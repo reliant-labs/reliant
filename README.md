@@ -1,4 +1,8 @@
 <p align="center">
+  <img src="assets/Create_Workflows_ListItem.webp" alt="Reliant Workflows" width="800">
+</p>
+
+<p align="center">
   <a href="https://reliantlabs.io">Website</a>
   ·
   <a href="https://docs.reliantlabs.io/docs/">Docs</a>
