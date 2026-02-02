@@ -63,7 +63,7 @@ brew install --cask reliant-labs/reliant/reliant
 
 | Platform    | Architecture             | Download                                                                                   |
 | ----------- | ------------------------ | ------------------------------------------------------------------------------------------ |
-| **macOS**   | Apple Silicon (M1/M2/M3) | [Download DMG](https://downloads.reliantlabs.io/Reliant-latest-mac-arm64.dmg)              |
+| **macOS**   | Apple Silicon            | [Download DMG](https://downloads.reliantlabs.io/Reliant-latest-mac-arm64.dmg)              |
 | **macOS**   | Intel                    | [Download DMG](https://downloads.reliantlabs.io/Reliant-latest-mac-x64.dmg)                |
 | **Windows** | x64                      | [Download EXE](https://downloads.reliantlabs.io/Reliant-latest-win-x64.exe)                |
 | **Windows** | ARM64                    | [Download EXE](https://downloads.reliantlabs.io/Reliant-latest-win-arm64.exe)              |
