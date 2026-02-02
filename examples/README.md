@@ -13,99 +13,56 @@ examples/
 
 ## Workflows
 
-Workflow definitions that demonstrate different agent patterns:
-
 | Workflow | Description |
 |----------|-------------|
-| `agent.yaml` | Interactive agent workflow with loop-based tool execution. The foundation for most agent interactions. |
-| `checklist.yaml` | Checklist-based workflow for structured task completion. |
-| `auditing-agent.yaml` | Agent pattern for auditing and review tasks. |
-| `parallel-compete.yaml` | Runs multiple agents in parallel and selects the best result. |
-| `structured-agent.yaml` | Agent that produces structured output matching a defined schema. |
-| `retry-with-escalation.yaml` | Retry pattern that escalates to more capable models on failure. |
-| `context-reducing-agent.yaml` | Agent with automatic context compaction for long conversations. |
+| `agent.yaml` | Interactive agent workflow with loop-based tool execution |
+| `checklist.yaml` | Checklist-based workflow with planning, implementation, and review phases |
+| `auditing-agent.yaml` | Agent with an auditor that reviews responses before sending |
+| `parallel-compete.yaml` | Runs multiple agents in parallel and selects the best result |
+| `structured-agent.yaml` | Agent that produces structured output matching a schema |
+| `retry-with-escalation.yaml` | Retry pattern that escalates to more capable models on failure |
+| `context-reducing-agent.yaml` | Agent with automatic context compaction |
 
 ## Presets
 
-Presets configure agent behavior for specialized tasks. Apply them via the `presets:` field in workflows.
-
-### General Purpose
-
 | Preset | Description |
 |--------|-------------|
-| `general.yaml` | Balanced general-purpose agent with full tool access |
-| `planner.yaml` | Strategic planner for orchestrating research and implementation plans |
-| `researcher.yaml` | Research specialist with read-only codebase access |
-
-### Code Review
-
-| Preset | Description |
-|--------|-------------|
-| `code_reviewer.yaml` | Comprehensive code review orchestrator |
-| `architect.yaml` | Design-level review and high-leverage refactoring recommendations |
+| `general.yaml` | Balanced general-purpose agent |
+| `planner.yaml` | Strategic planner for research and implementation |
+| `researcher.yaml` | Research specialist with read-only access |
+| `architect.yaml` | Design-level review and refactoring recommendations |
+| `code_reviewer.yaml` | Comprehensive code review |
 | `security_reviewer.yaml` | Security-focused code review |
-| `performance_reviewer.yaml` | Performance analysis and optimization review |
-| `code_hygiene_reviewer.yaml` | Code quality and maintainability review |
-
-### Development
-
-| Preset | Description |
-|--------|-------------|
-| `tester.yaml` | Testing specialist for comprehensive test creation |
-| `debug.yaml` | Debugging orchestrator for isolating bugs |
-| `reproducer.yaml` | Runtime reproduction specialist for capturing bug evidence |
-| `refactor.yaml` | Code refactoring with behavior preservation |
-| `documentation.yaml` | Technical documentation creation |
-
-### Specialized
-
-| Preset | Description |
-|--------|-------------|
-| `git.yaml` | Git operations, commits, and version control |
-| `ux.yaml` | User experience and UI/UX improvements |
+| `performance_reviewer.yaml` | Performance analysis |
+| `code_hygiene_reviewer.yaml` | Code quality review |
+| `tester.yaml` | Testing specialist |
+| `debug.yaml` | Debugging orchestrator |
+| `reproducer.yaml` | Bug reproduction specialist |
+| `refactor.yaml` | Code refactoring |
+| `documentation.yaml` | Technical documentation |
+| `git.yaml` | Git operations |
+| `ux.yaml` | User experience improvements |
 | `conflict-resolver.yaml` | Git merge conflict resolution |
 | `workflow_builder.yaml` | Workflow creation and modification |
 
 ## Scenarios
 
-Test scenarios demonstrate expected workflow behavior. Each scenario defines:
-- **inputs**: Configuration values for the workflow
-- **events**: Simulated LLM responses and tool executions
-- **expect**: Expected outcomes, nodes reached, and assertions
+Test scenarios for each workflow. Each file contains multiple scenarios (separated by `---`) that define inputs, simulated events, and expected outcomes.
 
-### Agent Scenarios (`scenarios/agent/`)
-
-| Scenario | Description |
-|----------|-------------|
-| `happy_path.yaml` | LLM responds without tool calls, loop exits immediately |
-| `tool_use.yaml` | LLM calls tools, they execute, conversation continues |
-| `manual_mode.yaml` | Tool execution requires user approval |
-| `plan_mode.yaml` | Read-only mode with planning tools only |
-| `max_turns.yaml` | Loop terminates when max iterations reached |
-
-### Structured Agent Scenarios (`scenarios/structured-agent/`)
-
-| Scenario | Description |
-|----------|-------------|
-| `happy_path.yaml` | Agent produces valid structured output |
-| `custom_schema.yaml` | Custom output schema validation |
-| `reminder_flow.yaml` | Reminder mechanism for incomplete responses |
-| `tool_use_then_response.yaml` | Tool usage followed by structured response |
-| `schema_validation_failure.yaml` | Handling of invalid output |
-
-### Context-Reducing Agent Scenarios (`scenarios/context-reducing-agent/`)
-
-| Scenario | Description |
-|----------|-------------|
-| `happy_path.yaml` | Normal operation without compaction |
-| `compaction_triggered.yaml` | Context compaction activates at threshold |
-| `large_results_filtered.yaml` | Large tool results are filtered |
+| File | Description |
+|------|-------------|
+| `agent_scenarios.yaml` | Agent workflow test cases |
+| `auditing-agent_scenarios.yaml` | Auditing agent test cases |
+| `checklist_scenarios.yaml` | Checklist workflow test cases |
+| `context-reducing-agent_scenarios.yaml` | Context-reducing agent test cases |
+| `parallel-compete_scenarios.yaml` | Parallel compete test cases |
+| `retry-with-escalation_scenarios.yaml` | Retry escalation test cases |
+| `structured-agent_scenarios.yaml` | Structured agent test cases |
+| `presets_validation.yaml` | Preset validation test cases |
 
 ## Usage
 
 ### Using a Workflow
-
-Reference builtin workflows in your workflow definitions:
 
 ```yaml
 nodes:
@@ -119,18 +76,12 @@ nodes:
 
 ### Applying Presets
 
-Apply presets to configure agent behavior:
-
 ```yaml
 nodes:
   - id: research_step
     type: workflow
     ref: builtin://agent
-    presets: researcher  # Applies researcher preset
+    presets: researcher
     args:
       mode: auto
 ```
-
-### Running Scenarios
-
-Scenarios are used for testing workflow behavior. They simulate LLM responses to verify workflow logic without making actual API calls.

@@ -1,0 +1,830 @@
+# Test scenarios for parallel-compete.yaml workflow
+#
+# Parallel Compete workflow:
+# 1. improve_prompt -> save_improved_prompt
+# 2. Parallel chains: create_worktree_1 -> impl_1, create_worktree_2 -> impl_2, create_worktree_3 -> impl_3
+# 3. implementations_done (join)
+# 4. review (structured response with winner/strategy)
+# 5. apply_winner OR synthesizer (conditional based on strategy)
+# 6. apply_done (join)
+# 7. complete
+#
+# NOTE: impl_1, impl_2, impl_3, review, and synthesizer are all `type: workflow` nodes
+# referencing builtin://agent. The simulator treats them as BLACK BOXES.
+# Mock events should provide the WORKFLOW'S FINAL OUTPUTS (message, response_text, response fields),
+# not internal call_llm events.
+
+---
+# Happy path: All three implementations complete, reviewer picks winner (use_winner strategy)
+name: parallel_compete_use_winner
+description: Three implementations complete in parallel, reviewer selects candidate 2 using use_winner strategy
+events:
+  # Improve prompt (call_llm node - direct)
+  - node: improve_prompt
+    output:
+      message:
+        role: assistant
+        text: |
+          ## Refined Specification
+          - Implement user authentication
+          - Support OAuth and password auth
+          - Include rate limiting
+          - Write unit tests
+      response_text: |
+        ## Refined Specification
+        - Implement user authentication
+        - Support OAuth and password auth
+        - Include rate limiting
+        - Write unit tests
+      tool_calls: []
+  
+  # Create worktrees (worktree nodes - parallel)
+  - node: create_worktree_1
+    output:
+      id: "wt1"
+      name: "compete-impl-1"
+      path: "/tmp/worktrees/compete-impl-1"
+      branch: "compete-impl-1"
+      base_branch: "main"
+      repo_id: "test-repo"
+      status: "created"
+  - node: create_worktree_2
+    output:
+      id: "wt2"
+      name: "compete-impl-2"
+      path: "/tmp/worktrees/compete-impl-2"
+      branch: "compete-impl-2"
+      base_branch: "main"
+      repo_id: "test-repo"
+      status: "created"
+  - node: create_worktree_3
+    output:
+      id: "wt3"
+      name: "compete-impl-3"
+      path: "/tmp/worktrees/compete-impl-3"
+      branch: "compete-impl-3"
+      base_branch: "main"
+      repo_id: "test-repo"
+      status: "created"
+  
+  # Parallel implementations (workflow nodes - BLACK BOX outputs)
+  - node: impl_1
+    output:
+      message:
+        role: assistant
+        text: "Candidate 1 implementation complete. Used basic password auth."
+      response_text: "Candidate 1 implementation complete. Used basic password auth."
+  
+  - node: impl_2
+    output:
+      message:
+        role: assistant
+        text: "Candidate 2 implementation complete. Full OAuth + password with tests."
+      response_text: "Candidate 2 implementation complete. Full OAuth + password with tests."
+  
+  - node: impl_3
+    output:
+      message:
+        role: assistant
+        text: "Candidate 3 implementation complete. OAuth only, minimal tests."
+      response_text: "Candidate 3 implementation complete. OAuth only, minimal tests."
+  
+  # Reviewer with structured response (use_winner strategy)
+  - node: review
+    output:
+      message:
+        role: assistant
+        text: |
+          After reviewing all implementations:
+          
+          - Candidate 1: Basic but incomplete
+          - Candidate 2: Complete with good test coverage
+          - Candidate 3: Missing password auth
+      response_text: |
+        After reviewing all implementations:
+        
+        - Candidate 1: Basic but incomplete
+        - Candidate 2: Complete with good test coverage
+        - Candidate 3: Missing password auth
+      # Structured response fields
+      winner: 2
+      strategy: "use_winner"
+      confidence: 8
+      rationale: "Candidate 2 has the most complete implementation with proper OAuth and password auth support, plus good test coverage."
+      synthesis_instructions: ""
+
+  # apply_winner runs rsync command
+  - node: apply_winner
+    output:
+      exit_code: 0
+      stdout: "sent 1234 bytes  received 56 bytes\n"
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - improve_prompt
+    - save_improved_prompt
+    - create_worktree_1
+    - create_worktree_2
+    - create_worktree_3
+    - impl_1
+    - impl_2
+    - impl_3
+    - review
+    - apply_winner
+    - apply_done
+    - complete
+  not_reached:
+    - synthesizer
+
+---
+# Synthesize path: Reviewer decides to combine best parts from multiple implementations
+name: parallel_compete_synthesize
+description: Reviewer chooses to synthesize best parts from multiple implementations
+events:
+  - node: improve_prompt
+    output:
+      message:
+        role: assistant
+        text: "Build a cache layer with TTL support"
+      response_text: "Build a cache layer with TTL support"
+      tool_calls: []
+  
+  - node: create_worktree_1
+    output:
+      id: "wt1"
+      name: "b1"
+      path: "/wt/1"
+      branch: "b1"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  - node: create_worktree_2
+    output:
+      id: "wt2"
+      name: "b2"
+      path: "/wt/2"
+      branch: "b2"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  - node: create_worktree_3
+    output:
+      id: "wt3"
+      name: "b3"
+      path: "/wt/3"
+      branch: "b3"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  
+  - node: impl_1
+    output:
+      message:
+        role: assistant
+        text: "Created cache.go with excellent TTL implementation"
+      response_text: "Created cache.go with excellent TTL implementation"
+  
+  - node: impl_2
+    output:
+      message:
+        role: assistant
+        text: "Created cache.go with great test coverage but basic TTL"
+      response_text: "Created cache.go with great test coverage but basic TTL"
+  
+  - node: impl_3
+    output:
+      message:
+        role: assistant
+        text: "Created cache.go with good API design but minimal tests"
+      response_text: "Created cache.go with good API design but minimal tests"
+  
+  # Reviewer chooses synthesize strategy
+  - node: review
+    output:
+      message:
+        role: assistant
+        text: "Each implementation has unique strengths that should be combined."
+      response_text: "Each implementation has unique strengths that should be combined."
+      winner: 1
+      strategy: "synthesize"
+      confidence: 9
+      rationale: "Candidate 1 has the best TTL implementation, Candidate 2 has the best tests, and Candidate 3 has the best API design."
+      synthesis_instructions: |
+        1. Use Candidate 1's cache.go as the base (best TTL logic)
+        2. Copy Candidate 2's cache_test.go for test coverage
+        3. Update the public API in cache.go to match Candidate 3's cleaner interface
+
+  # Synthesizer agent combines the implementations
+  - node: synthesizer
+    output:
+      message:
+        role: assistant
+        text: |
+          Synthesis complete. I have:
+          1. Used Candidate 1's TTL implementation as the base
+          2. Added Candidate 2's comprehensive test suite
+          3. Refactored the API to match Candidate 3's cleaner design
+      response_text: |
+        Synthesis complete. I have:
+        1. Used Candidate 1's TTL implementation as the base
+        2. Added Candidate 2's comprehensive test suite
+        3. Refactored the API to match Candidate 3's cleaner design
+
+expect:
+  outcome: completed
+  reached:
+    - improve_prompt
+    - save_improved_prompt
+    - create_worktree_1
+    - create_worktree_2
+    - create_worktree_3
+    - impl_1
+    - impl_2
+    - impl_3
+    - review
+    - synthesizer
+    - apply_done
+    - complete
+  not_reached:
+    - apply_winner
+
+---
+# Prompt improvement produces clear specification
+name: parallel_compete_prompt_improvement
+description: Verifies prompt improvement step runs correctly
+events:
+  - node: improve_prompt
+    output:
+      message:
+        role: assistant
+        text: |
+          ## Improved Task Specification
+          
+          ### Objective
+          Create a user management API endpoint
+          
+          ### Acceptance Criteria
+          - GET /users returns paginated list
+          - POST /users creates new user
+          - Input validation required
+          
+          ### Edge Cases
+          - Empty database returns empty array
+          - Duplicate email returns 409
+      response_text: |
+        ## Improved Task Specification
+        
+        ### Objective
+        Create a user management API endpoint
+      tool_calls: []
+  
+  # Worktrees
+  - node: create_worktree_1
+    output:
+      id: "wt1"
+      name: "b1"
+      path: "/wt/1"
+      branch: "b1"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  - node: create_worktree_2
+    output:
+      id: "wt2"
+      name: "b2"
+      path: "/wt/2"
+      branch: "b2"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  - node: create_worktree_3
+    output:
+      id: "wt3"
+      name: "b3"
+      path: "/wt/3"
+      branch: "b3"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  
+  # Implementations (black-box workflow outputs)
+  - node: impl_1
+    output:
+      message:
+        role: assistant
+        text: "Done"
+      response_text: "Done"
+  - node: impl_2
+    output:
+      message:
+        role: assistant
+        text: "Done"
+      response_text: "Done"
+  - node: impl_3
+    output:
+      message:
+        role: assistant
+        text: "Done"
+      response_text: "Done"
+  
+  # Review with structured response
+  - node: review
+    output:
+      message:
+        role: assistant
+        text: "Candidate 1 is the best implementation"
+      response_text: "Candidate 1 is the best implementation"
+      winner: 1
+      strategy: "use_winner"
+      confidence: 7
+      rationale: "Best implementation overall"
+      synthesis_instructions: ""
+
+  - node: apply_winner
+    output:
+      exit_code: 0
+      stdout: ""
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - improve_prompt
+    - save_improved_prompt
+    - review
+    - apply_winner
+    - complete
+
+---
+# Implementations complete successfully with detailed review
+name: parallel_compete_impl_with_tools
+description: All implementation candidates complete their work with detailed review
+events:
+  - node: improve_prompt
+    output:
+      message:
+        role: assistant
+        text: "Build a cache layer"
+      response_text: "Build a cache layer"
+      tool_calls: []
+  
+  - node: create_worktree_1
+    output:
+      id: "wt1"
+      name: "b1"
+      path: "/wt/1"
+      branch: "b1"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  - node: create_worktree_2
+    output:
+      id: "wt2"
+      name: "b2"
+      path: "/wt/2"
+      branch: "b2"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  - node: create_worktree_3
+    output:
+      id: "wt3"
+      name: "b3"
+      path: "/wt/3"
+      branch: "b3"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  
+  # All impls complete (black-box outputs)
+  - node: impl_1
+    output:
+      message:
+        role: assistant
+        text: "Created cache.go with basic implementation"
+      response_text: "Created cache.go with basic implementation"
+  
+  - node: impl_2
+    output:
+      message:
+        role: assistant
+        text: "Created cache.go and cache_test.go with full test coverage"
+      response_text: "Created cache.go and cache_test.go with full test coverage"
+  
+  - node: impl_3
+    output:
+      message:
+        role: assistant
+        text: "Minimal cache implementation"
+      response_text: "Minimal cache implementation"
+  
+  # Reviewer picks winner with structured response
+  - node: review
+    output:
+      message:
+        role: assistant
+        text: "Candidate 2 has the only implementation with tests"
+      response_text: "Candidate 2 has the only implementation with tests"
+      winner: 2
+      strategy: "use_winner"
+      confidence: 9
+      rationale: "Only candidate with test coverage"
+      synthesis_instructions: ""
+
+  - node: apply_winner
+    output:
+      exit_code: 0
+      stdout: ""
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - impl_1
+    - impl_2
+    - impl_3
+    - review
+    - apply_winner
+    - complete
+
+---
+# Reviewer provides thorough analysis before use_winner decision
+name: parallel_compete_thorough_review
+description: Reviewer provides detailed analysis before deciding
+events:
+  - node: improve_prompt
+    output:
+      message:
+        role: assistant
+        text: "Create REST API"
+      response_text: "Create REST API"
+      tool_calls: []
+  
+  - node: create_worktree_1
+    output:
+      id: "wt1"
+      name: "b1"
+      path: "/wt/1"
+      branch: "b1"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  - node: create_worktree_2
+    output:
+      id: "wt2"
+      name: "b2"
+      path: "/wt/2"
+      branch: "b2"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  - node: create_worktree_3
+    output:
+      id: "wt3"
+      name: "b3"
+      path: "/wt/3"
+      branch: "b3"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  
+  - node: impl_1
+    output:
+      message:
+        role: assistant
+        text: "Implementation 1 done"
+      response_text: "Implementation 1 done"
+  - node: impl_2
+    output:
+      message:
+        role: assistant
+        text: "Implementation 2 done"
+      response_text: "Implementation 2 done"
+  - node: impl_3
+    output:
+      message:
+        role: assistant
+        text: "Implementation 3 done"
+      response_text: "Implementation 3 done"
+  
+  # Thorough reviewer analysis with structured response
+  - node: review
+    output:
+      message:
+        role: assistant
+        text: |
+          ## Detailed Code Review
+          
+          ### Candidate 1 Analysis
+          - Basic CRUD implementation
+          - Missing input validation
+          - No tests
+          
+          ### Candidate 2 Analysis
+          - Complete REST implementation
+          - Proper error handling
+          - Unit tests included
+          
+          ### Candidate 3 Analysis
+          - Incomplete, no tests
+      response_text: |
+        ## Detailed Code Review
+        
+        ### Candidate 1 Analysis
+        - Basic CRUD implementation
+        - Missing input validation
+        - No tests
+        
+        ### Candidate 2 Analysis
+        - Complete REST implementation
+        - Proper error handling
+        - Unit tests included
+        
+        ### Candidate 3 Analysis
+        - Incomplete, no tests
+      winner: 2
+      strategy: "use_winner"
+      confidence: 10
+      rationale: "Most complete implementation with proper structure and testing"
+      synthesis_instructions: ""
+
+  - node: apply_winner
+    output:
+      exit_code: 0
+      stdout: ""
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - review
+    - apply_winner
+    - complete
+
+---
+# Implementation failure scenario - one impl fails, others succeed
+name: implementation_failure
+description: One implementation fails but workflow continues with review
+events:
+  - node: improve_prompt
+    output:
+      message:
+        role: assistant
+        text: "Implement error handling"
+      response_text: "Implement error handling"
+      tool_calls: []
+  
+  - node: create_worktree_1
+    output:
+      id: "wt1"
+      name: "b1"
+      path: "/wt/1"
+      branch: "b1"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  - node: create_worktree_2
+    output:
+      id: "wt2"
+      name: "b2"
+      path: "/wt/2"
+      branch: "b2"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  - node: create_worktree_3
+    output:
+      id: "wt3"
+      name: "b3"
+      path: "/wt/3"
+      branch: "b3"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  
+  # Impl 1 succeeds
+  - node: impl_1
+    output:
+      message:
+        role: assistant
+        text: "Implementation 1 complete with error handling"
+      response_text: "Implementation 1 complete with error handling"
+  
+  # Impl 2 fails (outputs error message)
+  - node: impl_2
+    output:
+      message:
+        role: assistant
+        text: "ERROR: Unable to complete implementation due to unforeseen issue"
+      response_text: "ERROR: Unable to complete implementation due to unforeseen issue"
+  
+  # Impl 3 succeeds
+  - node: impl_3
+    output:
+      message:
+        role: assistant
+        text: "Implementation 3 complete with robust error handling"
+      response_text: "Implementation 3 complete with robust error handling"
+  
+  # Reviewer notes impl_2 failed and picks from remaining
+  - node: review
+    output:
+      message:
+        role: assistant
+        text: |
+          ## Review Summary
+          
+          Candidate 1: Complete implementation
+          Candidate 2: FAILED - no implementation
+          Candidate 3: Complete implementation with robust error handling
+      response_text: |
+        ## Review Summary
+        
+        Candidate 1: Complete implementation
+        Candidate 2: FAILED - no implementation
+        Candidate 3: Complete implementation with robust error handling
+      winner: 3
+      strategy: "use_winner"
+      confidence: 8
+      rationale: "Only viable option with complete error handling. Candidate 2 failed to complete."
+      synthesis_instructions: ""
+
+  - node: apply_winner
+    output:
+      exit_code: 0
+      stdout: ""
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - improve_prompt
+    - save_improved_prompt
+    - create_worktree_1
+    - create_worktree_2
+    - create_worktree_3
+    - impl_1
+    - impl_2
+    - impl_3
+    - review
+    - apply_winner
+    - complete
+
+---
+# Worktree creation failure scenario
+# When a worktree fails to return path, downstream nodes that reference it will error.
+# The workflow errors when trying to evaluate project path for impl nodes.
+name: worktree_creation_failure
+description: One worktree creation fails, workflow errors when accessing missing path
+events:
+  - node: improve_prompt
+    output:
+      message:
+        role: assistant
+        text: "Build a feature"
+      response_text: "Build a feature"
+      tool_calls: []
+  
+  - node: create_worktree_1
+    output:
+      id: "wt1"
+      name: "b1"
+      path: "/wt/1"
+      branch: "b1"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  
+  # Worktree 2 fails - no path field returned
+  - node: create_worktree_2
+    output:
+      id: "wt2"
+      name: "b2"
+      status: "error"
+      error: "Failed to create worktree: branch already exists"
+  
+  - node: create_worktree_3
+    output:
+      id: "wt3"
+      name: "b3"
+      path: "/wt/3"
+      branch: "b3"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+
+  # impl_1 completes (has valid path)
+  - node: impl_1
+    output:
+      message:
+        role: assistant
+        text: "Implementation 1 done"
+      response_text: "Implementation 1 done"
+
+expect:
+  outcome: error
+  error_contains: "no such key: path"
+  error_node: impl_2
+  reached:
+    - improve_prompt
+    - save_improved_prompt
+    - create_worktree_1
+    - create_worktree_2
+    - create_worktree_3
+    - impl_1
+
+---
+# High confidence synthesize decision
+name: parallel_compete_high_confidence_synthesize
+description: Reviewer has high confidence in synthesis approach
+events:
+  - node: improve_prompt
+    output:
+      message:
+        role: assistant
+        text: "Build authentication system"
+      response_text: "Build authentication system"
+      tool_calls: []
+  
+  - node: create_worktree_1
+    output:
+      id: "wt1"
+      name: "b1"
+      path: "/wt/1"
+      branch: "b1"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  - node: create_worktree_2
+    output:
+      id: "wt2"
+      name: "b2"
+      path: "/wt/2"
+      branch: "b2"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  - node: create_worktree_3
+    output:
+      id: "wt3"
+      name: "b3"
+      path: "/wt/3"
+      branch: "b3"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  
+  - node: impl_1
+    output:
+      message:
+        role: assistant
+        text: "OAuth implementation complete"
+      response_text: "OAuth implementation complete"
+  - node: impl_2
+    output:
+      message:
+        role: assistant
+        text: "Password auth implementation complete"
+      response_text: "Password auth implementation complete"
+  - node: impl_3
+    output:
+      message:
+        role: assistant
+        text: "JWT token handling complete"
+      response_text: "JWT token handling complete"
+  
+  # High confidence synthesis
+  - node: review
+    output:
+      message:
+        role: assistant
+        text: "Each candidate excels at different parts of the auth system"
+      response_text: "Each candidate excels at different parts of the auth system"
+      winner: 2
+      strategy: "synthesize"
+      confidence: 10
+      rationale: "Candidate 1 has best OAuth, Candidate 2 has best password handling, Candidate 3 has best JWT management. Combining all three creates a comprehensive auth system."
+      synthesis_instructions: |
+        1. Start with Candidate 2's password auth as the base (most complete structure)
+        2. Integrate Candidate 1's OAuth provider setup from /wt/1/auth/oauth.go
+        3. Add Candidate 3's JWT token generation and validation from /wt/3/auth/jwt.go
+        4. Ensure all auth methods use consistent user session handling
+
+  - node: synthesizer
+    output:
+      message:
+        role: assistant
+        text: "Successfully combined OAuth, password auth, and JWT handling into unified auth system"
+      response_text: "Successfully combined OAuth, password auth, and JWT handling into unified auth system"
+
+expect:
+  outcome: completed
+  reached:
+    - review
+    - synthesizer
+    - apply_done
+    - complete
+  not_reached:
+    - apply_winner

@@ -1,0 +1,523 @@
+# Test scenarios for agent.yaml workflow
+#
+# Agent workflow structure:
+# - agent_loop (main loop) contains: call_llm -> approval -> execute_tools -> compact
+# - Loop continues while: tool_calls not empty AND iteration + 1 < max_turns
+# - After loop: max_turns_notification if _iterations >= max_turns
+#
+# Key behaviors:
+# - mode=auto: auto-approves tool execution (skips approval node)
+# - mode=manual: requires approval before tool execution
+# - mode=plan: read-only tools with planning prompt
+#
+# Output format note:
+# Events use the 'output' field which matches activity output structures directly:
+# - call_llm: message, response_text, tool_calls, input_tokens, output_tokens, etc.
+# - execute_tools: message, tool_results, thread_token_count, response_data, etc.
+# - approval: approval_id, status, action_taken, data
+
+---
+# Happy path: LLM responds without any tool calls, loop exits immediately
+name: happy_path_no_tools
+description: LLM responds with text only, no tool calls - loop exits after first iteration
+inputs:
+  mode: auto
+  max_turns: 100
+events:
+  # call_llm responds with text only, no tool calls
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "I can help you with that question. Here's the answer to your query."
+      response_text: "I can help you with that question. Here's the answer to your query."
+      tool_calls: []
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+  not_reached:
+    - agent_loop.approval
+    - agent_loop.execute_tools
+    - agent_loop.compact
+    - max_turns_notification
+
+---
+# Auto mode: LLM uses tools, they execute automatically, then responds
+name: tool_use_auto_mode
+description: LLM calls tools in auto mode, tools execute without approval, loop continues
+inputs:
+  mode: auto
+  max_turns: 100
+events:
+  # First iteration: LLM requests a tool
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Let me read that file for you."
+      response_text: "Let me read that file for you."
+      tool_calls:
+        - id: call_0
+          name: view
+          input:
+            file_path: "/path/to/file.go"
+  # Tool executes (auto mode skips approval)
+  - node: agent_loop.execute_tools
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_0
+          content: "package main\n\nfunc main() {\n\tfmt.Println(\"Hello\")\n}"
+      thread_token_count: 500
+  # Second iteration: LLM responds with final answer
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "The file contains a simple Go main package that prints Hello."
+      response_text: "The file contains a simple Go main package that prints Hello."
+      tool_calls: []
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.execute_tools
+  not_reached:
+    - agent_loop.approval
+    - max_turns_notification
+
+---
+# Manual mode with approval granted
+name: tool_use_manual_approved
+description: Manual mode requires approval, user approves, tools execute
+inputs:
+  mode: manual
+  max_turns: 100
+events:
+  # LLM requests a tool
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "I need to edit this file."
+      response_text: "I need to edit this file."
+      tool_calls:
+        - id: call_0
+          name: edit
+          input:
+            file_path: "/path/to/file.go"
+            old_string: "Hello"
+            new_string: "World"
+  # Approval is granted
+  - node: agent_loop.approval
+    output:
+      approval_id: "approval_1"
+      status: approved
+      action_taken: approve
+      data: {}
+  # Tool executes after approval
+  - node: agent_loop.execute_tools
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_0
+          content: "File edited successfully"
+      thread_token_count: 500
+  # LLM responds with final answer
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Done! I've updated the file to say World instead of Hello."
+      response_text: "Done! I've updated the file to say World instead of Hello."
+      tool_calls: []
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.approval
+    - agent_loop.execute_tools
+  not_reached:
+    - max_turns_notification
+
+---
+# Manual mode with approval denied - loop exits (no tool execution)
+name: tool_use_manual_denied
+description: Manual mode, user denies approval, tools do not execute
+inputs:
+  mode: manual
+  max_turns: 100
+events:
+  # LLM requests a tool
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "I'm going to delete this file."
+      response_text: "I'm going to delete this file."
+      tool_calls:
+        - id: call_0
+          name: bash
+          input:
+            command: "rm -rf /important/file"
+  # Approval is denied
+  - node: agent_loop.approval
+    output:
+      approval_id: "approval_1"
+      status: denied
+      action_taken: deny
+      data: {}
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.approval
+  not_reached:
+    - agent_loop.execute_tools
+    - agent_loop.compact
+    - max_turns_notification
+
+---
+# Max turns limit reached - verify loop completes with correct iteration count
+name: max_turns_reached
+description: Loop hits max_turns limit (verifies iterations output)
+inputs:
+  mode: auto
+  max_turns: 2
+events:
+  # Iteration 0: tool call
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Searching..."
+      response_text: "Searching..."
+      tool_calls:
+        - id: call_0
+          name: grep
+          input:
+            pattern: "TODO"
+  - node: agent_loop.execute_tools
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_0
+          content: '["file1.go"]'
+      thread_token_count: 500
+  # Iteration 1: still wants more tools (hits max_turns=2, iteration < 2 is still true)
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Reading file..."
+      response_text: "Reading file..."
+      tool_calls:
+        - id: call_1
+          name: view
+          input:
+            file_path: "file1.go"
+  - node: agent_loop.execute_tools
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_1
+          content: "// TODO: fix this"
+      thread_token_count: 600
+  # max_turns_notification fires because iterations >= max_turns (2 >= 2)
+  - node: max_turns_notification
+    output:
+      message:
+        role: system
+        text: "Agent reached maximum iteration limit (2 turns)."
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.execute_tools
+    - max_turns_notification
+  not_reached:
+    - agent_loop.approval
+  # Verify loop outputs _iterations = 2 (exactly hit max_turns)
+  node_outputs:
+    agent_loop:
+      _iterations: 2
+
+---
+# Compaction triggered when token count exceeds threshold
+name: compaction_triggered
+description: Token count exceeds threshold after tool execution, compact node runs
+inputs:
+  mode: auto
+  max_turns: 100
+  compaction_threshold: 1000
+events:
+  # LLM requests a tool that returns lots of data
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Let me read a large file."
+      response_text: "Let me read a large file."
+      tool_calls:
+        - id: call_0
+          name: view
+          input:
+            file_path: "/path/to/large/file.go"
+  # Tool returns with high token count
+  - node: agent_loop.execute_tools
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_0
+          content: "Very large file content..."
+      thread_token_count: 5000
+  # Compact node runs due to high token count
+  - node: agent_loop.compact
+    output:
+      message:
+        role: assistant
+        text: "Context compacted successfully."
+  # Next iteration: LLM provides final response
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Here's the analysis of the large file."
+      response_text: "Here's the analysis of the large file."
+      tool_calls: []
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.execute_tools
+    - agent_loop.compact
+  not_reached:
+    - agent_loop.approval
+    - max_turns_notification
+
+---
+# Compaction skipped when token count is below threshold
+name: compaction_skipped_below_threshold
+description: Token count stays below compaction_threshold, compact node is not reached
+inputs:
+  mode: auto
+  max_turns: 100
+  compaction_threshold: 185000
+events:
+  # LLM requests a tool
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Let me read that file."
+      response_text: "Let me read that file."
+      tool_calls:
+        - id: call_0
+          name: view
+          input:
+            file_path: "/path/to/small_file.go"
+  # Tool returns with low token count (below threshold)
+  - node: agent_loop.execute_tools
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_0
+          content: "package main"
+      thread_token_count: 500
+  # Compact is skipped, next iteration starts
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "The file is a simple Go main package."
+      response_text: "The file is a simple Go main package."
+      tool_calls: []
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.execute_tools
+  not_reached:
+    - agent_loop.approval
+    - agent_loop.compact
+    - max_turns_notification
+
+---
+# Multiple tool calls in sequence
+name: multiple_tool_iterations
+description: Agent makes multiple tool calls across iterations before completing
+inputs:
+  mode: auto
+  max_turns: 100
+events:
+  # Iteration 0: search
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Let me find the relevant files first."
+      response_text: "Let me find the relevant files first."
+      tool_calls:
+        - id: call_0
+          name: glob
+          input:
+            pattern: "**/*.go"
+  - node: agent_loop.execute_tools
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_0
+          content: '["main.go", "util.go", "handler.go"]'
+      thread_token_count: 500
+  # Iteration 1: read first file
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Found some files. Let me check main.go."
+      response_text: "Found some files. Let me check main.go."
+      tool_calls:
+        - id: call_1
+          name: view
+          input:
+            file_path: "main.go"
+  - node: agent_loop.execute_tools
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_1
+          content: "package main\n\nfunc main() {}"
+      thread_token_count: 600
+  # Iteration 2: read second file
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Now checking util.go."
+      response_text: "Now checking util.go."
+      tool_calls:
+        - id: call_2
+          name: view
+          input:
+            file_path: "util.go"
+  - node: agent_loop.execute_tools
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_2
+          content: 'package main\n\nfunc helper() string { return "help" }'
+      thread_token_count: 700
+  # Iteration 3: final response
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "I've analyzed the codebase. There are 3 Go files with a main package."
+      response_text: "I've analyzed the codebase. There are 3 Go files with a main package."
+      tool_calls: []
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.execute_tools
+  not_reached:
+    - agent_loop.approval
+    - max_turns_notification
+
+---
+# Plan mode uses plan-tagged tools only
+name: plan_mode_readonly
+description: Plan mode restricts to read-only tools for planning
+inputs:
+  mode: plan
+  max_turns: 100
+events:
+  # LLM uses read-only tools in plan mode
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Let me analyze the codebase to create a plan."
+      response_text: "Let me analyze the codebase to create a plan."
+      tool_calls:
+        - id: call_0
+          name: view
+          input:
+            file_path: "README.md"
+  - node: agent_loop.execute_tools
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_0
+          content: "# My Project\n\nThis is a sample project."
+      thread_token_count: 500
+  # LLM creates a plan using planning tools
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Based on my analysis, here's the plan for implementing the feature."
+      response_text: "Based on my analysis, here's the plan for implementing the feature."
+      tool_calls:
+        - id: call_1
+          name: create_plan
+          input:
+            title: "Add dark mode feature"
+            tasks:
+              - "Update theme configuration"
+              - "Add dark mode styles"
+  - node: agent_loop.execute_tools
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_1
+          content: '{"plan_id": "plan_123", "status": "created"}'
+      thread_token_count: 600
+  # Final response
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "I've created a plan for the dark mode feature. Switch to Auto mode to execute."
+      response_text: "I've created a plan for the dark mode feature. Switch to Auto mode to execute."
+      tool_calls: []
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.execute_tools
+  not_reached:
+    - agent_loop.approval
+    - max_turns_notification

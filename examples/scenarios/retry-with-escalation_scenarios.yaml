@@ -1,0 +1,509 @@
+# Test scenarios for retry-with-escalation.yaml workflow
+#
+# Retry with Escalation workflow:
+# 1. implement_loop: implement -> verify (repeats while verify fails, up to escalation_threshold)
+# 2. If loop succeeds: completion (success message)
+# 3. If loop exhausts: escalate to planner -> fresh worktree -> simplified implementation -> final_verify
+# 4. All paths end at completion node (with conditional success/failure message)
+#
+# Key input: escalation_threshold (default: 2) - number of attempts before escalation
+
+---
+# Happy path: First attempt succeeds
+name: retry_first_attempt_succeeds
+description: Implementation passes verification on first try
+inputs:
+  verify_command: "make test"
+  escalation_threshold: 3
+events:
+  # Iteration 0: implement then verify succeeds
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "I've implemented the feature correctly on the first try."
+      response_text: "I've implemented the feature correctly on the first try."
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 0
+      stdout: "All tests passed"
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - implement_loop
+    - implement_loop.implement
+    - implement_loop.verify
+    - completion
+  not_reached:
+    - planner_reapproach
+  node_outputs:
+    implement_loop:
+      exit_code: 0
+      _iterations: 1
+
+---
+# Retry once then succeed
+name: retry_second_attempt_succeeds
+description: First attempt fails, second succeeds with Analyze and Adjust guidance
+inputs:
+  verify_command: "npm test"
+  escalation_threshold: 3
+events:
+  # Iteration 0: fails
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "Initial implementation attempt."
+      response_text: "Initial implementation attempt."
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 1
+      stdout: ""
+      stderr: "Error: expected foo but got bar"
+  
+  # Iteration 1: "Analyze and Adjust" - succeeds
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "After analyzing the error, I fixed the issue."
+      response_text: "After analyzing the error, I fixed the issue."
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 0
+      stdout: "All tests passed"
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - implement_loop
+    - implement_loop.implement
+    - implement_loop.verify
+    - completion
+  not_reached:
+    - planner_reapproach
+  node_outputs:
+    implement_loop:
+      exit_code: 0
+      _iterations: 2
+
+---
+# Retry twice then succeed (needs threshold >= 3)
+name: retry_third_attempt_succeeds
+description: First two attempts fail, third succeeds
+inputs:
+  verify_command: "go test ./..."
+  escalation_threshold: 3
+events:
+  # Iteration 0: fails
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "First attempt."
+      response_text: "First attempt."
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 1
+      stdout: ""
+      stderr: "FAIL"
+  
+  # Iteration 1: fails
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "Analyzed and adjusted."
+      response_text: "Analyzed and adjusted."
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 1
+      stdout: ""
+      stderr: "FAIL again"
+  
+  # Iteration 2: succeeds
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "Stepped back, simplified the approach, and it works now."
+      response_text: "Stepped back, simplified the approach, and it works now."
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 0
+      stdout: "PASS"
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - implement_loop
+    - completion
+  not_reached:
+    - planner_reapproach
+  node_outputs:
+    implement_loop:
+      exit_code: 0
+      _iterations: 3
+
+---
+# Escalation triggered: loop exhausts threshold, planner takes over
+name: retry_escalation_triggered
+description: All retry attempts fail within threshold, triggers escalation to planner
+inputs:
+  verify_command: "pytest"
+  escalation_threshold: 2
+events:
+  # Iteration 0: fails
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "First attempt."
+      response_text: "First attempt."
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 1
+      stdout: ""
+      stderr: "Test failed"
+  
+  # Iteration 1: fails (threshold reached)
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "Analyzing..."
+      response_text: "Analyzing..."
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 1
+      stdout: ""
+      stderr: "Still failing"
+  
+  # Escalation path
+  - node: planner_reapproach
+    output:
+      message:
+        role: assistant
+        text: "I've analyzed the failures. The approach needs to be simplified."
+      response_text: "I've analyzed the failures. The approach needs to be simplified."
+      tool_calls: []
+  
+  
+  - node: implement_simplified
+    output:
+      message:
+        role: assistant
+        text: "Implemented the simplified approach."
+      response_text: "Implemented the simplified approach."
+      tool_calls: []
+  
+  - node: final_verify
+    output:
+      exit_code: 0
+      stdout: "All tests pass!"
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - implement_loop
+    - planner_reapproach
+    - implement_simplified
+    - final_verify
+    - completion
+  not_reached:
+  node_outputs:
+    implement_loop:
+      exit_code: 1
+      _iterations: 2
+
+---
+# Escalation fails: even simplified approach doesn't work
+name: retry_escalation_fails
+description: Escalation path also fails, workflow ends in failure
+inputs:
+  verify_command: "pytest"
+  escalation_threshold: 2
+events:
+  # Initial loop fails
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "First attempt."
+      response_text: "First attempt."
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 1
+      stdout: ""
+      stderr: "Test failed"
+  
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "Analyzing..."
+      response_text: "Analyzing..."
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 1
+      stdout: ""
+      stderr: "Still failing"
+  
+  # Escalation path - but final_verify fails
+  - node: planner_reapproach
+    output:
+      message:
+        role: assistant
+        text: "Let me try a different approach."
+      response_text: "Let me try a different approach."
+      tool_calls: []
+  
+  
+  - node: implement_simplified
+    output:
+      message:
+        role: assistant
+        text: "Implemented simplified version."
+      response_text: "Implemented simplified version."
+      tool_calls: []
+  
+  - node: final_verify
+    output:
+      exit_code: 1
+      stdout: ""
+      stderr: "Simplified approach also failed"
+
+expect:
+  outcome: completed
+  reached:
+    - implement_loop
+    - planner_reapproach
+    - final_verify
+    - completion
+  not_reached:
+
+---
+# Higher retry limit succeeds late (needs threshold >= 5)
+name: retry_many_attempts_eventual_success
+description: Succeeds on iteration 4 with higher threshold
+inputs:
+  verify_command: "make test"
+  escalation_threshold: 5
+events:
+  # Iterations 0-3 all fail
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "Attempt 1"
+      response_text: "Attempt 1"
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 1
+      stdout: ""
+      stderr: "Error 1"
+  
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "Attempt 2 - analyzing"
+      response_text: "Attempt 2 - analyzing"
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 1
+      stdout: ""
+      stderr: "Error 2"
+  
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "Attempt 3 - simplifying"
+      response_text: "Attempt 3 - simplifying"
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 1
+      stdout: ""
+      stderr: "Error 3"
+  
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "Attempt 4 - fresh perspective"
+      response_text: "Attempt 4 - fresh perspective"
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 1
+      stdout: ""
+      stderr: "Error 4"
+  
+  # Iteration 4: Finally succeeds
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "Fresh perspective worked! Complete rewrite."
+      response_text: "Fresh perspective worked! Complete rewrite."
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 0
+      stdout: "All tests pass!"
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - implement_loop
+    - completion
+  not_reached:
+    - planner_reapproach
+  node_outputs:
+    implement_loop:
+      exit_code: 0
+      _iterations: 5
+
+---
+# Implementation uses tools before verify (workflow node is black-box in simulation)
+name: retry_impl_uses_tools
+description: Implementation agent uses tools to make changes before verification
+inputs:
+  verify_command: "npm test"
+  escalation_threshold: 2
+events:
+  # Iteration 0: implement completes (workflow node returns final state, not internal tool calls)
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "Fixed the function by viewing and editing src/index.ts."
+      response_text: "Fixed the function by viewing and editing src/index.ts."
+      tool_calls: []
+  
+  - node: implement_loop.verify
+    output:
+      exit_code: 0
+      stdout: "PASS"
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - implement_loop.implement
+    - implement_loop.verify
+    - completion
+  not_reached:
+    - planner_reapproach
+
+---
+# Single attempt threshold triggers immediate escalation on failure
+name: retry_single_threshold_escalation
+description: With escalation_threshold=1, single failure triggers escalation
+inputs:
+  verify_command: "test"
+  escalation_threshold: 1
+events:
+  # Single iteration fails
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "Only chance."
+      response_text: "Only chance."
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 1
+      stdout: ""
+      stderr: "Failed"
+  
+  # Escalation succeeds
+  - node: planner_reapproach
+    output:
+      message:
+        role: assistant
+        text: "Reanalyzed the problem."
+      response_text: "Reanalyzed the problem."
+      tool_calls: []
+  
+  
+  - node: implement_simplified
+    output:
+      message:
+        role: assistant
+        text: "Fixed with simplified approach."
+      response_text: "Fixed with simplified approach."
+      tool_calls: []
+  
+  - node: final_verify
+    output:
+      exit_code: 0
+      stdout: "PASS"
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - implement_loop
+    - planner_reapproach
+    - completion
+  not_reached:
+  node_outputs:
+    implement_loop:
+      exit_code: 1
+      _iterations: 1
+
+---
+# Verify captures stdout and stderr
+name: retry_verify_output_capture
+description: Verifies that stdout and stderr are captured from verify command
+inputs:
+  verify_command: "npm test"
+  escalation_threshold: 2
+events:
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "Implementation."
+      response_text: "Implementation."
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 0
+      stdout: "Test suite passed\n5 tests, 0 failures"
+      stderr: "Warning: deprecated API"
+
+expect:
+  outcome: completed
+  reached:
+    - completion
+  not_reached:
+    - planner_reapproach
+  node_outputs:
+    implement_loop:
+      exit_code: 0
+      stdout: "Test suite passed\n5 tests, 0 failures"
+      stderr: "Warning: deprecated API"
