@@ -1,0 +1,34 @@
+# Manual mode - denied approval ends the flow
+name: manual_mode_denied
+description: Manual mode with denied approval - tool execution skipped
+inputs:
+  mode: "manual"
+events:
+  # LLM requests a tool
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "I want to run a dangerous command."
+      response_text: "I want to run a dangerous command."
+      tool_calls:
+        - id: call_0
+          name: bash
+          input:
+            command: "rm -rf /"
+  # User denies
+  - node: agent_loop.approval
+    output:
+      approval_id: "approval_1"
+      status: "denied"
+      action_taken: "deny"
+      data: {}
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.approval
+  not_reached:
+    - agent_loop.execute_tools
+    - agent_loop.save_tool_results

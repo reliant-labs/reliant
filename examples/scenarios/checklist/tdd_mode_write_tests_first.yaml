@@ -1,0 +1,42 @@
+# TDD mode - write_tests runs before implement
+name: tdd_mode_write_tests_first
+description: TDD mode writes tests before implementation.
+
+inputs:
+  steps: [plan, tdd, implement, test, code_review]
+
+events:
+  - node: plan
+    output:
+      response_text: "Plan with TDD approach."
+
+  - node: write_tests
+    output:
+      response_text: "Created failing tests for the new feature."
+
+  - node: implement
+    output:
+      response_text: "Implemented the feature to make tests pass."
+
+  - node: test
+    output:
+      exit_code: 0
+      stdout: "All tests passed"
+
+  - node: code_review
+    output:
+      response:
+        grade: pass
+        summary: "TDD approach resulted in well-tested code."
+        suggestions:
+          - "Consider adding integration tests"
+
+expect:
+  outcome: completed
+  reached:
+    - plan
+    - write_tests
+    - implement
+    - test
+    - code_review
+    - complete

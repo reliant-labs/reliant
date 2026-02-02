@@ -1,0 +1,74 @@
+# All steps enabled - comprehensive
+name: all_steps_enabled_comprehensive
+description: Workflow with ALL steps enabled - full checklist flow.
+
+inputs:
+  steps: [research, plan, critique, approve, tdd, implement, lint, test, build, code_review]
+
+events:
+  - node: research
+    output:
+      response_text: "Research complete."
+
+  - node: plan
+    output:
+      response_text: "Plan complete."
+
+  - node: criticize
+    output:
+      response_text: "Critique complete."
+
+  - node: revise
+    output:
+      response_text: "Revise complete."
+
+  - node: approve
+    output:
+      status: approved
+
+  - node: write_tests
+    output:
+      response_text: "Tests written."
+
+  - node: implement
+    output:
+      response_text: "Implementation complete."
+
+  - node: lint
+    output:
+      exit_code: 0
+      stdout: "Lint passed"
+
+  - node: test
+    output:
+      exit_code: 0
+      stdout: "Tests passed"
+
+  - node: build
+    output:
+      exit_code: 0
+      stdout: "Build passed"
+
+  - node: code_review
+    output:
+      response:
+        grade: pass
+        summary: "Perfect implementation with comprehensive testing."
+        suggestions: []
+
+expect:
+  outcome: completed
+  reached:
+    - research
+    - plan
+    - criticize
+    - revise
+    - approve
+    - write_tests
+    - implement
+    - lint
+    - test
+    - build
+    - join_checks
+    - code_review
+    - complete

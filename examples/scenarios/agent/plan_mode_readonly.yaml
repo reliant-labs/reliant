@@ -1,0 +1,69 @@
+# Plan mode uses plan-tagged tools only
+name: plan_mode_readonly
+description: Plan mode restricts to read-only tools for planning
+inputs:
+  mode: plan
+  max_turns: 100
+events:
+  # LLM uses read-only tools in plan mode
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Let me analyze the codebase to create a plan."
+      response_text: "Let me analyze the codebase to create a plan."
+      tool_calls:
+        - id: call_0
+          name: view
+          input:
+            file_path: "README.md"
+  - node: agent_loop.execute_tools
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_0
+          content: "# My Project\n\nThis is a sample project."
+      thread_token_count: 500
+  # LLM creates a plan using planning tools
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Based on my analysis, here's the plan for implementing the feature."
+      response_text: "Based on my analysis, here's the plan for implementing the feature."
+      tool_calls:
+        - id: call_1
+          name: create_plan
+          input:
+            title: "Add dark mode feature"
+            tasks:
+              - "Update theme configuration"
+              - "Add dark mode styles"
+  - node: agent_loop.execute_tools
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_1
+          content: '{"plan_id": "plan_123", "status": "created"}'
+      thread_token_count: 600
+  # Final response
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "I've created a plan for the dark mode feature. Switch to Auto mode to execute."
+      response_text: "I've created a plan for the dark mode feature. Switch to Auto mode to execute."
+      tool_calls: []
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.execute_tools
+  not_reached:
+    - agent_loop.approval
+    - max_turns_notification

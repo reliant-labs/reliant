@@ -1,0 +1,30 @@
+# Code review with no suggestions
+name: code_review_no_suggestions
+description: Code review passes with no suggestions (empty array).
+
+inputs:
+  steps: [plan, implement, code_review]
+
+events:
+  - node: plan
+    output:
+      response_text: "Plan."
+
+  - node: implement
+    output:
+      response_text: "Perfect implementation."
+
+  - node: code_review
+    output:
+      response:
+        grade: pass
+        summary: "Excellent implementation, nothing to improve."
+        suggestions: []
+
+expect:
+  outcome: completed
+  reached:
+    - plan
+    - implement
+    - code_review
+    - complete

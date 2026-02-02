@@ -1,0 +1,33 @@
+# Code review fails
+name: code_review_fails
+description: Code review returns fail grade with suggestions.
+
+inputs:
+  steps: [plan, implement, code_review]
+
+events:
+  - node: plan
+    output:
+      response_text: "Plan."
+
+  - node: implement
+    output:
+      response_text: "Implementation."
+
+  - node: code_review
+    output:
+      response:
+        grade: fail
+        summary: "Implementation has critical issues that need addressing."
+        suggestions:
+          - "Fix the null pointer exception in line 42"
+          - "Add error handling for edge cases"
+          - "Missing unit tests for new functionality"
+
+expect:
+  outcome: completed
+  reached:
+    - plan
+    - implement
+    - code_review
+    - complete

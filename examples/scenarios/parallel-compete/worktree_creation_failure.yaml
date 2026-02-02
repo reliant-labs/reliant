@@ -1,0 +1,61 @@
+# Worktree creation failure scenario
+# When a worktree fails to return path, downstream nodes that reference it will error.
+# The workflow errors when trying to evaluate project path for impl nodes.
+name: worktree_creation_failure
+description: One worktree creation fails, workflow errors when accessing missing path
+events:
+  - node: improve_prompt
+    output:
+      message:
+        role: assistant
+        text: "Build a feature"
+      response_text: "Build a feature"
+      tool_calls: []
+  
+  - node: create_worktree_1
+    output:
+      id: "wt1"
+      name: "b1"
+      path: "/wt/1"
+      branch: "b1"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  
+  # Worktree 2 fails - no path field returned
+  - node: create_worktree_2
+    output:
+      id: "wt2"
+      name: "b2"
+      status: "error"
+      error: "Failed to create worktree: branch already exists"
+  
+  - node: create_worktree_3
+    output:
+      id: "wt3"
+      name: "b3"
+      path: "/wt/3"
+      branch: "b3"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+
+  # impl_1 completes (has valid path)
+  - node: impl_1
+    output:
+      message:
+        role: assistant
+        text: "Implementation 1 done"
+      response_text: "Implementation 1 done"
+
+expect:
+  outcome: error
+  error_contains: "no such key: path"
+  error_node: impl_2
+  reached:
+    - improve_prompt
+    - save_improved_prompt
+    - create_worktree_1
+    - create_worktree_2
+    - create_worktree_3
+    - impl_1
