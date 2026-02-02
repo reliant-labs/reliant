@@ -1,0 +1,80 @@
+# Tool Use Then Response: LLM uses regular tools before response tool
+#
+# Tests the full workflow with multiple tools:
+# 1. LLM calls regular tools (e.g., view, grep)
+# 2. Tools execute and return results
+# 3. LLM analyzes results and calls response tool
+# 4. Loop exits with structured output
+#
+# This verifies regular tools work alongside the response tool.
+
+name: tool_use_then_response
+description: LLM uses regular tools to gather info, then submits structured response
+
+inputs:
+  response_tool_name: "submit_response"
+  mode: "auto"
+
+events:
+  # Iteration 1: LLM uses a regular tool
+  - node: agent_loop.call_llm
+    type: llm_response
+    text: "Let me check the file contents first."
+    tool_calls:
+      - name: view
+        input:
+          file_path: "/project/config.json"
+
+  # Tool result
+  - node: agent_loop.execute_tools
+    type: tool_result
+    tool: view
+    output:
+      result: '{"version": "1.2.3", "debug": false}'
+
+  # Iteration 2: LLM uses another tool
+  - node: agent_loop.call_llm
+    type: llm_response
+    text: "Now let me check the logs."
+    tool_calls:
+      - name: grep
+        input:
+          pattern: "error"
+          path: "/project/logs/"
+
+  # Tool result
+  - node: agent_loop.execute_tools
+    type: tool_result
+    tool: grep
+    output:
+      result: "No matches found"
+
+  # Iteration 3: LLM has gathered enough info, uses response tool
+  - node: agent_loop.call_llm
+    type: llm_response
+    text: "Based on my investigation, here's my structured analysis."
+    tool_calls:
+      - name: submit_response
+        input:
+          choice: "complete"
+          value: "Config is at v1.2.3 with debug disabled. No errors in logs. System appears healthy."
+
+  # Response tool execution
+  - node: agent_loop.execute_tools
+    type: tool_result
+    tool: submit_response
+    output:
+      choice: "complete"
+      value: "Config is at v1.2.3 with debug disabled. No errors in logs. System appears healthy."
+
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.execute_tools
+  not_reached:
+    # Regular tools don't trigger reminder
+    - agent_loop.remind_response
+    - agent_loop.approval
+    - agent_loop.compact

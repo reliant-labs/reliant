@@ -1,0 +1,52 @@
+# Reminder Flow: LLM tries to end without response tool
+#
+# Tests the reminder mechanism:
+# 1. LLM responds with just text (no tool calls)
+# 2. remind_response node saves a system message
+# 3. Loop continues (completed is still false)
+# 4. LLM sees the reminder and calls the response tool
+# 5. Loop exits with completed = true
+#
+# This verifies the workflow enforces structured output.
+
+name: reminder_flow
+description: LLM tries to end without response tool, gets reminded, then uses it
+
+inputs:
+  response_tool_name: "submit_response"
+
+events:
+  # Iteration 1: LLM responds without calling any tools
+  - node: agent_loop.call_llm
+    type: llm_response
+    text: "I've finished analyzing the data. The results look good!"
+    # No tool_calls - this should trigger remind_response
+
+  # Iteration 2: After reminder, LLM uses the response tool
+  - node: agent_loop.call_llm
+    type: llm_response
+    text: "Let me provide that in the structured format."
+    tool_calls:
+      - name: submit_response
+        input:
+          choice: "complete"
+          value: "Analysis complete. All metrics are within expected ranges."
+
+  # Response tool execution
+  - node: agent_loop.execute_tools
+    type: tool_result
+    tool: submit_response
+    output:
+      choice: "complete"
+      value: "Analysis complete. All metrics are within expected ranges."
+
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.remind_response  # Reminder should be triggered
+    - agent_loop.execute_tools
+  not_reached:
+    - agent_loop.approval
+    - agent_loop.compact

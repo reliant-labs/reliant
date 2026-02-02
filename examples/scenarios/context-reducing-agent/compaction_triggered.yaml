@@ -1,0 +1,63 @@
+# Compaction Triggered: Context exceeds threshold, compact runs
+#
+# Tests the compaction mechanism:
+# 1. LLM calls tools
+# 2. Tool results are saved
+# 3. Thread token count exceeds compaction_threshold
+# 4. Compact node runs to reduce context
+# 5. LLM responds without tools, loop exits
+#
+# This verifies automatic context compaction works.
+
+name: compaction_triggered
+description: When thread token count exceeds threshold, compact node runs
+
+inputs:
+  mode: "auto"
+  compaction_threshold: 1000  # Low threshold for testing
+
+events:
+  # Iteration 1: LLM calls a tool
+  - node: agent_loop.call_llm
+    type: llm_response
+    text: "Processing your request with multiple steps..."
+    tool_calls:
+      - name: bash
+        input:
+          command: "find . -type f -name '*.go' | wc -l"
+
+  # Tool result with high token count in thread
+  - node: agent_loop.execute_tools
+    type: tool_result
+    tool: bash
+    output:
+      result: "42"
+      thread_token_count: 1500  # Exceeds 1000 threshold
+
+  # Compact node runs (implicit - mocked as pass-through)
+  - node: agent_loop.compact
+    type: tool_result
+    tool: compact
+    output:
+      compacted: true
+      original_tokens: 1500
+      compacted_tokens: 800
+
+  # Iteration 2: LLM responds without tools
+  - node: agent_loop.call_llm
+    type: llm_response
+    text: "Found 42 Go files in the project."
+
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.execute_tools
+    - agent_loop.save_tool_results
+    - agent_loop.compact  # Compaction should run
+  not_reached:
+    - agent_loop.filter_results
+    - agent_loop.execute_filter
+    - agent_loop.save_filtered_results
+    - agent_loop.approval

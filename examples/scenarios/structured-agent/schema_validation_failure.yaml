@@ -1,0 +1,117 @@
+# Schema Validation Failure Test: Response data fails JSON Schema validation
+#
+# This scenario tests that structured-agent properly rejects response data
+# that doesn't conform to the JSON Schema, triggering the remind_response flow.
+#
+# Key aspects tested:
+# 1. Schema validation catches missing required fields
+# 2. Schema validation catches type mismatches
+# 3. Schema validation catches constraint violations (min/max, minLength)
+# 4. Failed validation triggers remind_response instead of completing
+# 5. LLM can retry with valid data after seeing the error
+
+name: schema_validation_failure
+description: LLM response fails schema validation, gets reminded, then succeeds with valid data
+
+inputs:
+  response_tool_name: "submit_review"
+  
+  response_schema:
+    type: object
+    required: [verdict, findings]
+    additionalProperties: false
+    properties:
+      verdict:
+        type: boolean
+      confidence:
+        type: integer
+        minimum: 1
+        maximum: 10
+      findings:
+        type: string
+        minLength: 10
+
+events:
+  # Iteration 1: LLM calls response tool with INVALID data
+  - node: agent_loop.call_llm
+    type: llm_response
+    text: "Here's my review."
+    tool_calls:
+      - name: submit_review
+        input:
+          # Missing required field "findings"
+          verdict: true
+          confidence: 8
+
+  # Response tool execution FAILS validation (missing required field)
+  - node: agent_loop.execute_tools
+    type: tool_result
+    tool: submit_review
+    is_error: true
+    output:
+      error: "Response tool schema validation failed: missing required property 'findings'"
+
+  # Iteration 2: Remind LLM about schema requirements
+  - node: agent_loop.remind_response
+    type: inject_message
+    content: "Please call the submit_review tool to provide your structured response. Required fields: verdict (boolean), findings (string, min 10 chars)"
+
+  # Iteration 3: LLM tries again with wrong type
+  - node: agent_loop.call_llm
+    type: llm_response
+    text: "Let me fix that."
+    tool_calls:
+      - name: submit_review
+        input:
+          verdict: "yes"  # Wrong type - should be boolean
+          findings: "Code looks good with proper tests"
+
+  # Response tool execution FAILS validation (type mismatch)
+  - node: agent_loop.execute_tools
+    type: tool_result
+    tool: submit_review
+    is_error: true
+    output:
+      error: "Response tool schema validation failed: property 'verdict' has type 'string', expected 'boolean'"
+
+  # Iteration 4: Remind again
+  - node: agent_loop.remind_response
+    type: inject_message
+    content: "Please call the submit_review tool to provide your structured response. Note: verdict must be a boolean (true/false), not a string"
+
+  # Iteration 5: LLM provides VALID data
+  - node: agent_loop.call_llm
+    type: llm_response
+    text: "Now with the correct schema."
+    tool_calls:
+      - name: submit_review
+        input:
+          verdict: true
+          confidence: 8
+          findings: "Code quality is excellent with comprehensive tests and error handling"
+
+  # Response tool execution succeeds
+  - node: agent_loop.execute_tools
+    type: tool_result
+    tool: submit_review
+    output:
+      verdict: true
+      confidence: 8
+      findings: "Code quality is excellent with comprehensive tests and error handling"
+
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.execute_tools
+    - agent_loop.remind_response  # Triggered due to validation failures
+  not_reached:
+    - agent_loop.approval
+    - agent_loop.compact
+  
+  # Final output should be the valid response
+  outputs:
+    response.verdict: true
+    response.confidence: 8
+    response.findings: "Code quality is excellent with comprehensive tests and error handling"

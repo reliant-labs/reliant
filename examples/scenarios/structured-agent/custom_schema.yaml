@@ -1,0 +1,86 @@
+# Custom Schema Test: Using ObjectInput with JSON Schema for response_schema
+#
+# This scenario tests that structured-agent properly validates response data
+# against a custom JSON Schema provided as a workflow input.
+#
+# Key aspects tested:
+# 1. ObjectInput with JSON Schema validation (required fields, types, constraints)
+# 2. Response tool validation against the custom schema
+# 3. Integer min/max constraints (confidence: 1-10)
+# 4. Required vs optional fields (verdict+findings required, issues+suggestions optional)
+# 5. additionalProperties: false enforcement (no extra fields allowed)
+
+name: custom_schema
+description: LLM response is validated against a custom JSON Schema with strict constraints
+
+inputs:
+  response_tool_name: "submit_review"
+  response_tool_description: "Submit your code review verdict with structured findings"
+  
+  # Custom response schema using ObjectInput with JSON Schema
+  response_schema:
+    type: object
+    required: [verdict, findings]
+    additionalProperties: false
+    properties:
+      verdict:
+        type: boolean
+        description: "true = pass, false = fail"
+      confidence:
+        type: integer
+        description: "Confidence level from 1 (low) to 10 (high)"
+        minimum: 1
+        maximum: 10
+      findings:
+        type: string
+        description: "Summary of key findings"
+        minLength: 10
+      issues:
+        type: string
+        description: "List of issues found (optional)"
+      suggestions:
+        type: string
+        description: "Improvement suggestions (optional)"
+
+events:
+  # LLM calls response tool with valid data matching schema
+  - node: agent_loop.call_llm
+    type: llm_response
+    text: "I've completed the code review. Here are my findings."
+    tool_calls:
+      - name: submit_review
+        input:
+          verdict: true
+          confidence: 8
+          findings: "Code quality is excellent with proper error handling and comprehensive tests"
+          suggestions: "Consider adding more edge case tests for concurrent access scenarios"
+          # Note: issues is optional and omitted
+          # Note: no extra fields - additionalProperties: false
+
+  # Response tool execution succeeds (validated against schema)
+  - node: agent_loop.execute_tools
+    type: tool_result
+    tool: submit_review
+    output:
+      verdict: true
+      confidence: 8
+      findings: "Code quality is excellent with proper error handling and comprehensive tests"
+      suggestions: "Consider adding more edge case tests for concurrent access scenarios"
+
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.execute_tools
+  not_reached:
+    - agent_loop.remind_response
+    - agent_loop.approval
+    - agent_loop.compact
+  
+  # Verify structured response is available in outputs
+  outputs:
+    response.verdict: true
+    response.confidence: 8
+    response.findings: "Code quality is excellent with proper error handling and comprehensive tests"
+    response.suggestions: "Consider adding more edge case tests for concurrent access scenarios"

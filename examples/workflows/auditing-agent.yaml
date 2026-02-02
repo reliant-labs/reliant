@@ -1,0 +1,195 @@
+name: auditing-agent
+apiVersion: "0.0.5"
+description: Agent with continuous audit oversight on every turn
+inputs:
+  agent:
+    type: group
+    description: Settings for the main agent being audited
+    ui: toolbar
+    presets:
+      tag: agent
+      default: general
+    inputs:
+      compaction_threshold:
+        type: integer
+        default: 185000
+        description: Token count to trigger context compaction
+        min: 10000
+      max_turns:
+        type: integer
+        default: 200
+        description: Maximum agent loop iterations
+        min: 1
+        max: 500
+      mode:
+        type: enum
+        default: auto
+        description: "Execution mode: manual = requires approval, auto = auto-approves, plan = read-only tools"
+      model:
+        type: model
+        description: Model for main agent
+        default:
+          tags: ["flagship"]
+          providers: ["anthropic"]
+      system_prompt:
+        type: string
+        default: ""
+        description: System prompt for main agent
+      temperature:
+        type: number
+        default: 1
+        description: Temperature for main agent
+        min: 0
+        max: 1
+      thinking_level:
+        type: enum
+        default: low
+        description: Extended thinking level for main agent
+      tools:
+        type: tools
+        default:
+          - tag:default
+        description: Available tools for main agent
+      spawn_presets:
+        type: preset
+        tags: [agent]
+        multi: true
+        default: []
+        description: Presets available for main agent's spawn tool
+  auditor_model:
+    type: model
+    description: Model for the auditor
+    default:
+      tags: [fast, cheap]
+      providers: [local]
+  auditor_system_prompt:
+    type: string
+    default: |
+      You are a principal code auditor, auditing a junior engineer's work. Your job is to gate actions based on safety, correctness, and code quality.
+
+      You MUST use the audit tool to report your findings.
+
+      Default to APPROVE when safe and clearly helpful. DENY when policy is violated, risk is unclear, quality is unacceptable, or the agent is going off-task.
+
+      # Hard DENY rules
+      - Creating fallbacks which mask bugs
+      - No use of `pkill` command - use BashList and BashKill instead
+      - No private secrets in committed code
+      - Don't allow view + edit in the same message
+      - Skipping tests or writing fake tests
+      - Making assumptions without verification steps
+
+      # Quality gates
+      DENY if: scope creep, claims without evidence, no definition of done, big-bang refactors, complexity increases without payoff.
+    description: System prompt for the auditor
+nodes:
+  - id: audited_loop
+    type: loop
+    while: (outputs.tool_calls != null && size(outputs.tool_calls) > 0) && iter.iteration < inputs.agent.max_turns
+    inline:
+      name: audited_loop (Loop Body)
+      description: Inline loop body for audited_loop
+      outputs:
+        tool_calls: "{{nodes.main_agent.tool_calls}}"
+      nodes:
+        - id: main_agent
+          type: call_llm
+          args:
+            model: "{{inputs.agent.model}}"
+            system_prompt: "{{inputs.agent.system_prompt}}"
+            temperature: "{{inputs.agent.temperature}}"
+            thinking_level: "{{inputs.agent.thinking_level}}"
+            tool_filter: "{{inputs.agent.tools}}"
+        - id: audit_check
+          type: call_llm
+          args:
+            model: "{{inputs.auditor_model}}"
+            system_prompt: "{{inputs.auditor_system_prompt}}"
+            messages:
+              - role: user
+                content: |
+                  AUDIT REQUEST:
+
+                  Agent just responded:
+                  {{nodes.main_agent.response_text}}
+
+                  {{nodes.main_agent.tool_calls != null && size(nodes.main_agent.tool_calls) > 0 ? 'Tool calls pending: ' + string(size(nodes.main_agent.tool_calls)) : 'No tool calls'}}
+
+                  Use the audit tool to report whether the agent is on track.
+            response_tool:
+              name: audit
+              description: Report audit findings
+              schema:
+                type: object
+                properties:
+                  approved:
+                    type: boolean
+                    description: True to allow the agent to continue. False to deny with guidance.
+                  guidance:
+                    type: string
+                    description: Explanation or guidance for your choice. Never provide guidance that just comments that the choice is good. You want to avoid polluting the context window. In those cases just omit guidance completely. Only provide guidance if it is intended to influence/change direction.
+                required:
+                  - approved
+            tool_filter:
+              - audit
+        - id: execute_audit
+          type: execute_tools
+          args:
+            tool_calls: "{{nodes.audit_check.tool_calls}}"
+          save_message:
+            condition: >-
+              has(output.response_data) && 'audit' in output.response_data &&
+              has(output.response_data.audit.guidance) && output.response_data.audit.guidance != ''
+            role: user
+            content: |
+              **AUDIT FEEDBACK**:
+
+              {{output.response_data.audit.guidance}}
+        - id: save_approved_response
+          type: save_message
+          args:
+            content: "{{nodes.main_agent.message.text}}"
+            role: "{{nodes.main_agent.message.role}}"
+            thinking: "{{nodes.main_agent.thinking}}"
+            tool_calls: "{{nodes.main_agent.tool_calls}}"
+        - id: execute_tools
+          type: execute_tools
+          args:
+            tool_calls: "{{nodes.main_agent.tool_calls}}"
+          save_message:
+            role: tool
+            content: ""
+            tool_results: "{{output.tool_results}}"
+        - id: compact
+          type: compact
+          timeout: 10m
+      edges:
+        - from: main_agent
+          default: audit_check
+        - from: audit_check
+          cases:
+            - to: execute_audit
+              condition: nodes.audit_check.tool_calls != null && size(nodes.audit_check.tool_calls) > 0
+              label: execute_audit_tool
+          default: save_approved_response
+        - from: execute_audit
+          cases:
+            - to: save_approved_response
+              condition: >-
+                has(nodes.execute_audit.response_data) && 'audit' in nodes.execute_audit.response_data &&
+                nodes.execute_audit.response_data.audit.approved == true
+              label: approved
+        - from: save_approved_response
+          cases:
+            - to: execute_tools
+              condition: nodes.main_agent.tool_calls != null && size(nodes.main_agent.tool_calls) > 0
+              label: has_tools
+        - from: execute_tools
+          cases:
+            - to: compact
+              condition: nodes.execute_tools.thread_token_count > inputs.agent.compaction_threshold
+              label: compact
+      entry: main_agent
+    thread:
+      mode: inherit
+entry: audited_loop
