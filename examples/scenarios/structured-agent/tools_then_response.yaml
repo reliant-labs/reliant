@@ -1,0 +1,86 @@
+# LLM uses regular tools first, then calls response tool
+name: tools_then_response
+description: LLM uses regular tools to gather information, then calls response tool
+inputs:
+  mode: auto
+  max_turns: 100
+  response_tool_name: submit_response
+events:
+  # First iteration: LLM reads a file
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Let me read the configuration file first."
+      response_text: "Let me read the configuration file first."
+      tool_calls:
+        - id: call_0
+          name: view
+          input:
+            file_path: "config.yaml"
+  - node: agent_loop.execute_tools
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_0
+          content: "database:\n  host: localhost\n  port: 5432"
+      thread_token_count: 500
+  # Second iteration: LLM searches for more info
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Let me check for any related files."
+      response_text: "Let me check for any related files."
+      tool_calls:
+        - id: call_1
+          name: grep
+          input:
+            pattern: "database"
+            path: "."
+  - node: agent_loop.execute_tools
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_1
+          content: '["config.yaml", "db/connection.go"]'
+      thread_token_count: 600
+  # Third iteration: LLM submits structured response
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Analysis complete."
+      response_text: "Analysis complete."
+      tool_calls:
+        - id: call_2
+          name: submit_response
+          input:
+            choice: complete
+            value: "Database is configured for localhost:5432. Found 2 related files."
+  - node: agent_loop.execute_tools
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_2
+          content: '{"choice": "complete"}'
+      response_data:
+        submit_response:
+          choice: complete
+          value: "Database is configured for localhost:5432. Found 2 related files."
+      thread_token_count: 700
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.execute_tools
+  not_reached:
+    - agent_loop.remind_response
+    - agent_loop.approval

@@ -1,0 +1,26 @@
+# Default steps - minimal workflow
+name: default_steps_minimal
+description: Default steps (research, plan, implement) - simplest workflow path.
+
+# Default inputs: steps: [research, plan, implement]
+
+events:
+  - node: research
+    output:
+      response_text: "Research findings..."
+
+  - node: plan
+    output:
+      response_text: "Here is the plan..."
+
+  - node: implement
+    output:
+      response_text: "Implementation complete."
+
+expect:
+  outcome: completed
+  reached:
+    - research
+    - plan
+    - implement
+    - complete

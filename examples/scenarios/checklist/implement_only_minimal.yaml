@@ -1,0 +1,17 @@
+# Implement only - minimal workflow
+name: implement_only_minimal
+description: Only 'implement' step enabled - absolute minimal workflow.
+
+inputs:
+  steps: [implement]
+
+events:
+  - node: implement
+    output:
+      response_text: "Minimal implementation complete."
+
+expect:
+  outcome: completed
+  reached:
+    - implement
+    - complete

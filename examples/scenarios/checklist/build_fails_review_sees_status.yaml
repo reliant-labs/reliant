@@ -1,0 +1,38 @@
+# Build fails - code review sees failure
+name: build_fails_review_sees_status
+description: Build failure is properly reflected in code_review context.
+
+inputs:
+  steps: [plan, implement, build, code_review]
+
+events:
+  - node: plan
+    output:
+      response_text: "Plan."
+
+  - node: implement
+    output:
+      response_text: "Implementation."
+
+  - node: build
+    output:
+      exit_code: 1
+      stdout: "Error: undefined reference to 'main'"
+
+  - node: code_review
+    output:
+      response:
+        grade: fail
+        summary: "Build failed - compilation errors found."
+        suggestions:
+          - "Fix the undefined reference error"
+          - "Ensure all dependencies are properly imported"
+
+expect:
+  outcome: completed
+  reached:
+    - plan
+    - implement
+    - build
+    - code_review
+    - complete

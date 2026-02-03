@@ -1,0 +1,48 @@
+# Retry once then succeed
+name: retry_second_attempt_succeeds
+description: First attempt fails, second succeeds with Analyze and Adjust guidance
+inputs:
+  verify_command: "npm test"
+  escalation_threshold: 3
+events:
+  # Iteration 0: fails
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "Initial implementation attempt."
+      response_text: "Initial implementation attempt."
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 1
+      stdout: ""
+      stderr: "Error: expected foo but got bar"
+  
+  # Iteration 1: "Analyze and Adjust" - succeeds
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "After analyzing the error, I fixed the issue."
+      response_text: "After analyzing the error, I fixed the issue."
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 0
+      stdout: "All tests passed"
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - implement_loop
+    - implement_loop.implement
+    - implement_loop.verify
+    - completion
+  not_reached:
+    - planner_reapproach
+  node_outputs:
+    implement_loop:
+      exit_code: 0
+      _iterations: 2

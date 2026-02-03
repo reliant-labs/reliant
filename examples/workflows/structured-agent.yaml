@@ -1,0 +1,266 @@
+# Structured Agent Workflow
+#
+# Agent that requires a response tool to complete its turn.
+# Unlike the standard agent (which yields when no tool calls),
+# this agent loops while the response tool hasn't been called.
+#
+# The response tool schema is customizable via `response_schema` input.
+# If not provided, uses a default choice/value schema.
+# The structured response is available via the `response` output.
+
+name: structured-agent
+apiVersion: "0.0.5"
+description: Agent that yields structured output via a required response tool
+presets:
+  tag: agent
+  default: general
+entry: agent_loop
+
+inputs:
+  # === EXECUTION MODE ===
+  mode:
+    type: enum
+    enum: ["manual", "auto", "plan"]
+    default: "auto"
+    description: "Execution mode: manual = requires approval, auto = auto-approves"
+
+  # === CORE LLM SETTINGS ===
+  model:
+    type: model
+    description: LLM model to use
+    default:
+      tags: ["flagship"]
+      providers: ["anthropic"]
+  temperature:
+    type: number
+    default: 1.0
+    min: 0
+    max: 1
+    description: Response randomness (0 = focused, 1 = creative)
+
+  # === AGENT CAPABILITIES ===
+  tools:
+    type: tools
+    default: ["tag:default"]
+    description: Available tools for the agent
+  system_prompt:
+    type: string
+    default: ""
+    description: System prompt for the agent
+  thinking_level:
+    type: enum
+    enum: [low, medium, high]
+    default: low
+    description: Extended thinking level
+  spawn_presets:
+    type: preset
+    tags: [agent]
+    multi: true
+    default: []
+    description: Presets available for spawn tool (empty = spawn disabled)
+
+  # === RESPONSE TOOL CONFIGURATION ===
+  response_tool_name:
+    type: string
+    default: "submit_response"
+    description: Name of the required response tool
+  response_tool_description:
+    type: string
+    default: "Submit your structured response to complete the task"
+    description: Description shown to the LLM for the response tool
+
+  # === RESPONSE SCHEMA ===
+  response_schema:
+    type: object
+    description: "JSON Schema for the response tool output. If not provided, uses default choice/value schema."
+    default:
+      type: object
+      required:
+        - choice
+        - value
+      properties:
+        choice:
+          type: string
+          enum:
+            - complete
+          description: "Task completed successfully - provide summary or result"
+        value:
+          type: string
+          description: "Explanation or data for your choice"
+
+  # === LIMITS ===
+  max_turns:
+    type: integer
+    default: 200
+    min: 1
+    max: 500
+    description: Maximum agent loop iterations
+  compaction_threshold:
+    type: integer
+    default: 185000
+    min: 10000
+    description: Token count to trigger context compaction
+
+outputs:
+  # The structured response from the response tool
+  response: "{{nodes.agent_loop.response}}"
+  # Whether the response tool was called successfully
+  completed: "{{nodes.agent_loop.completed}}"
+  # The choice made by the agent
+  choice: "{{nodes.agent_loop.choice}}"
+  # The value/explanation provided
+  value: "{{nodes.agent_loop.value}}"
+
+nodes:
+  - id: agent_loop
+    thread:
+      mode: inherit
+    type: loop
+    # Continue while response tool not called AND under max turns
+    while: outputs.completed != true && iter.iteration < inputs.max_turns
+    inline:
+      entry: [call_llm]
+
+      outputs:
+        tool_calls: "{{nodes.call_llm.tool_calls}}"
+        # Extract response data if available (null if response tool wasn't called)
+        response: "{{has(nodes.execute_tools) && has(nodes.execute_tools.response_data) ? nodes.execute_tools.response_data[inputs.response_tool_name] : null}}"
+        # Check if response tool was called (response is non-null)
+        completed: "{{has(nodes.execute_tools) && has(nodes.execute_tools.response_data) && inputs.response_tool_name in nodes.execute_tools.response_data && nodes.execute_tools.response_data[inputs.response_tool_name] != null}}"
+        # Extract choice and value for convenience
+        choice: "{{has(nodes.execute_tools) && has(nodes.execute_tools.response_data) && inputs.response_tool_name in nodes.execute_tools.response_data && nodes.execute_tools.response_data[inputs.response_tool_name] != null ? nodes.execute_tools.response_data[inputs.response_tool_name].choice : ''}}"
+        value: "{{has(nodes.execute_tools) && has(nodes.execute_tools.response_data) && inputs.response_tool_name in nodes.execute_tools.response_data && nodes.execute_tools.response_data[inputs.response_tool_name] != null ? nodes.execute_tools.response_data[inputs.response_tool_name].value : ''}}"
+
+      nodes:
+        # Call LLM with tools + response tool
+        - id: call_llm
+          type: call_llm
+          save_message:
+            role: "{{output.message.role}}"
+            content: "{{output.message.text}}"
+            tool_calls: "{{output.tool_calls}}"
+          args:
+            model: "{{inputs.model}}"
+            temperature: "{{inputs.temperature}}"
+            system_prompt: "{{inputs.system_prompt}}"
+            # Include regular tools plus the response tool
+            tool_filter: "{{(size(inputs.tools) > 0 ? inputs.tools : []) + [inputs.response_tool_name]}}"
+            response_tool:
+              name: "{{inputs.response_tool_name}}"
+              description: "{{inputs.response_tool_description}}"
+              schema: "{{inputs.response_schema}}"
+
+        # Remind agent to use response tool if it tries to end without tool calls
+        - id: remind_response
+          type: save_message
+          args:
+            role: system
+            content: "You must call the `{{inputs.response_tool_name}}` tool to complete your turn. Please use this tool to submit your structured response."
+
+        # Approval gate for manual mode
+        - id: approval
+          type: approval
+          args:
+            title: Approve tool execution?
+            description: "The agent wants to execute tool(s)"
+            timeout: 1h
+            actions:
+              - type: approve
+                label: "Approve"
+              - type: deny
+                label: "Deny"
+
+        # Execute tools (both regular tools and response tool)
+        - id: execute_tools
+          type: execute_tools
+          save_message:
+            role: tool
+            content: ""
+            tool_results: "{{output.tool_results}}"
+          args:
+            tool_calls: "{{nodes.call_llm.tool_calls}}"
+            # Explicitly declare expected response tool since the name is dynamic
+            # This ensures response_data[response_tool_name] exists even if LLM doesn't call it
+            expected_response_tools:
+              - "{{inputs.response_tool_name}}"
+
+        # Compact context if needed (saves message internally)
+        - id: compact
+          type: compact
+          timeout: "10m"
+
+      edges:
+        - from: call_llm
+          cases:
+            # Has tool calls + manual mode -> require approval
+            - to: approval
+              condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode == 'manual'
+              label: require_approval
+            # Has tool calls + auto mode -> execute directly
+            - to: execute_tools
+              condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode != 'manual'
+              label: auto_approve
+            # No tool calls -> remind to use response tool
+            - to: remind_response
+              condition: nodes.call_llm.tool_calls == null || size(nodes.call_llm.tool_calls) == 0
+              label: no_tools
+
+        # Approval result
+        - from: approval
+          cases:
+            - to: execute_tools
+              condition: nodes.approval.status == 'approved'
+              label: approved
+
+        # After executing tools, check if compaction needed
+        - from: execute_tools
+          cases:
+            - to: compact
+              condition: nodes.execute_tools.thread_token_count > inputs.compaction_threshold
+              label: needs_compact
+
+      ui:
+        positions:
+          approval:
+            x: 1002
+            y: 104
+          call_llm:
+            x: 389
+            y: 207.5
+          compact:
+            x: 1620
+            y: 240.25
+          execute_tools:
+            x: 1270
+            y: 235.25
+          remind_response:
+            x: 1023
+            y: 356
+          workflow:
+            x: 50
+            y: 200
+        switches:
+          switch-call_llm:
+            source_node: call_llm
+            position:
+              x: 670
+              y: 148.5
+            cases:
+              - id: case-0
+                condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode == 'manual'
+                label: require_approval
+              - id: case-1
+                condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode != 'manual'
+                label: auto_approve
+              - id: case-2
+                condition: nodes.call_llm.tool_calls == null || size(nodes.call_llm.tool_calls) == 0
+                label: no_tools
+
+ui:
+  positions:
+    agent_loop:
+      x: 445
+      y: 250
+    workflow:
+      x: 150
+      y: 270

@@ -1,0 +1,31 @@
+# Verify captures stdout and stderr
+name: retry_verify_output_capture
+description: Verifies that stdout and stderr are captured from verify command
+inputs:
+  verify_command: "npm test"
+  escalation_threshold: 2
+events:
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "Implementation."
+      response_text: "Implementation."
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 0
+      stdout: "Test suite passed\n5 tests, 0 failures"
+      stderr: "Warning: deprecated API"
+
+expect:
+  outcome: completed
+  reached:
+    - completion
+  not_reached:
+    - planner_reapproach
+  node_outputs:
+    implement_loop:
+      exit_code: 0
+      stdout: "Test suite passed\n5 tests, 0 failures"
+      stderr: "Warning: deprecated API"

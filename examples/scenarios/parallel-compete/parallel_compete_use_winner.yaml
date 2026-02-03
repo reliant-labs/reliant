@@ -1,0 +1,122 @@
+# Happy path: All three implementations complete, reviewer picks winner (use_winner strategy)
+name: parallel_compete_use_winner
+description: Three implementations complete in parallel, reviewer selects candidate 2 using use_winner strategy
+events:
+  # Improve prompt (call_llm node - direct)
+  - node: improve_prompt
+    output:
+      message:
+        role: assistant
+        text: |
+          ## Refined Specification
+          - Implement user authentication
+          - Support OAuth and password auth
+          - Include rate limiting
+          - Write unit tests
+      response_text: |
+        ## Refined Specification
+        - Implement user authentication
+        - Support OAuth and password auth
+        - Include rate limiting
+        - Write unit tests
+      tool_calls: []
+  
+  # Create worktrees (worktree nodes - parallel)
+  - node: create_worktree_1
+    output:
+      id: "wt1"
+      name: "compete-impl-1"
+      path: "/tmp/worktrees/compete-impl-1"
+      branch: "compete-impl-1"
+      base_branch: "main"
+      repo_id: "test-repo"
+      status: "created"
+  - node: create_worktree_2
+    output:
+      id: "wt2"
+      name: "compete-impl-2"
+      path: "/tmp/worktrees/compete-impl-2"
+      branch: "compete-impl-2"
+      base_branch: "main"
+      repo_id: "test-repo"
+      status: "created"
+  - node: create_worktree_3
+    output:
+      id: "wt3"
+      name: "compete-impl-3"
+      path: "/tmp/worktrees/compete-impl-3"
+      branch: "compete-impl-3"
+      base_branch: "main"
+      repo_id: "test-repo"
+      status: "created"
+  
+  # Parallel implementations (workflow nodes - BLACK BOX outputs)
+  - node: impl_1
+    output:
+      message:
+        role: assistant
+        text: "Candidate 1 implementation complete. Used basic password auth."
+      response_text: "Candidate 1 implementation complete. Used basic password auth."
+  
+  - node: impl_2
+    output:
+      message:
+        role: assistant
+        text: "Candidate 2 implementation complete. Full OAuth + password with tests."
+      response_text: "Candidate 2 implementation complete. Full OAuth + password with tests."
+  
+  - node: impl_3
+    output:
+      message:
+        role: assistant
+        text: "Candidate 3 implementation complete. OAuth only, minimal tests."
+      response_text: "Candidate 3 implementation complete. OAuth only, minimal tests."
+  
+  # Reviewer with structured response (use_winner strategy)
+  - node: review
+    output:
+      message:
+        role: assistant
+        text: |
+          After reviewing all implementations:
+          
+          - Candidate 1: Basic but incomplete
+          - Candidate 2: Complete with good test coverage
+          - Candidate 3: Missing password auth
+      response_text: |
+        After reviewing all implementations:
+        
+        - Candidate 1: Basic but incomplete
+        - Candidate 2: Complete with good test coverage
+        - Candidate 3: Missing password auth
+      # Structured response fields
+      winner: 2
+      strategy: "use_winner"
+      confidence: 8
+      rationale: "Candidate 2 has the most complete implementation with proper OAuth and password auth support, plus good test coverage."
+      synthesis_instructions: ""
+
+  # apply_winner runs rsync command
+  - node: apply_winner
+    output:
+      exit_code: 0
+      stdout: "sent 1234 bytes  received 56 bytes\n"
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - improve_prompt
+    - save_improved_prompt
+    - create_worktree_1
+    - create_worktree_2
+    - create_worktree_3
+    - impl_1
+    - impl_2
+    - impl_3
+    - review
+    - apply_winner
+    - apply_done
+    - complete
+  not_reached:
+    - synthesizer

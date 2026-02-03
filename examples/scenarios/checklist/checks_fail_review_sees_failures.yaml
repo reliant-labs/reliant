@@ -1,0 +1,44 @@
+# Checks fail - code review sees failures
+name: checks_fail_review_sees_failures
+description: Failed checks are visible in code_review context.
+
+inputs:
+  steps: [plan, implement, lint, test, code_review]
+
+events:
+  - node: plan
+    output:
+      response_text: "Plan."
+
+  - node: implement
+    output:
+      response_text: "Implementation."
+
+  - node: lint
+    output:
+      exit_code: 0
+      stdout: "Lint passed"
+
+  - node: test
+    output:
+      exit_code: 1
+      stdout: "Tests failed: 3 assertions failed"
+
+  - node: code_review
+    output:
+      response:
+        grade: fail
+        summary: "Tests are failing, implementation incomplete."
+        suggestions:
+          - "Fix the failing test assertions"
+          - "Check edge case handling"
+
+expect:
+  outcome: completed
+  reached:
+    - plan
+    - implement
+    - lint
+    - test
+    - code_review
+    - complete

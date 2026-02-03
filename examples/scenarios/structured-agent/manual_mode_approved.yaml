@@ -1,0 +1,79 @@
+# Manual mode with approval granted
+name: manual_mode_approved
+description: Manual mode, user approves tool execution
+inputs:
+  mode: manual
+  max_turns: 100
+  response_tool_name: submit_response
+events:
+  # LLM requests a tool in manual mode
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Let me read the file."
+      response_text: "Let me read the file."
+      tool_calls:
+        - id: call_0
+          name: view
+          input:
+            file_path: "main.go"
+  # Approval is required in manual mode
+  - node: agent_loop.approval
+    output:
+      approval_id: "approval_1"
+      status: approved
+      action_taken: approve
+      data: {}
+  # Tool executes after approval
+  - node: agent_loop.execute_tools
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_0
+          content: "package main"
+      thread_token_count: 500
+  # LLM submits response
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Found a Go file."
+      response_text: "Found a Go file."
+      tool_calls:
+        - id: call_1
+          name: submit_response
+          input:
+            choice: complete
+            value: "File contains a Go main package."
+  # Approval for response tool
+  - node: agent_loop.approval
+    output:
+      approval_id: "approval_2"
+      status: approved
+      action_taken: approve
+      data: {}
+  - node: agent_loop.execute_tools
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_1
+          content: '{"choice": "complete"}'
+      response_data:
+        submit_response:
+          choice: complete
+          value: "File contains a Go main package."
+      thread_token_count: 600
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.approval
+    - agent_loop.execute_tools
+  not_reached:
+    - agent_loop.remind_response

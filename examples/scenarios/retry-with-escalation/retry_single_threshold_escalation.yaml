@@ -1,0 +1,56 @@
+# Single attempt threshold triggers immediate escalation on failure
+name: retry_single_threshold_escalation
+description: With escalation_threshold=1, single failure triggers escalation
+inputs:
+  verify_command: "test"
+  escalation_threshold: 1
+events:
+  # Single iteration fails
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "Only chance."
+      response_text: "Only chance."
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 1
+      stdout: ""
+      stderr: "Failed"
+  
+  # Escalation succeeds
+  - node: planner_reapproach
+    output:
+      message:
+        role: assistant
+        text: "Reanalyzed the problem."
+      response_text: "Reanalyzed the problem."
+      tool_calls: []
+  
+  
+  - node: implement_simplified
+    output:
+      message:
+        role: assistant
+        text: "Fixed with simplified approach."
+      response_text: "Fixed with simplified approach."
+      tool_calls: []
+  
+  - node: final_verify
+    output:
+      exit_code: 0
+      stdout: "PASS"
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - implement_loop
+    - planner_reapproach
+    - completion
+  not_reached:
+  node_outputs:
+    implement_loop:
+      exit_code: 1
+      _iterations: 1

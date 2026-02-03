@@ -1,0 +1,28 @@
+# Audit check without tool calls - goes directly to save_approved_response
+name: audit_no_response_tool
+description: Audit check responds without calling the audit tool
+events:
+  - node: audited_loop.main_agent
+    output:
+      message:
+        role: assistant
+        text: "Here's my analysis."
+      response_text: "Here's my analysis."
+      tool_calls: []
+  # audit_check responds with text only (no tool call)
+  - node: audited_loop.audit_check
+    output:
+      message:
+        role: assistant
+        text: "Looks good to me."
+      response_text: "Looks good to me."
+      tool_calls: []
+expect:
+  outcome: completed
+  reached:
+    - audited_loop
+    - audited_loop.main_agent
+    - audited_loop.audit_check
+    - audited_loop.save_approved_response
+  not_reached:
+    - audited_loop.execute_audit

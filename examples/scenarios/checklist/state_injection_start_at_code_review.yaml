@@ -1,0 +1,30 @@
+# State injection - start at code_review
+name: state_injection_start_at_code_review
+description: Start workflow at code_review with pre-populated state.
+
+state:
+  lint:
+    exit_code: 0
+  test:
+    exit_code: 0
+  build:
+    exit_code: 0
+
+start_at: code_review
+
+inputs:
+  steps: [implement, lint, test, build, code_review]
+
+events:
+  - node: code_review
+    output:
+      response:
+        grade: pass
+        summary: "All checks passed in prior steps."
+        suggestions: []
+
+expect:
+  outcome: completed
+  reached:
+    - code_review
+    - complete

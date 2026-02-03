@@ -1,0 +1,28 @@
+# Lint only check
+name: lint_only_check
+description: Implementation with only lint check enabled.
+
+inputs:
+  steps: [plan, implement, lint]
+
+events:
+  - node: plan
+    output:
+      response_text: "Plan."
+
+  - node: implement
+    output:
+      response_text: "Implementation."
+
+  - node: lint
+    output:
+      exit_code: 0
+      stdout: "Lint passed"
+
+expect:
+  outcome: completed
+  reached:
+    - plan
+    - implement
+    - lint
+    - complete

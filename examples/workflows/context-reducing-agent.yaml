@@ -1,0 +1,365 @@
+# Context-Reducing Agent Workflow
+#
+# Agent workflow with active context management.
+# Compacts context when it grows too large.
+# Uses filtering for large tool results to reduce context bloat.
+#
+# MESSAGE PERSISTENCE: Uses inline save_message where possible.
+# Note: execute_tools uses explicit SaveMessage because save behavior
+# differs by path (large results are filtered before saving).
+
+name: context-reducing-agent
+apiVersion: "0.0.5"
+description: Agent workflow with active context management
+presets:
+  tag: agent
+  default: general
+entry: agent_loop
+
+inputs:
+  # === AGENT SETTINGS ===
+  model:
+    type: model
+    description: LLM model to use
+    default:
+      tags: ["flagship"]
+  temperature:
+    type: number
+    default: 1.0
+    min: 0
+    max: 1
+    description: Response randomness
+  mode:
+    type: enum
+    enum: ["manual", "auto", "plan"]
+    default: "auto"
+    description: Execution mode
+  system_prompt:
+    type: string
+    default: ""
+    description: Override the system prompt
+  tools:
+    type: tools
+    default: ["tag:default"]
+    description: Available tools for the agent (empty = no tools)
+  compaction_threshold:
+    type: integer
+    default: 185000
+    min: 10000
+    description: Token count to trigger context compaction
+  max_turns:
+    type: integer
+    default: 50
+    min: 1
+    max: 500
+    description: Maximum agent loop iterations
+  thinking_level:
+    type: enum
+    enum: [low, medium, high]
+    default: low
+    description: Extended thinking level
+  spawn_presets:
+    type: preset
+    tags: [agent]
+    multi: true
+    default:
+      - general
+      - researcher
+      - code_reviewer
+    description: Presets available for spawn tool (empty = spawn disabled)
+
+outputs:
+  message: "{{nodes.agent_loop.message}}"
+  response_text: "{{nodes.agent_loop.response_text}}"
+
+nodes:
+  # Agent loop with context reduction
+  - id: agent_loop
+    type: loop
+    while: (outputs.tool_calls != null && size(outputs.tool_calls) > 0) && iter.iteration < inputs.max_turns
+    inline:
+      # Single turn with context reduction for large tool results
+
+      outputs:
+        tool_calls: "{{nodes.call_llm.tool_calls}}"
+        message: "{{nodes.call_llm.message}}"
+        response_text: "{{nodes.call_llm.response_text}}"
+
+      entry: call_llm
+
+      nodes:
+        # Call LLM (saves via inline save_message)
+        - id: call_llm
+          type: call_llm
+          save_message:
+            role: "{{output.message.role}}"
+            content: "{{output.message.text}}"
+            tool_calls: "{{output.tool_calls}}"
+          args:
+            model: "{{inputs.model}}"
+            temperature: "{{inputs.temperature}}"
+            thinking_level: "{{inputs.thinking_level}}"
+            system_prompt: "{{inputs.system_prompt}}"
+            # Tools: respect user's tool selection (MCP only included if user selects tag:mcp)
+            tool_filter: "{{inputs.mode == 'plan' ? ['tag:plan'] : inputs.tools + ['spawn:builtin://agent(' + inputs.spawn_presets.join(',') + ')']}}"
+
+        # Approval gate - waits for user approval before executing tools
+        - id: approval
+          type: approval
+          args:
+            title: Approve tool execution?
+            description: "The agent wants to execute tool(s)"
+            timeout: 1h
+            actions:
+              - type: approve
+                label: "Approve"
+              - type: deny
+                label: "Deny"
+
+        # Execute tools (no inline save_message - we branch based on result size)
+        - id: execute_tools
+          type: execute_tools
+          args:
+            tool_calls: "{{nodes.call_llm.tool_calls}}"
+
+        # LARGE RESULTS PATH: Filter with structured response tool
+        # Step 1: LLM filters results and outputs structured data via response tool
+        - id: filter_results
+          type: call_llm
+          args:
+            model: { tags: [fast, free, cheap] }
+            tools: false
+            tool_filter: [filtered_results]
+            response_tool:
+              name: filtered_results
+              description: Submit filtered tool results
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    description: Evaluation for each tool call result
+                    items:
+                      type: object
+                      required: [tool_call_id, name, filtered]
+                      properties:
+                        tool_call_id:
+                          type: string
+                          description: The original tool_call_id (MUST match exactly)
+                        name:
+                          type: string
+                          description: The tool name
+                        filtered:
+                          type: boolean
+                          description: true if you summarized/filtered the content, false to keep original result unchanged
+                        content:
+                          type: string
+                          description: Filtered/summarized content (required when filtered=true, ignored when filtered=false)
+                        is_error:
+                          type: boolean
+                          description: Whether this result represents an error
+            system_prompt: |
+              You are a context filter for an AI coding assistant.
+
+              Given tool calls and their results, evaluate each result and submit via the filtered_results tool.
+
+              ## CRITICAL:
+              - You MUST preserve the exact tool_call_id for each result.
+              - You MUST output snippets of exact results. The LLM often uses find/replace edit tools that require exact text matching. If it does not have access to the exact results, it will not be able to use its tools.
+              - You don't always need to filter results. You can often keep results as-is by setting filtered=false. The best time to filter is when there is a lot of noise (e.g., reading logs, or extremely large files).
+
+              ## When to keep original (filtered=false):
+              - Code files that will be edited - exact text is needed for edit tools
+              - Error messages and stack traces - details matter for debugging
+              - Small/medium results that are already concise (under ~2000 chars)
+              - Search results with few matches
+              - Any output where precision matters more than brevity
+
+              ## When to filter (filtered=true):
+              - Very long log output with repetitive entries
+              - Large file contents where only a small portion is relevant
+              - Verbose command output (npm install, git status with many files)
+              - Search results with many matches where a summary suffices
+              - Directory listings with hundreds of files
+
+              ## When filtering, you MUST:
+              - Preserve exact file paths and line numbers (critical for navigation)
+              - Keep error messages and stack traces verbatim
+              - Keep function/variable names and signatures exactly as written
+              - Keep code snippets that will be modified - character-for-character exact
+              - Include enough context for the agent to take action
+
+              ## When filtering, you may remove:
+              - Redundant/repetitive log entries (summarize patterns instead)
+              - Boilerplate that doesn't inform the next action
+              - Verbose output from package managers
+              - Duplicate information
+            messages:
+              - role: user
+                content: |
+                  Filter each of these tool results. Preserve the tool_call_id exactly.
+
+                  {{toJson(nodes.execute_tools.tool_results)}}
+
+        # Step 2: Execute the response tool to capture structured data
+        - id: execute_filter
+          type: execute_tools
+          args:
+            tool_calls: "{{nodes.filter_results.tool_calls}}"
+
+        # Step 3: Save the filtered results as proper tool messages
+        # Merge logic: use original when filtered=false, LLM content when filtered=true
+        # NOTE: Defensive check - if filter LLM returned malformed data (schema validation failed),
+        # response_data.filtered_results will be null. In that case, fall back to unfiltered results.
+        - id: save_filtered_results
+          type: save_message
+          args:
+            role: tool
+            tool_results: |
+              {{
+                has(nodes.execute_filter.response_data.filtered_results) &&
+                nodes.execute_filter.response_data.filtered_results != null &&
+                has(nodes.execute_filter.response_data.filtered_results.results)
+                  ? nodes.execute_filter.response_data.filtered_results.results.map(r,
+                      r.filtered 
+                        ? {
+                            "tool_call_id": r.tool_call_id,
+                            "name": r.name,
+                            "content": r.content,
+                            "is_error": has(r.is_error) ? r.is_error : false
+                          }
+                        : nodes.execute_tools.tool_results.filter(orig, 
+                            orig.tool_call_id == r.tool_call_id
+                          )[0]
+                    )
+                  : nodes.execute_tools.tool_results
+              }}
+
+        # SMALL RESULTS PATH: Save tool results directly
+        - id: save_tool_results
+          type: save_message
+          args:
+            role: tool
+            content: ""
+            tool_results: "{{nodes.execute_tools.tool_results}}"
+
+        # Compact if needed (saves message internally)
+        # NOTE: This node receives from two MUTUALLY EXCLUSIVE paths:
+        #   - save_filtered_results (large results path)
+        #   - save_tool_results (small results path)
+        # Only one path can reach compact in any given iteration - this is NOT a join pattern.
+        - id: compact
+          type: compact
+          timeout: "10m"
+
+      edges:
+        # After LLM call, decide next step
+        - from: call_llm
+          cases:
+            - to: approval
+              condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode == 'manual'
+              label: "require_approval"
+            - to: execute_tools
+              condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode != 'manual'
+              label: "auto_approve"
+
+        # Approval result
+        - from: approval
+          cases:
+            - to: execute_tools
+              condition: nodes.approval.status == 'approved'
+              label: "approved"
+
+        - from: execute_tools
+          cases:
+            # Large results: filter first
+            - to: filter_results
+              condition: nodes.execute_tools.total_result_chars > 4000
+              label: filter_large
+          # Small results: save directly
+          default: save_tool_results
+
+        # Filter path: filter_results → execute_filter → save_filtered_results
+        - from: filter_results
+          default: execute_filter
+
+        - from: execute_filter
+          default: save_filtered_results
+
+        - from: save_filtered_results
+          cases:
+            - to: compact
+              condition: nodes.execute_tools.thread_token_count > inputs.compaction_threshold
+              label: compact_after_filter
+
+        - from: save_tool_results
+          cases:
+            - to: compact
+              condition: nodes.execute_tools.thread_token_count > inputs.compaction_threshold
+              label: compact_after_save
+
+      ui:
+        positions:
+          call_llm:
+            x: 375
+            y: 229
+          approval:
+            x: 950
+            y: 85
+          execute_tools:
+            x: 1163
+            y: 259
+          filter_results:
+            x: 1757
+            y: 133
+          execute_filter:
+            x: 2142
+            y: 134
+          save_filtered_results:
+            x: 2497
+            y: 131
+          save_tool_results:
+            x: 1891
+            y: 322
+          compact:
+            x: 2845
+            y: 319
+        switches:
+          switch-call_llm:
+            source_node: call_llm
+            position:
+              x: 675
+              y: 213
+            cases:
+              - id: case-0
+                condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode == 'manual'
+                label: require_approval
+              - id: case-1
+                condition: ""
+                label: auto_approve
+          switch-execute_tools:
+            source_node: execute_tools
+            position:
+              x: 1463
+              y: 243
+            cases:
+              - id: case-0
+                condition: nodes.execute_tools.total_result_chars > 4000
+                label: filter_large
+              - id: case-1
+                condition: ""
+                label: save_small
+
+    # Loop inherits parent's thread
+    thread:
+      mode: inherit
+
+ui:
+  positions:
+    workflow:
+      x: 150
+      y: 270
+    agent_loop:
+      x: 519
+      y: 249

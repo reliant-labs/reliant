@@ -1,0 +1,21 @@
+# Happy path: Agent responds with text only in auto mode
+name: text_only_auto_mode
+description: Agent responds with text, no tool calls - loop exits
+inputs:
+  mode: "auto"
+events:
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Here's my answer to your question."
+      response_text: "Here's my answer to your question."
+      tool_calls: []
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+  not_reached:
+    - agent_loop.approval
+    - agent_loop.execute_tools

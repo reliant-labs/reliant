@@ -1,0 +1,89 @@
+# Audit rejection flow - auditor rejects and provides guidance, agent adjusts
+name: audit_rejected_with_guidance
+description: Auditor rejects agent's approach, guidance message is saved, agent adjusts on next iteration
+events:
+  # Iteration 1: main_agent wants to do something risky
+  - node: audited_loop.main_agent
+    output:
+      message:
+        role: assistant
+        text: "I'm going to delete all the test files."
+      response_text: "I'm going to delete all the test files."
+      tool_calls:
+        - id: call_0
+          name: bash
+          input:
+            command: "rm -rf tests/"
+  # audit_check rejects
+  - node: audited_loop.audit_check
+    output:
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_1
+          name: audit
+          input:
+            approved: false
+            guidance: "Do not delete test files. Please suggest an alternative approach."
+  # execute_audit result with rejection
+  - node: audited_loop.execute_audit
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_1
+          content: '{"approved": false, "guidance": "Do not delete test files."}'
+      response_data:
+        audit:
+          approved: false
+          guidance: "Do not delete test files. Please suggest an alternative approach."
+      thread_token_count: 500
+  # Guidance is saved - loop continues because main_agent had tool_calls
+  # (outputs.tool_calls from inline workflow outputs section)
+
+  # Iteration 2: main_agent adjusts approach based on guidance
+  - node: audited_loop.main_agent
+    output:
+      message:
+        role: assistant
+        text: "I understand. Instead of deleting tests, I'll help you organize them."
+      response_text: "I understand. Instead of deleting tests, I'll help you organize them."
+      tool_calls: []
+  # audit_check for adjusted response
+  - node: audited_loop.audit_check
+    output:
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_2
+          name: audit
+          input:
+            approved: true
+            guidance: ""
+  - node: audited_loop.execute_audit
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_2
+          content: '{"approved": true}'
+      response_data:
+        audit:
+          approved: true
+          guidance: ""
+      thread_token_count: 600
+  # Loop exits because tool_calls is now empty
+expect:
+  outcome: completed
+  reached:
+    - audited_loop
+    - audited_loop.main_agent
+    - audited_loop.audit_check
+    - audited_loop.execute_audit  # Guidance saved inline on first iteration (denied)
+    - audited_loop.save_approved_response  # Reached on second iteration (approved)

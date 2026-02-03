@@ -1,0 +1,35 @@
+# Approval granted continues
+name: approval_granted_continues
+description: When approval is granted, workflow continues to implementation.
+
+inputs:
+  steps: [plan, approve, implement, code_review]
+
+events:
+  - node: plan
+    output:
+      response_text: "Here's the plan."
+
+  - node: approve
+    output:
+      status: approved
+
+  - node: implement
+    output:
+      response_text: "Implementation done."
+
+  - node: code_review
+    output:
+      response:
+        grade: pass
+        summary: "Looks good."
+        suggestions: []
+
+expect:
+  outcome: completed
+  reached:
+    - plan
+    - approve
+    - implement
+    - code_review
+    - complete

@@ -1,0 +1,34 @@
+# Happy path: First attempt succeeds
+name: retry_first_attempt_succeeds
+description: Implementation passes verification on first try
+inputs:
+  verify_command: "make test"
+  escalation_threshold: 3
+events:
+  # Iteration 0: implement then verify succeeds
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "I've implemented the feature correctly on the first try."
+      response_text: "I've implemented the feature correctly on the first try."
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 0
+      stdout: "All tests passed"
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - implement_loop
+    - implement_loop.implement
+    - implement_loop.verify
+    - completion
+  not_reached:
+    - planner_reapproach
+  node_outputs:
+    implement_loop:
+      exit_code: 0
+      _iterations: 1

@@ -1,0 +1,40 @@
+# Approval with critique denied
+name: approval_with_critique_denied
+description: Workflow with critique and approval, where approval is denied.
+
+inputs:
+  steps: [research, plan, critique, approve, implement, code_review]
+
+events:
+  - node: research
+    output:
+      response_text: "Research done."
+
+  - node: plan
+    output:
+      response_text: "Plan done."
+
+  - node: criticize
+    output:
+      response_text: "Major issues found."
+
+  - node: revise
+    output:
+      response_text: "Cannot address issues."
+
+  - node: approve
+    output:
+      status: denied
+
+expect:
+  outcome: completed
+  reached:
+    - research
+    - plan
+    - criticize
+    - revise
+    - approve
+  not_reached:
+    - implement
+    - code_review
+    - complete

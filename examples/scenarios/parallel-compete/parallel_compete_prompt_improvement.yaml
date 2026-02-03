@@ -1,0 +1,105 @@
+# Prompt improvement produces clear specification
+name: parallel_compete_prompt_improvement
+description: Verifies prompt improvement step runs correctly
+events:
+  - node: improve_prompt
+    output:
+      message:
+        role: assistant
+        text: |
+          ## Improved Task Specification
+          
+          ### Objective
+          Create a user management API endpoint
+          
+          ### Acceptance Criteria
+          - GET /users returns paginated list
+          - POST /users creates new user
+          - Input validation required
+          
+          ### Edge Cases
+          - Empty database returns empty array
+          - Duplicate email returns 409
+      response_text: |
+        ## Improved Task Specification
+        
+        ### Objective
+        Create a user management API endpoint
+      tool_calls: []
+  
+  # Worktrees
+  - node: create_worktree_1
+    output:
+      id: "wt1"
+      name: "b1"
+      path: "/wt/1"
+      branch: "b1"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  - node: create_worktree_2
+    output:
+      id: "wt2"
+      name: "b2"
+      path: "/wt/2"
+      branch: "b2"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  - node: create_worktree_3
+    output:
+      id: "wt3"
+      name: "b3"
+      path: "/wt/3"
+      branch: "b3"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  
+  # Implementations (black-box workflow outputs)
+  - node: impl_1
+    output:
+      message:
+        role: assistant
+        text: "Done"
+      response_text: "Done"
+  - node: impl_2
+    output:
+      message:
+        role: assistant
+        text: "Done"
+      response_text: "Done"
+  - node: impl_3
+    output:
+      message:
+        role: assistant
+        text: "Done"
+      response_text: "Done"
+  
+  # Review with structured response
+  - node: review
+    output:
+      message:
+        role: assistant
+        text: "Candidate 1 is the best implementation"
+      response_text: "Candidate 1 is the best implementation"
+      winner: 1
+      strategy: "use_winner"
+      confidence: 7
+      rationale: "Best implementation overall"
+      synthesis_instructions: ""
+
+  - node: apply_winner
+    output:
+      exit_code: 0
+      stdout: ""
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - improve_prompt
+    - save_improved_prompt
+    - review
+    - apply_winner
+    - complete

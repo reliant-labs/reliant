@@ -1,0 +1,32 @@
+# Planning only - no implementation
+name: planning_only_no_implement
+description: Only planning steps - research, plan, critique. No implementation.
+
+inputs:
+  steps: [research, plan, critique]
+
+events:
+  - node: research
+    output:
+      response_text: "Research complete."
+
+  - node: plan
+    output:
+      response_text: "Plan complete."
+
+  - node: criticize
+    output:
+      response_text: "Critique complete."
+
+  - node: revise
+    output:
+      response_text: "Revise complete."
+
+expect:
+  outcome: completed
+  reached:
+    - research
+    - plan
+    - criticize
+    - revise
+    - complete

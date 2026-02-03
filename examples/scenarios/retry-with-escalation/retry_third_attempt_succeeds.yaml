@@ -1,0 +1,60 @@
+# Retry twice then succeed (needs threshold >= 3)
+name: retry_third_attempt_succeeds
+description: First two attempts fail, third succeeds
+inputs:
+  verify_command: "go test ./..."
+  escalation_threshold: 3
+events:
+  # Iteration 0: fails
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "First attempt."
+      response_text: "First attempt."
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 1
+      stdout: ""
+      stderr: "FAIL"
+  
+  # Iteration 1: fails
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "Analyzed and adjusted."
+      response_text: "Analyzed and adjusted."
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 1
+      stdout: ""
+      stderr: "FAIL again"
+  
+  # Iteration 2: succeeds
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "Stepped back, simplified the approach, and it works now."
+      response_text: "Stepped back, simplified the approach, and it works now."
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 0
+      stdout: "PASS"
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - implement_loop
+    - completion
+  not_reached:
+    - planner_reapproach
+  node_outputs:
+    implement_loop:
+      exit_code: 0
+      _iterations: 3

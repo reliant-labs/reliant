@@ -1,0 +1,112 @@
+# Reviewer provides thorough analysis before use_winner decision
+name: parallel_compete_thorough_review
+description: Reviewer provides detailed analysis before deciding
+events:
+  - node: improve_prompt
+    output:
+      message:
+        role: assistant
+        text: "Create REST API"
+      response_text: "Create REST API"
+      tool_calls: []
+  
+  - node: create_worktree_1
+    output:
+      id: "wt1"
+      name: "b1"
+      path: "/wt/1"
+      branch: "b1"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  - node: create_worktree_2
+    output:
+      id: "wt2"
+      name: "b2"
+      path: "/wt/2"
+      branch: "b2"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  - node: create_worktree_3
+    output:
+      id: "wt3"
+      name: "b3"
+      path: "/wt/3"
+      branch: "b3"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  
+  - node: impl_1
+    output:
+      message:
+        role: assistant
+        text: "Implementation 1 done"
+      response_text: "Implementation 1 done"
+  - node: impl_2
+    output:
+      message:
+        role: assistant
+        text: "Implementation 2 done"
+      response_text: "Implementation 2 done"
+  - node: impl_3
+    output:
+      message:
+        role: assistant
+        text: "Implementation 3 done"
+      response_text: "Implementation 3 done"
+  
+  # Thorough reviewer analysis with structured response
+  - node: review
+    output:
+      message:
+        role: assistant
+        text: |
+          ## Detailed Code Review
+          
+          ### Candidate 1 Analysis
+          - Basic CRUD implementation
+          - Missing input validation
+          - No tests
+          
+          ### Candidate 2 Analysis
+          - Complete REST implementation
+          - Proper error handling
+          - Unit tests included
+          
+          ### Candidate 3 Analysis
+          - Incomplete, no tests
+      response_text: |
+        ## Detailed Code Review
+        
+        ### Candidate 1 Analysis
+        - Basic CRUD implementation
+        - Missing input validation
+        - No tests
+        
+        ### Candidate 2 Analysis
+        - Complete REST implementation
+        - Proper error handling
+        - Unit tests included
+        
+        ### Candidate 3 Analysis
+        - Incomplete, no tests
+      winner: 2
+      strategy: "use_winner"
+      confidence: 10
+      rationale: "Most complete implementation with proper structure and testing"
+      synthesis_instructions: ""
+
+  - node: apply_winner
+    output:
+      exit_code: 0
+      stdout: ""
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - review
+    - apply_winner
+    - complete

@@ -1,0 +1,36 @@
+# TDD without test step - only writes tests
+name: tdd_without_test_step
+description: TDD enabled but test step not included - tests are written but not run.
+
+inputs:
+  steps: [plan, tdd, implement, code_review]
+
+events:
+  - node: plan
+    output:
+      response_text: "Plan with TDD."
+
+  - node: write_tests
+    output:
+      response_text: "Tests written for planned functionality."
+
+  - node: implement
+    output:
+      response_text: "Implementation to satisfy tests."
+
+  - node: code_review
+    output:
+      response:
+        grade: pass
+        summary: "Tests written but not executed in workflow."
+        suggestions:
+          - "Consider enabling test step to run tests automatically"
+
+expect:
+  outcome: completed
+  reached:
+    - plan
+    - write_tests
+    - implement
+    - code_review
+    - complete

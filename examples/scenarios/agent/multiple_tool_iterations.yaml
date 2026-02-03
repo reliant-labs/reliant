@@ -1,0 +1,87 @@
+# Multiple tool calls in sequence
+name: multiple_tool_iterations
+description: Agent makes multiple tool calls across iterations before completing
+inputs:
+  mode: auto
+  max_turns: 100
+events:
+  # Iteration 0: search
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Let me find the relevant files first."
+      response_text: "Let me find the relevant files first."
+      tool_calls:
+        - id: call_0
+          name: glob
+          input:
+            pattern: "**/*.go"
+  - node: agent_loop.execute_tools
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_0
+          content: '["main.go", "util.go", "handler.go"]'
+      thread_token_count: 500
+  # Iteration 1: read first file
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Found some files. Let me check main.go."
+      response_text: "Found some files. Let me check main.go."
+      tool_calls:
+        - id: call_1
+          name: view
+          input:
+            file_path: "main.go"
+  - node: agent_loop.execute_tools
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_1
+          content: "package main\n\nfunc main() {}"
+      thread_token_count: 600
+  # Iteration 2: read second file
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Now checking util.go."
+      response_text: "Now checking util.go."
+      tool_calls:
+        - id: call_2
+          name: view
+          input:
+            file_path: "util.go"
+  - node: agent_loop.execute_tools
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_2
+          content: 'package main\n\nfunc helper() string { return "help" }'
+      thread_token_count: 700
+  # Iteration 3: final response
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "I've analyzed the codebase. There are 3 Go files with a main package."
+      response_text: "I've analyzed the codebase. There are 3 Go files with a main package."
+      tool_calls: []
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.execute_tools
+  not_reached:
+    - agent_loop.approval
+    - max_turns_notification

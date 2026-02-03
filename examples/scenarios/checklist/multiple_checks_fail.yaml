@@ -1,0 +1,45 @@
+# Multiple checks fail
+name: multiple_checks_fail
+description: Both lint and test fail, code review sees both failures.
+
+inputs:
+  steps: [plan, implement, lint, test, code_review]
+
+events:
+  - node: plan
+    output:
+      response_text: "Plan."
+
+  - node: implement
+    output:
+      response_text: "Implementation."
+
+  - node: lint
+    output:
+      exit_code: 1
+      stdout: "Lint errors found"
+
+  - node: test
+    output:
+      exit_code: 1
+      stdout: "3 tests failed"
+
+  - node: code_review
+    output:
+      response:
+        grade: fail
+        summary: "Both lint and test checks failed."
+        suggestions:
+          - "Fix lint errors first"
+          - "Then address failing tests"
+          - "Consider running checks locally before committing"
+
+expect:
+  outcome: completed
+  reached:
+    - plan
+    - implement
+    - lint
+    - test
+    - code_review
+    - complete

@@ -1,0 +1,25 @@
+# Approval denied ends workflow
+name: approval_denied_ends_workflow
+description: When approval is denied, workflow ends without implementing.
+
+inputs:
+  steps: [plan, approve, implement, code_review]
+
+events:
+  - node: plan
+    output:
+      response_text: "Here's the plan."
+
+  - node: approve
+    output:
+      status: denied
+
+expect:
+  outcome: completed
+  reached:
+    - plan
+    - approve
+  not_reached:
+    - implement
+    - code_review
+    - complete

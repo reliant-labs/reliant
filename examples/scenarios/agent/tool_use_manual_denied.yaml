@@ -1,0 +1,36 @@
+# Manual mode with approval denied - loop exits (no tool execution)
+name: tool_use_manual_denied
+description: Manual mode, user denies approval, tools do not execute
+inputs:
+  mode: manual
+  max_turns: 100
+events:
+  # LLM requests a tool
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "I'm going to delete this file."
+      response_text: "I'm going to delete this file."
+      tool_calls:
+        - id: call_0
+          name: bash
+          input:
+            command: "rm -rf /important/file"
+  # Approval is denied
+  - node: agent_loop.approval
+    output:
+      approval_id: "approval_1"
+      status: denied
+      action_taken: deny
+      data: {}
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.approval
+  not_reached:
+    - agent_loop.execute_tools
+    - agent_loop.compact
+    - max_turns_notification

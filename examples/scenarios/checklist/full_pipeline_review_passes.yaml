@@ -1,0 +1,47 @@
+# All steps enabled, review passes
+name: full_pipeline_review_passes
+description: All steps run, review passes with structured output.
+
+inputs:
+  steps: [research, plan, critique, implement, code_review]
+
+events:
+  - node: research
+    output:
+      response_text: "Research findings..."
+
+  - node: plan
+    output:
+      response_text: "The plan is..."
+
+  - node: criticize
+    output:
+      response_text: "Critique: looks good overall."
+
+  - node: revise
+    output:
+      response_text: "Revised approach..."
+
+  - node: implement
+    output:
+      response_text: "Implementation done."
+
+  - node: code_review
+    output:
+      response:
+        grade: pass
+        summary: "Code looks good, well structured."
+        suggestions:
+          - "Consider adding more comments"
+          - "Could extract helper function"
+
+expect:
+  outcome: completed
+  reached:
+    - research
+    - plan
+    - criticize
+    - revise
+    - implement
+    - code_review
+    - complete
