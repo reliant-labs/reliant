@@ -1,0 +1,139 @@
+# Multiple tool calls in sequence
+name: multiple_tool_iterations
+description: Agent makes multiple tool calls across iterations
+events:
+  # Iteration 1: search for files
+  - node: audited_loop.main_agent
+    output:
+      message:
+        role: assistant
+        text: "Let me search for relevant files."
+      response_text: "Let me search for relevant files."
+      tool_calls:
+        - id: call_0
+          name: grep
+          input:
+            pattern: "TODO"
+            path: "."
+  - node: audited_loop.audit_check
+    output:
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_1
+          name: audit
+          input:
+            approved: true
+            guidance: ""
+  - node: audited_loop.execute_audit
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_1
+          content: '{"approved": true}'
+      response_data:
+        audit:
+          approved: true
+          guidance: ""
+      thread_token_count: 500
+  - node: audited_loop.execute_tools
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_0
+          content: '["main.go:10", "util.go:25"]'
+      thread_token_count: 600
+  # Iteration 2: read file
+  - node: audited_loop.main_agent
+    output:
+      message:
+        role: assistant
+        text: "Found some TODOs. Let me check main.go."
+      response_text: "Found some TODOs. Let me check main.go."
+      tool_calls:
+        - id: call_2
+          name: view
+          input:
+            file_path: "main.go"
+  - node: audited_loop.audit_check
+    output:
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_3
+          name: audit
+          input:
+            approved: true
+            guidance: ""
+  - node: audited_loop.execute_audit
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_3
+          content: '{"approved": true}'
+      response_data:
+        audit:
+          approved: true
+          guidance: ""
+      thread_token_count: 500
+  - node: audited_loop.execute_tools
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_2
+          content: "// TODO: implement feature"
+      thread_token_count: 700
+  # Iteration 3: final response
+  - node: audited_loop.main_agent
+    output:
+      message:
+        role: assistant
+        text: "Found 2 TODOs in the codebase."
+      response_text: "Found 2 TODOs in the codebase."
+      tool_calls: []
+  - node: audited_loop.audit_check
+    output:
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_4
+          name: audit
+          input:
+            approved: true
+            guidance: ""
+  - node: audited_loop.execute_audit
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_4
+          content: '{"approved": true}'
+      response_data:
+        audit:
+          approved: true
+          guidance: ""
+      thread_token_count: 500
+expect:
+  outcome: completed
+  reached:
+    - audited_loop
+    - audited_loop.main_agent
+    - audited_loop.audit_check
+    - audited_loop.execute_audit
+    - audited_loop.save_approved_response
+    - audited_loop.execute_tools

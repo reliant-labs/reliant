@@ -1,0 +1,319 @@
+# Retry with Escalation Workflow
+#
+# Implements a task with verification and intelligent retry logic.
+# After initial retries fail, escalates to a planner agent who creates
+# a simplified approach.
+#
+# Flow:
+# 1. implement_loop: Try up to `escalation_threshold` times with adaptive prompts
+# 2. If still failing: Escalate to planner for re-analysis
+# 3. Simplified implementation with planner's approach
+# 4. Final verification
+# 5. Single completion node (success or failure message)
+
+name: retry-with-escalation
+apiVersion: "0.0.5"
+description: Implement with verification, adaptive retries, and planner escalation
+presets:
+  tag: agent
+  default: general
+entry: implement_loop
+
+inputs:
+  # === RETRY CONFIGURATION ===
+  escalation_threshold:
+    type: integer
+    default: 2
+    min: 1
+    max: 5
+    description: Number of retry attempts before escalating to planner
+  verify_command:
+    type: string
+    default: "make test"
+    description: Command to run for verification (e.g., "npm test", "go test ./...", "pytest")
+
+  # === AGENT SETTINGS ===
+  mode:
+    type: enum
+    enum: ["manual", "auto", "plan"]
+    default: "auto"
+    description: Execution mode (auto recommended for retries)
+  model:
+    type: model
+    description: LLM model to use
+  temperature:
+    type: number
+    default: 1.0
+    min: 0
+    max: 1
+    description: Response randomness
+  system_prompt:
+    type: string
+    default: ""
+    description: Override the system prompt
+  tools:
+    type: tools
+    default: ["tag:default"]
+    description: Available tools for the agent
+  compaction_threshold:
+    type: integer
+    default: 185000
+    min: 10000
+    description: Token count to trigger context compaction
+  max_turns:
+    type: integer
+    default: 200
+    min: 1
+    max: 500
+    description: Maximum agent loop iterations per phase
+  thinking_level:
+    type: enum
+    enum: [low, medium, high]
+    default: low
+    description: Extended thinking level
+  spawn_presets:
+    type: preset
+    tags: [agent]
+    multi: true
+    default: []
+    description: Presets available for spawn tool (empty = spawn disabled)
+
+outputs:
+  exit_code: "{{has(nodes.final_verify) ? nodes.final_verify.exit_code : nodes.implement_loop.exit_code}}"
+  success: "{{has(nodes.final_verify) ? nodes.final_verify.exit_code == 0 : nodes.implement_loop.exit_code == 0}}"
+  escalated: "{{has(nodes.planner_reapproach)}}"
+
+nodes:
+  # ============================================================
+  # PHASE 1: Initial implementation loop with adaptive prompts
+  # ============================================================
+  - id: implement_loop
+    type: loop
+    while: outputs.exit_code != 0 && iter.iteration < inputs.escalation_threshold
+    inline:
+      entry: implement
+      outputs:
+        exit_code: "{{nodes.verify.exit_code}}"
+        stdout: "{{nodes.verify.stdout}}"
+        stderr: "{{nodes.verify.stderr}}"
+        iterations: "{{iter.iteration + 1}}"
+
+      nodes:
+        - id: implement
+          type: workflow
+          ref: builtin://agent
+          thread:
+            mode: inherit
+            inject:
+              role: user
+              content: |
+                {{iter.iteration == 0 ?
+                    'Please complete the task described above.'
+                  :
+                    "## Retry #" + string(iter.iteration) + ": Analyze and Adjust\n\n" +
+                    "The previous attempt did not pass verification. Before making changes:\n\n" +
+                    "1. **Read the error carefully** - What is it actually telling us?\n" +
+                    "2. **Identify the root cause** - Not just the symptom\n" +
+                    "3. **Consider if our approach is sound** - Or if we need a different strategy\n\n" +
+                    "Take a moment to analyze before implementing the fix."
+                }}
+          args:
+            model: "{{inputs.model}}"
+            temperature: "{{inputs.temperature}}"
+            mode: "{{inputs.mode}}"
+            system_prompt: "{{inputs.system_prompt}}"
+            tools: "{{inputs.tools}}"
+            compaction_threshold: "{{inputs.compaction_threshold}}"
+            max_turns: "{{inputs.max_turns}}"
+            thinking_level: "{{inputs.thinking_level}}"
+            spawn_presets: "{{inputs.spawn_presets}}"
+
+        - id: verify
+          type: run
+          command: "{{inputs.verify_command}}"
+
+      edges:
+        - from: implement
+          default: verify
+
+      ui:
+        positions:
+          implement:
+            x: 374
+            y: 158
+          verify:
+            x: 731
+            y: 188
+          workflow:
+            x: 50
+            y: 200
+
+    thread:
+      mode: inherit
+
+  # ============================================================
+  # PHASE 2: Escalation - Planner re-approaches the problem
+  # ============================================================
+  
+  - id: planner_reapproach
+    type: workflow
+    ref: builtin://agent
+    presets:
+      default: planner
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Escalation: Implementation Failed {{inputs.escalation_threshold}} Times
+
+          The original implementation approach has failed verification {{inputs.escalation_threshold}} times.
+          
+          **Last error output:**
+          ```
+          {{nodes.implement_loop.stderr}}{{nodes.implement_loop.stdout}}
+          ```
+
+          ## Your Mission
+          
+          1. **Analyze what went wrong** - Look at the error patterns across attempts
+          2. **Identify if the approach is fundamentally flawed** - Sometimes the direction is wrong
+          3. **Create a SIMPLER plan** - The goal is to remove complexity, not add it
+          4. **Consider refactoring first** - Can we restructure to make the problem trivial?
+          
+          ## Guidelines
+          
+          - Use your tools to examine the current state of the code
+          - Look for overly complex solutions that could be simplified
+          - Identify any scattered or duplicated logic that should be unified
+          - Propose a clear, minimal approach
+          
+          Create a concrete plan that a fresh implementation can follow.
+    save_message:
+      role: assistant
+      content: |
+        ## Escalation: Planner Re-Analysis Complete
+
+        {{output.response_text}}
+    args:
+      mode: "{{inputs.mode}}"
+      model: "{{inputs.model}}"
+      max_turns: 30
+      spawn_presets: "{{inputs.spawn_presets}}"
+
+  # ============================================================
+  # PHASE 3: Simplified implementation with planner's approach
+  # ============================================================
+  
+  - id: implement_simplified
+    type: workflow
+    ref: builtin://agent
+    thread:
+      mode: new
+      inject:
+        role: user
+        content: |
+          ## Fresh Start: Implement the Simplified Plan
+
+          The original approach failed {{inputs.escalation_threshold}} times. The planner has analyzed the problem and created a simplified approach.
+
+          **The planner's simplified approach:**
+          {{nodes.planner_reapproach.response_text}}
+
+          Follow this plan carefully. Focus on simplicity and correctness.
+          
+          When you believe the implementation is complete, the workflow will run verification automatically.
+    args:
+      model: "{{inputs.model}}"
+      temperature: "{{inputs.temperature}}"
+      mode: "{{inputs.mode}}"
+      tools: "{{inputs.tools}}"
+      compaction_threshold: "{{inputs.compaction_threshold}}"
+      max_turns: "{{inputs.max_turns}}"
+      thinking_level: "{{inputs.thinking_level}}"
+      spawn_presets: "{{inputs.spawn_presets}}"
+      system_prompt: |
+        You are implementing a SIMPLIFIED approach after the original failed.
+
+        ## Critical Guidelines
+        - Follow the planner's approach closely
+        - Prefer simple, direct solutions over clever ones
+        - If something seems complex, step back and find a simpler way
+        - Verify your changes work incrementally
+        - Focus on getting it working correctly first
+
+  # Final verification
+  - id: final_verify
+    type: run
+    command: "{{inputs.verify_command}}"
+
+  # ============================================================
+  # TERMINAL NODE - Single completion with conditional message
+  # ============================================================
+  
+  - id: completion
+    type: save_message
+    args:
+      role: assistant
+      content: |
+        {{nodes.implement_loop.exit_code == 0 ?
+          '## Implementation Complete\n\nAll verification checks passed after ' + string(nodes.implement_loop._iterations) + ' attempt(s).'
+        : has(nodes.final_verify) && nodes.final_verify.exit_code == 0 ?
+          '## Implementation Complete (After Escalation)\n\nThe original approach failed ' + string(inputs.escalation_threshold) + ' times and was escalated to the planner.\n\nThe simplified approach succeeded!'
+        :
+          '## Implementation Failed\n\nBoth approaches failed verification.\n\n```\n' + nodes.final_verify.stderr + nodes.final_verify.stdout + '\n```\n\nThis may require human intervention.'
+        }}
+
+edges:
+  # Phase 1: Success -> completion, Failure -> escalate
+  - from: implement_loop
+    cases:
+      - to: completion
+        condition: nodes.implement_loop.exit_code == 0
+      - to: planner_reapproach
+        condition: nodes.implement_loop.exit_code != 0
+
+  # Phase 2: Escalation path
+  - from: planner_reapproach
+    default: implement_simplified
+  - from: implement_simplified
+    default: final_verify
+
+  # Phase 3: Final verify -> completion (success or failure)
+  - from: final_verify
+    default: completion
+
+ui:
+  positions:
+    implement_loop:
+      x: 444
+      y: 180
+    planner_reapproach:
+      x: 880
+      y: 320
+    implement_simplified:
+      x: 1250
+      y: 320
+    final_verify:
+      x: 1550
+      y: 320
+    completion:
+      x: 1850
+      y: 320
+    workflow:
+      x: 150
+      y: 270
+  switches:
+    switch-implement_loop:
+      source_node: implement_loop
+      position:
+        x: 660
+        y: 165
+      cases:
+        - id: case-0
+          condition: nodes.implement_loop.exit_code == 0
+          label: success
+        - id: case-1
+          condition: ""
+          label: escalate

@@ -1,0 +1,47 @@
+# Compaction triggered after small results
+name: compaction_after_small_results
+description: High token count triggers compaction after saving small results
+inputs:
+  mode: "auto"
+  compaction_threshold: 10000
+events:
+  # LLM requests a tool
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Let me check that."
+      response_text: "Let me check that."
+      tool_calls:
+        - id: call_0
+          name: view
+          input:
+            file_path: "test.go"
+  # Tool result with high thread token count
+  - node: agent_loop.execute_tools
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_0
+          content: "package test"
+      total_result_chars: 100
+      thread_token_count: 15000
+  # After save, compact should trigger
+  # Final response
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Done."
+      response_text: "Done."
+      tool_calls: []
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.execute_tools
+    - agent_loop.save_tool_results
+    - agent_loop.compact

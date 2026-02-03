@@ -1,0 +1,31 @@
+# Code review without checks
+name: code_review_without_checks
+description: Code review can run without lint/test/build checks.
+
+inputs:
+  steps: [plan, implement, code_review]
+
+events:
+  - node: plan
+    output:
+      response_text: "Plan."
+
+  - node: implement
+    output:
+      response_text: "Implementation without checks."
+
+  - node: code_review
+    output:
+      response:
+        grade: pass
+        summary: "Reviewed without automated checks."
+        suggestions:
+          - "Consider adding CI checks in the future"
+
+expect:
+  outcome: completed
+  reached:
+    - plan
+    - implement
+    - code_review
+    - complete

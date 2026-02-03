@@ -1,0 +1,36 @@
+# Build only - no lint or test
+name: build_only_no_lint_test
+description: Build can run independently without lint or test.
+
+inputs:
+  steps: [plan, implement, build, code_review]
+
+events:
+  - node: plan
+    output:
+      response_text: "Plan for build."
+
+  - node: implement
+    output:
+      response_text: "Implementation."
+
+  - node: build
+    output:
+      exit_code: 0
+      stdout: "Build succeeded"
+
+  - node: code_review
+    output:
+      response:
+        grade: pass
+        summary: "Build passed."
+        suggestions: []
+
+expect:
+  outcome: completed
+  reached:
+    - plan
+    - implement
+    - build
+    - code_review
+    - complete

@@ -1,0 +1,107 @@
+# Implementation failure scenario - one impl fails, others succeed
+name: implementation_failure
+description: One implementation fails but workflow continues with review
+events:
+  - node: improve_prompt
+    output:
+      message:
+        role: assistant
+        text: "Implement error handling"
+      response_text: "Implement error handling"
+      tool_calls: []
+  
+  - node: create_worktree_1
+    output:
+      id: "wt1"
+      name: "b1"
+      path: "/wt/1"
+      branch: "b1"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  - node: create_worktree_2
+    output:
+      id: "wt2"
+      name: "b2"
+      path: "/wt/2"
+      branch: "b2"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  - node: create_worktree_3
+    output:
+      id: "wt3"
+      name: "b3"
+      path: "/wt/3"
+      branch: "b3"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  
+  # Impl 1 succeeds
+  - node: impl_1
+    output:
+      message:
+        role: assistant
+        text: "Implementation 1 complete with error handling"
+      response_text: "Implementation 1 complete with error handling"
+  
+  # Impl 2 fails (outputs error message)
+  - node: impl_2
+    output:
+      message:
+        role: assistant
+        text: "ERROR: Unable to complete implementation due to unforeseen issue"
+      response_text: "ERROR: Unable to complete implementation due to unforeseen issue"
+  
+  # Impl 3 succeeds
+  - node: impl_3
+    output:
+      message:
+        role: assistant
+        text: "Implementation 3 complete with robust error handling"
+      response_text: "Implementation 3 complete with robust error handling"
+  
+  # Reviewer notes impl_2 failed and picks from remaining
+  - node: review
+    output:
+      message:
+        role: assistant
+        text: |
+          ## Review Summary
+          
+          Candidate 1: Complete implementation
+          Candidate 2: FAILED - no implementation
+          Candidate 3: Complete implementation with robust error handling
+      response_text: |
+        ## Review Summary
+        
+        Candidate 1: Complete implementation
+        Candidate 2: FAILED - no implementation
+        Candidate 3: Complete implementation with robust error handling
+      winner: 3
+      strategy: "use_winner"
+      confidence: 8
+      rationale: "Only viable option with complete error handling. Candidate 2 failed to complete."
+      synthesis_instructions: ""
+
+  - node: apply_winner
+    output:
+      exit_code: 0
+      stdout: ""
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - improve_prompt
+    - save_improved_prompt
+    - create_worktree_1
+    - create_worktree_2
+    - create_worktree_3
+    - impl_1
+    - impl_2
+    - impl_3
+    - review
+    - apply_winner
+    - complete

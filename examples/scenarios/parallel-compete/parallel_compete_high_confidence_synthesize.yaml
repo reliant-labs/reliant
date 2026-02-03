@@ -1,0 +1,92 @@
+# High confidence synthesize decision
+name: parallel_compete_high_confidence_synthesize
+description: Reviewer has high confidence in synthesis approach
+events:
+  - node: improve_prompt
+    output:
+      message:
+        role: assistant
+        text: "Build authentication system"
+      response_text: "Build authentication system"
+      tool_calls: []
+  
+  - node: create_worktree_1
+    output:
+      id: "wt1"
+      name: "b1"
+      path: "/wt/1"
+      branch: "b1"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  - node: create_worktree_2
+    output:
+      id: "wt2"
+      name: "b2"
+      path: "/wt/2"
+      branch: "b2"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  - node: create_worktree_3
+    output:
+      id: "wt3"
+      name: "b3"
+      path: "/wt/3"
+      branch: "b3"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  
+  - node: impl_1
+    output:
+      message:
+        role: assistant
+        text: "OAuth implementation complete"
+      response_text: "OAuth implementation complete"
+  - node: impl_2
+    output:
+      message:
+        role: assistant
+        text: "Password auth implementation complete"
+      response_text: "Password auth implementation complete"
+  - node: impl_3
+    output:
+      message:
+        role: assistant
+        text: "JWT token handling complete"
+      response_text: "JWT token handling complete"
+  
+  # High confidence synthesis
+  - node: review
+    output:
+      message:
+        role: assistant
+        text: "Each candidate excels at different parts of the auth system"
+      response_text: "Each candidate excels at different parts of the auth system"
+      winner: 2
+      strategy: "synthesize"
+      confidence: 10
+      rationale: "Candidate 1 has best OAuth, Candidate 2 has best password handling, Candidate 3 has best JWT management. Combining all three creates a comprehensive auth system."
+      synthesis_instructions: |
+        1. Start with Candidate 2's password auth as the base (most complete structure)
+        2. Integrate Candidate 1's OAuth provider setup from /wt/1/auth/oauth.go
+        3. Add Candidate 3's JWT token generation and validation from /wt/3/auth/jwt.go
+        4. Ensure all auth methods use consistent user session handling
+
+  - node: synthesizer
+    output:
+      message:
+        role: assistant
+        text: "Successfully combined OAuth, password auth, and JWT handling into unified auth system"
+      response_text: "Successfully combined OAuth, password auth, and JWT handling into unified auth system"
+
+expect:
+  outcome: completed
+  reached:
+    - review
+    - synthesizer
+    - apply_done
+    - complete
+  not_reached:
+    - apply_winner

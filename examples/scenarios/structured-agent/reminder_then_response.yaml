@@ -1,0 +1,54 @@
+# LLM tries to end without tools, gets reminded, then calls response tool
+name: reminder_then_response
+description: LLM responds without tools, gets reminder, then calls response tool
+inputs:
+  mode: auto
+  max_turns: 100
+  response_tool_name: submit_response
+events:
+  # First iteration: LLM responds with text only (no tool calls)
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "I've reviewed the request and here's my analysis."
+      response_text: "I've reviewed the request and here's my analysis."
+      tool_calls: []
+  # remind_response node executes (no tool calls triggers this edge)
+  # Loop continues because response tool wasn't called (completed != true)
+
+  # Second iteration: LLM now calls the response tool
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Let me submit my response properly."
+      response_text: "Let me submit my response properly."
+      tool_calls:
+        - id: call_0
+          name: submit_response
+          input:
+            choice: complete
+            value: "Analysis complete. The code follows best practices."
+  - node: agent_loop.execute_tools
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_0
+          content: '{"choice": "complete"}'
+      response_data:
+        submit_response:
+          choice: complete
+          value: "Analysis complete. The code follows best practices."
+      thread_token_count: 500
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.remind_response
+    - agent_loop.execute_tools
+  not_reached:
+    - agent_loop.approval

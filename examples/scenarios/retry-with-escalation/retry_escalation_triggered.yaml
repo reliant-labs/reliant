@@ -1,0 +1,72 @@
+# Escalation triggered: loop exhausts threshold, planner takes over
+name: retry_escalation_triggered
+description: All retry attempts fail within threshold, triggers escalation to planner
+inputs:
+  verify_command: "pytest"
+  escalation_threshold: 2
+events:
+  # Iteration 0: fails
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "First attempt."
+      response_text: "First attempt."
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 1
+      stdout: ""
+      stderr: "Test failed"
+  
+  # Iteration 1: fails (threshold reached)
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "Analyzing..."
+      response_text: "Analyzing..."
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 1
+      stdout: ""
+      stderr: "Still failing"
+  
+  # Escalation path
+  - node: planner_reapproach
+    output:
+      message:
+        role: assistant
+        text: "I've analyzed the failures. The approach needs to be simplified."
+      response_text: "I've analyzed the failures. The approach needs to be simplified."
+      tool_calls: []
+  
+  
+  - node: implement_simplified
+    output:
+      message:
+        role: assistant
+        text: "Implemented the simplified approach."
+      response_text: "Implemented the simplified approach."
+      tool_calls: []
+  
+  - node: final_verify
+    output:
+      exit_code: 0
+      stdout: "All tests pass!"
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - implement_loop
+    - planner_reapproach
+    - implement_simplified
+    - final_verify
+    - completion
+  not_reached:
+  node_outputs:
+    implement_loop:
+      exit_code: 1
+      _iterations: 2

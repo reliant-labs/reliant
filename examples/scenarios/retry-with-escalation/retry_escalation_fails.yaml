@@ -1,0 +1,66 @@
+# Escalation fails: even simplified approach doesn't work
+name: retry_escalation_fails
+description: Escalation path also fails, workflow ends in failure
+inputs:
+  verify_command: "pytest"
+  escalation_threshold: 2
+events:
+  # Initial loop fails
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "First attempt."
+      response_text: "First attempt."
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 1
+      stdout: ""
+      stderr: "Test failed"
+  
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "Analyzing..."
+      response_text: "Analyzing..."
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 1
+      stdout: ""
+      stderr: "Still failing"
+  
+  # Escalation path - but final_verify fails
+  - node: planner_reapproach
+    output:
+      message:
+        role: assistant
+        text: "Let me try a different approach."
+      response_text: "Let me try a different approach."
+      tool_calls: []
+  
+  
+  - node: implement_simplified
+    output:
+      message:
+        role: assistant
+        text: "Implemented simplified version."
+      response_text: "Implemented simplified version."
+      tool_calls: []
+  
+  - node: final_verify
+    output:
+      exit_code: 1
+      stdout: ""
+      stderr: "Simplified approach also failed"
+
+expect:
+  outcome: completed
+  reached:
+    - implement_loop
+    - planner_reapproach
+    - final_verify
+    - completion
+  not_reached:

@@ -1,0 +1,49 @@
+# Happy path: Agent responds with text only, no tool calls, loop exits after first iteration
+name: text_only_response
+description: Agent responds with just text, no tool calls - loop exits immediately
+events:
+  # main_agent responds with text only
+  - node: audited_loop.main_agent
+    output:
+      message:
+        role: assistant
+        text: "I can help you with that. Here's my answer."
+      response_text: "I can help you with that. Here's my answer."
+      tool_calls: []
+  # audit_check responds with approval via response tool
+  - node: audited_loop.audit_check
+    output:
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_0
+          name: audit
+          input:
+            approved: true
+            guidance: ""
+  # execute_audit tool result
+  - node: audited_loop.execute_audit
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_0
+          content: '{"approved": true}'
+      response_data:
+        audit:
+          approved: true
+          guidance: ""
+      thread_token_count: 500
+expect:
+  outcome: completed
+  reached:
+    - audited_loop
+    - audited_loop.main_agent
+    - audited_loop.audit_check
+    - audited_loop.execute_audit
+    - audited_loop.save_approved_response
+  not_reached:
+    - audited_loop.execute_tools  # No tool calls, so execute_tools should be skipped

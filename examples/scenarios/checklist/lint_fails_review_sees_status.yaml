@@ -1,0 +1,38 @@
+# Lint fails - code review sees failure status
+name: lint_fails_review_sees_status
+description: Lint failure is properly reflected in code_review context.
+
+inputs:
+  steps: [plan, implement, lint, code_review]
+
+events:
+  - node: plan
+    output:
+      response_text: "Plan."
+
+  - node: implement
+    output:
+      response_text: "Implementation."
+
+  - node: lint
+    output:
+      exit_code: 1
+      stdout: "Error: missing semicolon at line 42"
+
+  - node: code_review
+    output:
+      response:
+        grade: fail
+        summary: "Lint check failed - code style issues found."
+        suggestions:
+          - "Fix the missing semicolon at line 42"
+          - "Run linter locally before committing"
+
+expect:
+  outcome: completed
+  reached:
+    - plan
+    - implement
+    - lint
+    - code_review
+    - complete

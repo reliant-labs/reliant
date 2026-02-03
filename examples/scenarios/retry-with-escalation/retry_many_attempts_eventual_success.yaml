@@ -1,0 +1,85 @@
+# Higher retry limit succeeds late (needs threshold >= 5)
+name: retry_many_attempts_eventual_success
+description: Succeeds on iteration 4 with higher threshold
+inputs:
+  verify_command: "make test"
+  escalation_threshold: 5
+events:
+  # Iterations 0-3 all fail
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "Attempt 1"
+      response_text: "Attempt 1"
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 1
+      stdout: ""
+      stderr: "Error 1"
+  
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "Attempt 2 - analyzing"
+      response_text: "Attempt 2 - analyzing"
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 1
+      stdout: ""
+      stderr: "Error 2"
+  
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "Attempt 3 - simplifying"
+      response_text: "Attempt 3 - simplifying"
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 1
+      stdout: ""
+      stderr: "Error 3"
+  
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "Attempt 4 - fresh perspective"
+      response_text: "Attempt 4 - fresh perspective"
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 1
+      stdout: ""
+      stderr: "Error 4"
+  
+  # Iteration 4: Finally succeeds
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "Fresh perspective worked! Complete rewrite."
+      response_text: "Fresh perspective worked! Complete rewrite."
+      tool_calls: []
+  - node: implement_loop.verify
+    output:
+      exit_code: 0
+      stdout: "All tests pass!"
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - implement_loop
+    - completion
+  not_reached:
+    - planner_reapproach
+  node_outputs:
+    implement_loop:
+      exit_code: 0
+      _iterations: 5

@@ -1,0 +1,90 @@
+# Implementations complete successfully with detailed review
+name: parallel_compete_impl_with_tools
+description: All implementation candidates complete their work with detailed review
+events:
+  - node: improve_prompt
+    output:
+      message:
+        role: assistant
+        text: "Build a cache layer"
+      response_text: "Build a cache layer"
+      tool_calls: []
+  
+  - node: create_worktree_1
+    output:
+      id: "wt1"
+      name: "b1"
+      path: "/wt/1"
+      branch: "b1"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  - node: create_worktree_2
+    output:
+      id: "wt2"
+      name: "b2"
+      path: "/wt/2"
+      branch: "b2"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  - node: create_worktree_3
+    output:
+      id: "wt3"
+      name: "b3"
+      path: "/wt/3"
+      branch: "b3"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  
+  # All impls complete (black-box outputs)
+  - node: impl_1
+    output:
+      message:
+        role: assistant
+        text: "Created cache.go with basic implementation"
+      response_text: "Created cache.go with basic implementation"
+  
+  - node: impl_2
+    output:
+      message:
+        role: assistant
+        text: "Created cache.go and cache_test.go with full test coverage"
+      response_text: "Created cache.go and cache_test.go with full test coverage"
+  
+  - node: impl_3
+    output:
+      message:
+        role: assistant
+        text: "Minimal cache implementation"
+      response_text: "Minimal cache implementation"
+  
+  # Reviewer picks winner with structured response
+  - node: review
+    output:
+      message:
+        role: assistant
+        text: "Candidate 2 has the only implementation with tests"
+      response_text: "Candidate 2 has the only implementation with tests"
+      winner: 2
+      strategy: "use_winner"
+      confidence: 9
+      rationale: "Only candidate with test coverage"
+      synthesis_instructions: ""
+
+  - node: apply_winner
+    output:
+      exit_code: 0
+      stdout: ""
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - impl_1
+    - impl_2
+    - impl_3
+    - review
+    - apply_winner
+    - complete

@@ -1,0 +1,30 @@
+# Implementation uses tools before verify (workflow node is black-box in simulation)
+name: retry_impl_uses_tools
+description: Implementation agent uses tools to make changes before verification
+inputs:
+  verify_command: "npm test"
+  escalation_threshold: 2
+events:
+  # Iteration 0: implement completes (workflow node returns final state, not internal tool calls)
+  - node: implement_loop.implement
+    output:
+      message:
+        role: assistant
+        text: "Fixed the function by viewing and editing src/index.ts."
+      response_text: "Fixed the function by viewing and editing src/index.ts."
+      tool_calls: []
+  
+  - node: implement_loop.verify
+    output:
+      exit_code: 0
+      stdout: "PASS"
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - implement_loop.implement
+    - implement_loop.verify
+    - completion
+  not_reached:
+    - planner_reapproach

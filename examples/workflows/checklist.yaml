@@ -1,0 +1,350 @@
+name: checklist
+apiVersion: "0.0.5"
+description: |
+  Checklist workflow with optional steps in a linear flow.
+  
+  Structure:
+  - Planning phase: research → plan → criticize → revise → approve
+  - Implementation phase: write_tests → implement → lint/test/build (parallel)
+  - Review phase: code_review → complete
+  
+  The workflow ends early if approval is denied.
+
+entry: research
+
+inputs:
+  mode:
+    type: enum
+    ui: toolbar
+    default: auto
+    description: Execution mode for agent steps.
+    enum: [manual, auto, plan]
+
+  steps:
+    type: enum
+    ui: toolbar
+    default: [research, plan, implement]
+    description: Steps to include in the checklist.
+    multi: true
+    enum:
+      - research
+      - plan
+      - critique      # Enables both criticize + revise nodes
+      - approve       # Approval gate before implementation
+      - tdd           # Enables write_tests node
+      - implement
+      - lint
+      - test
+      - build
+      - code_review   # Final code review
+
+  lint_command:
+    type: string
+    default: npm run lint
+    description: Command to run linting.
+
+  lint_log:
+    type: string
+    default: ./data/checklist/lint.log
+    description: File path for lint output.
+
+  test_command:
+    type: string
+    default: npm test
+    description: Command to run tests.
+
+  test_log:
+    type: string
+    default: ./data/checklist/test.log
+    description: File path for test output.
+
+  build_command:
+    type: string
+    default: npm run build
+    description: Command to run builds.
+
+  build_log:
+    type: string
+    default: ./data/checklist/build.log
+    description: File path for build output.
+
+# ============================================================================
+# NODES - Linear flow
+# ============================================================================
+nodes:
+  # --------------------------------------------------------------------------
+  # Planning Phase: research → plan → criticize → revise → approve
+  # --------------------------------------------------------------------------
+  
+  - id: research
+    type: workflow
+    condition: "'research' in inputs.steps"
+    ref: builtin://agent
+    presets:
+      default: researcher
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Checklist Step: Research
+          Gather context, constraints, and sources before planning.
+    save_message:
+      role: assistant
+      content: |
+        ## Research Summary
+        {{output.response_text}}
+
+  - id: plan
+    type: workflow
+    condition: "'plan' in inputs.steps"
+    ref: builtin://agent
+    presets:
+      default: planner
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Checklist Step: Plan
+          Produce a concise, actionable plan aligned with the task.
+    save_message:
+      role: assistant
+      content: |
+        ## Plan Summary
+        {{output.response_text}}
+
+  - id: criticize
+    type: workflow
+    condition: "'critique' in inputs.steps"
+    ref: builtin://agent
+    presets:
+      default: architect
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Checklist Step: Criticize
+          Critique the current approach, highlight risks, and suggest improvements.
+    save_message:
+      role: assistant
+      content: |
+        ## Criticism Summary
+        {{output.response_text}}
+
+  - id: revise
+    type: workflow
+    condition: "'critique' in inputs.steps"
+    ref: builtin://agent
+    presets:
+      default: planner
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Checklist Step: Revise
+          Revise the plan and approach based on criticism.
+    save_message:
+      role: assistant
+      content: |
+        ## Revision Summary
+        {{output.response_text}}
+
+  # Approval gate - if denied, workflow ends
+  - id: approve
+    type: approval
+    condition: "'approve' in inputs.steps"
+    title: "Approve Implementation"
+    description: |
+      Review the plan above and approve to proceed with implementation.
+      
+      If denied, the workflow will end without implementing.
+    actions:
+      - type: approve
+        label: "Approve & Implement"
+      - type: reject
+        label: "Deny"
+    save_message:
+      role: assistant
+      content: "{{output.status == 'denied' ? '## Approval Denied\\nThe workflow has ended. The plan was not approved for implementation.' : '## Approved\\nProceeding with implementation.'}}"
+
+  # --------------------------------------------------------------------------
+  # Implementation Phase: write_tests → implement → lint/test/build (parallel)
+  # --------------------------------------------------------------------------
+  
+  # TDD: Write tests first
+  - id: write_tests
+    type: workflow
+    condition: "'tdd' in inputs.steps"
+    ref: builtin://agent
+    presets:
+      default: tester
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Checklist Step: Write Tests (TDD)
+          Write failing tests for the planned functionality before implementation.
+          Focus on:
+          - Unit tests for the core logic
+          - Edge cases and error conditions
+          - Integration points if applicable
+          
+          The tests should fail initially - they will pass after implementation.
+    save_message:
+      role: assistant
+      content: |
+        ## Test Suite Created
+        {{output.response_text}}
+
+  - id: implement
+    type: workflow
+    condition: "'implement' in inputs.steps"
+    ref: builtin://agent
+    presets:
+      default: general
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Checklist Step: Implement
+          Implement the required changes. Use tools to edit code and verify results.
+    save_message:
+      role: assistant
+      content: |
+        ## Implementation Summary
+        {{output.response_text}}
+
+  # Checks run in parallel after implementation
+  - id: lint
+    type: run
+    condition: "'lint' in inputs.steps"
+    command: "{{inputs.lint_command}} > {{inputs.lint_log}} 2>&1"
+
+  - id: test
+    type: run
+    condition: "'test' in inputs.steps"
+    command: "{{inputs.test_command}} > {{inputs.test_log}} 2>&1"
+
+  - id: build
+    type: run
+    condition: "'build' in inputs.steps"
+    command: "{{inputs.build_command}} > {{inputs.build_log}} 2>&1"
+
+  - id: join_checks
+    type: join
+
+  # --------------------------------------------------------------------------
+  # Review Phase: code_review → complete
+  # --------------------------------------------------------------------------
+
+  - id: code_review
+    type: workflow
+    condition: "'code_review' in inputs.steps"
+    ref: builtin://structured-agent
+    presets:
+      default: code_reviewer
+    args:
+      response_tool_name: submit_review
+      response_tool_description: "Submit your code review with a pass/fail grade and suggestions"
+      response_schema:
+        type: object
+        required: [grade, summary]
+        properties:
+          grade:
+            type: string
+            enum: [pass, fail]
+            description: "Overall grade for the implementation"
+          summary:
+            type: string
+            description: "Brief summary of the review findings"
+          suggestions:
+            type: array
+            items:
+              type: string
+            description: "List of suggestions for improvement"
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Checklist Step: Code Review
+          Review all changes made during implementation.
+          
+          Check status:
+          - Lint: {{has(nodes.lint) && has(nodes.lint.exit_code) ? (nodes.lint.exit_code == 0 ? 'passed' : 'failed') : 'skipped'}}
+          - Test: {{has(nodes.test) && has(nodes.test.exit_code) ? (nodes.test.exit_code == 0 ? 'passed' : 'failed') : 'skipped'}}
+          - Build: {{has(nodes.build) && has(nodes.build.exit_code) ? (nodes.build.exit_code == 0 ? 'passed' : 'failed') : 'skipped'}}
+          
+          Analyze the implementation quality and submit your review with a grade (pass/fail) and suggestions.
+    save_message:
+      role: assistant
+      content: |
+        ## Code Review: {{output.response.grade}}
+        
+        {{output.response.summary}}
+        
+        {{has(output.response.suggestions) && size(output.response.suggestions) > 0 ? '### Suggestions\n' + output.response.suggestions.map(s, '- ' + s).join('\n') : ''}}
+
+  # Final completion node
+  - id: complete
+    type: save_message
+    args:
+      role: assistant
+      content: |
+        ## Checklist Complete
+        
+        The workflow has completed successfully.
+
+# ============================================================================
+# EDGES - Linear flow with conditional routing
+# ============================================================================
+edges:
+  # Planning phase
+  - from: research
+    default: plan
+  - from: plan
+    default: criticize
+  - from: criticize
+    default: revise
+  - from: revise
+    default: approve
+  
+  # Approval routing - denied ends workflow (no edge)
+  - from: approve
+    cases:
+      - to: write_tests
+        condition: "!has(nodes.approve) || !has(nodes.approve.status) || nodes.approve.status != 'denied'"
+  
+  # Implementation phase
+  - from: write_tests
+    default: implement
+  - from: implement
+    default: lint
+  - from: implement
+    default: test
+  - from: implement
+    default: build
+  - from: lint
+    default: join_checks
+  - from: test
+    default: join_checks
+  - from: build
+    default: join_checks
+  
+  # Review phase
+  - from: join_checks
+    default: code_review
+  - from: code_review
+    default: complete

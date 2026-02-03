@@ -1,0 +1,545 @@
+# Parallel Compete Workflow
+#
+# Three agents compete to implement a task, then a reviewer picks the winner.
+
+name: parallel-compete
+apiVersion: "0.0.5"
+description: Three agents compete to implement task, reviewer picks winner
+entry: improve_prompt
+
+inputs:
+  # === SHARED SETTINGS ===
+  mode:
+    type: enum
+    enum: ["manual", "auto", "plan"]
+    default: "auto"
+    description: "Execution mode: auto = auto-approve tools, manual = require approval"
+  model:
+    type: model
+
+    description: Default LLM model for all agents (can be overridden per group)
+
+  # Input group for implementer settings
+  implementer:
+    type: group
+    presets:
+      tag: agent
+      default: general
+    description: Settings for implementer agents (all 3 candidates)
+    inputs:
+      model:
+        type: model
+        description: Model override for implementer agents
+      temperature:
+        type: number
+        default: 1.0
+        min: 0
+        max: 1
+        description: Temperature for implementers
+      compaction_threshold:
+        type: integer
+        default: 185000
+        min: 10000
+        description: Token count to trigger context compaction
+      max_turns:
+        type: integer
+        default: 200
+        min: 1
+        max: 500
+        description: Maximum agent loop iterations
+      tools:
+        type: tools
+        default: ["tag:default"]
+        description: Available tools for implementers
+      system_prompt:
+        type: string
+        default: |
+          You are an implementation candidate in a competitive coding challenge.
+          Your implementation will be compared against other candidates and judged by a reviewer.
+
+          ## Guidelines
+          - Implement the feature completely and correctly
+          - Write clean, well-documented code
+          - Include any necessary tests
+          - Follow project conventions and best practices
+          - Handle edge cases appropriately
+        description: System prompt override for implementers
+      thinking_level:
+        type: enum
+        enum: [low, medium, high]
+        default: low
+        description: Extended thinking level for implementers
+      spawn_presets:
+        type: preset
+        tags: [agent]
+        multi: true
+        default: []
+        description: Presets available for implementer's spawn tool (empty = spawn disabled)
+
+nodes:
+  # Prompt improvement - ephemeral call, saves improved result to main thread
+  - id: improve_prompt
+    type: call_llm
+    thread:
+      mode: inherit
+    args:
+      model: "{{inputs.model}}"
+      tools: false
+      system_prompt: |
+        You are a prompt engineer. Your job is to take the task description and improve it into a clear, detailed specification that multiple developers could implement independently.
+
+        Include:
+        - Clear acceptance criteria
+        - Edge cases to handle  
+        - Any constraints or requirements
+        - Expected behavior
+
+        Output ONLY the improved prompt, no preamble.
+
+  - id: save_improved_prompt
+    type: save_message
+    args:
+      role: assistant
+      content: |
+        ## Improved Task Specification
+
+        {{nodes.improve_prompt.message.text}}
+
+  # Create worktrees in parallel
+  - id: create_worktree_1
+    type: create_worktree
+    args:
+      name: compete-impl-1-{{workflow.id}}
+      base_branch: "{{workflow.branch != '' ? workflow.branch : 'main'}}"
+      copy_files:
+        - .env
+        - .env.local
+      force: true
+
+  - id: create_worktree_2
+    type: create_worktree
+    args:
+      name: compete-impl-2-{{workflow.id}}
+      base_branch: "{{workflow.branch != '' ? workflow.branch : 'main'}}"
+      copy_files:
+        - .env
+        - .env.local
+      force: true
+
+  - id: create_worktree_3
+    type: create_worktree
+    args:
+      name: compete-impl-3-{{workflow.id}}
+      base_branch: "{{workflow.branch != '' ? workflow.branch : 'main'}}"
+      copy_files:
+        - .env
+        - .env.local
+      force: true
+
+  # Three parallel implementations (each starts as soon as its worktree is ready)
+  - id: impl_1
+    type: workflow
+    ref: builtin://agent
+    thread:
+      mode: new
+      inject:
+        role: user
+        content: |
+          You are Implementation Candidate #1.
+
+          ## Task
+          {{nodes.improve_prompt.message.text}}
+    # Project path sets the working directory for all tools in this sub-workflow
+    project:
+      path: "{{nodes.create_worktree_1.path}}"
+    presets:
+      default: general
+    args:
+      mode: "{{inputs.mode}}"
+      model: "{{inputs.implementer.model != '' ? inputs.implementer.model : inputs.model}}"
+      temperature: "{{inputs.implementer.temperature}}"
+      compaction_threshold: "{{inputs.implementer.compaction_threshold}}"
+      max_turns: "{{inputs.implementer.max_turns}}"
+      tools: "{{inputs.implementer.tools}}"
+      system_prompt: "{{inputs.implementer.system_prompt}}"
+      thinking_level: "{{inputs.implementer.thinking_level}}"
+      spawn_presets: "{{inputs.implementer.spawn_presets}}"
+
+  - id: impl_2
+    type: workflow
+    ref: builtin://agent
+    thread:
+      mode: new
+      inject:
+        role: user
+        content: |
+          You are Implementation Candidate #2.
+
+          ## Task
+          {{nodes.improve_prompt.message.text}}
+    # Project path sets the working directory for all tools in this sub-workflow
+    project:
+      path: "{{nodes.create_worktree_2.path}}"
+    presets:
+      default: general
+    args:
+      mode: "{{inputs.mode}}"
+      model: "{{inputs.implementer.model != '' ? inputs.implementer.model : inputs.model}}"
+      temperature: "{{inputs.implementer.temperature}}"
+      compaction_threshold: "{{inputs.implementer.compaction_threshold}}"
+      max_turns: "{{inputs.implementer.max_turns}}"
+      tools: "{{inputs.implementer.tools}}"
+      system_prompt: "{{inputs.implementer.system_prompt}}"
+      thinking_level: "{{inputs.implementer.thinking_level}}"
+      spawn_presets: "{{inputs.implementer.spawn_presets}}"
+
+  - id: impl_3
+    type: workflow
+    ref: builtin://agent
+    thread:
+      mode: new
+      inject:
+        role: user
+        content: |
+          You are Implementation Candidate #3.
+
+          ## Task
+          {{nodes.improve_prompt.message.text}}
+    # Project path sets the working directory for all tools in this sub-workflow
+    project:
+      path: "{{nodes.create_worktree_3.path}}"
+    presets:
+      default: general
+    args:
+      mode: "{{inputs.mode}}"
+      model: "{{inputs.implementer.model != '' ? inputs.implementer.model : inputs.model}}"
+      temperature: "{{inputs.implementer.temperature}}"
+      compaction_threshold: "{{inputs.implementer.compaction_threshold}}"
+      max_turns: "{{inputs.implementer.max_turns}}"
+      tools: "{{inputs.implementer.tools}}"
+      system_prompt: "{{inputs.implementer.system_prompt}}"
+      thinking_level: "{{inputs.implementer.thinking_level}}"
+      spawn_presets: "{{inputs.implementer.spawn_presets}}"
+
+  - id: implementations_done
+    type: join
+    condition: "all"
+
+  # Review all implementations - fork from main thread to preserve context
+  # Uses structured response to output a machine-readable decision
+  - id: review
+    type: workflow
+    ref: builtin://agent
+    thread:
+      mode: fork
+      inject:
+        role: user
+        content: |
+          You are a senior code reviewer. Three implementations have been completed for the task described above.
+
+          REFINED SPECIFICATION:
+          {{nodes.improve_prompt.message.text}}
+
+          IMPLEMENTATION LOCATIONS:
+          - Candidate 1: {{nodes.create_worktree_1.path}}
+          - Candidate 2: {{nodes.create_worktree_2.path}}
+          - Candidate 3: {{nodes.create_worktree_3.path}}
+
+          REVIEW INSTRUCTIONS:
+          1. Use your tools to browse each worktree and examine the code
+          2. Evaluate code quality, correctness, and completeness
+          3. Consider maintainability, performance, and best practices
+          4. Make your decision using the response tool
+
+          DECISION OPTIONS:
+          - **use_winner**: One implementation is clearly best. Pick it and we'll apply it directly.
+          - **synthesize**: The best solution combines parts from multiple implementations. Provide detailed instructions on what to cherry-pick from each.
+    save_message:
+      role: assistant
+      content: |
+        ## Review Complete
+
+        **Decision:** {{output.strategy}} (Candidate {{output.winner}})
+        **Confidence:** {{output.confidence}}/10
+
+        **Rationale:**
+        {{output.rationale}}
+        {{output.strategy == 'synthesize' ? '\n**Synthesis Instructions:**\n' + output.synthesis_instructions : ''}}
+    presets:
+      default: code_reviewer
+    args:
+      mode: "{{inputs.mode}}"
+      model: "{{inputs.model}}"
+      system_prompt: |
+        You are a SENIOR CODE REVIEWER evaluating competing implementations.
+
+        ## Your Mission
+        Thoroughly review each implementation and select the best approach.
+        Use your tools to actually examine the code - don't guess based on summaries.
+
+        ## Review Criteria
+
+        **Correctness (Most Important)**
+        - Does it actually implement the requirements?
+        - Are there obvious bugs or edge cases missed?
+        - Does it handle errors appropriately?
+
+        **Code Quality**
+        - Is the code clean and readable?
+        - Does it follow project conventions?
+        - Is it well-structured and maintainable?
+
+        **Completeness**
+        - Are tests included?
+        - Is documentation adequate?
+        - Are edge cases handled?
+
+        **Best Practices**
+        - Security considerations addressed?
+        - Performance reasonable?
+        - No unnecessary complexity?
+
+        ## Review Process
+        1. Browse each worktree thoroughly using glob/view
+        2. Compare similar files across implementations
+        3. Look for tests and examine their coverage
+        4. Check for obvious issues or antipatterns
+
+        ## Making Your Decision
+        Use the response tool to submit your decision:
+
+        - **use_winner**: Choose this when one implementation is clearly superior.
+          The winning implementation will be copied directly to the main worktree.
+
+        - **synthesize**: Choose this when the best solution combines elements from
+          multiple implementations. Provide detailed synthesis_instructions explaining
+          exactly what to take from each candidate (specific files, functions, approaches).
+
+        Be objective and evidence-based in your evaluation.
+    response:
+      winner:
+        type: integer
+        description: "The best implementation candidate (1, 2, or 3)"
+      strategy:
+        type: enum
+        enum: [use_winner, synthesize]
+        description: "use_winner to apply directly, synthesize to combine best parts"
+      confidence:
+        type: integer
+        description: "Confidence in decision (1-10)"
+      rationale:
+        type: string
+        description: "Explanation of why this decision was made"
+      synthesis_instructions:
+        type: string
+        description: "If strategy=synthesize, detailed instructions on what to take from each implementation"
+
+  # --------------------------------------------------------------------------
+  # Post-Review: Apply Winner or Synthesize
+  # --------------------------------------------------------------------------
+
+  # Apply the winning implementation directly via rsync
+  - id: apply_winner
+    type: run
+    condition: "nodes.review.strategy == 'use_winner'"
+    command: |
+      rsync -av --exclude='.git' --exclude='node_modules' --exclude='.env.ports' \
+        "{{nodes.review.winner == 1 ? nodes.create_worktree_1.path : (nodes.review.winner == 2 ? nodes.create_worktree_2.path : nodes.create_worktree_3.path)}}/" \
+        "{{workflow.path}}/"
+
+  # Synthesize best parts from multiple implementations
+  - id: synthesizer
+    type: workflow
+    condition: "nodes.review.strategy == 'synthesize'"
+    ref: builtin://agent
+    thread:
+      mode: fork
+      inject:
+        role: user
+        content: |
+          ## Synthesis Task
+
+          The code reviewer has analyzed three competing implementations and determined
+          the best solution combines elements from multiple candidates.
+
+          **Original Task:**
+          {{nodes.improve_prompt.message.text}}
+
+          **Implementation Locations:**
+          - Candidate 1: {{nodes.create_worktree_1.path}}
+          - Candidate 2: {{nodes.create_worktree_2.path}}
+          - Candidate 3: {{nodes.create_worktree_3.path}}
+
+          **Base Implementation:** Candidate {{nodes.review.winner}}
+
+          **Synthesis Instructions from Reviewer:**
+          {{nodes.review.synthesis_instructions}}
+
+          **Your Task:**
+          1. Start with the base implementation (Candidate {{nodes.review.winner}})
+          2. Follow the synthesis instructions to incorporate the best parts from other candidates
+          3. Use cp/rsync to copy files, or edit to merge specific code sections
+          4. Ensure the final result is coherent and working
+          5. The result should be in your current working directory (the main worktree)
+    save_message:
+      role: assistant
+      content: |
+        ## Synthesis Complete
+
+        {{output.response_text}}
+    presets:
+      default: general
+    args:
+      mode: "{{inputs.mode}}"
+      model: "{{inputs.model}}"
+      system_prompt: |
+        You are an implementation specialist combining the best parts from multiple code implementations.
+
+        You have access to three worktrees containing different implementations of the same feature.
+        Your job is to follow the synthesis instructions to create the optimal combined solution.
+
+        ## Guidelines
+        - Use glob/view to examine each worktree
+        - Use cp or rsync to copy entire files when appropriate
+        - Use edit to merge specific code sections
+        - Ensure imports, dependencies, and references are consistent
+        - Test that the combined code is coherent
+        - Work in your current directory (the main worktree)
+
+  # Join point for both paths
+  - id: apply_done
+    type: join
+
+  # Final completion message with instructions
+  - id: complete
+    type: save_message
+    args:
+      role: assistant
+      content: |
+        ## Parallel Competition Complete
+
+        **Strategy Used:** {{nodes.review.strategy == 'use_winner' ? 'Applied Winner (Candidate ' + string(nodes.review.winner) + ')' : 'Synthesized from multiple candidates (base: Candidate ' + string(nodes.review.winner) + ')'}}
+        **Confidence:** {{nodes.review.confidence}}/10
+
+        **Result Directory:**
+        ```
+        {{workflow.path}}
+        ```
+
+        **Candidate Worktrees (for reference):**
+        - Candidate 1: {{nodes.create_worktree_1.path}}
+        - Candidate 2: {{nodes.create_worktree_2.path}}
+        - Candidate 3: {{nodes.create_worktree_3.path}}
+
+        **Next Steps:**
+        ```bash
+        cd {{workflow.path}}
+        git status
+        git diff
+        git add -A && git commit -m "Apply parallel-compete result"
+        ```
+
+        **Rationale:**
+        {{nodes.review.rationale}}
+
+edges:
+  - from: improve_prompt
+    default: save_improved_prompt
+
+  # PARALLEL EDGES - create worktrees simultaneously
+  - from: save_improved_prompt
+    default: create_worktree_1
+  - from: save_improved_prompt
+    default: create_worktree_2
+  - from: save_improved_prompt
+    default: create_worktree_3
+
+  # Each worktree creation goes directly to its implementation
+  - from: create_worktree_1
+    default: impl_1
+  - from: create_worktree_2
+    default: impl_2
+  - from: create_worktree_3
+    default: impl_3
+
+  - from: impl_1
+    default: implementations_done
+  - from: impl_2
+    default: implementations_done
+  - from: impl_3
+    default: implementations_done
+
+  - from: implementations_done
+    default: review
+
+  # POST-REVIEW ROUTING - conditional based on strategy
+  # Both paths run (conditions on nodes handle which actually executes)
+  - from: review
+    default: apply_winner
+  - from: review
+    default: synthesizer
+
+  # Both paths converge to apply_done
+  - from: apply_winner
+    default: apply_done
+  - from: synthesizer
+    default: apply_done
+
+  # Final completion
+  - from: apply_done
+    default: complete
+
+# UI metadata for workflow builder positioning
+# Layout: Horizontal left-to-right flow
+# - Sequential nodes: same y (center), increasing x
+# - Parallel branches: same x, spread on y-axis (top/center/bottom)
+ui:
+  positions:
+    create_worktree_1:
+      x: 1506
+      y: 112
+    create_worktree_2:
+      x: 1498
+      y: 281
+    create_worktree_3:
+      x: 1501
+      y: 430
+    impl_1:
+      x: 2571
+      y: 8
+    impl_2:
+      x: 2569
+      y: 258
+    impl_3:
+      x: 2571
+      y: 508
+    implementations_done:
+      x: 2981
+      y: 262
+    improve_prompt:
+      x: 476
+      y: 273
+    review:
+      x: 3387
+      y: 254
+    apply_winner:
+      x: 3800
+      y: 150
+    synthesizer:
+      x: 3800
+      y: 358
+    apply_done:
+      x: 4200
+      y: 254
+    complete:
+      x: 4600
+      y: 254
+    save_improved_prompt:
+      x: 797
+      y: 273
+    workflow:
+      x: 150
+      y: 270
+    worktrees_ready:
+      x: 1891
+      y: 246
