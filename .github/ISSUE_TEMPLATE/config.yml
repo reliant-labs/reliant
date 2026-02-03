@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Reliant Documentation
+    url: https://docs.reliantlabs.io/docs/
+    about: Documentation for workflows, configuration, and more.
+  - name: Reliant Slack Community
+    url: https://join.slack.com/t/reliant-pn51441/shared_invite/zt-3g6mhfnhx-~CWMzNRZUylWHevlJXO89A
+    about: Connect with other users and the team.
+  - name: Website
+    url: https://reliantlabs.io
+    about: Reliant homepage.
