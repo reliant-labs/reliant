@@ -1,0 +1,98 @@
+name: Bug Report
+description: Create a report to help us improve.
+labels: ["bug"]
+body:
+  - type: checkboxes
+    attributes:
+      label: "Pre-submit Checks"
+      options:
+        - label: "I have [searched existing issues](https://github.com/reliantlabs/reliant/issues?q=is%3Aissue) and there are no duplicates"
+          required: true
+        - label: "I have checked the [Reliant documentation](https://docs.reliantlabs.io/docs/) and my issue is not covered"
+          required: true
+  - type: textarea
+    id: "describe-the-bug"
+    attributes:
+      label: "Describe the bug"
+      description: "A clear and concise description of what the bug is."
+      placeholder: Tell us what you see.
+    validations:
+      required: true
+  - type: textarea
+    id: "to-reproduce"
+    attributes:
+      label: "To reproduce"
+      description: "Bug reports with clear reproduction steps will get prioritized higher and addressed more quickly."
+      placeholder: "Steps to reproduce:\n1. Open Reliant\n2. Run workflow '...'\n3. See error '...'"
+    validations:
+      required: true
+  - type: textarea
+    id: "expected-behavior"
+    attributes:
+      label: "Expected behavior"
+      description: "A clear and concise description of what you expected to happen."
+      placeholder: Tell us what you expect to see.
+    validations:
+      required: false
+  - type: textarea
+    id: "screenshots-logs"
+    attributes:
+      label: "Screenshots, videos, and logs"
+      description: "If applicable, add screenshots, videos, or logs to help us understand your problem."
+    validations:
+      required: false
+  - type: dropdown
+    id: "os"
+    attributes:
+      label: "Operating system (OS)"
+      multiple: false
+      options:
+        - "Select an OS"
+        - macOS
+        - Linux
+        - Windows
+    validations:
+      required: true
+  - type: input
+    id: "os-version"
+    attributes:
+      label: "Operating system version"
+      description: "For example: macOS 14.2, Ubuntu 22.04"
+    validations:
+      required: true
+  - type: input
+    id: "reliant-version"
+    attributes:
+      label: "Reliant version"
+      description: "Which version of Reliant are you using?"
+    validations:
+      required: false
+  - type: dropdown
+    id: "regression"
+    attributes:
+      label: "Regression"
+      description: "Did this work in a previous version?"
+      multiple: false
+      options:
+        - "Unknown"
+        - "No, this bug has always existed for me"
+        - "Yes, this bug started recently"
+    validations:
+      required: true
+  - type: textarea
+    id: "additional-context"
+    attributes:
+      label: "Additional context"
+      description: "Add any other context about the problem here."
+    validations:
+      required: false
+  - type: dropdown
+    id: "blocker"
+    attributes:
+      label: "Does this block you from using Reliant?"
+      multiple: false
+      options:
+        - "No"
+        - "Yes, this issue prevents me from using Reliant."
+    validations:
+      required: true
