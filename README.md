@@ -61,14 +61,14 @@ brew install --cask reliant-labs/reliant/reliant
 
 ### Direct Download
 
-| Platform    | Architecture             | Download                                                                                   |
-| ----------- | ------------------------ | ------------------------------------------------------------------------------------------ |
-| **macOS**   | Apple Silicon            | [Download DMG](https://downloads.reliantlabs.io/Reliant-latest-mac-arm64.dmg)              |
-| **macOS**   | Intel                    | [Download DMG](https://downloads.reliantlabs.io/Reliant-latest-mac-x64.dmg)                |
-| **Windows** | x64                      | [Download EXE](https://downloads.reliantlabs.io/Reliant-latest-win-x64.exe)                |
-| **Windows** | ARM64                    | [Download EXE](https://downloads.reliantlabs.io/Reliant-latest-win-arm64.exe)              |
-| **Linux**   | x86_64                   | [Download AppImage](https://downloads.reliantlabs.io/Reliant-latest-linux-x86_64.AppImage) |
-| **Linux**   | ARM64                    | [Download AppImage](https://downloads.reliantlabs.io/Reliant-latest-linux-arm64.AppImage)  |
+| Platform    | Architecture  | Download                                                                                                     |
+| ----------- | ------------- | ------------------------------------------------------------------------------------------------------------ |
+| **macOS**   | Apple Silicon | [Download DMG](https://downloads.reliantlabs.io/Reliant-latest-mac-arm64.dmg?utm_source=github)              |
+| **macOS**   | Intel         | [Download DMG](https://downloads.reliantlabs.io/Reliant-latest-mac-x64.dmg?utm_source=github)                |
+| **Windows** | x64           | [Download EXE](https://downloads.reliantlabs.io/Reliant-latest-win-x64.exe?utm_source=github)                |
+| **Windows** | ARM64         | [Download EXE](https://downloads.reliantlabs.io/Reliant-latest-win-arm64.exe?utm_source=github)              |
+| **Linux**   | x86_64        | [Download AppImage](https://downloads.reliantlabs.io/Reliant-latest-linux-x86_64.AppImage?utm_source=github) |
+| **Linux**   | ARM64         | [Download AppImage](https://downloads.reliantlabs.io/Reliant-latest-linux-arm64.AppImage?utm_source=github)  |
 
 ### Arch Linux (AUR)
 
