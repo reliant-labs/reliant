@@ -194,15 +194,6 @@ params:
     - Making changes that require surrounding context
 
 
-    Use `patch` when:
-
-    - Coordinating related changes across multiple files
-
-    - Making structural changes that span multiple locations
-
-    - Applying complex transformations atomically
-
-
     **Execution Best Practices**:
 
 
@@ -435,7 +426,7 @@ params:
     - "copy": Keeps in source, adds to target
 
 
-    ## edit and patch for Context-Sensitive Changes
+    ## edit for Context-Sensitive Changes
 
 
     For changes that require understanding context:
@@ -443,20 +434,13 @@ params:
 
     **edit Tool**:
 
-    - Best for single-file, context-dependent changes
+    - Best for context-dependent changes
 
     - Requires exact old_string match including whitespace
 
     - Use when change depends on surrounding code
 
-
-    **patch Tool**:
-
-    - Best for coordinated multi-file changes
-
-    - Atomic operation ensures consistency
-
-    - Use when changes across files must happen together
+    - Supports batched multi-file edits via edits array
 
 
     # Quality Standards
@@ -556,7 +540,6 @@ params:
   tools:
   - view
   - edit
-  - patch
   - write
   - find_replace
   - move_code

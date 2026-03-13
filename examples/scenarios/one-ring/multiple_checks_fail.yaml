@@ -1,0 +1,85 @@
+# Multiple Checks Fail: Lint, test, and build all fail simultaneously
+#
+# Tests the parallel failure path where all three checks fail at once:
+# 1. Iteration 0: implement runs, then lint/test/build run in parallel — all fail
+# 2. Code review sees all failures and grades 'fail'
+# 3. Loop re-iterates because lint_exit, test_exit, and build_exit are all non-zero
+# 4. Iteration 1: all checks pass, review passes → loop exits
+#
+# Verifies that multiple simultaneous check failures are handled correctly
+# and that the loop properly re-iterates when any check fails.
+
+name: multiple_checks_fail
+description: All three checks (lint, test, build) fail simultaneously then pass on retry
+
+inputs:
+  steps: [implement, lint, test, build, code_review]
+
+events:
+  # Iteration 0 — all checks fail
+  - node: impl_loop.implement
+    output:
+      response_text: "Rough first implementation."
+
+  - node: impl_loop.lint
+    output:
+      exit_code: 1
+
+  - node: impl_loop.test
+    output:
+      exit_code: 1
+
+  - node: impl_loop.build
+    output:
+      exit_code: 1
+
+  - node: impl_loop.code_review
+    output:
+      response:
+        grade: fail
+        summary: "All checks failing. Major rework needed."
+        suggestions:
+          - "Fix lint errors"
+          - "Fix failing tests"
+          - "Fix compilation errors"
+
+  # Iteration 1 — all checks pass
+  - node: impl_loop.implement
+    output:
+      response_text: "Comprehensive fixes applied."
+
+  - node: impl_loop.lint
+    output:
+      exit_code: 0
+
+  - node: impl_loop.test
+    output:
+      exit_code: 0
+
+  - node: impl_loop.build
+    output:
+      exit_code: 0
+
+  - node: impl_loop.code_review
+    output:
+      response:
+        grade: pass
+        summary: "All checks pass. Clean implementation."
+        suggestions: []
+
+expect:
+  outcome: completed
+  reached:
+    - planning
+    - impl_loop
+    - impl_loop.implement
+    - impl_loop.lint
+    - impl_loop.test
+    - impl_loop.build
+    - impl_loop.join_checks
+    - impl_loop.code_review
+    - complete
+  not_reached:
+    - planning.plan
+    - write_tests
+    - start_app

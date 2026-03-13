@@ -1,0 +1,75 @@
+# Verification failure: lint fails during verification phase
+#
+# GSD workflow: discuss → research → plan → implement → [lint,test,build] → join → report → complete
+#
+# Tests that the workflow completes even when a verification step fails.
+# The verify_report node renders the pass/fail status via CEL template.
+
+name: verification_failure
+description: >
+  All phases (discuss through implement) succeed. During verification,
+  lint fails (exit_code 1) while test and build pass. The workflow still
+  completes — verify_report renders the failure status.
+
+events:
+  # Phases 1-4: All succeed
+  - node: discuss
+    output:
+      message:
+        role: assistant
+        text: "Understood, proceeding with default conventions."
+      response_text: "Understood, proceeding with default conventions."
+
+  - node: research
+    output:
+      message:
+        role: assistant
+        text: "Codebase uses standard Go project layout."
+      response_text: "Codebase uses standard Go project layout."
+
+  - node: plan
+    output:
+      message:
+        role: assistant
+        text: "Single wave: add handler and test."
+      response_text: "Single wave: add handler and test."
+
+  - node: implement
+    output:
+      message:
+        role: assistant
+        text: "Done. Added handler and test file."
+      response_text: "Done. Added handler and test file."
+
+  # Phase 5: Lint fails, test and build pass
+  - node: verify_lint
+    output:
+      exit_code: 1
+      stdout: ""
+      stderr: "src/handlers/user.go:15:2: unused variable 'ctx'"
+
+  - node: verify_test
+    output:
+      exit_code: 0
+      stdout: "PASS\nok  	./... 1.823s"
+      stderr: ""
+
+  - node: verify_build
+    output:
+      exit_code: 0
+      stdout: "Build succeeded."
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - discuss
+    - research
+    - plan
+    - implement
+    - verify_lint
+    - verify_test
+    - verify_build
+    - verify_join
+    - verify_report
+    - complete

@@ -1,0 +1,98 @@
+# Yield Between Phases: yield=true pauses for user review after each phase
+#
+# Tests the yield behavior of the superpowers workflow:
+# - yield=true (the default) is passed to each agent sub-workflow via args
+# - Each phase yields to the user after completion for review/feedback
+# - All phases still complete in sequence but with user checkpoints between them
+#
+# This scenario verifies that the yield input flows through correctly
+# and that all phases still complete end-to-end. The yield behavior
+# itself is handled by the sub-workflow (builtin://agent), so from the
+# superpowers workflow perspective the output shape is identical.
+# The key difference is the inputs.yield=true value being passed through.
+
+name: yield_between_phases
+description: With yield=true, phases pause for user review; all phases still complete
+
+inputs:
+  mode: auto
+  yield: true
+
+events:
+  # Phase 1: Brainstorm (yields after completion for user to review questions)
+  - node: brainstorm
+    output:
+      message:
+        role: assistant
+        text: |
+          ## Problem Statement
+          Implement webhook delivery with retry and dead-letter queue.
+
+          ## Key Questions
+          1. What payload format? → JSON with HMAC signature
+          2. Retry policy? → 3 attempts, exponential backoff
+          3. Dead-letter storage? → Database table for failed deliveries
+      response_text: |
+        ## Problem Statement
+        Implement webhook delivery with retry and dead-letter queue.
+
+  # Phase 2: Plan (yields for user to review plan)
+  - node: plan
+    output:
+      message:
+        role: assistant
+        text: |
+          ## Tasks
+          1. Webhook delivery service — internal/webhooks/deliver.go
+          2. Retry queue — internal/webhooks/retry.go
+          3. Dead-letter table migration — internal/db/migrations/
+      response_text: |
+        ## Tasks
+        1. Webhook delivery service — internal/webhooks/deliver.go
+        2. Retry queue — internal/webhooks/retry.go
+        3. Dead-letter table migration — internal/db/migrations/
+
+  # Phase 3: TDD (yields for user to review test plan)
+  - node: tdd
+    output:
+      message:
+        role: assistant
+        text: "Tests written for delivery, retry, and dead-letter flows. All RED."
+      response_text: "Tests written for delivery, retry, and dead-letter flows. All RED."
+
+  # Phase 4: Implement (yields for user to review implementation)
+  - node: implement
+    output:
+      message:
+        role: assistant
+        text: "Implementation complete. All 18 tests pass (GREEN)."
+      response_text: "Implementation complete. All 18 tests pass (GREEN)."
+
+  # Phase 5: Review (structured review)
+  - node: review
+    output:
+      message:
+        role: assistant
+        text: "Code review complete. Implementation passes all checks."
+      response_text: "Code review complete. Implementation passes all checks."
+      response:
+        verdict: pass
+        summary: "Solid webhook delivery implementation with proper retry semantics and dead-letter handling."
+        issues:
+          - severity: suggestion
+            description: "Consider adding a circuit breaker for endpoints that consistently fail."
+            file: "internal/webhooks/deliver.go"
+            line: 89
+        test_coverage: "Comprehensive coverage including retry exhaustion, concurrent delivery, and dead-letter insertion."
+        follows_patterns: true
+      completed: true
+
+expect:
+  outcome: completed
+  reached:
+    - brainstorm
+    - plan
+    - tdd
+    - implement
+    - review
+    - complete

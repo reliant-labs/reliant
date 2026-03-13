@@ -1,0 +1,69 @@
+# One Retry Then Success: First attempt fails, second attempt succeeds
+#
+# Tests the core try-fail-learn cycle with one retry:
+# 1. Iteration 0: try_implement runs, try_diagnose says needs_retry=true
+# 2. Loop condition: needs_retry == true && iter.iteration(1) < max_retries(2) → re-iterate
+# 3. Iteration 1: try_implement runs again with learnings, try_diagnose says needs_retry=false
+# 4. Loop condition: needs_retry == false → loop exits
+# 5. Final diagnose synthesizes accumulated learnings from both iterations
+# 6. Final implement applies the correct solution
+#
+# Verifies that:
+# - A failing first attempt correctly triggers re-iteration
+# - Learnings accumulate across iterations (thread.mode: inherit)
+# - The loop exits when needs_retry becomes false
+# - Final diagnose and implement receive the full context
+
+name: one_retry_then_success
+description: First attempt fails, second attempt succeeds after learning from failure
+
+events:
+  # Attempt loop — iteration 0: try fails, retry needed
+  - node: attempt.try_implement
+    output:
+      response_text: "Attempted the feature but tests fail. The data model doesn't match expectations."
+
+  - node: attempt.try_diagnose
+    output:
+      response:
+        needs_retry: true
+        diagnosis: "The implementation assumed a flat data model but the schema is actually nested with foreign key constraints."
+        difficulty_areas: "Database schema is more complex than it appears from the API layer."
+        wrong_abstractions: "Assumed direct table access but there's a repository pattern wrapping queries."
+        approach_for_next: "Use the repository layer instead of direct SQL. Follow the existing pattern in UserRepository."
+
+  # Attempt loop — iteration 1: try succeeds, no retry needed
+  - node: attempt.try_implement
+    output:
+      response_text: "Used the repository pattern as suggested. Tests pass, implementation is clean."
+
+  - node: attempt.try_diagnose
+    output:
+      response:
+        needs_retry: false
+        diagnosis: "Implementation is now correct. Using the repository layer resolved the data model mismatch."
+        difficulty_areas: "The repository pattern was non-obvious from the surface API."
+        wrong_abstractions: "First attempt bypassed the repository layer — now corrected."
+
+  # Final diagnose
+  - node: diagnose
+    output:
+      response_text: "Key learning: always use the repository layer for data access. The schema has hidden complexity behind FK constraints that the repository handles correctly."
+
+  # Final implement
+  - node: implement
+    output:
+      response_text: "Final implementation uses the repository pattern throughout. All tests pass. Migration script included."
+
+expect:
+  outcome: completed
+  reached:
+    - attempt
+    - attempt.try_implement
+    - attempt.try_diagnose
+    - diagnose
+    - implement
+  node_outputs:
+    attempt:
+      needs_retry: false
+      diagnosis: "Implementation is now correct. Using the repository layer resolved the data model mismatch."

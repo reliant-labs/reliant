@@ -1,0 +1,73 @@
+# Max Retries Exhausted: Loop exits after hitting the retry limit
+#
+# Tests the loop's max_retries safeguard:
+# 1. max_retries set to 2 (default)
+# 2. Iteration 0: try_diagnose says needs_retry=true → re-iterate
+# 3. Iteration 1: try_diagnose says needs_retry=true → iter.iteration(2) == max_retries(2) → loop exits
+# 4. Workflow still completes (loop exhaustion is not an error)
+# 5. Final diagnose synthesizes all failure learnings into actionable guidance
+# 6. Final implement makes best-effort implementation using everything learned
+#
+# Verifies that:
+# - The loop correctly stops when iter.iteration reaches max_retries
+# - The final needs_retry remains true (never succeeded)
+# - The workflow still completes through diagnose → implement
+# - Accumulated failure learnings flow to the final phases
+
+name: max_retries_exhausted
+description: All retries fail, loop exits at max_retries limit
+
+inputs:
+  max_retries: 2
+
+events:
+  # Attempt loop — iteration 0: fails
+  - node: attempt.try_implement
+    output:
+      response_text: "First attempt. Tried to refactor the auth module but broke session handling."
+
+  - node: attempt.try_diagnose
+    output:
+      response:
+        needs_retry: true
+        diagnosis: "Auth module is tightly coupled to session management. Can't change one without the other."
+        difficulty_areas: "Session state is shared across auth middleware, route handlers, and websocket connections."
+        wrong_abstractions: "Assumed auth and sessions were independent modules — they're deeply intertwined."
+        approach_for_next: "Need to refactor both auth and session handling together. Start from the middleware layer."
+
+  # Attempt loop — iteration 1: still fails (max_retries reached, loop exits)
+  - node: attempt.try_implement
+    output:
+      response_text: "Second attempt. Tried refactoring both auth and sessions but the websocket layer also breaks."
+
+  - node: attempt.try_diagnose
+    output:
+      response:
+        needs_retry: true
+        diagnosis: "The coupling extends to websockets too. A three-way dependency between auth, sessions, and websockets."
+        difficulty_areas: "Three-way coupling between auth, sessions, and websockets. Each depends on the others' internal state."
+        wrong_abstractions: "Even the combined auth+session refactor isn't enough — websockets maintain their own auth state."
+        approach_for_next: "Must introduce an event bus to decouple all three systems before any refactoring is possible."
+
+  # Final diagnose — synthesize accumulated failure learnings
+  - node: diagnose
+    output:
+      response_text: "After 2 failed attempts, the core problem is clear: auth, sessions, and websockets form a tightly coupled triad. The correct approach is to introduce an event bus for state changes, then refactor each module to subscribe to events instead of direct coupling."
+
+  # Final implement — best-effort implementation with everything learned
+  - node: implement
+    output:
+      response_text: "Implemented event bus pattern to decouple auth, sessions, and websockets. Each module now subscribes to state change events instead of directly referencing others."
+
+expect:
+  outcome: completed
+  reached:
+    - attempt
+    - attempt.try_implement
+    - attempt.try_diagnose
+    - diagnose
+    - implement
+  node_outputs:
+    attempt:
+      needs_retry: true
+      diagnosis: "The coupling extends to websockets too. A three-way dependency between auth, sessions, and websockets."

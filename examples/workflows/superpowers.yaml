@@ -1,0 +1,365 @@
+name: superpowers
+apiVersion: "0.0.5"
+description: |
+  Superpowers (obra methodology) — Mandatory skill gates and strict TDD enforcement. Inspired by https://github.com/obra/superpowers
+
+  Key innovation: Socratic brainstorming before code, mandatory TDD (write tests first),
+  and a structured review gate that documents quality findings.
+
+  Phases:
+    1. Brainstorm — Socratic questions to deeply understand the problem before any code
+    2. Plan — Create bite-sized tasks with file paths
+    3. TDD — Write tests first (RED phase: tests must exist and fail)
+    4. Implement — Make the tests pass (GREEN phase)
+    5. Review — Structured code quality review with pass/fail verdict
+    6. Complete — Summary
+
+entry: [brainstorm]
+
+inputs:
+  model:
+    type: model
+    description: Model used for all LLM sub-agents
+    default:
+      tags: [flagship]
+
+  mode:
+    type: enum
+    ui: toolbar
+    default: auto
+    description: Execution mode for agent steps.
+    enum: [manual, auto, plan]
+
+  yield:
+    type: boolean
+    ui: toolbar
+    default: true
+    description: Pause for user review after each phase.
+
+  temperature:
+    type: number
+    default: 1.0
+    min: 0
+    max: 1
+    description: Response randomness
+  thinking_level:
+    type: enum
+    enum: [low, medium, high, xhigh]
+    default: medium
+    description: Extended thinking level
+
+nodes:
+  # ── Phase 1: Brainstorm ──────────────────────────────────────────────────
+  #
+  # Socratic questioning before any code. The agent asks probing questions to
+  # deeply understand the problem space, constraints, and edge cases.
+  # Yields to the user so they can answer questions and refine understanding.
+
+  - id: brainstorm
+    type: workflow
+    ref: builtin://agent
+    presets:
+      default: researcher
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+      yield: "{{inputs.yield}}"
+      temperature: "{{inputs.temperature}}"
+      thinking_level: "{{inputs.thinking_level}}"
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Superpowers — Phase 1: Socratic Brainstorm
+
+          Before writing ANY code, deeply understand the problem.
+
+          **Process:**
+          1. Investigate the codebase to understand relevant patterns, constraints, and existing code
+          2. Based on your investigation, identify hidden assumptions, edge cases, and failure modes
+          3. Synthesize your understanding into a clear problem statement
+
+          **Do NOT:**
+          - Write any code or pseudocode
+          - Make implementation decisions
+          - Skip the investigation — understanding IS the work here
+
+          **Output:**
+          1. **Problem Statement** — What are we really solving?
+          2. **Key Discoveries** — What you found in the codebase that's relevant
+          3. **Constraints** — Hard limits and soft preferences
+          4. **Edge Cases** — What could go wrong
+          5. **Success Criteria** — How we know we're done
+    save_message:
+      role: assistant
+      content: |
+        ## Brainstorm
+        {{output.response_text}}
+
+  # ── Phase 2: Plan ────────────────────────────────────────────────────────
+  #
+  # Create bite-sized tasks with specific file paths. Each task should be
+  # small enough to implement and test independently.
+
+  - id: plan
+    type: workflow
+    ref: builtin://agent
+    presets:
+      default: planner
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+      yield: "{{inputs.yield}}"
+      temperature: "{{inputs.temperature}}"
+      thinking_level: "{{inputs.thinking_level}}"
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Superpowers — Phase 2: Plan
+
+          Based on the brainstorm above, create a detailed implementation plan.
+
+          **Requirements:**
+          - Break work into bite-sized tasks (each completable in one focused step)
+          - Every task MUST include specific file paths to create or modify
+          - Tasks must be ordered so tests can be written before implementation
+          - Identify which tests to write for each task
+
+          **Output format:**
+          1. **Approach** — High-level strategy in 2–3 sentences
+          2. **Tasks** — Numbered list, each with:
+             - Description of what to do
+             - File paths to create/modify
+             - Test file paths for this task
+             - Dependencies on other tasks (if any)
+          3. **Test Strategy** — What types of tests (unit, integration, e2e) and why
+    save_message:
+      role: assistant
+      content: |
+        ## Plan
+        {{output.response_text}}
+
+  # ── Phase 3: TDD — Write Tests First (RED) ──────────────────────────────
+  #
+  # Write all tests BEFORE any implementation. Tests should fail (RED phase).
+  # This forces clear thinking about interfaces and behavior.
+
+  - id: tdd
+    type: workflow
+    ref: builtin://agent
+    presets:
+      default: tester
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+      yield: "{{inputs.yield}}"
+      temperature: "{{inputs.temperature}}"
+      thinking_level: "{{inputs.thinking_level}}"
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Superpowers — Phase 3: TDD (RED Phase)
+
+          Write tests FIRST, before any implementation code.
+
+          **Rules:**
+          - Write tests that define the expected behavior from the plan above
+          - Tests MUST be runnable (proper imports, test framework setup)
+          - Tests SHOULD fail because the implementation doesn't exist yet
+          - Cover happy paths, edge cases, and error conditions from the brainstorm
+          - Use the project's existing test patterns and frameworks
+          - **Run the tests after writing them** to confirm they fail (this is the RED verification)
+
+          **Do NOT:**
+          - Write any implementation code
+          - Create stubs or mocks that make tests pass trivially
+          - Skip edge cases identified in the brainstorm phase
+
+          **Output:**
+          1. List of test files created with their file paths
+          2. Summary of what each test validates
+          3. Confirmation that tests were run and they fail as expected
+    save_message:
+      role: assistant
+      content: |
+        ## Tests (RED Phase)
+        {{output.response_text}}
+
+  # ── Phase 4: Implement ──────────────────────────────────────────────────
+  #
+  # Write the implementation to make the tests pass (GREEN phase).
+
+  - id: implement
+    type: workflow
+    ref: builtin://agent
+    presets:
+      default: general
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+      yield: "{{inputs.yield}}"
+      temperature: "{{inputs.temperature}}"
+      thinking_level: "{{inputs.thinking_level}}"
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Superpowers — Phase 4: Implement (GREEN Phase)
+
+          Make the tests pass.
+
+          **Process:**
+          1. Read every test file mentioned in the TDD phase summary above
+             (if file paths aren't listed, search for recently created test files)
+          2. Implement the minimum code needed to make each test pass
+          3. Run tests frequently to verify progress
+          4. Keep implementations simple — don't gold-plate
+
+          **Guidelines:**
+          - Follow the plan from Phase 2
+          - Follow existing codebase patterns and conventions
+          - Parallelize independent tasks using spawn
+
+          **After implementation:**
+          - Run the full test suite to confirm ALL tests pass
+          - Verify no existing tests were broken
+    save_message:
+      role: assistant
+      content: |
+        ## Implementation Summary
+        {{output.response_text}}
+
+  # ── Phase 5: Review Gate ────────────────────────────────────────────────
+  #
+  # Structured code review with pass/fail gating. Uses structured-agent
+  # to enforce a schema on the review output. If the review fails,
+  # issues are documented for the user to address.
+
+  - id: review
+    type: workflow
+    ref: builtin://structured-agent
+    presets:
+      default: code_reviewer
+    args:
+      model: "{{inputs.model}}"
+      temperature: "{{inputs.temperature}}"
+      thinking_level: "{{inputs.thinking_level}}"
+      response_tool_name: submit_review
+      response_tool_description: "Submit your code review with a pass/fail verdict and detailed findings"
+      response_schema:
+        type: object
+        required:
+          - verdict
+          - summary
+          - issues
+        properties:
+          verdict:
+            type: string
+            enum:
+              - pass
+              - fail
+            description: "pass if the code meets quality standards; fail if critical issues remain"
+          summary:
+            type: string
+            description: "Brief overall assessment of code quality"
+          issues:
+            type: array
+            items:
+              type: object
+              required:
+                - severity
+                - description
+                - file
+              properties:
+                severity:
+                  type: string
+                  enum:
+                    - critical
+                    - warning
+                    - suggestion
+                  description: "critical = must fix, warning = should fix, suggestion = nice to have"
+                description:
+                  type: string
+                  description: "What the issue is and how to fix it"
+                file:
+                  type: string
+                  description: "File path where the issue exists"
+                line:
+                  type: integer
+                  description: "Approximate line number"
+            description: "List of issues found during review"
+          test_coverage:
+            type: string
+            description: "Assessment of test coverage adequacy"
+
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Superpowers — Phase 5: Code Review
+
+          Review the implementation quality. **Read the actual files that were changed** — do not rely solely on the thread summaries above.
+
+          **Review checklist:**
+          - Does the implementation match the plan and success criteria from brainstorm?
+          - Are all tests passing? Are there gaps in test coverage?
+          - Does the code follow existing project patterns and conventions?
+          - Are there any bugs, security issues, or performance concerns?
+          - Is the code clean and maintainable?
+
+          Submit your structured review with a verdict and specific issues.
+    save_message:
+      role: assistant
+      content: |
+        ## Code Review
+        **Verdict: {{has(output.response) ? output.response.verdict : 'unknown'}}**
+
+        {{has(output.response) ? output.response.summary : 'Review not available'}}
+
+        {{has(output.response) && has(output.response.test_coverage) ? '**Test Coverage:** ' + output.response.test_coverage : ''}}
+
+        {{has(output.response) && has(output.response.issues) && size(output.response.issues) > 0 ? '### Issues\n' + output.response.issues.map(i, '- **' + i.severity + '** ' + i.file + (has(i.line) ? ':' + string(i.line) : '') + ' — ' + i.description).join('\n') : ''}}
+
+  # ── Phase 6: Complete ───────────────────────────────────────────────────
+
+  - id: complete
+    type: save_message
+    args:
+      role: assistant
+      content: |
+        ## Superpowers — Complete
+
+        Workflow finished. All phases completed:
+        1. Socratic brainstorm — problem deeply understood
+        2. Plan — bite-sized tasks with file paths
+        3. TDD — tests written first (RED phase)
+        4. Implement — tests made to pass (GREEN phase)
+        5. Review — code quality gate applied
+
+edges:
+  - from: brainstorm
+    default: plan
+  - from: plan
+    default: tdd
+  - from: tdd
+    default: implement
+  - from: implement
+    default: review
+  - from: review
+    default: complete
+
+outputs:
+  review_verdict: "{{has(nodes.review.response) ? nodes.review.response.verdict : 'unknown'}}"
+  implementation: "{{nodes.implement.response_text}}"

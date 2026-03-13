@@ -1,0 +1,264 @@
+name: get-it-right
+apiVersion: "0.0.5"
+description: |
+  Get It Right — for complex brownfield codebases where LLMs paper-mache code on top.
+  The insight: sometimes you need to try and fail to truly understand the codebase.
+
+  Phases:
+    1. attempt (loop) — Try to implement, then diagnose what went wrong. Repeat up to max_retries.
+    2. diagnose — Final reflection armed with accumulated failure insights.
+    3. implement — Correct implementation using everything learned from the try→fail→learn cycle.
+
+  Thread architecture:
+    attempt loop inherits main thread so each iteration's learnings accumulate.
+    Each try_implement forks so failed code stays isolated.
+    diagnose forks for a clean analysis pass; summary saved to main thread.
+    implement forks for the final clean implementation.
+
+entry: [attempt]
+
+inputs:
+  model:
+    type: model
+    description: LLM model to use for all phases
+    default:
+      tags: [flagship]
+
+  max_retries:
+    type: integer
+    default: 2
+    min: 1
+    max: 5
+    description: Maximum attempt→diagnose iterations before moving to final implementation
+
+  mode:
+    type: enum
+    ui: toolbar
+    default: auto
+    description: Execution mode for agent steps.
+    enum: [manual, auto, plan]
+
+  yield:
+    type: boolean
+    ui: toolbar
+    default: true
+    description: Pause for user review after diagnosis before final implementation.
+
+  temperature:
+    type: number
+    default: 1.0
+    min: 0
+    max: 1
+    description: Response randomness
+
+  thinking_level:
+    type: enum
+    enum: [low, medium, high, xhigh]
+    default: medium
+    description: Extended thinking level
+
+nodes:
+  # ── Attempt loop (try → diagnose → retry) ───────────────────────────────────
+  #
+  # Each iteration: fork a thread to try implementing, then analyze what went wrong.
+  # The loop continues while diagnose says retry is needed and we haven't hit max_retries.
+  # Loop inherits the main thread so failure learnings accumulate across iterations.
+
+  - id: attempt
+    type: loop
+    while: >
+      has(outputs.needs_retry) && outputs.needs_retry == true
+      && iter.iteration < inputs.max_retries
+    inline:
+      entry: [try_implement]
+
+      outputs:
+        # Default to true (retry) so that if try_diagnose fails to produce a response,
+        # the loop retries rather than proceeding with insufficient understanding.
+        needs_retry: "{{has(nodes.try_diagnose) && has(nodes.try_diagnose.response) ? nodes.try_diagnose.response.needs_retry : true}}"
+        diagnosis: "{{has(nodes.try_diagnose) && has(nodes.try_diagnose.response) ? nodes.try_diagnose.response.diagnosis : ''}}"
+
+      nodes:
+        - id: try_implement
+          type: workflow
+          ref: builtin://agent
+          presets:
+            default: general
+          args:
+            model: "{{inputs.model}}"
+            mode: "{{inputs.mode}}"
+            temperature: "{{inputs.temperature}}"
+            thinking_level: "{{inputs.thinking_level}}"
+          thread:
+            mode: fork
+            memo: false
+            inject:
+              role: user
+              content: |
+                ## Get It Right — Attempt {{iter.iteration + 1}}
+
+                {{iter.iteration == 0 ? 'Implement the requested changes. Start by investigating the relevant code, then make your changes and run tests to verify them.' : 'Previous attempt failed. The diagnosis above explains what went wrong. Before writing code, re-read the diagnosis — specifically the "Approach for next attempt" section. Address the wrong abstractions and difficulty areas it identified.'}}
+
+                After finishing, summarize:
+                1. What you changed and why
+                2. What tests you ran and their results
+                3. What surprised you about the codebase
+                4. What you're uncertain about
+          save_message:
+            role: assistant
+            content: |
+              ## Attempt {{iter.iteration + 1}} Summary
+              {{output.response_text}}
+
+        - id: try_diagnose
+          type: workflow
+          ref: builtin://structured-agent
+          args:
+            model: "{{inputs.model}}"
+            mode: "{{inputs.mode}}"
+            temperature: "{{inputs.temperature}}"
+            thinking_level: "{{inputs.thinking_level}}"
+            response_tool_name: submit_diagnosis
+            response_tool_description: "Submit your diagnosis of what went wrong and whether another attempt is needed"
+            response_schema:
+              type: object
+              required:
+                - needs_retry
+                - diagnosis
+                - difficulty_areas
+                - wrong_abstractions
+              properties:
+                needs_retry:
+                  type: boolean
+                  description: "true if another attempt would help learn more about the codebase; false if we understand enough to implement correctly"
+                difficulty_areas:
+                  type: string
+                  description: "What was harder than expected and why"
+                wrong_abstractions:
+                  type: string
+                  description: "What abstractions or assumptions were wrong"
+                diagnosis:
+                  type: string
+                  description: "Complete analysis of what went wrong and what we learned"
+                approach_for_next:
+                  type: string
+                  description: "If retrying, what to do differently next time"
+          thread:
+            mode: fork
+            memo: false
+            inject:
+              role: user
+              content: |
+                ## Get It Right — Diagnose Attempt {{iter.iteration + 1}}
+
+                Analyze the implementation attempt above. Focus on:
+                1. What was harder than expected? Why?
+                2. What abstractions or assumptions about the codebase were wrong?
+                3. What did we learn that we didn't know before?
+                4. Do we understand the codebase well enough now, or would another attempt help?
+
+                Be brutally honest. The goal is understanding, not saving face.
+          save_message:
+            role: assistant
+            content: |
+              ## Diagnosis — Attempt {{iter.iteration + 1}}
+              {{has(output.response) ? output.response.diagnosis : 'Diagnosis not available'}}
+
+              **Difficulty areas:** {{has(output.response) ? output.response.difficulty_areas : 'N/A'}}
+              **Wrong abstractions:** {{has(output.response) ? output.response.wrong_abstractions : 'N/A'}}
+              **Approach for next attempt:** {{has(output.response) && has(output.response.approach_for_next) ? output.response.approach_for_next : 'N/A'}}
+
+      edges:
+        - from: try_implement
+          default: [try_diagnose]
+
+  # ── Final diagnosis / reflection ─────────────────────────────────────────────
+  #
+  # After the loop exits, do one final reflection that synthesizes all learnings
+  # into actionable guidance for the implementation phase.
+
+  - id: diagnose
+    type: workflow
+    ref: builtin://agent
+    presets:
+      default: planner
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+      yield: "{{inputs.yield}}"
+      temperature: "{{inputs.temperature}}"
+      thinking_level: high
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Get It Right — Final Diagnosis
+
+          Review all the attempt and diagnosis summaries above. Synthesize everything learned into a clear, actionable implementation guide.
+
+          **Produce:**
+          1. **Key Insights** — What did we learn about this codebase that wasn't obvious?
+          2. **Correct Approach** — Step-by-step, what's the right way to implement the changes?
+          3. **Pitfalls** — Numbered list of specific things to avoid (reference earlier failures)
+          4. **Order of Operations** — What to do first, second, third
+          5. **Files & Interfaces** — Specific files to touch and the key interfaces/abstractions to use correctly
+
+          Be concrete and specific. This guide will be the sole reference for the implementation phase.
+    save_message:
+      role: assistant
+      content: |
+        ## Implementation Guide (from failure analysis)
+        {{output.response_text}}
+
+  # ── Final implementation ─────────────────────────────────────────────────────
+  #
+  # Armed with all the learnings, do the correct implementation.
+
+  - id: implement
+    type: workflow
+    ref: builtin://agent
+    presets:
+      default: general
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+      temperature: "{{inputs.temperature}}"
+      thinking_level: "{{inputs.thinking_level}}"
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Get It Right — Final Implementation
+
+          The implementation guide above was built from real attempts and failures. This is the real implementation.
+
+          **Process:**
+          1. Read the implementation guide above carefully before writing any code
+          2. Address each numbered pitfall explicitly as you implement
+          3. Follow the recommended order of operations
+          4. Run tests after each significant change
+          5. If the guide's approach doesn't work for some part, note the deviation and why
+
+          **Do NOT:**
+          - Ignore the pitfalls section — those are real failures that happened
+          - Re-discover things already documented in the guide
+          - Skip running tests
+    save_message:
+      role: assistant
+      content: |
+        ## Implementation Complete
+        {{output.response_text}}
+
+outputs:
+  needs_retry: "{{nodes.attempt.needs_retry}}"
+  implementation: "{{nodes.implement.response_text}}"
+
+edges:
+  - from: attempt
+    default: [diagnose]
+  - from: diagnose
+    default: [implement]

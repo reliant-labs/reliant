@@ -1,0 +1,38 @@
+# Single Task Complete: One iteration loop exit
+#
+# Tests the simplest happy path:
+# 1. Iteration 0: orient picks a task, implement executes, verify confirms done
+# 2. verify returns tasks_remaining=false → while condition is false → loop exits
+#
+# Verifies the loop correctly exits after a single pass when all work is done.
+
+name: single_task_complete
+description: One iteration — orient, implement, verify says done, loop exits
+
+events:
+  # Iteration 0 — all done on first try
+  - node: task_loop.orient
+    output:
+      response_text: "Task chosen: implement user authentication endpoint. Priority: high. Acceptance: returns JWT on valid credentials."
+
+  - node: task_loop.implement
+    output:
+      response_text: "Implemented /auth/login endpoint with JWT generation. Tests pass."
+
+  - node: task_loop.verify
+    output:
+      response:
+        summary: "Authentication endpoint implemented correctly. All spec tasks complete."
+        tasks_remaining: false
+        issues: []
+
+expect:
+  outcome: completed
+  reached:
+    - task_loop
+    - task_loop.orient
+    - task_loop.implement
+    - task_loop.verify
+  node_outputs:
+    task_loop:
+      tasks_remaining: false

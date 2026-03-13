@@ -1,97 +1,90 @@
-# Approved with guidance - auditor approves but provides feedback
+# Approved With Guidance: Auditor approves but provides feedback
+#
+# Tests the approval-with-guidance path:
+# 1. main_agent makes a tool call
+# 2. audit_check approves but includes non-empty guidance
+# 3. execute_audit returns approved=true with guidance
+# 4. execute_audit's save_message condition fires (guidance is non-empty),
+#    saving "AUDIT FEEDBACK" as a user message to the thread
+# 5. save_approved_response saves the agent message (approved=true)
+# 6. execute_tools runs the agent's tool call
+# 7. Next iteration: main_agent sees the guidance and adjusts
+# 8. Loop exits
+#
+# Key distinction from pure approval: the guidance is non-empty, so the
+# save_message condition on execute_audit fires. This means the agent will
+# see audit feedback even though the action was approved.
+
 name: approved_with_guidance
-description: Auditor approves the action but provides helpful guidance that should be saved to thread
+description: Auditor approves but provides feedback that gets saved to thread
+
 events:
-  # main_agent makes a tool call
+  # Iteration 1: main_agent makes a tool call
   - node: audited_loop.main_agent
-    output:
-      message:
-        role: assistant
-        text: "Let me search for that pattern."
-      response_text: "Let me search for that pattern."
-      tool_calls:
-        - id: call_0
-          name: grep
-          input:
-            pattern: "TODO"
-            path: "."
-  # audit_check approves BUT provides guidance
+    type: llm_response
+    text: "Let me search for that pattern."
+    tool_calls:
+      - name: grep
+        input:
+          pattern: "TODO"
+          path: "."
+
+  # audit_check approves but provides guidance
   - node: audited_loop.audit_check
-    output:
-      message:
-        role: assistant
-        text: ""
-      response_text: ""
-      tool_calls:
-        - id: call_1
-          name: audit
-          input:
-            approved: true
-            guidance: "Consider limiting search scope to specific directories to avoid slow performance."
-  # execute_audit result with approval AND guidance
-  - node: audited_loop.execute_audit
-    output:
-      message:
-        role: tool
-        text: ""
-      tool_results:
-        - tool_call_id: call_1
-          content: '{"approved": true, "guidance": "Consider limiting search scope to specific directories."}'
-      response_data:
-        audit:
+    type: llm_response
+    text: ""
+    tool_calls:
+      - name: audit
+        input:
           approved: true
           guidance: "Consider limiting search scope to specific directories to avoid slow performance."
-      thread_token_count: 500
-  # execute_tools result
+
+  # execute_audit returns approval with guidance — guidance is saved to thread
+  - node: audited_loop.execute_audit
+    type: tool_result
+    tool: audit
+    output:
+      approved: true
+      guidance: "Consider limiting search scope to specific directories to avoid slow performance."
+
+  # execute_tools runs the grep tool (approved despite guidance)
   - node: audited_loop.execute_tools
+    type: tool_result
+    tool: grep
     output:
-      message:
-        role: tool
-        text: ""
-      tool_results:
-        - tool_call_id: call_0
-          content: '["main.go:10", "util.go:25"]'
-      thread_token_count: 600
-  # Second iteration: main_agent responds with final answer
+      result: '["main.go:10", "util.go:25"]'
+
+  # Iteration 2: main_agent responds with final answer incorporating feedback
   - node: audited_loop.main_agent
-    output:
-      message:
-        role: assistant
-        text: "Found 2 TODOs in the codebase."
-      response_text: "Found 2 TODOs in the codebase."
-      tool_calls: []
+    type: llm_response
+    text: "Found 2 TODOs in the codebase."
+
   # audit_check approves final response (no guidance this time)
   - node: audited_loop.audit_check
-    output:
-      message:
-        role: assistant
-        text: ""
-      response_text: ""
-      tool_calls:
-        - id: call_2
-          name: audit
-          input:
-            approved: true
-            guidance: ""
-  - node: audited_loop.execute_audit
-    output:
-      message:
-        role: tool
-        text: ""
-      tool_results:
-        - tool_call_id: call_2
-          content: '{"approved": true}'
-      response_data:
-        audit:
+    type: llm_response
+    text: ""
+    tool_calls:
+      - name: audit
+        input:
           approved: true
           guidance: ""
-      thread_token_count: 500
+
+  # execute_audit confirms approval
+  - node: audited_loop.execute_audit
+    type: tool_result
+    tool: audit
+    output:
+      approved: true
+      guidance: ""
+
 expect:
   outcome: completed
   reached:
     - audited_loop
     - audited_loop.main_agent
     - audited_loop.audit_check
-    - audited_loop.execute_audit  # Guidance saved inline via save_message condition
+    - audited_loop.execute_audit
     - audited_loop.save_approved_response
     - audited_loop.execute_tools
+  not_reached:
+    - audited_loop.compact

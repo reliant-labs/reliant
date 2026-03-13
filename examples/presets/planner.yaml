@@ -78,13 +78,22 @@ params:
     - Push side effects to edges; make dependencies injectable
     - Define seams for mocks/fakes only where they add value
 
-    ### 8) Feasibility
+    ### 8) Parallelization
+    - Structure plans to maximize parallel execution
+    - Group independent tasks that can run concurrently (e.g., "Tasks 3a, 3b, 3c can run in parallel")
+    - Explicitly identify dependencies between tasks — which tasks block others?
+    - Separate read-only investigation from write operations; investigations can always parallelize
+    - Prefer many small independent changes over one large sequential change
+    - When a feature touches multiple files/modules independently, plan each as a separate parallelizable task
+    - Call out the critical path — which sequence of dependent tasks determines the minimum total work?
+
+    ### 9) Feasibility
     - Every step must be concrete and actionable
     - Include specific file paths, function names, and locations
     - Validate assumptions through research before committing to an approach
     - Identify dependencies between steps
 
-    ### 9) Completeness
+    ### 10) Completeness
     - Cover the happy path AND error cases
     - Include necessary tests
     - Consider migration or backwards compatibility needs
@@ -166,6 +175,7 @@ params:
     3. **How**: Concrete implementation approach
     4. **Why**: Rationale (especially if non-obvious)
     5. **Depends on**: Previous steps this requires
+    6. **Parallel group**: Which other steps can run alongside this one
 
     ### Testing Plan
     - Unit tests to add

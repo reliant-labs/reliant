@@ -1,30 +1,21 @@
-# Structured Agent Workflow
-#
-# Agent that requires a response tool to complete its turn.
-# Unlike the standard agent (which yields when no tool calls),
-# this agent loops while the response tool hasn't been called.
-#
-# The response tool schema is customizable via `response_schema` input.
-# If not provided, uses a default choice/value schema.
-# The structured response is available via the `response` output.
-
 name: structured-agent
 apiVersion: "0.0.5"
-description: Agent that yields structured output via a required response tool
+description: |
+  Agent that requires structured output via response tool. Unlike builtin://agent which yields on
+  end_turn, this loops until the response tool is called. If LLM responds without tools, a reminder
+  is injected. Access output via output.response (structured data) and output.completed (boolean).
 presets:
   tag: agent
   default: general
-entry: agent_loop
+entry: [agent_loop]
 
 inputs:
-  # === EXECUTION MODE ===
   mode:
     type: enum
-    enum: ["manual", "auto", "plan"]
+    enum: ["manual", "auto"]
     default: "auto"
     description: "Execution mode: manual = requires approval, auto = auto-approves"
 
-  # === CORE LLM SETTINGS ===
   model:
     type: model
     description: LLM model to use
@@ -38,7 +29,6 @@ inputs:
     max: 1
     description: Response randomness (0 = focused, 1 = creative)
 
-  # === AGENT CAPABILITIES ===
   tools:
     type: tools
     default: ["tag:default"]
@@ -49,9 +39,9 @@ inputs:
     description: System prompt for the agent
   thinking_level:
     type: enum
-    enum: [low, medium, high]
+    enum: [low, medium, high, xhigh]
     default: low
-    description: Extended thinking level
+    description: Extended thinking level (support is model/provider dependent)
   spawn_presets:
     type: preset
     tags: [agent]
@@ -59,7 +49,6 @@ inputs:
     default: []
     description: Presets available for spawn tool (empty = spawn disabled)
 
-  # === RESPONSE TOOL CONFIGURATION ===
   response_tool_name:
     type: string
     default: "submit_response"
@@ -69,10 +58,9 @@ inputs:
     default: "Submit your structured response to complete the task"
     description: Description shown to the LLM for the response tool
 
-  # === RESPONSE SCHEMA ===
   response_schema:
     type: object
-    description: "JSON Schema for the response tool output. If not provided, uses default choice/value schema."
+    description: "JSON Schema for the response tool output. The response is available via output.response."
     default:
       type: object
       required:
@@ -88,7 +76,6 @@ inputs:
           type: string
           description: "Explanation or data for your choice"
 
-  # === LIMITS ===
   max_turns:
     type: integer
     default: 200
@@ -101,38 +88,37 @@ inputs:
     min: 10000
     description: Token count to trigger context compaction
 
+  yield:
+    type: boolean
+    default: false
+    description: When true, wait for user interaction after agent completes before returning
+    ui: hidden
+
 outputs:
-  # The structured response from the response tool
+  # The structured response from the response tool (schema defined by response_schema input)
   response: "{{nodes.agent_loop.response}}"
   # Whether the response tool was called successfully
   completed: "{{nodes.agent_loop.completed}}"
-  # The choice made by the agent
-  choice: "{{nodes.agent_loop.choice}}"
-  # The value/explanation provided
-  value: "{{nodes.agent_loop.value}}"
 
 nodes:
   - id: agent_loop
-    thread:
-      mode: inherit
     type: loop
     # Continue while response tool not called AND under max turns
     while: outputs.completed != true && iter.iteration < inputs.max_turns
+    yield: "{{inputs.yield || iter.iteration >= inputs.max_turns}}"
     inline:
       entry: [call_llm]
 
       outputs:
-        tool_calls: "{{nodes.call_llm.tool_calls}}"
-        # Extract response data if available (null if response tool wasn't called)
-        response: "{{has(nodes.execute_tools) && has(nodes.execute_tools.response_data) ? nodes.execute_tools.response_data[inputs.response_tool_name] : null}}"
-        # Check if response tool was called (response is non-null)
-        completed: "{{has(nodes.execute_tools) && has(nodes.execute_tools.response_data) && inputs.response_tool_name in nodes.execute_tools.response_data && nodes.execute_tools.response_data[inputs.response_tool_name] != null}}"
-        # Extract choice and value for convenience
-        choice: "{{has(nodes.execute_tools) && has(nodes.execute_tools.response_data) && inputs.response_tool_name in nodes.execute_tools.response_data && nodes.execute_tools.response_data[inputs.response_tool_name] != null ? nodes.execute_tools.response_data[inputs.response_tool_name].choice : ''}}"
-        value: "{{has(nodes.execute_tools) && has(nodes.execute_tools.response_data) && inputs.response_tool_name in nodes.execute_tools.response_data && nodes.execute_tools.response_data[inputs.response_tool_name] != null ? nodes.execute_tools.response_data[inputs.response_tool_name].value : ''}}"
+        # Guard with 'in' operator before indexing — response_data may not contain the key
+        # when the LLM calls regular tools (not the response tool) in this iteration.
+        # Also guard against response_data being null (happens when spawn tools are mixed
+        # with regular tools — buildFinalToolResult drops response_data, normalizeOutput
+        # backfills it as nil from proto pointer zero-value).
+        response: "{{has(nodes.execute_tools) && has(nodes.execute_tools.response_data) && nodes.execute_tools.response_data != null && inputs.response_tool_name in nodes.execute_tools.response_data ? nodes.execute_tools.response_data[inputs.response_tool_name] : null}}"
+        completed: "{{has(nodes.execute_tools) && has(nodes.execute_tools.response_data) && nodes.execute_tools.response_data != null && inputs.response_tool_name in nodes.execute_tools.response_data && nodes.execute_tools.response_data[inputs.response_tool_name] != null}}"
 
       nodes:
-        # Call LLM with tools + response tool
         - id: call_llm
           type: call_llm
           save_message:
@@ -142,35 +128,28 @@ nodes:
           args:
             model: "{{inputs.model}}"
             temperature: "{{inputs.temperature}}"
+            thinking_level: "{{inputs.thinking_level}}"
             system_prompt: "{{inputs.system_prompt}}"
-            # Include regular tools plus the response tool
-            tool_filter: "{{(size(inputs.tools) > 0 ? inputs.tools : []) + [inputs.response_tool_name]}}"
+            # Include regular tools, response tool, and spawn
+            tool_filter: "{{inputs.tools + [inputs.response_tool_name, spawn(workflow.name, inputs.spawn_presets)]}}"
             response_tool:
               name: "{{inputs.response_tool_name}}"
               description: "{{inputs.response_tool_description}}"
               schema: "{{inputs.response_schema}}"
 
-        # Remind agent to use response tool if it tries to end without tool calls
+        # No outgoing edge - just injects reminder, then loop continues
         - id: remind_response
           type: save_message
           args:
             role: system
             content: "You must call the `{{inputs.response_tool_name}}` tool to complete your turn. Please use this tool to submit your structured response."
 
-        # Approval gate for manual mode
         - id: approval
           type: approval
           args:
             title: Approve tool execution?
-            description: "The agent wants to execute tool(s)"
             timeout: 1h
-            actions:
-              - type: approve
-                label: "Approve"
-              - type: deny
-                label: "Deny"
 
-        # Execute tools (both regular tools and response tool)
         - id: execute_tools
           type: execute_tools
           save_message:
@@ -179,12 +158,10 @@ nodes:
             tool_results: "{{output.tool_results}}"
           args:
             tool_calls: "{{nodes.call_llm.tool_calls}}"
-            # Explicitly declare expected response tool since the name is dynamic
-            # This ensures response_data[response_tool_name] exists even if LLM doesn't call it
+            # Pre-creates key so CEL can safely access dynamic response_data[tool_name]
             expected_response_tools:
               - "{{inputs.response_tool_name}}"
 
-        # Compact context if needed (saves message internally)
         - id: compact
           type: compact
           timeout: "10m"
@@ -192,27 +169,22 @@ nodes:
       edges:
         - from: call_llm
           cases:
-            # Has tool calls + manual mode -> require approval
             - to: approval
               condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode == 'manual'
               label: require_approval
-            # Has tool calls + auto mode -> execute directly
             - to: execute_tools
               condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode != 'manual'
               label: auto_approve
-            # No tool calls -> remind to use response tool
             - to: remind_response
               condition: nodes.call_llm.tool_calls == null || size(nodes.call_llm.tool_calls) == 0
               label: no_tools
 
-        # Approval result
         - from: approval
           cases:
             - to: execute_tools
               condition: nodes.approval.status == 'approved'
               label: approved
 
-        # After executing tools, check if compaction needed
         - from: execute_tools
           cases:
             - to: compact
@@ -256,11 +228,28 @@ nodes:
                 condition: nodes.call_llm.tool_calls == null || size(nodes.call_llm.tool_calls) == 0
                 label: no_tools
 
+  - id: max_turns_notification
+    type: save_message
+    args:
+      role: "system"
+      display_style: "warning"
+      content: "Agent reached maximum iteration limit ({{inputs.max_turns}} turns). The conversation will pause — send a message to continue."
+
+edges:
+  - from: agent_loop
+    cases:
+      - to: max_turns_notification
+        condition: nodes.agent_loop._iterations >= inputs.max_turns
+        label: "max_turns_reached"
+
 ui:
   positions:
     agent_loop:
       x: 445
       y: 250
+    max_turns_notification:
+      x: 917
+      y: 283
     workflow:
       x: 150
       y: 270

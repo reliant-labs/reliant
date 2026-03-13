@@ -1,0 +1,71 @@
+name: yield_between_phases
+description: >
+  With yield=true (default), each workflow phase passes the yield input through.
+  Tests that all nodes are reached in the correct linear order with yield enabled.
+  The simulator treats workflow nodes as black boxes regardless of yield —
+  yield behavior is handled by the sub-workflow runtime, not the parent graph.
+
+inputs:
+  yield: true
+
+events:
+  # Phase 1: Specify Requirements (yields after completion in real execution)
+  - node: specify
+    output:
+      response_text: |
+        ## Goal
+        Add CSV export to the reporting dashboard.
+
+        ## Requirements
+        1. Export any report as CSV
+        2. Support filtered and full data exports
+        3. Handle reports up to 100k rows
+
+        ## Constraints
+        - Must stream for large exports (no full buffering)
+
+        ## Out of Scope
+        - PDF or Excel export formats
+
+  # Phase 2: Plan (yields after completion in real execution)
+  - node: plan
+    output:
+      response_text: |
+        ## Approach
+        Streaming CSV writer with chunked DB queries.
+
+        ## Architecture
+        - Use Go's encoding/csv with io.Pipe for streaming
+        - Paginated DB queries (1000 rows per batch)
+        - Content-Disposition header for browser download
+
+        ## Task Breakdown
+        1. Add CSV streaming utility
+        2. Create export HTTP handler
+        3. Wire up report query pagination
+        4. Add integration tests
+
+        ## Dependencies
+        - Task 1 blocks tasks 2-3
+
+        ## Risks
+        - Memory pressure on very wide reports
+
+  # Phase 3: Implement (yields after completion in real execution)
+  - node: implement
+    output:
+      response_text: |
+        Implementation complete:
+        - Built streaming CSV writer with io.Pipe
+        - Export handler with Content-Disposition headers
+        - Paginated queries with 1000-row batches
+        - Integration tests cover up to 50k rows
+        - Memory profiling shows constant ~2MB usage
+
+expect:
+  outcome: completed
+  reached:
+    - specify
+    - plan
+    - implement
+    - complete

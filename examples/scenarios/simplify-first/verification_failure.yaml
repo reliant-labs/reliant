@@ -1,0 +1,79 @@
+# Scenario: verification_failure
+# Workflow: simplify-first.yaml
+#
+# Refactor breaks tests. verify_test returns exit_code 1.
+# The workflow still completes (verification is informational).
+
+name: verification_failure
+description: >
+  Refactor breaks tests. Research and refactor succeed, but verify_test returns exit_code 1
+  indicating test failures. The workflow still completes (verification is informational),
+  but the verify_report node captures the failure status.
+events:
+  # Phase 1: Research
+  - node: research
+    output:
+      message:
+        role: assistant
+        text: "Found unnecessary abstraction layers in the service package."
+      response_text: "Found unnecessary abstraction layers in the service package."
+
+  # Phase 2: Refactor
+  - node: refactor
+    output:
+      message:
+        role: assistant
+        text: "Removed abstraction layers and inlined service methods."
+      response_text: "Removed abstraction layers and inlined service methods."
+
+  # Phase 3: Verification — test fails
+  - node: verify_lint
+    output:
+      exit_code: 0
+      stdout: "No linting errors."
+      stderr: ""
+
+  - node: verify_test
+    output:
+      exit_code: 1
+      stdout: "FAIL: TestUserService/Create (expected mock call not satisfied)"
+      stderr: "exit status 1"
+
+  - node: verify_build
+    output:
+      exit_code: 0
+      stdout: "Build succeeded."
+      stderr: ""
+
+  # Phase 4: Plan (still runs — verification is informational)
+  - node: plan
+    output:
+      message:
+        role: assistant
+        text: "Plan: fix broken test mocks, then implement the feature."
+      response_text: "Plan: fix broken test mocks, then implement the feature."
+
+  # Phase 5: Implement
+  - node: implement
+    output:
+      message:
+        role: assistant
+        text: "Fixed test mocks and implemented the feature."
+      response_text: "Fixed test mocks and implemented the feature."
+
+expect:
+  outcome: completed
+  reached:
+    - research
+    - refactor
+    - verify_lint
+    - verify_test
+    - verify_build
+    - verify_join
+    - verify_report
+    - plan
+    - implement
+    - complete
+  node_outputs:
+    verify_test:
+      exit_code: 1

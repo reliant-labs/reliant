@@ -1,63 +1,65 @@
-# Multiple reminders before LLM gets it right
+# Multiple Reminders: LLM ignores response tool requirement repeatedly
+#
+# Tests that the reminder mechanism works across multiple iterations:
+# 1. LLM responds with text only (no tool calls) - gets reminded
+# 2. LLM responds with text only again - gets reminded again
+# 3. LLM finally calls the response tool
+# 4. Loop exits with completed = true
+#
+# This verifies:
+# - remind_response fires on every text-only response
+# - The loop doesn't break after multiple reminders
+# - The agent eventually complies and completes
+
 name: multiple_reminders
-description: LLM needs multiple reminders before calling response tool
+description: LLM needs multiple reminders before calling the response tool
+
 inputs:
-  mode: auto
-  max_turns: 100
-  response_tool_name: submit_response
+  response_tool_name: "submit_response"
+
 events:
-  # First iteration: text only
+  # Iteration 1: LLM responds without tools
   - node: agent_loop.call_llm
-    output:
-      message:
-        role: assistant
-        text: "Here's what I found."
-      response_text: "Here's what I found."
-      tool_calls: []
-  # remind_response triggers
+    type: llm_response
+    text: "Here's what I found."
+    # No tool_calls - triggers remind_response
 
-  # Second iteration: still text only
+  # Iteration 2: LLM still responds without tools
   - node: agent_loop.call_llm
-    output:
-      message:
-        role: assistant
-        text: "Let me explain further..."
-      response_text: "Let me explain further..."
-      tool_calls: []
-  # remind_response triggers again
+    type: llm_response
+    text: "Let me explain further..."
+    # No tool_calls again - triggers remind_response again
 
-  # Third iteration: finally uses response tool
+  # Iteration 3: LLM finally calls the response tool
   - node: agent_loop.call_llm
-    output:
-      message:
-        role: assistant
-        text: "Submitting my response now."
-      response_text: "Submitting my response now."
-      tool_calls:
-        - id: call_0
-          name: submit_response
-          input:
-            choice: complete
-            value: "Final analysis complete."
-  - node: agent_loop.execute_tools
-    output:
-      message:
-        role: tool
-        text: ""
-      tool_results:
-        - tool_call_id: call_0
-          content: '{"choice": "complete"}'
-      response_data:
-        submit_response:
-          choice: complete
+    type: llm_response
+    text: "Submitting my response now."
+    tool_calls:
+      - name: submit_response
+        input:
+          choice: "complete"
           value: "Final analysis complete."
-      thread_token_count: 500
+
+  # Response tool executes
+  - node: agent_loop.execute_tools
+    type: tool_result
+    tool: submit_response
+    output:
+      choice: "complete"
+      value: "Final analysis complete."
+
 expect:
   outcome: completed
   reached:
     - agent_loop
     - agent_loop.call_llm
-    - agent_loop.remind_response
+    - agent_loop.remind_response  # Fired at least twice
     - agent_loop.execute_tools
   not_reached:
     - agent_loop.approval
+    - agent_loop.compact
+
+  outputs:
+    response.choice: "complete"
+    response.value: "Final analysis complete."
+    completed: true

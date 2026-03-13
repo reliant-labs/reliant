@@ -1,0 +1,79 @@
+# Max Iterations Reached: Loop exits after hitting the iteration limit
+#
+# Tests the loop's max_iterations safeguard:
+# 1. max_iterations set to 3 (low limit for testing)
+# 2. Iteration 0: verify returns tasks_remaining=true → re-iterate
+# 3. Iteration 1: verify returns tasks_remaining=true → re-iterate
+# 4. Iteration 2: verify returns tasks_remaining=true → iter.iteration (3) >= max_iterations (3) → loop exits
+# 5. Workflow still completes (loop exhaustion is not an error)
+#
+# Verifies the loop correctly stops when max_iterations is reached,
+# even if tasks_remaining is still true. Final tasks_remaining will be true.
+
+name: max_iterations_reached
+description: Loop exits after max_iterations despite tasks remaining
+
+inputs:
+  max_iterations: 3
+
+events:
+  # Iteration 0
+  - node: task_loop.orient
+    output:
+      response_text: "Task chosen: set up project scaffolding."
+
+  - node: task_loop.implement
+    output:
+      response_text: "Created project structure with src/, tests/, docs/ directories."
+
+  - node: task_loop.verify
+    output:
+      response:
+        summary: "Scaffolding done. Many tasks remain in the spec."
+        tasks_remaining: true
+        issues: []
+
+  # Iteration 1
+  - node: task_loop.orient
+    output:
+      response_text: "Task chosen: implement data models."
+
+  - node: task_loop.implement
+    output:
+      response_text: "Created data models for User, Project, and Task entities."
+
+  - node: task_loop.verify
+    output:
+      response:
+        summary: "Models created but API layer and tests still needed."
+        tasks_remaining: true
+        issues: []
+
+  # Iteration 2 (last — iter.iteration reaches 3 after this, hitting max)
+  - node: task_loop.orient
+    output:
+      response_text: "Task chosen: implement API routes."
+
+  - node: task_loop.implement
+    output:
+      response_text: "Implemented core API routes for all entities."
+
+  - node: task_loop.verify
+    output:
+      response:
+        summary: "API routes done but integration tests and docs still pending."
+        tasks_remaining: true
+        issues:
+          - "Integration tests not yet written"
+          - "API documentation incomplete"
+
+expect:
+  outcome: completed
+  reached:
+    - task_loop
+    - task_loop.orient
+    - task_loop.implement
+    - task_loop.verify
+  node_outputs:
+    task_loop:
+      tasks_remaining: true

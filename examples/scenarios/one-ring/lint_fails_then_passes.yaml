@@ -1,0 +1,67 @@
+# Lint Retry: Lint fails on iteration 0, passes on iteration 1
+#
+# Tests the loop re-iteration triggered by a failing lint check:
+# 1. Iteration 0: implement runs, lint fails (exit_code: 1), review also fails
+# 2. Loop condition: lint_exit != 0 → re-iterate
+# 3. Iteration 1: implement runs again, lint passes (exit_code: 0), review passes
+# 4. Loop exits
+#
+# Verifies that a non-zero lint exit_code triggers re-iteration.
+# Note: lint is a `type: run` node — mock its exit_code directly.
+
+name: lint_fails_then_passes
+description: Lint fails on first iteration, passes on retry
+
+inputs:
+  steps: [implement, lint, code_review]
+
+events:
+  # Iteration 0 — lint fails
+  - node: impl_loop.implement
+    output:
+      response_text: "Implementation with style issues."
+
+  - node: impl_loop.lint
+    output:
+      exit_code: 1
+
+  - node: impl_loop.code_review
+    output:
+      response:
+        grade: fail
+        summary: "Lint errors must be fixed before approval."
+        suggestions:
+          - "Fix the 3 linting violations"
+
+  # Iteration 1 — lint passes, review passes
+  - node: impl_loop.implement
+    output:
+      response_text: "Fixed linting issues."
+
+  - node: impl_loop.lint
+    output:
+      exit_code: 0
+
+  - node: impl_loop.code_review
+    output:
+      response:
+        grade: pass
+        summary: "Lint passes. Code looks good."
+        suggestions: []
+
+expect:
+  outcome: completed
+  reached:
+    - planning
+    - impl_loop
+    - impl_loop.implement
+    - impl_loop.lint
+    - impl_loop.join_checks
+    - impl_loop.code_review
+    - complete
+  not_reached:
+    - planning.plan
+    - write_tests
+    - start_app
+    - impl_loop.test
+    - impl_loop.build

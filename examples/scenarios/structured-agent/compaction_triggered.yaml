@@ -1,73 +1,82 @@
-# Compaction triggered after large tool result
+# Compaction Triggered: Context exceeds threshold, compact runs
+#
+# Tests the compaction mechanism in structured-agent:
+# 1. LLM calls a tool that produces a large result
+# 2. execute_tools reports thread_token_count above compaction_threshold
+# 3. Compact node runs to reduce context size
+# 4. Loop continues, LLM calls the response tool
+# 5. Loop exits with completed = true
+#
+# This verifies:
+# - The edge condition: thread_token_count > compaction_threshold
+# - Compact node fires when threshold is exceeded
+# - The agent can still complete normally after compaction
+
 name: compaction_triggered
-description: Token count exceeds threshold, compact node runs
+description: Token count exceeds threshold, triggering context compaction before response
+
 inputs:
-  mode: auto
-  max_turns: 100
-  response_tool_name: submit_response
-  compaction_threshold: 1000
+  mode: "auto"
+  response_tool_name: "submit_response"
+  compaction_threshold: 10000  # Low threshold for testing
+
 events:
-  # LLM reads a large file
+  # Iteration 1: LLM reads a large file
   - node: agent_loop.call_llm
-    output:
-      message:
-        role: assistant
-        text: "Reading the large documentation file."
-      response_text: "Reading the large documentation file."
-      tool_calls:
-        - id: call_0
-          name: view
-          input:
-            file_path: "docs/api.md"
-  # Large tool result triggers compaction
+    type: llm_response
+    text: "Reading the large documentation file."
+    tool_calls:
+      - name: view
+        input:
+          file_path: "docs/api.md"
+
+  # Large tool result exceeds compaction threshold
   - node: agent_loop.execute_tools
+    type: tool_result
+    tool: view
     output:
-      message:
-        role: tool
-        text: ""
-      tool_results:
-        - tool_call_id: call_0
-          content: "Very long documentation content..."
-      thread_token_count: 5000
-  # Compact runs
+      result: "Very long documentation content..."
+      thread_token_count: 15000  # Exceeds 10000 threshold
+
+  # Compact runs because 15000 > 10000
   - node: agent_loop.compact
+    type: tool_result
+    tool: compact
     output:
-      message:
-        role: assistant
-        text: "Context compacted."
-  # LLM submits response
+      compacted: true
+      original_tokens: 15000
+      compacted_tokens: 5000
+
+  # Iteration 2: LLM submits response after compaction
   - node: agent_loop.call_llm
-    output:
-      message:
-        role: assistant
-        text: "Documentation reviewed."
-      response_text: "Documentation reviewed."
-      tool_calls:
-        - id: call_1
-          name: submit_response
-          input:
-            choice: complete
-            value: "API documentation is comprehensive and well-structured."
-  - node: agent_loop.execute_tools
-    output:
-      message:
-        role: tool
-        text: ""
-      tool_results:
-        - tool_call_id: call_1
-          content: '{"choice": "complete"}'
-      response_data:
-        submit_response:
-          choice: complete
+    type: llm_response
+    text: "Documentation reviewed."
+    tool_calls:
+      - name: submit_response
+        input:
+          choice: "complete"
           value: "API documentation is comprehensive and well-structured."
-      thread_token_count: 1000
+
+  # Response tool executes
+  - node: agent_loop.execute_tools
+    type: tool_result
+    tool: submit_response
+    output:
+      choice: "complete"
+      value: "API documentation is comprehensive and well-structured."
+
 expect:
   outcome: completed
   reached:
     - agent_loop
     - agent_loop.call_llm
     - agent_loop.execute_tools
-    - agent_loop.compact
+    - agent_loop.compact         # Compaction should run
   not_reached:
     - agent_loop.approval
     - agent_loop.remind_response
+
+  outputs:
+    response.choice: "complete"
+    response.value: "API documentation is comprehensive and well-structured."
+    completed: true

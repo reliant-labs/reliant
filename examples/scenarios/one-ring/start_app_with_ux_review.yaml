@@ -1,0 +1,76 @@
+# Start App with UX Review: Full pipeline including the dev server
+#
+# Tests the complete pipeline with start_app enabled:
+# 1. Planning produces a plan
+# 2. TDD writes tests
+# 3. start_app runs (type: run) — starts the dev server before the impl loop
+# 4. Implementation runs in the loop
+# 5. All checks (lint, test, build) pass
+# 6. Code review passes (with UX review context since start_app is in steps)
+# 7. Loop exits after 1 iteration
+#
+# Verifies the start_app node runs between write_tests and impl_loop,
+# and that the full pipeline completes with all steps enabled.
+# Note: start_app is a `type: run` node — mock its exit_code directly.
+
+name: start_app_with_ux_review
+description: Full pipeline with start_app enabled for UX review
+
+inputs:
+  steps: [plan, tdd, implement, lint, test, build, start_app, code_review]
+
+events:
+  # Planning
+  - node: planning.plan
+    output:
+      response_text: "Plan: build full-stack feature with UX validation."
+
+  # TDD
+  - node: write_tests
+    output:
+      response_text: "Created tests including accessibility checks."
+
+  # Start app — dev server starts before impl loop
+  - node: start_app
+    output:
+      exit_code: 0
+
+  # Implementation loop — iteration 0
+  - node: impl_loop.implement
+    output:
+      response_text: "Full-stack implementation with accessibility."
+
+  - node: impl_loop.lint
+    output:
+      exit_code: 0
+
+  - node: impl_loop.test
+    output:
+      exit_code: 0
+
+  - node: impl_loop.build
+    output:
+      exit_code: 0
+
+  - node: impl_loop.code_review
+    output:
+      response:
+        grade: pass
+        summary: "Full pipeline green. UX review passed. Ship it."
+        suggestions: []
+
+expect:
+  outcome: completed
+  reached:
+    - planning
+    - planning.plan
+    - write_tests
+    - start_app
+    - impl_loop
+    - impl_loop.implement
+    - impl_loop.lint
+    - impl_loop.test
+    - impl_loop.build
+    - impl_loop.join_checks
+    - impl_loop.code_review
+    - complete

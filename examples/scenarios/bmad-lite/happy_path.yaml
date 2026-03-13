@@ -1,0 +1,90 @@
+# Happy Path: All 5 phases complete successfully
+#
+# Tests the full BMAD-Lite pipeline with yield disabled:
+# 1. Ideate — PM defines product vision
+# 2. Requirements — PM creates user stories and acceptance criteria
+# 3. Architecture — Architect designs the system
+# 4. Implement — Developer executes the plan
+# 5. Complete — Summary message saved
+#
+# All agent nodes are type: workflow (builtin://agent) — black boxes.
+# We mock their final outputs. The complete node is type: save_message
+# and runs directly without events.
+
+name: happy_path
+description: All phases complete in sequence — ideate, requirements, architecture, implement, complete.
+
+inputs:
+  mode: auto
+  yield: false
+
+events:
+  # Phase 1: PM ideates product vision
+  - node: ideate
+    output:
+      response_text: |
+        **Problem Statement:** Users need a way to track daily habits.
+        **Vision:** A lightweight habit tracker with streaks and reminders.
+        **Key Value Propositions:** Simple, fast, works offline.
+        **Scope:** MVP — single user, local storage, 3 habit types.
+        **Risks:** Notification reliability on mobile.
+      message:
+        role: assistant
+        text: "Product vision defined for habit tracker MVP."
+
+  # Phase 2: PM writes requirements
+  - node: requirements
+    output:
+      response_text: |
+        **User Stories:**
+        - As a user, I want to create a habit so I can track it daily.
+        - As a user, I want to see my streak so I stay motivated.
+        **Acceptance Criteria:**
+        - Habit creation takes < 3 taps.
+        - Streak resets after 1 missed day.
+        **Priority:** Must-have: create, complete, streak. Should-have: reminders.
+        **Constraints:** Must work offline. < 50ms render time.
+      message:
+        role: assistant
+        text: "Requirements defined with user stories and acceptance criteria."
+
+  # Phase 3: Architect designs the system
+  - node: architecture
+    output:
+      response_text: |
+        **Technical Approach:** React Native app with local SQLite storage.
+        **Components:** HabitStore, StreakCalculator, NotificationService.
+        **File Changes:** Create src/stores/habit.ts, src/services/streak.ts.
+        **Task Breakdown:**
+        1. Set up SQLite schema
+        2. Implement HabitStore CRUD
+        3. Build StreakCalculator
+        4. Wire up UI components
+      message:
+        role: assistant
+        text: "Architecture designed with component breakdown and task list."
+
+  # Phase 4: Developer implements
+  - node: implement
+    output:
+      response_text: |
+        Implementation complete:
+        - Created SQLite schema with habits and completions tables
+        - Implemented HabitStore with create, complete, delete operations
+        - Built StreakCalculator with timezone-aware day boundaries
+        - Connected UI components to store
+        - All 12 tests passing
+      message:
+        role: assistant
+        text: "Implementation complete with all tests passing."
+
+  # Phase 5: complete is type: save_message — no events needed
+
+expect:
+  outcome: completed
+  reached:
+    - ideate
+    - requirements
+    - architecture
+    - implement
+    - complete

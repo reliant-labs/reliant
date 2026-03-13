@@ -1,0 +1,111 @@
+# Review Fail: All phases complete but review returns verdict: fail
+#
+# Tests the failure path through the review gate:
+# 1-4. All prior phases (brainstorm, plan, tdd, implement) complete normally
+# 5. Review returns verdict: fail with critical issues documented
+# 6. Complete still runs (linear chain has no loop-back)
+#
+# This verifies that a failing review gate still allows the workflow to
+# complete — the structured response documents what needs fixing.
+# The issues array contains severity-tagged problems with file/line refs.
+
+name: review_fail
+description: All phases complete, review returns verdict fail with critical issues
+
+inputs:
+  mode: auto
+  yield: false
+
+events:
+  # Phase 1: Brainstorm
+  - node: brainstorm
+    output:
+      message:
+        role: assistant
+        text: |
+          ## Problem Statement
+          Add rate limiting middleware to the API server.
+
+          ## Success Criteria
+          - Per-IP rate limiting with configurable thresholds
+          - Returns 429 with Retry-After header when exceeded
+      response_text: |
+        ## Problem Statement
+        Add rate limiting middleware to the API server.
+
+        ## Success Criteria
+        - Per-IP rate limiting with configurable thresholds
+        - Returns 429 with Retry-After header when exceeded
+
+  # Phase 2: Plan
+  - node: plan
+    output:
+      message:
+        role: assistant
+        text: |
+          ## Tasks
+          1. Create rate limiter — pkg/middleware/ratelimit.go
+          2. Add middleware to router — internal/server/router.go
+      response_text: |
+        ## Tasks
+        1. Create rate limiter — pkg/middleware/ratelimit.go
+        2. Add middleware to router — internal/server/router.go
+
+  # Phase 3: TDD
+  - node: tdd
+    output:
+      message:
+        role: assistant
+        text: "Created tests in pkg/middleware/ratelimit_test.go. Tests fail as expected."
+      response_text: "Created tests in pkg/middleware/ratelimit_test.go. Tests fail as expected."
+
+  # Phase 4: Implement
+  - node: implement
+    output:
+      message:
+        role: assistant
+        text: "Implementation complete. Tests pass."
+      response_text: "Implementation complete. Tests pass."
+
+  # Phase 5: Review — verdict: fail with critical issues
+  - node: review
+    output:
+      message:
+        role: assistant
+        text: |
+          Code review complete. Found critical issues that must be addressed.
+      response_text: |
+        Code review complete. Found critical issues that must be addressed.
+      response:
+        verdict: fail
+        summary: "Rate limiter has a race condition in concurrent access and missing input validation on configuration."
+        issues:
+          - severity: critical
+            description: "Race condition: concurrent map read/write in token bucket without mutex. Will panic under load."
+            file: "pkg/middleware/ratelimit.go"
+            line: 42
+          - severity: critical
+            description: "No validation on rate limit config — zero or negative values cause infinite loop."
+            file: "pkg/middleware/ratelimit.go"
+            line: 15
+          - severity: warning
+            description: "Retry-After header uses integer seconds but should use HTTP-date format for large values."
+            file: "pkg/middleware/ratelimit.go"
+            line: 67
+          - severity: suggestion
+            description: "Consider using sync.Map or a sharded map for better concurrent performance."
+            file: "pkg/middleware/ratelimit.go"
+            line: 42
+        test_coverage: "Missing tests for concurrent access patterns. Only sequential test cases present."
+        follows_patterns: false
+      completed: true
+
+expect:
+  outcome: completed
+  reached:
+    - brainstorm
+    - plan
+    - tdd
+    - implement
+    - review
+    - complete

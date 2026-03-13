@@ -1,0 +1,67 @@
+# Build Retry: Build fails on iteration 0, passes on iteration 1
+#
+# Tests the loop re-iteration triggered by a failing build:
+# 1. Iteration 0: implement runs, build fails (exit_code: 1), review also fails
+# 2. Loop condition: build_exit != 0 → re-iterate
+# 3. Iteration 1: implement runs again, build passes (exit_code: 0), review passes
+# 4. Loop exits
+#
+# Verifies that a non-zero build exit_code triggers re-iteration.
+# Note: build is a `type: run` node — mock its exit_code directly.
+
+name: build_fails_then_passes
+description: Build fails on first iteration, passes on retry
+
+inputs:
+  steps: [implement, build, code_review]
+
+events:
+  # Iteration 0 — build fails
+  - node: impl_loop.implement
+    output:
+      response_text: "Implementation with compilation error."
+
+  - node: impl_loop.build
+    output:
+      exit_code: 1
+
+  - node: impl_loop.code_review
+    output:
+      response:
+        grade: fail
+        summary: "Build broken. Missing function reference."
+        suggestions:
+          - "Add the missing processData function"
+
+  # Iteration 1 — build passes, review passes
+  - node: impl_loop.implement
+    output:
+      response_text: "Added missing function definition."
+
+  - node: impl_loop.build
+    output:
+      exit_code: 0
+
+  - node: impl_loop.code_review
+    output:
+      response:
+        grade: pass
+        summary: "Build passes. Implementation complete."
+        suggestions: []
+
+expect:
+  outcome: completed
+  reached:
+    - planning
+    - impl_loop
+    - impl_loop.implement
+    - impl_loop.build
+    - impl_loop.join_checks
+    - impl_loop.code_review
+    - complete
+  not_reached:
+    - planning.plan
+    - write_tests
+    - start_app
+    - impl_loop.lint
+    - impl_loop.test

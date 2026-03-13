@@ -1,0 +1,77 @@
+# Multiple Iterations: Several tool rounds before final answer
+#
+# Tests the agent loop iterating multiple times:
+# 1. LLM calls a tool (iteration 0)
+# 2. Tool executes, LLM calls another tool (iteration 1)
+# 3. Tool executes, LLM calls another tool (iteration 2)
+# 4. Tool executes, LLM responds with final answer (iteration 3 exits)
+#
+# This exercises the full loop mechanic across several iterations,
+# verifying that the agent correctly chains tool calls before arriving
+# at a final text-only response. Distinct from multi_tool_calls.yaml
+# which tests multiple tools in a single turn.
+
+name: multiple_iterations
+description: Agent iterates through several tool calls across rounds before final answer
+
+inputs:
+  mode: "auto"
+
+events:
+  # Iteration 0: search for files
+  - node: agent_loop.call_llm
+    type: llm_response
+    text: "Let me find the relevant files first."
+    tool_calls:
+      - name: glob
+        input:
+          pattern: "**/*.go"
+  - node: agent_loop.execute_tools
+    type: tool_result
+    tool: glob
+    output:
+      result: '["main.go", "util.go", "handler.go"]'
+
+  # Iteration 1: read first file
+  - node: agent_loop.call_llm
+    type: llm_response
+    text: "Found some files. Let me check main.go."
+    tool_calls:
+      - name: view
+        input:
+          file_path: "main.go"
+  - node: agent_loop.execute_tools
+    type: tool_result
+    tool: view
+    output:
+      result: "package main\n\nfunc main() {}"
+
+  # Iteration 2: read second file
+  - node: agent_loop.call_llm
+    type: llm_response
+    text: "Now checking util.go."
+    tool_calls:
+      - name: view
+        input:
+          file_path: "util.go"
+  - node: agent_loop.execute_tools
+    type: tool_result
+    tool: view
+    output:
+      result: "package main\n\nfunc helper() string { return \"help\" }"
+
+  # Iteration 3: final response (no tools, loop exits)
+  - node: agent_loop.call_llm
+    type: llm_response
+    text: "I've analyzed the codebase. There are 3 Go files with a main package containing an entry point and a helper utility."
+
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.execute_tools
+  not_reached:
+    - agent_loop.approval
+    - agent_loop.compact
+    - max_turns_notification

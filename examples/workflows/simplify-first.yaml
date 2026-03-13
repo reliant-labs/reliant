@@ -1,0 +1,314 @@
+name: simplify-first
+apiVersion: "0.0.5"
+description: |
+  Simplify First — before implementing a feature, take a large stab at refactoring the
+  relevant code with the goal of simplification. Then implement on the now-cleaner codebase.
+
+  Phases:
+    1. Research/analyze the codebase for simplification opportunities
+    2. Refactor (forked thread to isolate the refactoring conversation)
+    3. Verify the refactor didn't break anything (lint/test/build)
+    4. Plan the feature on the now-simplified codebase
+    5. Implement the feature
+    6. Complete
+
+  Thread architecture:
+    Main thread: [user msg] → [research summary] → [refactor summary] → [verify status] → [plan] → [impl summary] → [done]
+    Research fork: [user msg] → [research conversation]  (only summary saved back)
+    Refactor fork: [user msg + research summary] → [refactor conversation]  (only summary saved back)
+    Plan fork: [user msg + refactor summary + verify status] → [plan conversation]  (only plan saved back)
+    Implement fork: [full main thread] → [implementation conversation]  (only summary saved back)
+
+entry: [research]
+
+inputs:
+  model:
+    type: model
+    description: Model used for all LLM sub-agents in this workflow
+    default:
+      tags: [flagship]
+
+  mode:
+    type: enum
+    ui: toolbar
+    default: auto
+    description: Execution mode for agent steps.
+    enum: [manual, auto, plan]
+
+  yield:
+    type: boolean
+    ui: toolbar
+    default: true
+    description: Pause for user review after research (before refactoring) and after plan.
+
+  temperature:
+    type: number
+    default: 1.0
+    min: 0
+    max: 1
+    description: Response randomness
+  thinking_level:
+    type: enum
+    enum: [low, medium, high, xhigh]
+    default: medium
+    description: Extended thinking level
+
+  lint_command:
+    type: string
+    default: npm run lint
+    description: Command to run linting.
+
+  test_command:
+    type: string
+    default: npm test
+    description: Command to run tests.
+
+  build_command:
+    type: string
+    default: npm run build
+    description: Command to run builds.
+
+nodes:
+  # ── Phase 1: Research / Analyze ─────────────────────────────────────────────
+  #
+  # Fork from main thread. Analyze the codebase to identify simplification
+  # opportunities before touching any code. Only the summary is saved back.
+
+  - id: research
+    type: workflow
+    ref: builtin://agent
+    presets:
+      default: researcher
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+      yield: "{{inputs.yield}}"
+      temperature: "{{inputs.temperature}}"
+      thinking_level: "{{inputs.thinking_level}}"
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Simplify First — Phase 1: Research & Analyze
+
+          Analyze the codebase **directly relevant to the user's request** to find simplification opportunities.
+
+          **Process:**
+          1. Identify the files/modules that will be touched by the upcoming feature
+          2. Read those files and their immediate dependencies
+          3. Evaluate each for simplification opportunities
+
+          **Look for:**
+          - Dead code or unused abstractions in the relevant area
+          - Overly-complex patterns that could be simplified
+          - Duplicated logic that could be consolidated
+          - Indirection that obscures intent
+
+          **Output:**
+          1. **Scope** — Which files/modules were analyzed and why
+          2. **Opportunities** — Numbered list, each with: file path, what to simplify, why it helps the upcoming feature
+          3. **Risk Assessment** — Which simplifications are safe (pure cleanup) vs. risky (behavioral adjacency)
+          4. **Recommended Order** — Which simplifications to do first (least risky → most impactful)
+    save_message:
+      role: assistant
+      content: |
+        ## Research: Simplification Opportunities
+        {{output.response_text}}
+
+  # ── Phase 2: Refactor ──────────────────────────────────────────────────────
+  #
+  # Fork from main thread (which now has research summary). Perform the actual
+  # refactoring. The fork isolates the refactoring conversation so it doesn't
+  # pollute the implementation context.
+
+  - id: refactor
+    type: workflow
+    ref: builtin://agent
+    presets:
+      default: general
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+      temperature: "{{inputs.temperature}}"
+      thinking_level: "{{inputs.thinking_level}}"
+      system_prompt: "You are a code simplification specialist. Your prime directive is to REDUCE complexity, not shift it. Every change must be behavior-preserving. Prefer deletion over modification. If a change is risky or questionable, skip it and note it as an opportunity for the user to evaluate."
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Simplify First — Phase 2: Refactor
+
+          Based on the research findings above, refactor the codebase to simplify it.
+
+          **Guidelines:**
+          - Remove dead code and unused abstractions
+          - Consolidate duplicated logic
+          - Simplify overly-complex patterns
+          - Reduce unnecessary indirection
+          - Improve naming and structure
+
+          **Important:**
+          - Do NOT implement the new feature yet — only simplify existing code
+          - Make sure the code still works after changes (no behavioral changes)
+          - If the research found only minor or risky opportunities, it is acceptable to make minimal or no changes — do not refactor for refactoring's sake
+          - The goal is to make the UPCOMING FEATURE easier to implement
+    save_message:
+      role: assistant
+      content: |
+        ## Refactor Summary
+        {{output.response_text}}
+
+  # ── Phase 3: Verify ────────────────────────────────────────────────────────
+  #
+  # Run lint/test/build to confirm the refactor didn't break anything.
+
+  - id: verify_lint
+    type: run
+    command: "{{inputs.lint_command}}"
+
+  - id: verify_test
+    type: run
+    command: "{{inputs.test_command}}"
+
+  - id: verify_build
+    type: run
+    command: "{{inputs.build_command}}"
+
+  - id: verify_join
+    type: join
+
+  - id: verify_report
+    type: save_message
+    args:
+      role: assistant
+      content: |
+        ## Refactor Verification
+        - Lint: {{has(nodes.verify_lint) && has(nodes.verify_lint.exit_code) ? (nodes.verify_lint.exit_code == 0 ? 'passed' : 'failed (exit ' + string(nodes.verify_lint.exit_code) + ')') : 'unknown'}}
+        - Test: {{has(nodes.verify_test) && has(nodes.verify_test.exit_code) ? (nodes.verify_test.exit_code == 0 ? 'passed' : 'failed (exit ' + string(nodes.verify_test.exit_code) + ')') : 'unknown'}}
+        - Build: {{has(nodes.verify_build) && has(nodes.verify_build.exit_code) ? (nodes.verify_build.exit_code == 0 ? 'passed' : 'failed (exit ' + string(nodes.verify_build.exit_code) + ')') : 'unknown'}}
+
+  # ── Phase 4: Plan ──────────────────────────────────────────────────────────
+  #
+  # Fork from main thread. Now that the code is simplified, plan the feature
+  # implementation on the cleaner codebase.
+
+  - id: plan
+    type: workflow
+    ref: builtin://agent
+    presets:
+      default: planner
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+      yield: "{{inputs.yield}}"
+      temperature: "{{inputs.temperature}}"
+      thinking_level: "{{inputs.thinking_level}}"
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Simplify First — Phase 4: Plan
+
+          The codebase has been refactored and simplified. Check the verification results above — if lint, tests, or build failed, the plan MUST include fixing those failures as the first task(s).
+
+          Now plan the feature implementation on this cleaner codebase.
+
+          Produce a concise, actionable plan:
+          - Break work into clear, ordered tasks with specific file paths
+          - Group independent tasks into waves that can run in parallel
+          - Call out dependencies between tasks
+          - Reference the simplifications that were made and how they affect your approach
+    save_message:
+      role: assistant
+      content: |
+        ## Implementation Plan
+        {{output.response_text}}
+
+  # ── Phase 5: Implement ─────────────────────────────────────────────────────
+  #
+  # Fork from main thread. Implement the feature according to the plan.
+
+  - id: implement
+    type: workflow
+    ref: builtin://agent
+    presets:
+      default: general
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+      temperature: "{{inputs.temperature}}"
+      thinking_level: "{{inputs.thinking_level}}"
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Simplify First — Phase 5: Implement
+
+          Implement the feature according to the plan above.
+
+          **Guidelines:**
+          - Follow the plan's task structure and order
+          - Parallelize independent tasks using spawn
+          - Follow existing codebase patterns and conventions
+          - Run tests after each major change to catch regressions early
+
+          **Do NOT:**
+          - Re-research or re-plan — that work is done
+          - Refactor code beyond what's in the plan — the simplification phase is over
+          - Add features beyond what was requested
+    save_message:
+      role: assistant
+      content: |
+        ## Implementation Summary
+        {{output.response_text}}
+
+  # ── Phase 6: Complete ──────────────────────────────────────────────────────
+
+  - id: complete
+    type: save_message
+    args:
+      role: assistant
+      content: |
+        ## Simplify First — Complete
+
+        **Refactor verification:** Lint {{has(nodes.verify_lint) && has(nodes.verify_lint.exit_code) ? (nodes.verify_lint.exit_code == 0 ? 'passed' : 'FAILED') : 'unknown'}}, Test {{has(nodes.verify_test) && has(nodes.verify_test.exit_code) ? (nodes.verify_test.exit_code == 0 ? 'passed' : 'FAILED') : 'unknown'}}, Build {{has(nodes.verify_build) && has(nodes.verify_build.exit_code) ? (nodes.verify_build.exit_code == 0 ? 'passed' : 'FAILED') : 'unknown'}}
+
+        The codebase was simplified before implementing the feature. Review the implementation summary above for details.
+
+outputs:
+  lint_exit: "{{has(nodes.verify_lint) && has(nodes.verify_lint.exit_code) ? nodes.verify_lint.exit_code : -1}}"
+  test_exit: "{{has(nodes.verify_test) && has(nodes.verify_test.exit_code) ? nodes.verify_test.exit_code : -1}}"
+  build_exit: "{{has(nodes.verify_build) && has(nodes.verify_build.exit_code) ? nodes.verify_build.exit_code : -1}}"
+  implementation: "{{nodes.implement.response_text}}"
+
+edges:
+  - from: research
+    default: refactor
+  - from: refactor
+    default: verify_lint
+  - from: refactor
+    default: verify_test
+  - from: refactor
+    default: verify_build
+  - from: verify_lint
+    default: verify_join
+  - from: verify_test
+    default: verify_join
+  - from: verify_build
+    default: verify_join
+  - from: verify_join
+    default: verify_report
+  - from: verify_report
+    default: plan
+  - from: plan
+    default: implement
+  - from: implement
+    default: complete

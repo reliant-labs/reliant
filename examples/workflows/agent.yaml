@@ -1,29 +1,13 @@
-# Agent Workflow (V4 with Trigger Model)
-#
-# Interactive agent workflow using loop construct for the agent cycle.
-# Entry: trigger message auto-saved, then runs agent loop.
-# Loop: call LLM → execute tools → repeats while tool calls exist.
-#
-# MESSAGE PERSISTENCE: Uses inline save_message on action nodes.
-# This ensures the frontend correctly associates activities with their saved messages.
-#
-# NAMESPACE MODEL (explicit references required):
-# - inputs.*: Configuration inputs (model, temperature, tools, task, etc.)
-# - workflow.*: Workflow metadata (id, name, path, branch)
-# - nodes.*: Node outputs via nodes.<node_id>.<field>
-# - iter.*: Loop iteration context (iteration)
-
 name: agent
 apiVersion: "0.0.5"
-description: Interactive agent workflow with trigger model (V4)
+description: |
+  Standard interactive agent. Loops while LLM returns tool calls, yields when LLM responds with no tool calls.
+  Will always start on a thread that is seeded with the user's message. User interaction occurs outside of the workflow. Uses inline save_message for frontend activity association.
 presets:
   tag: agent
   default: general
 
-# Input schema for configuration only - NO message/thread here
-# Message is trigger data, not configuration
 inputs:
-  # === EXECUTION MODE (most important - affects behavior) ===
   mode:
     type: enum
     ui: toolbar
@@ -31,13 +15,11 @@ inputs:
     default: "auto"
     description: "Execution mode: manual = requires approval, auto = auto-approves, plan = read-only tools"
 
-  # === CORE LLM SETTINGS ===
   model:
     type: model
     description: LLM model to use
     default:
       tags: ["flagship"]
-      providers: ["anthropic"]
   temperature:
     type: number
     default: 1.0
@@ -46,11 +28,10 @@ inputs:
     description: Response randomness (0 = focused, 1 = creative)
   thinking_level:
     type: enum
-    enum: [low, medium, high]
+    enum: [low, medium, high, xhigh]
     default: medium
-    description: Extended thinking (low = minimal, high = thorough)
+    description: Extended thinking level (support is model/provider dependent)
 
-  # === AGENT CAPABILITIES ===
   tools:
     type: tools
     default: ["tag:default"]
@@ -65,7 +46,6 @@ inputs:
       - code_reviewer
     description: Presets available for spawn tool (empty = spawn disabled)
 
-  # === ADVANCED CONFIGURATION ===
   system_prompt:
     type: string
     default: ""
@@ -82,7 +62,13 @@ inputs:
     min: 10000
     description: Token count to trigger context compaction
 
-  # === HIDDEN PLANNING PROMPT ===
+  yield:
+    type: boolean
+    default: false
+    description: When true, wait for user interaction after agent completes before returning
+    ui: hidden
+
+  # Hidden: prepended to system_prompt when mode='plan' (concatenates planning_prompt + system_prompt)
   planning_prompt:
     type: string
     ui: hidden
@@ -146,32 +132,23 @@ outputs:
   response_text: "{{nodes.agent_loop.response_text}}"
 
 # Entry point - replaces from: started edge
-entry: agent_loop
+entry: [agent_loop]
 
 nodes:
-  # Main agent loop - continues while LLM has tool calls to execute
-  # Loop inherits the parent's thread via mode: inherit
-  # No entry save_message needed - trigger message is auto-saved
   - id: agent_loop
     type: loop
+    # Continues while: has tool calls AND under max turns. No tools = yield to user.
     while: (outputs.tool_calls != null && size(outputs.tool_calls) > 0) && iter.iteration < inputs.max_turns
+    yield: "{{inputs.yield || iter.iteration >= inputs.max_turns}}"
     inline:
-      # Single turn of the agent loop:
-      # 1. Call LLM (saves assistant message via inline save_message)
-      # 2. If tool calls: handle approval → execute tools (saves tool results via inline save_message)
-      # 3. Optionally compact if context is large (saves compact result via inline save_message)
-
       outputs:
         tool_calls: "{{nodes.call_llm.tool_calls}}"
         message: "{{nodes.call_llm.message}}"
         response_text: "{{nodes.call_llm.response_text}}"
 
-      # Entry point for inline workflow
-      entry: call_llm
+      entry: [call_llm]
 
       nodes:
-        # Call LLM to get assistant response
-        # Thread is inherited from parent
         - id: call_llm
           type: call_llm
           save_message:
@@ -182,25 +159,17 @@ nodes:
             model: "{{inputs.model}}"
             temperature: "{{inputs.temperature}}"
             thinking_level: "{{inputs.thinking_level}}"
-            system_prompt: "{{inputs.mode == 'plan' && inputs.planning_prompt != '' ? inputs.planning_prompt : inputs.system_prompt}}"
-            # Tools: respect user's tool selection (MCP only if user selects tag:mcp)
-            # Plan mode: plan-tagged tools only. Spawn is no-op when presets empty.
-            tool_filter: "{{inputs.mode == 'plan' ? ['tag:plan'] : inputs.tools + ['spawn:builtin://agent(' + inputs.spawn_presets.join(',') + ')']}}"
+            system_prompt: >
+              {{inputs.mode == 'plan' && inputs.planning_prompt != '' ? (inputs.system_prompt != '' ? inputs.system_prompt + "\n\n" : '') + inputs.planning_prompt : inputs.system_prompt}}
+            # Plan mode gets plan-tagged tools only; spawn no-op when presets empty
+            tool_filter: "{{inputs.mode == 'plan' ? ['tag:plan'] : inputs.tools + [spawn(workflow.name, inputs.spawn_presets)]}}"
 
-        # Approval gate - waits for user approval before executing tools
         - id: approval
           type: approval
           args:
             title: Approve tool execution?
-            description: "The agent wants to execute tool(s)"
             timeout: 1h
-            actions:
-              - type: approve
-                label: "Approve"
-              - type: deny
-                label: "Deny"
 
-        # Execute all tool calls (saves tool results via inline save_message)
         - id: execute_tools
           type: execute_tools
           save_message:
@@ -210,30 +179,28 @@ nodes:
           args:
             tool_calls: "{{nodes.call_llm.tool_calls}}"
 
-        # Compact context if needed after tool results (saves message internally)
         - id: compact
           type: compact
           timeout: "10m"
 
       edges:
-        # After LLM call, decide next step
         - from: call_llm
           cases:
             - to: approval
               condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode == 'manual'
               label: "require_approval"
+            # Plan mode falls through here too — plan-tagged tools are read-only, so auto-approve is safe
             - to: execute_tools
               condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode != 'manual'
               label: "auto_approve"
 
-        # Approval result
+        # No edge when denied - iteration ends, loop continues (user can re-prompt)
         - from: approval
           cases:
             - to: execute_tools
               condition: nodes.approval.status == 'approved'
               label: "approved"
 
-        # After execute_tools, check if compaction needed
         - from: execute_tools
           cases:
             - to: compact
@@ -268,30 +235,24 @@ nodes:
                 condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode == 'manual'
                 label: require_approval
               - id: case-1
-                condition: ""
+                condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode != 'manual'
                 label: auto_approve
 
-    # Loop inherits parent thread
-    thread:
-      mode: inherit
 
-  # Notification when max turns is reached (shown to user)
   - id: max_turns_notification
     type: save_message
     args:
       role: "system"
       display_style: "warning"
-      content: "Agent reached maximum iteration limit ({{inputs.max_turns}} turns). The conversation was stopped to prevent runaway execution."
+      content: "Agent reached maximum iteration limit ({{inputs.max_turns}} turns). The conversation will pause — send a message to continue."
 
 edges:
-  # After loop completes, check if we hit max turns
   - from: agent_loop
     cases:
       - to: max_turns_notification
         condition: nodes.agent_loop._iterations >= inputs.max_turns
         label: "max_turns_reached"
 
-# UI metadata for workflow builder positioning
 ui:
   positions:
     workflow:

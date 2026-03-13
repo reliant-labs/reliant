@@ -78,7 +78,6 @@ params:
   - view
   - write
   - edit
-  - patch
   - tag:shell
   - get_plan
   - list_tasks

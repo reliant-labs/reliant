@@ -1,54 +1,61 @@
-# Compaction triggered when token count exceeds threshold
+# Compaction Triggered: Token count exceeds threshold
+#
+# Tests the compaction path:
+# 1. LLM calls a tool
+# 2. Tool executes and returns a large result
+# 3. thread_token_count exceeds compaction_threshold
+# 4. Compact node runs to reduce context size
+# 5. Loop continues, LLM responds with final answer
+#
+# The edge condition is:
+#   nodes.execute_tools.thread_token_count > inputs.compaction_threshold
+#
+# This verifies the compact node is triggered when context grows too large.
+
 name: compaction_triggered
-description: Token count exceeds threshold after tool execution, compact node runs
+description: Token count exceeds compaction_threshold, compact node runs
+
 inputs:
-  mode: auto
-  max_turns: 100
-  compaction_threshold: 1000
+  mode: "auto"
+  compaction_threshold: 10000  # Low threshold to trigger compaction
+
 events:
   # LLM requests a tool that returns lots of data
   - node: agent_loop.call_llm
-    output:
-      message:
-        role: assistant
-        text: "Let me read a large file."
-      response_text: "Let me read a large file."
-      tool_calls:
-        - id: call_0
-          name: view
-          input:
-            file_path: "/path/to/large/file.go"
-  # Tool returns with high token count
+    type: llm_response
+    text: "Let me read a large file."
+    tool_calls:
+      - name: view
+        input:
+          file_path: "/path/to/large/file.go"
+
+  # Tool returns with high token count (exceeds threshold of 10000)
   - node: agent_loop.execute_tools
+    type: tool_result
+    tool: view
     output:
-      message:
-        role: tool
-        text: ""
-      tool_results:
-        - tool_call_id: call_0
-          content: "Very large file content..."
-      thread_token_count: 5000
+      result: "Very large file content that pushed us over the token limit..."
+    thread_token_count: 15000
+
   # Compact node runs due to high token count
   - node: agent_loop.compact
+    type: tool_result
+    tool: compact
     output:
-      message:
-        role: assistant
-        text: "Context compacted successfully."
+      result: "Context compacted successfully."
+
   # Next iteration: LLM provides final response
   - node: agent_loop.call_llm
-    output:
-      message:
-        role: assistant
-        text: "Here's the analysis of the large file."
-      response_text: "Here's the analysis of the large file."
-      tool_calls: []
+    type: llm_response
+    text: "Here's the analysis of the large file."
+
 expect:
   outcome: completed
   reached:
     - agent_loop
     - agent_loop.call_llm
     - agent_loop.execute_tools
-    - agent_loop.compact
+    - agent_loop.compact  # Compact must be reached
   not_reached:
     - agent_loop.approval
     - max_turns_notification

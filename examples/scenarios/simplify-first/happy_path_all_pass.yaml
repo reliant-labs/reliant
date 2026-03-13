@@ -1,0 +1,108 @@
+# Scenario: happy_path_all_pass
+# Workflow: simplify-first.yaml
+#
+# Full happy path: research → refactor → verify (all pass) → plan → implement → complete.
+# All verification steps (lint, test, build) return exit_code 0.
+
+name: happy_path_all_pass
+description: >
+  Full happy path: research identifies simplification opportunities, refactor cleans up code,
+  all verification steps pass (lint, test, build exit_code: 0), plan produces implementation
+  plan, implement executes it, workflow completes.
+events:
+  # Phase 1: Research (workflow BLACK BOX)
+  - node: research
+    output:
+      message:
+        role: assistant
+        text: |
+          ## Simplification Opportunities
+          - Dead code in utils/legacy.go (unused helper functions)
+          - Duplicated validation logic in handlers/auth.go and handlers/user.go
+          - Overly complex middleware chain that can be flattened
+      response_text: |
+        ## Simplification Opportunities
+        - Dead code in utils/legacy.go (unused helper functions)
+        - Duplicated validation logic in handlers/auth.go and handlers/user.go
+        - Overly complex middleware chain that can be flattened
+
+  # Phase 2: Refactor (workflow BLACK BOX)
+  - node: refactor
+    output:
+      message:
+        role: assistant
+        text: |
+          ## Refactoring Complete
+          - Removed 150 lines of dead code from utils/legacy.go
+          - Consolidated validation into shared/validation.go
+          - Flattened middleware chain from 5 layers to 2
+      response_text: |
+        ## Refactoring Complete
+        - Removed 150 lines of dead code from utils/legacy.go
+        - Consolidated validation into shared/validation.go
+        - Flattened middleware chain from 5 layers to 2
+
+  # Phase 3: Verification (run nodes, parallel)
+  - node: verify_lint
+    output:
+      exit_code: 0
+      stdout: "No linting errors found."
+      stderr: ""
+
+  - node: verify_test
+    output:
+      exit_code: 0
+      stdout: "All 87 tests passed."
+      stderr: ""
+
+  - node: verify_build
+    output:
+      exit_code: 0
+      stdout: "Build succeeded."
+      stderr: ""
+
+  # Phase 4: Plan (workflow BLACK BOX)
+  - node: plan
+    output:
+      message:
+        role: assistant
+        text: |
+          ## Implementation Plan
+          1. Add new endpoint in handlers/metrics.go
+          2. Create metrics service in services/metrics.go
+          3. Write integration tests
+      response_text: |
+        ## Implementation Plan
+        1. Add new endpoint in handlers/metrics.go
+        2. Create metrics service in services/metrics.go
+        3. Write integration tests
+
+  # Phase 5: Implement (workflow BLACK BOX)
+  - node: implement
+    output:
+      message:
+        role: assistant
+        text: |
+          ## Implementation Complete
+          - Created handlers/metrics.go with GET /metrics endpoint
+          - Created services/metrics.go with collection logic
+          - Added 12 integration tests, all passing
+      response_text: |
+        ## Implementation Complete
+        - Created handlers/metrics.go with GET /metrics endpoint
+        - Created services/metrics.go with collection logic
+        - Added 12 integration tests, all passing
+
+expect:
+  outcome: completed
+  reached:
+    - research
+    - refactor
+    - verify_lint
+    - verify_test
+    - verify_build
+    - verify_join
+    - verify_report
+    - plan
+    - implement
+    - complete

@@ -1,0 +1,39 @@
+# Implement Only: Straight to implementation, nothing else
+#
+# Tests the minimal implementation-only configuration:
+# 1. Planning sub-workflow runs but plan node is skipped ('plan' not in steps)
+# 2. write_tests skipped ('tdd' not in steps)
+# 3. start_app skipped ('start_app' not in steps)
+# 4. Implementation runs in the loop
+# 5. No checks, no review → review_grade defaults to 'pass' → loop exits
+#
+# Verifies the workflow handles the "just do it" configuration.
+
+name: implement_only
+description: "steps: [implement] — straight to implementation, no planning or checks"
+
+inputs:
+  steps: [implement]
+
+events:
+  # Implementation loop — iteration 0 (only node that runs in the loop)
+  - node: impl_loop.implement
+    output:
+      response_text: "Minimal implementation done."
+
+expect:
+  outcome: completed
+  reached:
+    - planning
+    - impl_loop
+    - impl_loop.implement
+    - impl_loop.join_checks
+    - complete
+  not_reached:
+    - planning.plan
+    - write_tests
+    - start_app
+    - impl_loop.lint
+    - impl_loop.test
+    - impl_loop.build
+    - impl_loop.code_review

@@ -1,0 +1,76 @@
+# Yield Between Phases: Default yield=true pauses for user review
+#
+# Tests the workflow with yield=true (the default behavior).
+# Each agent phase (ideate, requirements, architecture, implement) receives
+# yield=true via args, which causes the sub-workflow to pause for user input
+# between phases.
+#
+# From this (parent) workflow's perspective, the same nodes are reached in
+# the same order — the yield behavior is handled internally by each
+# builtin://agent sub-workflow. This scenario verifies the linear chain
+# still completes correctly with yield enabled.
+
+name: yield_between_phases
+description: >
+  With yield=true (the default), each agent phase pauses for user review.
+  Verifies all phases are reached in the correct linear order.
+
+# Uses default yield: true
+inputs:
+  mode: auto
+
+events:
+  # Phase 1: Ideate
+  - node: ideate
+    output:
+      response_text: "Vision: build a CLI tool for managing dotfiles across machines."
+      message:
+        role: assistant
+        text: "Ideation complete — dotfile manager vision defined."
+
+  # Phase 2: Requirements
+  - node: requirements
+    output:
+      response_text: |
+        User Stories:
+        - As a developer, I want to sync dotfiles so I have consistent configs.
+        - As a developer, I want to diff before applying so I don't lose changes.
+        Acceptance Criteria:
+        - Sync completes in < 5 seconds for 100 files.
+        - Diff output matches GNU diff format.
+      message:
+        role: assistant
+        text: "Requirements written with stories and acceptance criteria."
+
+  # Phase 3: Architecture
+  - node: architecture
+    output:
+      response_text: |
+        Technical Approach: Go CLI with git-based sync backend.
+        Components: SyncEngine, DiffResolver, ConfigParser.
+        File Changes: cmd/sync.go, internal/diff/resolver.go, internal/config/parser.go.
+      message:
+        role: assistant
+        text: "Architecture defined — Go CLI with git sync backend."
+
+  # Phase 4: Implement
+  - node: implement
+    output:
+      response_text: |
+        Implementation complete:
+        - Built SyncEngine with git pull/push
+        - DiffResolver with colorized output
+        - ConfigParser for YAML and TOML
+        - 8 unit tests, 3 integration tests passing
+      message:
+        role: assistant
+        text: "Implementation done, all tests passing."
+
+expect:
+  outcome: completed
+  reached:
+    - ideate
+    - requirements
+    - architecture
+    - implement
+    - complete

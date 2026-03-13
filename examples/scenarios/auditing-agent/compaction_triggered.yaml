@@ -1,99 +1,92 @@
-# Compaction triggered when token count exceeds threshold
+# Compaction Triggered: Large tool output triggers context compaction
+#
+# Tests the compaction path:
+# 1. main_agent makes a tool call
+# 2. audit_check approves
+# 3. execute_tools runs the tool, returns high thread_token_count
+# 4. Compact node runs because thread_token_count > compaction_threshold
+# 5. Next iteration continues normally after compaction
+#
+# The edge from execute_tools to compact fires when:
+#   nodes.execute_tools.thread_token_count > inputs.compaction_threshold
+#
+# We set compaction_threshold to 10000 and return thread_token_count of 15000
+# to trigger compaction.
+
 name: compaction_triggered
-description: Token count exceeds compaction_threshold, compact node runs
+description: Tool output pushes token count over threshold, compact node runs
+
 inputs:
-  agent:
-    compaction_threshold: 1000
+  compaction_threshold: 10000  # Low threshold for testing
+
 events:
-  # main_agent requests a tool
+  # Iteration 1: main_agent requests a tool
   - node: audited_loop.main_agent
-    output:
-      message:
-        role: assistant
-        text: "Let me read that large file."
-      response_text: "Let me read that large file."
-      tool_calls:
-        - id: call_0
-          name: view
-          input:
-            file_path: "/path/to/large_file.go"
+    type: llm_response
+    text: "Let me read that large file."
+    tool_calls:
+      - name: view
+        input:
+          file_path: "/path/to/large_file.go"
+
   # audit_check approves
   - node: audited_loop.audit_check
-    output:
-      message:
-        role: assistant
-        text: ""
-      response_text: ""
-      tool_calls:
-        - id: call_1
-          name: audit
-          input:
-            approved: true
-            guidance: ""
-  # execute_audit result
-  - node: audited_loop.execute_audit
-    output:
-      message:
-        role: tool
-        text: ""
-      tool_results:
-        - tool_call_id: call_1
-          content: '{"approved": true}'
-      response_data:
-        audit:
+    type: llm_response
+    text: ""
+    tool_calls:
+      - name: audit
+        input:
           approved: true
           guidance: ""
-      thread_token_count: 500
+
+  # execute_audit confirms approval
+  - node: audited_loop.execute_audit
+    type: tool_result
+    tool: audit
+    output:
+      approved: true
+      guidance: ""
+
   # execute_tools returns large result, token count exceeds threshold
   - node: audited_loop.execute_tools
+    type: tool_result
+    tool: view
     output:
-      message:
-        role: tool
-        text: ""
-      tool_results:
-        - tool_call_id: call_0
-          content: "Very long file content that causes context to grow..."
-      thread_token_count: 5000
-  # Compact runs because thread_token_count (5000) > compaction_threshold (1000)
+      result: "Very long file content that causes context to grow..."
+      thread_token_count: 15000  # Exceeds 10000 threshold
+
+  # compact runs because 15000 > 10000
   - node: audited_loop.compact
+    type: tool_result
+    tool: compact
     output:
-      message:
-        role: assistant
-        text: "Context compacted."
-  # Next iteration: main_agent responds with final answer
+      compacted: true
+      original_tokens: 15000
+      compacted_tokens: 8000
+
+  # Iteration 2: main_agent responds with final answer
   - node: audited_loop.main_agent
-    output:
-      message:
-        role: assistant
-        text: "The file contains Go code."
-      response_text: "The file contains Go code."
-      tool_calls: []
+    type: llm_response
+    text: "The file contains Go code."
+
   # audit_check approves final response
   - node: audited_loop.audit_check
-    output:
-      message:
-        role: assistant
-        text: ""
-      response_text: ""
-      tool_calls:
-        - id: call_2
-          name: audit
-          input:
-            approved: true
-            guidance: ""
-  - node: audited_loop.execute_audit
-    output:
-      message:
-        role: tool
-        text: ""
-      tool_results:
-        - tool_call_id: call_2
-          content: '{"approved": true}'
-      response_data:
-        audit:
+    type: llm_response
+    text: ""
+    tool_calls:
+      - name: audit
+        input:
           approved: true
           guidance: ""
-      thread_token_count: 1500
+
+  # execute_audit confirms approval
+  - node: audited_loop.execute_audit
+    type: tool_result
+    tool: audit
+    output:
+      approved: true
+      guidance: ""
+
 expect:
   outcome: completed
   reached:
@@ -103,4 +96,4 @@ expect:
     - audited_loop.execute_audit
     - audited_loop.save_approved_response
     - audited_loop.execute_tools
-    - audited_loop.compact
+    - audited_loop.compact  # Compaction should run

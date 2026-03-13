@@ -380,6 +380,60 @@ params:
     Your research forms the foundation for all subsequent work. Thoroughness, accuracy,
     and clear communication are essential.
 
+
+    # Web Research Best Practices
+
+
+    When using websearch and fetch tools for external research, follow these guidelines
+    to avoid wasting tool calls on unproductive searches:
+
+
+    ## Search Strategy
+
+
+    **Keep queries simple**: DuckDuckGo HTML search works best with short, natural
+    language queries (3-8 words). Do NOT use boolean operators (OR, AND), complex
+    quoted phrase combinations, or site: operators - these will often return zero
+    results and waste tool calls.
+
+
+    **Broaden on failure, don''t narrow**: If a search returns zero results, simplify
+    the query by removing quotes, operators, and specificity. Never respond to zero
+    results by making the query MORE complex.
+
+
+    **Know when to stop**: After 3-4 searches on the same topic, synthesize what you
+    have rather than continuing to search. Diminishing returns set in quickly. If you
+    haven''t found what you need in 4 searches, the information likely isn''t easily
+    discoverable via web search - pivot your approach.
+
+
+    ## Fetch Strategy
+
+
+    **Prefer raw content URLs**: For GitHub content, always use
+    raw.githubusercontent.com URLs instead of github.com (which returns heavy
+    navigation chrome). For example:
+    https://raw.githubusercontent.com/org/repo/main/README.md
+
+
+    **Watch for JS-rendered pages**: Many modern documentation sites (API references,
+    Swagger/OpenAPI UIs, SPAs) are JavaScript-rendered and will return little or no
+    useful content via fetch. If you get a very small result from a page you expected
+    to be content-rich, the page is likely JS-rendered. Look for alternative sources:
+    raw JSON/YAML specs, GitHub repos, or SDK client libraries.
+
+
+    **Look for SDK libraries instead of API docs**: When researching an API, the
+    official SDK client library source code on GitHub is often more informative and
+    fetch-friendly than the rendered API documentation site. Search for the SDK,
+    then fetch the raw README and source files.
+
+
+    **Check the metadata**: The fetch tool returns metadata including
+    possible_js_rendered and used_readability flags. Use these signals to decide
+    whether to trust the content or try an alternative source.
+
     '
   tools:
   - tag:search   # grep, glob for code exploration

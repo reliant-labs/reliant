@@ -1,0 +1,90 @@
+# Yield on discuss: discuss phase yields for user input then completes
+#
+# GSD workflow: discuss → research → plan → implement → [lint,test,build] → join → report → complete
+#
+# The discuss node has yield: true, meaning the agent sub-workflow pauses
+# for user input. From the simulator's perspective, discuss is a black box —
+# it eventually completes with preferences captured from the user.
+# This scenario verifies the full flow completes after discuss yields and resumes.
+
+name: yield_discuss
+description: >
+  The discuss node has yield: true, meaning the agent sub-workflow will pause
+  for user input. From the simulator's perspective, the discuss node is a black
+  box — it eventually completes with a response that captures user preferences.
+  This scenario verifies the full flow still completes after discuss yields and
+  resumes.
+
+events:
+  # Discuss yields internally, then completes with captured preferences
+  - node: discuss
+    output:
+      message:
+        role: assistant
+        text: |
+          After discussion with user:
+          - Prefer speed over comprehensive error handling
+          - Use existing auth middleware, don't create new one
+          - Skip integration tests for now
+      response_text: |
+        After discussion with user:
+        - Prefer speed over comprehensive error handling
+        - Use existing auth middleware, don't create new one
+        - Skip integration tests for now
+
+  - node: research
+    output:
+      message:
+        role: assistant
+        text: "Auth middleware at src/middleware/auth.go. Service layer at src/services/."
+      response_text: "Auth middleware at src/middleware/auth.go. Service layer at src/services/."
+
+  - node: plan
+    output:
+      message:
+        role: assistant
+        text: |
+          Wave 1: Add endpoint handler with auth middleware
+          Wave 2: Add unit tests only (skip integration per user preference)
+      response_text: |
+        Wave 1: Add endpoint handler with auth middleware
+        Wave 2: Add unit tests only (skip integration per user preference)
+
+  - node: implement
+    output:
+      message:
+        role: assistant
+        text: "Implemented endpoint with auth middleware. Unit tests added."
+      response_text: "Implemented endpoint with auth middleware. Unit tests added."
+
+  - node: verify_lint
+    output:
+      exit_code: 0
+      stdout: "No linting errors."
+      stderr: ""
+
+  - node: verify_test
+    output:
+      exit_code: 0
+      stdout: "PASS\nok  	./... 0.912s"
+      stderr: ""
+
+  - node: verify_build
+    output:
+      exit_code: 0
+      stdout: "Build succeeded."
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - discuss
+    - research
+    - plan
+    - implement
+    - verify_lint
+    - verify_test
+    - verify_build
+    - verify_join
+    - verify_report
+    - complete

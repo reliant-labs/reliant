@@ -1,0 +1,60 @@
+# Code Review Retry: Review fails on iteration 0, passes on iteration 1
+#
+# Tests the loop re-iteration triggered by a failing code review:
+# 1. Iteration 0: implement runs, code review grades 'fail'
+# 2. Loop condition: review_grade == 'fail' → re-iterate
+# 3. Iteration 1: implement runs again (sees previous feedback), review grades 'pass'
+# 4. Loop exits
+#
+# Verifies that a failing review correctly triggers re-iteration and
+# the loop exits when the review passes on retry.
+
+name: code_review_fails_then_passes
+description: Code review fails on first try, passes on retry
+
+inputs:
+  steps: [implement, code_review]
+
+events:
+  # Iteration 0 — review fails
+  - node: impl_loop.implement
+    output:
+      response_text: "Initial implementation attempt."
+
+  - node: impl_loop.code_review
+    output:
+      response:
+        grade: fail
+        summary: "Implementation has critical issues."
+        suggestions:
+          - "Fix null pointer in handler"
+          - "Add input validation"
+
+  # Iteration 1 — review passes
+  - node: impl_loop.implement
+    output:
+      response_text: "Fixed issues from review feedback."
+
+  - node: impl_loop.code_review
+    output:
+      response:
+        grade: pass
+        summary: "All issues resolved. Implementation looks good."
+        suggestions: []
+
+expect:
+  outcome: completed
+  reached:
+    - planning
+    - impl_loop
+    - impl_loop.implement
+    - impl_loop.join_checks
+    - impl_loop.code_review
+    - complete
+  not_reached:
+    - planning.plan
+    - write_tests
+    - start_app
+    - impl_loop.lint
+    - impl_loop.test
+    - impl_loop.build
