@@ -1,0 +1,199 @@
+name: ralph-wiggum
+apiVersion: "0.0.5"
+description: |
+  Ralph Wiggum - A loop-based autonomous agent that iterates:
+  read specs → pick task → implement → verify → commit → repeat until done or max iterations.
+
+inputs:
+  model:
+    type: model
+    description: LLM model for all agent steps
+    default:
+      tags: ["flagship"]
+
+  max_iterations:
+    type: integer
+    default: 10
+    min: 1
+    max: 50
+    description: Maximum number of orient→implement→verify iterations before stopping.
+
+  mode:
+    type: enum
+    ui: toolbar
+    default: auto
+    description: Execution mode for agent steps
+    enum: [manual, auto, plan]
+
+  yield:
+    type: boolean
+    ui: toolbar
+    default: false
+    description: Pause for user review after each iteration
+
+outputs:
+  tasks_remaining: "{{nodes.task_loop.tasks_remaining}}"
+
+entry: [task_loop]
+
+edges:
+  - from: task_loop
+    default: complete
+
+nodes:
+  - id: task_loop
+    type: loop
+    while: >
+      (has(outputs.tasks_remaining) && outputs.tasks_remaining == true)
+      && iter.iteration < inputs.max_iterations
+    inline:
+      entry: [orient]
+
+      outputs:
+        tasks_remaining: "{{has(nodes.verify.response) && has(nodes.verify.response.tasks_remaining) ? nodes.verify.response.tasks_remaining : false}}"
+
+      nodes:
+        - id: orient
+          type: workflow
+          ref: builtin://agent
+          presets:
+            default: researcher
+          thread:
+            mode: fork
+            memo: false
+            inject:
+              role: user
+              content: |
+                ## Orient: Read Specs & Pick Task (Iteration {{iter.iteration + 1}})
+
+                Review the conversation above — prior iteration summaries (Orient, Implement, Verify) are saved there.
+
+                **Process:**
+                1. Identify the full list of tasks from specs, task lists, or the user's original request
+                2. Cross-reference against prior iteration summaries to determine what's already done
+                3. Pick the single highest-priority remaining task
+                4. Define clear acceptance criteria for this task
+
+                **Output:**
+                - **Chosen Task:** [name/description]
+                - **Why it's next:** [priority rationale]
+                - **Acceptance Criteria:** [specific, testable conditions]
+                - **Files likely affected:** [file paths]
+
+                Be concise. This output directly feeds the implementer.
+          args:
+            model: "{{inputs.model}}"
+            mode: "{{inputs.mode}}"
+            yield: "{{inputs.yield}}"
+          save_message:
+            role: assistant
+            content: |
+              ## Iteration {{iter.iteration + 1}} — Orient
+              {{output.response_text}}
+
+        - id: implement
+          type: workflow
+          ref: builtin://agent
+          presets:
+            default: general
+          thread:
+            mode: fork
+            memo: false
+            inject:
+              role: user
+              content: |
+                ## Implement: Execute the Chosen Task (Iteration {{iter.iteration + 1}})
+
+                The orient step above identified a specific task with acceptance criteria.
+
+                **Process:**
+                1. Implement exactly the task described in the orient summary above
+                2. Write tests or configuration changes as needed
+                3. Run relevant tests or build commands to verify your changes
+                4. Stage and commit with a clear commit message referencing the task
+
+                **Stay scoped:** Only implement the chosen task. Do not work on other tasks.
+          args:
+            model: "{{inputs.model}}"
+            mode: "{{inputs.mode}}"
+            yield: "{{inputs.yield}}"
+          save_message:
+            role: assistant
+            content: |
+              ## Iteration {{iter.iteration + 1}} — Implement
+              {{output.response_text}}
+
+        - id: verify
+          type: workflow
+          ref: builtin://structured-agent
+          presets:
+            default: code_reviewer
+          thread:
+            mode: fork
+            memo: false
+            inject:
+              role: user
+              content: |
+                ## Verify: Check Progress (Iteration {{iter.iteration + 1}})
+
+                Review what was just implemented against the orient step's acceptance criteria.
+
+                1. Read the code changes from this iteration
+                2. Run tests — do they pass?
+                3. Check the acceptance criteria from the orient step — are they satisfied?
+                4. Identify remaining tasks from the spec that haven't been completed
+
+                Set tasks_remaining to true ONLY if there are concrete, identified tasks left to do.
+          args:
+            model: "{{inputs.model}}"
+            response_tool_name: submit_verification
+            response_tool_description: "Submit your verification of the implementation progress"
+            response_schema:
+              type: object
+              properties:
+                summary:
+                  type: string
+                  description: Brief summary of what was verified
+                completed_task:
+                  type: string
+                  description: Name of the task completed in this iteration
+                tasks_remaining:
+                  type: boolean
+                  description: true if there are more tasks to complete, false if all done
+                remaining_tasks:
+                  type: array
+                  items:
+                    type: string
+                  description: List of remaining tasks not yet completed
+                issues:
+                  type: array
+                  items:
+                    type: string
+                  description: Any issues found during verification
+              required:
+                - summary
+                - tasks_remaining
+          save_message:
+            role: assistant
+            content: |
+              ## Iteration {{iter.iteration + 1}} — Verify
+              **Completed:** {{has(output.response) && has(output.response.completed_task) ? output.response.completed_task : 'N/A'}}
+              **Result:** {{output.response.tasks_remaining ? 'More work needed' : 'All tasks complete'}}
+              {{output.response.summary}}
+              {{has(output.response.issues) && size(output.response.issues) > 0 ? '**Issues:** ' + string(output.response.issues) : ''}}
+              {{has(output.response.remaining_tasks) && size(output.response.remaining_tasks) > 0 ? '**Remaining:** ' + string(output.response.remaining_tasks) : ''}}
+
+      edges:
+        - from: orient
+          default: [implement]
+        - from: implement
+          default: [verify]
+
+  - id: complete
+    type: save_message
+    args:
+      role: assistant
+      content: |
+        ## Ralph Wiggum — Complete
+
+        {{has(nodes.task_loop) && has(nodes.task_loop.tasks_remaining) && nodes.task_loop.tasks_remaining == true ? 'Stopped at max iterations — tasks may still remain.' : 'All tasks completed.'}}

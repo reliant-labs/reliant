@@ -1,15 +1,30 @@
-# Implementation failure scenario - one impl fails, others succeed
+# Implementation Failure: One implementation fails, reviewer picks from remaining
+#
+# Tests that the workflow handles partial implementation failure gracefully:
+# 1. All three worktrees are created successfully
+# 2. Implementation 2 fails (returns error message as its output)
+# 3. The join node still completes because all three impls have outputs
+#    (even failed ones produce workflow-level output)
+# 4. The reviewer notes the failure and picks from the remaining candidates
+# 5. Workflow completes normally via use_winner path
+#
+# Since workflow nodes are black boxes, a "failed" implementation simply
+# returns output indicating failure — the join and review still proceed.
+
 name: implementation_failure
-description: One implementation fails but workflow continues with review
+description: One implementation fails but the workflow continues with review of remaining candidates
+
 events:
+  # Prompt improvement
   - node: improve_prompt
     output:
       message:
         role: assistant
-        text: "Implement error handling"
-      response_text: "Implement error handling"
+        text: "Implement error handling middleware"
+      response_text: "Implement error handling middleware"
       tool_calls: []
-  
+
+  # Create worktrees
   - node: create_worktree_1
     output:
       id: "wt1"
@@ -37,54 +52,55 @@ events:
       base_branch: "main"
       repo_id: "test"
       status: "created"
-  
+
   # Impl 1 succeeds
   - node: impl_1
     output:
       message:
         role: assistant
-        text: "Implementation 1 complete with error handling"
-      response_text: "Implementation 1 complete with error handling"
-  
-  # Impl 2 fails (outputs error message)
+        text: "Implementation 1 complete with error handling middleware"
+      response_text: "Implementation 1 complete with error handling middleware"
+
+  # Impl 2 fails (outputs error message — still a valid workflow output)
   - node: impl_2
     output:
       message:
         role: assistant
         text: "ERROR: Unable to complete implementation due to unforeseen issue"
       response_text: "ERROR: Unable to complete implementation due to unforeseen issue"
-  
+
   # Impl 3 succeeds
   - node: impl_3
     output:
       message:
         role: assistant
-        text: "Implementation 3 complete with robust error handling"
-      response_text: "Implementation 3 complete with robust error handling"
-  
-  # Reviewer notes impl_2 failed and picks from remaining
+        text: "Implementation 3 complete with robust error handling and recovery"
+      response_text: "Implementation 3 complete with robust error handling and recovery"
+
+  # Reviewer notes failure and picks from remaining
   - node: review
     output:
       message:
         role: assistant
         text: |
           ## Review Summary
-          
-          Candidate 1: Complete implementation
-          Candidate 2: FAILED - no implementation
-          Candidate 3: Complete implementation with robust error handling
+          - Candidate 1: Complete error handling middleware
+          - Candidate 2: FAILED — no usable implementation
+          - Candidate 3: Complete with robust error handling and recovery
       response_text: |
         ## Review Summary
-        
-        Candidate 1: Complete implementation
-        Candidate 2: FAILED - no implementation
-        Candidate 3: Complete implementation with robust error handling
-      winner: 3
-      strategy: "use_winner"
-      confidence: 8
-      rationale: "Only viable option with complete error handling. Candidate 2 failed to complete."
-      synthesis_instructions: ""
+        - Candidate 1: Complete error handling middleware
+        - Candidate 2: FAILED — no usable implementation
+        - Candidate 3: Complete with robust error handling and recovery
+      response:
+        winner: 3
+        strategy: "use_winner"
+        confidence: 8
+        rationale: "Candidate 2 failed. Candidate 3 has more robust error handling with recovery support compared to Candidate 1."
+        synthesis_instructions: ""
+      completed: true
 
+  # apply_winner rsync
   - node: apply_winner
     output:
       exit_code: 0
@@ -105,3 +121,5 @@ expect:
     - review
     - apply_winner
     - complete
+  not_reached:
+    - synthesizer

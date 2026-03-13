@@ -1,14 +1,18 @@
-# Parallel Compete Workflow
-#
-# Three agents compete to implement a task, then a reviewer picks the winner.
-
 name: parallel-compete
 apiVersion: "0.0.5"
-description: Three agents compete to implement task, reviewer picks winner
-entry: improve_prompt
+description: |
+  3 agents implement in parallel worktrees, reviewer picks winner or synthesizes.
+  Thread mode: new (isolated context). Each worktree is independent.
+  Apply path: use_winner copies via rsync, synthesize merges best parts.
+entry: [improve_prompt]
+
+outputs:
+  strategy: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null ? nodes.review.response.strategy : ''}}"
+  winner: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null ? nodes.review.response.winner : 0}}"
+  confidence: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null ? nodes.review.response.confidence : 0}}"
+  rationale: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null ? nodes.review.response.rationale : ''}}"
 
 inputs:
-  # === SHARED SETTINGS ===
   mode:
     type: enum
     enum: ["manual", "auto", "plan"]
@@ -16,10 +20,10 @@ inputs:
     description: "Execution mode: auto = auto-approve tools, manual = require approval"
   model:
     type: model
-
+    default:
+      tags: ["flagship"]
     description: Default LLM model for all agents (can be overridden per group)
 
-  # Input group for implementer settings
   implementer:
     type: group
     presets:
@@ -30,6 +34,8 @@ inputs:
       model:
         type: model
         description: Model override for implementer agents
+        default:
+          tags: ["flagship"]
       temperature:
         type: number
         default: 1.0
@@ -49,7 +55,7 @@ inputs:
         description: Maximum agent loop iterations
       tools:
         type: tools
-        default: ["tag:default"]
+        default: ["tag:default", "!tag:planning"]
         description: Available tools for implementers
       system_prompt:
         type: string
@@ -63,12 +69,20 @@ inputs:
           - Include any necessary tests
           - Follow project conventions and best practices
           - Handle edge cases appropriately
+
+          ## Planning
+          You do not have access to the plan tool. Instead, write your implementation plan
+          to a markdown file at `PLAN.md` in the root of your working directory. Include:
+          - Your approach and strategy
+          - Key decisions and trade-offs
+          - Task breakdown with status tracking
+          Update this file as you progress through your implementation.
         description: System prompt override for implementers
       thinking_level:
         type: enum
-        enum: [low, medium, high]
+        enum: [low, medium, high, xhigh]
         default: low
-        description: Extended thinking level for implementers
+        description: Extended thinking level for implementers (support is model/provider dependent)
       spawn_presets:
         type: preset
         tags: [agent]
@@ -80,8 +94,6 @@ nodes:
   # Prompt improvement - ephemeral call, saves improved result to main thread
   - id: improve_prompt
     type: call_llm
-    thread:
-      mode: inherit
     args:
       model: "{{inputs.model}}"
       tools: false
@@ -105,7 +117,7 @@ nodes:
 
         {{nodes.improve_prompt.message.text}}
 
-  # Create worktrees in parallel
+  # workflow.id in name ensures unique worktrees per workflow execution
   - id: create_worktree_1
     type: create_worktree
     args:
@@ -136,7 +148,8 @@ nodes:
         - .env.local
       force: true
 
-  # Three parallel implementations (each starts as soon as its worktree is ready)
+  # mode: new = isolated thread (not fork/inherit which would share/copy context)
+  # project.path = working dir for sub-workflow tools
   - id: impl_1
     type: workflow
     ref: builtin://agent
@@ -149,7 +162,6 @@ nodes:
 
           ## Task
           {{nodes.improve_prompt.message.text}}
-    # Project path sets the working directory for all tools in this sub-workflow
     project:
       path: "{{nodes.create_worktree_1.path}}"
     presets:
@@ -177,7 +189,6 @@ nodes:
 
           ## Task
           {{nodes.improve_prompt.message.text}}
-    # Project path sets the working directory for all tools in this sub-workflow
     project:
       path: "{{nodes.create_worktree_2.path}}"
     presets:
@@ -205,7 +216,6 @@ nodes:
 
           ## Task
           {{nodes.improve_prompt.message.text}}
-    # Project path sets the working directory for all tools in this sub-workflow
     project:
       path: "{{nodes.create_worktree_3.path}}"
     presets:
@@ -225,13 +235,13 @@ nodes:
     type: join
     condition: "all"
 
-  # Review all implementations - fork from main thread to preserve context
-  # Uses structured response to output a machine-readable decision
+  # Fork: reviewer needs parent context. Uses response tool for structured decision.
   - id: review
     type: workflow
-    ref: builtin://agent
+    ref: builtin://structured-agent
     thread:
       mode: fork
+      memo: false
       inject:
         role: user
         content: |
@@ -259,12 +269,12 @@ nodes:
       content: |
         ## Review Complete
 
-        **Decision:** {{output.strategy}} (Candidate {{output.winner}})
-        **Confidence:** {{output.confidence}}/10
+        **Decision:** {{output.response.strategy}} (Candidate {{output.response.winner}})
+        **Confidence:** {{output.response.confidence}}/10
 
         **Rationale:**
-        {{output.rationale}}
-        {{output.strategy == 'synthesize' ? '\n**Synthesis Instructions:**\n' + output.synthesis_instructions : ''}}
+        {{output.response.rationale}}
+        {{output.response.strategy == 'synthesize' ? '\n**Synthesis Instructions:**\n' + output.response.synthesis_instructions : ''}}
     presets:
       default: code_reviewer
     args:
@@ -316,44 +326,52 @@ nodes:
           exactly what to take from each candidate (specific files, functions, approaches).
 
         Be objective and evidence-based in your evaluation.
-    response:
-      winner:
-        type: integer
-        description: "The best implementation candidate (1, 2, or 3)"
-      strategy:
-        type: enum
-        enum: [use_winner, synthesize]
-        description: "use_winner to apply directly, synthesize to combine best parts"
-      confidence:
-        type: integer
-        description: "Confidence in decision (1-10)"
-      rationale:
-        type: string
-        description: "Explanation of why this decision was made"
-      synthesis_instructions:
-        type: string
-        description: "If strategy=synthesize, detailed instructions on what to take from each implementation"
+      response_tool_name: "submit_review"
+      response_tool_description: "Submit your review decision - choose use_winner to apply the best implementation directly, or synthesize to combine the best parts from multiple implementations."
+      response_schema:
+        type: object
+        required:
+          - winner
+          - strategy
+          - confidence
+          - rationale
+        properties:
+          winner:
+            type: integer
+            enum: [1, 2, 3]
+            description: "The best implementation candidate (1, 2, or 3)"
+          strategy:
+            type: string
+            enum:
+              - use_winner
+              - synthesize
+            description: "use_winner to apply directly, synthesize to combine best parts"
+          confidence:
+            type: integer
+            description: "Confidence in decision (1-10)"
+          rationale:
+            type: string
+            description: "Explanation of why this decision was made"
+          synthesis_instructions:
+            type: string
+            description: "If strategy=synthesize, detailed instructions on what to take from each implementation"
 
-  # --------------------------------------------------------------------------
-  # Post-Review: Apply Winner or Synthesize
-  # --------------------------------------------------------------------------
-
-  # Apply the winning implementation directly via rsync
+  # Mutually exclusive paths via edge cases from review
   - id: apply_winner
     type: run
-    condition: "nodes.review.strategy == 'use_winner'"
     command: |
-      rsync -av --exclude='.git' --exclude='node_modules' --exclude='.env.ports' \
-        "{{nodes.review.winner == 1 ? nodes.create_worktree_1.path : (nodes.review.winner == 2 ? nodes.create_worktree_2.path : nodes.create_worktree_3.path)}}/" \
+      rsync -av --delete --exclude='.git' --exclude='node_modules' --exclude='.env.ports' --exclude='data' --exclude='.env.local' \
+        "{{nodes.review.response.winner == 1 ? nodes.create_worktree_1.path : (nodes.review.response.winner == 2 ? nodes.create_worktree_2.path : nodes.create_worktree_3.path)}}/" \
         "{{workflow.path}}/"
 
-  # Synthesize best parts from multiple implementations
   - id: synthesizer
     type: workflow
-    condition: "nodes.review.strategy == 'synthesize'"
     ref: builtin://agent
+    project:
+      path: "{{workflow.path}}"
     thread:
       mode: fork
+      memo: false
       inject:
         role: user
         content: |
@@ -370,13 +388,13 @@ nodes:
           - Candidate 2: {{nodes.create_worktree_2.path}}
           - Candidate 3: {{nodes.create_worktree_3.path}}
 
-          **Base Implementation:** Candidate {{nodes.review.winner}}
+          **Base Implementation:** Candidate {{nodes.review.response.winner}}
 
           **Synthesis Instructions from Reviewer:**
-          {{nodes.review.synthesis_instructions}}
+          {{nodes.review.response.synthesis_instructions}}
 
           **Your Task:**
-          1. Start with the base implementation (Candidate {{nodes.review.winner}})
+          1. Start with the base implementation (Candidate {{nodes.review.response.winner}})
           2. Follow the synthesis instructions to incorporate the best parts from other candidates
           3. Use cp/rsync to copy files, or edit to merge specific code sections
           4. Ensure the final result is coherent and working
@@ -406,11 +424,6 @@ nodes:
         - Test that the combined code is coherent
         - Work in your current directory (the main worktree)
 
-  # Join point for both paths
-  - id: apply_done
-    type: join
-
-  # Final completion message with instructions
   - id: complete
     type: save_message
     args:
@@ -418,8 +431,8 @@ nodes:
       content: |
         ## Parallel Competition Complete
 
-        **Strategy Used:** {{nodes.review.strategy == 'use_winner' ? 'Applied Winner (Candidate ' + string(nodes.review.winner) + ')' : 'Synthesized from multiple candidates (base: Candidate ' + string(nodes.review.winner) + ')'}}
-        **Confidence:** {{nodes.review.confidence}}/10
+        **Strategy Used:** {{nodes.review.response.strategy == 'use_winner' ? 'Applied Winner (Candidate ' + string(nodes.review.response.winner) + ')' : 'Synthesized from multiple candidates (base: Candidate ' + string(nodes.review.response.winner) + ')'}}
+        **Confidence:** {{nodes.review.response.confidence}}/10
 
         **Result Directory:**
         ```
@@ -440,7 +453,7 @@ nodes:
         ```
 
         **Rationale:**
-        {{nodes.review.rationale}}
+        {{nodes.review.response.rationale}}
 
 edges:
   - from: improve_prompt
@@ -472,27 +485,18 @@ edges:
   - from: implementations_done
     default: review
 
-  # POST-REVIEW ROUTING - conditional based on strategy
-  # Both paths run (conditions on nodes handle which actually executes)
   - from: review
-    default: apply_winner
-  - from: review
-    default: synthesizer
+    cases:
+      - to: apply_winner
+        condition: "has(nodes.review.response) && nodes.review.response != null && nodes.review.response.strategy == 'use_winner'"
+      - to: synthesizer
+        condition: "has(nodes.review.response) && nodes.review.response != null && nodes.review.response.strategy == 'synthesize'"
 
-  # Both paths converge to apply_done
   - from: apply_winner
-    default: apply_done
+    default: complete
   - from: synthesizer
-    default: apply_done
-
-  # Final completion
-  - from: apply_done
     default: complete
 
-# UI metadata for workflow builder positioning
-# Layout: Horizontal left-to-right flow
-# - Sequential nodes: same y (center), increasing x
-# - Parallel branches: same x, spread on y-axis (top/center/bottom)
 ui:
   positions:
     create_worktree_1:
@@ -528,11 +532,8 @@ ui:
     synthesizer:
       x: 3800
       y: 358
-    apply_done:
-      x: 4200
-      y: 254
     complete:
-      x: 4600
+      x: 4200
       y: 254
     save_improved_prompt:
       x: 797
@@ -540,6 +541,4 @@ ui:
     workflow:
       x: 150
       y: 270
-    worktrees_ready:
-      x: 1891
-      y: 246
+

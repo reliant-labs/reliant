@@ -1,0 +1,166 @@
+# Happy Path: All phases complete, review passes
+#
+# Tests the simplest successful path through the obra methodology:
+# 1. Brainstorm — Socratic questioning to understand the problem
+# 2. Plan — Bite-sized tasks with file paths
+# 3. TDD — Write tests first (RED phase)
+# 4. Implement — Make tests pass (GREEN phase)
+# 5. Review — Structured code review returns verdict: pass
+# 6. Complete — Save summary message
+#
+# All agent nodes are BLACK BOX sub-workflows. We mock only their
+# top-level outputs (response_text, response, completed).
+
+name: happy_path_review_pass
+description: All six phases complete successfully, review returns verdict pass
+
+inputs:
+  mode: auto
+  yield: false
+
+events:
+  # Phase 1: Brainstorm — Socratic questioning
+  - node: brainstorm
+    output:
+      message:
+        role: assistant
+        text: |
+          ## Problem Statement
+          We need to add a retry mechanism with exponential backoff to the HTTP client.
+
+          ## Key Questions & Answers
+          1. What errors should trigger retries? → 5xx and network timeouts only
+          2. What's the max retry count? → 3 retries with exponential backoff
+          3. Should retries be configurable? → Yes, per-request override
+
+          ## Constraints
+          - Must not retry on 4xx errors
+          - Max total wait time: 30 seconds
+
+          ## Edge Cases
+          - Connection reset mid-response
+          - Server returns 503 with Retry-After header
+
+          ## Success Criteria
+          - All transient errors retried up to 3 times
+          - Exponential backoff with jitter
+          - Configurable per-request
+      response_text: |
+        ## Problem Statement
+        We need to add a retry mechanism with exponential backoff to the HTTP client.
+
+        ## Key Questions & Answers
+        1. What errors should trigger retries? → 5xx and network timeouts only
+        2. What's the max retry count? → 3 retries with exponential backoff
+        3. Should retries be configurable? → Yes, per-request override
+
+        ## Constraints
+        - Must not retry on 4xx errors
+        - Max total wait time: 30 seconds
+
+        ## Edge Cases
+        - Connection reset mid-response
+        - Server returns 503 with Retry-After header
+
+        ## Success Criteria
+        - All transient errors retried up to 3 times
+        - Exponential backoff with jitter
+        - Configurable per-request
+
+  # Phase 2: Plan — Bite-sized tasks with file paths
+  - node: plan
+    output:
+      message:
+        role: assistant
+        text: |
+          ## Approach
+          Add a RetryTransport that wraps http.RoundTripper with configurable retry logic.
+
+          ## Tasks
+          1. Create retry config struct — pkg/httpclient/retry.go
+             Tests: pkg/httpclient/retry_test.go
+          2. Implement RetryTransport — pkg/httpclient/transport.go
+             Tests: pkg/httpclient/transport_test.go
+          3. Add per-request override via context — pkg/httpclient/context.go
+             Tests: pkg/httpclient/context_test.go
+
+          ## Test Strategy
+          Unit tests for retry logic, integration tests with httptest server.
+      response_text: |
+        ## Approach
+        Add a RetryTransport that wraps http.RoundTripper with configurable retry logic.
+
+        ## Tasks
+        1. Create retry config struct — pkg/httpclient/retry.go
+        2. Implement RetryTransport — pkg/httpclient/transport.go
+        3. Add per-request override via context — pkg/httpclient/context.go
+
+        ## Test Strategy
+        Unit tests for retry logic, integration tests with httptest server.
+
+  # Phase 3: TDD — Write tests first (RED phase)
+  - node: tdd
+    output:
+      message:
+        role: assistant
+        text: |
+          Created test files:
+          1. pkg/httpclient/retry_test.go — Tests for RetryConfig defaults and validation
+          2. pkg/httpclient/transport_test.go — Tests for retry behavior on 5xx, no retry on 4xx
+          3. pkg/httpclient/context_test.go — Tests for per-request config override
+
+          All tests are runnable and currently FAIL (RED phase complete).
+      response_text: |
+        Created test files:
+        1. pkg/httpclient/retry_test.go — Tests for RetryConfig defaults and validation
+        2. pkg/httpclient/transport_test.go — Tests for retry behavior on 5xx, no retry on 4xx
+        3. pkg/httpclient/context_test.go — Tests for per-request config override
+
+        All tests are runnable and currently FAIL (RED phase complete).
+
+  # Phase 4: Implement — Make tests pass (GREEN phase)
+  - node: implement
+    output:
+      message:
+        role: assistant
+        text: |
+          Implementation complete. All tests pass:
+          - pkg/httpclient/retry.go — RetryConfig with defaults
+          - pkg/httpclient/transport.go — RetryTransport with exponential backoff + jitter
+          - pkg/httpclient/context.go — Context-based per-request override
+          - go test ./pkg/httpclient/... → PASS (12 tests)
+      response_text: |
+        Implementation complete. All tests pass:
+        - pkg/httpclient/retry.go — RetryConfig with defaults
+        - pkg/httpclient/transport.go — RetryTransport with exponential backoff + jitter
+        - pkg/httpclient/context.go — Context-based per-request override
+        - go test ./pkg/httpclient/... → PASS (12 tests)
+
+  # Phase 5: Review — Structured code review (verdict: pass)
+  - node: review
+    output:
+      message:
+        role: assistant
+        text: |
+          Code review complete. The implementation is clean and follows existing patterns.
+      response_text: |
+        Code review complete. The implementation is clean and follows existing patterns.
+      response:
+        verdict: pass
+        summary: "Clean implementation with good separation of concerns. Retry logic is well-tested and follows existing HTTP client patterns."
+        issues: []
+        test_coverage: "Good coverage of happy paths and edge cases. 12 tests covering retry behavior, config validation, and context overrides."
+        follows_patterns: true
+      completed: true
+
+  # Phase 6: complete is a save_message node — no event needed
+
+expect:
+  outcome: completed
+  reached:
+    - brainstorm
+    - plan
+    - tdd
+    - implement
+    - review
+    - complete

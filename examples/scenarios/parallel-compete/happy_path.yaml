@@ -1,0 +1,133 @@
+# Happy Path: All 3 implementations complete, reviewer picks a winner
+#
+# Tests the most common successful path through parallel-compete:
+# 1. improve_prompt refines the task spec
+# 2. Three worktrees are created in parallel
+# 3. Three implementation agents run in parallel (black-box workflows)
+# 4. implementations_done join waits for all three
+# 5. Reviewer picks candidate 2 with use_winner strategy
+# 6. apply_winner runs rsync to copy winning implementation
+# 7. complete saves final summary
+#
+# This verifies the use_winner branch: when the reviewer decides one
+# implementation is clearly best, it gets applied directly via rsync.
+# The synthesizer node should be skipped entirely.
+
+name: happy_path
+description: All 3 implementations complete, reviewer selects candidate 2 via use_winner strategy
+
+events:
+  # Step 1: Prompt improvement (call_llm node)
+  - node: improve_prompt
+    output:
+      message:
+        role: assistant
+        text: |
+          ## Refined Specification
+          - Implement user authentication with OAuth and password support
+          - Include rate limiting on login endpoints
+          - Write unit tests for all auth flows
+      response_text: |
+        ## Refined Specification
+        - Implement user authentication with OAuth and password support
+        - Include rate limiting on login endpoints
+        - Write unit tests for all auth flows
+      tool_calls: []
+
+  # Step 2: Create worktrees (parallel)
+  - node: create_worktree_1
+    output:
+      id: "wt1"
+      name: "compete-impl-1"
+      path: "/tmp/worktrees/compete-impl-1"
+      branch: "compete-impl-1"
+      base_branch: "main"
+      repo_id: "test-repo"
+      status: "created"
+  - node: create_worktree_2
+    output:
+      id: "wt2"
+      name: "compete-impl-2"
+      path: "/tmp/worktrees/compete-impl-2"
+      branch: "compete-impl-2"
+      base_branch: "main"
+      repo_id: "test-repo"
+      status: "created"
+  - node: create_worktree_3
+    output:
+      id: "wt3"
+      name: "compete-impl-3"
+      path: "/tmp/worktrees/compete-impl-3"
+      branch: "compete-impl-3"
+      base_branch: "main"
+      repo_id: "test-repo"
+      status: "created"
+
+  # Step 3: Parallel implementations (workflow nodes - BLACK BOX outputs)
+  - node: impl_1
+    output:
+      message:
+        role: assistant
+        text: "Candidate 1: Basic password auth only, no OAuth."
+      response_text: "Candidate 1: Basic password auth only, no OAuth."
+
+  - node: impl_2
+    output:
+      message:
+        role: assistant
+        text: "Candidate 2: Full OAuth + password auth with comprehensive test suite."
+      response_text: "Candidate 2: Full OAuth + password auth with comprehensive test suite."
+
+  - node: impl_3
+    output:
+      message:
+        role: assistant
+        text: "Candidate 3: OAuth only, minimal tests."
+      response_text: "Candidate 3: OAuth only, minimal tests."
+
+  # Step 4: Review (structured-agent workflow - BLACK BOX)
+  - node: review
+    output:
+      message:
+        role: assistant
+        text: |
+          After reviewing all three implementations:
+          - Candidate 1: Basic but incomplete (missing OAuth)
+          - Candidate 2: Complete with good test coverage
+          - Candidate 3: Missing password auth
+      response_text: |
+        After reviewing all three implementations:
+        - Candidate 1: Basic but incomplete (missing OAuth)
+        - Candidate 2: Complete with good test coverage
+        - Candidate 3: Missing password auth
+      response:
+        winner: 2
+        strategy: "use_winner"
+        confidence: 8
+        rationale: "Candidate 2 has the most complete implementation with both OAuth and password auth, plus comprehensive tests."
+        synthesis_instructions: ""
+      completed: true
+
+  # Step 5: apply_winner rsync
+  - node: apply_winner
+    output:
+      exit_code: 0
+      stdout: "sent 1234 bytes  received 56 bytes\n"
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - improve_prompt
+    - save_improved_prompt
+    - create_worktree_1
+    - create_worktree_2
+    - create_worktree_3
+    - impl_1
+    - impl_2
+    - impl_3
+    - review
+    - apply_winner
+    - complete
+  not_reached:
+    - synthesizer

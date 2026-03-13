@@ -1,110 +1,133 @@
 name: auditing-agent
 apiVersion: "0.0.5"
-description: Agent with continuous audit oversight on every turn
+description: |
+  Agent with per-turn audit oversight. Main agent generates response, auditor (cheap model)
+  reviews it. If denied, guidance is injected and tools are NOT executed. If approved, response
+  is saved and tools run. Main agent response is deferred until audit approval to keep thread clean.
+  The auditor replaces the manual approval gate — there is no separate "mode" input because
+  every turn is automatically audited.
+presets:
+  tag: agent
+  default: general
+
 inputs:
-  agent:
+  # Top-level agent inputs (subset of builtin://agent — mode is intentionally omitted;
+  # the auditor serves as the approval gate, replacing manual/auto/plan mode switching)
+  model:
+    type: model
+    description: Model for main agent
+    default:
+      tags: ["flagship"]
+      providers: ["anthropic"]
+  system_prompt:
+    type: string
+    default: ""
+    description: System prompt for main agent
+  temperature:
+    type: number
+    default: 1
+    description: Temperature for main agent
+    min: 0
+    max: 1
+  thinking_level:
+    type: enum
+    enum: [low, medium, high, xhigh]
+    default: medium
+    description: Extended thinking level for main agent
+  tools:
+    type: tools
+    default:
+      - tag:default
+    description: Available tools for main agent
+  spawn_presets:
+    type: preset
+    tags: [agent]
+    multi: true
+    default: []
+    description: Presets available for main agent's spawn tool
+  max_turns:
+    type: integer
+    default: 200
+    description: Maximum agent loop iterations
+    min: 1
+    max: 500
+  compaction_threshold:
+    type: integer
+    default: 185000
+    description: Token count to trigger context compaction
+    min: 10000
+
+  yield:
+    type: boolean
+    default: false
+    description: When true, wait for user interaction after agent completes before returning
+    ui: hidden
+
+  # Auditor-specific inputs (grouped)
+  auditor:
     type: group
-    description: Settings for the main agent being audited
-    ui: toolbar
-    presets:
-      tag: agent
-      default: general
+    description: Settings for the audit oversight model
     inputs:
-      compaction_threshold:
-        type: integer
-        default: 185000
-        description: Token count to trigger context compaction
-        min: 10000
-      max_turns:
-        type: integer
-        default: 200
-        description: Maximum agent loop iterations
-        min: 1
-        max: 500
-      mode:
-        type: enum
-        default: auto
-        description: "Execution mode: manual = requires approval, auto = auto-approves, plan = read-only tools"
+      # Cheap/fast/local: auditor runs every turn, doesn't need flagship intelligence
       model:
         type: model
-        description: Model for main agent
+        description: Model for the auditor (should be cheap/fast)
         default:
-          tags: ["flagship"]
-          providers: ["anthropic"]
+          tags: [fast, cheap]
+          providers: [local]
       system_prompt:
         type: string
-        default: ""
-        description: System prompt for main agent
-      temperature:
-        type: number
-        default: 1
-        description: Temperature for main agent
-        min: 0
-        max: 1
-      thinking_level:
-        type: enum
-        default: low
-        description: Extended thinking level for main agent
-      tools:
-        type: tools
-        default:
-          - tag:default
-        description: Available tools for main agent
-      spawn_presets:
-        type: preset
-        tags: [agent]
-        multi: true
-        default: []
-        description: Presets available for main agent's spawn tool
-  auditor_model:
-    type: model
-    description: Model for the auditor
-    default:
-      tags: [fast, cheap]
-      providers: [local]
-  auditor_system_prompt:
-    type: string
-    default: |
-      You are a principal code auditor, auditing a junior engineer's work. Your job is to gate actions based on safety, correctness, and code quality.
+        default: |
+          You are a principal code auditor, auditing a junior engineer's work. Your job is to gate actions based on safety, correctness, and code quality.
 
-      You MUST use the audit tool to report your findings.
+          You MUST use the audit tool to report your findings.
 
-      Default to APPROVE when safe and clearly helpful. DENY when policy is violated, risk is unclear, quality is unacceptable, or the agent is going off-task.
+          Default to APPROVE when safe and clearly helpful. DENY when policy is violated, risk is unclear, quality is unacceptable, or the agent is going off-task.
 
-      # Hard DENY rules
-      - Creating fallbacks which mask bugs
-      - No use of `pkill` command - use BashList and BashKill instead
-      - No private secrets in committed code
-      - Don't allow view + edit in the same message
-      - Skipping tests or writing fake tests
-      - Making assumptions without verification steps
+          # Hard DENY rules
+          - Creating fallbacks which mask bugs
+          - No use of `pkill` command - use BashList and BashKill instead
+          - No private secrets in committed code
+          - Don't allow view + edit in the same message
+          - Skipping tests or writing fake tests
+          - Making assumptions without verification steps
 
-      # Quality gates
-      DENY if: scope creep, claims without evidence, no definition of done, big-bang refactors, complexity increases without payoff.
-    description: System prompt for the auditor
+          # Quality gates
+          DENY if: scope creep, claims without evidence, no definition of done, big-bang refactors, complexity increases without payoff.
+        description: System prompt for the auditor
+
+outputs:
+  message: "{{nodes.audited_loop.message}}"
+  response_text: "{{nodes.audited_loop.response_text}}"
+
+entry: [audited_loop]
+
 nodes:
   - id: audited_loop
     type: loop
-    while: (outputs.tool_calls != null && size(outputs.tool_calls) > 0) && iter.iteration < inputs.agent.max_turns
+    while: (outputs.tool_calls != null && size(outputs.tool_calls) > 0) && iter.iteration < inputs.max_turns
+    yield: "{{inputs.yield || iter.iteration >= inputs.max_turns}}"
     inline:
       name: audited_loop (Loop Body)
       description: Inline loop body for audited_loop
       outputs:
         tool_calls: "{{nodes.main_agent.tool_calls}}"
+        message: "{{nodes.main_agent.message}}"
+        response_text: "{{nodes.main_agent.response_text}}"
       nodes:
         - id: main_agent
           type: call_llm
           args:
-            model: "{{inputs.agent.model}}"
-            system_prompt: "{{inputs.agent.system_prompt}}"
-            temperature: "{{inputs.agent.temperature}}"
-            thinking_level: "{{inputs.agent.thinking_level}}"
-            tool_filter: "{{inputs.agent.tools}}"
+            model: "{{inputs.model}}"
+            system_prompt: "{{inputs.system_prompt}}"
+            temperature: "{{inputs.temperature}}"
+            thinking_level: "{{inputs.thinking_level}}"
+            tool_filter: "{{inputs.tools + [spawn(workflow.name, inputs.spawn_presets)]}}"
         - id: audit_check
           type: call_llm
           args:
-            model: "{{inputs.auditor_model}}"
-            system_prompt: "{{inputs.auditor_system_prompt}}"
+            model: "{{inputs.auditor.model}}"
+            system_prompt: "{{inputs.auditor.system_prompt}}"
             messages:
               - role: user
                 content: |
@@ -113,7 +136,7 @@ nodes:
                   Agent just responded:
                   {{nodes.main_agent.response_text}}
 
-                  {{nodes.main_agent.tool_calls != null && size(nodes.main_agent.tool_calls) > 0 ? 'Tool calls pending: ' + string(size(nodes.main_agent.tool_calls)) : 'No tool calls'}}
+                  {{nodes.main_agent.tool_calls != null && size(nodes.main_agent.tool_calls) > 0 ? 'Tool calls pending:\n' + string(nodes.main_agent.tool_calls) : 'No tool calls'}}
 
                   Use the audit tool to report whether the agent is on track.
             response_tool:
@@ -132,25 +155,26 @@ nodes:
                   - approved
             tool_filter:
               - audit
+        # Only save non-empty guidance (empty on approval pollutes context)
         - id: execute_audit
           type: execute_tools
           args:
             tool_calls: "{{nodes.audit_check.tool_calls}}"
           save_message:
             condition: >-
-              has(output.response_data) && 'audit' in output.response_data &&
+              has(output.response_data) && output.response_data != null && 'audit' in output.response_data &&
               has(output.response_data.audit.guidance) && output.response_data.audit.guidance != ''
             role: user
             content: |
               **AUDIT FEEDBACK**:
 
               {{output.response_data.audit.guidance}}
+        # Deferred save: main_agent message only saved if approved (keeps thread clean)
         - id: save_approved_response
           type: save_message
           args:
             content: "{{nodes.main_agent.message.text}}"
             role: "{{nodes.main_agent.message.role}}"
-            thinking: "{{nodes.main_agent.thinking}}"
             tool_calls: "{{nodes.main_agent.tool_calls}}"
         - id: execute_tools
           type: execute_tools
@@ -176,7 +200,7 @@ nodes:
           cases:
             - to: save_approved_response
               condition: >-
-                has(nodes.execute_audit.response_data) && 'audit' in nodes.execute_audit.response_data &&
+                has(nodes.execute_audit.response_data) && nodes.execute_audit.response_data != null && 'audit' in nodes.execute_audit.response_data &&
                 nodes.execute_audit.response_data.audit.approved == true
               label: approved
         - from: save_approved_response
@@ -187,9 +211,55 @@ nodes:
         - from: execute_tools
           cases:
             - to: compact
-              condition: nodes.execute_tools.thread_token_count > inputs.agent.compaction_threshold
+              condition: nodes.execute_tools.thread_token_count > inputs.compaction_threshold
               label: compact
-      entry: main_agent
-    thread:
-      mode: inherit
-entry: audited_loop
+      entry: [main_agent]
+      ui:
+        positions:
+          workflow:
+            x: 50
+            y: 200
+          main_agent:
+            x: 400
+            y: 200
+          audit_check:
+            x: 750
+            y: 200
+          execute_audit:
+            x: 1100
+            y: 100
+          save_approved_response:
+            x: 1450
+            y: 200
+          execute_tools:
+            x: 1800
+            y: 200
+          compact:
+            x: 2150
+            y: 200
+
+  - id: max_turns_notification
+    type: save_message
+    args:
+      role: "system"
+      display_style: "warning"
+      content: "Agent reached maximum iteration limit ({{inputs.max_turns}} turns). The conversation will pause — send a message to continue."
+
+edges:
+  - from: audited_loop
+    cases:
+      - to: max_turns_notification
+        condition: nodes.audited_loop._iterations >= inputs.max_turns
+        label: "max_turns_reached"
+
+ui:
+  positions:
+    workflow:
+      x: 150
+      y: 270
+    audited_loop:
+      x: 500
+      y: 254
+    max_turns_notification:
+      x: 950
+      y: 283

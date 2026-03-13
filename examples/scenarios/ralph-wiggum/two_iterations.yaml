@@ -1,0 +1,57 @@
+# Two Iterations: Loop runs twice before exiting
+#
+# Tests the loop re-iteration when work remains:
+# 1. Iteration 0: orient → implement → verify returns tasks_remaining=true
+# 2. While condition: tasks_remaining == true → re-iterate
+# 3. Iteration 1: orient → implement → verify returns tasks_remaining=false
+# 4. While condition: tasks_remaining == false → loop exits
+#
+# Verifies the loop correctly continues when tasks remain and exits
+# when all tasks are completed on a subsequent iteration.
+
+name: two_iterations
+description: First verify says tasks remain, second says all done
+
+events:
+  # Iteration 0 — first task done, more remain
+  - node: task_loop.orient
+    output:
+      response_text: "Task chosen: create database schema for users table."
+
+  - node: task_loop.implement
+    output:
+      response_text: "Created users table migration with id, email, password_hash columns."
+
+  - node: task_loop.verify
+    output:
+      response:
+        summary: "Users table schema created. Still need API endpoints."
+        tasks_remaining: true
+        issues: []
+
+  # Iteration 1 — second task completes everything
+  - node: task_loop.orient
+    output:
+      response_text: "Task chosen: implement CRUD API endpoints for users."
+
+  - node: task_loop.implement
+    output:
+      response_text: "Implemented GET/POST/PUT/DELETE /users endpoints with validation."
+
+  - node: task_loop.verify
+    output:
+      response:
+        summary: "All API endpoints implemented and tested. Spec is fully satisfied."
+        tasks_remaining: false
+        issues: []
+
+expect:
+  outcome: completed
+  reached:
+    - task_loop
+    - task_loop.orient
+    - task_loop.implement
+    - task_loop.verify
+  node_outputs:
+    task_loop:
+      tasks_remaining: false

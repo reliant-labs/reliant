@@ -1,0 +1,213 @@
+name: spec-driven
+apiVersion: "0.0.5"
+description: |
+  Spec-first development. Define what you want before how to build it.
+
+  Inspired by GitHub Spec Kit / Kiro: specify requirements → plan technical approach → implement. https://github.com/github/spec-kit
+
+  Thread architecture:
+    Main thread: [user msg] → [requirements] → [technical plan] → [implementation summary] → [complete]
+    Each agent step forks so internal conversation stays isolated — only summaries are saved back.
+
+entry: [specify]
+
+inputs:
+  model:
+    type: model
+    description: Model used for all LLM sub-agents
+    default:
+      tags: [flagship]
+
+  mode:
+    type: enum
+    ui: toolbar
+    default: auto
+    description: Execution mode for agent steps.
+    enum: [manual, auto, plan]
+
+  temperature:
+    type: number
+    default: 1.0
+    min: 0
+    max: 1
+    description: Response randomness
+
+  thinking_level:
+    type: enum
+    enum: [low, medium, high, xhigh]
+    default: high
+    description: Extended thinking level (default high for analytical phases)
+
+  yield:
+    type: boolean
+    ui: toolbar
+    default: true
+    description: Pause for user review after each phase.
+
+nodes:
+  # ── Phase 1: Specify Requirements ─────────────────────────────────────────
+  #
+  # Define WHAT and WHY. No technology decisions, no architecture — just requirements.
+  # Forks from main thread so the requirements conversation stays isolated.
+  # Only the final requirements summary is saved to the main thread.
+
+  - id: specify
+    type: workflow
+    ref: builtin://agent
+    presets:
+      default: researcher
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+      yield: "{{inputs.yield}}"
+      temperature: "{{inputs.temperature}}"
+      thinking_level: "{{inputs.thinking_level}}"
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Step: Specify Requirements
+
+          You are in the **requirements specification** phase. Your job is to clearly define WHAT needs to be built and WHY.
+
+          **Do:**
+          - Analyze the user's request and break it into clear, numbered requirements
+          - Assign each requirement an ID (REQ-001, REQ-002, etc.) for traceability
+          - Define acceptance criteria as concrete, verifiable conditions
+          - Examine the codebase to understand existing constraints and patterns
+          - Identify edge cases and constraints
+
+          **Requirement format (use this structure):**
+          - **REQ-001**: WHEN [trigger/condition] THE SYSTEM SHALL [observable behavior]
+            - Acceptance: [concrete pass/fail test]
+            - Priority: must-have | nice-to-have
+
+          **Do NOT:**
+          - Make technology or architecture decisions
+          - Write any code or pseudocode
+          - Discuss implementation details
+          - Guess when uncertain — mark ambiguities as: **[NEEDS CLARIFICATION: specific question]**
+
+          **Output:**
+          1. **Goal** — What problem are we solving?
+          2. **Requirements** — Numbered list using the format above
+          3. **Constraints** — Limitations, compatibility needs, performance targets
+          4. **Out of Scope** — What we are explicitly NOT doing
+    save_message:
+      role: assistant
+      content: |
+        ## Requirements
+        {{output.response_text}}
+
+  # ── Phase 2: Plan Technical Approach ──────────────────────────────────────
+  #
+  # Define HOW. Architecture decisions, file changes, dependencies.
+  # Sees the requirements from Phase 1 on the main thread.
+
+  - id: plan
+    type: workflow
+    ref: builtin://agent
+    presets:
+      default: planner
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+      yield: "{{inputs.yield}}"
+      temperature: "{{inputs.temperature}}"
+      thinking_level: "{{inputs.thinking_level}}"
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Step: Technical Plan
+
+          The requirements have been specified above (with REQ IDs). Create a concrete technical plan.
+
+          **Do:**
+          - Research the codebase to understand existing patterns and conventions
+          - Define architecture and key design decisions
+          - List specific files to create, modify, or delete
+          - Group independent tasks into waves for parallel execution
+
+          **Output:**
+          1. **Approach** — High-level strategy
+          2. **Architecture** — Key design decisions and why
+          3. **Task Breakdown** — Ordered tasks with file paths, grouped into waves:
+             Wave 1 (parallel): [independent tasks]
+             Wave 2 (parallel): [tasks depending on Wave 1]
+          4. **Dependencies** — What must happen before what
+          5. **Risks** — Potential issues and mitigations
+
+          **Traceability (required):**
+          - Map each task to the REQ ID(s) it satisfies
+          - Flag any REQs with no corresponding task
+          - Flag any tasks that don't trace to a REQ (scope creep)
+    save_message:
+      role: assistant
+      content: |
+        ## Technical Plan
+        {{output.response_text}}
+
+  # ── Phase 3: Implement ────────────────────────────────────────────────────
+  #
+  # Execute the plan. Sees requirements + technical plan on the main thread.
+
+  - id: implement
+    type: workflow
+    ref: builtin://agent
+    presets:
+      default: general
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+      yield: "{{inputs.yield}}"
+      temperature: "{{inputs.temperature}}"
+      thinking_level: "{{inputs.thinking_level}}"
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Step: Implement
+
+          The requirements (with REQ IDs) and technical plan are above. Execute the plan.
+
+          **Guidelines:**
+          - Follow the technical plan's task breakdown and wave structure
+          - Parallelize independent tasks using spawn
+          - Write tests alongside implementation
+          - Run tests to verify changes as you go
+          - If you discover the plan is wrong about something, implement the best solution and note the deviation and which REQ it affects
+    save_message:
+      role: assistant
+      content: |
+        ## Implementation Summary
+        {{output.response_text}}
+
+  # ── Phase 4: Complete ─────────────────────────────────────────────────────
+
+  - id: complete
+    type: save_message
+    args:
+      role: assistant
+      content: |
+        ## Complete
+        Spec-driven workflow finished. Requirements were specified, a technical plan was created, and implementation is complete. Review the conversation above for full details.
+
+outputs:
+  requirements: "{{nodes.specify.response_text}}"
+  plan: "{{nodes.plan.response_text}}"
+  implementation: "{{nodes.implement.response_text}}"
+
+edges:
+  - from: specify
+    default: plan
+  - from: plan
+    default: implement
+  - from: implement
+    default: complete

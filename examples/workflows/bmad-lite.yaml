@@ -1,0 +1,300 @@
+name: bmad-lite
+apiVersion: "0.0.5"
+description: |
+  BMAD-Lite — Simplified BMAD methodology with persona-driven planning. Inspired by https://github.com/bmad-code-org/BMAD-METHOD
+
+  Each phase uses a different persona (PM, Architect, Developer) via system_prompt
+  injection to simulate role-specific thinking. The PM defines vision and requirements,
+  the Architect designs the system, and the Developer implements it.
+
+  Phases:
+    1. Ideate — PM persona brainstorms and defines vision
+    2. Requirements — PM persona creates user stories and acceptance criteria
+    3. Architecture — Architect persona designs the system
+    4. Implement — Developer persona executes the plan
+    5. Complete — Summary
+
+  Thread architecture:
+    Main thread: [user msg] → [vision] → [requirements] → [architecture] → [implementation summary] → [complete]
+    Each agent step forks so internal conversation stays isolated — only summaries are saved back.
+
+entry: [ideate]
+
+inputs:
+  model:
+    type: model
+    description: Model used for all LLM sub-agents
+    default:
+      tags: [flagship]
+
+  mode:
+    type: enum
+    ui: toolbar
+    default: auto
+    description: Execution mode for agent steps.
+    enum: [manual, auto, plan]
+
+  yield:
+    type: boolean
+    ui: toolbar
+    default: true
+    description: Pause for user review after each phase.
+
+  temperature:
+    type: number
+    default: 1.0
+    min: 0
+    max: 1
+    description: Response randomness (0 = focused, 1 = creative)
+
+  thinking_level:
+    type: enum
+    enum: [low, medium, high, xhigh]
+    default: medium
+    description: Extended thinking level
+
+outputs:
+  vision: "{{nodes.ideate.response_text}}"
+  requirements: "{{nodes.requirements.response_text}}"
+  architecture: "{{nodes.architecture.response_text}}"
+  implementation: "{{nodes.implement.response_text}}"
+
+nodes:
+  # ── Phase 1: Ideate (PM Persona) ──────────────────────────────────────────
+  #
+  # The Product Manager brainstorms and defines the product vision.
+  # Focuses on the problem space, target users, and high-level value proposition.
+
+  - id: ideate
+    type: workflow
+    ref: builtin://agent
+    presets:
+      default: general
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+      yield: "{{inputs.yield}}"
+      temperature: "{{inputs.temperature}}"
+      thinking_level: "{{inputs.thinking_level}}"
+      system_prompt: |
+        You are acting as a **Product Manager** — specifically a visionary PM in the ideation phase.
+
+        **Your mindset:**
+        - Think about the problem from the user's perspective first — who has this pain and how acute is it?
+        - Focus on value, impact, and feasibility
+        - Challenge yourself: is this the right problem to solve, or just the most obvious one?
+        - Consider the competitive landscape and existing solutions
+
+        **Anti-patterns to avoid:**
+        - Don't jump to solutions — stay in problem space
+        - Don't assume a single user persona — consider who else is affected
+        - Don't scope the entire product — scope this iteration only
+        - Don't be vague — "improve user experience" is not a vision
+
+        **Quality bar:** If you can't articulate who the user is and what pain they have in 2 sentences, you haven't done your job.
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Phase: Ideation
+
+          The user's request is in the conversation above.
+
+          **Produce:**
+          1. **Problem Statement** — What problem are we solving and for whom?
+          2. **Vision** — What does success look like?
+          3. **Key Value Propositions** — Why will this solution matter?
+          4. **Scope Boundaries** — What's in scope vs. out of scope for this iteration?
+          5. **Risks & Open Questions** — What unknowns need to be resolved?
+
+          Keep it concise and actionable. This will feed directly into requirements.
+    save_message:
+      role: assistant
+      content: |
+        ## Product Vision
+        {{output.response_text}}
+
+  # ── Phase 2: Requirements (PM Persona) ─────────────────────────────────────
+  #
+  # The PM translates the vision into concrete user stories and acceptance criteria.
+  # Sees the vision from Phase 1 on the main thread.
+
+  - id: requirements
+    type: workflow
+    ref: builtin://agent
+    presets:
+      default: general
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+      yield: "{{inputs.yield}}"
+      temperature: "{{inputs.temperature}}"
+      thinking_level: "{{inputs.thinking_level}}"
+      system_prompt: |
+        You are acting as a **Product Manager** — specifically a disciplined PM translating vision into requirements.
+
+        **Your mindset:**
+        - Be precise and unambiguous — every requirement must be testable
+        - Think in terms of user stories with concrete acceptance criteria
+        - Prioritize ruthlessly — cut anything that isn't essential for this iteration
+        - If a requirement is vague, make it specific or mark it as needing clarification
+
+        **Anti-patterns to avoid:**
+        - Don't let scope creep in — defend the boundaries set in ideation
+        - Don't write requirements that are really implementation decisions
+        - Don't accept "works correctly" as acceptance criteria — define what correct means
+        - Don't include nice-to-haves disguised as must-haves
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Phase: Requirements
+
+          Above you'll find the **Product Vision** (problem statement, value propositions, scope boundaries).
+          Translate that vision into detailed, testable requirements.
+
+          **Produce:**
+          1. **User Stories** — As a [role], I want [capability], so that [benefit]
+          2. **Acceptance Criteria** — For each story, define specific pass/fail conditions
+          3. **Priority** — Must-have vs. should-have vs. could-have (MoSCoW)
+          4. **Constraints** — Technical, performance, or compatibility requirements
+          5. **Out of Scope** — What we are explicitly NOT doing
+
+          Do NOT make architecture or technology decisions. Focus purely on WHAT, not HOW.
+    save_message:
+      role: assistant
+      content: |
+        ## Requirements
+        {{output.response_text}}
+
+  # ── Phase 3: Architecture (Architect Persona) ──────────────────────────────
+  #
+  # The Architect designs the system based on the requirements.
+  # Sees vision + requirements from Phases 1-2 on the main thread.
+
+  - id: architecture
+    type: workflow
+    ref: builtin://agent
+    presets:
+      default: planner
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+      yield: "{{inputs.yield}}"
+      temperature: "{{inputs.temperature}}"
+      thinking_level: "{{inputs.thinking_level}}"
+      system_prompt: |
+        You are acting as a **Software Architect**. The product vision and requirements are defined above.
+
+        **Your mindset:**
+        - Research the codebase FIRST — understand existing patterns, conventions, and constraints before designing
+        - Favor simplicity and consistency with what already exists
+        - Think in terms of coupling, cohesion, data contracts, and failure modes
+        - Design for the requirements — no over-engineering
+        - Every component should be testable in isolation
+
+        **Anti-patterns to avoid:**
+        - Don't design in a vacuum — your architecture must fit the existing codebase
+        - Don't introduce new patterns when existing ones suffice
+        - Don't hand-wave the hard parts — if something is complex, break it down
+        - Don't ignore migration paths — how do we get from here to there?
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Phase: Architecture
+
+          Above you'll find the **Product Vision** and **Requirements** (user stories with acceptance criteria, MoSCoW priorities).
+          Design the technical solution to satisfy these requirements.
+
+          **Produce:**
+          1. **Technical Approach** — High-level strategy and key decisions
+          2. **Component Design** — How the pieces fit together
+          3. **File Changes** — Specific files to create, modify, or delete
+          4. **Data Flow** — How data moves through the system
+          5. **Task Breakdown** — Ordered implementation tasks, grouped for parallelization
+          6. **Risks & Mitigations** — Technical risks and how to handle them
+
+          Do NOT write code. Focus on the design so the Developer can execute efficiently.
+    save_message:
+      role: assistant
+      content: |
+        ## Architecture
+        {{output.response_text}}
+
+  # ── Phase 4: Implement (Developer Persona) ─────────────────────────────────
+  #
+  # The Developer implements the architecture.
+  # Sees vision + requirements + architecture from Phases 1-3 on the main thread.
+
+  - id: implement
+    type: workflow
+    ref: builtin://agent
+    presets:
+      default: general
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+      yield: "{{inputs.yield}}"
+      temperature: "{{inputs.temperature}}"
+      thinking_level: "{{inputs.thinking_level}}"
+      system_prompt: |
+        You are acting as a **Senior Developer**. The vision, requirements, and architecture are all defined above.
+
+        **Your mindset:**
+        - Follow the architecture closely — the Architect made the design decisions
+        - Write clean, idiomatic code that follows existing project conventions
+        - Test as you go — don't leave testing until the end
+        - If you discover a problem with the architecture, note it but implement the best solution you can
+
+        **Anti-patterns to avoid:**
+        - Don't deviate from the architecture without documenting why
+        - Don't skip tests for "simple" changes — everything gets tested
+        - Don't gold-plate — implement what's needed, nothing more
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Phase: Implementation
+
+          Above you'll find the **Product Vision**, **Requirements**, and **Architecture** (technical approach, component design, task breakdown).
+          Execute the architecture's task breakdown.
+
+          **Guidelines:**
+          - Implement in the order specified by the task breakdown
+          - Use spawn for independent tasks to maximize throughput
+          - Keep commits focused and atomic
+          - If you discover issues with the architecture, note them but still implement the best solution
+    save_message:
+      role: assistant
+      content: |
+        ## Implementation Summary
+        {{output.response_text}}
+
+  # ── Phase 5: Complete ──────────────────────────────────────────────────────
+
+  - id: complete
+    type: save_message
+    args:
+      role: assistant
+      content: |
+        ## BMAD-Lite Complete
+        The workflow has finished. A Product Manager defined the vision and requirements, an Architect designed the system, and a Developer implemented it. Review the conversation above for full details.
+
+edges:
+  - from: ideate
+    default: requirements
+  - from: requirements
+    default: architecture
+  - from: architecture
+    default: implement
+  - from: implement
+    default: complete

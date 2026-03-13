@@ -1,0 +1,62 @@
+# Max Retries Exhausted: Loop exits after hitting the retry limit
+#
+# Tests the loop's max_retries safeguard:
+# 1. max_retries set to 2 (low limit for testing)
+# 2. Iteration 0: review fails → re-iterate
+# 3. Iteration 1: review fails again → iter.iteration (2) == max_retries (2) → loop exits
+# 4. Workflow still completes (loop exhaustion is not an error)
+#
+# Verifies the loop correctly stops when max_retries is reached,
+# even if the last iteration still has failures.
+# The final review_grade will be 'fail' since it never passed.
+
+name: max_retries_exhausted
+description: Loop exits after max_retries iterations without passing review
+
+inputs:
+  steps: [implement, code_review]
+  max_retries: 2
+
+events:
+  # Iteration 0 — review fails
+  - node: impl_loop.implement
+    output:
+      response_text: "First implementation attempt."
+
+  - node: impl_loop.code_review
+    output:
+      response:
+        grade: fail
+        summary: "Fundamental design flaw."
+        suggestions:
+          - "Rethink the data model"
+
+  # Iteration 1 — review fails again (max_retries reached, loop exits)
+  - node: impl_loop.implement
+    output:
+      response_text: "Second attempt, still flawed."
+
+  - node: impl_loop.code_review
+    output:
+      response:
+        grade: fail
+        summary: "Still has design issues."
+        suggestions:
+          - "Consider a different approach entirely"
+
+expect:
+  outcome: completed
+  reached:
+    - planning
+    - impl_loop
+    - impl_loop.implement
+    - impl_loop.join_checks
+    - impl_loop.code_review
+    - complete
+  not_reached:
+    - planning.plan
+    - write_tests
+    - start_app
+    - impl_loop.lint
+    - impl_loop.test
+    - impl_loop.build

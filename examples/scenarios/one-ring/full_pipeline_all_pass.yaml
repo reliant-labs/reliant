@@ -1,0 +1,69 @@
+# Full Pipeline: All steps enabled, everything passes first try
+#
+# Tests the maximum configuration with all steps enabled:
+# 1. Planning produces a plan
+# 2. TDD writes tests
+# 3. Implementation runs
+# 4. Lint, test, and build all pass (exit_code: 0)
+# 5. Code review passes → loop exits after 1 iteration
+#
+# Verifies every node is reached when all steps are active.
+# Note: start_app is NOT included here — see start_app_with_ux_review.yaml for that.
+
+name: full_pipeline_all_pass
+description: All steps enabled (plan, tdd, implement, lint, test, build, code_review), all pass
+
+inputs:
+  steps: [plan, tdd, implement, lint, test, build, code_review]
+
+events:
+  # Planning
+  - node: planning.plan
+    output:
+      response_text: "Comprehensive plan for the feature."
+
+  # TDD
+  - node: write_tests
+    output:
+      response_text: "Wrote failing unit and integration tests."
+
+  # Implementation loop — iteration 0
+  - node: impl_loop.implement
+    output:
+      response_text: "Full implementation complete."
+
+  - node: impl_loop.lint
+    output:
+      exit_code: 0
+
+  - node: impl_loop.test
+    output:
+      exit_code: 0
+
+  - node: impl_loop.build
+    output:
+      exit_code: 0
+
+  - node: impl_loop.code_review
+    output:
+      response:
+        grade: pass
+        summary: "Excellent implementation. All checks pass."
+        suggestions: []
+
+expect:
+  outcome: completed
+  reached:
+    - planning
+    - planning.plan
+    - write_tests
+    - impl_loop
+    - impl_loop.implement
+    - impl_loop.lint
+    - impl_loop.test
+    - impl_loop.build
+    - impl_loop.join_checks
+    - impl_loop.code_review
+    - complete
+  not_reached:
+    - start_app

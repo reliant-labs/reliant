@@ -1,0 +1,51 @@
+# Happy Path: Text-only response, audit approved, loop exits
+#
+# Tests the simplest successful path through auditing-agent:
+# 1. main_agent responds with text only (no tool calls)
+# 2. audit_check reviews and calls the audit response tool
+# 3. execute_audit runs the audit tool, returns approved=true (no guidance)
+# 4. save_approved_response saves the agent message to thread
+# 5. Loop exits because tool_calls is empty
+#
+# execute_tools is skipped because there are no tool calls to run.
+# The audit guidance is empty, so the execute_audit save_message condition
+# is false — no audit feedback message is saved.
+
+name: text_only_approved
+description: Agent responds with text only, auditor approves, loop exits after 1 iteration
+
+events:
+  # main_agent responds with text only — no tool calls
+  - node: audited_loop.main_agent
+    type: llm_response
+    text: "I can help you with that. Here's my answer."
+
+  # audit_check calls the audit response tool to approve
+  - node: audited_loop.audit_check
+    type: llm_response
+    text: ""
+    tool_calls:
+      - name: audit
+        input:
+          approved: true
+          guidance: ""
+
+  # execute_audit: audit tool returns approved, no guidance
+  - node: audited_loop.execute_audit
+    type: tool_result
+    tool: audit
+    output:
+      approved: true
+      guidance: ""
+
+expect:
+  outcome: completed
+  reached:
+    - audited_loop
+    - audited_loop.main_agent
+    - audited_loop.audit_check
+    - audited_loop.execute_audit
+    - audited_loop.save_approved_response
+  not_reached:
+    - audited_loop.execute_tools  # No tool calls from main_agent
+    - audited_loop.compact

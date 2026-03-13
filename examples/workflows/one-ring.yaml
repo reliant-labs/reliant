@@ -1,0 +1,696 @@
+name: one-ring
+apiVersion: "0.0.5"
+description: |
+  Unified development pipeline: planning → write_tests → start_app → [simplify → refactor? → implement → lint/test/build → code_review] (loop) → complete.
+
+  Planning runs in a sub-workflow fork with optional research/criticize/revise steps.
+  Only the final plan summary is saved to the main thread.
+
+  The simplify-first gate inspects the codebase before each implementation attempt and can
+  trigger a targeted refactor before implementation proceeds. On re-entry after failure,
+  the gate also has retrospective context about what went wrong.
+
+  The implementation loop repeats when lint/test/build fail or code review fails, up to max_retries.
+  Iterations accumulate on the main thread so the implement agent sees previous feedback.
+
+  Thread architecture:
+    Main thread: [user msg] → [final plan] → [test summary] → [simplify assessment] → [refactor summary?] → [impl summary] → [check results] → [review] → ...
+    Planning fork: [user msg] → [research?] → [plan conversation] → [criticize?] → [revise?]  (discarded after plan saved)
+    Each agent fork: [parent context snapshot] → [agent conversation]  (only summary saved back)
+
+entry: [planning]
+
+inputs:
+  mode:
+    type: enum
+    ui: toolbar
+    default: auto
+    description: Execution mode for agent steps.
+    enum: [manual, auto, plan]
+
+  model:
+    type: model
+    description: Model used for all LLM sub-agents in this pipeline
+    default:
+      tags: [flagship]
+
+  steps:
+    type: enum
+    ui: toolbar
+    default: [plan, simplify, implement, code_review]
+    description: Steps to include in the pipeline.
+    multi: true
+    enum:
+      - research    # Research phase before planning
+      - plan
+      - criticize   # Critique the plan
+      - revise      # Revise the plan based on critique
+      - simplify    # Simplify-first gate before each implementation attempt
+      - tdd         # Enables write_tests
+      - implement
+      - lint
+      - test
+      - build
+      - start_app   # Start dev server before impl loop (enables UX sub-review)
+      - code_review
+
+  yield:
+    type: boolean
+    ui: toolbar
+    default: true
+    description: Pause for user review after plan and implement steps.
+
+  max_retries:
+    type: integer
+    default: 3
+    min: 1
+    max: 10
+    description: Maximum implementation loop iterations before giving up.
+
+  max_simplify:
+    type: integer
+    default: 1
+    min: 0
+    max: 5
+    description: Maximum number of simplify_first verdicts (refactor-before-implement) per workflow run. After this cap, the simplify gate still runs but its verdict is ignored.
+
+  lint_command:
+    type: string
+    default: npm run lint
+    description: Command to run linting.
+
+  lint_log:
+    type: string
+    default: ./data/one-ring/lint.log
+    description: File path for lint output.
+
+  test_command:
+    type: string
+    default: npm test
+    description: Command to run tests.
+
+  test_log:
+    type: string
+    default: ./data/one-ring/test.log
+    description: File path for test output.
+
+  build_command:
+    type: string
+    default: npm run build
+    description: Command to run builds.
+
+  build_log:
+    type: string
+    default: ./data/one-ring/build.log
+    description: File path for build output.
+
+  start_app_command:
+    type: string
+    default: npm run dev
+    description: Command to start the application for UX review.
+
+  app_port:
+    type: integer
+    default: 5173
+    description: Port the application runs on (for UX reviewer to connect to).
+
+# Thread design:
+# - Planning forks from main thread (gets user msg). Each sub-step forks again.
+#   Only the final plan is saved to main. Research/criticism stays in forks.
+# - write_tests forks from main: sees only [user msg, final plan]. Clean.
+# - impl_loop is passthrough (loops always inherit parent thread): iterations accumulate so implement sees previous feedback.
+# - simplify_gate, refactor, implement, and code_review fork within the loop:
+#   agent conversations stay isolated, only summaries written back to main thread.
+# - On iteration 1+, the main thread already has iter 0's summaries and review feedback,
+#   so the simplify gate fork sees the retrospective context automatically.
+
+nodes:
+  # ── Planning phase (sub-workflow, runs once) ────────────────────────────────
+  #
+  # Forks from main thread. Inner nodes each fork again (double fork).
+  # Only the plan summary is saved to the main thread.
+  # Supports optional research → plan → criticize → revise pipeline.
+
+  - id: planning
+    type: workflow
+    thread:
+      mode: fork
+      memo: false
+    inline:
+      entry: [research]
+
+      outputs:
+        plan_summary: >
+          {{has(nodes.revise) && has(nodes.revise.response_text)
+            ? nodes.revise.response_text
+            : has(nodes.plan) && has(nodes.plan.response_text)
+              ? nodes.plan.response_text
+              : ''}}
+
+      nodes:
+        - id: research
+          type: workflow
+          condition: "'research' in inputs.steps"
+          ref: builtin://agent
+          presets:
+            default: researcher
+          args:
+            model: "{{inputs.model}}"
+            mode: "{{inputs.mode}}"
+          thread:
+            mode: fork
+            memo: false
+            inject:
+              role: user
+              content: |
+                ## Pipeline Step: Research
+                Gather context, constraints, and relevant information before planning.
+                Explore the codebase, read documentation, and identify key patterns.
+          save_message:
+            role: assistant
+            content: |
+              ## Research Findings
+              {{output.response_text}}
+
+        - id: plan
+          type: workflow
+          condition: "'plan' in inputs.steps"
+          ref: builtin://agent
+          presets:
+            default: planner
+          args:
+            model: "{{inputs.model}}"
+            yield: "{{inputs.yield}}"
+            mode: "{{inputs.mode}}"
+          thread:
+            mode: fork
+            memo: false
+            inject:
+              role: user
+              content: |
+                ## Pipeline Step: Plan
+                Produce a concise, actionable plan aligned with the task.
+
+                **Spawn researchers** to investigate the codebase before planning. Delegate all investigation
+                to researcher agents — they use cheaper models and free you to focus on synthesis.
+
+                Structure the plan to maximize parallelization — group independent tasks that can run
+                concurrently and explicitly call out dependencies between tasks.
+          save_message:
+            role: assistant
+            content: |
+              ## Plan
+              {{output.response_text}}
+
+        - id: criticize
+          type: workflow
+          condition: "'criticize' in inputs.steps"
+          ref: builtin://agent
+          presets:
+            default: planner
+          args:
+            model: "{{inputs.model}}"
+            mode: "{{inputs.mode}}"
+          thread:
+            mode: fork
+            memo: false
+            inject:
+              role: user
+              content: |
+                ## Pipeline Step: Criticize
+                Critique the current plan. Identify risks, gaps, overcomplications, and potential issues.
+                Be specific — point to concrete problems, not vague concerns.
+          save_message:
+            role: assistant
+            content: |
+              ## Plan Critique
+              {{output.response_text}}
+
+        - id: revise
+          type: workflow
+          condition: "'revise' in inputs.steps"
+          ref: builtin://agent
+          presets:
+            default: planner
+          args:
+            model: "{{inputs.model}}"
+            mode: "{{inputs.mode}}"
+          thread:
+            mode: fork
+            memo: false
+            inject:
+              role: user
+              content: |
+                ## Pipeline Step: Revise
+                Revise the plan based on the critique. Address the identified risks and gaps.
+                Produce a final, improved plan.
+          save_message:
+            role: assistant
+            content: |
+              ## Revised Plan
+              {{output.response_text}}
+
+      edges:
+        - from: research
+          default: plan
+        - from: plan
+          default: criticize
+        - from: criticize
+          default: revise
+      ui:
+        positions:
+          workflow:
+            x: 50
+            y: 200
+          research:
+            x: 400
+            y: 200
+          plan:
+            x: 750
+            y: 200
+          criticize:
+            x: 1100
+            y: 200
+          revise:
+            x: 1450
+            y: 200
+
+    save_message:
+      role: assistant
+      content: >-
+        {{output.plan_summary != '' ? '## Final Plan\n' + output.plan_summary : ''}}
+
+  # ── TDD (runs once, clean context) ─────────────────────────────────────────
+  #
+  # Forks from main thread which at this point has: [user msg, final plan].
+  # No research details, no criticism — just what the test writer needs.
+
+  - id: write_tests
+    type: workflow
+    condition: "'tdd' in inputs.steps"
+    ref: builtin://agent
+    presets:
+      default: tester
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Pipeline Step: Write Tests (TDD)
+          Write failing tests for the planned functionality before implementation.
+          Focus on:
+          - Unit tests for the core logic
+          - Edge cases and error conditions
+          - Integration points if applicable
+          
+          The tests should fail initially — they will pass after implementation.
+    save_message:
+      role: assistant
+      content: |
+        ## Test Suite Created
+        {{output.response_text}}
+
+  # Start the dev server before the impl loop so it persists across iterations.
+  - id: start_app
+    type: run
+    condition: "'start_app' in inputs.steps"
+    command: "{{inputs.start_app_command}} &"
+
+  # ── Implementation loop (repeats on failure) ────────────────────────────────
+  #
+  # Inherits main thread: iterations accumulate so the implement agent on iteration N+1
+  # sees the code review feedback and lint/test/build errors from iteration N.
+  #
+  # Each iteration:
+  #   1. stash_failed: git stash any changes from prior failed iteration (iter 1+)
+  #   2. simplify_gate: structured agent reviews codebase — proceed or simplify_first?
+  #   3. refactor: (conditional) targeted refactoring based on simplify instructions
+  #   4. implement: implementation agent
+  #   5. lint/test/build: parallel checks
+  #   6. code_review: structured code review
+  #
+  # Main thread at loop entry: [user msg, final plan, test summary]
+  # After iteration 0:        + [simplify assessment, refactor summary?, impl summary, check results, review]
+  # After iteration 1:        + [simplify assessment, refactor summary?, impl summary, check results, review] → loop exits
+
+  - id: impl_loop
+    type: loop
+    while: >
+      (
+        (has(outputs.lint_exit) && outputs.lint_exit != 0) ||
+        (has(outputs.test_exit) && outputs.test_exit != 0) ||
+        (has(outputs.build_exit) && outputs.build_exit != 0) ||
+        (has(outputs.review_grade) && outputs.review_grade == 'fail')
+      ) && iter.iteration < inputs.max_retries
+    inline:
+      entry: [stash_failed]
+
+      outputs:
+        lint_exit: "{{has(nodes.lint) && has(nodes.lint.exit_code) ? nodes.lint.exit_code : 0}}"
+        test_exit: "{{has(nodes.test) && has(nodes.test.exit_code) ? nodes.test.exit_code : 0}}"
+        build_exit: "{{has(nodes.build) && has(nodes.build.exit_code) ? nodes.build.exit_code : 0}}"
+        review_grade: "{{has(nodes.code_review) && has(nodes.code_review.response) && nodes.code_review.response != null ? nodes.code_review.response.grade : 'pass'}}"
+
+      nodes:
+        # Git stash any changes from the prior failed iteration.
+        # On iteration 0 this is a no-op (nothing to stash).
+        - id: stash_failed
+          type: run
+          command: "git stash push --include-untracked -m 'one-ring-iter-{{iter.iteration}}' 2>/dev/null || true"
+
+        # ── Simplify-first gate ──────────────────────────────────────────────
+        #
+        # Structured agent that reviews the codebase and plan, deciding whether
+        # targeted refactoring should precede implementation.
+        #
+        # On iter 0: sees the plan + existing code that will be touched
+        # On iter 1+: also sees prior implementation summary and failure reasons
+        #   (because the main thread accumulates across iterations)
+
+        - id: simplify_gate
+          type: workflow
+          condition: "'simplify' in inputs.steps"
+          ref: builtin://structured-agent
+          presets:
+            default: simplifier
+          args:
+            model: "{{inputs.model}}"
+            mode: auto
+            response_tool_name: submit_simplify_review
+            response_tool_description: "Submit your simplify-first assessment. Default to 'proceed' unless there is a clear structural improvement needed."
+            response_schema:
+              type: object
+              required: [verdict, reason]
+              properties:
+                verdict:
+                  type: string
+                  enum: [proceed, simplify_first]
+                  description: "'proceed' to implement directly, 'simplify_first' to refactor before implementing"
+                reason:
+                  type: string
+                  description: "Explanation of your decision"
+                refactor_instructions:
+                  type: string
+                  description: "Specific, actionable refactoring instructions. Required when verdict is simplify_first."
+                files_to_refactor:
+                  type: array
+                  items:
+                    type: string
+                  description: "Files that should be refactored. Optional."
+          thread:
+            mode: fork
+            memo: false
+            inject:
+              role: user
+              content: |
+                ## Simplify-First Assessment
+
+                Review the current codebase and plan. Should we refactor existing code before implementing?
+
+                **Default to `proceed`** unless there is a clear, specific structural improvement that would
+                make the upcoming implementation significantly simpler or less risky.
+
+                Simplify budget for this workflow run: {{inputs.max_simplify}}.
+                If the budget is 0, you MUST respond with verdict: proceed.
+          save_message:
+            role: assistant
+            content: |
+              ## Simplify Assessment: {{output.response.verdict}}
+              {{output.response.reason}}
+              {{has(output.response.refactor_instructions) && output.response.refactor_instructions != null && output.response.refactor_instructions != '' ? '\n### Refactor Instructions\n' + output.response.refactor_instructions : ''}}
+              {{has(output.response.files_to_refactor) && output.response.files_to_refactor != null && size(output.response.files_to_refactor) > 0 ? '\n### Target Files\n' + output.response.files_to_refactor.map(f, '- ' + f).join('\n') : ''}}
+
+        # ── Refactor (conditional on simplify_first verdict) ─────────────────
+        #
+        # Only runs when the simplify gate recommends refactoring.
+        # Receives the refactor instructions and target files from the gate.
+        # Runs in a fork — only the summary is saved to the main thread.
+
+        - id: refactor
+          type: workflow
+          condition: >
+            has(nodes.simplify_gate)
+            && has(nodes.simplify_gate.response)
+            && nodes.simplify_gate.response != null
+            && nodes.simplify_gate.response.verdict == 'simplify_first'
+          ref: builtin://agent
+          presets:
+            default: refactor
+          args:
+            model: "{{inputs.model}}"
+            mode: "{{inputs.mode}}"
+          thread:
+            mode: fork
+            memo: false
+            inject:
+              role: user
+              content: |
+                ## Refactor Before Implementation
+
+                The simplify-first assessment identified structural improvements needed before implementation.
+
+                ### Instructions
+                {{has(nodes.simplify_gate.response) && nodes.simplify_gate.response != null && has(nodes.simplify_gate.response.refactor_instructions) ? nodes.simplify_gate.response.refactor_instructions : 'No specific instructions provided.'}}
+
+                {{has(nodes.simplify_gate.response) && nodes.simplify_gate.response != null && has(nodes.simplify_gate.response.files_to_refactor) && nodes.simplify_gate.response.files_to_refactor != null && size(nodes.simplify_gate.response.files_to_refactor) > 0 ? '### Target Files\n' + nodes.simplify_gate.response.files_to_refactor.map(f, '- ' + f).join('\n') : ''}}
+
+                Focus on structural refactoring only. Do NOT implement the feature — that comes next.
+          save_message:
+            role: assistant
+            content: |
+              ## Refactor Summary
+              {{output.response_text}}
+
+        - id: implement
+          type: workflow
+          condition: "'implement' in inputs.steps"
+          ref: builtin://agent
+          presets:
+            default: general
+          args:
+            model: "{{inputs.model}}"
+            yield: "{{inputs.yield}}"
+            mode: "{{inputs.mode}}"
+          thread:
+            mode: fork
+            memo: false
+            inject:
+              role: user
+              content: |
+                ## Pipeline Step: Implement
+                Implement the required changes. Use tools to edit code and verify results.
+                
+                Parallelize your work: if the plan identifies independent tasks, use spawn to work on
+                multiple files or modules simultaneously rather than sequentially.
+          save_message:
+            role: assistant
+            content: |
+              ## Implementation Summary
+              {{output.response_text}}
+
+        - id: lint
+          type: run
+          condition: "'lint' in inputs.steps"
+          command: "{{inputs.lint_command}} > {{inputs.lint_log}} 2>&1"
+          save_message:
+            role: assistant
+            content: "Lint: {{output.exit_code == 0 ? 'passed' : 'failed (exit ' + string(output.exit_code) + ')'}}"
+
+        - id: test
+          type: run
+          condition: "'test' in inputs.steps"
+          command: "{{inputs.test_command}} > {{inputs.test_log}} 2>&1"
+          save_message:
+            role: assistant
+            content: "Test: {{output.exit_code == 0 ? 'passed' : 'failed (exit ' + string(output.exit_code) + ')'}}"
+
+        - id: build
+          type: run
+          condition: "'build' in inputs.steps"
+          command: "{{inputs.build_command}} > {{inputs.build_log}} 2>&1"
+          save_message:
+            role: assistant
+            content: "Build: {{output.exit_code == 0 ? 'passed' : 'failed (exit ' + string(output.exit_code) + ')'}}"
+
+        - id: join_checks
+          type: join
+
+        - id: code_review
+          type: workflow
+          condition: "'code_review' in inputs.steps"
+          ref: builtin://structured-agent
+          presets:
+            default: code_reviewer
+          args:
+            model: "{{inputs.model}}"
+            mode: "{{inputs.mode}}"
+            response_tool_name: submit_review
+            response_tool_description: "Submit your code review with a pass/fail grade and suggestions"
+            response_schema:
+              type: object
+              required: [grade, summary]
+              properties:
+                grade:
+                  type: string
+                  enum: [pass, fail]
+                  description: "Overall grade for the implementation"
+                summary:
+                  type: string
+                  description: "Brief summary of the review findings"
+                suggestions:
+                  type: array
+                  items:
+                    type: string
+                  description: "List of suggestions for improvement"
+          thread:
+            mode: fork
+            memo: false
+            inject:
+              role: user
+              content: |
+                ## Pipeline Step: Code Review
+                Review all changes made during implementation. Spawn your sub-reviewers in parallel.
+                
+                Check status:
+                - Lint: {{has(nodes.lint) && has(nodes.lint.exit_code) ? (nodes.lint.exit_code == 0 ? 'passed' : 'failed') : 'skipped'}}
+                - Test: {{has(nodes.test) && has(nodes.test.exit_code) ? (nodes.test.exit_code == 0 ? 'passed' : 'failed') : 'skipped'}}
+                - Build: {{has(nodes.build) && has(nodes.build.exit_code) ? (nodes.build.exit_code == 0 ? 'passed' : 'failed') : 'skipped'}}
+                
+                {{'start_app' in inputs.steps ? 'The application is running at: http://localhost:' + string(inputs.app_port) + ' — spawn the ux_reviewer to audit it via Chrome DevTools.' : ''}}
+                
+                Analyze the implementation quality and submit your review with a grade (pass/fail) and suggestions.
+          save_message:
+            role: assistant
+            content: |
+              ## Code Review: {{output.response.grade}}
+              
+              {{output.response.summary}}
+              
+              {{has(output.response.suggestions) && output.response.suggestions != null && size(output.response.suggestions) > 0 ? '### Suggestions\n' + output.response.suggestions.map(s, '- ' + s).join('\n') : ''}}
+
+      edges:
+        - from: stash_failed
+          default: simplify_gate
+        - from: simplify_gate
+          default: refactor
+        - from: refactor
+          default: implement
+        - from: implement
+          default: lint
+        - from: implement
+          default: test
+        - from: implement
+          default: build
+        - from: lint
+          default: join_checks
+        - from: test
+          default: join_checks
+        - from: build
+          default: join_checks
+        - from: join_checks
+          default: code_review
+      ui:
+        positions:
+          workflow:
+            x: 50
+            y: 300
+          stash_failed:
+            x: 400
+            y: 300
+          simplify_gate:
+            x: 750
+            y: 300
+          refactor:
+            x: 1100
+            y: 300
+          implement:
+            x: 1450
+            y: 300
+          lint:
+            x: 1800
+            y: 150
+          test:
+            x: 1800
+            y: 300
+          build:
+            x: 1800
+            y: 450
+          join_checks:
+            x: 2150
+            y: 300
+          code_review:
+            x: 2500
+            y: 300
+
+  # ── Completion ──────────────────────────────────────────────────────────────
+
+  - id: success
+    type: save_message
+    args:
+      role: assistant
+      content: |
+        ## Pipeline Complete
+        
+        All checks passed and code review approved the implementation.
+
+  - id: max_retries_reached
+    type: save_message
+    args:
+      role: assistant
+      content: |
+        ## Pipeline Stopped
+
+        Reached maximum retries ({{inputs.max_retries}}).
+
+        Final status:
+        - Lint: {{has(nodes.impl_loop) && has(nodes.impl_loop.lint_exit) ? (nodes.impl_loop.lint_exit == 0 ? 'passed' : 'failed (exit ' + string(nodes.impl_loop.lint_exit) + ')') : 'skipped'}}
+        - Test: {{has(nodes.impl_loop) && has(nodes.impl_loop.test_exit) ? (nodes.impl_loop.test_exit == 0 ? 'passed' : 'failed (exit ' + string(nodes.impl_loop.test_exit) + ')') : 'skipped'}}
+        - Build: {{has(nodes.impl_loop) && has(nodes.impl_loop.build_exit) ? (nodes.impl_loop.build_exit == 0 ? 'passed' : 'failed (exit ' + string(nodes.impl_loop.build_exit) + ')') : 'skipped'}}
+        - Review: {{has(nodes.impl_loop) && has(nodes.impl_loop.review_grade) ? nodes.impl_loop.review_grade : 'skipped'}}
+
+outputs:
+  plan_summary: "{{nodes.planning.plan_summary}}"
+  review_grade: "{{nodes.impl_loop.review_grade}}"
+  iterations: "{{nodes.impl_loop._iterations}}"
+
+edges:
+  - from: planning
+    default: write_tests
+  - from: write_tests
+    default: start_app
+  - from: start_app
+    default: impl_loop
+  - from: impl_loop
+    cases:
+      - to: max_retries_reached
+        condition: >
+          has(nodes.impl_loop.review_grade) && nodes.impl_loop.review_grade == 'fail'
+    default: success
+
+ui:
+  positions:
+    workflow:
+      x: -120
+      y: 830
+    planning:
+      x: 200
+      y: 820
+    write_tests:
+      x: 600
+      y: 820
+    start_app:
+      x: 950
+      y: 820
+    impl_loop:
+      x: 1300
+      y: 820
+    success:
+      x: 1650
+      y: 760
+    max_retries_reached:
+      x: 1650
+      y: 920

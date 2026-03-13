@@ -1,0 +1,312 @@
+name: gsd
+apiVersion: "0.0.5"
+description: |
+  GSD (Get Shit Done) — A pragmatic, no-ceremony workflow focused on rapid parallel execution.
+  Inspired by https://github.com/gsd-build/get-shit-done.
+
+  Key innovation: fresh context per task to prevent context rot. Each phase forks from the
+  main thread so agents start with clean context plus only the accumulated summaries.
+  Wave-based parallel execution in the implementation phase.
+
+  Phases:
+    1. discuss — Brief discussion to capture preferences for gray areas (yield for user input)
+    2. research — Research the codebase to understand what we're working with
+    3. plan — Create atomic task breakdown optimized for parallel execution
+    4. implement — Execute the plan (fresh context per task)
+    5. verify — Run lint/test/build to confirm nothing is broken
+    6. complete — Summary of what was done
+
+  Thread architecture:
+    Main thread: [user msg] → [preferences] → [research] → [plan] → [impl summary] → [verify] → [done]
+    Each agent forks from main: isolated conversation, only summary saved back.
+
+entry: [discuss]
+
+inputs:
+  model:
+    type: model
+    description: Model used for all LLM sub-agents
+    default:
+      tags: [flagship]
+
+  mode:
+    type: enum
+    ui: toolbar
+    default: auto
+    description: Execution mode for agent steps.
+    enum: [manual, auto, plan]
+
+  yield:
+    type: boolean
+    ui: toolbar
+    default: false
+    description: Pause for user review after key phases. Off by default — this is GSD.
+
+  lint_command:
+    type: string
+    default: npm run lint
+    description: Command to run linting.
+
+  test_command:
+    type: string
+    default: npm test
+    description: Command to run tests.
+
+  build_command:
+    type: string
+    default: npm run build
+    description: Command to run builds.
+
+  temperature:
+    type: number
+    default: 1.0
+    min: 0
+    max: 1
+    description: Response randomness
+  thinking_level:
+    type: enum
+    enum: [low, medium, high, xhigh]
+    default: medium
+    description: Extended thinking level
+
+outputs:
+  lint_exit: "{{has(nodes.verify_lint) && has(nodes.verify_lint.exit_code) ? nodes.verify_lint.exit_code : -1}}"
+  test_exit: "{{has(nodes.verify_test) && has(nodes.verify_test.exit_code) ? nodes.verify_test.exit_code : -1}}"
+  build_exit: "{{has(nodes.verify_build) && has(nodes.verify_build.exit_code) ? nodes.verify_build.exit_code : -1}}"
+
+nodes:
+  # ── Phase 1: Discuss ───────────────────────────────────────────────────────
+  #
+  # Quick discussion to resolve ambiguities. Uses yield so the user can weigh in
+  # on gray areas before we start executing. Keep it brief — this is GSD.
+
+  - id: discuss
+    type: workflow
+    ref: builtin://agent
+    presets:
+      default: general
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+      yield: true  # Always yield — this phase exists specifically to collect user input
+      temperature: "{{inputs.temperature}}"
+      thinking_level: "{{inputs.thinking_level}}"
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## GSD — Phase 1: Quick Discussion
+
+          Before diving in, quickly identify any gray areas or ambiguities in the request
+          that need the user's input. Be brief and direct.
+
+          **Do:**
+          - Identify decisions that could go multiple ways
+          - Ask about preferences for trade-offs (speed vs correctness, scope, etc.)
+          - Clarify any unclear requirements
+
+          **Don't:**
+          - Over-analyze or bikeshed
+          - Ask about things you can figure out from the codebase
+          - Turn this into a long requirements session
+
+          If the request is clear enough, just confirm your understanding and move on.
+    save_message:
+      role: assistant
+      content: |
+        ## Preferences
+        {{output.response_text}}
+
+  # ── Phase 2: Research ──────────────────────────────────────────────────────
+  #
+  # Quick codebase research. Fork so the research conversation stays isolated.
+  # Only the findings summary is saved to the main thread.
+
+  - id: research
+    type: workflow
+    ref: builtin://agent
+    presets:
+      default: researcher
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+      temperature: "{{inputs.temperature}}"
+      thinking_level: "{{inputs.thinking_level}}"
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## GSD — Phase 2: Research
+
+          Quickly research the codebase. Focus on what's directly relevant — don't go on a tour.
+
+          **Produce:**
+          1. **Relevant Files** — Files that need modification, with brief descriptions of what they do
+          2. **Existing Patterns** — Conventions to follow (naming, structure, test patterns)
+          3. **Dependencies** — What the affected code depends on and what depends on it
+          4. **Gotchas** — Anything that could trip up implementation (non-obvious constraints, fragile code, hidden side effects)
+
+          Be concise. This feeds directly into planning.
+    save_message:
+      role: assistant
+      content: |
+        ## Research
+        {{output.response_text}}
+
+  # ── Phase 3: Plan ──────────────────────────────────────────────────────────
+  #
+  # Create an atomic task breakdown. Structure for maximum parallelization.
+  # Each task should be independent and self-contained.
+
+  - id: plan
+    type: workflow
+    ref: builtin://agent
+    presets:
+      default: planner
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+      yield: "{{inputs.yield}}"
+      temperature: "{{inputs.temperature}}"
+      thinking_level: "{{inputs.thinking_level}}"
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## GSD — Phase 3: Plan
+
+          Create an atomic task breakdown based on the research and user preferences above.
+
+          **Requirements:**
+          - Each task must be independent and self-contained
+          - Group tasks into waves — tasks in the same wave can run in parallel
+          - Each task must include: specific file paths, what to create/modify, and how to verify it works
+          - Keep tasks small and focused — one file or one logical unit per task
+
+          **Format (strict):**
+          Wave 1 (parallel):
+          - Task 1.1: [description] — files: [paths] — verify: [how]
+          - Task 1.2: [description] — files: [paths] — verify: [how]
+          Wave 2 (depends on Wave 1):
+          - Task 2.1: [description] — files: [paths] — verify: [how]
+
+          Fewer waves = faster execution. Maximize parallelism. No fluff.
+    save_message:
+      role: assistant
+      content: |
+        ## Plan
+        {{output.response_text}}
+
+  # ── Phase 4: Implement ─────────────────────────────────────────────────────
+  #
+  # Execute the plan. Fresh forked context so the implementation agent starts
+  # clean with just the accumulated summaries. This prevents context rot from
+  # the research and planning conversations.
+
+  - id: implement
+    type: workflow
+    ref: builtin://agent
+    presets:
+      default: general
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+      temperature: "{{inputs.temperature}}"
+      thinking_level: "{{inputs.thinking_level}}"
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## GSD — Phase 4: Implement
+
+          The preferences, research, and plan are all above. Execute.
+
+          **Rules:**
+          - Follow the plan's wave structure — parallelize aggressively using spawn
+          - Each spawned agent gets only its task description + relevant file paths (fresh context)
+          - Don't re-research what's already been researched
+          - Don't re-plan what's already been planned
+          - Run tests/build after each wave to catch issues early
+          - If you hit a blocker, work around it and note it — don't stop to discuss
+
+          This is GSD. Execute the plan.
+    save_message:
+      role: assistant
+      content: |
+        ## Implementation Summary
+        {{output.response_text}}
+
+  # ── Phase 5: Verify ────────────────────────────────────────────────────────
+  #
+  # Run lint, test, and build in parallel to verify nothing is broken.
+
+  - id: verify_lint
+    type: run
+    command: "{{inputs.lint_command}}"
+
+  - id: verify_test
+    type: run
+    command: "{{inputs.test_command}}"
+
+  - id: verify_build
+    type: run
+    command: "{{inputs.build_command}}"
+
+  - id: verify_join
+    type: join
+
+  - id: verify_report
+    type: save_message
+    args:
+      role: assistant
+      content: |
+        ## Verification
+        - Lint: {{has(nodes.verify_lint) && has(nodes.verify_lint.exit_code) ? (nodes.verify_lint.exit_code == 0 ? 'passed' : 'failed (exit ' + string(nodes.verify_lint.exit_code) + ')') : 'unknown'}}
+        - Test: {{has(nodes.verify_test) && has(nodes.verify_test.exit_code) ? (nodes.verify_test.exit_code == 0 ? 'passed' : 'failed (exit ' + string(nodes.verify_test.exit_code) + ')') : 'unknown'}}
+        - Build: {{has(nodes.verify_build) && has(nodes.verify_build.exit_code) ? (nodes.verify_build.exit_code == 0 ? 'passed' : 'failed (exit ' + string(nodes.verify_build.exit_code) + ')') : 'unknown'}}
+
+  # ── Phase 6: Complete ──────────────────────────────────────────────────────
+
+  - id: complete
+    type: save_message
+    args:
+      role: assistant
+      content: |
+        ## GSD — Done
+        {{has(nodes.verify_lint) && has(nodes.verify_lint.exit_code) && nodes.verify_lint.exit_code != 0 ? 'WARNING: Lint failed. ' : ''}}{{has(nodes.verify_test) && has(nodes.verify_test.exit_code) && nodes.verify_test.exit_code != 0 ? 'WARNING: Tests failed. ' : ''}}{{has(nodes.verify_build) && has(nodes.verify_build.exit_code) && nodes.verify_build.exit_code != 0 ? 'WARNING: Build failed. ' : ''}}Workflow complete. Check verification results above.
+
+edges:
+  # discuss → research → plan → implement (linear chain)
+  - from: discuss
+    default: research
+  - from: research
+    default: plan
+  - from: plan
+    default: implement
+  # implement → parallel verification (fan-out)
+  - from: implement
+    default: verify_lint
+  - from: implement
+    default: verify_test
+  - from: implement
+    default: verify_build
+  # verification → join (fan-in)
+  - from: verify_lint
+    default: verify_join
+  - from: verify_test
+    default: verify_join
+  - from: verify_build
+    default: verify_join
+  # join → report → complete
+  - from: verify_join
+    default: verify_report
+  - from: verify_report
+    default: complete

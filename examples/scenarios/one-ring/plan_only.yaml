@@ -1,0 +1,39 @@
+# Plan Only: Only the planning step is enabled
+#
+# Tests the minimal planning-only configuration:
+# 1. Planning sub-workflow runs, plan agent produces a plan
+# 2. Everything else is skipped (no TDD, no implementation, no checks)
+# 3. The impl_loop still runs once but all inner nodes are skipped
+#    because none of implement/lint/test/build/code_review are in steps
+# 4. Loop exits immediately (no failures to trigger re-iteration)
+#
+# Verifies the workflow completes cleanly with only planning enabled.
+
+name: plan_only
+description: "steps: [plan] — only planning runs, everything else skipped"
+
+inputs:
+  steps: [plan]
+
+events:
+  # Planning sub-workflow — plan agent produces a summary
+  - node: planning.plan
+    output:
+      response_text: "Here is the plan for the task."
+
+expect:
+  outcome: completed
+  reached:
+    - planning
+    - planning.plan
+    - impl_loop
+    - impl_loop.join_checks
+    - complete
+  not_reached:
+    - write_tests
+    - start_app
+    - impl_loop.implement
+    - impl_loop.lint
+    - impl_loop.test
+    - impl_loop.build
+    - impl_loop.code_review

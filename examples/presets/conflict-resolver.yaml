@@ -184,6 +184,5 @@ params:
   - view
   - tag:search    # grep, glob
   - edit
-  - patch
   model:
     tags: [moderate]

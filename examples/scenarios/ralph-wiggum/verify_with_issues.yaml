@@ -1,0 +1,43 @@
+# Verify With Issues: All done despite issues noted
+#
+# Tests that the loop exits based on tasks_remaining, not on issues:
+# 1. Iteration 0: orient → implement → verify
+# 2. verify returns tasks_remaining=false with a non-empty issues array
+# 3. While condition: tasks_remaining == false → loop exits
+#
+# Verifies that issues in the verify response do not prevent loop exit
+# when tasks_remaining is false. Issues are advisory, not blocking.
+
+name: verify_with_issues
+description: Verify reports issues but tasks_remaining=false — loop exits normally
+
+events:
+  # Iteration 0 — done but with issues noted
+  - node: task_loop.orient
+    output:
+      response_text: "Task chosen: implement payment processing integration."
+
+  - node: task_loop.implement
+    output:
+      response_text: "Integrated Stripe payment processing. Webhook handler and checkout flow complete."
+
+  - node: task_loop.verify
+    output:
+      response:
+        summary: "Payment integration works end-to-end. All spec requirements met."
+        tasks_remaining: false
+        issues:
+          - "Error messages could be more user-friendly"
+          - "Consider adding retry logic for transient Stripe API failures"
+          - "Webhook signature verification uses test key"
+
+expect:
+  outcome: completed
+  reached:
+    - task_loop
+    - task_loop.orient
+    - task_loop.implement
+    - task_loop.verify
+  node_outputs:
+    task_loop:
+      tasks_remaining: false

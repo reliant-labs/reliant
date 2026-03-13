@@ -1,0 +1,92 @@
+# Happy path: All phases complete successfully, all verification passes
+#
+# GSD workflow: discuss → research → plan → implement → [lint,test,build] → join → report → complete
+#
+# All workflow nodes (discuss, research, plan, implement) are BLACK BOXES — mock final outputs only.
+# Run nodes (verify_lint, verify_test, verify_build) need exit_code/stdout/stderr.
+# Join and save_message nodes require no mock events.
+
+name: happy_path_all_pass
+description: >
+  Full GSD flow — discuss, research, plan, implement all complete successfully.
+  Lint, test, and build all pass (exit_code 0). Workflow reaches completion.
+
+events:
+  # Phase 1: Discuss (workflow — black box)
+  - node: discuss
+    output:
+      message:
+        role: assistant
+        text: "The request is clear. I'll use the existing service pattern and add the new endpoint."
+      response_text: "The request is clear. I'll use the existing service pattern and add the new endpoint."
+
+  # Phase 2: Research (workflow — black box)
+  - node: research
+    output:
+      message:
+        role: assistant
+        text: |
+          Found relevant files:
+          - src/services/user.go (existing service pattern)
+          - src/routes/api.go (route registration)
+          - src/models/user.go (data model)
+      response_text: |
+        Found relevant files:
+        - src/services/user.go (existing service pattern)
+        - src/routes/api.go (route registration)
+        - src/models/user.go (data model)
+
+  # Phase 3: Plan (workflow — black box)
+  - node: plan
+    output:
+      message:
+        role: assistant
+        text: |
+          Wave 1: Create data model and service interface
+          Wave 2: Implement service and register routes
+      response_text: |
+        Wave 1: Create data model and service interface
+        Wave 2: Implement service and register routes
+
+  # Phase 4: Implement (workflow — black box)
+  - node: implement
+    output:
+      message:
+        role: assistant
+        text: "Implementation complete. Created 3 files, modified 2."
+      response_text: "Implementation complete. Created 3 files, modified 2."
+
+  # Phase 5: Verification (run nodes — parallel)
+  - node: verify_lint
+    output:
+      exit_code: 0
+      stdout: "No linting errors found."
+      stderr: ""
+
+  - node: verify_test
+    output:
+      exit_code: 0
+      stdout: "PASS\nok  	./... 2.341s"
+      stderr: ""
+
+  - node: verify_build
+    output:
+      exit_code: 0
+      stdout: "Build succeeded."
+      stderr: ""
+
+  # verify_join, verify_report, complete — no mock needed (join + save_message)
+
+expect:
+  outcome: completed
+  reached:
+    - discuss
+    - research
+    - plan
+    - implement
+    - verify_lint
+    - verify_test
+    - verify_build
+    - verify_join
+    - verify_report
+    - complete

@@ -1,90 +1,79 @@
-# Agent with tool calls that get audited and approved
+# Tool Calls Approved: Agent makes tool calls, auditor approves, tools execute
+#
+# Tests the tool execution path:
+# 1. main_agent responds with a tool call
+# 2. audit_check approves via the audit response tool
+# 3. execute_audit confirms approval
+# 4. save_approved_response saves agent message to thread
+# 5. execute_tools runs the agent's tool call
+# 6. Loop continues (tool_calls was non-empty)
+# 7. main_agent responds with text only on second iteration
+# 8. audit_check approves again
+# 9. Loop exits because tool_calls is now empty
+#
+# This verifies the full audit-approve-execute cycle works end-to-end.
+
 name: tool_calls_approved
-description: Agent makes tool calls, auditor approves, tools execute
+description: Agent makes tool calls, auditor approves, tools execute, then agent finishes
+
 events:
-  # First iteration: main_agent requests a tool
+  # Iteration 1: main_agent requests a tool
   - node: audited_loop.main_agent
-    output:
-      message:
-        role: assistant
-        text: "Let me read that file for you."
-      response_text: "Let me read that file for you."
-      tool_calls:
-        - id: call_0
-          name: view
-          input:
-            file_path: "/path/to/file.go"
+    type: llm_response
+    text: "Let me read that file for you."
+    tool_calls:
+      - name: view
+        input:
+          file_path: "/path/to/file.go"
+
   # audit_check approves
   - node: audited_loop.audit_check
-    output:
-      message:
-        role: assistant
-        text: ""
-      response_text: ""
-      tool_calls:
-        - id: call_1
-          name: audit
-          input:
-            approved: true
-            guidance: ""
-  # execute_audit result
-  - node: audited_loop.execute_audit
-    output:
-      message:
-        role: tool
-        text: ""
-      tool_results:
-        - tool_call_id: call_1
-          content: '{"approved": true}'
-      response_data:
-        audit:
+    type: llm_response
+    text: ""
+    tool_calls:
+      - name: audit
+        input:
           approved: true
           guidance: ""
-      thread_token_count: 500
-  # execute_tools result
+
+  # execute_audit confirms approval
+  - node: audited_loop.execute_audit
+    type: tool_result
+    tool: audit
+    output:
+      approved: true
+      guidance: ""
+
+  # execute_tools runs the view tool
   - node: audited_loop.execute_tools
+    type: tool_result
+    tool: view
     output:
-      message:
-        role: tool
-        text: ""
-      tool_results:
-        - tool_call_id: call_0
-          content: "package main\n\nfunc main() {}"
-      thread_token_count: 600
-  # Second iteration: main_agent responds with final answer
+      result: "package main\n\nfunc main() {}"
+
+  # Iteration 2: main_agent responds with final answer (no tools)
   - node: audited_loop.main_agent
-    output:
-      message:
-        role: assistant
-        text: "The file contains a simple Go main package."
-      response_text: "The file contains a simple Go main package."
-      tool_calls: []
-  # audit_check for second iteration
+    type: llm_response
+    text: "The file contains a simple Go main package."
+
+  # audit_check approves final response
   - node: audited_loop.audit_check
-    output:
-      message:
-        role: assistant
-        text: ""
-      response_text: ""
-      tool_calls:
-        - id: call_2
-          name: audit
-          input:
-            approved: true
-            guidance: ""
-  - node: audited_loop.execute_audit
-    output:
-      message:
-        role: tool
-        text: ""
-      tool_results:
-        - tool_call_id: call_2
-          content: '{"approved": true}'
-      response_data:
-        audit:
+    type: llm_response
+    text: ""
+    tool_calls:
+      - name: audit
+        input:
           approved: true
           guidance: ""
-      thread_token_count: 500
+
+  # execute_audit confirms approval
+  - node: audited_loop.execute_audit
+    type: tool_result
+    tool: audit
+    output:
+      approved: true
+      guidance: ""
+
 expect:
   outcome: completed
   reached:
@@ -94,3 +83,5 @@ expect:
     - audited_loop.execute_audit
     - audited_loop.save_approved_response
     - audited_loop.execute_tools
+  not_reached:
+    - audited_loop.compact

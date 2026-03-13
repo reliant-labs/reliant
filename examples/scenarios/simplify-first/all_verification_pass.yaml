@@ -1,0 +1,83 @@
+# Scenario: all_verification_pass
+# Workflow: simplify-first.yaml
+#
+# Focused test for the parallel verification fan-out/fan-in pattern.
+# All three verification steps pass with exit_code 0.
+
+name: all_verification_pass
+description: >
+  Focused test for the parallel verification fan-out/fan-in pattern.
+  All three verification steps (lint, test, build) pass with exit_code 0,
+  join collects them, and verify_report summarizes the results.
+events:
+  # Phase 1: Research
+  - node: research
+    output:
+      message:
+        role: assistant
+        text: "Minor simplifications identified in config parsing."
+      response_text: "Minor simplifications identified in config parsing."
+
+  # Phase 2: Refactor
+  - node: refactor
+    output:
+      message:
+        role: assistant
+        text: "Simplified config parsing — reduced from 3 files to 1."
+      response_text: "Simplified config parsing — reduced from 3 files to 1."
+
+  # Phase 3: All verification passes
+  - node: verify_lint
+    output:
+      exit_code: 0
+      stdout: "0 issues found."
+      stderr: ""
+
+  - node: verify_test
+    output:
+      exit_code: 0
+      stdout: "42 tests passed, 0 failed."
+      stderr: ""
+
+  - node: verify_build
+    output:
+      exit_code: 0
+      stdout: "Build OK."
+      stderr: ""
+
+  # Phase 4: Plan
+  - node: plan
+    output:
+      message:
+        role: assistant
+        text: "Plan: add caching layer using the simplified config system."
+      response_text: "Plan: add caching layer using the simplified config system."
+
+  # Phase 5: Implement
+  - node: implement
+    output:
+      message:
+        role: assistant
+        text: "Caching layer implemented with 8 new tests."
+      response_text: "Caching layer implemented with 8 new tests."
+
+expect:
+  outcome: completed
+  reached:
+    - research
+    - refactor
+    - verify_lint
+    - verify_test
+    - verify_build
+    - verify_join
+    - verify_report
+    - plan
+    - implement
+    - complete
+  node_outputs:
+    verify_lint:
+      exit_code: 0
+    verify_test:
+      exit_code: 0
+    verify_build:
+      exit_code: 0

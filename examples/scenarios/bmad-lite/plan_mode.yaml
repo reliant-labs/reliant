@@ -1,0 +1,84 @@
+# Plan Mode: Read-only tools throughout all phases
+#
+# Tests the workflow with mode=plan passed to all agent sub-workflows.
+# In plan mode, each agent phase uses read-only tools and produces analysis
+# or plans rather than making changes. The mode input is forwarded to each
+# builtin://agent node via args.
+#
+# Verifies the full linear chain completes with plan mode, and that
+# each phase produces planning-oriented output.
+
+name: plan_mode
+description: >
+  With mode=plan, all agent phases use read-only tools. Each phase produces
+  a plan or analysis rather than making changes.
+
+inputs:
+  mode: plan
+  yield: false
+
+events:
+  # Phase 1: PM ideates in plan mode (read-only analysis)
+  - node: ideate
+    output:
+      response_text: |
+        [PLAN MODE] Product Vision Analysis:
+        After reviewing the codebase, here's the ideation:
+        - Problem: API response times are degrading under load.
+        - Vision: Implement caching layer to reduce p99 latency by 80%.
+        - Scope: Redis cache for read-heavy endpoints only.
+      message:
+        role: assistant
+        text: "[PLAN] Ideation complete — caching layer vision."
+
+  # Phase 2: PM writes requirements in plan mode
+  - node: requirements
+    output:
+      response_text: |
+        [PLAN MODE] Requirements Analysis:
+        - As a user, I want API responses in < 200ms at p99.
+        - Cache invalidation on write operations.
+        - TTL-based expiry with configurable duration.
+        Priority: Must-have: GET caching, invalidation. Should-have: cache warming.
+      message:
+        role: assistant
+        text: "[PLAN] Requirements defined in read-only mode."
+
+  # Phase 3: Architect plans the design (read-only)
+  - node: architecture
+    output:
+      response_text: |
+        [PLAN MODE] Architecture Analysis:
+        After reviewing existing code patterns:
+        - Add Redis client in internal/cache/redis.go
+        - Middleware approach for transparent caching
+        - Invalidation via pub/sub on write endpoints
+        - Files to modify: cmd/server.go, internal/middleware/cache.go
+      message:
+        role: assistant
+        text: "[PLAN] Architecture planned with file change list."
+
+  # Phase 4: Developer reviews and plans implementation (read-only)
+  - node: implement
+    output:
+      response_text: |
+        [PLAN MODE] Implementation Plan:
+        Reviewed codebase structure. Here's the execution plan:
+        1. Add redis dependency to go.mod
+        2. Create internal/cache/redis.go with connection pool
+        3. Create internal/middleware/cache.go with key generation
+        4. Update cmd/server.go to wire middleware
+        5. Add tests for cache hit/miss/invalidation paths
+        Switch to auto mode to execute this plan.
+      message:
+        role: assistant
+        text: "[PLAN] Implementation plan ready — switch to auto mode to execute."
+
+expect:
+  outcome: completed
+  reached:
+    - ideate
+    - requirements
+    - architecture
+    - implement
+    - complete

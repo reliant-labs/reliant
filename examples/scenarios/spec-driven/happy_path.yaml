@@ -1,0 +1,69 @@
+name: happy_path
+description: >
+  All 4 phases complete successfully with default inputs.
+  specify → plan → implement → complete in linear order.
+
+events:
+  # Phase 1: Specify Requirements
+  - node: specify
+    output:
+      response_text: |
+        ## Goal
+        Build a user authentication system.
+
+        ## Requirements
+        1. Users can register with email and password
+        2. Users can log in and receive a JWT token
+        3. Passwords are hashed with bcrypt
+
+        ## Constraints
+        - Must support PostgreSQL and SQLite
+        - Token expiry: 24 hours
+
+        ## Out of Scope
+        - OAuth/social login
+        - Multi-factor authentication
+
+  # Phase 2: Plan Technical Approach
+  - node: plan
+    output:
+      response_text: |
+        ## Approach
+        Implement auth as a middleware layer with repository pattern.
+
+        ## Architecture
+        - JWT-based stateless authentication
+        - bcrypt password hashing
+        - Repository interface for DB abstraction
+
+        ## Task Breakdown
+        1. Create user model and migration
+        2. Implement auth repository (SQLite + Postgres)
+        3. Build auth middleware
+        4. Add login/register HTTP handlers
+
+        ## Dependencies
+        - Task 1 blocks tasks 2-4
+        - Task 2 blocks tasks 3-4
+
+        ## Risks
+        - Token refresh strategy needs future consideration
+
+  # Phase 3: Implement
+  - node: implement
+    output:
+      response_text: |
+        Implementation complete:
+        - Created user model with migration for both SQLite and Postgres
+        - Implemented auth repository with password hashing
+        - Built JWT middleware with 24h token expiry
+        - Added /register and /login endpoints
+        - All tests passing
+
+expect:
+  outcome: completed
+  reached:
+    - specify
+    - plan
+    - implement
+    - complete

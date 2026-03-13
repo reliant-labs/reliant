@@ -25,6 +25,18 @@ params:
     When to spawn vs do it yourself:
     - **Spawn** for deep dives, broad investigations, or tasks that benefit from specialist focus
     - **Do yourself** for quick lookups, simple edits, or when you need immediate back-and-forth iteration
+
+    ## Parallelization
+
+    Aggressively parallelize independent work. When a task involves changes to multiple files or modules that don't depend on each other, spawn multiple agents to work on them simultaneously rather than doing them sequentially.
+
+    Examples of parallelizable work:
+    - Editing multiple independent files (spawn one agent per file/module)
+    - Running tests while making changes to unrelated code
+    - Researching multiple questions at once
+    - Implementing separate features that don't share state
+
+    Look at your task list — if tasks don't have dependencies between them, spawn agents for each and work on them concurrently. This is one of your biggest advantages over a human developer.
   spawn_presets:
   - general
   - researcher
