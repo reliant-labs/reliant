@@ -5,7 +5,7 @@
 # 2. write_tests skipped ('tdd' not in steps)
 # 3. start_app skipped ('start_app' not in steps)
 # 4. Implementation runs in the loop
-# 5. No checks, no review → review_grade defaults to 'pass' → loop exits
+# 5. No checks, no review, no evaluate → eval_strategy defaults to 'proceed' → loop exits
 #
 # Verifies the workflow handles the "just do it" configuration.
 
@@ -28,7 +28,7 @@ expect:
     - impl_loop
     - impl_loop.implement
     - impl_loop.join_checks
-    - complete
+    - success
   not_reached:
     - planning.plan
     - write_tests
@@ -37,3 +37,5 @@ expect:
     - impl_loop.test
     - impl_loop.build
     - impl_loop.code_review
+    - impl_loop.evaluate
+    - impl_loop.refactor

@@ -4,16 +4,27 @@ description: |
   Get It Right — for complex brownfield codebases where LLMs paper-mache code on top.
   The insight: sometimes you need to try and fail to truly understand the codebase.
 
-  Phases:
-    1. attempt (loop) — Try to implement, then diagnose what went wrong. Repeat up to max_retries.
-    2. diagnose — Final reflection armed with accumulated failure insights.
-    3. implement — Correct implementation using everything learned from the try→fail→learn cycle.
+  Loop: implement → evaluate → [proceed or refactor → loop back]
+    1. implement — Try to build the requested changes.
+    2. evaluate — Assess the implementation: what worked, what didn't, what to do next.
+    3. refactor — If not proceeding, apply the evaluation's improvements before the next attempt.
+
+  After the loop:
+    4. diagnose — Final synthesis of all learnings into an actionable implementation guide.
+    5. implement — Clean, correct implementation armed with everything learned.
+
+  The evaluation step decides the strategy:
+    - "proceed" — understanding is sufficient, break the loop
+    - "improve" — approach is sound but has specific fixable issues, refactor and retry
+    - "restart" — approach is fundamentally wrong, refactor by scrapping and starting fresh
 
   Thread architecture:
-    attempt loop inherits main thread so each iteration's learnings accumulate.
-    Each try_implement forks so failed code stays isolated.
-    diagnose forks for a clean analysis pass; summary saved to main thread.
-    implement forks for the final clean implementation.
+    attempt loop inherits main thread so learnings accumulate across iterations.
+    implement forks so failed code stays isolated; summary saved to main thread.
+    evaluate forks for clean analysis; structured diagnosis saved to main thread.
+    refactor forks to apply improvements; summary saved to main thread.
+    diagnose forks for final synthesis; implementation guide saved to main thread.
+    final implement forks for the clean implementation.
 
 entry: [attempt]
 
@@ -29,7 +40,7 @@ inputs:
     default: 2
     min: 1
     max: 5
-    description: Maximum attempt→diagnose iterations before moving to final implementation
+    description: Maximum implement→evaluate→refactor iterations before moving to final implementation
 
   mode:
     type: enum
@@ -58,28 +69,26 @@ inputs:
     description: Extended thinking level
 
 nodes:
-  # ── Attempt loop (try → diagnose → retry) ───────────────────────────────────
+  # ── Attempt loop (implement → evaluate → refactor) ──────────────────────────
   #
-  # Each iteration: fork a thread to try implementing, then analyze what went wrong.
-  # The loop continues while diagnose says retry is needed and we haven't hit max_retries.
-  # Loop inherits the main thread so failure learnings accumulate across iterations.
+  # Each iteration: implement the changes, evaluate what happened, then refactor
+  # if the evaluation says we're not ready to proceed. The loop exits when
+  # evaluate says "proceed" or we hit max_retries.
 
   - id: attempt
     type: loop
     while: >
-      has(outputs.needs_retry) && outputs.needs_retry == true
+      has(outputs.strategy) && outputs.strategy != "proceed"
       && iter.iteration < inputs.max_retries
     inline:
-      entry: [try_implement]
+      entry: [implement]
 
       outputs:
-        # Default to true (retry) so that if try_diagnose fails to produce a response,
-        # the loop retries rather than proceeding with insufficient understanding.
-        needs_retry: "{{has(nodes.try_diagnose) && has(nodes.try_diagnose.response) ? nodes.try_diagnose.response.needs_retry : true}}"
-        diagnosis: "{{has(nodes.try_diagnose) && has(nodes.try_diagnose.response) ? nodes.try_diagnose.response.diagnosis : ''}}"
+        strategy: "{{has(nodes.evaluate) && has(nodes.evaluate.response) ? nodes.evaluate.response.strategy : 'restart'}}"
+        diagnosis: "{{has(nodes.evaluate) && has(nodes.evaluate.response) ? nodes.evaluate.response.diagnosis : ''}}"
 
       nodes:
-        - id: try_implement
+        - id: implement
           type: workflow
           ref: builtin://agent
           presets:
@@ -97,7 +106,7 @@ nodes:
               content: |
                 ## Get It Right — Attempt {{iter.iteration + 1}}
 
-                {{iter.iteration == 0 ? 'Implement the requested changes. Start by investigating the relevant code, then make your changes and run tests to verify them.' : 'Previous attempt failed. The diagnosis above explains what went wrong. Before writing code, re-read the diagnosis — specifically the "Approach for next attempt" section. Address the wrong abstractions and difficulty areas it identified.'}}
+                {{iter.iteration == 0 ? 'Implement the requested changes. Start by investigating the relevant code, then make your changes and run tests to verify them.' : 'Previous attempt was evaluated and refactored above. Read the evaluation and refactoring summary carefully before continuing. Build on the refactored code — do not redo work that has already been improved.'}}
 
                 After finishing, summarize:
                 1. What you changed and why
@@ -107,10 +116,10 @@ nodes:
           save_message:
             role: assistant
             content: |
-              ## Attempt {{iter.iteration + 1}} Summary
+              ## Attempt {{iter.iteration + 1}} — Implementation Summary
               {{output.response_text}}
 
-        - id: try_diagnose
+        - id: evaluate
           type: workflow
           ref: builtin://structured-agent
           args:
@@ -118,59 +127,128 @@ nodes:
             mode: "{{inputs.mode}}"
             temperature: "{{inputs.temperature}}"
             thinking_level: "{{inputs.thinking_level}}"
-            response_tool_name: submit_diagnosis
-            response_tool_description: "Submit your diagnosis of what went wrong and whether another attempt is needed"
+            response_tool_name: submit_evaluation
+            response_tool_description: "Submit your evaluation of the implementation attempt and recommended strategy"
             response_schema:
               type: object
               required:
-                - needs_retry
+                - strategy
                 - diagnosis
                 - difficulty_areas
                 - wrong_abstractions
+                - improvements
               properties:
-                needs_retry:
-                  type: boolean
-                  description: "true if another attempt would help learn more about the codebase; false if we understand enough to implement correctly"
+                strategy:
+                  type: string
+                  enum: ["improve", "restart", "proceed"]
+                  description: |
+                    "proceed" — the implementation is correct and complete, break the loop.
+                    "restart" — the approach is fundamentally wrong; the refactor agent should scrap it and start fresh with what we've learned. Prefer this when the code is fighting the codebase's grain or layering hacks on hacks.
+                    "improve" — the approach is sound but has specific fixable issues for the refactor agent to address.
                 difficulty_areas:
                   type: string
                   description: "What was harder than expected and why"
                 wrong_abstractions:
                   type: string
                   description: "What abstractions or assumptions were wrong"
+                improvements:
+                  type: array
+                  items:
+                    type: object
+                    required: [area, suggestion]
+                    properties:
+                      area:
+                        type: string
+                        description: "The area of code or concept that needs improvement"
+                      suggestion:
+                        type: string
+                        description: "Specific, actionable suggestion for the refactor agent"
+                      severity:
+                        type: string
+                        enum: [critical, important, minor]
+                        description: "How significant this improvement is"
+                  description: "Specific improvement suggestions for the refactor agent, ordered by severity"
                 diagnosis:
                   type: string
-                  description: "Complete analysis of what went wrong and what we learned"
-                approach_for_next:
-                  type: string
-                  description: "If retrying, what to do differently next time"
+                  description: "Complete analysis of the attempt — what worked, what didn't, and why"
           thread:
             mode: fork
             memo: false
             inject:
               role: user
               content: |
-                ## Get It Right — Diagnose Attempt {{iter.iteration + 1}}
+                ## Get It Right — Evaluate Attempt {{iter.iteration + 1}}
 
                 Analyze the implementation attempt above. Focus on:
                 1. What was harder than expected? Why?
                 2. What abstractions or assumptions about the codebase were wrong?
-                3. What did we learn that we didn't know before?
-                4. Do we understand the codebase well enough now, or would another attempt help?
+                3. What specific improvements should the refactor agent make? (List them concretely)
+                4. Should we improve what we have, or would starting from scratch be better?
 
                 Be brutally honest. The goal is understanding, not saving face.
+
+                **Bias toward restarting.** Code that fights the codebase's existing patterns usually gets worse with patches, not better. If the approach feels like it's swimming upstream — if you're working around the architecture rather than with it — recommend "restart". The learnings from this attempt are the real value; the code itself is disposable. A clean implementation armed with hard-won understanding almost always beats an incrementally-patched first attempt.
           save_message:
             role: assistant
             content: |
-              ## Diagnosis — Attempt {{iter.iteration + 1}}
-              {{has(output.response) ? output.response.diagnosis : 'Diagnosis not available'}}
+              ## Evaluation — Attempt {{iter.iteration + 1}}
+              **Strategy:** {{has(output.response) ? output.response.strategy : 'N/A'}}
+
+              {{has(output.response) ? output.response.diagnosis : 'Evaluation not available'}}
 
               **Difficulty areas:** {{has(output.response) ? output.response.difficulty_areas : 'N/A'}}
               **Wrong abstractions:** {{has(output.response) ? output.response.wrong_abstractions : 'N/A'}}
-              **Approach for next attempt:** {{has(output.response) && has(output.response.approach_for_next) ? output.response.approach_for_next : 'N/A'}}
+
+              {{has(output.response) && has(output.response.improvements) ? '**Improvements for refactoring:**' : ''}}
+              {{has(output.response) && has(output.response.improvements) ? output.response.improvements : ''}}
+
+        - id: refactor
+          type: workflow
+          ref: builtin://agent
+          presets:
+            default: refactor
+          args:
+            model: "{{inputs.model}}"
+            mode: "{{inputs.mode}}"
+            temperature: "{{inputs.temperature}}"
+            thinking_level: "{{inputs.thinking_level}}"
+          thread:
+            mode: fork
+            memo: false
+            inject:
+              role: user
+              content: |
+                ## Get It Right — Refactor After Attempt {{iter.iteration + 1}}
+
+                The evaluation above assessed the implementation and produced a list of improvements. Your job is to apply them.
+
+                **Read the evaluation's strategy carefully:**
+                - If the strategy is **"improve"** — the approach is sound. Apply the specific improvements listed. Fix what's broken without rewriting what works.
+                - If the strategy is **"restart"** — the approach is fundamentally wrong. Revert or delete the failed code and restructure from scratch, using the evaluation's insights about what abstractions and patterns are actually correct. Don't try to salvage bad code — the learnings are the value, not the code.
+
+                **Process:**
+                1. Read the evaluation's improvements list — address them in severity order (critical first)
+                2. Apply each improvement, running tests after each significant change
+                3. Summarize what you changed and what the code looks like now
+
+                **Do NOT:**
+                - Ignore critical improvements
+                - Add new features beyond what the improvements specify
+                - Leave code in a broken state
+          save_message:
+            role: assistant
+            content: |
+              ## Refactoring Summary — After Attempt {{iter.iteration + 1}}
+              {{output.response_text}}
 
       edges:
-        - from: try_implement
-          default: [try_diagnose]
+        - from: implement
+          default: [evaluate]
+        - from: evaluate
+          cases:
+            - condition: "has(nodes.evaluate.response) && nodes.evaluate.response.strategy == 'proceed'"
+              to: []
+          default: [refactor]
 
   # ── Final diagnosis / reflection ─────────────────────────────────────────────
   #
@@ -196,16 +274,18 @@ nodes:
         content: |
           ## Get It Right — Final Diagnosis
 
-          Review all the attempt and diagnosis summaries above. Synthesize everything learned into a clear, actionable implementation guide.
+          Review all the attempt, evaluation, and refactoring summaries above. Synthesize everything learned into a clear, actionable implementation guide.
 
           **Produce:**
           1. **Key Insights** — What did we learn about this codebase that wasn't obvious?
-          2. **Correct Approach** — Step-by-step, what's the right way to implement the changes?
-          3. **Pitfalls** — Numbered list of specific things to avoid (reference earlier failures)
-          4. **Order of Operations** — What to do first, second, third
-          5. **Files & Interfaces** — Specific files to touch and the key interfaces/abstractions to use correctly
+          2. **Correct Approach** — Step-by-step, what's the right way to implement the changes? Should we build on the refactored code or start completely fresh?
+          3. **Improvements Checklist** — Consolidated list of all improvements identified across attempts, ordered by severity
+          4. **Pitfalls** — Numbered list of specific things to avoid (reference earlier failures)
+          5. **Order of Operations** — What to do first, second, third
+          6. **Files & Interfaces** — Specific files to touch and the key interfaces/abstractions to use correctly
 
           Be concrete and specific. This guide will be the sole reference for the implementation phase.
+          If the attempts revealed the approach was fundamentally wrong, say so clearly and describe the right approach from scratch.
     save_message:
       role: assistant
       content: |
@@ -214,7 +294,7 @@ nodes:
 
   # ── Final implementation ─────────────────────────────────────────────────────
   #
-  # Armed with all the learnings, do the correct implementation.
+  # Armed with all the learnings and refactoring, do the correct implementation.
 
   - id: implement
     type: workflow
@@ -234,18 +314,20 @@ nodes:
         content: |
           ## Get It Right — Final Implementation
 
-          The implementation guide above was built from real attempts and failures. This is the real implementation.
+          The implementation guide above was built from real attempts, evaluations, and refactoring passes. This is the real implementation.
 
           **Process:**
           1. Read the implementation guide above carefully before writing any code
-          2. Address each numbered pitfall explicitly as you implement
-          3. Follow the recommended order of operations
-          4. Run tests after each significant change
-          5. If the guide's approach doesn't work for some part, note the deviation and why
+          2. If the guide recommends starting from scratch, do exactly that — don't try to salvage previous attempts
+          3. Address each improvement and pitfall explicitly as you implement
+          4. Follow the recommended order of operations
+          5. Run tests after each significant change
+          6. If the guide's approach doesn't work for some part, note the deviation and why
 
           **Do NOT:**
           - Ignore the pitfalls section — those are real failures that happened
           - Re-discover things already documented in the guide
+          - Patch or band-aid over problems the guide identified — fix them properly
           - Skip running tests
     save_message:
       role: assistant
@@ -254,7 +336,7 @@ nodes:
         {{output.response_text}}
 
 outputs:
-  needs_retry: "{{nodes.attempt.needs_retry}}"
+  strategy: "{{nodes.attempt.strategy}}"
   implementation: "{{nodes.implement.response_text}}"
 
 edges:

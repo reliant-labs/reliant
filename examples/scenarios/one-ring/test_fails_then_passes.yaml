@@ -1,19 +1,16 @@
-# Test Retry: Tests fail on iteration 0, pass on iteration 1
+# Test Retry: Tests fail, evaluate says improve, refactor fixes, second attempt passes
 #
-# Tests the loop re-iteration triggered by failing tests:
-# 1. Iteration 0: implement runs, test fails (exit_code: 1), review also fails
-# 2. Loop condition: test_exit != 0 → re-iterate
-# 3. Iteration 1: implement runs again, test passes (exit_code: 0), review passes
-# 4. Loop exits
-#
-# Verifies that a non-zero test exit_code triggers re-iteration.
-# Note: test is a `type: run` node — mock its exit_code directly.
+# Tests the evaluate → refactor loop triggered by failing tests:
+# 1. Iteration 0: implement runs, test fails, review fails, evaluate says 'improve', refactor fixes
+# 2. Loop condition: eval_strategy != "proceed" → re-iterate
+# 3. Iteration 1: implement runs, test passes, review passes, evaluate says 'proceed'
+# 4. Refactor skipped, loop exits
 
 name: test_fails_then_passes
-description: Tests fail on first iteration, pass on retry
+description: Tests fail, evaluate triggers refactor, pass on retry
 
 inputs:
-  steps: [implement, test, code_review]
+  steps: [implement, test, code_review, evaluate, refactor]
 
 events:
   # Iteration 0 — test fails
@@ -33,10 +30,24 @@ events:
         suggestions:
           - "Fix the 2 failing test assertions"
 
+  - node: impl_loop.evaluate
+    output:
+      response:
+        strategy: "improve"
+        diagnosis: "Two test assertions failing. The implementation logic doesn't match expected behavior."
+        improvements:
+          - area: "Test assertions"
+            suggestion: "Fix the 2 failing assertions — the return value format doesn't match what tests expect."
+            severity: critical
+
+  - node: impl_loop.refactor
+    output:
+      response_text: "Fixed the return value format to match test expectations. Both assertions should pass now."
+
   # Iteration 1 — test passes, review passes
   - node: impl_loop.implement
     output:
-      response_text: "Fixed failing test cases."
+      response_text: "Built on refactored code. Tests verified."
 
   - node: impl_loop.test
     output:
@@ -49,6 +60,13 @@ events:
         summary: "All tests pass. Implementation approved."
         suggestions: []
 
+  - node: impl_loop.evaluate
+    output:
+      response:
+        strategy: "proceed"
+        diagnosis: "Tests pass, review approved. Implementation is correct."
+        improvements: []
+
 expect:
   outcome: completed
   reached:
@@ -58,7 +76,9 @@ expect:
     - impl_loop.test
     - impl_loop.join_checks
     - impl_loop.code_review
-    - complete
+    - impl_loop.evaluate
+    - impl_loop.refactor
+    - success
   not_reached:
     - planning.plan
     - write_tests

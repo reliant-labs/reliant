@@ -1,0 +1,54 @@
+# Validation Fails Then Passes: Retry loop recovers after first failure
+#
+# Tests the setup → validate feedback loop with one retry:
+# 1. Iteration 0: cleanup skipped, setup runs, validation fails with specific issues
+# 2. Iteration 1: cleanup runs (tears down stale state), setup retries with fixes,
+#    validation passes
+# 3. Loop exits after 2 iterations. Reaches success.
+#
+# Verifies that validation failures trigger re-entry into the loop and that
+# the setup agent can recover based on failure feedback.
+
+name: validation_fails_then_passes
+description: >
+  First iteration: cleanup skipped, setup runs, validation fails with issues.
+  Second iteration: cleanup runs (tears down stale state), setup retries, validation passes.
+  Loop exits after 2 iterations. Reaches success.
+
+events:
+  # Iteration 0
+  - node: setup_loop.setup
+    output:
+      response_text: "Initial setup complete."
+
+  - node: setup_loop.validate
+    output:
+      response:
+        grade: fail
+        findings: "Port 8080 not listening. Binary missing worktree suffix."
+        issues:
+          - "Port 8080 is not listening after startup"
+          - "Binary at ./dist/myapp has no worktree suffix"
+
+  # Iteration 1 — cleanup runs first (run node, no event needed), then setup retries
+  - node: setup_loop.setup
+    output:
+      response_text: "Fixed port binding and binary naming."
+
+  - node: setup_loop.validate
+    output:
+      response:
+        grade: pass
+        findings: "All checks passed after fixes."
+        issues: []
+
+expect:
+  outcome: completed
+  reached:
+    - setup_loop
+    - setup_loop.setup
+    - setup_loop.validate
+    - success
+  node_outputs:
+    setup_loop:
+      validation_grade: "pass"

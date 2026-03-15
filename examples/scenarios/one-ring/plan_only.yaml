@@ -4,8 +4,7 @@
 # 1. Planning sub-workflow runs, plan agent produces a plan
 # 2. Everything else is skipped (no TDD, no implementation, no checks)
 # 3. The impl_loop still runs once but all inner nodes are skipped
-#    because none of implement/lint/test/build/code_review are in steps
-# 4. Loop exits immediately (no failures to trigger re-iteration)
+# 4. Loop exits immediately (eval_strategy defaults to 'proceed')
 #
 # Verifies the workflow completes cleanly with only planning enabled.
 
@@ -28,7 +27,7 @@ expect:
     - planning.plan
     - impl_loop
     - impl_loop.join_checks
-    - complete
+    - success
   not_reached:
     - write_tests
     - start_app
@@ -37,3 +36,5 @@ expect:
     - impl_loop.test
     - impl_loop.build
     - impl_loop.code_review
+    - impl_loop.evaluate
+    - impl_loop.refactor

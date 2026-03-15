@@ -7,17 +7,16 @@
 # 4. Implementation runs in the loop
 # 5. All checks (lint, test, build) pass
 # 6. Code review passes (with UX review context since start_app is in steps)
-# 7. Loop exits after 1 iteration
+# 7. Evaluate says "proceed" → refactor skipped → loop exits
 #
 # Verifies the start_app node runs between write_tests and impl_loop,
 # and that the full pipeline completes with all steps enabled.
-# Note: start_app is a `type: run` node — mock its exit_code directly.
 
 name: start_app_with_ux_review
 description: Full pipeline with start_app enabled for UX review
 
 inputs:
-  steps: [plan, tdd, implement, lint, test, build, start_app, code_review]
+  steps: [plan, tdd, implement, lint, test, build, start_app, code_review, evaluate, refactor]
 
 events:
   # Planning
@@ -59,6 +58,13 @@ events:
         summary: "Full pipeline green. UX review passed. Ship it."
         suggestions: []
 
+  - node: impl_loop.evaluate
+    output:
+      response:
+        strategy: "proceed"
+        diagnosis: "All checks pass, code review approved, UX review passed. Ship it."
+        improvements: []
+
 expect:
   outcome: completed
   reached:
@@ -73,4 +79,7 @@ expect:
     - impl_loop.build
     - impl_loop.join_checks
     - impl_loop.code_review
-    - complete
+    - impl_loop.evaluate
+    - success
+  not_reached:
+    - impl_loop.refactor

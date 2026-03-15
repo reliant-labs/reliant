@@ -1,29 +1,23 @@
-# Default Steps: Plan, TDD, Implement, Code Review — all pass first try
+# Default Steps: Plan, Implement, Evaluate, Code Review — all pass first try
 #
 # Tests the default configuration with no input overrides:
 # 1. Planning sub-workflow runs, plan agent produces a plan
-# 2. TDD writes failing tests
-# 3. Implementation loop runs once
-# 4. Code review passes on first iteration → loop exits
+# 2. Implementation loop runs once
+# 3. Code review passes, evaluate says "proceed" → refactor skipped → loop exits
 #
 # Verifies the happy path through the default one-ring pipeline.
-# Note: lint, test, build, start_app are not in default steps, so they're skipped.
+# Note: lint, test, build, tdd, start_app are not in default steps, so they're skipped.
 
 name: default_steps
-description: Default steps (plan, tdd, implement, code_review) all pass on first try
+description: Default steps (plan, implement, evaluate, code_review) all pass on first try
 
-# Uses default inputs: steps: [plan, tdd, implement, code_review]
+# Uses default inputs: steps: [plan, implement, evaluate, code_review]
 
 events:
   # Planning sub-workflow — plan agent produces a summary
   - node: planning.plan
     output:
       response_text: "Plan: implement the feature with modular design."
-
-  # TDD — write failing tests
-  - node: write_tests
-    output:
-      response_text: "Created unit tests for the new feature."
 
   # Implementation loop — iteration 0
   - node: impl_loop.implement
@@ -38,19 +32,30 @@ events:
         suggestions:
           - "Consider adding inline comments for complex logic"
 
+  - node: impl_loop.evaluate
+    output:
+      response:
+        strategy: "proceed"
+        diagnosis: "Implementation is correct. Code review passed. All good."
+        improvements: []
+
+  # refactor skipped (evaluate strategy == "proceed")
+
 expect:
   outcome: completed
   reached:
     - planning
     - planning.plan
-    - write_tests
     - impl_loop
     - impl_loop.implement
     - impl_loop.join_checks
     - impl_loop.code_review
-    - complete
+    - impl_loop.evaluate
+    - success
   not_reached:
+    - write_tests
     - start_app
     - impl_loop.lint
     - impl_loop.test
     - impl_loop.build
+    - impl_loop.refactor

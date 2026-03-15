@@ -1,19 +1,16 @@
-# Lint Retry: Lint fails on iteration 0, passes on iteration 1
+# Lint Retry: Lint fails, evaluate says improve, refactor fixes, second attempt passes
 #
-# Tests the loop re-iteration triggered by a failing lint check:
-# 1. Iteration 0: implement runs, lint fails (exit_code: 1), review also fails
-# 2. Loop condition: lint_exit != 0 → re-iterate
-# 3. Iteration 1: implement runs again, lint passes (exit_code: 0), review passes
-# 4. Loop exits
-#
-# Verifies that a non-zero lint exit_code triggers re-iteration.
-# Note: lint is a `type: run` node — mock its exit_code directly.
+# Tests the evaluate → refactor loop triggered by a failing lint check:
+# 1. Iteration 0: implement runs, lint fails, review fails, evaluate says 'improve', refactor fixes
+# 2. Loop condition: eval_strategy != "proceed" → re-iterate
+# 3. Iteration 1: implement runs, lint passes, review passes, evaluate says 'proceed'
+# 4. Refactor skipped, loop exits
 
 name: lint_fails_then_passes
-description: Lint fails on first iteration, passes on retry
+description: Lint fails, evaluate triggers refactor, passes on retry
 
 inputs:
-  steps: [implement, lint, code_review]
+  steps: [implement, lint, code_review, evaluate, refactor]
 
 events:
   # Iteration 0 — lint fails
@@ -33,10 +30,24 @@ events:
         suggestions:
           - "Fix the 3 linting violations"
 
+  - node: impl_loop.evaluate
+    output:
+      response:
+        strategy: "improve"
+        diagnosis: "Lint failed with 3 violations. Straightforward fixes needed."
+        improvements:
+          - area: "Lint violations"
+            suggestion: "Fix the 3 linting violations identified in the lint output."
+            severity: important
+
+  - node: impl_loop.refactor
+    output:
+      response_text: "Fixed all 3 linting violations. Code style now matches project conventions."
+
   # Iteration 1 — lint passes, review passes
   - node: impl_loop.implement
     output:
-      response_text: "Fixed linting issues."
+      response_text: "Built on refactored code. Lint clean."
 
   - node: impl_loop.lint
     output:
@@ -49,6 +60,13 @@ events:
         summary: "Lint passes. Code looks good."
         suggestions: []
 
+  - node: impl_loop.evaluate
+    output:
+      response:
+        strategy: "proceed"
+        diagnosis: "Lint passes, review approved. All good."
+        improvements: []
+
 expect:
   outcome: completed
   reached:
@@ -58,7 +76,9 @@ expect:
     - impl_loop.lint
     - impl_loop.join_checks
     - impl_loop.code_review
-    - complete
+    - impl_loop.evaluate
+    - impl_loop.refactor
+    - success
   not_reached:
     - planning.plan
     - write_tests

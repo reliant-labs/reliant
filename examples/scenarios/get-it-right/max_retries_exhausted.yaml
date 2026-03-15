@@ -1,18 +1,15 @@
 # Max Retries Exhausted: Loop exits after hitting the retry limit
 #
-# Tests the loop's max_retries safeguard:
-# 1. max_retries set to 2 (default)
-# 2. Iteration 0: try_diagnose says needs_retry=true → re-iterate
-# 3. Iteration 1: try_diagnose says needs_retry=true → iter.iteration(2) == max_retries(2) → loop exits
-# 4. Workflow still completes (loop exhaustion is not an error)
-# 5. Final diagnose synthesizes all failure learnings into actionable guidance
-# 6. Final implement makes best-effort implementation using everything learned
+# Tests the loop's max_retries safeguard with the full implement → evaluate → refactor cycle:
+# 1. Iteration 0: implement fails, evaluate says "restart", refactor scraps and restructures
+# 2. Iteration 1: implement tries again, evaluate says "improve", refactor applies fixes
+# 3. Loop condition: iter.iteration(2) == max_retries(2) → loop exits despite not proceeding
+# 4. Final diagnose synthesizes all learnings, final implement does best-effort
 #
 # Verifies that:
-# - The loop correctly stops when iter.iteration reaches max_retries
-# - The final needs_retry remains true (never succeeded)
+# - The loop correctly stops at max_retries even when strategy != "proceed"
+# - Both "restart" and "improve" strategies trigger refactor before re-iterating
 # - The workflow still completes through diagnose → implement
-# - Accumulated failure learnings flow to the final phases
 
 name: max_retries_exhausted
 description: All retries fail, loop exits at max_retries limit
@@ -21,53 +18,74 @@ inputs:
   max_retries: 2
 
 events:
-  # Attempt loop — iteration 0: fails
-  - node: attempt.try_implement
+  # Iteration 0: fundamentally wrong, restart
+  - node: attempt.implement
     output:
       response_text: "First attempt. Tried to refactor the auth module but broke session handling."
 
-  - node: attempt.try_diagnose
+  - node: attempt.evaluate
     output:
       response:
-        needs_retry: true
-        diagnosis: "Auth module is tightly coupled to session management. Can't change one without the other."
+        strategy: "restart"
+        diagnosis: "Auth module is tightly coupled to session management. Can't change one without the other. This approach is swimming upstream."
         difficulty_areas: "Session state is shared across auth middleware, route handlers, and websocket connections."
         wrong_abstractions: "Assumed auth and sessions were independent modules — they're deeply intertwined."
-        approach_for_next: "Need to refactor both auth and session handling together. Start from the middleware layer."
+        improvements:
+          - area: "Architecture"
+            suggestion: "Introduce an event bus to decouple auth, sessions, and websockets before attempting any refactoring."
+            severity: critical
+          - area: "Approach"
+            suggestion: "Start from the middleware layer rather than the module boundaries."
+            severity: critical
 
-  # Attempt loop — iteration 1: still fails (max_retries reached, loop exits)
-  - node: attempt.try_implement
+  - node: attempt.refactor
     output:
-      response_text: "Second attempt. Tried refactoring both auth and sessions but the websocket layer also breaks."
+      response_text: "Reverted auth module changes. Introduced a basic event bus for state changes between auth and sessions. Restructured the approach to start from the middleware layer."
 
-  - node: attempt.try_diagnose
+  # Iteration 1: better but still not there
+  - node: attempt.implement
+    output:
+      response_text: "Second attempt. Event bus approach works for auth/sessions but the websocket layer also has coupling issues."
+
+  - node: attempt.evaluate
     output:
       response:
-        needs_retry: true
-        diagnosis: "The coupling extends to websockets too. A three-way dependency between auth, sessions, and websockets."
+        strategy: "improve"
+        diagnosis: "The event bus approach is right but incomplete. Websockets maintain their own auth state that also needs to go through the bus."
         difficulty_areas: "Three-way coupling between auth, sessions, and websockets. Each depends on the others' internal state."
         wrong_abstractions: "Even the combined auth+session refactor isn't enough — websockets maintain their own auth state."
-        approach_for_next: "Must introduce an event bus to decouple all three systems before any refactoring is possible."
+        improvements:
+          - area: "Websocket auth"
+            suggestion: "Websocket connections need to subscribe to auth state changes via the event bus rather than caching auth state internally."
+            severity: critical
+          - area: "Event bus scope"
+            suggestion: "Extend the event bus to cover all three systems: auth, sessions, and websocket connection state."
+            severity: important
 
-  # Final diagnose — synthesize accumulated failure learnings
+  - node: attempt.refactor
+    output:
+      response_text: "Extended event bus to cover websocket auth state. Websocket connections now subscribe to auth changes instead of caching. Still need to verify all edge cases around reconnection."
+
+  # Loop exits: iter.iteration(2) == max_retries(2)
+
   - node: diagnose
     output:
-      response_text: "After 2 failed attempts, the core problem is clear: auth, sessions, and websockets form a tightly coupled triad. The correct approach is to introduce an event bus for state changes, then refactor each module to subscribe to events instead of direct coupling."
+      response_text: "After 2 attempts, the core problem is clear: auth, sessions, and websockets form a tightly coupled triad. The event bus approach is correct but needs to cover all three systems. Start the final implementation from scratch with the full event bus architecture."
 
-  # Final implement — best-effort implementation with everything learned
   - node: implement
     output:
-      response_text: "Implemented event bus pattern to decouple auth, sessions, and websockets. Each module now subscribes to state change events instead of directly referencing others."
+      response_text: "Implemented complete event bus pattern from scratch covering auth, sessions, and websockets. Each module subscribes to state change events instead of directly referencing others."
 
 expect:
   outcome: completed
   reached:
     - attempt
-    - attempt.try_implement
-    - attempt.try_diagnose
+    - attempt.implement
+    - attempt.evaluate
+    - attempt.refactor
     - diagnose
     - implement
   node_outputs:
     attempt:
-      needs_retry: true
-      diagnosis: "The coupling extends to websockets too. A three-way dependency between auth, sessions, and websockets."
+      strategy: "improve"
+      diagnosis: "The event bus approach is right but incomplete. Websockets maintain their own auth state that also needs to go through the bus."

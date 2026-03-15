@@ -1,22 +1,23 @@
-# Multiple Checks Fail: Lint, test, and build all fail simultaneously
+# Multiple Checks Fail: Lint, test, and build all fail, evaluate says restart
 #
 # Tests the parallel failure path where all three checks fail at once:
-# 1. Iteration 0: implement runs, then lint/test/build run in parallel — all fail
-# 2. Code review sees all failures and grades 'fail'
-# 3. Loop re-iterates because lint_exit, test_exit, and build_exit are all non-zero
-# 4. Iteration 1: all checks pass, review passes → loop exits
+# 1. Iteration 0: implement runs, lint/test/build all fail, review fails
+# 2. Evaluate says "restart" — approach is fundamentally wrong
+# 3. Refactor scraps and restructures
+# 4. Iteration 1: all checks pass, review passes, evaluate says "proceed"
+# 5. Refactor skipped, loop exits
 #
-# Verifies that multiple simultaneous check failures are handled correctly
-# and that the loop properly re-iterates when any check fails.
+# Verifies that multiple simultaneous failures trigger the evaluate → refactor path
+# and that the "restart" strategy results in a clean second attempt.
 
 name: multiple_checks_fail
-description: All three checks (lint, test, build) fail simultaneously then pass on retry
+description: All three checks fail, evaluate says restart, refactor restructures, passes on retry
 
 inputs:
-  steps: [implement, lint, test, build, code_review]
+  steps: [implement, lint, test, build, code_review, evaluate, refactor]
 
 events:
-  # Iteration 0 — all checks fail
+  # Iteration 0 — all checks fail, evaluate says restart
   - node: impl_loop.implement
     output:
       response_text: "Rough first implementation."
@@ -43,10 +44,30 @@ events:
           - "Fix failing tests"
           - "Fix compilation errors"
 
+  - node: impl_loop.evaluate
+    output:
+      response:
+        strategy: "restart"
+        diagnosis: "All three checks failed simultaneously. The implementation approach is fighting the codebase — lint errors suggest wrong coding patterns, test failures indicate wrong data model assumptions, build failure indicates missing dependencies. Start fresh."
+        improvements:
+          - area: "Coding patterns"
+            suggestion: "Follow the existing coding style conventions. Check .eslintrc for the expected patterns."
+            severity: critical
+          - area: "Data model"
+            suggestion: "Review the test fixtures to understand the expected data shapes before implementing."
+            severity: critical
+          - area: "Dependencies"
+            suggestion: "Check package.json for available dependencies before importing."
+            severity: critical
+
+  - node: impl_loop.refactor
+    output:
+      response_text: "Reverted all changes. Restructured approach: reviewed eslint config, test fixtures, and package dependencies. Set up clean foundation matching codebase conventions."
+
   # Iteration 1 — all checks pass
   - node: impl_loop.implement
     output:
-      response_text: "Comprehensive fixes applied."
+      response_text: "Clean implementation following codebase conventions."
 
   - node: impl_loop.lint
     output:
@@ -67,6 +88,13 @@ events:
         summary: "All checks pass. Clean implementation."
         suggestions: []
 
+  - node: impl_loop.evaluate
+    output:
+      response:
+        strategy: "proceed"
+        diagnosis: "All checks pass, code review approved. Clean implementation."
+        improvements: []
+
 expect:
   outcome: completed
   reached:
@@ -78,7 +106,9 @@ expect:
     - impl_loop.build
     - impl_loop.join_checks
     - impl_loop.code_review
-    - complete
+    - impl_loop.evaluate
+    - impl_loop.refactor
+    - success
   not_reached:
     - planning.plan
     - write_tests

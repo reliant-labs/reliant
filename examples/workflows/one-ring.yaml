@@ -1,20 +1,24 @@
 name: one-ring
 apiVersion: "0.0.5"
 description: |
-  Unified development pipeline: planning → write_tests → start_app → [simplify → refactor? → implement → lint/test/build → code_review] (loop) → complete.
+  Unified development pipeline: planning → write_tests → start_app → [implement → lint/test/build → code_review → evaluate → refactor?] (loop) → complete.
 
   Planning runs in a sub-workflow fork with optional research/criticize/revise steps.
   Only the final plan summary is saved to the main thread.
 
-  The simplify-first gate inspects the codebase before each implementation attempt and can
-  trigger a targeted refactor before implementation proceeds. On re-entry after failure,
-  the gate also has retrospective context about what went wrong.
+  The implementation loop runs implement → checks → code_review → evaluate → refactor:
+    - implement: build the requested changes
+    - lint/test/build: parallel automated checks
+    - code_review: structured review with pass/fail grade
+    - evaluate: structured assessment that decides strategy (proceed/improve/restart)
+    - refactor: (conditional) applies the evaluation's improvements before next attempt
 
-  The implementation loop repeats when lint/test/build fail or code review fails, up to max_retries.
-  Iterations accumulate on the main thread so the implement agent sees previous feedback.
+  The loop repeats when the evaluate strategy is not "proceed", up to max_retries.
+  When evaluate says "proceed", refactor is skipped and the loop exits.
+  Iterations accumulate on the main thread so agents see previous feedback.
 
   Thread architecture:
-    Main thread: [user msg] → [final plan] → [test summary] → [simplify assessment] → [refactor summary?] → [impl summary] → [check results] → [review] → ...
+    Main thread: [user msg] → [final plan] → [test summary] → [impl summary] → [check results] → [review] → [evaluation] → [refactor summary?] → ...
     Planning fork: [user msg] → [research?] → [plan conversation] → [criticize?] → [revise?]  (discarded after plan saved)
     Each agent fork: [parent context snapshot] → [agent conversation]  (only summary saved back)
 
@@ -37,7 +41,7 @@ inputs:
   steps:
     type: enum
     ui: toolbar
-    default: [plan, simplify, implement, code_review]
+    default: [plan, implement, evaluate, code_review]
     description: Steps to include in the pipeline.
     multi: true
     enum:
@@ -45,7 +49,6 @@ inputs:
       - plan
       - criticize   # Critique the plan
       - revise      # Revise the plan based on critique
-      - simplify    # Simplify-first gate before each implementation attempt
       - tdd         # Enables write_tests
       - implement
       - lint
@@ -53,6 +56,8 @@ inputs:
       - build
       - start_app   # Start dev server before impl loop (enables UX sub-review)
       - code_review
+      - evaluate    # Post-implementation evaluation with strategy decision
+      - refactor    # Conditional refactoring based on evaluation
 
   yield:
     type: boolean
@@ -66,13 +71,6 @@ inputs:
     min: 1
     max: 10
     description: Maximum implementation loop iterations before giving up.
-
-  max_simplify:
-    type: integer
-    default: 1
-    min: 0
-    max: 5
-    description: Maximum number of simplify_first verdicts (refactor-before-implement) per workflow run. After this cap, the simplify gate still runs but its verdict is ignored.
 
   lint_command:
     type: string
@@ -119,10 +117,10 @@ inputs:
 #   Only the final plan is saved to main. Research/criticism stays in forks.
 # - write_tests forks from main: sees only [user msg, final plan]. Clean.
 # - impl_loop is passthrough (loops always inherit parent thread): iterations accumulate so implement sees previous feedback.
-# - simplify_gate, refactor, implement, and code_review fork within the loop:
+# - implement, code_review, evaluate, and refactor fork within the loop:
 #   agent conversations stay isolated, only summaries written back to main thread.
-# - On iteration 1+, the main thread already has iter 0's summaries and review feedback,
-#   so the simplify gate fork sees the retrospective context automatically.
+# - On iteration 1+, the main thread already has iter 0's summaries, review feedback,
+#   evaluation, and refactoring summary, so the next implement sees the full context.
 
 nodes:
   # ── Planning phase (sub-workflow, runs once) ────────────────────────────────
@@ -320,32 +318,28 @@ nodes:
     condition: "'start_app' in inputs.steps"
     command: "{{inputs.start_app_command}} &"
 
-  # ── Implementation loop (repeats on failure) ────────────────────────────────
+  # ── Implementation loop (implement → checks → review → evaluate → refactor) ─
   #
   # Inherits main thread: iterations accumulate so the implement agent on iteration N+1
-  # sees the code review feedback and lint/test/build errors from iteration N.
+  # sees the evaluation feedback and refactoring summary from iteration N.
   #
   # Each iteration:
   #   1. stash_failed: git stash any changes from prior failed iteration (iter 1+)
-  #   2. simplify_gate: structured agent reviews codebase — proceed or simplify_first?
-  #   3. refactor: (conditional) targeted refactoring based on simplify instructions
-  #   4. implement: implementation agent
-  #   5. lint/test/build: parallel checks
-  #   6. code_review: structured code review
+  #   2. implement: implementation agent
+  #   3. lint/test/build: parallel checks
+  #   4. code_review: structured code review with pass/fail
+  #   5. evaluate: structured assessment — proceed, improve, or restart?
+  #   6. refactor: (conditional) apply improvements before next iteration
   #
   # Main thread at loop entry: [user msg, final plan, test summary]
-  # After iteration 0:        + [simplify assessment, refactor summary?, impl summary, check results, review]
-  # After iteration 1:        + [simplify assessment, refactor summary?, impl summary, check results, review] → loop exits
+  # After iteration 0: + [impl summary, check results, review, evaluation, refactor summary?]
+  # After iteration 1: + [impl summary, check results, review, evaluation, refactor summary?] → loop exits
 
   - id: impl_loop
     type: loop
     while: >
-      (
-        (has(outputs.lint_exit) && outputs.lint_exit != 0) ||
-        (has(outputs.test_exit) && outputs.test_exit != 0) ||
-        (has(outputs.build_exit) && outputs.build_exit != 0) ||
-        (has(outputs.review_grade) && outputs.review_grade == 'fail')
-      ) && iter.iteration < inputs.max_retries
+      has(outputs.eval_strategy) && outputs.eval_strategy != "proceed"
+      && iter.iteration < inputs.max_retries
     inline:
       entry: [stash_failed]
 
@@ -354,6 +348,15 @@ nodes:
         test_exit: "{{has(nodes.test) && has(nodes.test.exit_code) ? nodes.test.exit_code : 0}}"
         build_exit: "{{has(nodes.build) && has(nodes.build.exit_code) ? nodes.build.exit_code : 0}}"
         review_grade: "{{has(nodes.code_review) && has(nodes.code_review.response) && nodes.code_review.response != null ? nodes.code_review.response.grade : 'pass'}}"
+        eval_strategy: >
+          {{has(nodes.evaluate) && has(nodes.evaluate.response) && nodes.evaluate.response != null
+            ? nodes.evaluate.response.strategy
+            : (
+                (has(nodes.lint) && has(nodes.lint.exit_code) && nodes.lint.exit_code != 0) ||
+                (has(nodes.test) && has(nodes.test.exit_code) && nodes.test.exit_code != 0) ||
+                (has(nodes.build) && has(nodes.build.exit_code) && nodes.build.exit_code != 0) ||
+                (has(nodes.code_review) && has(nodes.code_review.response) && nodes.code_review.response != null && nodes.code_review.response.grade == 'fail')
+              ) ? 'improve' : 'proceed'}}
 
       nodes:
         # Git stash any changes from the prior failed iteration.
@@ -361,109 +364,6 @@ nodes:
         - id: stash_failed
           type: run
           command: "git stash push --include-untracked -m 'one-ring-iter-{{iter.iteration}}' 2>/dev/null || true"
-
-        # ── Simplify-first gate ──────────────────────────────────────────────
-        #
-        # Structured agent that reviews the codebase and plan, deciding whether
-        # targeted refactoring should precede implementation.
-        #
-        # On iter 0: sees the plan + existing code that will be touched
-        # On iter 1+: also sees prior implementation summary and failure reasons
-        #   (because the main thread accumulates across iterations)
-
-        - id: simplify_gate
-          type: workflow
-          condition: "'simplify' in inputs.steps"
-          ref: builtin://structured-agent
-          presets:
-            default: simplifier
-          args:
-            model: "{{inputs.model}}"
-            mode: auto
-            response_tool_name: submit_simplify_review
-            response_tool_description: "Submit your simplify-first assessment. Default to 'proceed' unless there is a clear structural improvement needed."
-            response_schema:
-              type: object
-              required: [verdict, reason]
-              properties:
-                verdict:
-                  type: string
-                  enum: [proceed, simplify_first]
-                  description: "'proceed' to implement directly, 'simplify_first' to refactor before implementing"
-                reason:
-                  type: string
-                  description: "Explanation of your decision"
-                refactor_instructions:
-                  type: string
-                  description: "Specific, actionable refactoring instructions. Required when verdict is simplify_first."
-                files_to_refactor:
-                  type: array
-                  items:
-                    type: string
-                  description: "Files that should be refactored. Optional."
-          thread:
-            mode: fork
-            memo: false
-            inject:
-              role: user
-              content: |
-                ## Simplify-First Assessment
-
-                Review the current codebase and plan. Should we refactor existing code before implementing?
-
-                **Default to `proceed`** unless there is a clear, specific structural improvement that would
-                make the upcoming implementation significantly simpler or less risky.
-
-                Simplify budget for this workflow run: {{inputs.max_simplify}}.
-                If the budget is 0, you MUST respond with verdict: proceed.
-          save_message:
-            role: assistant
-            content: |
-              ## Simplify Assessment: {{output.response.verdict}}
-              {{output.response.reason}}
-              {{has(output.response.refactor_instructions) && output.response.refactor_instructions != null && output.response.refactor_instructions != '' ? '\n### Refactor Instructions\n' + output.response.refactor_instructions : ''}}
-              {{has(output.response.files_to_refactor) && output.response.files_to_refactor != null && size(output.response.files_to_refactor) > 0 ? '\n### Target Files\n' + output.response.files_to_refactor.map(f, '- ' + f).join('\n') : ''}}
-
-        # ── Refactor (conditional on simplify_first verdict) ─────────────────
-        #
-        # Only runs when the simplify gate recommends refactoring.
-        # Receives the refactor instructions and target files from the gate.
-        # Runs in a fork — only the summary is saved to the main thread.
-
-        - id: refactor
-          type: workflow
-          condition: >
-            has(nodes.simplify_gate)
-            && has(nodes.simplify_gate.response)
-            && nodes.simplify_gate.response != null
-            && nodes.simplify_gate.response.verdict == 'simplify_first'
-          ref: builtin://agent
-          presets:
-            default: refactor
-          args:
-            model: "{{inputs.model}}"
-            mode: "{{inputs.mode}}"
-          thread:
-            mode: fork
-            memo: false
-            inject:
-              role: user
-              content: |
-                ## Refactor Before Implementation
-
-                The simplify-first assessment identified structural improvements needed before implementation.
-
-                ### Instructions
-                {{has(nodes.simplify_gate.response) && nodes.simplify_gate.response != null && has(nodes.simplify_gate.response.refactor_instructions) ? nodes.simplify_gate.response.refactor_instructions : 'No specific instructions provided.'}}
-
-                {{has(nodes.simplify_gate.response) && nodes.simplify_gate.response != null && has(nodes.simplify_gate.response.files_to_refactor) && nodes.simplify_gate.response.files_to_refactor != null && size(nodes.simplify_gate.response.files_to_refactor) > 0 ? '### Target Files\n' + nodes.simplify_gate.response.files_to_refactor.map(f, '- ' + f).join('\n') : ''}}
-
-                Focus on structural refactoring only. Do NOT implement the feature — that comes next.
-          save_message:
-            role: assistant
-            content: |
-              ## Refactor Summary
-              {{output.response_text}}
 
         - id: implement
           type: workflow
@@ -481,15 +381,12 @@ nodes:
             inject:
               role: user
               content: |
-                ## Pipeline Step: Implement
-                Implement the required changes. Use tools to edit code and verify results.
-                
-                Parallelize your work: if the plan identifies independent tasks, use spawn to work on
-                multiple files or modules simultaneously rather than sequentially.
+                ## Pipeline Step: Implement (Attempt {{iter.iteration + 1}})
+                {{iter.iteration == 0 ? 'Implement the required changes. Use tools to edit code and verify results.\n\nParallelize your work: if the plan identifies independent tasks, use spawn to work on\nmultiple files or modules simultaneously rather than sequentially.' : 'Previous attempt was evaluated and refactored above. Read the evaluation and refactoring summary carefully before continuing. Build on the refactored code — do not redo work that has already been improved.'}}
           save_message:
             role: assistant
             content: |
-              ## Implementation Summary
+              ## Implementation Summary (Attempt {{iter.iteration + 1}})
               {{output.response_text}}
 
         - id: lint
@@ -572,12 +469,133 @@ nodes:
               
               {{has(output.response.suggestions) && output.response.suggestions != null && size(output.response.suggestions) > 0 ? '### Suggestions\n' + output.response.suggestions.map(s, '- ' + s).join('\n') : ''}}
 
+        # ── Evaluate (post-implementation assessment) ──────────────────────────
+        #
+        # Structured agent that reviews everything — implementation, check results,
+        # code review — and decides the strategy for the next iteration.
+        # This is the get-it-right pattern: evaluate what happened, decide whether
+        # to improve, restart, or proceed.
+
+        - id: evaluate
+          type: workflow
+          condition: "'evaluate' in inputs.steps"
+          ref: builtin://structured-agent
+          args:
+            model: "{{inputs.model}}"
+            mode: auto
+            response_tool_name: submit_evaluation
+            response_tool_description: "Submit your evaluation of the implementation attempt and recommended strategy"
+            response_schema:
+              type: object
+              required: [strategy, diagnosis, improvements]
+              properties:
+                strategy:
+                  type: string
+                  enum: ["improve", "restart", "proceed"]
+                  description: |
+                    "proceed" — implementation is correct, checks pass, code review approved. Break the loop.
+                    "restart" — the approach is fundamentally wrong; the refactor agent should scrap it and start fresh. Prefer this when the code fights the codebase's patterns.
+                    "improve" — the approach is sound but has specific fixable issues for the refactor agent.
+                diagnosis:
+                  type: string
+                  description: "Complete analysis — what worked, what didn't, and why. Include check failures and review feedback."
+                improvements:
+                  type: array
+                  items:
+                    type: object
+                    required: [area, suggestion]
+                    properties:
+                      area:
+                        type: string
+                        description: "The area of code or concern that needs improvement"
+                      suggestion:
+                        type: string
+                        description: "Specific, actionable suggestion for the refactor agent"
+                      severity:
+                        type: string
+                        enum: [critical, important, minor]
+                        description: "How significant this improvement is"
+                  description: "Specific improvements for the refactor agent, ordered by severity"
+          thread:
+            mode: fork
+            memo: false
+            inject:
+              role: user
+              content: |
+                ## Pipeline Step: Evaluate (Attempt {{iter.iteration + 1}})
+
+                Analyze the implementation attempt, check results, and code review above. Decide the strategy:
+
+                **Check results:**
+                - Lint: {{has(nodes.lint) && has(nodes.lint.exit_code) ? (nodes.lint.exit_code == 0 ? 'passed' : 'FAILED') : 'skipped'}}
+                - Test: {{has(nodes.test) && has(nodes.test.exit_code) ? (nodes.test.exit_code == 0 ? 'passed' : 'FAILED') : 'skipped'}}
+                - Build: {{has(nodes.build) && has(nodes.build.exit_code) ? (nodes.build.exit_code == 0 ? 'passed' : 'FAILED') : 'skipped'}}
+                - Code Review: {{has(nodes.code_review) && has(nodes.code_review.response) && nodes.code_review.response != null ? nodes.code_review.response.grade : 'skipped'}}
+
+                Focus on:
+                1. Why did checks fail (if any)? What's the root cause?
+                2. What did the code review identify? Are the suggestions critical or cosmetic?
+                3. What abstractions or assumptions were wrong?
+                4. What specific improvements should the refactor agent make?
+                5. Should we improve what we have, or would starting from scratch be better?
+
+                **Bias toward restarting** when the code is fighting the codebase's patterns.
+                A clean implementation armed with hard-won understanding beats incrementally-patched code.
+          save_message:
+            role: assistant
+            content: |
+              ## Evaluation (Attempt {{iter.iteration + 1}}): {{has(output.response) ? output.response.strategy : 'N/A'}}
+
+              {{has(output.response) ? output.response.diagnosis : 'Evaluation not available'}}
+
+              {{has(output.response) && has(output.response.improvements) && size(output.response.improvements) > 0 ? '### Improvements for refactoring\n' + output.response.improvements.map(i, '- **' + i.area + '** (' + (has(i.severity) ? i.severity : 'unspecified') + '): ' + i.suggestion).join('\n') : ''}}
+
+        # ── Refactor (conditional on evaluate strategy) ────────────────────────
+        #
+        # Only runs when evaluate says the strategy is not "proceed".
+        # Applies the evaluation's improvements before the next iteration.
+        # Uses the refactor preset for specialized code transformation.
+
+        - id: refactor
+          type: workflow
+          condition: "'refactor' in inputs.steps"
+          ref: builtin://agent
+          presets:
+            default: refactor
+          args:
+            model: "{{inputs.model}}"
+            mode: "{{inputs.mode}}"
+          thread:
+            mode: fork
+            memo: false
+            inject:
+              role: user
+              content: |
+                ## Pipeline Step: Refactor (After Attempt {{iter.iteration + 1}})
+
+                The evaluation above assessed the implementation and produced improvements. Your job is to apply them.
+
+                **Read the evaluation's strategy carefully:**
+                - If the strategy is **"improve"** — the approach is sound. Apply the specific improvements listed. Fix what's broken without rewriting what works.
+                - If the strategy is **"restart"** — the approach is fundamentally wrong. Revert or delete the failed code and restructure from scratch, using the evaluation's insights about what patterns are actually correct.
+
+                **Process:**
+                1. Read the evaluation's improvements list — address them in severity order (critical first)
+                2. Apply each improvement, running tests after each significant change
+                3. Summarize what you changed and what the code looks like now
+
+                **Do NOT:**
+                - Ignore critical improvements
+                - Add new features beyond what the improvements specify
+                - Leave code in a broken state
+          save_message:
+            role: assistant
+            content: |
+              ## Refactoring Summary (After Attempt {{iter.iteration + 1}})
+              {{output.response_text}}
+
       edges:
         - from: stash_failed
-          default: simplify_gate
-        - from: simplify_gate
-          default: refactor
-        - from: refactor
           default: implement
         - from: implement
           default: lint
@@ -593,6 +611,13 @@ nodes:
           default: join_checks
         - from: join_checks
           default: code_review
+        - from: code_review
+          default: evaluate
+        - from: evaluate
+          cases:
+            - condition: "has(nodes.evaluate.response) && nodes.evaluate.response.strategy == 'proceed'"
+              to: []
+          default: refactor
       ui:
         positions:
           workflow:
@@ -601,28 +626,28 @@ nodes:
           stash_failed:
             x: 400
             y: 300
-          simplify_gate:
+          implement:
             x: 750
             y: 300
-          refactor:
-            x: 1100
-            y: 300
-          implement:
-            x: 1450
-            y: 300
           lint:
-            x: 1800
+            x: 1100
             y: 150
           test:
-            x: 1800
+            x: 1100
             y: 300
           build:
-            x: 1800
+            x: 1100
             y: 450
           join_checks:
-            x: 2150
+            x: 1450
             y: 300
           code_review:
+            x: 1800
+            y: 300
+          evaluate:
+            x: 2150
+            y: 300
+          refactor:
             x: 2500
             y: 300
 
@@ -635,7 +660,7 @@ nodes:
       content: |
         ## Pipeline Complete
         
-        All checks passed and code review approved the implementation.
+        All checks passed and implementation approved.
 
   - id: max_retries_reached
     type: save_message
@@ -651,10 +676,12 @@ nodes:
         - Test: {{has(nodes.impl_loop) && has(nodes.impl_loop.test_exit) ? (nodes.impl_loop.test_exit == 0 ? 'passed' : 'failed (exit ' + string(nodes.impl_loop.test_exit) + ')') : 'skipped'}}
         - Build: {{has(nodes.impl_loop) && has(nodes.impl_loop.build_exit) ? (nodes.impl_loop.build_exit == 0 ? 'passed' : 'failed (exit ' + string(nodes.impl_loop.build_exit) + ')') : 'skipped'}}
         - Review: {{has(nodes.impl_loop) && has(nodes.impl_loop.review_grade) ? nodes.impl_loop.review_grade : 'skipped'}}
+        - Evaluation: {{has(nodes.impl_loop) && has(nodes.impl_loop.eval_strategy) ? nodes.impl_loop.eval_strategy : 'skipped'}}
 
 outputs:
   plan_summary: "{{nodes.planning.plan_summary}}"
   review_grade: "{{nodes.impl_loop.review_grade}}"
+  eval_strategy: "{{nodes.impl_loop.eval_strategy}}"
   iterations: "{{nodes.impl_loop._iterations}}"
 
 edges:
@@ -668,7 +695,7 @@ edges:
     cases:
       - to: max_retries_reached
         condition: >
-          has(nodes.impl_loop.review_grade) && nodes.impl_loop.review_grade == 'fail'
+          has(nodes.impl_loop.eval_strategy) && nodes.impl_loop.eval_strategy != 'proceed'
     default: success
 
 ui:
