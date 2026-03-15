@@ -1,22 +1,21 @@
-# Code Review Retry: Review fails on iteration 0, passes on iteration 1
+# Code Review Retry: Review fails, evaluate says improve, refactor fixes, second attempt passes
 #
-# Tests the loop re-iteration triggered by a failing code review:
-# 1. Iteration 0: implement runs, code review grades 'fail'
-# 2. Loop condition: review_grade == 'fail' → re-iterate
-# 3. Iteration 1: implement runs again (sees previous feedback), review grades 'pass'
-# 4. Loop exits
+# Tests the full evaluate → refactor loop triggered by a failing code review:
+# 1. Iteration 0: implement runs, review grades 'fail', evaluate says 'improve', refactor applies fixes
+# 2. Loop condition: eval_strategy != "proceed" → re-iterate
+# 3. Iteration 1: implement builds on refactored code, review passes, evaluate says 'proceed'
+# 4. Refactor skipped, loop exits
 #
-# Verifies that a failing review correctly triggers re-iteration and
-# the loop exits when the review passes on retry.
+# Verifies that a failing review flows through evaluate → refactor → retry.
 
 name: code_review_fails_then_passes
-description: Code review fails on first try, passes on retry
+description: Code review fails, evaluate triggers refactor, passes on retry
 
 inputs:
-  steps: [implement, code_review]
+  steps: [implement, code_review, evaluate, refactor]
 
 events:
-  # Iteration 0 — review fails
+  # Iteration 0 — review fails, evaluate says improve, refactor fixes
   - node: impl_loop.implement
     output:
       response_text: "Initial implementation attempt."
@@ -30,10 +29,27 @@ events:
           - "Fix null pointer in handler"
           - "Add input validation"
 
-  # Iteration 1 — review passes
+  - node: impl_loop.evaluate
+    output:
+      response:
+        strategy: "improve"
+        diagnosis: "Code review found null pointer and missing validation. These are specific fixable issues."
+        improvements:
+          - area: "Handler null safety"
+            suggestion: "Add null check before accessing request.body in the handler."
+            severity: critical
+          - area: "Input validation"
+            suggestion: "Add validation middleware for the incoming request payload."
+            severity: important
+
+  - node: impl_loop.refactor
+    output:
+      response_text: "Added null check in handler and input validation middleware. Both issues from the review are resolved."
+
+  # Iteration 1 — review passes, evaluate says proceed
   - node: impl_loop.implement
     output:
-      response_text: "Fixed issues from review feedback."
+      response_text: "Built on refactored code. All review issues resolved."
 
   - node: impl_loop.code_review
     output:
@@ -41,6 +57,15 @@ events:
         grade: pass
         summary: "All issues resolved. Implementation looks good."
         suggestions: []
+
+  - node: impl_loop.evaluate
+    output:
+      response:
+        strategy: "proceed"
+        diagnosis: "Code review passed. Implementation is clean and complete."
+        improvements: []
+
+  # refactor skipped (evaluate strategy == "proceed")
 
 expect:
   outcome: completed
@@ -50,7 +75,9 @@ expect:
     - impl_loop.implement
     - impl_loop.join_checks
     - impl_loop.code_review
-    - complete
+    - impl_loop.evaluate
+    - impl_loop.refactor
+    - success
   not_reached:
     - planning.plan
     - write_tests

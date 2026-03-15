@@ -1,19 +1,18 @@
-# Build Retry: Build fails on iteration 0, passes on iteration 1
+# Build Retry: Build fails, evaluate says improve, refactor fixes, second attempt passes
 #
-# Tests the loop re-iteration triggered by a failing build:
-# 1. Iteration 0: implement runs, build fails (exit_code: 1), review also fails
-# 2. Loop condition: build_exit != 0 → re-iterate
-# 3. Iteration 1: implement runs again, build passes (exit_code: 0), review passes
-# 4. Loop exits
+# Tests the evaluate → refactor loop triggered by a failing build:
+# 1. Iteration 0: implement runs, build fails, review fails, evaluate says 'improve', refactor fixes
+# 2. Loop condition: eval_strategy != "proceed" → re-iterate
+# 3. Iteration 1: implement runs, build passes, review passes, evaluate says 'proceed'
+# 4. Refactor skipped, loop exits
 #
-# Verifies that a non-zero build exit_code triggers re-iteration.
-# Note: build is a `type: run` node — mock its exit_code directly.
+# Verifies that build failures flow through evaluate → refactor → retry.
 
 name: build_fails_then_passes
-description: Build fails on first iteration, passes on retry
+description: Build fails, evaluate triggers refactor, passes on retry
 
 inputs:
-  steps: [implement, build, code_review]
+  steps: [implement, build, code_review, evaluate, refactor]
 
 events:
   # Iteration 0 — build fails
@@ -33,10 +32,24 @@ events:
         suggestions:
           - "Add the missing processData function"
 
+  - node: impl_loop.evaluate
+    output:
+      response:
+        strategy: "improve"
+        diagnosis: "Build failed due to missing function reference. Code review identified the specific issue."
+        improvements:
+          - area: "Missing function"
+            suggestion: "Add the processData function definition that's referenced but not implemented."
+            severity: critical
+
+  - node: impl_loop.refactor
+    output:
+      response_text: "Added the missing processData function definition. Build should compile now."
+
   # Iteration 1 — build passes, review passes
   - node: impl_loop.implement
     output:
-      response_text: "Added missing function definition."
+      response_text: "Built on refactored code. Compilation verified."
 
   - node: impl_loop.build
     output:
@@ -49,6 +62,13 @@ events:
         summary: "Build passes. Implementation complete."
         suggestions: []
 
+  - node: impl_loop.evaluate
+    output:
+      response:
+        strategy: "proceed"
+        diagnosis: "Build passes, review approved. Implementation is complete."
+        improvements: []
+
 expect:
   outcome: completed
   reached:
@@ -58,7 +78,9 @@ expect:
     - impl_loop.build
     - impl_loop.join_checks
     - impl_loop.code_review
-    - complete
+    - impl_loop.evaluate
+    - impl_loop.refactor
+    - success
   not_reached:
     - planning.plan
     - write_tests

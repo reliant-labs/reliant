@@ -5,16 +5,17 @@
 # 2. TDD writes tests
 # 3. Implementation runs
 # 4. Lint, test, and build all pass (exit_code: 0)
-# 5. Code review passes → loop exits after 1 iteration
+# 5. Code review passes
+# 6. Evaluate says "proceed" → refactor skipped → loop exits after 1 iteration
 #
 # Verifies every node is reached when all steps are active.
 # Note: start_app is NOT included here — see start_app_with_ux_review.yaml for that.
 
 name: full_pipeline_all_pass
-description: All steps enabled (plan, tdd, implement, lint, test, build, code_review), all pass
+description: All steps enabled, all pass on first try
 
 inputs:
-  steps: [plan, tdd, implement, lint, test, build, code_review]
+  steps: [plan, tdd, implement, lint, test, build, code_review, evaluate, refactor]
 
 events:
   # Planning
@@ -51,6 +52,15 @@ events:
         summary: "Excellent implementation. All checks pass."
         suggestions: []
 
+  - node: impl_loop.evaluate
+    output:
+      response:
+        strategy: "proceed"
+        diagnosis: "Everything passes. Implementation is clean and correct."
+        improvements: []
+
+  # refactor skipped (evaluate strategy == "proceed")
+
 expect:
   outcome: completed
   reached:
@@ -64,6 +74,8 @@ expect:
     - impl_loop.build
     - impl_loop.join_checks
     - impl_loop.code_review
-    - complete
+    - impl_loop.evaluate
+    - success
   not_reached:
     - start_app
+    - impl_loop.refactor

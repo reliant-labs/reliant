@@ -1,24 +1,23 @@
 # Max Retries Exhausted: Loop exits after hitting the retry limit
 #
-# Tests the loop's max_retries safeguard:
-# 1. max_retries set to 2 (low limit for testing)
-# 2. Iteration 0: review fails → re-iterate
-# 3. Iteration 1: review fails again → iter.iteration (2) == max_retries (2) → loop exits
-# 4. Workflow still completes (loop exhaustion is not an error)
+# Tests the loop's max_retries safeguard with evaluate → refactor:
+# 1. max_retries set to 2
+# 2. Iteration 0: review fails, evaluate says 'improve', refactor applies fixes
+# 3. Iteration 1: review fails again, evaluate says 'improve', refactor applies fixes
+# 4. Loop exits: iter.iteration(2) == max_retries(2)
 #
 # Verifies the loop correctly stops when max_retries is reached,
-# even if the last iteration still has failures.
-# The final review_grade will be 'fail' since it never passed.
+# even if evaluate never says "proceed".
 
 name: max_retries_exhausted
-description: Loop exits after max_retries iterations without passing review
+description: Loop exits after max_retries iterations without reaching proceed
 
 inputs:
-  steps: [implement, code_review]
+  steps: [implement, code_review, evaluate, refactor]
   max_retries: 2
 
 events:
-  # Iteration 0 — review fails
+  # Iteration 0 — review fails, evaluate says improve
   - node: impl_loop.implement
     output:
       response_text: "First implementation attempt."
@@ -31,7 +30,21 @@ events:
         suggestions:
           - "Rethink the data model"
 
-  # Iteration 1 — review fails again (max_retries reached, loop exits)
+  - node: impl_loop.evaluate
+    output:
+      response:
+        strategy: "improve"
+        diagnosis: "Code review found fundamental design flaw in the data model."
+        improvements:
+          - area: "Data model"
+            suggestion: "Restructure the data model to match the existing schema patterns."
+            severity: critical
+
+  - node: impl_loop.refactor
+    output:
+      response_text: "Restructured data model to follow existing patterns."
+
+  # Iteration 1 — review fails again, evaluate says improve (max_retries reached)
   - node: impl_loop.implement
     output:
       response_text: "Second attempt, still flawed."
@@ -44,6 +57,22 @@ events:
         suggestions:
           - "Consider a different approach entirely"
 
+  - node: impl_loop.evaluate
+    output:
+      response:
+        strategy: "improve"
+        diagnosis: "Still failing review. The data model fix wasn't sufficient."
+        improvements:
+          - area: "Approach"
+            suggestion: "Consider a completely different approach to the data model."
+            severity: critical
+
+  - node: impl_loop.refactor
+    output:
+      response_text: "Applied further data model changes but fundamental issues remain."
+
+  # Loop exits: iter.iteration(2) == max_retries(2)
+
 expect:
   outcome: completed
   reached:
@@ -52,7 +81,9 @@ expect:
     - impl_loop.implement
     - impl_loop.join_checks
     - impl_loop.code_review
-    - complete
+    - impl_loop.evaluate
+    - impl_loop.refactor
+    - max_retries_reached
   not_reached:
     - planning.plan
     - write_tests
@@ -60,3 +91,4 @@ expect:
     - impl_loop.lint
     - impl_loop.test
     - impl_loop.build
+    - success

@@ -1,39 +1,36 @@
 # Immediate Understanding: First try fully succeeds with no issues
 #
 # Tests the case where the codebase is simple enough that the first attempt
-# needs no diagnosis — the implementation is immediately correct:
-# 1. Iteration 0: try_implement succeeds cleanly, try_diagnose confirms no retry needed
-# 2. Loop condition: needs_retry == false → loop exits after 1 iteration
-# 3. Final diagnose confirms the straightforward nature of the change
-# 4. Final implement applies the clean solution
+# needs no evaluation feedback:
+# 1. Iteration 0: implement succeeds cleanly, evaluate confirms proceed
+# 2. Conditional edge: strategy == "proceed" → skip refactor
+# 3. Loop exits, final diagnose and implement complete the workflow
 #
-# This is similar to happy_path_no_retry but emphasizes the "immediate understanding"
-# scenario where the codebase patterns are well-established and predictable.
-# Verifies the workflow handles trivially successful cases efficiently.
+# Similar to happy_path_no_retry but emphasizes well-established codebase patterns.
 
 name: immediate_understanding
 description: Codebase is simple enough that first attempt fully succeeds
 
 events:
-  # Attempt loop — iteration 0: immediate success
-  - node: attempt.try_implement
+  - node: attempt.implement
     output:
       response_text: "Added the new endpoint. Followed the existing pattern from the adjacent routes. All tests pass."
 
-  - node: attempt.try_diagnose
+  - node: attempt.evaluate
     output:
       response:
-        needs_retry: false
+        strategy: "proceed"
         diagnosis: "The implementation is complete and correct. The codebase has consistent patterns that made this straightforward."
         difficulty_areas: "No unexpected difficulty. The route patterns are well-established."
         wrong_abstractions: "No wrong assumptions — the codebase structure matches its documentation."
+        improvements: []
 
-  # Final diagnose — quick confirmation
+  # refactor is skipped (conditional edge: strategy == "proceed")
+
   - node: diagnose
     output:
       response_text: "No issues found. The codebase is well-structured with consistent patterns. The implementation follows established conventions."
 
-  # Final implement — confirm the implementation
   - node: implement
     output:
       response_text: "Implementation confirmed. New endpoint follows existing route patterns with proper validation and error handling."
@@ -42,11 +39,13 @@ expect:
   outcome: completed
   reached:
     - attempt
-    - attempt.try_implement
-    - attempt.try_diagnose
+    - attempt.implement
+    - attempt.evaluate
     - diagnose
     - implement
+  not_reached:
+    - attempt.refactor
   node_outputs:
     attempt:
-      needs_retry: false
+      strategy: "proceed"
       diagnosis: "The implementation is complete and correct. The codebase has consistent patterns that made this straightforward."

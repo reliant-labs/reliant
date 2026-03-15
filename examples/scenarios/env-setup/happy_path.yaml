@@ -1,0 +1,40 @@
+# Happy Path: Setup runs, validation passes on first try
+#
+# Tests the simplest successful path through the env-setup workflow:
+# 1. Cleanup is skipped on iteration 0 (condition: iter.iteration > 0)
+# 2. Setup agent configures environment isolation
+# 3. Validation agent passes all checks
+# 4. Loop exits after 1 iteration because grade is 'pass'
+# 5. Reaches success node
+#
+# Verifies the basic setup → validate loop exits on first pass.
+
+name: happy_path
+description: >
+  Setup runs, validation passes on first try.
+  Cleanup is skipped on iteration 0 (condition: iter.iteration > 0).
+  Loop exits after 1 iteration because grade is 'pass'.
+  Reaches success.
+
+events:
+  - node: setup_loop.setup
+    output:
+      response_text: "Environment configured: ports allocated, databases isolated, scripts created."
+
+  - node: setup_loop.validate
+    output:
+      response:
+        grade: pass
+        findings: "All checks passed. Ports listening, databases accessible, processes named correctly, teardown clean."
+        issues: []
+
+expect:
+  outcome: completed
+  reached:
+    - setup_loop
+    - setup_loop.setup
+    - setup_loop.validate
+    - success
+  node_outputs:
+    setup_loop:
+      validation_grade: "pass"

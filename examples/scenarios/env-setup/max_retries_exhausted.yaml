@@ -1,0 +1,59 @@
+# Max Retries Exhausted: Loop exits after hitting the retry limit
+#
+# Tests the loop's max_retries safeguard:
+# 1. max_retries set to 2
+# 2. Iteration 0: setup runs, validation fails (database isolation issue)
+# 3. Iteration 1: cleanup runs, setup retries, validation still fails
+# 4. Loop exits: iter.iteration(2) == max_retries(2)
+# 5. Reaches max_retries_reached (failure outcome)
+#
+# Verifies the loop correctly stops when max_retries is reached,
+# even if validation never passes.
+
+name: max_retries_exhausted
+description: >
+  max_retries: 2. Both iterations: validation fails.
+  Cleanup runs on iteration 1 (skipped on iteration 0).
+  Loop exits after 2 iterations because iter.iteration reaches max_retries.
+  Reaches max_retries_reached.
+
+inputs:
+  max_retries: 2
+
+events:
+  # Iteration 0
+  - node: setup_loop.setup
+    output:
+      response_text: "Setup attempt 1."
+
+  - node: setup_loop.validate
+    output:
+      response:
+        grade: fail
+        findings: "Database isolation failed."
+        issues:
+          - "SQLite DB not in ephemeral dir"
+
+  # Iteration 1 — cleanup runs (no event needed)
+  - node: setup_loop.setup
+    output:
+      response_text: "Setup attempt 2."
+
+  - node: setup_loop.validate
+    output:
+      response:
+        grade: fail
+        findings: "Database isolation still failing."
+        issues:
+          - "SQLite DB still not in ephemeral dir"
+
+expect:
+  outcome: completed
+  reached:
+    - setup_loop
+    - setup_loop.setup
+    - setup_loop.validate
+    - max_retries_reached
+  node_outputs:
+    setup_loop:
+      validation_grade: "fail"

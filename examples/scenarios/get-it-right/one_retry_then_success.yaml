@@ -1,56 +1,64 @@
-# One Retry Then Success: First attempt fails, second attempt succeeds
+# One Retry Then Success: First attempt has issues, refactor fixes them, second succeeds
 #
-# Tests the core try-fail-learn cycle with one retry:
-# 1. Iteration 0: try_implement runs, try_diagnose says needs_retry=true
-# 2. Loop condition: needs_retry == true && iter.iteration(1) < max_retries(2) → re-iterate
-# 3. Iteration 1: try_implement runs again with learnings, try_diagnose says needs_retry=false
-# 4. Loop condition: needs_retry == false → loop exits
-# 5. Final diagnose synthesizes accumulated learnings from both iterations
-# 6. Final implement applies the correct solution
+# Tests the implement → evaluate → refactor → loop cycle:
+# 1. Iteration 0: implement runs, evaluate says strategy="improve" with improvements
+# 2. Refactor agent applies the improvements
+# 3. Loop condition: strategy != "proceed" → re-iterate
+# 4. Iteration 1: implement builds on refactored code, evaluate says strategy="proceed"
+# 5. Conditional edge: strategy == "proceed" → skip refactor
+# 6. Loop exits, final diagnose and implement complete
 #
-# Verifies that:
-# - A failing first attempt correctly triggers re-iteration
-# - Learnings accumulate across iterations (thread.mode: inherit)
-# - The loop exits when needs_retry becomes false
-# - Final diagnose and implement receive the full context
+# Verifies the three-agent loop works: implement → evaluate → refactor → implement
 
 name: one_retry_then_success
-description: First attempt fails, second attempt succeeds after learning from failure
+description: First attempt has issues, refactor agent fixes them, second attempt succeeds
 
 events:
-  # Attempt loop — iteration 0: try fails, retry needed
-  - node: attempt.try_implement
+  # Iteration 0: implement has issues
+  - node: attempt.implement
     output:
       response_text: "Attempted the feature but tests fail. The data model doesn't match expectations."
 
-  - node: attempt.try_diagnose
+  - node: attempt.evaluate
     output:
       response:
-        needs_retry: true
+        strategy: "improve"
         diagnosis: "The implementation assumed a flat data model but the schema is actually nested with foreign key constraints."
         difficulty_areas: "Database schema is more complex than it appears from the API layer."
         wrong_abstractions: "Assumed direct table access but there's a repository pattern wrapping queries."
-        approach_for_next: "Use the repository layer instead of direct SQL. Follow the existing pattern in UserRepository."
+        improvements:
+          - area: "Data access layer"
+            suggestion: "Use the repository layer instead of direct SQL. Follow the existing pattern in UserRepository."
+            severity: critical
+          - area: "Schema assumptions"
+            suggestion: "Check the migration files for the actual schema shape before writing queries."
+            severity: important
 
-  # Attempt loop — iteration 1: try succeeds, no retry needed
-  - node: attempt.try_implement
+  - node: attempt.refactor
     output:
-      response_text: "Used the repository pattern as suggested. Tests pass, implementation is clean."
+      response_text: "Refactored data access to use the repository layer. Replaced direct SQL queries with UserRepository methods. Updated schema assumptions based on migration files. Tests now pass for the data layer."
 
-  - node: attempt.try_diagnose
+  # Iteration 1: implement builds on refactored code, succeeds
+  - node: attempt.implement
+    output:
+      response_text: "Built on the refactored repository layer. All tests pass, implementation is clean."
+
+  - node: attempt.evaluate
     output:
       response:
-        needs_retry: false
-        diagnosis: "Implementation is now correct. Using the repository layer resolved the data model mismatch."
+        strategy: "proceed"
+        diagnosis: "Implementation is now correct. The repository layer integration is solid and follows codebase conventions."
         difficulty_areas: "The repository pattern was non-obvious from the surface API."
-        wrong_abstractions: "First attempt bypassed the repository layer — now corrected."
+        wrong_abstractions: "First attempt bypassed the repository layer — now corrected by the refactor."
+        improvements: []
 
-  # Final diagnose
+  # refactor is skipped (conditional edge: strategy == "proceed")
+
+  # Final phases
   - node: diagnose
     output:
       response_text: "Key learning: always use the repository layer for data access. The schema has hidden complexity behind FK constraints that the repository handles correctly."
 
-  # Final implement
   - node: implement
     output:
       response_text: "Final implementation uses the repository pattern throughout. All tests pass. Migration script included."
@@ -59,11 +67,12 @@ expect:
   outcome: completed
   reached:
     - attempt
-    - attempt.try_implement
-    - attempt.try_diagnose
+    - attempt.implement
+    - attempt.evaluate
+    - attempt.refactor
     - diagnose
     - implement
   node_outputs:
     attempt:
-      needs_retry: false
-      diagnosis: "Implementation is now correct. Using the repository layer resolved the data model mismatch."
+      strategy: "proceed"
+      diagnosis: "Implementation is now correct. The repository layer integration is solid and follows codebase conventions."

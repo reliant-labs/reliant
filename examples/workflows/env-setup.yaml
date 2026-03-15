@@ -3,7 +3,8 @@ apiVersion: "0.0.5"
 description: |
   Environment isolation pipeline: [setup → validate] (loop) → complete.
   Analyzes any codebase, sets up dynamic ports, isolated databases, worktree-named
-  processes, language-appropriate hot-reload, and writes all state to .reliant/ephemeral/.
+  processes, language-appropriate hot-reload, consolidated logging (including browser
+  console capture), and writes all state to .reliant/ephemeral/.
   Validation agent tests the full setup in a feedback loop until everything works.
 
 entry: [setup_loop]
@@ -37,12 +38,30 @@ nodes:
       (has(outputs.validation_grade) && outputs.validation_grade == 'fail')
       && iter.iteration < inputs.max_retries
     inline:
-      entry: [setup]
+      entry: [cleanup]
 
       outputs:
         validation_grade: "{{has(nodes.validate) && has(nodes.validate.response) && nodes.validate.response != null ? nodes.validate.response.grade : 'fail'}}"
 
       nodes:
+        # On retry iterations, tear down partial state before re-running setup.
+        # On iteration 0 this is a no-op.
+        - id: cleanup
+          type: run
+          condition: "iter.iteration > 0"
+          command: |
+            if [ -x .reliant/ephemeral/stop.sh ]; then
+              echo "Cleaning up previous attempt (iteration {{iter.iteration}})..."
+              .reliant/ephemeral/stop.sh 2>/dev/null || true
+            fi
+            # Clear stale PID tracking so setup starts fresh
+            rm -f .reliant/ephemeral/pids.json
+          save_message:
+            role: assistant
+            content: |
+              ## Cleanup (Iteration {{iter.iteration}})
+              Ran stop.sh and cleared stale PID state from previous attempt.
+
         - id: setup
           type: workflow
           ref: builtin://agent
@@ -157,6 +176,13 @@ nodes:
               ├── pids.json           # {"air": 12345, "vite": 12346, "temporal-ui": "container-id"}
               ├── worktree.json       # {"name": "my-feature", "path": "/path/to/worktree", "created_at": "..."}
               ├── db/                 # SQLite databases go here
+              ├── logs/               # ALL logs consolidated here
+              │   ├── backend.log     # Backend server stdout/stderr
+              │   ├── frontend.log    # Frontend dev server stdout/stderr
+              │   ├── hot-reload.log  # Hot-reload tool output (Air, nodemon, etc.)
+              │   ├── docker/         # Per-container logs
+              │   ├── browser.log     # Browser console logs (via DevTools Protocol)
+              │   └── combined.log    # Merged log stream with timestamps + source prefixes
               ├── services/           # Per-service state files
               ├── start.sh            # Starts everything
               └── stop.sh             # Tears everything down
@@ -437,17 +463,69 @@ nodes:
 
               echo "Starting environment for worktree: $WORKTREE_NAME"
 
+              # -- Prepare log directory and truncate old logs --
+              LOG_DIR="$SCRIPT_DIR/logs"
+              mkdir -p "$LOG_DIR/docker"
+              for f in "$LOG_DIR"/*.log; do
+                [ -f "$f" ] && : > "$f"
+              done
+
               # -- Start services (Docker containers, embedded servers) --
               # [generated per-project]
+              # IMPORTANT: Redirect stdout/stderr to $LOG_DIR/<service>.log
+              # Example: my-service >> "$LOG_DIR/my-service.log" 2>&1 &
+              # For Docker: docker logs -f "container-$WORKTREE_NAME" >> "$LOG_DIR/docker/container.log" 2>&1 &
 
               # -- Start hot-reload / dev server --
               # [generated per-project]
+              # IMPORTANT: Redirect output to $LOG_DIR/backend.log, $LOG_DIR/frontend.log, etc.
+
+              # -- Browser console log capture (if frontend detected) --
+              # CDP_PORT=$(jq -r '.cdp // empty' "$SCRIPT_DIR/ports.json")
+              # [generated per-project if frontend/Electron is present]
+
+              # -- Combined log stream --
+              # Merges all individual logs with source prefixes
+              # (
+              #   tail -F "$LOG_DIR/backend.log"  2>/dev/null | sed 's/^/[backend]  /' &
+              #   tail -F "$LOG_DIR/frontend.log" 2>/dev/null | sed 's/^/[frontend] /' &
+              #   tail -F "$LOG_DIR/browser.log"  2>/dev/null | sed 's/^/[browser]  /' &
+              #   wait
+              # ) >> "$LOG_DIR/combined.log" 2>&1 &
 
               # -- Register PIDs --
               # [write to pids.json after each process starts]
 
-              echo "Environment started. Ports:"
-              cat "$SCRIPT_DIR/ports.json" | jq .
+              # -- Readiness probes: wait for all services to be listening --
+              echo "Waiting for services to become ready..."
+              MAX_WAIT=30
+              ALL_READY=true
+              for port in $(jq -r 'to_entries[] | .value' "$SCRIPT_DIR/ports.json" 2>/dev/null); do
+                elapsed=0
+                while ! nc -z localhost "$port" 2>/dev/null; do
+                  sleep 1
+                  elapsed=$((elapsed + 1))
+                  if [ "$elapsed" -ge "$MAX_WAIT" ]; then
+                    echo "WARNING: Port $port not ready after ${MAX_WAIT}s"
+                    ALL_READY=false
+                    break
+                  fi
+                done
+                if [ "$elapsed" -lt "$MAX_WAIT" ]; then
+                  echo "  Port $port ready (${elapsed}s)"
+                fi
+              done
+
+              if [ "$ALL_READY" = true ]; then
+                echo "All services ready."
+              else
+                echo "WARNING: Some services did not become ready within ${MAX_WAIT}s."
+                echo "Check logs in $LOG_DIR/ for errors."
+              fi
+
+              echo "Ports:"
+              jq . "$SCRIPT_DIR/ports.json"
+              echo "Logs: $LOG_DIR/"
               ```
 
               ## stop.sh
@@ -476,6 +554,35 @@ nodes:
                 done
               fi
 
+              # Wait for processes to actually exit (poll, don't sleep blindly)
+              echo "Waiting for processes to exit..."
+              MAX_WAIT=15
+              elapsed=0
+              while [ "$elapsed" -lt "$MAX_WAIT" ]; do
+                all_dead=true
+                for pid in $(jq -r '.[] | select(.type == "process") | .pid' "$SCRIPT_DIR/pids.json" 2>/dev/null); do
+                  if kill -0 "$pid" 2>/dev/null; then
+                    all_dead=false
+                    break
+                  fi
+                done
+                if [ "$all_dead" = true ]; then
+                  break
+                fi
+                sleep 1
+                elapsed=$((elapsed + 1))
+              done
+
+              # Force kill any stragglers
+              if [ "$elapsed" -ge "$MAX_WAIT" ]; then
+                echo "Some processes did not exit gracefully, sending SIGKILL..."
+                for pid in $(jq -r '.[] | select(.type == "process") | .pid' "$SCRIPT_DIR/pids.json" 2>/dev/null); do
+                  if kill -0 "$pid" 2>/dev/null; then
+                    kill -9 "$pid" 2>/dev/null || true
+                  fi
+                done
+              fi
+
               # Release port reservations
               WORKTREE_NAME=$(jq -r '.name' "$SCRIPT_DIR/worktree.json" 2>/dev/null || echo "")
               if [ -n "$WORKTREE_NAME" ] && [ -d "$HOME/.reliant/port-reservations" ]; then
@@ -487,8 +594,6 @@ nodes:
                 done
               fi
 
-              # Wait for processes to die
-              sleep 2
               echo "Environment stopped."
               ```
 
@@ -507,6 +612,11 @@ nodes:
               - **Ports**: `cat .reliant/ephemeral/ports.json` or `source .reliant/ephemeral/ports.env`
               - **Running services**: `cat .reliant/ephemeral/pids.json`
               - **Databases**: Check `.reliant/ephemeral/db/` (SQLite) or `PGDATABASE` in `ports.env` (Postgres)
+              - **Logs**: All logs in `.reliant/ephemeral/logs/`
+                - `combined.log` — merged stream from all sources with `[source]` prefixes
+                - `backend.log`, `frontend.log` — individual service logs
+                - `browser.log` — browser console output (console.log/warn/error)
+                - `docker/` — per-container logs
               - **Worktree identity**: `cat .reliant/ephemeral/worktree.json`
               - **Start**: `.reliant/ephemeral/start.sh`
               - **Stop**: `.reliant/ephemeral/stop.sh`
@@ -516,6 +626,171 @@ nodes:
               ```
 
               IMPORTANT: Only add this section if it doesn't already exist. Check first.
+
+              # Phase 10: Log Consolidation
+
+              ALL logs must be routed to `.reliant/ephemeral/logs/`. No service should write logs
+              to the project root, `./data/`, or any other location. This makes debugging trivial
+              and prevents log files from colliding across worktrees.
+
+              ## Directory Setup
+              ```bash
+              mkdir -p .reliant/ephemeral/logs/docker
+              ```
+
+              ## Application & Service Logs
+
+              Every process started in `start.sh` must redirect stdout and stderr to a log file
+              in `.reliant/ephemeral/logs/`. Use a tee-like approach so logs are both captured and
+              optionally visible in the terminal.
+
+              ### Pattern: Background Process Logging
+              ```bash
+              LOG_DIR="$SCRIPT_DIR/logs"
+
+              # Backend (example: Go with Air)
+              air -c "$SCRIPT_DIR/air.toml" > >(tee -a "$LOG_DIR/backend.log") 2>&1 &
+              BACKEND_PID=$!
+
+              # Frontend (example: Vite)
+              npx vite --port "$FRONTEND_PORT" > >(tee -a "$LOG_DIR/frontend.log") 2>&1 &
+              FRONTEND_PID=$!
+              ```
+
+              For simpler setups where tee is not needed:
+              ```bash
+              my-server --port "$BACKEND_PORT" >> "$LOG_DIR/backend.log" 2>&1 &
+              ```
+
+              ### Docker Container Logs
+              For Docker-managed services, stream logs to files:
+              ```bash
+              docker logs -f "postgres-$WORKTREE_NAME" >> "$LOG_DIR/docker/postgres.log" 2>&1 &
+              docker logs -f "redis-$WORKTREE_NAME"    >> "$LOG_DIR/docker/redis.log" 2>&1 &
+              ```
+
+              ### Combined Log Stream
+              Create a combined log that merges all sources with timestamps and prefixes.
+              Add this to `start.sh` AFTER all services are started:
+              ```bash
+              # Combined log: tail all individual logs, prefix with source name
+              (
+                tail -F "$LOG_DIR/backend.log"  2>/dev/null | sed 's/^/[backend]  /' &
+                tail -F "$LOG_DIR/frontend.log" 2>/dev/null | sed 's/^/[frontend] /' &
+                # Add more services as needed
+                wait
+              ) >> "$LOG_DIR/combined.log" 2>&1 &
+              COMBINED_LOG_PID=$!
+              ```
+              Track the combined log PID in `pids.json` for cleanup.
+
+              ## Browser Console Logs
+
+              If the project has a frontend (detected by the presence of Vite, webpack, Next.js,
+              or any browser-targeted build), set up browser console log capture.
+
+              ### Strategy: Chrome DevTools Protocol (CDP) Logger
+              Create a small script at `.reliant/ephemeral/browser-log-capture.mjs` (or `.py`/`.sh`
+              depending on what's available in the project) that connects to a headless or
+              development Chrome instance via CDP and captures console messages.
+
+              **Node.js version** (preferred if the project already has Node):
+              ```javascript
+              // .reliant/ephemeral/browser-log-capture.mjs
+              import { createConnection } from 'net';
+              import { appendFileSync } from 'fs';
+              import WebSocket from 'ws'; // or use the built-in fetch + ws if Node 22+
+
+              const CDP_PORT = process.env.CDP_PORT || 9222;
+              const LOG_FILE = process.env.BROWSER_LOG_FILE || '.reliant/ephemeral/logs/browser.log';
+
+              async function capture() {
+                // Discover WebSocket debugger URL
+                const res = await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`);
+                const { webSocketDebuggerUrl } = await res.json();
+                const ws = new WebSocket(webSocketDebuggerUrl);
+
+                ws.on('open', () => {
+                  ws.send(JSON.stringify({ id: 1, method: 'Runtime.enable' }));
+                  ws.send(JSON.stringify({ id: 2, method: 'Log.enable' }));
+                });
+
+                ws.on('message', (data) => {
+                  const msg = JSON.parse(data);
+                  if (msg.method === 'Runtime.consoleAPICalled') {
+                    const ts = new Date().toISOString();
+                    const level = msg.params.type; // log, warn, error, info, debug
+                    const text = msg.params.args.map(a => a.value ?? a.description ?? '').join(' ');
+                    const line = `${ts} [console.${level}] ${text}\n`;
+                    appendFileSync(LOG_FILE, line);
+                  }
+                  if (msg.method === 'Log.entryAdded') {
+                    const e = msg.params.entry;
+                    const line = `${e.timestamp ? new Date(e.timestamp).toISOString() : new Date().toISOString()} [${e.level}] ${e.text}\n`;
+                    appendFileSync(LOG_FILE, line);
+                  }
+                });
+              }
+
+              capture().catch(err => {
+                appendFileSync(LOG_FILE, `[browser-log-capture] Failed to connect: ${err.message}\n`);
+                process.exit(1);
+              });
+              ```
+
+              **When Node is NOT available**, create a lightweight Python or curl-based poller
+              that hits the CDP `/json` endpoint and captures via WebSocket.
+
+              ### Integration with start.sh
+              If the project launches a browser or Electron app, or if a frontend dev server is
+              present, add to `start.sh`:
+              ```bash
+              # Allocate a CDP port for browser debugging
+              CDP_PORT=$(jq -r '.cdp // empty' "$SCRIPT_DIR/ports.json")
+              if [ -n "$CDP_PORT" ]; then
+                # Start the browser/Electron with remote debugging enabled
+                # (For Electron apps):
+                # electron . --remote-debugging-port=$CDP_PORT &
+                # (For Chrome):
+                # google-chrome --remote-debugging-port=$CDP_PORT &
+
+                # Wait for CDP to be available, then start log capture
+                sleep 2
+                CDP_PORT=$CDP_PORT BROWSER_LOG_FILE="$LOG_DIR/browser.log" \
+                  node "$SCRIPT_DIR/browser-log-capture.mjs" >> "$LOG_DIR/browser.log" 2>&1 &
+                BROWSER_LOG_PID=$!
+              fi
+              ```
+
+              Also feed `browser.log` into the combined log stream.
+
+              ### Port Allocation
+              Add a `cdp` entry to the port allocation in Phase 3 if a frontend/Electron is detected.
+              This port is used for `--remote-debugging-port`.
+
+              ### Cleanup
+              The `stop.sh` script already kills all PIDs from `pids.json`. Ensure the browser
+              log capture PID is registered there.
+
+              ## Log Rotation (Optional)
+              For long-running dev sessions, logs can grow large. If the project has `logrotate`
+              or similar, configure it. Otherwise, a simple truncation in `start.sh` is fine:
+              ```bash
+              # Truncate old logs on each start
+              for f in "$LOG_DIR"/*.log; do
+                [ -f "$f" ] && : > "$f"
+              done
+              ```
+
+              ## Environment Variables
+              Add to `.reliant/ephemeral/ports.env`:
+              ```bash
+              export LOG_DIR="$SCRIPT_DIR/logs"
+              export BROWSER_LOG_FILE="$SCRIPT_DIR/logs/browser.log"
+              ```
+
+              And if any framework supports a log-file configuration (e.g., `LOG_FILE`, `--log-output`),
+              set it to point into `.reliant/ephemeral/logs/`.
 
               # Spawning Strategy
 
@@ -535,28 +810,29 @@ nodes:
               1. **NEVER hardcode ports.** Every port must come from dynamic allocation.
               2. **NEVER use `pkill` or `killall`.** Always kill by PID or container name.
               3. **ALL state goes in `.reliant/ephemeral/`.** Nothing outside this directory.
-              4. **Binary names include worktree suffix.** `myapp-featurename`, not `myapp`.
-              5. **Container names include worktree suffix.** `postgres-featurename`, not `postgres`.
-              6. **Test your scripts.** After creating start.sh and stop.sh, verify they work.
-              7. **Be idempotent.** Running this setup twice should not break anything.
-              8. **Respect existing configs.** Don't delete working configurations — augment or wrap them.
-              9. **Clean teardown.** stop.sh must leave no orphaned processes or containers.
+              4. **ALL logs go in `.reliant/ephemeral/logs/`.** No service should write logs elsewhere.
+              5. **Binary names include worktree suffix.** `myapp-featurename`, not `myapp`.
+              6. **Container names include worktree suffix.** `postgres-featurename`, not `postgres`.
+              7. **Test your scripts.** After creating start.sh and stop.sh, verify they work.
+              8. **Be idempotent.** Running this setup twice should not break anything.
+              9. **Respect existing configs.** Don't delete working configurations — augment or wrap them.
+              10. **Clean teardown.** stop.sh must leave no orphaned processes or containers.
           thread:
             mode: fork
             memo: false
             inject:
               role: user
               content: |
-                ## Environment Isolation Setup
+                ## Environment Isolation Setup (Attempt {{iter.iteration + 1}})
 
                 Analyze this project and set up a fully isolated development environment.
                 Create all artifacts in `.reliant/ephemeral/`.
 
-                Follow your system prompt phases 1-9 systematically.
+                {{iter.iteration == 0 ? 'Follow your system prompt phases 1-10 systematically.' : 'IMPORTANT: This is a RETRY. The previous attempt was validated and FAILED. Read the validation results above carefully — they contain specific, actionable issues. Fix ONLY the identified problems rather than re-running the entire setup from scratch. The previous attempt\'s artifacts are still in `.reliant/ephemeral/` (stale PIDs were cleaned up, but config files remain).'}}
           save_message:
             role: assistant
             content: |
-              ## Environment Setup Complete
+              ## Environment Setup {{iter.iteration == 0 ? 'Complete' : 'Retry (Attempt ' + string(iter.iteration + 1) + ')'}}
               {{output.response_text}}
 
         - id: validate
@@ -607,6 +883,7 @@ nodes:
               test -f .reliant/ephemeral/stop.sh      || echo "FAIL: stop.sh missing"
               test -x .reliant/ephemeral/start.sh     || echo "FAIL: start.sh not executable"
               test -x .reliant/ephemeral/stop.sh      || echo "FAIL: stop.sh not executable"
+              test -d .reliant/ephemeral/logs         || echo "FAIL: logs/ directory missing"
               ```
 
               Verify `ports.json` is valid JSON and contains at least one port assignment.
@@ -771,7 +1048,88 @@ nodes:
               configured and that's acceptable. Only FAIL if hot-reload was explicitly configured by the
               setup agent but doesn't work.
 
-              ## Step 8: Teardown Verification
+              ## Step 8: Log Consolidation Verification
+
+              Verify that all logs are being written to `.reliant/ephemeral/logs/`:
+
+              ```bash
+              LOG_DIR=".reliant/ephemeral/logs"
+
+              # Check that the logs directory exists and has content
+              test -d "$LOG_DIR" || echo "FAIL: logs/ directory missing"
+
+              # After startup, at least some log files should have content
+              # Give services a few seconds to produce output
+              sleep 5
+
+              # Check for non-empty log files
+              LOGS_WITH_CONTENT=0
+              for f in "$LOG_DIR"/*.log; do
+                [ -f "$f" ] || continue
+                if [ -s "$f" ]; then
+                  echo "OK: $(basename "$f") has content ($(wc -l < "$f") lines)"
+                  LOGS_WITH_CONTENT=$((LOGS_WITH_CONTENT + 1))
+                else
+                  echo "WARN: $(basename "$f") exists but is empty"
+                fi
+              done
+
+              if [ "$LOGS_WITH_CONTENT" -eq 0 ]; then
+                echo "FAIL: No log files have content — services may not be logging to ephemeral/logs/"
+              fi
+
+              # Verify no logs are being written OUTSIDE the ephemeral dir
+              # Check common log locations that should NOT have fresh content
+              for stale_log in ./data/logs.txt ./data/logs/reliant.log ./logs/*.log ./*.log; do
+                if [ -f "$stale_log" ]; then
+                  # Check if the file was modified after start.sh ran
+                  START_TIME=$(stat -f %m .reliant/ephemeral/start.sh 2>/dev/null || stat -c %Y .reliant/ephemeral/start.sh 2>/dev/null)
+                  LOG_TIME=$(stat -f %m "$stale_log" 2>/dev/null || stat -c %Y "$stale_log" 2>/dev/null)
+                  if [ "$LOG_TIME" -gt "$START_TIME" ] 2>/dev/null; then
+                    echo "WARN: Log file $stale_log was modified after startup — logs may not be fully redirected"
+                  fi
+                fi
+              done
+              ```
+
+              ### Browser Console Log Verification
+              If the project has a frontend and browser log capture was configured:
+              ```bash
+              BROWSER_LOG="$LOG_DIR/browser.log"
+              CDP_PORT=$(jq -r '.cdp // empty' .reliant/ephemeral/ports.json 2>/dev/null)
+              if [ -n "$CDP_PORT" ]; then
+                # CDP was allocated — browser log capture should be active
+                if [ -f "$BROWSER_LOG" ] && [ -s "$BROWSER_LOG" ]; then
+                  echo "OK: browser.log is being written ($(wc -l < "$BROWSER_LOG") lines)"
+                else
+                  echo "WARN: CDP port allocated but browser.log is empty — capture may have failed to connect"
+                fi
+              else
+                echo "INFO: No CDP port allocated — browser console capture not configured (OK if no frontend)"
+              fi
+              ```
+
+              ### Combined Log Verification
+              ```bash
+              COMBINED="$LOG_DIR/combined.log"
+              if [ -f "$COMBINED" ] && [ -s "$COMBINED" ]; then
+                # Verify it contains prefixed entries from multiple sources
+                SOURCES=$(grep -oE '^\[[a-z]+\]' "$COMBINED" 2>/dev/null | sort -u | wc -l | tr -d ' ')
+                if [ "$SOURCES" -gt 1 ]; then
+                  echo "OK: combined.log has entries from $SOURCES sources"
+                else
+                  echo "WARN: combined.log exists but only has entries from $SOURCES source(s)"
+                fi
+              else
+                echo "WARN: combined.log missing or empty"
+              fi
+              ```
+
+              Note: Browser log capture and combined log are WARN, not FAIL — they are best-effort
+              enhancements. Individual service log redirection to `.reliant/ephemeral/logs/` is a FAIL
+              if no log files have any content after startup.
+
+              ## Step 9: Teardown Verification
 
               This is CRITICAL. Run the stop script and verify complete cleanup:
 
@@ -837,6 +1195,8 @@ nodes:
               - Databases are accessible and isolated (worktree-named or in ephemeral dir)
               - Process names include the worktree suffix
               - pids.json is populated with live PIDs
+              - Logs are written to `.reliant/ephemeral/logs/` (at least one log file has content)
+              - No service logs are being written outside the ephemeral directory
               - stop.sh cleanly kills all processes and containers
               - All ports are free after teardown
               - Port reservations are released after teardown
@@ -870,7 +1230,7 @@ nodes:
                 ## Environment Validation
 
                 Validate the isolated development environment set up in `.reliant/ephemeral/`.
-                Follow your system prompt validation protocol steps 1-8 systematically.
+                Follow your system prompt validation protocol steps 1-9 systematically.
                 Submit your grade via the submit_validation tool.
           save_message:
             role: assistant
@@ -880,6 +1240,8 @@ nodes:
               {{has(output.response.issues) && output.response.issues != null && size(output.response.issues) > 0 ? '\n### Issues\n' + output.response.issues.map(i, '- ' + i).join('\n') : ''}}
 
       edges:
+        - from: cleanup
+          default: setup
         - from: setup
           default: validate
 
@@ -888,11 +1250,14 @@ nodes:
           workflow:
             x: 50
             y: 200
+          cleanup:
+            x: 250
+            y: 200
           setup:
-            x: 400
+            x: 500
             y: 200
           validate:
-            x: 800
+            x: 850
             y: 200
 
   - id: success
@@ -907,6 +1272,7 @@ nodes:
         - Start: `.reliant/ephemeral/start.sh`
         - Stop: `.reliant/ephemeral/stop.sh`
         - Ports: `cat .reliant/ephemeral/ports.json`
+        - Logs: `.reliant/ephemeral/logs/` (combined.log for merged stream)
 
   - id: max_retries_reached
     type: save_message

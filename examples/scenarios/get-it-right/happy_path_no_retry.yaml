@@ -1,37 +1,37 @@
-# Happy Path No Retry: First attempt succeeds immediately
+# Happy Path: First attempt succeeds immediately
 #
-# Tests the simplest successful path through the try-fail-learn cycle:
-# 1. Iteration 0: try_implement runs, try_diagnose says needs_retry=false
-# 2. Loop condition: needs_retry == false → loop exits after 1 iteration
-# 3. Final diagnose synthesizes learnings (trivial — first attempt succeeded)
-# 4. Final implement applies the correct solution
+# Tests the simplest successful path:
+# 1. Iteration 0: implement runs, evaluate says strategy="proceed"
+# 2. Conditional edge: strategy == "proceed" → skip refactor
+# 3. Loop condition: strategy == "proceed" → loop exits after 1 iteration
+# 4. Final diagnose synthesizes learnings, final implement applies solution
 #
-# Verifies the loop correctly exits when the first attempt needs no retry,
-# and the workflow proceeds through diagnose → implement.
+# Verifies the loop correctly exits when the first attempt needs no refactoring,
+# and the conditional edge skips the refactor node.
 
 name: happy_path_no_retry
-description: First attempt succeeds, no retry needed
+description: First attempt succeeds, no refactoring needed
 
 events:
-  # Attempt loop — iteration 0: try succeeds, no retry needed
-  - node: attempt.try_implement
+  - node: attempt.implement
     output:
       response_text: "Implemented the feature. Tests pass, code looks correct."
 
-  - node: attempt.try_diagnose
+  - node: attempt.evaluate
     output:
       response:
-        needs_retry: false
+        strategy: "proceed"
         diagnosis: "Implementation is correct. The codebase patterns were straightforward."
         difficulty_areas: "None — the existing abstractions mapped cleanly to the task."
         wrong_abstractions: "None — initial assumptions were accurate."
+        improvements: []
 
-  # Final diagnose — synthesize learnings
+  # refactor is skipped (conditional edge: strategy == "proceed")
+
   - node: diagnose
     output:
       response_text: "The implementation succeeded on the first attempt. Key insight: the codebase follows clean separation of concerns, making the change straightforward."
 
-  # Final implement — apply the correct implementation
   - node: implement
     output:
       response_text: "Final implementation complete. Applied the same approach from the successful first attempt."
@@ -40,11 +40,13 @@ expect:
   outcome: completed
   reached:
     - attempt
-    - attempt.try_implement
-    - attempt.try_diagnose
+    - attempt.implement
+    - attempt.evaluate
     - diagnose
     - implement
+  not_reached:
+    - attempt.refactor
   node_outputs:
     attempt:
-      needs_retry: false
+      strategy: "proceed"
       diagnosis: "Implementation is correct. The codebase patterns were straightforward."
