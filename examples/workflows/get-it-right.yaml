@@ -106,7 +106,7 @@ nodes:
               content: |
                 ## Get It Right — Attempt {{iter.iteration + 1}}
 
-                {{iter.iteration == 0 ? 'Implement the requested changes. Start by investigating the relevant code, then make your changes and run tests to verify them.' : 'Previous attempt was evaluated and refactored above. Read the evaluation and refactoring summary carefully before continuing. Build on the refactored code — don''t redo work that''s already been improved.'}}
+                {{iter.iteration == 0 ? 'Implement the requested changes. Start by investigating the relevant code, then make your changes and run tests to verify them.' : 'Previous attempt was evaluated and refactored above. Read the evaluation and refactoring summary carefully before continuing. Build on the refactored code — do not redo work that has already been improved.'}}
 
                 After finishing, summarize:
                 1. What you changed and why
@@ -245,10 +245,10 @@ nodes:
         - from: implement
           default: [evaluate]
         - from: evaluate
-          default: [refactor]
-          when:
+          cases:
             - condition: "has(nodes.evaluate.response) && nodes.evaluate.response.strategy == 'proceed'"
-              goto: []
+              to: []
+          default: [refactor]
 
   # ── Final diagnosis / reflection ─────────────────────────────────────────────
   #

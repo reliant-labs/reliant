@@ -55,7 +55,7 @@ inputs:
         description: Maximum agent loop iterations
       tools:
         type: tools
-        default: ["tag:default", "!tag:planning"]
+        default: ["tag:default"]
         description: Available tools for implementers
       system_prompt:
         type: string
@@ -69,14 +69,6 @@ inputs:
           - Include any necessary tests
           - Follow project conventions and best practices
           - Handle edge cases appropriately
-
-          ## Planning
-          You do not have access to the plan tool. Instead, write your implementation plan
-          to a markdown file at `PLAN.md` in the root of your working directory. Include:
-          - Your approach and strategy
-          - Key decisions and trade-offs
-          - Task breakdown with status tracking
-          Update this file as you progress through your implementation.
         description: System prompt override for implementers
       thinking_level:
         type: enum

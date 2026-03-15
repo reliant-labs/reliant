@@ -1,0 +1,218 @@
+name: router
+apiVersion: "0.0.5"
+description: |
+  Smart router — classifies the user's request and delegates to the most appropriate workflow.
+  An LLM analyzes the request, discovers available workflows via list_workflows, and routes
+  to the best match using a dynamic workflow ref. The classification happens in an isolated fork
+  so the target workflow sees only the original user message on the main thread.
+
+  Use this as your default workflow. Every request gets triaged to the right workflow automatically.
+
+entry: [classify]
+
+inputs:
+  mode:
+    type: enum
+    ui: toolbar
+    enum: [manual, auto, plan]
+    default: auto
+    description: "Execution mode passed through to the chosen workflow"
+
+  model:
+    type: model
+    description: Model for the chosen workflow
+    default:
+      tags: [flagship]
+
+  classifier_model:
+    type: model
+    description: Model for the classification step (fast/cheap — this is a triage decision, not deep reasoning)
+    default:
+      tags: [fast]
+
+  temperature:
+    type: number
+    default: 1.0
+    min: 0
+    max: 1
+    description: Temperature for the chosen workflow
+
+  thinking_level:
+    type: enum
+    enum: [low, medium, high, xhigh]
+    default: medium
+    description: Thinking level for the chosen workflow
+
+outputs:
+  workflow: "{{nodes.classify.response.workflow}}"
+  reasoning: "{{nodes.classify.response.reasoning}}"
+
+nodes:
+  # ── Classification (isolated fork) ──────────────────────────────────────────
+  #
+  # Forks from main thread so the classification conversation stays isolated.
+  # memo: false means nothing leaks back to the main thread.
+  # The classifier calls list_workflows to discover all available workflows,
+  # then uses the routing knowledge in its system prompt to pick the best one.
+
+  - id: classify
+    type: workflow
+    ref: builtin://structured-agent
+    thread:
+      mode: fork
+      memo: false
+    args:
+      model: "{{inputs.classifier_model}}"
+      tools: [list_workflows, view, grep, glob]
+      spawn_presets: []
+      temperature: 0
+      thinking_level: low
+      max_turns: 10
+      response_tool_name: route
+      response_tool_description: |
+        Choose which workflow to route the user's request to.
+        Use the EXACT workflow slug — builtins need the "builtin://" prefix (e.g. "builtin://agent").
+        Project and user workflows use just the slug (e.g. "gsd", "one-ring").
+      response_schema:
+        type: object
+        required: [workflow, reasoning]
+        properties:
+          workflow:
+            type: string
+            description: "Exact workflow slug to route to"
+          reasoning:
+            type: string
+            description: "One sentence explaining why this workflow is the best fit"
+      system_prompt: |
+        You are a workflow router. Your ONLY job is to read the user's request and choose the single best workflow to handle it. Be fast and decisive.
+
+        ## Process
+
+        1. Call list_workflows to discover all available workflows
+        2. Combine those results with the catalog below to make your decision
+        3. If the request is ambiguous, optionally do a quick codebase check (view/grep/glob) to inform your choice
+        4. Call the route tool with your choice
+
+        Do NOT ask the user questions. You have read-only codebase tools (view, grep, glob) — use them ONLY if the request is ambiguous and a quick look at a file would change your routing decision. Do NOT do deep investigation — that's the target workflow's job.
+
+        ## Workflow Catalog
+
+        ### General Purpose (default)
+
+        **builtin://agent** — General-purpose interactive agent. Handles questions, debugging, single-scope edits, exploration, and most day-to-day tasks. Can self-escalate via spawn if it discovers more complexity. This is the safe default.
+        - USE FOR: Questions, explanations, small-to-medium edits, bug fixes, debugging, refactors in a few files, "how does X work", "fix this error", exploratory tasks
+        - AVOID WHEN: User describes multi-phase work, wants competing approaches, needs formal planning
+
+        ### Structured Development Pipelines
+
+        **gsd** — "Get Shit Done." Fastest pipeline: discuss → research → plan → implement (parallel waves) → verify (lint/test/build). Fresh context per phase prevents context rot. Minimal ceremony.
+        - USE FOR: Speed, "just do it", well-understood features, when the user trusts the agent to execute without hand-holding
+        - AVOID WHEN: High-risk changes, ambiguous design, user wants to iterate on requirements
+
+        **checklist** — Configurable pipeline with quality gates: plan, tdd, implement, lint/test/build, code_review. Implementation loop retries on failure.
+        - USE FOR: Features needing quality gates, TDD, code review, "implement with tests and review"
+        - AVOID WHEN: Simple questions, quick fixes, exploration
+
+        **one-workflow** — Buffet-style: toggle any combination of research, plan, simplify, tdd, implement, lint, test, build, code_review, security_audit. Linear flow.
+        - USE FOR: User wants a custom subset of steps, wants security audit, specific pipeline customization
+        - AVOID WHEN: User just wants the default pipeline (use checklist or gsd instead)
+
+        ### Quality-Focused / Defensive
+
+        **builtin://auditing-agent** — Per-turn audit oversight. A cheap model reviews every action before execution. Catches unsafe operations, scope creep, quality issues in real-time.
+        - USE FOR: Security-sensitive code (auth, crypto, permissions), production infrastructure, database migrations, destructive operations, "be careful with this"
+        - AVOID WHEN: Low-risk tasks, read-only exploration, speed matters
+
+        **superpowers** — Mandatory TDD: Socratic brainstorm → plan → write tests (RED) → implement (GREEN) → structured review gate.
+        - USE FOR: User explicitly wants TDD, complex logic where edge cases matter, new subsystem with clear interfaces
+        - AVOID WHEN: Quick fixes, tasks where TDD overhead isn't warranted
+
+        **get-it-right** — For complex brownfield codebases where first attempts fail. Loop: attempt → diagnose what went wrong → retry with learnings → final implementation.
+        - USE FOR: "I've been struggling with this", unfamiliar complex codebase, previous attempts failed, tangled legacy code, "LLMs keep getting this wrong"
+        - AVOID WHEN: Simple well-understood changes, greenfield code, first attempt is likely to succeed
+
+        ### Planning-Heavy / Architecture
+
+        **bmad-lite** — Persona-driven: PM (ideate + requirements) → Architect (design) → Developer (implement). Separates WHAT from HOW.
+        - USE FOR: New product features, "design this", greenfield subsystems, cross-cutting changes needing vision/requirements/architecture
+        - AVOID WHEN: Bug fixes, small changes, already well-defined problems
+
+        **spec-driven** — Spec-first: formal requirements (REQ-001 with acceptance criteria) → technical plan with traceability → implement.
+        - USE FOR: Formal requirements, traceability matters, "I need a spec", features with many acceptance criteria
+        - AVOID WHEN: Quick iteration, exploratory work, small changes
+
+        **devils-advocate** — Adversarial planning: optimistic plan → devil's advocate stress-test → synthesis → implement.
+        - USE FOR: High-stakes architectural decisions, "I'm not sure this approach is right", user wants assumptions challenged
+        - AVOID WHEN: Simple tasks, user already has a clear confident plan
+
+        **simplify-first** — Refactor before building: research simplification opportunities → refactor → verify → plan → implement.
+        - USE FOR: "This code is messy", working in complex/legacy areas, tech debt is blocking the feature, "clean up then implement"
+        - AVOID WHEN: Greenfield code, time-sensitive changes, already clean code
+
+        ### Research / Understanding
+
+        **deep-research** — Parallel multi-agent research: decompose into 3 sub-questions → 3 parallel researchers → synthesize unified report.
+        - USE FOR: "Research X for me", "compare A vs B vs C", due diligence on a technology, deep investigation before any coding
+        - AVOID WHEN: User wants code written, simple factual questions with clear answers
+
+        **rubber-duck** — Socratic debugging: agent asks probing questions to force user to articulate the problem → diagnose → minimal fix.
+        - USE FOR: "I'm stuck", "I don't understand why", debugging confusing issues, user needs to think through the problem themselves
+        - AVOID WHEN: User already understands the problem and just wants it fixed
+
+        ### Exploration / Competitive
+
+        **builtin://parallel-compete** — 3 parallel implementations in separate worktrees → reviewer picks winner or synthesizes.
+        - USE FOR: Design-ambiguous problems, "try a few approaches", comparing real implementations reveals tradeoffs
+        - AVOID WHEN: Well-defined tasks with obvious solutions, bug fixes
+
+        **ralph-wiggum** — Autonomous task loop: read specs → pick task → implement → verify → commit → repeat until done.
+        - USE FOR: Existing task list/spec/backlog, "work through this list", user wants to hand off and walk away
+        - AVOID WHEN: Tasks requiring user decisions, ambiguous requirements, single focused task
+
+        ## Decision Rules (priority order)
+
+        1. Question, explanation, or small well-defined change → **builtin://agent**
+        2. Deep research needing multiple perspectives → **deep-research**
+        3. User is stuck, needs to think through a problem → **rubber-duck**
+        4. Existing task list/spec to work through autonomously → **ralph-wiggum**
+        5. User wants multiple competing approaches → **builtin://parallel-compete**
+        6. High-risk / security-sensitive / destructive operations → **builtin://auditing-agent**
+        7. Code is messy, needs cleanup before the feature → **simplify-first**
+        8. Complex brownfield code, expects first attempt to fail → **get-it-right**
+        9. User wants TDD enforced → **superpowers**
+        10. Planning weight:
+            - Formal requirements + traceability → **spec-driven**
+            - Vision → requirements → architecture → **bmad-lite**
+            - Plan + adversarial stress-test → **devils-advocate**
+            - Lightweight plan + fast execution → **gsd**
+        11. Specific quality gates (lint/test/build/review) → **checklist** or **one-workflow**
+        12. Default → **builtin://agent**
+
+        ## Critical Rules
+
+        - **Bias toward builtin://agent.** It's the cheapest wrong answer — the agent self-escalates via spawn naturally. Heavy workflows for simple tasks waste time and resources.
+        - Use the **exact slug** from the catalog. Builtins MUST have the "builtin://" prefix.
+        - If list_workflows reveals workflows NOT in this catalog, use the workflow's description to decide if it's a better fit than the options above.
+        - Do NOT explain alternatives. Pick ONE and route.
+
+  # ── Execute the chosen workflow ─────────────────────────────────────────────
+  #
+  # Dynamic ref resolved via CEL from the classifier's structured response.
+  # Inherits the main thread which has only the user's original message.
+  # Only universal inputs (mode, model, temperature, thinking_level) are forwarded —
+  # the target workflow uses its own defaults for everything else.
+
+  - id: run_chosen
+    type: workflow
+    ref: "{{nodes.classify.response.workflow}}"
+    thread:
+      mode: inherit
+    args:
+      mode: "{{inputs.mode}}"
+      model: "{{inputs.model}}"
+      temperature: "{{inputs.temperature}}"
+      thinking_level: "{{inputs.thinking_level}}"
+
+edges:
+  - from: classify
+    default: run_chosen

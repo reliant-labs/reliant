@@ -382,7 +382,7 @@ nodes:
               role: user
               content: |
                 ## Pipeline Step: Implement (Attempt {{iter.iteration + 1}})
-                {{iter.iteration == 0 ? 'Implement the required changes. Use tools to edit code and verify results.\n\nParallelize your work: if the plan identifies independent tasks, use spawn to work on\nmultiple files or modules simultaneously rather than sequentially.' : 'Previous attempt was evaluated and refactored above. Read the evaluation and refactoring summary carefully before continuing. Build on the refactored code — don''t redo work that''s already been improved.'}}
+                {{iter.iteration == 0 ? 'Implement the required changes. Use tools to edit code and verify results.\n\nParallelize your work: if the plan identifies independent tasks, use spawn to work on\nmultiple files or modules simultaneously rather than sequentially.' : 'Previous attempt was evaluated and refactored above. Read the evaluation and refactoring summary carefully before continuing. Build on the refactored code — do not redo work that has already been improved.'}}
           save_message:
             role: assistant
             content: |
@@ -614,10 +614,10 @@ nodes:
         - from: code_review
           default: evaluate
         - from: evaluate
-          default: refactor
-          when:
+          cases:
             - condition: "has(nodes.evaluate.response) && nodes.evaluate.response.strategy == 'proceed'"
-              goto: []
+              to: []
+          default: refactor
       ui:
         positions:
           workflow:
