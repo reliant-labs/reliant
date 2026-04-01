@@ -125,9 +125,11 @@ After each release, files are available at:
 
 The "latest" URLs automatically redirect to the current version, so you never need to update download links.
 
-## GitHub Actions Secrets Required
+## GitHub Actions Secrets and Variables Required
 
-Set these up in your GitHub repository settings (Settings → Secrets and variables → Actions):
+Set these up in your GitHub repository settings (Settings → Secrets and variables → Actions).
+
+Note: `GITHUB_TOKEN` is auto-provided by GitHub Actions and does not need to be created manually.
 
 ### Supabase Auth Domain Configuration
 
@@ -142,24 +144,42 @@ Make sure these are configured consistently:
   - `http://127.0.0.1:*/auth/callback` (desktop OAuth callback for Electron)
   - local/dev callback URLs used during development
 
-### Cloudflare R2 (for publishing releases)
-- `AWS_ACCESS_KEY_ID` - Your Cloudflare R2 Access Key ID
-- `AWS_SECRET_ACCESS_KEY` - Your Cloudflare R2 Secret Access Key
+### CI / code generation
+- `BUF_API_KEY` - Buf protobuf registry token used by `pr-ci.yml` and `release.yml`
+
+### Release build env baked into packaged app
+- `VITE_SUPABASE_URL` - Supabase URL baked into the frontend build
+- `VITE_SUPABASE_ANON_KEY` - Supabase publishable key baked into the frontend build
+- `VITE_API_URL` - API URL baked into the frontend build
+- `VITE_SENTRY_DSN` - Frontend Sentry DSN baked into the frontend build
+- `SUPABASE_ANON_KEY` - Backend/runtime Supabase anon key baked into the packaged app
+- `SENTRY_DSN` - Backend/Electron Sentry DSN baked into the packaged app
+- `STATSIG_CLIENT_KEY` - Statsig client key baked into the packaged app for analytics/feature flags
+
+The release workflow currently hardcodes these non-secret production defaults when generating `.env`:
+- `SENTRY_ENABLED=true`
+- `SENTRY_TRACES_SAMPLE_RATE=0.1`
+- `VITE_SENTRY_ENABLED=true`
+- `VITE_SENTRY_TRACES_SAMPLE_RATE=0.1`
+- `VITE_SENTRY_REPLAYS_SESSION_SAMPLE_RATE=0.1`
+- `VITE_SENTRY_REPLAYS_ERROR_SAMPLE_RATE=1.0`
+
+### Cloudflare R2 / release artifact upload
+- `AWS_ACCESS_KEY_ID` - Cloudflare R2 access key ID used to upload release artifacts
+- `AWS_SECRET_ACCESS_KEY` - Cloudflare R2 secret access key used to upload release artifacts
 
 ### Apple Code Signing & Notarization (required for macOS)
 - `CSC_LINK` - Base64 encoded P12 certificate for macOS code signing
 - `CSC_KEY_PASSWORD` - Password for the P12 certificate
-- `APPLE_ID` - Your Apple Developer ID email
+- `APPLE_ID` - Apple Developer ID email
 - `APPLE_APP_SPECIFIC_PASSWORD` - App-specific password for notarization
-- `APPLE_TEAM_ID` - Your Apple Developer Team ID (10-character identifier)
+- `APPLE_TEAM_ID` - Apple Developer Team ID (10-character identifier)
 
 ### Windows Code Signing (Azure Trusted Signing / Artifact Signing)
 
 Windows releases are signed in CI using **Azure Trusted Signing** (a.k.a. Azure Artifact Signing).
 
 Electron Builder performs signing during packaging using `win.azureSignOptions`, and authenticates via the `Invoke-TrustedSigning` PowerShell module.
-
-**GitHub Actions secrets to add:**
 
 #### Azure authentication (service principal + secret)
 - `AZURE_TENANT_ID`
@@ -175,6 +195,20 @@ Electron Builder performs signing during packaging using `win.azureSignOptions`,
 Notes:
 - This setup avoids storing a Windows PFX in GitHub secrets.
 - We can migrate to GitHub OIDC (secretless auth) later if/when supported by the underlying signing module.
+
+### Cloudflare
+- `CLOUDFLARE_API_TOKEN` - Cloudflare API token used for Pages deploys and CDN cache purge
+- `CLOUDFLARE_ACCOUNT_ID` - Cloudflare account ID used for Pages deploys
+- `CLOUDFLARE_ZONE_ID` - Cloudflare zone ID used for release cache purge
+
+### Homebrew
+- `HOMEBREW_TAP_TOKEN` - PAT used to push formula updates to `reliant-labs/homebrew-reliant`
+
+### Customer.io
+- `CUSTOMERIO_APP_API_KEY` - Customer.io API key used to trigger changelog emails
+
+### GitHub Actions variables
+- `CUSTOMERIO_CHANGELOG_BROADCAST_ID` - Customer.io broadcast ID used by `release.yml` and `email_changelog.yml`
 
 ## CloudFlare Workers Setup for "Latest" URLs
 
