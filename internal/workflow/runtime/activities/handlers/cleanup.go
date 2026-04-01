@@ -1,0 +1,371 @@
+// Copyright (c) 2025 Reliant Labs
+package handlers
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/reliant-labs/reliant/internal/db"
+	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
+)
+
+// ============================================================================
+// TYPES (strongly typed inputs/outputs)
+// ============================================================================
+
+// CleanupInput is the input for Cleanup activity
+type CleanupInput struct {
+	ChatID     string `json:"chat_id" reliant:"-"`
+	WorkflowID string `json:"workflow_id,omitempty"` // Only clean up tool calls from this workflow
+	Thread     string `json:"thread,omitempty"`      // Only clean up tool calls from this thread
+}
+
+// CleanupOutput is the output from Cleanup activity
+type CleanupOutput struct {
+	ApprovalsCancelled int `json:"approvals_cancelled"`
+	ToolCallsCancelled int `json:"tool_calls_cancelled"`
+}
+
+// ============================================================================
+// ACTIVITY IMPLEMENTATION
+// ============================================================================
+
+// CleanupActivity handles cleanup tasks when a workflow completes or is cancelled.
+// This includes:
+// - Cancelling any pending approvals
+// - Cleaning up any pending tool execution requests
+// - Notifying the UI of the cancelled state
+type CleanupActivity struct {
+	repo db.Repository
+}
+
+// NewCleanupActivity creates a new CleanupActivity
+func NewCleanupActivity(repo db.Repository) *CleanupActivity {
+	return &CleanupActivity{
+		repo: repo,
+	}
+}
+
+// Name returns the activity name for registration
+func (a *CleanupActivity) Name() string {
+	return "Cleanup"
+}
+
+// DisplayName returns human-readable name for UI
+func (a *CleanupActivity) DisplayName() string {
+	return "Cleanup"
+}
+
+// Description returns what the activity does
+func (a *CleanupActivity) Description() string {
+	return "Cancel pending approvals and clean up resources when workflow ends"
+}
+
+// Category returns the activity category for UI grouping
+func (a *CleanupActivity) Category() schema.ActivityCategory {
+	return schema.CategoryWorkflowManagement
+}
+
+// Execute cancels pending approvals and notifies UI
+func (a *CleanupActivity) Execute(ctx context.Context, input CleanupInput) (CleanupOutput, error) {
+	logging.Info("[Cleanup] Starting cleanup for chat", "chatID", input.ChatID)
+
+	// Cancel orphaned tool calls (stops spinning indicators in UI for cancelled tool executions)
+	toolCallsCancelled := a.cancelOrphanedToolCalls(ctx, input.ChatID, input.Thread)
+
+	// Get all pending approvals for this chat
+	pendingApprovals, err := a.repo.ListPendingApprovalsByChat(ctx, input.ChatID)
+	if err != nil {
+		logging.Error("[Cleanup] Failed to list pending approvals", "error", err)
+		return CleanupOutput{ToolCallsCancelled: toolCallsCancelled}, fmt.Errorf("failed to list pending approvals: %w", err)
+	}
+
+	if len(pendingApprovals) == 0 {
+		logging.Info("[Cleanup] No pending approvals to cancel")
+		return CleanupOutput{ApprovalsCancelled: 0, ToolCallsCancelled: toolCallsCancelled}, nil
+	}
+
+	logging.Info("[Cleanup] Found pending approvals to cancel", "count", len(pendingApprovals))
+
+	// Cancel each pending approval
+	cancelledCount := 0
+	for _, approval := range pendingApprovals {
+		// Update status to cancelled
+		err := a.repo.RunTx(ctx, func(txCtx context.Context) error {
+			// Update approval status (nil for actionTaken since this is a system cancellation)
+			if err := a.repo.UpdateApprovalStatus(txCtx, approval.ID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED), nil, nil, nil); err != nil {
+				return fmt.Errorf("failed to update approval status: %w", err)
+			}
+
+			// Emit chat_update for UI notification
+			updateData := map[string]interface{}{
+				"update_type":   "approval",
+				"id":            approval.ID,
+				"approval_type": approval.ApprovalType,
+				"entity_id":     approval.EntityID,
+				"status":        "cancelled",
+				"title":         approval.Title,
+				"resolved_at":   time.Now().UTC().Format(time.RFC3339),
+			}
+
+			updateDataJSON, err := json.Marshal(updateData)
+			if err != nil {
+				return fmt.Errorf("failed to marshal chat_update data: %w", err)
+			}
+
+			if err := a.repo.CreateChatUpdate(txCtx, input.ChatID, db.UpdateTypeApproval, approval.ID, string(updateDataJSON)); err != nil {
+				return fmt.Errorf("failed to create chat_update: %w", err)
+			}
+
+			return nil
+		})
+
+		if err != nil {
+			logging.Error("[Cleanup] Failed to cancel approval", "approvalID", approval.ID, "error", err)
+			// Continue with other approvals even if one fails
+			continue
+		}
+
+		cancelledCount++
+		logging.Info("[Cleanup] Cancelled approval", "approvalID", approval.ID, "title", approval.Title)
+	}
+
+	logging.Info("[Cleanup] Cleanup completed", "approvalsCancelled", cancelledCount, "toolCallsCancelled", toolCallsCancelled)
+	return CleanupOutput{ApprovalsCancelled: cancelledCount, ToolCallsCancelled: toolCallsCancelled}, nil
+}
+
+// orphanedToolCall holds information about a tool_call that has no matching tool_result
+type orphanedToolCall struct {
+	ToolCallID string
+	ToolName   string
+	BlockID    string
+}
+
+// cancelOrphanedToolCalls finds tool_call blocks that don't have matching tool_result blocks,
+// persists synthetic tool_result blocks to repair the conversation state, and emits cancelled
+// status updates for the UI.
+//
+// This is the primary repair mechanism for orphaned tool calls. It ensures the DB state is
+// always valid for branching and LLM context resolution. The CallLLM activity has additional
+// defense-in-depth repair logic that handles edge cases.
+//
+// If thread is specified, only processes tool calls from that specific thread.
+func (a *CleanupActivity) cancelOrphanedToolCalls(ctx context.Context, chatID, thread string) int {
+	// Get messages from the specific thread if specified, otherwise all chat messages
+	opts := db.MessageListOptions{}
+	if thread != "" {
+		opts.Thread = &thread
+	}
+	msgs, err := a.repo.ListMessages(ctx, chatID, opts)
+	if err != nil {
+		logging.Error("[Cleanup] Failed to list messages for tool call cleanup", "chatID", chatID, "thread", thread, "error", err)
+		return 0
+	}
+
+	// Group orphaned tool calls by their parent assistant message
+	// Map: assistant message ID -> list of orphaned tool calls
+	orphansByMessage := make(map[string][]orphanedToolCall)
+	assistantMessages := make(map[string]*db.Message) // Keep reference for metadata
+
+	// Process messages in reverse order (most recent first) to find orphaned tool calls
+	// We only need to check recent assistant messages - older ones should have results
+	for i := len(msgs) - 1; i >= 0 && i >= len(msgs)-10; i-- {
+		msg := msgs[i]
+		if msg.Role != reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT {
+			continue
+		}
+
+		// Get content blocks for this message
+		blocks, err := a.repo.ListContentBlocks(ctx, msg.ID)
+		if err != nil {
+			logging.Error("[Cleanup] Failed to list content blocks", "messageID", msg.ID, "error", err)
+			continue
+		}
+
+		// Find tool_call blocks and check if they have matching tool_results
+		for _, block := range blocks {
+			if block.BlockType != reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_CALL || block.ToolCallID == nil {
+				continue
+			}
+
+			toolCallID := *block.ToolCallID
+			toolName := "unknown"
+			if block.ToolName != nil {
+				toolName = *block.ToolName
+			}
+
+			// Check if there's a matching tool_result
+			resultBlock, err := a.repo.GetToolResultBlock(ctx, toolCallID)
+			if err != nil {
+				logging.Error("[Cleanup] Failed to check for tool result", "toolCallID", toolCallID, "error", err)
+				continue
+			}
+
+			// If no result exists, this is an orphaned tool call
+			if resultBlock == nil {
+				orphansByMessage[msg.ID] = append(orphansByMessage[msg.ID], orphanedToolCall{
+					ToolCallID: toolCallID,
+					ToolName:   toolName,
+					BlockID:    block.ID,
+				})
+				assistantMessages[msg.ID] = msg
+			}
+		}
+	}
+
+	if len(orphansByMessage) == 0 {
+		return 0
+	}
+
+	// For each assistant message with orphaned tool calls, create a repair tool message
+	cancelledCount := 0
+	for msgID, orphans := range orphansByMessage {
+		assistantMsg := assistantMessages[msgID]
+
+		// Create the repair tool message and content blocks
+		repairMsgID, err := a.createRepairToolMessage(ctx, chatID, assistantMsg, orphans)
+		if err != nil {
+			logging.Error("[Cleanup] Failed to create repair tool message",
+				"error", err,
+				"chatID", chatID,
+				"assistantMessageID", msgID,
+				"orphanCount", len(orphans))
+			// Fall back to just emitting UI events
+			for _, orphan := range orphans {
+				a.emitToolCancelledStatus(ctx, chatID, orphan.BlockID, orphan.ToolCallID, orphan.ToolName)
+				cancelledCount++
+			}
+			continue
+		}
+
+		// Emit UI events for each repaired tool call
+		for _, orphan := range orphans {
+			logging.Info("[Cleanup] Repaired orphaned tool call",
+				"toolCallID", orphan.ToolCallID,
+				"toolName", orphan.ToolName,
+				"blockID", orphan.BlockID,
+				"repairMessageID", repairMsgID,
+				"thread", thread)
+			a.emitToolCancelledStatus(ctx, chatID, orphan.BlockID, orphan.ToolCallID, orphan.ToolName)
+			cancelledCount++
+		}
+	}
+
+	if cancelledCount > 0 {
+		logging.Info("[Cleanup] Repaired orphaned tool calls", "count", cancelledCount, "thread", thread)
+	}
+
+	return cancelledCount
+}
+
+// createRepairToolMessage creates a tool role message with synthetic tool_result blocks
+// for orphaned tool calls. This persists the repair to the database so the conversation
+// state is valid for branching and LLM context resolution.
+//
+// Returns the created message ID on success.
+func (a *CleanupActivity) createRepairToolMessage(
+	ctx context.Context,
+	chatID string,
+	assistantMsg *db.Message,
+	orphans []orphanedToolCall,
+) (string, error) {
+	now := time.Now()
+	msgID := uuid.New().String()
+
+	// Get next ordinal for this thread
+	// The repair message should come after the assistant message
+	nextOrdinal, err := a.repo.GetNextOrdinal(ctx, assistantMsg.ThreadID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get next ordinal: %w", err)
+	}
+
+	// Create the tool message with the same context_window_id as the assistant message
+	repairMsg := &db.Message{
+		ID:              msgID,
+		ChatID:          chatID,
+		Ordinal:         nextOrdinal,
+		ThreadID:        assistantMsg.ThreadID,
+		ContextWindowID: assistantMsg.ContextWindowID,
+		Role:            reliantv1.MessageRole_MESSAGE_ROLE_TOOL,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}
+
+	if err := a.repo.CreateMessage(ctx, repairMsg); err != nil {
+		return "", fmt.Errorf("failed to create repair message: %w", err)
+	}
+
+	// Create tool_result content blocks for each orphaned tool call
+	for i, orphan := range orphans {
+		blockID := uuid.New().String()
+		isError := true
+		content := "Tool execution was cancelled before completion. The previous request was interrupted."
+
+		block := &db.MessageContentBlock{
+			ID:         blockID,
+			MessageID:  msgID,
+			Position:   i,
+			BlockType:  reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT,
+			Content:    &content,
+			ToolName:   &orphan.ToolName,
+			ToolCallID: &orphan.ToolCallID,
+			IsError:    &isError,
+			IsComplete: true,
+			CreatedAt:  now,
+			UpdatedAt:  now,
+		}
+
+		if err := a.repo.CreateContentBlock(ctx, block); err != nil {
+			logging.Error("[Cleanup] Failed to create repair content block",
+				"error", err,
+				"chatID", chatID,
+				"blockID", blockID,
+				"toolCallID", orphan.ToolCallID)
+			// Continue with other blocks - partial repair is better than none
+			continue
+		}
+
+		logging.Info("[Cleanup] Created repair tool_result",
+			"chatID", chatID,
+			"messageID", msgID,
+			"toolCallID", orphan.ToolCallID,
+			"toolName", orphan.ToolName)
+	}
+
+	// Note: We don't emit a chat_update for the repair message itself.
+	// The repair message will be loaded naturally when the conversation is fetched.
+	// The tool_call cancelled updates (emitted by the caller) are sufficient for UI feedback.
+
+	return msgID, nil
+}
+
+// emitToolCancelledStatus emits a tool_call cancelled status update to chat_updates
+// This notifies the UI to stop showing the spinner for this tool call
+func (a *CleanupActivity) emitToolCancelledStatus(ctx context.Context, chatID, contentBlockID, toolCallID, toolName string) {
+	updateData := map[string]interface{}{
+		"update_type":      "tool_call",
+		"content_block_id": contentBlockID,
+		"tool_call_id":     toolCallID,
+		"tool_name":        toolName,
+		"status":           "cancelled",
+		"timestamp":        time.Now().Format(time.RFC3339),
+	}
+
+	updateDataJSON, err := json.Marshal(updateData)
+	if err != nil {
+		logging.Error("[Cleanup] Failed to marshal tool cancelled update", "error", err, "toolCallID", toolCallID)
+		return
+	}
+
+	if err := a.repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeToolCall, contentBlockID, string(updateDataJSON)); err != nil {
+		logging.Error("[Cleanup] Failed to emit tool cancelled update", "error", err, "toolCallID", toolCallID)
+	}
+}
+
+// NOTE: cancelStreamingToolCalls removed - streaming_delta updates are now ephemeral
+// and never persisted to the database, making the streaming tool cleanup obsolete.

@@ -1,0 +1,88 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+// Empty represents an empty message (no fields)
+message Empty {}
+
+// ErrorDetail provides structured error information
+message ErrorDetail {
+  // Error code (e.g., "not_found", "validation_error")
+  string code = 1;
+  // Human-readable error message
+  string message = 2;
+  // Additional error context
+  map<string, string> metadata = 3;
+}
+
+// =============================================================================
+// Shared enums used across multiple proto files
+// =============================================================================
+
+// PlanStatus tracks the lifecycle of a plan
+enum PlanStatus {
+  PLAN_STATUS_UNSPECIFIED = 0;
+  PLAN_STATUS_PENDING = 1;
+  PLAN_STATUS_IN_PROGRESS = 2;
+  PLAN_STATUS_COMPLETED = 3;
+  PLAN_STATUS_CANCELLED = 4;
+}
+
+// BackgroundProcessStatus tracks the lifecycle of a background process
+enum BackgroundProcessStatus {
+  BACKGROUND_PROCESS_STATUS_UNSPECIFIED = 0;
+  BACKGROUND_PROCESS_STATUS_RUNNING = 1;
+  BACKGROUND_PROCESS_STATUS_COMPLETED = 2;
+  BACKGROUND_PROCESS_STATUS_FAILED = 3;
+  BACKGROUND_PROCESS_STATUS_KILLED = 4;
+  BACKGROUND_PROCESS_STATUS_KILLED_EXTERNALLY = 5;
+  // STALE is used for package processes that are no longer tracked
+  BACKGROUND_PROCESS_STATUS_STALE = 6;
+}
+
+// ToolExecutionStatus tracks the lifecycle of a tool execution request
+enum ToolExecutionStatus {
+  TOOL_EXECUTION_STATUS_UNSPECIFIED = 0;
+  TOOL_EXECUTION_STATUS_PENDING = 1;
+  TOOL_EXECUTION_STATUS_EXECUTING = 2;
+  TOOL_EXECUTION_STATUS_COMPLETED = 3;
+  TOOL_EXECUTION_STATUS_FAILED = 4;
+  TOOL_EXECUTION_STATUS_CANCELLED = 5;
+  TOOL_EXECUTION_STATUS_TIMEOUT = 6;
+}
+
+// OutputStreamType distinguishes stdout from stderr in process output
+enum OutputStreamType {
+  OUTPUT_STREAM_TYPE_UNSPECIFIED = 0;
+  OUTPUT_STREAM_TYPE_STDOUT = 1;
+  OUTPUT_STREAM_TYPE_STDERR = 2;
+}
+
+// FileChangeStatus indicates the git status of a changed file
+enum FileChangeStatus {
+  FILE_CHANGE_STATUS_UNSPECIFIED = 0;
+  FILE_CHANGE_STATUS_MODIFIED = 1;
+  FILE_CHANGE_STATUS_STAGED = 2;
+  FILE_CHANGE_STATUS_UNTRACKED = 3;
+  FILE_CHANGE_STATUS_DELETED = 4;
+}
+
+// =============================================================================
+// Configuration
+// =============================================================================
+
+// ConfigScope defines where configuration should be saved
+// Scopes are loaded with merge priority: global < project < project_local
+enum ConfigScope {
+  // CONFIG_SCOPE_UNSPECIFIED uses the default behavior (project scope)
+  CONFIG_SCOPE_UNSPECIFIED = 0;
+  // CONFIG_SCOPE_GLOBAL saves to ~/.reliant/.reliant/ - available in all projects
+  CONFIG_SCOPE_GLOBAL = 1;
+  // CONFIG_SCOPE_PROJECT saves to $project/.reliant/ - shared with team (committed to git)
+  CONFIG_SCOPE_PROJECT = 2;
+  // CONFIG_SCOPE_PROJECT_LOCAL saves to $project/.reliant.local/ - personal config (gitignored)
+  CONFIG_SCOPE_PROJECT_LOCAL = 3;
+}

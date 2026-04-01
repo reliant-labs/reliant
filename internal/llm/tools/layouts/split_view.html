@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Split View Layout</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+            line-height: 1.6;
+            color: #333;
+            background: #1e1e1e;
+            overflow: hidden;
+        }
+
+        .split-container {
+            display: flex;
+            height: 100vh;
+            position: relative;
+        }
+
+        .split-panel {
+            flex: 1;
+            overflow: auto;
+            position: relative;
+        }
+
+        .split-panel.left {
+            background: #2d2d30;
+            border-right: 1px solid #3e3e42;
+        }
+
+        .split-panel.right {
+            background: #1e1e1e;
+        }
+
+        .panel-header {
+            background: #2d2d30;
+            padding: 1rem;
+            border-bottom: 1px solid #3e3e42;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-title {
+            color: #cccccc;
+            font-size: 0.875rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .panel-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .panel-button {
+            padding: 0.25rem 0.5rem;
+            background: transparent;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            color: #cccccc;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .panel-button:hover {
+            background: #3e3e42;
+            border-color: #5e5e62;
+        }
+
+        .panel-content {
+            padding: 1rem;
+            color: #d4d4d4;
+        }
+
+        .code-block {
+            font-family: inherit;
+            font-size: 0.875rem;
+            line-height: 1.6;
+            white-space: pre;
+            overflow-x: auto;
+        }
+
+        .line-number {
+            display: inline-block;
+            width: 3em;
+            color: #858585;
+            text-align: right;
+            padding-right: 1em;
+            user-select: none;
+        }
+
+        .code-line {
+            display: block;
+            padding: 0.125rem 0;
+        }
+
+        .code-line:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .code-line.added {
+            background: rgba(87, 171, 90, 0.2);
+        }
+
+        .code-line.removed {
+            background: rgba(239, 83, 80, 0.2);
+        }
+
+        .code-line.modified {
+            background: rgba(255, 184, 108, 0.2);
+        }
+
+        .split-handle {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 8px;
+            background: #3e3e42;
+            cursor: col-resize;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s ease;
+        }
+
+        .split-handle:hover {
+            background: #007acc;
+        }
+
+        .split-handle::before {
+            content: '';
+            width: 2px;
+            height: 30px;
+            background: #5e5e62;
+            border-radius: 1px;
+        }
+
+        .split-handle:hover::before {
+            background: white;
+        }
+
+        .toolbar {
+            background: #2d2d30;
+            padding: 0.5rem 1rem;
+            border-bottom: 1px solid #3e3e42;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .toolbar-group {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .toolbar-button {
+            padding: 0.375rem 0.75rem;
+            background: transparent;
+            border: none;
+            color: #cccccc;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            transition: background 0.2s ease;
+        }
+
+        .toolbar-button:hover {
+            background: #3e3e42;
+        }
+
+        .toolbar-button.active {
+            background: #094771;
+            color: white;
+        }
+
+        .status-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #007acc;
+            color: white;
+            padding: 0.25rem 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.75rem;
+            z-index: 1000;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        @media (max-width: 768px) {
+            .split-container {
+                flex-direction: column;
+            }
+
+            .split-handle {
+                width: 100%;
+                height: 8px;
+                cursor: row-resize;
+            }
+
+            .split-handle::before {
+                width: 30px;
+                height: 2px;
+            }
+
+            .split-panel.left {
+                border-right: none;
+                border-bottom: 1px solid #3e3e42;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .panel-button,
+            .toolbar-button,
+            .split-handle {
+                transition: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar" role="toolbar" aria-label="Main toolbar">
+        <div class="toolbar-group">
+            <button class="toolbar-button" aria-label="Toggle file explorer">📁 Files</button>
+            <button class="toolbar-button active" aria-label="Split view">⬌ Split</button>
+            <button class="toolbar-button" aria-label="Unified view">⬜ Unified</button>
+        </div>
+        <div class="toolbar-group">
+            <button class="toolbar-button" aria-label="Previous difference">← Previous</button>
+            <button class="toolbar-button" aria-label="Next difference">Next →</button>
+        </div>
+    </div>
+
+    <div class="split-container" role="main">
+        <div class="split-panel left" role="region" aria-label="Left panel">
+            <div class="panel-header">
+                <span class="panel-title">Original Version</span>
+                <div class="panel-actions">
+                    <button class="panel-button" aria-label="Copy content">Copy</button>
+                    <button class="panel-button" aria-label="Download file">Download</button>
+                </div>
+            </div>
+            <div class="panel-content">
+                <div class="code-block" role="textbox" aria-multiline="true" aria-label="Original code">
+<span class="code-line"><span class="line-number">1</span>function calculateTotal(items) {</span>
+<span class="code-line"><span class="line-number">2</span>    let total = 0;</span>
+<span class="code-line removed"><span class="line-number">3</span>    for (let i = 0; i < items.length; i++) {</span>
+<span class="code-line removed"><span class="line-number">4</span>        total += items[i].price;</span>
+<span class="code-line removed"><span class="line-number">5</span>    }</span>
+<span class="code-line"><span class="line-number">6</span>    return total;</span>
+<span class="code-line"><span class="line-number">7</span>}</span>
+<span class="code-line"><span class="line-number">8</span></span>
+<span class="code-line"><span class="line-number">9</span>function formatCurrency(amount) {</span>
+<span class="code-line modified"><span class="line-number">10</span>    return '$' + amount.toFixed(2);</span>
+<span class="code-line"><span class="line-number">11</span>}</span>
+<span class="code-line"><span class="line-number">12</span></span>
+<span class="code-line"><span class="line-number">13</span>function displayTotal(items) {</span>
+<span class="code-line"><span class="line-number">14</span>    const total = calculateTotal(items);</span>
+<span class="code-line"><span class="line-number">15</span>    console.log('Total: ' + formatCurrency(total));</span>
+<span class="code-line"><span class="line-number">16</span>}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="split-handle" id="split-handle" role="separator" aria-orientation="vertical" aria-label="Resize panels"></div>
+
+        <div class="split-panel right" role="region" aria-label="Right panel">
+            <div class="panel-header">
+                <span class="panel-title">Modified Version</span>
+                <div class="panel-actions">
+                    <button class="panel-button" aria-label="Accept changes">Accept</button>
+                    <button class="panel-button" aria-label="Reject changes">Reject</button>
+                </div>
+            </div>
+            <div class="panel-content">
+                <div class="code-block" role="textbox" aria-multiline="true" aria-label="Modified code">
+<span class="code-line"><span class="line-number">1</span>function calculateTotal(items) {</span>
+<span class="code-line added"><span class="line-number">2</span>    // Use reduce for better performance</span>
+<span class="code-line added"><span class="line-number">3</span>    return items.reduce((total, item) => {</span>
+<span class="code-line added"><span class="line-number">4</span>        return total + (item.price * (item.quantity || 1));</span>
+<span class="code-line added"><span class="line-number">5</span>    }, 0);</span>
+<span class="code-line"><span class="line-number">6</span>}</span>
+<span class="code-line"><span class="line-number">7</span></span>
+<span class="code-line"><span class="line-number">8</span>function formatCurrency(amount) {</span>
+<span class="code-line modified"><span class="line-number">9</span>    return new Intl.NumberFormat('en-US', {</span>
+<span class="code-line modified"><span class="line-number">10</span>        style: 'currency',</span>
+<span class="code-line modified"><span class="line-number">11</span>        currency: 'USD'</span>
+<span class="code-line modified"><span class="line-number">12</span>    }).format(amount);</span>
+<span class="code-line"><span class="line-number">13</span>}</span>
+<span class="code-line"><span class="line-number">14</span></span>
+<span class="code-line added"><span class="line-number">15</span>function applyDiscount(total, discountPercent) {</span>
+<span class="code-line added"><span class="line-number">16</span>    return total * (1 - discountPercent / 100);</span>
+<span class="code-line added"><span class="line-number">17</span>}</span>
+<span class="code-line added"><span class="line-number">18</span></span>
+<span class="code-line"><span class="line-number">19</span>function displayTotal(items) {</span>
+<span class="code-line"><span class="line-number">20</span>    const total = calculateTotal(items);</span>
+<span class="code-line"><span class="line-number">21</span>    console.log('Total: ' + formatCurrency(total));</span>
+<span class="code-line"><span class="line-number">22</span>}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="status-bar" role="status" aria-live="polite">
+        <div class="status-item">
+            <span>3 additions</span>
+            <span>•</span>
+            <span>2 deletions</span>
+            <span>•</span>
+            <span>1 modification</span>
+        </div>
+        <div class="status-item">
+            <span>Split View Mode</span>
+        </div>
+    </div>
+
+    <script>
+        const handle = document.getElementById('split-handle');
+        const container = document.querySelector('.split-container');
+        const leftPanel = document.querySelector('.split-panel.left');
+        let isResizing = false;
+
+        handle.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+
+            const containerRect = container.getBoundingClientRect();
+            const percentage = ((e.clientX - containerRect.left) / containerRect.width) * 100;
+
+            if (percentage > 20 && percentage < 80) {
+                leftPanel.style.flex = `0 0 ${percentage}%`;
+                handle.style.left = `${percentage}%`;
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            isResizing = false;
+            document.body.style.cursor = 'default';
+            document.body.style.userSelect = 'auto';
+        });
+
+        // Initialize handle position
+        handle.style.left = '50%';
+    </script>
+</body>
+</html>

@@ -1,0 +1,179 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+// TaskStatus tracks the lifecycle of a task
+enum TaskStatus {
+  TASK_STATUS_UNSPECIFIED = 0;
+  TASK_STATUS_PENDING = 1;
+  TASK_STATUS_IN_PROGRESS = 2;
+  TASK_STATUS_COMPLETED = 3;
+  TASK_STATUS_FAILED = 4;
+  TASK_STATUS_BLOCKED = 5;
+  TASK_STATUS_CANCELLED = 6;
+  TASK_STATUS_SKIPPED = 7;
+}
+
+// DependencyType describes the relationship between two tasks
+enum DependencyType {
+  DEPENDENCY_TYPE_UNSPECIFIED = 0;
+  // from_task must complete before to_task can start
+  DEPENDENCY_TYPE_BLOCKS = 1;
+  // Informational link, no execution constraint
+  DEPENDENCY_TYPE_RELATED = 2;
+  // Explicitly marks tasks as safe to run in parallel
+  DEPENDENCY_TYPE_PARALLEL_WITH = 3;
+}
+
+// TaskService handles task-related operations
+service TaskService {
+  // CreateTask creates a new task
+  rpc CreateTask(CreateTaskRequest) returns (CreateTaskResponse) {}
+  
+  // GetTask retrieves a task by ID
+  rpc GetTask(GetTaskRequest) returns (GetTaskResponse) {}
+  
+  // ListTasks lists tasks (optionally filtered by plan)
+  rpc ListTasks(ListTasksRequest) returns (ListTasksResponse) {}
+  
+  // UpdateTask updates an existing task
+  rpc UpdateTask(UpdateTaskRequest) returns (UpdateTaskResponse) {}
+  
+  // DeleteTask deletes a task
+  rpc DeleteTask(DeleteTaskRequest) returns (DeleteTaskResponse) {}
+
+  // AddTaskDependency creates a dependency between two tasks
+  rpc AddTaskDependency(AddTaskDependencyRequest) returns (AddTaskDependencyResponse) {}
+
+  // RemoveTaskDependency removes a dependency between two tasks
+  rpc RemoveTaskDependency(RemoveTaskDependencyRequest) returns (RemoveTaskDependencyResponse) {}
+
+  // ListReadyTasks lists tasks that are ready to work on (no unresolved blockers)
+  rpc ListReadyTasks(ListReadyTasksRequest) returns (ListReadyTasksResponse) {}
+}
+
+// Task represents a task in the system
+message Task {
+  string id = 1;
+  string plan_id = 2;
+  string title = 3;
+  string description = 4;
+  TaskStatus status = 5;
+  int32 position = 6;
+  optional string parent_task_id = 7;
+  string created_at = 8;
+  string updated_at = 9;
+  optional string metadata = 10;
+  optional string assignee = 11;
+}
+
+// TaskDependency represents a typed relationship between two tasks
+message TaskDependency {
+  string id = 1;
+  string from_task_id = 2;
+  string to_task_id = 3;
+  DependencyType dependency_type = 4;
+  string created_at = 5;
+}
+
+// CreateTaskRequest creates a new task
+message CreateTaskRequest {
+  string plan_id = 1;
+  string title = 2;
+  string description = 3;
+  TaskStatus status = 4;
+  optional int32 position = 5;
+  optional string parent_task_id = 6;
+  optional string metadata = 7;
+  optional string assignee = 8;
+}
+
+// CreateTaskResponse returns the created task
+message CreateTaskResponse {
+  Task task = 1;
+}
+
+// GetTaskRequest retrieves a task by ID
+message GetTaskRequest {
+  string task_id = 1;
+}
+
+// GetTaskResponse returns the requested task
+message GetTaskResponse {
+  Task task = 1;
+}
+
+// ListTasksRequest lists tasks
+message ListTasksRequest {
+  optional string plan_id = 1; // Filter by plan (if provided)
+}
+
+// ListTasksResponse returns a list of tasks
+message ListTasksResponse {
+  repeated Task tasks = 1;
+  int32 total = 2;
+}
+
+// UpdateTaskRequest updates a task
+message UpdateTaskRequest {
+  string task_id = 1;
+  optional string title = 2;
+  optional string description = 3;
+  optional TaskStatus status = 4;
+  optional int32 position = 5;
+  optional string metadata = 6;
+  optional string assignee = 7;
+}
+
+// UpdateTaskResponse returns the updated task
+message UpdateTaskResponse {
+  Task task = 1;
+}
+
+// DeleteTaskRequest deletes a task
+message DeleteTaskRequest {
+  string task_id = 1;
+}
+
+// DeleteTaskResponse confirms deletion
+message DeleteTaskResponse {
+  bool success = 1;
+}
+
+// AddTaskDependencyRequest creates a dependency between two tasks
+message AddTaskDependencyRequest {
+  string from_task_id = 1;
+  string to_task_id = 2;
+  DependencyType dependency_type = 3;
+}
+
+// AddTaskDependencyResponse returns the created dependency
+message AddTaskDependencyResponse {
+  TaskDependency dependency = 1;
+}
+
+// RemoveTaskDependencyRequest removes a dependency between two tasks
+message RemoveTaskDependencyRequest {
+  string from_task_id = 1;
+  string to_task_id = 2;
+  DependencyType dependency_type = 3;
+}
+
+// RemoveTaskDependencyResponse confirms removal
+message RemoveTaskDependencyResponse {
+  bool success = 1;
+}
+
+// ListReadyTasksRequest lists tasks ready for work
+message ListReadyTasksRequest {
+  string plan_id = 1;
+}
+
+// ListReadyTasksResponse returns ready tasks
+message ListReadyTasksResponse {
+  repeated Task tasks = 1;
+  int32 total = 2;
+}

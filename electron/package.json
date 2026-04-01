@@ -1,0 +1,51 @@
+{
+  "name": "reliant",
+  "version": "1.2.2",
+  "description": "AI-powered coding assistant with intelligent agents for professional software development",
+  "author": "Reliant Labs <support@reliantlabs.io>",
+  "homepage": "https://reliantlabs.io",
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/reliant-labs/reliant.git"
+  },
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev:preclean": "node -e \"console.log('preclean ok')\"",
+    "dev": "node scripts/dev-multi.js",
+    "dev:clean": "node scripts/kill-ports.js && npm run dev",
+    "dev:fresh": "rm -f ../.ports.json ../.instance-info && node scripts/kill-ports.js && npm run dev",
+    "build:backend": "cd .. && go build -buildvcs=false -o dist/reliant.tmp ./cmd/reliant/ && mv dist/reliant.tmp dist/reliant",
+    "dev:vite": "npm --prefix ../web run dev",
+    "dev:electron": "node scripts/wait-and-start.js",
+    "test": "node --test test/backend-auth.test.js test/oauth-callback-server.test.js",
+    "build:web": "cd ../web && npm run build:alpha",
+    "build:web:alpha": "cd ../web && npm run build:alpha",
+    "build": "npm run build:web && ../scripts/build-electron.sh mac && electron-builder",
+    "build:alpha": "npm run build:web:alpha && ../scripts/build-electron.sh mac && electron-builder --config electron-builder.alpha.js",
+    "dist": "npm run build",
+    "dist:alpha": "npm run build:alpha",
+    "dist:mac": "npm run build:web && ../scripts/build-electron.sh mac && electron-builder --mac",
+    "dist:mac:dev": "npm run build:web:alpha && ../scripts/build-electron.sh mac && electron-builder --mac --config electron-builder.dev.js",
+    "dist:mac:alpha": "npm run build:web:alpha && ../scripts/build-electron.sh mac && electron-builder --mac --config electron-builder.alpha.js",
+    "dist:win": "npm run build:web && ../scripts/build-electron.sh win && electron-builder --win",
+    "dist:linux": "npm run build:web && ../scripts/build-electron.sh linux && electron-builder --linux"
+  },
+  "devDependencies": {
+    "@electron/notarize": "^2.2.1",
+    "concurrently": "^8.2.2",
+    "electron": "^39.2.7",
+    "electron-builder": "26.0.11",
+    "kill-port": "^2.0.1",
+    "wait-on": "^7.2.0"
+  },
+  "dependencies": {
+    "@sentry/electron": "^6.11.0",
+    "@statsig/js-client": "^3.29.1",
+    "dotenv": "^17.2.3",
+    "electron-log": "^5.4.3",
+    "electron-updater": "^6.6.2",
+    "find-free-port": "^2.0.0"
+  }
+}

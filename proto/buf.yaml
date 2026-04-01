@@ -1,0 +1,3 @@
+# Module configuration for proto files
+version: v2
+name: buf.build/reliant/reliant

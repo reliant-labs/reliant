@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Reliant</title>
+    <script>
+      (function(){
+        try{
+          // Load and apply theme mode (light/dark) from localStorage before React hydration
+          // Check both the canonical key and legacy key for backwards compatibility
+          var savedTheme = localStorage.getItem('appearance.theme');
+          if (savedTheme === 'dark') {
+            document.documentElement.classList.add('dark');
+          } else if (savedTheme === 'light') {
+            document.documentElement.classList.remove('dark');
+          } else {
+            // No saved theme - use system preference
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+              document.documentElement.classList.add('dark');
+            }
+          }
+          
+          // Load and apply color scheme from localStorage
+          var savedScheme = localStorage.getItem('appearance.colorScheme') || 'black';
+          var schemeMap = {
+            'blue': 'professional-blue',
+            'neutral': 'refined-neutral',
+            'teal': 'modern-teal',
+            'slate': 'slate',
+            'forest': 'forest',
+            'purple': 'purple-classic',
+            'pink': 'vibrant-pink',
+            'orange': 'energetic-orange',
+            'red': 'bold-red',
+            'black': 'pure-black'
+          };
+          document.documentElement.setAttribute('data-color-scheme', schemeMap[savedScheme] || 'pure-black');
+          
+          // Load and apply font settings
+          var font = localStorage.getItem('appearance.font') || 'system';
+          var chatFont = localStorage.getItem('appearance.chatFont') || 'default';
+          var editorFont = localStorage.getItem('appearance.editorFont') || 'default';
+          var fontSize = localStorage.getItem('appearance.fontSize') || 'md';
+          
+          document.documentElement.dataset.font = font;
+          document.documentElement.dataset.chatFont = chatFont;
+          document.documentElement.dataset.editorFont = editorFont;
+          
+          var fontSizeMap = { xs: '12px', sm: '13px', md: '14px', lg: '15px', xl: '16px' };
+          document.documentElement.style.fontSize = fontSizeMap[fontSize] || '14px';
+          
+          // Mark that initial theme has been applied
+          window.__THEME_APPLIED__ = true;
+        }catch(e){
+          console.error('Failed to apply initial theme:', e);
+          // Fallback to defaults
+          document.documentElement.setAttribute('data-color-scheme', 'pure-black');
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

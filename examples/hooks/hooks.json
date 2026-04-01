@@ -1,0 +1,74 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "bash|shell|exec",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./hooks/pre-bash.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "file_write|file_delete",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./hooks/file-guard.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./hooks/log-tool-use.sh",
+            "timeout": 2
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./hooks/prompt-filter.sh",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./hooks/on-complete.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'New session started: '$SESSION_ID >> /tmp/reliant-sessions.log",
+            "timeout": 1,
+            "env": {
+              "SESSION_ID": "{{.SessionID}}"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

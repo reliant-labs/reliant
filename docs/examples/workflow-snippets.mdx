@@ -1,0 +1,763 @@
+---
+title: "Workflow Snippets"
+description: "Copy-and-adapt YAML patterns for common workflow scenarios"
+---
+
+Copy-and-adapt snippets for building workflows. Each example shows the minimal YAML needed for a specific technique.
+
+## Basic Patterns
+
+### Simple Agent Loop with Auto-Approve
+
+The standard agent pattern: call LLM, execute tools, repeat while there's work.
+
+```yaml
+- id: agent_loop
+  loop:
+    while: (outputs.tool_calls != null && size(outputs.tool_calls) > 0) && iter.iteration < inputs.max_turns
+    inline:
+      entry: [call_llm]
+      outputs:
+        tool_calls: "{{nodes.call_llm.tool_calls}}"
+
+      nodes:
+        - id: call_llm
+          action: CallLLM
+          inputs:
+            model: "{{inputs.model}}"
+
+        - id: execute_tools
+          action: ExecuteTools
+          inputs:
+            tool_calls: "{{nodes.call_llm.tool_calls}}"
+
+      edges:
+        - from: call_llm
+          cases:
+            - to: execute_tools
+              condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0
+```
+
+**Key points:**
+
+- `while` condition checks for non-empty tool_calls to continue looping
+- No approval step means tools execute automatically
+
+### Manual Approval Mode
+
+Add an approval gate before tool execution.
+
+```yaml
+nodes:
+  - id: call_llm
+    action: CallLLM
+    inputs:
+
+  - id: approval
+    action: Approval
+    inputs:
+      title: Approve tool execution?
+      description: "The agent wants to execute tool(s)"
+      timeout: 1h
+      actions:
+        - type: approve
+          label: "Approve"
+        - type: deny
+          label: "Deny"
+
+  - id: execute_tools
+    action: ExecuteTools
+    inputs:
+      tool_calls: "{{nodes.call_llm.tool_calls}}"
+
+edges:
+  - from: call_llm
+    cases:
+      - to: approval
+        condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0
+
+  - from: approval
+    cases:
+      - to: execute_tools
+        condition: nodes.approval.status == 'approved'
+```
+
+**Key points:**
+
+- Approval blocks until user responds or timeout
+- Check `nodes.approval.status == 'approved'` before proceeding
+
+### Plan Mode (Read-Only Tools)
+
+Restrict agent to read-only tools for planning without modifications.
+
+```yaml
+inputs:
+  mode:
+    type: enum
+    enum: ["auto", "plan", "manual"]
+    default: "auto"
+
+nodes:
+  - id: call_llm
+    action: CallLLM
+    inputs:
+      # Filter tools based on mode
+      tool_filter: "{{inputs.mode == 'plan' ? ['tag:readonly', 'tag:mcp'] : ['tag:default', 'tag:mcp']}}"
+      # Optionally add planning-specific system prompt
+      system_prompt: "{{inputs.mode == 'plan' ? inputs.planning_prompt : inputs.system_prompt}}"
+```
+
+**Key points:**
+
+- Use `tool_filter` to restrict available tools
+- `tag:readonly` includes view, grep, glob, etc.
+- Pair with a planning-specific system prompt
+
+---
+
+## Conditional Logic
+
+### Branch Based on Exit Code
+
+Route workflow based on command success/failure.
+
+```yaml
+nodes:
+  - id: run_tests
+    run: make test
+
+  - id: on_success
+    action: SaveMessage
+    inputs:
+      role: assistant
+      content: "Tests passed!"
+
+  - id: on_failure
+    action: SaveMessage
+    inputs:
+      role: assistant
+      content: "Tests failed: {{nodes.run_tests.stderr}}"
+
+edges:
+  - from: run_tests
+    cases:
+      - to: on_success
+        condition: nodes.run_tests.exit_code == 0
+        label: success
+      - to: on_failure
+        condition: nodes.run_tests.exit_code != 0
+        label: failure
+```
+
+**Key points:**
+
+- `run` nodes expose `exit_code`, `stdout`, `stderr`
+- Use conditions to branch on exit_code
+
+### Branch Based on Tool Calls Present
+
+Check if LLM made tool calls to decide next step.
+
+```yaml
+edges:
+  - from: call_llm
+    cases:
+      # LLM wants to use tools
+      - to: execute_tools
+        condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0
+        label: has_tools
+      # LLM responded without tools (done)
+      - to: complete
+        label: no_tools
+```
+
+**Key points:**
+
+- Always check both `!= null` and `size() > 0`
+- The label-only case acts as default (no condition)
+
+### Loop While Condition Met
+
+Retry while tests fail (up to iteration limit). Uses `fork` with `memo: false` so each iteration starts fresh from the original request, with targeted error feedback injected after failures.
+
+```yaml
+- id: implement_loop
+  loop:
+    while: outputs.exit_code != 0 && iter.iteration < 5
+    inline:
+      entry: [implement]
+      outputs:
+        exit_code: "{{nodes.verify.exit_code}}"
+        stderr: "{{nodes.verify.stderr}}"
+
+      nodes:
+        - id: implement
+          workflow: builtin://agent
+          thread:
+            mode: inherit # Agent sees full history including previous errors
+            inject:
+              role: user
+              content: "{{inputs.task}}"
+
+        - id: verify
+          run: make test
+
+      edges:
+        - from: implement
+          default: verify
+
+  thread:
+    mode: fork
+    memo: false  # Fresh fork each iteration
+    inject:
+      role: user
+      condition: "iter.iteration > 0"
+      content: |
+        Previous attempt failed:
+        {{outputs.stderr}}
+        Please fix these issues.
+```
+
+**Key points:**
+
+- `while` condition evaluated after each iteration with `outputs.*` containing results
+- `thread: mode: fork` with `memo: false` gives each iteration a fresh start from the original request
+- `inject.condition` adds error feedback only after the first iteration fails
+- In loop body, `iter.iteration` is 0-indexed; in `while` check, it reflects completed iterations
+
+---
+
+## Multi-Agent
+
+### Two Agents Taking Turns on Same Thread
+
+Agents alternate on shared context (e.g., proposer/critic debate).
+
+```yaml
+- id: debate_loop
+  loop:
+    while: iter.iteration < 3
+    inline:
+      entry: [proposer]
+      nodes:
+        - id: proposer
+          workflow: builtin://agent
+          thread:
+            mode: inherit
+          inputs:
+            system_prompt: "You are the PROPOSER. Create or refine the plan."
+
+        - id: critic
+          workflow: builtin://agent
+          thread:
+            mode: inherit
+            inject:
+              role: user
+              content: "Challenge this plan. What could go wrong?"
+          inputs:
+            system_prompt: "You are the CRITIC. Find flaws and edge cases."
+
+      edges:
+        - from: proposer
+          default: critic
+  thread:
+    mode: inherit
+```
+
+**Key points:**
+
+- Both agents use `thread: mode: inherit` to share context
+- Each agent sees what the other wrote
+- Use `inject` to add turn-specific instructions
+
+### Parallel Agents with Join
+
+Launch multiple agents simultaneously, wait for all to complete.
+
+```yaml
+nodes:
+  - id: impl_1
+    workflow: builtin://agent
+    thread:
+      mode: fork
+      key: impl_1
+      inject:
+        role: user
+        content: "Implement approach A"
+
+  - id: impl_2
+    workflow: builtin://agent
+    thread:
+      mode: fork
+      key: impl_2
+      inject:
+        role: user
+        content: "Implement approach B"
+
+  - id: implementations_done
+    join: all
+
+  - id: review
+    workflow: builtin://agent
+    thread:
+      mode: inherit
+      inject:
+        role: user
+        content: "Review both implementations and pick the winner."
+
+edges:
+  # Start both in parallel
+  - from: some_previous_step
+    default: impl_1
+  - from: some_previous_step
+    default: impl_2
+
+  # Both feed into join
+  - from: impl_1
+    default: implementations_done
+  - from: impl_2
+    default: implementations_done
+
+  # After join
+  - from: implementations_done
+    default: review
+```
+
+**Key points:**
+
+- See [Threads](/features/threads) for thread mode documentation (`fork`, `new`, `inherit`)
+- Use unique `key` values for each parallel branch
+- `join: all` waits for all incoming edges
+
+### Groups for Different Model Configs
+
+Configure different settings for each agent type.
+
+```yaml
+inputs:
+  model:
+    type: model
+    default: ""
+    description: Default model for all agents
+
+groups:
+  Implementer:
+    tag: agent
+    inputs:
+      model:
+        type: model
+        default: ""
+      temperature:
+        type: number
+        default: 1.0
+      system_prompt:
+        type: string
+        default: "You are an implementation agent."
+
+  Reviewer:
+    tag: agent
+    inputs:
+      model:
+        type: model
+        default: ""
+      temperature:
+        type: number
+        default: 0.7
+      system_prompt:
+        type: string
+        default: "You are a code reviewer."
+
+nodes:
+  - id: implement
+    workflow: builtin://agent
+    inputs:
+      # Fall back to workflow default if group model is empty
+      model: "{{inputs.Implementer.model != '' ? inputs.Implementer.model : inputs.model}}"
+      temperature: "{{inputs.Implementer.temperature}}"
+      system_prompt: "{{inputs.Implementer.system_prompt}}"
+
+  - id: review
+    workflow: builtin://agent
+    inputs:
+      model: "{{inputs.Reviewer.model != '' ? inputs.Reviewer.model : inputs.model}}"
+      temperature: "{{inputs.Reviewer.temperature}}"
+      system_prompt: "{{inputs.Reviewer.system_prompt}}"
+```
+
+**Key points:**
+
+- Groups appear as collapsible sections in UI
+- Use `tag: agent` to enable preset picker
+- Reference group inputs as `inputs.GroupName.field`
+
+---
+
+## Context Management
+
+### Filter Large Tool Results with CallLLM
+
+Reduce context bloat by summarizing large outputs.
+
+```yaml
+nodes:
+  - id: execute_tools
+    action: ExecuteTools
+    inputs:
+      tool_calls: "{{nodes.call_llm.tool_calls}}"
+
+  # Filter large results before saving
+  - id: filter_results
+    action: CallLLM
+    save_message:
+      role: tool
+      content: "{{output.response_text}}"
+      tool_results: "{{nodes.execute_tools.tool_results}}"
+    inputs:
+      model:
+        tags: [fast]  # Use a fast model for filtering
+      tools: false
+      ephemeral: true
+      system_prompt: |
+        Extract only relevant information from tool results:
+        - Keep file paths and line numbers
+        - Keep error messages
+        - Remove verbose/redundant output
+      messages:
+        - role: user
+          content: |
+            Filter these tool results:
+            {{toJson(nodes.execute_tools.tool_results)}}
+
+  # Save small results directly
+  - id: save_results
+    action: SaveMessage
+    inputs:
+      role: tool
+      tool_results: "{{nodes.execute_tools.tool_results}}"
+
+edges:
+  - from: execute_tools
+    cases:
+      - to: filter_results
+        condition: nodes.execute_tools.total_result_chars > 4000
+        label: filter_large
+    default: save_results
+```
+
+**Key points:**
+
+- Check `total_result_chars` to decide filtering
+- Use `ephemeral: true` so filter call doesn't add to thread
+- Save filtered content with original tool_results for proper UI display
+
+### Compact When Tokens Exceed Threshold
+
+Trigger context compaction after tool execution.
+
+```yaml
+- id: compact
+  action: Compact
+  timeout: "10m"
+
+edges:
+  - from: execute_tools
+    cases:
+      - to: compact
+        condition: nodes.execute_tools.thread_token_count > 185000
+        label: compact_needed
+```
+
+**Key points:**
+
+- `thread_token_count` available after ExecuteTools or SaveMessage
+- Compact saves its summary message internally with the new context sequence
+- No `save_message` block needed for Compact nodes
+
+### Conditional Message Saving
+
+Save messages only under certain conditions.
+
+````yaml
+- id: verify
+  run: go test ./...
+  save_message:
+    condition: "{{output.exit_code != 0}}"
+    role: user
+    content: |
+      Tests failed. Please fix:
+      ```
+      {{output.stderr}}
+      ```
+````
+
+**Key points:**
+
+- `save_message.condition` controls whether message is saved
+- Useful for feedback loops (only inject on failure)
+- Message content can reference node outputs via `output.*`
+
+---
+
+## Approvals and Oversight
+
+### Custom Approval with Multiple Actions
+
+Offer multiple response options beyond approve/deny.
+
+```yaml
+- id: approval
+  action: Approval
+  inputs:
+    title: "Review proposed changes"
+    description: "The agent wants to modify files"
+    timeout: 30m
+    actions:
+      - type: approve
+        label: "Approve All"
+      - type: approve
+        label: "Approve with Caution"
+        value: "caution"
+      - type: deny
+        label: "Reject"
+      - type: custom
+        label: "Modify Request"
+        value: "modify"
+
+edges:
+  - from: approval
+    cases:
+      - to: execute_tools
+        condition: nodes.approval.status == 'approved'
+      - to: get_modifications
+        condition: nodes.approval.action_value == 'modify'
+```
+
+**Key points:**
+
+- Multiple approve actions can have different `value` fields
+- Access chosen action via `nodes.approval.action_value`
+- `type: custom` for non-standard responses
+
+### Audit Check Before Tool Execution
+
+Run an auditor agent before allowing tool execution.
+
+```yaml
+nodes:
+  - id: main_agent
+    action: CallLLM
+    inputs:
+
+  - id: audit_check
+    action: CallLLM
+    inputs:
+      model:
+        tags: [moderate]  # Balanced model for audit
+      tool_filter: [audit_result]
+      response_tool:
+        name: audit_result
+        description: Report audit findings
+        options:
+          approved: "Agent is on track - provide brief confirmation"
+          denied: "Agent needs guidance - explain what is wrong and how to fix it"
+      messages:
+        - role: user
+          content: |
+            Review this action. Is the agent on track?
+            Response: {{nodes.main_agent.response_text}}
+            Tool calls: {{size(nodes.main_agent.tool_calls)}}
+
+  - id: execute_audit
+    action: ExecuteTools
+    inputs:
+      tool_calls: "{{nodes.audit_check.tool_calls}}"
+
+  - id: execute_tools
+    action: ExecuteTools
+    inputs:
+      tool_calls: "{{nodes.main_agent.tool_calls}}"
+
+edges:
+  - from: main_agent
+    cases:
+      - to: audit_check
+        condition: nodes.main_agent.tool_calls != null && size(nodes.main_agent.tool_calls) > 0
+
+  - from: audit_check
+    cases:
+      - to: execute_audit
+        condition: nodes.audit_check.tool_calls != null
+
+  - from: execute_audit
+    cases:
+      - to: execute_tools
+        condition: nodes.execute_audit.response_data.audit_result.choice == 'approved'
+```
+
+**Key points:**
+
+- Use `response_tool` to force structured output
+- Define `options` as choice names with descriptions
+- LLM returns `{ choice: "option_name", value: "explanation" }`
+- Access response data via `nodes.<execute_tools_node>.response_data.<tool_name>.choice` or `.value`
+- Auditor can use cheaper/faster model
+
+### Response Tools for Structured Feedback
+
+Force LLM to provide structured responses via a "response tool." Response tools use a simplified options-based format where output is always `{ choice, value }`.
+
+```yaml
+- id: validation_report
+  action: CallLLM
+  inputs:
+    tool_filter: [validation_result]
+    response_tool:
+      name: validation_result
+      description: Report validation results
+      options:
+        passed: "Validation passed - explain what was verified"
+        failed: "Validation failed - describe the issues found"
+
+- id: execute_response
+  action: ExecuteTools
+  inputs:
+    tool_calls: "{{nodes.validation_report.tool_calls}}"
+
+# Access structured data
+outputs:
+  passed: "{{nodes.execute_response.response_data.validation_result.choice == 'passed'}}"
+  details: "{{nodes.execute_response.response_data.validation_result.value}}"
+```
+
+**Key points:**
+
+- `response_tool` is a synthetic tool only the LLM can call
+- Define options as `option_name: "description for LLM"`
+- Output is always `{ choice: string, value: string }`
+- Must execute tools to capture the structured data
+- Access via `nodes.<node>.response_data.<tool_name>.choice` or `.value`
+
+---
+
+## Worktrees
+
+### Create Worktree for Isolated Work
+
+Give an agent its own working directory.
+
+```yaml
+- id: create_worktree
+  action: CreateWorktree
+  inputs:
+    name: "feature-{{workflow.id}}"
+    base_branch: "{{has(workflow.current_branch) ? workflow.current_branch : 'main'}}"
+    force: true
+
+- id: implement
+  workflow: builtin://agent
+  thread:
+    mode: inherit
+    inject:
+      role: user
+      content: |
+        Implement the feature in: {{nodes.create_worktree.path}}
+```
+
+**Key points:**
+
+- Include `workflow.id` in name for uniqueness
+- `force: true` overwrites existing worktree with same name
+- Reference worktree path via `nodes.create_worktree.path`
+
+### Copy Env Files to Worktree
+
+Include configuration files in new worktree.
+
+```yaml
+- id: create_worktree
+  action: CreateWorktree
+  inputs:
+    name: "impl-{{workflow.id}}"
+    base_branch: main
+    copy_files:
+      - .env
+      - .env.local
+      - config/secrets.yaml
+    force: true
+```
+
+**Key points:**
+
+- `copy_files` searches recursively for matching filenames
+- Directory structure is preserved (e.g., `frontend/.env` → `worktree/frontend/.env`)
+- Files are copied from source repo, not current worktree
+
+### Multiple Parallel Worktrees
+
+Create isolated environments for competing implementations.
+
+```yaml
+nodes:
+  - id: create_wt_1
+    action: CreateWorktree
+    inputs:
+      name: "compete-1-{{workflow.id}}"
+      base_branch: main
+      copy_files: [.env]
+      force: true
+
+  - id: create_wt_2
+    action: CreateWorktree
+    inputs:
+      name: "compete-2-{{workflow.id}}"
+      base_branch: main
+      copy_files: [.env]
+      force: true
+
+  - id: worktrees_ready
+    join: all
+
+  - id: impl_1
+    workflow: builtin://agent
+    thread:
+      mode: new
+      key: impl_1
+      inject:
+        role: user
+        content: "Work in: {{nodes.create_wt_1.path}}"
+
+  - id: impl_2
+    workflow: builtin://agent
+    thread:
+      mode: new
+      key: impl_2
+      inject:
+        role: user
+        content: "Work in: {{nodes.create_wt_2.path}}"
+
+edges:
+  # Create worktrees in parallel
+  - from: start
+    default: create_wt_1
+  - from: start
+    default: create_wt_2
+
+  # Wait for both
+  - from: create_wt_1
+    default: worktrees_ready
+  - from: create_wt_2
+    default: worktrees_ready
+
+  # Launch implementations in parallel
+  - from: worktrees_ready
+    default: impl_1
+  - from: worktrees_ready
+    default: impl_2
+```
+
+**Key points:**
+
+- Create worktrees in parallel for faster setup
+- Use `thread: mode: new` so implementations don't share context
+- Each parallel edge needs its own `- from:` block

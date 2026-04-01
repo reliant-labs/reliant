@@ -1,0 +1,132 @@
+---
+title: "Worktrees & Workspaces"
+description: "Managing isolated development environments (Git worktrees)"
+---
+
+Workspaces let you work on multiple branches simultaneously. They're built on Git worktrees: isolated working directories for each branch, sharing the same repository.
+
+> [!NOTE]
+> In Reliant, we call these **Workspaces**. Under the hood, they are standard Git worktrees.
+
+![Workspaces panel showing list of workspaces with branch names, status badges, and Create Workspace button](/images/screenshots/workspace-page.png)
+
+## What are Workspaces?
+
+A Workspace corresponds to a Git worktree: a separate working directory for a specific branch, linked to the same repository. You can have multiple checkouts of your project active at once, each with its own files, build artifacts, and dependencies.
+
+When you switch workspaces, the AI's context switches too. Your code and your conversations are isolated together.
+
+## Creating Workspaces
+
+### From the Workspace Panel
+
+![Create workspace dialog with branch name, workspace name, base branch, and path fields](/images/screenshots/create-workspace.png)
+
+Navigate to the **Workspaces** tab and click **Create Workspace**. Provide a branch name, choose the base branch, and the workspace becomes available immediately.
+
+## Workspaces in Workflows
+
+Workspaces integrate with Reliant's workflow system through the **CreateWorktree** activity, allowing automated workspace creation in larger workflows.
+
+### The CreateWorktree Activity
+
+In the Workflow Editor, the CreateWorktree activity programmatically creates workspaces. It accepts a name, optional base branch, and files to copy from the source repository.
+
+The activity handles branch creation, directory setup, and file copying automatically. After execution, workspace information (path, branch name, metadata) is stored in the workflow context.
+
+### Parallel Implementation Patterns
+
+The **parallel-compete** workflow pattern uses workspaces to run multiple agents on the same task independently. Each agent gets its own environment, implements their solution, and the workflow compares results.
+
+A parallel-compete workflow might:
+
+1. Create two workspaces from the same base branch
+2. Spawn separate agent sessions in each workspace
+3. Give both agents the same implementation task
+4. Wait for both to complete
+5. Present both solutions for comparison
+
+Each agent has its own files, can install dependencies, run builds, and make commits without affecting the other.
+
+### Copying Configuration Files
+
+Many projects have local configuration files that shouldn't be committed but are needed for development—files like `.env`, `.env.local`, or local database configurations. The CreateWorktree activity supports a **copy_files** parameter that handles this automatically.
+
+When you specify files to copy, Reliant searches recursively through the source repository and copies matching files to the new workspace, preserving their directory structure. If your project has `frontend/.env` and `backend/.env`, both get copied to the corresponding locations in the new workspace.
+
+### Workspace Lifecycle in Workflows
+
+Workspaces created by workflows follow a managed lifecycle. The workflow system tracks which workspaces it creates, and you can configure cleanup behavior. Some workflows might delete workspaces after merging successful implementations, while others keep them for review.
+
+In the Workspaces panel, workflow-created workspaces appear alongside manually created ones. You can manage them the same way—switch to them, view their status, or delete them when no longer needed.
+
+## Integration with Chat
+
+Workspaces and chat sessions are tightly integrated in Reliant. The workspace you have selected determines the context for your AI conversations.
+
+### Context Switching
+
+When you switch workspaces, the AI assistant's context switches with you. The assistant sees the files, Git history, and project state of the selected workspace. If you ask about recent changes or want to modify code, the assistant works with the workspace you have selected.
+
+This means you can have different conversations happening in different workspaces. Switch to your feature branch workspace to work on new functionality, then switch to your bugfix workspace to address an issue—each conversation picks up where you left off in that context.
+
+### Tool Paths and Operations
+
+All file operations from the AI assistant use paths relative to the current workspace. When the assistant reads files, makes edits, or runs commands, those operations happen in the selected workspace's directory. This ensures changes go to the right place and prevents accidentally modifying the wrong branch.
+
+The same applies to Git operations. Commits, pushes, and status checks all reflect the selected workspace's state.
+
+### Starting Fresh Conversations
+
+Sometimes you want a completely fresh start in a workspace. You can create a new chat session while keeping the same workspace selected, giving you a clean conversation history while maintaining the same code context.
+
+## Managing Workspaces
+
+### Workspace List
+
+The Workspaces panel displays all your workspaces with their name, associated Git branch, base branch, and current status. Click any workspace to select it and see its details.
+
+### Status Types
+
+Workspaces have status indicators:
+
+- **Active** — Work in progress
+- **Completed** — Ready for merge
+- **Abandoned** — No longer needed
+- **Merging** — Currently being merged to base branch
+
+### Detail View
+
+Selecting a workspace reveals detailed information including the full working directory path (with a copy button for easy access), current Git status showing modified, staged, and untracked files, and sync status indicating commits ahead or behind the remote.
+
+### Actions
+
+Each workspace supports several actions. **New Window** opens the workspace in a separate Reliant window, letting you work on multiple workspaces simultaneously with their own chat sessions. **Delete Workspace** removes the workspace when you're done with it, cleaning up the directory and branch reference.
+
+## Git Operations
+
+The workspace detail view provides direct access to common Git operations.
+
+**Commit** opens a dialog where you can write a commit message and commit staged changes. **Push** sends your commits to the remote repository and updates the ahead/behind status. **Create PR** opens a dialog for creating a pull request, letting you write a title and description before submitting to your Git platform.
+
+The Git status display updates in real-time as you work, showing exactly what files have changed and their staging state.
+
+## Best Practices
+
+### Naming and Organization
+
+Use descriptive branch names that follow your team's conventions—patterns like `feature/user-authentication` or `bugfix/login-redirect` make it clear what each workspace contains. Keep workspace display names concise but meaningful.
+
+Update workspace status as work progresses. Marking a workspace as completed signals it's ready for review, while abandoned status helps identify cleanup candidates. Regular cleanup of old workspaces keeps your environment organized and frees disk space.
+
+### Effective Parallel Development
+
+Keep a clean main branch workspace available for reference and comparison. Create one workspace per feature or bug fix to maintain clear separation. When you need to switch contexts quickly, workspaces eliminate the need for stashing—just click and you're there.
+
+For projects with complex dependencies, each workspace can maintain its own installed packages. This is particularly valuable when testing upgrades or when different features require different dependency versions.
+
+### Workflow Integration
+
+When designing workflows that create workspaces, always specify the files that need copying for a functional development environment. Consider the cleanup strategy—will workspaces be deleted automatically, or should they persist for review?
+
+For parallel implementation patterns, give each workspace a descriptive name that indicates its purpose or the approach being tried. This makes comparison easier when reviewing results.

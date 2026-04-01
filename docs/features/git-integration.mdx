@@ -1,0 +1,77 @@
+---
+title: "Git Integration"
+description: "GitHub CLI requirements and source control features"
+---
+
+Reliant integrates with Git for status, branching, worktrees, and pull-request workflows. Some GitHub-specific actions require the GitHub CLI (`gh`).
+
+## What requires GitHub CLI
+
+| Feature | Requires `gh` |
+| --- | --- |
+| Create PR from workspace | Yes |
+| Push branch to remote | Yes |
+| Detect repository default branch | Yes |
+| View git status | No |
+| Create commits | No |
+| Create or switch branches | No |
+| Create workspaces | No |
+
+## Installing GitHub CLI
+
+### macOS
+
+```bash
+brew install gh
+```
+
+### Linux
+
+```bash
+# Debian/Ubuntu
+sudo apt install gh
+
+# Fedora
+sudo dnf install gh
+```
+
+### Windows
+
+```powershell
+winget install GitHub.cli
+```
+
+You can also download installers from [cli.github.com](https://cli.github.com/).
+
+## Authenticating
+
+After installation:
+
+```bash
+gh auth login
+```
+
+Follow the prompts to authenticate through the browser or a token-based flow.
+
+## Creating pull requests from workspaces
+
+![Create pull request dialog from a workspace](/images/screenshots/create-pr.png)
+
+A typical flow is:
+
+1. make changes in a workspace
+2. review status and commit
+3. push the branch
+4. create a PR from the workspace UI
+
+If `gh` is missing or unauthenticated, Reliant will surface an error and point you toward setup.
+
+## Default branch detection
+
+Reliant uses `gh` to detect the repository’s default branch when available. If that fails, it falls back to conventional defaults such as `main` or `master`.
+
+## Related topics
+
+- [Worktrees & Workspaces](/features/worktrees)
+- [Processes](/features/processes)
+- [Branching](/features/branching)

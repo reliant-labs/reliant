@@ -1,0 +1,129 @@
+# Test scenarios for gsd.yaml workflow
+#
+# GSD workflow structure:
+#   discuss → research → plan → implement → [verify_lint, verify_test, verify_build] → verify_join → verify_report → complete
+#
+# Node types:
+#   - discuss      type: workflow, ref: builtin://agent (BLACK BOX) — quick discussion
+#   - research     type: workflow, ref: builtin://agent (BLACK BOX) — codebase research
+#   - plan         type: workflow, ref: builtin://agent (BLACK BOX) — atomic task breakdown
+#   - implement    type: workflow, ref: builtin://agent (BLACK BOX) — execute the plan
+#   - verify_lint  type: run — lint command
+#   - verify_test  type: run — test command
+#   - verify_build type: run — build command
+#   - verify_join  type: join — wait for all verifications
+#   - verify_report type: save_message — report verification results
+#   - complete     type: save_message — final summary
+#
+# Notes:
+#   - workflow (builtin://agent) nodes need response_text in output
+#   - run nodes need exit_code in output
+#   - join and save_message nodes are auto-handled (no events needed)
+
+---
+name: happy_path_all_pass
+description: >
+  All four agent phases succeed. Lint, test, and build all pass with exit code 0.
+  The workflow completes end-to-end through verify_report and complete.
+
+events:
+  - node: discuss
+    output:
+      response_text: "The request is clear. We'll add a new REST endpoint for user preferences with JSON validation."
+
+  - node: research
+    output:
+      response_text: "Found the router in src/routes/index.ts, existing endpoint patterns in src/routes/users.ts, and validation middleware in src/middleware/validate.ts. Tests follow the pattern in tests/routes/."
+
+  - node: plan
+    output:
+      response_text: |
+        Wave 1 (parallel):
+        - Task 1.1: Create src/routes/preferences.ts with GET/PUT endpoints — verify: unit tests pass
+        - Task 1.2: Add JSON schema in src/schemas/preferences.json — verify: schema validates sample data
+        Wave 2 (depends on Wave 1):
+        - Task 2.1: Register routes in src/routes/index.ts — verify: integration test hits endpoint
+
+  - node: implement
+    output:
+      response_text: "All tasks complete. Created preferences endpoint, JSON schema, and registered routes. Unit and integration tests added."
+
+  - node: verify_lint
+    output:
+      exit_code: 0
+
+  - node: verify_test
+    output:
+      exit_code: 0
+
+  - node: verify_build
+    output:
+      exit_code: 0
+
+expect:
+  outcome: completed
+  reached:
+    - discuss
+    - research
+    - plan
+    - implement
+    - verify_lint
+    - verify_test
+    - verify_build
+    - verify_join
+    - verify_report
+    - complete
+
+---
+name: verification_failures
+description: >
+  All agent phases succeed but lint and test fail with non-zero exit codes.
+  Build passes. The workflow still completes (verifications don't block completion).
+
+events:
+  - node: discuss
+    output:
+      response_text: "Confirmed: refactoring the auth module to use JWT tokens instead of sessions."
+
+  - node: research
+    output:
+      response_text: "Auth module at src/auth/session.ts. Token utilities in src/utils/token.ts. 12 files import the session module. Test coverage is sparse."
+
+  - node: plan
+    output:
+      response_text: |
+        Wave 1 (parallel):
+        - Task 1.1: Create src/auth/jwt.ts with sign/verify helpers — verify: unit tests
+        - Task 1.2: Add JWT config to src/config/auth.ts — verify: config loads
+        Wave 2 (depends on Wave 1):
+        - Task 2.1: Replace session imports across 12 files — verify: build passes
+
+  - node: implement
+    output:
+      response_text: "Replaced session-based auth with JWT across all 12 files. Some lint warnings remain from unused session imports in test files."
+
+  - node: verify_lint
+    output:
+      exit_code: 1
+
+  - node: verify_test
+    output:
+      exit_code: 1
+
+  - node: verify_build
+    output:
+      exit_code: 0
+
+expect:
+  outcome: completed
+  reached:
+    - discuss
+    - research
+    - plan
+    - implement
+    - verify_lint
+    - verify_test
+    - verify_build
+    - verify_join
+    - verify_report
+    - complete

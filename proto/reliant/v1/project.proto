@@ -1,0 +1,311 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+import "reliant/v1/common.proto";
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+// ProjectService handles project-related operations
+service ProjectService {
+  // CreateProject creates a new project
+  rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse) {}
+  
+  // ListProjects lists all projects for the current user
+  rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse) {}
+  
+  // GetProject retrieves a project by ID
+  rpc GetProject(GetProjectRequest) returns (GetProjectResponse) {}
+  
+  // UpdateProject updates an existing project
+  rpc UpdateProject(UpdateProjectRequest) returns (UpdateProjectResponse) {}
+  
+  // DeleteProject deletes a project
+  rpc DeleteProject(DeleteProjectRequest) returns (DeleteProjectResponse) {}
+  
+  // TouchProject updates the project's last_active timestamp
+  rpc TouchProject(TouchProjectRequest) returns (TouchProjectResponse) {}
+  
+  // GetProjectMetadata returns detailed project metadata
+  rpc GetProjectMetadata(GetProjectMetadataRequest) returns (GetProjectMetadataResponse) {}
+  
+  // UpdateProjectMetadata updates project metadata
+  rpc UpdateProjectMetadata(UpdateProjectMetadataRequest) returns (UpdateProjectMetadataResponse) {}
+  
+  // GetProjectGitInfo returns git repository information for a project
+  rpc GetProjectGitInfo(GetProjectGitInfoRequest) returns (GetProjectGitInfoResponse) {}
+  
+  // GetProjectGitBranches lists all git branches for a project
+  rpc GetProjectGitBranches(GetProjectGitBranchesRequest) returns (GetProjectGitBranchesResponse) {}
+  
+  // GetProjectInitStatus returns the initialization status of a project
+  rpc GetProjectInitStatus(GetProjectInitStatusRequest) returns (GetProjectInitStatusResponse) {}
+  
+  // InitializeProject initializes a project (no-op in V2, projects are initialized on creation)
+  rpc InitializeProject(InitializeProjectRequest) returns (InitializeProjectResponse) {}
+  
+  // GetProjectChanges returns recent git changes for a project
+  rpc GetProjectChanges(GetProjectChangesRequest) returns (GetProjectChangesResponse) {}
+  
+  // GetProjectPrompts retrieves project-scoped prompts
+  rpc GetProjectPrompts(GetProjectPromptsRequest) returns (GetProjectPromptsResponse) {}
+  
+  // SaveProjectPrompts saves project-scoped prompts
+  rpc SaveProjectPrompts(SaveProjectPromptsRequest) returns (SaveProjectPromptsResponse) {}
+  
+  // InitializeGitRepo initializes a git repository for a project
+  rpc InitializeGitRepo(InitializeGitRepoRequest) returns (InitializeGitRepoResponse) {}
+}
+
+// Project represents a project in the system
+message Project {
+  string id = 1;
+  string user_id = 2;
+  string name = 3;
+  string path = 4;
+  optional string description = 5;
+  bool is_git_repo = 6;
+  optional string default_branch = 7;
+  string created_at = 8;
+  string updated_at = 9;
+  string last_active = 10;
+}
+
+// CreateProjectRequest creates a new project
+message CreateProjectRequest {
+  string name = 1;
+  string path = 2;
+  optional string description = 3;
+  optional string default_branch = 4;
+}
+
+// CreateProjectResponse returns the created project
+message CreateProjectResponse {
+  Project project = 1;
+}
+
+// ListProjectsRequest lists projects with optional filters
+message ListProjectsRequest {
+  int32 limit = 1;
+  int32 offset = 2;
+}
+
+// ListProjectsResponse returns a list of projects
+message ListProjectsResponse {
+  repeated Project projects = 1;
+  int32 total = 2;
+}
+
+// GetProjectRequest retrieves a project by ID
+message GetProjectRequest {
+  string project_id = 1;
+}
+
+// GetProjectResponse returns the requested project
+message GetProjectResponse {
+  Project project = 1;
+}
+
+// UpdateProjectRequest updates a project
+message UpdateProjectRequest {
+  string project_id = 1;
+  optional string name = 2;
+  optional string description = 3;
+  optional string default_branch = 4;
+}
+
+// UpdateProjectResponse returns the updated project
+message UpdateProjectResponse {
+  Project project = 1;
+}
+
+// DeleteProjectRequest deletes a project
+message DeleteProjectRequest {
+  string project_id = 1;
+}
+
+// DeleteProjectResponse confirms deletion
+message DeleteProjectResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// TouchProjectRequest updates the project's last_active timestamp
+message TouchProjectRequest {
+  string project_id = 1;
+}
+
+// TouchProjectResponse confirms the touch operation
+message TouchProjectResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// GetProjectMetadataRequest retrieves project metadata
+message GetProjectMetadataRequest {
+  string project_id = 1;
+}
+
+// GetProjectMetadataResponse returns project metadata
+message GetProjectMetadataResponse {
+  string project_id = 1;
+  string name = 2;
+  string path = 3;
+  optional string description = 4;
+  bool is_git_repo = 5;
+  optional string default_branch = 6;
+  string created_at = 7;
+  string updated_at = 8;
+  string last_active = 9;
+}
+
+// UpdateProjectMetadataRequest updates project metadata
+message UpdateProjectMetadataRequest {
+  string project_id = 1;
+  optional string description = 2;
+}
+
+// UpdateProjectMetadataResponse returns the updated project
+message UpdateProjectMetadataResponse {
+  Project project = 1;
+}
+
+// GetProjectGitInfoRequest retrieves git info for a project
+message GetProjectGitInfoRequest {
+  string project_id = 1;
+}
+
+// GetProjectGitInfoResponse returns git repository information
+message GetProjectGitInfoResponse {
+  string project_id = 1;
+  bool is_git_repo = 2;
+  string current_branch = 3;
+  bool has_changes = 4;
+  string status = 5;  // "clean" or "dirty"
+  repeated string staged_files = 6;
+  repeated string unstaged_files = 7;
+  repeated string untracked_files = 8;
+  int32 ahead = 9;
+  int32 behind = 10;
+  string remote_url = 11;
+  string message = 12;  // Used when not a git repo
+}
+
+// GitBranch represents a git branch
+message GitBranch {
+  string name = 1;
+  bool is_current = 2;
+  bool is_remote = 3;
+  string upstream = 4;
+  int64 last_commit_age = 5;
+  // is_detached is true when HEAD is in detached state (checked out to a commit, not a branch)
+  bool is_detached = 6;
+  // commit_sha is the full commit SHA of the current HEAD (only set when is_detached is true)
+  string commit_sha = 7;
+}
+
+// GetProjectGitBranchesRequest retrieves git branches for a project
+message GetProjectGitBranchesRequest {
+  string project_id = 1;
+}
+
+// GetProjectGitBranchesResponse returns git branches
+message GetProjectGitBranchesResponse {
+  repeated GitBranch branches = 1;
+}
+
+// GetProjectInitStatusRequest retrieves project initialization status
+message GetProjectInitStatusRequest {
+  string project_id = 1;
+}
+
+// GetProjectInitStatusResponse returns initialization status
+message GetProjectInitStatusResponse {
+  bool initialized = 1;
+  string project_id = 2;
+  string message = 3;
+}
+
+// InitializeProjectRequest initializes a project
+message InitializeProjectRequest {
+  string project_id = 1;
+}
+
+// InitializeProjectResponse confirms initialization
+message InitializeProjectResponse {
+  string project_id = 1;
+  string status = 2;
+  string message = 3;
+  bool initialized = 4;
+}
+
+// FileChange represents a changed file with its diff
+message FileChange {
+  string path = 1;
+  FileChangeStatus status = 2;
+  string diff = 3;
+  string content = 4;
+  string original_content = 5;
+  bool is_new = 6;
+}
+
+// GetProjectChangesRequest retrieves recent changes for a project
+message GetProjectChangesRequest {
+  string project_id = 1;
+}
+
+// GetProjectChangesResponse returns recent changes
+message GetProjectChangesResponse {
+  string branch = 1;
+  repeated FileChange files = 2;
+  int32 total_files = 3;
+}
+
+// Prompt represents a saved prompt
+message Prompt {
+  string id = 1;
+  string name = 2;
+  string content = 3;
+  string description = 4;
+  string created_at = 5;
+  string updated_at = 6;
+}
+
+// GetProjectPromptsRequest retrieves project prompts
+message GetProjectPromptsRequest {
+  string project_id = 1;
+}
+
+// GetProjectPromptsResponse returns project prompts
+message GetProjectPromptsResponse {
+  repeated Prompt prompts = 1;
+}
+
+// SaveProjectPromptsRequest saves project prompts
+message SaveProjectPromptsRequest {
+  string project_id = 1;
+  repeated Prompt prompts = 2;
+}
+
+// SaveProjectPromptsResponse confirms prompts saved
+message SaveProjectPromptsResponse {
+  string message = 1;
+  repeated Prompt prompts = 2;
+}
+
+// InitializeGitRepoRequest initializes a git repository
+message InitializeGitRepoRequest {
+  string project_id = 1;
+  string initial_branch = 2;
+  repeated string gitignore_patterns = 3;
+  bool initial_commit = 4;
+}
+
+// InitializeGitRepoResponse confirms git repository initialization
+message InitializeGitRepoResponse {
+  string message = 1;
+  string project_id = 2;
+  bool is_git_repo = 3;
+  string default_branch = 4;
+}

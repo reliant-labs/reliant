@@ -1,0 +1,1425 @@
+// Copyright (c) 2025 Reliant Labs
+package db
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"math/rand"
+	"os"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/google/uuid"
+	core "github.com/reliant-labs/reliant/internal/db/core"
+	postgresstore "github.com/reliant-labs/reliant/internal/db/postgres"
+	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
+	sqlitestore "github.com/reliant-labs/reliant/internal/db/sqlite"
+	sqlitedb "github.com/reliant-labs/reliant/internal/db/sqlite/generated"
+	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/logging"
+	"go.temporal.io/sdk/activity"
+)
+
+type transactionKey string
+
+const (
+	txKey transactionKey = `tx`
+
+	// Retry configuration
+	maxRetries     = 3
+	baseRetryDelay = 50 * time.Millisecond
+	maxRetryDelay  = 1 * time.Second
+
+	// Default timeout for database operations
+	defaultDBTimeout = 10 * time.Second
+)
+
+// Global metrics for monitoring write queue depth
+// These help diagnose lock-up issues caused by write contention
+var (
+	pendingWrites     int64 // Current number of goroutines waiting for write lock
+	peakPendingWrites int64 // High water mark for pending writes
+)
+
+// ============================================================================
+// TRANSACTION HELPER TYPES
+// ============================================================================
+
+// txMetrics holds timing and retry data for transaction monitoring
+type txMetrics struct {
+	txStartTime      time.Time
+	lockWaitDuration time.Duration
+	totalRetries     int
+}
+
+// txResult represents the outcome of a transaction attempt
+type txResult struct {
+	committed      bool
+	beginDuration  time.Duration
+	execDuration   time.Duration
+	commitDuration time.Duration
+	err            error
+}
+
+// UserUpdateNotifier is called after a user update is persisted to the DB.
+// Implementations broadcast the event to connected streams.
+type UserUpdateNotifier func(update *UserUpdate)
+
+// ChatUpdateNotifier is called after a chat update is persisted to the DB.
+// Implementations broadcast the event to connected streams.
+type ChatUpdateNotifier func(chatID string, seqNum int64, update ChatUpdate)
+
+type Repo struct {
+	DB              *WrappedDBTX
+	driver          DatabaseDriver
+	serializeWrites bool
+	writeMu         sync.Mutex // Global mutex to serialize SQLite write transactions
+	planTasks       core.PlanTaskStore
+	chats           core.ChatStore
+	messages        core.MessageStore
+	approvals       core.ApprovalStore
+	projects        core.ProjectStore
+	worktrees       core.WorktreeStore
+	settings        core.SettingStore
+	attachments     core.AttachmentStore
+	workflows       core.WorkflowStore
+	threads         core.ThreadStore
+	contextWindows  core.ContextWindowStore
+	workflowCatalog core.WorkflowCatalogStore
+	tokenCounts     tokenCountStore
+
+	// Update notifiers — set via SetUpdateNotifiers to push events to
+	// streaming hubs after DB writes. Nil = no notification (tests, CLI).
+	onUserUpdate UserUpdateNotifier
+	onChatUpdate ChatUpdateNotifier
+}
+
+// NewRepo creates a new Repo with the given database
+func NewRepo(db *sql.DB) *Repo {
+	return NewRepoWithDriver(db, DriverSQLite)
+}
+
+func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) *Repo {
+	q := &WrappedDBTX{db: db}
+	sqliteQueries := sqlitedb.New(q)
+	pgQueries := pgdb.New(q)
+	serializeWrites := driver == DriverSQLite
+
+	var planTasks core.PlanTaskStore
+	var chats core.ChatStore
+	var messages core.MessageStore
+	var approvals core.ApprovalStore
+	var projects core.ProjectStore
+	var worktrees core.WorktreeStore
+	var settings core.SettingStore
+	var attachments core.AttachmentStore
+	var workflows core.WorkflowStore
+	var threads core.ThreadStore
+	var contextWindows core.ContextWindowStore
+	var workflowCatalog core.WorkflowCatalogStore
+	if driver == DriverPostgres {
+		planTasks = postgresstore.NewPlanTaskStore(pgQueries)
+		chats = postgresstore.NewChatStore(pgQueries, q)
+		messages = postgresstore.NewMessageStore(pgQueries)
+		approvals = postgresstore.NewApprovalStore(pgQueries)
+		projects = postgresstore.NewProjectStore(pgQueries)
+		worktrees = postgresstore.NewWorktreeStore(pgQueries)
+		settings = postgresstore.NewSettingStore(pgQueries, q, func(query string) string {
+			return (&Repo{driver: DriverPostgres}).bindQuery(query)
+		})
+		attachments = postgresstore.NewAttachmentStore(pgQueries)
+		workflows = postgresstore.NewWorkflowStore(pgQueries)
+		threads = postgresstore.NewThreadStore(pgQueries)
+		contextWindows = postgresstore.NewContextWindowStore(pgQueries)
+		workflowCatalog = postgresstore.NewWorkflowCatalogStore(pgQueries)
+	} else {
+		planTasks = sqlitestore.NewPlanTaskStore(sqliteQueries)
+		chats = sqlitestore.NewChatStore(sqliteQueries, q)
+		messages = sqlitestore.NewMessageStore(sqliteQueries)
+		approvals = sqlitestore.NewApprovalStore(sqliteQueries)
+		projects = sqlitestore.NewProjectStore(sqliteQueries)
+		worktrees = sqlitestore.NewWorktreeStore(sqliteQueries)
+		settings = sqlitestore.NewSettingStore(sqliteQueries, q, func(query string) string {
+			return (&Repo{driver: DriverSQLite}).bindQuery(query)
+		})
+		attachments = sqlitestore.NewAttachmentStore(sqliteQueries)
+		workflows = sqlitestore.NewWorkflowStore(sqliteQueries)
+		threads = sqlitestore.NewThreadStore(sqliteQueries)
+		contextWindows = sqlitestore.NewContextWindowStore(sqliteQueries)
+		workflowCatalog = sqlitestore.NewWorkflowCatalogStore(sqliteQueries)
+	}
+	tokenCounts := newSQLTokenCountStore(q, func(query string) string {
+		return (&Repo{driver: driver}).bindQuery(query)
+	})
+
+	return &Repo{
+		DB:              q,
+		driver:          driver,
+		serializeWrites: serializeWrites,
+		planTasks:       planTasks,
+		chats:           chats,
+		messages:        messages,
+		approvals:       approvals,
+		projects:        projects,
+		worktrees:       worktrees,
+		settings:        settings,
+		attachments:     attachments,
+		workflows:       workflows,
+		threads:         threads,
+		contextWindows:  contextWindows,
+		workflowCatalog: workflowCatalog,
+		tokenCounts:     tokenCounts,
+	}
+}
+
+// SetUpdateNotifiers configures callbacks that are invoked after successful
+// DB writes to user_updates and chat_updates. This bridges the DB layer to
+// the streaming hub without introducing a direct dependency on the streaming package.
+func (r *Repo) SetUpdateNotifiers(onUser UserUpdateNotifier, onChat ChatUpdateNotifier) {
+	r.onUserUpdate = onUser
+	r.onChatUpdate = onChat
+}
+
+// bindQuery rewrites generic '?' placeholders into Postgres-style positional
+// placeholders when running with the Postgres driver.
+func (r *Repo) bindQuery(query string) string {
+	if r.driver != DriverPostgres {
+		return query
+	}
+
+	var builder strings.Builder
+	builder.Grow(len(query) + 16)
+	argIndex := 1
+
+	for _, ch := range query {
+		if ch == '?' {
+			builder.WriteByte('$')
+			builder.WriteString(strconv.Itoa(argIndex))
+			argIndex++
+			continue
+		}
+		builder.WriteRune(ch)
+	}
+
+	return builder.String()
+}
+
+func NewRepoFromDir(dbPath string) (*Repo, error) {
+	cfg, err := ResolveDatabaseConfig(dbPath)
+	if err != nil {
+		return nil, err
+	}
+
+	db, err := ConnectWithConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewRepoWithDriver(db, cfg.Driver), nil
+}
+
+func NewRepoFromConfig(cfg DatabaseConfig) (*Repo, error) {
+	db, err := ConnectWithConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewRepoWithDriver(db, cfg.Driver), nil
+}
+
+func NewInMemoryRepo() (*Repo, error) {
+	// Use a unique named in-memory database with shared cache.
+	// This ensures all connections from this sql.DB share the same database,
+	// while different calls to NewInMemoryRepo() get isolated databases.
+	// Without this, each connection in Go's connection pool would get a
+	// separate :memory: database, causing "no such table" errors when
+	// background goroutines use different connections than the one that
+	// ran migrations.
+	dbName := fmt.Sprintf("file:memdb_%s?mode=memory&cache=shared", uuid.New().String())
+	db, err := sql.Open("sqlite3", dbName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Force single connection to ensure all queries use the same connection
+	// and see the same in-memory database state.
+	db.SetMaxOpenConns(1)
+
+	err = RunMigrations(db, DriverSQLite)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewRepo(db), nil
+}
+
+func DatabaseDriverFromEnv() DatabaseDriver {
+	driver, err := ParseDatabaseDriver(os.Getenv("DATABASE_DRIVER"))
+	if err != nil {
+		return DriverSQLite
+	}
+	return driver
+}
+
+func (r *Repo) Close() error {
+	return r.DB.Close()
+}
+
+func (r *Repo) Ping(ctx context.Context) error {
+	return r.DB.Ping(ctx)
+}
+
+// isRetryableError checks if an error is retryable (e.g., transaction conflicts)
+func isRetryableError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errMsg := strings.ToLower(err.Error())
+
+	// SQLite busy/locked errors
+	if strings.Contains(errMsg, "database is locked") ||
+		strings.Contains(errMsg, "database table is locked") ||
+		strings.Contains(errMsg, "database schema is locked") ||
+		strings.Contains(errMsg, "busy") {
+		return true
+	}
+
+	// SQLite specific error codes for busy/locked
+	if strings.Contains(errMsg, "sqlite_busy") ||
+		strings.Contains(errMsg, "sqlite_locked") {
+		return true
+	}
+
+	// Generic transaction/concurrency errors
+	if strings.Contains(errMsg, "concurrent update") ||
+		strings.Contains(errMsg, "could not serialize") ||
+		strings.Contains(errMsg, "deadlock") ||
+		strings.Contains(errMsg, "transaction conflict") {
+		return true
+	}
+
+	// UNIQUE constraint violations during parallel operations
+	// This handles the case where multiple parallel tool executions try to create
+	// the same tool result message simultaneously. The constraint violation means
+	// another transaction succeeded, so we should retry to find the created record.
+	if strings.Contains(errMsg, "unique constraint") ||
+		strings.Contains(errMsg, "constraint failed") {
+		return true
+	}
+
+	return false
+}
+
+// calculateBackoff calculates the retry delay with exponential backoff and jitter
+func calculateBackoff(attempt int) time.Duration {
+	delay := baseRetryDelay * time.Duration(1<<uint(attempt))
+	if delay > maxRetryDelay {
+		delay = maxRetryDelay
+	}
+
+	// Add jitter (±25% of delay)
+	jitter := time.Duration(rand.Int63n(int64(delay / 2)))
+	return delay + jitter - delay/4
+}
+
+// GetPendingWrites returns the current number of goroutines waiting for write lock
+// Useful for monitoring and debugging lock contention
+func GetPendingWrites() int64 {
+	return atomic.LoadInt64(&pendingWrites)
+}
+
+// GetPeakPendingWrites returns the high water mark for pending writes
+func GetPeakPendingWrites() int64 {
+	return atomic.LoadInt64(&peakPendingWrites)
+}
+
+// ResetPeakPendingWrites resets the high water mark (useful after investigating an issue)
+func ResetPeakPendingWrites() {
+	atomic.StoreInt64(&peakPendingWrites, 0)
+}
+
+// ============================================================================
+// TRANSACTION EXECUTION HELPERS
+// ============================================================================
+
+// trackWriteQueueDepth increments pending writes counter and updates peak if needed.
+// IMPORTANT: Caller MUST call `defer atomic.AddInt64(&pendingWrites, -1)` to decrement.
+// This function only increments; decrement is the caller's responsibility for proper
+// cleanup even on panics.
+// Returns the current queue depth after increment.
+func trackWriteQueueDepth() int64 {
+	current := atomic.AddInt64(&pendingWrites, 1)
+
+	// Update peak if this is a new high (CAS loop)
+	for {
+		peak := atomic.LoadInt64(&peakPendingWrites)
+		if current <= peak {
+			break
+		}
+		if atomic.CompareAndSwapInt64(&peakPendingWrites, peak, current) {
+			break
+		}
+	}
+
+	// Warn if queue depth is getting high
+	if current > 5 {
+		logging.Warn("High write queue depth - potential bottleneck",
+			"pending", current,
+			"peak", atomic.LoadInt64(&peakPendingWrites))
+	}
+
+	return current
+}
+
+// executeTransaction executes a function within a transaction and handles commit/rollback.
+// The returned txResult always has execDuration and commitDuration set; beginDuration
+// should be set by the caller (attemptTransaction) since it tracks the BeginImmediate call.
+func (r *Repo) executeTransaction(ctx context.Context, tx *sql.Tx, f func(ctx context.Context) error) txResult {
+	var result txResult
+
+	// Setup deferred rollback for panics and errors
+	defer func() {
+		if !result.committed {
+			tx.Rollback()
+		}
+	}()
+
+	// Execute the transaction function
+	execTime := time.Now()
+	err := f(context.WithValue(ctx, txKey, tx))
+	result.execDuration = time.Since(execTime)
+
+	if err != nil {
+		result.err = err
+		return result
+	}
+
+	// Try to commit
+	commitTime := time.Now()
+	err = tx.Commit()
+	result.commitDuration = time.Since(commitTime)
+
+	if err != nil {
+		result.err = err
+		return result
+	}
+
+	result.committed = true
+	return result
+}
+
+// logTransactionTiming logs slow or notable transaction timing
+func logTransactionTiming(metrics *txMetrics, result *txResult) {
+	totalDuration := time.Since(metrics.txStartTime)
+
+	if totalDuration > 1*time.Second {
+		logging.Warn("Slow transaction detected",
+			"totalDuration", totalDuration,
+			"lockWait", metrics.lockWaitDuration,
+			"begin", result.beginDuration,
+			"exec", result.execDuration,
+			"commit", result.commitDuration,
+			"retries", metrics.totalRetries)
+	} else if totalDuration > 100*time.Millisecond {
+		logging.Debug("Transaction timing",
+			"totalDuration", totalDuration,
+			"lockWait", metrics.lockWaitDuration,
+			"begin", result.beginDuration,
+			"exec", result.execDuration,
+			"commit", result.commitDuration,
+			"retries", metrics.totalRetries)
+	}
+}
+
+func (r *Repo) RunTx(ctx context.Context, f func(ctx context.Context) error) error {
+	// Check if database is initialized
+	if r.DB == nil {
+		return errors.New("database connection not initialized")
+	}
+
+	// Check if we're already in a transaction - if so, just execute the function
+	// This prevents nested transactions
+	if _, ok := ctx.Value(txKey).(sqlitedb.DBTX); ok {
+		return f(ctx)
+	}
+
+	// Initialize metrics
+	metrics := &txMetrics{txStartTime: time.Now()}
+
+	// Track pending writes for monitoring
+	if r.serializeWrites {
+		trackWriteQueueDepth()
+		defer atomic.AddInt64(&pendingWrites, -1)
+
+		// Acquire write mutex to serialize write transactions for SQLite.
+		r.writeMu.Lock()
+		metrics.lockWaitDuration = time.Since(metrics.txStartTime)
+		if metrics.lockWaitDuration > 100*time.Millisecond {
+			logging.Warn("Transaction lock wait exceeded 100ms",
+				"waitDuration", metrics.lockWaitDuration,
+				"pendingWrites", atomic.LoadInt64(&pendingWrites))
+		}
+		defer r.writeMu.Unlock()
+	}
+
+	return r.runTxWithRetries(ctx, f, metrics)
+}
+
+// runTxWithRetries executes the transaction with retry logic
+func (r *Repo) runTxWithRetries(ctx context.Context, f func(ctx context.Context) error, metrics *txMetrics) error {
+	var lastErr error
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		result, err := r.attemptTransaction(ctx, f, metrics)
+		if err != nil {
+			// Begin transaction failed
+			if isRetryableError(err) && attempt < maxRetries {
+				metrics.totalRetries++
+				logging.Debug("Transaction begin failed, retrying",
+					"attempt", attempt+1,
+					"maxRetries", maxRetries,
+					"error", err)
+				time.Sleep(calculateBackoff(attempt))
+				continue
+			}
+			logging.Error("Failed to begin transaction", "error", err, "attempts", attempt+1)
+			return err
+		}
+
+		if result.committed {
+			logTransactionTiming(metrics, result)
+			return nil
+		}
+
+		// Transaction failed - check if retryable
+		if isRetryableError(result.err) && attempt < maxRetries {
+			metrics.totalRetries++
+			lastErr = result.err
+			logging.Debug("Transaction failed, retrying",
+				"attempt", attempt+1,
+				"maxRetries", maxRetries,
+				"error", result.err)
+			time.Sleep(calculateBackoff(attempt))
+			continue
+		}
+
+		logging.Error("Transaction failed",
+			"error", result.err,
+			"attempts", attempt+1,
+			"duration", time.Since(metrics.txStartTime))
+		return result.err
+	}
+
+	// All retries exhausted
+	logging.Error("Transaction failed after all retries",
+		"retries", metrics.totalRetries,
+		"lastError", lastErr,
+		"duration", time.Since(metrics.txStartTime))
+
+	if lastErr != nil {
+		return errors.New("transaction failed after retries: " + lastErr.Error())
+	}
+	return errors.New("transaction failed after retries")
+}
+
+// attemptTransaction tries to begin and execute a single transaction
+// Returns (result, nil) if transaction was started, (nil, err) if begin failed
+func (r *Repo) attemptTransaction(ctx context.Context, f func(ctx context.Context) error, metrics *txMetrics) (*txResult, error) {
+	beginTime := time.Now()
+	tx, err := r.DB.BeginImmediate(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	result := r.executeTransaction(ctx, tx, f)
+	result.beginDuration = time.Since(beginTime)
+	return &result, nil
+}
+
+type WrappedDBTX struct {
+	db *sql.DB
+}
+
+func (w *WrappedDBTX) DB(ctx context.Context) sqlitedb.DBTX {
+	tx, ok := ctx.Value(txKey).(sqlitedb.DBTX)
+	if ok && tx != nil {
+		return tx
+	}
+
+	return w.db
+}
+
+// BeginImmediate starts a transaction in IMMEDIATE mode
+// This acquires a write lock immediately, preventing deadlocks
+func (w *WrappedDBTX) BeginImmediate(ctx context.Context) (*sql.Tx, error) {
+	// For SQLite, use Serializable isolation level which maps to IMMEDIATE mode
+	// This acquires the write lock immediately instead of waiting until first write
+	return w.db.BeginTx(ctx, &sql.TxOptions{
+		Isolation: sql.LevelSerializable,
+		ReadOnly:  false,
+	})
+}
+
+func (w *WrappedDBTX) Close() error {
+	return w.db.Close()
+}
+
+func (w *WrappedDBTX) Ping(ctx context.Context) error {
+	return w.db.PingContext(ctx)
+}
+
+func (w *WrappedDBTX) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	return w.execContextWithRetry(ctx, query, args...)
+}
+
+func (w *WrappedDBTX) PrepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
+	return w.DB(ctx).PrepareContext(ctx, query)
+}
+
+func (w *WrappedDBTX) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	return w.queryContextWithRetry(ctx, query, args...)
+}
+
+func (w *WrappedDBTX) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
+	return w.DB(ctx).QueryRowContext(ctx, query, args...)
+}
+
+// execContextWithRetry executes a query with automatic retry on lock errors
+func (w *WrappedDBTX) execContextWithRetry(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	var lastErr error
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		result, err := w.DB(ctx).ExecContext(ctx, query, args...)
+		if err == nil {
+			return result, nil
+		}
+
+		// Check if error is retryable and we have retries left
+		if isRetryableError(err) && attempt < maxRetries {
+			lastErr = err
+			logging.Debug("Database exec failed, retrying",
+				"attempt", attempt+1,
+				"maxRetries", maxRetries,
+				"error", err)
+			time.Sleep(calculateBackoff(attempt))
+			continue
+		}
+
+		return nil, err
+	}
+
+	if lastErr != nil {
+		return nil, errors.New("exec failed after retries: " + lastErr.Error())
+	}
+	return nil, errors.New("exec failed after retries")
+}
+
+// queryContextWithRetry executes a query with automatic retry on lock errors
+func (w *WrappedDBTX) queryContextWithRetry(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	var lastErr error
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		rows, err := w.DB(ctx).QueryContext(ctx, query, args...)
+		if err == nil {
+			return rows, nil
+		}
+
+		// Check if error is retryable and we have retries left
+		if isRetryableError(err) && attempt < maxRetries {
+			lastErr = err
+			logging.Debug("Database query failed, retrying",
+				"attempt", attempt+1,
+				"maxRetries", maxRetries,
+				"error", err)
+			time.Sleep(calculateBackoff(attempt))
+			continue
+		}
+
+		return nil, err
+	}
+
+	if lastErr != nil {
+		return nil, errors.New("query failed after retries: " + lastErr.Error())
+	}
+	return nil, errors.New("query failed after retries")
+}
+
+// ==================== Sequence-based Sync for WebSocket ====================
+
+// GetLatestUpdateSequence returns the latest sequence number for a given chat
+// This is used by polling clients to check if they're in sync
+func (r *Repo) GetLatestUpdateSequence(ctx context.Context, chatID string) (int64, error) {
+	var sequence sql.NullInt64
+
+	query := `
+		SELECT MAX(sequence_number)
+		FROM chat_updates
+		WHERE chat_id = ?
+	`
+	query = r.bindQuery(query)
+
+	err := r.DB.DB(ctx).QueryRowContext(ctx, query, chatID).Scan(&sequence)
+	if err != nil {
+		return 0, err
+	}
+
+	if !sequence.Valid {
+		return 0, nil // No updates yet
+	}
+
+	return sequence.Int64, nil
+}
+
+// GetNextSequenceNumber returns the next sequence number for a chat's updates
+func (r *Repo) GetNextSequenceNumber(ctx context.Context, chatID string) (int64, error) {
+	var maxSeq sql.NullInt64
+	query := `SELECT MAX(sequence_number) FROM chat_updates WHERE chat_id = ?`
+	query = r.bindQuery(query)
+
+	err := r.DB.DB(ctx).QueryRowContext(ctx, query, chatID).Scan(&maxSeq)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get max sequence: %w", err)
+	}
+
+	if !maxSeq.Valid {
+		return 1, nil // First update
+	}
+
+	return maxSeq.Int64 + 1, nil
+}
+
+// CreateChatUpdate creates a new chat update (for dual-write pattern)
+// This operation is atomic - the sequence number generation and insert happen in a transaction
+// to prevent race conditions when multiple parallel operations try to create updates.
+func (r *Repo) CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error {
+	var chatUpdate ChatUpdate
+
+	// Wrap in transaction to make sequence number generation + insert atomic
+	// This prevents UNIQUE constraint violations when parallel goroutines try to create updates
+	err := r.RunTx(ctx, func(ctx context.Context) error {
+		// Get next sequence number within the transaction
+		nextSeq, err := r.GetNextSequenceNumber(ctx, chatID)
+		if err != nil {
+			return fmt.Errorf("failed to get next sequence number: %w", err)
+		}
+
+		// Generate ID
+		updateID := fmt.Sprintf("%s-%d", chatID, nextSeq)
+
+		createdAt := time.Now()
+
+		chatUpdate = ChatUpdate{
+			ID:             updateID,
+			ChatID:         chatID,
+			SequenceNumber: nextSeq,
+			UpdateType:     updateType,
+			EntityID:       entityID,
+			Data:           json.RawMessage(data),
+			CreatedAt:      createdAt,
+		}
+
+		err = r.chats.CreateChatUpdate(ctx, chatUpdate)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	// Notify hub after successful DB commit (fire-and-forget)
+	if r.onChatUpdate != nil {
+		r.onChatUpdate(chatID, chatUpdate.SequenceNumber, chatUpdate)
+	}
+	return nil
+}
+
+// GetUpdatesSince returns all updates since a given sequence number
+// This is used for polling clients to fetch new updates
+// limit: maximum number of updates to return (defaults to 100 if <= 0)
+func (r *Repo) GetUpdatesSince(ctx context.Context, chatID string, sinceSeq int64, limit int) ([]ChatUpdate, error) {
+	// Default to 100 updates per batch if not specified or invalid
+	if limit <= 0 {
+		limit = 100
+	}
+
+	query := `
+		SELECT
+			id,
+			chat_id,
+			sequence_number,
+			update_type,
+			entity_id,
+			data,
+			created_at
+		FROM chat_updates
+		WHERE chat_id = ? AND sequence_number > ?
+		ORDER BY sequence_number ASC
+		LIMIT ?
+	`
+	query = r.bindQuery(query)
+
+	rows, err := r.DB.DB(ctx).QueryContext(ctx, query, chatID, sinceSeq, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var updates []ChatUpdate
+	for rows.Next() {
+		var update ChatUpdate
+		var dataJSON string
+
+		err := rows.Scan(
+			&update.ID,
+			&update.ChatID,
+			&update.SequenceNumber,
+			&update.UpdateType,
+			&update.EntityID,
+			&dataJSON,
+			&update.CreatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		// Parse JSON data field
+		update.Data = json.RawMessage(dataJSON)
+
+		// Enrich message updates with content blocks
+		if update.UpdateType == reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE {
+			// Check if this is a minimal message update (not already enriched)
+			var dataMap map[string]interface{}
+			if err := json.Unmarshal(update.Data, &dataMap); err == nil {
+				// Only enrich if content_blocks is missing
+				if _, hasContentBlocks := dataMap["content_blocks"]; !hasContentBlocks {
+					enrichedData, err := r.EnrichMessageUpdate(ctx, update)
+					if err != nil {
+						// Log error but continue with original data
+						logging.Warn("Failed to enrich message update",
+							"error", err,
+							"messageID", update.EntityID,
+							"sequence", update.SequenceNumber)
+					} else {
+						update.Data = enrichedData
+					}
+				}
+			}
+		}
+
+		updates = append(updates, update)
+	}
+
+	if updates == nil {
+		updates = []ChatUpdate{} // Return empty slice instead of nil
+	}
+
+	// COMPREHENSIVE LOGGING - what we found
+	updateTypes := make(map[reliantv1.ChatUpdateType]int)
+	for _, update := range updates {
+		updateTypes[update.UpdateType]++
+	}
+
+	return updates, rows.Err()
+}
+
+// EnrichMessageUpdate adds content blocks to a message update
+// This ensures websocket clients receive complete MessageWithBlocks objects
+func (r *Repo) EnrichMessageUpdate(ctx context.Context, update ChatUpdate) (json.RawMessage, error) {
+	// Parse the existing update data
+	var updateData map[string]interface{}
+	if err := json.Unmarshal(update.Data, &updateData); err != nil {
+		return nil, fmt.Errorf("failed to parse update data: %w", err)
+	}
+
+	// Get message ID from the update
+	messageID, ok := updateData["id"].(string)
+	if !ok {
+		return nil, fmt.Errorf("message ID not found in update data")
+	}
+
+	// Fetch message details
+	msg, err := r.GetMessage(ctx, messageID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get message: %w", err)
+	}
+
+	// Fetch content blocks
+	blocks, err := r.ListContentBlocks(ctx, messageID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get content blocks: %w", err)
+	}
+
+	// Compute streaming state from blocks instead of using deprecated field
+	blockValues := make([]MessageContentBlock, len(blocks))
+	for i, block := range blocks {
+		if block != nil {
+			blockValues[i] = *block
+		}
+	}
+	streamingState := ComputeStreamingState(blockValues)
+
+	// Build content blocks array and extract attachments for response
+	contentBlocks := []map[string]interface{}{}
+
+	// First, collect all attachment IDs from image and file_reference blocks
+	attachmentIDs := []string{}
+	for _, block := range blocks {
+		if (block.BlockType == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE || block.BlockType == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_FILE_REFERENCE) && block.Content != nil {
+			attachmentIDs = append(attachmentIDs, *block.Content)
+		}
+	}
+
+	// Fetch attachment metadata from database in bulk
+	attachmentMap := make(map[string]*Attachment)
+	if len(attachmentIDs) > 0 {
+		attachmentsData, err := r.GetAttachmentsByIDs(ctx, attachmentIDs)
+		if err != nil {
+			logging.Warn("Failed to fetch attachments for message update", "error", err, "messageID", messageID)
+			// Continue anyway - we'll use placeholder data
+		} else {
+			for _, att := range attachmentsData {
+				attachmentMap[att.ID] = att
+			}
+		}
+	}
+
+	attachments := []map[string]interface{}{}
+	for _, block := range blocks {
+		// Extract attachments from image and file_reference blocks
+		if (block.BlockType == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE || block.BlockType == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_FILE_REFERENCE) && block.Content != nil {
+			attachmentID := *block.Content
+
+			// Try to get real attachment data from database
+			if att, found := attachmentMap[attachmentID]; found {
+				// Use real attachment metadata
+				attachments = append(attachments, map[string]interface{}{
+					"id":        att.ID,
+					"filename":  att.Filename,
+					"size":      att.Size,
+					"mime_type": att.MimeType,
+					"url":       fmt.Sprintf("/api/attachments/%s", att.ID),
+				})
+			} else {
+				// Fallback when attachment metadata is unavailable
+				defaultFilename := "file"
+				defaultMime := "application/octet-stream"
+				if block.BlockType == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE {
+					defaultFilename = "image"
+					defaultMime = "image/jpeg"
+				}
+				logging.Warn("Attachment not found in database, using placeholder", "attachmentID", attachmentID, "messageID", messageID)
+				attachments = append(attachments, map[string]interface{}{
+					"id":        attachmentID,
+					"filename":  defaultFilename,
+					"size":      0,
+					"mime_type": defaultMime,
+					"url":       fmt.Sprintf("/api/attachments/%s", attachmentID),
+				})
+			}
+		}
+
+		blockData := map[string]interface{}{
+			"id":    block.ID,
+			"type":  block.BlockType,
+			"index": block.Position,
+		}
+
+		if block.Content != nil {
+			blockData["content"] = *block.Content
+		}
+		if block.ToolName != nil {
+			blockData["tool_name"] = *block.ToolName
+		}
+		if block.ToolInput != nil {
+			blockData["input"] = *block.ToolInput
+		}
+		if block.ToolCallID != nil {
+			blockData["tool_call_id"] = *block.ToolCallID
+		}
+		if block.IsError != nil {
+			blockData["is_error"] = *block.IsError
+		}
+		// Note: streaming state is now computed, not stored
+
+		contentBlocks = append(contentBlocks, blockData)
+	}
+
+	// Get context_sequence from context_window for frontend compatibility
+	var contextSequence int
+	cw, err := r.GetContextWindow(ctx, msg.ContextWindowID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get context window for message %s: %w", msg.ID, err)
+	}
+	if cw != nil {
+		contextSequence = cw.Sequence
+	}
+
+	// Build enriched message update matching MessageWithBlocks interface
+	enrichedData := map[string]interface{}{
+		"update_type":       "message",
+		"id":                msg.ID,
+		"role":              msg.Role,
+		"ordinal":           msg.Ordinal,
+		"thread":            msg.ThreadID, // Direct access
+		"context_sequence":  contextSequence,
+		"context_window_id": msg.ContextWindowID,
+		"streaming_state":   streamingState.State, // Use computed state instead of field
+		"created_at":        msg.CreatedAt.Format(time.RFC3339),
+		"updated_at":        msg.UpdatedAt.Format(time.RFC3339),
+		"content_blocks":    contentBlocks,
+		"attachments":       attachments, // Include attachments for image preview
+	}
+
+	// Add optional fields
+	if msg.TokenCount != nil {
+		enrichedData["token_count"] = *msg.TokenCount
+	}
+
+	// Marshal back to JSON
+	enrichedJSON, err := json.Marshal(enrichedData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal enriched data: %w", err)
+	}
+
+	return enrichedJSON, nil
+}
+
+// ==================== Approval Methods ==
+// Note: Old tool_approvals and workflow_approvals have been consolidated into approvals table
+// Methods now in repository_impl.go using the new unified Approval model
+
+// =============================================================================
+// Workflow Status Query Functions
+// =============================================================================
+
+// Workflow execution methods removed - use Temporal client directly to query workflow state
+// Temporal is the source of truth for workflow execution status
+
+// IsChatBusy removed - use Temporal client to query running workflows for a chat
+
+// Null type conversion helpers
+func nullStringToPtr(ns sql.NullString) *string {
+	if ns.Valid {
+		return &ns.String
+	}
+	return nil
+}
+
+func nullTimeToPtr(nt sql.NullTime) *time.Time {
+	if nt.Valid {
+		return &nt.Time
+	}
+	return nil
+}
+
+// =============================================================================
+// Activity Idempotency Helpers
+// =============================================================================
+
+// GetActivityInfo extracts Temporal activity info from context
+// Returns empty strings if not in activity context (for testing)
+func GetActivityInfo(ctx context.Context) (activityID string, workflowRunID string, attemptNumber int) {
+	// Try to get activity info from Temporal context
+	// This will panic if not in activity context, so we recover
+	defer func() {
+		if r := recover(); r != nil {
+			// Not in activity context - return empty values
+			activityID = ""
+			workflowRunID = ""
+			attemptNumber = 1
+		}
+	}()
+
+	// Import activity package dynamically to avoid circular dependencies
+	// This is safe because GetActivityInfo is only called from activities
+	info := activity.GetInfo(ctx)
+	return info.ActivityID, info.WorkflowExecution.RunID, int(info.Attempt)
+}
+
+// =============================================================================
+// User Updates (Global WebSocket for workspace-level updates)
+// =============================================================================
+
+// GetLatestUserUpdateSequence returns the latest sequence number for a user's updates
+func (r *Repo) GetLatestUserUpdateSequence(ctx context.Context, userID string) (int64, error) {
+	var sequence sql.NullInt64
+
+	query := `
+		SELECT MAX(sequence_number)
+		FROM user_updates
+		WHERE user_id = ?
+	`
+	query = r.bindQuery(query)
+
+	err := r.DB.DB(ctx).QueryRowContext(ctx, query, userID).Scan(&sequence)
+	if err != nil {
+		return 0, err
+	}
+
+	if !sequence.Valid {
+		return 0, nil // No updates yet
+	}
+
+	return sequence.Int64, nil
+}
+
+// GetNextUserSequenceNumber returns the next sequence number for a user's updates
+func (r *Repo) GetNextUserSequenceNumber(ctx context.Context, userID string) (int64, error) {
+	var maxSeq sql.NullInt64
+	query := `SELECT MAX(sequence_number) FROM user_updates WHERE user_id = ?`
+	query = r.bindQuery(query)
+
+	err := r.DB.DB(ctx).QueryRowContext(ctx, query, userID).Scan(&maxSeq)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get max user sequence: %w", err)
+	}
+
+	if !maxSeq.Valid {
+		return 1, nil // First update
+	}
+
+	return maxSeq.Int64 + 1, nil
+}
+
+// CreateUserUpdate creates a new user update for the global WebSocket.
+//
+// This mirrors CreateChatUpdate semantics:
+// 1) sequence allocation and insert are atomic in a transaction
+// 2) SQLite writes go through RunTx serialization to avoid lock contention
+// 3) nested transaction calls (ctx already carrying txKey) are supported
+func (r *Repo) CreateUserUpdate(ctx context.Context, update *UserUpdate) error {
+	err := r.RunTx(ctx, func(txCtx context.Context) error {
+		// Get next sequence number within the transaction for atomicity.
+		nextSeq, err := r.GetNextUserSequenceNumber(txCtx, update.UserID)
+		if err != nil {
+			return fmt.Errorf("failed to get next user sequence number: %w", err)
+		}
+		update.SequenceNumber = nextSeq
+
+		// Generate ID if not set
+		if update.ID == "" {
+			update.ID = fmt.Sprintf("%s-%d", update.UserID, nextSeq)
+		}
+
+		query := `
+			INSERT INTO user_updates (
+				id, user_id, sequence_number, project_id, worktree_id, chat_id,
+				update_type, entity_type, entity_id, data, created_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`
+		query = r.bindQuery(query)
+
+		_, err = r.DB.ExecContext(txCtx, query,
+			update.ID,
+			update.UserID,
+			update.SequenceNumber,
+			update.ProjectID,
+			update.WorktreeID,
+			update.ChatID,
+			int64(update.UpdateType),
+			int64(update.EntityType),
+			update.EntityID,
+			string(update.Data),
+			time.Now().UTC(),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to insert user update: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	// Notify hub after successful DB commit (fire-and-forget)
+	if r.onUserUpdate != nil {
+		r.onUserUpdate(update)
+	}
+	return nil
+}
+
+// GetUserUpdatesSince returns all user updates since a given sequence number
+func (r *Repo) GetUserUpdatesSince(ctx context.Context, userID string, sinceSeq int64, limit int) ([]UserUpdate, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+
+	query := `
+		SELECT
+			id, user_id, sequence_number, project_id, worktree_id, chat_id,
+			update_type, entity_type, entity_id, data, created_at
+		FROM user_updates
+		WHERE user_id = ? AND sequence_number > ?
+		ORDER BY sequence_number ASC
+		LIMIT ?
+	`
+	query = r.bindQuery(query)
+
+	rows, err := r.DB.DB(ctx).QueryContext(ctx, query, userID, sinceSeq, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var updates []UserUpdate
+	for rows.Next() {
+		var update UserUpdate
+		var projectID, worktreeID, chatID sql.NullString
+		var dataJSON string
+		var updateTypeInt, entityTypeInt int64
+
+		err := rows.Scan(
+			&update.ID,
+			&update.UserID,
+			&update.SequenceNumber,
+			&projectID,
+			&worktreeID,
+			&chatID,
+			&updateTypeInt,
+			&entityTypeInt,
+			&update.EntityID,
+			&dataJSON,
+			&update.CreatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		update.ProjectID = nullStringToPtr(projectID)
+		update.WorktreeID = nullStringToPtr(worktreeID)
+		update.ChatID = nullStringToPtr(chatID)
+		update.UpdateType = UserUpdateType(updateTypeInt)
+		update.EntityType = UserUpdateEntityType(entityTypeInt)
+		update.Data = json.RawMessage(dataJSON)
+
+		updates = append(updates, update)
+	}
+
+	if updates == nil {
+		updates = []UserUpdate{}
+	}
+
+	return updates, rows.Err()
+}
+
+// UpdateChatState updates a chat's state and emits a user update
+func (r *Repo) UpdateChatState(ctx context.Context, chatID string, state ChatState, reason string) error {
+	// Get the chat first to get user_id and project_id
+	chat, err := r.GetChat(ctx, chatID)
+	if err != nil {
+		return fmt.Errorf("failed to get chat: %w", err)
+	}
+
+	previousState := chat.State
+
+	// If we're archiving, capture the worktree name onto the chat so archived chat
+	// display remains stable even if the worktree row is later deleted.
+	archivedWorktreeName := chat.ArchivedWorktreeName
+	if state == ChatStateArchived && archivedWorktreeName == nil {
+		if chat.WorktreeID != nil {
+			if wt, err := r.GetWorktree(ctx, *chat.WorktreeID); err == nil {
+				archivedWorktreeName = &wt.Name
+			}
+		}
+	}
+
+	// Update the chat state
+	now := time.Now().UTC()
+	query := `
+		UPDATE chats
+		SET state = ?, 
+		    archived_worktree_name = COALESCE(archived_worktree_name, ?),
+		    updated_at = ?,
+		    last_active = ?
+		WHERE id = ?
+	`
+	query = r.bindQuery(query)
+
+	_, err = r.DB.ExecContext(ctx, query, int32(state), archivedWorktreeName, now, now, chatID)
+	if err != nil {
+		return fmt.Errorf("failed to update chat state: %w", err)
+	}
+
+	// Create user update for the state change
+	updateData := map[string]interface{}{
+		"state":          int32(state),
+		"previous_state": int32(previousState),
+		"reason":         reason,
+		"title":          chat.Title,
+		"chat_id":        chatID,
+	}
+
+	dataJSON, err := json.Marshal(updateData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal state update: %w", err)
+	}
+
+	userUpdate := &UserUpdate{
+		UserID:     chat.UserID,
+		ProjectID:  &chat.ProjectID,
+		WorktreeID: chat.WorktreeID,
+		ChatID:     &chatID,
+		UpdateType: UserUpdateChatStateChange,
+		EntityType: EntityTypeChat,
+		EntityID:   chatID,
+		Data:       dataJSON,
+	}
+
+	if err := r.CreateUserUpdate(ctx, userUpdate); err != nil {
+		// Log but don't fail - the state update succeeded
+		logging.Error("Failed to create user update for chat state change",
+			"error", err,
+			"chatID", chatID,
+			"state", state)
+	}
+
+	// Also emit chat_activity_changed (with dedup) so the sidebar reflects updated activity
+	if emitErr := r.emitChatActivityIfChanged(ctx, chatID); emitErr != nil {
+		logging.Error("Failed to emit activity changed on chat state change",
+			"error", emitErr,
+			"chatID", chatID)
+	}
+
+	logging.Debug("Chat state updated",
+		"chatID", chatID,
+		"previousState", previousState,
+		"newState", state,
+		"reason", reason)
+
+	return nil
+}
+
+// UpdateChatUnread sets the unread flag on a chat and emits a user update.
+func (r *Repo) UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error {
+	chat, err := r.GetChat(ctx, chatID)
+	if err != nil {
+		return fmt.Errorf("failed to get chat: %w", err)
+	}
+
+	unreadInt := 0
+	if unread {
+		unreadInt = 1
+	}
+
+	now := time.Now().UTC()
+	query := `UPDATE chats SET unread = ?, updated_at = ? WHERE id = ?`
+	query = r.bindQuery(query)
+
+	_, err = r.DB.ExecContext(ctx, query, unreadInt, now, chatID)
+	if err != nil {
+		return fmt.Errorf("failed to update chat unread: %w", err)
+	}
+
+	updateData := map[string]interface{}{
+		"unread":  unread,
+		"reason":  reason,
+		"chat_id": chatID,
+	}
+
+	dataJSON, err := json.Marshal(updateData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal unread update: %w", err)
+	}
+
+	userUpdate := &UserUpdate{
+		UserID:     chat.UserID,
+		ProjectID:  &chat.ProjectID,
+		WorktreeID: chat.WorktreeID,
+		ChatID:     &chatID,
+		UpdateType: UserUpdateChatStateChange,
+		EntityType: EntityTypeChat,
+		EntityID:   chatID,
+		Data:       dataJSON,
+	}
+
+	if err := r.CreateUserUpdate(ctx, userUpdate); err != nil {
+		logging.Error("Failed to create user update for chat unread change",
+			"error", err,
+			"chatID", chatID,
+			"unread", unread)
+	}
+
+	logging.Debug("Chat unread updated",
+		"chatID", chatID,
+		"unread", unread,
+		"reason", reason)
+
+	return nil
+}
+
+// ============================================================================
+// Node Execution Event Methods
+// ============================================================================
+// These methods emit real-time execution state to the chat_updates table for UI streaming
+
+// EmitNodeExecutionEvent creates a node_execution update in chat_updates
+// This is called when a workflow node starts, makes progress, or completes
+func (r *Repo) EmitNodeExecutionEvent(ctx context.Context, eventType string, state *NodeExecutionState) error {
+	if state == nil {
+		return fmt.Errorf("node execution state is nil")
+	}
+
+	// Build the event data structure
+	eventData := map[string]interface{}{
+		"update_type": "node_execution",
+		"event_type":  eventType, // "started", "progress", "completed", "failed"
+		"node_id":     state.NodeID,
+		"node_type":   state.NodeType,
+		"status":      state.Status,
+		"workflow_id": state.WorkflowID,
+		"chat_id":     state.ChatID,
+	}
+
+	// Add optional fields if present
+	if state.ParentNodeID != nil {
+		eventData["parent_node_id"] = *state.ParentNodeID
+	}
+	if state.ActivityID != nil {
+		eventData["activity_id"] = *state.ActivityID
+	}
+	if state.StartedAt != nil {
+		eventData["started_at"] = state.StartedAt.UnixMilli()
+	}
+	if state.CompletedAt != nil {
+		eventData["completed_at"] = state.CompletedAt.UnixMilli()
+	}
+	if state.DurationMs != nil {
+		eventData["duration_ms"] = *state.DurationMs
+	}
+	if state.ExitCode != nil {
+		eventData["exit_code"] = *state.ExitCode
+	}
+	if state.ErrorMessage != nil {
+		eventData["error_message"] = *state.ErrorMessage
+	}
+	if state.Iteration != nil {
+		eventData["iteration"] = *state.Iteration
+	}
+	if state.MaxIterations != nil {
+		eventData["max_iterations"] = *state.MaxIterations
+	}
+	if len(state.Metadata) > 0 {
+		eventData["metadata"] = state.Metadata
+	}
+
+	// Serialize to JSON
+	eventJSON, err := json.Marshal(eventData)
+	if err != nil {
+		return fmt.Errorf("failed to marshal node execution event: %w", err)
+	}
+
+	// Use node_id as entity_id for deduplication and filtering
+	entityID := fmt.Sprintf("%s:%s", state.WorkflowID, state.NodeID)
+
+	return r.CreateChatUpdate(ctx, state.ChatID, UpdateTypeNodeExecution, entityID, string(eventJSON))
+}

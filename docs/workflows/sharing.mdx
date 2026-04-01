@@ -1,0 +1,249 @@
+---
+title: "Sharing & Config-as-Code"
+description: "Share workflows with your team and manage configuration in version control"
+---
+
+Reliant supports config-as-code: workflows and presets live in your repository, versioned alongside your code. Your team can share configurations, review changes, and maintain consistent environments.
+
+## Directory Structure
+
+Reliant looks for configuration in the `.reliant/` directory:
+
+<Tree>
+  <Tree.Folder name="your-project" defaultOpen>
+    <Tree.Folder name=".reliant" defaultOpen>
+      <Tree.Folder name="workflows" defaultOpen>
+        <Tree.File name="code-review.yaml" />
+        <Tree.File name="tdd-loop.yaml" />
+      </Tree.Folder>
+      <Tree.Folder name="presets" defaultOpen>
+        <Tree.File name="senior-dev.yaml" />
+        <Tree.File name="security-auditor.yaml" />
+      </Tree.Folder>
+    </Tree.Folder>
+    <Tree.Folder name=".reliant.local" defaultOpen>
+      <Tree.Folder name="skills" />
+    </Tree.Folder>
+    <Tree.File name="reliant.md" />
+    <Tree.Folder name="src" />
+  </Tree.Folder>
+</Tree>
+
+- `.reliant/workflows/` contains custom workflows.
+- `.reliant/presets/` contains custom presets.
+- `.reliant.local/` contains local-only configuration.
+- `reliant.md` stores project memory and context.
+
+### Discovery
+
+On startup, Reliant scans:
+1. `.reliant/workflows/*.yaml` for workflows
+2. `.reliant/presets/*.yaml` for presets
+3. `reliant.md` for project context
+
+Changes require restarting Reliant or clicking **Reload** in the workflow/preset picker.
+
+## Sharing Workflows
+
+When workflows are in your repository:
+
+### Team Benefits
+
+1. **Automatic distribution** — Team members get workflows when they clone or pull
+2. **Code review** — Workflow changes go through PR review
+3. **Branch isolation** — Feature branches can have experimental workflows
+4. **History** — Git tracks who changed what and when
+
+### Best Practices
+
+```yaml
+# .reliant/workflows/code-review.yaml
+name: code-review
+version: v1.0.0
+description: "Team code review workflow with security check"
+status: published
+tag: agent
+
+inputs:
+  # Document inputs clearly
+  files:
+    type: string
+    description: "Files or patterns to review"
+    required: true
+```
+
+**Naming:** Use lowercase with hyphens (`code-review.yaml`)
+
+**Versioning:** Use semantic versioning in the `version` field
+
+**Documentation:** Add clear descriptions for the workflow and each input
+
+## Sharing Presets
+
+Presets bundle common configurations:
+
+```yaml
+# .reliant/presets/security-auditor.yaml
+name: security-auditor
+description: "Security-focused code reviewer"
+tag: agent
+
+params:
+  model: claude-4.5-sonnet
+  temperature: 0.3
+  system_prompt: |
+    You are a security auditor. Focus on:
+    - Injection vulnerabilities (SQL, XSS, command)
+    - Authentication and authorization flaws
+    - Sensitive data exposure
+    - Security misconfiguration
+  tool_filter:
+    - view
+    - grep
+    - glob
+```
+
+### Preset Selection
+
+Presets are matched by `tag`. A workflow with `tag: agent` can use any preset with `tag: agent`.
+
+In the UI, users select presets from a dropdown. The preset's params override the workflow's defaults.
+
+## Configuration Loading
+
+Reliant uses a layered configuration system:
+
+### Load Order (highest priority first)
+
+1. **Runtime overrides** — Values set via UI or API
+2. **Project config** — `.reliant/` in your project
+3. **Global config** — `~/.reliant/` in your home directory
+4. **Built-in defaults** — Shipped with Reliant
+
+### Database vs File Config
+
+| Aspect | Database | File Config |
+|--------|----------|-------------|
+| **Storage** | SQLite in app data | `.reliant/` directory |
+| **Sharing** | Per-user | Via git |
+| **Editing** | Via UI | Via text editor |
+| **Use case** | Personal settings | Team standards |
+
+**Conversations and settings** are stored in the database and are not shareable.
+
+**Workflows and presets** can be stored in either location:
+- Database: Created via UI, personal to you
+- Files: Created in `.reliant/`, shareable via git
+
+### File Config Takes Precedence
+
+If the same workflow name exists in both locations, the file version wins. This lets you:
+- Override built-in workflows with customized versions
+- Test workflow changes before committing
+
+## Export and Import
+
+### Exporting from UI
+
+1. Open Workflows or Presets panel
+2. Click the export icon on any item
+3. Save the `.yaml` file to `.reliant/workflows/` or `.reliant/presets/`
+
+### Importing
+
+Simply place `.yaml` files in the appropriate directory and restart Reliant.
+
+## Team Workflow
+
+### Initial Setup
+
+```bash
+# Create directory structure
+mkdir -p .reliant/workflows .reliant/presets
+
+# Add to git
+git add .reliant/
+git commit -m "Add Reliant configuration directory"
+```
+
+### Adding a Team Workflow
+
+```bash
+# Create workflow file
+cat > .reliant/workflows/our-review.yaml << 'EOF'
+name: our-review
+version: v1.0.0
+description: "Company code review standards"
+status: published
+# ... rest of workflow
+EOF
+
+# Commit and push
+git add .reliant/workflows/our-review.yaml
+git commit -m "Add company code review workflow"
+git push
+```
+
+### Team Member Setup
+
+```bash
+# Pull latest (includes workflows)
+git pull
+
+# Restart Reliant to pick up new workflows
+# Or: Click Reload in workflow picker
+```
+
+## Gitignore Considerations
+
+You might want to ignore certain files:
+
+```gitignore
+# .gitignore
+
+# Ignore personal presets (if you use personal directory)
+# .reliant/presets/personal-*.yaml
+
+# Ignore draft workflows
+# .reliant/workflows/*-draft.yaml
+```
+
+## Memory Files
+
+The `reliant.md` file provides persistent context. It can also be version-controlled:
+
+```markdown
+# reliant.md (in project root)
+
+## Project Context
+- TypeScript/React codebase
+- Uses Prisma for database
+- Follow existing patterns in src/components/
+
+## Conventions
+- Use functional components
+- Tests go in __tests__ directories
+- Follow eslint configuration
+```
+
+See [Memories](/settings/memories) for details.
+
+## Troubleshooting
+
+### Workflows Not Appearing
+
+1. Check file is in `.reliant/workflows/` and not just `.reliant/`
+2. Ensure valid YAML syntax
+3. Restart Reliant or click Reload
+4. Check `status: published` because drafts do not appear in the picker
+
+### Wrong Version Loading
+
+If database and file versions conflict:
+- File version takes precedence
+- Delete the database version to fully switch
+- Or rename the file to avoid conflict
+
+---
+
+**See also:** [Custom Workflows](/workflows/custom-workflows) • [Presets](/workflows/presets) • [Memories](/settings/memories)

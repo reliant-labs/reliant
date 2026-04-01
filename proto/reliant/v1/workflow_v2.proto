@@ -1,0 +1,910 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+import "google/protobuf/struct.proto";
+import "reliant/v1/annotations.proto";
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+// NOTE: This proto is the internal typed workflow schema used by the engine,
+// YAML parser/marshaler, and docs generators. It is not the WorkflowService RPC API.
+
+// =============================================================================
+// CEL WRAPPER MESSAGES
+// =============================================================================
+//
+// Each CEL[T] field in the v3 Go types maps to a oneof { T literal; string expr }.
+// DirectCEL[T] (always an expression, no {{}} delimiters) maps to a simple string.
+//
+// These wrappers allow proto-first serialization while preserving the
+// "literal or expression" semantics used throughout the workflow schema.
+// =============================================================================
+
+// CelString wraps a string that may be a literal or a CEL {{expr}} expression.
+message CelString {
+  oneof value {
+    string literal = 1;
+    string expr = 2;
+  }
+}
+
+// CelBool wraps a bool that may be a literal or a CEL {{expr}} expression.
+message CelBool {
+  oneof value {
+    bool literal = 1;
+    string expr = 2;
+  }
+}
+
+// CelDouble wraps a double that may be a literal or a CEL {{expr}} expression.
+message CelDouble {
+  oneof value {
+    double literal = 1;
+    string expr = 2;
+  }
+}
+
+// CelInt wraps an int64 that may be a literal or a CEL {{expr}} expression.
+message CelInt {
+  oneof value {
+    int64 literal = 1;
+    string expr = 2;
+  }
+}
+
+// CelStringList wraps a string list that may be a literal or a CEL {{expr}} expression.
+message CelStringList {
+  oneof value {
+    StringList literal = 1;
+    string expr = 2;
+  }
+}
+
+// CelModelSelector wraps a ModelSelector that may be a literal or a CEL {{expr}} expression.
+message CelModelSelector {
+  oneof value {
+    ModelSelector literal = 1;
+    string expr = 2;
+  }
+}
+
+// DirectCelBool is a raw CEL expression that evaluates to bool.
+// Used for conditions and while clauses where the entire value is always a CEL program.
+// No {{}} delimiters — the string is the expression itself.
+message DirectCelBool {
+  string expr = 1;
+}
+
+// =============================================================================
+// HELPER TYPES
+// =============================================================================
+
+// StringList is a wrapper for repeated string, needed for CelStringList oneof.
+message StringList {
+  repeated string values = 1;
+}
+
+// ModelSelector specifies which LLM model to use.
+// Supports direct ID or tag-based resolution with optional provider preferences.
+message ModelSelector {
+  // Exact model identifier (e.g., "claude-4-sonnet").
+  string id = 1;
+  // Tag-based model resolution (e.g., ["flagship", "fast"]).
+  repeated string tags = 2;
+  // Ordered list of preferred providers. Empty = system default.
+  repeated string providers = 3;
+}
+
+// =============================================================================
+// SHARED CONFIG TYPES
+// =============================================================================
+
+// SaveMessageConfig configures automatic message saving after a node executes.
+// All fields support CEL expressions with access to output.* namespace.
+// Thread behavior: For workflow nodes with thread.mode "fork" or "new", the
+// save_message saves to the PARENT workflow's thread, not the child's thread.
+message SaveMessageConfig {
+  // Condition is a CEL expression that must evaluate to true for the message to be saved.
+  CelString condition = 1;
+  // Role is the message role: "user", "assistant", "system", "tool".
+  CelString role = 2;
+  // Content is the message text content.
+  CelString content = 3;
+  // ToolCalls saves tool calls from LLM response.
+  CelString tool_calls = 4;
+  // ToolResults saves tool execution results.
+  CelString tool_results = 5;
+  // Attachments saves file attachment IDs.
+  CelString attachments = 6 [(reliant) = { hidden: true }];
+  // DisplayStyle sets the UI display style: "info", "warning", "success", "hidden".
+  CelString display_style = 7 [(reliant) = { hidden: true }];
+}
+
+// ThreadConfig configures thread behavior for a node.
+// Threads are conversation contexts that persist messages across nodes.
+message ThreadConfig {
+  // Mode determines thread relationship to parent: "inherit", "new", "fork".
+  string mode = 1 [(reliant) = { description: "Thread mode: inherit (default), new, or fork" enum_values: "inherit|new|fork" }];
+  // Memo controls thread reuse in loops. Only meaningful for new/fork modes.
+  // false (default): Create fresh thread each iteration.
+  // true: Create thread once, reuse across iterations.
+  CelBool memo = 2 [(reliant) = { description: "Whether to memoize thread across loop iterations" }];
+  // Inject adds a message to the thread before execution.
+  InjectConfig inject = 3 [(reliant) = { description: "Message injection into the thread" }];
+}
+
+// InjectConfig configures message injection into a thread.
+message InjectConfig {
+  // Role is the message role: "user" (default), "system", or "assistant".
+  CelString role = 1 [(reliant) = { description: "Message role for injected message" enum_values: "user|system|assistant" }];
+  // Content is the message text. Required. Supports CEL expressions.
+  CelString content = 2 [(reliant) = { description: "Message content to inject" }];
+  // Attachments is a CEL expression for attachment IDs to include.
+  CelString attachments = 3 [(reliant) = { description: "Attachment IDs to include" hidden: true }];
+}
+
+// ProjectConfig configures the working directory for a sub-workflow.
+message ProjectConfig {
+  // Path is the project directory path. Supports CEL expressions.
+  // Empty/nil means "inherit from parent workflow".
+  CelString path = 1 [(reliant) = { description: "Project directory path for sub-workflow execution" }];
+}
+
+// PresetsConfig defines preset matching and default configuration for a workflow or group.
+message PresetsConfig {
+  // Tag for preset matching (e.g., "agent").
+  string tag = 1 [(reliant) = { description: "Tag for preset matching" }];
+  // Default preset slug to use when none is explicitly selected.
+  string default = 2 [(reliant) = { description: "Default preset slug" }];
+}
+
+// =============================================================================
+// NODE DEFINITION
+// =============================================================================
+
+// Node represents a single workflow step with common fields and typed arguments.
+// The type field is kept for YAML compatibility (the CustomUnmarshaler uses it as
+// a discriminator to select the correct oneof case in args).
+message Node {
+  // ID is the unique identifier for this node within the workflow.
+  // Must be unique across all nodes. Convention: kebab-case.
+  string id = 1;
+
+  // Type is the node type discriminator (call_llm, execute_tools, run, loop, etc.).
+  // Used during YAML parsing to select the correct args oneof case.
+  string type = 2;
+
+  // Condition is a direct CEL expression controlling whether this node executes.
+  // If omitted or evaluates to true, the node runs.
+  // On Join nodes, the only valid values are the literals "all" and "any".
+  DirectCelBool condition = 3;
+
+  reserved 4;  // thread moved to SubWorkflowArgs
+
+  // Timeout overrides the default activity timeout for this node.
+  // Format: Go duration string (e.g., "5m", "1h30m", "30s").
+  CelString timeout = 5;
+
+  // SaveMessage automatically saves a message to the thread after node completion.
+  SaveMessageConfig save_message = 6;
+
+  // Type-specific arguments. Exactly one must be set, matching the type field.
+  oneof args {
+    CallLLMArgs call_llm = 10;
+    ExecuteToolsArgs execute_tools = 11;
+    CompactArgs compact = 12;
+    ApprovalArgs approval = 13;
+    SaveMessageNodeArgs save_message_node = 14;
+    CreateWorktreeArgs create_worktree = 15;
+    RunArgs run = 20;
+    SubWorkflowArgs workflow = 21;
+    LoopArgs loop = 22;
+    JoinArgs join = 23;
+  }
+}
+
+// =============================================================================
+// ACTIVITY NODE ARGS
+// =============================================================================
+
+// CallLLMArgs configures a call_llm node — calls a Large Language Model.
+// This is the primary node type for AI interactions.
+//
+// Output fields accessible via nodes.<id>.*:
+//   message, response_text, tool_calls, token_count, thinking
+message CallLLMArgs {
+  option (node_meta) = {
+    node_type: "call_llm"
+    display_name: "Call LLM"
+    description: "Send a prompt to a language model and get a response"
+    is_structural: false
+    category: "agentic"
+    icon: "Bot"
+  };
+
+  // Model specifies which LLM to use via tags or explicit ID.
+  CelModelSelector model = 1 [(reliant) = { description: "Model selector using tags (e.g. flagship) or explicit ID" label: "Model" placeholder: "e.g. flagship, fast, cheap, or explicit model ID" visibility_contexts: "basic" required: true category: "Model" }];
+  // Temperature controls randomness (0.0 = deterministic, 1.0 = creative).
+  CelDouble temperature = 2 [(reliant) = { description: "Temperature (0-1) controls randomness" default_value: "0.7" min_value: 0 max_value: 2 label: "Temperature" visibility_contexts: "advanced" cleanup_semantics: "trim" category: "Model" }];
+  // MaxTokens limits the response length.
+  CelInt max_tokens = 3 [(reliant) = { description: "Maximum tokens in the response" min_value: 1 max_value: 128000 label: "Max tokens" hidden: true category: "Model" }];
+  // ThinkingLevel enables extended thinking for complex reasoning.
+  CelString thinking_level = 4 [(reliant) = { description: "Extended thinking level for complex reasoning" enum_values: "none|low|medium|high|xhigh" default_value: "none" label: "Thinking level" visibility_contexts: "advanced" category: "Model" }];
+  // SystemPrompt sets the system message for this LLM call.
+  CelString system_prompt = 5 [(reliant) = { description: "System message for this LLM call" ui_hint: "textarea" label: "System prompt" placeholder: "Optional instructions for model behavior" visibility_contexts: "advanced" cleanup_semantics: "trim" category: "Prompt" }];
+  // Tools enables/disables tool use for this call.
+  CelBool tools = 6 [(reliant) = { description: "Enable tool use for this call" default_value: "true" category: "Tools" hidden: true }];
+  // ToolFilter specifies which tools are available (names or tags like "tag:search").
+  // Supports either a literal list or CEL expression returning []string.
+  CelStringList tool_filter = 7 [(reliant) = { description: "Filter which tools are available. Use tool names, glob patterns (edit*), tags (tag:search), or !exclusions (!bash)." label: "Tool Filter" placeholder: "view, edit, tag:search" category: "Tools" }];
+  // Field 8 removed (sub_agents — superseded by tool_filter + spawn() CEL).
+  reserved 8;
+  // ResponseTool defines a custom structured output tool.
+  ResponseTool response_tool = 9;
+  // Messages injects messages for ad-hoc LLM calls without a thread.
+  repeated CallLLMMessageInput messages = 10 [(reliant) = { hidden: true }];
+}
+
+// ResponseTool defines a custom tool for structured LLM output.
+// When configured, the LLM must respond by calling this tool,
+// ensuring responses match your schema.
+message ResponseTool {
+  // Name is the tool name the LLM will call (supports CEL templates like {{inputs.response_tool_name}}).
+  CelString name = 1;
+  // Description explains what the tool does, shown to LLM (supports CEL templates).
+  CelString description = 2;
+  // Schema is a JSON Schema defining the expected response structure.
+  google.protobuf.Struct schema = 3;
+}
+
+// CallLLMMessageInput represents a message to inject into the conversation.
+// Used for ad-hoc LLM calls with pre-built message context.
+message CallLLMMessageInput {
+  // Role is the message role: "user", "assistant", "system", "tool".
+  string role = 1;
+  // Content is the text content of the message.
+  string content = 2;
+  // ToolResult is a single tool result (for role="tool" messages).
+  ToolResultMsg tool_result = 3;
+  // ToolCalls are tool calls (for role="assistant" messages with tool_use).
+  repeated ToolCallMsg tool_calls = 4;
+}
+
+// ToolCallMsg represents a tool call requested by an LLM.
+message ToolCallMsg {
+  string id = 1;
+  string name = 2;
+  string input = 3;
+}
+
+// ToolResultMsg represents the result of executing a tool.
+message ToolResultMsg {
+  string tool_call_id = 1;
+  string name = 2;
+  string content = 3;
+  bool is_error = 4;
+}
+
+// ExecuteToolsArgs configures an execute_tools node — executes tool calls from an LLM.
+// Typically follows a call_llm node that returned tool_calls.
+//
+// Output fields accessible via nodes.<id>.*:
+//   message, tool_results, thread_token_count, total_result_chars, response_data
+message ExecuteToolsArgs {
+  option (node_meta) = {
+    node_type: "execute_tools"
+    display_name: "Execute Tools"
+    description: "Execute tool calls from an LLM response"
+    is_structural: false
+    category: "agentic"
+    icon: "Wrench"
+  };
+
+  // ToolCalls is a CEL expression evaluating to tool calls.
+  // Typically: "{{nodes.call_llm.tool_calls}}"
+  CelString tool_calls = 1 [(reliant) = { description: "CEL expression for tool calls to execute" }];
+  // ResolvedToolCalls is populated at runtime after CEL evaluation.
+  repeated ToolCallMsg resolved_tool_calls = 2 [(reliant) = { hidden: true }];
+  // ExpectedResponseTools filters which response tools to execute.
+  repeated string expected_response_tools = 3 [(reliant) = { hidden: true }];
+  // ResponseToolSchemas maps response tool names to their JSON schemas.
+  map<string, google.protobuf.Struct> response_tool_schemas = 4 [(reliant) = { hidden: true }];
+}
+
+// CompactArgs configures a compact node — compacts conversation context to reduce token usage.
+//
+// Output fields accessible via nodes.<id>.*:
+//   message
+message CompactArgs {
+  option (node_meta) = {
+    node_type: "compact"
+    display_name: "Compact"
+    description: "Compact conversation context to reduce token usage"
+    is_structural: false
+    category: "agentic"
+    icon: "Minimize2"
+  };
+
+  // Field 1 removed (triggering_message — never read at runtime).
+  reserved 1;
+}
+
+// ApprovalArgs configures an approval node — pauses for user approval.
+//
+// Output fields accessible via nodes.<id>.*:
+//   approval_id, status, action_taken, data
+message ApprovalArgs {
+  option (node_meta) = {
+    node_type: "approval"
+    display_name: "Approval"
+    description: "Pause workflow execution for user approval"
+    is_structural: false
+    category: "utility"
+    icon: "ShieldCheck"
+  };
+
+  // Title is the approval dialog title.
+  CelString title = 1 [(reliant) = { description: "Approval dialog title" }];
+  // Timeout is how long to wait for approval (e.g. "30m", "1h").
+  CelString timeout = 3 [(reliant) = { description: "How long to wait for approval" }];
+
+  // Reserved field numbers for removed fields.
+  reserved 2; // description (removed: never rendered in UI)
+  reserved 4; // actions (removed: broken end-to-end, default approve/deny always used)
+  reserved 5; // metadata (removed: never used)
+}
+
+// SaveMessageNodeArgs configures a save_message node — saves a message to a thread.
+// All fields support CEL expressions for dynamic content.
+//
+// Output fields accessible via nodes.<id>.*:
+//   message, message_id, thread, tool_calls, tool_results, thread_token_count, message_count
+message SaveMessageNodeArgs {
+  option (node_meta) = {
+    node_type: "save_message"
+    display_name: "Save Message"
+    description: "Save a message to the conversation thread"
+    is_structural: false
+    category: "agentic"
+    icon: "MessageSquare"
+  };
+
+  // Role is a CEL expression for the message role: "user", "assistant", "system".
+  CelString role = 1 [(reliant) = { description: "Message role" enum_values: "user|assistant|system|tool" }];
+  // Content is a CEL expression for the message content.
+  CelString content = 2 [(reliant) = { description: "Message content" ui_hint: "textarea" }];
+  // ToolCalls is a CEL expression for tool calls.
+  CelString tool_calls = 3 [(reliant) = { description: "Tool calls from LLM response" }];
+  // ToolResults is a CEL expression for tool results.
+  CelString tool_results = 4 [(reliant) = { description: "Tool execution results" hidden: true }];
+  // Attachments is a CEL expression for file attachments.
+  CelString attachments = 5 [(reliant) = { hidden: true }];
+  // DisplayStyle is a CEL expression for UI display style.
+  CelString display_style = 6 [(reliant) = { description: "UI display style hint" enum_values: "info|warning|success|hidden" }];
+
+  // Resolved runtime values (populated after CEL evaluation)
+  string resolved_role = 20 [(reliant) = { hidden: true }];
+  string resolved_content = 21 [(reliant) = { hidden: true }];
+  repeated ToolCallMsg resolved_tool_calls = 22 [(reliant) = { hidden: true }];
+  repeated ToolResultMsg resolved_tool_results = 23 [(reliant) = { hidden: true }];
+  repeated string resolved_attachments = 24 [(reliant) = { hidden: true }];
+  ThinkingOutput resolved_thinking = 25 [(reliant) = { hidden: true }];
+  string resolved_display_style = 26 [(reliant) = { hidden: true }];
+  int32 token_count = 27 [(reliant) = { hidden: true }];
+}
+
+// CreateWorktreeArgs configures a create_worktree node — creates a git worktree.
+//
+// Output fields accessible via nodes.<id>.*:
+//   id, name, path, branch, base_branch, repo_id, status
+message CreateWorktreeArgs {
+  option (node_meta) = {
+    node_type: "create_worktree"
+    display_name: "Create Worktree"
+    description: "Create a git worktree for isolated development"
+    is_structural: false
+    category: "git"
+    icon: "GitBranch"
+  };
+
+  // Name identifies this worktree.
+  CelString name = 1 [(reliant) = { description: "Worktree name, used in path" }];
+  // Branch is the branch name to create/checkout. Auto-generated if omitted.
+  CelString branch = 2 [(reliant) = { description: "Branch name to create" hidden: true }];
+  // BaseBranch is the branch to branch from. Defaults to repo's default branch.
+  CelString base_branch = 3 [(reliant) = { description: "Base branch to branch from" }];
+  // CopyFiles lists files to copy from the source repo (searches recursively).
+  repeated string copy_files = 4 [(reliant) = { description: "Files to copy from source repo (e.g. .env)" }];
+  // Force deletes existing worktree/branch if they exist.
+  CelBool force = 5 [(reliant) = { description: "Force creation by deleting existing worktree" }];
+}
+
+// =============================================================================
+// STRUCTURAL NODE ARGS
+// =============================================================================
+
+// RunArgs configures a run node — executes a shell command.
+//
+// Output fields accessible via nodes.<id>.*:
+//   exit_code, stdout, stderr
+message RunArgs {
+  option (node_meta) = {
+    node_type: "run"
+    display_name: "Run Command"
+    description: "Execute a shell command"
+    is_structural: true
+    category: "utility"
+    icon: "Terminal"
+  };
+
+  // Command is the shell command to execute. Required.
+  CelString command = 1 [(reliant) = { description: "Shell command to execute" required: true }];
+  // Env sets environment variables for the command.
+  map<string, string> env = 2 [(reliant) = { description: "Environment variables" hidden: true }];
+  // WorkDir sets the working directory. Defaults to project root.
+  CelString work_dir = 3 [(reliant) = { description: "Working directory for command execution" hidden: true }];
+}
+
+// SubWorkflowArgs configures a workflow node — invokes a sub-workflow.
+// Must specify either ref or inline, but not both.
+//
+// Output fields accessible via nodes.<id>.*:
+//   outputs (flattened sub-workflow outputs)
+message SubWorkflowArgs {
+  option (node_meta) = {
+    node_type: "workflow"
+    display_name: "Agent"
+    description: "Invoke an agent or sub-workflow"
+    is_structural: true
+    category: "agentic"
+    icon: "Bot"
+  };
+
+  // Ref is a workflow reference string (e.g., "builtin://agent", "project://my-flow").
+  CelString ref = 1 [(reliant) = { description: "Workflow reference (builtin://name or project://name)" }];
+  // Inline defines the workflow inline rather than referencing an external one.
+  Workflow inline = 2;
+  // Args passes input values to the sub-workflow. Keys must match declared inputs.
+  map<string, google.protobuf.Value> args = 3 [(reliant) = { description: "Input values for the sub-workflow" }];
+  // Presets applies preset configurations to sub-workflow inputs.
+  // Format: map[group_name]preset_name. Use "default" for ungrouped inputs.
+  map<string, string> presets = 4 [(reliant) = { description: "Preset configurations for sub-workflow inputs" }];
+  // Project configures the working directory for this sub-workflow.
+  ProjectConfig project = 5 [(reliant) = { description: "Working directory override for sub-workflow" visibility_contexts: "advanced" }];
+  // Thread configures how this workflow node relates to conversation threads.
+  ThreadConfig thread = 6 [(reliant) = { description: "Thread mode: inherit (default), new, or fork" }];
+}
+
+// LoopArgs configures a loop node — repeats a sub-workflow while a condition is true.
+// Extends SubWorkflowArgs with loop-specific fields.
+//
+// Output fields accessible via nodes.<id>.*:
+//   _iterations, plus flattened sub-workflow outputs from final iteration
+message LoopArgs {
+  option (node_meta) = {
+    node_type: "loop"
+    display_name: "Loop"
+    description: "Execute a sub-workflow in a loop with conditions"
+    is_structural: true
+    category: "flow"
+    icon: "Repeat"
+  };
+
+  // Ref is a workflow reference string.
+  CelString ref = 1 [(reliant) = { description: "Workflow reference for loop body" hidden: true }];
+  // Inline defines the loop body workflow inline.
+  Workflow inline = 2;
+  // Args passes input values to the sub-workflow.
+  map<string, google.protobuf.Value> args = 3 [(reliant) = { description: "Input values for the loop body" hidden: true }];
+  // Presets applies preset configurations.
+  map<string, string> presets = 4 [(reliant) = { description: "Preset configurations for loop body inputs" hidden: true }];
+  // Project configures the working directory.
+  ProjectConfig project = 5 [(reliant) = { description: "Working directory override for loop body" hidden: true }];
+  // While is a direct CEL expression evaluated after each iteration.
+  // Loop continues while true. Required.
+  // Has access to: outputs.* (sub-workflow output), iter.iteration (0-indexed count).
+  DirectCelBool while = 6 [(reliant) = { description: "CEL condition: loop continues while true" required: true }];
+  // Yield is a CEL expression. When true and while is false, yield to user before exiting.
+  string yield = 7 [(reliant) = { description: "CEL expression to yield to user on loop exit" }];
+}
+
+// JoinArgs configures a join node — synchronizes parallel branches.
+// The join condition is specified via Node.condition (inherited from NodeBase):
+//   - "" (empty) or "all": Wait for ALL incoming branches.
+//   - "any": Continue when ANY branch completes.
+//
+// Output fields accessible via nodes.<id>.*:
+//   _sources (output from each source branch)
+message JoinArgs {
+  option (node_meta) = {
+    node_type: "join"
+    display_name: "Join"
+    description: "Wait for parallel branches to complete before continuing"
+    is_structural: true
+    category: "flow"
+    icon: "Merge"
+  };
+
+  // No additional fields. Join uses Node.condition for satisfaction mode.
+}
+
+// =============================================================================
+// EDGE TYPES
+// =============================================================================
+
+// Edge connects a source node to destination(s) with conditional routing.
+// Cases are evaluated in order; first match wins. If no case matches, default is used.
+// For parallel execution, create multiple edges from the same source node.
+message Edge {
+  // From is the source node ID.
+  string from = 1;
+  // Cases lists conditional routing paths, evaluated in order.
+  repeated EdgeCase cases = 2;
+  // Default is the fallback destination(s) when no case matches.
+  // Single target or multiple for fan-out.
+  repeated string default = 3;
+}
+
+// EdgeCase defines one conditional routing path from an edge.
+message EdgeCase {
+  // To is the destination node ID(s). Multiple values enable fan-out.
+  repeated string to = 1;
+  // Condition is a direct CEL expression (no {{}} delimiters).
+  string condition = 2;
+  // Label is a human-readable name for this case (shown in UI).
+  string label = 3;
+}
+
+// =============================================================================
+// INPUT TYPES
+// =============================================================================
+
+// Input defines a workflow input with type-specific configuration.
+// The type field determines which config oneof case is used.
+message Input {
+  // Type is the semantic type discriminator for YAML compatibility.
+  string type = 1;
+
+  // Type-specific configuration. Exactly one must be set, matching the type field.
+  oneof config {
+    StringInputConfig string_input = 10;
+    NumberInputConfig number_input = 11;
+    IntegerInputConfig integer_input = 12;
+    BooleanInputConfig boolean_input = 13;
+    EnumInputConfig enum_input = 14;
+    ModelInputConfig model_input = 15;
+    MessageInputConfig message_input = 16;
+    AttachmentsInputConfig attachments_input = 17;
+    ToolsInputConfig tools_input = 18;
+    ArrayInputConfig array_input = 19;
+    ObjectInputConfig object_input = 20;
+    AnyInputConfig any_input = 21;
+    GroupInputConfig group_input = 22;
+    PresetInputConfig preset_input = 23;
+  }
+}
+
+// InputBase contains fields common to all input types.
+message InputBase {
+  // Human-readable description shown in UI.
+  string description = 1;
+  // UI visibility: "hidden" (runtime-only), "config" (default), "textarea", "model", "slider", "toolbar".
+  string ui = 2;
+}
+
+// StringInputConfig configures a string input with optional validation constraints.
+message StringInputConfig {
+  InputBase base = 1;
+  // Default value. If unset, the input is required.
+  optional string default = 2;
+  // Regex pattern for validation.
+  string pattern = 3;
+  // Minimum string length.
+  optional int32 min_length = 4;
+  // Maximum string length.
+  optional int32 max_length = 5;
+}
+
+// NumberInputConfig configures a decimal number input with optional min/max constraints.
+message NumberInputConfig {
+  InputBase base = 1;
+  // Default value. If unset, the input is required.
+  optional double default = 2;
+  // Minimum value.
+  optional double min = 3;
+  // Maximum value.
+  optional double max = 4;
+}
+
+// IntegerInputConfig configures a whole number input with optional min/max constraints.
+message IntegerInputConfig {
+  InputBase base = 1;
+  // Default value. If unset, the input is required.
+  optional int64 default = 2;
+  // Minimum value.
+  optional int64 min = 3;
+  // Maximum value.
+  optional int64 max = 4;
+}
+
+// BooleanInputConfig configures a boolean toggle input.
+message BooleanInputConfig {
+  InputBase base = 1;
+  // Default value. If unset, the input is required.
+  optional bool default = 2;
+}
+
+// EnumInputConfig configures an enum dropdown with predefined values.
+message EnumInputConfig {
+  InputBase base = 1;
+  // Default value (string for single-select, array for multi-select).
+  google.protobuf.Value default = 2;
+  // Allowed values for the enum.
+  repeated string enum_values = 3;
+  // If true, allows selecting multiple values (renders as multi-select).
+  bool multi = 4;
+}
+
+// ModelInputConfig configures a model selector dropdown.
+message ModelInputConfig {
+  InputBase base = 1;
+  // Default model selector.
+  ModelSelector default = 2;
+}
+
+// MessageInputConfig configures a primary user message/prompt input.
+message MessageInputConfig {
+  InputBase base = 1;
+  // Default message text.
+  optional string default = 2;
+}
+
+// AttachmentsInputConfig configures a file attachment input.
+message AttachmentsInputConfig {
+  InputBase base = 1;
+  // Default attachments (as a Value since it's an array).
+  google.protobuf.Value default = 2;
+  // Minimum number of attachments.
+  optional int32 min_items = 3;
+  // Maximum number of attachments.
+  optional int32 max_items = 4;
+}
+
+// ToolsInputConfig configures a tool selector input.
+message ToolsInputConfig {
+  InputBase base = 1;
+  // Default tool names (as a Value since it's an array).
+  google.protobuf.Value default = 2;
+}
+
+// ArrayInputConfig configures a generic array input with optional length constraints.
+message ArrayInputConfig {
+  InputBase base = 1;
+  // Default array value.
+  google.protobuf.Value default = 2;
+  // Minimum number of items.
+  optional int32 min_items = 3;
+  // Maximum number of items.
+  optional int32 max_items = 4;
+}
+
+// ObjectInputConfig configures a structured object input with JSON Schema validation.
+message ObjectInputConfig {
+  InputBase base = 1;
+  // JSON Schema properties for the object.
+  map<string, PropertySchema> properties = 2;
+  // Required property names.
+  repeated string required = 3;
+  // Whether additional properties are allowed.
+  optional bool additional_properties = 4;
+  // Default object value.
+  google.protobuf.Value default = 5;
+}
+
+// PropertySchema represents a JSON Schema property definition for ObjectInput.
+message PropertySchema {
+  string type = 1;
+  string description = 2;
+  repeated google.protobuf.Value enum_values = 3;
+  optional double minimum = 4;
+  optional double maximum = 5;
+  optional int32 min_length = 6;
+  optional int32 max_length = 7;
+  map<string, PropertySchema> properties = 8;
+  PropertySchema items = 9;
+  repeated string required = 10;
+}
+
+// AnyInputConfig configures a generic input that accepts any JSON-serializable value.
+message AnyInputConfig {
+  InputBase base = 1;
+  // Default value (any type).
+  google.protobuf.Value default = 2;
+}
+
+// GroupInputConfig organizes related inputs and enables preset matching.
+message GroupInputConfig {
+  InputBase base = 1;
+  // Preset configuration for this group (tag and default).
+  PresetsConfig presets = 2;
+  // Nested inputs within this group.
+  map<string, Input> inputs = 3;
+}
+
+// PresetInputConfig provides a dynamic preset picker filtered by tags.
+message PresetInputConfig {
+  InputBase base = 1;
+  // Default preset value (string for single, array for multi).
+  google.protobuf.Value default = 2;
+  // Filter presets by these tags.
+  repeated string tags = 3;
+  // Allow multiple selections.
+  bool multi = 4;
+}
+
+// =============================================================================
+// OUTPUT TYPES
+// =============================================================================
+
+// MessageOutput is the standardized output for activities that produce messages.
+message MessageOutput {
+  string id = 1;   // Unique message ID
+  string role = 2; // "user", "assistant", or "system"
+  string text = 3; // Message content
+}
+
+// ThinkingOutput contains extended thinking content from the LLM.
+message ThinkingOutput {
+  string content = 1;   // Raw thinking text
+  string signature = 2; // Signature for multi-turn preservation
+}
+
+// CallLLMOutput is the output from call_llm nodes.
+message CallLLMOutput {
+  MessageOutput message = 1;
+  string response_text = 2;
+  repeated ToolCallMsg tool_calls = 3;
+  int32 token_count = 4;
+  ThinkingOutput thinking = 5;
+  string upstream_request_id = 6;  // Provider request correlation ID (e.g. x-oai-request-id)
+  string upstream_proxyman_id = 7; // Proxyman flow correlation ID (e.g. x-proxyman-id)
+}
+
+// ExecuteToolsOutput is the output from execute_tools nodes.
+message ExecuteToolsOutput {
+  MessageOutput message = 1;
+  repeated ToolResultMsg tool_results = 2;
+  int32 thread_token_count = 3;
+  int32 total_result_chars = 4;
+  google.protobuf.Struct response_data = 5;
+}
+
+// CompactOutput is the output from the compact activity.
+message CompactOutput {
+  MessageOutput message = 1;
+}
+
+// ApprovalOutput is the output from the approval activity.
+message ApprovalOutput {
+  string approval_id = 1;
+  string status = 2;       // "approved", "denied", or "timeout"
+  string action_taken = 3; // Action button that was clicked
+  google.protobuf.Struct data = 4;
+}
+
+// SaveMessageOutput is the output from the save_message activity.
+message SaveMessageOutput {
+  MessageOutput message = 1;
+  string message_id = 2;
+  string thread = 3;
+  repeated ToolCallMsg tool_calls = 4;
+  repeated ToolResultMsg tool_results = 5;
+  int32 thread_token_count = 6;
+  int32 message_count = 7;
+}
+
+// CreateWorktreeOutput is the output from the create_worktree activity.
+message CreateWorktreeOutput {
+  string id = 1;
+  string name = 2;
+  string path = 3;
+  string branch = 4;
+  string base_branch = 5;
+  string repo_id = 6;
+  string status = 7;
+}
+
+// DeleteWorktreeOutput is the output from the delete_worktree activity.
+message DeleteWorktreeOutput {
+  bool deleted = 1;
+}
+
+// RunOutput is the output from run nodes (shell command execution).
+message RunOutput {
+  int32 exit_code = 1;
+  string stdout = 2;
+  string stderr = 3;
+}
+
+// WorkflowOutput is the output from a workflow node (non-loop sub-workflow).
+message WorkflowOutput {
+  google.protobuf.Struct outputs = 1;
+}
+
+// LoopOutput is the output from loop nodes.
+// User-defined outputs are in outputs; _iterations is the system field.
+message LoopOutput {
+  int32 iterations = 1;               // Total iterations completed (JSON: "_iterations")
+  google.protobuf.Struct outputs = 2; // Final iteration outputs
+}
+
+// JoinOutput is the output from a join node.
+message JoinOutput {
+  repeated google.protobuf.Struct sources = 1; // Output from each source branch (JSON: "_sources")
+}
+
+// SkippedOutput is the output for nodes skipped due to conditions.
+message SkippedOutput {
+  bool skipped = 1; // Always true for skipped nodes
+}
+
+// =============================================================================
+// UI TYPES
+// =============================================================================
+
+// Position represents x,y coordinates for UI layout.
+message Position {
+  double x = 1;
+  double y = 2;
+}
+
+// SwitchCase represents a case in a switch node for UI persistence.
+message SwitchCase {
+  string id = 1;
+  DirectCelBool condition = 2;
+  string label = 3;
+}
+
+// SwitchMetadata contains switch node data for UI persistence.
+message SwitchMetadata {
+  string source_node = 1;
+  Position position = 2;
+  repeated SwitchCase cases = 3;
+}
+
+// WorkflowUI contains UI-specific metadata for the visual workflow editor.
+message WorkflowUI {
+  map<string, Position> positions = 1;
+  map<string, SwitchMetadata> switches = 2;
+  bool locked = 3;
+}
+
+// =============================================================================
+// WORKFLOW DEFINITION
+// =============================================================================
+
+// Workflow defines a complete workflow with nodes, edges, inputs, and outputs.
+message Workflow {
+  // Name uniquely identifies this workflow.
+  string name = 1;
+  // Nodes lists all workflow steps.
+  repeated Node nodes = 2;
+  // Edges define execution flow between nodes.
+  repeated Edge edges = 3;
+  // Description documents what this workflow does.
+  string description = 4;
+  // Inputs defines parameters passed when invoking this workflow.
+  map<string, Input> inputs = 5;
+  // Outputs defines return values as CEL expressions (use {{}} interpolation).
+  map<string, string> outputs = 6;
+  // UI stores visual editor metadata (node positions, etc.). Ignored by engine.
+  WorkflowUI ui = 7;
+  // Presets configures preset matching for this workflow's ungrouped inputs.
+  PresetsConfig presets = 8;
+  // Entry specifies starting node(s) as a list of node IDs.
+  repeated string entry = 9;
+  // APIVersion specifies the schema version. Optional, for future compatibility.
+  string api_version = 10;
+}

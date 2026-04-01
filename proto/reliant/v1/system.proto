@@ -1,0 +1,119 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+// SystemService provides system-level operations like health checks and version info
+service SystemService {
+  // Health returns the health status of the service
+  rpc Health(HealthRequest) returns (HealthResponse) {}
+  
+  // Ready returns the readiness status of the service
+  rpc Ready(ReadyRequest) returns (ReadyResponse) {}
+  
+  // Info returns general API information including version, build info, and worktree
+  rpc Info(InfoRequest) returns (InfoResponse) {}
+  
+  // Version returns detailed version information
+  rpc Version(VersionRequest) returns (VersionResponse) {}
+
+  // DevAuthLoad loads the global auth session (development only)
+  rpc DevAuthLoad(DevAuthLoadRequest) returns (DevAuthLoadResponse) {}
+
+  // DevAuthSave saves the global auth session (development only)
+  rpc DevAuthSave(DevAuthSaveRequest) returns (DevAuthSaveResponse) {}
+
+  // DevAuthClear clears the global auth session (development only)
+  rpc DevAuthClear(DevAuthClearRequest) returns (DevAuthClearResponse) {}
+}
+
+// HealthRequest is the request for the Health RPC
+message HealthRequest {}
+
+// HealthResponse is the response for the Health RPC
+message HealthResponse {
+  // Status of the service (e.g., "ok", "degraded")
+  string status = 1;
+  // API version
+  string version = 2;
+}
+
+// ReadyRequest is the request for the Ready RPC
+message ReadyRequest {}
+
+// ReadyResponse is the response for the Ready RPC
+message ReadyResponse {
+  // Status of the service (e.g., "ready", "not_ready")
+  string status = 1;
+  // Unix timestamp when the check was performed
+  int64 timestamp = 2;
+}
+
+// InfoRequest is the request for the Info RPC
+message InfoRequest {}
+
+// InfoResponse is the response for the Info RPC
+message InfoResponse {
+  // Version string (e.g., "v1.2.3" or commit hash)
+  string version = 1;
+  // Git commit hash
+  string commit = 2;
+  // Build date (ISO 8601 format)
+  string date = 3;
+  // Git branch name
+  string branch = 4;
+  // API version
+  string api = 5;
+  // Unix timestamp when the response was generated
+  int64 timestamp = 6;
+  // Worktree name (for multi-worktree development)
+  string worktree_name = 7;
+}
+
+// VersionRequest is the request for the Version RPC
+message VersionRequest {}
+
+// VersionResponse is the response for the Version RPC
+message VersionResponse {
+  // Version string (e.g., "v1.2.3" or commit hash)
+  string version = 1;
+  // Git commit hash
+  string commit = 2;
+  // Build date (ISO 8601 format)
+  string date = 3;
+  // Git branch name
+  string branch = 4;
+}
+
+// ============================================
+// Dev Auth Messages (development only)
+// ============================================
+
+// DevAuthLoadRequest loads the auth session
+message DevAuthLoadRequest {}
+
+// DevAuthLoadResponse returns the auth session
+message DevAuthLoadResponse {
+  bool success = 1;
+  optional string session_json = 2;  // JSON-encoded session data, null if no session
+}
+
+// DevAuthSaveRequest saves the auth session
+message DevAuthSaveRequest {
+  string session_json = 1;          // JSON-encoded session data
+}
+
+// DevAuthSaveResponse confirms session save
+message DevAuthSaveResponse {
+  bool success = 1;
+}
+
+// DevAuthClearRequest clears the auth session
+message DevAuthClearRequest {}
+
+// DevAuthClearResponse confirms session cleared
+message DevAuthClearResponse {
+  bool success = 1;
+}

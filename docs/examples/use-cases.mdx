@@ -1,0 +1,364 @@
+---
+title: "Use Cases"
+description: "Real-world scenarios and how to implement them"
+---
+
+Practical examples of what you can build with Reliant workflows.
+
+## Code Review Pipeline
+
+Automatically review PRs with multiple specialized agents.
+
+```yaml
+name: Code Review Pipeline
+description: Multi-agent code review with security and style checks
+
+nodes:
+  - id: fetch_changes
+    run: git diff origin/main...HEAD
+
+  - id: security_review
+    workflow: builtin://agent
+    thread:
+      mode: fork
+      key: security
+      inject:
+        role: user
+        content: |
+          Review these changes for security issues:
+          ~~~
+          {{nodes.fetch_changes.stdout}}
+          ~~~
+    inputs:
+      system_prompt: |
+        You are a security-focused code reviewer. Look for:
+        - SQL injection, XSS, command injection
+        - Hardcoded secrets or credentials
+        - Insecure dependencies
+        - Authentication/authorization issues
+
+  - id: style_review
+    workflow: builtin://agent
+    thread:
+      mode: fork
+      key: style
+      inject:
+        role: user
+        content: |
+          Review these changes for style and best practices:
+          ~~~
+          {{nodes.fetch_changes.stdout}}
+          ~~~
+    inputs:
+      system_prompt: |
+        You are a code style reviewer. Check for:
+        - Consistent naming conventions
+        - Code organization and readability
+        - Documentation and comments
+        - Error handling patterns
+
+  - id: reviews_done
+    join: all
+
+  - id: summarize
+    workflow: builtin://agent
+    thread:
+      mode: inherit
+      inject:
+        role: user
+        content: "Summarize the review findings and provide an overall assessment."
+
+edges:
+  - from: fetch_changes
+    default: security_review
+  - from: fetch_changes
+    default: style_review
+  - from: security_review
+    default: reviews_done
+  - from: style_review
+    default: reviews_done
+  - from: reviews_done
+    default: summarize
+```
+
+**Key techniques:**
+- Parallel agents for different review focuses
+- Fork threads to isolate each reviewer's context
+- Join to wait for all reviews before summarizing
+
+---
+
+## Test-Driven Bug Fix
+
+Implement a fix using a test-first approach with retry loop.
+
+```yaml
+name: TDD Bug Fix
+description: Write test, implement fix, verify with retry
+
+inputs:
+  bug_description:
+    type: string
+    description: Description of the bug to fix
+  max_attempts:
+    type: number
+    default: 3
+
+nodes:
+  - id: write_test
+    workflow: builtin://agent
+    thread:
+      mode: inherit
+      inject:
+        role: user
+        content: |
+          Write a failing test that reproduces this bug:
+          {{inputs.bug_description}}
+          
+          The test should fail now and pass after the fix.
+    inputs:
+      system_prompt: "You are a test engineer. Write minimal, focused tests."
+
+  - id: verify_test_fails
+    run: npm test
+    save_message:
+      role: user
+      condition: "{{output.exit_code == 0}}"
+      content: "Test passed but should fail. Rewrite the test to actually catch the bug."
+
+  - id: fix_loop
+    loop:
+      while: outputs.exit_code != 0 && iter.iteration < inputs.max_attempts
+      inline:
+        entry: [implement_fix]
+        outputs:
+          exit_code: "{{nodes.run_tests.exit_code}}"
+          error: "{{nodes.run_tests.stderr}}"
+        
+        nodes:
+          - id: implement_fix
+            workflow: builtin://agent
+            thread:
+              mode: inherit
+              inject:
+                role: user
+                condition: "iter.iteration > 0"
+                content: |
+                  Previous fix attempt failed:
+                  {{outputs.error}}
+                  Try a different approach.
+            inputs:
+              system_prompt: "Fix the bug. Make minimal changes."
+
+          - id: run_tests
+            run: npm test
+
+        edges:
+          - from: implement_fix
+            default: run_tests
+
+edges:
+  - from: write_test
+    default: verify_test_fails
+  - from: verify_test_fails
+    default: fix_loop
+```
+
+**Key techniques:**
+- Test-first approach ensures fix is verified
+- Loop with iteration limit prevents infinite retries
+- Conditional message injection adds context on failures
+
+---
+
+## Documentation Generator
+
+Generate documentation for a codebase with structure analysis.
+
+```yaml
+name: Documentation Generator
+description: Analyze code and generate comprehensive docs
+
+inputs:
+  target_dir:
+    type: string
+    default: "src"
+  output_file:
+    type: string
+    default: "DOCUMENTATION.md"
+
+nodes:
+  - id: analyze_structure
+    workflow: builtin://agent
+    thread:
+      mode: inherit
+      inject:
+        role: user
+        content: |
+          Analyze the structure of {{inputs.target_dir}}:
+          1. List main modules/packages
+          2. Identify public APIs
+          3. Find existing documentation
+          4. Note any complex or undocumented areas
+    inputs:
+      system_prompt: "You are a technical analyst. Be thorough but concise."
+
+  - id: generate_docs
+    workflow: builtin://agent
+    thread:
+      mode: inherit
+      inject:
+        role: user
+        content: |
+          Based on your analysis, generate documentation for {{inputs.output_file}}.
+          Include:
+          - Overview and architecture
+          - Module descriptions
+          - API reference for public functions
+          - Usage examples
+    inputs:
+      system_prompt: |
+        You are a technical writer. Write clear, helpful documentation.
+        Use markdown formatting. Include examples.
+
+  - id: review_docs
+    workflow: builtin://agent
+    thread:
+      mode: inherit
+      inject:
+        role: user
+        content: "Review the generated documentation for accuracy and completeness."
+    inputs:
+      system_prompt: "Review documentation critically. Check for errors and gaps."
+
+edges:
+  - from: analyze_structure
+    default: generate_docs
+  - from: generate_docs
+    default: review_docs
+```
+
+**Key techniques:**
+- Sequential pipeline: analyze → generate → review
+- Thread inheritance maintains context across stages
+- Specialized prompts for each role
+
+---
+
+## Parallel Implementation Competition
+
+Have multiple agents implement the same feature, then pick the best.
+
+```yaml
+name: Parallel Compete
+description: Multiple agents compete on same task
+
+inputs:
+  task:
+    type: string
+    description: The feature to implement
+
+nodes:
+  - id: create_wt_a
+    action: CreateWorktree
+    inputs:
+      name: "compete-a-{{workflow.id}}"
+      copy_files: [.env]
+      force: true
+
+  - id: create_wt_b
+    action: CreateWorktree
+    inputs:
+      name: "compete-b-{{workflow.id}}"
+      copy_files: [.env]
+      force: true
+
+  - id: worktrees_ready
+    join: all
+
+  - id: impl_a
+    workflow: builtin://agent
+    thread:
+      mode: new
+      key: impl_a
+      inject:
+        role: user
+        content: |
+          Implement in {{nodes.create_wt_a.path}}:
+          {{inputs.task}}
+          
+          Focus on: simplicity and readability
+    inputs:
+      preset: Implementer
+
+  - id: impl_b
+    workflow: builtin://agent
+    thread:
+      mode: new
+      key: impl_b
+      inject:
+        role: user
+        content: |
+          Implement in {{nodes.create_wt_b.path}}:
+          {{inputs.task}}
+          
+          Focus on: performance and efficiency
+    inputs:
+      preset: Implementer
+
+  - id: implementations_done
+    join: all
+
+  - id: compare
+    workflow: builtin://agent
+    thread:
+      mode: inherit
+      inject:
+        role: user
+        content: |
+          Compare both implementations:
+          - Implementation A ({{nodes.create_wt_a.path}}): simplicity focus
+          - Implementation B ({{nodes.create_wt_b.path}}): performance focus
+          
+          Evaluate: correctness, code quality, performance, maintainability.
+          Recommend which to proceed with.
+    inputs:
+      preset: Reviewer
+
+edges:
+  - from: entry
+    default: create_wt_a
+  - from: entry
+    default: create_wt_b
+  - from: create_wt_a
+    default: worktrees_ready
+  - from: create_wt_b
+    default: worktrees_ready
+  - from: worktrees_ready
+    default: impl_a
+  - from: worktrees_ready
+    default: impl_b
+  - from: impl_a
+    default: implementations_done
+  - from: impl_b
+    default: implementations_done
+  - from: implementations_done
+    default: compare
+```
+
+**Key techniques:**
+- Worktrees provide isolated Git environments
+- `thread: mode: new` keeps implementations separate
+- Join synchronizes parallel work
+- Final comparison sees both implementations' context
+
+---
+
+## More Examples
+
+See [Workflow Snippets](/examples/workflow-snippets) for more copy-paste patterns covering:
+
+- Approval workflows
+- Context management
+- Response tools
+- Loop patterns

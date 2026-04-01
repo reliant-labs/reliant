@@ -1,0 +1,74 @@
+// Copyright (c) 2025 Reliant Labs
+package toolexec
+
+import (
+	"context"
+	"time"
+)
+
+// ToolExecutor defines the interface for executing tools
+// Implementation: RemoteExecutor (DB-backed queue + daemon gRPC stream delivery)
+type ToolExecutor interface {
+	// ExecuteTool executes a tool and returns the result
+	ExecuteTool(ctx context.Context, req *ToolRequest) (*ToolResult, error)
+
+	// Close cleans up resources
+	Close() error
+}
+
+// ToolRequest represents a tool execution request
+// All fields are primitives - ToolContext is reconstructed as needed
+type ToolRequest struct {
+	// Tool identification
+	ToolName       string // Name of the tool to execute
+	ToolInput      string // JSON-encoded tool parameters
+	ToolCallID     string // ID from LLM tool call
+	ContentBlockID string // Database content block ID
+
+	// Required identifiers
+	UserID     string // User who owns this execution (REQUIRED for routing)
+	ChatID     string // Chat this execution belongs to (REQUIRED)
+	ProjectID  string // Project ID (REQUIRED)
+	WorktreeID string // Worktree ID (optional, empty if none)
+
+	// Context for tool execution (primitives only)
+	Thread       string // Thread path (UUID matching workflow ID)
+	MessageID    string // Message that triggered this tool call
+	ProjectPath  string // Absolute path to project root
+	ProjectName  string // Project display name
+	WorktreePath string // Absolute path to worktree (empty if using project path)
+
+	// Execution options
+	WorkingDir  string            // Override working directory (optional)
+	Timeout     time.Duration     // Execution timeout
+	Environment map[string]string // Additional environment variables
+}
+
+// ToolResult represents the result of tool execution.
+// This is an internal type for the toolexec package with execution-specific
+// fields (timing, error codes). For the domain model, see message.ToolResult.
+// Conversion: toolexec.ToolResult -> message.ToolResult happens in execute_tools.go.
+type ToolResult struct {
+	// Execution status
+	Success      bool   // Whether execution succeeded
+	IsError      bool   // Whether the content represents an error
+	Backgrounded bool   // Whether the tool was converted to background execution
+	Content      string // Tool output/result
+
+	// Execution-specific metadata (not in domain model)
+	Metadata     string    // JSON-encoded metadata
+	StartTime    time.Time // Execution start time
+	EndTime      time.Time // Execution end time
+	ErrorMessage string    // Error message if success=false
+	ErrorCode    string    // Error code for categorization
+}
+
+// ExecutionMetrics provides telemetry for tool execution
+type ExecutionMetrics struct {
+	ToolName   string
+	Success    bool
+	Duration   time.Duration
+	IsRemote   bool // True if executed remotely, false if local
+	ErrorCode  string
+	RetryCount int
+}

@@ -1,0 +1,88 @@
+# Audit Rejection: Auditor denies agent's approach, agent adjusts
+#
+# Tests the denial/guidance path:
+# 1. main_agent proposes a risky action (deleting tests)
+# 2. audit_check denies via the audit tool with guidance
+# 3. execute_audit returns approved=false with guidance
+# 4. execute_audit's save_message condition fires (guidance is non-empty),
+#    saving "AUDIT FEEDBACK" as a user message to the thread
+# 5. save_approved_response is SKIPPED (edge from execute_audit only
+#    goes to save_approved_response when approved=true)
+# 6. execute_tools is SKIPPED (agent message was not saved, tools not run)
+# 7. Loop continues because main_agent's tool_calls was non-empty
+# 8. main_agent sees the feedback, adjusts its approach
+# 9. audit_check approves the adjusted response
+# 10. Loop exits because tool_calls is now empty
+#
+# This verifies the denial flow gates tool execution and injects guidance.
+
+name: audit_rejection_with_guidance
+description: Auditor rejects agent's risky approach, guidance is saved, agent adjusts on next turn
+
+events:
+  # Iteration 1: main_agent wants to do something risky
+  - node: audited_loop.main_agent
+    type: llm_response
+    text: "I'm going to delete all the test files."
+    tool_calls:
+      - name: bash
+        input:
+          command: "rm -rf tests/"
+
+  # audit_check rejects with guidance
+  - node: audited_loop.audit_check
+    type: llm_response
+    text: ""
+    tool_calls:
+      - name: audit
+        input:
+          approved: false
+          guidance: "Do not delete test files. Please suggest an alternative approach."
+
+  # execute_audit returns denial — guidance is saved to thread
+  - node: audited_loop.execute_audit
+    type: tool_result
+    tool: audit
+    output:
+      approved: false
+      guidance: "Do not delete test files. Please suggest an alternative approach."
+
+  # Loop continues (main_agent had tool_calls), but save_approved_response
+  # and execute_tools are skipped due to the denial.
+
+  # Iteration 2: main_agent adjusts based on the audit feedback
+  - node: audited_loop.main_agent
+    type: llm_response
+    text: "I understand. Instead of deleting tests, I'll help you organize them."
+
+  # audit_check approves the adjusted response
+  - node: audited_loop.audit_check
+    type: llm_response
+    text: ""
+    tool_calls:
+      - name: audit
+        input:
+          approved: true
+          guidance: ""
+
+  # execute_audit confirms approval
+  - node: audited_loop.execute_audit
+    type: tool_result
+    tool: audit
+    output:
+      approved: true
+      guidance: ""
+
+  # Loop exits because tool_calls is empty
+
+expect:
+  outcome: completed
+  reached:
+    - audited_loop
+    - audited_loop.main_agent
+    - audited_loop.audit_check
+    - audited_loop.execute_audit
+    - audited_loop.save_approved_response  # Reached on iteration 2 (approved)
+  not_reached:
+    - audited_loop.execute_tools  # Never reached — denied on iter 1, no tools on iter 2
+    - audited_loop.compact

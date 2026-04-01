@@ -1,0 +1,199 @@
+name: Migration & DB Schema Check
+
+on:
+  pull_request:
+    paths:
+      - "internal/db/migrations/**"
+      - "internal/db/schema.sql"
+      - "internal/db/postgres/schema.sql"
+      - "scripts/check-migrations.sh"
+      - "scripts/validate-schema.sh"
+      - "scripts/generate-schema.sh"
+      - "sqlc.yaml"
+  push:
+    branches:
+      - main
+    paths:
+      - "internal/db/migrations/**"
+      - "internal/db/schema.sql"
+      - "internal/db/postgres/schema.sql"
+      - "scripts/check-migrations.sh"
+      - "scripts/validate-schema.sh"
+      - "scripts/generate-schema.sh"
+      - "sqlc.yaml"
+
+jobs:
+  check-migrations:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: reliant_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # Need full history to compare with main
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Install goose
+        run: go install github.com/pressly/goose/v3/cmd/goose@latest
+
+      - name: Fetch main branch
+        run: |
+          git fetch origin main:refs/remotes/origin/main
+
+      - name: Check for migration conflicts
+        id: check
+        run: |
+          chmod +x scripts/fix-migration-conflicts.sh
+
+          # Run in check mode first
+          echo "🔍 Checking for migration conflicts..."
+
+          HAS_CONFLICTS=false
+
+          for MIGRATION_DIR in internal/db/migrations/sqlite internal/db/migrations/postgres; do
+            DIR_NAME=$(basename "$MIGRATION_DIR")
+
+            # Get highest migration in main for this directory
+            MAIN_MAX=0
+            while IFS= read -r file; do
+              if [ -n "$file" ]; then
+                filename=$(basename "$file")
+                number=$(echo "$filename" | grep -oE '^[0-9]+' || echo "0")
+                number=$((10#$number))
+                if [ "$number" -gt "$MAIN_MAX" ]; then
+                  MAIN_MAX=$number
+                fi
+              fi
+            done < <(git ls-tree -r --name-only origin/main "$MIGRATION_DIR/" 2>/dev/null | grep '\.sql$' || true)
+
+            echo "📊 [$DIR_NAME] Highest migration in main: $MAIN_MAX"
+
+            # Get migrations added in this PR for this directory
+            ADDED_MIGRATIONS=$(git diff --name-only --diff-filter=A origin/main HEAD -- "$MIGRATION_DIR/*.sql" 2>/dev/null || true)
+
+            if [ -z "$ADDED_MIGRATIONS" ]; then
+              echo "✅ [$DIR_NAME] No new migrations in this PR"
+              continue
+            fi
+
+            echo "📋 [$DIR_NAME] New migrations in this PR:"
+            echo "$ADDED_MIGRATIONS" | while read -r file; do
+              [ -n "$file" ] && echo "   - $(basename "$file")"
+            done
+
+            while IFS= read -r file; do
+              if [ -n "$file" ]; then
+                filename=$(basename "$file")
+                number=$(echo "$filename" | grep -oE '^[0-9]+' || echo "0")
+                number=$((10#$number))
+
+                if [ "$number" -le "$MAIN_MAX" ]; then
+                  echo "❌ [$DIR_NAME] CONFLICT: $filename (number $number ≤ main's max $MAIN_MAX)"
+                  HAS_CONFLICTS=true
+                else
+                  echo "✅ [$DIR_NAME] OK: $filename (number $number > main's max $MAIN_MAX)"
+                fi
+              fi
+            done <<< "$ADDED_MIGRATIONS"
+          done
+
+          if [ "$HAS_CONFLICTS" = true ]; then
+              echo "has_conflicts=true" >> $GITHUB_OUTPUT
+              exit 1
+          else
+              echo "has_conflicts=false" >> $GITHUB_OUTPUT
+              echo ""
+              echo "✅ No migration conflicts detected"
+          fi
+
+      - name: Suggest fix
+        if: failure() && steps.check.outputs.has_conflicts == 'true'
+        run: |
+          echo "::error::Migration number conflicts detected!"
+          echo ""
+          echo "To fix this issue, run:"
+          echo "  git rebase origin/main"
+          echo "  (The post-rebase hook will auto-renumber your migrations)"
+          echo ""
+          echo "Or manually run:"
+          echo "  ./scripts/fix-migration-conflicts.sh"
+          echo "  git add internal/db/migrations/sqlite/"
+          echo "  git commit --amend --no-edit"
+          echo "  git push --force-with-lease"
+          exit 1
+
+      - name: Ensure no root-level migrations remain
+        run: |
+          shopt -s nullglob
+          ROOT_MIGRATIONS=(internal/db/migrations/*.sql)
+          shopt -u nullglob
+
+          if [ ${#ROOT_MIGRATIONS[@]} -gt 0 ]; then
+            echo "❌ Found unexpected root-level migrations (must be in sqlite/ or postgres/):"
+            printf '  - %s\n' "${ROOT_MIGRATIONS[@]}"
+            exit 1
+          fi
+
+          echo "✅ No root-level migrations found"
+
+      - name: Validate migration numbering (sqlite + postgres)
+        run: bash ./scripts/check-migrations.sh
+
+      - name: Validate migration sequence
+        run: |
+          echo "✅ Sequence validation covered by scripts/check-migrations.sh"
+
+      - name: Validate SQLite migrations apply cleanly
+        run: |
+          goose -dir internal/db/migrations/sqlite sqlite3 /tmp/reliant-ci-schema-check.db up
+
+      - name: Validate Postgres migrations apply cleanly
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/reliant_ci?sslmode=disable
+        run: |
+          goose -dir internal/db/migrations/postgres postgres "$DATABASE_URL" up
+
+      - name: Validate Postgres-generated SQL exists
+        run: |
+          test -f internal/db/postgres/schema.sql
+          echo "✅ Postgres schema file present"
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "### Migration Check Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.check.outputs.has_conflicts }}" = "true" ]; then
+              echo "❌ **Migration conflicts detected**" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "One or more sqlite/postgres migrations need to be renumbered to come after main's highest migration in their respective directory." >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "**To fix:**" >> $GITHUB_STEP_SUMMARY
+              echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+              echo "git rebase origin/main" >> $GITHUB_STEP_SUMMARY
+              echo "# Post-rebase hook will auto-fix migrations" >> $GITHUB_STEP_SUMMARY
+              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          else
+              echo "✅ **No migration conflicts**" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "All migrations are numbered correctly relative to main branch." >> $GITHUB_STEP_SUMMARY
+          fi

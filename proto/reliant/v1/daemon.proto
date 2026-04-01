@@ -1,0 +1,29 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+// DaemonService exposes daemon-side operations proxied through the daemon-gateway.
+service DaemonService {
+  // StartOAuthFlow starts a localhost callback server on the daemon, opens the
+  // browser for the user to authorize, and returns the authorization code.
+  rpc StartOAuthFlow(StartOAuthFlowRequest) returns (StartOAuthFlowResponse) {}
+}
+
+message StartOAuthFlowRequest {
+  // Full OAuth authorize URL with {redirect_uri} placeholder.
+  string authorize_url_template = 1;
+  // Timeout in seconds for the user to complete auth (default 120).
+  int32 timeout_seconds = 2;
+}
+
+message StartOAuthFlowResponse {
+  // Authorization code from the OAuth callback.
+  string code = 1;
+  // State parameter from the OAuth callback.
+  string state = 2;
+  // The redirect URI used (http://127.0.0.1:<port>/callback).
+  string redirect_uri = 3;
+}

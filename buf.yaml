@@ -1,0 +1,17 @@
+# buf.yaml - Buf workspace configuration
+version: v2
+# Modules define the protobuf packages in this workspace
+modules:
+  - path: proto
+# Lint configuration
+lint:
+  use:
+    - STANDARD
+  except:
+    - PACKAGE_VERSION_SUFFIX # We use v1, not v1beta1
+    - RPC_REQUEST_STANDARD_NAME # Allow flexible request naming
+    - RPC_RESPONSE_STANDARD_NAME # Allow flexible response naming
+# Breaking change detection (disabled for now during initial development)
+breaking:
+  use:
+    - FILE

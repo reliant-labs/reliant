@@ -1,0 +1,287 @@
+---
+title: "Provider Authentication"
+description: "Configure AI providers using API keys or OAuth in Reliant"
+---
+
+Reliant supports multiple AI model providers, allowing you to choose the best models for your workflow. Providers are configured through one of two authentication methods:
+
+- **API key** (most providers)
+- **OAuth login** (Claude Code and Codex)
+
+You can configure API key providers through environment variables, configuration files, or the Settings UI. Claude Code and Codex authentication is completed in the Settings UI via their respective **Login** buttons.
+
+## Supported Providers
+
+Reliant supports the following AI model providers:
+
+### Anthropic (Claude)
+
+**Available Models**: Claude 4.5 Sonnet, Claude 4.6 Opus, Claude 4.5 Haiku
+
+**Configuration**:
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+```
+
+Or in `.reliant.json`:
+
+```json
+{
+  "providers": {
+    "anthropic": {
+      "apiKey": "sk-ant-...",
+      "disabled": false
+    }
+  }
+}
+```
+
+**Getting an API Key**:
+- Sign up at [console.anthropic.com](https://console.anthropic.com)
+
+### OpenAI
+
+**Available Models**: GPT-5.3 Codex (flagship), GPT-5.2 Codex, GPT-5.2, GPT-5 Mini, GPT-5.2 Pro
+
+**Configuration**:
+
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+Or in `.reliant.json`:
+
+```json
+{
+  "providers": {
+    "openai": {
+      "apiKey": "sk-...",
+      "disabled": false
+    }
+  }
+}
+```
+
+**Getting an API Key**:
+- Sign up at [platform.openai.com](https://platform.openai.com)
+- Navigate to API Keys section
+- Create new secret key
+
+### Claude Code (OAuth)
+
+**Available Models**: Claude 4.5 Sonnet, Claude 4.6 Opus, Claude 4.5 Haiku
+
+**Authentication Method**: OAuth (no API key required — uses your Claude account)
+
+**How to Connect**:
+1. Open **Settings → AI**
+2. Select **Claude Code**
+3. Click **Login with Claude Code**
+4. Complete sign-in in your browser
+5. Return to Reliant and verify the success state
+
+<Note>
+If you're using the **web UI** (not the desktop app), see [OAuth in Web Mode](#oauth-in-web-mode) below.
+</Note>
+
+### Codex (OAuth)
+
+**Available Models**: GPT-5.3 Codex, GPT-5.3 Codex Spark, GPT-5.2 Codex
+
+**Authentication Method**: OAuth (no API key required)
+
+**How to Connect**:
+1. Open **Settings → AI**
+2. Select **Codex**
+3. Click **Login with Codex**
+4. Complete sign-in in your browser
+5. Return to Reliant and verify the success state
+
+<Note>
+If you're using the **web UI** (not the desktop app), see [OAuth in Web Mode](#oauth-in-web-mode) below.
+</Note>
+
+### Google Gemini
+
+**Available Models**: Gemini 3.1 Pro, Gemini 3.1 Pro (Custom Tools), Gemini 3 Pro, Gemini 3 Flash, Gemini 2.5 Pro, Gemini 2.5 Flash
+
+**Configuration**:
+
+```bash
+export GEMINI_API_KEY="..."
+```
+
+Or in `.reliant.json`:
+
+```json
+{
+  "providers": {
+    "gemini": {
+      "apiKey": "...",
+      "disabled": false
+    }
+  }
+}
+```
+
+**Getting an API Key**:
+- Visit [ai.google.dev](https://ai.google.dev)
+- Sign in with Google account
+- Create API key in API Keys section
+
+### OpenRouter
+
+**Configuration**:
+
+```bash
+export OPENROUTER_API_KEY="sk-or-..."
+```
+
+Or in `.reliant.json`:
+
+```json
+{
+  "providers": {
+    "openrouter": {
+      "apiKey": "sk-or-...",
+      "disabled": false
+    }
+  }
+}
+```
+
+**Note on Model Support**: OpenRouter can be used to access the Anthropic, OpenAI, and Google models listed above. Other custom models available on OpenRouter are not currently supported in Reliant.
+
+**Getting an API Key**:
+- Sign up at [openrouter.ai](https://openrouter.ai)
+- Navigate to Keys section
+- Create new API key
+
+## Configuration Priority
+
+Reliant checks for configuration in this order:
+
+1. **Environment Variables** (highest priority)
+2. **Configuration File** (`.reliant.json`)
+3. **Settings UI** (stored in config file)
+
+Environment variables override configuration file settings, allowing temporary changes without modifying files.
+
+## OAuth in Web Mode
+
+Claude Code and Codex use OAuth flows that require a **localhost callback** — the provider redirects your browser to `localhost` after you sign in. In the **desktop app (Electron)**, this is handled automatically.
+
+If you're using Reliant through a **web browser** (e.g. accessing a remote Reliant server), you need to run a small helper on your local machine first:
+
+```bash
+reliant auth serve
+```
+
+This starts a lightweight server on `localhost:19284` that receives the OAuth callback. It does not store any credentials — it only passes the authorization code back to your browser, and the Reliant server handles the rest.
+
+**Steps for web mode:**
+1. Run `reliant auth serve` in your terminal (keep it running)
+2. Open **Settings → AI** in the web UI
+3. Select **Claude Code** or **Codex**
+4. Click the **Login** button (it appears once the helper is detected)
+5. Complete sign-in in your browser
+6. You can stop `reliant auth serve` after connecting
+
+If the helper isn't running, the UI will show the command you need to run instead of the login button.
+
+<Info>
+You can customize the port with `reliant auth serve --port 9999`.
+</Info>
+
+## Verifying Provider Authentication
+
+After configuring a provider:
+
+1. Open Reliant Settings
+2. Navigate to the AI Providers section
+3. Find your configured provider
+4. Verify connection status:
+   - API key providers: click **Test Connection** or **Validate**
+   - Codex provider: use **Login with Codex** and confirm success state
+5. Verify you see a success message
+
+## Common Issues
+
+### "Invalid API Key" Error
+
+**Solutions**:
+- Verify key is copied correctly with no extra spaces
+- Check key hasn't expired (regenerate if needed)
+- Ensure you're using the correct provider (for example, an Anthropic key for Claude models)
+
+### "Rate Limit Exceeded"
+
+**Solutions**:
+- Wait before sending more requests
+- Check your provider's rate limits for your tier
+- Consider upgrading your plan
+- Use a different API key or provider temporarily
+
+### Provider Not Showing in UI
+
+**Solutions**:
+- Restart Reliant after configuration changes
+- Check configuration file syntax (JSON must be valid)
+- Ensure provider isn't marked as `"disabled": true`
+
+### Connection Timeout
+
+**Solutions**:
+- Verify internet connection
+- Check firewall settings
+- For local models, ensure server is running
+- Disable VPN temporarily to test
+
+## Security Best Practices
+
+### Never Commit API Keys
+
+Add to `.gitignore`:
+
+```text
+.reliant.json
+.env
+```
+
+### Use Environment Variables for CI/CD
+
+In CI/CD pipelines, set API keys as secret environment variables:
+
+```yaml
+env:
+  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+### Rotate Keys Regularly
+
+- Rotate API keys every 90 days
+- Immediately rotate if a key may have been exposed
+- Use different keys for development and production
+
+### Limit Key Permissions
+
+Where possible:
+- Use read-only or limited-scope keys
+- Create separate keys for different projects
+- Monitor key usage in provider dashboards
+
+## Rate Limits and Billing
+
+Different provider tiers have different limits. Refer to your provider's documentation for the most up-to-date information on rate limits and pricing:
+
+- **Anthropic**: [Rate Limits](https://docs.anthropic.com/en/api/rate-limits) | [Pricing](https://www.anthropic.com/pricing)
+- **OpenAI**: [Rate Limits](https://platform.openai.com/docs/guides/rate-limits) | [Pricing](https://openai.com/pricing)
+- **Google Gemini**: [Pricing and Limits](https://ai.google.dev/pricing)
+- **OpenRouter**: [Models and Pricing](https://openrouter.ai/models)
+
+## Related Topics
+
+- [Presets](/workflows/presets) - Configure which models workflows use
+- [MCP Servers](/settings/mcp-servers) - Extend capabilities with external tools
+- [Troubleshooting](/help/troubleshooting) - Solve common API key issues

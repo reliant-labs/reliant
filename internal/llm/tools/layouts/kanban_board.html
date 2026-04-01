@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kanban Board Layout</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .kanban-container {
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .kanban-header {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .kanban-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #1a1a1a;
+            margin-bottom: 0.5rem;
+        }
+
+        .kanban-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .filter-chips {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .chip {
+            padding: 0.375rem 0.75rem;
+            background: #f0f2f5;
+            border-radius: 20px;
+            font-size: 0.875rem;
+            color: #495057;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .chip:hover {
+            background: #e9ecef;
+        }
+
+        .chip.active {
+            background: #667eea;
+            color: white;
+            border-color: #5568d3;
+        }
+
+        .add-task-button {
+            padding: 0.5rem 1.25rem;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .add-task-button:hover {
+            background: #5568d3;
+            transform: translateY(-1px);
+        }
+
+        .kanban-board {
+            display: flex;
+            gap: 1.5rem;
+            overflow-x: auto;
+            padding-bottom: 1rem;
+        }
+
+        .kanban-column {
+            flex: 0 0 320px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 12px;
+            padding: 1rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .column-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .column-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #495057;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .column-count {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 24px;
+            height: 24px;
+            background: #e9ecef;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #495057;
+            padding: 0 0.5rem;
+        }
+
+        .column-actions {
+            display: flex;
+            gap: 0.25rem;
+        }
+
+        .column-button {
+            width: 28px;
+            height: 28px;
+            background: transparent;
+            border: none;
+            border-radius: 6px;
+            color: #adb5bd;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .column-button:hover {
+            background: #f0f2f5;
+            color: #495057;
+        }
+
+        .task-list {
+            min-height: 200px;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .task-card {
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+            cursor: move;
+            transition: all 0.3s ease;
+            border-left: 4px solid transparent;
+        }
+
+        .task-card:hover {
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12);
+            transform: translateY(-2px);
+        }
+
+        .task-card.dragging {
+            opacity: 0.5;
+            transform: rotate(5deg);
+        }
+
+        .task-card.priority-high {
+            border-left-color: #ef4444;
+        }
+
+        .task-card.priority-medium {
+            border-left-color: #f59e0b;
+        }
+
+        .task-card.priority-low {
+            border-left-color: #10b981;
+        }
+
+        .task-title {
+            font-size: 0.95rem;
+            font-weight: 500;
+            color: #1a1a1a;
+            margin-bottom: 0.5rem;
+        }
+
+        .task-description {
+            font-size: 0.85rem;
+            color: #6c757d;
+            margin-bottom: 0.75rem;
+            line-height: 1.4;
+        }
+
+        .task-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .task-tags {
+            display: flex;
+            gap: 0.25rem;
+        }
+
+        .task-tag {
+            padding: 0.125rem 0.5rem;
+            background: #f0f2f5;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            color: #495057;
+        }
+
+        .task-assignee {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            background: #667eea;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .drop-zone {
+            min-height: 100px;
+            border: 2px dashed #dee2e6;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #adb5bd;
+            font-size: 0.875rem;
+            margin-top: 0.75rem;
+        }
+
+        .drop-zone.active {
+            border-color: #667eea;
+            background: rgba(102, 126, 234, 0.05);
+        }
+
+        @media (max-width: 768px) {
+            .kanban-board {
+                flex-direction: column;
+            }
+
+            .kanban-column {
+                flex: 1 1 auto;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .task-card,
+            .chip,
+            .add-task-button {
+                transition: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="kanban-container">
+        <div class="kanban-header">
+            <h1 class="kanban-title">Project Kanban Board</h1>
+            <div class="kanban-controls">
+                <div class="filter-chips" role="group" aria-label="Filter tasks">
+                    <button class="chip active">All Tasks</button>
+                    <button class="chip">My Tasks</button>
+                    <button class="chip">High Priority</button>
+                    <button class="chip">This Week</button>
+                </div>
+                <button class="add-task-button" aria-label="Add new task">+ New Task</button>
+            </div>
+        </div>
+
+        <div class="kanban-board" role="region" aria-label="Kanban board">
+            <div class="kanban-column" data-column="todo">
+                <div class="column-header">
+                    <h2 class="column-title">
+                        <span>📋 To Do</span>
+                        <span class="column-count">4</span>
+                    </h2>
+                    <div class="column-actions">
+                        <button class="column-button" aria-label="Add task to To Do">+</button>
+                        <button class="column-button" aria-label="More options">⋯</button>
+                    </div>
+                </div>
+                <div class="task-list" role="list" aria-label="To Do tasks">
+                    <div class="task-card priority-high" draggable="true" role="listitem">
+                        <h3 class="task-title">Fix critical bug in payment system</h3>
+                        <p class="task-description">Users are experiencing errors when processing credit card payments.</p>
+                        <div class="task-meta">
+                            <div class="task-tags">
+                                <span class="task-tag">Bug</span>
+                                <span class="task-tag">Urgent</span>
+                            </div>
+                            <div class="task-assignee">JD</div>
+                        </div>
+                    </div>
+                    <div class="task-card priority-medium" draggable="true" role="listitem">
+                        <h3 class="task-title">Update user documentation</h3>
+                        <p class="task-description">Add new features to the user guide and API documentation.</p>
+                        <div class="task-meta">
+                            <div class="task-tags">
+                                <span class="task-tag">Docs</span>
+                            </div>
+                            <div class="task-assignee">AS</div>
+                        </div>
+                    </div>
+                    <div class="task-card priority-low" draggable="true" role="listitem">
+                        <h3 class="task-title">Optimize database queries</h3>
+                        <p class="task-description">Review and optimize slow-running queries identified in monitoring.</p>
+                        <div class="task-meta">
+                            <div class="task-tags">
+                                <span class="task-tag">Performance</span>
+                            </div>
+                            <div class="task-assignee">BJ</div>
+                        </div>
+                    </div>
+                    <div class="task-card priority-medium" draggable="true" role="listitem">
+                        <h3 class="task-title">Design new dashboard layout</h3>
+                        <p class="task-description">Create mockups for the analytics dashboard redesign.</p>
+                        <div class="task-meta">
+                            <div class="task-tags">
+                                <span class="task-tag">Design</span>
+                                <span class="task-tag">UI</span>
+                            </div>
+                            <div class="task-assignee">CW</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="kanban-column" data-column="progress">
+                <div class="column-header">
+                    <h2 class="column-title">
+                        <span>🚀 In Progress</span>
+                        <span class="column-count">2</span>
+                    </h2>
+                    <div class="column-actions">
+                        <button class="column-button" aria-label="Add task to In Progress">+</button>
+                        <button class="column-button" aria-label="More options">⋯</button>
+                    </div>
+                </div>
+                <div class="task-list" role="list" aria-label="In Progress tasks">
+                    <div class="task-card priority-high" draggable="true" role="listitem">
+                        <h3 class="task-title">Implement user authentication</h3>
+                        <p class="task-description">Add OAuth2 authentication for Google and GitHub providers.</p>
+                        <div class="task-meta">
+                            <div class="task-tags">
+                                <span class="task-tag">Feature</span>
+                                <span class="task-tag">Security</span>
+                            </div>
+                            <div class="task-assignee">DG</div>
+                        </div>
+                    </div>
+                    <div class="task-card priority-medium" draggable="true" role="listitem">
+                        <h3 class="task-title">Write unit tests</h3>
+                        <p class="task-description">Add comprehensive test coverage for the new API endpoints.</p>
+                        <div class="task-meta">
+                            <div class="task-tags">
+                                <span class="task-tag">Testing</span>
+                            </div>
+                            <div class="task-assignee">EB</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="kanban-column" data-column="review">
+                <div class="column-header">
+                    <h2 class="column-title">
+                        <span>👀 In Review</span>
+                        <span class="column-count">1</span>
+                    </h2>
+                    <div class="column-actions">
+                        <button class="column-button" aria-label="Add task to In Review">+</button>
+                        <button class="column-button" aria-label="More options">⋯</button>
+                    </div>
+                </div>
+                <div class="task-list" role="list" aria-label="In Review tasks">
+                    <div class="task-card priority-low" draggable="true" role="listitem">
+                        <h3 class="task-title">Mobile responsive updates</h3>
+                        <p class="task-description">Ensure all pages are fully responsive on mobile devices.</p>
+                        <div class="task-meta">
+                            <div class="task-tags">
+                                <span class="task-tag">Mobile</span>
+                                <span class="task-tag">CSS</span>
+                            </div>
+                            <div class="task-assignee">FH</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="kanban-column" data-column="done">
+                <div class="column-header">
+                    <h2 class="column-title">
+                        <span>✅ Done</span>
+                        <span class="column-count">3</span>
+                    </h2>
+                    <div class="column-actions">
+                        <button class="column-button" aria-label="Archive completed tasks">📦</button>
+                        <button class="column-button" aria-label="More options">⋯</button>
+                    </div>
+                </div>
+                <div class="task-list" role="list" aria-label="Done tasks">
+                    <div class="task-card priority-medium" draggable="true" role="listitem">
+                        <h3 class="task-title">Set up CI/CD pipeline</h3>
+                        <p class="task-description">Configure automated testing and deployment workflows.</p>
+                        <div class="task-meta">
+                            <div class="task-tags">
+                                <span class="task-tag">DevOps</span>
+                            </div>
+                            <div class="task-assignee">GI</div>
+                        </div>
+                    </div>
+                    <div class="task-card priority-low" draggable="true" role="listitem">
+                        <h3 class="task-title">Update dependencies</h3>
+                        <p class="task-description">Upgrade all npm packages to latest stable versions.</p>
+                        <div class="task-meta">
+                            <div class="task-tags">
+                                <span class="task-tag">Maintenance</span>
+                            </div>
+                            <div class="task-assignee">HJ</div>
+                        </div>
+                    </div>
+                    <div class="task-card priority-high" draggable="true" role="listitem">
+                        <h3 class="task-title">Security audit</h3>
+                        <p class="task-description">Complete security assessment and fix vulnerabilities.</p>
+                        <div class="task-meta">
+                            <div class="task-tags">
+                                <span class="task-tag">Security</span>
+                            </div>
+                            <div class="task-assignee">IK</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Drag and drop functionality
+        let draggedElement = null;
+
+        document.querySelectorAll('.task-card').forEach(card => {
+            card.addEventListener('dragstart', (e) => {
+                draggedElement = e.target;
+                e.target.classList.add('dragging');
+            });
+
+            card.addEventListener('dragend', (e) => {
+                e.target.classList.remove('dragging');
+            });
+        });
+
+        document.querySelectorAll('.task-list').forEach(list => {
+            list.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                const draggingCard = document.querySelector('.dragging');
+                const afterElement = getDragAfterElement(list, e.clientY);
+
+                if (afterElement == null) {
+                    list.appendChild(draggingCard);
+                } else {
+                    list.insertBefore(draggingCard, afterElement);
+                }
+            });
+        });
+
+        function getDragAfterElement(container, y) {
+            const draggableElements = [...container.querySelectorAll('.task-card:not(.dragging)')];
+
+            return draggableElements.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = y - box.top - box.height / 2;
+
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset: offset, element: child };
+                } else {
+                    return closest;
+                }
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        }
+
+        // Update column counts
+        function updateColumnCounts() {
+            document.querySelectorAll('.kanban-column').forEach(column => {
+                const count = column.querySelectorAll('.task-card').length;
+                const countElement = column.querySelector('.column-count');
+                if (countElement) {
+                    countElement.textContent = count;
+                }
+            });
+        }
+
+        // Initialize
+        updateColumnCounts();
+    </script>
+</body>
+</html>

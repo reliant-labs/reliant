@@ -1,0 +1,139 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+import "reliant/v1/common.proto";
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+// BackgroundService handles background process management
+service BackgroundService {
+  // ListProcesses returns all background processes, optionally filtered
+  rpc ListProcesses(ListBackgroundProcessesRequest) returns (ListBackgroundProcessesResponse) {}
+  
+  // GetProcessOutput returns the stdout/stderr output of a process
+  rpc GetProcessOutput(GetProcessOutputRequest) returns (GetProcessOutputResponse) {}
+  
+  // KillProcess terminates a background process
+  rpc KillProcess(KillProcessRequest) returns (KillProcessResponse) {}
+  
+  // StreamProcessOutput streams real-time process output (stdout/stderr)
+  // Returns existing output first, then streams new lines as they arrive
+  rpc StreamProcessOutput(StreamProcessOutputRequest) returns (stream ProcessOutputEvent) {}
+}
+
+// ============================================
+// Core Types
+// ============================================
+
+// PortInfo represents port information for a background process
+message PortInfo {
+  int32 port = 1;
+  string protocol = 2;
+  string state = 3;
+  string address = 4;
+}
+
+// BackgroundProcess represents a background process
+message BackgroundProcess {
+  string id = 1;
+  string command = 2;
+  BackgroundProcessStatus status = 3;
+  string start_time = 4;
+  optional string end_time = 5;
+  optional int32 exit_code = 6;
+  string working_dir = 7;
+  optional string worktree_id = 8;
+  string session_id = 9;
+  optional string chat_id = 10;
+  repeated PortInfo ports = 11;
+}
+
+// ProcessOutput contains stdout and stderr from a process
+message ProcessOutput {
+  string stdout = 1;
+  string stderr = 2;
+}
+
+// ============================================
+// ListProcesses
+// ============================================
+
+message ListBackgroundProcessesRequest {
+  // Optional filters - if none specified, returns all processes
+  optional string worktree_id = 1;
+  optional string session_id = 2;
+  optional string chat_id = 3;
+}
+
+message ListBackgroundProcessesResponse {
+  repeated BackgroundProcess processes = 1;
+}
+
+// ============================================
+// GetProcessOutput
+// ============================================
+
+message GetProcessOutputRequest {
+  string process_id = 1;
+}
+
+message GetProcessOutputResponse {
+  string stdout = 1;
+  string stderr = 2;
+}
+
+// ============================================
+// KillProcess
+// ============================================
+
+message KillProcessRequest {
+  string process_id = 1;
+}
+
+message KillProcessResponse {
+  string message = 1;
+}
+
+// ============================================
+// StreamProcessOutput
+// ============================================
+
+message StreamProcessOutputRequest {
+  string process_id = 1;
+  // If true, skip sending existing output and only stream new lines
+  bool new_only = 2;
+}
+
+// ProcessOutputEvent represents a single output event in the stream
+message ProcessOutputEvent {
+  oneof event {
+    ProcessOutputLine line = 1;           // A single line of output
+    ProcessOutputComplete complete = 2;   // Process completed, no more output
+    ProcessOutputSnapshot snapshot = 3;   // Initial snapshot of existing output
+  }
+}
+
+// ProcessOutputLine represents a single line of process output
+message ProcessOutputLine {
+  OutputStreamType type = 1;
+  string text = 2;      // The line content
+  int64 sequence = 3;   // Monotonically increasing sequence number
+}
+
+// ProcessOutputComplete indicates the process has finished
+message ProcessOutputComplete {
+  BackgroundProcessStatus status = 1;
+  optional int32 exit_code = 2;
+  string end_time = 3;
+}
+
+// ProcessOutputSnapshot contains all existing output (sent on stream start)
+message ProcessOutputSnapshot {
+  repeated ProcessOutputLine lines = 1;
+  int64 latest_sequence = 2;  // Sequence number of last line
+  bool is_complete = 3;       // True if process already finished
+  optional BackgroundProcessStatus status = 4;
+  optional int32 exit_code = 5;
+}

@@ -1,0 +1,49 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+// ToolCallService handles operations on individual tool calls
+// This includes cancellation and background conversion for running tool executions
+service ToolCallService {
+  // CancelToolCall cancels an executing tool call
+  // This sets the chat cancellation flag which propagates to the workflow
+  rpc CancelToolCall(CancelToolCallRequest) returns (CancelToolCallResponse) {}
+  
+  // ConvertToBackground converts an executing tool call to a background process
+  // This allows the tool to continue running while the workflow can proceed
+  rpc ConvertToBackground(ConvertToBackgroundRequest) returns (ConvertToBackgroundResponse) {}
+}
+
+// CancelToolCallRequest requests cancellation of a tool call
+message CancelToolCallRequest {
+  // The tool_call_id from the content block
+  string tool_call_id = 1;
+}
+
+// CancelToolCallResponse confirms the cancellation request
+message CancelToolCallResponse {
+  bool success = 1;
+  string message = 2;
+  string tool_call_id = 3;
+  string session_id = 4;
+  string chat_id = 5;
+}
+
+// ConvertToBackgroundRequest requests converting a tool to background execution
+message ConvertToBackgroundRequest {
+  // The tool_call_id from the content block
+  string tool_call_id = 1;
+}
+
+// ConvertToBackgroundResponse confirms the background conversion
+message ConvertToBackgroundResponse {
+  bool success = 1;
+  string message = 2;
+  string process_id = 3;
+  string tool_call_id = 4;
+  string session_id = 5;
+  string chat_id = 6;
+}

@@ -1,0 +1,116 @@
+# Winner Candidate 3: Reviewer selects the third implementation
+#
+# Tests that the winner selection logic works for any candidate number.
+# The apply_winner node uses a ternary expression to map the winner number
+# to the correct worktree path:
+#   winner == 1 ? create_worktree_1.path : (winner == 2 ? create_worktree_2.path : create_worktree_3.path)
+#
+# This scenario ensures candidate 3 is reachable through that expression
+# and that the full use_winner path completes successfully.
+
+name: winner_candidate_3
+description: Reviewer selects candidate 3 as the winner via use_winner strategy
+
+events:
+  # Prompt improvement
+  - node: improve_prompt
+    output:
+      message:
+        role: assistant
+        text: "Create a REST API for user management with pagination"
+      response_text: "Create a REST API for user management with pagination"
+      tool_calls: []
+
+  # Create worktrees
+  - node: create_worktree_1
+    output:
+      id: "wt1"
+      name: "b1"
+      path: "/wt/1"
+      branch: "b1"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  - node: create_worktree_2
+    output:
+      id: "wt2"
+      name: "b2"
+      path: "/wt/2"
+      branch: "b2"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  - node: create_worktree_3
+    output:
+      id: "wt3"
+      name: "b3"
+      path: "/wt/3"
+      branch: "b3"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+
+  # Implementations
+  - node: impl_1
+    output:
+      message:
+        role: assistant
+        text: "Basic CRUD implementation, no pagination"
+      response_text: "Basic CRUD implementation, no pagination"
+
+  - node: impl_2
+    output:
+      message:
+        role: assistant
+        text: "CRUD with offset pagination, missing input validation"
+      response_text: "CRUD with offset pagination, missing input validation"
+
+  - node: impl_3
+    output:
+      message:
+        role: assistant
+        text: "Full REST API with cursor pagination, input validation, and comprehensive tests"
+      response_text: "Full REST API with cursor pagination, input validation, and comprehensive tests"
+
+  # Reviewer picks candidate 3
+  - node: review
+    output:
+      message:
+        role: assistant
+        text: |
+          Candidate 3 is the clear winner with cursor pagination,
+          proper validation, and full test coverage.
+      response_text: |
+        Candidate 3 is the clear winner with cursor pagination,
+        proper validation, and full test coverage.
+      response:
+        winner: 3
+        strategy: "use_winner"
+        confidence: 9
+        rationale: "Candidate 3 has cursor-based pagination (more scalable than offset), input validation, and comprehensive tests. The other candidates are incomplete."
+        synthesis_instructions: ""
+      completed: true
+
+  # apply_winner rsync from worktree 3
+  - node: apply_winner
+    output:
+      exit_code: 0
+      stdout: ""
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - improve_prompt
+    - save_improved_prompt
+    - create_worktree_1
+    - create_worktree_2
+    - create_worktree_3
+    - impl_1
+    - impl_2
+    - impl_3
+    - review
+    - apply_winner
+    - complete
+  not_reached:
+    - synthesizer

@@ -1,0 +1,57 @@
+# Example: Output Type Validation
+#
+# This workflow demonstrates how output expressions are type-checked.
+# Run validation to see warnings for dynamic types and errors for invalid field access.
+
+name: output-type-validation-demo
+description: Demonstrates output type validation with various scenarios
+
+inputs:
+  query:
+    type: string
+    default: "What is the capital of France?"
+
+entry: llm
+
+nodes:
+  - id: llm
+    type: call_llm
+    args:
+      model: claude-4-sonnet
+    user_prompt: "{{inputs.query}}"
+
+outputs:
+  # ✅ VALID - String type inferred from nodes.llm.message.text
+  response_text: "{{nodes.llm.message.text}}"
+  
+  # ✅ VALID - String type inferred from nodes.llm.message.content
+  response_content: "{{nodes.llm.message.content}}"
+  
+  # ✅ VALID - Boolean type from comparison expression
+  is_complete: "{{nodes.llm.stop_reason == 'end_turn'}}"
+  
+  # ✅ VALID - Integer type from size() function
+  tool_count: "{{size(nodes.llm.tool_calls)}}"
+  
+  # ✅ VALID - String type from ternary expression
+  status: "{{nodes.llm.stop_reason == 'end_turn' ? 'done' : 'continuing'}}"
+
+# Uncomment to see validation errors:
+#
+# outputs:
+#   # ❌ ERROR - 'mesage' is not a valid field on CallLLMOutput (typo)
+#   typo_error: "{{nodes.llm.mesage.text}}"
+#   
+#   # ❌ ERROR - 'unknown_field' does not exist on CallLLMOutput
+#   field_error: "{{nodes.llm.unknown_field}}"
+
+# To see dynamic type warning, create a workflow that references an external workflow:
+#
+# nodes:
+#   - id: external
+#     type: workflow
+#     ref: some-external-workflow
+#
+# outputs:
+#   # ⚠️  WARNING - dynamic type (dyn) because external workflow outputs are unknown
+#   external_data: "{{nodes.external.result}}"

@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timeline Layout</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(180deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+        }
+
+        .timeline-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 4rem 2rem;
+        }
+
+        .timeline-header {
+            text-align: center;
+            margin-bottom: 4rem;
+        }
+
+        .timeline-title {
+            font-size: 3rem;
+            font-weight: 700;
+            color: #1a1a1a;
+            margin-bottom: 1rem;
+            letter-spacing: -0.02em;
+        }
+
+        .timeline-subtitle {
+            font-size: 1.25rem;
+            color: #6c757d;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .timeline {
+            position: relative;
+            padding: 2rem 0;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 4px;
+            height: 100%;
+            background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+            border-radius: 2px;
+        }
+
+        .timeline-item {
+            position: relative;
+            margin-bottom: 4rem;
+            width: 100%;
+        }
+
+        .timeline-item::after {
+            content: '';
+            position: absolute;
+            top: 2rem;
+            width: 20px;
+            height: 20px;
+            background: white;
+            border: 4px solid #667eea;
+            border-radius: 50%;
+            z-index: 10;
+            left: 50%;
+            transform: translateX(-50%);
+            box-shadow: 0 0 0 8px rgba(102, 126, 234, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .timeline-item:hover::after {
+            transform: translateX(-50%) scale(1.2);
+            box-shadow: 0 0 0 12px rgba(102, 126, 234, 0.2);
+        }
+
+        .timeline-content {
+            position: relative;
+            width: 45%;
+            padding: 2rem;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            transition: all 0.3s ease;
+        }
+
+        .timeline-content:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+        }
+
+        .timeline-item:nth-child(odd) .timeline-content {
+            margin-left: auto;
+            margin-right: 55%;
+        }
+
+        .timeline-item:nth-child(even) .timeline-content {
+            margin-left: 55%;
+        }
+
+        .timeline-content::before {
+            content: '';
+            position: absolute;
+            top: 2rem;
+            width: 0;
+            height: 0;
+            border-style: solid;
+            border-width: 10px;
+        }
+
+        .timeline-item:nth-child(odd) .timeline-content::before {
+            right: -20px;
+            border-color: transparent transparent transparent white;
+        }
+
+        .timeline-item:nth-child(even) .timeline-content::before {
+            left: -20px;
+            border-color: transparent white transparent transparent;
+        }
+
+        .timeline-date {
+            position: absolute;
+            top: 2rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #667eea;
+            background: #f0f4ff;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+        }
+
+        .timeline-item:nth-child(odd) .timeline-date {
+            right: 47%;
+            transform: translateX(100%);
+        }
+
+        .timeline-item:nth-child(even) .timeline-date {
+            left: 47%;
+            transform: translateX(-100%);
+        }
+
+        .timeline-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .timeline-content-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #1a1a1a;
+            margin-bottom: 1rem;
+            line-height: 1.3;
+        }
+
+        .timeline-content-description {
+            color: #6c757d;
+            margin-bottom: 1.5rem;
+            line-height: 1.8;
+        }
+
+        .timeline-image {
+            width: 100%;
+            height: 200px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.125rem;
+        }
+
+        .timeline-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .timeline-tag {
+            padding: 0.25rem 0.75rem;
+            background: #f0f2f5;
+            color: #495057;
+            border-radius: 16px;
+            font-size: 0.8125rem;
+        }
+
+        .timeline-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .timeline-link:hover {
+            gap: 0.75rem;
+            color: #5568d3;
+        }
+
+        .timeline-milestone {
+            position: relative;
+            margin: 6rem 0;
+            text-align: center;
+        }
+
+        .timeline-milestone::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 10%;
+            right: 10%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #667eea, transparent);
+            z-index: 1;
+        }
+
+        .milestone-content {
+            position: relative;
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem 3rem;
+            border-radius: 50px;
+            font-size: 1.25rem;
+            font-weight: 600;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+            z-index: 10;
+        }
+
+        @media (max-width: 768px) {
+            .timeline::before {
+                left: 2rem;
+            }
+
+            .timeline-item::after {
+                left: 2rem;
+            }
+
+            .timeline-content {
+                width: calc(100% - 4rem);
+                margin-left: 4rem !important;
+                margin-right: 0 !important;
+            }
+
+            .timeline-content::before {
+                left: -20px !important;
+                border-color: transparent white transparent transparent !important;
+            }
+
+            .timeline-date {
+                position: relative;
+                top: 0;
+                left: 0 !important;
+                right: auto !important;
+                transform: none !important;
+                display: inline-block;
+                margin-bottom: 1rem;
+            }
+
+            .timeline-milestone::before {
+                display: none;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .timeline-content,
+            .timeline-item::after,
+            .timeline-link {
+                transition: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="timeline-container">
+        <header class="timeline-header">
+            <h1 class="timeline-title">Our Journey</h1>
+            <p class="timeline-subtitle">A chronicle of milestones, achievements, and the moments that shaped our story</p>
+        </header>
+
+        <div class="timeline" role="region" aria-label="Company timeline">
+            <div class="timeline-item">
+                <span class="timeline-date">January 2024</span>
+                <div class="timeline-content">
+                    <span class="timeline-badge">Launch</span>
+                    <h2 class="timeline-content-title">Product Launch 2.0</h2>
+                    <p class="timeline-content-description">
+                        After months of development and testing, we launched version 2.0 of our flagship product,
+                        introducing revolutionary features that redefined the industry standard.
+                    </p>
+                    <div class="timeline-tags">
+                        <span class="timeline-tag">Product</span>
+                        <span class="timeline-tag">Innovation</span>
+                        <span class="timeline-tag">Release</span>
+                    </div>
+                    <a href="#" class="timeline-link">
+                        Read more
+                        <span aria-hidden="true">→</span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="timeline-item">
+                <span class="timeline-date">November 2023</span>
+                <div class="timeline-content">
+                    <div class="timeline-image" role="img" aria-label="Event image">
+                        Event Image
+                    </div>
+                    <span class="timeline-badge">Partnership</span>
+                    <h2 class="timeline-content-title">Strategic Alliance Formed</h2>
+                    <p class="timeline-content-description">
+                        Partnered with industry leaders to expand our global reach and enhance our service offerings,
+                        marking a significant milestone in our growth journey.
+                    </p>
+                    <a href="#" class="timeline-link">
+                        Learn about our partners
+                        <span aria-hidden="true">→</span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="timeline-item">
+                <span class="timeline-date">September 2023</span>
+                <div class="timeline-content">
+                    <span class="timeline-badge">Award</span>
+                    <h2 class="timeline-content-title">Excellence Award Recognition</h2>
+                    <p class="timeline-content-description">
+                        Received the prestigious Industry Excellence Award for our innovative approach to solving
+                        complex challenges and commitment to customer success.
+                    </p>
+                    <div class="timeline-tags">
+                        <span class="timeline-tag">Award</span>
+                        <span class="timeline-tag">Recognition</span>
+                        <span class="timeline-tag">Achievement</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="timeline-milestone">
+                <div class="milestone-content">
+                    🎉 1 Million Users Milestone
+                </div>
+            </div>
+
+            <div class="timeline-item">
+                <span class="timeline-date">June 2023</span>
+                <div class="timeline-content">
+                    <span class="timeline-badge">Expansion</span>
+                    <h2 class="timeline-content-title">International Expansion</h2>
+                    <p class="timeline-content-description">
+                        Opened new offices in Europe and Asia, establishing our presence in key international markets
+                        and bringing our solutions to a global audience.
+                    </p>
+                    <div class="timeline-image" role="img" aria-label="Office locations">
+                        Global Offices
+                    </div>
+                </div>
+            </div>
+
+            <div class="timeline-item">
+                <span class="timeline-date">March 2023</span>
+                <div class="timeline-content">
+                    <span class="timeline-badge">Team</span>
+                    <h2 class="timeline-content-title">100th Team Member</h2>
+                    <p class="timeline-content-description">
+                        Welcomed our 100th team member, marking a significant growth milestone. Our diverse team
+                        continues to drive innovation and excellence in everything we do.
+                    </p>
+                    <div class="timeline-tags">
+                        <span class="timeline-tag">Team</span>
+                        <span class="timeline-tag">Growth</span>
+                        <span class="timeline-tag">Culture</span>
+                    </div>
+                    <a href="#" class="timeline-link">
+                        Meet our team
+                        <span aria-hidden="true">→</span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="timeline-item">
+                <span class="timeline-date">January 2023</span>
+                <div class="timeline-content">
+                    <span class="timeline-badge">Research</span>
+                    <h2 class="timeline-content-title">R&D Center Established</h2>
+                    <p class="timeline-content-description">
+                        Launched our dedicated Research & Development center, focusing on next-generation technologies
+                        and pushing the boundaries of what's possible in our industry.
+                    </p>
+                </div>
+            </div>
+
+            <div class="timeline-milestone">
+                <div class="milestone-content">
+                    🚀 Company Founded - 2020
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,58 @@
+# Max Turns Exhausted: Loop exits without response tool being called
+#
+# Tests the max_turns safety limit:
+# 1. max_turns is set low (3)
+# 2. LLM responds with text only on every iteration (never calls tools)
+# 3. remind_response fires each time
+# 4. After 3 iterations, loop exits because iter.iteration >= max_turns
+# 5. completed is NEVER set to true (response tool was never called)
+#
+# This verifies:
+# - The loop respects the max_turns limit
+# - The workflow terminates gracefully even without a response tool call
+# - output.completed remains false when response tool is never invoked
+#
+# Loop condition: outputs.completed != true && iter.iteration < inputs.max_turns
+
+name: max_turns_exhausted
+description: Loop exits when max_turns is reached without the response tool being called
+
+inputs:
+  mode: "auto"
+  max_turns: 3  # Low limit for testing
+  response_tool_name: "submit_response"
+
+events:
+  # Iteration 1: LLM responds without tools
+  - node: agent_loop.call_llm
+    type: llm_response
+    text: "I'm thinking about how to approach this."
+    # No tool_calls - remind_response fires
+
+  # Iteration 2: LLM still doesn't use tools
+  - node: agent_loop.call_llm
+    type: llm_response
+    text: "Let me analyze the problem more."
+    # No tool_calls - remind_response fires again
+
+  # Iteration 3 (last): LLM still doesn't call response tool
+  - node: agent_loop.call_llm
+    type: llm_response
+    text: "I need more time to think."
+    # No tool_calls - remind_response fires
+    # Loop exits: iter.iteration (3) is NOT < max_turns (3)
+
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.remind_response  # Fired on every iteration
+  not_reached:
+    - agent_loop.execute_tools    # Never called - LLM never used tools
+    - agent_loop.approval
+    - agent_loop.compact
+
+  # completed should be false since response tool was never called
+  outputs:
+    completed: false

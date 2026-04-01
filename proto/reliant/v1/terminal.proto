@@ -1,0 +1,112 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+// TerminalService provides terminal session management and streaming.
+service TerminalService {
+  // ListSessions returns all active terminal sessions
+  rpc ListSessions(ListTerminalSessionsRequest) returns (ListTerminalSessionsResponse) {}
+
+  // CloseSession closes a specific terminal session
+  rpc CloseSession(CloseTerminalSessionRequest) returns (CloseTerminalSessionResponse) {}
+
+  // StreamTerminal provides bidi streaming terminal I/O (replaces WebSocket)
+  rpc StreamTerminal(stream TerminalStreamInput) returns (stream TerminalStreamOutput) {}
+}
+
+// TerminalSession represents an active terminal session
+message TerminalSession {
+  string id = 1;
+  string working_dir = 2;
+  string created_at = 3;          // ISO 8601 format
+  string last_active = 4;         // ISO 8601 format
+  optional int32 pid = 5;         // Process ID if available
+}
+
+// ListTerminalSessionsRequest lists terminal sessions
+message ListTerminalSessionsRequest {
+  // No filters needed - returns all sessions
+}
+
+// ListTerminalSessionsResponse returns the list of sessions
+message ListTerminalSessionsResponse {
+  repeated TerminalSession sessions = 1;
+  int32 total = 2;
+}
+
+// CloseTerminalSessionRequest closes a terminal session
+message CloseTerminalSessionRequest {
+  string session_id = 1;          // Required: session to close
+}
+
+// CloseTerminalSessionResponse confirms session closure
+message CloseTerminalSessionResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// ============================================
+// Bidi Streaming Terminal Messages
+// ============================================
+
+// TerminalStreamInput is the client-to-server message for the StreamTerminal RPC.
+message TerminalStreamInput {
+  oneof input {
+    TerminalCreateRequest create = 1;       // Create new session
+    TerminalDataInput data = 2;             // Send input to session
+    TerminalResizeInput resize = 3;         // Resize terminal
+    TerminalCloseRequest close_session = 4; // Close session
+  }
+}
+
+message TerminalCreateRequest {
+  string working_dir = 1;
+}
+
+message TerminalDataInput {
+  string session_id = 1;
+  bytes data = 2;
+}
+
+message TerminalResizeInput {
+  string session_id = 1;
+  uint32 cols = 2;
+  uint32 rows = 3;
+}
+
+message TerminalCloseRequest {
+  string session_id = 1;
+}
+
+// TerminalStreamOutput is the server-to-client message for the StreamTerminal RPC.
+message TerminalStreamOutput {
+  oneof output {
+    TerminalSessionCreated created = 1;
+    TerminalDataOutput data = 2;
+    TerminalSessionClosed closed = 3;
+    TerminalError error = 4;
+  }
+}
+
+message TerminalSessionCreated {
+  string session_id = 1;
+  int32 pid = 2;
+}
+
+message TerminalDataOutput {
+  string session_id = 1;
+  bytes data = 2;
+}
+
+message TerminalSessionClosed {
+  string session_id = 1;
+  int32 exit_code = 2;
+}
+
+message TerminalError {
+  string session_id = 1;
+  string message = 2;
+}

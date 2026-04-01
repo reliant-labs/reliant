@@ -1,0 +1,49 @@
+# Evaluate Retry: Evaluate fails, says refactor, refactor fixes, second attempt passes
+
+name: evaluate_fails_then_passes
+description: Evaluate fails, triggers refactor, passes on retry
+
+inputs:
+  steps: [implement]
+
+events:
+  - node: impl_loop.attempt.implement
+    output:
+      response_text: "Initial implementation attempt."
+
+  - node: impl_loop.attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "refactor"
+        feedback: "Implementation has critical issues: null pointer in handler, missing validation. Add null check before accessing request.body in the handler. Add validation middleware for the incoming request payload."
+
+  - node: impl_loop.attempt.refactor
+    output:
+      response_text: "Added null check in handler and input validation middleware."
+
+  - node: impl_loop.attempt.implement
+    output:
+      response_text: "Built on refactored code. All issues resolved."
+
+  - node: impl_loop.attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Implementation is clean and complete."
+
+expect:
+  outcome: completed
+  reached:
+    - planning
+    - impl_loop
+    - impl_loop.attempt.implement
+    - impl_loop.attempt.join_checks
+    - impl_loop.attempt.capture_diff
+    - impl_loop.attempt.review
+    - impl_loop.attempt.refactor
+    - success
+  not_reached:
+    - planning.plan
+    - write_tests

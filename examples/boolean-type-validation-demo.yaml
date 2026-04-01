@@ -1,0 +1,132 @@
+# Boolean Type Validation Demonstration
+# This workflow demonstrates the new boolean type validation for conditions
+
+name: boolean-type-validation-demo
+description: |
+  Demonstrates valid and invalid condition expressions.
+  The validator will ensure all conditions return boolean types.
+
+entry: initial_check
+
+inputs:
+  retry_enabled:
+    type: boolean
+    default: true
+    description: Whether retries are enabled
+    
+  max_retries:
+    type: integer
+    default: 3
+    description: Maximum number of retries allowed
+    
+  user_message:
+    type: string
+    default: "Hello!"
+    description: Message to process
+
+nodes:
+  # ✓ Valid: Node with boolean input condition
+  - id: initial_check
+    type: call_llm
+    condition: "inputs.retry_enabled"  # Valid: boolean input
+    model:
+      tags: [flagship]
+    messages:
+      - role: user
+        content: "{{inputs.user_message}}"
+  
+  # ✓ Valid: Node with comparison condition
+  - id: retry_check
+    type: call_llm
+    condition: "inputs.max_retries > 0"  # Valid: comparison returns bool
+    model:
+      tags: [flagship]
+    messages:
+      - role: user
+        content: "Retry check"
+  
+  # ✓ Valid: Node with complex boolean expression
+  - id: complex_check
+    type: call_llm
+    condition: "inputs.retry_enabled && inputs.max_retries > 0"  # Valid: logical AND
+    model:
+      tags: [flagship]
+    messages:
+      - role: user
+        content: "Complex check"
+  
+  # Tool execution node
+  - id: execute_tools
+    type: execute_tools
+    tool_calls: "{{nodes.initial_check.tool_calls}}"
+  
+  # Final step
+  - id: done
+    type: call_llm
+    model:
+      tags: [flagship]
+    messages:
+      - role: assistant
+        content: "{{nodes.initial_check.response_text}}"
+
+edges:
+  # ✓ Valid: Edge with size comparison
+  - from: initial_check
+    cases:
+      - to: execute_tools
+        condition: "size(nodes.initial_check.tool_calls) > 0"  # Valid: size() > 0 returns bool
+      - to: complex_check
+        condition: "nodes.initial_check.input_tokens < 1000"   # Valid: comparison returns bool
+    default: done
+  
+  # ✓ Valid: Edge with string comparison
+  - from: execute_tools
+    cases:
+      - to: retry_check
+        condition: "nodes.execute_tools.message.role == 'assistant'"  # Valid: equality returns bool
+    default: done
+  
+  # ✓ Valid: Edge with logical OR
+  - from: retry_check
+    cases:
+      - to: done
+        condition: "nodes.retry_check.input_tokens > 500 || inputs.max_retries < 1"  # Valid: OR returns bool
+  
+  - from: complex_check
+    default: done
+
+outputs:
+  result: "{{nodes.done.response_text}}"
+  tool_count: "{{size(nodes.initial_check.tool_calls)}}"
+  
+  
+# ============================================================================
+# INVALID EXAMPLES (will cause validation errors)
+# ============================================================================
+# 
+# The following would be INVALID and caught by validation:
+#
+# nodes:
+#   - id: bad_node
+#     type: call_llm
+#     condition: "inputs.max_retries"  # ✗ Invalid: returns int, not bool
+#     # Error: condition must return bool, but expression returns 'int'
+#     # Suggestion: Use a comparison like: inputs.max_retries > 0
+#
+# edges:
+#   - from: initial_check
+#     cases:
+#       - to: done
+#         condition: "size(nodes.initial_check.tool_calls)"  # ✗ Invalid: returns int
+#         # Error: condition must return bool, but expression returns 'int'
+#         # Suggestion: Use a comparison like: size(nodes.initial_check.tool_calls) > 0
+#
+#       - to: done
+#         condition: "nodes.initial_check.response_text"  # ✗ Invalid: returns string
+#         # Error: condition must return bool, but expression returns 'string'
+#         # Suggestion: Use a comparison like: nodes.initial_check.response_text != ''
+#
+#       - to: done
+#         condition: "inputs.user_message"  # ✗ Invalid: returns string
+#         # Error: condition must return bool, but expression returns 'string'
+#         # Suggestion: Use a comparison like: inputs.user_message != '' or inputs.user_message == 'expected_value'

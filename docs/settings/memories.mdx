@@ -1,0 +1,125 @@
+---
+title: "Memories & Context"
+description: "Configure persistent context files that inform every conversation"
+---
+
+Memories are markdown files that provide persistent context to every conversation in a project. They're automatically loaded and included in the system prompt, giving the AI assistant relevant background about your codebase, conventions, and preferences.
+
+## Context Files
+
+Reliant discovers two context files in your project root:
+
+| File | Purpose | Git Status |
+| --- | --- | --- |
+| `reliant.md` | **Project context** — shared guidelines, architecture notes, conventions | Commit to repository |
+| `reliant.local.md` | **Personal context** — your local notes, preferences, shortcuts | Add to .gitignore |
+
+Both files are automatically loaded when present. Their contents are concatenated and included in every conversation.
+
+## What to Include
+
+### Project Context (`reliant.md`)
+
+Include information that benefits everyone working on the project:
+
+```markdown
+# Project Overview
+
+Brief description of what this project does and its architecture.
+
+## Key Patterns
+
+- We use repository pattern for data access
+- All API endpoints go through the `/api/v1` prefix
+- Components follow atomic design (atoms, molecules, organisms)
+
+## Important Files
+
+- `src/config.ts` - All configuration
+- `src/api/routes.ts` - API route definitions
+- `src/db/schema.ts` - Database schema
+
+## Conventions
+
+- Use `pnpm` not `npm`
+- Tests go in `__tests__` directories
+- Prefer named exports over default exports
+```
+
+### Personal Context (`reliant.local.md`)
+
+Include your personal preferences and local setup details:
+
+```markdown
+# My Setup
+
+## Local Services
+
+- Database: `docker compose up db`
+- Backend: `pnpm dev:api` on port 3001
+- Frontend: `pnpm dev` on port 3000
+
+## Preferences
+
+- I prefer verbose explanations
+- Always suggest tests for new code
+- I'm working on the authentication feature this week
+
+## Notes
+
+- The legacy auth system is in `src/auth/legacy` - don't modify
+- Sean owns the billing module
+```
+
+## Auto-Discovery
+
+Reliant searches for context files in:
+
+1. Your project root directory
+2. Parent directories (for monorepos)
+
+Files are discovered in this order and concatenated:
+
+1. `reliant.md` from root
+2. `reliant.local.md` from root
+
+> [!TIP]
+> **Monorepo tip**: Place a `reliant.md` in your monorepo root with shared context, and additional `reliant.md` files in each package for package-specific context.
+
+## Best Practices
+
+**Keep it concise** — Context files are included in every conversation. Large files consume tokens without proportional benefit.
+
+**Update regularly** — As your project evolves, keep context files current. Outdated information is worse than no information.
+
+**Separate concerns** — Put team knowledge in `reliant.md`, personal preferences in `reliant.local.md`.
+
+**Use structure** — Headings and bullet points are easier to scan than prose.
+
+**Avoid secrets** — Never put API keys, passwords, or sensitive data in context files.
+
+## Global Context
+
+You can also add global context that applies to all projects. Create a `reliant.md` file in your global config directory:
+
+```text
+~/.reliant/reliant.md
+```
+
+This is useful for personal preferences that should apply everywhere:
+
+```markdown
+# Global Preferences
+
+- I prefer concise responses
+- Always use TypeScript, never plain JavaScript
+- Include examples with explanations
+```
+
+Global context is loaded before project context, so project-specific context can override global defaults.
+
+## Related Topics
+
+- [Model Configuration](/settings/model-config) — Configure models and providers
+- [MCP Servers](/settings/mcp-servers) — Extend capabilities with external tools
+- [Custom Workflows](/workflows/custom-workflows) — Create specialized workflows

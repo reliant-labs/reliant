@@ -1,0 +1,333 @@
+---
+title: "Scenario Testing"
+description: "Test workflows with simulated events before deploying them"
+---
+
+Scenario testing lets you verify workflow behavior without running real LLM calls or tool executions. You define simulated events such as mocked LLM responses and tool results, then assert expected outcomes.
+
+## How It Works
+
+The scenario simulator executes your workflow's node graph, but instead of calling real activities, it uses your mocked events to produce node outputs. It follows the same edge routing, condition evaluation, and loop logic as the real executor.
+
+## Scenario Structure
+
+A scenario YAML file defines:
+
+```yaml
+name: my_test_scenario
+description: "What this tests"
+
+# Optional: override workflow inputs
+inputs:
+  max_turns: 5
+
+# Optional: start execution at a specific node (for partial testing)
+start_at: execute_tools
+
+# Optional: pre-populate node outputs (for partial testing)
+state:
+  call_llm:
+    tool_calls: [{name: bash, input: {command: ls}}]
+
+# Simulated events (required)
+events:
+  - type: llm_response
+    text: "Hello!"
+
+# Expected outcome (optional but recommended)
+expect:
+  outcome: completed
+  reached: [call_llm, save_result]
+```
+
+## Event Types
+
+| Type | Fields | Description |
+|------|--------|-------------|
+| `llm_response` | `text`, `tool_calls` | Simulates an LLM returning a response |
+| `tool_result` | `tool`, `output` | Simulates a tool returning results |
+| `tool_error` | `tool`, `error` | Simulates a tool failing |
+| `llm_error` | `error` | Simulates an LLM API error |
+| `user_input` | `user_text` | Simulates user sending a message |
+
+### Event Fields
+
+```yaml
+events:
+  # LLM responds with text only (no tool calls)
+  - type: llm_response
+    text: "I'm done, here's the answer."
+
+  # LLM responds with tool calls
+  - type: llm_response
+    text: "Let me check that..."
+    tool_calls:
+      - name: bash
+        input: {command: "ls -la"}
+      - name: read_file
+        input: {path: "/tmp/test.txt"}
+
+  # Tool returns successfully
+  - type: tool_result
+    tool: bash
+    output: {result: "file1.txt\nfile2.txt"}
+
+  # Tool returns an error
+  - type: tool_error
+    tool: bash
+    error: "Permission denied"
+
+  # User sends input
+  - type: user_input
+    user_text: "Yes, please continue"
+```
+
+## Targeting Nodes
+
+By default, events are consumed sequentially — the first triggered node gets the first event, and so on. Use the `node` field to target a specific node:
+
+```yaml
+events:
+  - node: call_llm
+    type: llm_response
+    text: "Hello!"
+  - node: execute_tools
+    type: tool_result
+    tool: bash
+    output: {result: "ok"}
+```
+
+Multiple events for the same node are consumed in order each time that node is triggered.
+
+### Inner Nodes (Loops and Sub-Workflows)
+
+For workflows with inline loops or inline sub-workflows using `type: workflow` with `inline:`, you can target individual nodes inside them using dot-separated qualified IDs:
+
+```yaml
+events:
+  # Target the call_llm node inside agent_loop
+  - node: agent_loop.call_llm
+    type: llm_response
+    tool_calls: [{name: bash, input: {command: ls}}]
+
+  # Target execute_tools inside agent_loop
+  - node: agent_loop.execute_tools
+    type: tool_result
+    tool: bash
+    output: {result: "file.txt"}
+
+  # Second iteration: call_llm responds without tools (exits loop)
+  - node: agent_loop.call_llm
+    type: llm_response
+    text: "All done!"
+```
+
+The same dot-notation works for inline workflow nodes:
+
+```yaml
+events:
+  # Target the plan node inside a planning sub-workflow
+  - node: planning.plan
+    output:
+      response_text: "Here is the plan."
+
+  # Target the criticize node inside the same sub-workflow
+  - node: planning.criticize
+    output:
+      response_text: "Critique of the plan."
+```
+
+For nested structures, chain the IDs:
+
+```yaml
+events:
+  - node: outer_loop.inner_loop.call_llm
+    type: llm_response
+    text: "Inner step done"
+```
+
+### How inline simulation works
+
+For **inline loops** with an `inline:` definition, the simulator:
+1. Creates a sub-state-machine for the inline workflow
+2. Executes each inner node individually per iteration
+3. Evaluates conditions on inner nodes and skips those with false conditions
+4. Evaluates edges within the loop to determine node ordering
+5. Calls the mocker with qualified IDs like `loop_id.inner_node_id`
+6. Evaluates the `while` condition after each iteration
+7. If the sub-workflow declares `outputs:`, evaluates them for the `while` condition
+
+For **inline workflow nodes** with `type: workflow` and `inline:`, the simulator:
+1. Creates a sub-state-machine for the inline workflow
+2. Evaluates conditions on each inner node and tracks false conditions as skipped
+3. Executes inner nodes using qualified IDs like `workflow_id.inner_node_id`
+4. Evaluates the sub-workflow's `outputs:` expressions if declared
+
+For **referenced** loops or workflows with `ref:` to an external workflow, the simulator mocks the entire node as a black box using the ref name as the mock ID, since external workflows cannot be loaded in the simulator.
+
+## Expectations
+
+The `expect` section defines assertions:
+
+```yaml
+expect:
+  # Expected outcome
+  outcome: completed  # or "error"
+
+  # Nodes that must be executed
+  reached:
+    - call_llm
+    - agent_loop.execute_tools  # inner loop nodes supported
+    - planning.plan             # inline workflow inner nodes supported
+    - save_result
+
+  # Nodes that must NOT be executed
+  not_reached:
+    - error_handler
+    - agent_loop.fallback_step
+
+  # Nodes that must have been skipped (condition evaluated to false)
+  skipped:
+    - planning.criticize        # skipped because 'critique' not in steps
+    - planning.revise
+    - impl_loop.lint            # skipped because 'lint' not in steps
+
+  # Assert specific node output values
+  node_outputs:
+    call_llm:
+      tool_calls: []
+    agent_loop.call_llm:  # inner loop nodes supported
+      message:
+        text: "Done!"
+
+  # Assert error message content
+  error_contains: "CEL evaluation"
+
+  # Assert which node produced the error
+  error_node: call_llm
+```
+
+## Partial Testing
+
+Use `start_at` and `state` to test from a specific point in the workflow:
+
+```yaml
+name: test_from_execute_tools
+start_at: execute_tools
+
+# Pre-populate prior node outputs
+state:
+  call_llm:
+    tool_calls:
+      - name: bash
+        input: {command: ls}
+    message:
+      role: assistant
+      text: "Let me check"
+
+events:
+  - type: tool_result
+    tool: bash
+    output: {result: "file.txt"}
+
+expect:
+  outcome: completed
+  reached: [execute_tools, save_result]
+  not_reached: [call_llm]  # skipped because we started after it
+```
+
+## Loop Testing Patterns
+
+### Single Iteration (Exit Immediately)
+
+```yaml
+name: loop_exits_immediately
+events:
+  - node: agent_loop.call_llm
+    type: llm_response
+    text: "No tools needed"
+expect:
+  outcome: completed
+  reached: [agent_loop.call_llm, agent_loop.save_result]
+  not_reached: [agent_loop.execute_tools]
+```
+
+### Multi-Iteration Loop
+
+Provide events for each iteration. The simulator consumes events per-node sequentially:
+
+```yaml
+name: loop_three_iterations
+events:
+  # Iteration 1: calls tool
+  - node: agent_loop.call_llm
+    type: llm_response
+    tool_calls: [{name: bash, input: {command: "echo 1"}}]
+  - node: agent_loop.execute_tools
+    type: tool_result
+    tool: bash
+    output: {result: "1"}
+
+  # Iteration 2: calls another tool
+  - node: agent_loop.call_llm
+    type: llm_response
+    tool_calls: [{name: bash, input: {command: "echo 2"}}]
+  - node: agent_loop.execute_tools
+    type: tool_result
+    tool: bash
+    output: {result: "2"}
+
+  # Iteration 3: exits loop
+  - node: agent_loop.call_llm
+    type: llm_response
+    text: "All done!"
+
+expect:
+  outcome: completed
+  reached: [agent_loop, agent_loop.call_llm, agent_loop.execute_tools]
+```
+
+### Testing Loop Output Routing
+
+When a loop's inline workflow declares `outputs:`, those evaluated outputs are available for downstream edge conditions:
+
+```yaml
+# In the workflow YAML:
+# nodes:
+#   - id: agent_loop
+#     type: loop
+#     while: "size(outputs.tool_calls) > 0"
+#     inline:
+#       outputs:
+#         status: "{{nodes.call_llm.message.text}}"
+#       ...
+# edges:
+#   - from: agent_loop
+#     cases:
+#       - to: success
+#         condition: "nodes.agent_loop.status == 'done'"
+#     default: fallback
+
+name: loop_routes_to_success
+events:
+  - node: agent_loop.call_llm
+    type: llm_response
+    text: "done"
+expect:
+  reached: [agent_loop, success]
+  not_reached: [fallback]
+```
+
+## Using Scenario Tools
+
+In the workflow builder, use these tools to manage scenarios:
+
+| Tool | Usage |
+|------|-------|
+| `list_scenarios` | See all scenarios and their status |
+| `view_scenario` | Examine a scenario's full YAML |
+| `create_scenario` | Create a new scenario and run it automatically |
+| `edit_scenario` | Make targeted edits to a scenario |
+| `run_scenario` | Re-run a scenario after workflow changes |
+
+Scenarios are stored alongside the workflow and run instantly without network calls or LLM API usage.

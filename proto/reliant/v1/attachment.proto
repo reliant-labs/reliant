@@ -1,0 +1,106 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+
+// AttachmentService handles file attachment operations
+service AttachmentService {
+  // UploadAttachment uploads a new binary file attachment (for images)
+  rpc UploadAttachment(UploadAttachmentRequest) returns (UploadAttachmentResponse) {}
+  
+  // CreateFileReference creates a reference to a local file (for text files)
+  rpc CreateFileReference(CreateFileReferenceRequest) returns (CreateFileReferenceResponse) {}
+  
+  // GetAttachment retrieves an attachment by ID (includes file content)
+  rpc GetAttachment(GetAttachmentRequest) returns (GetAttachmentResponse) {}
+  
+  // DeleteAttachment removes an attachment by ID
+  rpc DeleteAttachment(DeleteAttachmentRequest) returns (DeleteAttachmentResponse) {}
+}
+
+// ============================================
+// Extended Attachment Info (includes DB fields not in chat.proto Attachment)
+// ============================================
+
+// AttachmentInfo contains full attachment metadata including storage details
+message AttachmentInfo {
+  string id = 1;
+  string user_id = 2;
+  string filename = 3;
+  int64 size = 4;
+  string mime_type = 5;
+  optional string file_hash = 6;
+  string file_path = 7;
+  string created_at = 8;
+  string updated_at = 9;
+  // URL for frontend compatibility (constructed from ID)
+  string url = 10;
+  // Type of attachment: "image" (binary uploaded) or "file_reference" (path to local file)
+  string attachment_type = 11;
+}
+
+// ============================================
+// UploadAttachment
+// ============================================
+
+message UploadAttachmentRequest {
+  // Original filename
+  string filename = 1;
+  // File content as bytes (base64 encoded in JSON transport)
+  bytes content = 2;
+  // MIME type of the file
+  string mime_type = 3;
+}
+
+message UploadAttachmentResponse {
+  // The created attachment with metadata
+  AttachmentInfo attachment = 1;
+}
+
+// ============================================
+// GetAttachment
+// ============================================
+
+message GetAttachmentRequest {
+  string attachment_id = 1;
+}
+
+message GetAttachmentResponse {
+  // Attachment metadata
+  AttachmentInfo attachment = 1;
+  // File content as bytes (base64 encoded in JSON transport)
+  bytes content = 2;
+}
+
+// ============================================
+// DeleteAttachment
+// ============================================
+
+message DeleteAttachmentRequest {
+  string attachment_id = 1;
+}
+
+message DeleteAttachmentResponse {
+  string message = 1;
+}
+
+// ============================================
+// CreateFileReference (for text files - store path only)
+// ============================================
+
+message CreateFileReferenceRequest {
+  // Absolute path to the file on disk (kept as metadata for display)
+  string file_path = 1;
+  // Original filename (basename of the path)
+  string filename = 2;
+  // File content as bytes — captured at attach time so the server doesn't need filesystem access
+  bytes content = 3;
+}
+
+message CreateFileReferenceResponse {
+  // The created file reference with metadata
+  AttachmentInfo attachment = 1;
+}

@@ -1,0 +1,166 @@
+# Scenario tests for presets-demo workflow
+#
+# This workflow is simple - it has one node (demo_step) that calls the builtin://agent workflow
+# with a "researcher" preset applied. The workflow passes mode input to the sub-workflow.
+#
+# Since demo_step is a workflow node (calling another workflow), the simulation tests
+# focus on verifying the node is reached and completes with different inputs.
+
+---
+# Happy path: Demo step completes with auto mode
+name: auto_mode_completion
+description: Demo step executes with auto mode preset
+inputs:
+  mode: "auto"
+events:
+  # The demo_step calls builtin://agent which will have its own LLM call
+  # We simulate the agent responding without tool calls
+  - node: demo_step
+    output:
+      message:
+        role: assistant
+        text: "As a researcher, I've analyzed the problem and here's my conclusion."
+      response_text: "As a researcher, I've analyzed the problem and here's my conclusion."
+      tool_calls: []
+expect:
+  outcome: completed
+  reached:
+    - demo_step
+
+---
+# Manual mode passed through
+name: manual_mode_passthrough
+description: Demo step passes manual mode to the sub-workflow
+inputs:
+  mode: "manual"
+events:
+  # Agent in manual mode responds
+  - node: demo_step
+    output:
+      message:
+        role: assistant
+        text: "I'll wait for your approval before proceeding."
+      response_text: "I'll wait for your approval before proceeding."
+      tool_calls: []
+expect:
+  outcome: completed
+  reached:
+    - demo_step
+
+---
+# Plan mode for read-only analysis
+name: plan_mode_readonly
+description: Demo step runs with plan mode restricting to plan-tagged tools
+inputs:
+  mode: "plan"
+events:
+  # Agent provides analysis without modifications
+  - node: demo_step
+    output:
+      message:
+        role: assistant
+        text: "Based on my analysis of the codebase structure..."
+      response_text: "Based on my analysis of the codebase structure..."
+      tool_calls: []
+expect:
+  outcome: completed
+  reached:
+    - demo_step
+
+---
+# Sub-workflow makes tool calls
+name: researcher_with_tool_calls
+description: Researcher preset makes tool calls to gather information
+inputs:
+  mode: "auto"
+events:
+  # First turn: researcher wants to explore
+  - node: demo_step
+    output:
+      message:
+        role: assistant
+        text: "Let me investigate the codebase."
+      response_text: "Let me investigate the codebase."
+      tool_calls:
+        - id: call_0
+          name: glob
+          input:
+            pattern: "**/*.go"
+  # Tool result
+  - node: demo_step
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_0
+          content: '["main.go", "handler.go", "util.go"]'
+      thread_token_count: 500
+  # Second turn: provides findings
+  - node: demo_step
+    output:
+      message:
+        role: assistant
+        text: "I found 3 Go files in the project. The structure suggests a simple service."
+      response_text: "I found 3 Go files in the project. The structure suggests a simple service."
+      tool_calls: []
+expect:
+  outcome: completed
+  reached:
+    - demo_step
+
+---
+# LLM error handling
+name: llm_error_in_subworkflow
+description: LLM error in the sub-workflow is handled
+inputs:
+  mode: "auto"
+events:
+  - node: demo_step
+    output:
+      error: "API rate limit exceeded"
+expect:
+  outcome: error
+  error_contains: "rate limit"
+  error_node: demo_step
+
+---
+# Tool error handling - agent recovers
+name: tool_error_recovery
+description: Tool error in the sub-workflow, agent recovers
+inputs:
+  mode: "auto"
+events:
+  - node: demo_step
+    output:
+      message:
+        role: assistant
+        text: "Let me read that file."
+      response_text: "Let me read that file."
+      tool_calls:
+        - id: call_0
+          name: view
+          input:
+            file_path: "/nonexistent/path.go"
+  - node: demo_step
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_0
+          content: "Error: file not found: /nonexistent/path.go"
+          is_error: true
+      thread_token_count: 500
+  # Agent recovers from error
+  - node: demo_step
+    output:
+      message:
+        role: assistant
+        text: "The file doesn't exist. Let me try a different approach."
+      response_text: "The file doesn't exist. Let me try a different approach."
+      tool_calls: []
+expect:
+  outcome: completed
+  reached:
+    - demo_step

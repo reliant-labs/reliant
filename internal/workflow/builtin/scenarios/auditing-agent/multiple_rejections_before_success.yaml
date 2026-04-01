@@ -1,0 +1,140 @@
+# Multiple Rejections: Auditor denies multiple times before agent succeeds
+#
+# Tests repeated denial/retry path:
+# 1. Iteration 1: main_agent proposes pkill (hard deny rule), auditor rejects
+# 2. Iteration 2: main_agent tries kill -9 (still risky), auditor rejects again
+# 3. Iteration 3: main_agent uses BashList + BashKill (correct approach), approved
+# 4. Tool executes, loop continues
+# 5. Iteration 4: main_agent responds with text, approved, loop exits
+#
+# This verifies the workflow handles multiple consecutive rejections gracefully.
+# Each rejection injects guidance that accumulates in the thread, helping the
+# agent converge on an acceptable approach.
+
+name: multiple_rejections_before_success
+description: Auditor rejects twice before agent finds an acceptable approach
+
+events:
+  # Iteration 1: main_agent tries pkill (violates hard deny rule)
+  - node: audited_loop.main_agent
+    type: llm_response
+    text: "Let me kill that process."
+    tool_calls:
+      - name: bash
+        input:
+          command: "pkill -f server"
+
+  # audit_check rejects — pkill is a hard deny
+  - node: audited_loop.audit_check
+    type: llm_response
+    text: ""
+    tool_calls:
+      - name: audit
+        input:
+          approved: false
+          guidance: "DENIED: pkill is not allowed. Use BashList to find the process, then BashKill to stop it."
+
+  # execute_audit saves denial guidance to thread
+  - node: audited_loop.execute_audit
+    type: tool_result
+    tool: audit
+    output:
+      approved: false
+      guidance: "DENIED: pkill is not allowed. Use BashList to find the process, then BashKill to stop it."
+
+  # Iteration 2: main_agent tries kill -9 (still risky, not using BashKill)
+  - node: audited_loop.main_agent
+    type: llm_response
+    text: "Let me try a different approach to stop the process."
+    tool_calls:
+      - name: bash
+        input:
+          command: "kill -9 12345"
+
+  # audit_check rejects again — still not using the approved tools
+  - node: audited_loop.audit_check
+    type: llm_response
+    text: ""
+    tool_calls:
+      - name: audit
+        input:
+          approved: false
+          guidance: "DENIED: Do not use kill directly. Use BashList to find processes, then BashKill with the process ID."
+
+  # execute_audit saves second denial guidance
+  - node: audited_loop.execute_audit
+    type: tool_result
+    tool: audit
+    output:
+      approved: false
+      guidance: "DENIED: Do not use kill directly. Use BashList to find processes, then BashKill with the process ID."
+
+  # Iteration 3: main_agent uses BashList (correct approach)
+  - node: audited_loop.main_agent
+    type: llm_response
+    text: "I'll use the approved process management tools."
+    tool_calls:
+      - name: bash_list
+        input: {}
+
+  # audit_check approves
+  - node: audited_loop.audit_check
+    type: llm_response
+    text: ""
+    tool_calls:
+      - name: audit
+        input:
+          approved: true
+          guidance: ""
+
+  # execute_audit confirms approval
+  - node: audited_loop.execute_audit
+    type: tool_result
+    tool: audit
+    output:
+      approved: true
+      guidance: ""
+
+  # execute_tools runs bash_list
+  - node: audited_loop.execute_tools
+    type: tool_result
+    tool: bash_list
+    output:
+      result: "PID 12345: node server.js (running 2h)"
+
+  # Iteration 4: main_agent responds with final text
+  - node: audited_loop.main_agent
+    type: llm_response
+    text: "Found the process. It's PID 12345 running server.js. Would you like me to stop it with BashKill?"
+
+  # audit_check approves final response
+  - node: audited_loop.audit_check
+    type: llm_response
+    text: ""
+    tool_calls:
+      - name: audit
+        input:
+          approved: true
+          guidance: ""
+
+  # execute_audit confirms approval
+  - node: audited_loop.execute_audit
+    type: tool_result
+    tool: audit
+    output:
+      approved: true
+      guidance: ""
+
+  # Loop exits because tool_calls is empty
+
+expect:
+  outcome: completed
+  reached:
+    - audited_loop
+    - audited_loop.main_agent
+    - audited_loop.audit_check
+    - audited_loop.execute_audit
+    - audited_loop.save_approved_response  # Reached on iterations 3 and 4
+    - audited_loop.execute_tools           # Reached on iteration 3
+  not_reached:
+    - audited_loop.compact

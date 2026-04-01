@@ -1,0 +1,132 @@
+version: "2"
+
+run:
+  timeout: 10m
+  tests: true
+
+formatters:
+  enable:
+    - goimports
+
+linters:
+  # Use standard defaults (govet, staticcheck, errcheck, ineffassign, unused)
+  default: standard
+  
+  # Enable additional industry-standard linters
+  enable:
+    - gosec        # Security-focused linter
+    - revive       # Extensible linter, golint replacement
+  
+  # Exclusions for paths
+  exclusions:
+    # Exclude standalone utility directories
+    paths:
+      - scripts
+      - tools/dev
+      - cmd/test-analytics
+      - cmd/test-vertexai
+    
+    # Rules-based exclusions
+    rules:
+      # Test files can use deprecated APIs
+      - path: _test\.go
+        linters:
+          - staticcheck
+        text: "SA1019"
+      
+      # Allow unchecked errors in test files
+      - path: _test\.go
+        linters:
+          - errcheck
+      
+      # Allow gosec issues in test files
+      - path: _test\.go
+        linters:
+          - gosec
+
+  settings:
+    errcheck:
+      # Exclude common deferred close patterns and best-effort operations
+      # Note: Internal package methods use //nolint comments instead (exclude-functions doesn't match them reliably)
+      exclude-functions:
+        # Close operations - safe to ignore in defer
+        - (*os.File).Close
+        - (io.Closer).Close
+        - (*bufio.Writer).Flush
+        - (*database/sql.Rows).Close
+        - (*database/sql.DB).Close
+        - (*database/sql.Tx).Rollback
+        - (net.Conn).Close
+        - (*net/http.Response.Body).Close
+        - (net.Listener).Close
+        - (*os.File).Sync
+        # Gorilla websocket - common defer patterns
+        - (*github.com/gorilla/websocket.Conn).Close
+        - (*github.com/gorilla/websocket.Conn).WriteJSON
+        - (*github.com/gorilla/websocket.Conn).SetReadDeadline
+        # HTTP writes - client disconnect is unrecoverable in handlers
+        - (net/http.ResponseWriter).Write
+        - (*encoding/json.Encoder).Encode
+        # Print to stdout/stderr - if these fail, program is in bad state
+        - fmt.Printf
+        - fmt.Println
+        # OS operations - often best-effort cleanup
+        - os.Remove
+        - os.Setenv
+        - (*os.Process).Kill
+    
+    revive:
+      rules:
+        # Disable overly pedantic rules
+        - name: package-comments
+          disabled: true
+        - name: exported
+          disabled: true
+    
+    gosec:
+      # ==========================================================================
+      # GOSEC EXCLUSIONS RATIONALE
+      # ==========================================================================
+      # Reliant is a CLI tool that executes commands and manipulates files by design.
+      # Many gosec rules flag patterns that are intentional and necessary for this
+      # type of application. Rather than littering the codebase with //nolint comments,
+      # we exclude rules that fundamentally conflict with the tool's purpose.
+      #
+      # If you're adding new code that triggers these rules, ensure you've validated:
+      # - User input is properly sanitized before use in commands/paths
+      # - Sensitive data doesn't use weak random sources
+      # - File permissions are appropriate for the use case
+      # ==========================================================================
+      excludes:
+        # G104: Errors unhandled - Already covered by errcheck linter
+        - G104
+        # G115: Integer overflow int->int32 - False positives on list lengths/counts
+        # that will never exceed int32 max value in practice
+        - G115
+        # G204: Subprocess with variable - Core feature of the tool. We execute:
+        # bash commands, git operations, ripgrep searches, etc. All by design.
+        - G204
+        # G301: Directory permissions 0750 - We use 0755 for directories which is
+        # standard for CLI tools and necessary for proper operation
+        - G301
+        # G302: File permissions 0600 - We use 0644 for non-sensitive config files,
+        # certificates, and generated content. Appropriate for shared access.
+        - G302
+        # G304: File path from variable - Core feature. We read/write files specified
+        # by users or discovered at runtime (configs, patches, certs, etc.)
+        - G304
+        # G306: WriteFile permissions 0600 - Same as G302, we use 0644 for files
+        # that need to be readable by other processes or users
+        - G306
+        # G404: Weak random (math/rand vs crypto/rand) - Used only for non-security
+        # purposes: retry jitter, port selection, temp file names. Not for crypto.
+        - G404
+
+output:
+  formats:
+    text:
+      print-linter-name: true
+
+issues:
+  max-issues-per-linter: 50
+  max-same-issues: 10

@@ -1,0 +1,69 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+import "google/protobuf/descriptor.proto";
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+// FieldMeta provides metadata for workflow proto fields.
+// Used by UI rendering, documentation generation, and validation.
+message FieldMeta {
+  // Human-readable description of the field.
+  string description = 1;
+
+  // Pipe-separated enum values (e.g., "none|low|medium|high|xhigh").
+  string enum_values = 2;
+
+  // UI rendering hint: "textarea", "dropdown", "slider", "model", "toolbar".
+  string ui_hint = 3;
+
+  // If true, field is internal/runtime-only — not shown in UI or docs.
+  bool hidden = 4;
+
+  // Category for grouping fields in UI panels.
+  string category = 5;
+
+  // Default value as string (e.g., "none", "0.7").
+  string default_value = 6;
+
+  // Minimum value for numeric fields. Optional so proto3 can distinguish "not set" from 0.
+  optional double min_value = 7;
+
+  // Maximum value for numeric fields. Optional so proto3 can distinguish "not set" from 0.
+  optional double max_value = 8;
+
+  // Human-readable short label for form controls.
+  string label = 9;
+
+  // Optional placeholder text for text-like controls.
+  optional string placeholder = 10;
+
+  // Optional UI visibility contexts (e.g., "basic", "advanced", "debug").
+  repeated string visibility_contexts = 11;
+
+  // Optional cleanup behavior hint for UI/client preprocessing.
+  optional string cleanup_semantics = 12;
+
+  // Whether this field is required.
+  bool required = 14;
+}
+
+// NodeMeta describes metadata for a workflow node args message.
+message NodeMeta {
+  string node_type = 1;        // e.g., "call_llm" — the node type string
+  string display_name = 2;     // e.g., "Call LLM" — for UI/docs
+  string description = 3;      // Human-readable description
+  bool is_structural = 4;      // true for loop/run/workflow/join
+  string category = 5;         // e.g., "llm", "tools", "flow", "utility"
+  string icon = 6;             // icon identifier for frontend
+}
+
+extend google.protobuf.FieldOptions {
+  optional FieldMeta reliant = 50000;
+}
+
+extend google.protobuf.MessageOptions {
+  optional NodeMeta node_meta = 50001;
+}

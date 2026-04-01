@@ -1,0 +1,68 @@
+{
+  "name": "reliant-monorepo",
+  "version": "1.0.0",
+  "description": "Reliant AI coding assistant with Electron desktop app",
+  "license": "BUSL-1.1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/reliant-labs/reliant"
+  },
+  "author": "Reliant Labs <hello@reliantlabs.io>",
+  "scripts": {
+    "dev": "node scripts/dev.js",
+    "dev:sqlite": "DATABASE_DRIVER=sqlite node scripts/dev.js",
+    "dev:pg": "DATABASE_DRIVER=postgres node scripts/dev.js",
+    "db:info": "node scripts/db-context.js",
+    "temporal:ui": "./scripts/start-temporal-ui.sh",
+    "temporal:check": "./scripts/check-temporal.sh",
+    "instances": "./scripts/list-instances.sh",
+    "instances:list": "./scripts/list-instances.sh",
+    "build:unified": "./scripts/build-unified.sh",
+    "build:all-platforms": "./scripts/build-unified.sh --all-platforms",
+    "build:clean": "./scripts/build-unified.sh --clean",
+    "build:electron": "./scripts/build-electron.sh",
+    "install:electron": "npm run build:electron && open electron/dist/Reliant-*.dmg",
+    "update:electron": "rm -rf /Applications/Reliant.app && npm run install:electron",
+    "verify:licenses": "./scripts/verify-licenses.sh",
+    "verify:dev": "./scripts/verify-dev-setup.sh",
+    "logs": "./scripts/logs.sh",
+    "start:backend": "go run cmd/reliant/main.go api --port 8080",
+    "start:backend:v2": "go run cmd/reliant/main.go",
+    "start:web": "cd web && npm run dev",
+    "start:electron": "cd electron && npm start",
+    "build:backend": "go build -buildvcs=false -o dist/reliant.tmp ./cmd/reliant && mv dist/reliant.tmp dist/reliant",
+    "build:backend:v2": "go build -buildvcs=false -o dist/reliant.tmp ./cmd/reliant && mv dist/reliant.tmp dist/reliant",
+    "build:backend:clean": "rm -f dist/reliant && go build -buildvcs=false -o dist/reliant.tmp ./cmd/reliant && mv dist/reliant.tmp dist/reliant",
+    "build:backend:clean:v2": "rm -f dist/reliant && go build -buildvcs=false -o dist/reliant.tmp ./cmd/reliant && mv dist/reliant.tmp dist/reliant",
+    "check:migrations": "./scripts/check-migrations.sh",
+    "fix:migrations": "./scripts/fix-migration-conflicts.sh",
+    "install:hooks": "./scripts/install-git-hooks.sh",
+    "rebase:main": "./scripts/rebase-with-migration-fix.sh",
+    "build:web": "cd web && npm run build:alpha",
+    "package:electron": "cd electron && npm run package",
+    "test:web": "cd web && npm run test",
+    "test:e2e": "cd web && npm run test:e2e",
+    "find:ports": "node scripts/find-ports.js",
+    "clean:ports": "rm -f .ports.json .instance-info",
+    "proto:generate": "PATH=./web/node_modules/.bin:$PATH buf generate",
+    "proto:lint": "buf lint",
+    "proto:format": "buf format -w",
+    "postinstall": "cd web && npm install --legacy-peer-deps && cd ../electron && npm install",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
+  },
+  "dependencies": {
+    "expo": "^54.0.21",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@bufbuild/protoc-gen-es": "^2.10.1",
+    "cross-env": "^10.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "go": ">=1.24.0"
+  }
+}

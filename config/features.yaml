@@ -1,0 +1,80 @@
+registry:
+  cache_enabled: true
+  cache_timeout: "5m"
+  refresh_interval: "30s"
+  health_check_interval: "1m"
+  metrics_enabled: true
+
+providers:
+  build_time:
+    enabled: true
+    priority: 1000
+  
+  environment:
+    enabled: true
+    priority: 600
+    prefix: "RELIANT_FEATURE_"
+  
+  statsig:
+    server_secret_key: "${STATSIG_SERVER_SECRET_KEY}"
+    environment: "${STATSIG_ENVIRONMENT:production}"
+    refresh_interval: "30s"
+    timeout: "10s"
+    local_mode: false
+  
+  static:
+    enabled: true
+    priority: 100
+
+flags:
+  - key: "debug_enhanced"
+    name: "Enhanced Debug Mode"
+    description: "Enable enhanced debugging features"
+    category: "operational"
+    type: "bool"
+    default_value: false
+    status: "active"
+    owner: "platform-team"
+    tags: ["debug", "development"]
+  
+  - key: "new_chat_ui"
+    name: "New Chat UI"
+    description: "Enable the new chat user interface"
+    category: "feature"
+    type: "bool"
+    default_value: false
+    status: "active"
+    owner: "ui-team"
+    tags: ["ui", "chat", "feature"]
+    targeting_rules:
+      - id: "beta_users"
+        name: "Beta Users"
+        enabled: true
+        value: true
+        conditions:
+          - field: "user_id"
+            operator: "in"
+            value: ["beta_user_1", "beta_user_2"]
+  
+  - key: "max_concurrent_sessions"
+    name: "Max Concurrent Sessions"
+    description: "Maximum number of concurrent chat sessions"
+    category: "operational"
+    type: "int"
+    default_value: 5
+    status: "active"
+    owner: "backend-team"
+    tags: ["limits", "performance"]
+  
+environments:
+  development:
+    enabled: true
+    prefix: "DEV_FEATURE_"
+  
+  staging:
+    enabled: true
+    prefix: "STAGING_FEATURE_"
+  
+  production:
+    enabled: true
+    prefix: "PROD_FEATURE_"

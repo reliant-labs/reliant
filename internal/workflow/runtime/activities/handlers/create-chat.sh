@@ -1,0 +1,17 @@
+curl 'https://localhost:8116/reliant.v1.ChatService/CreateChat' \
+  -H 'accept: */*' \
+  -H 'accept-language: en-US' \
+  -H 'connect-protocol-version: 1' \
+  -H 'content-type: application/json' \
+  -H 'origin: http://127.0.0.1:3021' \
+  -H 'priority: u=1, i' \
+  -H 'referer: http://127.0.0.1:3021/' \
+  -H 'sec-ch-ua: "Not_A Brand";v="99", "Chromium";v="142"' \
+  -H 'sec-ch-ua-mobile: ?0' \
+  -H 'sec-ch-ua-platform: "macOS"' \
+  -H 'sec-fetch-dest: empty' \
+  -H 'sec-fetch-mode: cors' \
+  -H 'sec-fetch-site: cross-site' \
+  -H 'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) reliant/0.2.5-rc25 Chrome/142.0.7444.235 Electron/39.2.7 Safari/537.36' \
+  --data-raw '{"projectId":"1e4c0198-6c63-4e8b-bd18-90b14b4b4d69","firstMessage":"hello","worktreeId":"98035abf-6a8b-4124-b99d-5f02ef084744","model":"","temperature":1,"mode":"auto"}' \
+  --insecure

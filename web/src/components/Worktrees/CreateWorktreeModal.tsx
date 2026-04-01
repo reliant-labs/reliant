@@ -1,0 +1,493 @@
+import { useState, useMemo, useEffect, type ReactNode } from "react";
+import { FileText, Cloud, FolderGit2, AlertCircle, GitCommitHorizontal } from "lucide-react";
+import { Modal } from "../ui/Modal";
+import { SearchableDropdown, type DropdownOption } from "../ui/SearchableDropdown";
+import { useWorktreeStore } from "../../store/worktreeStore";
+import { useProjectStore } from "../../store/projectStore";
+import { useBranches } from "../../hooks/useBranches";
+import { InitializeGitModal } from "../Git/InitializeGitModal";
+import { Button } from "../ui/Button";
+import { cn } from "../../lib/utils";
+import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
+
+interface CreateWorktreeModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onWorktreeCreated: (worktreeId: string) => void | Promise<void>;
+  projectId: string;
+  title?: string; // Optional custom title
+  sourceWorktreeId?: string; // Source worktree to copy files from (for branch to workspace)
+  sourceWorktreeBranch?: string; // Branch of source worktree to use as default base branch
+  additionalCopyFiles?: string[]; // Additional files to copy (e.g., modified/untracked files from source)
+  lockBaseBranch?: boolean; // If true, prevent changing the base branch (used when branching to workspace)
+  extraContent?: ReactNode; // Additional content to render in the form (e.g., copy files toggle)
+}
+
+export function CreateWorktreeModal({
+  isOpen,
+  onClose,
+  onWorktreeCreated,
+  projectId,
+  title = "Create New Workspace", // Default title
+  sourceWorktreeId,
+  sourceWorktreeBranch,
+  additionalCopyFiles = [],
+  lockBaseBranch = false,
+  extraContent,
+}: CreateWorktreeModalProps) {
+  const createWorktree = useWorktreeStore((state) => state.createWorktree);
+  const currentProject = useProjectStore((state) => state.currentProject);
+  const refreshCurrentProject = useProjectStore((state) => state.refreshCurrentProject);
+  const [showInitGitModal, setShowInitGitModal] = useState(false);
+  const { branches, isLoading: isBranchesLoading, error: branchesError, refetch: refetchBranches } = useBranches(projectId);
+
+  // Find the default base branch:
+  // 1. If sourceWorktreeBranch is provided (branching from existing workspace), use it
+  // 2. Otherwise use the current branch from branches list
+  //    - If current branch is in detached HEAD state, use the commit SHA
+  // 3. Fallback to "main"
+  const defaultBaseBranch = useMemo(() => {
+    if (sourceWorktreeBranch) {
+      return sourceWorktreeBranch;
+    }
+    const currentBranch = branches.find((b) => b.is_current && !b.is_remote);
+    if (currentBranch) {
+      // If in detached HEAD state, use the commit SHA instead of the name
+      if (currentBranch.is_detached && currentBranch.commit_sha) {
+        return currentBranch.commit_sha;
+      }
+      return currentBranch.name;
+    }
+    return "main";
+  }, [branches, sourceWorktreeBranch]);
+
+  const [formData, setFormData] = useState({
+    name: "",
+    branch: "",
+    base_branch: defaultBaseBranch,
+    copy_files: [".env", ".env.local"] as string[],
+    force: false,
+  });
+
+  // Refetch branches when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      refetchBranches();
+    }
+  }, [isOpen, refetchBranches]);
+
+  // Update base_branch when branches load or sourceWorktreeBranch is provided
+  useEffect(() => {
+    // If sourceWorktreeBranch is set (from git status), always use it as the base branch
+    if (sourceWorktreeBranch) {
+      setFormData(prev => ({ ...prev, base_branch: sourceWorktreeBranch }));
+    } else if (branches.length > 0) {
+      // Always update to the default base branch (current branch from useBranches) when branches load
+      setFormData(prev => ({ ...prev, base_branch: defaultBaseBranch }));
+    }
+  }, [branches, defaultBaseBranch, sourceWorktreeBranch]);
+  const [customFilesInput, setCustomFilesInput] = useState(".env, .env.local");
+  const [isCreating, setIsCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [normalizedName, setNormalizedName] = useState<string | null>(null);
+  const [normalizedBranch, setNormalizedBranch] = useState<string | null>(null);
+
+  // Helper function to normalize names (replace spaces with hyphens, trim trailing spaces)
+  const normalizeName = (value: string): string => {
+    return value.trim().replace(/\s+/g, "-");
+  };
+
+  // Transform branches into dropdown options with main/current at top
+  const branchOptions = useMemo<DropdownOption[]>(() => {
+    const localBranches = branches
+      .filter((b) => !b.is_remote)
+      .map((b) => {
+        // For detached HEAD, use commit SHA as value and show commit indicator
+        if (b.is_detached && b.commit_sha) {
+          return {
+            value: b.commit_sha, // Use full SHA for git operations
+            label: b.name, // Short SHA for display
+            description: "detached HEAD",
+            icon: <GitCommitHorizontal className="w-3.5 h-3.5" />,
+            group: "Current State",
+            commitAge: b.last_commit_age || 0, // Detached HEAD is always "most recent"
+          };
+        }
+        return {
+          value: b.name,
+          label: b.name,
+          description: b.is_current ? "current" : undefined,
+          icon: <FolderGit2 className="w-3.5 h-3.5" />,
+          group: "Local Branches",
+          commitAge: b.last_commit_age || Infinity,
+        };
+      });
+
+    // Sort: detached HEAD first, then main, then by most recent commit
+    localBranches.sort((a, b) => {
+      // Detached HEAD (Current State group) always first
+      if (a.group === "Current State") return -1;
+      if (b.group === "Current State") return 1;
+      // Main branch next
+      if (a.value === "main") return -1;
+      if (b.value === "main") return 1;
+      // Then sort by commit age (most recent first = smaller age value)
+      return a.commitAge - b.commitAge;
+    });
+
+    const remoteBranches = branches
+      .filter((b) => b.is_remote)
+      .map((b) => ({
+        value: b.name,
+        label: b.name.replace(/^origin\//, ''),
+        description: "remote",
+        icon: <Cloud className="w-3.5 h-3.5" />,
+        group: "Remote Branches",
+      }));
+
+    return [...localBranches, ...remoteBranches];
+  }, [branches]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!formData.branch) {
+      setError("Branch name is required");
+      return;
+    }
+
+    setIsCreating(true);
+    setError(null);
+
+    // Normalize names by replacing spaces with hyphens
+    const finalBranch = normalizeName(formData.branch);
+    const finalName = formData.name ? normalizeName(formData.name) : finalBranch;
+
+    try {
+      // Merge default copy_files with any additional files (e.g., modified/untracked files from source worktree)
+      const allCopyFiles = [...new Set([...formData.copy_files, ...additionalCopyFiles])];
+      
+      const worktree = await createWorktree({
+        name: finalName,
+        branch: finalBranch,
+        base_branch: formData.base_branch,
+        project_id: projectId,
+        copy_files: allCopyFiles,
+        status: WorktreeStatus.ACTIVE,
+        force: formData.force,
+        source_worktree_id: sourceWorktreeId,
+      });
+
+      await onWorktreeCreated(worktree.id);
+      onClose();
+
+      setFormData({
+        name: "",
+        branch: "",
+        base_branch: "main",
+        copy_files: [".env", ".env.local"],
+        force: false,
+      });
+      setNormalizedName(null);
+      setNormalizedBranch(null);
+      setCustomFilesInput(".env, .env.local");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to create worktree"
+      );
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const handleInitGitSuccess = async () => {
+    // Refresh the project to update is_git_repo status
+    await refreshCurrentProject();
+    // Refetch branches now that git is initialized
+    await refetchBranches();
+    setShowInitGitModal(false);
+    // The modal stays open, now showing the workspace creation form
+  };
+
+  // Check if project is not a git repo
+  const isNotGitRepo = currentProject && !currentProject.is_git_repo;
+
+  // If project is not a git repo, show prompt to initialize git
+  if (isOpen && isNotGitRepo) {
+    return (
+      <>
+        <Modal
+          isOpen={isOpen && !showInitGitModal}
+          onClose={onClose}
+          title="Git Repository Required"
+          size="md"
+        >
+          <div className="space-y-6">
+            <div className="flex flex-col items-center justify-center py-6 text-center">
+              <div className="p-4 rounded-full bg-warning/10 ring-1 ring-warning/20 mb-4">
+                <AlertCircle className="w-8 h-8 text-warning" />
+              </div>
+              <h3 className="text-sm font-semibold text-foreground mb-2">
+                Git Repository Required
+              </h3>
+              <p className="text-sm text-muted-foreground max-w-sm">
+                Workspaces require a git repository. Initialize git for this project to enable workspace management.
+              </p>
+            </div>
+
+            <div className="flex gap-3 pt-4 border-t border-border">
+              <Button
+                onClick={onClose}
+                variant="secondary"
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => setShowInitGitModal(true)}
+                leftIcon={<FolderGit2 className="w-4 h-4" />}
+                variant="primary"
+                className="flex-1"
+              >
+                Initialize Git
+              </Button>
+            </div>
+          </div>
+        </Modal>
+
+        {currentProject && (
+          <InitializeGitModal
+            isOpen={showInitGitModal}
+            onClose={() => setShowInitGitModal(false)}
+            onSuccess={handleInitGitSuccess}
+            projectId={projectId}
+            projectName={currentProject.name}
+          />
+        )}
+      </>
+    );
+  }
+
+  return (
+    <>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={title}
+      size="lg"
+    >
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {error && (
+          <div className="p-4 bg-destructive/10 border border-destructive/30 text-destructive rounded-lg text-sm">
+            <div className="flex items-start gap-2">
+              <span className="text-destructive mt-0.5">⚠️</span>
+              <span className="flex-1">{error}</span>
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-5">
+          <div className="space-y-2">
+            <label className="block text-sm font-semibold text-foreground">
+              Branch Name <span className="text-destructive">*</span>
+            </label>
+            <div className="relative">
+              <FolderGit2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input
+                type="text"
+                value={formData.branch}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setFormData((prev) => ({ ...prev, branch: value }));
+
+                  // Show normalized name if spaces are present
+                  const normalized = normalizeName(value);
+                  if (value !== normalized && value.trim() !== "") {
+                    setNormalizedBranch(normalized);
+                  } else {
+                    setNormalizedBranch(null);
+                  }
+                }}
+                className="w-full pl-10 pr-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                placeholder="feature/awesome-feature"
+                required
+                autoFocus
+              />
+            </div>
+            {normalizedBranch && (
+              <div className="p-2 bg-info/10 border border-info/20 rounded-lg">
+                <p className="text-xs text-info font-mono">
+                  The new branch name will be "{normalizedBranch}"
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-sm font-semibold text-foreground">
+              Display Name
+            </label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => {
+                const value = e.target.value;
+                setFormData((prev) => ({ ...prev, name: value }));
+
+                // Show normalized name if spaces are present
+                const normalized = normalizeName(value);
+                if (value !== normalized && value.trim() !== "") {
+                  setNormalizedName(normalized);
+                } else {
+                  setNormalizedName(null);
+                }
+              }}
+              className="w-full px-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+              placeholder="Optional (defaults to branch name)"
+            />
+            {normalizedName && (
+              <div className="p-2 bg-info/10 border border-info/20 rounded-lg">
+                <p className="text-xs text-info font-mono">
+                  The new workspace display name will be "{normalizedName}"
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2 mb-4">
+            <label className="block text-sm font-semibold text-foreground">
+              Base Branch
+            </label>
+            <SearchableDropdown
+              options={branchOptions}
+              value={formData.base_branch}
+              placeholder={isBranchesLoading ? "Loading branches..." : "Select base branch"}
+              emptyMessage={branchesError ? "Failed to load branches" : "No branches found"}
+              onSelect={(value) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  base_branch: value || "main",
+                }))
+              }
+              disabled={isBranchesLoading || lockBaseBranch}
+              groupBy={true}
+              variant="form"
+              className="w-full"
+            />
+            {branchesError ? (
+              <p className="text-xs text-destructive flex items-center gap-1">
+                <span>⚠️</span>
+                <span>{branchesError} - You can still enter a branch name manually above</span>
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {lockBaseBranch 
+                  ? "New workspace will branch from the current workspace's branch"
+                  : "Branch to create the new workspace from"}
+                {isBranchesLoading && " (loading branches...)"}
+              </p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-sm font-semibold text-foreground">
+              Copy Files/Directories
+            </label>
+            <div className="relative">
+              <FileText className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input
+                type="text"
+                value={customFilesInput}
+                onChange={(e) => {
+                  setCustomFilesInput(e.target.value);
+                  const files = e.target.value
+                    .split(",")
+                    .map((f) => f.trim())
+                    .filter((f) => f.length > 0);
+                  setFormData((prev) => ({ ...prev, copy_files: files }));
+                }}
+                className="w-full pl-10 pr-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                placeholder=".env, frontend/, backend/config"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Comma-separated list of files or directories to copy. Directories are copied recursively. File patterns (e.g., ".env") search recursively.
+            </p>
+          </div>
+
+          {/* Extra content slot (e.g., copy uncommitted files toggle) */}
+          {extraContent}
+
+          <div className="flex items-center gap-3 p-4 elevation-1 border border-border rounded-lg">
+            <div className="relative flex items-center justify-center">
+              <input
+                type="checkbox"
+                id="force-create"
+                checked={formData.force}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, force: e.target.checked }))
+                }
+                className="sr-only"
+              />
+              <div
+                className={cn(
+                  "w-5 h-5 rounded border-2 transition-all flex items-center justify-center",
+                  formData.force
+                    ? "border-foreground bg-background"
+                    : "border-border bg-background"
+                )}
+              >
+                {formData.force && (
+                  <svg className="w-3 h-3 text-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </div>
+            </div>
+            <div className="flex-1">
+              <label
+                htmlFor="force-create"
+                className="block text-sm font-semibold text-foreground cursor-pointer"
+              >
+                Force Create
+              </label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Delete existing workspace/branch if they exist and recreate from scratch
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex gap-3 pt-6 border-t border-border">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 px-5 py-3 bg-muted hover:bg-muted/80 border border-border rounded-lg text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+            disabled={isCreating}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="flex-1 px-5 py-3 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-semibold shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={isCreating}
+          >
+            {isCreating ? "Creating..." : "Create Workspace"}
+          </button>
+        </div>
+      </form>
+    </Modal>
+
+    {/* InitializeGitModal for when user clicks Initialize Git from the prompt */}
+    {currentProject && (
+      <InitializeGitModal
+        isOpen={showInitGitModal}
+        onClose={() => setShowInitGitModal(false)}
+        onSuccess={handleInitGitSuccess}
+        projectId={projectId}
+        projectName={currentProject.name}
+      />
+    )}
+    </>
+  );
+}

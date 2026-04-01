@@ -1,0 +1,158 @@
+---
+title: "Installation"
+description: "Download and install Reliant on macOS, Linux, and Windows"
+---
+
+Get Reliant up and running on your system.
+
+## Install via Homebrew (macOS/Linux)
+
+The easiest way to install Reliant on **macOS and Linux** is via Homebrew.
+
+```bash
+brew install --cask reliant-labs/reliant/reliant
+```
+
+Or add the tap first, then install:
+
+```bash
+brew tap reliant-labs/reliant
+brew install --cask reliant
+```
+
+Homebrew automatically downloads the correct version for your Mac (Apple Silicon or Intel).
+
+> Homebrew must be installed first. Visit [brew.sh](https://brew.sh) if you don't have it.
+
+## System Requirements
+
+### Hardware
+
+- **RAM**: Minimum 8GB, recommended 16GB+
+- **Storage**: At least 4GB free
+- **Processor**: Intel x86-64, Apple Silicon, or ARM64
+
+### Operating System
+
+| Platform | Minimum | Recommended |
+|----------|---------|-------------|
+| **macOS** | 11.0 (Big Sur) | 13.0+ (Ventura) |
+| **Linux** | x86_64 or ARM64 | AppImage format |
+| **Windows** | Windows 10 | Windows 10/11 (x64 or ARM64) |
+
+### Additional Requirements
+
+- **Internet**: Required for AI features
+- **AI Provider Authentication**: Required (API key or OAuth login, depending on provider — see [Quick Start](/getting-started/quick-start))
+- **Git**: Optional but recommended
+
+## Direct Download
+
+### macOS
+
+#### Apple Silicon
+
+[Download for Apple Silicon](https://downloads.reliantlabs.io/Reliant-latest-mac-arm64.dmg?utm_source=docs&utm_medium=installation) — For Apple Silicon Macs
+
+#### Intel
+
+[Download for Intel](https://downloads.reliantlabs.io/Reliant-latest-mac-x64.dmg?utm_source=docs&utm_medium=installation) — For Intel-based Macs
+
+> **Not sure?** Check Apple menu → About This Mac → Chip
+
+### Windows
+
+#### x64
+
+[Download for Windows x64](https://downloads.reliantlabs.io/Reliant-latest-win-x64.exe?utm_source=docs&utm_medium=installation) — For 64-bit Windows
+
+#### ARM64
+
+[Download for Windows ARM](https://downloads.reliantlabs.io/Reliant-latest-win-arm64.exe?utm_source=docs&utm_medium=installation) — For ARM64 Windows
+
+### Linux
+
+#### x86_64
+
+[Download AppImage (x86_64)](https://downloads.reliantlabs.io/Reliant-latest-linux-x86_64.AppImage?utm_source=docs&utm_medium=installation)
+
+After downloading:
+
+```bash
+chmod +x Reliant-latest-linux-x86_64.AppImage
+./Reliant-latest-linux-x86_64.AppImage
+```
+
+#### ARM64
+
+[Download AppImage (ARM64)](https://downloads.reliantlabs.io/Reliant-latest-linux-arm64.AppImage?utm_source=docs&utm_medium=installation)
+
+After downloading:
+
+```bash
+chmod +x Reliant-latest-linux-arm64.AppImage
+./Reliant-latest-linux-arm64.AppImage
+```
+
+## Post-Installation
+
+1. **Launch Reliant** from Applications (macOS), Start Menu (Windows), or run the AppImage (Linux)
+2. **Open a project folder** or create a new one
+3. **Configure your API key** — see [Quick Start](/getting-started/quick-start)
+
+## Updating
+
+### Via Homebrew
+
+```bash
+brew upgrade --cask reliant
+```
+
+### Manual
+
+Go to **Reliant → Check for Updates**, or download and install the latest version over your existing installation.
+
+## Uninstalling
+
+### Homebrew
+
+```bash
+brew uninstall --cask reliant
+
+# Also remove settings:
+brew uninstall --cask reliant --zap
+```
+
+### macOS Manual
+
+1. Quit Reliant
+2. Drag from Applications to Trash
+3. Remove settings (optional):
+
+```bash
+rm -rf ~/Library/Application\ Support/reliant
+rm -rf ~/Library/Logs/Reliant
+```
+
+### Windows
+
+1. Quit Reliant
+2. Settings → Apps → Installed Apps → Reliant → Uninstall
+3. Remove settings (optional): Delete `%APPDATA%\Reliant`
+
+### Linux
+
+1. Quit Reliant
+2. Delete the AppImage file
+3. Remove settings (optional):
+
+```bash
+rm -rf ~/.config/reliant
+rm -rf ~/.local/share/reliant
+```
+
+Your projects and code remain untouched.
+
+---
+
+**Next**: [Quick Start](/getting-started/quick-start) — Configure your API key and start chatting

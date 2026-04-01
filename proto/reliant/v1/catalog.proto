@@ -1,0 +1,232 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+// CatalogService provides discovery endpoints for models, tools, and activities
+service CatalogService {
+  // ListModels returns all available models filtered by user's configured API keys
+  rpc ListModels(ListModelsRequest) returns (ListModelsResponse) {}
+  
+  // ListModelsByProvider returns all models for a specific provider
+  rpc ListModelsByProvider(ListModelsByProviderRequest) returns (ListModelsByProviderResponse) {}
+  
+  // ListTools returns all available tools
+  rpc ListTools(ListToolsRequest) returns (ListToolsResponse) {}
+  
+  // ListNodes returns all workflow nodes available for the workflow builder
+  rpc ListNodes(ListNodesRequest) returns (ListNodesResponse) {}
+
+  // GetCELCompletions returns CEL expression completion data for the workflow builder
+  rpc GetCELCompletions(GetCELCompletionsRequest) returns (GetCELCompletionsResponse) {}
+}
+
+// ModelInfo represents information about an LLM model
+message ModelInfo {
+  // Model identifier (e.g., "claude-4-sonnet")
+  string id = 1;
+  // Human-readable name
+  string name = 2;
+  // Provider/driver (e.g., "anthropic", "openai") - used for display grouping
+  string provider = 3;
+  // Model capabilities (e.g., "vision", "function_calling")
+  repeated string capabilities = 4;
+  // Context window size in tokens
+  int64 context_window = 5;
+  // Default max output tokens
+  int64 default_max_tokens = 6;
+  // Cost per 1M input tokens
+  double cost_per_1m_in = 7;
+  // Cost per 1M output tokens
+  double cost_per_1m_out = 8;
+  // Whether the model supports reasoning/thinking
+  bool can_reason = 9;
+  // Whether the model supports file attachments
+  bool supports_attachments = 10;
+  // Driver ID for routing (e.g., "openrouter", "anthropic") - the actual API to use
+  // This allows the same model to appear under multiple providers
+  string driver_id = 11;
+  // Model tags for categorization (e.g., "flagship", "fast", "cheap")
+  repeated string tags = 12;
+  // Whether the model supports tool/function calling
+  bool supports_tools = 13;
+  // Whether the model supports caching
+  bool supports_caching = 14;
+  // Supported non-empty thinking levels for this model+driver (e.g., ["low", "medium", "high", "xhigh"])
+  repeated string supported_thinking_levels = 15;
+}
+
+// ListModelsRequest is the request for ListModels
+message ListModelsRequest {}
+
+// ListModelsResponse is the response for ListModels
+message ListModelsResponse {
+  // List of available models
+  repeated ModelInfo models = 1;
+  // Total number of models
+  int32 total = 2;
+}
+
+// ListModelsByProviderRequest is the request for ListModelsByProvider
+message ListModelsByProviderRequest {
+  // Provider name to filter by (e.g., "anthropic", "openai")
+  string provider = 1;
+}
+
+// ListModelsByProviderResponse is the response for ListModelsByProvider
+message ListModelsByProviderResponse {
+  // List of models for the specified provider
+  repeated ModelInfo models = 1;
+}
+
+// ToolInfo represents information about a tool
+message ToolInfo {
+  // Tool name (e.g., "grep", "edit", "bash")
+  string name = 1;
+  // Human-readable description
+  string description = 2;
+  // Tool category (e.g., "File Operations", "Search & Discovery")
+  string category = 3;
+}
+
+// ListToolsRequest is the request for ListTools
+message ListToolsRequest {}
+
+// ListToolsResponse is the response for ListTools
+message ListToolsResponse {
+  // List of available tools
+  repeated ToolInfo tools = 1;
+  // Total number of tools
+  int32 total = 2;
+}
+
+// NodeInputField describes an input field for a node
+message NodeInputField {
+  // Field name
+  string name = 1;
+  // Field type (string, integer, boolean, array, object)
+  string type = 2;
+  // Human-readable description
+  string description = 3;
+  // Whether the field is required
+  bool required = 4;
+  // Default value as JSON string (optional)
+  string default_value = 5;
+  // Valid enum values for dropdown fields (pipe-separated in struct tag)
+  repeated string enum_values = 6;
+  // UI rendering hint (dropdown, textarea, input)
+  string ui_hint = 7;
+  // Minimum value for numeric fields (optional)
+  optional double min_value = 8;
+  // Maximum value for numeric fields (optional)
+  optional double max_value = 9;
+  // Human-readable short label for form controls.
+  string label = 10;
+  // Optional placeholder text for text-like controls.
+  optional string placeholder = 11;
+  // Optional UI visibility contexts (e.g., "basic", "advanced", "debug").
+  repeated string visibility_contexts = 12;
+  // Optional cleanup behavior hint for UI/client preprocessing.
+  optional string cleanup_semantics = 13;
+  // Whether this field supports CEL expressions (wrapped in CelX type).
+  bool is_cel = 14;
+  // Per-field grouping category (e.g., "Model Settings", "Tools").
+  string category = 15;
+}
+
+// NodeInfo represents a workflow node available for the builder
+message NodeInfo {
+  // Node ID (e.g., "call_llm", "create_worktree")
+  string id = 1;
+  // Human-readable display name
+  string display_name = 2;
+  // Description of what the node does
+  string description = 3;
+  // Category for grouping (e.g., "git", "worktree")
+  string category = 4;
+  // Input fields for the node
+  repeated NodeInputField input_fields = 5;
+  // Icon hint for the UI (optional)
+  string icon_hint = 6;
+  // Output fields available via nodes.<id>.* in CEL expressions
+  repeated NodeInputField output_fields = 7;
+}
+
+// NodeCategory describes a category of nodes
+message NodeCategory {
+  // Category ID
+  string id = 1;
+  // Human-readable display name
+  string display_name = 2;
+  // Number of nodes in this category
+  int32 count = 3;
+}
+
+// ListNodesRequest is the request for ListNodes
+message ListNodesRequest {
+  // Optional category filter
+  string category = 1;
+  // Whether to include internal nodes (default: false)
+  bool include_internal = 2;
+}
+
+// ListNodesResponse is the response for ListNodes
+message ListNodesResponse {
+  // List of available nodes
+  repeated NodeInfo nodes = 1;
+  // List of categories with counts
+  repeated NodeCategory categories = 2;
+}
+
+// GetCELCompletionsRequest is the request for GetCELCompletions
+message GetCELCompletionsRequest {}
+
+// CELFieldInfo describes a field within a CEL namespace or output schema
+message CELFieldInfo {
+  string name = 1;
+  string type = 2;
+  string description = 3;
+}
+
+// CELNamespaceInfo describes a namespace accessible in CEL expressions
+message CELNamespaceInfo {
+  string name = 1;
+  string description = 2;
+  bool is_dynamic = 3;
+  repeated CELFieldInfo fields = 4;
+}
+
+// CELFunctionInfo describes a custom CEL function
+message CELFunctionInfo {
+  string name = 1;
+  string signature = 2;
+  string description = 3;
+  string example = 4;
+  // Whether this is a member function (called as value.func()) vs global (func(value))
+  bool is_member = 5;
+}
+
+// CELNodeOutputSchema describes the output fields for a workflow node type
+message CELNodeOutputSchema {
+  string node_type = 1;
+  string display_name = 2;
+  repeated CELFieldInfo fields = 3;
+}
+
+// CELHelperTypeInfo describes a nested/helper type used in node outputs
+message CELHelperTypeInfo {
+  string name = 1;
+  string description = 2;
+  string access_path = 3;
+  repeated CELFieldInfo fields = 4;
+}
+
+// GetCELCompletionsResponse is the response for GetCELCompletions
+message GetCELCompletionsResponse {
+  repeated CELNamespaceInfo namespaces = 1;
+  repeated CELFunctionInfo functions = 2;
+  repeated CELNodeOutputSchema node_output_schemas = 3;
+  repeated CELHelperTypeInfo helper_types = 4;
+}

@@ -1,0 +1,194 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+import "reliant/v1/common.proto";
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+// PackageType identifies the type of package manager
+enum PackageType {
+  PACKAGE_TYPE_UNSPECIFIED = 0;
+  PACKAGE_TYPE_MAKEFILE = 1;
+  PACKAGE_TYPE_NPM = 2;
+  PACKAGE_TYPE_TASKFILE = 3;
+}
+
+// PackageCommandsService handles package command discovery and execution
+service PackageCommandsService {
+  // ListCommands returns available commands for a directory
+  rpc ListCommands(ListPackageCommandsRequest) returns (ListPackageCommandsResponse) {}
+  
+  // RunCommand executes a package command
+  rpc RunCommand(RunPackageCommandRequest) returns (RunPackageCommandResponse) {}
+  
+  // ListProcesses returns processes for a worktree
+  rpc ListProcesses(ListPackageProcessesRequest) returns (ListPackageProcessesResponse) {}
+  
+  // GetProcess returns a specific process
+  rpc GetProcess(GetPackageProcessRequest) returns (GetPackageProcessResponse) {}
+  
+  // GetProcessLogs returns the logs for a process
+  rpc GetProcessLogs(GetPackageProcessLogsRequest) returns (GetPackageProcessLogsResponse) {}
+  
+  // KillProcess terminates a process
+  rpc KillProcess(KillPackageProcessRequest) returns (KillPackageProcessResponse) {}
+  
+  // GetCommandFavorites returns the list of favorited command keys for a project
+  rpc GetCommandFavorites(GetCommandFavoritesRequest) returns (GetCommandFavoritesResponse) {}
+  
+  // SetCommandFavorite adds or removes a command from favorites
+  rpc SetCommandFavorite(SetCommandFavoriteRequest) returns (SetCommandFavoriteResponse) {}
+}
+
+// ============================================
+// Core Types
+// ============================================
+
+// PackageCommand represents a runnable command from a package manager file
+message PackageCommand {
+  string name = 1;
+  string description = 2;
+  string command = 3;
+  PackageType package_type = 4;
+  string source = 5;
+  string category = 6;
+  repeated string dependencies = 7;
+  string working_dir = 8;      // Full path to directory where command should run
+  string relative_path = 9;    // Path relative to project root for display (empty for root)
+}
+
+// PackageProcess represents a running or completed package command process
+message PackageProcess {
+  string id = 1;
+  string command = 2;
+  BackgroundProcessStatus status = 3;
+  optional string worktree_id = 4;
+  string working_dir = 5;
+  string start_time = 6;
+  optional string end_time = 7;
+  optional int32 exit_code = 8;
+}
+
+// ============================================
+// ListCommands
+// ============================================
+
+message ListPackageCommandsRequest {
+  // Either worktree_id or path must be provided
+  optional string worktree_id = 1;
+  optional string path = 2;
+  // Additional directories to search for commands (relative paths like "electron")
+  repeated string custom_directories = 3;
+}
+
+// CommandsByType groups commands by package type
+message CommandsByType {
+  repeated PackageCommand commands = 1;
+}
+
+message ListPackageCommandsResponse {
+  // Commands grouped by package type (key is the package type string)
+  map<string, CommandsByType> commands = 1;
+  repeated string detected_types = 2;
+}
+
+// ============================================
+// RunCommand
+// ============================================
+
+message RunPackageCommandRequest {
+  optional string worktree_id = 1;
+  optional string path = 2;           // Root project path (deprecated, use working_dir)
+  string command_name = 3;
+  PackageType package_type = 4;
+  map<string, string> env = 5;
+  optional string working_dir = 6;    // Directory to run command from (from command.working_dir)
+}
+
+message RunPackageCommandResponse {
+  string process_id = 1;
+  string command = 2;
+  string start_time = 3;
+}
+
+// ============================================
+// ListProcesses
+// ============================================
+
+message ListPackageProcessesRequest {
+  string worktree_id = 1;
+}
+
+message ListPackageProcessesResponse {
+  repeated PackageProcess processes = 1;
+}
+
+// ============================================
+// GetProcess
+// ============================================
+
+message GetPackageProcessRequest {
+  string process_id = 1;
+}
+
+message GetPackageProcessResponse {
+  PackageProcess process = 1;
+}
+
+// ============================================
+// GetProcessLogs
+// ============================================
+
+message GetPackageProcessLogsRequest {
+  string process_id = 1;
+}
+
+// OutputLine represents a single line of output with its source type
+message OutputLine {
+  OutputStreamType type = 1;
+  string text = 2;
+}
+
+message GetPackageProcessLogsResponse {
+  string stdout = 1;
+  string stderr = 2;
+  // Combined output in the order lines were received (interleaved stdout/stderr)
+  repeated OutputLine combined = 3;
+}
+
+// ============================================
+// KillProcess
+// ============================================
+
+message KillPackageProcessRequest {
+  string process_id = 1;
+}
+
+message KillPackageProcessResponse {
+  string message = 1;
+}
+
+// ============================================
+// Command Favorites
+// ============================================
+
+message GetCommandFavoritesRequest {
+  string project_id = 1;
+}
+
+message GetCommandFavoritesResponse {
+  // List of command keys in format: {package_type}:{name} or {package_type}:{relative_path}:{name}
+  repeated string command_keys = 1;
+}
+
+message SetCommandFavoriteRequest {
+  string project_id = 1;
+  string command_key = 2;  // Command key in format: {package_type}:{name} or {package_type}:{relative_path}:{name}
+  bool is_favorite = 3;    // true to add, false to remove
+}
+
+message SetCommandFavoriteResponse {
+  bool success = 1;
+}

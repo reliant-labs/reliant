@@ -1,0 +1,136 @@
+---
+title: "Troubleshooting"
+description: "Quick fixes for common issues"
+---
+
+## Workflow Issues
+
+### Workflow seems stuck
+
+1. **Check if paused** — Look for pause indicator in chat
+2. **Check approval mode** — Manual mode waits for approval on each tool
+3. **Cancel and retry** — Press `Cmd+.` or click stop, then try a different approach
+4. **Branch from earlier** — Click branch icon on any message to start fresh
+
+See [Threads & Branching](/features/threads) for details.
+
+### AI responses are slow
+
+- Check your API provider's status page
+- Try a smaller/faster model
+- Check rate limits haven't been exceeded
+- Verify stable internet connection
+
+### Workflow fails repeatedly
+
+Reliant pauses instead of crashing. Check the error message, fix the issue (permissions, network, API), then click resume.
+
+## Application Issues
+
+### Something not working right
+
+Reinstall Reliant:
+
+```bash
+# Uninstall
+brew uninstall --cask reliant
+
+# Clear app data
+rm -rf ~/Library/Application\ Support/reliant
+rm -rf ~/Library/Logs/Reliant
+
+# Reinstall
+brew install --cask reliant
+```
+
+Your API keys (stored in system keychain) are preserved.
+
+### App won't start
+
+1. Check if another instance is running
+2. Try launching from terminal to see errors
+3. Reset app data (see above)
+4. Reinstall from scratch
+
+## API Issues
+
+### OAuth login button not showing (Claude Code / Codex)
+
+If you're using the **web UI** and the OAuth login button doesn't appear, the local OAuth helper isn't running.
+
+**Fix**: Run `reliant auth serve` in your terminal and keep it running while you complete the login. The UI will detect it and show the login button.
+
+This is only needed in web mode — the desktop app handles OAuth automatically.
+
+### "Invalid API key" error
+
+1. Verify key is correct (no extra spaces)
+2. Check key hasn't expired or been revoked
+3. Test in provider's dashboard/playground
+4. Try regenerating the key
+
+### Rate limit errors
+
+- Wait a few minutes and retry
+- Switch to a different model
+- Check your plan's limits with the provider
+
+## Logs
+
+Logs help diagnose issues. Find them at:
+
+| Platform | Location |
+|----------|----------|
+| **macOS** | `~/Library/Logs/Reliant/` |
+| **Linux** | `~/.local/share/reliant/logs/` |
+| **Windows** | `%APPDATA%\Reliant\logs\` |
+
+Check `reliant.log` for recent activity. Logs rotate to prevent large files.
+
+## Known Issues
+
+### Chat gets into a bad state
+
+Occasionally a chat may get into an inconsistent state (agent confused, repeated errors, or unexpected behavior).
+
+**Fix**: Branch from an earlier message where things were working. Click the branch icon on any message to start a fresh conversation from that point.
+
+### Refresh doesn't work (macOS)
+
+`Cmd+R` to refresh the page is currently disabled in the packaged app. This is intentional to prevent accidental data loss.
+
+**Workaround**: Close and reopen the tab, or restart the app if needed.
+
+### Auto-updater may fail to open new version
+
+After downloading an update, you may see "The application 'Reliant' can't be opened." This happens when background processes from the previous version are still running.
+
+**Workaround**:
+```bash
+# Kill any orphaned Reliant processes
+pkill -f reliant-backend
+pkill -f "Reliant.app"
+
+# Then open the app manually
+open /Applications/Reliant.app
+```
+
+If issues persist, do a clean reinstall (see "Something not working right" above).
+
+### Local model loading is broken
+
+Local model loading (e.g., Ollama, LM Studio) is currently not working. We're aware of the issue and working on a fix. In the meantime, please use cloud-based API providers.
+
+## Get Help
+
+**Still stuck?** Email support@reliantlabs.io with:
+- Reliant version (Help → About)
+- What you were trying to do
+- What happened instead
+- Relevant log snippets
+
+We typically respond within 24-48 hours.
+
+---
+
+**See also**: [FAQ](/help/faq) • [Feedback & Support](/help/feedback)

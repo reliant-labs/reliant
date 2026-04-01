@@ -1,0 +1,159 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Reliant",
+  "logo": {
+    "light": "/images/reliant-logo.svg",
+    "dark": "/images/reliant-logo.svg",
+    "href": "/"
+  },
+  "colors": {
+    "primary": "#6E39FF",
+    "light": "#8B5CF6",
+    "dark": "#6E39FF"
+  },
+  "favicon": "/favicon.ico",
+  "icons": {
+    "library": "lucide"
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Docs",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "getting-started/installation",
+              "getting-started/quick-start",
+              "getting-started/concepts"
+            ]
+          },
+          {
+            "group": "Workflows",
+            "pages": [
+              "workflows/overview",
+              "workflows/workflow-control",
+              "workflows/patterns",
+              "workflows/presets",
+              "workflows/presets-reference.generated",
+              "workflows/spawn",
+              "workflows/sharing",
+              "workflows/custom-workflows",
+              "workflows/testing"
+            ]
+          },
+          {
+            "group": "Examples",
+            "pages": [
+              "examples/workflow-snippets",
+              "examples/use-cases"
+            ]
+          },
+          {
+            "group": "Features",
+            "pages": [
+              "features/worktrees",
+              "features/threads",
+              "features/branching",
+              "features/processes",
+              "features/git-integration",
+              "features/skills"
+            ]
+          },
+          {
+            "group": "Settings",
+            "pages": [
+              "settings/memories",
+              "settings/model-config",
+              "settings/api-keys",
+              "settings/mcp-servers"
+            ]
+          },
+          {
+            "group": "Architecture",
+            "pages": [
+              "architecture/overview",
+              "architecture/monolith",
+              "architecture/distributed"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/cli",
+              "reference/nodes",
+              "reference/types",
+              "reference/cel-expressions",
+              "reference/models",
+              "reference/tools",
+              "reference/llm-guide",
+              "reference/scenario-schema",
+              "reference/workflow-schema"
+            ]
+          },
+          {
+            "group": "Help",
+            "pages": [
+              "help/faq",
+              "help/troubleshooting",
+              "help/feedback",
+              "help/privacy",
+              "changelog",
+              "license-faq"
+            ]
+          }
+        ]
+      }
+    ],
+    "global": {
+      "anchors": [
+        {
+          "anchor": "Main Site",
+          "icon": "globe",
+          "href": "https://reliantlabs.io"
+        },
+        {
+          "anchor": "GitHub",
+          "icon": "github",
+          "href": "https://github.com/reliant-labs/reliant"
+        },
+        {
+          "anchor": "Slack",
+          "icon": "slack",
+          "href": "https://join.slack.com/t/reliant-pn51441/shared_invite/zt-3g6mhfnhx-~CWMzNRZUylWHevlJXO89A"
+        }
+      ]
+    }
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Changelog",
+        "href": "/changelog"
+      },
+      {
+        "label": "Main Site",
+        "href": "https://reliantlabs.io"
+      },
+      {
+        "label": "GitHub",
+        "href": "https://github.com/reliant-labs/reliant"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Download",
+      "href": "https://reliantlabs.io/#download"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/reliant-labs/reliant",
+      "x": "https://x.com/reliantlabs"
+    }
+  },
+  "seo": {
+    "indexing": "navigable"
+  }
+}

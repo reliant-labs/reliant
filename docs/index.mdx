@@ -1,0 +1,105 @@
+---
+title: "Reliant"
+description: "The agentic development environment with programmable workflows"
+---
+
+Reliant is an agentic development environment (ADE). Like Cursor or Claude Code, it lets you chat with AI agents that read, write, and run code in your project. Unlike them, Reliant adds **programmable workflows** — multi-step, multi-agent processes defined in YAML that reduce the human in the loop and produce higher quality code more consistently.
+
+## Why workflows matter
+
+In a typical AI coding tool, you are the orchestrator. You prompt, read the output, decide the next step, prompt again. For simple tasks that's fine. For anything involving multiple steps — refactoring, code review, test-driven development, release prep — you're doing the same manual choreography every time.
+
+Workflows automate that choreography. You define the steps, the agents, and the logic once. Then you run it.
+
+<Tabs>
+  <Tab title="Without workflows">
+    ```
+    1. Ask AI to review the code        (copy-paste diff)
+    2. Read the review                   (manually)
+    3. Ask AI to check for security      (copy-paste diff again)
+    4. Read that review                  (manually)
+    5. Synthesize both reviews           (you do this in your head)
+    ```
+  </Tab>
+  <Tab title="With a Reliant workflow">
+    ```yaml
+    # .reliant/workflows/code-review.yaml
+    nodes:
+      - id: security_review
+        workflow: builtin://agent
+        args:
+          system_prompt: "Review for security issues..."
+
+      - id: style_review
+        workflow: builtin://agent
+        args:
+          system_prompt: "Review for code quality..."
+
+      - id: reviews_done
+        join: all           # wait for both
+
+      - id: summarize
+        workflow: builtin://agent
+        args:
+          system_prompt: "Synthesize the reviews..."
+    ```
+    Two agents review in parallel, a third summarizes. One click, every time.
+  </Tab>
+</Tabs>
+
+## What ships with Reliant
+
+Reliant includes built-in workflows you can use immediately:
+
+| Workflow | What it does |
+| --- | --- |
+| **agent** | The default. Chat with an AI agent that can read, edit, search, and run commands in your project. |
+| **gsd** | "Get Shit Done." Discuss → research → plan → implement in parallel waves → verify. Fresh context per phase. |
+| **spec-driven** | Spec-first development. Write requirements → plan technical approach → implement. |
+| **simplify-first** | Refactor before building. Research simplifications → refactor → verify → plan → implement. For messy or legacy code. |
+| **superpowers** | Mandatory TDD. Brainstorm → plan → write failing tests → implement until green → structured review. |
+| **get-it-right** | For complex brownfield codebases. Expects first attempts to fail — attempt → evaluate → improve or restart → diagnose → final implementation. |
+| **one-ring** | Full pipeline: planning → testing → implementation → checks → evaluate → refactor loop. |
+| **parallel-compete** | Three agents implement the same thing in isolated worktrees. A reviewer picks the winner. |
+| **router** | Classifies your request and routes it to the best workflow automatically. |
+
+You can also build your own — see [Creating Custom Workflows](/workflows/custom-workflows).
+
+## What you can build
+
+Beyond the built-ins, workflows let you encode any repeatable multi-step process:
+
+**Automated code review** — Parallel agents check security, style, and correctness. A third agent synthesizes findings into one review.
+
+**Test-driven bug fixes** — Write a failing test, loop: attempt fix → run tests → retry if failing. Stops when tests pass or hits an attempt limit.
+
+**Refactor with guardrails** — Analyze code for simplification opportunities, refactor, then verify that tests still pass before moving on.
+
+**Competitive implementations** — Three agents solve the same problem with different approaches in isolated worktrees. A reviewer picks the best one.
+
+**Plan-debate** — A proposer and critic alternate rounds, refining a plan until they converge. Better plans through adversarial thinking.
+
+**Continuous autonomous development** — Pick a task from a spec, implement it, verify it, commit it, pick the next task. Hands-off until done.
+
+## Config as code
+
+Workflows are YAML files that live in `.reliant/workflows/` inside your repository. This gives you things no other ADE offers:
+
+- **History** — Track who changed what workflow and when
+- **Review** — Workflow changes go through PRs like any other code
+- **Consistency** — Everyone on the team runs the same processes
+- **Rollback** — Revert a broken workflow like any other commit
+
+## Get started
+
+<CardGroup cols={3}>
+  <Card title="Install Reliant" icon="download" href="/getting-started/installation">
+    macOS, Linux, or Windows
+  </Card>
+  <Card title="Quick Start" icon="play" href="/getting-started/quick-start">
+    Chat + your first workflow in 5 minutes
+  </Card>
+  <Card title="Key Concepts" icon="graduation-cap" href="/getting-started/concepts">
+    The essential terms you need
+  </Card>
+</CardGroup>

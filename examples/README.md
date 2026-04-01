@@ -6,22 +6,29 @@ This directory contains example workflows, presets, and scenarios that demonstra
 
 ```
 examples/
-├── workflows/     # Core workflow definitions
-├── presets/       # Agent configuration presets
-└── scenarios/     # Test scenarios for workflows
+├── workflows/     # Core workflow definitions (symlinks to builtin sources)
+├── presets/       # Agent configuration presets (symlinks to builtin sources)
+├── scenarios/     # Test scenarios for workflows (symlinks to builtin sources)
+├── hooks/         # Example hook scripts
+├── boolean-type-validation-demo.yaml
+├── output-type-validation.yaml
+└── stateful-debug-example.md
 ```
 
 ## Workflows
 
 | Workflow | Description |
 |----------|-------------|
-| `agent.yaml` | Interactive agent workflow with loop-based tool execution |
-| `checklist.yaml` | Checklist-based workflow with planning, implementation, and review phases |
-| `auditing-agent.yaml` | Agent with an auditor that reviews responses before sending |
-| `parallel-compete.yaml` | Runs multiple agents in parallel and selects the best result |
-| `structured-agent.yaml` | Agent that produces structured output matching a schema |
-| `retry-with-escalation.yaml` | Retry pattern that escalates to more capable models on failure |
-| `context-reducing-agent.yaml` | Agent with automatic context compaction |
+| `agent.yaml` | Standard interactive agent with loop-based tool execution |
+| `auditing-agent.yaml` | Agent with per-turn audit oversight from a cheap reviewer model |
+| `discovery-relay.yaml` | Iterative waves with progressive knowledge transfer |
+| `env-setup.yaml` | Environment isolation pipeline: setup, validate, complete |
+| `get-it-right.yaml` | For complex brownfield codebases — try, fail, and learn before implementing |
+| `migrate.yaml` | Guided migration from Claude Code, Cursor, Codex, or Windsurf into Reliant |
+| `one-ring.yaml` | Unified development pipeline: planning → tests → get-it-right loop → complete |
+| `parallel-compete.yaml` | 3 agents implement in parallel worktrees, reviewer picks winner or synthesizes |
+| `ralph-wiggum.yaml` | Brute-force iteration for complex tasks |
+| `structured-agent.yaml` | Agent that requires structured output via a response tool |
 
 ## Presets
 
@@ -39,26 +46,28 @@ examples/
 | `debug.yaml` | Debugging orchestrator |
 | `reproducer.yaml` | Bug reproduction specialist |
 | `refactor.yaml` | Code refactoring |
+| `simplifier.yaml` | Code simplification |
 | `documentation.yaml` | Technical documentation |
 | `git.yaml` | Git operations |
+| `migrate.yaml` | Migration assistant |
 | `ux.yaml` | User experience improvements |
+| `ux_reviewer.yaml` | UX-focused code review |
 | `conflict-resolver.yaml` | Git merge conflict resolution |
 | `workflow_builder.yaml` | Workflow creation and modification |
 
 ## Scenarios
 
-Test scenarios for each workflow. Each file contains multiple scenarios (separated by `---`) that define inputs, simulated events, and expected outcomes.
+Test scenarios for each workflow live in subdirectories under `scenarios/`. Each directory contains multiple `.yaml` files that define inputs, simulated events, and expected outcomes.
 
-| File | Description |
-|------|-------------|
-| `agent_scenarios.yaml` | Agent workflow test cases |
-| `auditing-agent_scenarios.yaml` | Auditing agent test cases |
-| `checklist_scenarios.yaml` | Checklist workflow test cases |
-| `context-reducing-agent_scenarios.yaml` | Context-reducing agent test cases |
-| `parallel-compete_scenarios.yaml` | Parallel compete test cases |
-| `retry-with-escalation_scenarios.yaml` | Retry escalation test cases |
-| `structured-agent_scenarios.yaml` | Structured agent test cases |
-| `presets_validation.yaml` | Preset validation test cases |
+| Directory | Description |
+|-----------|-------------|
+| `agent/` | Agent workflow test cases (happy path, manual mode, compaction, multi-tool, etc.) |
+| `auditing-agent/` | Auditing agent test cases (approval, rejection, guidance flows) |
+| `context-reducing-agent/` | Context-reducing agent test cases (compaction, large result filtering) |
+| `get-it-right/` | Get-it-right test cases (retries, max retries exhausted, restart) |
+| `one-ring/` | One-ring pipeline test cases (full pipeline, individual steps, retries) |
+| `parallel-compete/` | Parallel compete test cases (winner selection, synthesis, failure handling) |
+| `structured-agent/` | Structured agent test cases (schema validation, reminders, custom tools) |
 
 ## Usage
 

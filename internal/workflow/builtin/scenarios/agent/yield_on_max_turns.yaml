@@ -1,0 +1,60 @@
+# Yield on Max Turns: Agent yields when max_turns is reached with yield input
+#
+# Tests the yield behavior at max_turns:
+# The loop yield expression is:
+#   inputs.yield || iter.iteration >= inputs.max_turns
+#
+# When max_turns is reached, the loop yields (pauses for user input)
+# rather than just completing. This is important for the "send a message
+# to continue" UX flow.
+#
+# Additionally, the outer edge fires max_turns_notification when
+# _iterations >= max_turns. This scenario sets yield: true to explicitly
+# test the yield input combined with max_turns.
+#
+# With max_turns=1, the agent gets one iteration. If the LLM still
+# wants to call tools, the loop exits due to the iteration limit,
+# and the workflow yields waiting for the user.
+
+name: yield_on_max_turns
+description: Agent yields to user when max_turns limit is hit
+
+inputs:
+  mode: "auto"
+  max_turns: 1
+  yield: true
+
+events:
+  # Single iteration: LLM calls a tool
+  - node: agent_loop.call_llm
+    type: llm_response
+    text: "Let me search for that..."
+    tool_calls:
+      - name: grep
+        input:
+          pattern: "TODO"
+
+  # Tool executes
+  - node: agent_loop.execute_tools
+    type: tool_result
+    tool: grep
+    output:
+      result: '["file1.go:10", "file2.go:20"]'
+
+  # max_turns_notification fires because _iterations >= max_turns (1 >= 1)
+  - node: max_turns_notification
+    type: tool_result
+    tool: save_message
+    output:
+      result: "Agent reached maximum iteration limit (1 turns)."
+
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.execute_tools
+    - max_turns_notification
+  not_reached:
+    - agent_loop.approval
+    - agent_loop.compact

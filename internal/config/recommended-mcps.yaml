@@ -1,0 +1,450 @@
+# Recommended MCP Servers Configuration
+# This file defines the list of recommended MCP servers that users can install with one click
+
+recommended:
+  - name: chrome-devtools
+    displayName: Chrome DevTools
+    description: Control Chrome browser and web pages
+    category: Development
+    config:
+      command: npx
+      args:
+        - -y
+        - "chrome-devtools-mcp@latest"
+        - "--isolated"
+        - "--accept-insecure-certs"
+      type: stdio
+
+  - name: serena
+    displayName: Serena
+    description: Serena is a code intelligence platform that provides code search, code completion, and code refactoring.
+    category: Development
+    config:
+      command: uvx
+      args:
+        - "--from"
+        - "git+https://github.com/oraios/serena"
+        - "serena"
+        - "start-mcp-server"
+      type: stdio
+
+  - name: context7
+    displayName: Context7
+    description: Search and analyze code across repositories with AI-powered insights
+    category: Development
+    setupRequired: true
+    docsUrl: https://context7.com/docs
+    setupInstructions: |
+      Context7 MCP requires your own API key:
+
+      1. Sign up at https://context7.com
+      2. Navigate to Settings → API Keys
+      3. Create a new API key
+      4. Copy the key and enter it below
+    configFields:
+      - key: CONTEXT7_API_KEY
+        label: Context7 API Key
+        type: password
+        required: true
+        placeholder: ctx7sk-xxxxxxxxxxxxx
+        helpText: API key from https://context7.com/settings/api-keys
+        validationRegex: ^ctx7sk-[a-zA-Z0-9_-]{16,}$
+        validationMessage: API key must start with 'ctx7sk-'
+    config:
+      command: npx
+      args:
+        - -y
+        - "@upstash/context7-mcp"
+      env:
+        CONTEXT7_API_KEY: ""
+      type: stdio
+
+  - name: supabase
+    displayName: Supabase
+    description: Interact with Supabase projects and databases using Supabase's official remote MCP endpoint
+    category: Database
+    setupRequired: true
+    docsUrl: https://supabase.com/docs/guides/getting-started/mcp
+    setupInstructions: |
+      Supabase official setup uses remote HTTP MCP.
+
+      Enter your project ref and personal access token (PAT), then Reliant will send:
+      Authorization: Bearer <token>
+
+      1. Get project ref from your Supabase project settings
+      2. Go to https://supabase.com/dashboard/account/tokens
+      3. Generate a personal access token (PAT)
+      4. Copy both values and enter them below
+
+      Note: PATs are account-level tokens. This configuration scopes MCP to one project via project_ref.
+    configFields:
+      - key: SUPABASE_PROJECT_REF
+        label: Supabase Project Ref
+        type: text
+        required: true
+        placeholder: abcdefghijklmnop
+        helpText: Project reference from Supabase project settings
+      - key: SUPABASE_ACCESS_TOKEN
+        label: Supabase Personal Access Token
+        type: password
+        required: true
+        placeholder: sbp_xxxxxxxxxxxxx
+        helpText: Account-level token from https://supabase.com/dashboard/account/tokens
+    config:
+      command: ""
+      args: []
+      type: http
+      url: "https://mcp.supabase.com/mcp?project_ref=${SUPABASE_PROJECT_REF}"
+      env:
+        SUPABASE_PROJECT_REF: ""
+        SUPABASE_ACCESS_TOKEN: ""
+      headers:
+        Authorization: "Bearer ${SUPABASE_ACCESS_TOKEN}"
+
+  - name: zen
+    displayName: Zen MCP
+    description: Multi-model AI orchestration - collaborate with multiple AI models in one conversation
+    category: Development
+    setupRequired: true
+    docsUrl: https://github.com/BeehiveInnovations/pal-mcp-server
+    setupInstructions: |
+      PAL MCP (formerly Zen MCP) requires at least one model provider API key.
+
+      Add at least one of the following:
+
+      - Gemini: https://makersuite.google.com/app/apikey
+      - OpenAI: https://platform.openai.com/api-keys
+      - OpenRouter: https://openrouter.ai/ (access multiple models)
+      - Ollama: https://ollama.ai/ (local models, free)
+
+      Without at least one provider key, the server exits during startup.
+
+      You can configure which models to use after installation.
+    configFields:
+      - key: GEMINI_API_KEY
+        label: Gemini API Key (Optional)
+        type: password
+        required: false
+        placeholder: AIza...
+        helpText: For Google's Gemini models
+      - key: OPENAI_API_KEY
+        label: OpenAI API Key
+        type: password
+        required: true
+        placeholder: sk-...
+        helpText: Required by default for recommended setup; use custom config for other provider-only setups
+      - key: OPENROUTER_API_KEY
+        label: OpenRouter API Key (Optional)
+        type: password
+        required: false
+        placeholder: sk-or-...
+        helpText: For access to multiple models via OpenRouter
+    config:
+      command: uvx
+      args:
+        - "--from"
+        - "git+https://github.com/BeehiveInnovations/zen-mcp-server.git"
+        - "pal-mcp-server"
+      env:
+        DISABLED_TOOLS: "analyze,refactor,testgen,secaudit,docgen,tracer"
+        DEFAULT_MODEL: "auto"
+      type: stdio
+
+  - name: github
+    displayName: GitHub
+    description: Create PRs, manage issues, search code, and interact with GitHub repositories
+    category: Development
+    setupRequired: true
+    docsUrl: https://github.com/modelcontextprotocol/servers/tree/main/src/github
+    setupInstructions: |
+      GitHub MCP requires a personal access token:
+
+      1. Go to https://github.com/settings/tokens
+      2. Generate a new token (classic) with repo, read:org scopes
+      3. Copy the token and enter it below
+    bundles:
+      skills:
+        - name: github-pr-review
+          description: PR review workflow hints for GitHub MCP usage
+          targetScope: project_local
+          conflictPolicy: skip
+          files:
+            - path: github-pr-review/SKILL.md
+              content: |
+                ---
+                name: github-pr-review
+                description: Review pull requests using GitHub MCP tools. Use when asked to inspect PR files, comments, review status, or CI checks.
+                ---
+
+                # GitHub PR Review
+
+                Use this skill when a task requires reviewing a pull request end-to-end.
+
+                ## Suggested flow
+                1. Fetch PR metadata and status checks.
+                2. Inspect changed files and identify risky areas.
+                3. Review comments and unresolved threads.
+                4. Summarize findings with concrete file/line references.
+
+                ## Tooling guidance
+                - Prefer `get_pull_request`, `get_pull_request_files`, `get_pull_request_status`, and `get_pull_request_comments`.
+                - Call out failing checks and blocking feedback clearly.
+                - If proposing changes, keep comments specific and actionable.
+    configFields:
+      - key: GITHUB_PERSONAL_ACCESS_TOKEN
+        label: GitHub Personal Access Token
+        type: password
+        required: true
+        placeholder: ghp_xxxxxxxxxxxxx
+        helpText: Token from https://github.com/settings/tokens
+    config:
+      command: npx
+      args:
+        - -y
+        - "@modelcontextprotocol/server-github"
+      env:
+        GITHUB_PERSONAL_ACCESS_TOKEN: ""
+      type: stdio
+
+  - name: postgres
+    displayName: PostgreSQL
+    description: Query PostgreSQL databases, inspect schemas, and run SQL
+    category: Database
+    setupRequired: true
+    docsUrl: https://github.com/modelcontextprotocol/servers/tree/main/src/postgres
+    setupInstructions: |
+      PostgreSQL MCP requires a connection string:
+
+      Format: postgresql://user:password@host:port/database
+    configFields:
+      - key: POSTGRES_CONNECTION_STRING
+        label: PostgreSQL Connection String
+        type: password
+        required: true
+        placeholder: postgresql://user:password@localhost:5432/mydb
+        helpText: Full connection string including credentials
+    config:
+      command: bash
+      args:
+        - "-lc"
+        - "npx -y @modelcontextprotocol/server-postgres \"$POSTGRES_CONNECTION_STRING\""
+      env:
+        POSTGRES_CONNECTION_STRING: ""
+      type: stdio
+
+  - name: sqlite
+    displayName: SQLite
+    description: Query SQLite databases directly without shell commands
+    category: Database
+    setupRequired: true
+    docsUrl: https://pypi.org/project/mcp-server-sqlite/
+    setupInstructions: |
+      SQLite MCP requires the path to your database file.
+
+      The SQLite server uses --db-path. Reliant injects your configured value automatically.
+    configFields:
+      - key: SQLITE_DB_PATH
+        label: SQLite Database Path
+        type: text
+        required: true
+        placeholder: ./data/myapp.db
+        helpText: Path to the SQLite database file
+    config:
+      command: bash
+      args:
+        - "-lc"
+        - "uvx mcp-server-sqlite --db-path \"$SQLITE_DB_PATH\""
+      env:
+        SQLITE_DB_PATH: ""
+      type: stdio
+
+  - name: puppeteer
+    displayName: Puppeteer
+    description: Browser automation, screenshots, and web scraping
+    category: Development
+    setupRequired: false
+    docsUrl: https://github.com/modelcontextprotocol/servers/tree/main/src/puppeteer
+    config:
+      command: npx
+      args:
+        - -y
+        - "@modelcontextprotocol/server-puppeteer"
+      type: stdio
+
+  - name: filesystem
+    displayName: Filesystem
+    description: Read, write, and manage files with controlled access
+    category: Development
+    setupRequired: true
+    docsUrl: https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem
+    setupInstructions: |
+      Filesystem MCP requires at least one allowed directory for security.
+    configFields:
+      - key: ALLOWED_DIRECTORIES
+        label: Allowed Directory
+        type: text
+        required: true
+        placeholder: /absolute/path/to/project
+        helpText: Absolute directory path the MCP can access (add more via custom MCP config)
+    config:
+      command: bash
+      args:
+        - "-lc"
+        - "npx -y @modelcontextprotocol/server-filesystem \"$ALLOWED_DIRECTORIES\""
+      env:
+        ALLOWED_DIRECTORIES: ""
+      type: stdio
+
+  - name: slack
+    displayName: Slack
+    description: Send messages, read channels, and interact with Slack workspaces
+    category: Communication
+    setupRequired: true
+    docsUrl: https://github.com/modelcontextprotocol/servers/tree/main/src/slack
+    setupInstructions: |
+      Slack MCP requires a bot token:
+
+      1. Go to https://api.slack.com/apps
+      2. Create or select your app
+      3. Navigate to OAuth & Permissions
+      4. Copy the Bot User OAuth Token
+    configFields:
+      - key: SLACK_BOT_TOKEN
+        label: Slack Bot Token
+        type: password
+        required: true
+        placeholder: xoxb-xxxxxxxxxxxxx
+        helpText: Bot token from https://api.slack.com/apps
+      - key: SLACK_TEAM_ID
+        label: Slack Team ID
+        type: text
+        required: true
+        placeholder: T01234567
+        helpText: Slack workspace/team ID required by the MCP server
+    config:
+      command: npx
+      args:
+        - -y
+        - "@modelcontextprotocol/server-slack"
+      env:
+        SLACK_BOT_TOKEN: ""
+        SLACK_TEAM_ID: ""
+      type: stdio
+
+  - name: memory
+    displayName: Memory
+    description: Persistent memory for storing and retrieving information across sessions
+    category: Development
+    setupRequired: false
+    docsUrl: https://github.com/modelcontextprotocol/servers/tree/main/src/memory
+    config:
+      command: npx
+      args:
+        - -y
+        - "@modelcontextprotocol/server-memory"
+      type: stdio
+
+  - name: fetch
+    displayName: Fetch
+    description: Make HTTP requests and fetch web content
+    category: Development
+    setupRequired: false
+    docsUrl: https://pypi.org/project/mcp-server-fetch/
+    config:
+      command: uvx
+      args:
+        - "mcp-server-fetch"
+      type: stdio
+
+  - name: sentry
+    displayName: Sentry
+    description: Query errors, view stack traces, and manage issues in Sentry
+    category: Monitoring
+    setupRequired: true
+    docsUrl: https://www.npmjs.com/package/@sentry/mcp-server
+    setupInstructions: |
+      Sentry MCP requires an access token:
+
+      1. Go to https://sentry.io/settings/account/api/auth-tokens/
+      2. Create a new token with project:read, event:read scopes
+      3. Copy the token and enter it below
+    configFields:
+      - key: SENTRY_ACCESS_TOKEN
+        label: Sentry Access Token
+        type: password
+        required: true
+        placeholder: sntrys_xxxxxxxxxxxxx
+        helpText: Token from https://sentry.io/settings/account/api/auth-tokens/
+    config:
+      command: npx
+      args:
+        - -y
+        - "@sentry/mcp-server"
+      env:
+        SENTRY_ACCESS_TOKEN: ""
+      type: stdio
+
+  - name: linear
+    displayName: Linear
+    description: Manage issues, projects, and workflows in Linear
+    category: Project Management
+    setupRequired: true
+    docsUrl: https://github.com/jerhadf/linear-mcp-server
+    setupInstructions: |
+      Linear MCP requires an API key:
+
+      1. Go to Linear Settings → API → Personal API keys
+      2. Create a new key
+      3. Copy and enter it below
+    configFields:
+      - key: LINEAR_API_KEY
+        label: Linear API Key
+        type: password
+        required: true
+        placeholder: lin_api_xxxxxxxxxxxxx
+        helpText: Personal API key from Linear settings
+    config:
+      command: npx
+      args:
+        - -y
+        - "linear-mcp-server"
+      env:
+        LINEAR_API_KEY: ""
+      type: stdio
+
+  - name: aws
+    displayName: AWS
+    description: Manage AWS resources, query CloudWatch, and interact with AWS services
+    category: Cloud
+    setupRequired: true
+    docsUrl: https://awslabs.github.io/mcp/
+    setupInstructions: |
+      AWS MCP uses your AWS credentials from environment or ~/.aws/credentials.
+
+      Ensure you have AWS CLI configured or set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.
+    configFields:
+      - key: AWS_REGION
+        label: AWS Region
+        type: text
+        required: false
+        placeholder: us-east-1
+        helpText: Default AWS region (optional if set in ~/.aws/config)
+    config:
+      command: uvx
+      args:
+        - "awslabs.aws-api-mcp-server@latest"
+      env:
+        AWS_REGION: ""
+      type: stdio
+
+  - name: docker
+    displayName: Docker
+    description: Manage containers, images, and Docker Compose stacks
+    category: Infrastructure
+    setupRequired: false
+    docsUrl: https://pypi.org/project/mcp-server-docker/
+    config:
+      command: uvx
+      args:
+        - "mcp-server-docker"
+      type: stdio

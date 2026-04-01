@@ -1,0 +1,309 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+// FileNodeType distinguishes files from directories
+enum FileNodeType {
+  FILE_NODE_TYPE_UNSPECIFIED = 0;
+  FILE_NODE_TYPE_FILE = 1;
+  FILE_NODE_TYPE_DIRECTORY = 2;
+}
+
+// FileViewerKind describes how Reliant should render a file.
+enum FileViewerKind {
+  FILE_VIEWER_KIND_UNSPECIFIED = 0;
+  FILE_VIEWER_KIND_TEXT = 1;
+  FILE_VIEWER_KIND_IMAGE = 2;
+  FILE_VIEWER_KIND_PDF = 3;
+  FILE_VIEWER_KIND_AUDIO = 4;
+  FILE_VIEWER_KIND_VIDEO = 5;
+  FILE_VIEWER_KIND_BINARY = 6;
+}
+
+// FileSystemService handles file system operations within projects
+service FileSystemService {
+  // GetFileTree returns the file tree structure for a project
+  rpc GetFileTree(GetFileTreeRequest) returns (GetFileTreeResponse) {}
+  
+  // GetFileContent returns the content of a specific file
+  rpc GetFileContent(GetFileContentRequest) returns (GetFileContentResponse) {}
+  
+  // SaveFileContent saves content to a specific file
+  rpc SaveFileContent(SaveFileContentRequest) returns (SaveFileContentResponse) {}
+  
+  // GetFileMetadata returns metadata for a file or directory
+  rpc GetFileMetadata(GetFileMetadataRequest) returns (GetFileMetadataResponse) {}
+
+  // GetFilePreviewInfo returns preview metadata for a file
+  rpc GetFilePreviewInfo(GetFilePreviewInfoRequest) returns (GetFilePreviewInfoResponse) {}
+  
+  // CreateFileOrFolder creates a new file or folder
+  rpc CreateFileOrFolder(CreateFileOrFolderRequest) returns (CreateFileOrFolderResponse) {}
+  
+  // DeleteFileOrFolder deletes a file or folder
+  rpc DeleteFileOrFolder(DeleteFileOrFolderRequest) returns (DeleteFileOrFolderResponse) {}
+  
+  // CopyFile copies a file to a new location
+  rpc CopyFile(CopyFileRequest) returns (CopyFileResponse) {}
+  
+  // SearchFiles searches for text within files in the workspace
+  rpc SearchFiles(SearchFilesRequest) returns (SearchFilesResponse) {}
+  
+  // ReplaceInFiles replaces text in files across the workspace
+  rpc ReplaceInFiles(ReplaceInFilesRequest) returns (ReplaceInFilesResponse) {}
+
+  // ListDirectory lists entries in an arbitrary filesystem directory.
+  // Used by the project picker in browser mode (no Electron).
+  rpc ListDirectory(ListDirectoryRequest) returns (ListDirectoryResponse) {}
+}
+
+// ============================================
+// Core Types
+// ============================================
+
+// FileNode represents a file or directory in the tree
+message FileNode {
+  string name = 1;
+  string path = 2;
+  FileNodeType type = 3;
+  repeated FileNode children = 4;
+  optional int64 size = 5;
+  optional string modified = 6;
+}
+
+// FileMetadata contains detailed information about a file or directory
+message FileMetadata {
+  string name = 1;
+  string path = 2;
+  int64 size = 3;
+  string modified = 4;
+  FileNodeType type = 5;
+  string permissions = 6;
+}
+
+message FilePreviewInfo {
+  string name = 1;
+  string path = 2;
+  int64 size = 3;
+  string modified = 4;
+  FileViewerKind viewer_kind = 5;
+  string mime_type = 6;
+  bool is_binary = 7;
+  bool is_editable = 8;
+}
+
+// ============================================
+// GetFileTree
+// ============================================
+
+message GetFileTreeRequest {
+  string project_id = 1;
+  string path = 2; // Optional path to start from (default: root "/")
+  bool show_hidden = 3; // Whether to show hidden files
+  optional string worktree_id = 4; // Optional worktree to scope the tree
+  optional string chat_id = 5; // Optional chat to resolve worktree from
+}
+
+message GetFileTreeResponse {
+  repeated FileNode files = 1;
+}
+
+// ============================================
+// GetFileContent
+// ============================================
+
+message GetFileContentRequest {
+  string project_id = 1;
+  string path = 2;
+  optional string worktree_id = 3;
+  optional string chat_id = 4;
+}
+
+message GetFileContentResponse {
+  string content = 1;
+}
+
+// ============================================
+// SaveFileContent
+// ============================================
+
+message SaveFileContentRequest {
+  string project_id = 1;
+  string path = 2;
+  string content = 3;
+  optional string worktree_id = 4;
+  optional string chat_id = 5;
+}
+
+message SaveFileContentResponse {
+  string message = 1;
+}
+
+// ============================================
+// GetFileMetadata
+// ============================================
+
+message GetFileMetadataRequest {
+  string project_id = 1;
+  string path = 2;
+  optional string worktree_id = 3;
+  optional string chat_id = 4;
+}
+
+message GetFileMetadataResponse {
+  FileMetadata metadata = 1;
+}
+
+// ============================================
+// GetFilePreviewInfo
+// ============================================
+
+message GetFilePreviewInfoRequest {
+  string project_id = 1;
+  string path = 2;
+  optional string worktree_id = 3;
+  optional string chat_id = 4;
+}
+
+message GetFilePreviewInfoResponse {
+  FilePreviewInfo info = 1;
+}
+
+// ============================================
+// CreateFileOrFolder
+// ============================================
+
+message CreateFileOrFolderRequest {
+  string project_id = 1;
+  string path = 2;
+  FileNodeType type = 3;
+  string content = 4; // Optional content for files
+  optional string worktree_id = 5;
+  optional string chat_id = 6;
+}
+
+message CreateFileOrFolderResponse {
+  string message = 1;
+  string path = 2;
+}
+
+// ============================================
+// DeleteFileOrFolder
+// ============================================
+
+message DeleteFileOrFolderRequest {
+  string project_id = 1;
+  string path = 2;
+  optional string worktree_id = 3;
+  optional string chat_id = 4;
+}
+
+message DeleteFileOrFolderResponse {
+  string message = 1;
+}
+
+// ============================================
+// CopyFile
+// ============================================
+
+message CopyFileRequest {
+  string project_id = 1;
+  string source_path = 2;
+  string destination_path = 3;
+  optional string worktree_id = 4;
+  optional string chat_id = 5;
+}
+
+message CopyFileResponse {
+  string message = 1;
+  string destination = 2;
+}
+
+// ============================================
+// SearchFiles
+// ============================================
+
+message SearchFilesRequest {
+  string project_id = 1;
+  string query = 2; // The search query (regex supported)
+  optional string path = 3; // Optional path to search within (default: root)
+  optional string worktree_id = 4;
+  optional string chat_id = 5;
+  optional string file_pattern = 6; // Optional glob pattern to filter files (e.g., "*.ts", "*.go")
+  optional bool case_sensitive = 7; // Whether search is case-sensitive (default: false)
+  optional int32 max_results = 8; // Maximum number of results (default: 100)
+  optional int32 context_lines = 9; // Number of context lines before/after match (default: 2)
+}
+
+message SearchFilesResponse {
+  repeated SearchResult results = 1;
+  int32 total_matches = 2; // Total number of matches found
+  bool truncated = 3; // Whether results were truncated due to max_results
+}
+
+message SearchResult {
+  string path = 1; // Relative file path
+  repeated SearchMatch matches = 2;
+}
+
+message SearchMatch {
+  int32 line_number = 1;
+  string line_content = 2; // The matched line
+  int32 match_start = 3; // Start position of match within line
+  int32 match_end = 4; // End position of match within line
+  repeated string context_before = 5; // Lines before the match
+  repeated string context_after = 6; // Lines after the match
+}
+
+// ============================================
+// ReplaceInFiles
+// ============================================
+
+message ReplaceInFilesRequest {
+  string project_id = 1;
+  string search_text = 2; // Text to search for
+  string replace_text = 3; // Text to replace with
+  optional string path = 4; // Optional path to search within (default: root)
+  optional string worktree_id = 5;
+  optional string chat_id = 6;
+  optional string file_pattern = 7; // Optional glob pattern to filter files
+  optional bool case_sensitive = 8; // Whether search is case-sensitive (default: false)
+  repeated string file_paths = 9; // Optional specific files to replace in (if empty, replaces in all matching files)
+}
+
+message ReplaceInFilesResponse {
+  repeated ReplaceResult results = 1;
+  int32 total_replacements = 2;
+  int32 files_modified = 3;
+}
+
+message ReplaceResult {
+  string path = 1;
+  int32 replacements = 2; // Number of replacements in this file
+  bool success = 3;
+  string error = 4; // Error message if failed
+}
+
+// ============================================
+// ListDirectory
+// ============================================
+
+message ListDirectoryRequest {
+  string path = 1; // Absolute path to list. Empty means home directory.
+}
+
+message ListDirectoryResponse {
+  string path = 1; // The resolved absolute path that was listed
+  repeated DirectoryEntry entries = 2;
+}
+
+message DirectoryEntry {
+  string name = 1;
+  string path = 2; // Full absolute path
+  bool is_directory = 3;
+  bool is_hidden = 4;
+  bool is_symlink = 5;
+}

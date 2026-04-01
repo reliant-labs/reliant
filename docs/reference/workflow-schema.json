@@ -1,0 +1,408 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://reliant.dev/schemas/workflow.json",
+  "title": "Reliant Workflow Schema",
+  "description": "Schema for Reliant workflow YAML definitions",
+  "type": "object",
+  "required": ["name", "nodes"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Unique workflow identifier",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "apiVersion": {
+      "type": "string",
+      "description": "Workflow API version (e.g., 0.0.5)",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "entry": {
+      "oneOf": [
+        { "type": "string", "description": "Single entry node ID" },
+        { "type": "array", "items": { "type": "string" }, "description": "Multiple parallel entry nodes" }
+      ],
+      "description": "Entry point node(s) - required for all workflows"
+    },
+    "groups": {
+      "type": "object",
+      "description": "Input groups for organizing related inputs",
+      "additionalProperties": {
+        "$ref": "#/definitions/InputGroup"
+      }
+    },
+    "version": {
+      "type": "string",
+      "description": "Semantic version (e.g., v1.0.0)",
+      "pattern": "^v?[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z0-9]+)?$"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable workflow description"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "published", "internal"],
+      "default": "draft",
+      "description": "Workflow publication status"
+    },
+    "inputs": {
+      "type": "object",
+      "description": "Input schema for workflow validation",
+      "additionalProperties": {
+        "$ref": "#/definitions/InputSchema"
+      }
+    },
+    "outputs": {
+      "type": "object",
+      "description": "Output mappings as CEL expressions",
+      "additionalProperties": {
+        "type": "string",
+        "description": "CEL expression for output value"
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "description": "Workflow nodes (execution units)",
+      "items": {
+        "$ref": "#/definitions/Node"
+      },
+      "minItems": 1
+    },
+    "edges": {
+      "type": "array",
+      "description": "Edge connections between nodes",
+      "items": {
+        "$ref": "#/definitions/Edge"
+      }
+    },
+    "ui": {
+      "type": "object",
+      "description": "UI metadata for workflow builder",
+      "properties": {
+        "positions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "x": { "type": "number" },
+              "y": { "type": "number" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "InputSchema": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["string", "integer", "boolean", "array", "object", "any"],
+          "description": "Input value type"
+        },
+        "required": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether this input is required"
+        },
+        "default": {
+          "description": "Default value if not provided"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable input description"
+        }
+      }
+    },
+    "Node": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique node identifier within workflow",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*$"
+        },
+        "action": {
+          "type": "string",
+          "description": "Built-in action to execute",
+          "enum": [
+            "CallLLM",
+            "ExecuteTools",
+            "SaveMessage",
+            "Compact",
+            "Approval",
+            "FetchThreadResult",
+            "GenerateTitle"
+          ]
+        },
+        "run": {
+          "type": "string",
+          "description": "Shell command to execute"
+        },
+        "agent": {
+          "type": "string",
+          "description": "Agent name to invoke (shorthand for workflow: builtin://agent)"
+        },
+        "workflow": {
+          "type": "string",
+          "description": "Sub-workflow reference (e.g., builtin://agent-turn, ./path/to/workflow.yaml)"
+        },
+        "loop": {
+          "$ref": "#/definitions/LoopConfig",
+          "description": "Loop configuration for repeated execution"
+        },
+        "join": {
+          "type": "string",
+          "enum": ["all", "any"],
+          "description": "Join mode for convergent edges"
+        },
+        "inputs": {
+          "type": "object",
+          "description": "Node inputs as CEL expressions",
+          "additionalProperties": true
+        },
+        "timeout": {
+          "type": "string",
+          "description": "Timeout as Go duration (e.g., 5m, 1h)",
+          "pattern": "^[0-9]+(h|m|s|ms)+$"
+        },
+        "save_message": {
+          "$ref": "#/definitions/SaveMessageConfig",
+          "description": "Automatic message saving configuration"
+        },
+        "thread": {
+          "$ref": "#/definitions/ThreadConfig",
+          "description": "Thread configuration for this node"
+        },
+        "args": {
+          "type": "object",
+          "description": "Arguments to pass to the workflow/agent (CEL expressions)",
+          "additionalProperties": true
+        }
+      },
+      "oneOf": [
+        { "required": ["action"] },
+        { "required": ["run"] },
+        { "required": ["agent"] },
+        { "required": ["workflow"] },
+        { "required": ["loop"] },
+        { "required": ["join"] }
+      ]
+    },
+    "ThreadConfig": {
+      "type": "object",
+      "description": "Thread configuration for nodes",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["inherit", "new", "fork"],
+          "default": "inherit",
+          "description": "Thread mode: inherit (use parent thread), new (create new thread), fork (copy parent thread to new)"
+        },
+        "memo": {
+          "type": "boolean",
+          "default": true,
+          "description": "Thread memoization in loops. true: reuse same thread across iterations, false: fresh thread each iteration. Only valid with 'new' or 'fork' modes."
+        },
+        "key": {
+          "type": "string",
+          "description": "Custom thread key for stable thread IDs (e.g., 'advocate', 'critic' for debate patterns)"
+        },
+        "inject": {
+          "$ref": "#/definitions/InjectConfig",
+          "description": "Message to inject into the thread before execution"
+        }
+      }
+    },
+    "InjectConfig": {
+      "type": "object",
+      "required": ["content"],
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": ["user", "assistant", "system"],
+          "default": "user",
+          "description": "Role for the injected message"
+        },
+        "content": {
+          "type": "string",
+          "description": "Message content (supports CEL template expressions like {{nodes.step.output}})"
+        }
+      }
+    },
+    "InputGroup": {
+      "type": "object",
+      "properties": {
+        "tag": {
+          "type": "string",
+          "description": "Group tag (e.g., 'agent' for agent-related settings)"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable group description"
+        },
+        "inputs": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/InputSchema"
+          }
+        }
+      }
+    },
+    "LoopConfig": {
+      "type": "object",
+      "properties": {
+        "max": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1, "maximum": 1000 },
+            { "type": "string", "description": "CEL expression for max iterations" }
+          ],
+          "description": "Maximum iterations (required)"
+        },
+        "while": {
+          "type": "string",
+          "description": "CEL condition to continue looping (loop continues while true)"
+        },
+        "yield": {
+          "type": "string",
+          "description": "CEL expression. When true and while condition is false, yield to user for interaction before exiting loop."
+        },
+        "workflow": {
+          "type": "string",
+          "description": "Sub-workflow to execute each iteration"
+        },
+        "inline": {
+          "$ref": "#/definitions/InlineLoopBody",
+          "description": "Inline loop body (alternative to workflow reference)"
+        },
+        "entry": {
+          "type": "string",
+          "description": "Entry node for inline loop body"
+        }
+      },
+      "required": ["max"]
+    },
+    "InlineLoopBody": {
+      "type": "object",
+      "properties": {
+        "entry": {
+          "type": "string",
+          "description": "Entry node ID within the inline loop"
+        },
+        "inputs": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/InputSchema"
+          }
+        },
+        "nodes": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Node" }
+        },
+        "edges": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/Edge" }
+        },
+        "outputs": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      },
+      "required": ["entry", "nodes"]
+    },
+    "SaveMessageConfig": {
+      "type": "object",
+      "properties": {
+        "thread": {
+          "type": "string",
+          "description": "Thread to save to (CEL expression, defaults to inputs.thread)"
+        },
+        "condition": {
+          "type": "string",
+          "description": "CEL condition for saving (must evaluate to true)"
+        },
+        "role": {
+          "type": "string",
+          "description": "Message role (CEL expression: user, assistant, tool, system, info, warning, hidden)"
+        },
+        "content": {
+          "type": "string",
+          "description": "Message content (CEL expression)"
+        },
+        "tool_calls": {
+          "type": "string",
+          "description": "Tool calls for assistant messages (CEL expression)"
+        },
+        "tool_results": {
+          "type": "string",
+          "description": "Tool results for tool messages (CEL expression)"
+        },
+        "input_tokens": {
+          "type": "string",
+          "description": "Input tokens (CEL expression)"
+        },
+        "output_tokens": {
+          "type": "string",
+          "description": "Output tokens (CEL expression)"
+        },
+        "cache_creation_tokens": {
+          "type": "string",
+          "description": "Cache creation tokens (CEL expression)"
+        },
+        "cache_read_tokens": {
+          "type": "string",
+          "description": "Cache read tokens (CEL expression)"
+        },
+        "attachments": {
+          "type": "string",
+          "description": "Attachment IDs (CEL expression)"
+        }
+      }
+    },
+    "Edge": {
+      "type": "object",
+      "required": ["from"],
+      "description": "Edge with conditional routing. Must have at least one of cases or default.",
+      "properties": {
+        "from": {
+          "type": "string",
+          "description": "Source node ID"
+        },
+        "cases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/EdgeCase"
+          },
+          "description": "Conditional routing cases - first matching condition wins"
+        },
+        "default": {
+          "description": "Fallback destination when no case matches (string or array of strings)",
+          "oneOf": [
+            {"type": "string"},
+            {"type": "array", "items": {"type": "string"}}
+          ]
+        }
+      }
+    },
+    "EdgeCase": {
+      "type": "object",
+      "required": ["condition", "to"],
+      "properties": {
+        "condition": {
+          "type": "string",
+          "description": "CEL condition expression (required)"
+        },
+        "to": {
+          "type": "string",
+          "description": "Target node ID"
+        },
+        "label": {
+          "type": "string",
+          "description": "Human-readable label for visualization"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,13 @@
+version: "v1.2.1"
+date: "2026-03-18"
+title: "DNS resolution fix, GPT-5.4 Mini support, and parameter editing improvements"
+summary: "Fixes DNS resolution issues, adds GPT-5.4 Mini support, improves error message display, and resolves parameter editing bugs."
+items:
+  - title: "Fix DNS resolution"
+    description: "fix scenarios where DNS resolution might be broken."
+  - title: "Improve error message UI"
+    description: "error messages are now displayed more clearly."
+  - title: "Fix non-string parameter editing"
+    description: "resolve issues when editing non-string parameters."
+  - title: "Add GPT-5.4 Mini support"
+    description: "add support for the GPT-5.4 Mini model across Reliant workflows and model selection."

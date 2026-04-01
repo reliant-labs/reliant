@@ -1,0 +1,1854 @@
+@import "tailwindcss";
+@import "./styles/cursor-fixes.css";
+@import "./themes/professional-themes.css";
+@config "../tailwind.config.js";
+
+/* Animations */
+@layer utilities {
+  @keyframes pulse-border {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.7;
+    }
+  }
+  
+  @keyframes spin-slow {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  
+  .animate-spin-slow {
+    animation: spin-slow 3s linear infinite;
+  }
+}
+
+/* GLOBAL FIX: Prevent accidental transparency */
+@layer utilities {
+  /* Override any default opacity on theme background colors */
+  /* This ensures bg-background, bg-muted, etc. are ALWAYS opaque unless explicitly using /opacity modifier */
+  .bg-background {
+    background-color: hsl(var(--background)) !important;
+  }
+  .bg-foreground {
+    background-color: hsl(var(--foreground)) !important;
+  }
+  .bg-card {
+    background-color: hsl(var(--card)) !important;
+  }
+  .bg-popover {
+    background-color: hsl(var(--popover)) !important;
+  }
+  .bg-primary {
+    background-color: hsl(var(--primary)) !important;
+  }
+  .bg-secondary {
+    background-color: hsl(var(--secondary)) !important;
+  }
+  .bg-muted {
+    background-color: hsl(var(--muted)) !important;
+  }
+  .bg-accent {
+    background-color: hsl(var(--accent)) !important;
+  }
+  .bg-destructive {
+    background-color: hsl(var(--destructive)) !important;
+  }
+  /* Hover bg for secondary-style buttons (e.g. Create PR) - must come after .bg-background so it wins on hover */
+  .btn-hover-bg-muted:hover {
+    background-color: hsl(var(--muted)) !important;
+  }
+}
+
+/* Syntax highlighting themes - using .dark class instead of media queries */
+@layer base {
+  :root {
+    @import "highlight.js/styles/github.css";
+  }
+
+  .dark {
+    @import "highlight.js/styles/github-dark.css";
+  }
+}
+
+/* Override Shiki syntax highlighting background to use theme background */
+@layer components {
+  /* Make shiki code blocks transparent and use our theme colors */
+  pre.shiki,
+  pre.shiki > code {
+    background-color: transparent !important;
+    background: transparent !important;
+  }
+
+  /* Ensure syntax highlighting respects theme */
+  .shiki {
+    background-color: transparent !important;
+  }
+}
+
+@layer base {
+  :root {
+    /* VIBRANT BLUE LIGHT THEME - colorful & modern */
+    --background: 0 0% 98%;          /* Soft white, not harsh */
+    --foreground: 0 0% 15%;          /* True neutral dark gray */
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 15%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 15%;
+    --primary: 217 91% 60%;          /* Vibrant blue */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 280 85% 65%;        /* Purple accent */
+    --secondary-foreground: 0 0% 100%;
+    --muted: 210 40% 96%;            /* Very light blue-gray */
+    --muted-foreground: 215 16% 47%;
+    --accent: 210 40% 96%;           /* Light blue accent */
+    --accent-foreground: 217 91% 60%;
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 91%;           /* Light blue-gray border */
+    --input: 214 32% 91%;
+    --ring: 217 91% 60%;
+
+    /* Code colors fallback (before themed data attributes apply) */
+    --code-bg: #f5f5f5;
+    --code-fg: #1a1a1a;
+    --code-accent: #333333;
+
+    /* Config panel input surfaces */
+    --config-input-bg: 210 40% 96%;
+    --config-input-border: 214 32% 82%;
+    --radius: 0.5rem;
+
+    /* Semantic colors for status, success, warning, info */
+    --success: 142 76% 36%;          /* Green for success states */
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;           /* Amber/Orange for warnings */
+    --warning-foreground: 0 0% 100%;
+    --info: 199 89% 48%;             /* Blue for info states */
+    --info-foreground: 0 0% 100%;
+
+    /* Status colors for worktrees and processes */
+    --status-active: 142 76% 36%;     /* Green */
+    --status-completed: 217 91% 60%;  /* Blue */
+    --status-merging: 280 85% 56%;    /* Purple */
+    --status-abandoned: 0 0% 45%;     /* Gray */
+    --status-processing: 199 89% 48%; /* Blue */
+    --status-pending: 280 85% 56%;    /* Purple */
+
+    /* Font family variables - VS Code defaults */
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe WPC', 'Segoe UI', 'Ubuntu', 'Droid Sans', sans-serif;
+    --font-mono: Menlo, Monaco, Consolas, 'Courier New', monospace;
+
+    /* Neutral elevation */
+    --surface-base: 0 0% 98%;
+    --surface-raised: 0 0% 99%;
+    --surface-overlay: 0 0% 100%;
+    --surface-modal: 0 0% 100%;
+
+    /* Chat with better contrast - more visible */
+    --chat-input-bg: #f5f5f5;
+    --chat-input-text: #1a1a1a;
+    --chat-input-placeholder: #666666;
+    --chat-button-bg: #e0e0e0;        /* Darker for better visibility */
+    --chat-button-text: #0a0a0a;      /* Darker text for better contrast */
+    --chat-button-hover: #d0d0d0;     /* More visible hover */
+    --chat-border: #b0b0b0;           /* Stronger border */
+    --purple-500: #333333;            /* Neutral gray */
+
+    /* Dropdown-specific colors */
+    --chat-dropdown-bg: #e8e8e8;      /* Slightly darker than button */
+    --chat-dropdown-search-bg: #f2f2f2; /* Lighter search area */
+    --chat-dropdown-input-bg: #ffffff; /* White input field */
+    --chat-dropdown-group-bg: #ececec; /* Group header background */
+    --chat-dropdown-item-hover: #d8d8d8; /* Item hover */
+    --chat-dropdown-item-selected: #d0d0d0; /* Selected item */
+
+    /* Neutral transparent hover */
+    --transparent-button-hover: rgba(0, 0, 0, 0.08);
+
+    /* Streaming mode - more visible */
+    --chat-button-bg-streaming: rgba(0, 0, 0, 0.12);
+    --chat-button-text-streaming: #0a0a0a;
+    --chat-button-hover-streaming: rgba(0, 0, 0, 0.18);
+    --chat-border-streaming: rgba(0, 0, 0, 0.30);
+
+    /* Tooltip colors - neutral, not blue */
+    --tooltip-bg: 0 0% 20%;              /* Dark neutral gray */
+    --tooltip-foreground: 0 0% 98%;      /* White text */
+  }
+
+  .dark {
+    /* VIBRANT BLUE DARK THEME - colorful & modern */
+    --background: 222 47% 11%;       /* Deep blue-gray */
+    --foreground: 210 40% 98%;       /* Soft white text */
+    --card: 222 47% 13%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 13%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217 91% 70%;          /* Bright blue */
+    --primary-foreground: 222 47% 11%;
+    --secondary: 280 85% 70%;        /* Purple accent */
+    --secondary-foreground: 222 47% 11%;
+    --muted: 217 33% 17%;            /* Dark blue-gray */
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 33% 17%;           /* Dark blue accent */
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 70% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 217 33% 24%;           /* Dark blue-gray border */
+    --input: 217 33% 24%;
+    --ring: 217 91% 70%;
+
+    /* Code colors fallback (before themed data attributes apply) */
+    --code-bg: #1f1f1f;
+    --code-fg: #e6e6e6;
+    --code-accent: #b8b8b8;
+
+    /* Config panel input surfaces */
+    --config-input-bg: 217 33% 18%;
+    --config-input-border: 217 33% 32%;
+
+    /* Semantic colors for dark mode */
+    --success: 142 76% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 55%;
+    --warning-foreground: 0 0% 100%;
+    --info: 199 89% 58%;
+    --info-foreground: 0 0% 100%;
+
+    /* Status colors for dark mode */
+    --status-active: 142 76% 45%;
+    --status-completed: 217 91% 65%;
+    --status-merging: 280 85% 65%;
+    --status-abandoned: 0 0% 55%;
+    --status-processing: 199 89% 58%;
+    --status-pending: 280 85% 65%;
+
+    /* Dark elevation - use theme colors */
+    --surface-base: var(--background);
+    --surface-raised: var(--muted);
+    --surface-overlay: var(--card);
+    --surface-modal: var(--card);
+
+    /* Chat input colors - better contrast for dark mode */
+    --chat-input-bg: hsl(217 33% 20%);        /* Slightly lighter than muted */
+    --chat-input-text: hsl(var(--foreground));
+    --chat-input-placeholder: hsl(var(--muted-foreground));
+    --chat-button-bg: hsl(217 33% 22%);       /* More visible background */
+    --chat-button-text: hsl(210 40% 98%);     /* Brighter text */
+    --chat-button-hover: hsl(217 33% 28%);    /* More visible hover */
+    --chat-border: hsl(217 33% 32%);          /* Stronger border */
+    --purple-500: #b8b8b8;                    /* Light neutral gray */
+
+    /* Dropdown-specific colors */
+    --chat-dropdown-bg: hsl(217 33% 18%);     /* Slightly darker than button */
+    --chat-dropdown-search-bg: hsl(217 33% 24%); /* Lighter search area */
+    --chat-dropdown-input-bg: hsl(217 33% 26%); /* Input field */
+    --chat-dropdown-group-bg: hsl(217 33% 20%); /* Group header background */
+    --chat-dropdown-item-hover: hsl(217 33% 30%); /* Item hover */
+    --chat-dropdown-item-selected: hsl(217 33% 28%); /* Selected item */
+
+    /* Neutral transparent hover */
+    --transparent-button-hover: rgba(255, 255, 255, 0.12);
+
+    /* Streaming mode - better visibility */
+    --chat-button-bg-streaming: rgba(255, 255, 255, 0.16);
+    --chat-button-text-streaming: #f0f0f0;
+    --chat-button-hover-streaming: rgba(255, 255, 255, 0.24);
+    --chat-border-streaming: rgba(255, 255, 255, 0.35);
+
+    /* Tooltip colors - neutral, not blue */
+    --tooltip-bg: 0 0% 20%;              /* Dark neutral gray */
+    --tooltip-foreground: 0 0% 98%;      /* White text */
+  }
+}
+
+/* Theme tokens: override variables based on data-theme */
+@layer base {
+  :root[data-theme="light-default"] {
+    /* VIBRANT BLUE LIGHT - colorful and modern */
+    --background: 0 0% 98%;
+    --foreground: 0 0% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 15%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 15%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 280 85% 65%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 217 91% 60%;
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 217 91% 60%;
+    /* Tab colors - Blue */
+    --tab-active: 217 91% 60%;
+    --tab-active-foreground: 0 0% 100%;
+    --tab-active-accent: 217 91% 50%;
+    /* Code colors - neutral */
+    --code-bg: #f5f5f5; --code-fg: #1a1a1a; --code-accent: #333333;
+    /* Chat input - better contrast */
+    --chat-input-bg: #f5f5f5;
+    --chat-input-text: #1a1a1a;
+    --chat-input-placeholder: #666666;
+    --chat-button-bg: #e0e0e0;
+    --chat-button-text: #0a0a0a;
+    --chat-button-hover: #d0d0d0;
+    --chat-border: #b0b0b0;
+    /* Neutral transparent hover */
+    --transparent-button-hover: rgba(0, 0, 0, 0.08);
+    /* Streaming mode - better visibility */
+    --chat-button-bg-streaming: rgba(0, 0, 0, 0.12);
+    --chat-button-text-streaming: #0a0a0a;
+    --chat-button-hover-streaming: rgba(0, 0, 0, 0.18);
+    --chat-border-streaming: rgba(0, 0, 0, 0.30);
+    /* Dropdown-specific colors */
+    --chat-dropdown-bg: #e8e8e8;
+    --chat-dropdown-search-bg: #f2f2f2;
+    --chat-dropdown-input-bg: #ffffff;
+    --chat-dropdown-group-bg: #ececec;
+    --chat-dropdown-item-hover: #d8d8d8;
+    --chat-dropdown-item-selected: #d0d0d0;
+    /* Tooltip colors - neutral */
+    --tooltip-bg: 0 0% 20%;
+    --tooltip-foreground: 0 0% 98%;
+  }
+  :root[data-theme="dark-default"] {
+    /* VIBRANT BLUE DARK - colorful and modern */
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 13%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 13%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217 91% 70%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 280 85% 70%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 70% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 217 33% 24%;
+    --input: 217 33% 24%;
+    --ring: 217 91% 70%;
+    /* Tab colors - Blue */
+    --tab-active: 217 91% 70%;
+    --tab-active-foreground: 222 47% 11%;
+    --tab-active-accent: 217 91% 60%;
+    /* Code colors - neutral dark */
+    --code-bg: #1f1f1f; --code-fg: #e6e6e6; --code-accent: #b8b8b8;
+    /* Chat input - better contrast for dark mode */
+    --chat-input-bg: hsl(217 33% 20%);
+    --chat-input-text: hsl(var(--foreground));
+    --chat-input-placeholder: hsl(var(--muted-foreground));
+    --chat-button-bg: hsl(217 33% 22%);
+    --chat-button-text: hsl(210 40% 98%);
+    --chat-button-hover: hsl(217 33% 28%);
+    --chat-border: hsl(217 33% 32%);
+    /* Neutral transparent hover */
+    --transparent-button-hover: rgba(255, 255, 255, 0.12);
+    /* Streaming mode - better visibility */
+    --chat-button-bg-streaming: rgba(255, 255, 255, 0.16);
+    --chat-button-text-streaming: #f0f0f0;
+    --chat-button-hover-streaming: rgba(255, 255, 255, 0.24);
+    --chat-border-streaming: rgba(255, 255, 255, 0.35);
+    /* Dropdown-specific colors */
+    --chat-dropdown-bg: hsl(217 33% 18%);
+    --chat-dropdown-search-bg: hsl(217 33% 24%);
+    --chat-dropdown-input-bg: hsl(217 33% 26%);
+    --chat-dropdown-group-bg: hsl(217 33% 20%);
+    --chat-dropdown-item-hover: hsl(217 33% 30%);
+    --chat-dropdown-item-selected: hsl(217 33% 28%);
+    /* Tooltip colors - neutral */
+    --tooltip-bg: 0 0% 20%;
+    --tooltip-foreground: 0 0% 98%;
+  }
+  :root[data-theme="github-light"] { /* GitHub Light */
+    --background: 210 20% 98%;
+    --foreground: 220 13% 18%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 13% 18%;
+    --muted: 210 29% 97%;
+    --muted-foreground: 220 9% 46%;
+    --accent: 210 29% 97%;
+    --accent-foreground: 220 13% 18%;
+    --primary: 212 100% 43%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 29% 97%;
+    --secondary-foreground: 220 13% 18%;
+    --destructive: 0 73% 42%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 15% 91%;
+    --input: 214 15% 91%;
+    --ring: 212 100% 43%;
+    /* Tab colors */
+    --tab-active: 212 100% 43%;
+    --tab-active-foreground: 0 0% 100%;
+    --tab-active-accent: 212 100% 43%;
+    --code-bg: #f6f8fa; --code-fg: #24292e; --code-accent: #0969da;
+    /* GitHub Light chat colors - use theme variables */
+    --chat-input-bg: hsl(var(--card));
+    --chat-input-text: hsl(var(--foreground));
+    --chat-input-placeholder: hsl(var(--muted-foreground));
+    --chat-button-bg: hsl(var(--muted));
+    --chat-button-text: hsl(var(--foreground));
+    --chat-button-hover: hsl(var(--accent));
+    --chat-border: hsl(var(--border));
+    --transparent-button-hover: rgba(0, 0, 0, 0.04);
+    --chat-button-bg-streaming: rgba(13, 110, 253, 0.05);
+    --chat-button-text-streaming: #24292f;
+    --chat-button-hover-streaming: rgba(13, 110, 253, 0.1);
+    --chat-border-streaming: rgba(13, 110, 253, 0.2);
+    /* Dropdown-specific colors */
+    --chat-dropdown-bg: hsl(210 29% 95%);
+    --chat-dropdown-search-bg: hsl(210 29% 97%);
+    --chat-dropdown-input-bg: hsl(0 0% 100%);
+    --chat-dropdown-group-bg: hsl(210 29% 96%);
+    --chat-dropdown-item-hover: hsl(210 29% 93%);
+    --chat-dropdown-item-selected: hsl(210 29% 94%);
+    /* Tooltip colors - neutral */
+    --tooltip-bg: 0 0% 20%;
+    --tooltip-foreground: 0 0% 98%;
+  }
+  :root[data-theme="solarized-light"] { /* Solarized Light */
+    --background: 44 87% 94%; /* base3 */
+    --foreground: 192 13% 23%; /* base00 */
+    --card: 44 87% 94%;
+    --card-foreground: 192 13% 23%;
+    --muted: 44 40% 90%;
+    --muted-foreground: 192 9% 35%;
+    --accent: 44 40% 90%;
+    --accent-foreground: 192 13% 23%;
+    --primary: 205 69% 40%; /* blue */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 44 40% 90%;
+    --secondary-foreground: 192 13% 23%;
+    --destructive: 6 84% 44%; /* red */
+    --destructive-foreground: 0 0% 100%;
+    --border: 44 25% 80%;
+    --input: 44 25% 80%;
+    --ring: 205 69% 40%;
+    /* Tab colors */
+    --tab-active: 205 69% 40%;
+    --tab-active-foreground: 0 0% 100%;
+    --tab-active-accent: 43 100% 50%;
+    --code-bg: #fdf6e3; --code-fg: #586e75; --code-accent: #268bd2;
+    /* Solarized Light chat colors - use theme variables */
+    --chat-input-bg: hsl(var(--card));
+    --chat-input-text: hsl(var(--foreground));
+    --chat-input-placeholder: hsl(var(--muted-foreground));
+    --chat-button-bg: hsl(var(--muted));
+    --chat-button-text: hsl(var(--foreground));
+    --chat-button-hover: hsl(var(--accent));
+    --chat-border: hsl(var(--border));
+    --transparent-button-hover: rgba(88, 110, 117, 0.06);
+    --chat-button-bg-streaming: rgba(38, 139, 210, 0.08);
+    --chat-button-text-streaming: #586e75;
+    --chat-button-hover-streaming: rgba(38, 139, 210, 0.12);
+    --chat-border-streaming: rgba(38, 139, 210, 0.25);
+    /* Dropdown-specific colors */
+    --chat-dropdown-bg: hsl(44 87% 96%);
+    --chat-dropdown-search-bg: hsl(44 87% 98%);
+    --chat-dropdown-input-bg: hsl(0 0% 100%);
+    --chat-dropdown-group-bg: hsl(44 87% 97%);
+    --chat-dropdown-item-hover: hsl(44 87% 94%);
+    --chat-dropdown-item-selected: hsl(44 87% 95%);
+    /* Tooltip colors - neutral */
+    --tooltip-bg: 0 0% 20%;
+    --tooltip-foreground: 0 0% 98%;
+  }
+  :root[data-theme="one-light"] { /* One Light */
+    --background: 0 0% 100%;
+    --foreground: 210 13% 23%;
+    --card: 0 0% 100%;
+    --card-foreground: 210 13% 23%;
+    --muted: 210 20% 96%;
+    --muted-foreground: 210 10% 40%;
+    --accent: 210 20% 96%;
+    --accent-foreground: 210 13% 23%;
+    --primary: 207 82% 66%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 20% 96%;
+    --secondary-foreground: 210 13% 23%;
+    --destructive: 357 79% 65%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 210 16% 90%;
+    --input: 210 16% 90%;
+    --ring: 207 82% 66%;
+    /* Tab colors */
+    --tab-active: 207 82% 66%;
+    --tab-active-foreground: 0 0% 100%;
+    --tab-active-accent: 116 60% 50%;
+    --code-bg: #fafafa; --code-fg: #383a42; --code-accent: #4078f2;
+    /* One Light chat colors - use theme variables */
+    --chat-input-bg: hsl(var(--card));
+    --chat-input-text: hsl(var(--foreground));
+    --chat-input-placeholder: hsl(var(--muted-foreground));
+    --chat-button-bg: hsl(var(--muted));
+    --chat-button-text: hsl(var(--foreground));
+    --chat-button-hover: hsl(var(--accent));
+    --chat-border: hsl(var(--border));
+    --transparent-button-hover: rgba(56, 58, 66, 0.05);
+    --chat-button-bg-streaming: rgba(64, 120, 242, 0.06);
+    --chat-button-text-streaming: #383a42;
+    --chat-button-hover-streaming: rgba(64, 120, 242, 0.1);
+    --chat-border-streaming: rgba(64, 120, 242, 0.2);
+    /* Dropdown-specific colors */
+    --chat-dropdown-bg: hsl(230 25% 98%);
+    --chat-dropdown-search-bg: hsl(230 25% 99%);
+    --chat-dropdown-input-bg: hsl(0 0% 100%);
+    --chat-dropdown-group-bg: hsl(230 25% 98%);
+    --chat-dropdown-item-hover: hsl(230 25% 95%);
+    --chat-dropdown-item-selected: hsl(230 25% 96%);
+    /* Tooltip colors - neutral */
+    --tooltip-bg: 0 0% 20%;
+    --tooltip-foreground: 0 0% 98%;
+  }
+  :root[data-theme="dracula"] { /* Dracula */
+    --background: 231 15% 18%;
+    --foreground: 60 30% 96%;
+    --card: 231 15% 20%;
+    --card-foreground: 60 30% 96%;
+    --muted: 231 15% 22%;
+    --muted-foreground: 60 10% 80%;
+    --accent: 260 89% 76%; /* purple */
+    --accent-foreground: 231 15% 18%;
+    --primary: 191 97% 77%; /* cyan */
+    --primary-foreground: 231 15% 18%;
+    --secondary: 326 85% 76%; /* pink */
+    --secondary-foreground: 231 15% 18%;
+    --destructive: 0 100% 67%;
+    --destructive-foreground: 231 15% 18%;
+    --border: 231 15% 28%;
+    --input: 231 15% 28%;
+    --ring: 260 89% 76%;
+    /* Tab colors */
+    --tab-active: 260 89% 76%;
+    --tab-active-foreground: 231 15% 18%;
+    --tab-active-accent: 326 85% 76%;
+    --code-bg: #282a36; --code-fg: #f8f8f2; --code-accent: #bd93f9;
+    /* Dracula chat colors - use theme variables */
+    --chat-input-bg: hsl(var(--card));
+    --chat-input-text: hsl(var(--foreground));
+    --chat-input-placeholder: hsl(var(--muted-foreground));
+    --chat-button-bg: hsl(var(--muted));
+    --chat-button-text: hsl(var(--foreground));
+    --chat-button-hover: hsl(var(--accent));
+    --chat-border: hsl(var(--border));
+    --transparent-button-hover: rgba(189, 147, 249, 0.08);
+    --chat-button-bg-streaming: rgba(189, 147, 249, 0.12);
+    --chat-button-text-streaming: #f8f8f2;
+    --chat-button-hover-streaming: rgba(189, 147, 249, 0.18);
+    --chat-border-streaming: rgba(189, 147, 249, 0.3);
+    /* Dropdown-specific colors */
+    --chat-dropdown-bg: hsl(231 15% 20%);
+    --chat-dropdown-search-bg: hsl(231 15% 24%);
+    --chat-dropdown-input-bg: hsl(231 15% 26%);
+    --chat-dropdown-group-bg: hsl(231 15% 21%);
+    --chat-dropdown-item-hover: hsl(231 15% 28%);
+    --chat-dropdown-item-selected: hsl(231 15% 26%);
+    /* Tooltip colors - neutral */
+    --tooltip-bg: 0 0% 20%;
+    --tooltip-foreground: 0 0% 98%;
+  }
+  :root[data-theme="tokyo-night"] { /* Tokyo Night */
+    --background: 235 20% 20%;
+    --foreground: 220 27% 92%;
+    --card: 235 20% 22%;
+    --card-foreground: 220 27% 92%;
+    --muted: 235 15% 26%;
+    --muted-foreground: 218 14% 71%;
+    --accent: 199 94% 70%;
+    --accent-foreground: 235 20% 20%;
+    --primary: 267 84% 81%;
+    --primary-foreground: 235 20% 20%;
+    --secondary: 204 94% 68%;
+    --secondary-foreground: 235 20% 20%;
+    --destructive: 346 74% 60%;
+    --destructive-foreground: 235 20% 20%;
+    --border: 235 15% 28%;
+    --input: 235 15% 28%;
+    --ring: 199 94% 70%;
+    /* Tab colors */
+    --tab-active: 267 84% 81%;
+    --tab-active-foreground: 235 20% 20%;
+    --tab-active-accent: 199 94% 70%;
+    --code-bg: #1a1b26; --code-fg: #c0caf5; --code-accent: #7aa2f7;
+    /* Tokyo Night chat colors - use theme variables */
+    --chat-input-bg: hsl(var(--card));
+    --chat-input-text: hsl(var(--foreground));
+    --chat-input-placeholder: hsl(var(--muted-foreground));
+    --chat-button-bg: hsl(var(--muted));
+    --chat-button-text: hsl(var(--foreground));
+    --chat-button-hover: hsl(var(--accent));
+    --chat-border: hsl(var(--border));
+    --transparent-button-hover: rgba(122, 162, 247, 0.08);
+    --chat-button-bg-streaming: rgba(122, 162, 247, 0.12);
+    --chat-button-text-streaming: #c0caf5;
+    --chat-button-hover-streaming: rgba(122, 162, 247, 0.18);
+    --chat-border-streaming: rgba(122, 162, 247, 0.3);
+    /* Dropdown-specific colors */
+    --chat-dropdown-bg: hsl(220 16% 20%);
+    --chat-dropdown-search-bg: hsl(220 16% 24%);
+    --chat-dropdown-input-bg: hsl(220 16% 26%);
+    --chat-dropdown-group-bg: hsl(220 16% 21%);
+    --chat-dropdown-item-hover: hsl(220 16% 28%);
+    --chat-dropdown-item-selected: hsl(220 16% 26%);
+    /* Tooltip colors - neutral */
+    --tooltip-bg: 0 0% 20%;
+    --tooltip-foreground: 0 0% 98%;
+  }
+  :root[data-theme="nord"] { /* Nord */
+    --background: 220 16% 22%;
+    --foreground: 218 27% 94%;
+    --card: 220 16% 24%;
+    --card-foreground: 218 27% 94%;
+    --muted: 220 16% 28%;
+    --muted-foreground: 218 16% 78%;
+    --accent: 199 53% 47%;
+    --accent-foreground: 218 27% 94%;
+    --primary: 210 34% 63%;
+    --primary-foreground: 220 16% 22%;
+    --secondary: 179 25% 65%;
+    --secondary-foreground: 220 16% 22%;
+    --destructive: 354 42% 56%;
+    --destructive-foreground: 220 16% 22%;
+    --border: 220 16% 30%;
+    --input: 220 16% 30%;
+    --ring: 199 53% 47%;
+    /* Tab colors */
+    --tab-active: 210 34% 63%;
+    --tab-active-foreground: 220 16% 22%;
+    --tab-active-accent: 199 53% 47%;
+    --code-bg: #2e3440; --code-fg: #d8dee9; --code-accent: #88c0d0;
+    /* Nord chat colors - use theme variables */
+    --chat-input-bg: hsl(var(--card));
+    --chat-input-text: hsl(var(--foreground));
+    --chat-input-placeholder: hsl(var(--muted-foreground));
+    --chat-button-bg: hsl(var(--muted));
+    --chat-button-text: hsl(var(--foreground));
+    --chat-button-hover: hsl(var(--accent));
+    --chat-border: hsl(var(--border));
+    --transparent-button-hover: rgba(136, 192, 208, 0.08);
+    --chat-button-bg-streaming: rgba(136, 192, 208, 0.12);
+    --chat-button-text-streaming: #d8dee9;
+    --chat-button-hover-streaming: rgba(136, 192, 208, 0.18);
+    --chat-border-streaming: rgba(136, 192, 208, 0.3);
+    /* Dropdown-specific colors */
+    --chat-dropdown-bg: hsl(220 16% 18%);
+    --chat-dropdown-search-bg: hsl(220 16% 22%);
+    --chat-dropdown-input-bg: hsl(220 16% 24%);
+    --chat-dropdown-group-bg: hsl(220 16% 19%);
+    --chat-dropdown-item-hover: hsl(220 16% 26%);
+    --chat-dropdown-item-selected: hsl(220 16% 24%);
+    /* Tooltip colors - neutral */
+    --tooltip-bg: 0 0% 20%;
+    --tooltip-foreground: 0 0% 98%;
+  }
+}
+
+/* Override highlight.js colors to match current theme */
+[data-theme] .hljs {
+  background: var(--code-bg) !important;
+  color: var(--code-fg) !important;
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+}
+[data-theme] pre code {
+  background: transparent !important;
+  color: inherit !important;
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+}
+[data-theme] .hljs-keyword, [data-theme] .hljs-selector-tag { color: var(--ring) !important; }
+[data-theme] .hljs-string, [data-theme] .hljs-title, [data-theme] .hljs-name { color: var(--code-accent) !important; }
+
+/* Keep markdown code blocks simple and neutral in both modes */
+[data-theme] .prose pre {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+/* Dynamic chat button styling based on streaming state */
+.chat-streaming .chat-button {
+  background-color: var(--chat-button-bg-streaming) !important;
+  color: var(--chat-button-text-streaming) !important;
+  border-color: var(--chat-border-streaming) !important;
+}
+
+.chat-streaming .chat-button:hover {
+  background-color: var(--chat-button-hover-streaming) !important;
+}
+
+/* Auto-approve button uses distinct primary color when enabled */
+.chat-streaming .chat-button.auto-approve-active {
+  background-color: hsl(var(--primary) / 0.3) !important;
+  color: hsl(var(--primary)) !important;
+  border-color: hsl(var(--primary) / 0.4) !important;
+}
+
+.chat-streaming .chat-button.auto-approve-active:hover {
+  background-color: hsl(var(--primary) / 0.4) !important;
+}
+
+/* Auto-approve button when not streaming but still enabled */
+.chat-button.auto-approve-active:not(.chat-streaming *) {
+  background-color: hsl(var(--primary) / 0.2) !important;
+  color: hsl(var(--primary)) !important;
+  border-color: hsl(var(--primary) / 0.3) !important;
+}
+
+.chat-button.auto-approve-active:not(.chat-streaming *):hover {
+  background-color: hsl(var(--primary) / 0.3) !important;
+}
+
+/* Plan mode button when active (matches auto-approve styling) */
+.chat-button.plan-mode-active {
+  background-color: hsl(var(--primary) / 0.2) !important;
+  color: hsl(var(--primary)) !important;
+  border-color: hsl(var(--primary) / 0.3) !important;
+}
+
+.chat-button.plan-mode-active:hover {
+  background-color: hsl(var(--primary) / 0.3) !important;
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    margin: 0;
+    /* Use CSS variable for font family - allows dynamic switching */
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-size: 14px;                /* Comfortable reading size */
+    line-height: 1.6;               /* Better readability */
+    font-weight: 400;
+    letter-spacing: -0.011em;
+  }
+
+  /* Font family presets - IMPORTANT: These override the default --font-sans */
+  :root[data-font="system"] {
+    --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif !important;
+  }
+
+  :root[data-font="inter"] {
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  }
+
+  :root[data-font="mono"] {
+    --font-sans: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'SF Mono', ui-monospace, Menlo, Monaco, Consolas, monospace !important;
+  }
+
+  :root[data-font="geist"] {
+    --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  }
+
+  :root[data-font="comic"] {
+    --font-sans: 'Comic Sans MS', 'Chalkboard SE', 'Comic Neue', cursive, sans-serif !important;
+  }
+
+
+  /* Chat Font Settings */
+  /* Default: monospace font when no data-chat-font is set */
+  textarea[data-testid="chat-input"],
+  .chat-input,
+  .user-message-content,
+  .user-message-content * {
+    font-family: var(--font-mono) !important;
+  }
+
+  :root[data-chat-font="inherit"] textarea[data-testid="chat-input"],
+  :root[data-chat-font="inherit"] .chat-input,
+  :root[data-chat-font="inherit"] .user-message-content,
+  :root[data-chat-font="inherit"] .user-message-content * {
+    font-family: inherit !important;
+  }
+
+  :root[data-chat-font="system"] textarea[data-testid="chat-input"],
+  :root[data-chat-font="system"] .chat-input,
+  :root[data-chat-font="system"] .user-message-content,
+  :root[data-chat-font="system"] .user-message-content * {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif !important;
+  }
+
+  :root[data-chat-font="inter"] textarea[data-testid="chat-input"],
+  :root[data-chat-font="inter"] .chat-input,
+  :root[data-chat-font="inter"] .user-message-content,
+  :root[data-chat-font="inter"] .user-message-content * {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  }
+
+  :root[data-chat-font="mono"] textarea[data-testid="chat-input"],
+  :root[data-chat-font="mono"] .chat-input,
+  :root[data-chat-font="mono"] .user-message-content,
+  :root[data-chat-font="mono"] .user-message-content * {
+    font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'SF Mono', ui-monospace, Menlo, Monaco, Consolas, monospace !important;
+  }
+
+  :root[data-chat-font="geist"] textarea[data-testid="chat-input"],
+  :root[data-chat-font="geist"] .chat-input,
+  :root[data-chat-font="geist"] .user-message-content,
+  :root[data-chat-font="geist"] .user-message-content * {
+    font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  }
+
+  :root[data-chat-font="comic"] textarea[data-testid="chat-input"],
+  :root[data-chat-font="comic"] .chat-input,
+  :root[data-chat-font="comic"] .user-message-content,
+  :root[data-chat-font="comic"] .user-message-content * {
+    font-family: 'Comic Sans MS', 'Chalkboard SE', 'Comic Neue', cursive, sans-serif !important;
+  }
+
+  /* Editor Font Settings */
+  :root[data-editor-font="mono"] .monaco-editor,
+  :root[data-editor-font="mono"] .monaco-editor * {
+    font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'SF Mono', ui-monospace, Menlo, Monaco, Consolas, monospace !important;
+  }
+
+  :root[data-editor-font="inherit"] .monaco-editor,
+  :root[data-editor-font="inherit"] .monaco-editor * {
+    font-family: inherit !important;
+  }
+
+  :root[data-editor-font="system"] .monaco-editor,
+  :root[data-editor-font="system"] .monaco-editor * {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif !important;
+  }
+
+  :root[data-editor-font="inter"] .monaco-editor,
+  :root[data-editor-font="inter"] .monaco-editor * {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  }
+
+  :root[data-editor-font="geist"] .monaco-editor,
+  :root[data-editor-font="geist"] .monaco-editor * {
+    font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  }
+
+  :root[data-editor-font="comic"] .monaco-editor,
+  :root[data-editor-font="comic"] .monaco-editor * {
+    font-family: 'Comic Sans MS', 'Chalkboard SE', 'Comic Neue', cursive, sans-serif !important;
+  }
+
+  /* Grid pattern for background */
+  .bg-grid-pattern {
+    background-image:
+      linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--border)) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+
+  /* Fix autofill background to be transparent */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 30px transparent inset !important;
+    -webkit-text-fill-color: hsl(var(--foreground)) !important;
+    transition: background-color 5000s ease-in-out 0s;
+  }
+}
+
+@layer utilities {
+  /* Modern Elevation System - Layered shadows for depth hierarchy */
+  .elevation-0 {
+    background-color: hsl(var(--surface-base));
+    box-shadow: none;
+  }
+
+  .elevation-1 {
+    background-color: hsl(var(--surface-raised));
+    /* Subtle shadow with warm undertones */
+    box-shadow:
+      0 1px 2px 0 rgb(0 0 0 / 0.06),
+      0 1px 3px 0 rgb(0 0 0 / 0.08);
+  }
+
+  .elevation-2 {
+    background-color: hsl(var(--surface-overlay));
+    /* Medium depth with layered shadows */
+    box-shadow:
+      0 2px 4px -1px rgb(0 0 0 / 0.06),
+      0 4px 6px -1px rgb(0 0 0 / 0.10);
+  }
+
+  .elevation-3 {
+    background-color: hsl(var(--surface-modal));
+    /* Clear hierarchy with prominent shadows */
+    box-shadow:
+      0 4px 6px -2px rgb(0 0 0 / 0.08),
+      0 10px 15px -3px rgb(0 0 0 / 0.12),
+      0 0 0 1px rgb(0 0 0 / 0.04);
+  }
+
+  .elevation-4 {
+    background-color: hsl(var(--surface-modal));
+    /* High elevation for modals and overlays */
+    box-shadow:
+      0 8px 10px -6px rgb(0 0 0 / 0.08),
+      0 20px 25px -5px rgb(0 0 0 / 0.14),
+      0 0 0 1px rgb(0 0 0 / 0.04);
+  }
+
+  .elevation-5 {
+    background-color: hsl(var(--surface-modal));
+    /* Maximum elevation with dramatic depth */
+    box-shadow:
+      0 10px 24px -8px rgb(0 0 0 / 0.12),
+      0 25px 50px -12px rgb(0 0 0 / 0.25),
+      0 0 0 1px rgb(0 0 0 / 0.04);
+  }
+
+  /* Dark mode - more dramatic shadows with theme color tint */
+  .dark .elevation-1 {
+    box-shadow:
+      0 1px 2px 0 hsl(var(--primary) / 0.08),
+      0 1px 3px 0 rgb(0 0 0 / 0.20);
+  }
+
+  .dark .elevation-2 {
+    box-shadow:
+      0 2px 4px -1px hsl(var(--primary) / 0.10),
+      0 4px 6px -1px rgb(0 0 0 / 0.24);
+  }
+
+  .dark .elevation-3 {
+    box-shadow:
+      0 4px 6px -2px hsl(var(--primary) / 0.12),
+      0 10px 15px -3px rgb(0 0 0 / 0.30),
+      0 0 0 1px hsl(var(--border) / 0.3);
+  }
+
+  .dark .elevation-4 {
+    box-shadow:
+      0 8px 10px -6px hsl(var(--primary) / 0.14),
+      0 20px 25px -5px rgb(0 0 0 / 0.35),
+      0 0 0 1px hsl(var(--border) / 0.3);
+  }
+
+  .dark .elevation-5 {
+    box-shadow:
+      0 10px 24px -8px hsl(var(--primary) / 0.16),
+      0 25px 50px -12px rgb(0 0 0 / 0.40),
+      0 0 0 1px hsl(var(--border) / 0.4);
+  }
+
+  .font-mono {
+    font-family: var(--font-mono) !important;
+  }
+
+  /* Color utilities for consistent theming */
+  .text-primary-accent {
+    color: hsl(var(--primary));
+  }
+
+  .text-secondary-accent {
+    color: hsl(var(--secondary-foreground));
+  }
+
+  .bg-primary-subtle {
+    background-color: hsl(var(--primary) / 0.1);
+  }
+
+  .border-primary-subtle {
+    border-color: hsl(var(--primary) / 0.3);
+  }
+
+  /* Hover states with primary color */
+  .hover-primary:hover {
+    color: hsl(var(--primary));
+  }
+
+  .hover-bg-primary:hover {
+    background-color: hsl(var(--primary) / 0.1);
+  }
+
+  /* Active/selected states get primary color */
+  .active-item,
+  [aria-selected="true"],
+  [data-state="active"] {
+    color: hsl(var(--primary));
+  }
+
+  /* Important headings and labels get subtle primary tint */
+  h1, h2 {
+    color: hsl(var(--foreground));
+  }
+
+  h3, h4 {
+    color: hsl(var(--foreground) / 0.9);
+  }
+
+  /* Links get primary color */
+  a:not(.no-color) {
+    color: hsl(var(--primary));
+    transition: color 0.2s;
+  }
+
+  a:not(.no-color):hover {
+    color: hsl(var(--primary) / 0.8);
+  }
+
+  /* Badges and pills with primary accent */
+  .badge-primary {
+    background-color: hsl(var(--primary) / 0.15);
+    color: hsl(var(--primary));
+    border: 1px solid hsl(var(--primary) / 0.3);
+  }
+
+  /* Global keyboard focus outline */
+  *:focus-visible {
+    outline: 2px solid hsl(var(--ring) / 0.45);
+    outline-offset: 2px;
+  }
+
+  /* Form controls have component-level ring styles; avoid double outlines */
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible,
+  [role="textbox"]:focus-visible,
+  [role="combobox"]:focus-visible {
+    outline: none;
+  }
+
+  /* Disable focus ring for file tree items (they use custom focus styling) */
+  .file-tree-item:focus-visible,
+  .file-tree-container:focus-visible {
+    outline: none !important;
+  }
+
+  /* Semantic color utilities */
+  .text-success {
+    color: hsl(var(--success));
+  }
+
+  .text-warning {
+    color: hsl(var(--warning));
+  }
+
+  .text-info {
+    color: hsl(var(--info));
+  }
+
+  .bg-success {
+    background-color: hsl(var(--success));
+  }
+
+  .bg-warning {
+    background-color: hsl(var(--warning));
+  }
+
+  .bg-info {
+    background-color: hsl(var(--info));
+  }
+
+  .border-success {
+    border-color: hsl(var(--success));
+  }
+
+  .border-warning {
+    border-color: hsl(var(--warning));
+  }
+
+  .border-info {
+    border-color: hsl(var(--info));
+  }
+
+  /* Status color utilities */
+  .text-status-active {
+    color: hsl(var(--status-active));
+  }
+
+  .text-status-completed {
+    color: hsl(var(--status-completed));
+  }
+
+  .text-status-merging {
+    color: hsl(var(--status-merging));
+  }
+
+  .text-status-abandoned {
+    color: hsl(var(--status-abandoned));
+  }
+
+  .text-status-processing {
+    color: hsl(var(--status-processing));
+  }
+
+  .text-status-pending {
+    color: hsl(var(--status-pending));
+  }
+
+  .bg-status-active {
+    background-color: hsl(var(--status-active));
+  }
+
+  .bg-status-completed {
+    background-color: hsl(var(--status-completed));
+  }
+
+  .bg-status-merging {
+    background-color: hsl(var(--status-merging));
+  }
+
+  .bg-status-abandoned {
+    background-color: hsl(var(--status-abandoned));
+  }
+
+  .bg-status-processing {
+    background-color: hsl(var(--status-processing));
+  }
+
+  .bg-status-pending {
+    background-color: hsl(var(--status-pending));
+  }
+
+  /* Tooltip themed styling - neutral colors */
+  .tooltip-themed {
+    background-color: hsl(var(--tooltip-bg));
+    color: hsl(var(--tooltip-foreground));
+    border: 1px solid hsl(var(--tooltip-bg));
+  }
+
+  /* Code blocks should use monospace */
+  code, pre, .hljs {
+    font-family: var(--font-mono) !important;
+  }
+
+  /* Force word wrapping in code blocks */
+  pre, pre code, .hljs, .hljs code {
+    white-space: pre-wrap !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+  }
+
+  /* Override prose plugin to use our font variable */
+  .prose {
+    font-family: var(--font-sans) !important;
+  }
+
+  .prose * {
+    font-family: inherit !important;
+  }
+
+  /* But keep code blocks in prose as monospace */
+  .prose code,
+  .prose pre {
+    font-family: var(--font-mono) !important;
+  }
+
+  /* Ensure ALL text elements use our font variable */
+  * {
+    font-family: var(--font-sans);
+  }
+
+  /* Monospace elements */
+  code, pre, kbd, samp, .font-mono,
+  [class*="mono"] {
+    font-family: var(--font-mono) !important;
+  }
+
+  /* Override any hardcoded font-family in components */
+  button, input, select, textarea,
+  div, span, p, h1, h2, h3, h4, h5, h6,
+  label, a {
+    font-family: inherit;
+  }
+
+  .dense-ui {
+    line-height: 1.3;
+  }
+
+  /* Header icon buttons: visible hover in all themes (foreground overlay) */
+  .header-icon-btn:hover {
+    background-color: hsl(var(--foreground) / 0.08) !important;
+  }
+
+  /* Primary button: visible hover (inline background overrides Tailwind otherwise) */
+  .btn-primary:hover:not(:disabled) {
+    background-color: hsl(var(--primary) / 0.9) !important;
+  }
+
+  /* Prevent layout shifts */
+  .layout-stable {
+    contain: layout;
+  }
+
+  /* Modern smooth transitions with refined easing */
+  .transition-layout {
+    transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Micro-interactions for buttons and interactive elements */
+  .transition-interactive {
+    transition:
+      background-color 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+      border-color 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+      color 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+      transform 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+      box-shadow 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Smooth fade transitions */
+  .transition-fade {
+    transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Spring-like bounce for emphasis */
+  .transition-spring {
+    transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  /* Ensure consistent sizing */
+  .size-consistent {
+    min-height: inherit;
+    min-width: inherit;
+  }
+
+  /* Smooth streaming status transitions */
+  .streaming-status {
+    transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+  }
+
+  /* Prevent layout shifts for dynamic content */
+  .layout-preserve {
+    contain: layout style paint;
+  }
+
+  /* Chat-specific utilities for better space utilization */
+  .chat-container {
+    max-width: 100%;
+    margin: 0 auto;
+  }
+
+  .chat-container-sm {
+    max-width: 100%;
+  }
+
+  .chat-container-md {
+    max-width: 100%;
+  }
+
+  .chat-container-lg {
+    max-width: 64rem; /* 1024px */
+  }
+
+  .chat-container-xl {
+    max-width: 72rem; /* 1152px */
+  }
+
+  .chat-container-2xl {
+    max-width: 80rem; /* 1280px */
+  }
+
+  /* Improved message spacing */
+  .message-spacing {
+    margin-bottom: 0.25rem;
+  }
+
+  .message-spacing-lg {
+    margin-bottom: 0.25rem;
+  }
+
+  /* Better responsive padding */
+  .responsive-padding {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  @media (min-width: 640px) {
+    .responsive-padding {
+      padding-left: 1.5rem;
+      padding-right: 1.5rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .responsive-padding {
+      padding-left: 2rem;
+      padding-right: 2rem;
+    }
+  }
+
+  /* Modern card styling with refined borders */
+  .modern-card {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border) / 0.7);
+    border-radius: 0.75rem;
+    box-shadow:
+      0 1px 2px 0 rgb(0 0 0 / 0.06),
+      0 1px 3px 0 rgb(0 0 0 / 0.08);
+    transition:
+      transform 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+      box-shadow 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+      border-color 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .modern-card:hover {
+    border-color: hsl(var(--border));
+    box-shadow:
+      0 2px 4px -1px rgb(0 0 0 / 0.08),
+      0 4px 6px -1px rgb(0 0 0 / 0.12);
+    transform: translateY(-2px);
+  }
+
+  .dark .modern-card {
+    border-color: hsl(var(--border) / 0.6);
+    box-shadow:
+      0 1px 2px 0 rgb(0 0 0 / 0.20),
+      0 1px 3px 0 rgb(33 71 139 / 0.12);
+  }
+
+  .dark .modern-card:hover {
+    border-color: hsl(var(--border) / 0.9);
+    box-shadow:
+      0 2px 4px -1px rgb(0 0 0 / 0.24),
+      0 4px 6px -1px rgb(33 71 139 / 0.16);
+  }
+
+  /* Improved message bubble styling */
+  .message-bubble {
+    border-radius: 0.75rem;
+    border: 1px solid transparent;
+    transition: all 0.2s ease-in-out;
+  }
+
+  /* Remove hover effects that cause movement */
+  .hover-lift {
+    transition: none;
+  }
+
+  .hover-lift:hover {
+    transform: none;
+    box-shadow: none;
+  }
+
+  /* Subtle background pattern for chat interface */
+  .chat-background {
+    background-image:
+      radial-gradient(circle at 1px 1px, hsl(var(--border) / 0.1) 1px, transparent 0);
+    background-size: 20px 20px;
+  }
+
+  /* Improved visual hierarchy */
+  .chat-message-container {
+    backdrop-filter: blur(8px);
+    background: hsl(var(--background) / 0.8);
+  }
+
+  /* Improved focus states */
+  .focus-ring {
+    transition: box-shadow 0.2s ease-in-out;
+  }
+
+  .focus-ring:focus {
+    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.3);
+  }
+
+  /* Copy button styling */
+  .copy-button {
+    opacity: 0;
+    transition: opacity 0.2s ease-in-out;
+  }
+
+  .copy-button:hover {
+    opacity: 1;
+  }
+
+  /* Remove copy success styling */
+  .copy-success {
+    /* Removed green line animation */
+  }
+
+  /* Remove copy toast styling */
+  .copy-toast {
+    /* Removed green line animation */
+  }
+
+  /* Message footer styling */
+  .message-footer {
+    opacity: 0.7;
+    transition: opacity 0.2s ease-in-out;
+  }
+
+  .group:hover .message-footer {
+    opacity: 1;
+  }
+
+  /* Improved button styling */
+  .message-action-button {
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.375rem;
+    font-size: 0.75rem;
+    transition: all 0.2s ease-in-out;
+    opacity: 0.8;
+  }
+
+  .message-action-button:hover {
+    background-color: hsl(var(--muted) / 0.5);
+    opacity: 1;
+  }
+
+  /* Remove old header styles */
+  .message-header {
+    display: none;
+  }
+
+  .message-header-buttons {
+    display: none;
+  }
+
+  .message-actions {
+    display: none;
+  }
+
+  /* Enhanced message layout for better UX */
+  .message-container {
+    position: relative;
+    transition: all 0.2s ease-in-out;
+  }
+
+  /* Avatar styling improvements */
+  .message-avatar {
+    position: relative;
+    transition: transform 0.2s ease-in-out;
+    flex-shrink: 0;
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .message-avatar:hover {
+    transform: scale(1.05);
+  }
+
+  /* Ensure assistant avatars have proper background */
+  .message-avatar:not(.bg-blue-500) {
+    background-color: hsl(var(--muted)) !important;
+    color: hsl(var(--muted-foreground)) !important;
+    border: 1px solid hsl(var(--border) / 0.2) !important;
+    /* Ensure exact same dimensions as user avatars */
+    width: 2rem !important;
+    height: 2rem !important;
+    min-width: 2rem !important;
+    min-height: 2rem !important;
+    max-width: 2rem !important;
+    max-height: 2rem !important;
+  }
+
+  /* Message content area improvements */
+  .message-content {
+    position: relative;
+    transition: all 0.2s ease-in-out;
+    flex: 1;
+    min-width: 0;
+    margin-left: 0;
+  }
+
+  /* User message content - full width */
+  .user-message-content {
+    flex: 1;
+    width: 100%;
+    display: block;
+    max-width: 100%;
+  }
+
+  /* Perfect alignment system */
+  .message-layout {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    width: 100%;
+  }
+
+  .message-layout-lg {
+    gap: 1rem;
+  }
+
+  /* Fix avatar alignment - ensure perfect vertical alignment */
+  .avatar-container {
+    position: relative;
+    flex-shrink: 0;
+    width: 2rem;
+    height: 2rem;
+    display: flex;
+    align-items: flex-start;
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-top: 0.5rem;
+  }
+
+  .message-avatar {
+    position: relative;
+    flex-shrink: 0;
+    width: 2rem;
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 0;
+    margin-bottom: 0;
+    /* Ensure consistent sizing for all avatars */
+    min-width: 2rem;
+    min-height: 2rem;
+    max-width: 2rem;
+    max-height: 2rem;
+  }
+
+  /* User message content - removed blue left border highlight */
+  .user-message-content {
+    position: relative;
+    padding: 6px!important;
+    box-sizing: border-box;
+    overflow: visible;
+    transition: all 0.2s ease-in-out;
+  }
+
+  /* User message bubble with max height and fade */
+  .user-message-content .message-bubble {
+    position: relative;
+  }
+
+  /* Consistent message spacing */
+  .message-spacing {
+    margin-bottom: 0.25rem;
+  }
+
+  /* Improved visual hierarchy */
+  .message-role {
+    font-weight: 500;
+    color: hsl(var(--foreground) / 0.8);
+  }
+
+  .message-timestamp {
+    color: hsl(var(--muted-foreground) / 0.7);
+    font-size: 0.75rem;
+  }
+
+  /* Button group styling */
+  .message-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    opacity: 0;
+    transform: translateY(-2px);
+    transition: all 0.2s ease-in-out;
+  }
+
+  .group:hover .message-actions {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* Tool execution alignment - ensure proper alignment with avatar */
+  .tool-executions-container {
+    padding-top: 0;
+    width: 100%;
+  }
+
+  /* Message content area - ensure proper alignment with avatar */
+  .message-content {
+    padding-top: 0;
+    margin-top: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  /* Aggressive word wrapping for long text */
+  .overflow-wrap-anywhere {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  @keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+  }
+}
+
+/* Custom Diff Viewer Styling - GitHub/Cursor AI style */
+.diff-viewer {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+  line-height: 1.4;
+}
+
+.diff-line {
+  transition: background-color 0.1s ease;
+  min-height: 20px;
+  display: flex;
+  align-items: center;
+}
+
+.diff-line:hover {
+  background-color: rgba(59, 130, 246, 0.05);
+}
+
+/* Table layout for diff lines */
+.diff-viewer table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.diff-viewer td {
+  border: none;
+  padding: 0;
+  vertical-align: top;
+}
+
+/* Content cell horizontal scrolling */
+.diff-viewer .overflow-x-auto {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+}
+
+.diff-viewer .overflow-x-auto::-webkit-scrollbar {
+  height: 6px;
+}
+
+.diff-viewer .overflow-x-auto::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.diff-viewer .overflow-x-auto::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.5);
+  border-radius: 3px;
+}
+
+.diff-viewer .overflow-x-auto::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(156, 163, 175, 0.7);
+}
+
+/* Force content to extend beyond cell width when needed */
+.diff-viewer .overflow-x-auto span {
+  min-width: max-content !important;
+  white-space: pre !important;
+}
+
+/* Ensure proper scrolling */
+.diff-viewer .overflow-auto {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+}
+
+.diff-viewer .overflow-auto::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.diff-viewer .overflow-auto::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.diff-viewer .overflow-auto::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.5);
+  border-radius: 4px;
+}
+
+.diff-viewer .overflow-auto::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(156, 163, 175, 0.7);
+}
+
+/* Ensure proper containment */
+.diff-viewer * {
+  box-sizing: border-box;
+}
+
+/* VS Code style diff lines - clean and professional */
+.vscode-diff-added {
+  background-color: rgba(16, 185, 129, 0.15);
+}
+
+.vscode-diff-added:hover {
+  background-color: rgba(16, 185, 129, 0.22);
+}
+
+.vscode-diff-removed {
+  background-color: rgba(239, 68, 68, 0.15);
+}
+
+.vscode-diff-removed:hover {
+  background-color: rgba(239, 68, 68, 0.22);
+}
+
+.vscode-diff-unchanged {
+  background-color: transparent;
+}
+
+.vscode-diff-unchanged:hover {
+  background-color: rgba(100, 116, 139, 0.08);
+}
+
+/* Dark mode - more subtle backgrounds - use .dark class */
+.dark .vscode-diff-added {
+  background-color: rgba(16, 185, 129, 0.12);
+}
+
+.dark .vscode-diff-added:hover {
+  background-color: rgba(16, 185, 129, 0.18);
+}
+
+.dark .vscode-diff-removed {
+  background-color: rgba(239, 68, 68, 0.12);
+}
+
+.dark .vscode-diff-removed:hover {
+  background-color: rgba(239, 68, 68, 0.18);
+}
+
+.dark .vscode-diff-unchanged:hover {
+  background-color: rgba(148, 163, 184, 0.06);
+}
+
+/* Legacy diff line styles - keep for backwards compatibility */
+.diff-line--added {
+  background-color: rgba(16, 185, 129, 0.15);
+}
+
+.diff-line--removed {
+  background-color: rgba(239, 68, 68, 0.15);
+}
+
+/* XTerm padding fixes */
+.xterm .xterm-screen {
+  margin-bottom: 20px !important;
+  margin-left: 8px !important;
+}
+
+.xterm .xterm-rows {
+  padding-bottom: 20px !important;
+  padding-left: 8px !important;
+}
+
+/* Monaco Editor: Line highlight for view() tool navigation */
+.line-highlight {
+  background-color: hsl(var(--primary) / 0.08) !important;
+}
+
+.dark .line-highlight {
+  background-color: hsl(var(--primary) / 0.12) !important;
+}
+
+.line-highlight-gutter {
+  background-color: hsl(var(--primary) / 0.4) !important;
+  width: 5px !important;
+}
+
+.dark .line-highlight-gutter {
+  background-color: hsl(var(--primary) / 0.5) !important;
+}
+
+/* ANSI Color Classes for Terminal Output (ansi_up with use_classes=true) */
+.ansi-black-fg { color: #000000; }
+.ansi-red-fg { color: #cd3131; }
+.ansi-green-fg { color: #0dbc79; }
+.ansi-yellow-fg { color: #e5e510; }
+.ansi-blue-fg { color: #2472c8; }
+.ansi-magenta-fg { color: #bc3fbc; }
+.ansi-cyan-fg { color: #11a8cd; }
+.ansi-white-fg { color: #e5e5e5; }
+
+/* Bright/bold foreground colors */
+.ansi-bright-black-fg { color: #666666; }
+.ansi-bright-red-fg { color: #f14c4c; }
+.ansi-bright-green-fg { color: #23d18b; }
+.ansi-bright-yellow-fg { color: #f5f543; }
+.ansi-bright-blue-fg { color: #3b8eea; }
+.ansi-bright-magenta-fg { color: #d670d6; }
+.ansi-bright-cyan-fg { color: #29b8db; }
+.ansi-bright-white-fg { color: #ffffff; }
+
+/* Background colors */
+.ansi-black-bg { background-color: #000000; }
+.ansi-red-bg { background-color: #cd3131; }
+.ansi-green-bg { background-color: #0dbc79; }
+.ansi-yellow-bg { background-color: #e5e510; }
+.ansi-blue-bg { background-color: #2472c8; }
+.ansi-magenta-bg { background-color: #bc3fbc; }
+.ansi-cyan-bg { background-color: #11a8cd; }
+.ansi-white-bg { background-color: #e5e5e5; }
+
+/* Bright background colors */
+.ansi-bright-black-bg { background-color: #666666; }
+.ansi-bright-red-bg { background-color: #f14c4c; }
+.ansi-bright-green-bg { background-color: #23d18b; }
+.ansi-bright-yellow-bg { background-color: #f5f543; }
+.ansi-bright-blue-bg { background-color: #3b8eea; }
+.ansi-bright-magenta-bg { background-color: #d670d6; }
+.ansi-bright-cyan-bg { background-color: #29b8db; }
+.ansi-bright-white-bg { background-color: #ffffff; }
+
+/* Text styles */
+.ansi-bold { font-weight: bold; }
+.ansi-dim { opacity: 0.7; }
+.ansi-italic { font-style: italic; }
+.ansi-underline { text-decoration: underline; }
+
+/* Monaco Diff Editor Styling - Remove borders and style revert buttons */
+.monaco-diff-editor,
+.monaco-diff-editor *,
+.diffViewport,
+.monaco-diff-editor .margin,
+.monaco-editor-background,
+.monaco-diff-editor .margin-view-overlays,
+.monaco-diff-editor .current-line,
+.monaco-diff-editor .view-line,
+.monaco-scrollable-element,
+.monaco-diff-editor .editor-container,
+.monaco-list,
+.monaco-action-bar,
+.monaco-diff-editor [class*="border"],
+.monaco-diff-editor [style*="border"],
+.monaco-diff-editor [style*="blue"] {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Style gutter indicators (added/deleted lines) */
+.monaco-diff-editor .gutter-insert {
+  /* Use semantic success (green) instead of primary (theme-dependent) */
+  background-color: hsl(var(--success)) !important;
+  width: 2px !important;
+  border: none !important;
+}
+
+.monaco-diff-editor .gutter-delete {
+  background-color: hsl(var(--destructive)) !important;
+  width: 2px !important;
+  border: none !important;
+}
+
+/* Style revert icons (codicon) - rounded pill shapes with theme colors */
+.monaco-diff-editor .codicon {
+  border-radius: 9999px !important;
+  background-color: hsl(var(--muted)) !important;
+  color: hsl(var(--foreground)) !important;
+  border: none !important;
+  padding: 2px !important;
+}
+
+.monaco-diff-editor .codicon:hover {
+  background-color: hsl(var(--accent)) !important;
+  color: hsl(var(--foreground)) !important;
+}

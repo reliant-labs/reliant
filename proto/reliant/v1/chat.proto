@@ -1,0 +1,707 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+import "google/protobuf/struct.proto";
+import "reliant/v1/common.proto";
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+// ChatState represents the user-facing lifecycle state of a chat
+enum ChatState {
+  CHAT_STATE_UNSPECIFIED = 0;
+  reserved 1; // was CHAT_STATE_NEEDS_ATTENTION, now use unread field
+  CHAT_STATE_IDLE = 2;
+  CHAT_STATE_ARCHIVED = 3;
+}
+
+// ChatWorkflowStatus tracks workflow lifecycle for a chat
+enum ChatWorkflowStatus {
+  CHAT_WORKFLOW_STATUS_UNSPECIFIED = 0;
+  CHAT_WORKFLOW_STATUS_PENDING = 1;
+  CHAT_WORKFLOW_STATUS_RUNNING = 2;
+  CHAT_WORKFLOW_STATUS_COMPLETED = 3;
+  CHAT_WORKFLOW_STATUS_FAILED = 4;
+  CHAT_WORKFLOW_STATUS_CANCELLED = 5;
+  CHAT_WORKFLOW_STATUS_PAUSED = 6;
+  CHAT_WORKFLOW_STATUS_EXPIRED = 7;
+}
+
+// MessageRole identifies the sender of a message
+enum MessageRole {
+  MESSAGE_ROLE_UNSPECIFIED = 0;
+  MESSAGE_ROLE_USER = 1;
+  MESSAGE_ROLE_ASSISTANT = 2;
+  MESSAGE_ROLE_SYSTEM = 3;
+  MESSAGE_ROLE_TOOL = 4;
+}
+
+// StreamingState tracks message streaming progress
+enum StreamingState {
+  STREAMING_STATE_UNSPECIFIED = 0;
+  STREAMING_STATE_STREAMING = 1;
+  STREAMING_STATE_COMPLETE = 2;
+  STREAMING_STATE_FAILED = 3;
+}
+
+// DisplayStyle controls how a message is rendered in the UI
+enum DisplayStyle {
+  DISPLAY_STYLE_UNSPECIFIED = 0;
+  DISPLAY_STYLE_INFO = 1;
+  DISPLAY_STYLE_WARNING = 2;
+  DISPLAY_STYLE_SUCCESS = 3;
+  DISPLAY_STYLE_HIDDEN = 4;
+}
+
+// ContentBlockType identifies the kind of content in a message block
+enum ContentBlockType {
+  CONTENT_BLOCK_TYPE_UNSPECIFIED = 0;
+  CONTENT_BLOCK_TYPE_TEXT = 1;
+  CONTENT_BLOCK_TYPE_TOOL_CALL = 2;
+  CONTENT_BLOCK_TYPE_TOOL_RESULT = 3;
+  CONTENT_BLOCK_TYPE_IMAGE = 4;
+  CONTENT_BLOCK_TYPE_THINKING = 5;
+  CONTENT_BLOCK_TYPE_FILE_REFERENCE = 6;
+}
+
+// ChatActivity represents the computed activity state of a chat.
+// This is derived from workflow status, pending approvals, and yields.
+enum ChatActivity {
+  CHAT_ACTIVITY_IDLE = 0;
+  CHAT_ACTIVITY_RUNNING = 1;
+  CHAT_ACTIVITY_AWAITING_INPUT = 2;
+  CHAT_ACTIVITY_ERROR = 3;
+}
+
+// ChatService handles chat-related operations
+service ChatService {
+  // ============================================
+  // Phase 3: Core Chat Operations
+  // ============================================
+  
+  // CreateChat creates a new chat and starts its workflow
+  rpc CreateChat(CreateChatRequest) returns (CreateChatResponse) {}
+  
+  // ListChats lists all non-archived chats for a project
+  rpc ListChats(ListChatsRequest) returns (ListChatsResponse) {}
+  
+  // GetChat retrieves a specific chat by ID
+  rpc GetChat(GetChatRequest) returns (GetChatResponse) {}
+  
+  // UpdateChat updates chat metadata (title, temperature, etc.)
+  rpc UpdateChat(UpdateChatRequest) returns (UpdateChatResponse) {}
+  
+  // DeleteChat archives or permanently deletes a chat
+  rpc DeleteChat(DeleteChatRequest) returns (DeleteChatResponse) {}
+  
+  // SearchChats searches chats by title and message content
+  rpc SearchChats(SearchChatsRequest) returns (SearchChatsResponse) {}
+  
+  // ListArchivedChats lists all archived chats with worktree info
+  rpc ListArchivedChats(ListArchivedChatsRequest) returns (ListArchivedChatsResponse) {}
+  
+  // SendMessage sends a user message to a chat and continues workflow
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse) {}
+  
+  // ListMessages lists messages for a chat with content blocks
+  rpc ListMessages(ListMessagesRequest) returns (ListMessagesResponse) {}
+  
+  // UpdateChatState changes chat state (idle/archived)
+  rpc UpdateChatState(UpdateChatStateRequest) returns (UpdateChatStateResponse) {}
+  
+  // CancelChat cancels the running workflow for a chat
+  rpc CancelChat(CancelChatRequest) returns (CancelChatResponse) {}
+
+  // PauseChat pauses the running workflow (keeps it resumable)
+  rpc PauseChat(PauseChatRequest) returns (PauseChatResponse) {}
+
+  // ResumeChat resumes a paused or expired workflow
+  rpc ResumeChat(ResumeChatRequest) returns (ResumeChatResponse) {}
+
+  // ForceYieldThread force-yields a running thread back to the parent workflow
+  rpc ForceYieldThread(ForceYieldThreadRequest) returns (ForceYieldThreadResponse) {}
+
+  // REMOVED: UpdateChatAgent - agent is now a workflow param, not stored on chat
+  
+  // ============================================
+  // Phase 4: Extended Chat Operations
+  // ============================================
+  
+  // DismissChat clears needs_attention state when user views a chat
+  rpc DismissChat(DismissChatRequest) returns (DismissChatResponse) {}
+  
+  // MarkUnreadChat marks a chat as needing attention (mark as unread)
+  rpc MarkUnreadChat(MarkUnreadChatRequest) returns (MarkUnreadChatResponse) {}
+  
+  // CompactChat triggers manual context compaction for a chat
+  rpc CompactChat(CompactChatRequest) returns (CompactChatResponse) {}
+  
+  // BranchChat creates a new chat branched from a specific message ordinal
+  rpc BranchChat(BranchChatRequest) returns (BranchChatResponse) {}
+  
+  // ListBranches lists all chats branched from a parent chat
+  rpc ListBranches(ListBranchesRequest) returns (ListBranchesResponse) {}
+  
+  // UpdateWorkflowParams updates workflow parameters for a running chat
+  // This signals the running workflow to update its inputs (e.g., mode, temperature)
+  rpc UpdateWorkflowParams(UpdateWorkflowParamsRequest) returns (UpdateWorkflowParamsResponse) {}
+  
+  // GetChatUpdates fetches chat updates since a sequence number
+  rpc GetChatUpdates(GetChatUpdatesRequest) returns (GetChatUpdatesResponse) {}
+  
+  // ListChatPlans lists plans associated with a chat
+  rpc ListChatPlans(ListChatPlansRequest) returns (ListChatPlansResponse) {}
+  
+  // GetWorkflowExecutions returns the workflow execution tree for a chat
+  rpc GetWorkflowExecutions(GetWorkflowExecutionsRequest) returns (GetWorkflowExecutionsResponse) {}
+  
+  // GetThreadWorkflowInputs returns the workflow inputs for a specific thread
+  rpc GetThreadWorkflowInputs(GetThreadWorkflowInputsRequest) returns (GetThreadWorkflowInputsResponse) {}
+}
+
+// Chat represents a conversation
+// NOTE: model/temperature/max_tokens are workflow input params, not stored on chat
+message Chat {
+  string id = 1;
+  string user_id = 2;
+  string title = 3;
+  string project_id = 4;
+  optional string worktree_id = 5;
+  reserved 6;                          // was: model (now workflow param)
+  reserved 7;                          // was: agent (now workflow param)
+  optional string workflow_name = 8;   // YAML workflow name
+  reserved 9;                          // was: temperature (now workflow param)
+  reserved 10;                         // was: max_tokens (now workflow param)
+  reserved 11;                         // was: auto_approve (now workflow param inputs.mode)
+  reserved 12;                         // was: is_planning_mode (now workflow param inputs.mode)
+  ChatState state = 13;
+  reserved 14;                         // was: branched_from_chat_id (removed - use workflow fork)
+  reserved 15;                         // was: branched_at_ordinal (removed - use workflow fork)
+  reserved 16;                         // was: parent_context_sequence (removed - use workflow fork)
+  optional string workflow_id = 17;    // Temporal workflow ID
+  optional string run_id = 18;         // Temporal run ID
+  string created_at = 19;
+  string updated_at = 20;
+  string last_active = 21;
+  optional string last_message_at = 22; // When last message was sent/received (for activity sorting)
+  optional ChatWorkflowStatus workflow_status = 23; // Source of truth for chat activity
+  reserved 24; // was: is_busy (now derived from workflow_status == 'running')
+  map<string, string> selected_presets = 25; // Preset selections per target ("" = workflow-level, "Agent A" = group)
+  // needs_recovery is true when the Temporal workflow was lost and the user needs to send a new message to continue
+  // This is set when GetChat detects DB says running but Temporal workflow doesn't exist
+  bool needs_recovery = 26;
+  ChatActivity activity = 27; // Computed activity state (from chats_with_activity view)
+  bool unread = 28; // Whether this chat has unseen content (decoupled from activity/state)
+}
+
+// ArchivedChat includes worktree information for archived chats
+message ArchivedChat {
+  Chat chat = 1;
+  optional string worktree_name = 2;
+  optional string worktree_deleted_at = 3;
+}
+
+// Message represents a conversation message
+message Message {
+  string id = 1;
+  string chat_id = 2;
+  int64 ordinal = 3;
+  string thread = 4;
+  reserved 5;                          // removed: context_sequence (internal only)
+  MessageRole role = 6;
+  optional string model = 7;
+  optional string agent = 8;
+  optional int32 input_tokens = 9;
+  optional int32 output_tokens = 10;
+  StreamingState streaming_state = 11;
+  repeated ContentBlock content_blocks = 12;
+  repeated Attachment attachments = 13;
+  string created_at = 14;
+  string updated_at = 15;
+  optional string workflow_id = 16;    // Workflow that produced this message (for handoff detection)
+  optional DisplayStyle display_style = 17;
+  int64 sequence_number = 18;           // Streaming sync sequence number for tracking
+}
+
+// ContentBlock represents a granular message content piece
+message ContentBlock {
+  string id = 1;
+  int32 index = 2;                     // Position in message
+  ContentBlockType type = 3;
+  optional string content = 4;         // Text content or tool result
+  optional string tool_name = 5;       // For tool_call blocks
+  optional string tool_call_id = 6;    // For tool_call and tool_result blocks
+  optional string input = 7;           // Tool input (JSON string)
+  optional bool is_error = 8;          // For tool_result blocks
+  optional MatchedToolResult matched_result = 9; // For tool_call blocks with results
+}
+
+// MatchedToolResult pairs a tool call with its result
+message MatchedToolResult {
+  string tool_call_id = 1;
+  string type = 2;                     // Always "tool_result"
+  optional string content = 3;
+  optional bool is_error = 4;
+}
+
+// Attachment represents a file attachment
+message Attachment {
+  string id = 1;
+  string filename = 2;
+  int64 size = 3;
+  string mime_type = 4;
+  string url = 5;
+}
+
+// InputMessage represents a message in a request (for CreateChat/SendMessage)
+// Supports user and system messages.
+message InputMessage {
+  MessageRole role = 1;
+  string content = 2;                  // Message text content
+  optional DisplayStyle display_style = 3;
+}
+
+// CreateChatRequest creates a new chat
+message CreateChatRequest {
+  string project_id = 1;
+  reserved 2;                          // was: first_message - use messages instead
+  optional string title = 3;
+  optional string worktree_id = 4;
+  reserved 5;                          // was: agent - use workflow_params instead
+  string workflow = 6;                 // Workflow name (optional - defaults to user preference or builtin://agent)
+  reserved 7;                          // was: model - use workflow_params instead
+  optional double temperature = 8;
+  optional int32 max_tokens = 9;
+  reserved 10;                         // was: auto_approve - use mode or workflow_params instead
+  reserved 11;                         // was: is_planning_mode - use mode or workflow_params instead
+  repeated string attachments = 12;    // Attachment IDs
+  map<string, google.protobuf.Value> workflow_params = 13;  // Workflow input parameters
+  optional string mode = 14;           // Execution mode
+  map<string, string> selected_presets = 15; // Preset selections per target ("" = workflow-level, "Agent A" = group)
+  repeated InputMessage messages = 16; // Messages to send (user and system). At least one user message required.
+}
+
+// CreateChatResponse returns the created chat
+message CreateChatResponse {
+  Chat chat = 1;
+  string workflow_id = 2;
+  string run_id = 3;
+  optional string draft_id = 4;  // Draft ID for workflow builder chats (when a new draft was created)
+}
+
+// ListChatsRequest lists chats for a project
+message ListChatsRequest {
+  string project_id = 1;               // Required
+  optional int32 limit = 2;
+}
+
+// ListChatsResponse returns the list of chats
+message ListChatsResponse {
+  repeated Chat chats = 1;
+  int32 total = 2;
+}
+
+// GetChatRequest retrieves a chat by ID
+message GetChatRequest {
+  string chat_id = 1;
+}
+
+// GetChatResponse returns the chat
+message GetChatResponse {
+  Chat chat = 1;
+}
+
+// UpdateChatRequest updates chat metadata
+// NOTE: model/temperature/max_tokens are workflow input params - use UpdateWorkflowParams instead
+message UpdateChatRequest {
+  string chat_id = 1;
+  optional string title = 2;
+  reserved 3;                          // was: auto_approve - use UpdateWorkflowParams instead
+  reserved 4;                          // was: temperature - use UpdateWorkflowParams instead
+  reserved 5;                          // was: max_tokens - use UpdateWorkflowParams instead
+  optional string worktree_id = 6;
+  optional string workflow_name = 7;   // Workflow to use - only changeable before chat starts (status=pending)
+}
+
+// UpdateChatResponse returns the updated chat
+message UpdateChatResponse {
+  Chat chat = 1;
+}
+
+// DeleteChatRequest deletes or archives a chat
+message DeleteChatRequest {
+  string chat_id = 1;
+}
+
+// DeleteChatResponse confirms deletion
+message DeleteChatResponse {
+  bool success = 1;
+  string message = 2;
+  bool permanently_deleted = 3;        // True if hard deleted, false if archived
+}
+
+// SearchChatsRequest searches chats
+message SearchChatsRequest {
+  string project_id = 1;               // Required
+  string query = 2;                    // Search query
+  optional int32 limit = 3;
+}
+
+// SearchChatsResponse returns matching chats
+message SearchChatsResponse {
+  repeated Chat chats = 1;
+  int32 total = 2;
+}
+
+// ListArchivedChatsRequest lists archived chats
+message ListArchivedChatsRequest {
+  // No filters needed - returns all archived chats for user
+}
+
+// ListArchivedChatsResponse returns archived chats with worktree info
+message ListArchivedChatsResponse {
+  repeated ArchivedChat chats = 1;
+  int32 total = 2;
+}
+
+// SendMessageRequest sends messages to a chat
+message SendMessageRequest {
+  string chat_id = 1;
+  reserved 2;                          // was: content - use messages instead
+  repeated string attachments = 3;     // Attachment IDs
+  reserved 4;                          // was: agent - use workflow_params instead
+  optional string workflow = 5;        // Switch to this workflow (only allowed before chat starts)
+  reserved 6;                          // was: is_planning_mode - use mode or workflow_params instead
+  reserved 7;                          // was: model_override - use workflow_params instead
+  optional double temperature = 8;     // Per-message temperature
+  optional int64 max_tokens = 9;       // Per-message max tokens
+  reserved 10;                         // was: auto_approve - use mode or workflow_params instead
+  map<string, google.protobuf.Value> workflow_params = 11;  // Workflow input parameters
+  optional string mode = 12;           // Execution mode
+  optional string target_thread = 13;  // Target thread ID for the message (defaults to main thread if not specified)
+  map<string, string> selected_presets = 14; // Update preset selections (persisted with chat)
+  repeated InputMessage messages = 15; // Messages to send (user and system). At least one user message required.
+  optional string yield_id = 16;  // If set, resolves this pending yield instead of starting new workflow
+}
+
+// SendMessageResponse confirms message sent
+message SendMessageResponse {
+  string chat_id = 1;
+  string workflow_id = 2;
+  string run_id = 3;
+  string status = 4;                   // 'processing'
+  optional string workflow_status = 5; // Workflow status after operation (running, paused, etc.)
+  string message_id = 6;               // ID of the saved user message
+}
+
+// ListMessagesRequest lists messages for a chat
+message ListMessagesRequest {
+  string chat_id = 1;
+  optional int32 recent = 2;           // Number of most recent messages
+  optional int64 before_ordinal = 3;   // Load messages before this ordinal
+}
+
+// ListMessagesResponse returns messages with content blocks
+message ListMessagesResponse {
+  repeated Message messages = 1;
+  int32 total = 2;
+  int32 count = 3;
+  bool has_more = 4;
+  int64 oldest_ordinal = 5;
+}
+
+// UpdateChatStateRequest changes chat state
+message UpdateChatStateRequest {
+  string chat_id = 1;
+  ChatState state = 2;
+}
+
+// UpdateChatStateResponse confirms state change
+message UpdateChatStateResponse {
+  ChatState state = 1;
+  ChatState previous_state = 2;
+  string message = 3;
+}
+
+// CancelChatRequest cancels a chat's workflow
+message CancelChatRequest {
+  string chat_id = 1;
+}
+
+// CancelChatResponse confirms cancellation
+message CancelChatResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// ForceYieldThreadRequest force-yields a specific thread
+message ForceYieldThreadRequest {
+  string chat_id = 1;
+  string thread_id = 2;
+}
+
+// ForceYieldThreadResponse confirms force-yield was sent
+message ForceYieldThreadResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// PauseChatRequest pauses a chat's workflow
+message PauseChatRequest {
+  string chat_id = 1;
+}
+
+// PauseChatResponse confirms pause
+message PauseChatResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// ResumeChatRequest resumes a paused workflow
+message ResumeChatRequest {
+  string chat_id = 1;
+}
+
+// RecoveryType indicates what kind of resume/recovery happened
+enum RecoveryType {
+  // RECOVERY_TYPE_UNSPECIFIED - default, not a recovery scenario
+  RECOVERY_TYPE_UNSPECIFIED = 0;
+  // RECOVERY_TYPE_RESUMED - simple signal-based resume (workflow was paused)
+  RECOVERY_TYPE_RESUMED = 1;
+  // RECOVERY_TYPE_WORKFLOW_LOST - Temporal workflow was lost, user must start new workflow
+  RECOVERY_TYPE_WORKFLOW_LOST = 2;
+}
+
+// ResumeChatResponse confirms resume
+message ResumeChatResponse {
+  bool success = 1;
+  string message = 2;
+  string workflow_id = 3;
+  string run_id = 4;
+  // needs_recovery is true when the Temporal workflow was lost and the user needs to send a new message to continue
+  bool needs_recovery = 5;
+  // recovery_type provides more context about what happened during resume
+  RecoveryType recovery_type = 6;
+}
+
+// REMOVED: UpdateChatAgentRequest/Response - agent is now a workflow param
+
+// ============================================
+// Phase 4: Extended Chat Operations Messages
+// ============================================
+
+// DismissChatRequest clears needs_attention state
+message DismissChatRequest {
+  string chat_id = 1;
+}
+
+// DismissChatResponse confirms dismissal
+message DismissChatResponse {
+  ChatState state = 1;
+  bool changed = 2;
+  string message = 3;
+}
+
+// MarkUnreadChatRequest marks chat as needing attention
+message MarkUnreadChatRequest {
+  string chat_id = 1;
+}
+
+// MarkUnreadChatResponse confirms marking as unread
+message MarkUnreadChatResponse {
+  ChatState state = 1;
+  bool changed = 2;
+  string message = 3;
+}
+
+// CompactChatRequest triggers context compaction
+message CompactChatRequest {
+  string chat_id = 1;
+  string thread_id = 2;  // Required: thread to compact
+}
+
+// CompactChatResponse returns compaction workflow info
+message CompactChatResponse {
+  string chat_id = 1;
+  string workflow_id = 2;
+  string run_id = 3;
+  string status = 4;                   // 'compacting'
+  string message = 5;
+}
+
+// WorkspaceBranchContext provides context about workspace branching
+message WorkspaceBranchContext {
+  optional string source_worktree_id = 1;  // Worktree the chat is being branched FROM
+  repeated string files_copied = 2;        // List of files that were copied to the new workspace
+  bool copy_files_enabled = 3;             // Whether the user enabled copying uncommitted files
+}
+
+// BranchChatRequest creates a branch from a specific message
+message BranchChatRequest {
+  string chat_id = 1;                  // Chat ID (can be current chat or original chat for inherited messages)
+  string message_id = 7;               // Message ID to branch from (unique, unambiguous)
+  optional string title = 3;           // Optional title for the new branch
+  optional string worktree_id = 4;     // Optional worktree ID to assign to the branched chat
+  optional WorkspaceBranchContext workspace_context = 5;  // Context about workspace branching
+  reserved 2; // was: ordinal (deprecated, use message_id)
+  reserved 6; // was: thread (deprecated, use message_id)
+}
+
+// BranchChatResponse returns the created branch chat
+message BranchChatResponse {
+  Chat chat = 1;                       // The new branched chat
+}
+
+// BranchInfo contains summary info about a branch
+message BranchInfo {
+  string id = 1;
+  string title = 2;
+  optional int64 branched_at_ordinal = 3;
+  string created_at = 4;
+  string last_active = 5;
+}
+
+// ListBranchesRequest lists branches of a chat
+message ListBranchesRequest {
+  string chat_id = 1;                  // Parent chat ID
+}
+
+// ListBranchesResponse returns the branches
+message ListBranchesResponse {
+  repeated BranchInfo branches = 1;
+  int32 total = 2;
+}
+
+// UpdateWorkflowParamsRequest updates workflow parameters for a running chat
+message UpdateWorkflowParamsRequest {
+  string chat_id = 1;
+  map<string, google.protobuf.Value> params = 2;  // Workflow parameters to update (e.g., mode, temperature)
+  optional string thread_id = 3;  // Optional: target a specific thread's workflow instead of root
+}
+
+// UpdateWorkflowParamsResponse confirms the update
+message UpdateWorkflowParamsResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// ChatUpdate represents a single update event
+message ChatUpdate {
+  int64 sequence_number = 1;
+  string update_type = 2;              // 'message', 'state', 'error', etc.
+  string entity_id = 3;                // ID of the entity (message_id, etc.)
+  string data = 4;                     // JSON data
+  string created_at = 5;
+}
+
+// GetChatUpdatesRequest fetches updates since a sequence
+message GetChatUpdatesRequest {
+  string chat_id = 1;
+  int64 since_seq = 2;                 // Sequence number to fetch updates after
+}
+
+// GetChatUpdatesResponse returns the updates
+message GetChatUpdatesResponse {
+  repeated ChatUpdate updates = 1;
+  int32 total = 2;
+  int64 latest_sequence = 3;
+}
+
+// ChatPlan represents a plan associated with a chat
+message ChatPlan {
+  string id = 1;
+  string chat_id = 2;
+  string title = 3;
+  optional string description = 4;
+  PlanStatus status = 5;
+  string created_at = 6;
+  string updated_at = 7;
+  optional string completed_at = 8;
+}
+
+// ListChatPlansRequest lists plans for a chat
+message ListChatPlansRequest {
+  string chat_id = 1;
+}
+
+// ListChatPlansResponse returns the plans
+message ListChatPlansResponse {
+  repeated ChatPlan plans = 1;
+  int32 total = 2;
+}
+
+// ============================================
+// Workflow Execution Tree
+// ============================================
+
+// StepExecution represents a single step execution with its output
+message StepExecution {
+  string id = 1;
+  string workflow_id = 2;
+  string step_id = 3;
+  string activity_name = 4;
+  string output_json = 5;                // Raw CEL output as JSON string
+  optional int32 exit_code = 6;
+  optional bool success = 7;
+  optional int64 duration_ms = 8;
+  string created_at = 9;
+  optional string loop_node_id = 10;     // Node ID of the loop that spawned this step
+  optional int32 loop_iteration = 11;    // Iteration index within the loop (0-indexed)
+}
+
+// WorkflowExecution represents a workflow and its children
+message WorkflowExecution {
+  string id = 1;
+  string workflow_name = 2;
+  string thread = 3;
+  ChatWorkflowStatus status = 4;
+  optional string parent_id = 5;
+  string created_at = 6;
+  optional string completed_at = 7;
+  int32 message_count = 8;               // Number of messages in this workflow's thread
+  repeated WorkflowExecution children = 9;
+  repeated StepExecution steps = 10;
+  optional int32 iteration = 11;         // For loop iterations
+  optional string spawned_by_node_id = 12; // Node ID that spawned this child workflow
+  optional string forked_from_thread = 13; // Thread this was forked from (if fork, not new)
+  repeated ThreadStatus thread_statuses = 14; // Thread liveness information
+  optional string thread_title = 15; // Human-readable title for the thread
+  optional string parent_thread = 16; // Parent thread ID (set for both fork and new child threads)
+}
+
+// ThreadStatus represents the liveness state of a thread
+message ThreadStatus {
+  string logical_name = 1;       // Logical thread name (e.g., "thread:step_id" or "thread:root")
+  optional string actual_uuid = 2;   // Actual thread UUID (if resolved)
+  bool is_active = 3;            // True if thread is still accepting messages
+  optional string owner_step_id = 4; // Step that created this thread (empty for root)
+  repeated string writers = 5;   // Step IDs that can write to this thread
+  optional string last_writer = 6;   // Last writer in execution order (thread closes after this)
+}
+
+// GetThreadWorkflowInputsRequest fetches workflow inputs for a specific thread
+message GetThreadWorkflowInputsRequest {
+  string chat_id = 1;
+  string thread_id = 2;  // Thread ID to look up
+}
+
+// GetThreadWorkflowInputsResponse returns the workflow inputs and metadata for a thread
+message GetThreadWorkflowInputsResponse {
+  string workflow_name = 1;  // The workflow name (e.g., "builtin://agent")
+  map<string, google.protobuf.Value> inputs = 2;  // Current workflow input values
+  bool is_running = 3;  // Whether the workflow is still running
+}
+
+// GetWorkflowExecutionsRequest fetches workflow execution tree
+message GetWorkflowExecutionsRequest {
+  string chat_id = 1;
+}
+
+// GetWorkflowExecutionsResponse returns the execution tree
+message GetWorkflowExecutionsResponse {
+  // The most recent/active root workflow (for backwards compat)
+  optional WorkflowExecution root_workflow = 1;
+  // All root workflows for this chat, sorted by created_at descending (newest first)
+  repeated WorkflowExecution all_root_workflows = 2;
+}

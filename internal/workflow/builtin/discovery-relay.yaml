@@ -1,0 +1,215 @@
+name: discovery-relay
+apiVersion: "0.0.5"
+description: |
+  Discovery Relay — iterative waves with progressive knowledge transfer.
+
+  The principle: each wave should start smarter than the last one ended. Not by
+  carrying the full history, just the decisions and discoveries that affect what
+  comes next.
+
+  Structure:
+    wave loop → execute → debrief → next wave
+    1. An execute agent works on the task, using spawn to parallelize as it sees fit.
+    2. A debrief agent (fleet commander) reads the execute agent's output and compresses
+       the key findings into a brief: what was decided, what was discovered about
+       the codebase, what failed.
+    3. That brief gets injected into the next wave's context before it starts.
+
+  The execute agent has full autonomy to spawn sub-agents for parallel work.
+  It decides the parallelization strategy based on the task — maybe 2 agents,
+  maybe 5, maybe sequential work with no spawns at all.
+
+  Thread architecture:
+    wave loop inherits main thread so the discovery brief accumulates.
+    execute uses fork + memo: false — fresh context each wave, plus the brief.
+    debrief uses fork + memo: false — clean synthesis each time.
+    The debrief summary is saved to the main thread, becoming context for the next wave.
+
+entry: [wave]
+
+inputs:
+  model:
+    type: model
+    description: LLM model for the execute agent
+    default:
+      tags: [flagship]
+
+  debrief_model:
+    type: model
+    description: LLM model for the debrief/fleet commander agent (can be cheaper)
+    default:
+      tags: [flagship]
+
+  max_waves:
+    type: integer
+    default: 3
+    min: 1
+    max: 10
+    description: Maximum number of waves to execute
+
+  mode:
+    type: enum
+    ui: toolbar
+    default: auto
+    description: Execution mode for agent steps.
+    enum: [manual, auto, plan]
+
+  yield:
+    type: boolean
+    ui: toolbar
+    default: true
+    description: Pause for user review after each wave.
+
+  temperature:
+    type: number
+    default: 1.0
+    min: 0
+    max: 1
+    description: Response randomness
+
+  thinking_level:
+    type: enum
+    enum: [low, medium, high, xhigh]
+    default: medium
+    description: Extended thinking level
+
+nodes:
+  - id: wave
+    type: loop
+    while: >
+      (has(outputs.wave_status) && outputs.wave_status != "complete")
+      && iter.iteration < inputs.max_waves
+    yield: "inputs.yield"
+    inline:
+      entry: [execute]
+
+      outputs:
+        wave_status: "{{has(nodes.debrief) && has(nodes.debrief.response) && nodes.debrief.response != null ? nodes.debrief.response.status : 'continue'}}"
+        discovery_brief: "{{has(nodes.debrief) && has(nodes.debrief.response) && nodes.debrief.response != null ? nodes.debrief.response.brief : ''}}"
+
+      nodes:
+        # ── Execute (wave agent) ──────────────────────────────────────────────
+        #
+        # A general agent that works on the task. It has full access to spawn
+        # sub-agents for parallel work — the parallelization strategy is up to
+        # the LLM based on what the task requires.
+
+        - id: execute
+          type: workflow
+          ref: builtin://agent
+          presets:
+            default: general
+          args:
+            model: "{{inputs.model}}"
+            mode: "{{inputs.mode}}"
+            temperature: "{{inputs.temperature}}"
+            thinking_level: "{{inputs.thinking_level}}"
+          thread:
+            mode: fork
+            memo: false
+            inject:
+              role: user
+              content: |
+                ## Discovery Relay — Wave {{iter.iteration + 1}} of {{inputs.max_waves}}
+
+                {{iter.iteration > 0 && has(outputs.discovery_brief) && outputs.discovery_brief != ''
+                  ? '### Discovery Brief from Previous Waves\nThe following is a compressed summary of what previous waves learned. Use these discoveries to avoid redundant work and build on progress.\n\n' + outputs.discovery_brief + '\n\n---\n'
+                  : ''}}
+
+                Work on the task described in the conversation above.
+                **Use spawn aggressively** to parallelize independent work — fan out sub-agents for tasks that don't depend on each other.
+
+                After finishing, summarize:
+                1. What you implemented or investigated
+                2. Key discoveries about the codebase
+                3. Decisions you made and why
+                4. What failed or was blocked
+                5. What remains to be done
+          save_message:
+            role: assistant
+            content: |
+              ## Wave {{iter.iteration + 1}} — Execution Summary
+              {{output.response_text}}
+
+        # ── Debrief (fleet commander) ─────────────────────────────────────────
+        #
+        # Reads the execute agent's output and compresses it into a discovery
+        # brief for the next wave.
+
+        - id: debrief
+          type: workflow
+          ref: builtin://structured-agent
+          args:
+            model: "{{inputs.debrief_model}}"
+            mode: "{{inputs.mode}}"
+            temperature: "{{inputs.temperature}}"
+            thinking_level: "{{inputs.thinking_level}}"
+            response_tool_name: submit_debrief
+            response_tool_description: "Submit the wave debrief with discovery brief and status"
+            response_schema:
+              type: object
+              required:
+                - status
+                - brief
+              properties:
+                status:
+                  type: string
+                  enum: ["continue", "complete"]
+                  description: |
+                    "continue" — more work needed, another wave should execute.
+                    "complete" — all work is done, no more waves needed.
+                brief:
+                  type: string
+                  description: |
+                    Compressed discovery brief for the next wave. Include:
+                    - Decisions made: what was chosen and why
+                    - Codebase discoveries: patterns, conventions, gotchas found
+                    - What failed: approaches that didn't work and why
+                    - What's left: remaining work for the next wave
+                    - Key files/modules: important locations discovered
+
+                    Be concise but complete. This is the ONLY context the next wave gets
+                    (besides the original request). Don't include raw code — focus on
+                    knowledge that helps the next wave avoid mistakes and build on progress.
+          thread:
+            mode: fork
+            memo: false
+            inject:
+              role: user
+              content: |
+                ## Discovery Relay — Wave {{iter.iteration + 1}} Debrief
+
+                You are the fleet commander. The wave's agent has completed its work.
+                The execution summary is in the conversation above.
+
+                Your job:
+                1. Read the execution summary carefully
+                2. Compress the key findings into a brief for the next wave
+                3. Determine if the work is complete or another wave is needed
+
+                Focus on knowledge transfer:
+                - What was discovered about the codebase that future waves need to know?
+                - What decisions were made that shouldn't be revisited?
+                - What approaches failed and should be avoided?
+                - What work remains?
+
+                If all the requested work appears to be complete and correct, set status to "complete".
+                If there's remaining work, set status to "continue" and include guidance in the brief.
+          save_message:
+            role: assistant
+            content: |
+              ## Wave {{iter.iteration + 1}} — Discovery Brief
+              {{has(output.response) && output.response != null ? output.response.brief : 'Debrief not available'}}
+
+              **Status:** {{has(output.response) && output.response != null ? output.response.status : 'unknown'}}
+
+      edges:
+        - from: execute
+          default: [debrief]
+
+outputs:
+  wave_status: "{{nodes.wave.wave_status}}"
+  discovery_brief: "{{nodes.wave.discovery_brief}}"
+  waves_completed: "{{nodes.wave._iterations}}"
+
+edges: []

@@ -1,0 +1,61 @@
+import { api } from "../api/client";
+import { useBrowserStore } from "../store/browserStore";
+import { logger } from "./logger";
+
+/**
+ * Opens a URL either in Reliant's embedded browser or in the system default browser,
+ * based on user preference.
+ * 
+ * @param url - The URL to open
+ * @param worktreeId - The worktree ID for opening in embedded browser
+ * @param forceExternal - If true, always open in system browser (for OAuth flows, etc.)
+ */
+export async function openLink(
+  url: string,
+  worktreeId?: string,
+  forceExternal = false
+): Promise<void> {
+  // Always use external browser if forced
+  if (forceExternal) {
+    return openExternalLink(url);
+  }
+
+  try {
+    // Check user preference
+    const preferences = await api.settings.getPreferences();
+    const openInApp = preferences.additional?.browserOpenLinksInApp !== "false"; // Default true
+
+    if (openInApp && worktreeId) {
+      // Open in embedded browser
+      const browserStore = useBrowserStore.getState();
+      await browserStore.createTab(worktreeId, url);
+      browserStore.showBrowser();
+      logger.debug("[openLink] Opened in embedded browser:", url);
+    } else {
+      // Open in system browser
+      return openExternalLink(url);
+    }
+  } catch (error) {
+    logger.error("[openLink] Error checking preference, falling back to external:", error);
+    return openExternalLink(url);
+  }
+}
+
+/**
+ * Opens a URL in the system's default browser.
+ */
+export async function openExternalLink(url: string): Promise<void> {
+  if (window.electronAPI?.openExternal) {
+    try {
+      await window.electronAPI.openExternal(url);
+      logger.debug("[openLink] Opened in system browser:", url);
+    } catch (error) {
+      logger.error("[openLink] Failed to open external URL:", error);
+      // Fallback: try window.open
+      window.open(url, "_blank");
+    }
+  } else {
+    // Web fallback
+    window.open(url, "_blank");
+  }
+}

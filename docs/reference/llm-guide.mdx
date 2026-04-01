@@ -1,0 +1,283 @@
+---
+title: "LLM Integration Guide"
+description: "Understanding how Reliant interacts with language models"
+---
+
+This guide covers how Reliant interacts with LLMs, common caveats, and provider-specific considerations.
+
+## How LLM Calls Work
+
+When Reliant calls an LLM, it sends a structured request:
+
+```
+┌─────────────────────────────────────┐
+│ LLM Request                         │
+├─────────────────────────────────────┤
+│ System Prompt (from workflow/preset)│
+│ ─────────────────────────────────── │
+│ Message History (thread context)    │
+│   - User messages                   │
+│   - Assistant responses             │
+│   - Tool calls & results            │
+│ ─────────────────────────────────── │
+│ Available Tools (definitions)       │
+│ ─────────────────────────────────── │
+│ Parameters (temperature, etc.)      │
+└─────────────────────────────────────┘
+```
+
+The LLM returns:
+- **Text response** (assistant message)
+- **Tool calls** (requests to use tools)
+- **Stop reason** (why it stopped: `end_turn`, `tool_use`, `max_tokens`)
+
+## Tool Call Requirements
+
+**Critical caveat:** When the LLM requests a tool, the tool must exist in the available tools list.
+
+```yaml
+# This will fail if 'bash' isn't in the tools list
+- id: call_llm
+  action: CallLLM
+  inputs:
+    tools: ["view", "edit"]  # bash not included!
+    # If LLM tries to call 'bash', it will error
+```
+
+### Tool Matching Rules
+
+1. Tool calls reference tools by name
+2. The name must exactly match an available tool
+3. Tool inputs must match the tool's schema
+4. Unknown tools cause execution errors
+
+### Best Practice
+
+Use `tools: true` to include all default tools, or explicitly list needed tools:
+
+```yaml
+# Include all default tools
+tools: true
+
+# Or be explicit
+tool_filter: ["tag:default", "tag:mcp"]
+```
+
+## System Messages
+
+System prompts set the LLM's behavior and context. They're sent first in every request.
+
+### Where System Prompts Come From
+
+1. **Workflow-level** `system_prompt` input
+2. **Preset** configuration
+3. **Node-level** override on `call_llm`
+
+These are combined, with node-level taking precedence.
+
+### System Prompt Best Practices
+
+```yaml
+system_prompt: |
+  # Role
+  You are a code reviewer focusing on security.
+  
+  # Rules
+  - Always check for injection vulnerabilities
+  - Flag hardcoded credentials
+  - Suggest secure alternatives
+  
+  # Output Format
+  Provide findings in markdown with severity levels.
+```
+
+**Tips:**
+- Be specific about the task
+- Define output format expectations
+- Include examples if needed
+- Keep it focused (long prompts waste tokens)
+
+## Context and Tokens
+
+### Context Window
+
+Each model has a maximum context window (total tokens for input + output):
+
+| Model | Context Window |
+|-------|---------------|
+| Claude Sonnet 4 | 200K tokens |
+| Claude Opus 4 | 200K tokens |
+| GPT-4o | 128K tokens |
+| Gemini Pro | 1M tokens |
+
+### Token Counting
+
+Reliant tracks token usage per-thread. When context grows large:
+
+1. **Compaction** summarizes older messages
+2. **Filtering** reduces tool result verbosity
+3. **Truncation** as a last resort
+
+### Caching
+
+Some providers cache repeated prefixes for efficiency:
+
+| Provider | Caching |
+|----------|---------|
+| Anthropic | Prompt caching (automatic) |
+| OpenAI | No automatic caching |
+| Google | Context caching available |
+
+Reliant leverages caching automatically when available.
+
+## Provider Differences
+
+### Anthropic (Claude)
+
+**Strengths:**
+- Excellent code understanding
+- Strong tool use
+- Good at following complex instructions
+
+**Caveats:**
+- Tool calls must include `thinking` for Opus models
+- Rate limits vary by tier
+- No image generation
+
+### OpenAI (GPT-4)
+
+**Strengths:**
+- Fast response times
+- Good general knowledge
+- Image understanding
+
+**Caveats:**
+- Different tool call format (function calling)
+- JSON mode requires explicit enabling
+- Rate limits per-minute
+
+### Google (Gemini)
+
+**Strengths:**
+- Large context window
+- Good multimodal support
+- Competitive pricing
+
+**Caveats:**
+- Different safety filter behavior
+- Tool use syntax differences
+- Regional availability varies
+
+## Common Pitfalls
+
+### 1. Tool Call Without Matching Tool
+
+```yaml
+# Problem: LLM might call tools not in the list
+tools: ["view", "grep"]
+
+# Solution: Include all tools the LLM might need
+tools: true
+# or
+tool_filter: ["tag:default"]
+```
+
+### 2. Context Overflow
+
+```yaml
+# Problem: Large tool results fill context
+- id: search
+  run: grep -r "pattern" .  # Could return megabytes
+
+# Solution: Limit results or filter
+- id: search
+  run: grep -r "pattern" . | head -100
+```
+
+### 3. Infinite Loops
+
+```yaml
+# Problem: No termination condition
+while: "true"
+
+# Solution: Always include iteration limit
+while: "iter.iteration < inputs.max_turns && ..."
+```
+
+### 4. Empty Tool Calls Array
+
+```yaml
+# Problem: Assuming tool_calls is never null
+condition: size(nodes.llm.tool_calls) > 0
+
+# Solution: Check for null first
+condition: nodes.llm.tool_calls != null && size(nodes.llm.tool_calls) > 0
+```
+
+### 5. Stop Reason Misunderstanding
+
+```yaml
+# Problem: Thinking end_turn means "done with tools"
+# Reality: end_turn just means LLM stopped responding
+
+# The LLM might stop because:
+# - It's truly done (no more tool calls)
+# - It hit max_tokens (output truncated)
+# - It wants to explain before continuing
+
+# Solution: Check tool_calls presence, not just stop_reason
+condition: nodes.llm.tool_calls != null && size(nodes.llm.tool_calls) > 0
+```
+
+## Response Tools
+
+Response tools force structured output from the LLM:
+
+```yaml
+response_tool:
+  name: decision
+  description: Report your decision
+  options:
+    approve: "Code looks good - explain why"
+    reject: "Issues found - describe them"
+```
+
+The LLM **must** call this tool to complete. Output is always:
+
+```json
+{
+  "choice": "approve",
+  "value": "The code follows all conventions and has good test coverage."
+}
+```
+
+**Use for:**
+- Routing decisions
+- Classification tasks
+- Structured data extraction
+
+See [Workflow Examples](/examples/workflow-snippets) for patterns.
+
+## Debugging LLM Issues
+
+### Check the Raw Response
+
+In the UI, expand a message to see:
+- Full prompt sent
+- Raw LLM response
+- Token counts
+- Timing information
+
+### Common Fixes
+
+| Symptom | Likely Cause | Fix |
+|---------|--------------|-----|
+| "Tool not found" | Tool not in available list | Add tool to `tools` or `tool_filter` |
+| Truncated output | Hit max_tokens | Increase limit or use streaming |
+| Repeated responses | No stop condition | Add iteration limits to loops |
+| Slow responses | Large context | Enable compaction or filter results |
+| Wrong tool called | Ambiguous prompt | Clarify in system prompt |
+
+---
+
+**See also:** [CEL Expressions](/reference/cel-expressions)

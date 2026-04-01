@@ -1,0 +1,127 @@
+// Copyright (c) 2025 Reliant Labs
+package llm
+
+import (
+	"context"
+	"time"
+
+	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/models/message"
+)
+
+type EventType string
+
+const (
+	EventContentStart  EventType = "content_start"
+	EventToolUseStart  EventType = "tool_use_start"
+	EventToolUseDelta  EventType = "tool_use_delta"
+	EventToolUseStop   EventType = "tool_use_stop"
+	EventContentDelta  EventType = "content_delta"
+	EventThinkingStart EventType = "thinking_start"
+	EventThinkingDelta EventType = "thinking_delta"
+	EventThinkingStop  EventType = "thinking_stop"
+	EventContentStop   EventType = "content_stop"
+	EventComplete      EventType = "complete"
+	EventError         EventType = "error"
+	EventWarning       EventType = "warning"
+)
+
+// TokenUsage contains token information from an LLM response.
+// TokenCount represents the total tokens used (input + output + cache).
+// This is used for compaction decisions.
+type TokenUsage struct {
+	TokenCount int64   // Total tokens (for compaction decisions)
+	Cost       float64 // Cost in USD (optional, for future billing)
+}
+
+// DriverResponse represents a complete response from a driver
+type DriverResponse struct {
+	Content           string
+	Thinking          string // Extended thinking/reasoning content
+	ThinkingSignature string // Signature for multi-turn thinking preservation
+	ToolCalls         []message.ToolCall
+	Usage             TokenUsage
+	FinishReason      message.FinishReason
+
+	// Upstream correlation identifiers copied from provider response headers when available.
+	// Used for log correlation between Reliant app logs and HTTP capture tooling (e.g. Proxyman).
+	UpstreamRequestID  string // e.g. x-oai-request-id
+	UpstreamProxymanID string // e.g. x-proxyman-id
+}
+
+// DriverEvent represents a streaming event from a driver
+type DriverEvent struct {
+	Type EventType
+
+	Model    models.Model // model used for this event
+	Content  string
+	Thinking string
+	Response *DriverResponse
+	ToolCall *message.ToolCall
+	Error    error
+}
+
+// Driver represents the interface for interacting with LLM providers
+// This was previously called Provider but has been renamed for clarity
+// Using interface{} for messages and tools to avoid circular dependencies
+type Driver interface {
+	Name() string
+	// SendMessages sends messages to the model and returns a complete response
+	// The messages and tools parameters are interface{} to avoid circular dependencies
+	SendMessages(ctx context.Context, prompts []string, messages []message.Message, tools []tools.Tool) (*DriverResponse, error)
+
+	// StreamResponse sends messages to the model and returns a stream of events
+	// The messages and tools parameters are interface{} to avoid circular dependencies
+	StreamResponse(ctx context.Context, prompts []string, messages []message.Message, tools []tools.Tool) <-chan DriverEvent
+
+	// Model returns the model configuration for this driver
+	Model() models.Model
+
+	// ValidateKey validates the API key for this driver using a small model
+	ValidateKey(ctx context.Context) error
+}
+
+// DriverOptions holds configuration options for creating a driver
+type DriverOptions struct {
+	SessionID   *string
+	ApiKey      string
+	Model       models.Model
+	MaxTokens   int64
+	Temperature *float64 // Optional temperature override (0.0-1.0)
+
+	// Shared Options -- these are not common on ALL models, but are used by multiple providers
+	DisableCache     bool
+	ReasoningEffort  string
+	ExtraHeaders     map[string]string
+	WorkingDirectory string // Project or worktree path where the agent is operating
+
+	// Anthropic-specific options
+	UseBedrock bool
+
+	// Copilot-specific options
+	BearerToken string
+
+	// OpenAI-specific options
+	BaseURL string
+
+	// Gemini-specific options
+	SafetyLevel string
+
+	// Claude Code specific options
+	IgnoreDefaultPrompts bool // Skip the second Claude Code prompt (used for compaction)
+
+	// Claude OAuth account metadata (from stored tokens, replaces .claude.json)
+	AccountUUID      string
+	AccountEmail     string
+	OrganizationUUID string
+
+	// TokenRefresher is an optional callback that refreshes an expired OAuth token.
+	// It takes the current refresh token, performs the refresh, persists new tokens to DB,
+	// and returns (newAccessToken, newExpiresAt, error).
+	TokenRefresher func(refreshToken string) (newAccessToken string, newExpiresAt time.Time, err error)
+	// RefreshToken is the OAuth refresh token used by TokenRefresher.
+	RefreshToken string
+	// TokenExpiresAt is when the current access token expires.
+	TokenExpiresAt time.Time
+}

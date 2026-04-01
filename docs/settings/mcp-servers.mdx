@@ -1,0 +1,331 @@
+---
+title: "MCP Servers"
+description: "Extend Reliant with Model Context Protocol servers for additional capabilities"
+---
+
+Model Context Protocol (MCP) servers extend Reliant's capabilities by providing additional tools and context sources. MCP is an open protocol that lets AI assistants securely interact with external data sources and tools.
+
+## What are MCP Servers?
+
+MCP servers are standalone programs that:
+- Expose additional tools and resources to Reliant
+- Provide access to external data sources such as databases, APIs, and file systems
+- Run as separate processes communicating via standard I/O
+- Can be written in any language that supports stdio communication
+
+Think of MCP servers as plugins that give Reliant new capabilities without modifying the core application.
+
+## Configuration Files and Scopes
+
+Reliant stores MCP server configs in scoped files:
+
+- **Global:** `~/.reliant/mcp.json`
+- **Project:** `<project>/.reliant/mcp.json`
+- **Project Local (gitignored):** `<project>/.reliant.local/mcp.json`
+  - Reliant automatically ensures `.reliant.local/` is present in `<project>/.gitignore` when you install to this scope.
+
+When resolving servers, Reliant merges these scopes with precedence:
+`Global < Project < Project Local`.
+
+## Built-in MCP Server Support
+
+Reliant comes with example configurations for common MCP servers.
+
+### Filesystem Server
+
+Provides tools for file system operations with scoped access.
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "${PWD}"]
+    }
+  }
+}
+```
+
+Capabilities: read and write files, list directories, and search files, scoped to prevent access outside allowed paths.
+
+### GitHub Server
+
+Integrates with GitHub for repository operations.
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "command": "uvx",
+      "args": ["mcp-server-github"],
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+Capabilities: create and manage issues, list and update PRs, search repositories, and manage branches.
+
+**Setup**: Create a personal access token at [github.com/settings/tokens](https://github.com/settings/tokens), grant appropriate scopes, and set the `GITHUB_TOKEN` environment variable.
+
+### SQLite Server
+
+Provides database query capabilities.
+
+```json
+{
+  "mcpServers": {
+    "sqlite": {
+      "command": "uvx",
+      "args": ["mcp-server-sqlite", "--db-path", "${HOME}/mcp-data.db"]
+    }
+  }
+}
+```
+
+Capabilities: execute SQL queries, inspect database schemas, and analyze data.
+
+## Adding Custom MCP Servers
+
+You can add custom MCP servers directly from **Settings → MCP Servers → Add Custom**. The guided UI supports:
+- server name
+- stdio or sse transport
+- command or URL
+- args and env vars
+- scope selection (Global, Project, or Project Local)
+
+For recommended setup-free MCP servers, Reliant prompts for scope on install by default. If you check **Remember this choice**, future one-click installs reuse that scope.
+
+### MCP + Skill Bundles
+
+Some recommended MCP servers include curated skill bundles.
+
+When present, install follows this sequence:
+1. Validate configuration and selected scope
+2. Write MCP configuration
+3. Materialize bundled skills into the selected target scope (`.reliant`, `.reliant.local`, or `~/.reliant`)
+4. Re-index skills
+5. Return an install summary
+
+Bundled-skill guardrails in v1:
+- Bundles come only from Reliant's trusted embedded recommended catalog
+- Skill file paths are normalized and traversal with `..` is rejected
+- Conflict policies are respected (`skip`, `overwrite`, `prompt`)
+- On bundle materialization failure, MCP installation is rolled back to avoid partial silent state
+
+You can also configure files manually as documented below.
+
+### Configuration Structure
+
+```json
+{
+  "mcpServers": {
+    "server_name": {
+      "command": "path/to/executable",
+      "args": ["--arg1", "value1"],
+      "env": {
+        "API_KEY": "${ENV_VAR_NAME}"
+      }
+    }
+  }
+}
+```
+
+### Configuration Fields
+
+**command** (required): Path to the executable or command name. This can be an absolute path or a command in `PATH`. Examples: `"npx"`, `"python"`, `"/usr/local/bin/custom-server"`
+
+**args** (optional): Array of command-line arguments passed in order. Supports variable substitution.
+
+**env** (optional): Environment variables for the server process. Format: `"VAR_NAME": "${SOURCE_VAR}"`
+
+## Variable Substitution
+
+MCP configurations support substitution from environment variables:
+
+| Variable | Description |
+|----------|-------------|
+| `${PWD}` | Current working directory |
+| `${HOME}` | User's home directory |
+| `${ENV_VAR}` | Any environment variable |
+| `${VAR:-default}` | Variable with default value |
+
+## Example: Python MCP Server
+
+```json
+{
+  "mcpServers": {
+    "data_analyzer": {
+      "command": "python",
+      "args": ["-m", "my_mcp_servers.data_analyzer"],
+      "env": {
+        "DATA_PATH": "${PROJECT_DATA_PATH}",
+        "LOG_LEVEL": "INFO"
+      }
+    }
+  }
+}
+```
+
+## Example: Docker-based MCP Server
+
+```json
+{
+  "mcpServers": {
+    "containerized_tool": {
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i",
+        "--network=host",
+        "my-mcp-server:latest"
+      ]
+    }
+  }
+}
+```
+
+## Building Your Own MCP Server
+
+An MCP server must:
+1. Communicate via standard input/output (stdio)
+2. Implement the MCP protocol
+3. Handle JSON-RPC 2.0 messages
+4. Provide tool definitions and implementations
+
+### Minimal Example (Python)
+
+```python
+#!/usr/bin/env python3
+import json
+import sys
+
+def handle_request(request):
+    method = request.get("method")
+
+    if method == "tools/list":
+        return {
+            "tools": [{
+                "name": "my_tool",
+                "description": "Does something useful",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "input": {"type": "string"}
+                    }
+                }
+            }]
+        }
+    elif method == "tools/call":
+        tool_name = request["params"]["name"]
+        if tool_name == "my_tool":
+            return {"result": "Success"}
+
+    return {"error": "Unknown method"}
+
+def main():
+    for line in sys.stdin:
+        request = json.loads(line)
+        response = handle_request(request)
+        print(json.dumps(response))
+        sys.stdout.flush()
+
+if __name__ == "__main__":
+    main()
+```
+
+### MCP Libraries and SDKs
+
+Official SDKs:
+- **Python**: `mcp` package
+- **TypeScript/Node.js**: `@modelcontextprotocol/sdk`
+- **Go**: Community implementations available
+
+Refer to the [Model Context Protocol documentation](https://modelcontextprotocol.io) for detailed specifications.
+
+## Managing MCP Servers
+
+### Testing MCP Servers
+
+After adding an MCP server:
+
+1. Open **Settings → MCP Servers** and verify status or last error
+2. **Check logs** for connection errors:
+   - macOS: `~/Library/Logs/Reliant/reliant.log`
+   - Windows: `%APPDATA%\Reliant\logs\reliant.log`
+   - Linux: `~/.local/share/reliant/logs/reliant.log`
+3. **Test in a chat** by asking the agent to use the new tools
+
+### Debugging Issues
+
+**Server will not start**: Check the command path, verify arguments, ensure environment variables are set, and confirm prerequisites like `npx` and `uvx` are installed.
+
+**Tools do not work**: Verify MCP protocol implementation, check the server last error in MCP Settings, inspect logs or stdout, and test the server independently with manual JSON-RPC calls.
+
+**Performance issues**: Consider adding timeouts, monitor resource usage, and use caching in the server implementation.
+
+## Security Considerations
+
+### Scoped Access
+
+Always scope MCP servers to minimal necessary access:
+
+```json
+// Good - scoped to project
+"args": ["--directory", "${PWD}"]
+
+// Risky - full system access
+"args": ["--directory", "/"]
+```
+
+### Environment Variable Security
+
+- Never commit API keys or secrets in configuration files
+- Use environment variables for sensitive data
+- Consider using secret management tools
+- Rotate credentials regularly
+
+### Trusted Servers Only
+
+- Only use MCP servers from trusted sources
+- Review server code before using it
+- Be cautious with servers requiring broad system access
+- Monitor server behavior in logs
+
+## Complete Configuration Example
+
+```json
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "${PWD}"]
+    },
+    "github": {
+      "command": "uvx",
+      "args": ["mcp-server-github"],
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      }
+    },
+    "database": {
+      "command": "uvx",
+      "args": ["mcp-server-sqlite", "--db-path", "${PWD}/app.db"]
+    },
+    "custom_tools": {
+      "command": "python",
+      "args": ["-m", "my_company.mcp_tools"],
+      "env": {
+        "CONFIG_PATH": "${HOME}/.config/tools.json"
+      }
+    }
+  }
+}
+```
+
+## Related Topics
+
+- [Workflows Overview](/workflows/overview) - Configure agents to use MCP tools
+- [API Keys](/settings/api-keys) - Set up credentials for MCP servers
+- [Troubleshooting](/help/troubleshooting) - Debug MCP server issues

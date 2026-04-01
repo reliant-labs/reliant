@@ -1,0 +1,22 @@
+export const thinkingMessages = [
+  'Thinking',
+  'Processing',
+  'Analyzing',
+  'Computing',
+  'Reasoning',
+  'Synthesizing',
+  'Calculating',
+  'Pondering',
+  'Considering',
+  'Evaluating',
+  'Brainstorming',
+  'Connecting dots',
+  'Brewing ideas',
+  'Deep diving',
+  'Crunching data',
+  'Weaving logic',
+  'Parsing thoughts',
+  'Mapping patterns',
+  'Solving puzzles',
+  'Assembling wisdom'
+];

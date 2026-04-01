@@ -1,0 +1,692 @@
+# Copyright (c) 2025 Reliant Labs
+# Model definitions for Reliant LLM infrastructure
+#
+# Model order determines tag resolution priority (first match wins).
+# Models are grouped by primary provider for organization.
+
+models:
+  # ============================================================================
+  # FLAGSHIP MODELS - Best overall for complex tasks
+  # ============================================================================
+
+  - id: claude-4.6-opus
+    name: Claude 4.6 Opus
+    tags: [flagship, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 200000
+      max_output_tokens: 20000
+    cost:
+      input_per_1m: 5.0
+      output_per_1m: 25.0
+      cached_input_per_1m: 0.5
+    providers:
+      - driver: anthropic
+        api_model: claude-opus-4-6
+      - driver: openrouter
+        api_model: anthropic/claude-opus-4.6
+
+  - id: claude-4.5-opus
+    name: Claude 4.5 Opus
+    tags: [flagship, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 200000
+      max_output_tokens: 20000
+    cost:
+      input_per_1m: 5.0
+      output_per_1m: 25.0
+      cached_input_per_1m: 0.5
+    providers:
+      - driver: anthropic
+        api_model: claude-opus-4-5-20251101
+      - driver: openrouter
+        api_model: anthropic/claude-opus-4.5
+
+  - id: gpt-5.4
+    name: GPT-5.4
+    tags: [flagship, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1050000
+      max_output_tokens: 128000
+    cost:
+      input_per_1m: 2.5
+      output_per_1m: 15.0
+      cached_input_per_1m: 0.25
+    providers:
+      - driver: codex
+        api_model: gpt-5.4
+      - driver: openai
+        api_model: gpt-5.4
+      - driver: openrouter
+        api_model: openai/gpt-5.4
+    driver_settings:
+      preferred_endpoint: responses
+      temperature_mode: omit
+      use_max_completion_tokens: true
+
+  - id: gpt-5.4-pro
+    name: GPT-5.4 Pro
+    tags: [flagship, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: false
+      max_context_window: 1050000
+      max_output_tokens: 128000
+    cost:
+      input_per_1m: 30.0
+      output_per_1m: 180.0
+    providers:
+      - driver: openai
+        api_model: gpt-5.4-pro
+    driver_settings:
+      preferred_endpoint: responses
+      temperature_mode: omit
+      use_max_completion_tokens: true
+
+  - id: gpt-5.3-codex
+    name: GPT-5.3 Codex
+    tags: [flagship, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 400000
+      max_output_tokens: 128000
+    cost:
+      input_per_1m: 1.75
+      output_per_1m: 14.0
+      cached_input_per_1m: 0.175
+    providers:
+      - driver: codex
+        api_model: gpt-5.3-codex
+      - driver: openai
+        api_model: gpt-5.3-codex
+      - driver: openrouter
+        api_model: openai/gpt-5.3-codex
+    driver_settings:
+      preferred_endpoint: responses
+      temperature_mode: omit
+      use_max_completion_tokens: true
+      reasoning_summary_mode: detailed_only
+
+  - id: gpt-5.3-codex-spark
+    name: GPT-5.3 Codex Spark
+    tags: [fast, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: false
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 128000
+      max_output_tokens: 10000
+    cost:
+      input_per_1m: 1.75
+      output_per_1m: 14.0
+      cached_input_per_1m: 0.175
+    providers:
+      - driver: codex
+        api_model: gpt-5.3-codex-spark
+    driver_settings:
+      preferred_endpoint: responses
+      temperature_mode: omit
+      use_max_completion_tokens: true
+
+  - id: gpt-5.2-codex
+    name: GPT-5.2 Codex
+    tags: [flagship, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 400000
+      max_output_tokens: 128000
+    cost:
+      input_per_1m: 1.75
+      output_per_1m: 14.0
+      cached_input_per_1m: 0.175
+    providers:
+      - driver: codex
+        api_model: gpt-5.2-codex
+      - driver: openai
+        api_model: gpt-5.2-codex
+      - driver: openrouter
+        api_model: openai/gpt-5.2-codex
+    driver_settings:
+      preferred_endpoint: responses
+      temperature_mode: omit
+      use_max_completion_tokens: true
+      reasoning_summary_mode: detailed_only
+
+  - id: gemini-3.1-pro-preview
+    name: Gemini 3.1 Pro Preview
+    tags: [flagship, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1048576
+      max_output_tokens: 65536
+    cost:
+      input_per_1m: 1.25
+      output_per_1m: 10.0
+    providers:
+      - driver: gemini
+        api_model: gemini-3.1-pro-preview
+      - driver: openrouter
+        api_model: google/gemini-3.1-pro-preview
+
+  - id: gemini-3-pro-preview
+    name: Gemini 3 Pro Preview
+    tags: [flagship, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: false
+      max_context_window: 1048576
+      max_output_tokens: 65536
+    cost:
+      input_per_1m: 1.25
+      output_per_1m: 10.0
+    providers:
+      - driver: gemini
+        api_model: gemini-3-pro-preview
+      - driver: openrouter
+        api_model: google/gemini-3-pro-preview
+
+  - id: gemini-3.1-pro-preview-customtools
+    name: Gemini 3.1 Pro Preview (Custom Tools)
+    tags: [reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1048576
+      max_output_tokens: 65536
+    cost:
+      input_per_1m: 1.25
+      output_per_1m: 10.0
+    providers:
+      - driver: gemini
+        api_model: gemini-3.1-pro-preview-customtools
+
+  - id: grok-4
+    name: Grok 4
+    tags: [flagship, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: false
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 256000
+      max_output_tokens: 20000
+    cost:
+      input_per_1m: 3.0
+      output_per_1m: 15.0
+      cached_input_per_1m: 0.75
+    providers:
+      - driver: xai
+        api_model: grok-4
+
+  # ============================================================================
+  # MODERATE MODELS - Good balance of quality and cost
+  # ============================================================================
+
+  - id: claude-4.6-sonnet
+    name: Claude 4.6 Sonnet
+    tags: [moderate, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 200000
+      max_output_tokens: 20000
+    cost:
+      input_per_1m: 3.0
+      output_per_1m: 15.0
+      cached_input_per_1m: 0.3
+    providers:
+      - driver: anthropic
+        api_model: claude-sonnet-4-6
+      - driver: openrouter
+        api_model: anthropic/claude-sonnet-4.6
+
+  - id: claude-4.5-sonnet
+    name: Claude 4.5 Sonnet
+    tags: [moderate, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 200000
+      max_output_tokens: 20000
+    cost:
+      input_per_1m: 3.0
+      output_per_1m: 15.0
+      cached_input_per_1m: 0.3
+    providers:
+      - driver: anthropic
+        api_model: claude-sonnet-4-5-20250929
+      - driver: openrouter
+        api_model: anthropic/claude-sonnet-4.5
+  - id: gpt-5.2-pro
+    name: GPT-5.2 Pro
+    tags: [moderate, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 400000
+      max_output_tokens: 128000
+    cost:
+      input_per_1m: 5.0
+      output_per_1m: 40.0
+      cached_input_per_1m: 0.5
+    providers:
+      - driver: openai
+        api_model: gpt-5.2-pro
+      - driver: openrouter
+        api_model: openai/gpt-5.2-pro
+    driver_settings:
+      preferred_endpoint: responses
+      temperature_mode: omit
+      use_max_completion_tokens: true
+
+  - id: gpt-5.2
+    name: GPT-5.2
+    tags: [moderate, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 400000
+      max_output_tokens: 128000
+    cost:
+      input_per_1m: 1.75
+      output_per_1m: 14.0
+      cached_input_per_1m: 0.175
+    providers:
+      - driver: openai
+        api_model: gpt-5.2
+      - driver: openrouter
+        api_model: openai/gpt-5.2
+    driver_settings:
+      preferred_endpoint: responses
+      temperature_mode: omit
+      use_max_completion_tokens: true
+
+  - id: gemini-2.5-pro
+    name: Gemini 2.5 Pro
+    tags: [moderate, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: false
+      max_context_window: 1048576
+      max_output_tokens: 65536
+    cost:
+      input_per_1m: 1.25
+      output_per_1m: 10.0
+    providers:
+      - driver: gemini
+        api_model: gemini-2.5-pro
+      - driver: openrouter
+        api_model: google/gemini-2.5-pro
+
+  # ============================================================================
+  # FAST MODELS - Quick responses, good for simple tasks
+  # ============================================================================
+
+  - id: claude-4.5-haiku
+    name: Claude 4.5 Haiku
+    tags: [fast, cheap, meta]
+    visibility: user
+    capabilities:
+      can_reason: false
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 200000
+      max_output_tokens: 8192
+    cost:
+      input_per_1m: 0.8
+      output_per_1m: 4.0
+      cached_input_per_1m: 0.08
+    providers:
+      - driver: anthropic
+        api_model: claude-haiku-4-5-20251001
+      - driver: openrouter
+        api_model: anthropic/claude-haiku-4.5
+
+  - id: gpt-5.4-mini
+    name: GPT-5.4 Mini
+    tags: [fast, cheap, meta]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 400000
+      max_output_tokens: 128000
+    cost:
+      input_per_1m: 0.25
+      output_per_1m: 2.0
+      cached_input_per_1m: 0.025
+    providers:
+      - driver: codex
+        api_model: gpt-5.4-mini
+      - driver: openai
+        api_model: gpt-5.4-mini
+      - driver: openrouter
+        api_model: openai/gpt-5.4-mini
+    driver_settings:
+      preferred_endpoint: responses
+      temperature_mode: omit
+      use_max_completion_tokens: true
+
+  - id: gemini-3-flash-preview
+    name: Gemini 3 Flash Preview
+    tags: [fast]
+    visibility: user
+    capabilities:
+      can_reason: false
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: false
+      max_context_window: 1048576
+      max_output_tokens: 65536
+    cost:
+      input_per_1m: 0.15
+      output_per_1m: 0.60
+    providers:
+      - driver: gemini
+        api_model: gemini-3-flash-preview
+      - driver: openrouter
+        api_model: google/gemini-3-flash-preview
+
+  - id: gemini-2.5-flash
+    name: Gemini 2.5 Flash
+    tags: [fast, cheap]
+    visibility: user
+    capabilities:
+      can_reason: false
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: false
+      max_context_window: 1048576
+      max_output_tokens: 65536
+    cost:
+      input_per_1m: 0.15
+      output_per_1m: 0.60
+    providers:
+      - driver: gemini
+        api_model: gemini-2.5-flash
+      - driver: openrouter
+        api_model: google/gemini-2.5-flash
+
+
+  # ============================================================================
+  # META MODELS - For internal operations (title generation, compaction, etc.)
+  # ============================================================================
+
+  - id: gemini-2.5-flash-lite
+    name: Gemini 2.5 Flash Lite
+    tags: [cheap, meta]
+    visibility: meta
+    capabilities:
+      can_reason: false
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: false
+      max_context_window: 1048576
+      max_output_tokens: 65536
+    cost:
+      input_per_1m: 0.075
+      output_per_1m: 0.30
+    providers:
+      - driver: gemini
+        api_model: gemini-2.5-flash-lite
+      - driver: openrouter
+        api_model: google/gemini-2.5-flash-lite
+
+  - id: grok-3-mini-beta
+    name: Grok 3 Mini Beta
+    tags: [cheap, meta]
+    visibility: meta
+    capabilities:
+      can_reason: false
+      supports_tools: true
+      supports_attachments: false
+      supports_streaming: true
+      supports_caching: false
+      max_context_window: 131072
+      max_output_tokens: 20000
+    cost:
+      input_per_1m: 0.3
+      output_per_1m: 0.5
+    providers:
+      - driver: xai
+        api_model: grok-3-mini-beta
+
+  # ============================================================================
+  # VERTEX AI MODELS - Google Cloud Vertex AI hosted models
+  # ============================================================================
+
+  - id: vertex-claude-4.6-opus
+    name: Vertex Claude 4.6 Opus
+    tags: [flagship, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 200000
+      max_output_tokens: 20000
+    cost:
+      input_per_1m: 5.0
+      output_per_1m: 25.0
+      cached_input_per_1m: 0.5
+    providers:
+      - driver: vertexai
+        api_model: claude-opus-4-6
+
+  - id: vertex-claude-4.5-sonnet
+    name: Vertex Claude 4.5 Sonnet
+    tags: [moderate, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 200000
+      max_output_tokens: 20000
+    cost:
+      input_per_1m: 3.0
+      output_per_1m: 15.0
+      cached_input_per_1m: 0.3
+    providers:
+      - driver: vertexai
+        api_model: claude-sonnet-4-5@20250929
+
+  - id: vertex-claude-4.5-haiku
+    name: Vertex Claude 4.5 Haiku
+    tags: [fast, cheap, meta]
+    visibility: meta
+    capabilities:
+      can_reason: false
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 200000
+      max_output_tokens: 8192
+    cost:
+      input_per_1m: 0.8
+      output_per_1m: 4.0
+      cached_input_per_1m: 0.08
+    providers:
+      - driver: vertexai
+        api_model: claude-haiku-4-5@20250512
+
+  - id: vertex-gemini-2.5-pro
+    name: Vertex Gemini 2.5 Pro
+    tags: [moderate, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: false
+      max_context_window: 1000000
+      max_output_tokens: 50000
+    cost:
+      input_per_1m: 1.25
+      output_per_1m: 10.0
+    providers:
+      - driver: vertexai
+        api_model: gemini-2.5-pro
+
+  - id: vertex-gemini-2.5-flash
+    name: Vertex Gemini 2.5 Flash
+    tags: [fast, cheap]
+    visibility: user
+    capabilities:
+      can_reason: false
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: false
+      max_context_window: 1000000
+      max_output_tokens: 50000
+    cost:
+      input_per_1m: 0.15
+      output_per_1m: 0.60
+    providers:
+      - driver: vertexai
+        api_model: gemini-2.5-flash
+
+  # ============================================================================
+  # TEST/MOCK MODELS - For testing only
+  # ============================================================================
+
+  - id: mock
+    name: Mock Model
+    tags: []
+    visibility: dev
+    capabilities:
+      can_reason: false
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: false
+      max_context_window: 128000
+      max_output_tokens: 8192
+    cost:
+      input_per_1m: 0.11
+      output_per_1m: 0.34
+    providers:
+      - driver: mock
+        api_model: mock-model
+
+  - id: tiny-context
+    name: Tiny Context Model
+    tags: []
+    visibility: dev
+    capabilities:
+      can_reason: false
+      supports_tools: true
+      supports_attachments: false
+      supports_streaming: true
+      supports_caching: false
+      max_context_window: 1000
+      max_output_tokens: 500
+    cost:
+      input_per_1m: 0.01
+      output_per_1m: 0.01
+    providers:
+      - driver: mock
+        api_model: tiny-context
+
+  - id: small-context
+    name: Small Context Model
+    tags: []
+    visibility: dev
+    capabilities:
+      can_reason: false
+      supports_tools: true
+      supports_attachments: false
+      supports_streaming: true
+      supports_caching: false
+      max_context_window: 4000
+      max_output_tokens: 1000
+    cost:
+      input_per_1m: 0.01
+      output_per_1m: 0.01
+    providers:
+      - driver: mock
+        api_model: small-context

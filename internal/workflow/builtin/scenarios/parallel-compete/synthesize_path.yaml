@@ -1,0 +1,127 @@
+# Synthesize Path: Reviewer combines best parts from multiple implementations
+#
+# Tests the synthesize branch of the parallel-compete workflow:
+# 1. improve_prompt refines the task spec
+# 2. Three worktrees created, three implementations run in parallel
+# 3. Reviewer determines no single candidate is best — each has unique strengths
+# 4. Reviewer picks strategy "synthesize" with detailed instructions
+# 5. Synthesizer agent (another black-box workflow) merges the best parts
+# 6. apply_winner is SKIPPED (condition: strategy == 'use_winner' is false)
+#
+# This verifies the conditional branching: when strategy == 'synthesize',
+# the synthesizer node runs and apply_winner is skipped.
+
+name: synthesize_path
+description: Reviewer chooses synthesize strategy, synthesizer agent combines best parts
+
+events:
+  # Prompt improvement
+  - node: improve_prompt
+    output:
+      message:
+        role: assistant
+        text: "Build a cache layer with TTL support and eviction policies"
+      response_text: "Build a cache layer with TTL support and eviction policies"
+      tool_calls: []
+
+  # Create worktrees
+  - node: create_worktree_1
+    output:
+      id: "wt1"
+      name: "b1"
+      path: "/wt/1"
+      branch: "b1"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  - node: create_worktree_2
+    output:
+      id: "wt2"
+      name: "b2"
+      path: "/wt/2"
+      branch: "b2"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+  - node: create_worktree_3
+    output:
+      id: "wt3"
+      name: "b3"
+      path: "/wt/3"
+      branch: "b3"
+      base_branch: "main"
+      repo_id: "test"
+      status: "created"
+
+  # Parallel implementations (black-box workflow outputs)
+  - node: impl_1
+    output:
+      message:
+        role: assistant
+        text: "Created cache.go with excellent TTL implementation but basic API"
+      response_text: "Created cache.go with excellent TTL implementation but basic API"
+
+  - node: impl_2
+    output:
+      message:
+        role: assistant
+        text: "Created cache.go and cache_test.go with great test coverage but basic TTL"
+      response_text: "Created cache.go and cache_test.go with great test coverage but basic TTL"
+
+  - node: impl_3
+    output:
+      message:
+        role: assistant
+        text: "Created cache.go with clean API design but minimal tests"
+      response_text: "Created cache.go with clean API design but minimal tests"
+
+  # Reviewer chooses synthesize strategy
+  - node: review
+    output:
+      message:
+        role: assistant
+        text: "Each implementation has unique strengths that should be combined."
+      response_text: "Each implementation has unique strengths that should be combined."
+      response:
+        winner: 1
+        strategy: "synthesize"
+        confidence: 9
+        rationale: "Candidate 1 has the best TTL logic, Candidate 2 has the best tests, Candidate 3 has the cleanest API. Combining all three creates the ideal solution."
+        synthesis_instructions: |
+          1. Use Candidate 1's cache.go as the base (best TTL logic)
+          2. Copy Candidate 2's cache_test.go for test coverage
+          3. Update the public API in cache.go to match Candidate 3's cleaner interface
+      completed: true
+
+  # Synthesizer agent combines implementations (black-box workflow output)
+  - node: synthesizer
+    output:
+      message:
+        role: assistant
+        text: |
+          Synthesis complete:
+          1. Used Candidate 1's TTL implementation as the base
+          2. Added Candidate 2's comprehensive test suite
+          3. Refactored the API to match Candidate 3's cleaner design
+      response_text: |
+        Synthesis complete:
+        1. Used Candidate 1's TTL implementation as the base
+        2. Added Candidate 2's comprehensive test suite
+        3. Refactored the API to match Candidate 3's cleaner design
+
+expect:
+  outcome: completed
+  reached:
+    - improve_prompt
+    - save_improved_prompt
+    - create_worktree_1
+    - create_worktree_2
+    - create_worktree_3
+    - impl_1
+    - impl_2
+    - impl_3
+    - review
+    - synthesizer
+    - complete
+  not_reached:
+    - apply_winner
