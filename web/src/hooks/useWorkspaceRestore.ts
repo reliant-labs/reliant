@@ -1,0 +1,406 @@
+/**
+ * useWorkspaceRestore Hook
+ *
+ * Orchestrates full workspace state restoration on app load.
+ * Handles restoring:
+ * - Last selected project
+ * - Last selected worktree within project
+ * - Active chat and chat queue
+ * - Open viewers
+ * - Panel states (sidebar, file browser, terminal)
+ * - Scroll positions
+ */
+
+import { useEffect, useState, useCallback, useRef } from "react";
+import { logger } from "../lib/logger";
+import { useWorkspaceStateStore } from "../store/workspaceStateStore";
+import { useProjectStore } from "../store/projectStore";
+import { useWorktreeStore } from "../store/worktreeStore";
+import { useViewerStore } from "../store/viewerStore";
+import { useChatStore } from "../store/chatStore";
+import { useChatNavigationStore } from "../store/chatNavigationStore";
+import { useTerminalStore } from "../store/terminalStore";
+
+export interface WorkspaceRestoreResult {
+  /** Whether restoration is in progress */
+  isRestoring: boolean;
+  /** Whether restoration completed (success or failure) */
+  isComplete: boolean;
+  /** Whether restoration succeeded */
+  isSuccess: boolean;
+  /** Error message if restoration failed */
+  error: string | null;
+  /** Warnings encountered during restoration */
+  warnings: string[];
+  /** The restored project (if any) */
+  restoredProject: { id: string; name: string } | null;
+  /** The restored worktree (if any) */
+  restoredWorktree: { id: string; name: string } | null;
+}
+
+export interface UseWorkspaceRestoreOptions {
+  /** Whether to automatically restore on mount (default: true) */
+  autoRestore?: boolean;
+  /** Skip project restoration (just restore worktree/chat state for current project) */
+  skipProjectRestore?: boolean;
+  /** Callback when restoration completes */
+  onComplete?: (result: WorkspaceRestoreResult) => void;
+}
+
+/**
+ * Hook to restore workspace state on app load.
+ * 
+ * Usage:
+ * ```tsx
+ * const { isRestoring, isComplete, error } = useWorkspaceRestore();
+ * 
+ * if (isRestoring) {
+ *   return <LoadingSpinner />;
+ * }
+ * ```
+ */
+export function useWorkspaceRestore(
+  options: UseWorkspaceRestoreOptions = {}
+): WorkspaceRestoreResult & { restore: () => Promise<void> } {
+  const { autoRestore = true, skipProjectRestore = false, onComplete } = options;
+
+  const [state, setState] = useState<WorkspaceRestoreResult>({
+    isRestoring: autoRestore,
+    isComplete: false,
+    isSuccess: false,
+    error: null,
+    warnings: [],
+    restoredProject: null,
+    restoredWorktree: null,
+  });
+
+  const hasRestoredRef = useRef(false);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+
+  // Sync isRestoring with autoRestore when it changes from false to true
+  // This ensures we show loading state immediately when autoRestore becomes true,
+  // not just when the restore() function is called
+  useEffect(() => {
+    if (autoRestore && !hasRestoredRef.current && !state.isRestoring) {
+      setState((prev) => ({ ...prev, isRestoring: true }));
+    }
+  }, [autoRestore, state.isRestoring]);
+
+  const restore = useCallback(async () => {
+    // Prevent double restoration
+    if (hasRestoredRef.current) {
+      logger.debug("[WorkspaceRestore] Already restored, skipping");
+      return;
+    }
+
+    logger.info("[WorkspaceRestore] Starting workspace restoration");
+    const warnings: string[] = [];
+    let restoredProject: { id: string; name: string } | null = null;
+    let restoredWorktree: { id: string; name: string } | null = null;
+
+    setState((prev) => ({ ...prev, isRestoring: true, error: null }));
+
+    try {
+      // Wait for workspace state to be hydrated from localStorage
+      // This is critical - zustand persist rehydrates asynchronously (even for localStorage)
+      // We need to ensure the persisted state is loaded before attempting restoration
+      const waitForHydration = async (maxWaitMs = 1000): Promise<void> => {
+        const startTime = Date.now();
+        
+        while (!useWorkspaceStateStore.persist.hasHydrated()) {
+          if (Date.now() - startTime > maxWaitMs) {
+            logger.warn("[WorkspaceRestore] Hydration wait timeout - proceeding anyway");
+            break;
+          }
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        
+        // Additional check - verify lastProjectId is actually available
+        // This ensures the state is fully merged
+        const state = useWorkspaceStateStore.getState();
+        if (state.lastProjectId) {
+          logger.info("[WorkspaceRestore] Workspace state hydrated", { lastProjectId: state.lastProjectId });
+        }
+      };
+      
+      if (!useWorkspaceStateStore.persist.hasHydrated()) {
+        logger.info("[WorkspaceRestore] Waiting for workspace state hydration...");
+        await waitForHydration();
+      } else {
+        logger.info("[WorkspaceRestore] Workspace state already hydrated");
+      }
+
+      const projectStore = useProjectStore.getState();
+      const worktreeStore = useWorktreeStore.getState();
+      const viewerStore = useViewerStore.getState();
+      const chatStore = useChatStore.getState();
+      const chatNavStore = useChatNavigationStore.getState();
+      const workspaceState = useWorkspaceStateStore.getState();
+
+      // Step 1: Restore project (if not skipped)
+      if (!skipProjectRestore) {
+        // Check if projects are loaded, if not wait a bit
+        if (projectStore.projects.length === 0 && !projectStore.isLoading) {
+          logger.info("[WorkspaceRestore] Waiting for projects to load...");
+          await projectStore.loadProjects();
+        }
+
+        // Attempt to restore last project
+        const restored = await projectStore.restoreLastProject();
+        // Get fresh state after restoration (the original projectStore reference is stale)
+        const freshProjectStore = useProjectStore.getState();
+        if (restored && freshProjectStore.currentProject) {
+          restoredProject = {
+            id: freshProjectStore.currentProject.id,
+            name: freshProjectStore.currentProject.name,
+          };
+          logger.info("[WorkspaceRestore] Restored project", restoredProject);
+        } else {
+          logger.info("[WorkspaceRestore] No project to restore");
+          // No project to restore - complete early
+          hasRestoredRef.current = true;
+          const result: WorkspaceRestoreResult = {
+            isRestoring: false,
+            isComplete: true,
+            isSuccess: true,
+            error: null,
+            warnings,
+            restoredProject: null,
+            restoredWorktree: null,
+          };
+          setState(result);
+          onCompleteRef.current?.(result);
+          window.dispatchEvent(new CustomEvent("workspace-restored", { detail: result }));
+          return;
+        }
+      }
+
+      // Get fresh state again (the reference at line 143 may have been reassigned)
+      const currentProject = useProjectStore.getState().currentProject;
+      if (!currentProject) {
+        logger.warn("[WorkspaceRestore] No current project after restoration attempt");
+        hasRestoredRef.current = true;
+        const result: WorkspaceRestoreResult = {
+          isRestoring: false,
+          isComplete: true,
+          isSuccess: true,
+          error: null,
+          warnings,
+          restoredProject: null,
+          restoredWorktree: null,
+        };
+        setState(result);
+        onCompleteRef.current?.(result);
+        return;
+      }
+
+      // Step 2: Load worktrees if not loaded
+      if (worktreeStore.worktrees.length === 0) {
+        logger.info("[WorkspaceRestore] Loading worktrees...");
+        await worktreeStore.loadWorktrees(currentProject.id);
+      }
+
+      // Step 3: Restore last worktree
+      const worktreeRestored = worktreeStore.restoreLastWorktree(currentProject.id);
+      // Get fresh worktree state after restoration
+      const freshWorktreeStore = useWorktreeStore.getState();
+      if (worktreeRestored && freshWorktreeStore.currentWorktree) {
+        restoredWorktree = {
+          id: freshWorktreeStore.currentWorktree.id,
+          name: freshWorktreeStore.currentWorktree.name,
+        };
+        logger.info("[WorkspaceRestore] Restored worktree", restoredWorktree);
+      }
+
+      const currentWorktreeId = freshWorktreeStore.currentWorktree?.id ?? null;
+
+      // Step 4: Get workspace state for this project/worktree
+      const worktreeState = workspaceState.getWorktreeState(currentProject.id, currentWorktreeId);
+
+      // Step 5: Restore viewers
+      // NOTE: viewerStore no longer has setCurrentWorktree - it reads from worktreeStore directly
+      viewerStore.setCurrentProject(currentProject.id);
+      viewerStore.restoreFromWorkspaceState(currentProject.id, currentWorktreeId);
+      // Get fresh viewer state after restoration
+      const freshViewerStore = useViewerStore.getState();
+      logger.info("[WorkspaceRestore] Restored viewers", {
+        count: freshViewerStore.viewers.length,
+      });
+
+      // Step 6: Restore chat navigation state
+      chatNavStore.restoreFromWorkspaceState(currentProject.id, currentWorktreeId);
+      logger.info("[WorkspaceRestore] Restored chat navigation state");
+
+      // Step 7: Restore active chat
+      if (worktreeState.activeChatId) {
+        // Load chats if not loaded
+        if (chatStore.chats.size === 0) {
+          logger.info("[WorkspaceRestore] Loading chats...");
+          await chatStore.loadChats();
+        }
+
+        // Get fresh chat state after loading
+        const freshChatStore = useChatStore.getState();
+        // Find and select the chat
+        const chatToRestore = worktreeState.activeChatId
+          ? freshChatStore.chats.get(worktreeState.activeChatId)
+          : undefined;
+
+        if (chatToRestore) {
+          logger.info("[WorkspaceRestore] Restoring active chat", {
+            chatId: chatToRestore.id,
+            title: chatToRestore.title,
+          });
+          if (chatToRestore.worktreeId) {
+            const targetWorktree = useWorktreeStore.getState().worktrees.find((worktree) => worktree.id === chatToRestore.worktreeId) ?? null;
+            if (targetWorktree) {
+              await useWorktreeStore.getState().switchWorktreeContext(currentProject.id, targetWorktree);
+            }
+          } else {
+            await useWorktreeStore.getState().switchWorktreeContext(currentProject.id, null);
+          }
+          freshChatStore.selectChat(chatToRestore);
+
+          // Step 8: Schedule scroll position restoration (after chat renders)
+          const scrollPosition = worktreeState.scrollPositions[chatToRestore.id];
+          if (scrollPosition) {
+            // Use requestAnimationFrame to wait for render
+            requestAnimationFrame(() => {
+              window.dispatchEvent(
+                new CustomEvent("restore-chat-scroll", {
+                  detail: { chatId: chatToRestore.id, position: scrollPosition },
+                })
+              );
+            });
+          }
+        } else {
+          warnings.push(`Active chat no longer exists: ${worktreeState.activeChatId}`);
+          // Clear the stale reference
+          workspaceState.setActiveChatId(currentProject.id, currentWorktreeId, null);
+        }
+      }
+
+      // Step 9: Restore terminal open state
+      if (worktreeState.terminalOpen) {
+        useTerminalStore.getState().showTerminal();
+        logger.info("[WorkspaceRestore] Restored terminal open state");
+      }
+
+      // Step 10: Restore workflow mode state
+      if (worktreeState.isWorkflowMode) {
+        viewerStore.setWorkflowMode(true, worktreeState.activeWorkflowName ?? undefined);
+        logger.info("[WorkspaceRestore] Restored workflow state", {
+          isWorkflowMode: worktreeState.isWorkflowMode,
+          activeWorkflowName: worktreeState.activeWorkflowName,
+        });
+      }
+
+      hasRestoredRef.current = true;
+      const result: WorkspaceRestoreResult = {
+        isRestoring: false,
+        isComplete: true,
+        isSuccess: true,
+        error: null,
+        warnings,
+        restoredProject,
+        restoredWorktree,
+      };
+
+      setState(result);
+      onCompleteRef.current?.(result);
+      window.dispatchEvent(new CustomEvent("workspace-restored", { detail: result }));
+
+      logger.info("[WorkspaceRestore] Restoration complete", {
+        restoredProject: restoredProject?.name,
+        restoredWorktree: restoredWorktree?.name,
+        warnings: warnings.length,
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      logger.error("[WorkspaceRestore] Restoration failed", { error });
+
+      hasRestoredRef.current = true;
+      const result: WorkspaceRestoreResult = {
+        isRestoring: false,
+        isComplete: true,
+        isSuccess: false,
+        error: errorMessage,
+        warnings,
+        restoredProject,
+        restoredWorktree,
+      };
+
+      setState(result);
+      onCompleteRef.current?.(result);
+    }
+  }, [skipProjectRestore]);
+
+  // Auto-restore on mount
+  useEffect(() => {
+    if (autoRestore && !hasRestoredRef.current) {
+      restore();
+    }
+  }, [autoRestore, restore]);
+
+  return { ...state, restore };
+}
+
+/**
+ * Hook to save current workspace state.
+ * Call this before navigation away or on unmount.
+ */
+export function useSaveWorkspaceState() {
+  return useCallback(() => {
+    const projectStore = useProjectStore.getState();
+    const worktreeStore = useWorktreeStore.getState();
+    const viewerStore = useViewerStore.getState();
+
+    const projectId = projectStore.currentProject?.id;
+    const worktreeId = worktreeStore.currentWorktree?.id ?? null;
+
+    if (!projectId) {
+      logger.debug("[SaveWorkspaceState] No project to save");
+      return;
+    }
+
+    // Save viewer state
+    viewerStore.saveToWorkspaceState();
+
+    logger.info("[SaveWorkspaceState] Saved workspace state", {
+      projectId,
+      worktreeId,
+    });
+  }, []);
+}
+
+/**
+ * Hook that automatically saves workspace state on visibility change or unmount.
+ */
+export function useAutoSaveWorkspaceState() {
+  const saveState = useSaveWorkspaceState();
+
+  useEffect(() => {
+    // Save on visibility change (tab switch, minimize)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        saveState();
+      }
+    };
+
+    // Save on beforeunload (window close, refresh)
+    const handleBeforeUnload = () => {
+      saveState();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      // Save on unmount
+      saveState();
+    };
+  }, [saveState]);
+}

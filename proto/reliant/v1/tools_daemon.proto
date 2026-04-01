@@ -1,0 +1,402 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+// ToolsDaemonService provides bidirectional streaming for tool execution.
+// The daemon connects and maintains a persistent stream for receiving tool requests
+// and sending back tool responses.
+service ToolsDaemonService {
+  // ConnectDaemon establishes a bidirectional stream for tool execution.
+  // - Server sends ToolRequest messages when tools need to be executed
+  // - Client sends ToolResponse messages with execution results
+  // - On connect, server streams any pending requests from the database
+  rpc ConnectDaemon(stream DaemonMessage) returns (stream ServerMessage) {}
+
+  // ReportToolResult is a unary fallback for reporting tool execution results
+  // when the bidirectional stream is unavailable. The daemon calls this when
+  // a tool completes but the bidi stream send fails (e.g. temporary disconnect).
+  rpc ReportToolResult(ReportToolResultRequest) returns (ReportToolResultResponse) {}
+}
+
+// FileChangeType categorizes file system change events
+enum FileChangeType {
+  FILE_CHANGE_TYPE_UNSPECIFIED = 0;
+  FILE_CHANGE_TYPE_CREATED = 1;
+  FILE_CHANGE_TYPE_UPDATED = 2;
+  FILE_CHANGE_TYPE_DELETED = 3;
+}
+
+// ============================================
+// Client -> Server Messages
+// ============================================
+
+// DaemonMessage is the message sent from daemon to server
+message DaemonMessage {
+  oneof message {
+    DaemonRegister register = 1; // Initial registration
+    ToolResponse tool_response = 2; // Tool execution result
+    DaemonHeartbeat heartbeat = 3; // Keepalive
+    ProjectDiscovery project_discovery = 4;
+
+    LoadProjectConfigsResponse load_project_configs_response = 5;
+    ProjectConfigDelta project_config_delta = 6;
+
+    DaemonKillProcessResponse kill_process_response = 7;
+    DaemonCommandResponse daemon_command_response = 8;
+
+    // Terminal I/O streaming
+    TerminalOutputMessage terminal_output = 9;
+    TerminalSessionEvent terminal_session_event = 10;
+
+    // Process output streaming
+    ProcessOutputChunkMessage process_output_chunk = 11;
+  }
+}
+
+// DaemonRegister is sent when daemon first connects
+message DaemonRegister {
+  string daemon_id = 1; // Unique daemon instance ID
+  string user_id = 2; // User this daemon belongs to
+  string hostname = 3; // Machine hostname
+  string platform = 4; // OS platform (darwin, linux, windows)
+  string working_dir = 5; // Current working directory
+  repeated string capabilities = 6; // Supported tools/features
+  reserved 7;
+}
+
+// ToolResponse contains the result of tool execution
+message ToolResponse {
+  string request_id = 1; // Request ID from ToolRequest
+  bool success = 2; // Whether execution succeeded
+  bool is_error = 3; // Whether content is an error message
+  string content = 4; // Tool output/result
+  string metadata = 5; // JSON-encoded metadata
+  string error_message = 6; // Error message if success=false
+  string error_code = 7; // Error code for categorization
+  bool backgrounded = 8; // Whether tool was converted to background execution
+}
+
+// DaemonHeartbeat is sent periodically to keep connection alive
+message DaemonHeartbeat {
+  int64 timestamp = 1;
+}
+
+// ============================================
+// Server -> Client Messages
+// ============================================
+
+// ServerMessage is the message sent from server to daemon
+message ServerMessage {
+  oneof message {
+    ToolRequest tool_request = 1; // Request to execute a tool
+    ServerHeartbeat heartbeat = 2; // Keepalive
+    RegistrationAck registration_ack = 3;
+    ToolExecutionCancel tool_cancel = 4;
+
+    LoadProjectConfigsRequest load_project_configs = 5;
+    WatchProjectConfigsRequest watch_project_configs = 6;
+    UnwatchProjectConfigsRequest unwatch_project_configs = 7;
+
+    DaemonKillProcessRequest kill_process = 8;
+    DaemonCommandRequest daemon_command = 9;
+
+    // Terminal I/O streaming
+    TerminalInputMessage terminal_input = 10;
+    TerminalResizeMessage terminal_resize = 11;
+
+    // Process output streaming
+    ProcessOutputSubscribeMessage process_output_subscribe = 12;
+    ProcessOutputUnsubscribeMessage process_output_unsubscribe = 13;
+  }
+}
+
+// ToolRequest is sent when a tool needs to be executed
+message ToolRequest {
+  string request_id = 1; // Unique request ID (for correlation)
+  string tool_name = 2; // Name of tool to execute
+  string tool_input = 3; // JSON-encoded tool parameters
+  string tool_call_id = 4; // ID from LLM tool call
+  string content_block_id = 5; // Database content block ID
+  string context_json = 6; // JSON-encoded execution context
+  reserved 7; // was: working_dir (deprecated, use context_json)
+  int32 timeout_ms = 8; // Timeout in milliseconds
+}
+
+// ServerHeartbeat is sent periodically to keep connection alive
+message ServerHeartbeat {
+  int64 timestamp = 1;
+}
+
+// RegistrationAck contains daemon registration status and requested config pushes.
+message RegistrationAck {
+  bool accepted = 1;
+  repeated string requested_project_paths = 2; // "send me config for these"
+}
+
+message LoadProjectConfigsRequest {
+  string project_path = 1; // normalized absolute path
+  string request_id = 2; // idempotency/correlation
+}
+
+message LoadProjectConfigsResponse {
+  string request_id = 1;
+  ProjectConfigSnapshot snapshot = 2;
+  string error = 3; // optional
+}
+
+message WatchProjectConfigsRequest {
+  string project_path = 1; // normalized absolute path
+  bool include_initial = 2; // send current snapshot immediately
+}
+
+message UnwatchProjectConfigsRequest {
+  string project_path = 1;
+}
+
+message ProjectConfigSnapshot {
+  string project_path = 1;
+  string config_version = 2; // content hash or monotonic version
+  int64 daemon_timestamp_unix_ms = 3;
+
+  bytes user_config_yaml = 4;
+  bytes project_config_yaml = 5;
+  bytes local_config_yaml = 6;
+
+  map<string, bytes> mcp_configs = 7; // user/project/local -> mcp.json content
+
+  repeated IndexedWorkflow workflows = 8;
+  repeated IndexedPreset presets = 9;
+  repeated IndexedScenario scenarios = 10;
+
+  // Memory files that must be available to cloud workers.
+  bytes global_memory_md = 11;  // ~/.reliant/reliant.md
+  bytes project_memory_md = 12; // {project_path}/reliant.md
+}
+
+message ProjectConfigDelta {
+  string project_path = 1;
+  string config_version = 2; // post-change version
+  int64 daemon_timestamp_unix_ms = 3;
+
+  repeated ChangedFile changed_files = 4;
+  ProjectConfigSnapshot snapshot_if_compacted = 5; // optional fallback full snapshot
+}
+
+message ChangedFile {
+  string relative_path = 1; // e.g. ".reliant/config.yaml"
+  FileChangeType change_type = 2;
+  string content_hash = 3; // empty on delete
+}
+
+message IndexedWorkflow {
+  string slug = 1;
+  string name = 2;
+  string relative_path = 3;
+  string content_hash = 4;
+  int64 mtime_unix_ms = 5;
+  bytes yaml_content = 6;
+}
+
+message IndexedPreset {
+  string name = 1;
+  string relative_path = 2;
+  string content_hash = 3;
+  int64 mtime_unix_ms = 4;
+  bytes yaml_content = 5;
+}
+
+message IndexedScenario {
+  string workflow_slug = 1;
+  string name = 2;
+  string relative_path = 3;
+  string content_hash = 4;
+  int64 mtime_unix_ms = 5;
+  bytes yaml_content = 6;
+}
+
+// ProjectDiscovery reports projects discovered by the daemon.
+message ProjectDiscovery {
+  repeated DiscoveredProject projects = 1;
+}
+
+// DiscoveredProject describes a local project path known by the daemon.
+message DiscoveredProject {
+  string path = 1;
+  string name = 2;
+  bool is_git_repo = 3;
+}
+
+// ToolExecutionCancel asks daemon to cancel an in-flight tool execution.
+message ToolExecutionCancel {
+  string request_id = 1;
+  string reason = 2;
+}
+
+// ReportToolResultRequest is used by the daemon to report a tool execution
+// result via a unary RPC when the bidirectional stream is unavailable.
+message ReportToolResultRequest {
+  string request_id = 1;
+  bool success = 2;
+  bool is_error = 3;
+  string content = 4;
+  string metadata = 5;
+  string error_message = 6;
+  string error_code = 7;
+  string daemon_id = 8;
+  string user_id = 9;
+  bool backgrounded = 10;
+}
+
+message ReportToolResultResponse {
+  bool accepted = 1;
+}
+
+// DaemonKillProcessRequest asks the daemon to kill a background process.
+message DaemonKillProcessRequest {
+  string process_id = 1;
+}
+
+// DaemonKillProcessResponse is sent back from the daemon after attempting to kill a process.
+message DaemonKillProcessResponse {
+  string process_id = 1;
+  bool success = 2;
+  string error_message = 3;
+}
+
+// DaemonCommandRequest is a generic command envelope sent from server to daemon.
+// New daemon commands only need a handler registered in the daemon's CommandRegistry
+// instead of new proto messages, oneof variants, and routing in every layer.
+message DaemonCommandRequest {
+  string request_id = 1;
+  string command_type = 2; // e.g. "worktree.create", "project.check_git"
+  bytes payload = 3; // JSON-encoded command-specific payload
+  int32 timeout_ms = 4;
+}
+
+// DaemonCommandResponse is the generic response from daemon back to server.
+message DaemonCommandResponse {
+  string request_id = 1;
+  string command_type = 2;
+  bool success = 3;
+  bytes payload = 4; // JSON-encoded response
+  string error_message = 5;
+}
+
+// DaemonRegistryService provides daemon registry and management APIs.
+service DaemonRegistryService {
+  rpc ListDaemons(ListDaemonsRequest) returns (ListDaemonsResponse) {}
+  rpc GetDaemon(GetDaemonRequest) returns (GetDaemonResponse) {}
+  // CreateDaemonToken creates a new Personal Access Token for daemon authentication.
+  // Requires JWT auth (user must be logged in). Returns the raw token once.
+  rpc CreateDaemonToken(CreateDaemonTokenRequest) returns (CreateDaemonTokenResponse) {}
+}
+
+message ListDaemonsRequest {}
+
+message ListDaemonsResponse {
+  repeated DaemonInfo daemons = 1;
+}
+
+message GetDaemonRequest {
+  string daemon_id = 1;
+}
+
+message GetDaemonResponse {
+  DaemonInfo daemon = 1;
+}
+
+message CreateDaemonTokenRequest {
+  string name = 1; // Human-readable name for the token (e.g. hostname)
+}
+
+message CreateDaemonTokenResponse {
+  string token = 1;    // Raw PAT — display once, cannot be retrieved again
+  string token_id = 2; // Unique ID for future revocation
+  string user_id = 3;  // The authenticated user's ID
+}
+
+message DaemonInfo {
+  string daemon_id = 1;
+  string user_id = 2;
+  string hostname = 3;
+  string platform = 4;
+  DaemonStatus status = 5;
+  repeated DiscoveredProject projects = 6;
+  google.protobuf.Timestamp connected_at = 7;
+  google.protobuf.Timestamp last_heartbeat = 8;
+  reserved 9;
+}
+
+enum DaemonStatus {
+  DAEMON_STATUS_UNSPECIFIED = 0;
+  DAEMON_STATUS_ACTIVE = 1;
+  DAEMON_STATUS_IDLE = 2;
+  DAEMON_STATUS_DISCONNECTED = 3;
+}
+
+// ============================================
+// Terminal I/O Streaming Messages
+// ============================================
+
+// TerminalInputMessage sends raw PTY input bytes (server -> daemon)
+message TerminalInputMessage {
+  string session_id = 1;
+  bytes data = 2;           // Raw PTY input bytes
+}
+
+// TerminalResizeMessage requests a terminal resize (server -> daemon)
+message TerminalResizeMessage {
+  string session_id = 1;
+  uint32 cols = 2;
+  uint32 rows = 3;
+}
+
+// TerminalOutputMessage sends raw PTY output bytes (daemon -> server)
+message TerminalOutputMessage {
+  string session_id = 1;
+  bytes data = 2;            // Raw PTY output bytes
+}
+
+// TerminalSessionEvent reports terminal session lifecycle events (daemon -> server)
+message TerminalSessionEvent {
+  string session_id = 1;
+  enum EventType {
+    EVENT_TYPE_UNSPECIFIED = 0;
+    EVENT_TYPE_CREATED = 1;
+    EVENT_TYPE_CLOSED = 2;
+    EVENT_TYPE_ERROR = 3;
+  }
+  EventType event_type = 2;
+  string message = 3;        // Error message or additional info
+  int32 pid = 4;              // PID of the shell process (on created)
+}
+
+// ============================================
+// Process Output Streaming Messages
+// ============================================
+
+// ProcessOutputSubscribeMessage subscribes to a process's output (server -> daemon)
+message ProcessOutputSubscribeMessage {
+  string process_id = 1;
+  bool new_only = 2;          // If true, skip existing output
+}
+
+// ProcessOutputUnsubscribeMessage unsubscribes from a process's output (server -> daemon)
+message ProcessOutputUnsubscribeMessage {
+  string process_id = 1;
+}
+
+// ProcessOutputChunkMessage sends a chunk of process output (daemon -> server)
+message ProcessOutputChunkMessage {
+  string process_id = 1;
+  string data = 2;            // Output text
+  string stream = 3;          // "stdout" or "stderr"
+  uint64 sequence = 4;        // Sequence number for ordering
+  bool is_complete = 5;       // True when process has exited
+  int32 exit_code = 6;        // Only meaningful when is_complete=true
+}

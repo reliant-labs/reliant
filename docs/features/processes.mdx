@@ -1,0 +1,106 @@
+---
+title: "Processes"
+description: "Run commands discovered from package.json, Makefile, and Taskfile"
+---
+
+The Processes tab discovers runnable commands from your project's build files and lets you execute them directly.
+
+![Processes panel showing discovered Make targets and NPM scripts](/images/screenshots/processes-panel.png)
+
+## Supported File Types
+
+Reliant automatically detects and parses:
+
+| File | Commands | Example |
+| --- | --- | --- |
+| `package.json` | npm scripts + builtins | `npm run build`, `npm install` |
+| `Makefile` | make targets | `make build`, `make test` |
+| `Taskfile.yml` | task definitions | `task build`, `task test` |
+
+## Discovery
+
+Reliant scans your project recursively (up to 10 levels deep) looking for these files. It skips common non-source directories:
+
+- Package managers: `node_modules`, `vendor`, `.pnpm-store`
+- Build outputs: `dist`, `build`, `.next`, `target`
+- Caches: `.cache`, `.turbo`, `.nx`
+- Test fixtures: `__tests__`, `fixtures`, `testdata`
+
+Monorepos with multiple `package.json` files are fully supported—each directory's commands appear separately.
+
+## npm Scripts
+
+For `package.json`, Reliant extracts all scripts and adds common builtin commands:
+
+**From your scripts:**
+
+```json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "test": "vitest"
+  }
+}
+```
+
+**Builtin commands always available:**
+
+- `npm install` — Install dependencies
+- `npm ci` — Clean install from lockfile
+- `npm audit` — Security audit
+- `npm update` — Update packages
+- `npm outdated` — Check for outdated packages
+
+## Makefile Targets
+
+Reliant parses Makefile targets and extracts descriptions from `##` comments:
+
+```makefile
+build: ## Build the application
+	@go build -o bin/app ./cmd/app
+
+test: ## Run tests
+	@go test ./...
+
+clean: ## Remove build artifacts
+	@rm -rf bin/
+```
+
+Targets starting with `_` or `.` are treated as internal and hidden.
+
+## Taskfile
+
+For `Taskfile.yml` (go-task format), Reliant extracts task names and descriptions:
+
+```yaml
+version: '3'
+
+tasks:
+  build:
+    desc: Build the application
+    cmds:
+      - go build -o bin/app ./cmd/app
+
+  test:
+    desc: Run tests
+    cmds:
+      - go test ./...
+```
+
+Tasks marked `internal: true` or starting with `_` are hidden.
+
+## Running Commands
+
+Click any command to run it. Commands execute in the directory containing the build file, respecting your workspace/worktree context.
+
+Output appears in the terminal panel. Long-running commands (like dev servers) run in the background—you can view output and kill them from the terminal.
+
+## Workspace Scoping
+
+Processes are scoped to your current workspace. If you're working in a worktree, commands run in that worktree's directory, not the main repository.
+
+## Related Topics
+
+- [Worktrees & Workspaces](/features/worktrees) — Working in isolated directories
+- [Git Integration](/features/git-integration) — GitHub CLI and PR creation

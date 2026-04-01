@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Grid Layout</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f0f2f5;
+        }
+
+        .dashboard-container {
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .dashboard-header {
+            margin-bottom: 2rem;
+        }
+
+        .dashboard-title {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #1a1a1a;
+            margin-bottom: 0.5rem;
+        }
+
+        .dashboard-subtitle {
+            color: #6c757d;
+            font-size: 1rem;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .metric-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .metric-label {
+            font-size: 0.875rem;
+            color: #6c757d;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0.5rem;
+        }
+
+        .metric-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #1a1a1a;
+            margin-bottom: 0.5rem;
+        }
+
+        .metric-change {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .metric-change.positive {
+            color: #10b981;
+        }
+
+        .metric-change.negative {
+            color: #ef4444;
+        }
+
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .chart-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .chart-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #1a1a1a;
+        }
+
+        .chart-options {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .chart-button {
+            padding: 0.375rem 0.75rem;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            color: #495057;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .chart-button:hover {
+            background: #e9ecef;
+            border-color: #adb5bd;
+        }
+
+        .chart-button.active {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+
+        .chart-placeholder {
+            height: 250px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.125rem;
+        }
+
+        .activity-feed {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .activity-header {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #1a1a1a;
+            margin-bottom: 1.5rem;
+        }
+
+        .activity-list {
+            list-style: none;
+        }
+
+        .activity-item {
+            display: flex;
+            gap: 1rem;
+            padding: 1rem 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .activity-item:last-child {
+            border-bottom: none;
+        }
+
+        .activity-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #f0f2f5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .activity-icon.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .activity-icon.warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .activity-icon.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .activity-content {
+            flex: 1;
+        }
+
+        .activity-title {
+            font-weight: 500;
+            color: #1a1a1a;
+            margin-bottom: 0.25rem;
+        }
+
+        .activity-time {
+            font-size: 0.875rem;
+            color: #6c757d;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-container {
+                padding: 1rem;
+            }
+
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .chart-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .chart-placeholder {
+                height: 200px;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .metric-card,
+            .chart-button {
+                transition: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <header class="dashboard-header">
+            <h1 class="dashboard-title">Analytics Dashboard</h1>
+            <p class="dashboard-subtitle">Real-time metrics and performance indicators</p>
+        </header>
+
+        <div class="metrics-grid" role="region" aria-label="Key metrics">
+            <div class="metric-card">
+                <div class="metric-label">Total Revenue</div>
+                <div class="metric-value">$45,231</div>
+                <div class="metric-change positive">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 4l4 4H4l4-4z"/>
+                    </svg>
+                    +12.5% from last month
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">Active Users</div>
+                <div class="metric-value">2,543</div>
+                <div class="metric-change positive">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 4l4 4H4l4-4z"/>
+                    </svg>
+                    +8.2% from last week
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">Conversion Rate</div>
+                <div class="metric-value">3.2%</div>
+                <div class="metric-change negative">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 12l-4-4h8l-4 4z"/>
+                    </svg>
+                    -2.1% from last week
+                </div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">Avg. Response Time</div>
+                <div class="metric-value">142ms</div>
+                <div class="metric-change positive">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 4l4 4H4l4-4z"/>
+                    </svg>
+                    -15ms improvement
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-grid" role="region" aria-label="Charts and graphs">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h2 class="chart-title">Revenue Overview</h2>
+                    <div class="chart-options" role="group" aria-label="Time range">
+                        <button class="chart-button">Day</button>
+                        <button class="chart-button active">Week</button>
+                        <button class="chart-button">Month</button>
+                    </div>
+                </div>
+                <div class="chart-placeholder" role="img" aria-label="Revenue chart">
+                    Chart Visualization
+                </div>
+            </div>
+
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h2 class="chart-title">User Activity</h2>
+                    <div class="chart-options" role="group" aria-label="View options">
+                        <button class="chart-button active">Line</button>
+                        <button class="chart-button">Bar</button>
+                    </div>
+                </div>
+                <div class="chart-placeholder" role="img" aria-label="User activity chart">
+                    Chart Visualization
+                </div>
+            </div>
+        </div>
+
+        <div class="activity-feed" role="region" aria-label="Recent activity">
+            <h2 class="activity-header">Recent Activity</h2>
+            <ul class="activity-list" role="list">
+                <li class="activity-item">
+                    <div class="activity-icon success" aria-hidden="true">✓</div>
+                    <div class="activity-content">
+                        <div class="activity-title">New user registration</div>
+                        <div class="activity-time">2 minutes ago</div>
+                    </div>
+                </li>
+                <li class="activity-item">
+                    <div class="activity-icon warning" aria-hidden="true">!</div>
+                    <div class="activity-content">
+                        <div class="activity-title">High server load detected</div>
+                        <div class="activity-time">15 minutes ago</div>
+                    </div>
+                </li>
+                <li class="activity-item">
+                    <div class="activity-icon success" aria-hidden="true">✓</div>
+                    <div class="activity-content">
+                        <div class="activity-title">Payment processed successfully</div>
+                        <div class="activity-time">1 hour ago</div>
+                    </div>
+                </li>
+                <li class="activity-item">
+                    <div class="activity-icon error" aria-hidden="true">✕</div>
+                    <div class="activity-content">
+                        <div class="activity-title">Failed login attempt</div>
+                        <div class="activity-time">2 hours ago</div>
+                    </div>
+                </li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,25 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+import "reliant/v1/chat.proto";
+
+// MessageService provides operations for individual messages
+// Note: Bulk message operations (list, send) are in ChatService
+service MessageService {
+  // GetMessage retrieves a single message by ID with its content blocks
+  rpc GetMessage(GetMessageRequest) returns (GetMessageResponse) {}
+}
+
+// GetMessageRequest requests a single message by ID
+message GetMessageRequest {
+  string message_id = 1;
+}
+
+// GetMessageResponse returns the message with its content blocks
+message GetMessageResponse {
+  Message message = 1;
+}

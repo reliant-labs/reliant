@@ -1,0 +1,77 @@
+# Restart From Scratch: Evaluation says scrap it, refactor agent tears it down
+#
+# Tests the "restart" strategy where evaluate determines the approach is
+# fundamentally wrong and the refactor agent scraps and restructures:
+# 1. Iteration 0: implement builds duplicate infrastructure
+# 2. Evaluate says strategy="restart" — approach fights the codebase
+# 3. Refactor agent deletes the custom code and restructures using existing infra
+# 4. Iteration 1: implement builds on the clean foundation, evaluate says "proceed"
+# 5. Loop exits, final diagnose and implement complete
+#
+# Verifies that the refactor agent can do a full restart, not just incremental fixes.
+
+name: restart_from_scratch
+description: Approach is fundamentally wrong, refactor agent scraps and restarts
+
+events:
+  # Iteration 0: wrong approach entirely
+  - node: attempt.implement
+    output:
+      response_text: "Built a custom event system to handle notifications. Tests pass but the implementation is 400 lines and duplicates existing functionality."
+
+  - node: attempt.evaluate
+    output:
+      response:
+        strategy: "restart"
+        diagnosis: "The implementation works but fights the codebase. There's already a pub/sub system in the message broker module that handles exactly this. We built a parallel system instead of using what exists."
+        difficulty_areas: "The existing pub/sub system isn't documented and lives in an unexpected location (internal/broker rather than internal/events)."
+        wrong_abstractions: "Built from scratch instead of discovering the existing infrastructure. The codebase already solves this problem."
+        improvements:
+          - area: "Architecture"
+            suggestion: "Delete the custom event system entirely. Use internal/broker's pub/sub for all notification routing."
+            severity: critical
+          - area: "Discovery"
+            suggestion: "Search for existing infrastructure before building new systems. Check internal/broker, internal/bus, internal/pubsub."
+            severity: important
+
+  - node: attempt.refactor
+    output:
+      response_text: "Deleted the entire custom event system (400 lines removed). Replaced with a thin integration layer using internal/broker's pub/sub. The notification routing now uses 3 function calls to the existing broker API instead of a custom implementation."
+
+  # Iteration 1: fresh start using existing infrastructure
+  - node: attempt.implement
+    output:
+      response_text: "Built on the refactored broker integration. Implementation is 50 lines, all tests pass, and it integrates cleanly with the existing notification flow."
+
+  - node: attempt.evaluate
+    output:
+      response:
+        strategy: "proceed"
+        diagnosis: "Clean implementation using existing infrastructure. The pub/sub integration is correct and the code follows the established patterns in the broker module."
+        difficulty_areas: "The broker API has some quirks around subscription lifecycle but the existing tests provided good examples."
+        wrong_abstractions: "None this time — we correctly identified and used the existing pub/sub system."
+        improvements: []
+
+  # refactor is skipped (conditional edge: strategy == "proceed")
+
+  - node: diagnose
+    output:
+      response_text: "Key lesson: always search for existing infrastructure before building new systems. The codebase had a pub/sub system that was the right tool — we just didn't find it on the first pass. The restart was the right call; patching 400 lines of duplicate code would have been worse than starting fresh."
+
+  - node: implement
+    output:
+      response_text: "Final implementation uses internal/broker pub/sub. 50 lines, fully tested, follows established patterns. No custom event system needed."
+
+expect:
+  outcome: completed
+  reached:
+    - attempt
+    - attempt.implement
+    - attempt.evaluate
+    - attempt.refactor
+    - diagnose
+    - implement
+  node_outputs:
+    attempt:
+      strategy: "proceed"
+      diagnosis: "Clean implementation using existing infrastructure. The pub/sub integration is correct and the code follows the established patterns in the broker module."

@@ -1,0 +1,134 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+// ApprovalType distinguishes tool approvals from workflow step approvals
+enum ApprovalType {
+  APPROVAL_TYPE_UNSPECIFIED = 0;
+  APPROVAL_TYPE_TOOL = 1;
+  APPROVAL_TYPE_WORKFLOW_STEP = 2;
+}
+
+// ApprovalStatus tracks the lifecycle of an approval request
+enum ApprovalStatus {
+  APPROVAL_STATUS_UNSPECIFIED = 0;
+  APPROVAL_STATUS_PENDING = 1;
+  APPROVAL_STATUS_APPROVED = 2;
+  APPROVAL_STATUS_DENIED = 3;
+}
+
+// ApprovalService handles tool and workflow approval operations
+service ApprovalService {
+  // ListApprovalsByChat lists all pending approvals for a chat
+  rpc ListApprovalsByChat(ListApprovalsByChatRequest) returns (ListApprovalsByChatResponse) {}
+  
+  // Approve approves a pending approval request (signals workflow to continue)
+  rpc Approve(ApproveRequest) returns (ApproveResponse) {}
+  
+  // Deny denies a pending approval request (cancels workflow)
+  rpc Deny(DenyRequest) returns (DenyResponse) {}
+  
+  // BatchApprove approves multiple pending approval requests at once
+  rpc BatchApprove(BatchApproveRequest) returns (BatchApproveResponse) {}
+  
+  // BatchDeny denies multiple pending approval requests at once
+  rpc BatchDeny(BatchDenyRequest) returns (BatchDenyResponse) {}
+}
+
+// ApprovalAction represents a single action in an approval request
+message ApprovalAction {
+  string action = 1;              // The action type (e.g., "write", "execute")
+  string path = 2;                // File path or resource path
+  map<string, string> params = 3; // Additional parameters
+}
+
+// Approval represents a tool or workflow approval request
+message Approval {
+  string id = 1;
+  string chat_id = 2;
+  ApprovalType approval_type = 3;
+  string entity_id = 4;      // content_block_id for tools, event_id for workflows
+  ApprovalStatus status = 5;
+  string title = 6;
+  optional string description = 7;
+  optional string denial_reason = 8;
+  reserved 9;  // was: actions (deprecated, use structured_actions)
+  reserved 10; // was: metadata (deprecated, use structured fields)
+  string created_at = 11;
+  optional string resolved_at = 12;
+  
+  // Structured fields (replacing JSON in actions/metadata)
+  optional string tool_name = 13;      // Tool name from metadata
+  optional string tool_call_id = 14;   // Tool call ID from metadata
+  optional string message_id = 15;     // Message ID from metadata
+  optional string workflow_id = 16;    // Workflow ID from metadata
+  optional string run_id = 17;         // Run ID from metadata
+  repeated ApprovalAction structured_actions = 18; // Structured actions list
+  optional string action_taken = 19;   // Which action button was clicked (e.g., "Deploy Now")
+}
+
+// ListApprovalsByChatRequest lists pending approvals for a chat
+message ListApprovalsByChatRequest {
+  string chat_id = 1;
+}
+
+// ListApprovalsByChatResponse returns the list of approvals
+message ListApprovalsByChatResponse {
+  repeated Approval approvals = 1;
+  int32 total = 2;
+}
+
+// ApproveRequest approves a single approval
+message ApproveRequest {
+  string request_id = 1;
+  optional string action_taken = 2;  // Which action button was clicked (e.g., "Deploy Now")
+}
+
+// ApproveResponse confirms the approval
+message ApproveResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// DenyRequest denies a single approval
+message DenyRequest {
+  string request_id = 1;
+  optional string denial_reason = 2;
+  optional string action_taken = 3;  // Which action button was clicked (e.g., "Cancel")
+}
+
+// DenyResponse confirms the denial
+message DenyResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// BatchApproveRequest approves multiple approvals at once
+message BatchApproveRequest {
+  repeated string request_ids = 1;
+  optional string action_taken = 2;  // Which action button was clicked
+}
+
+// BatchApproveResponse confirms the batch approval
+message BatchApproveResponse {
+  bool success = 1;
+  int32 approved = 2;
+  string message = 3;
+}
+
+// BatchDenyRequest denies multiple approvals at once
+message BatchDenyRequest {
+  repeated string request_ids = 1;
+  optional string denial_reason = 2;
+  optional string action_taken = 3;  // Which action button was clicked
+}
+
+// BatchDenyResponse confirms the batch denial
+message BatchDenyResponse {
+  bool success = 1;
+  int32 denied = 2;
+  string message = 3;
+}

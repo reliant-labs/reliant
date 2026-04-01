@@ -1,0 +1,62 @@
+/* Ensure all interactive elements have proper cursor behavior */
+
+/* Buttons should always have pointer cursor */
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+/* Interactive elements with click handlers should have pointer cursor */
+[role="button"] {
+  cursor: pointer;
+}
+
+/* Dropdown options and menu items */
+[role="menuitem"],
+[role="option"] {
+  cursor: pointer;
+}
+
+/* Form inputs and selects should have appropriate cursors */
+input[type="text"],
+input[type="search"],
+input[type="email"],
+input[type="password"],
+textarea {
+  cursor: text;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  cursor: pointer;
+}
+
+select {
+  cursor: pointer;
+}
+
+/* Disabled elements should show not-allowed cursor */
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+}
+
+/* Links should have pointer cursor */
+a {
+  cursor: pointer;
+}
+
+/* Summary elements (for details/summary) should have pointer cursor */
+summary {
+  cursor: pointer;
+}
+
+/* Ensure draggable elements show appropriate cursor */
+[draggable="true"] {
+  cursor: grab;
+}
+
+[draggable="true"]:active {
+  cursor: grabbing;
+}

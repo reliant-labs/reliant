@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Card Grid Layout</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f7f8fc;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        .page-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #1a1a1a;
+            margin-bottom: 1rem;
+        }
+
+        .page-subtitle {
+            font-size: 1.125rem;
+            color: #6c757d;
+        }
+
+        .filter-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .filter-group {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .filter-button {
+            padding: 0.5rem 1rem;
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            color: #495057;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.875rem;
+        }
+
+        .filter-button:hover {
+            background: #f8f9fa;
+            border-color: #adb5bd;
+        }
+
+        .filter-button.active {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+
+        .search-box {
+            padding: 0.5rem 1rem;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            width: 100%;
+            max-width: 300px;
+            font-size: 0.875rem;
+        }
+
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+        }
+
+        .card-image {
+            width: 100%;
+            height: 200px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.125rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card-badge {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            padding: 0.25rem 0.75rem;
+            background: rgba(255, 255, 255, 0.9);
+            color: #007bff;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .card-content {
+            padding: 1.5rem;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #1a1a1a;
+            margin-bottom: 0.75rem;
+        }
+
+        .card-description {
+            color: #6c757d;
+            font-size: 0.95rem;
+            line-height: 1.6;
+            margin-bottom: 1.5rem;
+            flex: 1;
+        }
+
+        .card-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 1rem;
+            border-top: 1px solid #e9ecef;
+        }
+
+        .card-author {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .author-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #e9ecef;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: #495057;
+        }
+
+        .author-name {
+            font-size: 0.875rem;
+            color: #495057;
+        }
+
+        .card-stats {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.875rem;
+            color: #6c757d;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .card-actions {
+            display: flex;
+            justify-content: space-between;
+            padding: 1rem 1.5rem;
+            background: #f8f9fa;
+            border-top: 1px solid #e9ecef;
+        }
+
+        .card-button {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .card-button.primary {
+            background: #007bff;
+            color: white;
+        }
+
+        .card-button.primary:hover {
+            background: #0056b3;
+        }
+
+        .card-button.secondary {
+            background: transparent;
+            color: #6c757d;
+        }
+
+        .card-button.secondary:hover {
+            background: #e9ecef;
+            color: #495057;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-top: 3rem;
+        }
+
+        .page-link {
+            padding: 0.5rem 0.75rem;
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            color: #495057;
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+
+        .page-link:hover {
+            background: #f8f9fa;
+            border-color: #adb5bd;
+        }
+
+        .page-link.active {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+
+        @media (max-width: 768px) {
+            .card-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .filter-bar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .search-box {
+                max-width: 100%;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .card,
+            .filter-button,
+            .card-button {
+                transition: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1 class="page-title">Our Products</h1>
+            <p class="page-subtitle">Discover our collection of premium items</p>
+        </header>
+
+        <div class="filter-bar" role="group" aria-label="Filters and search">
+            <div class="filter-group" role="group" aria-label="Category filters">
+                <button class="filter-button active">All</button>
+                <button class="filter-button">Featured</button>
+                <button class="filter-button">Popular</button>
+                <button class="filter-button">New</button>
+            </div>
+            <input type="search" class="search-box" placeholder="Search products..." aria-label="Search products">
+        </div>
+
+        <div class="card-grid" role="region" aria-label="Product cards">
+            <article class="card">
+                <div class="card-image" role="img" aria-label="Product image">
+                    <span class="card-badge">New</span>
+                    Product Image
+                </div>
+                <div class="card-content">
+                    <h2 class="card-title">Premium Product One</h2>
+                    <p class="card-description">
+                        This is a high-quality product with exceptional features and outstanding performance. Perfect for professionals and enthusiasts alike.
+                    </p>
+                    <div class="card-meta">
+                        <div class="card-author">
+                            <div class="author-avatar">JD</div>
+                            <span class="author-name">John Doe</span>
+                        </div>
+                        <div class="card-stats">
+                            <span class="stat-item">⭐ 4.8</span>
+                            <span class="stat-item">💬 42</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-actions">
+                    <button class="card-button secondary">Save</button>
+                    <a href="#" class="card-button primary">View Details</a>
+                </div>
+            </article>
+
+            <article class="card">
+                <div class="card-image" role="img" aria-label="Product image">
+                    <span class="card-badge">Popular</span>
+                    Product Image
+                </div>
+                <div class="card-content">
+                    <h2 class="card-title">Essential Product Two</h2>
+                    <p class="card-description">
+                        An essential item for everyday use. Combines functionality with elegant design to meet all your needs.
+                    </p>
+                    <div class="card-meta">
+                        <div class="card-author">
+                            <div class="author-avatar">AS</div>
+                            <span class="author-name">Alice Smith</span>
+                        </div>
+                        <div class="card-stats">
+                            <span class="stat-item">⭐ 4.9</span>
+                            <span class="stat-item">💬 128</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-actions">
+                    <button class="card-button secondary">Save</button>
+                    <a href="#" class="card-button primary">View Details</a>
+                </div>
+            </article>
+
+            <article class="card">
+                <div class="card-image" role="img" aria-label="Product image">
+                    Product Image
+                </div>
+                <div class="card-content">
+                    <h2 class="card-title">Standard Product Three</h2>
+                    <p class="card-description">
+                        A reliable choice for those seeking quality at an affordable price. Built to last with attention to detail.
+                    </p>
+                    <div class="card-meta">
+                        <div class="card-author">
+                            <div class="author-avatar">BJ</div>
+                            <span class="author-name">Bob Johnson</span>
+                        </div>
+                        <div class="card-stats">
+                            <span class="stat-item">⭐ 4.6</span>
+                            <span class="stat-item">💬 67</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-actions">
+                    <button class="card-button secondary">Save</button>
+                    <a href="#" class="card-button primary">View Details</a>
+                </div>
+            </article>
+
+            <article class="card">
+                <div class="card-image" role="img" aria-label="Product image">
+                    <span class="card-badge">Featured</span>
+                    Product Image
+                </div>
+                <div class="card-content">
+                    <h2 class="card-title">Deluxe Product Four</h2>
+                    <p class="card-description">
+                        Experience luxury with this premium offering. Crafted with the finest materials and innovative technology.
+                    </p>
+                    <div class="card-meta">
+                        <div class="card-author">
+                            <div class="author-avatar">CW</div>
+                            <span class="author-name">Carol White</span>
+                        </div>
+                        <div class="card-stats">
+                            <span class="stat-item">⭐ 5.0</span>
+                            <span class="stat-item">💬 89</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-actions">
+                    <button class="card-button secondary">Save</button>
+                    <a href="#" class="card-button primary">View Details</a>
+                </div>
+            </article>
+
+            <article class="card">
+                <div class="card-image" role="img" aria-label="Product image">
+                    Product Image
+                </div>
+                <div class="card-content">
+                    <h2 class="card-title">Basic Product Five</h2>
+                    <p class="card-description">
+                        Simple, effective, and budget-friendly. Everything you need without unnecessary complications.
+                    </p>
+                    <div class="card-meta">
+                        <div class="card-author">
+                            <div class="author-avatar">DG</div>
+                            <span class="author-name">David Green</span>
+                        </div>
+                        <div class="card-stats">
+                            <span class="stat-item">⭐ 4.3</span>
+                            <span class="stat-item">💬 31</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-actions">
+                    <button class="card-button secondary">Save</button>
+                    <a href="#" class="card-button primary">View Details</a>
+                </div>
+            </article>
+
+            <article class="card">
+                <div class="card-image" role="img" aria-label="Product image">
+                    <span class="card-badge">Sale</span>
+                    Product Image
+                </div>
+                <div class="card-content">
+                    <h2 class="card-title">Special Product Six</h2>
+                    <p class="card-description">
+                        Limited time offer on this exceptional item. Don't miss out on this incredible value.
+                    </p>
+                    <div class="card-meta">
+                        <div class="card-author">
+                            <div class="author-avatar">EB</div>
+                            <span class="author-name">Emma Brown</span>
+                        </div>
+                        <div class="card-stats">
+                            <span class="stat-item">⭐ 4.7</span>
+                            <span class="stat-item">💬 156</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-actions">
+                    <button class="card-button secondary">Save</button>
+                    <a href="#" class="card-button primary">View Details</a>
+                </div>
+            </article>
+        </div>
+
+        <nav class="pagination" role="navigation" aria-label="Page navigation">
+            <a href="#" class="page-link">Previous</a>
+            <a href="#" class="page-link active">1</a>
+            <a href="#" class="page-link">2</a>
+            <a href="#" class="page-link">3</a>
+            <a href="#" class="page-link">4</a>
+            <a href="#" class="page-link">Next</a>
+        </nav>
+    </div>
+</body>
+</html>

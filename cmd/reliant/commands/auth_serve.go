@@ -1,0 +1,128 @@
+// Copyright (c) 2025 Reliant Labs
+package commands
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+
+	"github.com/reliant-labs/reliant/internal/auth/oauthcallback"
+	"github.com/spf13/cobra"
+)
+
+const defaultAuthServePort = 19284
+
+func newAuthServeCmd() *cobra.Command {
+	var port int
+
+	cmd := &cobra.Command{
+		Use:   "serve",
+		Short: "Start a local OAuth helper server",
+		Long: `Starts a lightweight HTTP server on localhost that handles OAuth
+callback flows for Claude and Codex authentication.
+
+This is required when using the Reliant web UI in a browser (not Electron)
+to connect Claude Code or Codex accounts via OAuth, since the OAuth
+callbacks must be received on localhost.
+
+The server exposes:
+  GET  /health       — Health check (for the frontend to detect availability)
+  POST /oauth/start  — Start an OAuth flow (opens browser, waits for callback)
+
+Example:
+  reliant auth serve
+  reliant auth serve --port 19284`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runAuthServe(cmd, port)
+		},
+	}
+
+	cmd.Flags().IntVar(&port, "port", defaultAuthServePort, "Port to listen on")
+
+	return cmd
+}
+
+func runAuthServe(cmd *cobra.Command, port int) error {
+	mux := http.NewServeMux()
+
+	// Health check
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+		setCORS(w, r)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	})
+
+	// CORS preflight
+	mux.HandleFunc("OPTIONS /", func(w http.ResponseWriter, r *http.Request) {
+		setCORS(w, r)
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	// Start OAuth flow
+	mux.HandleFunc("POST /oauth/start", func(w http.ResponseWriter, r *http.Request) {
+		setCORS(w, r)
+
+		var req struct {
+			AuthorizeURLTemplate string `json:"authorize_url_template"`
+			TimeoutSeconds       int    `json:"timeout_seconds"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+
+		if req.AuthorizeURLTemplate == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "authorize_url_template is required"})
+			return
+		}
+
+		result, err := oauthcallback.Run(req.AuthorizeURLTemplate, req.TimeoutSeconds)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, result)
+	})
+
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+
+	fmt.Fprintf(cmd.OutOrStdout(), "OAuth helper server listening on http://%s\n", addr)
+	fmt.Fprintf(cmd.OutOrStdout(), "Press Ctrl+C to stop\n")
+
+	server := &http.Server{Addr: addr, Handler: mux}
+
+	// Graceful shutdown on interrupt
+	go func() {
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		<-sigCh
+		fmt.Fprintln(cmd.OutOrStdout(), "\nShutting down...")
+		server.Close()
+	}()
+
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		return fmt.Errorf("server failed: %w", err)
+	}
+
+	return nil
+}
+
+func setCORS(w http.ResponseWriter, r *http.Request) {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		origin = "*"
+	}
+	w.Header().Set("Access-Control-Allow-Origin", origin)
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(v)
+}

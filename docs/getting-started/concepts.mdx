@@ -1,0 +1,113 @@
+---
+title: "Key Concepts"
+description: "Understand Reliant's core terminology and architecture"
+---
+
+Reliant has a few core concepts you need to understand, and several more that become relevant as you build more complex workflows.
+
+## The essentials
+
+These three concepts are all you need to start building workflows.
+
+### Workflow
+
+A **workflow** is a YAML file that defines a multi-step process. It specifies what steps to run, in what order, and under what conditions.
+
+The simplest workflow is the default `agent` loop: send your message to the LLM, execute tool calls, repeat until done — the same thing every ADE does. More interesting workflows chain multiple agents, run steps in parallel, loop until tests pass, or branch based on results. That's what makes Reliant different.
+
+Workflows live in `.reliant/workflows/` and are version-controlled with your code.
+
+**Related**: [Workflow Overview](/workflows/overview)
+
+### Node
+
+A **node** is a single step in a workflow. Each node does one thing:
+
+| Node Type | What it does |
+| --- | --- |
+| `workflow` | Runs an agent (the most common — calls `builtin://agent`) |
+| `run` | Executes a shell command (e.g., `npm test`) |
+| `action` | Performs a built-in operation (`SaveMessage`, `CallLLM`, `Approval`) |
+| `loop` | Repeats a sub-workflow while a condition is true |
+
+Nodes connect via **edges** that define execution flow — including conditional routing (e.g., "if tests pass, go to deploy; if they fail, go to fix").
+
+**Related**: [Creating Custom Workflows](/workflows/custom-workflows)
+
+### Thread
+
+A **thread** is the conversation history — the messages exchanged between you, the AI, and between agents. Threads matter most in multi-agent workflows where you control whether agents share context:
+
+| Thread Mode | Behavior |
+| --- | --- |
+| `inherit` | Agent uses the parent's thread (sees everything) |
+| `fork` | Agent starts with a copy of the thread (then diverges) |
+| `new` | Agent starts with an empty thread (fully isolated) |
+
+**Related**: [Threads](/features/threads)
+
+---
+
+## Building blocks
+
+These concepts come into play as your workflows get more sophisticated.
+
+### Preset
+
+A **preset** bundles parameter values into a reusable configuration: model selection, system prompt, temperature, tool access. Think of presets as agent personalities — the same workflow can behave differently with different presets.
+
+The "researcher" preset might use lower temperature with read-only tools. The "code reviewer" preset might use a specific system prompt. You can create custom presets in `.reliant/presets/`.
+
+**Related**: [Presets](/workflows/presets)
+
+### Execution mode
+
+Controls how much autonomy the agent has:
+
+| Mode | Behavior |
+| --- | --- |
+| **Auto** | Executes tools without asking |
+| **Manual** | Asks for approval before each tool |
+| **Plan** | Read-only tools only (explore, don't change) |
+
+You can switch modes mid-conversation. Start in Plan to analyze, switch to Auto to execute.
+
+**Related**: [Execution Modes](/workflows/overview#execution-modes)
+
+### Worktree (Workspace)
+
+A **worktree** is an isolated Git working directory. Reliant uses worktrees to let parallel agents work on separate branches without interfering, or to let you work on multiple branches simultaneously.
+
+In the UI, these appear as "Workspaces."
+
+**Related**: [Worktrees](/features/worktrees)
+
+---
+
+## Advanced
+
+These are used in advanced workflow definitions. You don't need them right away.
+
+### CEL (Common Expression Language)
+
+The expression language used in workflow conditions and dynamic values:
+
+```yaml
+# Edge condition (bare CEL)
+condition: nodes.run_tests.exit_code == 0
+
+# Interpolation in strings
+content: "Result: {{nodes.step.output}}"
+```
+
+**Related**: [CEL Expressions](/reference/cel-expressions)
+
+### MCP (Model Context Protocol)
+
+A standard for connecting AI assistants to external tools and data sources. Reliant includes built-in MCP servers and supports adding your own for database queries, API integrations, and custom tools.
+
+**Related**: [MCP Servers](/settings/mcp-servers)
+
+### Tool
+
+A capability the AI can use — reading files, searching code, running commands, making edits. Tools can be built-in, MCP-provided, or workflow-defined (response tools for structured output).

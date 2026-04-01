@@ -1,0 +1,57 @@
+# Multi Tool Calls: LLM makes multiple tool calls in a single turn
+#
+# Tests parallel tool execution within one iteration:
+# 1. LLM responds with multiple tool calls at once
+# 2. All tools execute together in execute_tools
+# 3. LLM receives all results and responds
+#
+# This is distinct from multiple_iterations.yaml where tools are called
+# one-per-turn across several iterations. Here, a single LLM response
+# contains multiple tool_calls that are all executed in one batch.
+
+name: multi_tool_calls
+description: LLM makes multiple tool calls in a single turn, all execute together
+
+inputs:
+  mode: "auto"
+
+events:
+  # LLM makes 3 tool calls in one response
+  - node: agent_loop.call_llm
+    type: llm_response
+    text: "Let me check several files at once."
+    tool_calls:
+      - name: view
+        input:
+          file_path: "main.go"
+      - name: view
+        input:
+          file_path: "config.go"
+      - name: grep
+        input:
+          pattern: "func main"
+
+  # All tool results come back together
+  - node: agent_loop.execute_tools
+    type: tool_result
+    tool: view
+    output:
+      result: "package main\n\nimport \"fmt\"\n\nfunc main() { fmt.Println(\"hello\") }"
+    # Additional results are implicit in the batch execution;
+    # the scenario format handles multiple tools via a single execute_tools event
+
+  # LLM synthesizes results and responds without tools
+  - node: agent_loop.call_llm
+    type: llm_response
+    text: "I found the main entry point in main.go and the configuration in config.go. The main function is defined in main.go."
+
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.execute_tools
+  not_reached:
+    - agent_loop.approval
+    - agent_loop.compact
+    - max_turns_notification

@@ -1,0 +1,122 @@
+---
+title: "FAQ"
+description: "Answers to common questions"
+---
+
+## Workflow Control
+
+### How do I pause a running workflow?
+
+Click the stop button or press `Esc`. The workflow stops with state preserved. Send a new message or click resume to continue.
+
+### Can I change parameters while running?
+
+Yes. Open parameters panel (gear icon), change values. Changes take effect on the next iteration. Common updates: switching to manual mode, adjusting temperature, changing model.
+
+### What happens when a workflow fails?
+
+Reliant pauses instead of crashing. Fix the issue (permissions, network, etc.) and click resume to retry.
+
+## Threads and Branching
+
+### How do I branch a conversation?
+
+Click the branch icon on any message. A new chat is created with history up to that point.
+
+### Can I switch workflows after branching?
+
+Only before sending the first message. After that, the workflow is locked.
+
+### How do I message a specific sub-agent thread?
+
+Pause the workflow, select the target thread from the selector, then send your message.
+
+### What's inherit vs new vs fork?
+
+| Mode | Behavior |
+|------|----------|
+| **inherit** | Use parent's thread, messages appear together |
+| **new** | Start empty, no history |
+| **fork** | Copy parent's messages to new thread |
+
+See [Threads](/features/threads) for complete documentation.
+
+## Workflows and Presets
+
+### What's the difference between workflow and preset?
+
+- **Workflow** = execution pattern (what steps, what order)
+- **Preset** = parameter values (model, temperature, prompt)
+
+### Why can't I change workflows mid-conversation?
+
+Workflows define structure. Changing mid-run would break execution. Branch from earlier and select a new workflow before sending.
+
+## Response Tools
+
+### What are response tools?
+
+Synthetic tools that force structured output from the LLM:
+
+```yaml
+response_tool:
+  name: review_result
+  options:
+    approved: "Code looks good"
+    needs_changes: "Issues found"
+```
+
+Output is always `{ choice: string, value: string }`.
+
+### When should I use them?
+
+When you need to branch on structured data—code review pass/fail, classification, validation results.
+
+## Data and Privacy
+
+### Where is my data stored?
+
+All local:
+- **Conversations**: `~/Library/Application Support/reliant` (macOS) or `~/.config/reliant` (Linux)
+- **API keys**: System keychain
+- **No cloud sync, no telemetry**
+
+### Are conversations sent to Reliant?
+
+No. Reliant Labs has no servers receiving your data. Only your AI provider sees messages for inference.
+
+## Known Limitations
+
+Current limitations we're aware of. We're working on these—check back for updates.
+
+### Terminal
+
+**Interactive utilities don't work.** Commands like `vim`, `nano`, and other interactive terminal programs aren't supported yet. Use GUI editors or non-interactive commands.
+
+### Models
+
+**Switching models mid-chat may cause issues.** Changing models during a conversation can break context, especially with thinking models. Workaround: branch first, then switch models on the new branch.
+
+**Gemini may experience issues.** Google's Gemini models have intermittent compatibility issues. If you encounter problems, try switching to Claude or OpenAI models.
+
+### Branching
+
+**Branching from a different workspace uses the original workspace.** If you branch a message that originated from a chat in a different workspace, the new branch will be created in that original workspace, not your current one.
+
+### Workflows
+
+**Approval denial restarts the workflow.** Denying an approval node will cancel the entire workflow. When you resume, it starts over from the beginning. We're investigating better mechanics here.
+
+**Switching tool chains may cause hallucinated tool calls.** Changing tool availability mid-conversation (like switching from auto → plan mode) can allow the LLM to hallucinate and attempt to execute tools it no longer has access to.
+
+**`continue_as_new` uses newer workflow versions.** When a workflow continues as new, it may pick up a newer version of the workflow definition, causing inconsistent behavior.
+
+**Spawned agents limited to `spawn_agent` workflow.** The spawn node currently only works with the built-in `spawn_agent` workflow, not custom workflows.
+
+### Experimental Features
+
+**Activity viewer is in alpha.** The activity viewer is experimental and not fully supported. Expect rough edges.
+
+---
+
+**More help**: [Troubleshooting](/help/troubleshooting) • [Feedback](/help/feedback)

@@ -1,0 +1,379 @@
+---
+title: "Presets"
+description: "Reusable parameter bundles that configure workflow behavior"
+---
+
+Presets are saved configurations of workflow parameters for switching between different agent behaviors. Instead of manually configuring model, temperature, tools, and system prompts each time you run a workflow, you select a preset that bundles all these settings together.
+
+![Manage and view your saved agent configurations](/images/screenshots/presets-list.png)
+
+Think of presets as profiles for your agents. A researcher preset configures an agent for thorough investigation with low temperature for accuracy. A code reviewer preset focuses on quality feedback with access to search tools. When you select a preset, all its parameters apply at once.
+
+## How Presets Work
+
+Presets use tag-based matching to connect with workflows. Every preset declares a `tag` that specifies what kind of workflow inputs it targets. When you load presets for a workflow, Reliant matches the preset's tag against the workflow's tag or a group's tag for multi-agent workflows. Only presets with matching tags appear as options.
+
+A preset with `tag: agent` works with any workflow that has `tag: agent` on its inputs or groups. The same researcher preset can configure a standalone agent workflow, or configure just the research phase of a multi-phase workflow—the tag matching handles it automatically.
+
+Presets can be partial. A preset doesn't need to specify every parameter the workflow accepts. It might only set `model` and `temperature`, leaving other parameters to their defaults or to be configured inline.
+
+However, every parameter a preset *does* specify must exist in the target workflow. Presets can't include unknown or extra parameters—strict validation catches typos and stale parameters early rather than silently ignoring them.
+
+When multiple presets match different groups in a workflow, each group gets its own preset selection. A multi-agent workflow might have one group configured with the researcher preset and another with the code reviewer preset.
+
+### Targeting Top-Level Inputs with "default"
+
+In multi-group workflows, you may need to apply a preset to the workflow's top-level inputs (those not in any group). The special group name `default` targets these ungrouped inputs.
+
+```yaml
+# In a workflow node that calls a sub-workflow
+- id: my_agent
+  type: workflow
+  ref: builtin://agent
+  presets:
+    default: researcher  # Applies to top-level inputs (model, temperature, etc.)
+    implementer: general # Applies to the implementer group
+```
+
+Because `default` has this special meaning, you can't name your own input groups `default`. If you try, the workflow will fail validation with an error indicating that `default` is reserved.
+
+### Provider-Agnostic Model Selection
+
+Presets use tag-based model selection to work across different AI providers. Instead of hardcoding a specific model like `claude-4.6-opus`, presets specify what they need semantically:
+
+```yaml
+params:
+  model:
+    tags: [flagship]  # Use the best available model
+```
+
+When you run a workflow with this preset, Reliant selects the best matching model from your configured providers. If you have Anthropic configured, it uses Claude 4.6 Opus. If you have OpenAI or Codex instead, it uses GPT-5.3 Codex. This means the same presets work regardless of which providers you've set up.
+
+Available tags describe model characteristics:
+
+- `flagship` — Best quality for complex tasks
+- `moderate` — Good balance of quality and cost
+- `fast` — Quick responses for simple tasks
+- `cheap` — Lowest cost for budget-conscious usage
+- `reasoning` — Extended thinking capability
+- `local` — Runs on local hardware (Ollama, LM Studio, etc.)
+
+When you specify multiple tags, Reliant uses **weighted best-match scoring**. Earlier tags have higher priority. A preset with `tags: [local, fast]` prefers models with both tags, but falls back to local-only or fast-only models if no perfect match exists. This enables graceful degradation—presets work whether or not users have local models configured.
+
+```yaml
+tags: [flagship, reasoning]  # Prefer flagship+reasoning, fall back to flagship-only
+tags: [local, cheap]         # Prefer local (free), fall back to cheap cloud models
+```
+
+If you need a specific model regardless of tags, you can still use explicit IDs:
+
+```yaml
+params:
+  model:
+    id: claude-4.6-opus  # Always use this specific model
+```
+
+See [LLM Guide](/reference/llm-guide) for complete details on model selection and available tags.
+
+## Built-in Presets
+
+Reliant includes a suite of built-in presets for common development roles. These are available immediately without configuration.
+
+For the full generated reference, see [Built-in Presets Reference](/workflows/presets-reference.generated).
+
+| Preset | Model | Key Tools | Purpose |
+|--------|-------|-----------|---------|
+| general | claude-4.6-opus | tag:default, tag:mcp | Versatile coding assistant with discovery-first approach. Can spawn specialized agents. |
+| researcher | claude-4.6-opus | tag:search, tag:web, view, bash | Codebase investigation and analysis. Methodical process: planning, architecture analysis, pattern recognition. |
+| planner | claude-4.6-opus | view, tag:search, create_plan | Strategic orchestration. Synthesizes research into step-by-step implementation plans. |
+| code_reviewer | claude-4.5-sonnet | tag:search, tag:web, view, bash | Code quality feedback. Evaluates correctness, security, maintainability. Read-only. |
+| tester | claude-4.5-sonnet | view, write, edit, patch, bash | Test suite creation. Builds harnesses, writes unit/integration/E2E tests. |
+| reproducer | claude-4.5-sonnet | view, edit, tag:search, bash | Runtime bug reproduction. Discovers entry points, adds logging, captures evidence. |
+| debug | claude-4.5-sonnet | view, tag:search, bash | Debugging orchestrator. Spawns researchers, testers, reproducers to find root causes. |
+| refactor | claude-4.6-opus | view, edit, patch, write, find_replace, move_code | Systematic code improvement. Strict methodology: assess, verify tests, transform incrementally. |
+| git | claude-4.5-sonnet | bash, view, tag:search | Version control operations. Conventional commits, atomic changes. |
+| conflict-resolver | claude-4.5-sonnet | bash, view, tag:search, edit, patch | Git conflict resolution. Classifies conflicts, preserves intent from both branches. |
+| documentation | claude-4.5-sonnet | view, write, edit, bash, fetch | Technical writing. Narrative-driven docs that teach through explanation and example. |
+| ux | claude-4.5-sonnet | fetch, glob, grep, view, write, edit, bash | UI design and implementation. WCAG 2.1 AA compliant, various style modes. |
+| workflow_builder | claude-4.6-opus | update_workflow, validate_workflow, view, grep | Workflow modification through conversation. Analyzes codebase, suggests patterns. |
+| auditor | claude-4.5-sonnet | tag:search, view, bash | Post-implementation QA. Checks completeness, correctness, cleanup before merge. |
+
+### Detailed Examples
+
+**researcher** is ideal when you need to understand a codebase before making changes. It follows a methodical investigation process: planning and scope definition, architecture and codebase analysis, pattern recognition, and historical analysis. The agent maps dependencies, identifies conventions, and documents findings—producing research that informs implementation decisions.
+
+**refactor** handles structural code changes safely. It uses specialized tools like `find_replace` for renaming across files and `move_code` for relocating functions. The strict methodology requires: assess and plan the changes, verify tests pass before starting, execute incremental transformations, and verify behavior preservation after each step.
+
+**debug** coordinates the debugging process by spawning specialized agents rather than doing everything itself. It delegates investigation to researchers, test isolation to testers, and runtime evidence gathering to reproducers. The goal is identifying the root cause with high confidence before any fix is attempted.
+
+## Creating Custom Presets
+
+Custom presets live in `.reliant/presets/` in your project directory. Each preset is a YAML file:
+
+```yaml
+name: careful-reviewer
+description: Conservative code review with strict quality standards
+tag: agent
+params:
+  model:
+    tags: [flagship]  # Use the best available model for thorough review
+  temperature: 0.2
+  tools:
+    - tag:search
+    - view
+    - bash
+  system_prompt: |
+    You are a meticulous code reviewer with extremely high standards.
+
+    Review every change with these priorities:
+    1. Security vulnerabilities - treat any potential issue as critical
+    2. Data integrity - ensure no data loss or corruption is possible
+    3. Error handling - verify all failure modes are handled gracefully
+    4. Test coverage - require tests for any new or modified code paths
+
+    Be conservative. When in doubt, request clarification rather than
+    approving code that might have issues.
+```
+
+### Preset Structure
+
+```yaml
+name: preset-name           # Required: identifier for the preset
+description: What it does   # Optional: shown in preset picker
+tag: agent                  # Required: matches workflow/group tags
+params:                     # Required: parameter values to apply
+  model:
+    tags: [moderate]        # Tag-based selection (provider-agnostic)
+  temperature: 0.7
+  tools:
+    - tool-name
+    - tag:tool-group
+  system_prompt: |
+    Instructions for the agent...
+```
+
+The `tag` field determines which workflows and groups this preset can configure. Most presets use `tag: agent` to match the standard agent workflow inputs.
+
+### Configurable Parameters
+
+**model**: The AI model to use. Specify by explicit ID (`{ id: "claude-4.6-opus" }`), by semantic tags (`{ tags: [flagship] }`), or constrain to a specific provider (`{ tags: [moderate], provider: "anthropic" }`). Tag-based selection makes presets provider-agnostic—they work with whatever providers you have configured. Available tags include `flagship`, `moderate`, `fast`, `cheap`, `reasoning`, and `codex` for code-optimized model selection where supported.
+
+**temperature**: Response randomness from 0.0 to 1.0. Lower values (0.1-0.3) produce focused, deterministic output for research and debugging. Higher values (0.7-1.0) increase creativity for brainstorming.
+
+**system_prompt**: Instructions defining the agent's role, approach, and constraints. This is where you customize behavior most significantly.
+
+**tools**: Tools the agent can access. Specify by name (`view`, `edit`, `bash`) or by tag (`tag:search`, `tag:default`, `tag:mcp`).
+
+**compaction_threshold**: Token count that triggers conversation compaction.
+
+**max_turns**: Maximum conversation turns before the agent stops.
+
+### Tool Specification
+
+```yaml
+params:
+  tools:
+    # Individual tools by name
+    - view
+    - edit
+    - bash
+
+    # Tool groups by tag
+    - tag:default    # Standard editing and file tools
+    - tag:search     # grep, glob for code exploration
+    - tag:web        # fetch for web requests
+    - tag:mcp        # All configured MCP tools
+```
+
+Using tags lets you reference logical groups without listing each tool.
+
+Tool filters also support advanced expressions:
+
+- `!tag:shell` — exclude an entire tag after includes
+- `mcp__server__*` — include all MCP tools from a server via wildcard
+- `!mcp__server__tool` — remove a specific tool
+
+This means you can combine broad includes (`tag:default`, `tag:mcp`) with precise exclusions for safer preset defaults.
+
+## Config-as-Code
+
+Presets in `.reliant/presets/` are regular files that can be checked into version control:
+
+**Team standardization**: Share agent configurations across your team. Everyone uses the same carefully tuned presets.
+
+**Project-specific customization**: A security-focused project might have stricter code review presets. A documentation project might have presets optimized for technical writing.
+
+**Iterative improvement**: Refine your presets and commit the improvements. Your agent configurations evolve alongside your codebase.
+
+**Override built-ins**: Project presets with the same name as built-in presets take precedence. Create a `general.yaml` in your project to customize the general preset without changing Reliant itself.
+
+### Preset Loading Order
+
+1. Built-in presets (embedded in Reliant)
+2. Project presets (from `.reliant/presets/`)
+
+Project presets override built-in presets with the same name.
+
+## Examples
+
+### Specialized Debugging Preset
+
+For complex debugging sessions requiring maximum context:
+
+```yaml
+name: deep-debug
+description: Thorough debugging with extensive context gathering
+tag: agent
+params:
+  model:
+    tags: [flagship]  # Use the best available model for complex debugging
+  temperature: 0.1
+  tools:
+    - tag:default
+    - tag:search
+    - tag:mcp
+  system_prompt: |
+    You are debugging a complex issue. Before attempting any fix:
+
+    1. Gather comprehensive context
+       - Read all relevant source files completely
+       - Trace the execution path that triggers the bug
+       - Identify all components involved
+
+    2. Form and test hypotheses
+       - List possible causes
+       - Design tests to confirm or rule out each hypothesis
+       - Document your reasoning
+
+    3. Implement the minimal fix
+       - Change only what's necessary
+       - Preserve existing behavior except for the bug
+       - Add a test that would have caught this bug
+
+    Never guess. Always verify with actual code and tests.
+```
+
+### Fast Implementation Preset
+
+For straightforward tasks where speed matters:
+
+```yaml
+name: quick-impl
+description: Fast implementation for simple, well-understood tasks
+tag: agent
+params:
+  model:
+    tags: [fast]  # Prioritize speed for simple tasks
+  temperature: 0.7
+  tools:
+    - tag:default
+  system_prompt: |
+    Implement the requested feature efficiently.
+
+    Focus on:
+    - Clear, idiomatic code
+    - Following existing patterns in the codebase
+    - Basic error handling
+
+    Move quickly but don't sacrifice code quality.
+```
+
+### Security Audit Preset
+
+For security-focused code review:
+
+```yaml
+name: security-audit
+description: Security-focused code analysis
+tag: agent
+params:
+  model:
+    tags: [flagship, reasoning]  # Security requires deep analysis
+  temperature: 0.2
+  tools:
+    - tag:search
+    - view
+    - bash
+  system_prompt: |
+    You are a security auditor reviewing code for vulnerabilities.
+
+    Check systematically for:
+    - Injection vulnerabilities (SQL, command, XSS)
+    - Authentication and authorization issues
+    - Sensitive data exposure
+    - Insecure dependencies
+    - Cryptographic weaknesses
+    - Input validation gaps
+
+    For each finding, provide:
+    - Severity (Critical/High/Medium/Low)
+    - Location (file and line numbers)
+    - Description of the vulnerability
+    - Proof of concept if applicable
+    - Recommended remediation
+```
+
+## Managing Presets in the UI
+
+While presets can be created as YAML files, Reliant also provides UI-based management.
+
+### Viewing Presets
+
+Open the Workflow/Preset selector in the app header (top-left). All available presets appear organized into:
+
+- **Your Presets** - Custom presets you've created
+- **Built-in Presets** - System presets that come with Reliant
+
+Each preset card displays the name, description, source badge, and target tag.
+
+### Editing Presets
+
+Hover over any non-built-in preset to reveal edit and delete buttons. Click the pencil icon to modify the name and description. For project presets (YAML files in `.reliant/presets/`), editing updates the file directly.
+
+> Note: Built-in presets can't be edited. To customize one, create a project preset with the same name—it will override the built-in version.
+
+### Deleting Presets
+
+Click the trash icon on any custom preset to delete it. For project presets, this removes the YAML file. Deletion can't be undone.
+
+### Setting Default Presets
+
+Default presets automatically apply when you start a new chat:
+
+1. Go to the **Workflows** tab
+2. Hover over a workflow with a preset badge
+3. Click the gear icon
+4. Select your preferred preset
+5. Click **Save**
+
+## Creating Presets from Chat
+
+The easiest way to create a preset is to save your current configuration:
+
+1. Configure your workflow parameters (model, temperature, tools, system prompt)
+2. Click **Save as Preset** in the parameters panel
+3. Enter a name and description
+4. Click **Save**
+
+The preset saves to `.reliant/presets/` and becomes available immediately.
+
+### What Gets Saved
+
+- Model, temperature, tools, system prompt
+- Tag (inherited from current workflow/group)
+
+Only explicitly configured parameters are saved. Default values aren't included, so the preset works across different workflows sharing the same tag.
+
+### Best Practices
+
+**Name presets descriptively.** Use names indicating purpose: `fast-prototyping`, `careful-refactor`, `security-audit`. Avoid generic names like `my-preset`.
+
+**Write useful descriptions.** Include what makes the preset different: "Lower temperature for deterministic debugging" or "Opus model for complex architectural decisions."
+
+**Start from built-in presets.** If one is close to what you need, select it first, make adjustments, then save as new.
+
+## Related Topics
+
+- [Multi-Agent Patterns](/workflows/patterns) - How presets configure agents in multi-agent workflows
+- [Workflows](/workflows) - Overview of the workflow system
+- [Creating Custom Workflows](/workflows/custom-workflows) - Build workflows that use your presets

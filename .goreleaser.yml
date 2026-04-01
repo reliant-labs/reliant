@@ -1,0 +1,84 @@
+version: 2
+project_name: reliant
+before:
+  hooks:
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w 
+        -X github.com/reliant-labs/reliant/internal/version.Version={{.Version}}
+        -X github.com/reliant-labs/reliant/internal/version.Commit={{.Commit}}
+        -X github.com/reliant-labs/reliant/internal/version.Date={{.Date}}
+        -X github.com/reliant-labs/reliant/internal/version.Branch={{.Branch}}
+    main: ./cmd/reliant/
+
+archives:
+  - format: tar.gz
+    name_template: >-
+      reliant-
+      {{- if eq .Os "darwin" }}mac-
+      {{- else if eq .Os "windows" }}windows-
+      {{- else if eq .Os "linux" }}linux-{{end}}
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "#86" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+checksum:
+  name_template: "checksums.txt"
+snapshot:
+  name_template: "0.0.0-{{ .Timestamp }}"
+aurs:
+  - name: reliant-labs
+    homepage: "https://github.com/reliant-labs/reliant"
+    description: "terminal based agent that can build anything"
+    maintainers:
+      - "Reliant Labs <support@reliantlabs.io>"
+    license: "Proprietary"
+    private_key: "{{ .Env.AUR_KEY }}"
+    git_url: "ssh://aur@aur.archlinux.org/reliant-labs-bin.git"
+    provides:
+      - reliant
+    conflicts:
+      - reliant
+    package: |-
+      install -Dm755 ./reliant "${pkgdir}/usr/bin/reliant"
+brews:
+  - repository:
+      owner: reliant-labs
+      name: homebrew-tap
+nfpms:
+  - maintainer: Reliant Labs <support@reliantlabs.io>
+    description: terminal based agent that can build anything
+    formats:
+      - deb
+      - rpm
+    file_name_template: >-
+      {{ .ProjectName }}-
+      {{- if eq .Os "darwin" }}mac
+      {{- else }}{{ .Os }}{{ end }}-{{ .Arch }}
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^doc:"
+      - "^test:"
+      - "^ci:"
+      - "^ignore:"
+      - "^example:"
+      - "^wip:"

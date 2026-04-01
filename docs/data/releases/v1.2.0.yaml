@@ -1,0 +1,13 @@
+version: "v1.2.0"
+date: "2026-03-16"
+title: "Claude Code OAuth, isolated env setup, and per-thread plans"
+summary: "Claude Code OAuth support, isolated environment setup, and per-thread planning improvements."
+items:
+  - title: "Claude Code OAuth support"
+    description: "so you can connect Claude Code without manual token setup."
+  - title: "New env-setup workflow"
+    description: "for isolated ephemeral environments that work cleanly with git worktrees."
+  - title: "Plans are now scoped per thread"
+    description: "for clearer agent coordination and better agentic workflows."
+  - title: "Workflow and worktree reliability improvements"
+    description: "including fixes for preset loading, custom preset tools, and workflow/worktree execution edge cases."

@@ -1,0 +1,1784 @@
+import React, {
+  useState,
+  useMemo,
+  useCallback,
+  useEffect,
+  type ReactNode,
+  useRef,
+  memo,
+} from "react";
+import { ChatState } from "../../gen/reliant/v1/chat_pb";
+import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
+import {
+  Plus,
+  Search,
+  Trash2,
+  Archive,
+  ChevronDown,
+  ChevronRight,
+  Edit,
+  Copy,
+  MoreVertical,
+  RotateCcw,
+  Mail,
+  FolderGit2,
+  LayoutList,
+  LayoutGrid,
+  Clock,
+  CalendarPlus,
+  CalendarMinus,
+  SortAsc,
+  SortDesc,
+  Bell,
+  GitBranch,
+  SlidersHorizontal,
+  Check,
+} from "lucide-react";
+import { useChatStore } from "../../store/chatStore";
+import { useChatNavigationStore } from "../../store/chatNavigationStore";
+import { useWorktreeStore } from "../../store/worktreeStore";
+import { useBackgroundTasksStore } from "../../store/backgroundTasksStore";
+import { useProjectStore } from "../../store/projectStore";
+import { cn, toTitleCase } from "../../lib/utils";
+import { Tooltip } from "../ui/Tooltip";
+import { Button } from "../ui/Button";
+import { ContextMenu } from "../ui/ContextMenu";
+import type { ContextMenuItem } from "../ui/ContextMenu";
+import type { Chat } from "../../api/client";
+import { useDebounce } from "../../hooks/useDebounce";
+import {
+  useChatListPreferencesStore,
+  type ChatSortOption,
+} from "../../store/chatListPreferencesStore";
+import { Dropdown } from "../ui/Dropdown";
+import { ActivityDot, type ChatActivityState } from "../ui/ActivityDot";
+import { useActivityStore, activityToDotState, ChatActivity } from "../../store/activityStore";
+
+// Sort options configuration
+const SORT_OPTIONS: {
+  value: ChatSortOption;
+  label: string;
+  icon: React.ReactNode;
+}[] = [
+  {
+    value: "recent_activity",
+    label: "Recent Activity",
+    icon: <Clock className="w-3.5 h-3.5" />,
+  },
+  {
+    value: "needs_attention_first",
+    label: "Needs Attention",
+    icon: <Bell className="w-3.5 h-3.5" />,
+  },
+  {
+    value: "newest_first",
+    label: "Newest First",
+    icon: <CalendarPlus className="w-3.5 h-3.5" />,
+  },
+  {
+    value: "oldest_first",
+    label: "Oldest First",
+    icon: <CalendarMinus className="w-3.5 h-3.5" />,
+  },
+  {
+    value: "alphabetical_asc",
+    label: "A → Z",
+    icon: <SortAsc className="w-3.5 h-3.5" />,
+  },
+  {
+    value: "alphabetical_desc",
+    label: "Z → A",
+    icon: <SortDesc className="w-3.5 h-3.5" />,
+  },
+];
+
+// Filter options for state filtering
+type StateFilterOption = "all" | "needs_attention" | "active" | "idle";
+
+const STATE_FILTER_OPTIONS: {
+  value: StateFilterOption;
+  label: string;
+}[] = [
+  { value: "all", label: "All" },
+  { value: "needs_attention", label: "Needs Attention" },
+  { value: "active", label: "Active" },
+  { value: "idle", label: "Idle" },
+];
+
+interface SidebarProps {
+  paddingClass?: string;
+}
+
+// Worktree group structure
+interface ChatGroup {
+  worktreeId: string;
+  worktreeName: string;
+  worktreeBranch: string;
+  chats: ChatWithActivity[];
+  hasActivity: boolean;
+  isMain: boolean;
+}
+
+// Archived worktree group structure
+interface ArchivedChatGroup {
+  worktreeName: string; // Display name (may be "Unknown Workspace" if missing)
+  worktreeId?: string; // Original worktree ID if available
+  chats: ChatWithActivity[];
+  isWorktreeArchived: boolean; // True if the worktree itself is archived
+}
+
+interface ChatWithActivity extends Chat {
+  activityState: ChatActivityState;
+  priority: number;
+  lastActivity?: string;
+}
+
+// Shared utility - avoids duplicate definitions in ChatItem/ArchivedChatItem
+function getRelativeTime(timestamp: string): string {
+  const now = new Date();
+  const past = new Date(timestamp);
+  const diffMs = now.getTime() - past.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 60) {
+    return diffMins <= 1 ? "now" : `${diffMins}m`;
+  } else if (diffHours < 24) {
+    return `${diffHours}h`;
+  } else {
+    return `${diffDays}d`;
+  }
+}
+
+// --- Extracted ChatItem (module-level for stable identity + React.memo) ---
+
+interface ChatItemProps {
+  chat: ChatWithActivity;
+  inGroup?: boolean;
+  editingChatId: string | null;
+  editingTitle: string;
+  workspaceBranch?: string;
+  activeChatId: string | null;
+  onChatClick: (chat: ChatWithActivity) => void;
+  onContextMenu: (e: React.MouseEvent, chat: ChatWithActivity) => void;
+  onEditingTitleChange: (title: string) => void;
+  onSaveRename: (chatId: string) => void;
+  onCancelRename: () => void;
+  onArchiveChat: (chatId: string) => void;
+}
+
+const ChatItem = memo(function ChatItem({
+  chat,
+  inGroup = false,
+  editingChatId,
+  editingTitle: propsEditingTitle,
+  workspaceBranch,
+  activeChatId,
+  onChatClick,
+  onContextMenu,
+  onEditingTitleChange,
+  onSaveRename,
+  onCancelRename,
+  onArchiveChat,
+}: ChatItemProps) {
+  const isActive = activeChatId === chat.id;
+  const showStatusDot = chat.activityState !== "idle" && chat.activityState !== "awaiting_approval";
+  const showNotificationBadge = chat.unread || chat.activityState === "awaiting_approval";
+  const chatTitle = chat.title
+    ? toTitleCase(chat.title.toLowerCase().replace(/\s+/g, "_"))
+    : "New chat";
+  const [isHovered, setIsHovered] = useState(false);
+  const isEditing = editingChatId === chat.id;
+  const relativeTime = getRelativeTime(chat.updatedAt || chat.createdAt);
+
+  return (
+    <div
+      data-chat-id={chat.id}
+      className={cn(
+        "group flex items-center gap-2 px-2.5 py-2 rounded-md cursor-pointer transition-all duration-150 font-mono w-full text-left text-xs relative overflow-hidden",
+        isActive
+          ? "text-foreground font-semibold"
+          : showStatusDot
+          ? "bg-accent/50 hover:bg-accent/70 text-foreground"
+          : "bg-transparent text-foreground/80 hover:text-foreground",
+        "active:scale-[0.99]"
+      )}
+      style={{
+        backgroundColor: isActive
+          ? "hsl(var(--primary) / 0.15)"
+          : !showStatusDot && isHovered
+          ? "hsl(var(--primary) / 0.1)"
+          : undefined,
+      }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onClick={() => onChatClick(chat)}
+      onContextMenu={(e) => onContextMenu(e, chat)}
+    >
+      {showNotificationBadge && (
+        <Tooltip 
+          content={chat.activityState === "awaiting_approval" ? "Approval needed" : "New activity"} 
+          placement="top" 
+          delay={300}
+        >
+          <div className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
+        </Tooltip>
+      )}
+
+      {showStatusDot && (
+        <div 
+          className="flex-shrink-0 group-hover:scale-110 transition-transform duration-200"
+          data-testid={`chat-activity-dot-${chat.id}`}
+          data-activity-state={chat.activityState}
+        >
+          <ActivityDot state={chat.activityState} />
+        </div>
+      )}
+
+      <div className={cn("flex-1 min-w-0 transition-all duration-200")}>
+        {isEditing ? (
+          <input
+            type="text"
+            value={propsEditingTitle}
+            onChange={(e) => onEditingTitleChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                onSaveRename(chat.id);
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                onCancelRename();
+              }
+            }}
+            onBlur={() => onSaveRename(chat.id)}
+            onClick={(e) => e.stopPropagation()}
+            autoFocus
+            className="w-full px-2 py-1 bg-background border border-primary rounded text-xs font-mono focus:outline-none focus:ring-2 focus:ring-primary/50"
+          />
+        ) : (
+          <div className="truncate group-hover:text-foreground transition-colors duration-200">
+            {chatTitle}
+          </div>
+        )}
+        {!inGroup && workspaceBranch && (
+          <div className="flex items-center gap-1 mt-0.5">
+            <GitBranch className="w-2.5 h-2.5 text-muted-foreground/60" />
+            <span className="text-[10px] text-muted-foreground/60 truncate max-w-[120px]">
+              {workspaceBranch}
+            </span>
+          </div>
+        )}
+      </div>
+
+      <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        <Tooltip content="More options" placement="left" delay={300}>
+          <button
+            onClick={(e) => onContextMenu(e, chat)}
+            className="hover:bg-muted/70 rounded p-1 flex items-center justify-center"
+          >
+            <MoreVertical className="w-3 h-3 text-muted-foreground hover:text-foreground transition-colors duration-200" />
+          </button>
+        </Tooltip>
+      </div>
+
+      <div className="flex-shrink-0 relative flex items-center justify-center min-w-[2rem]">
+        <span className="text-xs text-muted-foreground group-hover:opacity-0 transition-opacity duration-200">
+          {relativeTime}
+        </span>
+        <Tooltip content="Archive chat" placement="left" delay={300}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onArchiveChat(chat.id);
+            }}
+            className="opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-muted/70 rounded p-0.5 absolute inset-0 flex items-center justify-center"
+          >
+            <Archive className="w-3 h-3 text-muted-foreground hover:text-foreground transition-colors duration-200" />
+          </button>
+        </Tooltip>
+      </div>
+    </div>
+  );
+});
+
+// --- Extracted ArchivedChatItem (module-level for stable identity + React.memo) ---
+
+interface ArchivedChatItemProps {
+  chat: ChatWithActivity;
+  activeChatId: string | null;
+}
+
+const ArchivedChatItem = memo(function ArchivedChatItem({ chat, activeChatId }: ArchivedChatItemProps) {
+  const chatId = chat.id;
+  const chatTitle = chat.title
+    ? toTitleCase(chat.title.toLowerCase().replace(/\s+/g, "_"))
+    : "New chat";
+  const [isHovered, setIsHovered] = useState(false);
+  const isActive = activeChatId === chatId;
+  const relativeTime = getRelativeTime(chat.updatedAt || chat.createdAt);
+
+  const handleViewChat = async () => {
+    const currentProject = useProjectStore.getState().currentProject;
+    const worktreeStore = useWorktreeStore.getState();
+
+    if (currentProject?.id) {
+      if (chat.worktreeId) {
+        const targetWorktree = worktreeStore.worktrees.find((worktree) => worktree.id === chat.worktreeId) ?? null;
+        if (targetWorktree) {
+          await worktreeStore.switchWorktreeContext(currentProject.id, targetWorktree);
+        }
+      } else {
+        await worktreeStore.switchWorktreeContext(currentProject.id, null);
+      }
+    }
+
+    const { selectChat } = useChatStore.getState();
+    selectChat(chat);
+    const { navigateToChat } = useChatNavigationStore.getState();
+    navigateToChat(chatId);
+  };
+
+  const handleRestore = async () => {
+    try {
+      const { api } = await import("../../api/client");
+      await api.chatsV2.unarchive(chatId);
+    } catch (error) {
+      console.error("Failed to restore chat:", error);
+    }
+  };
+
+  const handleDelete = async () => {
+    try {
+      const { api } = await import("../../api/client");
+      await api.chatsV2.delete(chatId);
+      const chatStore = useChatStore.getState();
+      chatStore.removeArchivedChat(chatId);
+    } catch (error) {
+      console.error("Failed to delete archived chat:", error);
+    }
+  };
+
+  return (
+    <div
+      data-chat-id={chatId}
+      className={cn(
+        "group flex items-center gap-2 px-2.5 py-2 rounded-md cursor-pointer transition-all duration-150 font-mono w-full text-left text-xs relative overflow-hidden",
+        isActive
+          ? "text-foreground font-semibold"
+          : "bg-transparent text-foreground/80 hover:text-foreground",
+        "active:scale-[0.99]"
+      )}
+      style={{
+        backgroundColor: isActive
+          ? "hsl(var(--primary) / 0.15)"
+          : isHovered
+          ? "hsl(var(--primary) / 0.1)"
+          : undefined,
+      }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onClick={handleViewChat}
+    >
+      <div className="flex-1 min-w-0 transition-all duration-200">
+        <div className="truncate group-hover:text-foreground transition-colors duration-200">
+          {chatTitle}
+        </div>
+      </div>
+
+      <div className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        <Tooltip content="Restore chat" placement="left" delay={300}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleRestore();
+            }}
+            className="hover:bg-muted/70 rounded p-1 flex items-center justify-center"
+          >
+            <RotateCcw className="w-3 h-3 text-muted-foreground hover:text-foreground transition-colors duration-200" />
+          </button>
+        </Tooltip>
+      </div>
+
+      <div className="flex-shrink-0 relative flex items-center justify-center min-w-[2rem]">
+        <span className="text-xs text-muted-foreground group-hover:opacity-0 transition-opacity duration-200">
+          {relativeTime}
+        </span>
+        <Tooltip content="Delete chat" placement="left" delay={300}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDelete();
+            }}
+            className="opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-muted/70 rounded p-0.5 absolute inset-0 flex items-center justify-center"
+          >
+            <Trash2 className="w-3 h-3 text-destructive hover:text-destructive/80 transition-colors duration-200" />
+          </button>
+        </Tooltip>
+      </div>
+    </div>
+  );
+});
+
+// --- WorktreeGroupComponent ---
+
+interface WorktreeGroupComponentProps {
+  id: string;
+  title: string;
+  subtitle?: string | ReactNode;
+  icon: ReactNode;
+  chats: ChatWithActivity[];
+  isExpanded: boolean;
+  onToggle: () => void;
+  chatCount: number;
+  renderChat: (chat: ChatWithActivity) => ReactNode;
+  hasActiveChat?: boolean;
+  onNewChat?: () => void;
+  onArchiveWorktree?: () => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
+  emptyState?: {
+    message: string;
+    onClick?: () => void;
+  };
+}
+
+const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
+  id: _id,
+  title,
+  subtitle,
+  icon,
+  chats,
+  isExpanded,
+  onToggle,
+  chatCount: _chatCount,
+  renderChat,
+  hasActiveChat,
+  onNewChat,
+  onArchiveWorktree,
+  onContextMenu,
+  emptyState,
+}: WorktreeGroupComponentProps) {
+  const [isHovered, setIsHovered] = useState(false);
+
+  return (
+    <div className="mb-2">
+      {/* Worktree Container */}
+      <div
+        className="rounded-lg overflow-hidden transition-all duration-200 border border-transparent"
+        style={{
+          backgroundColor: hasActiveChat
+            ? "hsl(var(--primary) / 0.08)"
+            : isHovered
+            ? "hsl(var(--primary) / 0.05)"
+            : undefined,
+        }}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        {/* Header */}
+        <div
+          className="flex items-center gap-1 w-full px-3 py-2 group/header"
+          onContextMenu={(e) => onContextMenu?.(e)}
+        >
+          <button
+            onClick={onToggle}
+            className="flex items-center gap-2.5 flex-1 min-w-0 transition-all duration-200 rounded-lg"
+          >
+            {icon}
+
+            <div className="flex-1 min-w-0 text-left flex items-baseline gap-2">
+              <div className="text-sm font-semibold text-foreground truncate font-mono">
+                {title}
+              </div>
+              {subtitle && (
+                <div className="text-xs flex-shrink-0 leading-none">
+                  {typeof subtitle === "string" ? (
+                    <span className="text-muted-foreground truncate">
+                      {subtitle}
+                    </span>
+                  ) : (
+                    subtitle
+                  )}
+                </div>
+              )}
+            </div>
+          </button>
+
+          {/* New Chat Button - shows on hover */}
+          {onNewChat && (
+            <Tooltip
+              content="New chat in this workspace"
+              placement="left"
+              delay={300}
+            >
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onNewChat();
+                }}
+                className="opacity-0 group-hover/header:opacity-100 transition-opacity duration-200 hover:bg-muted/70 rounded p-1 flex-shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground transition-colors duration-200" />
+              </button>
+            </Tooltip>
+          )}
+
+          {/* Archive Workspace Button - shows on hover */}
+          {onArchiveWorktree && (
+            <Tooltip
+              content="Archive this workspace"
+              placement="left"
+              delay={300}
+            >
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onArchiveWorktree();
+                }}
+                className="opacity-0 group-hover/header:opacity-100 transition-opacity duration-200 hover:bg-muted/70 rounded p-1 flex-shrink-0"
+              >
+                <Archive className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground transition-colors duration-200" />
+              </button>
+            </Tooltip>
+          )}
+
+          <button
+            onClick={onToggle}
+            className="flex items-center transition-all duration-200 p-1 flex-shrink-0"
+          >
+            {isExpanded ? (
+              <ChevronDown className="w-3.5 h-3.5 text-foreground/60 transition-transform" />
+            ) : (
+              <ChevronRight className="w-3.5 h-3.5 text-foreground/60 transition-transform" />
+            )}
+          </button>
+        </div>
+
+        {/* Chats List */}
+        {isExpanded && chats.length > 0 && (
+          <div className="p-2 space-y-1.5">
+            {chats.map((chat) => (
+              <div key={chat.id}>{renderChat(chat)}</div>
+            ))}
+          </div>
+        )}
+
+        {/* Empty state for workspace with no chats */}
+        {isExpanded && chats.length === 0 && emptyState && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              emptyState.onClick?.();
+            }}
+            className={cn(
+              "w-full text-left p-2 mx-2 mb-2 rounded-md text-xs font-mono text-muted-foreground transition-colors",
+              emptyState.onClick ? "hover:bg-muted/50 hover:text-foreground cursor-pointer" : "cursor-default"
+            )}
+          >
+            {emptyState.message}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+});
+
+function SidebarComponent({ paddingClass = "" }: SidebarProps) {
+  const chatsMap = useChatStore((state) => state.chats);
+  const chats = useMemo(() => Array.from(chatsMap.values()), [chatsMap]);
+  // Activity from activityStore (SINGLE SOURCE OF TRUTH)
+  const selectChat = useChatStore((state) => state.selectChat);
+  const deleteChat = useChatStore((state) => state.deleteChat);
+  const renameChat = useChatStore((state) => state.renameChat);
+  const markUnread = useChatStore((state) => state.markUnread);
+  const activities = useActivityStore((state) => state.activities);
+  // pendingTimestampUpdates removed - no longer used
+  // Archived chats from store (loaded once, updated via gRPC stream)
+  const archivedChats = useChatStore((state) => state.archivedChats);
+  const archivedChatsLoaded = useChatStore((state) => state.archivedChatsLoaded);
+  const loadArchivedChats = useChatStore((state) => state.loadArchivedChats);
+  
+  const worktrees = useWorktreeStore((state) => state.worktrees);
+  const switchWorktreeContext = useWorktreeStore((state) => state.switchWorktreeContext);
+  const fetchProcesses = useBackgroundTasksStore(
+    (state) => state.fetchProcesses
+  );
+  const currentProject = useProjectStore((state) => state.currentProject);
+
+  // Get active chat from navigation store
+  const activeChatId = useChatStore((state) => state.activeChatId);
+
+  // Chat list preferences
+  const sortOrder = useChatListPreferencesStore((state) => state.sortOrder);
+  const viewMode = useChatListPreferencesStore((state) => state.viewMode);
+  const filters = useChatListPreferencesStore((state) => state.filters);
+  const setSortOrder = useChatListPreferencesStore((state) => state.setSortOrder);
+  const setViewMode = useChatListPreferencesStore((state) => state.setViewMode);
+  const setFilters = useChatListPreferencesStore((state) => state.setFilters);
+
+  // UI State
+  const [searchQuery, _setSearchQuery] = useState("");
+  const [isOptionsMenuOpen, setIsOptionsMenuOpen] = useState(false);
+
+  const [expandedWorktreeGroups, setExpandedWorktreeGroups] = useState<
+    Record<string, boolean>
+  >({});
+  const [isNoWorktreeExpanded, setIsNoWorktreeExpanded] = useState(true);
+  const [isArchivedExpanded, setIsArchivedExpanded] = useState(false);
+  const [expandedArchivedGroups, setExpandedArchivedGroups] = useState<
+    Record<string, boolean>
+  >({});
+  const [contextMenu, setContextMenu] = useState<
+    | {
+        x: number;
+        y: number;
+        type: "chat";
+        chatId: string;
+      }
+    | {
+        x: number;
+        y: number;
+        type: "worktree";
+        worktreeId: string;
+      }
+    | null
+  >(null);
+  const [editingChatId, setEditingChatId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
+
+  // Ref for scroll container
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Debounce search query for performance
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+
+  // Load archived chats once on mount - subsequent updates come through gRPC stream
+  // (chat_state_change events in globalUpdatesStore handle archive/restore transitions)
+  useEffect(() => {
+    if (currentProject && !archivedChatsLoaded) {
+      loadArchivedChats(currentProject.id);
+    }
+  }, [currentProject, archivedChatsLoaded, loadArchivedChats]);
+
+  // Filter archived chats by current project (store holds all projects' archived chats)
+  const projectArchivedChats = useMemo(() => {
+    if (!currentProject) return [];
+    return archivedChats.filter((c) => c.projectId === currentProject.id);
+  }, [archivedChats, currentProject]);
+
+  // Initialize background tasks monitoring for all chats
+  // Fetch processes once on mount - subsequent updates come through gRPC stream
+  // (process_started, process_completed, process_failed events in globalUpdatesStore)
+  const hasInitializedProcesses = useRef(false);
+  useEffect(() => {
+    if (!hasInitializedProcesses.current && chats.length > 0) {
+      hasInitializedProcesses.current = true;
+      fetchProcesses();
+    }
+  }, [chats.length, fetchProcesses]);
+
+  // Activity detection - reads directly from activityStore (SINGLE SOURCE OF TRUTH)
+  const getChatActivityState = useCallback(
+    (chat: Chat): ChatActivityState => {
+      return activityToDotState(activities.get(chat.id) ?? ChatActivity.IDLE);
+    },
+    [activities]
+  );
+
+  // Enhanced chat data with activity states
+  // Don't debounce here - we want immediate updates for activity states
+  const chatsWithActivity = useMemo((): ChatWithActivity[] => {
+    // Filter out any archived chats from the active list
+    // Also deduplicate by chatId to handle race conditions during chat creation
+    const seenIds = new Set<string>();
+    const activeChats = chats.filter((chat) => {
+      if (chat.state === ChatState.ARCHIVED) return false;
+      if (seenIds.has(chat.id)) {
+        return false;
+      }
+      seenIds.add(chat.id);
+      return true;
+    });
+
+    return activeChats.map((chat) => {
+      const activityState = getChatActivityState(chat);
+
+      // Priority calculation for sorting (only truly active chats float to top)
+      let priority = 0;
+      if (activityState === "awaiting_approval") priority += 1000; // Highest - needs user action
+      if (activityState === "thinking" || activityState === "streaming")
+        priority += 800; // AI actively working
+      if (activityState === "error") priority += 400; // Errors need attention
+      // Unread chats get a boost (but lower than active work)
+      if (chat.unread) priority += 200;
+
+      return {
+        ...chat,
+        activityState,
+        priority,
+        lastActivity: chat.updatedAt,
+      };
+    });
+  }, [chats, getChatActivityState]);
+
+  // Get worktree for a chat - all chats now have worktree_id
+  const getWorktreeForChat = useCallback(
+    (chat: Chat) => {
+      return worktrees.find((w) => w.id === chat.worktreeId);
+    },
+    [worktrees]
+  );
+
+  // Backend search results state
+  const [searchResults, setSearchResults] = useState<Chat[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
+  // Perform backend search when query changes
+  useEffect(() => {
+    const performSearch = async () => {
+      if (!debouncedSearchQuery || !currentProject) {
+        setSearchResults([]);
+        setIsSearching(false);
+        return;
+      }
+
+      setIsSearching(true);
+      try {
+        const { api } = await import("../../api/client");
+        const results = await api.chatsV2.search(
+          currentProject.id,
+          debouncedSearchQuery
+        );
+        setSearchResults(results);
+      } catch (error) {
+        console.error("Search failed:", error);
+        // Fallback to client-side search on error
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    };
+
+    performSearch();
+  }, [debouncedSearchQuery, currentProject]);
+
+  // Filtered and sorted chats grouped by worktree (or flat list)
+  const { activeGroups, flatList, archivedChats: filteredArchivedChats, archivedGroups } = useMemo(() => {
+    let filtered = chatsWithActivity;
+
+    // State filter - filter by chat state
+    if (filters.states && filters.states.length > 0) {
+      filtered = filtered.filter((chat) => {
+        // Map activityState to filter states
+        // "needs_attention" filter matches unread chats AND awaiting_approval activity
+        // "active" filter matches thinking, streaming
+        // "idle" filter matches idle state
+        if (filters.states!.includes("needs_attention")) {
+          return chat.unread || chat.activityState === "awaiting_approval";
+        }
+        if (filters.states!.includes("active")) {
+          return chat.activityState === "thinking" || 
+                 chat.activityState === "streaming";
+        }
+        if (filters.states!.includes("idle")) {
+          return chat.activityState === "idle";
+        }
+        return true;
+      });
+    }
+
+    // Search filter - use backend search results if available, otherwise client-side
+    if (debouncedSearchQuery) {
+      if (searchResults.length > 0 || isSearching) {
+        // Use backend search results
+        const searchResultIds = new Set(searchResults.map((r) => r.id));
+        filtered = filtered.filter((chat) => searchResultIds.has(chat.id));
+      } else {
+        // Fallback to client-side filtering
+        const query = debouncedSearchQuery.toLowerCase();
+        filtered = filtered.filter((chat) => {
+          const title = (chat.title || "New chat").toLowerCase();
+          const worktree = getWorktreeForChat(chat);
+          const branch = worktree?.branch?.toLowerCase() || "";
+          const worktreeName = worktree?.name?.toLowerCase() || "";
+          return (
+            title.includes(query) ||
+            branch.includes(query) ||
+            worktreeName.includes(query)
+          );
+        });
+      }
+    }
+
+    // Categorize chats - ONLY use active (non-archived) chats from the main list
+    // All chats now have worktree_id, no null handling needed
+    const activeWorktreeChats: ChatWithActivity[] = [];
+
+    filtered.forEach((chat) => {
+      const worktree = getWorktreeForChat(chat);
+
+      // Skip if worktree doesn't exist (these are archived)
+      if (!worktree) {
+        return;
+      }
+
+      // Skip if worktree is completed/abandoned (these are archived)
+      if (
+        worktree.status === WorktreeStatus.COMPLETED ||
+        worktree.status === WorktreeStatus.ABANDONED
+      ) {
+        return;
+      }
+
+      // Active worktree → Active Chats
+      activeWorktreeChats.push(chat);
+    });
+
+    // Convert archived chats from store to ChatWithActivity format
+    const archivedList: ChatWithActivity[] = projectArchivedChats.map((chat) => ({
+      ...chat,
+      activityState: "idle" as const,
+      priority: 0,
+      lastActivity: chat.updatedAt,
+    }));
+
+    // Group active chats by worktree - simple grouping now that all chats have worktree_id
+    const worktreeGroupsMap = new Map<string, ChatGroup>();
+
+    activeWorktreeChats.forEach((chat) => {
+      const worktree = getWorktreeForChat(chat);
+      if (!worktree) return;
+
+      if (!worktreeGroupsMap.has(worktree.id)) {
+        worktreeGroupsMap.set(worktree.id, {
+          worktreeId: worktree.id,
+          worktreeName: worktree.name,
+          worktreeBranch: worktree.branch,
+          chats: [],
+          hasActivity: false,
+          isMain: worktree.is_main,
+        });
+      }
+
+      const group = worktreeGroupsMap.get(worktree.id)!;
+      group.chats.push(chat);
+
+      // Check if any chat in group requires immediate action (awaiting_approval)
+      // Only awaiting_approval should cause groups to float - other activity states
+      // get visual indicators but don't change sort order
+      if (chat.activityState === "awaiting_approval") {
+        group.hasActivity = true;
+      }
+    });
+
+    // Sort chats based on user preference
+    const sortChatList = (chats: ChatWithActivity[]) => {
+      return [...chats].sort((a, b) => {
+        // ONLY awaiting_approval floats to top - it requires immediate user action
+        // Other states (thinking, streaming) stay in their natural position but get visual indicators
+        const aRequiresAction = a.activityState === "awaiting_approval";
+        const bRequiresAction = b.activityState === "awaiting_approval";
+
+        if (aRequiresAction && !bRequiresAction) return -1;
+        if (!aRequiresAction && bRequiresAction) return 1;
+
+        // Apply user-selected sort order for all other chats
+        switch (sortOrder) {
+          case "recent_activity":
+            // Most recent last_message_at first (falls back to created_at for new chats)
+            // Using last_message_at prevents "viewing" a chat from changing its sort position
+            return (
+              new Date(b.lastMessageAt || b.createdAt).getTime() -
+              new Date(a.lastMessageAt || a.createdAt).getTime()
+            );
+          case "needs_attention_first": {
+            // Chats needing attention come first (unread or awaiting_approval)
+            // This is an explicit sort mode where user WANTS these at top
+            const aNeedsAttention = a.unread || a.activityState === "awaiting_approval";
+            const bNeedsAttention = b.unread || b.activityState === "awaiting_approval";
+            
+            if (aNeedsAttention && !bNeedsAttention) return -1;
+            if (!aNeedsAttention && bNeedsAttention) return 1;
+            
+            // Both need attention or neither - sort by last_message_at
+            return (
+              new Date(b.lastMessageAt || b.createdAt).getTime() -
+              new Date(a.lastMessageAt || a.createdAt).getTime()
+            );
+          }
+          case "newest_first":
+            // Most recent created_at first
+            return (
+              new Date(b.createdAt).getTime() -
+              new Date(a.createdAt).getTime()
+            );
+          case "oldest_first":
+            // Oldest created_at first
+            return (
+              new Date(a.createdAt).getTime() -
+              new Date(b.createdAt).getTime()
+            );
+          case "alphabetical_asc":
+            // A-Z by title
+            return (a.title || "New chat").localeCompare(
+              b.title || "New chat"
+            );
+          case "alphabetical_desc":
+            // Z-A by title
+            return (b.title || "New chat").localeCompare(
+              a.title || "New chat"
+            );
+          default:
+            return 0;
+        }
+      });
+    };
+
+    // Sort chats within each group
+    worktreeGroupsMap.forEach((group) => {
+      group.chats = sortChatList([...group.chats]);
+    });
+
+    // Ensure main workspace is always present in grouped view, even with zero chats
+    const mainWorktree = worktrees.find(
+      (w) =>
+        w.is_main &&
+        !w.deleted_at &&
+        w.status !== WorktreeStatus.COMPLETED &&
+        w.status !== WorktreeStatus.ABANDONED
+    );
+
+    if (mainWorktree && !worktreeGroupsMap.has(mainWorktree.id)) {
+      worktreeGroupsMap.set(mainWorktree.id, {
+        worktreeId: mainWorktree.id,
+        worktreeName: mainWorktree.name,
+        worktreeBranch: mainWorktree.branch,
+        chats: [],
+        hasActivity: false,
+        isMain: true,
+      });
+    }
+
+    // Convert to array and sort groups (groups with activity first, then by most recent chat)
+    const groupsArray = Array.from(worktreeGroupsMap.values());
+    groupsArray.sort((a, b) => {
+      // Main workspace should be first when it has no chats so users can always switch to it
+      if (a.isMain && a.chats.length === 0) return -1;
+      if (b.isMain && b.chats.length === 0) return 1;
+
+      // Active groups first
+      if (a.hasActivity !== b.hasActivity) {
+        return a.hasActivity ? -1 : 1;
+      }
+
+      // If one group is empty, put non-empty first (except main empty special-case above)
+      if (a.chats.length === 0 && b.chats.length > 0) return 1;
+      if (b.chats.length === 0 && a.chats.length > 0) return -1;
+
+      // Then by most recent chat in group (using last_message_at for activity-based sorting)
+      const aTime = a.chats.length > 0
+        ? Math.max(...a.chats.map((c) => new Date(c.lastMessageAt || c.createdAt).getTime()))
+        : 0;
+      const bTime = b.chats.length > 0
+        ? Math.max(...b.chats.map((c) => new Date(c.lastMessageAt || c.createdAt).getTime()))
+        : 0;
+      return bTime - aTime;
+    });
+
+    // Create flat list for flat view mode
+    const flatList = sortChatList(activeWorktreeChats);
+
+    // Group archived chats by worktree_name (similar to active chats grouping)
+    const archivedGroupsMap = new Map<string, ArchivedChatGroup>();
+
+    archivedList.forEach((chat) => {
+      // Use worktree_name from archived chat metadata, or worktree_id, or fallback to "Unknown Workspace"
+      const groupKey = chat.worktreeName || chat.worktreeId || "unknown";
+      const displayName = chat.worktreeName || "Unknown Workspace";
+
+      if (!archivedGroupsMap.has(groupKey)) {
+        archivedGroupsMap.set(groupKey, {
+          worktreeName: displayName,
+          worktreeId: chat.worktreeId,
+          chats: [],
+          isWorktreeArchived: !!chat.worktreeDeletedAt,
+        });
+      }
+
+      archivedGroupsMap.get(groupKey)!.chats.push(chat);
+    });
+
+    // Sort chats within each archived group
+    archivedGroupsMap.forEach((group) => {
+      group.chats = sortChatList([...group.chats]);
+    });
+
+    // Convert to array and sort groups by most recent chat
+    const archivedGroupsArray = Array.from(archivedGroupsMap.values());
+    archivedGroupsArray.sort((a, b) => {
+      const aTime = Math.max(
+        ...a.chats.map((c) => new Date(c.lastMessageAt || c.createdAt).getTime())
+      );
+      const bTime = Math.max(
+        ...b.chats.map((c) => new Date(c.lastMessageAt || c.createdAt).getTime())
+      );
+      return bTime - aTime;
+    });
+
+    return {
+      activeGroups: groupsArray,
+      flatList,
+      archivedChats: sortChatList([...archivedList]),
+      archivedGroups: archivedGroupsArray,
+    };
+  }, [
+    chatsWithActivity,
+    debouncedSearchQuery,
+    searchResults,
+    isSearching,
+    getWorktreeForChat,
+    projectArchivedChats,
+    sortOrder,
+    filters,
+    worktrees,
+  ]);
+
+  const handleNewChat = async () => {
+    // Clear active chat to show new chat view
+    // Preserve current worktree context from active chat or current worktree store
+    const chatStore = useChatStore.getState();
+    const worktreeStore = useWorktreeStore.getState();
+    const activeChat = activeChatId ? chatStore.chats.get(activeChatId) ?? null : null;
+    const currentWorktreeId = activeChat?.worktreeId || worktreeStore.currentWorktree?.id || null;
+    chatStore.clearCurrentChat(currentWorktreeId);
+  };
+
+  const handleSwitchToWorktreeNewChat = useCallback(
+    async (worktreeId: string) => {
+      if (!currentProject?.id) return;
+
+      const targetWorktree = worktrees.find((w) => w.id === worktreeId);
+      if (!targetWorktree) return;
+
+      await switchWorktreeContext(currentProject.id, targetWorktree);
+
+      // Show New Chat page with the target workspace selected
+      useChatStore.getState().clearCurrentChat(targetWorktree.id);
+    },
+    [currentProject?.id, worktrees, switchWorktreeContext]
+  );
+
+  const handleChatClick = useCallback(async (chat: Chat) => {
+    // Switch worktree context first to save/restore viewer state
+    if (chat.worktreeId && currentProject?.id) {
+      const worktree = worktrees.find(w => w.id === chat.worktreeId);
+      if (worktree) {
+        await switchWorktreeContext(currentProject.id, worktree);
+      }
+    } else if (currentProject?.id) {
+      await switchWorktreeContext(currentProject.id, null);
+    }
+    
+    selectChat(chat);
+    const { navigateToChat } = useChatNavigationStore.getState();
+    navigateToChat(chat.id);
+  }, [currentProject?.id, worktrees, switchWorktreeContext, selectChat]);
+
+  const handleChatContextMenu = useCallback((e: React.MouseEvent, chat: Chat) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, type: "chat", chatId: chat.id });
+  }, []);
+
+  const handleWorktreeContextMenu = useCallback((e: React.MouseEvent, worktreeId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const worktree = worktrees.find((w) => w.id === worktreeId);
+    if (!worktree?.path) return;
+
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      type: "worktree",
+      worktreeId,
+    });
+  }, [worktrees]);
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).catch((err) => {
+      console.error("Failed to copy to clipboard:", err);
+    });
+  };
+
+  const handleRenameChat = useCallback(
+    (chatId: string) => {
+      const chat = chats.find((c) => c.id === chatId);
+      if (!chat) {
+        console.error("[Rename] Chat not found:", chatId);
+        return;
+      }
+
+      const currentTitle = chat.title || "New chat";
+
+      // Update state immediately - React will batch these updates
+      setEditingChatId(chatId);
+      setEditingTitle(currentTitle);
+    },
+    [chats]
+  );
+
+  const handleSaveRename = useCallback(async (chatId: string) => {
+    const chat = chats.find((c) => c.id === chatId);
+    if (!chat) return;
+
+    const currentTitle = chat.title || "New chat";
+    const newTitle = editingTitle.trim();
+
+    if (newTitle && newTitle !== currentTitle) {
+      try {
+        await renameChat(chatId, newTitle);
+      } catch (error) {
+        console.error("Failed to rename chat:", error);
+        alert("Failed to rename chat. Please try again.");
+      }
+    }
+
+    setEditingChatId(null);
+    setEditingTitle("");
+  }, [chats, editingTitle, renameChat]);
+
+  const handleCancelRename = useCallback(() => {
+    setEditingChatId(null);
+    setEditingTitle("");
+  }, []);
+
+  const getChatContextMenuItems = (chatId: string): ContextMenuItem[] => {
+    const chat = chats.find((c) => c.id === chatId);
+    if (!chat) return [];
+
+    const menuItems: ContextMenuItem[] = [
+      {
+        label: "Rename",
+        icon: <Edit className="w-4 h-4" />,
+        onClick: () => {
+          handleRenameChat(chatId);
+        },
+      },
+      {
+        label: "Copy Chat ID",
+        icon: <Copy className="w-4 h-4" />,
+        onClick: () => copyToClipboard(chatId),
+      },
+    ];
+
+    const chatWorktree = worktrees.find((w) => w.id === chat.worktreeId);
+    if (chatWorktree?.path) {
+      menuItems.push({
+        label: "Copy Workspace Path",
+        icon: <Copy className="w-4 h-4" />,
+        onClick: () => copyToClipboard(chatWorktree.path),
+      });
+    }
+
+    // Add "Mark Unread" option if chat is not already unread
+    if (!chat.unread) {
+      menuItems.push({
+        label: "Mark Unread",
+        icon: <Mail className="w-4 h-4" />,
+        onClick: () => markUnread(chatId),
+      });
+    }
+
+    menuItems.push(
+      { label: "", onClick: () => {}, separator: true },
+      {
+        label: "Delete",
+        icon: <Trash2 className="w-4 h-4" />,
+        onClick: () => deleteChat(chatId),
+        danger: true,
+      }
+    );
+
+    return menuItems;
+  };
+
+  const getWorktreeContextMenuItems = (worktreeId: string): ContextMenuItem[] => {
+    const worktree = worktrees.find((w) => w.id === worktreeId);
+    if (!worktree?.path) return [];
+
+    return [
+      {
+        label: "Copy Workspace Path",
+        icon: <Copy className="w-4 h-4" />,
+        onClick: () => copyToClipboard(worktree.path),
+      },
+    ];
+  };
+
+  const handleArchiveChat = useCallback(async (chatId: string) => {
+    await deleteChat(chatId);
+  }, [deleteChat]);
+
+  // Scroll active chat into view when it changes (e.g., via keyboard navigation)
+  // NOTE: Only trigger when activeChatId changes, NOT when chats list changes
+  // This prevents scrolling when unarchiving chats
+  useEffect(() => {
+    if (!activeChatId || !scrollContainerRef.current) return;
+
+    // Access current chats list inside the effect (not in dependencies)
+    // This way the effect only runs when activeChatId changes
+    const currentChatsWithActivity = chatsWithActivity;
+    const currentProjectArchivedChats = projectArchivedChats;
+    const currentArchivedGroups = archivedGroups;
+
+    // Find the chat in the active list first
+    let chat = currentChatsWithActivity.find((c) => c.id === activeChatId);
+    let isArchived = false;
+
+    // If not found in active chats, check archived chats
+    if (!chat) {
+      const archivedChat = currentProjectArchivedChats.find(
+        (c) => c.id === activeChatId
+      );
+      if (archivedChat) {
+        chat = {
+          ...archivedChat,
+        } as ChatWithActivity;
+        isArchived = true;
+      }
+    }
+
+    if (!chat) return;
+
+    // If archived, expand the archived section
+    if (isArchived && !isArchivedExpanded) {
+      setIsArchivedExpanded(true);
+    }
+
+    // If in grouped view and not archived, expand the worktree group containing this chat
+    if (!isArchived && viewMode === "grouped") {
+      const worktree = getWorktreeForChat(chat);
+      if (worktree) {
+        const worktreeId = worktree.id;
+        const isNoWorktree = worktreeId === "no-worktree" || !worktreeId;
+        
+        if (isNoWorktree) {
+          if (!isNoWorktreeExpanded) {
+            setIsNoWorktreeExpanded(true);
+          }
+        } else {
+          if (!expandedWorktreeGroups[worktreeId]) {
+            setExpandedWorktreeGroups((prev) => ({
+              ...prev,
+              [worktreeId]: true,
+            }));
+          }
+        }
+      }
+    }
+
+    // If archived and in grouped view, expand the archived group containing this chat
+    if (isArchived && viewMode === "grouped") {
+      const containingGroup = currentArchivedGroups.find((group) =>
+        group.chats.some((c) => {
+          return c.id === activeChatId;
+        })
+      );
+      if (containingGroup) {
+        const groupKey = containingGroup.worktreeId || containingGroup.worktreeName;
+        if (!expandedArchivedGroups[groupKey]) {
+          setExpandedArchivedGroups((prev) => ({
+            ...prev,
+            [groupKey]: true,
+          }));
+        }
+      }
+    }
+
+    // Scroll to the active chat item after a brief delay to allow DOM updates
+    // (especially for expanding groups)
+    const timeoutId = setTimeout(() => {
+      const chatElement = scrollContainerRef.current?.querySelector(
+        `[data-chat-id="${CSS.escape(activeChatId)}"]`
+      );
+      if (chatElement) {
+        chatElement.scrollIntoView({
+          block: "nearest",
+          behavior: "instant",
+        });
+      }
+    }, 100);
+
+    return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    activeChatId,
+    // Only include viewMode and expansion state - NOT the chats lists
+    // This prevents the effect from running when chats are unarchived
+    viewMode,
+    expandedWorktreeGroups,
+    expandedArchivedGroups,
+    isNoWorktreeExpanded,
+    isArchivedExpanded,
+    getWorktreeForChat,
+  ]);
+
+
+  const toggleWorktreeGroup = (worktreeId: string) => {
+    setExpandedWorktreeGroups((prev) => ({
+      ...prev,
+      [worktreeId]: !prev[worktreeId],
+    }));
+  };
+
+
+  // Memoized icon to avoid new JSX reference each render
+  const worktreeIcon = useMemo(
+    () => <FolderGit2 className="w-3.5 h-3.5 text-primary/80 flex-shrink-0" />,
+    []
+  );
+
+  const renderWorktreeGroup = useCallback(
+    (group: ChatGroup) => {
+      // Handle main branch (no worktree) special case
+      const isNoWorktree = group.worktreeId === "no-worktree";
+      const isExpanded = isNoWorktree
+        ? isNoWorktreeExpanded
+        : expandedWorktreeGroups[group.worktreeId] ?? true;
+
+      const handleToggle = () => {
+        if (isNoWorktree) {
+          setIsNoWorktreeExpanded(!isNoWorktreeExpanded);
+        } else {
+          toggleWorktreeGroup(group.worktreeId);
+        }
+      };
+
+      // Check if this group contains the active chat
+      const hasActiveChat = group.chats.some(
+        (chat) => chat.id === activeChatId
+      );
+
+      // Handlers for worktree actions
+      const handleNewChat = isNoWorktree
+        ? undefined
+        : async () => {
+            const chatStore = useChatStore.getState();
+            chatStore.clearCurrentChat(group.worktreeId);
+          };
+
+      const handleArchiveWorktree = (isNoWorktree || group.isMain)
+        ? undefined
+        : async () => {
+            const { archiveWorktree } = useWorktreeStore.getState();
+            await archiveWorktree(group.worktreeId);
+          };
+
+      const handleWorktreeMenu = isNoWorktree
+        ? undefined
+        : (e: React.MouseEvent) => handleWorktreeContextMenu(e, group.worktreeId);
+
+      const emptyState = group.chats.length === 0
+        ? {
+            message: "No chats",
+            onClick: group.isMain
+              ? () => {
+                  void handleSwitchToWorktreeNewChat(group.worktreeId);
+                }
+              : undefined,
+          }
+        : undefined;
+
+      return (
+        <WorktreeGroupComponent
+          key={group.worktreeId}
+          id={group.worktreeId}
+          title={group.worktreeBranch}
+          subtitle={null}
+          icon={worktreeIcon}
+          chats={group.chats}
+          isExpanded={isExpanded}
+          onToggle={handleToggle}
+          chatCount={group.chats.length}
+          renderChat={(chat) => (
+            <ChatItem
+              chat={chat}
+              inGroup={true}
+              editingChatId={editingChatId}
+              editingTitle={editingTitle}
+              activeChatId={activeChatId}
+              onChatClick={handleChatClick}
+              onContextMenu={handleChatContextMenu}
+              onEditingTitleChange={setEditingTitle}
+              onSaveRename={handleSaveRename}
+              onCancelRename={handleCancelRename}
+              onArchiveChat={handleArchiveChat}
+            />
+          )}
+          hasActiveChat={hasActiveChat}
+          onNewChat={handleNewChat}
+          onArchiveWorktree={handleArchiveWorktree}
+          onContextMenu={handleWorktreeMenu}
+          emptyState={emptyState}
+        />
+      );
+    },
+    [
+      expandedWorktreeGroups,
+      isNoWorktreeExpanded,
+      activeChatId,
+      editingChatId,
+      editingTitle,
+      worktreeIcon,
+      handleChatClick,
+      handleChatContextMenu,
+      handleSaveRename,
+      handleArchiveChat,
+      handleSwitchToWorktreeNewChat,
+      handleCancelRename,
+      handleWorktreeContextMenu,
+    ]
+  );
+
+  // Toggle archived workspace group expansion
+  const toggleArchivedGroup = (groupKey: string) => {
+    setExpandedArchivedGroups((prev) => ({
+      ...prev,
+      [groupKey]: !prev[groupKey],
+    }));
+  };
+
+  // Render archived workspace group (similar to renderWorktreeGroup but with archived styling)
+  const renderArchivedGroup = useCallback(
+    (group: ArchivedChatGroup) => {
+      const groupKey = group.worktreeId || group.worktreeName;
+      const isExpanded = expandedArchivedGroups[groupKey] ?? false; // Collapsed by default
+
+      const handleToggle = () => {
+        toggleArchivedGroup(groupKey);
+      };
+
+      // Check if this group contains the active chat
+      const hasActiveChat = group.chats.some(
+        (chat) => chat.id === activeChatId
+      );
+
+      // Icon showing this workspace is archived
+      const subtitle = group.isWorktreeArchived ? (
+        <Tooltip content="Workspace archived" placement="right" delay={300}>
+          <Archive className="w-3 h-3 text-muted-foreground/60" />
+        </Tooltip>
+      ) : null;
+
+      const handleWorktreeMenu = group.worktreeId
+        ? (e: React.MouseEvent) => handleWorktreeContextMenu(e, group.worktreeId as string)
+        : undefined;
+
+      return (
+        <WorktreeGroupComponent
+          key={groupKey}
+          id={groupKey}
+          title={group.worktreeName}
+          subtitle={subtitle}
+          icon={
+            <FolderGit2 className="w-3.5 h-3.5 text-muted-foreground/60 flex-shrink-0" />
+          }
+          chats={group.chats}
+          isExpanded={isExpanded}
+          onToggle={handleToggle}
+          chatCount={group.chats.length}
+          renderChat={(chat) => <ArchivedChatItem chat={chat} activeChatId={activeChatId} />}
+          hasActiveChat={hasActiveChat}
+          onContextMenu={handleWorktreeMenu}
+        />
+      );
+    },
+    [expandedArchivedGroups, activeChatId, handleWorktreeContextMenu]
+  );
+
+  return (
+    <div className="flex flex-col h-full dense-ui" data-onboarding="left-sidebar">
+      {/* Header section - only when not fullscreen */}
+      {paddingClass && (
+        <div className="h-12 border-b border-border/40 elevation-1"></div>
+      )}
+
+      <div className="p-3 border-b border-border/40 bg-accent">
+        {/* Options Menu with New Chat Button */}
+        <div className="flex items-center gap-2">
+          {/* Options Menu */}
+          <Dropdown
+            isOpen={isOptionsMenuOpen}
+            onOpenChange={setIsOptionsMenuOpen}
+            align="left"
+            trigger={
+              <Tooltip content="Sort, filter & view options" placement="bottom" delay={300}>
+                <button
+                  onClick={() => setIsOptionsMenuOpen(!isOptionsMenuOpen)}
+                  className={cn(
+                    "header-icon-btn p-2.5 rounded-md border border-border/50 transition-colors",
+                    (filters.states && filters.states.length > 0)
+                      ? "bg-primary/10 text-primary border-primary/30"
+                      : "bg-background/50 text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <SlidersHorizontal className="w-4 h-4" />
+                </button>
+              </Tooltip>
+            }
+            contentClassName="min-w-[200px]"
+          >
+            <div className="py-1">
+              {/* View Mode Section */}
+              <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                View
+              </div>
+              <button
+                onClick={() => setViewMode("grouped")}
+                className={cn(
+                  "w-full flex items-center justify-between gap-2 px-3 py-2 text-xs transition-colors rounded-sm hover:bg-[var(--chat-dropdown-item-hover)]",
+                  viewMode === "grouped" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  <span>Grouped by workspace</span>
+                </div>
+                {viewMode === "grouped" && <Check className="w-3.5 h-3.5 text-primary" />}
+              </button>
+              <button
+                onClick={() => setViewMode("flat")}
+                className={cn(
+                  "w-full flex items-center justify-between gap-2 px-3 py-2 text-xs transition-colors rounded-sm hover:bg-[var(--chat-dropdown-item-hover)]",
+                  viewMode === "flat" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <LayoutList className="w-3.5 h-3.5" />
+                  <span>Flat list</span>
+                </div>
+                {viewMode === "flat" && <Check className="w-3.5 h-3.5 text-primary" />}
+              </button>
+
+              {/* Divider */}
+              <div className="h-px bg-border/50 my-1" />
+
+              {/* Sort Section */}
+              <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                Sort by
+              </div>
+              {SORT_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => setSortOrder(option.value)}
+                  className={cn(
+                    "w-full flex items-center justify-between gap-2 px-3 py-2 text-xs transition-colors rounded-sm hover:bg-[var(--chat-dropdown-item-hover)]",
+                    sortOrder === option.value ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="w-3.5 h-3.5 flex items-center justify-center">{option.icon}</span>
+                    <span>{option.label}</span>
+                  </div>
+                  {sortOrder === option.value && <Check className="w-3.5 h-3.5 text-primary" />}
+                </button>
+              ))}
+
+              {/* Divider */}
+              <div className="h-px bg-border/50 my-1" />
+
+              {/* Filter Section */}
+              <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                Filter
+              </div>
+              {STATE_FILTER_OPTIONS.map((option) => {
+                const isSelected = option.value === "all"
+                  ? !filters.states || filters.states.length === 0
+                  : filters.states?.includes(option.value as "active" | "needs_attention" | "idle");
+                return (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      if (option.value === "all") {
+                        setFilters({ ...filters, states: undefined });
+                      } else {
+                        setFilters({ ...filters, states: [option.value as "active" | "needs_attention" | "idle"] });
+                      }
+                    }}
+                    className={cn(
+                      "w-full flex items-center justify-between gap-2 px-3 py-2 text-xs transition-colors rounded-sm hover:bg-[var(--chat-dropdown-item-hover)]",
+                      isSelected ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <span>{option.label}</span>
+                    {isSelected && <Check className="w-3.5 h-3.5 text-primary" />}
+                  </button>
+                );
+              })}
+            </div>
+          </Dropdown>
+
+          <Button
+            onClick={handleNewChat}
+            leftIcon={<Plus className="w-3 h-3" />}
+            variant="primary"
+            size="sm"
+            className="flex-1 !h-auto py-2.5"
+            data-testid="create-chat-button"
+          >
+            New Chat
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Combined Active + Archived in single scroll container */}
+        <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto p-3">
+          {/* Active Section - Grouped or Flat based on viewMode */}
+          {viewMode === "grouped" ? (
+            // Grouped View (by workspace)
+            activeGroups.length > 0 && (
+              <>
+                <div className="text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-2 px-2 flex items-center gap-2">
+                  <span>Active</span>
+                  <div className="h-px flex-1 bg-border/50"></div>
+                </div>
+                <div className="mb-3 space-y-2">
+                  {activeGroups.map((group) => renderWorktreeGroup(group))}
+                </div>
+              </>
+            )
+          ) : (
+            // Flat View (all chats in a single list)
+            flatList.length > 0 && (
+              <>
+                <div className="text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-2 px-2 flex items-center gap-2">
+                  <span>Active</span>
+                  <span className="text-muted-foreground/50">({flatList.length})</span>
+                  <div className="h-px flex-1 bg-border/50"></div>
+                </div>
+                <div className="mb-3 space-y-1">
+                  {flatList.map((chat) => {
+                    const worktree = getWorktreeForChat(chat);
+                    return (
+                      <ChatItem
+                        key={chat.id}
+                        chat={chat}
+                        inGroup={false}
+                        editingChatId={editingChatId}
+                        editingTitle={editingTitle}
+                        workspaceBranch={worktree?.branch}
+                        activeChatId={activeChatId}
+                        onChatClick={handleChatClick}
+                        onContextMenu={handleChatContextMenu}
+                        onEditingTitleChange={setEditingTitle}
+                        onSaveRename={handleSaveRename}
+                        onCancelRename={handleCancelRename}
+                        onArchiveChat={handleArchiveChat}
+                      />
+                    );
+                  })}
+                </div>
+              </>
+            )
+          )}
+
+          {/* Archived Section - Grouped by workspace or flat list based on viewMode */}
+          {filteredArchivedChats.length > 0 && (
+            <div>
+              <button
+                onClick={() => setIsArchivedExpanded(!isArchivedExpanded)}
+                className="w-full text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-2 px-2 flex items-center gap-2 hover:text-foreground/80 transition-colors"
+              >
+                {isArchivedExpanded ? (
+                  <ChevronDown className="w-3 h-3" />
+                ) : (
+                  <ChevronRight className="w-3 h-3" />
+                )}
+                <span>Archived</span>
+                <span className="text-muted-foreground/50">({filteredArchivedChats.length})</span>
+                <div className="h-px flex-1 bg-border/50"></div>
+              </button>
+              {isArchivedExpanded && viewMode === "grouped" ? (
+                // Grouped View - show archived chats grouped by workspace
+                <div className="space-y-2">
+                  {archivedGroups.map((group) => renderArchivedGroup(group))}
+                </div>
+              ) : isArchivedExpanded ? (
+                // Flat View - show all archived chats in a flat list
+                <div className="space-y-1">
+                  {filteredArchivedChats.map((chat) => (
+                    <ArchivedChatItem key={chat.id || chat.id} chat={chat} activeChatId={activeChatId} />
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          )}
+
+          {/* Empty State */}
+          {((viewMode === "grouped" && activeGroups.length === 0) ||
+            (viewMode === "flat" && flatList.length === 0)) &&
+            filteredArchivedChats.length === 0 && (
+            <div className="text-center py-8 text-muted-foreground">
+              <div className="w-12 h-12 mx-auto mb-3 rounded-full elevation-1 flex items-center justify-center">
+                <Search className="w-5 h-5" />
+              </div>
+              <p className="text-sm font-medium mb-1">
+                {searchQuery
+                  ? "No chats match your search"
+                  : "No chats"}
+              </p>
+              <p className="text-xs text-muted-foreground/70">
+                {searchQuery
+                  ? "Try adjusting your search"
+                  : "Create your first chat to get started"}
+              </p>
+              {!searchQuery && (
+                <div className="mt-3 flex flex-col items-center gap-2">
+                  <Button
+                    onClick={handleNewChat}
+                    variant="ghost"
+                    size="sm"
+                  >
+                    Create Chat
+                  </Button>
+                  {viewMode === "flat" && activeGroups.length > 0 && (
+                    <Button
+                      onClick={() => {
+                        const mainGroup = activeGroups.find((g) => g.isMain);
+                        if (mainGroup) {
+                          void handleSwitchToWorktreeNewChat(mainGroup.worktreeId);
+                        }
+                      }}
+                      variant="ghost"
+                      size="sm"
+                    >
+                      Go to Main Workspace
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <ContextMenu
+          items={
+            contextMenu.type === "chat"
+              ? getChatContextMenuItems(contextMenu.chatId)
+              : getWorktreeContextMenuItems(contextMenu.worktreeId)
+          }
+          position={{ x: contextMenu.x, y: contextMenu.y }}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
+      {/* Render complete */}
+    </div>
+  );
+}
+
+export const Sidebar = SidebarComponent;

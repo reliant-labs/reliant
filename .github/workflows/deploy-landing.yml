@@ -1,0 +1,49 @@
+name: Deploy Landing Page to Cloudflare Pages
+
+on:
+  push:
+    tags:
+      - 'landing-v*'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: landing/package-lock.json
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: landing/node_modules
+          key: ${{ runner.os }}-landing-node-modules-${{ hashFiles('landing/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-landing-node-modules-
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: landing
+
+      - name: Build
+        run: npm run build
+        working-directory: landing
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: reliant-landing
+          directory: landing/dist
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          branch: main

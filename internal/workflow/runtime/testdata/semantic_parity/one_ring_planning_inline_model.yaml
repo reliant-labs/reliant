@@ -1,0 +1,58 @@
+name: one_ring_planning_inline_model
+workflow_ref: builtin://one-ring
+canonical_workflow_ref: builtin://one-ring
+
+core:
+  use_workflow_loader: false
+  expected_contracts:
+    - node_path: planning
+      input_policy: inline_inherit_parent_inputs
+      workflow_identity: builtin://one-ring
+      load_strategy: inline_embedded
+    - node_path: planning/plan
+      input_policy: ref_presets_args_defaults
+      load_strategy: load_by_workflow_ref
+
+validation:
+  should_pass: true
+  use_workflow_loader: false
+
+simulator:
+  expected_status: passed
+  scenario:
+    name: one_ring_plan_only
+    inputs:
+      mode: auto
+      model: gpt-5
+      yield: false
+      steps: [plan]
+      max_retries: 3
+      temperature: 1.0
+      thinking_level: medium
+      lint_command: ""
+      lint_log: "./data/one-ring/lint.log"
+      test_command: ""
+      test_log: "./data/one-ring/test.log"
+      build_command: ""
+      build_log: "./data/one-ring/build.log"
+      start_app_command: ""
+      app_port: 5173
+    events:
+      - node: planning.plan
+        output:
+          response_text: "Plan complete"
+    expect:
+      outcome: completed
+      reached:
+        - planning
+        - planning.plan
+
+runtime:
+  checks:
+    - type: one_ring_nested_plan_inherits_model
+      node_path: planning/plan
+      parent_inputs:
+        mode: auto
+        model: gpt-5
+        yield: false
+      expected_model: gpt-5

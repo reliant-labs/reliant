@@ -1,0 +1,263 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+// PresetService provides operations for workflow presets.
+//
+// Presets are reusable bundles of workflow parameter values that can be
+// applied to compatible workflows. A preset is compatible with a workflow
+// if its tag matches the workflow's tag (or a group's tag) AND all params
+// in the preset exist in the matched target's inputs.
+service PresetService {
+  // ListPresets returns all presets for a project.
+  rpc ListPresets(ListPresetsRequest) returns (ListPresetsResponse) {}
+
+  // GetPreset returns a specific preset by name.
+  rpc GetPreset(GetPresetRequest) returns (GetPresetResponse) {}
+
+  // ListPresetsForWorkflow returns presets compatible with a specific workflow.
+  // A preset is compatible if its tag matches and all params exist in the target's inputs.
+  rpc ListPresetsForWorkflow(ListPresetsForWorkflowRequest) returns (ListPresetsForWorkflowResponse) {}
+  
+  // CreatePreset saves a new preset to the project's .reliant/presets/ directory.
+  // Returns an error if a preset with the same name already exists.
+  rpc CreatePreset(CreatePresetRequest) returns (CreatePresetResponse) {}
+
+  // UpdatePreset updates an existing project preset (name, description, params).
+  // Returns an error if the preset is builtin or doesn't exist.
+  rpc UpdatePreset(UpdatePresetRequest) returns (UpdatePresetResponse) {}
+
+  // DeletePreset deletes a project preset file.
+  // Returns an error if the preset is builtin or doesn't exist.
+  rpc DeletePreset(DeletePresetRequest) returns (DeletePresetResponse) {}
+
+  // SetDefaultPreset marks a preset as the default for a workflow tag.
+  // Stores in settings table: preset.default.<tag> = <preset_name>
+  rpc SetDefaultPreset(SetDefaultPresetRequest) returns (SetDefaultPresetResponse) {}
+
+  // GetDefaultPreset retrieves the default preset for a workflow tag.
+  rpc GetDefaultPreset(GetDefaultPresetRequest) returns (GetDefaultPresetResponse) {}
+}
+
+// PresetInfo represents a workflow preset.
+message PresetInfo {
+  // Preset name (also the filename without .yaml extension)
+  string name = 1;
+
+  // Human-readable description
+  string description = 2;
+
+  // Parameter name to value mapping.
+  // Values are any JSON-compatible type (string, number, boolean, array, object).
+  map<string, google.protobuf.Value> params = 3;
+
+  // Source of the preset: "builtin", "project", or "user"
+  // - "builtin": Embedded in the application
+  // - "project": From .reliant/presets/*.yaml files (read-only)
+  // - "user": User-created, stored in database (editable)
+  string source = 4;
+
+  // Tag this preset targets (e.g., "agent", "orchestration").
+  // The preset matches workflows/groups with the same tag.
+  string tag = 5;
+
+  // Unique ID for user-created presets (empty for builtin/project presets)
+  string id = 6;
+
+  // URL-safe slug for runtime reference
+  string slug = 7;
+
+  // Whether this preset is hidden from the preset picker by default
+  bool is_hidden = 8;
+}
+
+// ListPresetsRequest is the request for ListPresets.
+message ListPresetsRequest {
+  // Project ID to load presets for.
+  // Presets are loaded from <project_dir>/.reliant/presets/
+  string project_id = 1;
+  // If true, include items hidden by default (for management UIs)
+  bool include_hidden = 2;
+}
+
+// ListPresetsResponse is the response for ListPresets.
+message ListPresetsResponse {
+  // All valid presets found in the project
+  repeated PresetInfo presets = 1;
+  // Presets that failed to load (for management UIs to display errors)
+  repeated InvalidPreset invalid_presets = 2;
+}
+
+// InvalidPreset represents a preset that failed to load or validate.
+message InvalidPreset {
+  // Name/slug of the preset (from filename or YAML)
+  string name = 1;
+  // Source of the preset: "builtin", "project", or "user"
+  string source = 2;
+  // Path to the preset file (empty for user presets)
+  string path = 3;
+  // Validation/loading errors
+  repeated string errors = 4;
+}
+
+// GetPresetRequest is the request for GetPreset.
+message GetPresetRequest {
+  // Project ID
+  string project_id = 1;
+  
+  // Preset name to retrieve
+  string name = 2;
+}
+
+// GetPresetResponse is the response for GetPreset.
+message GetPresetResponse {
+  // The preset (nil if not found)
+  PresetInfo preset = 1;
+}
+
+// ListPresetsForWorkflowRequest is the request for ListPresetsForWorkflow.
+message ListPresetsForWorkflowRequest {
+  // Project ID
+  string project_id = 1;
+
+  // Workflow name to check compatibility against
+  string workflow_name = 2;
+
+  // If true, include items hidden by default (for management UIs)
+  bool include_hidden = 3;
+}
+
+// ListPresetsForWorkflowResponse is the response for ListPresetsForWorkflow.
+message ListPresetsForWorkflowResponse {
+  // Presets compatible with the specified workflow
+  repeated PresetInfo presets = 1;
+  // Presets that failed to load (for management UIs to display errors)
+  repeated InvalidPreset invalid_presets = 2;
+}
+
+// CreatePresetRequest is the request for CreatePreset.
+message CreatePresetRequest {
+  // Project ID (determines where to save the preset file)
+  string project_id = 1;
+  
+  // Preset name (will become the filename: <name>.yaml)
+  string name = 2;
+  
+  // Human-readable description
+  string description = 3;
+  
+  // Parameter name to value mapping
+  map<string, google.protobuf.Value> params = 4;
+  
+  // Tag this preset targets (e.g., "agent", "orchestration")
+  string tag = 5;
+}
+
+// CreatePresetResponse is the response for CreatePreset.
+message CreatePresetResponse {
+  // Whether the preset was created successfully
+  bool success = 1;
+
+  // Error message if creation failed (e.g., preset already exists)
+  string error = 2;
+
+  // The created preset info
+  PresetInfo preset = 3;
+}
+
+// UpdatePresetRequest is the request for UpdatePreset.
+message UpdatePresetRequest {
+  // Project ID
+  string project_id = 1;
+
+  // Current preset name (identifies the preset to update)
+  string name = 2;
+
+  // Optional: New name for the preset (renames the file)
+  optional string new_name = 3;
+
+  // Optional: New description
+  optional string new_description = 4;
+
+  // Optional: New parameter values (empty map means no update)
+  map<string, google.protobuf.Value> new_params = 5;
+
+  // Optional: New tag for the preset
+  optional string new_tag = 6;
+}
+
+// UpdatePresetResponse is the response for UpdatePreset.
+message UpdatePresetResponse {
+  // Whether the preset was updated successfully
+  bool success = 1;
+
+  // Error message if update failed
+  string error = 2;
+
+  // The updated preset info
+  PresetInfo preset = 3;
+}
+
+// DeletePresetRequest is the request for DeletePreset.
+message DeletePresetRequest {
+  // Project ID
+  string project_id = 1;
+
+  // Preset name to delete
+  string name = 2;
+}
+
+// DeletePresetResponse is the response for DeletePreset.
+message DeletePresetResponse {
+  // Whether the preset was deleted successfully
+  bool success = 1;
+
+  // Error message if deletion failed
+  string error = 2;
+}
+
+// SetDefaultPresetRequest is the request for SetDefaultPreset.
+message SetDefaultPresetRequest {
+  // Project ID
+  string project_id = 1;
+
+  // Workflow name (used to determine the tag)
+  string workflow_name = 2;
+
+  // Optional: Preset name to set as default (null/empty = clear default)
+  optional string preset_name = 3;
+
+  // Optional: Group name for group-level defaults (empty = workflow-level default)
+  optional string group_name = 4;
+}
+
+// SetDefaultPresetResponse is the response for SetDefaultPreset.
+message SetDefaultPresetResponse {
+  // Whether the operation was successful
+  bool success = 1;
+
+  // Error message if operation failed
+  string error = 2;
+}
+
+// GetDefaultPresetRequest is the request for GetDefaultPreset.
+message GetDefaultPresetRequest {
+  // Project ID
+  string project_id = 1;
+
+  // Workflow name to get defaults for
+  string workflow_name = 2;
+}
+
+// GetDefaultPresetResponse is the response for GetDefaultPreset.
+message GetDefaultPresetResponse {
+  // Map of group name to default preset name.
+  // Empty string key ("") = top-level/workflow-level inputs.
+  // Example: {"": "general", "Proposer": "researcher", "Critic": "careful"}
+  map<string, string> presets = 1;
+}

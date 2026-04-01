@@ -1,0 +1,49 @@
+# Presets Demo Workflow
+#
+# Demonstrates the `presets:` field for applying presets to sub-workflows
+# without exposing them as top-level workflow parameters.
+#
+# The presets field supports two forms:
+#   presets: researcher          # String: applies "researcher" preset to default group
+#   presets:                     # Map: target specific groups
+#     default: researcher
+#     Reviewer: careful
+
+name: presets-demo
+apiVersion: "0.0.5"
+description: Demo of presets field for sub-workflow configuration
+entry: demo_step
+
+inputs:
+  mode:
+    type: enum
+    enum: ["manual", "auto", "plan"]
+    default: "auto"
+    description: Execution mode
+
+nodes:
+  # Simple example: apply a single preset to the agent
+  - id: demo_step
+    type: workflow
+    ref: builtin://agent
+    presets: researcher  # Applies "researcher" preset to agent's inputs
+    thread:
+      mode: inherit
+    args:
+      mode: "{{inputs.mode}}"
+      # Note: we don't need to pass model, temperature, etc.
+      # The "researcher" preset provides those values.
+      # Any explicit args here will override preset values.
+
+# No edges needed - demo_step is the only node and workflow ends after it completes
+
+# Example with map form targeting multiple groups:
+#
+# - id: multi_group_example
+#   workflow: some-workflow-with-groups
+#   presets:
+#     default: fast           # Apply to ungrouped inputs
+#     Planner: researcher     # Apply to Planner group
+#     Critic: careful         # Apply to Critic group
+#   args:
+#     mode: "{{inputs.mode}}"

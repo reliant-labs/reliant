@@ -1,0 +1,136 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+import "reliant/v1/common.proto";
+import "reliant/v1/task.proto";
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+// PlanComplexity indicates the estimated complexity of a plan
+enum PlanComplexity {
+  PLAN_COMPLEXITY_UNSPECIFIED = 0;
+  PLAN_COMPLEXITY_SIMPLE = 1;
+  PLAN_COMPLEXITY_MODERATE = 2;
+  PLAN_COMPLEXITY_COMPLEX = 3;
+}
+
+// PlanService handles plan-related operations
+service PlanService {
+  // CreatePlan creates a new plan
+  rpc CreatePlan(CreatePlanRequest) returns (CreatePlanResponse) {}
+  
+  // GetPlan retrieves a plan by ID
+  rpc GetPlan(GetPlanRequest) returns (GetPlanResponse) {}
+  
+  // GetPlanByChatId retrieves a plan by chat ID
+  rpc GetPlanByChatId(GetPlanByChatIdRequest) returns (GetPlanByChatIdResponse) {}
+  
+  // UpdatePlan updates an existing plan
+  rpc UpdatePlan(UpdatePlanRequest) returns (UpdatePlanResponse) {}
+  
+  // DeletePlan deletes a plan
+  rpc DeletePlan(DeletePlanRequest) returns (DeletePlanResponse) {}
+  
+  // ListPlanTasks lists all tasks for a plan
+  rpc ListPlanTasks(ListPlanTasksRequest) returns (ListPlanTasksResponse) {}
+
+  // ListPlansByProject lists all plans for a project (cross-workflow sharing)
+  rpc ListPlansByProject(ListPlansByProjectRequest) returns (ListPlansByProjectResponse) {}
+}
+
+// Plan represents a plan in the system
+message Plan {
+  string id = 1;
+  string chat_id = 2;
+  string title = 3;
+  string description = 4;
+  PlanStatus status = 5;
+  PlanComplexity complexity = 6;
+  string created_at = 7;
+  string updated_at = 8;
+  optional string project_id = 9;
+}
+
+// CreatePlanRequest creates a new plan
+message CreatePlanRequest {
+  string chat_id = 1;
+  string title = 2;
+  string description = 3;
+  PlanStatus status = 4;
+  PlanComplexity complexity = 5;
+  optional string project_id = 6;
+}
+
+// CreatePlanResponse returns the created plan
+message CreatePlanResponse {
+  Plan plan = 1;
+}
+
+// GetPlanRequest retrieves a plan by ID
+message GetPlanRequest {
+  string plan_id = 1;
+}
+
+// GetPlanResponse returns the requested plan
+message GetPlanResponse {
+  Plan plan = 1;
+}
+
+// GetPlanByChatIdRequest retrieves a plan by chat ID
+message GetPlanByChatIdRequest {
+  string chat_id = 1;
+}
+
+// GetPlanByChatIdResponse returns the plan for a chat
+message GetPlanByChatIdResponse {
+  Plan plan = 1;
+}
+
+// UpdatePlanRequest updates a plan
+message UpdatePlanRequest {
+  string plan_id = 1;
+  optional string title = 2;
+  optional string description = 3;
+  optional PlanStatus status = 4;
+  optional PlanComplexity complexity = 5;
+}
+
+// UpdatePlanResponse returns the updated plan
+message UpdatePlanResponse {
+  Plan plan = 1;
+}
+
+// DeletePlanRequest deletes a plan
+message DeletePlanRequest {
+  string plan_id = 1;
+}
+
+// DeletePlanResponse confirms deletion
+message DeletePlanResponse {
+  bool success = 1;
+}
+
+// ListPlanTasksRequest lists tasks for a plan
+message ListPlanTasksRequest {
+  string plan_id = 1;
+}
+
+// ListPlanTasksResponse returns tasks for a plan
+message ListPlanTasksResponse {
+  repeated Task tasks = 1;
+  int32 total = 2;
+  repeated TaskDependency dependencies = 3;
+}
+
+// ListPlansByProjectRequest lists plans for a project
+message ListPlansByProjectRequest {
+  string project_id = 1;
+}
+
+// ListPlansByProjectResponse returns plans for a project
+message ListPlansByProjectResponse {
+  repeated Plan plans = 1;
+  int32 total = 2;
+}

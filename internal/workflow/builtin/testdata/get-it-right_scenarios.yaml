@@ -1,0 +1,242 @@
+# Test scenarios for get-it-right.yaml workflow
+#
+# Get-It-Right workflow structure:
+#   Top-level node: attempt (loop)
+#
+#   attempt (type: loop, passthrough thread):
+#     While: has(outputs.eval_strategy) && eval_strategy != "pass"
+#            && (check failures) && iter.iteration < inputs.max_retries
+#     Inner nodes: implement → checks → review → refactor (conditional)
+#     - implement   type: workflow ref: builtin://agent (BLACK BOX) — the only node that writes code
+#     - lint        type: run, condition: inputs.lint_command != ''
+#     - test        type: run, condition: inputs.test_command != ''
+#     - build       type: run, condition: inputs.build_command != ''
+#     - join_checks type: join — if any check failed, skip review and loop back
+#     - review      type: workflow ref: builtin://structured-agent
+#       response_schema: { grade, strategy, feedback }
+#       grade enum: ["pass", "pass_with_suggestions", "fail"]
+#       strategy enum: ["pass", "continue", "refactor"]
+#     - refactor    type: workflow ref: builtin://agent (BLACK BOX)
+#       Conditional: only runs when review.response.strategy == "refactor"
+#       Role: UNDO problematic work only — does NOT reimplement
+#     - Loop outputs:
+#         eval_strategy: from review.response.strategy
+#         review_grade:  from review.response.grade
+#         lint_exit, test_exit, build_exit: from check exit codes
+#
+# Inputs:
+#   model (type: model): default tags: [flagship]
+#   max_retries (integer): default 2, min 1, max 5
+#
+# NOTE: For loop scenarios, provide events for EACH iteration in order.
+#       The simulator consumes events sequentially per node name.
+
+---
+name: happy_path_no_retry
+description: >
+  First attempt succeeds. review says strategy="pass" on iteration 0.
+  Refactor is skipped (conditional edge). Loop exits after 1 iteration.
+
+events:
+  - node: attempt.implement
+    output:
+      response_text: "Implemented the feature. Tests pass, code looks correct."
+
+  - node: attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Implementation is correct. The codebase patterns were straightforward."
+
+expect:
+  outcome: completed
+  reached:
+    - attempt
+    - attempt.implement
+    - attempt.join_checks
+    - attempt.review
+  not_reached:
+    - attempt.refactor
+  node_outputs:
+    attempt:
+      eval_strategy: "pass"
+      review_grade: "pass"
+
+---
+name: one_retry_then_success
+description: >
+  First attempt has issues (strategy="refactor"). Refactor agent undoes the problematic work.
+  Second attempt starts fresh with review insights and succeeds (strategy="pass").
+
+events:
+  - node: attempt.implement
+    output:
+      response_text: "Attempted the feature but tests fail. The data model doesn't match expectations."
+
+  - node: attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "refactor"
+        feedback: "The implementation assumed a flat data model but the schema is actually nested with foreign key constraints. Use the repository layer instead of direct SQL — follow the existing pattern in UserRepository. Check the migration files for the actual schema shape before writing queries."
+
+  - node: attempt.refactor
+    output:
+      response_text: "Reverted the direct SQL queries and flat data model code. Workspace is clean for the next attempt to use the repository layer instead."
+
+  - node: attempt.implement
+    output:
+      response_text: "Built using the repository layer as suggested by the review. All tests pass, implementation is clean."
+
+  - node: attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Implementation is now correct. The repository layer integration is solid and follows codebase conventions."
+
+expect:
+  outcome: completed
+  reached:
+    - attempt
+    - attempt.implement
+    - attempt.join_checks
+    - attempt.review
+    - attempt.refactor
+  node_outputs:
+    attempt:
+      eval_strategy: "pass"
+      review_grade: "pass"
+
+---
+name: restart_from_scratch
+description: >
+  First attempt is fundamentally wrong (strategy="refactor"). Refactor agent undoes
+  400 lines of duplicate code. Second attempt starts fresh using existing infrastructure
+  and succeeds.
+
+events:
+  - node: attempt.implement
+    output:
+      response_text: "Built a custom event system to handle notifications. Tests pass but the implementation is 400 lines and duplicates existing functionality."
+
+  - node: attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "refactor"
+        feedback: "The implementation works but fights the codebase. There's already a pub/sub system in the message broker module that handles exactly this. Delete the custom event system entirely and use internal/broker's pub/sub for all notification routing. Search for existing infrastructure before building new systems."
+
+  - node: attempt.refactor
+    output:
+      response_text: "Deleted the entire custom event system (400 lines removed). Workspace is clean for the next attempt to use the existing internal/broker pub/sub system."
+
+  - node: attempt.implement
+    output:
+      response_text: "Built on the existing broker infrastructure. Implementation is 50 lines, all tests pass, and it integrates cleanly with the existing notification flow."
+
+  - node: attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Clean implementation using existing infrastructure. The pub/sub integration is correct and the code follows the established patterns in the broker module."
+
+expect:
+  outcome: completed
+  reached:
+    - attempt
+    - attempt.implement
+    - attempt.join_checks
+    - attempt.review
+    - attempt.refactor
+  node_outputs:
+    attempt:
+      eval_strategy: "pass"
+      review_grade: "pass"
+
+---
+name: max_retries_exhausted
+description: >
+  All retries fail. max_retries=2. Iteration 0: refactor strategy, refactor undoes work.
+  Iteration 1: refactor strategy, refactor undoes work. Loop exits at max_retries.
+
+inputs:
+  max_retries: 2
+
+events:
+  - node: attempt.implement
+    output:
+      response_text: "First attempt. Tried to refactor the auth module but broke session handling."
+
+  - node: attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "refactor"
+        feedback: "Auth module is tightly coupled to session management. Can't change one without the other. Introduce an event bus to decouple auth, sessions, and websockets before attempting any refactoring. Start from the middleware layer rather than the module boundaries."
+
+  - node: attempt.refactor
+    output:
+      response_text: "Reverted auth module changes. Workspace is clean for the next attempt to try the middleware-first approach with an event bus."
+
+  - node: attempt.implement
+    output:
+      response_text: "Second attempt. Event bus approach works for auth/sessions but the websocket layer also has coupling issues."
+
+  - node: attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "refactor"
+        feedback: "The event bus approach is right but incomplete. Websockets maintain their own auth state that also needs to go through the bus. Extend the event bus to cover all three systems: auth, sessions, and websocket connection state."
+
+  - node: attempt.refactor
+    output:
+      response_text: "Reverted the incomplete event bus implementation. Workspace is clean for a fresh attempt that covers all three systems: auth, sessions, and websocket connection state."
+
+expect:
+  outcome: completed
+  reached:
+    - attempt
+    - attempt.implement
+    - attempt.join_checks
+    - attempt.review
+    - attempt.refactor
+  node_outputs:
+    attempt:
+      eval_strategy: "refactor"
+      review_grade: "fail"
+
+---
+name: immediate_understanding
+description: >
+  Codebase is simple enough that first attempt fully succeeds. strategy="pass"
+  on the very first try. Refactor is skipped via conditional edge.
+
+events:
+  - node: attempt.implement
+    output:
+      response_text: "Added the new endpoint. Followed the existing pattern from the adjacent routes. All tests pass."
+
+  - node: attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "The implementation is complete and correct. The codebase has consistent patterns that made this straightforward."
+
+expect:
+  outcome: completed
+  reached:
+    - attempt
+    - attempt.implement
+    - attempt.join_checks
+    - attempt.review
+  not_reached:
+    - attempt.refactor
+  node_outputs:
+    attempt:
+      eval_strategy: "pass"
+      review_grade: "pass"

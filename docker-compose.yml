@@ -1,0 +1,169 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: reliant
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  temporal:
+    image: temporalio/auto-setup:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB: postgres12
+      DB_PORT: "5432"
+      POSTGRES_USER: postgres
+      POSTGRES_PWD: postgres
+      POSTGRES_SEEDS: postgres
+    ports:
+      - "7233:7233"
+
+  nats:
+    image: nats:2-alpine
+    command: ["--jetstream", "--store_dir", "/data", "-m", "8222"]
+    ports:
+      - "4222:4222"   # Client connections
+      - "8222:8222"   # HTTP monitoring
+    volumes:
+      - nats-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api-server:
+    build:
+      context: .
+      target: api-server
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+      nats:
+        condition: service_healthy
+    environment:
+      API_PORT: "8080"
+      GRPC_PORT: "9090"
+      BIND_ADDRESS: "0.0.0.0"
+      RELIANT_ENV: dev
+      TEMPORAL_HOST: temporal
+      TEMPORAL_PORT: "7233"
+      DATABASE_DRIVER: postgres
+      DATABASE_URL: "postgres://postgres:postgres@postgres:5432/reliant?sslmode=disable"
+      DATA_DIR: /data
+      STREAMING_DRIVER: nats
+      NATS_URL: "nats://nats:4222"
+      CORS_ALLOWED_ORIGINS: "*"
+      HEALTH_PORT: "8081"
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    volumes:
+      - api-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  temporal-worker:
+    build:
+      context: .
+      target: temporal-worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+      nats:
+        condition: service_healthy
+    environment:
+      TEMPORAL_HOST: temporal
+      TEMPORAL_PORT: "7233"
+      DATABASE_DRIVER: postgres
+      DATABASE_URL: "postgres://postgres:postgres@postgres:5432/reliant?sslmode=disable"
+      DATA_DIR: /data
+      STREAMING_DRIVER: nats
+      NATS_URL: "nats://nats:4222"
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      HEALTH_PORT: "8082"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8082/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  daemon-gateway:
+    build:
+      context: .
+      target: daemon-gateway
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    environment:
+      TOOLS_DAEMON_PORT: "9190"
+      FRONTEND_PORT: "9191"
+      HEALTH_PORT: "8081"
+      BIND_ADDRESS: "0.0.0.0"
+      RELIANT_ENV: dev
+      DATABASE_DRIVER: postgres
+      DATABASE_URL: "postgres://postgres:postgres@postgres:5432/reliant?sslmode=disable"
+      DATA_DIR: /data
+      NATS_URL: "nats://nats:4222"
+    ports:
+      - "9190:9190"    # Daemon gRPC (tools-daemon connects here)
+      - "9191:9191"    # Frontend proxy (browser connects here: gRPC + terminal WS)
+      - "8081:8081"    # Health/readiness checks
+    volumes:
+      - gateway-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  tools-daemon:
+    build:
+      context: .
+      target: tools-daemon
+    depends_on:
+      daemon-gateway:
+        condition: service_healthy
+    environment:
+      RELIANT_ENV: dev
+      # DAEMON_PAT and DAEMON_AUTH_USER_ID must be set for tools-daemon to authenticate.
+      # dev-cloud.sh auto-creates these; for manual use, set them in .env.cloud.
+      DAEMON_PAT: ${DAEMON_PAT:-}
+      DAEMON_AUTH_USER_ID: ${DAEMON_AUTH_USER_ID:-530eb7d2-1f6a-4305-890e-c05becebcf03}
+      DAEMON_GRPC_URL: "http://daemon-gateway:9190"
+      DAEMON_DATA_DIR: /data
+      DAEMON_WORKING_DIR: /workspace
+    volumes:
+      - daemon-data:/data
+      - workspace:/workspace
+
+volumes:
+  pgdata:
+  api-data:
+  nats-data:
+  gateway-data:
+  daemon-data:
+  workspace:

@@ -1,0 +1,431 @@
+/* ReactFlow theme overrides for dark mode support */
+
+/* Node theme colors - light mode defaults */
+:root {
+  /* Node backgrounds - light mode uses light tints */
+  --node-green-bg: #f0fdf4;      /* green-50 */
+  --node-indigo-bg: #eef2ff;     /* indigo-50 */
+  --node-blue-bg: #eff6ff;       /* blue-50 */
+  --node-teal-bg: #f0fdfa;       /* teal-50 */
+  --node-amber-bg: #fffbeb;      /* amber-50 */
+  --node-purple-bg: #faf5ff;     /* purple-50 */
+  --node-orange-bg: #fff7ed;     /* orange-50 */
+  --node-emerald-bg: #ecfdf5;    /* emerald-50 */
+  --node-pink-bg: #fdf2f8;       /* pink-50 */
+  --node-rose-bg: #fff1f2;       /* rose-50 */
+  --node-fuchsia-bg: #fdf4ff;    /* fuchsia-50 */
+  --node-red-bg: #fef2f2;        /* red-50 */
+  --node-yellow-bg: #fefce8;     /* yellow-50 */
+  --node-sky-bg: #f0f9ff;        /* sky-50 */
+  --node-cyan-bg: #ecfeff;       /* cyan-50 */
+  --node-violet-bg: #f5f3ff;     /* violet-50 */
+  --node-slate-bg: #f8fafc;      /* slate-50 */
+  --node-primary-bg: color-mix(in srgb, hsl(var(--primary)) 5%, hsl(var(--background)));  /* solid primary tint matching other nodes */
+  
+  /* Status backgrounds */
+  --node-status-running-bg: #f0f9ff;   /* sky-50 */
+  --node-status-completed-bg: #f0fdf4; /* green-50 */
+  --node-status-failed-bg: #fef2f2;    /* red-50 */
+  
+  /* Secondary backgrounds for badges/pills */
+  --node-green-bg-secondary: #dcfce7;   /* green-100 */
+  --node-indigo-bg-secondary: #e0e7ff;  /* indigo-100 */
+  --node-blue-bg-secondary: #dbeafe;    /* blue-100 */
+  --node-teal-bg-secondary: #ccfbf1;    /* teal-100 */
+  --node-amber-bg-secondary: #fef3c7;   /* amber-100 */
+  --node-purple-bg-secondary: #f3e8ff;  /* purple-100 */
+  --node-orange-bg-secondary: #ffedd5;  /* orange-100 */
+  --node-pink-bg-secondary: #fce7f3;    /* pink-100 */
+  --node-rose-bg-secondary: #fecdd3;    /* rose-200 */
+  --node-fuchsia-bg-secondary: #f5d0fe; /* fuchsia-200 */
+  --node-yellow-bg-secondary: #fef08a;  /* yellow-200 */
+  --node-sky-bg-secondary: #bae6fd;     /* sky-200 */
+  --node-violet-bg-secondary: #ddd6fe;  /* violet-200 */
+  --node-slate-bg-secondary: #f1f5f9;   /* slate-100 */
+  --node-gray-bg-secondary: #e5e7eb;    /* gray-200 */
+}
+
+/* Node theme colors - dark mode overrides */
+.dark {
+  /* Node backgrounds - dark mode uses dark tints */
+  --node-green-bg: #052e16;      /* green-950 */
+  --node-indigo-bg: #1e1b4b;     /* indigo-950 */
+  --node-blue-bg: #172554;       /* blue-950 */
+  --node-teal-bg: #042f2e;       /* teal-950 */
+  --node-amber-bg: #451a03;      /* amber-950 */
+  --node-purple-bg: #3b0764;     /* purple-950 */
+  --node-orange-bg: #431407;     /* orange-950 */
+  --node-emerald-bg: #022c22;    /* emerald-950 */
+  --node-pink-bg: #500724;       /* pink-950 */
+  --node-rose-bg: #4c0519;       /* rose-950 */
+  --node-fuchsia-bg: #4a044e;    /* fuchsia-950 */
+  --node-red-bg: #450a0a;        /* red-950 */
+  --node-yellow-bg: #422006;     /* yellow-950 */
+  --node-sky-bg: #082f49;        /* sky-950 */
+  --node-cyan-bg: #083344;       /* cyan-950 */
+  --node-violet-bg: #2e1065;     /* violet-950 */
+  --node-slate-bg: #020617;      /* slate-950 */
+  --node-primary-bg: color-mix(in srgb, hsl(var(--primary)) 10%, hsl(var(--background)));  /* solid primary tint for dark mode */
+  
+  /* Status backgrounds */
+  --node-status-running-bg: #082f49;   /* sky-950 */
+  --node-status-completed-bg: #052e16; /* green-950 */
+  --node-status-failed-bg: #450a0a;    /* red-950 */
+  
+  /* Secondary backgrounds for badges/pills */
+  --node-green-bg-secondary: #14532d;   /* green-900 */
+  --node-indigo-bg-secondary: #312e81;  /* indigo-900 */
+  --node-blue-bg-secondary: #1e3a8a;    /* blue-900 */
+  --node-teal-bg-secondary: #134e4a;    /* teal-900 */
+  --node-amber-bg-secondary: #78350f;   /* amber-900 */
+  --node-purple-bg-secondary: #581c87;  /* purple-900 */
+  --node-orange-bg-secondary: #7c2d12;  /* orange-900 */
+  --node-pink-bg-secondary: #831843;    /* pink-900 */
+  --node-rose-bg-secondary: #881337;    /* rose-900 */
+  --node-fuchsia-bg-secondary: #701a75; /* fuchsia-900 */
+  --node-yellow-bg-secondary: #713f12;  /* yellow-900 */
+  --node-sky-bg-secondary: #0c4a6e;     /* sky-900 */
+  --node-violet-bg-secondary: #4c1d95;  /* violet-900 */
+  --node-slate-bg-secondary: #1e293b;   /* slate-800 */
+  --node-gray-bg-secondary: #374151;    /* gray-700 */
+}
+
+/* Canvas background */
+.react-flow {
+  background-color: hsl(var(--background));
+}
+
+.react-flow__pane {
+  /* Don't set background - let the Background component show through */
+}
+
+/* Background pattern */
+.react-flow__background {
+  z-index: 0;
+}
+
+#workflow-bg {
+  opacity: 1 !important;
+}
+
+#workflow-bg circle,
+#workflow-bg .react-flow__background-pattern {
+  fill: #94a3b8 !important;
+  opacity: 0.3 !important;
+}
+
+/* Controls buttons */
+.react-flow__controls {
+  box-shadow: 0 0 2px 1px hsl(var(--border) / 0.08);
+  background: hsl(var(--card)) !important;
+  border: 1px solid hsl(var(--border)) !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+}
+
+.react-flow__controls-button {
+  background: hsl(var(--card)) !important;
+  border-bottom: 1px solid hsl(var(--border)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.react-flow__controls-button:last-child {
+  border-bottom: none !important;
+}
+
+.react-flow__controls-button:hover {
+  background: hsl(var(--muted)) !important;
+}
+
+.react-flow__controls-button svg {
+  fill: hsl(var(--foreground)) !important;
+  stroke: hsl(var(--foreground)) !important;
+  opacity: 1 !important;
+}
+
+.react-flow__controls-button:disabled {
+  opacity: 0.5 !important;
+}
+
+.react-flow__controls-button:disabled svg {
+  opacity: 0.5 !important;
+}
+
+/* MiniMap */
+.react-flow__minimap {
+  background-color: hsl(var(--muted));
+  border: 1px solid hsl(var(--border));
+}
+
+.react-flow__minimap-mask {
+  fill: hsl(var(--muted) / 0.6);
+}
+
+.react-flow__minimap-node {
+  fill: hsl(var(--background));
+  stroke: hsl(var(--border));
+}
+
+/* Edges */
+.react-flow__edge-path {
+  stroke: hsl(var(--border));
+  stroke-width: 2;
+}
+
+/* Selected edges - make them prominent */
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: hsl(var(--primary)) !important;
+  stroke-width: 3 !important;
+}
+
+.react-flow__edge.selected .react-flow__edge-text {
+  fill: hsl(var(--primary)) !important;
+  font-weight: 600;
+}
+
+/* Edge markers (arrows) for selected edges */
+.react-flow__edge.selected marker path {
+  stroke: hsl(var(--primary)) !important;
+  fill: hsl(var(--primary)) !important;
+}
+
+/* Selection box - show while dragging, hide after release */
+.react-flow__selection {
+  background: hsl(var(--primary) / 0.1);
+  border: 1px solid hsl(var(--primary));
+}
+
+/* Hide the box that appears AFTER selection */
+.react-flow__nodesselection {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
+
+.react-flow__nodesselection-rect {
+  display: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
+
+/* Show selection via node borders instead */
+.react-flow__node.selected {
+  /* Add a colored border to selected nodes */
+}
+
+.react-flow__node.selected > div {
+  box-shadow: 0 0 0 2px hsl(var(--primary)), 0 0 0 4px hsl(var(--primary) / 0.2) !important;
+}
+
+/* Attribution (if shown) */
+.react-flow__attribution {
+  background: hsl(var(--muted) / 0.5);
+  color: hsl(var(--muted-foreground));
+}
+
+/* Connection handles - smooth transition for state changes */
+.react-flow__handle {
+  transition: background 0.2s ease;
+}
+
+/* Smooth animation for collision detection repositioning */
+.react-flow__node.auto-repositioning {
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+}
+
+/* Custom cursors for interaction modes */
+
+/* Pan mode cursors (default) */
+.pan-mode .react-flow__pane {
+  cursor: grab !important;
+}
+
+.pan-mode .react-flow__pane.dragging {
+  cursor: grabbing !important;
+}
+
+/* Selection mode cursors - use standard arrow/pointer */
+.selection-mode .react-flow__pane {
+  cursor: default !important;
+}
+
+.selection-mode .react-flow__pane.dragging {
+  cursor: crosshair !important;
+}
+
+/* Everything in selection mode uses standard pointer/arrow */
+.selection-mode .react-flow__node {
+  cursor: default !important;
+}
+
+.selection-mode .react-flow__edge {
+  cursor: default !important;
+}
+
+.selection-mode {
+  cursor: default !important;
+}
+
+/* Nodes being dragged in selection mode still use default cursor */
+.selection-mode .react-flow__node.dragging {
+  cursor: default !important;
+}
+
+/* Only in pan mode do we use grab cursors for nodes */
+.pan-mode .react-flow__node.dragging {
+  cursor: grabbing !important;
+}
+
+/* Pulsing border animation for running nodes */
+@keyframes pulse-border {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.9), 0 0 10px 2px rgba(59, 130, 246, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.6), 0 0 20px 4px rgba(59, 130, 246, 0.4);
+  }
+}
+
+.animate-pulse-border {
+  animation: pulse-border 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Expanded loop node styling - ensure child nodes are visible */
+.react-flow__node[data-expanded-loop] {
+  z-index: 1;
+}
+
+/* Child nodes inside expanded loops should be visible and properly styled */
+.react-flow__node[data-parent-id] {
+  z-index: 2;
+  position: relative;
+}
+
+/* Ensure child nodes don't get cut off */
+.react-flow__node[data-parent-id] > div {
+  overflow: visible;
+}
+
+/* Expanded loop group container */
+.react-flow__node.expandedLoopNode {
+  overflow: visible !important;
+  background-color: hsl(var(--background)) !important;
+  z-index: 0 !important;
+}
+
+/* Ensure the background div doesn't cover child nodes */
+.react-flow__node.expandedLoopNode > div {
+  z-index: 0 !important;
+}
+
+/* Ensure child content area allows overflow */
+.react-flow__node.expandedLoopNode .child-content-area {
+  overflow: visible !important;
+}
+
+/* Make sure the expanded loop node wrapper doesn't clip children */
+.react-flow__node.expandedLoopNode > div {
+  overflow: visible !important;
+}
+
+/* Child nodes inside expanded loops - ensure they're visible and properly styled */
+.react-flow__node[data-parent-id] {
+  z-index: 100 !important;
+  position: relative !important;
+}
+
+/* Ensure child nodes have proper styling and don't get cut off */
+.react-flow__node[data-parent-id] > div {
+  overflow: visible !important;
+  position: relative !important;
+  z-index: 100 !important;
+}
+
+/* Ensure child nodes inside expanded loops use their proper node components and styling */
+/* Remove any default React Flow background that might override NodeStatusWrapper */
+.react-flow__node[data-parent-id] {
+  background: transparent !important;
+}
+
+/* Ensure child nodes use their proper node type components - remove any default React Flow styling */
+.react-flow__node[data-parent-id] > div {
+  background: transparent !important;
+}
+
+/* Make sure NodeStatusWrapper styling is applied to child nodes */
+.react-flow__node[data-parent-id] .px-4 {
+  /* NodeStatusWrapper uses px-4, ensure it's visible */
+}
+
+/* Make child nodes more prominent with better shadows and borders */
+.react-flow__node[data-parent-id] .react-flow__node {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+  z-index: 100 !important;
+}
+
+/* Improve edge visibility inside expanded loops */
+.react-flow__edge[data-parent-id] {
+  z-index: 50 !important;
+}
+
+.react-flow__edge[data-parent-id] path {
+  z-index: 50 !important;
+}
+
+/* ReactFlow container z-index - edges must be above nodes */
+.react-flow__edges {
+  z-index: 20 !important;
+}
+
+.react-flow__nodes {
+  z-index: 10 !important;
+}
+
+/* Ensure all edges are above nodes, especially for switch nodes in vertical layout */
+.react-flow__edge {
+  z-index: 20 !important;
+}
+
+.react-flow__edge path {
+  z-index: 20 !important;
+}
+
+.react-flow__edge .react-flow__edge-path {
+  z-index: 20 !important;
+}
+
+/* Edge labels and markers must appear above edge lines */
+.react-flow__edge-label {
+  z-index: 30 !important;
+}
+
+.react-flow__edge-label-wrapper {
+  z-index: 30 !important;
+}
+
+/* SVG markers (arrows) should appear above edge paths */
+.react-flow__edge marker {
+  z-index: 25 !important;
+}
+
+.react-flow__edge path[marker-end],
+.react-flow__edge path[marker-start] {
+  z-index: 20 !important;
+}
+
+.react-flow__edge[data-parent-id] .react-flow__edge-path {
+  stroke-width: 2.5 !important;
+  opacity: 0.9 !important;
+  transition: stroke 0.2s ease, stroke-width 0.2s ease;
+}
+
+/* Ensure EdgeLabelRenderer container is above edge lines */
+.react-flow__edge-label-wrapper,
+.react-flow__edge-label {
+  z-index: 30 !important;
+}
+
+/* Ensure edge labels appear above everything */
+[data-edge-id] {
+  z-index: 30 !important;
+}

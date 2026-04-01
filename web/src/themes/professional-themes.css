@@ -1,0 +1,1096 @@
+/* Modern Professional Themes 2025 - Refined, Warm, Sophisticated */
+
+/*
+  THEME 1: PROFESSIONAL BLUE (Default recommendation)
+  Inspired by: Linear, Arc, Stripe 2025
+  Primary: Refined blue with warmth
+  Accent: Modern blue-gray
+  Perfect for: Development tools, professional apps, SaaS
+*/
+:root[data-color-scheme="professional-blue"] {
+  /* Core colors - Vibrant blue */
+  --background: 0 0% 98%;           /* Soft white background */
+  --foreground: 0 0% 15%;
+  --card: 0 0% 100%;                /* White cards */
+  --card-foreground: 0 0% 15%;
+  --popover: 0 0% 100%;             /* Popover/dropdown background */
+  --popover-foreground: 0 0% 15%;
+  --surface-modal: 0 0% 100%;       /* Modal background */
+  --muted: 210 40% 96%;             /* Very light blue-gray */
+  --muted-foreground: 215 16% 47%;
+  --primary: 217 91% 60%;           /* Vibrant blue */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 280 85% 65%;         /* Purple accent */
+  --secondary-foreground: 0 0% 100%;
+  --accent: 210 40% 96%;            /* Light blue accent */
+  --accent-foreground: 217 91% 60%;
+  --ring: 217 91% 60%;
+  --border: 214 32% 91%;            /* Light blue-gray border */
+
+  /* Config panel input surfaces */
+  --config-input-bg: 210 40% 96%;
+  --config-input-border: 214 32% 82%;
+
+  /* Tab colors - Vibrant blue */
+  --tab-active: 217 91% 60%;
+  --tab-active-foreground: 0 0% 100%;
+  --tab-active-accent: 217 91% 50%;
+
+  /* Chat input colors - cohesive blue theme */
+  --chat-input-bg: hsl(210 50% 98%);           /* Very light blue background */
+  --chat-input-text: hsl(0 0% 15%);            /* Dark text */
+  --chat-input-placeholder: hsl(215 16% 47%);  /* Muted blue */
+  --chat-button-bg: hsl(210 40% 94%);          /* Light blue button */
+  --chat-button-text: hsl(0 0% 15%);           /* Dark text */
+  --chat-button-hover: hsl(210 40% 90%);       /* Subtle blue hover */
+  --chat-border: hsl(217 45% 70%);             /* Visible blue border */
+  --transparent-button-hover: rgba(59, 130, 246, 0.08);   /* Blue tint */
+  --chat-button-bg-streaming: rgba(59, 130, 246, 0.12);   /* Blue streaming state */
+  --chat-button-text-streaming: hsl(0 0% 15%);
+  --chat-button-hover-streaming: rgba(59, 130, 246, 0.18);
+  --chat-border-streaming: rgba(59, 130, 246, 0.35);      /* Strong blue border when streaming */
+  /* Dropdown-specific colors */
+  --chat-dropdown-bg: hsl(210 40% 92%);                   /* Slightly darker than button */
+  --chat-dropdown-search-bg: hsl(210 50% 96%);            /* Lighter search area */
+  --chat-dropdown-input-bg: hsl(0 0% 100%);               /* White input field */
+  --chat-dropdown-group-bg: hsl(210 40% 95%);             /* Group header background */
+  --chat-dropdown-item-hover: hsl(210 40% 88%);           /* Item hover */
+  --chat-dropdown-item-selected: hsl(210 40% 90%);        /* Selected item */
+}
+
+.dark[data-color-scheme="professional-blue"] {
+  --background: 222 47% 11%;        /* Deep blue-gray background */
+  --foreground: 210 40% 98%;
+  --card: 222 47% 13%;              /* Slightly lighter blue-gray for cards */
+  --card-foreground: 210 40% 98%;
+  --popover: 222 47% 15%;           /* Popover/dropdown background - slightly lighter */
+  --popover-foreground: 210 40% 98%;
+  --surface-modal: 222 47% 13%;     /* Modal background */
+  --muted: 217 33% 17%;             /* Dark blue-gray for muted areas */
+  --muted-foreground: 215 20% 65%;
+  --primary: 217 91% 70%;           /* Bright blue for dark mode */
+  --primary-foreground: 222 47% 11%;
+  --accent: 217 33% 17%;            /* Dark blue accent */
+  --accent-foreground: 210 40% 98%;
+  --ring: 217 91% 70%;
+  --border: 217 33% 24%;            /* Dark blue-gray border */
+
+  /* Config panel input surfaces */
+  --config-input-bg: 217 33% 18%;
+  --config-input-border: 217 33% 32%;
+
+  /* Tab colors */
+  --tab-active: 217 91% 70%;
+  --tab-active-foreground: 222 47% 11%;
+  --tab-active-accent: 217 91% 60%;
+
+  /* Chat input colors - dark mode cohesive blue */
+  --chat-input-bg: hsl(217 33% 16%);           /* Slightly lighter than background */
+  --chat-input-text: hsl(210 40% 98%);         /* Light text */
+  --chat-input-placeholder: hsl(215 20% 65%);  /* Muted foreground */
+  --chat-button-bg: hsl(217 33% 20%);          /* Subtle blue button */
+  --chat-button-text: hsl(210 40% 98%);        /* Light text */
+  --chat-button-hover: hsl(217 33% 24%);       /* Slightly lighter hover */
+  --chat-border: hsl(217 45% 40%);             /* Visible blue border */
+  --transparent-button-hover: rgba(96, 165, 250, 0.12);   /* Blue tint */
+  --chat-button-bg-streaming: rgba(96, 165, 250, 0.16);   /* Blue streaming state */
+  --chat-button-text-streaming: hsl(210 40% 98%);
+  --chat-button-hover-streaming: rgba(96, 165, 250, 0.24);
+  --chat-border-streaming: rgba(96, 165, 250, 0.40);      /* Strong blue border when streaming */
+  /* Dropdown-specific colors */
+  --chat-dropdown-bg: hsl(217 33% 18%);                   /* Slightly darker than button */
+  --chat-dropdown-search-bg: hsl(217 33% 22%);            /* Lighter search area */
+  --chat-dropdown-input-bg: hsl(217 33% 24%);             /* Input field */
+  --chat-dropdown-group-bg: hsl(217 33% 19%);             /* Group header background */
+  --chat-dropdown-item-hover: hsl(217 33% 28%);           /* Item hover */
+  --chat-dropdown-item-selected: hsl(217 33% 24%);        /* Selected item */
+}
+
+/*
+  THEME 2: REFINED NEUTRAL (Mocha-inspired 2025)
+  Inspired by: Notion, Linear, Figma 2025
+  Primary: Mocha tones with warmth (Pantone 2025 inspired)
+  Accent: Warm taupe
+  Perfect for: Clean, minimal, timeless interfaces
+*/
+:root[data-color-scheme="refined-neutral"] {
+  /* Core colors - Warm neutrals with mocha undertones */
+  --background: 30 20% 98%;         /* Warm creamy white */
+  --foreground: 25 18% 20%;
+  --card: 0 0% 100%;                /* White cards */
+  --card-foreground: 25 18% 20%;
+  --popover: 0 0% 100%;             /* Popover/dropdown background */
+  --popover-foreground: 25 18% 20%;
+  --surface-modal: 0 0% 100%;       /* Modal background */
+  --muted: 30 15% 95%;              /* Warm off-white */
+  --muted-foreground: 25 15% 45%;
+  --primary: 25 22% 28%;            /* Mocha brown */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 30 15% 95%;          /* Warm off-white */
+  --secondary-foreground: 25 18% 32%;
+  --accent: 30 20% 97%;             /* Creamy white */
+  --accent-foreground: 25 22% 28%;
+  --ring: 25 22% 28%;
+  --border: 30 12% 90%;             /* Warm border */
+
+  /* Config panel input surfaces */
+  --config-input-bg: 30 15% 95%;
+  --config-input-border: 30 12% 82%;
+
+  /* Tab colors - Warm subtle */
+  --tab-active: 25 22% 28%;
+  --tab-active-foreground: 0 0% 100%;
+  --tab-active-accent: 30 30% 60%;
+
+  /* Chat input colors - cohesive warm neutral theme */
+  --chat-input-bg: hsl(30 20% 97%);            /* Warm creamy background */
+  --chat-input-text: hsl(25 18% 20%);          /* Dark warm text */
+  --chat-input-placeholder: hsl(25 15% 45%);   /* Muted warm */
+  --chat-button-bg: hsl(30 15% 93%);           /* Light warm button */
+  --chat-button-text: hsl(25 18% 20%);         /* Dark warm text */
+  --chat-button-hover: hsl(30 15% 88%);        /* Subtle warm hover */
+  --chat-border: hsl(25 25% 75%);              /* Visible warm border */
+  --transparent-button-hover: rgba(91, 70, 54, 0.08);     /* Mocha tint */
+  --chat-button-bg-streaming: rgba(91, 70, 54, 0.12);     /* Mocha streaming state */
+  --chat-button-text-streaming: hsl(25 18% 20%);
+  --chat-button-hover-streaming: rgba(91, 70, 54, 0.18);
+  --chat-border-streaming: rgba(91, 70, 54, 0.35);        /* Strong mocha border when streaming */
+  /* Dropdown-specific colors */
+  --chat-dropdown-bg: hsl(30 15% 91%);
+  --chat-dropdown-search-bg: hsl(30 20% 95%);
+  --chat-dropdown-input-bg: hsl(0 0% 100%);
+  --chat-dropdown-group-bg: hsl(30 15% 94%);
+  --chat-dropdown-item-hover: hsl(30 15% 86%);
+  --chat-dropdown-item-selected: hsl(30 15% 88%);
+}
+
+.dark[data-color-scheme="refined-neutral"] {
+  --background: 25 20% 14%;         /* Deep warm brown */
+  --foreground: 30 18% 90%;
+  --card: 25 20% 16%;               /* Slightly lighter warm cards */
+  --card-foreground: 30 18% 90%;
+  --popover: 25 20% 18%;            /* Popover/dropdown background - slightly lighter */
+  --popover-foreground: 30 18% 90%;
+  --surface-modal: 25 20% 16%;      /* Modal background */
+  --muted: 30 12% 20%;              /* Deep warm gray */
+  --muted-foreground: 30 15% 60%;
+  --primary: 30 18% 88%;            /* Warm light on dark */
+  --primary-foreground: 25 20% 14%;
+  --accent: 30 12% 20%;             /* Deep warm gray */
+  --accent-foreground: 30 18% 88%;
+  --ring: 30 18% 82%;
+  --border: 30 10% 24%;             /* Warm dark border */
+
+  /* Config panel input surfaces */
+  --config-input-bg: 30 12% 20%;
+  --config-input-border: 30 10% 32%;
+
+  /* Tab colors */
+  --tab-active: 30 18% 88%;
+  --tab-active-foreground: 25 20% 14%;
+  --tab-active-accent: 30 25% 75%;
+
+  /* Chat input colors - dark mode cohesive warm neutral */
+  --chat-input-bg: hsl(30 12% 18%);            /* Slightly lighter than background */
+  --chat-input-text: hsl(30 18% 90%);          /* Light warm text */
+  --chat-input-placeholder: hsl(30 15% 60%);   /* Muted warm */
+  --chat-button-bg: hsl(30 12% 22%);           /* Subtle warm button */
+  --chat-button-text: hsl(30 18% 88%);         /* Light warm text */
+  --chat-button-hover: hsl(30 12% 26%);        /* Slightly lighter hover */
+  --chat-border: hsl(30 18% 40%);              /* Visible warm border */
+  --transparent-button-hover: rgba(230, 215, 195, 0.12);  /* Warm tint */
+  --chat-button-bg-streaming: rgba(230, 215, 195, 0.16);  /* Warm streaming state */
+  --chat-button-text-streaming: hsl(30 18% 88%);
+  --chat-button-hover-streaming: rgba(230, 215, 195, 0.24);
+  --chat-border-streaming: rgba(230, 215, 195, 0.40);     /* Strong warm border when streaming */
+  /* Dropdown-specific colors */
+  --chat-dropdown-bg: hsl(30 12% 20%);
+  --chat-dropdown-search-bg: hsl(30 12% 24%);
+  --chat-dropdown-input-bg: hsl(30 12% 26%);
+  --chat-dropdown-group-bg: hsl(30 12% 21%);
+  --chat-dropdown-item-hover: hsl(30 12% 28%);
+  --chat-dropdown-item-selected: hsl(30 12% 26%);
+}
+
+/*
+  THEME 3: MODERN TEAL
+  Inspired by: Vercel, Tailwind 2025, Framer
+  Primary: Vibrant teal/cyan (energetic, fresh)
+  Accent: Sophisticated teal-gray
+  Perfect for: Modern SaaS, creative tools, AI apps
+*/
+:root[data-color-scheme="modern-teal"] {
+  /* Core colors - Vibrant yet professional teal */
+  --background: 180 50% 98%;        /* Very light teal-white */
+  --foreground: 185 20% 18%;
+  --card: 0 0% 100%;                /* White cards */
+  --card-foreground: 185 20% 18%;
+  --popover: 0 0% 100%;             /* Popover/dropdown background */
+  --popover-foreground: 185 20% 18%;
+  --surface-modal: 0 0% 100%;       /* Modal background */
+  --surface-modal: 0 0% 100%;       /* Modal background */
+  --muted: 185 14% 95%;             /* Warm teal-tinted gray */
+  --muted-foreground: 185 18% 45%;
+  --primary: 180 88% 42%;           /* Modern teal */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 185 14% 95%;         /* Warm teal-tinted gray */
+  --secondary-foreground: 185 18% 28%;
+  --accent: 180 82% 96%;            /* Light teal accent */
+  --accent-foreground: 180 82% 32%;
+  --ring: 180 88% 42%;
+  --border: 185 12% 89%;            /* Subtle teal border */
+
+  /* Config panel input surfaces */
+  --config-input-bg: 185 14% 95%;
+  --config-input-border: 185 12% 82%;
+
+  /* Tab colors - Fresh teal */
+  --tab-active: 180 88% 42%;
+  --tab-active-foreground: 0 0% 100%;
+  --tab-active-accent: 180 88% 52%;
+
+  /* Chat input colors - cohesive teal theme */
+  --chat-input-bg: hsl(180 40% 97%);           /* Very light teal background */
+  --chat-input-text: hsl(185 20% 18%);         /* Dark teal text */
+  --chat-input-placeholder: hsl(185 18% 45%);  /* Muted teal */
+  --chat-button-bg: hsl(185 14% 93%);          /* Light teal button */
+  --chat-button-text: hsl(185 20% 18%);        /* Dark teal text */
+  --chat-button-hover: hsl(180 25% 88%);       /* Subtle teal hover */
+  --chat-border: hsl(180 50% 65%);             /* Visible teal border */
+  --transparent-button-hover: rgba(20, 184, 166, 0.08);   /* Teal tint */
+  --chat-button-bg-streaming: rgba(20, 184, 166, 0.12);   /* Teal streaming state */
+  --chat-button-text-streaming: hsl(185 20% 18%);
+  --chat-button-hover-streaming: rgba(20, 184, 166, 0.18);
+  --chat-border-streaming: rgba(20, 184, 166, 0.35);      /* Strong teal border when streaming */
+  /* Dropdown-specific colors */
+  --chat-dropdown-bg: hsl(180 50% 96%);
+  --chat-dropdown-search-bg: hsl(180 50% 97%);
+  --chat-dropdown-input-bg: hsl(0 0% 100%);
+  --chat-dropdown-group-bg: hsl(180 50% 97%);
+  --chat-dropdown-item-hover: hsl(180 40% 92%);
+  --chat-dropdown-item-selected: hsl(180 40% 94%);
+}
+
+.dark[data-color-scheme="modern-teal"] {
+  --background: 185 20% 12%;        /* Deep teal-gray background */
+  --foreground: 185 12% 92%;
+  --card: 185 20% 14%;              /* Slightly lighter teal cards */
+  --card-foreground: 185 12% 92%;
+  --popover: 185 20% 17%;             /* Popover/dropdown background */
+  --popover-foreground: 185 12% 92%;
+  --surface-modal: 185 20% 14%;     /* Modal background */
+  --surface-modal: 185 20% 14%;     /* Modal background */
+  --muted: 185 14% 22%;             /* Deep teal-gray */
+  --muted-foreground: 185 12% 65%;
+  --primary: 180 82% 56%;           /* Bright teal on dark */
+  --primary-foreground: 0 0% 100%;
+  --accent: 185 14% 22%;            /* Deep teal-gray */
+  --accent-foreground: 185 12% 90%;
+  --ring: 180 82% 56%;
+  --border: 185 12% 23%;            /* Dark teal border */
+
+  /* Config panel input surfaces */
+  --config-input-bg: 185 14% 18%;
+  --config-input-border: 185 12% 30%;
+
+  /* Tab colors */
+  --tab-active: 180 82% 56%;
+  --tab-active-foreground: 0 0% 100%;
+  --tab-active-accent: 180 92% 66%;
+
+  /* Chat input colors - dark mode cohesive teal */
+  --chat-input-bg: hsl(185 14% 18%);           /* Slightly lighter than background */
+  --chat-input-text: hsl(185 12% 92%);         /* Light text */
+  --chat-input-placeholder: hsl(185 12% 65%);  /* Muted foreground */
+  --chat-button-bg: hsl(185 14% 24%);          /* Subtle teal button */
+  --chat-button-text: hsl(185 12% 90%);        /* Light text */
+  --chat-button-hover: hsl(185 14% 28%);       /* Slightly lighter hover */
+  --chat-border: hsl(180 40% 45%);             /* Visible teal border */
+  --transparent-button-hover: rgba(45, 212, 191, 0.12);   /* Teal tint */
+  --chat-button-bg-streaming: rgba(45, 212, 191, 0.16);   /* Teal streaming state */
+  --chat-button-text-streaming: hsl(185 12% 92%);
+  --chat-button-hover-streaming: rgba(45, 212, 191, 0.24);
+  --chat-border-streaming: rgba(45, 212, 191, 0.40);      /* Strong teal border when streaming */
+  /* Dropdown-specific colors */
+  --chat-dropdown-bg: hsl(185 14% 22%);
+  --chat-dropdown-search-bg: hsl(185 14% 26%);
+  --chat-dropdown-input-bg: hsl(185 14% 28%);
+  --chat-dropdown-group-bg: hsl(185 14% 23%);
+  --chat-dropdown-item-hover: hsl(185 14% 30%);
+  --chat-dropdown-item-selected: hsl(185 14% 28%);
+}
+
+/*
+  THEME 4: SLATE (Moonlit greys)
+  Inspired by: shadcn/ui 2025, Radix, Arc Browser
+  Primary: Sophisticated blue-gray
+  Accent: Cool slate
+  Perfect for: Professional dashboards, enterprise tools
+*/
+:root[data-color-scheme="slate"] {
+  --background: 215 24% 98%;        /* Very light cool slate */
+  --foreground: 215 22% 18%;
+  --card: 0 0% 100%;                /* White cards */
+  --card-foreground: 215 22% 18%;
+  --popover: 0 0% 100%;             /* Popover/dropdown background */
+  --popover-foreground: 215 22% 18%;
+  --surface-modal: 0 0% 100%;       /* Modal background */
+  --surface-modal: 0 0% 100%;       /* Modal background */
+  --muted: 215 18% 94%;             /* Soft slate gray */
+  --muted-foreground: 215 16% 45%;
+  --primary: 215 28% 32%;           /* Deep slate blue */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 215 18% 94%;         /* Soft slate gray */
+  --secondary-foreground: 215 22% 30%;
+  --accent: 215 24% 96%;            /* Light cool slate */
+  --accent-foreground: 215 28% 32%;
+  --ring: 215 28% 32%;
+  --border: 215 16% 89%;            /* Subtle cool border */
+
+  /* Config panel input surfaces */
+  --config-input-bg: 215 18% 94%;
+  --config-input-border: 215 16% 82%;
+
+  /* Tab colors */
+  --tab-active: 215 28% 32%;
+  --tab-active-foreground: 0 0% 100%;
+  --tab-active-accent: 215 38% 52%;
+
+  /* Chat input colors - cohesive slate theme */
+  --chat-input-bg: hsl(215 24% 97%);           /* Very light slate background */
+  --chat-input-text: hsl(215 22% 18%);         /* Dark slate text */
+  --chat-input-placeholder: hsl(215 16% 45%);  /* Muted slate */
+  --chat-button-bg: hsl(215 18% 92%);          /* Light slate button */
+  --chat-button-text: hsl(215 22% 18%);        /* Dark slate text */
+  --chat-button-hover: hsl(215 18% 87%);       /* Subtle slate hover */
+  --chat-border: hsl(215 30% 70%);             /* Visible slate border */
+  --transparent-button-hover: rgba(71, 85, 105, 0.08);    /* Slate tint */
+  --chat-button-bg-streaming: rgba(71, 85, 105, 0.12);    /* Slate streaming state */
+  --chat-button-text-streaming: hsl(215 22% 18%);
+  --chat-button-hover-streaming: rgba(71, 85, 105, 0.18);
+  --chat-border-streaming: rgba(71, 85, 105, 0.35);       /* Strong slate border when streaming */
+  /* Dropdown-specific colors */
+  --chat-dropdown-bg: hsl(215 18% 90%);
+  --chat-dropdown-search-bg: hsl(215 24% 95%);
+  --chat-dropdown-input-bg: hsl(0 0% 100%);
+  --chat-dropdown-group-bg: hsl(215 18% 93%);
+  --chat-dropdown-item-hover: hsl(215 18% 85%);
+  --chat-dropdown-item-selected: hsl(215 18% 87%);
+}
+
+.dark[data-color-scheme="slate"] {
+  --background: 215 22% 13%;        /* Deep cool slate background */
+  --foreground: 215 20% 94%;
+  --card: 215 22% 15%;              /* Slightly lighter slate cards */
+  --card-foreground: 215 20% 94%;
+  --popover: 215 22% 18%;             /* Popover/dropdown background */
+  --popover-foreground: 215 20% 94%;
+  --surface-modal: 215 22% 15%;     /* Modal background */
+  --surface-modal: 215 22% 15%;     /* Modal background */
+  --muted: 215 18% 22%;             /* Deep cool slate */
+  --muted-foreground: 215 16% 65%;
+  --primary: 215 82% 62%;           /* Bright slate blue on dark */
+  --primary-foreground: 0 0% 100%;
+  --accent: 215 18% 22%;            /* Deep cool slate */
+  --accent-foreground: 215 20% 92%;
+  --ring: 215 82% 62%;
+  --border: 215 16% 24%;            /* Dark cool border */
+
+  /* Config panel input surfaces */
+  --config-input-bg: 215 18% 18%;
+  --config-input-border: 215 16% 32%;
+
+  /* Tab colors */
+  --tab-active: 215 82% 62%;
+  --tab-active-foreground: 0 0% 100%;
+  --tab-active-accent: 215 88% 68%;
+
+  /* Chat input colors - dark mode cohesive slate */
+  --chat-input-bg: hsl(215 18% 18%);           /* Slightly lighter than background */
+  --chat-input-text: hsl(215 20% 94%);         /* Light text */
+  --chat-input-placeholder: hsl(215 16% 65%);  /* Muted foreground */
+  --chat-button-bg: hsl(215 18% 24%);          /* Subtle slate button */
+  --chat-button-text: hsl(215 20% 92%);        /* Light text */
+  --chat-button-hover: hsl(215 18% 28%);       /* Slightly lighter hover */
+  --chat-border: hsl(215 40% 45%);             /* Visible slate border */
+  --transparent-button-hover: rgba(148, 163, 184, 0.12);  /* Slate tint */
+  --chat-button-bg-streaming: rgba(148, 163, 184, 0.16);  /* Slate streaming state */
+  --chat-button-text-streaming: hsl(215 20% 94%);
+  --chat-button-hover-streaming: rgba(148, 163, 184, 0.24);
+  --chat-border-streaming: rgba(148, 163, 184, 0.40);     /* Strong slate border when streaming */
+  /* Dropdown-specific colors */
+  --chat-dropdown-bg: hsl(215 18% 22%);
+  --chat-dropdown-search-bg: hsl(215 18% 26%);
+  --chat-dropdown-input-bg: hsl(215 18% 28%);
+  --chat-dropdown-group-bg: hsl(215 18% 23%);
+  --chat-dropdown-item-hover: hsl(215 18% 30%);
+  --chat-dropdown-item-selected: hsl(215 18% 28%);
+}
+
+/*
+  THEME 5: FOREST (Serene greens 2025)
+  Inspired by: Forest apps, Things 3, Apple Notes
+  Primary: Calming forest green
+  Accent: Modern sage
+  Perfect for: Focused work, writing, productivity tools
+*/
+:root[data-color-scheme="forest"] {
+  --background: 158 40% 98%;        /* Very light sage-white */
+  --foreground: 145 20% 18%;
+  --card: 0 0% 100%;                /* White cards */
+  --card-foreground: 145 20% 18%;
+  --popover: 0 0% 100%;             /* Popover/dropdown background */
+  --popover-foreground: 145 20% 18%;
+  --surface-modal: 0 0% 100%;       /* Modal background */
+  --surface-modal: 0 0% 100%;       /* Modal background */
+  --muted: 145 12% 94%;             /* Warm sage-gray */
+  --muted-foreground: 145 15% 45%;
+  --primary: 158 58% 38%;           /* Deep forest green */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 145 12% 94%;         /* Warm sage-gray */
+  --secondary-foreground: 145 16% 30%;
+  --accent: 158 48% 96%;            /* Light sage accent */
+  --accent-foreground: 158 58% 28%;
+  --ring: 158 58% 38%;
+  --border: 145 12% 88%;            /* Soft green border */
+
+  /* Config panel input surfaces */
+  --config-input-bg: 145 12% 94%;
+  --config-input-border: 145 12% 82%;
+
+  /* Tab colors */
+  --tab-active: 158 58% 38%;
+  --tab-active-foreground: 0 0% 100%;
+  --tab-active-accent: 158 68% 48%;
+
+  /* Chat input colors - cohesive green theme */
+  --chat-input-bg: hsl(158 30% 97%);           /* Very light sage background */
+  --chat-input-text: hsl(145 20% 18%);         /* Dark green text */
+  --chat-input-placeholder: hsl(145 15% 45%);  /* Muted green */
+  --chat-button-bg: hsl(145 12% 92%);          /* Light sage button */
+  --chat-button-text: hsl(145 20% 18%);        /* Dark green */
+  --chat-button-hover: hsl(158 20% 88%);       /* Subtle green hover */
+  --chat-border: hsl(158 25% 75%);             /* Visible green border */
+  --transparent-button-hover: rgba(66, 153, 108, 0.08);  /* Forest green tint */
+  --chat-button-bg-streaming: rgba(66, 153, 108, 0.12);  /* Green streaming state */
+  --chat-button-text-streaming: hsl(145 20% 18%);
+  --chat-button-hover-streaming: rgba(66, 153, 108, 0.18);
+  --chat-border-streaming: rgba(66, 153, 108, 0.35);     /* Strong green border when streaming */
+  /* Dropdown-specific colors */
+  --chat-dropdown-bg: hsl(150 25% 94%);
+  --chat-dropdown-search-bg: hsl(150 30% 97%);
+  --chat-dropdown-input-bg: hsl(0 0% 100%);
+  --chat-dropdown-group-bg: hsl(150 25% 96%);
+  --chat-dropdown-item-hover: hsl(150 25% 90%);
+  --chat-dropdown-item-selected: hsl(150 25% 92%);
+}
+
+.dark[data-color-scheme="forest"] {
+  --background: 145 18% 13%;        /* Deep forest background */
+  --foreground: 145 12% 92%;
+  --card: 145 18% 15%;              /* Slightly lighter forest cards */
+  --card-foreground: 145 12% 92%;
+  --popover: 145 18% 18%;             /* Popover/dropdown background */
+  --popover-foreground: 145 12% 92%;
+  --surface-modal: 145 18% 15%;     /* Modal background */
+  --surface-modal: 145 18% 15%;     /* Modal background */
+  --muted: 145 14% 22%;             /* Deep sage-gray */
+  --muted-foreground: 145 12% 65%;
+  --primary: 158 62% 56%;           /* Bright forest on dark */
+  --primary-foreground: 0 0% 100%;
+  --accent: 145 14% 22%;            /* Deep sage-gray */
+  --accent-foreground: 145 12% 90%;
+  --ring: 158 62% 56%;
+  --border: 145 12% 24%;            /* Dark green border */
+
+  /* Config panel input surfaces */
+  --config-input-bg: 145 14% 18%;
+  --config-input-border: 145 12% 30%;
+
+  /* Tab colors */
+  --tab-active: 158 62% 56%;
+  --tab-active-foreground: 0 0% 100%;
+  --tab-active-accent: 158 72% 64%;
+
+  /* Chat input colors - dark mode cohesive green */
+  --chat-input-bg: hsl(145 18% 18%);           /* Slightly lighter than background */
+  --chat-input-text: hsl(145 12% 92%);         /* Light text */
+  --chat-input-placeholder: hsl(145 12% 65%);  /* Muted foreground */
+  --chat-button-bg: hsl(145 14% 24%);          /* Subtle green button */
+  --chat-button-text: hsl(145 12% 90%);        /* Light text */
+  --chat-button-hover: hsl(145 14% 28%);       /* Slightly lighter hover */
+  --chat-border: hsl(158 20% 35%);             /* Visible green border */
+  --transparent-button-hover: rgba(109, 178, 139, 0.12);  /* Forest green tint */
+  --chat-button-bg-streaming: rgba(109, 178, 139, 0.16);  /* Green streaming state */
+  --chat-button-text-streaming: hsl(145 12% 92%);
+  --chat-button-hover-streaming: rgba(109, 178, 139, 0.24);
+  --chat-border-streaming: rgba(109, 178, 139, 0.40);     /* Strong green border when streaming */
+  /* Dropdown-specific colors */
+  --chat-dropdown-bg: hsl(150 20% 20%);
+  --chat-dropdown-search-bg: hsl(150 20% 24%);
+  --chat-dropdown-input-bg: hsl(150 20% 26%);
+  --chat-dropdown-group-bg: hsl(150 20% 21%);
+  --chat-dropdown-item-hover: hsl(150 20% 28%);
+  --chat-dropdown-item-selected: hsl(150 20% 26%);
+}
+
+/*
+  THEME 6: VIBRANT PINK
+  Inspired by: Modern design systems, Dribbble, Magenta trends
+  Primary: Vibrant pink/magenta
+  Accent: Soft pink
+  Perfect for: Creative apps, design tools, energetic interfaces
+*/
+:root[data-color-scheme="vibrant-pink"] {
+  /* Core colors - Vibrant pink */
+  --background: 330 40% 98%;        /* Very light pink-white */
+  --foreground: 330 15% 18%;
+  --card: 0 0% 100%;                /* White cards */
+  --card-foreground: 330 15% 18%;
+  --popover: 0 0% 100%;             /* Popover/dropdown background */
+  --popover-foreground: 330 15% 18%;
+  --surface-modal: 0 0% 100%;       /* Modal background */
+  --surface-modal: 0 0% 100%;       /* Modal background */
+  --muted: 330 20% 95%;             /* Soft pink-gray */
+  --muted-foreground: 330 12% 45%;
+  --primary: 330 85% 55%;           /* Vibrant pink */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 330 20% 95%;         /* Soft pink-gray */
+  --secondary-foreground: 330 15% 28%;
+  --accent: 330 90% 96%;            /* Light pink accent */
+  --accent-foreground: 330 85% 45%;
+  --ring: 330 85% 55%;
+  --border: 330 15% 90%;            /* Soft pink border */
+
+  /* Config panel input surfaces */
+  --config-input-bg: 330 20% 95%;
+  --config-input-border: 330 15% 82%;
+
+  /* Tab colors */
+  --tab-active: 330 85% 55%;
+  --tab-active-foreground: 0 0% 100%;
+  --tab-active-accent: 330 90% 65%;
+
+  /* Chat input colors - cohesive pink theme */
+  --chat-input-bg: hsl(330 40% 97%);           /* Very light pink background */
+  --chat-input-text: hsl(330 15% 18%);         /* Dark text */
+  --chat-input-placeholder: hsl(330 12% 45%);  /* Muted pink */
+  --chat-button-bg: hsl(330 20% 93%);          /* Light pink button */
+  --chat-button-text: hsl(330 15% 18%);        /* Dark text */
+  --chat-button-hover: hsl(330 30% 88%);       /* Subtle pink hover */
+  --chat-border: hsl(330 60% 70%);             /* Visible pink border */
+  --transparent-button-hover: rgba(236, 72, 153, 0.08);   /* Pink tint */
+  --chat-button-bg-streaming: rgba(236, 72, 153, 0.12);   /* Pink streaming state */
+  --chat-button-text-streaming: hsl(330 15% 18%);
+  --chat-button-hover-streaming: rgba(236, 72, 153, 0.18);
+  --chat-border-streaming: rgba(236, 72, 153, 0.35);      /* Strong pink border when streaming */
+  /* Dropdown-specific colors */
+  --chat-dropdown-bg: hsl(330 80% 95%);
+  --chat-dropdown-search-bg: hsl(330 80% 97%);
+  --chat-dropdown-input-bg: hsl(0 0% 100%);
+  --chat-dropdown-group-bg: hsl(330 80% 96%);
+  --chat-dropdown-item-hover: hsl(330 60% 90%);
+  --chat-dropdown-item-selected: hsl(330 60% 92%);
+}
+
+.dark[data-color-scheme="vibrant-pink"] {
+  --background: 330 20% 12%;        /* Deep pink-gray background */
+  --foreground: 330 15% 92%;
+  --card: 330 20% 14%;              /* Slightly lighter pink cards */
+  --card-foreground: 330 15% 92%;
+  --popover: 330 20% 17%;             /* Popover/dropdown background */
+  --popover-foreground: 330 15% 92%;
+  --surface-modal: 330 20% 14%;     /* Modal background */
+  --surface-modal: 330 20% 14%;     /* Modal background */
+  --muted: 330 18% 20%;             /* Deep pink-gray */
+  --muted-foreground: 330 12% 65%;
+  --primary: 330 80% 65%;           /* Bright pink on dark */
+  --primary-foreground: 0 0% 100%;
+  --accent: 330 18% 20%;            /* Deep pink-gray */
+  --accent-foreground: 330 15% 90%;
+  --ring: 330 80% 65%;
+  --border: 330 15% 24%;            /* Dark pink border */
+
+  /* Config panel input surfaces */
+  --config-input-bg: 330 20% 18%;
+  --config-input-border: 330 15% 30%;
+
+  /* Tab colors */
+  --tab-active: 330 80% 65%;
+  --tab-active-foreground: 0 0% 100%;
+  --tab-active-accent: 330 85% 72%;
+
+  /* Chat input colors - dark mode cohesive pink */
+  --chat-input-bg: hsl(330 18% 18%);           /* Slightly lighter than background */
+  --chat-input-text: hsl(330 15% 92%);         /* Light text */
+  --chat-input-placeholder: hsl(330 12% 65%);  /* Muted foreground */
+  --chat-button-bg: hsl(330 18% 24%);          /* Subtle pink button */
+  --chat-button-text: hsl(330 15% 90%);        /* Light text */
+  --chat-button-hover: hsl(330 18% 28%);       /* Slightly lighter hover */
+  --chat-border: hsl(330 50% 45%);             /* Visible pink border */
+  --transparent-button-hover: rgba(244, 114, 182, 0.12);  /* Pink tint */
+  --chat-button-bg-streaming: rgba(244, 114, 182, 0.16);  /* Pink streaming state */
+  --chat-button-text-streaming: hsl(330 15% 92%);
+  --chat-button-hover-streaming: rgba(244, 114, 182, 0.24);
+  --chat-border-streaming: rgba(244, 114, 182, 0.40);     /* Strong pink border when streaming */
+  /* Dropdown-specific colors */
+  --chat-dropdown-bg: hsl(330 45% 16%);
+  --chat-dropdown-search-bg: hsl(330 45% 20%);
+  --chat-dropdown-input-bg: hsl(330 45% 22%);
+  --chat-dropdown-group-bg: hsl(330 45% 17%);
+  --chat-dropdown-item-hover: hsl(330 45% 24%);
+  --chat-dropdown-item-selected: hsl(330 45% 22%);
+}
+
+/*
+  THEME 7: ENERGETIC ORANGE
+  Inspired by: GitLab, SoundCloud, Modern productivity apps
+  Primary: Warm energetic orange
+  Accent: Soft amber
+  Perfect for: Productivity tools, collaboration apps, vibrant interfaces
+*/
+:root[data-color-scheme="energetic-orange"] {
+  /* Core colors - Energetic orange */
+  --background: 25 45% 98%;         /* Very light orange-white */
+  --foreground: 25 18% 18%;
+  --card: 0 0% 100%;                /* White cards */
+  --card-foreground: 25 18% 18%;
+  --popover: 0 0% 100%;             /* Popover/dropdown background */
+  --popover-foreground: 25 18% 18%;
+  --surface-modal: 0 0% 100%;       /* Modal background */
+  --surface-modal: 0 0% 100%;       /* Modal background */
+  --muted: 25 25% 95%;              /* Soft orange-gray */
+  --muted-foreground: 25 15% 45%;
+  --primary: 25 95% 53%;            /* Vibrant orange */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 25 25% 95%;          /* Soft orange-gray */
+  --secondary-foreground: 25 18% 28%;
+  --accent: 25 85% 96%;             /* Light orange accent */
+  --accent-foreground: 25 95% 43%;
+  --ring: 25 95% 53%;
+  --border: 25 20% 88%;             /* Soft orange border */
+
+  /* Config panel input surfaces */
+  --config-input-bg: 25 25% 95%;
+  --config-input-border: 25 20% 82%;
+
+  /* Tab colors */
+  --tab-active: 25 95% 53%;
+  --tab-active-foreground: 0 0% 100%;
+  --tab-active-accent: 25 98% 63%;
+
+  /* Chat input colors - cohesive orange theme */
+  --chat-input-bg: hsl(25 45% 97%);            /* Very light orange background */
+  --chat-input-text: hsl(25 18% 18%);          /* Dark text */
+  --chat-input-placeholder: hsl(25 15% 45%);   /* Muted orange */
+  --chat-button-bg: hsl(25 25% 93%);           /* Light orange button */
+  --chat-button-text: hsl(25 18% 18%);         /* Dark text */
+  --chat-button-hover: hsl(25 35% 88%);        /* Subtle orange hover */
+  --chat-border: hsl(25 70% 65%);              /* Visible orange border */
+  --transparent-button-hover: rgba(249, 115, 22, 0.08);   /* Orange tint */
+  --chat-button-bg-streaming: rgba(249, 115, 22, 0.12);   /* Orange streaming state */
+  --chat-button-text-streaming: hsl(25 18% 18%);
+  --chat-button-hover-streaming: rgba(249, 115, 22, 0.18);
+  --chat-border-streaming: rgba(249, 115, 22, 0.35);      /* Strong orange border when streaming */
+  /* Dropdown-specific colors */
+  --chat-dropdown-bg: hsl(24 95% 95%);
+  --chat-dropdown-search-bg: hsl(24 95% 97%);
+  --chat-dropdown-input-bg: hsl(0 0% 100%);
+  --chat-dropdown-group-bg: hsl(24 95% 96%);
+  --chat-dropdown-item-hover: hsl(24 80% 90%);
+  --chat-dropdown-item-selected: hsl(24 80% 92%);
+}
+
+.dark[data-color-scheme="energetic-orange"] {
+  --background: 25 22% 12%;         /* Deep orange-gray background */
+  --foreground: 25 15% 92%;
+  --card: 25 22% 14%;               /* Slightly lighter orange cards */
+  --card-foreground: 25 15% 92%;
+  --popover: 25 22% 17%;             /* Popover/dropdown background */
+  --popover-foreground: 25 15% 92%;
+  --surface-modal: 25 22% 14%;      /* Modal background */
+  --surface-modal: 25 22% 14%;      /* Modal background */
+  --muted: 25 20% 20%;              /* Deep orange-gray */
+  --muted-foreground: 25 12% 65%;
+  --primary: 25 90% 60%;            /* Bright orange on dark */
+  --primary-foreground: 0 0% 100%;
+  --accent: 25 20% 20%;             /* Deep orange-gray */
+  --accent-foreground: 25 15% 90%;
+  --ring: 25 90% 60%;
+  --border: 25 18% 24%;             /* Dark orange border */
+
+  /* Config panel input surfaces */
+  --config-input-bg: 25 20% 20%;
+  --config-input-border: 25 18% 32%;
+
+  /* Tab colors */
+  --tab-active: 25 90% 60%;
+  --tab-active-foreground: 0 0% 100%;
+  --tab-active-accent: 25 95% 68%;
+
+  /* Chat input colors - dark mode cohesive orange */
+  --chat-input-bg: hsl(25 20% 18%);            /* Slightly lighter than background */
+  --chat-input-text: hsl(25 15% 92%);          /* Light text */
+  --chat-input-placeholder: hsl(25 12% 65%);   /* Muted foreground */
+  --chat-button-bg: hsl(25 20% 24%);           /* Subtle orange button */
+  --chat-button-text: hsl(25 15% 90%);         /* Light text */
+  --chat-button-hover: hsl(25 20% 28%);        /* Slightly lighter hover */
+  --chat-border: hsl(25 65% 45%);              /* Visible orange border */
+  --transparent-button-hover: rgba(251, 146, 60, 0.12);   /* Orange tint */
+  --chat-button-bg-streaming: rgba(251, 146, 60, 0.16);   /* Orange streaming state */
+  --chat-button-text-streaming: hsl(25 15% 92%);
+  --chat-button-hover-streaming: rgba(251, 146, 60, 0.24);
+  --chat-border-streaming: rgba(251, 146, 60, 0.40);      /* Strong orange border when streaming */
+  /* Dropdown-specific colors */
+  --chat-dropdown-bg: hsl(24 45% 16%);
+  --chat-dropdown-search-bg: hsl(24 45% 20%);
+  --chat-dropdown-input-bg: hsl(24 45% 22%);
+  --chat-dropdown-group-bg: hsl(24 45% 17%);
+  --chat-dropdown-item-hover: hsl(24 45% 24%);
+  --chat-dropdown-item-selected: hsl(24 45% 22%);
+}
+
+/*
+  THEME 8: BOLD RED
+  Inspired by: YouTube, Netflix, Modern red-accented interfaces
+  Primary: Bold confident red
+  Accent: Soft crimson
+  Perfect for: Media apps, attention-grabbing interfaces, bold brands
+*/
+:root[data-color-scheme="bold-red"] {
+  /* Core colors - Bold red */
+  --background: 0 40% 98%;          /* Very light red-white */
+  --foreground: 0 15% 18%;
+  --card: 0 0% 100%;                /* White cards */
+  --card-foreground: 0 15% 18%;
+  --popover: 0 0% 100%;             /* Popover/dropdown background */
+  --popover-foreground: 0 15% 18%;
+  --surface-modal: 0 0% 100%;       /* Modal background */
+  --surface-modal: 0 0% 100%;       /* Modal background */
+  --muted: 0 20% 95%;               /* Soft red-gray */
+  --muted-foreground: 0 12% 45%;
+  --primary: 0 84% 60%;             /* Bold red */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 20% 95%;           /* Soft red-gray */
+  --secondary-foreground: 0 15% 28%;
+  --accent: 0 90% 96%;              /* Light red accent */
+  --accent-foreground: 0 84% 50%;
+  --ring: 0 84% 60%;
+  --border: 0 18% 90%;              /* Soft red border */
+
+  /* Config panel input surfaces */
+  --config-input-bg: 0 20% 95%;
+  --config-input-border: 0 18% 82%;
+
+  /* Tab colors */
+  --tab-active: 0 84% 60%;
+  --tab-active-foreground: 0 0% 100%;
+  --tab-active-accent: 0 88% 68%;
+
+  /* Chat input colors - cohesive red theme */
+  --chat-input-bg: hsl(0 40% 97%);             /* Very light red background */
+  --chat-input-text: hsl(0 15% 18%);           /* Dark text */
+  --chat-input-placeholder: hsl(0 12% 45%);    /* Muted red */
+  --chat-button-bg: hsl(0 20% 93%);            /* Light red button */
+  --chat-button-text: hsl(0 15% 18%);          /* Dark text */
+  --chat-button-hover: hsl(0 30% 88%);         /* Subtle red hover */
+  --chat-border: hsl(0 65% 65%);               /* Visible red border */
+  --transparent-button-hover: rgba(239, 68, 68, 0.08);    /* Red tint */
+  --chat-button-bg-streaming: rgba(239, 68, 68, 0.12);    /* Red streaming state */
+  --chat-button-text-streaming: hsl(0 15% 18%);
+  --chat-button-hover-streaming: rgba(239, 68, 68, 0.18);
+  --chat-border-streaming: rgba(239, 68, 68, 0.35);       /* Strong red border when streaming */
+  /* Dropdown-specific colors */
+  --chat-dropdown-bg: hsl(0 85% 96%);
+  --chat-dropdown-search-bg: hsl(0 85% 98%);
+  --chat-dropdown-input-bg: hsl(0 0% 100%);
+  --chat-dropdown-group-bg: hsl(0 85% 97%);
+  --chat-dropdown-item-hover: hsl(0 70% 92%);
+  --chat-dropdown-item-selected: hsl(0 70% 94%);
+}
+
+.dark[data-color-scheme="bold-red"] {
+  --background: 0 20% 12%;          /* Deep red-gray background */
+  --foreground: 0 15% 92%;
+  --card: 0 20% 14%;                /* Slightly lighter red cards */
+  --card-foreground: 0 15% 92%;
+  --popover: 0 20% 17%;             /* Popover/dropdown background */
+  --popover-foreground: 0 15% 92%;
+  --surface-modal: 0 20% 14%;       /* Modal background */
+  --surface-modal: 0 20% 14%;       /* Modal background */
+  --muted: 0 18% 20%;               /* Deep red-gray */
+  --muted-foreground: 0 12% 65%;
+  --primary: 0 78% 65%;             /* Bright red on dark */
+  --primary-foreground: 0 0% 100%;
+  --accent: 0 18% 20%;              /* Deep red-gray */
+  --accent-foreground: 0 15% 90%;
+  --ring: 0 78% 65%;
+  --border: 0 18% 24%;              /* Dark red border */
+
+  /* Config panel input surfaces */
+  --config-input-bg: 0 18% 20%;
+  --config-input-border: 0 18% 32%;
+
+  /* Tab colors */
+  --tab-active: 0 78% 65%;
+  --tab-active-foreground: 0 0% 100%;
+  --tab-active-accent: 0 82% 72%;
+
+  /* Chat input colors - dark mode cohesive red */
+  --chat-input-bg: hsl(0 18% 18%);             /* Slightly lighter than background */
+  --chat-input-text: hsl(0 15% 92%);           /* Light text */
+  --chat-input-placeholder: hsl(0 12% 65%);    /* Muted foreground */
+  --chat-button-bg: hsl(0 18% 24%);            /* Subtle red button */
+  --chat-button-text: hsl(0 15% 90%);          /* Light text */
+  --chat-button-hover: hsl(0 18% 28%);         /* Slightly lighter hover */
+  --chat-border: hsl(0 60% 45%);               /* Visible red border */
+  --transparent-button-hover: rgba(248, 113, 113, 0.12);  /* Red tint */
+  --chat-button-bg-streaming: rgba(248, 113, 113, 0.16);  /* Red streaming state */
+  --chat-button-text-streaming: hsl(0 15% 92%);
+  --chat-button-hover-streaming: rgba(248, 113, 113, 0.24);
+  --chat-border-streaming: rgba(248, 113, 113, 0.40);     /* Strong red border when streaming */
+  /* Dropdown-specific colors */
+  --chat-dropdown-bg: hsl(0 45% 16%);
+  --chat-dropdown-search-bg: hsl(0 45% 20%);
+  --chat-dropdown-input-bg: hsl(0 45% 22%);
+  --chat-dropdown-group-bg: hsl(0 45% 17%);
+  --chat-dropdown-item-hover: hsl(0 45% 24%);
+  --chat-dropdown-item-selected: hsl(0 45% 22%);
+}
+
+/*
+  THEME 9: PURPLE CLASSIC
+  Inspired by: Original Reliant theme, Creative tools, Design apps
+  Primary: Classic vibrant purple
+  Accent: Lavender
+  Perfect for: Creative applications, design tools, original branding
+*/
+:root[data-color-scheme="purple-classic"] {
+  /* Core colors - Classic purple */
+  --background: 270 30% 98%;        /* Very light purple-white */
+  --foreground: 270 15% 18%;
+  --card: 0 0% 100%;                /* White cards */
+  --card-foreground: 270 15% 18%;
+  --popover: 0 0% 100%;             /* Popover/dropdown background */
+  --popover-foreground: 270 15% 18%;
+  --surface-modal: 0 0% 100%;       /* Modal background */
+  --surface-modal: 0 0% 100%;       /* Modal background */
+  --muted: 270 20% 95%;             /* Soft purple-gray */
+  --muted-foreground: 270 12% 45%;
+  --primary: 270 85% 60%;           /* Vibrant purple */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 270 20% 95%;         /* Soft purple-gray */
+  --secondary-foreground: 270 15% 28%;
+  --accent: 270 80% 96%;            /* Light lavender accent */
+  --accent-foreground: 270 85% 50%;
+  --ring: 270 85% 60%;
+  --border: 270 15% 90%;            /* Soft purple border */
+
+  /* Config panel input surfaces */
+  --config-input-bg: 270 20% 95%;
+  --config-input-border: 270 15% 82%;
+
+  /* Tab colors */
+  --tab-active: 270 85% 60%;
+  --tab-active-foreground: 0 0% 100%;
+  --tab-active-accent: 270 90% 68%;
+
+  /* Chat input colors - cohesive purple theme */
+  --chat-input-bg: hsl(270 30% 97%);           /* Very light purple background */
+  --chat-input-text: hsl(270 15% 18%);         /* Dark text */
+  --chat-input-placeholder: hsl(270 12% 45%);  /* Muted purple */
+  --chat-button-bg: hsl(270 20% 93%);          /* Light purple button */
+  --chat-button-text: hsl(270 15% 18%);        /* Dark text */
+  --chat-button-hover: hsl(270 30% 88%);       /* Subtle purple hover */
+  --chat-border: hsl(270 60% 70%);             /* Visible purple border */
+  --transparent-button-hover: rgba(168, 85, 247, 0.08);   /* Purple tint */
+  --chat-button-bg-streaming: rgba(168, 85, 247, 0.12);   /* Purple streaming state */
+  --chat-button-text-streaming: hsl(270 15% 18%);
+  --chat-button-hover-streaming: rgba(168, 85, 247, 0.18);
+  --chat-border-streaming: rgba(168, 85, 247, 0.35);      /* Strong purple border when streaming */
+  /* Dropdown-specific colors */
+  --chat-dropdown-bg: hsl(270 95% 96%);
+  --chat-dropdown-search-bg: hsl(270 95% 98%);
+  --chat-dropdown-input-bg: hsl(0 0% 100%);
+  --chat-dropdown-group-bg: hsl(270 95% 97%);
+  --chat-dropdown-item-hover: hsl(270 80% 92%);
+  --chat-dropdown-item-selected: hsl(270 80% 94%);
+}
+
+.dark[data-color-scheme="purple-classic"] {
+  --background: 270 25% 12%;        /* Deep purple-gray background */
+  --foreground: 270 15% 92%;
+  --card: 270 25% 14%;              /* Slightly lighter purple cards */
+  --card-foreground: 270 15% 92%;
+  --popover: 270 25% 17%;             /* Popover/dropdown background */
+  --popover-foreground: 270 15% 92%;
+  --surface-modal: 270 25% 14%;     /* Modal background */
+  --surface-modal: 270 25% 14%;     /* Modal background */
+  --muted: 270 18% 20%;             /* Deep purple-gray */
+  --muted-foreground: 270 12% 65%;
+  --primary: 270 80% 68%;           /* Bright purple on dark */
+  --primary-foreground: 0 0% 100%;
+  --accent: 270 18% 20%;            /* Deep purple-gray */
+  --accent-foreground: 270 15% 90%;
+  --ring: 270 80% 68%;
+  --border: 270 15% 24%;            /* Dark purple border */
+
+  /* Config panel input surfaces */
+  --config-input-bg: 270 18% 20%;
+  --config-input-border: 270 15% 32%;
+
+  /* Tab colors */
+  --tab-active: 270 80% 68%;
+  --tab-active-foreground: 0 0% 100%;
+  --tab-active-accent: 270 85% 75%;
+
+  /* Chat input colors - dark mode cohesive purple */
+  --chat-input-bg: hsl(270 18% 18%);           /* Slightly lighter than background */
+  --chat-input-text: hsl(270 15% 92%);         /* Light text */
+  --chat-input-placeholder: hsl(270 12% 65%);  /* Muted foreground */
+  --chat-button-bg: hsl(270 18% 24%);          /* Subtle purple button */
+  --chat-button-text: hsl(270 15% 90%);        /* Light text */
+  --chat-button-hover: hsl(270 18% 28%);       /* Slightly lighter hover */
+  --chat-border: hsl(270 55% 48%);             /* Visible purple border */
+  --transparent-button-hover: rgba(192, 132, 252, 0.12);  /* Purple tint */
+  --chat-button-bg-streaming: rgba(192, 132, 252, 0.16);  /* Purple streaming state */
+  --chat-button-text-streaming: hsl(270 15% 92%);
+  --chat-button-hover-streaming: rgba(192, 132, 252, 0.24);
+  --chat-border-streaming: rgba(192, 132, 252, 0.40);     /* Strong purple border when streaming */
+  /* Dropdown-specific colors */
+  --chat-dropdown-bg: hsl(270 45% 16%);
+  --chat-dropdown-search-bg: hsl(270 45% 20%);
+  --chat-dropdown-input-bg: hsl(270 45% 22%);
+  --chat-dropdown-group-bg: hsl(270 45% 17%);
+  --chat-dropdown-item-hover: hsl(270 45% 24%);
+  --chat-dropdown-item-selected: hsl(270 45% 22%);
+}
+
+/*
+  THEME 10: PURE BLACK
+  Inspired by: OLED displays, Terminal aesthetics, High contrast interfaces
+  Primary: Pure white on black
+  Accent: Subtle grays
+  Perfect for: OLED screens, night coding, minimal distraction
+*/
+:root[data-color-scheme="pure-black"] {
+  /* Core colors - True black with white accents */
+  --background: 0 0% 100%;            /* White background in light mode */
+  --foreground: 0 0% 5%;
+  --card: 0 0% 100%;                   /* White cards */
+  --card-foreground: 0 0% 5%;
+  --popover: 0 0% 100%;                /* Popover/dropdown background */
+  --popover-foreground: 0 0% 5%;
+  --surface-modal: 0 0% 100%;          /* Modal background */
+  --muted: 0 0% 96%;                   /* Very light gray */
+  --muted-foreground: 0 0% 45%;
+  --primary: 0 0% 9%;                  /* Near black primary */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 96%;               /* Light gray */
+  --secondary-foreground: 0 0% 20%;
+  --accent: 0 0% 96%;                  /* Light gray accent */
+  --accent-foreground: 0 0% 9%;
+  --ring: 0 0% 9%;
+  --border: 0 0% 90%;                  /* Light gray border */
+
+  /* Config panel input surfaces */
+  --config-input-bg: 0 0% 96%;
+  --config-input-border: 0 0% 82%;
+
+  /* Tab colors */
+  --tab-active: 0 0% 9%;
+  --tab-active-foreground: 0 0% 100%;
+  --tab-active-accent: 0 0% 20%;
+
+  /* Chat input colors - monochrome theme */
+  --chat-input-bg: hsl(0 0% 98%);              /* Very light gray background */
+  --chat-input-text: hsl(0 0% 5%);             /* Near black text */
+  --chat-input-placeholder: hsl(0 0% 45%);    /* Gray placeholder */
+  --chat-button-bg: hsl(0 0% 94%);             /* Light gray button */
+  --chat-button-text: hsl(0 0% 5%);            /* Near black text */
+  --chat-button-hover: hsl(0 0% 88%);          /* Slightly darker hover */
+  --chat-border: hsl(0 0% 70%);                /* Visible gray border */
+  --transparent-button-hover: rgba(0, 0, 0, 0.06);         /* Black tint */
+  --chat-button-bg-streaming: rgba(0, 0, 0, 0.08);         /* Black streaming state */
+  --chat-button-text-streaming: hsl(0 0% 5%);
+  --chat-button-hover-streaming: rgba(0, 0, 0, 0.12);
+  --chat-border-streaming: rgba(0, 0, 0, 0.25);            /* Strong black border when streaming */
+  /* Dropdown-specific colors */
+  --chat-dropdown-bg: hsl(0 0% 92%);
+  --chat-dropdown-search-bg: hsl(0 0% 96%);
+  --chat-dropdown-input-bg: hsl(0 0% 100%);
+  --chat-dropdown-group-bg: hsl(0 0% 95%);
+  --chat-dropdown-item-hover: hsl(0 0% 88%);
+  --chat-dropdown-item-selected: hsl(0 0% 90%);
+}
+
+.dark[data-color-scheme="pure-black"] {
+  --background: 0 0% 0%;              /* True black background */
+  --foreground: 0 0% 95%;
+  --card: 0 0% 4%;                    /* Very dark gray cards */
+  --card-foreground: 0 0% 95%;
+  --popover: 0 0% 6%;                 /* Popover/dropdown background */
+  --popover-foreground: 0 0% 95%;
+  --surface-modal: 0 0% 4%;           /* Modal background */
+  --muted: 0 0% 10%;                  /* Dark gray for muted areas */
+  --muted-foreground: 0 0% 65%;
+  --primary: 0 0% 100%;               /* Pure white primary */
+  --primary-foreground: 0 0% 0%;
+  --accent: 0 0% 10%;                 /* Dark gray accent */
+  --accent-foreground: 0 0% 95%;
+  --ring: 0 0% 100%;
+  --border: 0 0% 15%;                 /* Dark gray border */
+
+  /* Config panel input surfaces */
+  --config-input-bg: 0 0% 10%;
+  --config-input-border: 0 0% 28%;
+
+  /* Tab colors */
+  --tab-active: 0 0% 100%;
+  --tab-active-foreground: 0 0% 0%;
+  --tab-active-accent: 0 0% 85%;
+
+  /* Chat input colors - dark mode pure black */
+  --chat-input-bg: hsl(0 0% 6%);              /* Very dark gray */
+  --chat-input-text: hsl(0 0% 95%);           /* Light text */
+  --chat-input-placeholder: hsl(0 0% 50%);   /* Gray placeholder */
+  --chat-button-bg: hsl(0 0% 12%);            /* Dark gray button */
+  --chat-button-text: hsl(0 0% 95%);          /* Light text */
+  --chat-button-hover: hsl(0 0% 18%);         /* Slightly lighter hover */
+  --chat-border: hsl(0 0% 25%);               /* Visible gray border */
+  --transparent-button-hover: rgba(255, 255, 255, 0.08);   /* White tint */
+  --chat-button-bg-streaming: rgba(255, 255, 255, 0.10);   /* White streaming state */
+  --chat-button-text-streaming: hsl(0 0% 95%);
+  --chat-button-hover-streaming: rgba(255, 255, 255, 0.15);
+  --chat-border-streaming: rgba(255, 255, 255, 0.30);      /* Strong white border when streaming */
+  /* Dropdown-specific colors */
+  --chat-dropdown-bg: hsl(0 0% 8%);
+  --chat-dropdown-search-bg: hsl(0 0% 12%);
+  --chat-dropdown-input-bg: hsl(0 0% 14%);
+  --chat-dropdown-group-bg: hsl(0 0% 9%);
+  --chat-dropdown-item-hover: hsl(0 0% 18%);
+  --chat-dropdown-item-selected: hsl(0 0% 14%);
+}
+
+/* Keep generic input token aligned with per-scheme config input borders */
+:root[data-color-scheme] {
+  --input: var(--config-input-border);
+}
+
+/* 
+  USAGE:
+  
+  Add to <html> or <body>:
+  data-color-scheme="professional-blue"
+  data-color-scheme="refined-neutral"
+  data-color-scheme="modern-teal"
+  data-color-scheme="slate"
+  data-color-scheme="forest"
+  data-color-scheme="vibrant-pink"
+  data-color-scheme="energetic-orange"
+  data-color-scheme="bold-red"
+  data-color-scheme="purple-classic"
+  data-color-scheme="pure-black"
+  
+  These work with existing dark/light mode and data-theme attributes.
+*/

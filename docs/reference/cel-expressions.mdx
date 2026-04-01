@@ -1,0 +1,712 @@
+---
+title: "CEL Expressions Reference"
+description: "Complete reference for CEL (Common Expression Language) in Reliant workflows"
+---
+
+Reliant workflows use CEL (Common Expression Language) for dynamic values. CEL is a simple, safe expression language that allows you to reference data, perform calculations, and make decisions within your workflow YAML.
+
+---
+
+## Overview
+
+In Reliant workflows, **all string values in YAML are treated as potential CEL expressions**. The template syntax `{{expression}}` is used to embed CEL expressions within strings.
+
+### Key Concepts
+
+1. **Template Interpolation**: Use `{{expression}}` to insert dynamic values into strings
+2. **Pure Expressions**: When an entire value is `{{expression}}`, the native type is preserved (not converted to string)
+3. **Literal Strings**: Text without `{{}}` is treated as a literal value
+4. **Explicit Namespaces**: All data access uses explicit namespaces (`inputs.*`, `nodes.*`, etc.)
+
+### Quick Examples
+
+```yaml
+# Simple value interpolation
+model: "{{inputs.model}}"
+
+# Literal string (no interpolation)
+role: user
+
+# String with embedded expression
+content: "Processing iteration {{iter.iteration + 1}}"
+
+# Conditional expression (ternary)
+model: "{{inputs.model.id != '' ? inputs.model : {tags: ['moderate']}}}"
+
+# Accessing node outputs
+tool_calls: "{{nodes.call_llm.tool_calls}}"
+```
+
+---
+
+## Template Syntax
+
+### Basic Interpolation
+
+Use double curly braces to embed expressions within strings:
+
+```yaml
+content: "Hello, {{inputs.username}}!"
+```
+
+Multiple expressions can appear in a single string:
+
+```yaml
+content: "Running iteration {{iter.iteration + 1}} with exit code {{outputs.exit_code}}"
+```
+
+### Type Preservation
+
+When an entire YAML value is a single `{{expression}}`, the expression's native type is preserved:
+
+```yaml
+# Returns array (native type preserved)
+tool_calls: "{{nodes.call_llm.tool_calls}}"
+
+# Returns integer (native type preserved)
+max_turns: "{{inputs.max_turns}}"
+
+# Returns string (interpolation converts to string)
+message: "You have {{nodes.count.value}} items"
+```
+
+### Literal Values
+
+Text without `{{}}` is passed through as-is:
+
+```yaml
+role: user
+action: CallLLM
+content: This is a literal string with no expressions
+```
+
+---
+
+## Available Namespaces
+
+Reliant uses an explicit namespace model—all data access must use a namespace prefix. There is no implicit variable injection.
+
+### inputs.*
+
+Accesses workflow input parameters defined in the workflow schema.
+
+```yaml
+inputs:
+  model:
+    type: model
+    default: ""
+  temperature:
+    type: number
+    default: 1.0
+  mode:
+    type: enum
+    enum: ["manual", "auto", "plan"]
+    default: "auto"
+
+nodes:
+  - id: call_llm
+    action: CallLLM
+    inputs:
+      model: "{{inputs.model}}"
+      temperature: "{{inputs.temperature}}"
+```
+
+**Common patterns:**
+
+```yaml
+# Direct access
+"{{inputs.model}}"
+
+# With default fallback
+"{{inputs.model != '' ? inputs.model : 'claude-4.5-sonnet'}}"
+
+# Checking mode inputs
+"{{inputs.mode == 'auto'}}"
+
+# Accessing grouped inputs
+"{{inputs.Implementer.temperature}}"
+```
+
+### nodes.*
+
+Accesses outputs from completed workflow nodes. Only available after the referenced node has completed.
+
+```yaml
+# Access a node's output field
+"{{nodes.call_llm.response_text}}"
+
+# Access nested fields
+"{{nodes.call_llm.message.role}}"
+
+# Access tool calls array
+"{{nodes.call_llm.tool_calls}}"
+
+# Check if a node completed with specific value
+condition: nodes.run_tests.exit_code == 0
+```
+
+#### Optional Chaining (`?.`) for Conditional Nodes
+
+When accessing nodes that may have been skipped (due to a `condition:` on the node), use optional chaining to safely handle the case where the node output doesn't exist:
+
+```yaml
+# Regular access - errors if node was skipped
+"{{nodes.conditional_node.result}}"
+
+# Optional chaining - returns optional.none() if node was skipped
+"{{nodes.?conditional_node.result}}"
+
+# With a default fallback value
+"{{nodes.?conditional_node.result.orValue('default')}}"
+
+# Check if node ran before accessing
+condition: has(nodes.conditional_node)
+```
+
+**Common CallLLM outputs:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `message.role` | string | Always `"assistant"` |
+| `message.text` | string | Response text content |
+| `response_text` | string | Same as `message.text` |
+| `tool_calls` | array | Tool calls requested by model |
+| `input_tokens` | int | Input tokens consumed |
+| `output_tokens` | int | Output tokens generated |
+| `stop_reason` | string | Why the LLM stopped generating |
+
+**stop_reason values:**
+
+| Value | Description |
+|-------|-------------|
+| `end_turn` | LLM finished its response naturally |
+| `tool_use` | LLM wants to use tools |
+| `max_tokens` | Hit the token limit |
+| `stop_sequence` | Hit a stop sequence |
+
+**Common Run outputs (shell commands):**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `exit_code` | int | Command exit code (0 = success) |
+| `stdout` | string | Standard output |
+| `stderr` | string | Standard error |
+
+**Loop outputs:**
+
+Loop outputs contain the last iteration's sub-workflow outputs directly. Access them via `nodes.<loop_id>.<output_name>` where `<output_name>` matches outputs declared in the loop's inline workflow.
+
+### workflow.*
+
+Provides workflow metadata and execution context.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `workflow.id` | string | Unique workflow execution ID |
+| `workflow.name` | string | Workflow definition name |
+| `workflow.path` | string | Working directory path |
+| `workflow.branch` | string | Current git branch |
+
+```yaml
+# Create unique resource names
+name: "worktree-{{workflow.id}}"
+
+# Include workflow context in messages
+content: "Workflow {{workflow.name}} completed"
+
+# Access git branch
+base_branch: "{{workflow.branch}}"
+```
+
+### iter.*
+
+Provides loop iteration context. Only available inside loop constructs.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `iter.iteration` | int | Current iteration (0-indexed in loop body; increments before while check) |
+
+```yaml
+# Display human-readable iteration number
+content: "Attempt {{iter.iteration + 1}}"
+
+# Use in loop while condition (outputs.* contains current iteration's results)
+while: outputs.exit_code != 0 && iter.iteration < 5
+```
+
+Note: Previous iteration data is available via `outputs.*` in `while` conditions. For inject templates, use `thread: mode: inherit` to preserve context across iterations.
+
+### output.*
+
+Used in `save_message` blocks to reference the current activity's output.
+
+```yaml
+- id: call_llm
+  action: CallLLM
+  save_message:
+    role: "{{output.message.role}}"
+    content: "{{output.message.text}}"
+    tool_calls: "{{output.tool_calls}}"
+```
+
+Note: Token counts (`input_tokens`, `output_tokens`, etc.) and thinking are automatically extracted from activity output - no explicit configuration needed.
+
+### outputs.*
+
+Used in loop `while` conditions to reference the sub-workflow's declared outputs.
+
+```yaml
+loop:
+  while: outputs.exit_code != 0 && iter.iteration < 10
+  inline:
+    outputs:
+      exit_code: "{{nodes.verify.exit_code}}"
+```
+
+---
+
+## Built-in Functions
+
+### Standard CEL Functions
+
+| Function | Description | Example |
+|----------|-------------|---------|
+| `size(x)` | Length of list, map, or string | `size(nodes.call_llm.tool_calls) > 0` |
+| `has(x.field)` | Check if field exists | `has(nodes.verify) ? nodes.verify.exit_code == 0 : true` |
+| `type(x)` | Get type of value | `type(inputs.data) == "string"` |
+
+### String Functions
+
+| Function | Description | Example |
+|----------|-------------|---------|
+| `contains(s, substr)` | Check if string contains substring | `contains(output.stderr, "error")` |
+| `startsWith(s, prefix)` | Check if string starts with prefix | `startsWith(inputs.model, "claude")` |
+| `endsWith(s, suffix)` | Check if string ends with suffix | `endsWith(file, ".go")` |
+| `matches(s, pattern)` | Regex match | `matches(output.stdout, "^OK")` |
+
+### Reliant Custom Functions
+
+#### `first(list)`
+
+Returns the first element of a list as an optional. Returns `optional.none()` if the list is empty.
+Use `.orValue(default)` to unwrap with a default value, or `.value()` to unwrap (errors on empty).
+
+```yaml
+# Get first tool call, or null if none
+first_tool: "{{nodes.call_llm.tool_calls.first().orValue(null)}}"
+
+# Direct access (will error on empty list)
+first_tool: "{{nodes.call_llm.tool_calls.first().value()}}"
+```
+
+#### `last(list)`
+
+Returns the last element of a list as an optional. Returns `optional.none()` if the list is empty.
+Use `.orValue(default)` to unwrap with a default value, or `.value()` to unwrap (errors on empty).
+
+```yaml
+# Get last tool call, or null if none
+last_tool: "{{nodes.call_llm.tool_calls.last().orValue(null)}}"
+```
+
+#### `join(list, delimiter)`
+
+Joins list elements into a string with a delimiter.
+
+```yaml
+# Join array elements
+tools_list: "{{inputs.tools.join(',')}}"
+```
+
+#### `parseJson(string)`
+
+Parses a JSON string into a CEL value (map or list).
+
+```yaml
+data: "{{parseJson(nodes.fetch.body)}}"
+```
+
+#### `toJson(value)`
+
+Converts a value to its JSON string representation.
+
+```yaml
+# As global function
+json_str: "{{toJson(nodes.call_llm.tool_calls)}}"
+
+# As member function
+json_str: "{{nodes.call_llm.tool_calls.toJson()}}"
+```
+
+#### `coalesce(value1, value2, ...)`
+
+Returns the first non-null argument. Supports 2-4 arguments.
+
+```yaml
+# Use default if input is null
+model: "{{coalesce(inputs.model, {tags: ['moderate']})}}"
+
+# Chain multiple fallbacks
+value: "{{coalesce(inputs.primary, inputs.secondary, 'default')}}"
+```
+
+#### `getOrDefault(map, key, default)`
+
+Safely accesses a map key with a fallback default value.
+
+```yaml
+name: "{{getOrDefault(inputs, 'name', 'unnamed')}}"
+```
+
+### Response Tool Data Access
+
+Response tool data is available directly on ExecuteTools output via the `response_data` field. This field contains parsed response data keyed by tool name.
+
+Response tools use JSON Schema to define structured outputs. A common pattern is choice/value:
+
+```yaml
+response_tool:
+  name: audit_result
+  description: Report audit findings
+  schema:
+    type: object
+    required: [choice, value]
+    properties:
+      choice:
+        type: string
+        enum: [approved, denied]
+        description: |
+          Choose one:
+          - approved: Agent is on track
+          - denied: Agent needs guidance
+      value:
+        type: string
+        description: Explanation for your choice
+```
+
+Access the structured response via `response_data`:
+
+```yaml
+# Check the choice
+condition: nodes.execute_audit.response_data.audit_result.choice == 'approved'
+
+# Access the value
+guidance: "{{nodes.execute_audit.response_data.audit_result.value}}"
+```
+
+For more complex schemas, you can define arrays and nested objects:
+
+```yaml
+response_tool:
+  name: filtered_results
+  description: Submit filtered tool results
+  schema:
+    type: object
+    required: [results]
+    properties:
+      results:
+        type: array
+        items:
+          type: object
+          properties:
+            tool_call_id: { type: string }
+            content: { type: string }
+```
+
+#### `parseDuration(string)`
+
+Parses a Go duration string and returns seconds as a number.
+
+```yaml
+timeout_seconds: "{{parseDuration('5m')}}"    # Returns: 300
+total_seconds: "{{parseDuration('1h30m')}}"   # Returns: 5400
+```
+
+---
+
+## Common Patterns
+
+### Conditional Logic
+
+Use the ternary operator for conditional values:
+
+```yaml
+# Simple conditional
+model: "{{inputs.model.id != '' ? inputs.model : {tags: ['moderate']}}}"
+
+# Nested conditional
+prompt: "{{inputs.mode == 'plan' ? inputs.planning_prompt : inputs.system_prompt}}"
+
+# Multi-level conditional
+prompt: |
+  {{inputs.mode == 'plan' ? inputs.planning_prompt :
+    inputs.mode == 'auto' ? inputs.auto_prompt :
+    inputs.default_prompt}}
+```
+
+### Default Values
+
+Several patterns for handling missing or empty values:
+
+```yaml
+# Ternary with empty string check
+model: "{{inputs.model != '' ? inputs.model : 'default-model'}}"
+
+# Using coalesce (for null values)
+value: "{{coalesce(inputs.optional, 'fallback')}}"
+
+# Using getOrDefault (for map access)
+setting: "{{getOrDefault(inputs, 'setting', 'default')}}"
+
+# Combining approaches
+model: "{{inputs.Custom.model != '' ? inputs.Custom.model : coalesce(inputs.model, 'default')}}"
+```
+
+### Checking Optional Fields
+
+Use `has()` to safely check for optional fields:
+
+```yaml
+# Check if node exists before accessing its output
+condition: "{{has(nodes.verify) ? nodes.verify.exit_code == 0 : true}}"
+
+# Check nested optional fields
+branch: "{{has(workflow.branch) ? workflow.branch : 'main'}}"
+```
+
+### Working with Tool Calls
+
+Common patterns for handling tool calls from LLM responses:
+
+```yaml
+# Check if there are tool calls
+condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0
+
+# In edge conditions
+edges:
+  - from: call_llm
+    cases:
+      - to: execute_tools
+        condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0
+      - to: done
+        label: "no_tools"
+```
+
+### Loop Iteration Patterns
+
+Using iteration context in loops:
+
+```yaml
+# Display iteration number
+content: "Attempt {{iter.iteration + 1}} of {{inputs.max_turns}}"
+
+# Use in while condition to limit iterations
+while: outputs.exit_code != 0 && iter.iteration < inputs.max_turns
+```
+
+### String Interpolation
+
+Embed multiple values in strings:
+
+```yaml
+content: |
+  ## Task Complete
+  
+  **Final iteration:** {{iter.iteration}}
+  **Exit Code:** {{nodes.verify.exit_code}}
+```
+
+---
+
+## Type Handling
+
+### CEL Type System
+
+CEL is strongly typed. Values have specific types that affect how operators and functions work.
+
+| Type | Description | Examples |
+|------|-------------|----------|
+| `int` | Integer numbers | `0`, `42`, `-1` |
+| `double` | Floating point | `1.5`, `0.0`, `-3.14` |
+| `string` | Text | `"hello"`, `""` |
+| `bool` | Boolean | `true`, `false` |
+| `list` | Ordered collection | `[1, 2, 3]`, `[]` |
+| `map` | Key-value pairs | `{"key": "value"}` |
+| `null` | Null value | `null` |
+
+### Null Checks
+
+Always check for null before accessing nested fields:
+
+```yaml
+# Safe null check pattern
+condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0
+
+# Using has() for optional fields
+value: "{{has(nodes.optional_node) ? nodes.optional_node.result : 'default'}}"
+
+# Coalesce for null handling
+model: "{{coalesce(inputs.model, 'default')}}"
+```
+
+### Type Coercion
+
+CEL performs limited automatic type coercion:
+
+```yaml
+# Numbers in string interpolation are converted to strings
+content: "Count: {{nodes.count.value}}"  # int -> string
+
+# Explicit string conversion if needed
+str_value: "{{string(nodes.count.value)}}"
+```
+
+### Boolean Evaluation
+
+Values are not implicitly converted to booleans. Use explicit comparisons:
+
+```yaml
+# Correct: explicit comparison
+condition: nodes.run.exit_code == 0
+
+# Correct: explicit null check
+condition: nodes.call_llm.tool_calls != null
+
+# Wrong: implicit boolean conversion (will error)
+# condition: nodes.run.exit_code  # Don't do this
+```
+
+---
+
+## Edge Conditions
+
+Edge conditions use CEL expressions without the `{{}}` wrapper:
+
+```yaml
+edges:
+  - from: call_llm
+    cases:
+      # Condition is a raw CEL expression (no {{}} needed)
+      - to: execute_tools
+        condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0
+        label: "has_tools"
+      
+      # Combining multiple conditions
+      - to: approval
+        condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode == 'manual'
+        label: "require_approval"
+      
+      # Default case (no condition or always true)
+      - to: done
+        label: "complete"
+```
+
+---
+
+## Loop While Conditions
+
+Loops use **do-while** semantics: the first iteration always executes, then `iter.iteration` increments before the `while` condition is checked to determine whether to continue.
+
+```yaml
+- id: retry_loop
+  type: loop
+  while: outputs.exit_code != 0 && iter.iteration < 10  # Continue while failing AND under 10 iterations
+  inline:
+    outputs:
+      exit_code: "{{nodes.verify.exit_code}}"
+```
+
+**Skipping the loop entirely:** To conditionally skip a loop before it runs, use the node's `condition` field:
+
+```yaml
+- id: retry_loop
+  type: loop
+  condition: inputs.enable_retries == true  # Skip loop if retries disabled
+  while: outputs.exit_code != 0 && iter.iteration < 5
+  inline:
+    # ...
+```
+
+Available namespaces in `while`:
+- `outputs.*` - Sub-workflow outputs defined in `inline.outputs`
+- `iter.*` - Loop iteration context (`iter.iteration` is 0-indexed)
+- `inputs.*` - Workflow inputs (useful for configurable iteration limits like `inputs.max_turns`)
+
+**Do-while behavior:** The loop always runs at least once. After each iteration, `iter.iteration` increments, then the `while` condition is evaluated.
+
+**Iteration counting:** In the loop body, `iter.iteration` is 0-indexed (0, 1, 2...). In the `while` check, it reflects completed iterations (1 after first, 2 after second). Use `iter.iteration < N` to run exactly N iterations.
+
+---
+
+## Common Mistakes
+
+### Missing Null Checks
+
+```yaml
+# Wrong: will error if tool_calls is null
+condition: size(nodes.call_llm.tool_calls) > 0
+
+# Correct: check for null first
+condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0
+```
+
+### Wrong Namespace
+
+```yaml
+# Wrong: 'message' is not a top-level namespace
+content: "{{message.content}}"
+
+# Correct: use inputs for user-provided data
+content: "{{inputs.task}}"
+
+# Correct: use nodes.<id>.message for node outputs
+content: "{{nodes.call_llm.message.text}}"
+```
+
+### Using `{{}}` in Conditions
+
+```yaml
+# Wrong: don't use {{}} in edge conditions
+condition: "{{nodes.run.exit_code == 0}}"
+
+# Correct: raw CEL expression in conditions
+condition: nodes.run.exit_code == 0
+```
+
+### Empty String vs Null
+
+```yaml
+# Empty string is NOT null - coalesce won't help
+model: "{{coalesce(inputs.model, 'default')}}"  # Returns "" if inputs.model is ""
+
+# Use ternary for empty string check
+model: "{{inputs.model != '' ? inputs.model : 'default'}}"
+```
+
+### Accessing Undefined Nodes
+
+```yaml
+# Wrong: node hasn't completed yet or doesn't exist
+content: "{{nodes.nonexistent.value}}"
+
+# Correct: use has() for optional nodes
+content: "{{has(nodes.optional) ? nodes.optional.value : 'N/A'}}"
+```
+
+---
+
+## Debugging Tips
+
+1. **Check node IDs**: Ensure referenced node IDs match exactly (case-sensitive)
+2. **Verify node completion**: `nodes.*` only works after the node completes
+3. **Use has() liberally**: Wrap optional field access in `has()` checks
+4. **Check types**: Use `type(x)` to debug unexpected type errors
+5. **Start simple**: Build complex expressions incrementally
+
+---
+
+## See Also
+
+- [Custom Workflows](/workflows/custom-workflows) - Complete workflow YAML schema
+- [Types Reference](/reference/types) - Node inputs and outputs
+- [CEL Language Specification](https://github.com/google/cel-spec) - Official CEL documentation

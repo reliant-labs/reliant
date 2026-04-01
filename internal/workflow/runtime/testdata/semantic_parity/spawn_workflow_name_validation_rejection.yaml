@@ -1,0 +1,34 @@
+name: spawn_workflow_name_validation_rejection
+canonical_workflow_ref: builtin://not-loadable
+workflow_yaml: |
+  name: builtin://not-loadable
+  apiVersion: "0.0.5"
+  entry: [llm]
+  inputs:
+    model:
+      type: model
+      default:
+        tags: [flagship]
+    tools:
+      type: tools
+      default: [tag:default]
+    spawn_presets:
+      type: preset
+      tags: [agent]
+      multi: true
+      default: [general]
+  nodes:
+    - id: llm
+      type: call_llm
+      args:
+        model: "{{inputs.model}}"
+        tool_filter: "{{inputs.tools + [spawn(workflow.name, inputs.spawn_presets)]}}"
+
+core:
+  use_workflow_loader: false
+  expected_contracts: []
+
+validation:
+  should_pass: false
+  use_workflow_loader: true
+  error_contains: "spawn(workflow.name, ...)"

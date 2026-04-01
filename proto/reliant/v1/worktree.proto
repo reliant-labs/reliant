@@ -1,0 +1,404 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+import "reliant/v1/common.proto";
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+// WorktreeStatus tracks the lifecycle of a worktree
+enum WorktreeStatus {
+  WORKTREE_STATUS_UNSPECIFIED = 0;
+  WORKTREE_STATUS_ACTIVE = 1;
+  WORKTREE_STATUS_COMPLETED = 2;
+  WORKTREE_STATUS_ABANDONED = 3;
+  WORKTREE_STATUS_MERGING = 4;
+}
+
+// WorktreeService handles worktree-related operations
+service WorktreeService {
+  // CRUD Operations
+  rpc CreateWorktree(CreateWorktreeRequest) returns (CreateWorktreeResponse) {}
+  rpc ListWorktrees(ListWorktreesRequest) returns (ListWorktreesResponse) {}
+  rpc GetWorktree(GetWorktreeRequest) returns (GetWorktreeResponse) {}
+  rpc UpdateWorktree(UpdateWorktreeRequest) returns (UpdateWorktreeResponse) {}
+  rpc DeleteWorktree(DeleteWorktreeRequest) returns (DeleteWorktreeResponse) {}
+  rpc ArchiveWorktree(ArchiveWorktreeRequest) returns (ArchiveWorktreeResponse) {}
+  rpc UnarchiveWorktree(UnarchiveWorktreeRequest) returns (UnarchiveWorktreeResponse) {}
+  
+  // Import/Discovery Operations
+  rpc ImportWorktree(ImportWorktreeRequest) returns (ImportWorktreeResponse) {}
+  rpc DiscoverWorktrees(DiscoverWorktreesRequest) returns (DiscoverWorktreesResponse) {}
+  rpc RecreateWorktree(RecreateWorktreeRequest) returns (RecreateWorktreeResponse) {}
+  
+  // Git Read Operations
+  rpc GetWorktreeChanges(GetWorktreeChangesRequest) returns (GetWorktreeChangesResponse) {}
+  rpc GetWorktreeGitStatus(GetWorktreeGitStatusRequest) returns (GetWorktreeGitStatusResponse) {}
+  rpc GetWorktreeCommits(GetWorktreeCommitsRequest) returns (GetWorktreeCommitsResponse) {}
+  
+  // Git Write Operations
+  rpc StageFiles(StageFilesRequest) returns (StageFilesResponse) {}
+  rpc UnstageFiles(UnstageFilesRequest) returns (UnstageFilesResponse) {}
+  rpc RevertFiles(RevertFilesRequest) returns (RevertFilesResponse) {}
+  rpc CommitWorktree(CommitWorktreeRequest) returns (CommitWorktreeResponse) {}
+  rpc PushWorktree(PushWorktreeRequest) returns (PushWorktreeResponse) {}
+  rpc PullWorktree(PullWorktreeRequest) returns (PullWorktreeResponse) {}
+  rpc GetWorktreePR(GetWorktreePRRequest) returns (GetWorktreePRResponse) {}
+  rpc CreateWorktreePR(CreateWorktreePRRequest) returns (CreateWorktreePRResponse) {}
+}
+
+// =============================================================================
+// Core Message Types
+// =============================================================================
+
+// Worktree represents a git worktree in the system
+message Worktree {
+  string id = 1;
+  string name = 2;
+  string path = 3;
+  string branch = 4;
+  string base_branch = 5;
+  string project_id = 6;
+  optional string chat_id = 7;
+  WorktreeStatus status = 8;
+  bool is_main = 9;
+  string created_at = 10;
+  string updated_at = 11;
+  string last_active = 12;
+  optional string deleted_at = 13;  // Archive timestamp
+  optional CleanupMetadata cleanup_metadata = 14;
+}
+
+// CleanupMetadata tracks what was cleaned up during archive
+message CleanupMetadata {
+  bool directory_deleted = 1;
+  bool branch_deleted = 2;
+}
+
+// DiscoveredWorktree represents a worktree found via git discovery
+message DiscoveredWorktree {
+  string path = 1;
+  string name = 2;
+  string branch = 3;
+  bool is_imported = 4;
+  bool is_prunable = 5;
+  optional string imported_id = 6;
+}
+
+// GitCommit represents a git commit
+message GitCommit {
+  string hash = 1;
+  string short_hash = 2;
+  string author = 3;
+  string email = 4;
+  string date = 5;
+  string message = 6;
+}
+
+// WorktreeFileChange represents a changed file in a worktree
+message WorktreeFileChange {
+  string path = 1;
+  FileChangeStatus status = 2;
+  bool is_new = 3;
+  string diff = 4;
+  bool is_binary = 5;  // true if file is binary (diff will be empty or placeholder)
+}
+
+// =============================================================================
+// CRUD Request/Response Messages
+// =============================================================================
+
+// CreateWorktreeRequest creates a new worktree
+message CreateWorktreeRequest {
+  string name = 1;
+  string branch = 2;
+  string project_id = 3;
+  optional string base_branch = 4;
+  optional string chat_id = 5;
+  repeated string copy_files = 6;  // Files to copy (searches recursively in all directories)
+  bool force = 7;
+  optional string source_worktree_id = 8; // Source worktree to copy files from (if not set, copies from project path)
+}
+
+// CreateWorktreeResponse returns the created worktree
+message CreateWorktreeResponse {
+  Worktree worktree = 1;
+}
+
+// ListWorktreesRequest lists worktrees with filters
+message ListWorktreesRequest {
+  string project_id = 1;  // Required
+  optional string chat_id = 2;
+  int32 limit = 3;
+}
+
+// ListWorktreesResponse returns a list of worktrees
+message ListWorktreesResponse {
+  repeated Worktree worktrees = 1;
+  int32 total = 2;
+}
+
+// GetWorktreeRequest retrieves a worktree by ID
+message GetWorktreeRequest {
+  string worktree_id = 1;
+}
+
+// GetWorktreeResponse returns the requested worktree
+message GetWorktreeResponse {
+  Worktree worktree = 1;
+}
+
+// UpdateWorktreeRequest updates a worktree
+message UpdateWorktreeRequest {
+  string worktree_id = 1;
+  optional string name = 2;
+  optional WorktreeStatus status = 3;
+  optional string base_branch = 4;
+}
+
+// UpdateWorktreeResponse returns the updated worktree
+message UpdateWorktreeResponse {
+  Worktree worktree = 1;
+}
+
+// DeleteWorktreeRequest deletes or archives a worktree
+message DeleteWorktreeRequest {
+  string worktree_id = 1;
+  bool delete_local_directory = 2;
+  bool delete_git_branch = 3;
+}
+
+// DeleteWorktreeResponse confirms deletion/archive
+message DeleteWorktreeResponse {
+  string message = 1;
+  bool deleted_directory = 2;
+  bool deleted_branch = 3;
+  bool is_permanent_delete = 4;
+}
+
+// ArchiveWorktreeRequest archives a worktree (sets deleted_at)
+message ArchiveWorktreeRequest {
+  string worktree_id = 1;
+  bool delete_local_directory = 2;
+  bool delete_git_branch = 3;
+}
+
+// ArchiveWorktreeResponse confirms archive
+message ArchiveWorktreeResponse {
+  string message = 1;
+  bool deleted_directory = 2;
+  bool deleted_branch = 3;
+}
+
+// UnarchiveWorktreeRequest restores an archived worktree
+message UnarchiveWorktreeRequest {
+  string worktree_id = 1;
+}
+
+// UnarchiveWorktreeResponse confirms unarchive
+message UnarchiveWorktreeResponse {
+  string message = 1;
+}
+
+// =============================================================================
+// Import/Discovery Request/Response Messages
+// =============================================================================
+
+// ImportWorktreeRequest imports an existing worktree directory
+message ImportWorktreeRequest {
+  string path = 1;
+  string project_id = 2;
+  optional string name = 3;
+  optional string chat_id = 4;
+}
+
+// ImportWorktreeResponse returns the imported worktree
+message ImportWorktreeResponse {
+  Worktree worktree = 1;
+}
+
+// DiscoverWorktreesRequest discovers existing git worktrees
+message DiscoverWorktreesRequest {
+  string project_id = 1;
+}
+
+// DiscoverWorktreesResponse returns discovered worktrees
+message DiscoverWorktreesResponse {
+  repeated DiscoveredWorktree discovered = 1;
+  int32 total = 2;
+}
+
+// RecreateWorktreeRequest recreates an archived worktree from its branch
+message RecreateWorktreeRequest {
+  string worktree_id = 1;
+}
+
+// RecreateWorktreeResponse confirms recreation
+message RecreateWorktreeResponse {
+  string message = 1;
+  string path = 2;
+  string branch = 3;
+}
+
+// =============================================================================
+// Git Read Operations Request/Response Messages
+// =============================================================================
+
+// GetWorktreeChangesRequest gets file changes for a worktree
+message GetWorktreeChangesRequest {
+  string worktree_id = 1;
+}
+
+// GetWorktreeChangesResponse returns file changes
+message GetWorktreeChangesResponse {
+  string branch = 1;
+  repeated WorktreeFileChange files = 2;
+  int32 total_files = 3;
+  int32 ahead = 4;
+  int32 behind = 5;
+  string default_branch = 6;  // Repository's default branch (for PR targeting)
+}
+
+// GetWorktreeGitStatusRequest gets git status for a worktree
+message GetWorktreeGitStatusRequest {
+  string worktree_id = 1;
+}
+
+// GetWorktreeGitStatusResponse returns git status
+message GetWorktreeGitStatusResponse {
+  string worktree_id = 1;
+  string path = 2;
+  string branch = 3;
+  bool clean = 4;
+  bool has_changes = 5;
+  repeated string staged_files = 6;
+  repeated string modified_files = 7;
+  repeated string untracked_files = 8;
+  int32 ahead = 9;
+  int32 behind = 10;
+}
+
+// GetWorktreeCommitsRequest gets commit history for a worktree
+message GetWorktreeCommitsRequest {
+  string worktree_id = 1;
+  int32 limit = 2;  // Default 20, max 100
+}
+
+// GetWorktreeCommitsResponse returns commit history
+message GetWorktreeCommitsResponse {
+  repeated GitCommit commits = 1;
+  int32 total = 2;
+  string branch = 3;
+  string base_branch = 4;
+  bool comparison_mode = 5;
+  string comparison_ref = 6;
+  string current_branch = 7;
+}
+
+// =============================================================================
+// Git Write Operations Request/Response Messages
+// =============================================================================
+
+// StageFilesRequest stages files in a worktree
+message StageFilesRequest {
+  string worktree_id = 1;
+  repeated string files = 2;  // Empty or ["."] means stage all
+}
+
+// StageFilesResponse confirms staging
+message StageFilesResponse {
+  string message = 1;
+  repeated string files = 2;
+}
+
+// UnstageFilesRequest unstages files in a worktree
+message UnstageFilesRequest {
+  string worktree_id = 1;
+  repeated string files = 2;  // Empty or ["."] means unstage all
+}
+
+// UnstageFilesResponse confirms unstaging
+message UnstageFilesResponse {
+  string message = 1;
+  repeated string files = 2;
+}
+
+// RevertFilesRequest reverts/discards file changes
+// For staged files: unstages and discards changes
+// For modified files: discards working tree changes  
+// For untracked files: deletes the file
+message RevertFilesRequest {
+  string worktree_id = 1;
+  repeated string files = 2;  // File paths to revert
+}
+
+// RevertFilesResponse confirms revert
+message RevertFilesResponse {
+  string message = 1;
+  repeated string files = 2;
+}
+
+// CommitWorktreeRequest commits staged changes
+message CommitWorktreeRequest {
+  string worktree_id = 1;
+  string message = 2;
+}
+
+// CommitWorktreeResponse confirms commit
+message CommitWorktreeResponse {
+  string message = 1;
+  string output = 2;
+}
+
+// PushWorktreeRequest pushes commits to remote
+message PushWorktreeRequest {
+  string worktree_id = 1;
+}
+
+// PushWorktreeResponse confirms push
+message PushWorktreeResponse {
+  string message = 1;
+  string output = 2;
+}
+
+// PullWorktreeRequest pulls changes from remote
+message PullWorktreeRequest {
+  string worktree_id = 1;
+}
+
+// PullWorktreeResponse confirms pull
+message PullWorktreeResponse {
+  string message = 1;
+  string output = 2;
+}
+
+// GetWorktreePRRequest checks for existing PR
+message GetWorktreePRRequest {
+  string worktree_id = 1;
+}
+
+// GetWorktreePRResponse returns PR info if exists
+message GetWorktreePRResponse {
+  bool exists = 1;
+  optional string url = 2;
+  optional int32 number = 3;
+  optional string title = 4;
+  optional string state = 5;  // "OPEN", "CLOSED", "MERGED"
+}
+
+// CreateWorktreePRRequest creates a pull request
+message CreateWorktreePRRequest {
+  string worktree_id = 1;
+  string title = 2;
+  optional string body = 3;
+}
+
+// CreateWorktreePRResponse confirms PR creation
+message CreateWorktreePRResponse {
+  string message = 1;
+  string pr_url = 2;
+  string output = 3;
+  bool auto_committed = 4;
+  bool auto_pushed = 5;
+}

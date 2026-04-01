@@ -1,0 +1,92 @@
+// Copyright (c) 2025 Reliant Labs
+package models
+
+import "time"
+
+// DriverID represents a unique identifier for a driver implementation
+// Examples: "openai", "anthropic", "openrouter", "bedrock"
+type DriverID string
+
+// ModelFamily represents a grouping of related models
+// Examples: "claude", "gpt", "gemini", "llama"
+type ModelFamily string
+
+// DriverConfig represents configuration for a specific driver
+type DriverConfig struct {
+	DriverID         DriverID
+	APIKey           string
+	BaseURL          string    // Optional: for custom endpoints (required for local drivers)
+	Enabled          bool      // Whether this driver is available for use
+	AccountUUID      string    // Optional: Claude OAuth account UUID
+	AccountEmail     string    // Optional: Claude OAuth account email
+	OrganizationUUID string    // Optional: Claude OAuth organization UUID
+	RefreshToken     string    // Optional: Claude OAuth refresh token for auto-refresh
+	TokenExpiresAt   time.Time // Optional: when the access token expires
+}
+
+// IsConfigured returns true if the driver has the required configuration.
+// Most drivers require an API key, but local drivers only require a BaseURL.
+func (c DriverConfig) IsConfigured() bool {
+	if !c.Enabled {
+		return false
+	}
+	// Local drivers don't need an API key, they need a BaseURL
+	if c.DriverID == "local" {
+		return c.BaseURL != ""
+	}
+	// All other drivers require an API key
+	return c.APIKey != ""
+}
+
+// AvailableDrivers represents the set of configured drivers that can be used
+type AvailableDrivers struct {
+	// Map of driver ID to its configuration
+	Drivers map[DriverID]DriverConfig
+}
+
+// GetAvailableDriversForModel returns the list of drivers that support a model AND are properly configured.
+// For most drivers, this means having an API key. For local drivers, this means having a BaseURL.
+func GetAvailableDriversForModel(modelID ModelID, availableDrivers AvailableDrivers) []DriverConfig {
+	// Get all drivers that support this model
+	supportingDrivers := GetDriversForModel(modelID)
+
+	var configs []DriverConfig
+	for _, driverID := range supportingDrivers {
+		if config, exists := availableDrivers.Drivers[DriverID(driverID)]; exists && config.IsConfigured() {
+			configs = append(configs, config)
+		}
+	}
+
+	return configs
+}
+
+// SelectBestDriver selects the best available driver for a model
+// Priority order: Uses ProviderPriority from registry_v2.go
+// Native providers (anthropic, openai, gemini, xai, vertexai) have priority 1
+// Local providers have priority 2, aggregators (openrouter) have priority 10
+func SelectBestDriver(modelID ModelID, availableDrivers AvailableDrivers) (DriverConfig, bool) {
+	availableConfigs := GetAvailableDriversForModel(modelID, availableDrivers)
+	if len(availableConfigs) == 0 {
+		return DriverConfig{}, false
+	}
+
+	// Find the best config by priority using the authoritative ProviderPriority map
+	bestConfig := availableConfigs[0]
+	bestPriority := ProviderPriority[string(bestConfig.DriverID)]
+	if bestPriority == 0 {
+		bestPriority = 99 // Unknown driver, lowest priority
+	}
+
+	for _, config := range availableConfigs[1:] {
+		configPriority := ProviderPriority[string(config.DriverID)]
+		if configPriority == 0 {
+			configPriority = 99
+		}
+		if configPriority < bestPriority {
+			bestConfig = config
+			bestPriority = configPriority
+		}
+	}
+
+	return bestConfig, true
+}

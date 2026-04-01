@@ -1,0 +1,144 @@
+---
+title: "Privacy & Security"
+description: "How Reliant handles your data and keeps your code secure"
+---
+
+Reliant is designed with privacy as a core principle. Your code and conversations stay on your machine—we don't have servers receiving your data.
+
+## Local-First Architecture
+
+**All data stays on your machine:**
+
+| Data Type | Storage Location |
+| --- | --- |
+| Config | `~/.reliant/config.yaml` (all platforms) |
+| Conversations | `~/Library/Application Support/reliant` (macOS), `~/.local/share/reliant` (Linux) |
+| API keys | `~/Library/Application Support/reliant` (macOS), `~/.local/share/reliant` (Linux) |
+| Workflows | `.reliant/workflows/` in your project |
+| Presets | `.reliant/presets/` in your project |
+| Memories | `~/.reliant/reliant.md` (global), `reliant.md` (project) |
+| Worktrees | `~/.reliant/worktrees/` by default |
+| Your code | On your machine |
+
+## What Goes to AI Providers
+
+When you chat with Reliant, messages are sent directly to your chosen AI provider (Anthropic, OpenAI, etc.). This includes:
+
+- Your messages and prompts
+- Relevant code context (files you reference or that tools read)
+- Tool call requests and results
+- System prompts from workflows/presets
+
+**You control which provider receives your data** by choosing your API provider in Settings → AI.
+
+### Provider Privacy Policies
+
+Each provider has different data handling policies:
+
+| Provider | Data Retention | Training Usage |
+| --- | --- | --- |
+| Anthropic | 30 days (API) | Not used for training |
+| OpenAI | 30 days (API) | Not used for training (API) |
+| Google | Varies | Check their policy |
+
+**Tip:** Review your provider's privacy policy. API usage typically has better privacy guarantees than consumer products.
+
+## Project Isolation
+
+Each project has isolated data:
+
+- Separate chat history
+- Separate workflow configurations
+- Separate memory files (`reliant.md`)
+
+Worktrees share the parent repository's `.reliant/` directory but have isolated conversations.
+
+### Offline Mode
+
+Reliant works offline for:
+
+- Viewing past conversations
+- Editing workflows
+- File operations
+- Local LLMs
+
+## Telemetry
+
+By default, Reliant does collect basic telemetry to understand what features you are using. This is not attached to any user information, and is only used for product feature decisions. If you opt-in to crash reporting, only:
+
+- Crash stack traces (no code content)
+- Basic system info (OS version, Reliant version)
+
+are sent to help us fix bugs. You can opt out of both under Settings > Privacy.
+
+## Public Docs Site Analytics
+
+The public docs site (`docs.reliantlabs.io`) is separate from the desktop app. The Mintlify docs experience includes browser-side analytics integrations for documentation usage.
+
+Apollo remains enabled on the public docs site. Statsig is also supported for anonymous docs analytics when it is explicitly enabled in the runtime configuration for a deployment.
+
+When Statsig is enabled, it collects anonymous documentation usage events such as:
+
+- Page views
+- Outbound link clicks
+- Docs search opens and submissions
+
+The Statsig docs integration stores:
+
+- An anonymous visitor ID in `localStorage`
+- A session ID in `sessionStorage`
+
+These docs site analytics do **not** include your local code, project files, or desktop chat history. Statsig stays disabled by default for local development and preview environments unless it is explicitly turned on for testing.
+
+## Enterprise Considerations
+
+For organizations with strict security requirements:
+
+- **Self-hosted providers**: Use Azure OpenAI, AWS Bedrock, or local models
+- **Air-gapped environments**: Deploy with local LLM servers
+- **Audit logging**: Conversations are stored locally and can be reviewed
+- **SSO/SAML**: Coming soon
+
+## Deleting Your Data
+
+### Clear Conversations
+
+In the app: Settings → Data → Clear Chat History
+
+### Complete Removal
+
+```bash
+# Remove user configuration (all platforms)
+rm -rf ~/.reliant/
+
+# macOS - Remove internal data and logs
+rm -rf ~/Library/Application\ Support/reliant
+rm -rf ~/Library/Logs/Reliant
+
+# Linux - Remove internal data and logs
+rm -rf ~/.local/share/reliant
+rm -rf ~/.local/state/reliant
+
+# Windows - Remove internal data
+del /s /q %APPDATA%\reliant
+```
+
+Your code and project files are never modified by this process.
+
+## Security Practices
+
+### Code Modifications
+
+Reliant shows you exactly what changes will be made before applying them. In manual approval mode, every edit requires your confirmation.
+
+### Tool Execution
+
+Shell commands and file operations are:
+
+- Logged in the conversation
+- Visible in the UI before execution
+- Controllable via approval modes
+
+---
+
+**Questions?** Email [security@reliantlabs.io](mailto:security@reliantlabs.io) for security-related inquiries.

@@ -1,0 +1,212 @@
+# Test scenarios for ralph-wiggum.yaml workflow
+#
+# Ralph-wiggum workflow structure:
+#   task_loop (type: loop, passthrough thread):
+#     While: (has(outputs.tasks_remaining) && outputs.tasks_remaining == true)
+#            && iter.iteration < inputs.max_iterations
+#     Inner nodes: orient → implement → verify
+#     - orient    (type: workflow, ref: builtin://agent)        → BLACK BOX
+#     - implement (type: workflow, ref: builtin://agent)        → BLACK BOX
+#     - verify    (type: workflow, ref: builtin://structured-agent)
+#       → response schema: { summary: string, tasks_remaining: bool, issues: string[] }
+#     - Loop outputs: tasks_remaining (from verify response)
+#
+# Inputs:
+#   model (model): default tags: ["flagship"]
+#   max_iterations (integer): default 10, min 1, max 50
+#
+# NOTE: For loop scenarios, provide events for EACH iteration in order.
+#       The simulator consumes events sequentially per node name.
+
+---
+name: single_task_complete
+description: >
+  One iteration: orient picks a task, implement executes it, verify says
+  tasks_remaining=false. Loop exits after a single pass.
+
+events:
+  # Iteration 0 — all done on first try
+  - node: task_loop.orient
+    output:
+      response_text: "Task chosen: implement user authentication endpoint. Priority: high. Acceptance: returns JWT on valid credentials."
+
+  - node: task_loop.implement
+    output:
+      response_text: "Implemented /auth/login endpoint with JWT generation. Tests pass."
+
+  - node: task_loop.verify
+    output:
+      response:
+        summary: "Authentication endpoint implemented correctly. All spec tasks complete."
+        tasks_remaining: false
+        issues: []
+
+expect:
+  outcome: completed
+  reached:
+    - task_loop
+    - task_loop.orient
+    - task_loop.implement
+    - task_loop.verify
+  node_outputs:
+    task_loop:
+      tasks_remaining: false
+
+---
+name: two_iterations
+description: >
+  Two iterations: first verify says tasks_remaining=true (more work to do),
+  second verify says tasks_remaining=false (all done). Loop exits after 2 passes.
+
+events:
+  # Iteration 0 — first task done, more remain
+  - node: task_loop.orient
+    output:
+      response_text: "Task chosen: create database schema for users table."
+
+  - node: task_loop.implement
+    output:
+      response_text: "Created users table migration with id, email, password_hash columns."
+
+  - node: task_loop.verify
+    output:
+      response:
+        summary: "Users table schema created. Still need API endpoints."
+        tasks_remaining: true
+        issues: []
+
+  # Iteration 1 — second task completes everything
+  - node: task_loop.orient
+    output:
+      response_text: "Task chosen: implement CRUD API endpoints for users."
+
+  - node: task_loop.implement
+    output:
+      response_text: "Implemented GET/POST/PUT/DELETE /users endpoints with validation."
+
+  - node: task_loop.verify
+    output:
+      response:
+        summary: "All API endpoints implemented and tested. Spec is fully satisfied."
+        tasks_remaining: false
+        issues: []
+
+expect:
+  outcome: completed
+  reached:
+    - task_loop
+    - task_loop.orient
+    - task_loop.implement
+    - task_loop.verify
+  node_outputs:
+    task_loop:
+      tasks_remaining: false
+
+---
+name: max_iterations_reached
+description: >
+  Verify always returns tasks_remaining=true. Loop exits when iter.iteration
+  reaches max_iterations (set to 3 for testing). Workflow still completes
+  (loop exhaustion is not an error). Final tasks_remaining is true.
+
+inputs:
+  max_iterations: 3
+
+events:
+  # Iteration 0
+  - node: task_loop.orient
+    output:
+      response_text: "Task chosen: set up project scaffolding."
+
+  - node: task_loop.implement
+    output:
+      response_text: "Created project structure with src/, tests/, docs/ directories."
+
+  - node: task_loop.verify
+    output:
+      response:
+        summary: "Scaffolding done. Many tasks remain in the spec."
+        tasks_remaining: true
+        issues: []
+
+  # Iteration 1
+  - node: task_loop.orient
+    output:
+      response_text: "Task chosen: implement data models."
+
+  - node: task_loop.implement
+    output:
+      response_text: "Created data models for User, Project, and Task entities."
+
+  - node: task_loop.verify
+    output:
+      response:
+        summary: "Models created but API layer and tests still needed."
+        tasks_remaining: true
+        issues: []
+
+  # Iteration 2 (last iteration — iter.iteration will be 3 after this, hitting max)
+  - node: task_loop.orient
+    output:
+      response_text: "Task chosen: implement API routes."
+
+  - node: task_loop.implement
+    output:
+      response_text: "Implemented core API routes for all entities."
+
+  - node: task_loop.verify
+    output:
+      response:
+        summary: "API routes done but integration tests and docs still pending."
+        tasks_remaining: true
+        issues:
+          - "Integration tests not yet written"
+          - "API documentation incomplete"
+
+expect:
+  outcome: completed
+  reached:
+    - task_loop
+    - task_loop.orient
+    - task_loop.implement
+    - task_loop.verify
+  node_outputs:
+    task_loop:
+      tasks_remaining: true
+
+---
+name: verify_with_issues
+description: >
+  Single iteration: verify reports issues but sets tasks_remaining=false.
+  All spec work is done despite minor issues noted. Loop exits normally.
+
+events:
+  # Iteration 0 — done but with issues noted
+  - node: task_loop.orient
+    output:
+      response_text: "Task chosen: implement payment processing integration."
+
+  - node: task_loop.implement
+    output:
+      response_text: "Integrated Stripe payment processing. Webhook handler and checkout flow complete."
+
+  - node: task_loop.verify
+    output:
+      response:
+        summary: "Payment integration works end-to-end. All spec requirements met."
+        tasks_remaining: false
+        issues:
+          - "Error messages could be more user-friendly"
+          - "Consider adding retry logic for transient Stripe API failures"
+          - "Webhook signature verification uses test key"
+
+expect:
+  outcome: completed
+  reached:
+    - task_loop
+    - task_loop.orient
+    - task_loop.implement
+    - task_loop.verify
+  node_outputs:
+    task_loop:
+      tasks_remaining: false

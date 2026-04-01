@@ -1,0 +1,16 @@
+# buf.gen-go-only.yaml - Code generation for Go only (excludes TypeScript)
+version: v2
+managed:
+  enabled: false
+plugins:
+  # Generate Go protobuf code
+  - remote: buf.build/protocolbuffers/go
+    out: internal/gen
+    opt:
+      - paths=source_relative
+
+  # Generate Connect-Go service code using remote plugin
+  - remote: buf.build/connectrpc/go
+    out: internal/gen
+    opt:
+      - paths=source_relative

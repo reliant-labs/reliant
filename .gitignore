@@ -1,0 +1,319 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+coverage.html
+
+# Dependency directories (remove the comment below to include it)
+# vendor/
+
+# Go workspace file
+go.work
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.log
+
+# Binary output directory
+/bin/
+/dist/
+/build/
+
+# Test and debug files
+test-output.log
+test-results.json
+debug-*.log
+*.tmp
+*~
+
+# Coverage and profiling
+coverage.out
+cpu.prof
+mem.prof
+*.cover
+coverage.json
+coverage-final.json
+*.sarif
+
+# Local environment variables
+.env
+.env.local
+.env.production
+.env.staging
+.env.test
+
+# Production artifacts
+/reports/
+/artifacts/
+/logs/
+/data/
+/tmp/
+
+# Docker
+.dockerignore
+Dockerfile.local
+docker-compose.override.yml
+docker-logs.txt
+/tmp/.buildx-cache/
+
+# Reliant directory - ignore everything except specific files
+.claude_plan
+
+/dev/
+/docs/changelog.drafts/
+/.dev/
+
+# Node.js dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.npm
+
+# React Native
+*.jsbundle
+.metro-health-check*
+
+# iOS
+ios/Pods/
+ios/build/
+mobile-app/ios/Pods/
+mobile-app/ios/build/
+mobile-app/ios/.xcode.env.local
+mobile-app/ios/Podfile.lock
+Podfile.lock
+*.xcworkspace
+*.xcworkspace/xcuserdata
+*.xcodeproj/xcuserdata
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+mobile-app/android/.gradle/
+mobile-app/android/build/
+mobile-app/android/app/build/
+mobile-app/android/app/debug.keystore
+*.apk
+*.aab
+
+# Expo
+.expo/
+dist/
+*.expo-shared
+
+# Supabase
+.supabase/
+
+# Testing
+coverage/
+*.lcov
+test-results/
+playwright-report/
+playwright/.cache/
+web/test-results/
+web/playwright-report/
+web/coverage/
+
+# Temporary files
+*.tmp
+temp/
+tmp/
+
+# Go build artifacts
+/reliant
+/reliant-*
+/bin/
+/dist/
+*.exe
+*.test
+*.prof
+__debug_bin
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+.venv/
+venv/
+ENV/
+env/
+
+# TypeScript
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+# Package lock files (keep one or the other)
+# yarn.lock
+# pnpm-lock.yaml
+
+# Editor directories and files
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# System files
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Test sqllite db.
+:memory:
+
+# Dynamic port configuration (generated at runtime)
+.ports.json
+.ports-*.json
+.instance-info
+.instance-*.info
+.env.ports
+
+# Temporal artifacts (logs, pids, db)
+.temporal/
+temporal.db
+temporal.db-shm
+temporal.db-wal
+
+# Electron build artifacts
+electron/dist/
+electron/resources/bin/
+electron/resources/server/
+
+# Cursor
+.cursor/
+
+
+# Reliant AI
+/.reliant/ephemeral/
+/.reliant/reliant.local.md
+/.reliant/settings.local.yaml
+/.reliant/cache/
+/.reliant/logs/*.log
+/.reliant/tests/llm/outputs/
+
+# Reliant local config (gitignored, for local overrides)
+.reliant.local/
+
+/tests/backend/tests/testdata/
+
+# Claude settings
+.claude/settings.local.json
+
+# Reliant V2 binary
+reliant$
+electron/data
+electron/electron/
+
+# Browser data
+browser-data/
+
+
+# Gluestack MCP server (cloned from github.com/gluestack/mcp)
+.gluestack-mcp/
+
+# Generated protobuf code
+internal/gen/
+web/src/gen/
+nul
+dev/
+
+# Generated documentation and presets (rebuilt during make generate)
+# Source of truth files and what they generate:
+#
+# Keyboard Shortcuts (from config/shortcuts.yaml):
+#   -> web/src/store/shortcutsData.generated.ts
+#   -> generated/docs-source/settings/keyboard-shortcuts.generated.md
+#
+# Workflow/schema/model/tool reference docs:
+#   -> generated/docs-source/reference/*.md
+#   -> docs/reference/*.mdx
+#
+# Preset reference docs:
+#   -> generated/docs-source/workflows/presets-reference.generated.md
+#   -> docs/workflows/presets-reference.generated.mdx
+#
+# Changelog:
+#   -> docs/data/releases/*.yaml
+#   -> docs/changelog.mdx
+#
+# Workflow Builder Preset (from generated docs + runtime reference data):
+#   -> internal/workflow/builtin/presets/workflow_builder.yaml
+
+# Generated directory (intermediate build artifacts)
+generated/
+
+# Generated Go reference files (from tools/docgen)
+internal/workflow/v3/reference/
+internal/workflow/v2/schema/field_descriptions.go
+
+# Generated sqlc code
+internal/db/sqlite/generated/
+
+# Generated mocks
+internal/llm/drivers/mocks/
+
+# Generated presets
+internal/workflow/builtin/presets/workflow_builder.yaml
+
+# Generated TypeScript
+web/src/store/shortcutsData.generated.ts
+
+# Temp build artifacts (docgen binaries - use `go run` instead of building)
+/schema
+/refcheck
+/scenarios
+/celref
+/shortcuts
+/assembler
+/nodes
+/models
+# Cloud-split service binaries (built by go build without -o dist/)
+/api-server
+/temporal-worker
+/tools-daemon
+/daemon-gateway
+/autotune
+# Stray binaries in subdirs (e.g. web/api-server)
+web/api-server
+logsnippet.txt
+internal/db/schema.sql
+
+# Debug artifacts
+gpt.json
+analyze-state.js
+goroutines.txt
+
+# Developer-local files
+.mcp.json
+.serena/
+console.logs

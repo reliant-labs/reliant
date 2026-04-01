@@ -1,0 +1,240 @@
+# Test scenarios for bmad-lite.yaml workflow
+#
+# BMAD-Lite workflow structure (linear chain):
+#   ideate → requirements → architecture → implement → complete
+#
+# All agent nodes (ideate, requirements, architecture, implement) are
+# type: workflow (ref: builtin://agent) — BLACK BOXES in the simulator.
+# Mock their final outputs (response_text, message).
+#
+# complete is type: save_message — no events needed, it runs directly.
+#
+# Inputs:
+#   model (model):   default tags: [flagship]
+#   mode  (enum):    manual | auto | plan, default auto
+#   yield (boolean): default true — pause for user review after each phase
+
+---
+# Happy path: all 5 phases complete successfully
+name: happy_path
+description: All phases complete in sequence — ideate, requirements, architecture, implement, complete.
+inputs:
+  mode: auto
+  yield: false
+events:
+  # Phase 1: PM ideates product vision
+  - node: ideate
+    output:
+      response_text: |
+        **Problem Statement:** Users need a way to track daily habits.
+        **Vision:** A lightweight habit tracker with streaks and reminders.
+        **Key Value Propositions:** Simple, fast, works offline.
+        **Scope:** MVP — single user, local storage, 3 habit types.
+        **Risks:** Notification reliability on mobile.
+      message:
+        role: assistant
+        text: "Product vision defined for habit tracker MVP."
+
+  # Phase 2: PM writes requirements
+  - node: requirements
+    output:
+      response_text: |
+        **User Stories:**
+        - As a user, I want to create a habit so I can track it daily.
+        - As a user, I want to see my streak so I stay motivated.
+        **Acceptance Criteria:**
+        - Habit creation takes < 3 taps.
+        - Streak resets after 1 missed day.
+        **Priority:** Must-have: create, complete, streak. Should-have: reminders.
+        **Constraints:** Must work offline. < 50ms render time.
+      message:
+        role: assistant
+        text: "Requirements defined with user stories and acceptance criteria."
+
+  # Phase 3: Architect designs the system
+  - node: architecture
+    output:
+      response_text: |
+        **Technical Approach:** React Native app with local SQLite storage.
+        **Components:** HabitStore, StreakCalculator, NotificationService.
+        **File Changes:** Create src/stores/habit.ts, src/services/streak.ts.
+        **Task Breakdown:**
+        1. Set up SQLite schema
+        2. Implement HabitStore CRUD
+        3. Build StreakCalculator
+        4. Wire up UI components
+      message:
+        role: assistant
+        text: "Architecture designed with component breakdown and task list."
+
+  # Phase 4: Developer implements
+  - node: implement
+    output:
+      response_text: |
+        Implementation complete:
+        - Created SQLite schema with habits and completions tables
+        - Implemented HabitStore with create, complete, delete operations
+        - Built StreakCalculator with timezone-aware day boundaries
+        - Connected UI components to store
+        - All 12 tests passing
+      message:
+        role: assistant
+        text: "Implementation complete with all tests passing."
+
+  # Phase 5: complete is type: save_message — no events needed
+
+expect:
+  outcome: completed
+  reached:
+    - ideate
+    - requirements
+    - architecture
+    - implement
+    - complete
+
+---
+# Yield between phases: with yield=true (default), phases pause for user input
+name: yield_between_phases
+description: >
+  With yield=true (the default), each agent phase pauses for user review.
+  Verifies all phases are reached in the correct linear order.
+  The yield behavior is handled by the sub-workflow (builtin://agent),
+  so from this workflow's perspective the same nodes are reached.
+
+# Uses default yield: true
+inputs:
+  mode: auto
+
+events:
+  # Phase 1: Ideate
+  - node: ideate
+    output:
+      response_text: "Vision: build a CLI tool for managing dotfiles across machines."
+      message:
+        role: assistant
+        text: "Ideation complete — dotfile manager vision defined."
+
+  # Phase 2: Requirements
+  - node: requirements
+    output:
+      response_text: |
+        User Stories:
+        - As a developer, I want to sync dotfiles so I have consistent configs.
+        - As a developer, I want to diff before applying so I don't lose changes.
+        Acceptance Criteria:
+        - Sync completes in < 5 seconds for 100 files.
+        - Diff output matches GNU diff format.
+      message:
+        role: assistant
+        text: "Requirements written with stories and acceptance criteria."
+
+  # Phase 3: Architecture
+  - node: architecture
+    output:
+      response_text: |
+        Technical Approach: Go CLI with git-based sync backend.
+        Components: SyncEngine, DiffResolver, ConfigParser.
+        File Changes: cmd/sync.go, internal/diff/resolver.go, internal/config/parser.go.
+      message:
+        role: assistant
+        text: "Architecture defined — Go CLI with git sync backend."
+
+  # Phase 4: Implement
+  - node: implement
+    output:
+      response_text: |
+        Implementation complete:
+        - Built SyncEngine with git pull/push
+        - DiffResolver with colorized output
+        - ConfigParser for YAML and TOML
+        - 8 unit tests, 3 integration tests passing
+      message:
+        role: assistant
+        text: "Implementation done, all tests passing."
+
+expect:
+  outcome: completed
+  reached:
+    - ideate
+    - requirements
+    - architecture
+    - implement
+    - complete
+
+---
+# Plan mode: read-only tools throughout all phases
+name: plan_mode
+description: >
+  With mode=plan, all agent phases use read-only tools. Each phase produces
+  a plan or analysis rather than making changes. Verifies the full chain
+  completes with plan mode passed through to each sub-workflow.
+
+inputs:
+  mode: plan
+  yield: false
+
+events:
+  # Phase 1: PM ideates in plan mode (read-only analysis)
+  - node: ideate
+    output:
+      response_text: |
+        [PLAN MODE] Product Vision Analysis:
+        After reviewing the codebase, here's the ideation:
+        - Problem: API response times are degrading under load.
+        - Vision: Implement caching layer to reduce p99 latency by 80%.
+        - Scope: Redis cache for read-heavy endpoints only.
+      message:
+        role: assistant
+        text: "[PLAN] Ideation complete — caching layer vision."
+
+  # Phase 2: PM writes requirements in plan mode
+  - node: requirements
+    output:
+      response_text: |
+        [PLAN MODE] Requirements Analysis:
+        - As a user, I want API responses in < 200ms at p99.
+        - Cache invalidation on write operations.
+        - TTL-based expiry with configurable duration.
+        Priority: Must-have: GET caching, invalidation. Should-have: cache warming.
+      message:
+        role: assistant
+        text: "[PLAN] Requirements defined in read-only mode."
+
+  # Phase 3: Architect plans the design (read-only)
+  - node: architecture
+    output:
+      response_text: |
+        [PLAN MODE] Architecture Analysis:
+        After reviewing existing code patterns:
+        - Add Redis client in internal/cache/redis.go
+        - Middleware approach for transparent caching
+        - Invalidation via pub/sub on write endpoints
+        - Files to modify: cmd/server.go, internal/middleware/cache.go
+      message:
+        role: assistant
+        text: "[PLAN] Architecture planned with file change list."
+
+  # Phase 4: Developer reviews and plans implementation (read-only)
+  - node: implement
+    output:
+      response_text: |
+        [PLAN MODE] Implementation Plan:
+        Reviewed codebase structure. Here's the execution plan:
+        1. Add redis dependency to go.mod
+        2. Create internal/cache/redis.go with connection pool
+        3. Create internal/middleware/cache.go with key generation
+        4. Update cmd/server.go to wire middleware
+        5. Add tests for cache hit/miss/invalidation paths
+        Switch to auto mode to execute this plan.
+      message:
+        role: assistant
+        text: "[PLAN] Implementation plan ready — switch to auto mode to execute."
+
+expect:
+  outcome: completed
+  reached:
+    - ideate
+    - requirements
+    - architecture
+    - implement
+    - complete

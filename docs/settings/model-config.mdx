@@ -1,0 +1,357 @@
+---
+title: "Model Configuration"
+description: "Configure model selection preferences and add custom models"
+---
+
+Reliant uses a tag-based system for model selection that lets workflows declare what kind of model they need rather than which specific model to use. When a workflow requests a flagship model, Reliant automatically selects the best available option from your configured providers—Claude Opus if you have Anthropic configured, GPT Codex if you have OpenAI or Codex configured, or whichever flagship model is available.
+
+This abstraction provides powerful flexibility. Your workflows continue to work even when you switch providers, add new API keys, or when better models become available. A workflow that requests `tags: [flagship, reasoning]` adapts automatically to your environment without any changes.
+
+You can customize this behavior in your **global config** at `~/.reliant/config.yaml` by changing which models are preferred for each tag, adding custom models such as local models running through Ollama, and configuring provider endpoints.
+
+> Note: Model configuration lives in `~/.reliant/config.yaml` rather than project-level config because Reliant runs as a single server that can have multiple project windows open simultaneously. Global model configuration ensures consistent behavior across all projects.
+
+## Understanding Tag-Based Selection
+
+Tags describe characteristics of models rather than naming specific models. When you specify a model selector with tags, Reliant finds models that match all the specified tags, then selects the first available one according to priority order.
+
+```yaml
+# In a workflow or preset
+params:
+  model:
+    tags: [flagship]  # Use the best available flagship model
+```
+
+This selector matches any model tagged with `flagship`. Reliant checks each matching model in priority order and uses the first one for which you have a configured provider.
+
+### Available Tags
+
+Each tag represents a distinct characteristic. Models can have multiple tags.
+
+**flagship** identifies the most capable models from each provider—those with the deepest understanding, best reasoning, and highest quality outputs. These models excel at complex tasks requiring nuance, multi-step reasoning, or expert-level knowledge. Use flagship for important code changes, architectural decisions, or anything where quality matters more than cost.
+
+**moderate** identifies models that balance quality and cost effectively. These models handle most everyday development tasks well—implementing features, fixing bugs, and writing tests—at significantly lower cost than flagship models. This is often the best choice for routine development work.
+
+**fast** identifies models optimized for quick responses and high throughput. Fast models handle simple tasks efficiently such as quick lookups, straightforward code generation, and basic analysis. Use fast models for iteration-heavy work or when response time matters more than depth.
+
+**cheap** identifies the most cost-effective models available. These overlap significantly with fast models but specifically optimize for low token costs. Useful for high-volume operations like processing many files or bulk analysis where per-request cost adds up quickly.
+
+**reasoning** identifies models with extended thinking capability—the ability to work through complex problems step by step before responding. Request this tag when your task involves complex logic, multi-step planning, or problems that benefit from deliberate analysis.
+
+**meta** identifies models used for Reliant's internal operations like generating conversation titles and compacting long conversations. You typically do not need to select meta models directly—Reliant uses them automatically for background tasks.
+
+**local** identifies models that run on your local hardware rather than cloud APIs. Custom models you add with the `local` driver receive this tag automatically.
+
+### Multiple Tags
+
+When you specify multiple tags, Reliant uses **weighted best-match scoring** to find the best available model:
+
+```yaml
+params:
+  model:
+    tags: [local, fast]  # Prefer local+fast, fall back gracefully
+```
+
+**How scoring works:**
+- Earlier tags have higher weight
+- Models are scored by matching tags and sorted by total score
+- Perfect matches are preferred, but partial matches are used as fallback
+
+**Example: `[local, fast]`**
+- Model with both `local` and `fast` → best choice
+- Model with only `local` → fallback
+- Model with only `fast` → fallback
+- Model with neither → not considered
+
+This enables graceful degradation: workflows can express preferences like use a local model if available, otherwise use any fast model, without failing when local models are not configured.
+
+**Tag order matters:**
+```yaml
+tags: [local, cheap]   # Strongly prefer local, cheap is nice-to-have
+tags: [cheap, local]   # Strongly prefer cheap, local is nice-to-have
+```
+
+## Configuring Tag Preferences
+
+By default, Reliant selects from matching models based on the order they appear in its internal registry. You can override this by specifying your own preference order for any tag.
+
+In `~/.reliant/config.yaml`:
+
+```yaml
+models:
+  tag_preferences:
+    flagship:
+      - gpt-5.3-codex
+      - claude-4.6-opus
+      - gemini-3.1-pro-preview
+
+    fast:
+      - gemini-2.5-flash
+      - claude-4.5-haiku
+      - gpt-5-mini
+
+    moderate:
+      - claude-4.6-sonnet
+      - claude-4.5-sonnet
+      - gpt-5.2
+      - gemini-2.5-pro
+```
+
+When a workflow requests `tags: [flagship]`, Reliant tries the models in your preference order. The first model with an available provider wins.
+
+This lets you express preferences like preferring one provider's models when available or using a certain family for speed-critical work without hard-coding specific models into your workflows.
+
+### Partial Preferences
+
+You do not need to list every model for a tag. Any models not in your preference list maintain their default ordering after your preferred models:
+
+```yaml
+models:
+  tag_preferences:
+    flagship:
+      - claude-4.6-opus
+      # Other flagship models follow in default order
+```
+
+If a model in your preference list does not have the specified tag, Reliant silently skips it. This prevents errors if you list a model that does not apply.
+
+## Adding Custom Models
+
+You can add custom models for local providers like Ollama, LM Studio, or any OpenAI-compatible endpoint. Custom models integrate fully with the tag system—give them appropriate tags and they participate in tag-based selection alongside built-in models.
+
+### Local Model Example
+
+To add a local CodeLlama model running through Ollama:
+
+```yaml
+models:
+  custom:
+    - id: local-codellama
+      name: Local CodeLlama
+      tags: [local, fast]
+      visibility: user
+      capabilities:
+        can_reason: false
+        supports_tools: true
+        supports_attachments: false
+        supports_streaming: true
+        supports_caching: false
+        max_context_window: 32000
+        max_output_tokens: 4096
+      cost:
+        input_per_1m: 0
+        output_per_1m: 0
+      providers:
+        - driver: local
+          api_model: codellama:latest
+
+  providers:
+    local:
+      base_url: http://localhost:11434/v1
+```
+
+Field notes:
+
+**id** is a unique identifier you use to reference this model. The ID must not conflict with built-in model IDs.
+
+**name** is the human-readable name shown in the UI.
+
+**tags** determine when this model is considered for tag-based selection.
+
+**visibility** controls where the model appears:
+- `user`: shows in the model selector UI
+- `meta`: used only for internal operations
+- `dev`: only available in development builds
+
+**capabilities** describe what the model can do:
+- `can_reason`
+- `supports_tools`
+- `supports_attachments`
+- `supports_streaming`
+- `supports_caching`
+- `max_context_window`
+- `max_output_tokens`
+
+**cost** specifies pricing per million tokens. Set both to `0` for local models with no API cost.
+
+**providers** maps the model to API endpoints. Each entry specifies:
+- `driver`: which provider driver to use
+- `api_model`: the model identifier sent to that provider API
+
+### Multiple Provider Mappings
+
+A custom model can have multiple providers for redundancy:
+
+```yaml
+models:
+  custom:
+    - id: mixtral-8x22b
+      name: Mixtral 8x22B
+      tags: [moderate]
+      visibility: user
+      capabilities:
+        can_reason: false
+        supports_tools: true
+        supports_attachments: false
+        supports_streaming: true
+        supports_caching: false
+        max_context_window: 65536
+        max_output_tokens: 8192
+      cost:
+        input_per_1m: 0.9
+        output_per_1m: 0.9
+      providers:
+        - driver: openrouter
+          api_model: mistralai/mixtral-8x22b-instruct
+        - driver: local
+          api_model: mixtral:8x22b
+```
+
+Reliant uses the first available provider. This model uses OpenRouter if configured, otherwise falls back to a local instance.
+
+## Provider Configuration
+
+Different model drivers need different configuration. Cloud providers such as Anthropic, OpenAI, and Gemini are configured through API keys as described in [API Keys](/settings/api-keys). The local driver needs endpoint configuration.
+
+### Local Provider
+
+The local driver connects to any OpenAI-compatible API endpoint. Configure the base URL in your models configuration:
+
+```yaml
+models:
+  providers:
+    local:
+      base_url: http://localhost:11434/v1
+```
+
+Common base URLs:
+- **Ollama**: `http://localhost:11434/v1`
+- **LM Studio**: `http://localhost:1234/v1`
+- **llama.cpp server**: `http://localhost:8080/v1`
+- **vLLM**: `http://localhost:8000/v1`
+
+The URL should include `/v1` if the server requires it, but should not include trailing slashes or endpoint paths like `/chat/completions`.
+
+### Running Ollama
+
+If you do not have Ollama installed, get it from [ollama.ai](https://ollama.ai). After installation:
+
+```bash
+# Pull a model
+ollama pull codellama:latest
+
+# Start serving (Ollama typically runs as a service automatically)
+ollama serve
+```
+
+Then add the model to your Reliant configuration as shown above. Reliant automatically uses your local model when its tags match workflow requirements.
+
+## Provider Priority
+
+When multiple providers can serve the same model, Reliant prefers native drivers over aggregators. If you have both Anthropic and OpenRouter configured, Claude models automatically use the Anthropic API directly.
+
+The priority order from highest to lowest is:
+1. **Native drivers**: anthropic, openai, gemini, xai, vertexai
+2. **Local providers**: local
+3. **Aggregators**: openrouter
+
+Native drivers typically provide better performance, lower latency, and access to provider-specific features like prompt caching.
+
+You can override this when needed by specifying a provider explicitly:
+
+```yaml
+params:
+  model:
+    id: claude-4.5-sonnet
+    provider: openrouter
+```
+
+## Complete Configuration Example
+
+Here is a complete `~/.reliant/config.yaml` demonstrating all model configuration options:
+
+```yaml
+models:
+  # Customize which models are preferred for each tag
+  tag_preferences:
+    flagship:
+      - gpt-5.3-codex
+      - claude-4.6-opus
+    moderate:
+      - claude-4.5-sonnet
+      - gpt-5.2
+    fast:
+      - local-qwen
+      - gemini-2.5-flash
+      - claude-4.5-haiku
+
+  # Add custom models
+  custom:
+    - id: local-qwen
+      name: Qwen 2.5 32B
+      tags: [local, fast, moderate]
+      visibility: user
+      capabilities:
+        can_reason: false
+        supports_tools: true
+        supports_attachments: false
+        supports_streaming: true
+        supports_caching: false
+        max_context_window: 32768
+        max_output_tokens: 8192
+      cost:
+        input_per_1m: 0
+        output_per_1m: 0
+      providers:
+        - driver: local
+          api_model: qwen2.5:32b
+
+    - id: local-deepseek
+      name: DeepSeek Coder V2
+      tags: [local, reasoning]
+      visibility: user
+      capabilities:
+        can_reason: true
+        supports_tools: true
+        supports_attachments: false
+        supports_streaming: true
+        supports_caching: false
+        max_context_window: 128000
+        max_output_tokens: 8192
+      cost:
+        input_per_1m: 0
+        output_per_1m: 0
+      providers:
+        - driver: local
+          api_model: deepseek-coder-v2:latest
+
+  providers:
+    local:
+      base_url: http://localhost:11434/v1
+```
+
+With this configuration:
+- Workflows requesting `[flagship]` prefer GPT Codex
+- Workflows requesting `[fast]` prefer your local Qwen model
+- Workflows requesting `[reasoning]` can use your local DeepSeek Coder
+- All models participate in Reliant's cost tracking
+
+## Validation
+
+Reliant validates your model configuration when it loads. Common validation errors:
+
+**custom model missing required `id` field**: Every custom model needs a unique ID.
+
+**custom model has no providers**: Every model needs at least one provider mapping.
+
+**custom model ID conflicts with built-in model**: Your custom model ID must not match any built-in model ID.
+
+**unknown model ID in preference**: A model listed in `tag_preferences` does not exist. Check for typos.
+
+Validation warnings appear in logs but do not prevent Reliant from starting. For example, listing a model in tag preferences that does not have that tag generates a warning but continues normally.
+
+## Related Topics
+
+- [API Keys](/settings/api-keys) — Configure API keys for cloud providers
+- [Presets](/workflows/presets) — How presets use model selectors
+- [Custom Workflows](/workflows/custom-workflows) — Use model configuration in your workflows

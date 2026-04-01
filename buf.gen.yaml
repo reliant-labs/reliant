@@ -1,0 +1,24 @@
+# buf.gen.yaml - Code generation configuration
+version: v2
+managed:
+  enabled: false
+plugins:
+  # Generate Go protobuf code
+  - remote: buf.build/protocolbuffers/go
+    out: internal/gen
+    opt:
+      - paths=source_relative
+
+  # Generate Connect-Go service code using remote plugin
+  - remote: buf.build/connectrpc/go
+    out: internal/gen
+    opt:
+      - paths=source_relative
+
+  # Generate TypeScript protobuf code for web using remote plugin
+  - remote: buf.build/bufbuild/es
+    out: web/src/gen
+    include_imports: true
+    opt:
+      - target=ts
+      - ts_nocheck=true

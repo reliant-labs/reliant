@@ -1,0 +1,280 @@
+# Test scenarios for simplify-first.yaml workflow
+#
+# Simplify-first workflow structure:
+#   research (type: workflow, BLACK BOX) — Analyze for simplification opportunities
+#   refactor (type: workflow, BLACK BOX) — Perform simplification refactoring
+#   verify_lint, verify_test, verify_build (type: run, parallel) — Verification
+#   verify_join (type: join) — Wait for all verification steps
+#   verify_report (type: save_message) — Report verification results
+#   plan (type: workflow, BLACK BOX) — Plan feature on simplified codebase
+#   implement (type: workflow, BLACK BOX) — Implement the feature
+#   complete (type: save_message) — Summary
+#
+# Edges: research → refactor → [verify_lint, verify_test, verify_build] → verify_join → verify_report → plan → implement → complete
+#
+# NOTE: research, refactor, plan, and implement are `type: workflow` nodes referencing builtin://agent.
+# The simulator treats them as BLACK BOXES.
+# Mock events should provide the WORKFLOW'S FINAL OUTPUTS (message, response_text),
+# not internal call_llm events.
+
+---
+name: happy_path_all_pass
+description: >
+  Full happy path: research identifies simplification opportunities, refactor cleans up code,
+  all verification steps pass (lint, test, build exit_code: 0), plan produces implementation
+  plan, implement executes it, workflow completes.
+events:
+  # Phase 1: Research (workflow BLACK BOX)
+  - node: research
+    output:
+      message:
+        role: assistant
+        text: |
+          ## Simplification Opportunities
+          - Dead code in utils/legacy.go (unused helper functions)
+          - Duplicated validation logic in handlers/auth.go and handlers/user.go
+          - Overly complex middleware chain that can be flattened
+      response_text: |
+        ## Simplification Opportunities
+        - Dead code in utils/legacy.go (unused helper functions)
+        - Duplicated validation logic in handlers/auth.go and handlers/user.go
+        - Overly complex middleware chain that can be flattened
+
+  # Phase 2: Refactor (workflow BLACK BOX)
+  - node: refactor
+    output:
+      message:
+        role: assistant
+        text: |
+          ## Refactoring Complete
+          - Removed 150 lines of dead code from utils/legacy.go
+          - Consolidated validation into shared/validation.go
+          - Flattened middleware chain from 5 layers to 2
+      response_text: |
+        ## Refactoring Complete
+        - Removed 150 lines of dead code from utils/legacy.go
+        - Consolidated validation into shared/validation.go
+        - Flattened middleware chain from 5 layers to 2
+
+  # Phase 3: Verification (run nodes, parallel)
+  - node: verify_lint
+    output:
+      exit_code: 0
+      stdout: "No linting errors found."
+      stderr: ""
+
+  - node: verify_test
+    output:
+      exit_code: 0
+      stdout: "All 87 tests passed."
+      stderr: ""
+
+  - node: verify_build
+    output:
+      exit_code: 0
+      stdout: "Build succeeded."
+      stderr: ""
+
+  # Phase 4: Plan (workflow BLACK BOX)
+  - node: plan
+    output:
+      message:
+        role: assistant
+        text: |
+          ## Implementation Plan
+          1. Add new endpoint in handlers/metrics.go
+          2. Create metrics service in services/metrics.go
+          3. Write integration tests
+      response_text: |
+        ## Implementation Plan
+        1. Add new endpoint in handlers/metrics.go
+        2. Create metrics service in services/metrics.go
+        3. Write integration tests
+
+  # Phase 5: Implement (workflow BLACK BOX)
+  - node: implement
+    output:
+      message:
+        role: assistant
+        text: |
+          ## Implementation Complete
+          - Created handlers/metrics.go with GET /metrics endpoint
+          - Created services/metrics.go with collection logic
+          - Added 12 integration tests, all passing
+      response_text: |
+        ## Implementation Complete
+        - Created handlers/metrics.go with GET /metrics endpoint
+        - Created services/metrics.go with collection logic
+        - Added 12 integration tests, all passing
+
+expect:
+  outcome: completed
+  reached:
+    - research
+    - refactor
+    - verify_lint
+    - verify_test
+    - verify_build
+    - verify_join
+    - verify_report
+    - plan
+    - implement
+    - complete
+
+---
+name: verification_failure
+description: >
+  Refactor breaks tests. Research and refactor succeed, but verify_test returns exit_code 1
+  indicating test failures. The workflow still completes (verification is informational),
+  but the verify_report node captures the failure status.
+events:
+  # Phase 1: Research
+  - node: research
+    output:
+      message:
+        role: assistant
+        text: "Found unnecessary abstraction layers in the service package."
+      response_text: "Found unnecessary abstraction layers in the service package."
+
+  # Phase 2: Refactor
+  - node: refactor
+    output:
+      message:
+        role: assistant
+        text: "Removed abstraction layers and inlined service methods."
+      response_text: "Removed abstraction layers and inlined service methods."
+
+  # Phase 3: Verification — test fails
+  - node: verify_lint
+    output:
+      exit_code: 0
+      stdout: "No linting errors."
+      stderr: ""
+
+  - node: verify_test
+    output:
+      exit_code: 1
+      stdout: "FAIL: TestUserService/Create (expected mock call not satisfied)"
+      stderr: "exit status 1"
+
+  - node: verify_build
+    output:
+      exit_code: 0
+      stdout: "Build succeeded."
+      stderr: ""
+
+  # Phase 4: Plan (still runs — verification is informational)
+  - node: plan
+    output:
+      message:
+        role: assistant
+        text: "Plan: fix broken test mocks, then implement the feature."
+      response_text: "Plan: fix broken test mocks, then implement the feature."
+
+  # Phase 5: Implement
+  - node: implement
+    output:
+      message:
+        role: assistant
+        text: "Fixed test mocks and implemented the feature."
+      response_text: "Fixed test mocks and implemented the feature."
+
+expect:
+  outcome: completed
+  reached:
+    - research
+    - refactor
+    - verify_lint
+    - verify_test
+    - verify_build
+    - verify_join
+    - verify_report
+    - plan
+    - implement
+    - complete
+  node_outputs:
+    verify_test:
+      exit_code: 1
+
+---
+name: all_verification_pass
+description: >
+  Focused test for the parallel verification fan-out/fan-in pattern.
+  All three verification steps (lint, test, build) pass with exit_code 0,
+  join collects them, and verify_report summarizes the results.
+events:
+  # Phase 1: Research
+  - node: research
+    output:
+      message:
+        role: assistant
+        text: "Minor simplifications identified in config parsing."
+      response_text: "Minor simplifications identified in config parsing."
+
+  # Phase 2: Refactor
+  - node: refactor
+    output:
+      message:
+        role: assistant
+        text: "Simplified config parsing — reduced from 3 files to 1."
+      response_text: "Simplified config parsing — reduced from 3 files to 1."
+
+  # Phase 3: All verification passes
+  - node: verify_lint
+    output:
+      exit_code: 0
+      stdout: "0 issues found."
+      stderr: ""
+
+  - node: verify_test
+    output:
+      exit_code: 0
+      stdout: "42 tests passed, 0 failed."
+      stderr: ""
+
+  - node: verify_build
+    output:
+      exit_code: 0
+      stdout: "Build OK."
+      stderr: ""
+
+  # Phase 4: Plan
+  - node: plan
+    output:
+      message:
+        role: assistant
+        text: "Plan: add caching layer using the simplified config system."
+      response_text: "Plan: add caching layer using the simplified config system."
+
+  # Phase 5: Implement
+  - node: implement
+    output:
+      message:
+        role: assistant
+        text: "Caching layer implemented with 8 new tests."
+      response_text: "Caching layer implemented with 8 new tests."
+
+expect:
+  outcome: completed
+  reached:
+    - research
+    - refactor
+    - verify_lint
+    - verify_test
+    - verify_build
+    - verify_join
+    - verify_report
+    - plan
+    - implement
+    - complete
+  completed:
+    - verify_lint
+    - verify_test
+    - verify_build
+  node_outputs:
+    verify_lint:
+      exit_code: 0
+    verify_test:
+      exit_code: 0
+    verify_build:
+      exit_code: 0

@@ -1,0 +1,620 @@
+// Copyright (c) 2025 Reliant Labs
+package services
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"testing"
+
+	"connectrpc.com/connect"
+	"github.com/google/uuid"
+	"google.golang.org/protobuf/types/known/structpb"
+
+	"github.com/reliant-labs/reliant/internal/auth"
+	cfg "github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/db"
+	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/ptr"
+)
+
+// setupTestPresetService creates an in-memory database and preset service for testing
+func setupTestPresetService(t *testing.T) (*PresetService, *sql.DB, string) {
+	t.Helper()
+
+	// Create in-memory database
+	sqlDB, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		t.Fatalf("failed to open in-memory database: %v", err)
+	}
+
+	// Run migrations
+	if err := db.RunMigrations(sqlDB); err != nil {
+		t.Fatalf("failed to run migrations: %v", err)
+	}
+
+	// Create repo
+	repo := db.NewRepo(sqlDB)
+
+	// Create a test user ID and project in the database
+	userID := uuid.New().String()
+	projectID := uuid.New().String()
+
+	// Insert project
+	_, err = sqlDB.Exec(`INSERT INTO projects (id, user_id, name, path, created_at, updated_at) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))`,
+		projectID, userID, "Test Project", t.TempDir())
+	if err != nil {
+		t.Fatalf("failed to create test project: %v", err)
+	}
+
+	service := NewPresetService(repo)
+	return service, sqlDB, projectID
+}
+
+// insertStoredPresets inserts project presets into the project_configs table.
+func insertStoredPresets(t *testing.T, sqlDB *sql.DB, projectID string, presets []cfg.StoredPreset) {
+	t.Helper()
+	presetsJSON, err := json.Marshal(presets)
+	if err != nil {
+		t.Fatalf("failed to marshal presets: %v", err)
+	}
+	presetsStr := string(presetsJSON)
+
+	// Upsert project_configs row
+	_, err = sqlDB.Exec(`INSERT INTO project_configs (id, project_id, daemon_id, project_presets_json, pushed_at) VALUES (?, ?, 'test-daemon', ?, datetime('now'))
+		ON CONFLICT(project_id) DO UPDATE SET project_presets_json = excluded.project_presets_json`,
+		uuid.New().String(), projectID, presetsStr)
+	if err != nil {
+		t.Fatalf("failed to insert project config: %v", err)
+	}
+}
+
+// createTestContext creates a context with the user ID for auth
+func createTestContext(userID string) context.Context {
+	return context.WithValue(context.Background(), auth.UserIDContextKey, userID)
+}
+
+func TestPresetService_ListPresets_LayeredLoading(t *testing.T) {
+	service, sqlDB, projectID := setupTestPresetService(t)
+	defer sqlDB.Close()
+
+	var userID string
+	err := sqlDB.QueryRow("SELECT user_id FROM projects WHERE id = ?", projectID).Scan(&userID)
+	if err != nil {
+		t.Fatalf("failed to get user: %v", err)
+	}
+
+	// Store a project preset in the DB config
+	projectPresetYAML := `name: project-preset
+description: A project preset
+tag: agent
+params:
+  model:
+    id: claude-4.5-sonnet
+  temperature: 0.5
+  system_prompt: test
+`
+	insertStoredPresets(t, sqlDB, projectID, []cfg.StoredPreset{
+		{Name: "project-preset", YAMLContent: projectPresetYAML, ContentHash: "test"},
+	})
+
+	ctx := createTestContext(userID)
+
+	t.Run("ListPresets_ReturnsProjectPresets", func(t *testing.T) {
+		req := connect.NewRequest(&reliantv1.ListPresetsRequest{
+			ProjectId: projectID,
+		})
+
+		resp, err := service.ListPresets(ctx, req)
+		if err != nil {
+			t.Fatalf("ListPresets failed: %v", err)
+		}
+
+		// Should include the project preset
+		found := false
+		for _, p := range resp.Msg.Presets {
+			if p.Name == "project-preset" {
+				found = true
+				if p.Source != "project" {
+					t.Errorf("expected source 'project', got %q", p.Source)
+				}
+				modelStruct := p.Params["model"].GetStructValue()
+				if modelStruct == nil || modelStruct.Fields["id"].GetStringValue() != "claude-4.5-sonnet" {
+					t.Errorf("expected model.id 'claude-4.5-sonnet', got %v", p.Params["model"])
+				}
+				break
+			}
+		}
+		if !found {
+			for _, p := range resp.Msg.Presets {
+				t.Logf("preset: name=%q slug=%q source=%q tag=%q params=%v", p.Name, p.Slug, p.Source, p.Tag, p.Params)
+			}
+			t.Fatalf("project preset not found in response")
+		}
+	})
+
+	t.Run("ListPresets_UserOverridesProject", func(t *testing.T) {
+		// Create a user preset with the same slug as the project preset
+		repo := db.NewRepo(sqlDB)
+		userPreset := &db.Preset{
+			ID:     uuid.New().String(),
+			UserID: userID,
+			Name:   "project-preset",
+			Slug:   "project-preset",
+			Tag:    "agent",
+			Params: map[string]interface{}{
+				"model":       map[string]interface{}{"id": "claude-4.6-opus"},
+				"temperature": 0.9,
+			},
+		}
+		_, err := repo.CreatePreset(ctx, userPreset)
+		if err != nil {
+			t.Fatalf("CreatePreset failed: %v", err)
+		}
+
+		req := connect.NewRequest(&reliantv1.ListPresetsRequest{
+			ProjectId: projectID,
+		})
+
+		resp, err := service.ListPresets(ctx, req)
+		if err != nil {
+			t.Fatalf("ListPresets failed: %v", err)
+		}
+
+		// Should return the user preset (overrides project preset)
+		found := false
+		for _, p := range resp.Msg.Presets {
+			if p.Slug == "project-preset" {
+				found = true
+				if p.Source != "user" {
+					t.Errorf("expected source 'user' (override), got %q", p.Source)
+				}
+				modelStruct := p.Params["model"].GetStructValue()
+				if modelStruct == nil || modelStruct.Fields["id"].GetStringValue() != "claude-4.6-opus" {
+					t.Errorf("expected model.id 'claude-4.6-opus' (user override), got %v", p.Params["model"])
+				}
+				break
+			}
+		}
+		if !found {
+			t.Error("preset not found in response")
+		}
+	})
+}
+
+func TestPresetService_GetPreset_UserOverridesProject(t *testing.T) {
+	service, sqlDB, projectID := setupTestPresetService(t)
+	defer sqlDB.Close()
+
+	var userID string
+	err := sqlDB.QueryRow("SELECT user_id FROM projects WHERE id = ?", projectID).Scan(&userID)
+	if err != nil {
+		t.Fatalf("failed to get user: %v", err)
+	}
+
+	// Store a project preset in the DB config
+	projectPresetYAML := `name: override-test
+description: Project version
+tag: agent
+params:
+  model:
+    id: claude-4.5-sonnet
+  system_prompt: test
+`
+	insertStoredPresets(t, sqlDB, projectID, []cfg.StoredPreset{
+		{Name: "override-test", YAMLContent: projectPresetYAML, ContentHash: "test"},
+	})
+
+	ctx := createTestContext(userID)
+
+	t.Run("GetPreset_ReturnsProjectPresetWhenNoUserOverride", func(t *testing.T) {
+		req := connect.NewRequest(&reliantv1.GetPresetRequest{
+			ProjectId: projectID,
+			Name:      "override-test",
+		})
+
+		resp, err := service.GetPreset(ctx, req)
+		if err != nil {
+			t.Fatalf("GetPreset failed: %v", err)
+		}
+
+		if resp.Msg.Preset.Source != "project" {
+			t.Errorf("expected source 'project', got %q", resp.Msg.Preset.Source)
+		}
+		modelStruct := resp.Msg.Preset.Params["model"].GetStructValue()
+		if modelStruct == nil || modelStruct.Fields["id"].GetStringValue() != "claude-4.5-sonnet" {
+			t.Errorf("expected model.id 'claude-4.5-sonnet', got %v", resp.Msg.Preset.Params["model"])
+		}
+	})
+
+	t.Run("GetPreset_ReturnsUserPresetWhenOverrideExists", func(t *testing.T) {
+		// Create a user preset with the same slug
+		repo := db.NewRepo(sqlDB)
+		userPreset := &db.Preset{
+			ID:     uuid.New().String(),
+			UserID: userID,
+			Name:   "override-test",
+			Slug:   "override-test",
+			Tag:    "agent",
+			Params: map[string]interface{}{
+				"model": map[string]interface{}{"id": "claude-4.6-opus"},
+			},
+		}
+		_, err := repo.CreatePreset(ctx, userPreset)
+		if err != nil {
+			t.Fatalf("CreatePreset failed: %v", err)
+		}
+
+		req := connect.NewRequest(&reliantv1.GetPresetRequest{
+			ProjectId: projectID,
+			Name:      "override-test",
+		})
+
+		resp, err := service.GetPreset(ctx, req)
+		if err != nil {
+			t.Fatalf("GetPreset failed: %v", err)
+		}
+
+		// Should return user preset
+		if resp.Msg.Preset.Source != "user" {
+			t.Errorf("expected source 'user', got %q", resp.Msg.Preset.Source)
+		}
+		modelStruct := resp.Msg.Preset.Params["model"].GetStructValue()
+		if modelStruct == nil || modelStruct.Fields["id"].GetStringValue() != "claude-4.6-opus" {
+			t.Errorf("expected model.id 'claude-4.6-opus', got %v", resp.Msg.Preset.Params["model"])
+		}
+	})
+}
+
+func TestPresetService_CreatePreset(t *testing.T) {
+	service, sqlDB, projectID := setupTestPresetService(t)
+	defer sqlDB.Close()
+
+	// Get user ID
+	var userID string
+	err := sqlDB.QueryRow("SELECT user_id FROM projects WHERE id = ?", projectID).Scan(&userID)
+	if err != nil {
+		t.Fatalf("failed to get user: %v", err)
+	}
+
+	ctx := createTestContext(userID)
+
+	t.Run("CreatePreset_Success", func(t *testing.T) {
+		req := connect.NewRequest(&reliantv1.CreatePresetRequest{
+			ProjectId:   projectID,
+			Name:        "My Custom Preset",
+			Description: "A custom preset for testing",
+			Tag:         "agent",
+		})
+
+		resp, err := service.CreatePreset(ctx, req)
+		if err != nil {
+			t.Fatalf("CreatePreset failed: %v", err)
+		}
+
+		if !resp.Msg.Success {
+			t.Errorf("expected success, got error: %s", resp.Msg.Error)
+		}
+
+		if resp.Msg.Preset == nil {
+			t.Fatal("expected preset in response")
+		}
+
+		if resp.Msg.Preset.Name != "My Custom Preset" {
+			t.Errorf("Name = %q, want 'My Custom Preset'", resp.Msg.Preset.Name)
+		}
+
+		if resp.Msg.Preset.Source != "user" {
+			t.Errorf("Source = %q, want 'user'", resp.Msg.Preset.Source)
+		}
+
+		// Slug should be generated from name
+		if resp.Msg.Preset.Slug != "my-custom-preset" {
+			t.Errorf("Slug = %q, want 'my-custom-preset'", resp.Msg.Preset.Slug)
+		}
+	})
+
+	t.Run("CreatePreset_PreservesToolParams", func(t *testing.T) {
+		toolParams, err := structpb.NewValue([]interface{}{"tag:default", "tag:mcp"})
+		if err != nil {
+			t.Fatalf("failed to build tools value: %v", err)
+		}
+
+		req := connect.NewRequest(&reliantv1.CreatePresetRequest{
+			ProjectId: projectID,
+			Name:      "Tool Preset",
+			Tag:       "agent",
+			Params: map[string]*structpb.Value{
+				"tools": toolParams,
+			},
+		})
+
+		resp, err := service.CreatePreset(ctx, req)
+		if err != nil {
+			t.Fatalf("CreatePreset failed: %v", err)
+		}
+		if !resp.Msg.Success {
+			t.Fatalf("expected success, got error: %s", resp.Msg.Error)
+		}
+
+		tools := resp.Msg.Preset.Params["tools"].GetListValue()
+		if tools == nil || len(tools.Values) != 2 {
+			t.Fatalf("expected tools list of len 2, got %v", resp.Msg.Preset.Params["tools"])
+		}
+		if tools.Values[0].GetStringValue() != "tag:default" || tools.Values[1].GetStringValue() != "tag:mcp" {
+			t.Errorf("unexpected tools list: %v", tools.Values)
+		}
+	})
+
+	t.Run("CreatePreset_DuplicateSlug", func(t *testing.T) {
+		// First create
+		req := connect.NewRequest(&reliantv1.CreatePresetRequest{
+			ProjectId: projectID,
+			Name:      "Duplicate Test",
+			Tag:       "agent",
+		})
+
+		resp, err := service.CreatePreset(ctx, req)
+		if err != nil {
+			t.Fatalf("First CreatePreset failed: %v", err)
+		}
+		if !resp.Msg.Success {
+			t.Fatalf("First CreatePreset should succeed")
+		}
+
+		// Second create with same name should fail
+		resp, err = service.CreatePreset(ctx, req)
+		if err != nil {
+			t.Fatalf("Second CreatePreset returned error: %v", err)
+		}
+
+		if resp.Msg.Success {
+			t.Error("expected failure for duplicate slug")
+		}
+		if resp.Msg.Error == "" {
+			t.Error("expected error message for duplicate slug")
+		}
+	})
+
+	t.Run("CreatePreset_InvalidName", func(t *testing.T) {
+		req := connect.NewRequest(&reliantv1.CreatePresetRequest{
+			ProjectId: projectID,
+			Name:      "", // Empty name
+			Tag:       "agent",
+		})
+
+		_, err := service.CreatePreset(ctx, req)
+		if err == nil {
+			t.Error("expected error for empty name")
+		}
+	})
+}
+
+func TestPresetService_UpdatePreset(t *testing.T) {
+	service, sqlDB, projectID := setupTestPresetService(t)
+	defer sqlDB.Close()
+
+	// Get user ID
+	var userID string
+	err := sqlDB.QueryRow("SELECT user_id FROM projects WHERE id = ?", projectID).Scan(&userID)
+	if err != nil {
+		t.Fatalf("failed to get user: %v", err)
+	}
+
+	ctx := createTestContext(userID)
+
+	// Create a preset first
+	createReq := connect.NewRequest(&reliantv1.CreatePresetRequest{
+		ProjectId:   projectID,
+		Name:        "Update Test Preset",
+		Description: "Original description",
+		Tag:         "agent",
+	})
+
+	createResp, err := service.CreatePreset(ctx, createReq)
+	if err != nil || !createResp.Msg.Success {
+		t.Fatalf("CreatePreset failed: %v", err)
+	}
+
+	t.Run("UpdatePreset_Success", func(t *testing.T) {
+		updateReq := connect.NewRequest(&reliantv1.UpdatePresetRequest{
+			ProjectId:      projectID,
+			Name:           "update-test-preset", // Use slug, not display name
+			NewName:        ptr.Of("Updated Preset Name"),
+			NewDescription: ptr.Of("Updated description"),
+		})
+
+		resp, err := service.UpdatePreset(ctx, updateReq)
+		if err != nil {
+			t.Fatalf("UpdatePreset failed: %v", err)
+		}
+
+		if !resp.Msg.Success {
+			t.Errorf("expected success, got error: %s", resp.Msg.Error)
+		}
+
+		if resp.Msg.Preset.Name != "Updated Preset Name" {
+			t.Errorf("Name = %q, want 'Updated Preset Name'", resp.Msg.Preset.Name)
+		}
+
+		if resp.Msg.Preset.Description != "Updated description" {
+			t.Errorf("Description = %q, want 'Updated description'", resp.Msg.Preset.Description)
+		}
+	})
+
+	t.Run("UpdatePreset_NotFound", func(t *testing.T) {
+		updateReq := connect.NewRequest(&reliantv1.UpdatePresetRequest{
+			ProjectId:      projectID,
+			Name:           "nonexistent-preset",
+			NewDescription: ptr.Of("New description"),
+		})
+
+		resp, err := service.UpdatePreset(ctx, updateReq)
+		if err != nil {
+			t.Fatalf("UpdatePreset returned error: %v", err)
+		}
+
+		if resp.Msg.Success {
+			t.Error("expected failure for nonexistent preset")
+		}
+	})
+}
+
+func TestPresetService_DeletePreset(t *testing.T) {
+	service, sqlDB, projectID := setupTestPresetService(t)
+	defer sqlDB.Close()
+
+	// Get user ID
+	var userID string
+	err := sqlDB.QueryRow("SELECT user_id FROM projects WHERE id = ?", projectID).Scan(&userID)
+	if err != nil {
+		t.Fatalf("failed to get user: %v", err)
+	}
+
+	ctx := createTestContext(userID)
+
+	// Create a preset first
+	createReq := connect.NewRequest(&reliantv1.CreatePresetRequest{
+		ProjectId: projectID,
+		Name:      "Delete Test Preset",
+		Tag:       "agent",
+	})
+
+	createResp, err := service.CreatePreset(ctx, createReq)
+	if err != nil || !createResp.Msg.Success {
+		t.Fatalf("CreatePreset failed: %v", err)
+	}
+
+	t.Run("DeletePreset_Success", func(t *testing.T) {
+		deleteReq := connect.NewRequest(&reliantv1.DeletePresetRequest{
+			ProjectId: projectID,
+			Name:      "delete-test-preset", // Use slug, not display name
+		})
+
+		resp, err := service.DeletePreset(ctx, deleteReq)
+		if err != nil {
+			t.Fatalf("DeletePreset failed: %v", err)
+		}
+
+		if !resp.Msg.Success {
+			t.Errorf("expected success, got error: %s", resp.Msg.Error)
+		}
+
+		// Verify it's gone
+		getReq := connect.NewRequest(&reliantv1.GetPresetRequest{
+			ProjectId: projectID,
+			Name:      "delete-test-preset", // Use slug, not display name
+		})
+
+		_, err = service.GetPreset(ctx, getReq)
+		if err == nil {
+			t.Error("expected error when getting deleted preset")
+		}
+	})
+
+	t.Run("DeletePreset_NotFound", func(t *testing.T) {
+		deleteReq := connect.NewRequest(&reliantv1.DeletePresetRequest{
+			ProjectId: projectID,
+			Name:      "nonexistent-preset",
+		})
+
+		resp, err := service.DeletePreset(ctx, deleteReq)
+		if err != nil {
+			t.Fatalf("DeletePreset returned error: %v", err)
+		}
+
+		if resp.Msg.Success {
+			t.Error("expected failure for nonexistent preset")
+		}
+	})
+}
+
+func TestPresetService_ListPresets_IncludeHidden(t *testing.T) {
+	service, sqlDB, projectID := setupTestPresetService(t)
+	defer sqlDB.Close()
+
+	// Get user ID
+	var userID string
+	err := sqlDB.QueryRow("SELECT user_id FROM projects WHERE id = ?", projectID).Scan(&userID)
+	if err != nil {
+		t.Fatalf("failed to get user: %v", err)
+	}
+
+	ctx := createTestContext(userID)
+
+	// First, check what's in item_defaults table
+	rows, err := sqlDB.Query("SELECT item_type, slug, is_hidden, reason FROM item_defaults WHERE item_type = 'preset'")
+	if err != nil {
+		t.Fatalf("failed to query item_defaults: %v", err)
+	}
+	defer rows.Close()
+
+	t.Log("=== item_defaults for presets ===")
+	hiddenSlugs := make(map[string]bool)
+	for rows.Next() {
+		var itemType, slug, reason string
+		var isHidden bool
+		if err := rows.Scan(&itemType, &slug, &isHidden, &reason); err != nil {
+			t.Fatalf("failed to scan row: %v", err)
+		}
+		t.Logf("  item_type=%s slug=%s is_hidden=%v reason=%s", itemType, slug, isHidden, reason)
+		if isHidden {
+			hiddenSlugs[slug] = true
+		}
+	}
+
+	if len(hiddenSlugs) == 0 {
+		t.Log("WARNING: No hidden presets found in item_defaults!")
+	}
+
+	t.Run("ListPresets_WithoutIncludeHidden_ExcludesHiddenPresets", func(t *testing.T) {
+		req := connect.NewRequest(&reliantv1.ListPresetsRequest{
+			ProjectId:     projectID,
+			IncludeHidden: false,
+		})
+
+		resp, err := service.ListPresets(ctx, req)
+		if err != nil {
+			t.Fatalf("ListPresets failed: %v", err)
+		}
+
+		t.Logf("ListPresets(includeHidden=false) returned %d presets", len(resp.Msg.Presets))
+		for _, p := range resp.Msg.Presets {
+			t.Logf("  name=%s slug=%s source=%s is_hidden=%v", p.Name, p.Slug, p.Source, p.IsHidden)
+			if hiddenSlugs[p.Slug] {
+				t.Errorf("Hidden preset %q should NOT be returned when includeHidden=false", p.Slug)
+			}
+		}
+	})
+
+	t.Run("ListPresets_WithIncludeHidden_IncludesAllPresets", func(t *testing.T) {
+		req := connect.NewRequest(&reliantv1.ListPresetsRequest{
+			ProjectId:     projectID,
+			IncludeHidden: true,
+		})
+
+		resp, err := service.ListPresets(ctx, req)
+		if err != nil {
+			t.Fatalf("ListPresets failed: %v", err)
+		}
+
+		t.Logf("ListPresets(includeHidden=true) returned %d presets", len(resp.Msg.Presets))
+		foundHidden := make(map[string]bool)
+		for _, p := range resp.Msg.Presets {
+			t.Logf("  name=%s slug=%s source=%s is_hidden=%v", p.Name, p.Slug, p.Source, p.IsHidden)
+			if hiddenSlugs[p.Slug] {
+				foundHidden[p.Slug] = true
+				if !p.IsHidden {
+					t.Errorf("Preset %q should have is_hidden=true", p.Slug)
+				}
+			}
+		}
+
+		// Check that all hidden presets were found
+		for slug := range hiddenSlugs {
+			if !foundHidden[slug] {
+				t.Errorf("Hidden preset %q should be returned when includeHidden=true", slug)
+			}
+		}
+	})
+}

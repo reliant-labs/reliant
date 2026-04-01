@@ -1,0 +1,18 @@
+version: "v1.0.2"
+date: "2026-02-09"
+title: "New models, tray menu, and reliability improvements"
+summary: "Added new model support, a tray menu, and broader reliability improvements."
+items:
+  - title: "Model updates:"
+    description: ""
+    items:
+      - title: "Claude Opus 4.6"
+        description: ""
+      - title: "GPT-5.3 Codex"
+        description: ""
+      - title: "Local models support"
+        description: ""
+  - title: "Added a tray menu for faster access to chats, workspaces, workflows, notifications, and app actions."
+    description: ""
+  - title: "General bug fixes and usability improvements."
+    description: ""

@@ -1,0 +1,41 @@
+/* Mintlify pilot styling for Reliant branding */
+
+:root {
+  --reliant-accent: #6E39FF;
+}
+
+#navbar {
+  border-bottom: 1px solid rgba(110, 57, 255, 0.16);
+}
+
+#footer {
+  border-top: 1px solid rgba(110, 57, 255, 0.16);
+}
+
+#navbar a[href="/"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+#navbar a[href="/"] .nav-logo {
+  height: 1.5rem;
+  width: auto;
+}
+
+#navbar a[href="/"]::after {
+  content: "Reliant";
+  display: inline-block;
+  font-size: 1.5rem;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: inherit;
+}
+
+#assistant-entry,
+#assistant-entry-mobile,
+#assistant-entry button,
+#assistant-entry-mobile button {
+  font-weight: 600;
+}

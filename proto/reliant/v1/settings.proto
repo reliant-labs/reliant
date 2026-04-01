@@ -1,0 +1,645 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+import "reliant/v1/common.proto";
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+// SettingsService handles user settings and preferences
+service SettingsService {
+  // ============================================
+  // Sub-phase 6a: Core Settings CRUD
+  // ============================================
+  
+  // CreateSetting creates a new setting
+  rpc CreateSetting(CreateSettingRequest) returns (CreateSettingResponse) {}
+  
+  // ListSettings lists all settings for the current user
+  rpc ListSettings(ListSettingsRequest) returns (ListSettingsResponse) {}
+  
+  // GetSetting retrieves a setting by key
+  rpc GetSetting(GetSettingRequest) returns (GetSettingResponse) {}
+  
+  // UpdateSetting updates an existing setting
+  rpc UpdateSetting(UpdateSettingRequest) returns (UpdateSettingResponse) {}
+  
+  // DeleteSetting deletes a setting by key
+  rpc DeleteSetting(DeleteSettingRequest) returns (DeleteSettingResponse) {}
+  
+  // ============================================
+  // Sub-phase 6b: UI Settings (Shortcuts/Preferences)
+  // ============================================
+  
+  // GetShortcuts retrieves user keyboard shortcuts
+  rpc GetShortcuts(GetShortcutsRequest) returns (GetShortcutsResponse) {}
+  
+  // UpdateShortcuts updates user keyboard shortcuts
+  rpc UpdateShortcuts(UpdateShortcutsRequest) returns (UpdateShortcutsResponse) {}
+  
+  // GetPreferences retrieves user preferences
+  rpc GetPreferences(GetPreferencesRequest) returns (GetPreferencesResponse) {}
+  
+  // UpdatePreferences updates user preferences
+  rpc UpdatePreferences(UpdatePreferencesRequest) returns (UpdatePreferencesResponse) {}
+  
+  // SetHiddenItem toggles the hidden state of a workflow or preset
+  rpc SetHiddenItem(SetHiddenItemRequest) returns (SetHiddenItemResponse) {}
+  
+  // ============================================
+  // Sub-phase 6c: Prompts & Active Settings
+  // ============================================
+  
+  // GetPrompts retrieves global user prompts
+  rpc GetPrompts(GetPromptsRequest) returns (GetPromptsResponse) {}
+  
+  // SavePrompts saves global user prompts
+  rpc SavePrompts(SavePromptsRequest) returns (SavePromptsResponse) {}
+  
+  // ============================================
+  // Sub-phase 6d: Provider Settings (API Keys)
+  // ============================================
+  
+  // GetProviderStatuses retrieves configuration status of all providers
+  rpc GetProviderStatuses(GetProviderStatusesRequest) returns (GetProviderStatusesResponse) {}
+  
+  // UpdateProviderAPIKey updates or deletes an API key for a provider
+  rpc UpdateProviderAPIKey(UpdateProviderAPIKeyRequest) returns (UpdateProviderAPIKeyResponse) {}
+  
+  // ValidateProviderAPIKey validates an API key for a provider
+  rpc ValidateProviderAPIKey(ValidateProviderAPIKeyRequest) returns (ValidateProviderAPIKeyResponse) {}
+
+  // CompleteCodexOAuth exchanges an OAuth authorization code + PKCE verifier
+  // and marks Codex as connected for the current user.
+  rpc CompleteCodexOAuth(CompleteCodexOAuthRequest) returns (CompleteCodexOAuthResponse) {}
+
+  // CompleteClaudeOAuth exchanges an OAuth authorization code + PKCE verifier
+  // and marks Claude as connected for the current user.
+  rpc CompleteClaudeOAuth(CompleteClaudeOAuthRequest) returns (CompleteClaudeOAuthResponse) {}
+  
+  // ============================================
+  // Sub-phase 6e: Privacy Settings
+  // ============================================
+  
+  // GetPrivacySettings retrieves user privacy settings
+  rpc GetPrivacySettings(GetPrivacySettingsRequest) returns (GetPrivacySettingsResponse) {}
+  
+  // UpdatePrivacySettings updates user privacy settings
+  rpc UpdatePrivacySettings(UpdatePrivacySettingsRequest) returns (UpdatePrivacySettingsResponse) {}
+  
+  // TrackPageVisited tracks a page visit for analytics
+  rpc TrackPageVisited(TrackPageVisitedRequest) returns (TrackPageVisitedResponse) {}
+
+  // TrackOnboardingEvent tracks an onboarding flow event
+  rpc TrackOnboardingEvent(TrackOnboardingEventRequest) returns (TrackOnboardingEventResponse) {}
+  
+  // ============================================
+  // Skills Management
+  // ============================================
+
+  // InstallSkill installs or previews installation of a skill into Reliant-managed paths.
+  rpc InstallSkill(InstallSkillRequest) returns (InstallSkillResponse) {}
+
+  // ListInstalledSkills returns installed skills discovered across project and global Reliant roots.
+  rpc ListInstalledSkills(ListInstalledSkillsRequest) returns (ListInstalledSkillsResponse) {}
+
+  // GetInstalledSkillDefinition returns full SKILL.md content plus any packaged image assets for a discovered skill summary entry.
+  rpc GetInstalledSkillDefinition(GetInstalledSkillDefinitionRequest) returns (GetInstalledSkillDefinitionResponse) {}
+
+  // SetSkillEnabled toggles whether an installed skill definition path participates in discovery.
+  rpc SetSkillEnabled(SetSkillEnabledRequest) returns (SetSkillEnabledResponse) {}
+
+  // ListRecommendedSkills returns backend-defined recommended skills.
+  rpc ListRecommendedSkills(ListRecommendedSkillsRequest) returns (ListRecommendedSkillsResponse) {}
+
+  // DeleteGlobalSkill deletes a skill directory under ~/.reliant/skills.
+  rpc DeleteGlobalSkill(DeleteGlobalSkillRequest) returns (DeleteGlobalSkillResponse) {}
+
+  // ============================================
+  // Sub-phase 6g: Configuration Health
+  // ============================================
+  
+  // GetConfigHealth retrieves configuration errors and warnings
+  rpc GetConfigHealth(GetConfigHealthRequest) returns (GetConfigHealthResponse) {}
+}
+
+// ConfigSeverity indicates the severity of a configuration error
+enum ConfigSeverity {
+  CONFIG_SEVERITY_UNSPECIFIED = 0;
+  CONFIG_SEVERITY_ERROR = 1;
+  CONFIG_SEVERITY_WARNING = 2;
+}
+
+// HiddenItemType identifies the type of hideable item
+enum HiddenItemType {
+  HIDDEN_ITEM_TYPE_UNSPECIFIED = 0;
+  HIDDEN_ITEM_TYPE_WORKFLOW = 1;
+  HIDDEN_ITEM_TYPE_PRESET = 2;
+}
+
+// SkillScope identifies where a skill is installed/discovered.
+enum SkillScope {
+  SKILL_SCOPE_UNSPECIFIED = 0;
+  SKILL_SCOPE_PROJECT_LOCAL = 1;
+  SKILL_SCOPE_PROJECT = 2;
+  SKILL_SCOPE_GLOBAL = 3;
+  SKILL_SCOPE_BUILTIN = 4;
+}
+
+// SkillConflictPolicy identifies how installs handle destination conflicts.
+enum SkillConflictPolicy {
+  SKILL_CONFLICT_POLICY_UNSPECIFIED = 0;
+  SKILL_CONFLICT_POLICY_SKIP = 1;
+  SKILL_CONFLICT_POLICY_OVERWRITE = 2;
+  SKILL_CONFLICT_POLICY_RENAME = 3;
+}
+
+// SkillFormat identifies the supported SKILL.md dialect/format.
+enum SkillFormat {
+  SKILL_FORMAT_UNSPECIFIED = 0;
+  SKILL_FORMAT_CLAUDE_MARKDOWN = 1;
+}
+
+// SkillSourceType identifies where a skill install source came from.
+enum SkillSourceType {
+  SKILL_SOURCE_TYPE_UNSPECIFIED = 0;
+  SKILL_SOURCE_TYPE_LOCAL = 1;
+  SKILL_SOURCE_TYPE_GIT = 2;
+}
+
+// ============================================
+// Core Types
+// ============================================
+
+// Setting represents a user setting
+message Setting {
+  string id = 1;
+  string key = 2;
+  string value = 3;
+  string value_type = 4;
+  optional string project_id = 5;
+  string created_at = 6;
+  string updated_at = 7;
+}
+
+// UserPrompt represents a user-defined prompt (distinct from project Prompt)
+message UserPrompt {
+  string id = 1;
+  string title = 2;
+  string content = 3;
+  optional bool default = 4;
+  optional string hotkey = 5;
+  optional string category = 6;
+}
+
+// ProviderStatus represents the status of a provider
+message ProviderStatus {
+  string provider = 1;
+  bool configured = 2;
+  bool has_api_key = 3;
+  optional string masked_key = 4;
+  string display_name = 5;
+}
+
+// ============================================
+// Sub-phase 6a: Core Settings CRUD Messages
+// ============================================
+
+message CreateSettingRequest {
+  string key = 1;
+  string value = 2;
+  optional string value_type = 3;
+  optional string project_id = 4;
+}
+
+message CreateSettingResponse {
+  Setting setting = 1;
+}
+
+message ListSettingsRequest {
+  optional string project_id = 1;
+}
+
+message ListSettingsResponse {
+  repeated Setting settings = 1;
+  int32 total = 2;
+}
+
+message GetSettingRequest {
+  string key = 1;
+  optional string project_id = 2;
+}
+
+message GetSettingResponse {
+  Setting setting = 1;
+}
+
+message UpdateSettingRequest {
+  string key = 1;
+  optional string value = 2;
+  optional string value_type = 3;
+  optional string project_id = 4;
+}
+
+message UpdateSettingResponse {
+  Setting setting = 1;
+}
+
+message DeleteSettingRequest {
+  string key = 1;
+  optional string project_id = 2;
+}
+
+message DeleteSettingResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// ============================================
+// Sub-phase 6b: UI Settings Messages
+// ============================================
+
+message GetShortcutsRequest {}
+
+message GetShortcutsResponse {
+  string shortcuts = 1;
+}
+
+message UpdateShortcutsRequest {
+  string shortcuts = 1;
+}
+
+message UpdateShortcutsResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message GetPreferencesRequest {}
+
+message GetPreferencesResponse {
+  bool streaming_enabled = 1;
+  reserved 2; // was: notifications_enabled (deprecated)
+  string worktree_archive_mode = 3;
+  bool worktree_default_delete_directory = 4;
+  bool worktree_default_delete_branch = 5;
+  // Additional arbitrary preferences stored as JSON
+  map<string, string> additional = 6;
+  // Default auto-approve setting for new chats (defaults to true)
+  bool default_auto_approve = 7;
+  // Default setting for copying uncommitted files when branching to new workspace (defaults to false)
+  bool branch_copy_uncommitted_files_default = 8;
+  // Default planning mode setting for new chats (defaults to false)
+  bool default_planning_mode = 9;
+  // Default scope for saving MCP server configurations
+  ConfigScope default_mcp_scope = 10;
+  // Default scope for saving workflow definitions
+  ConfigScope default_workflow_scope = 11;
+  // Default workflow for new chats (e.g., "builtin://agent")
+  string default_workflow = 12;
+  // Hide builtin workflows from workflow hub (defaults to false)
+  bool hide_builtin_workflows = 13;
+  // Hide builtin presets from preset pickers (defaults to false)
+  bool hide_builtin_presets = 14;
+  // List of hidden workflow slugs (from hidden_items table)
+  repeated string hidden_workflow_slugs = 15;
+  // List of hidden preset slugs (from hidden_items table)
+  repeated string hidden_preset_slugs = 16;
+}
+
+message UpdatePreferencesRequest {
+  optional bool streaming_enabled = 1;
+  reserved 2; // was: notifications_enabled (deprecated)
+  optional string worktree_archive_mode = 3;
+  optional bool worktree_default_delete_directory = 4;
+  optional bool worktree_default_delete_branch = 5;
+  // Additional arbitrary preferences
+  map<string, string> additional = 6;
+  // Default auto-approve setting for new chats
+  optional bool default_auto_approve = 7;
+  // Default setting for copying uncommitted files when branching to new workspace
+  optional bool branch_copy_uncommitted_files_default = 8;
+  // Default planning mode setting for new chats
+  optional bool default_planning_mode = 9;
+  // Default scope for saving MCP server configurations
+  optional ConfigScope default_mcp_scope = 10;
+  // Default scope for saving workflow definitions
+  optional ConfigScope default_workflow_scope = 11;
+  // Default workflow for new chats (e.g., "builtin://agent")
+  optional string default_workflow = 12;
+  // Hide builtin workflows from workflow hub
+  optional bool hide_builtin_workflows = 13;
+  // Hide builtin presets from preset pickers
+  optional bool hide_builtin_presets = 14;
+}
+
+message UpdatePreferencesResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// SetHiddenItem request - toggle visibility of workflows/presets
+message SetHiddenItemRequest {
+  HiddenItemType item_type = 1;
+  // The slug of the item to hide/show
+  string slug = 2;
+  // True to hide, false to show
+  bool hidden = 3;
+}
+
+message SetHiddenItemResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// ============================================
+// Sub-phase 6c: Prompts & Active Settings Messages
+// ============================================
+
+message GetPromptsRequest {}
+
+message GetPromptsResponse {
+  repeated UserPrompt prompts = 1;
+}
+
+message SavePromptsRequest {
+  repeated UserPrompt prompts = 1;
+}
+
+message SavePromptsResponse {
+  bool success = 1;
+  string message = 2;
+  repeated UserPrompt prompts = 3;
+}
+
+// ============================================
+// Sub-phase 6d: Provider Settings Messages
+// ============================================
+
+message GetProviderStatusesRequest {}
+
+message GetProviderStatusesResponse {
+  repeated ProviderStatus providers = 1;
+}
+
+message UpdateProviderAPIKeyRequest {
+  string provider = 1;
+  string api_key = 2;  // Empty string triggers deletion
+}
+
+message UpdateProviderAPIKeyResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message ValidateProviderAPIKeyRequest {
+  string provider = 1;
+  string api_key = 2;
+}
+
+message ValidateProviderAPIKeyResponse {
+  bool valid = 1;
+  string message = 2;
+}
+
+message CompleteCodexOAuthRequest {
+  string code = 1;
+  string code_verifier = 2;
+  string redirect_uri = 3;
+}
+
+message CompleteCodexOAuthResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message CompleteClaudeOAuthRequest {
+  string code = 1;
+  string code_verifier = 2;
+  string redirect_uri = 3;
+  string state = 4;
+}
+
+message CompleteClaudeOAuthResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// ============================================
+// Skills Management Messages
+// ============================================
+
+message InstallSkillRequest {
+  string project_id = 1;
+  string source = 2;
+  optional string source_subpath = 3;
+  optional string ref = 4;
+  optional string name = 5;
+  SkillScope scope = 6;
+  SkillConflictPolicy conflict_policy = 7;
+  bool dry_run = 8;
+}
+
+message SkillInstallResult {
+  string source = 1;
+  SkillSourceType source_type = 2;
+  optional string source_subpath = 3;
+  optional string git_ref = 4;
+  string resolved_source = 5;
+  string target_dir = 6;
+  string skill_name = 7;
+  string install_dir_name = 8;
+  repeated string installed_files = 9;
+  repeated string skipped_files = 10;
+  bool dry_run = 11;
+  SkillScope scope = 12;
+  SkillConflictPolicy conflict_policy = 13;
+}
+
+message InstallSkillResponse {
+  bool success = 1;
+  string message = 2;
+  SkillInstallResult result = 3;
+}
+
+message InstalledSkill {
+  string skill_id = 1;
+  string name = 2;
+  string description = 3;
+  SkillScope scope = 4;
+  SkillFormat format = 5;
+  string skill_dir = 6;
+  string definition_path = 7;
+  bool active = 8;
+  optional string shadowed_by_definition_path = 9;
+}
+
+message ListInstalledSkillsRequest {
+  string project_id = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message SkillDiscoveryDiagnostic {
+  string path = 1;
+  SkillScope scope = 2;
+  string message = 3;
+}
+
+message ListInstalledSkillsResponse {
+  repeated InstalledSkill skills = 1;
+  int32 total = 2;
+  repeated SkillDiscoveryDiagnostic diagnostics = 3;
+  string next_page_token = 4;
+}
+
+message GetInstalledSkillDefinitionRequest {
+  string project_id = 1;
+  string skill_id = 2;
+}
+
+message SkillAsset {
+  string path = 1;
+  string mime_type = 2;
+  bytes content = 3;
+}
+
+message GetInstalledSkillDefinitionResponse {
+  string skill_id = 1;
+  string definition_path = 2;
+  string definition_content = 3;
+  repeated SkillAsset assets = 4;
+}
+
+message SetSkillEnabledRequest {
+  string project_id = 1;
+  string skill_id = 2;
+  bool enabled = 3;
+}
+
+message SetSkillEnabledResponse {
+  bool success = 1;
+  string message = 2;
+  string skill_id = 3;
+  bool enabled = 4;
+}
+
+message RecommendedSkill {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  string source = 4;
+  optional string source_subpath = 5;
+  optional string ref = 6;
+  optional string bundled_by = 7;
+}
+
+message ListRecommendedSkillsRequest {
+  string project_id = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListRecommendedSkillsResponse {
+  repeated RecommendedSkill recommended = 1;
+  int32 total = 2;
+  string next_page_token = 3;
+}
+
+message DeleteGlobalSkillRequest {
+  string project_id = 1;
+  string relative_path = 2;
+}
+
+message DeleteGlobalSkillResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// ============================================
+// Sub-phase 6e: Privacy Settings Messages
+// ============================================
+
+message GetPrivacySettingsRequest {}
+
+message GetPrivacySettingsResponse {
+  bool analytics_enabled = 1;
+  bool crash_reporting_enabled = 2;
+}
+
+message UpdatePrivacySettingsRequest {
+  optional bool analytics_enabled = 1;
+  optional bool crash_reporting_enabled = 2;
+}
+
+message UpdatePrivacySettingsResponse {
+  bool success = 1;
+  string message = 2;
+  bool analytics_enabled = 3;
+  bool crash_reporting_enabled = 4;
+  bool requires_restart = 5;
+}
+
+// ============================================
+// Configuration Health Types
+// ============================================
+
+// ConfigError represents a configuration error or warning
+message ConfigError {
+  // Error type: preset, workflow, mcp, config
+  string type = 1;
+  
+  // Source file or identifier where the error originated
+  string source = 2;
+  
+  // Human-readable error message
+  string message = 3;
+  
+  ConfigSeverity severity = 4;
+  
+  // Additional details (e.g., missing params, invalid values)
+  map<string, string> details = 5;
+}
+
+message GetConfigHealthRequest {
+  // Optional: filter by project
+  optional string project_id = 1;
+  
+  // Optional: filter by error type (preset, workflow, mcp, config)
+  optional string type_filter = 2;
+}
+
+message GetConfigHealthResponse {
+  // All configuration errors and warnings
+  repeated ConfigError errors = 1;
+  
+  // Summary counts
+  int32 error_count = 2;
+  int32 warning_count = 3;
+}
+
+// ============================================
+// Analytics Tracking Messages
+// ============================================
+
+message TrackPageVisitedRequest {
+  string page_name = 1;
+  optional string previous_page = 2;
+}
+
+message TrackPageVisitedResponse {
+  bool success = 1;
+}
+
+message TrackOnboardingEventRequest {
+  string event_type = 1;       // onboarding_started, onboarding_step_completed, etc.
+  optional string step_id = 2;
+  optional string step_name = 3;
+  int32 total_steps = 4;
+  int32 steps_completed = 5;
+  int32 steps_skipped = 6;
+}
+
+message TrackOnboardingEventResponse {
+  bool success = 1;
+}

@@ -1,0 +1,132 @@
+---
+title: "Architecture Overview"
+description: "High-level architecture of Reliant's two deployment modes"
+---
+
+Reliant is an AI-powered software engineering platform that orchestrates multi-step, multi-agent workflows. Each workflow coordinates LLM inference with local tool operations—shell commands, file edits, MCP servers, terminal sessions—through a durable execution engine that survives crashes and restarts.
+
+The platform runs in two modes: a self-contained **monolith** for local and desktop use, and a **distributed** deployment for cloud environments. Both modes use the same core components, wired differently depending on whether everything runs in one process or across many.
+
+## Core Components
+
+Every Reliant deployment consists of these components, regardless of mode:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                       Frontend                          │
+│                   (Web / Electron)                       │
+└──────────┬──────────────────┬───────────────────────────┘
+           │ REST              │ gRPC/ConnectRPC
+           ▼                  ▼
+┌──────────────────┐ ┌────────────────────┐
+│  HTTP API Server │ │ gRPC/ConnectRPC    │
+│  (REST endpoints)│ │ Server (real-time  │
+│                  │ │ ops, streaming)    │
+└────────┬─────────┘ └────────┬───────────┘
+         │                    │
+         ▼                    ▼
+┌─────────────────────────────────────────┐
+│           Temporal Engine               │
+│   (durable workflow orchestration)      │
+└────────────────┬────────────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────────────┐
+│          Temporal Workers               │
+│   (execute workflow activities)         │
+│                                         │
+│  ┌─────────────┐  ┌──────────────────┐  │
+│  │ LLM Calls   │  │ Tool Routing     │  │
+│  │ (Anthropic,  │  │ (shell, files,   │  │
+│  │  OpenAI ...) │  │  MCP, terminals) │  │
+│  └─────────────┘  └───────┬──────────┘  │
+└────────────────────────────┼────────────┘
+                             │
+                             ▼
+              ┌──────────────────────────┐
+              │      Tools Daemon        │
+              │  (local tool execution)  │
+              └──────────────────────────┘
+```
+
+**HTTP API Server** — Serves REST endpoints consumed by the web frontend. Handles CRUD operations for chats, messages, projects, workflows, and settings.
+
+**gRPC/ConnectRPC Server** — Provides RPC endpoints for real-time operations: streaming chat responses, file system browsing, terminal sessions, background process management, and daemon connectivity. Uses ConnectRPC for browser-compatible gRPC.
+
+**Temporal Engine** — The durable workflow orchestration layer. Workflows are defined as Temporal workflows, which means they automatically survive process crashes, restarts, and network failures. The engine manages workflow state, schedules activities, and handles retries.
+
+**Temporal Workers** — Execute the actual workflow activities: calling LLM providers (Anthropic, OpenAI, etc.), routing tool execution requests to the daemon, persisting messages and state to the database, and publishing streaming updates to the frontend.
+
+**Tools Daemon** — A local process that provides direct access to the user's machine. It executes shell commands, performs file operations, manages MCP server lifecycles, and hosts terminal sessions. In monolith mode it runs in-process; in distributed mode it runs as a separate `reliant daemon` process that connects to the cloud via a bidirectional gRPC stream.
+
+**Database** — Stores chats, messages, content blocks, workflows, projects, and worktree associations. SQLite for local/desktop deployments, Postgres for cloud.
+
+**Streaming Layer** — Delivers real-time updates (new messages, tool outputs, workflow state changes) from workers to the frontend. Memory-based pub/sub in monolith mode, NATS in distributed mode.
+
+## Two Deployment Modes
+
+### Monolith (`reliant monolith`)
+
+Everything runs in a single OS process. The embedded Temporal server uses a local SQLite database (`temporal.db`), the application database is SQLite (`reliant.db`), and the tools daemon runs in-process via `LazyDaemonStarter`—starting on the first authenticated request rather than at boot. Streaming uses `MemoryUpdateHub`, an in-process pub/sub channel. Tool execution routes through `LocalDaemonRouter`, which dispatches directly to the in-process daemon connection.
+
+This is the mode the Electron desktop app uses. Running `reliant monolith` starts the HTTP API, gRPC server, Temporal engine, workers, and daemon all within one process. TLS certificates are auto-generated (self-signed) and stored in the data directory.
+
+### Distributed (`reliant server {api,worker,gateway}`)
+
+Three separate process types split the workload for cloud deployment:
+
+- **`reliant server api`** — Stateless HTTP + gRPC server. Connects to external Temporal, Postgres, and NATS. Runs as N replicas behind a load balancer.
+- **`reliant server worker`** — Temporal workflow worker. Executes activities (LLM calls, tool routing). Runs as N replicas for horizontal scaling.
+- **`reliant server gateway`** — Manages bidirectional gRPC streams to `reliant daemon` processes. Routes tool execution requests from API servers and workers to the correct daemon via NATS. Runs as a small number of stateful replicas.
+
+Users run `reliant daemon start` on their local machine, which establishes a persistent gRPC stream to the gateway. Tool execution requests flow through NATS (`NATSDaemonRouter`) to the gateway, which forwards them to the appropriate daemon stream. Streaming updates propagate through `NATSUpdateHub` so all API server replicas can push events to their connected frontends.
+
+## Comparison
+
+| Aspect | Monolith | Distributed |
+|--------|----------|-------------|
+| Database | SQLite (embedded) | Postgres (external) |
+| Temporal | Embedded in-process | External cluster |
+| Tool Routing | `LocalDaemonRouter` (in-process) | `NATSDaemonRouter` (via NATS) |
+| Streaming | `MemoryUpdateHub` | `NATSUpdateHub` |
+| Daemon | In-process via `LazyDaemonStarter` | Separate `reliant daemon` + Gateway |
+| Scaling | Single process | N API + N workers + few gateways |
+| TLS | Auto-generated self-signed | External certificate management |
+| Use Case | Local development, desktop app | Cloud SaaS deployment |
+
+## Request Data Flow
+
+A user message flows through the system in this sequence:
+
+```
+User ──► Frontend ──► API Server ──► Temporal ──► Worker
+                                                    │
+                                         ┌──────────┴──────────┐
+                                         │                     │
+                                         ▼                     ▼
+                                    LLM Provider         Tools Daemon
+                                    (inference)       (shell, files, MCP)
+                                         │                     │
+                                         └──────────┬──────────┘
+                                                    │
+                                                    ▼
+                                            Streaming Layer
+                                                    │
+                                                    ▼
+                                          Frontend (live updates)
+```
+
+1. The frontend sends the message via the gRPC server, which creates a chat workflow execution in Temporal.
+2. Temporal dispatches workflow activities to a worker. The worker calls the configured LLM provider with the conversation history and available tools.
+3. When the LLM responds with tool calls, the worker routes them to the tools daemon—directly in monolith mode, or through NATS and the gateway in distributed mode.
+4. The daemon executes each tool (running a shell command, editing a file, calling an MCP server) and returns the results to the worker.
+5. The worker feeds tool results back to the LLM for the next iteration of the agent loop.
+6. At each step, the worker publishes streaming updates (message chunks, tool outputs, status changes) through the streaming layer. The gRPC server picks up these events and pushes them to the frontend over the active stream.
+7. This loop continues until the LLM produces a final response with no further tool calls.
+
+Because Temporal manages the workflow state, any crash during this process resumes from the last completed activity rather than starting over.
+
+## Further Reading
+
+- [Monolith Mode](/architecture/monolith) — Detailed breakdown of the single-process deployment, including configuration, data directories, and the Electron integration.
+- [Distributed Mode](/architecture/distributed) — Architecture of the cloud deployment: API server, worker, and gateway process types, NATS topology, and scaling considerations.

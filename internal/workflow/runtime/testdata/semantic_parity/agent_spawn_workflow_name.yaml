@@ -1,0 +1,57 @@
+name: agent_spawn_workflow_name
+workflow_ref: builtin://agent
+canonical_workflow_ref: builtin://agent
+
+core:
+  use_workflow_loader: true
+  expected_contracts:
+    - node_path: agent_loop
+      input_policy: inline_inherit_parent_inputs
+      workflow_identity: builtin://agent
+      load_strategy: inline_embedded
+
+validation:
+  should_pass: true
+  use_workflow_loader: true
+
+simulator:
+  expected_status: passed
+  scenario:
+    name: agent_single_turn
+    inputs:
+      mode: auto
+      max_turns: 1
+      temperature: 0.7
+      thinking_level: low
+      system_prompt: ""
+      planning_prompt: ""
+      model:
+        id: gpt-5
+      tools: [tag:default]
+      spawn_presets: [general, researcher]
+      yield: false
+    events:
+      - node: agent_loop.call_llm
+        type: llm_response
+        text: "Done"
+    expect:
+      outcome: completed
+      reached:
+        - agent_loop.call_llm
+
+runtime:
+  checks:
+    - type: spawn_workflow_name_presets
+      node_path: agent_loop/call_llm
+      inputs:
+        mode: auto
+        temperature: 0.7
+        thinking_level: low
+        system_prompt: ""
+        planning_prompt: ""
+        model:
+          id: gpt-5
+        tools: [tag:default]
+        spawn_presets: [general, researcher]
+      expected_spawn_ref: builtin://agent
+      expected_spawn_presets: [general, researcher]

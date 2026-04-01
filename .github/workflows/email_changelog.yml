@@ -1,0 +1,48 @@
+name: email_changelog
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version/tag to email (for example v1.2.0)"
+        required: true
+        type: string
+      ref:
+        description: "Git ref to read changelog YAML from"
+        required: false
+        default: "main"
+        type: string
+      dry_run:
+        description: "Preview payload without triggering Customer.io"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  email-changelog:
+    name: Send Changelog Email
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.ref }}
+          fetch-depth: 1
+
+      - name: Install yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Trigger changelog email from YAML
+        env:
+          VERSION: ${{ github.event.inputs.version }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+          CUSTOMERIO_APP_API_KEY: ${{ secrets.CUSTOMERIO_APP_API_KEY }}
+          CUSTOMERIO_BROADCAST_ID: ${{ vars.CUSTOMERIO_CHANGELOG_BROADCAST_ID }}
+        run: bash ./scripts/send-changelog-email.sh

@@ -1,0 +1,290 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+import "reliant/v1/chat.proto";
+
+// ChatUpdateType categorizes real-time chat update events
+enum ChatUpdateType {
+  CHAT_UPDATE_TYPE_UNSPECIFIED = 0;
+  CHAT_UPDATE_TYPE_MESSAGE = 1;
+  CHAT_UPDATE_TYPE_APPROVAL = 2;
+  CHAT_UPDATE_TYPE_THREAD = 3;
+  CHAT_UPDATE_TYPE_TOOL_CALL = 4;
+  CHAT_UPDATE_TYPE_WORKFLOW_STATUS = 5;
+  CHAT_UPDATE_TYPE_ERROR = 6;
+  CHAT_UPDATE_TYPE_CHAT = 7;
+  CHAT_UPDATE_TYPE_RUN_OUTPUT = 8;
+  CHAT_UPDATE_TYPE_NODE_EXECUTION = 9;
+  CHAT_UPDATE_TYPE_EXECUTION_LOG = 10;
+  CHAT_UPDATE_TYPE_WORKFLOW_EXECUTION = 11;
+  CHAT_UPDATE_TYPE_YIELD = 12;
+  CHAT_UPDATE_TYPE_INFO = 13;
+  CHAT_UPDATE_TYPE_WARNING = 14;
+  CHAT_UPDATE_TYPE_REFETCH = 15;
+  CHAT_UPDATE_TYPE_STREAMING_DELTA = 16;
+  CHAT_UPDATE_TYPE_SKILL_INVOCATION = 17;
+}
+
+// UserUpdateType categorizes user-level update events
+enum UserUpdateType {
+  USER_UPDATE_TYPE_UNSPECIFIED = 0;
+  USER_UPDATE_TYPE_CHAT_STATE_CHANGE = 1;
+  USER_UPDATE_TYPE_CHAT_CONFIG_CHANGED = 2;
+  USER_UPDATE_TYPE_CHAT_CREATED = 3;
+  USER_UPDATE_TYPE_CHAT_TITLE_CHANGED = 4;
+  USER_UPDATE_TYPE_CHAT_DELETED = 5;
+  USER_UPDATE_TYPE_CHAT_ACTIVITY_CHANGED = 6;
+  USER_UPDATE_TYPE_PROJECT_CREATED = 7;
+  USER_UPDATE_TYPE_PROJECT_DELETED = 8;
+  USER_UPDATE_TYPE_PROJECT_SETTINGS_CHANGED = 9;
+  USER_UPDATE_TYPE_WORKTREE_CREATED = 10;
+  USER_UPDATE_TYPE_WORKTREE_DELETED = 11;
+  USER_UPDATE_TYPE_WORKTREE_STATUS_CHANGED = 12;
+  USER_UPDATE_TYPE_PROCESS_STARTED = 13;
+  USER_UPDATE_TYPE_PROCESS_OUTPUT = 14;
+  USER_UPDATE_TYPE_PROCESS_COMPLETED = 15;
+  USER_UPDATE_TYPE_PROCESS_FAILED = 16;
+  USER_UPDATE_TYPE_PROCESS_PORT_CHANGED = 17;
+  USER_UPDATE_TYPE_NOTIFICATION = 18;
+  USER_UPDATE_TYPE_REFETCH = 19;
+}
+
+// EntityType categorizes the type of entity an update relates to
+enum EntityType {
+  ENTITY_TYPE_UNSPECIFIED = 0;
+  ENTITY_TYPE_CHAT = 1;
+  ENTITY_TYPE_PROJECT = 2;
+  ENTITY_TYPE_WORKTREE = 3;
+  ENTITY_TYPE_BACKGROUND_PROCESS = 4;
+  ENTITY_TYPE_SYSTEM = 5;
+}
+
+// NodeExecutionEventType categorizes node lifecycle events
+enum NodeExecutionEventType {
+  NODE_EXECUTION_EVENT_TYPE_UNSPECIFIED = 0;
+  NODE_EXECUTION_EVENT_TYPE_STARTED = 1;
+  NODE_EXECUTION_EVENT_TYPE_PROGRESS = 2;
+  NODE_EXECUTION_EVENT_TYPE_COMPLETED = 3;
+  NODE_EXECUTION_EVENT_TYPE_FAILED = 4;
+}
+
+// WorkflowExecutionEventType categorizes workflow lifecycle events
+enum WorkflowExecutionEventType {
+  WORKFLOW_EXECUTION_EVENT_TYPE_UNSPECIFIED = 0;
+  WORKFLOW_EXECUTION_EVENT_TYPE_STARTED = 1;
+  WORKFLOW_EXECUTION_EVENT_TYPE_COMPLETED = 2;
+  WORKFLOW_EXECUTION_EVENT_TYPE_FAILED = 3;
+  WORKFLOW_EXECUTION_EVENT_TYPE_CANCELLED = 4;
+}
+
+// StreamingService provides real-time streaming of updates.
+// Uses gRPC server-streaming for efficient push-based updates.
+// A single StreamUserUpdates stream handles BOTH global user-level events
+// and per-chat detail events (when subscribe_chat_id is set).
+service StreamingService {
+  // StreamUserUpdates opens a server-streaming connection for all real-time updates.
+  // Always delivers user-level events (chat state, projects, processes, etc.).
+  // When subscribe_chat_id is set, ALSO delivers per-chat detail events
+  // (messages, approvals, tool calls, streaming deltas, workflow/node events).
+  // To switch chat subscriptions, the client disconnects and reconnects with a new request.
+  rpc StreamUserUpdates(StreamUserUpdatesRequest) returns (stream UserStreamEvent) {}
+}
+
+// ============================================
+// Chat Detail Messages (delivered via UserStreamEvent when subscribed)
+// ============================================
+
+// ChatSyncSnapshot provides the initial sync with pre-assembled messages.
+// Sent through the unified stream when subscribe_chat_id is set.
+message ChatSyncSnapshot {
+  repeated Message messages = 1;                // Assembled messages with content blocks
+  repeated ChatUpdateData other_updates = 2;   // Non-message updates (approvals, threads, etc.)
+  int64 latest_sequence = 3;                   // Latest sequence number for tracking
+  int32 total = 4;                             // Total message count
+  bool has_more = 5;                           // Whether there are more messages to load
+  int64 oldest_ordinal = 6;                    // Ordinal of oldest message (for pagination)
+  // Context usage for compaction indicator
+  int64 thread_token_count = 7;                // Sum of output_tokens in current context
+  int64 compaction_threshold = 8;              // Threshold at which compaction triggers (default 20000)
+  // Workflow execution state - included in initial sync if workflow is active
+  repeated WorkflowExecutionState active_workflows = 9;  // Currently running workflows with full state
+}
+
+// ChatUpdateBatch contains a batch of incremental chat updates
+message ChatUpdateBatch {
+  repeated ChatUpdateData updates = 1;
+  int64 latest_sequence = 2;
+}
+
+// ChatUpdateData represents a single chat update event (generic JSON-like structure)
+message ChatUpdateData {
+  ChatUpdateType update_type = 1;
+  int64 sequence_number = 2;
+  string entity_id = 3;
+  string chat_id = 4;
+  string data_json = 5;                        // JSON-encoded update data
+  string created_at = 6;
+}
+
+// ============================================
+// User Updates Streaming Messages
+// ============================================
+
+// StreamUserUpdatesRequest initiates the unified update stream
+message StreamUserUpdatesRequest {
+  int64 since_seq = 1;                         // User-level sequence number to start from
+  optional string subscribe_chat_id = 2;       // Subscribe to per-chat detail events for this chat
+  int64 chat_since_seq = 3;                    // Chat-level sequence number to start from (0 for initial sync snapshot)
+}
+
+// UserStreamEvent represents a single event in the unified update stream.
+// Contains BOTH user-level events and per-chat detail events.
+message UserStreamEvent {
+  oneof event {
+    // User-level events (always delivered)
+    UserSyncInfo sync = 1;                     // Initial sync info
+    UserUpdateBatch updates = 2;               // Batch of user updates
+    Heartbeat heartbeat = 3;                   // Keepalive heartbeat
+
+    // Per-chat detail events (only when subscribe_chat_id is set)
+    ChatSyncSnapshot chat_sync_snapshot = 4;   // Initial chat sync with assembled messages
+    ChatUpdateBatch chat_updates = 5;          // Incremental chat updates batch
+    WorkflowExecutionEvent workflow_event = 6; // Workflow lifecycle event
+    NodeExecutionEvent node_event = 7;         // Node lifecycle event
+    ExecutionLog execution_log = 8;            // Log entry from execution
+  }
+}
+
+// UserSyncInfo provides initial sync information
+message UserSyncInfo {
+  int64 last_sequence = 1;
+}
+
+// UserUpdateBatch contains a batch of user-level updates
+message UserUpdateBatch {
+  repeated UserUpdateData updates = 1;
+}
+
+// UserUpdateData represents a user-level update
+message UserUpdateData {
+  string id = 1;
+  string user_id = 2;
+  int64 sequence_number = 3;
+  optional string project_id = 4;
+  optional string worktree_id = 5;
+  optional string chat_id = 6;
+  UserUpdateType update_type = 7;
+  EntityType entity_type = 8;
+  string entity_id = 9;
+  string data_json = 10;                       // JSON-encoded update data
+  string created_at = 11;
+}
+
+// ============================================
+// Common Messages
+// ============================================
+
+// Heartbeat is sent periodically to keep the connection alive
+message Heartbeat {
+  int64 timestamp = 1;
+}
+
+// ============================================
+// Workflow Execution State Messages
+// ============================================
+// These messages enable real-time visualization of workflow execution,
+// including active nodes, execution hierarchy, and streaming logs.
+
+// NodeExecutionStatus represents the lifecycle state of a workflow node
+enum NodeExecutionStatus {
+  NODE_EXECUTION_STATUS_UNSPECIFIED = 0;
+  NODE_EXECUTION_STATUS_PENDING = 1;     // Queued but not started
+  NODE_EXECUTION_STATUS_RUNNING = 2;     // Currently executing
+  NODE_EXECUTION_STATUS_COMPLETED = 3;   // Finished successfully
+  NODE_EXECUTION_STATUS_FAILED = 4;      // Finished with error
+  NODE_EXECUTION_STATUS_CANCELLED = 5;   // Cancelled by user or system
+  NODE_EXECUTION_STATUS_SKIPPED = 6;     // Skipped due to condition
+}
+
+// WorkflowExecutionStatus represents the overall workflow state
+enum WorkflowExecutionStatus {
+  WORKFLOW_EXECUTION_STATUS_UNSPECIFIED = 0;
+  WORKFLOW_EXECUTION_STATUS_RUNNING = 1;
+  WORKFLOW_EXECUTION_STATUS_COMPLETED = 2;
+  WORKFLOW_EXECUTION_STATUS_FAILED = 3;
+  WORKFLOW_EXECUTION_STATUS_CANCELLED = 4;
+}
+
+// NodeExecutionState represents the current state of a single workflow node
+message NodeExecutionState {
+  string node_id = 1;                        // Step/node identifier from workflow definition
+  string node_type = 2;                      // "agent", "run", "action", "approval", "loop", "join", "workflow"
+  NodeExecutionStatus status = 3;            // Current execution status
+  string workflow_id = 4;                    // Parent workflow UUID
+  optional string parent_node_id = 5;        // Parent node for nested workflows/loops
+  optional string activity_id = 6;           // Temporal activity ID for correlation
+  optional int64 started_at = 7;             // Unix timestamp when execution started
+  optional int64 completed_at = 8;           // Unix timestamp when execution completed
+  optional int64 duration_ms = 9;            // Execution duration in milliseconds
+  optional int32 exit_code = 10;             // Exit code for run steps
+  optional string error_message = 11;        // Error message if failed
+  optional int32 iteration = 12;             // Current iteration for loop nodes
+  optional int32 max_iterations = 13;        // Max iterations for loop nodes
+  map<string, string> metadata = 14;         // Additional node-specific metadata
+}
+
+// WorkflowExecutionState represents the complete execution state of a workflow
+message WorkflowExecutionState {
+  string workflow_id = 1;                    // Workflow UUID
+  string workflow_name = 2;                  // Workflow definition name (e.g., "builtin://agent")
+  string chat_id = 3;                        // Associated chat ID
+  WorkflowExecutionStatus status = 4;        // Overall workflow status
+  optional string parent_workflow_id = 5;    // Parent workflow for child workflows
+  string thread = 6;                    // Thread path for message isolation
+  repeated string active_nodes = 7;          // Currently executing node IDs
+  repeated NodeExecutionState nodes = 8;     // All node states in this workflow
+  repeated WorkflowExecutionState children = 9; // Child workflow states
+  optional int64 started_at = 10;            // Unix timestamp when workflow started
+  optional int64 completed_at = 11;          // Unix timestamp when workflow completed
+  map<string, string> params = 12;           // Workflow input parameters
+  map<string, string> outputs = 13;          // Workflow outputs (populated on completion)
+}
+
+// ExecutionLogLevel represents the severity of a log entry
+enum ExecutionLogLevel {
+  EXECUTION_LOG_LEVEL_UNSPECIFIED = 0;
+  EXECUTION_LOG_LEVEL_DEBUG = 1;
+  EXECUTION_LOG_LEVEL_INFO = 2;
+  EXECUTION_LOG_LEVEL_WARN = 3;
+  EXECUTION_LOG_LEVEL_ERROR = 4;
+}
+
+// ExecutionLog represents a log entry from workflow/node execution
+message ExecutionLog {
+  string id = 1;                             // Unique log entry ID
+  string workflow_id = 2;                    // Workflow UUID
+  optional string node_id = 3;               // Node ID if from a specific node
+  ExecutionLogLevel level = 4;               // Log severity
+  string message = 5;                        // Log message content
+  int64 timestamp = 6;                       // Unix timestamp
+  optional string source = 7;                // Source identifier (e.g., "stdout", "stderr", "activity")
+  map<string, string> fields = 8;            // Structured log fields
+}
+
+// NodeExecutionEvent represents a node lifecycle event (start, update, complete)
+message NodeExecutionEvent {
+  NodeExecutionEventType event_type = 1;
+  NodeExecutionState node = 2;               // Current node state
+  optional string progress_message = 3;      // Optional progress message for "progress" events
+  optional double progress_percent = 4;      // Optional progress percentage (0-100)
+}
+
+// WorkflowExecutionEvent represents a workflow lifecycle event
+message WorkflowExecutionEvent {
+  WorkflowExecutionEventType event_type = 1;
+  WorkflowExecutionState workflow = 2;       // Current workflow state (may include nested state)
+}

@@ -1,0 +1,161 @@
+---
+title: "Quick Start"
+description: "Get up and running with Reliant in minutes"
+---
+
+Get Reliant running, chat with your codebase, and run your first workflow.
+
+## 1. Connect an AI provider
+
+Open **Settings → AI**.
+
+1. Select your provider: Claude Code, Codex, Anthropic, OpenAI, OpenRouter, and others.
+2. Authenticate:
+   - Most providers: enter an API key, then click **Test Connection** and **Add Provider**.
+   - Claude Code or Codex: click **Login** and complete OAuth in your browser.
+
+<Tip>
+Using the web UI instead of the desktop app? Run `reliant auth serve` in your terminal first — OAuth needs a localhost helper. See [Provider Authentication](/settings/api-keys#oauth-in-web-mode) for details.
+</Tip>
+
+## 2. Open a project
+
+Click **Open Existing Project** and select your code folder. Reliant indexes your files automatically.
+
+Or click **Create New Project** to start fresh.
+
+## 3. Start chatting
+
+Type a message and press Enter:
+
+- "Explain the structure of this project"
+- "What does the main file do?"
+- "Add input validation to the signup form"
+
+This is the default **agent** workflow running. Your message goes to the LLM, the LLM calls tools (read files, search code, make edits, run commands), results go back to the LLM, and it loops until the task is done. So far this is like any other ADE.
+
+## 4. Run a built-in workflow
+
+This is where Reliant gets different. Instead of manually driving each step, pick a workflow and let agents execute a defined process.
+
+Click the **workflow selector** (defaults to "Agent") and try one of these:
+
+| Workflow | When to use it | What happens |
+| --- | --- | --- |
+| **gsd** | You have a clear feature to build | Discuss → research → plan → parallel implementation → verify |
+| **superpowers** | You want test-driven development | Brainstorm → plan → write failing tests → implement → review |
+| **simplify-first** | You're working in messy code | Analyze simplifications → refactor → verify → then build |
+| **spec-driven** | You want to nail requirements first | Write spec → plan approach → implement |
+| **get-it-right** | Complex change in a large codebase | Attempt → evaluate → improve/restart → diagnose → final implementation |
+
+Select a workflow, type your request, and watch multiple agents collaborate on the task.
+
+## 5. Build your own workflow
+
+Create a YAML file in your project to define a custom process:
+
+```yaml .reliant/workflows/review-and-refactor.yaml
+name: review-and-refactor
+version: v0.0.1
+description: Reviews code, then refactors based on findings
+status: published
+tag: agent
+
+entry: [review]
+
+inputs:
+  model:
+    type: model
+    default: ""
+
+nodes:
+  - id: review
+    workflow: builtin://agent
+    thread:
+      mode: inherit
+    args:
+      model: "{{inputs.model}}"
+      mode: auto
+      system_prompt: |
+        Critically review the code the user points you to. Focus on:
+        - Unnecessary complexity
+        - Duplicated logic
+        - Unclear naming or structure
+        Be specific. Reference exact code.
+
+  - id: refactor
+    workflow: builtin://agent
+    thread:
+      mode: inherit
+      inject:
+        role: user
+        content: |
+          Based on your review above, refactor the code to address the
+          issues you found. Make minimal, focused changes.
+    args:
+      model: "{{inputs.model}}"
+      mode: auto
+
+  - id: verify
+    run: npm test
+
+edges:
+  - from: review
+    default: refactor
+  - from: refactor
+    default: verify
+```
+
+This workflow: criticizes the code → refactors based on its own critique → runs tests to verify nothing broke. Three steps, zero manual intervention.
+
+See [Creating Custom Workflows](/workflows/custom-workflows) for the full guide.
+
+## The interface
+
+| Area | Purpose |
+| --- | --- |
+| **Navigation Bar** | Chats, Worktrees, Workflows, Settings |
+| **Sidebar** | Context for the selected navigation item |
+| **Chat Area** | Message input at bottom, history above |
+
+## Execution modes
+
+Control how much autonomy the agent has:
+
+| Mode | Behavior |
+| --- | --- |
+| **Auto** | Executes tools without asking. Press Escape to cancel. |
+| **Manual** | Asks for approval before each tool execution. |
+| **Plan** | Read-only tools only — explores but doesn't change anything. |
+
+A common pattern: start in **Plan** mode to analyze and create a plan, then switch to **Auto** to execute it.
+
+## Optional: memory files
+
+Memory files provide persistent context to the AI across conversations.
+
+**Global**: `~/.reliant/reliant.md`
+
+```markdown
+# My Guidelines
+- Always write tests
+- Use descriptive variable names
+```
+
+**Project-specific**: `reliant.md` in your project root
+
+```markdown
+# Project Context
+- TypeScript/React project
+- Uses Prisma for database
+```
+
+Learn more: [Memories & Context](/settings/memories)
+
+## Next steps
+
+- [Key Concepts](/getting-started/concepts) — Understand the essential terms
+- [Workflows Overview](/workflows/overview) — How workflows power Reliant
+- [Workflow Control](/workflows/workflow-control) — Pause, resume, and live parameter updates
+- [Creating Custom Workflows](/workflows/custom-workflows) — Build your own
+- [Use Cases](/examples/use-cases) — Real-world workflow examples

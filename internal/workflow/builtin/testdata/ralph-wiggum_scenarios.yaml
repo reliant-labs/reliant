@@ -1,0 +1,131 @@
+# Test scenarios for ralph-wiggum.yaml workflow
+#
+# Ralph Wiggum workflow structure:
+#   Top-level node: attempt (loop)
+#
+#   attempt (type: loop, brute-force):
+#     While: has(outputs.review_strategy) && outputs.review_strategy != "pass"
+#            && iter.iteration < inputs.max_iterations
+#     Inner nodes: implement → review
+#     - implement  type: workflow ref: builtin://agent (BLACK BOX) — fresh each iteration, no context carried
+#     - review     type: workflow ref: builtin://structured-agent
+#       response_schema: { strategy, feedback }
+#       strategy enum: ["pass", "retry"]
+#     - Loop outputs:
+#         review_strategy: from review.response.strategy
+#         review_feedback: from review.response.feedback
+#
+# Key difference from get-it-right: NO context is shared between attempts.
+# Each implement agent starts completely fresh (memo: false, no bridge).
+#
+# NOTE: For loop scenarios, provide events for EACH iteration in order.
+#       The simulator consumes events sequentially per node name.
+
+---
+name: happy_path_first_try
+description: >
+  First implementation succeeds. Review says strategy="pass" on iteration 0.
+  Loop exits after 1 iteration — no retry needed.
+
+events:
+  - node: attempt.implement
+    output:
+      response_text: "Investigated the codebase and implemented the requested feature. All tests pass."
+
+  - node: attempt.review
+    output:
+      response:
+        strategy: "pass"
+        feedback: "Implementation is correct and complete. Code follows existing patterns."
+
+expect:
+  outcome: completed
+  reached:
+    - attempt
+    - attempt.implement
+    - attempt.review
+  node_outputs:
+    attempt:
+      review_strategy: "pass"
+
+---
+name: retry_then_pass
+description: >
+  First attempt fails review (strategy="retry"). Second attempt succeeds
+  (strategy="pass"). Loop runs 2 iterations. Note: the second implement
+  agent has zero context from the first attempt — pure brute force.
+
+events:
+  # Iteration 0
+  - node: attempt.implement
+    output:
+      response_text: "Built the feature but took the wrong approach — used direct DB queries instead of the repository layer."
+
+  - node: attempt.review
+    output:
+      response:
+        strategy: "retry"
+        feedback: "Implementation uses raw SQL instead of the repository pattern. The approach is fundamentally wrong for this codebase."
+
+  # Iteration 1
+  - node: attempt.implement
+    output:
+      response_text: "Investigated the codebase and found the repository layer. Built the feature using existing patterns. All tests pass."
+
+  - node: attempt.review
+    output:
+      response:
+        strategy: "pass"
+        feedback: "Implementation is correct. Repository layer usage follows codebase conventions."
+
+expect:
+  outcome: completed
+  reached:
+    - attempt
+    - attempt.implement
+    - attempt.review
+  node_outputs:
+    attempt:
+      review_strategy: "pass"
+
+---
+name: max_iterations_exhausted
+description: >
+  max_iterations=2. Both attempts get strategy="retry". Loop exits at max
+  because iter.iteration reaches max_iterations. Final review_strategy is "retry".
+
+inputs:
+  max_iterations: 2
+
+events:
+  # Iteration 0
+  - node: attempt.implement
+    output:
+      response_text: "First attempt. Tried to refactor the auth module but the coupling is too deep."
+
+  - node: attempt.review
+    output:
+      response:
+        strategy: "retry"
+        feedback: "Auth module changes broke session handling. The coupling between auth, sessions, and websockets needs to be addressed first."
+
+  # Iteration 1
+  - node: attempt.implement
+    output:
+      response_text: "Second attempt from scratch. Tried a different angle but still hit coupling issues with websocket state management."
+
+  - node: attempt.review
+    output:
+      response:
+        strategy: "retry"
+        feedback: "Still incomplete. The websocket layer maintains its own auth state that conflicts with the changes. All three systems need simultaneous refactoring."
+
+expect:
+  outcome: completed
+  reached:
+    - attempt
+    - attempt.implement
+    - attempt.review
+  node_outputs:
+    attempt:
+      review_strategy: "retry"

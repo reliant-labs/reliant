@@ -1,55 +1,22 @@
-<p align="center">
-  <img src="assets/Create_Workflows_ListItem.webp" alt="Reliant Workflows" width="800">
-</p>
-
-<p align="center">
-  <a href="https://reliantlabs.io">Website</a>
-  ·
-  <a href="https://docs.reliantlabs.io/docs/">Docs</a>
-  ·
-  <a href="https://join.slack.com/t/reliant-pn51441/shared_invite/zt-3g6mhfnhx-~CWMzNRZUylWHevlJXO89A">Slack</a>
-</p>
-
 # Reliant
 
-**Take control of your AI workflows.**
+**AI coding assistant with programmable workflows**
 
-## About
+<p align="center">
+ <img width="2184" height="1390" alt="Reliant Screenshot" src="https://github.com/user-attachments/assets/cecdb7c2-1ee6-4c03-bc45-6b1feb44a8dd" />
+</p>
 
-This is an **issues-only** repo for **[Reliant](https://reliantlabs.io)** — an AI coding assistant built around **programmable workflows**.
+Reliant is a desktop AI coding assistant that goes beyond chat. Interact with your codebase through natural conversation, then extend that interaction with programmable workflows that automate complex, multi-step development tasks.
 
-Most AI coding tools are built around a single chat thread. That works for questions and quick edits, but longer tasks turn into manual babysitting: you prompt, copy outputs around, run commands yourself, and steer when things go off track. Reliant keeps the chat, but adds **workflows**—versioned, multi-step processes that mix model calls with real execution (commands, checks, branching, retries, approvals) and let you **compose multiple agents** into a single loop (plan → implement → test → review) instead of relying on one agent to do everything.
+## Key Features
 
-> Use issues here for bug reports, feature requests, workflow ideas, and integrations.
-
-### Why Reliant?
-
-- **Workflows as code**  
-  Define repeatable AI processes in YAML. Commit them with your repo, review changes in PRs, and share them across your team.
-
-- **Composable agents + roles**  
-  Build workflows out of distinct roles (planner, implementer, tester, reviewer, debugger, etc.) and combine them into reliable loops.
-
-- **Thread control (share / fork / fresh)**  
-  Steps can share context, fork it when you want isolation, or start fresh when context becomes baggage—so workflows stay legible instead of turning into one giant soup.
-
-- **Conditional routing + guardrails**  
-  Route based on outcomes (e.g., back to implementation if tests fail, escalate to a reviewer/refactor step after repeated failures). Add optional approval/filter steps where you want tighter control.
-
-- **Parallel execution with Git worktrees**  
-  Run multiple approaches side-by-side in isolated worktrees/branches to avoid conflicts and compare results.
-
-- **Pause / resume / branch**  
-  Inspect any step, inject context, branch into a new thread/workspace, and continue from the failure point instead of restarting.
-
-- **Config lives in your repo**  
-  Workflows, presets, and settings live in `.reliant/` so they’re inspectable, versioned, and portable.
-
-- **Extensible tool integration (MCP)**  
-  MCP (Model Context Protocol) support lets you connect agents to your APIs, databases, and custom tools.
-
-- **Provider-agnostic**  
-  Bring your own keys (Anthropic, OpenAI, Gemini, Groq, OpenRouter, local models). Pay providers directly.
+- **Chat with your codebase** — AI understands your project structure, reads files, and maintains context across conversations
+- **Programmable workflows** — Define repeatable multi-step processes in YAML, version them with your code
+- **Multi-agent patterns** — Spawn parallel agents, implement debate patterns, or chain specialized agents together
+- **Git worktrees** — Isolate work in separate branches without switching contexts
+- **Any LLM provider** — Anthropic, OpenAI, Google Gemini, GitHub Copilot, AWS Bedrock, Azure, Groq, OpenRouter, and more
+- **MCP support** — Extend capabilities with Model Context Protocol servers
+- **Config as code** — Workflows and presets live in your repo as `.reliant/` files
 
 ## Installation
 
@@ -61,44 +28,129 @@ brew install --cask reliant-labs/reliant/reliant
 
 ### Direct Download
 
-| Platform    | Architecture  | Download                                                                                                     |
-| ----------- | ------------- | ------------------------------------------------------------------------------------------------------------ |
-| **macOS**   | Apple Silicon | [Download DMG](https://downloads.reliantlabs.io/Reliant-latest-mac-arm64.dmg?utm_source=github)              |
-| **macOS**   | Intel         | [Download DMG](https://downloads.reliantlabs.io/Reliant-latest-mac-x64.dmg?utm_source=github)                |
-| **Windows** | x64           | [Download EXE](https://downloads.reliantlabs.io/Reliant-latest-win-x64.exe?utm_source=github)                |
-| **Windows** | ARM64         | [Download EXE](https://downloads.reliantlabs.io/Reliant-latest-win-arm64.exe?utm_source=github)              |
-| **Linux**   | x86_64        | [Download AppImage](https://downloads.reliantlabs.io/Reliant-latest-linux-x86_64.AppImage?utm_source=github) |
-| **Linux**   | ARM64         | [Download AppImage](https://downloads.reliantlabs.io/Reliant-latest-linux-arm64.AppImage?utm_source=github)  |
-
-### Arch Linux (AUR)
-
-```bash
-yay -S reliant-labs-bin
-```
-
-See our [installation docs](https://docs.reliantlabs.io/docs/getting-started/installation/) for detailed instructions.
+| Platform | Download |
+|----------|----------|
+| macOS (Apple Silicon) | [Reliant-latest-mac-arm64.dmg](https://downloads.reliantlabs.io/Reliant-latest-mac-arm64.dmg) |
+| macOS (Intel) | [Reliant-latest-mac-x64.dmg](https://downloads.reliantlabs.io/Reliant-latest-mac-x64.dmg) |
+| Windows (x64) | [Reliant-latest-win-x64.exe](https://downloads.reliantlabs.io/Reliant-latest-win-x64.exe) |
+| Windows (ARM) | [Reliant-latest-win-arm64.exe](https://downloads.reliantlabs.io/Reliant-latest-win-arm64.exe) |
+| Linux (x86_64) | [Reliant-latest-linux-x86_64.AppImage](https://downloads.reliantlabs.io/Reliant-latest-linux-x86_64.AppImage) |
+| Linux (ARM64) | [Reliant-latest-linux-arm64.AppImage](https://downloads.reliantlabs.io/Reliant-latest-linux-arm64.AppImage) |
 
 ## Quick Start
 
-1. **Install** using one of the methods above
-2. **Launch** and open a project folder
-3. **Configure** your API key in Settings → AI
-4. **Chat** — ask questions, request implementations, or run workflows
+1. **Launch Reliant** and open a project folder
+2. **Configure an API key** in Settings → AI
+   - Have a Claude Code subscription? Run `claude setup-token` and use that key with Anthropic
+3. **Start chatting** — ask questions, request changes, explore your codebase
 
-Free for 30 days. No credit card required.
+## Documentation
 
-## Resources
+Full documentation at [docs.reliantlabs.io](https://docs.reliantlabs.io)
 
-- [Documentation](https://docs.reliantlabs.io/docs/) — Full guides and reference
-- [Quick Start](https://docs.reliantlabs.io/docs/getting-started/quick-start/) — Get running in minutes
-- [Workflows Overview](https://docs.reliantlabs.io/docs/workflows/overview/) — How workflows work
-- [Custom Workflows](https://docs.reliantlabs.io/docs/workflows/custom-workflows/) — Build your own
+- [Quick Start Guide](https://docs.reliantlabs.io/using-reliant/quick-start/)
+- [Workflows Overview](https://docs.reliantlabs.io/workflows/overview/)
+- [Multi-Agent Patterns](https://docs.reliantlabs.io/workflows/patterns/)
+- [Custom Workflows](https://docs.reliantlabs.io/workflows/custom-workflows/)
+- [Presets Reference](https://docs.reliantlabs.io/workflows/presets/)
+- [MCP Servers](https://docs.reliantlabs.io/settings/mcp-servers/)
 
-## Issues and Feature Requests
+## How It Works
 
-Please search through existing issues before filing a new one. We appreciate detailed bug reports and thoughtful feature requests.
+When you send a message, Reliant runs a workflow. The default `agent` workflow:
+
+```
+Your Message → Call LLM → Execute Tools → Loop while working → Response
+```
+
+The agent reads your codebase, plans changes, implements them, and verifies they work—all within this loop. A single message like "add input validation to the signup form" might trigger dozens of iterations as the agent explores, plans, and implements.
+
+### Execution Modes
+
+| Mode | Description |
+|------|-------------|
+| **Auto** | Agent works autonomously, auto-approving tool calls |
+| **Manual** | You approve each tool execution |
+| **Plan** | Read-only exploration, outputs a task plan |
+
+### Workflows as Code
+
+Workflows live in `.reliant/workflows/*.yaml` and are versioned with your code:
+
+```yaml
+name: review-pr
+description: Review a pull request
+
+nodes:
+  - id: analyze
+    workflow: builtin://agent
+    inputs:
+      prompt: "Review the changes in this PR for bugs, security issues, and style"
+      mode: plan
+
+  - id: summarize
+    workflow: builtin://agent
+    inputs:
+      prompt: "Summarize the review findings"
+```
+
+## Supported Providers
+
+| Provider | Models |
+|----------|--------|
+| Anthropic | Claude 4 Opus, Claude 4 Sonnet, Claude 3.5 Sonnet, Claude 3.5 Haiku |
+| OpenAI | GPT-4.1, GPT-4o, O1, O3, O4-mini |
+| Google | Gemini 2.5 Pro, Gemini 2.5 Flash, Gemini 2.0 Flash |
+| GitHub Copilot | Access to Claude, GPT, Gemini, and O-series models |
+| AWS Bedrock | Claude models via AWS |
+| Azure OpenAI | GPT models via Azure |
+| Groq | Llama, Mixtral |
+| OpenRouter | 100+ models from various providers |
 
 ## Community
 
-- Join our [Slack](https://join.slack.com/t/reliant-pn51441/shared_invite/zt-3g6mhfnhx-~CWMzNRZUylWHevlJXO89A) to connect with other users
-- Follow the [GitHub Community Guidelines](https://docs.github.com/en/github/site-policy/github-community-guidelines)
+- [Slack](https://join.slack.com/t/reliant-pn51441/shared_invite/zt-3g6mhfnhx-~CWMzNRZUylWHevlJXO89A) — Get help and share workflows
+- [GitHub Issues](https://github.com/reliant-labs/reliant/issues) — Report bugs and request features
+- [Documentation](https://docs.reliantlabs.io) — Guides and reference
+
+## Development
+
+For Postgres-based local dev, run with `DATABASE_DRIVER=postgres` (for example `npm run dev:pg`).
+Reliant will use a shared local Postgres server while auto-provisioning a **per-worktree database** during startup, mirroring SQLite worktree isolation.
+
+To inspect the currently resolved DB context quickly (computed worktree DB name + active `DATABASE_URL`), run:
+
+```bash
+npm run db:info
+```
+
+See [docs/RELEASE_SETUP.md](docs/RELEASE_SETUP.md) for release process documentation.
+
+For WSL/Linux developer setup, see [docs/WSL_DEVELOPMENT_SETUP.md](docs/WSL_DEVELOPMENT_SETUP.md).
+On native Windows, use `npm run dev` for day-to-day development.
+Use `make` targets from Linux/macOS/WSL where Unix tooling (bash/sqlite3/goose) is available.
+
+## Star History
+
+<picture>
+  <source
+    media="(prefers-color-scheme: dark)"
+    srcset="
+      https://api.star-history.com/svg?repos=reliant-labs/reliant&type=Date&theme=dark
+    "
+  />
+  <source
+    media="(prefers-color-scheme: light)"
+    srcset="
+      https://api.star-history.com/svg?repos=reliant-labs/reliant&type=Date
+    "
+  />
+  <img
+    alt="Star History Chart"
+    src="https://api.star-history.com/svg?repos=reliant-labs/reliant&type=Date"
+  />
+</picture>
+
+## License
+
+Copyright (c) 2025 Reliant Labs. All rights reserved.

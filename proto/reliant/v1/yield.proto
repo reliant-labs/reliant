@@ -1,0 +1,53 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+// YieldStatus tracks the lifecycle of a yield request
+enum YieldStatus {
+  YIELD_STATUS_UNSPECIFIED = 0;
+  YIELD_STATUS_PENDING = 1;
+  YIELD_STATUS_RESOLVED = 2;
+}
+
+// YieldService handles interactive yield operations for agent loops
+service YieldService {
+  // ResolveYield resolves a pending yield (e.g., user clicks "Continue")
+  rpc ResolveYield(ResolveYieldRequest) returns (ResolveYieldResponse) {}
+
+  // GetPendingYield gets the current pending yield for a chat
+  rpc GetPendingYield(GetPendingYieldRequest) returns (GetPendingYieldResponse) {}
+}
+
+// ResolveYieldRequest resolves a pending yield
+message ResolveYieldRequest {
+  string yield_id = 1;
+  string action = 2;  // "continue"
+}
+
+// ResolveYieldResponse confirms the yield resolution
+message ResolveYieldResponse {
+  bool success = 1;
+}
+
+// GetPendingYieldRequest gets the pending yield for a chat
+message GetPendingYieldRequest {
+  string chat_id = 1;
+}
+
+// GetPendingYieldResponse returns the pending yield info
+message GetPendingYieldResponse {
+  optional YieldInfo yield = 1;
+}
+
+// YieldInfo contains yield details
+message YieldInfo {
+  string yield_id = 1;
+  string chat_id = 2;
+  string workflow_id = 3;
+  string step_id = 4;
+  YieldStatus status = 5;
+  string created_at = 6;
+}

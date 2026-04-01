@@ -1,0 +1,213 @@
+# docker-compose.cloud.yml
+#
+# Example split deployment: api-server (stateless, scalable) + daemon-gateway (stateful).
+#
+# This demonstrates the cloud split architecture where the api-server runs in API mode
+# (no daemon connections, no embedded worker) and routes tool execution requests to a
+# separate daemon-gateway via NATS.
+#
+# Usage:
+#   docker compose -f docker-compose.cloud.yml up --build
+#
+# To scale api-server replicas:
+#   docker compose -f docker-compose.cloud.yml up --build --scale api-server=3
+
+services:
+  # ---------------------------------------------------------------------------
+  # Infrastructure
+  # ---------------------------------------------------------------------------
+
+  # NATS with JetStream — message bus connecting api-server, daemon-gateway, and
+  # temporal-worker. JetStream is enabled for durable streaming support.
+  nats:
+    image: nats:2-alpine
+    command: ["--jetstream", "--store_dir", "/data", "-m", "8222"]
+    ports:
+      - "4222:4222"   # Client connections
+      - "8222:8222"   # HTTP monitoring
+    volumes:
+      - nats-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Postgres — shared database for all services. api-server, daemon-gateway,
+  # and temporal-worker all connect to the same database.
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: reliant
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Temporal — workflow orchestration. Uses Postgres for its own persistence
+  # (auto-setup image handles schema creation).
+  temporal:
+    image: temporalio/auto-setup:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB: postgres12
+      DB_PORT: "5432"
+      POSTGRES_USER: postgres
+      POSTGRES_PWD: postgres
+      POSTGRES_SEEDS: postgres
+    ports:
+      - "7233:7233"
+
+  # ---------------------------------------------------------------------------
+  # Application services
+  # ---------------------------------------------------------------------------
+
+  # api-server — stateless HTTP/gRPC API. Runs in API mode: no daemon listener,
+  # no embedded Temporal worker. Tool execution requests are published to NATS.
+  # Scale horizontally behind a load balancer.
+  api-server:
+    build:
+      context: .
+      target: api-server
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+      nats:
+        condition: service_healthy
+    environment:
+      API_PORT: "8080"
+      GRPC_PORT: "9090"
+      BIND_ADDRESS: "0.0.0.0"
+      RELIANT_ENV: dev
+      TEMPORAL_HOST: temporal
+      TEMPORAL_PORT: "7233"
+      DATABASE_DRIVER: postgres
+      DATABASE_URL: "postgres://postgres:postgres@postgres:5432/reliant?sslmode=disable"
+      DATA_DIR: /data
+      STREAMING_DRIVER: nats
+      NATS_URL: "nats://nats:4222"
+      CORS_ALLOWED_ORIGINS: "*"
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    volumes:
+      - api-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8081/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # daemon-gateway — stateful daemon connection manager. Holds bidi gRPC streams
+  # to tools-daemon processes. Subscribes to NATS for tool execution requests
+  # from api-server replicas and temporal-workers.
+  #
+  # This service is NOT horizontally scalable in the same way as api-server.
+  # Each daemon-gateway instance manages a subset of daemon connections. Currently
+  # a single instance handles all connections; future work will add daemon-aware
+  # routing for multi-gateway deployments.
+  daemon-gateway:
+    build:
+      context: .
+      target: daemon-gateway
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    environment:
+      NATS_URL: "nats://nats:4222"
+      DATABASE_DRIVER: postgres
+      DATABASE_URL: "postgres://postgres:postgres@postgres:5432/reliant?sslmode=disable"
+      TOOLS_DAEMON_PORT: "9190"
+      FRONTEND_PORT: "9191"
+      HEALTH_PORT: "8081"
+      BIND_ADDRESS: "0.0.0.0"
+      RELIANT_ENV: dev
+      DATA_DIR: /data
+    ports:
+      - "9190:9190"    # Daemon gRPC (tools-daemon connects here)
+      - "9191:9191"    # Frontend proxy (browser connects here: gRPC + terminal WS)
+      - "8081:8081"    # Health/readiness checks
+    volumes:
+      - gateway-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8081/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # temporal-worker — runs Temporal workflow activities. Uses NATS for tool
+  # execution routing (publishes requests that daemon-gateway picks up) and
+  # for distributed SSE streaming.
+  temporal-worker:
+    build:
+      context: .
+      target: temporal-worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+      nats:
+        condition: service_healthy
+    environment:
+      TEMPORAL_HOST: temporal
+      TEMPORAL_PORT: "7233"
+      DATABASE_DRIVER: postgres
+      DATABASE_URL: "postgres://postgres:postgres@postgres:5432/reliant?sslmode=disable"
+      DATA_DIR: /data
+      RELIANT_ENV: dev
+      STREAMING_DRIVER: nats
+      NATS_URL: "nats://nats:4222"
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      HEALTH_PORT: "8082"
+    ports:
+      - "8082:8082"    # Health/readiness checks
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8082/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # tools-daemon — workspace daemon. In a real deployment this runs on user
+  # machines (not in the cluster), but it's included here for local testing.
+  # Connects to daemon-gateway's gRPC endpoint.
+  tools-daemon:
+    build:
+      context: .
+      target: tools-daemon
+    depends_on:
+      daemon-gateway:
+        condition: service_healthy
+    environment:
+      RELIANT_ENV: dev
+      # DAEMON_PAT and DAEMON_AUTH_USER_ID must be set for tools-daemon to authenticate.
+      # dev-cloud.sh auto-creates these; for manual use, set them in .env.cloud.
+      DAEMON_PAT: ${DAEMON_PAT:-}
+      DAEMON_AUTH_USER_ID: ${DAEMON_AUTH_USER_ID:-530eb7d2-1f6a-4305-890e-c05becebcf03}
+      DAEMON_GRPC_URL: "http://daemon-gateway:9190"
+      DAEMON_DATA_DIR: /data
+      DAEMON_WORKING_DIR: /workspace
+    volumes:
+      - daemon-data:/data
+      - workspace:/workspace
+
+volumes:
+  pgdata:
+  nats-data:
+  api-data:
+  gateway-data:
+  daemon-data:
+  workspace:

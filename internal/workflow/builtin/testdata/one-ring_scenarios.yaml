@@ -1,0 +1,598 @@
+# Test scenarios for one-ring.yaml workflow
+#
+# One-ring workflow structure:
+#   Top-level nodes (linear):  planning → write_tests → impl_loop → success | max_retries_reached
+#
+#   Planning sub-workflow (type: workflow, thread.mode: fork):
+#     Inner nodes: research → plan → criticize → revise
+#
+#   write_tests (type: workflow, condition: 'tdd' in inputs.steps)
+#
+#   impl_loop (type: workflow, ref: builtin://get-it-right):
+#     Delegates to get-it-right which has: attempt loop containing:
+#       implement → lint/test/build (parallel) → join_checks → review → refactor
+#     Node paths use impl_loop.attempt.* prefix since get-it-right has an attempt loop.
+#
+#   Completion:
+#     success             — when eval_strategy == 'pass'
+#     max_retries_reached — when eval_strategy != 'pass' after loop
+#
+# Inputs:
+#   steps (enum, multi): default [plan, implement]
+#     Valid: research, plan, criticize, revise, tdd, implement, lint, test, build, start_app
+#   max_retries (integer): default 3
+
+---
+name: default_steps
+description: >
+  Default steps (plan, implement). All pass on first try.
+  Review says "pass", refactor skipped.
+
+events:
+  - node: planning.plan
+    output:
+      response_text: "Plan: implement the feature with modular design."
+
+  - node: impl_loop.attempt.implement
+    output:
+      response_text: "Implemented the feature as planned."
+
+  - node: impl_loop.attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Implementation is correct. All checks passed."
+
+expect:
+  outcome: completed
+  reached:
+    - planning
+    - planning.plan
+    - impl_loop
+    - impl_loop.attempt.implement
+    - impl_loop.attempt.join_checks
+    - impl_loop.attempt.review
+    - success
+  not_reached:
+    - write_tests
+    - impl_loop.attempt.refactor
+
+---
+name: plan_only
+description: >
+  steps: [plan]. Planning runs. Everything else is skipped.
+  impl_loop ref'd workflow runs but eval_strategy defaults to "pass".
+
+inputs:
+  steps: [plan]
+
+events:
+  - node: planning.plan
+    output:
+      response_text: "Here is the plan for the task."
+
+expect:
+  outcome: completed
+  reached:
+    - planning
+    - planning.plan
+    - impl_loop
+    - success
+  not_reached:
+    - write_tests
+
+---
+name: full_pipeline_all_pass
+description: >
+  All steps enabled, all pass on first try. Review says "pass", refactor skipped.
+
+inputs:
+  steps: [plan, tdd, implement, lint, test, build]
+
+events:
+  - node: planning.plan
+    output:
+      response_text: "Comprehensive plan for the feature."
+
+  - node: write_tests
+    output:
+      response_text: "Wrote failing unit and integration tests."
+
+  - node: impl_loop.attempt.implement
+    output:
+      response_text: "Full implementation complete."
+
+  - node: impl_loop.attempt.lint
+    output:
+      exit_code: 0
+
+  - node: impl_loop.attempt.test
+    output:
+      exit_code: 0
+
+  - node: impl_loop.attempt.build
+    output:
+      exit_code: 0
+
+  - node: impl_loop.attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Everything passes. Implementation is clean and correct."
+
+expect:
+  outcome: completed
+  reached:
+    - planning
+    - planning.plan
+    - write_tests
+    - impl_loop
+    - impl_loop.attempt.implement
+    - impl_loop.attempt.lint
+    - impl_loop.attempt.test
+    - impl_loop.attempt.build
+    - impl_loop.attempt.join_checks
+    - impl_loop.attempt.review
+    - success
+  not_reached:
+    - impl_loop.attempt.refactor
+
+---
+name: implement_only
+description: >
+  steps: [implement]. Straight to implementation, no checks, no review.
+  eval_strategy defaults to "pass". Loop exits after 1 iteration.
+
+inputs:
+  steps: [implement]
+
+events:
+  - node: impl_loop.attempt.implement
+    output:
+      response_text: "Minimal implementation done."
+
+expect:
+  outcome: completed
+  reached:
+    - planning
+    - impl_loop
+    - impl_loop.attempt.implement
+    - impl_loop.attempt.join_checks
+    - impl_loop.attempt.review
+    - success
+  not_reached:
+    - planning.plan
+    - write_tests
+    - impl_loop.attempt.refactor
+
+---
+name: evaluate_fails_then_passes
+description: >
+  Review gives fail grade and "refactor" strategy. Refactor fixes issues.
+  Second iteration passes. Tests the review → refactor → retry cycle.
+
+inputs:
+  steps: [implement]
+
+events:
+  # Iteration 0 — review fails, says refactor, refactor fixes
+  - node: impl_loop.attempt.implement
+    output:
+      response_text: "Initial implementation attempt."
+
+  - node: impl_loop.attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "refactor"
+        feedback: "Implementation has critical issues. Null pointer in handler, missing validation. Add null check before accessing request.body. Add validation middleware."
+
+  - node: impl_loop.attempt.refactor
+    output:
+      response_text: "Added null check and validation middleware."
+
+  # Iteration 1 — passes
+  - node: impl_loop.attempt.implement
+    output:
+      response_text: "Built on refactored code. Issues resolved."
+
+  - node: impl_loop.attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "All issues resolved. Implementation complete."
+
+expect:
+  outcome: completed
+  reached:
+    - planning
+    - impl_loop
+    - impl_loop.attempt.implement
+    - impl_loop.attempt.join_checks
+    - impl_loop.attempt.review
+    - impl_loop.attempt.refactor
+    - success
+  not_reached:
+    - planning.plan
+    - write_tests
+
+---
+name: build_fails_then_passes
+description: >
+  Build fails on iteration 0. Review says "refactor", refactor fixes.
+  Iteration 1: build passes, review says "pass".
+
+inputs:
+  steps: [implement, build]
+
+events:
+  # Iteration 0 — build fails
+  - node: impl_loop.attempt.implement
+    output:
+      response_text: "Implementation with compilation error."
+
+  - node: impl_loop.attempt.build
+    output:
+      exit_code: 1
+
+  - node: impl_loop.attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "refactor"
+        feedback: "Build failed due to missing function reference. Add the processData function definition."
+
+  - node: impl_loop.attempt.refactor
+    output:
+      response_text: "Added the missing processData function."
+
+  # Iteration 1 — build passes
+  - node: impl_loop.attempt.implement
+    output:
+      response_text: "Built on refactored code. Compilation verified."
+
+  - node: impl_loop.attempt.build
+    output:
+      exit_code: 0
+
+  - node: impl_loop.attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Build passes, implementation complete."
+
+expect:
+  outcome: completed
+  reached:
+    - planning
+    - impl_loop
+    - impl_loop.attempt.implement
+    - impl_loop.attempt.build
+    - impl_loop.attempt.join_checks
+    - impl_loop.attempt.review
+    - impl_loop.attempt.refactor
+    - success
+  not_reached:
+    - planning.plan
+    - write_tests
+
+---
+name: lint_fails_then_passes
+description: >
+  Lint fails on iteration 0. Review says "refactor", refactor fixes.
+  Iteration 1: lint passes, review says "pass".
+
+inputs:
+  steps: [implement, lint]
+
+events:
+  # Iteration 0 — lint fails
+  - node: impl_loop.attempt.implement
+    output:
+      response_text: "Implementation with style issues."
+
+  - node: impl_loop.attempt.lint
+    output:
+      exit_code: 1
+
+  - node: impl_loop.attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "refactor"
+        feedback: "Lint failed with 3 violations. Fix the linting violations."
+
+  - node: impl_loop.attempt.refactor
+    output:
+      response_text: "Fixed all 3 linting violations."
+
+  # Iteration 1 — lint passes
+  - node: impl_loop.attempt.implement
+    output:
+      response_text: "Built on refactored code. Lint clean."
+
+  - node: impl_loop.attempt.lint
+    output:
+      exit_code: 0
+
+  - node: impl_loop.attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Lint passes. Code looks good."
+
+expect:
+  outcome: completed
+  reached:
+    - planning
+    - impl_loop
+    - impl_loop.attempt.implement
+    - impl_loop.attempt.lint
+    - impl_loop.attempt.join_checks
+    - impl_loop.attempt.review
+    - impl_loop.attempt.refactor
+    - success
+  not_reached:
+    - planning.plan
+    - write_tests
+
+---
+name: test_fails_then_passes
+description: >
+  Tests fail on iteration 0. Review says "refactor", refactor fixes.
+  Iteration 1: tests pass, review says "pass".
+
+inputs:
+  steps: [implement, test]
+
+events:
+  # Iteration 0 — test fails
+  - node: impl_loop.attempt.implement
+    output:
+      response_text: "Implementation with failing tests."
+
+  - node: impl_loop.attempt.test
+    output:
+      exit_code: 1
+
+  - node: impl_loop.attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "refactor"
+        feedback: "Two test assertions failing. Fix the return value format to match test expectations."
+
+  - node: impl_loop.attempt.refactor
+    output:
+      response_text: "Fixed return value format. Assertions should pass."
+
+  # Iteration 1 — tests pass
+  - node: impl_loop.attempt.implement
+    output:
+      response_text: "Built on refactored code. Tests verified."
+
+  - node: impl_loop.attempt.test
+    output:
+      exit_code: 0
+
+  - node: impl_loop.attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Tests pass, review approved."
+
+expect:
+  outcome: completed
+  reached:
+    - planning
+    - impl_loop
+    - impl_loop.attempt.implement
+    - impl_loop.attempt.test
+    - impl_loop.attempt.join_checks
+    - impl_loop.attempt.review
+    - impl_loop.attempt.refactor
+    - success
+  not_reached:
+    - planning.plan
+    - write_tests
+
+---
+name: multiple_checks_fail
+description: >
+  All three checks fail. Review says "refactor", refactor restructures.
+  Iteration 1: all pass, review says "pass".
+
+inputs:
+  steps: [implement, lint, test, build]
+
+events:
+  # Iteration 0 — all checks fail, review says refactor
+  - node: impl_loop.attempt.implement
+    output:
+      response_text: "Rough first implementation."
+
+  - node: impl_loop.attempt.lint
+    output:
+      exit_code: 1
+
+  - node: impl_loop.attempt.test
+    output:
+      exit_code: 1
+
+  - node: impl_loop.attempt.build
+    output:
+      exit_code: 1
+
+  - node: impl_loop.attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "refactor"
+        feedback: "All three checks failed. The approach fights the codebase. Follow existing coding conventions, review test fixtures for expected data shapes, check package.json before importing."
+
+  - node: impl_loop.attempt.refactor
+    output:
+      response_text: "Reverted all changes. Set up clean foundation matching codebase conventions."
+
+  # Iteration 1 — all pass
+  - node: impl_loop.attempt.implement
+    output:
+      response_text: "Clean implementation following conventions."
+
+  - node: impl_loop.attempt.lint
+    output:
+      exit_code: 0
+
+  - node: impl_loop.attempt.test
+    output:
+      exit_code: 0
+
+  - node: impl_loop.attempt.build
+    output:
+      exit_code: 0
+
+  - node: impl_loop.attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "All checks pass. Clean implementation."
+
+expect:
+  outcome: completed
+  reached:
+    - planning
+    - impl_loop
+    - impl_loop.attempt.implement
+    - impl_loop.attempt.lint
+    - impl_loop.attempt.test
+    - impl_loop.attempt.build
+    - impl_loop.attempt.join_checks
+    - impl_loop.attempt.review
+    - impl_loop.attempt.refactor
+    - success
+  not_reached:
+    - planning.plan
+    - write_tests
+
+---
+name: max_retries_exhausted
+description: >
+  max_retries=2. Both iterations fail. Review never says "pass".
+  Loop exits at max_retries. Workflow reaches max_retries_reached.
+
+inputs:
+  steps: [implement]
+  max_retries: 2
+
+events:
+  # Iteration 0
+  - node: impl_loop.attempt.implement
+    output:
+      response_text: "First implementation attempt."
+
+  - node: impl_loop.attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "refactor"
+        feedback: "Fundamental design flaw. Restructure to match existing schema patterns."
+
+  - node: impl_loop.attempt.refactor
+    output:
+      response_text: "Restructured data model."
+
+  # Iteration 1
+  - node: impl_loop.attempt.implement
+    output:
+      response_text: "Second attempt, still flawed."
+
+  - node: impl_loop.attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "refactor"
+        feedback: "Data model fix wasn't sufficient. Try a completely different approach."
+
+  - node: impl_loop.attempt.refactor
+    output:
+      response_text: "Applied further changes but issues remain."
+
+expect:
+  outcome: completed
+  reached:
+    - planning
+    - impl_loop
+    - impl_loop.attempt.implement
+    - impl_loop.attempt.join_checks
+    - impl_loop.attempt.review
+    - impl_loop.attempt.refactor
+    - max_retries_reached
+  not_reached:
+    - planning.plan
+    - write_tests
+    - success
+
+---
+name: start_app_with_ux_review
+description: >
+  Full pipeline with start_app enabled. All checks pass, review says "pass".
+  start_app is an input flag that passes start_app_command to get-it-right.
+
+inputs:
+  steps: [plan, tdd, implement, lint, test, build, start_app]
+
+events:
+  - node: planning.plan
+    output:
+      response_text: "Plan: build full-stack feature with UX validation."
+
+  - node: write_tests
+    output:
+      response_text: "Created tests including accessibility checks."
+
+  - node: impl_loop.attempt.implement
+    output:
+      response_text: "Full-stack implementation with accessibility."
+
+  - node: impl_loop.attempt.lint
+    output:
+      exit_code: 0
+
+  - node: impl_loop.attempt.test
+    output:
+      exit_code: 0
+
+  - node: impl_loop.attempt.build
+    output:
+      exit_code: 0
+
+  - node: impl_loop.attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "All checks pass, reviews approved."
+
+expect:
+  outcome: completed
+  reached:
+    - planning
+    - planning.plan
+    - write_tests
+    - impl_loop
+    - impl_loop.attempt.implement
+    - impl_loop.attempt.lint
+    - impl_loop.attempt.test
+    - impl_loop.attempt.build
+    - impl_loop.attempt.join_checks
+    - impl_loop.attempt.review
+    - success
+  not_reached:
+    - impl_loop.attempt.refactor

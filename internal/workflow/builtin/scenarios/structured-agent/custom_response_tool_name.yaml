@@ -1,0 +1,54 @@
+# Custom Response Tool Name: Workflow uses a non-default tool name
+#
+# Tests that the response_tool_name input is respected throughout:
+# 1. response_tool_name is set to "finish_task" (not default "submit_response")
+# 2. LLM calls the custom-named tool
+# 3. execute_tools captures the response via response_data[inputs.response_tool_name]
+# 4. Loop exits with completed = true
+#
+# This verifies:
+# - The dynamic tool name propagates to call_llm's response_tool config
+# - response_data keying works with custom names
+# - The completion check (response_data[response_tool_name] != null) is correct
+
+name: custom_response_tool_name
+description: Workflow works correctly with a custom response tool name
+
+inputs:
+  response_tool_name: "finish_task"
+  response_tool_description: "Complete the task with your findings"
+
+events:
+  # LLM calls the custom-named response tool
+  - node: agent_loop.call_llm
+    type: llm_response
+    text: "Task complete."
+    tool_calls:
+      - name: finish_task
+        input:
+          choice: "complete"
+          value: "All items have been verified."
+
+  # Response tool executes (keyed by custom name)
+  - node: agent_loop.execute_tools
+    type: tool_result
+    tool: finish_task
+    output:
+      choice: "complete"
+      value: "All items have been verified."
+
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.execute_tools
+  not_reached:
+    - agent_loop.remind_response
+    - agent_loop.approval
+    - agent_loop.compact
+
+  outputs:
+    response.choice: "complete"
+    response.value: "All items have been verified."
+    completed: true

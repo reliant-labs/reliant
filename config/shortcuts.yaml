@@ -1,0 +1,258 @@
+# ==============================================================================
+# Keyboard Shortcuts - Source of Truth
+# ==============================================================================
+#
+# This file is the single source of truth for all keyboard shortcuts in Reliant.
+#
+# GENERATED FILES (do not edit directly):
+#   - web/src/store/shortcutsData.generated.ts  (TypeScript constants)
+#   - generated/docs-source/settings/keyboard-shortcuts.generated.md (Documentation source)
+#
+# To regenerate after changes:
+#   make generate-shortcuts
+#
+# BINDING SYNTAX:
+#   - "Cmd+X"          → Cmd on Mac, Ctrl on Windows (most common)
+#   - "Cmd+Shift+X"    → Cmd+Shift on Mac, Ctrl+Shift on Windows
+#   - "Cmd+Alt+X"      → Cmd+Alt on Mac, Ctrl+Alt on Windows
+#   - "Cmd+Ctrl+X"     → Cmd+Ctrl on Mac, Ctrl+Alt on Windows (for double-modifier)
+#   - "Escape"         → Just the key, no modifiers
+#   - "Enter"          → Just the key, no modifiers
+#
+# CATEGORIES:
+#   Categories group shortcuts in the UI settings panel and documentation.
+#   Use consistent category names across shortcuts.
+#
+# ==============================================================================
+
+categories:
+  - "File & Window Management"
+  - "Search & Navigation"
+  - "Chat Navigation"
+  - "File Navigation"
+  - "Panel Navigation"
+  - "Interface"
+  - "Terminal"
+  - "Chat Control"
+
+shortcuts:
+  # ==================================
+  # File & Window Management
+  # ==================================
+  - id: newChat
+    name: New Chat
+    description: Create a new chat tab
+    category: File & Window Management
+    binding: Cmd+T
+    handler: onNewChat
+
+
+  - id: openProject
+    name: Open Project
+    description: Open a new project directory
+    category: File & Window Management
+    binding: Cmd+O
+    handler: onOpenProject
+
+  - id: closeTab
+    name: Close Tab
+    description: Close active file viewer tab or window
+    category: File & Window Management
+    binding: Cmd+W
+    handler: onCloseTab
+
+  - id: openWorkflows
+    name: Open Workflow Builder
+    description: Open the workflow builder panel
+    category: File & Window Management
+    binding: Cmd+Shift+K
+    handler: onOpenWorkflows
+
+  # ==================================
+  # Search & Navigation
+  # ==================================
+  - id: quickFileOpen
+    name: Quick File Open
+    description: Open file by name (fuzzy search)
+    category: Search & Navigation
+    binding: Cmd+P
+    handler: onQuickFileOpen
+
+  - id: commandPalette
+    name: Command Palette
+    description: Open command palette
+    category: Search & Navigation
+    binding: Cmd+Shift+P
+    handler: onCommandPalette
+
+  - id: findInFiles
+    name: Find in Files
+    description: Search content across all files
+    category: Search & Navigation
+    binding: Cmd+Shift+F
+    handler: onFindInFiles
+
+  - id: findReplace
+    name: Find and Replace
+    description: Find and replace text across files
+    category: Search & Navigation
+    binding: Cmd+Shift+H
+    handler: onFindReplace
+
+  - id: chatSearch
+    name: Search Chats
+    description: Search in chat history and current chat
+    category: Search & Navigation
+    binding: Cmd+Shift+C
+    handler: onChatSearch
+
+  - id: focusChat
+    name: Focus Chat Input
+    description: Focus the chat input field (works from terminal or anywhere)
+    category: Search & Navigation
+    binding: Cmd+L
+    handler: onFocusChat
+
+  # ==================================
+  # Chat Navigation
+  # ==================================
+  - id: nextChat
+    name: Next Chat
+    description: Switch to the next chat in the list (down)
+    category: Chat Navigation
+    binding: Cmd+Ctrl+Down
+    handler: onNextChat
+
+  - id: prevChat
+    name: Previous Chat
+    description: Switch to the previous chat in the list (up)
+    category: Chat Navigation
+    binding: Cmd+Ctrl+Up
+    handler: onPrevChat
+
+  # ==================================
+  # File Navigation
+  # ==================================
+  - id: nextFileTab
+    name: Next File Tab
+    description: Switch to the next open file tab
+    category: File Navigation
+    binding: Cmd+Shift+]
+    handler: onNextFileTab
+
+  - id: prevFileTab
+    name: Previous File Tab
+    description: Switch to the previous open file tab
+    category: File Navigation
+    binding: Cmd+Shift+[
+    handler: onPrevFileTab
+
+  - id: focusFileEditor
+    name: Focus File Editor
+    description: Focus the active file editor
+    category: File Navigation
+    binding: Cmd+F
+    handler: onFocusFileEditor
+
+  - id: reopenLastClosedFile
+    name: Reopen Last Closed File
+    description: Reopen the most recently closed file
+    category: File Navigation
+    binding: Cmd+Shift+T
+    handler: onReopenLastClosedFile
+
+  - id: cutFile
+    name: Cut File
+    description: Cut selected file for moving
+    category: File Navigation
+    binding: Cmd+X
+    handler: onCutFile
+
+  - id: copyFile
+    name: Copy File
+    description: Copy selected file
+    category: File Navigation
+    binding: Cmd+C
+    handler: onCopyFile
+
+  - id: pasteFile
+    name: Paste File
+    description: Paste file to current location
+    category: File Navigation
+    binding: Cmd+V
+    handler: onPasteFile
+
+  # ==================================
+  # Panel Navigation
+  # ==================================
+  - id: nextRightSidebarTab
+    name: Next Right Sidebar Tab
+    description: Switch to the next right sidebar tab (files, changes, tasks, processes, browser)
+    category: Panel Navigation
+    binding: Cmd+Ctrl+Right
+    handler: onNextRightSidebarTab
+
+  - id: prevRightSidebarTab
+    name: Previous Right Sidebar Tab
+    description: Switch to the previous right sidebar tab
+    category: Panel Navigation
+    binding: Cmd+Ctrl+Left
+    handler: onPrevRightSidebarTab
+
+  # ==================================
+  # Interface
+  # ==================================
+  - id: toggleSettings
+    name: Toggle Settings
+    description: Open or close the settings panel
+    category: Interface
+    binding: Cmd+,
+    handler: onToggleSettings
+
+  - id: toggleSidebar
+    name: Toggle Chat Sidebar
+    description: Show or hide the left chat sidebar
+    category: Interface
+    binding: Cmd+Shift+B
+    handler: onToggleSidebar
+
+  - id: toggleFileBrowser
+    name: Toggle File Browser
+    description: Show or hide the right file browser sidebar
+    category: Interface
+    binding: Cmd+B
+    handler: onToggleFileBrowser
+
+  # ==================================
+  # Terminal
+  # ==================================
+  - id: toggleTerminal
+    name: Toggle Terminal
+    description: Show or hide the terminal panel
+    category: Terminal
+    binding: Cmd+J
+    handler: onToggleTerminal
+
+  - id: newTerminal
+    name: New Terminal
+    description: Create a new terminal instance
+    category: Terminal
+    binding: Cmd+Shift+J
+    handler: onNewTerminal
+
+  # ==================================
+  # Chat Control
+  # ==================================
+  - id: stopStreaming
+    name: Stop AI Response
+    description: Stop the current AI response generation
+    category: Chat Control
+    binding: Escape
+    handler: onStopStreaming
+
+  - id: approveToolRequests
+    name: Approve Tool Requests
+    description: Approve all pending tool requests for the current chat
+    category: Chat Control
+    binding: Cmd+Enter
+    handler: onApproveToolRequests

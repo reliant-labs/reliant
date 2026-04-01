@@ -1,0 +1,342 @@
+name: PR CI
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: pr-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24'
+
+jobs:
+  backend:
+    name: Backend (Go / ${{ matrix.database_driver }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - database_driver: sqlite
+            database_url: ""
+          - database_driver: postgres
+            database_url: postgres://postgres:postgres@localhost:5432/reliant_ci?sslmode=disable
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: reliant_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: gofmt check
+        run: |
+          if [ "$(gofmt -l . | wc -l)" -gt 0 ]; then
+            echo "The following files need formatting:"
+            gofmt -l .
+            exit 1
+          fi
+
+      - name: Install buf
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          version: '1.50.0'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          buf_api_token: ${{ secrets.BUF_API_KEY }}
+
+      - name: Install goose
+        run: go install github.com/pressly/goose/v3/cmd/goose@latest
+
+      - name: Generate Go code
+        run: make generate-go
+
+      - name: Verify descriptor-generated YAML bindings
+        run: make verify-yaml-bindings
+
+      - name: Disable VCS stamping
+        run: echo "GOFLAGS=-buildvcs=false" >> $GITHUB_ENV
+
+      - name: Install ripgrep
+        run: |
+          if ! command -v rg &> /dev/null; then
+            sudo apt-get update && sudo apt-get install -y ripgrep
+          fi
+
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          # v8 of the action only supports golangci-lint v2+.
+          # Keep this in sync with the Go version in go.mod.
+          # NOTE: golangci-lint must be built with >= the targeted Go version.
+          version: v2.5.0
+          # golangci-lint sometimes reports a timeout even when it finishes with 0 issues
+          # (seen in CI). Give it more headroom.
+          args: --timeout=10m
+
+      - name: Go tests (exclude e2e)
+        env:
+          DATABASE_DRIVER: ${{ matrix.database_driver }}
+          DATABASE_URL: ${{ matrix.database_url }}
+        run: |
+          set -euo pipefail
+          go test -buildvcs=false -timeout=10m -v $(go list -buildvcs=false ./... | grep -v '^github.com/reliant-labs/reliant/e2e$' | tr '\n' ' ')
+
+  e2e-backend:
+    name: E2E Backend (Go)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install buf
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          version: '1.50.0'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          buf_api_token: ${{ secrets.BUF_API_KEY }}
+
+      - name: Install goose
+        run: go install github.com/pressly/goose/v3/cmd/goose@latest
+
+      - name: Generate Go code
+        run: make generate-go
+
+      - name: Verify descriptor-generated YAML bindings
+        run: make verify-yaml-bindings
+
+      - name: Disable VCS stamping
+        run: echo "GOFLAGS=-buildvcs=false" >> $GITHUB_ENV
+
+      - name: Install ripgrep
+        run: |
+          if ! command -v rg &> /dev/null; then
+            sudo apt-get update && sudo apt-get install -y ripgrep
+          fi
+
+      - name: Go E2E tests
+        run: go test -buildvcs=false -timeout=5m -v ./e2e/...
+
+  web:
+    name: Web (lint, test, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install buf
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          version: '1.50.0'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          buf_api_token: ${{ secrets.BUF_API_KEY }}
+
+      - name: Install deps
+        working-directory: web
+        run: npm ci || npm install
+
+      - name: Generate protobufs (TypeScript)
+        run: buf generate --template buf.gen.yaml
+
+      - name: Install goose
+        run: go install github.com/pressly/goose/v3/cmd/goose@latest
+
+      - name: Generate docs and shortcuts
+        run: make generate
+
+      - name: Lint
+        working-directory: web
+        # Block PRs on lint errors, but allow warnings.
+        run: npm run lint
+
+      - name: Type check
+        working-directory: web
+        run: npm run typecheck
+
+      - name: Unit tests
+        working-directory: web
+        env:
+          CI: true
+        run: npm test -- --run
+
+      - name: Upload vitest report (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-test-artifacts
+          path: |
+            web/coverage
+            web/test-results
+          if-no-files-found: ignore
+
+      - name: Build (alpha)
+        working-directory: web
+        run: npm run build:alpha
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+          retention-days: 1
+
+  e2e-frontend:
+    name: E2E Frontend (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install buf
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          version: '1.50.0'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          buf_api_token: ${{ secrets.BUF_API_KEY }}
+
+      - name: Install deps
+        working-directory: web
+        run: npm ci || npm install
+
+      - name: Generate protobufs (TypeScript)
+        run: buf generate --template buf.gen.yaml
+
+      - name: Install goose
+        run: go install github.com/pressly/goose/v3/cmd/goose@latest
+
+      - name: Generate docs and shortcuts
+        run: make generate
+
+      - name: Build (alpha)
+        working-directory: web
+        run: npm run build:alpha
+
+      - name: Install Playwright browsers
+        working-directory: web
+        run: npx playwright install chromium --with-deps
+
+      - name: Run E2E tests
+        working-directory: web
+        env:
+          CI: true
+        run: npm run test:e2e -- --project=chromium
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            web/playwright-report
+            web/test-results
+          retention-days: 7
+          if-no-files-found: ignore
+
+  electron:
+    name: Electron (build smoke)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            electron/package-lock.json
+
+      - name: Install buf
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          version: '1.50.0'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          buf_api_token: ${{ secrets.BUF_API_KEY }}
+
+      - name: Install web deps
+        working-directory: web
+        run: npm ci || npm install
+
+      - name: Generate protobufs (TypeScript)
+        run: buf generate --template buf.gen.yaml
+
+      - name: Install goose
+        run: go install github.com/pressly/goose/v3/cmd/goose@latest
+
+      - name: Generate docs and shortcuts
+        run: make generate
+
+      - name: Install electron deps
+        working-directory: electron
+        run: npm ci || npm install
+
+      - name: Build web (alpha)
+        working-directory: electron
+        run: npm run build:web:alpha
+
+      - name: Build electron app (no publish)
+        working-directory: electron
+        env:
+          # Ensure CI doesn't require signing/notarization credentials
+          CI: true
+        run: npx electron-builder --config electron-builder.pr.js --dir --publish=never

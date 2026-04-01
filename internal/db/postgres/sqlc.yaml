@@ -1,0 +1,44 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    queries: "queries"
+    schema: "schema.sql"
+    gen:
+      go:
+        package: "pgdb"
+        out: "generated"
+        emit_json_tags: true
+        emit_interface: true
+        emit_empty_slices: true
+        sql_package: "database/sql"
+        overrides:
+          - column: "*.created_at"
+            go_type:
+              type: "time.Time"
+          - column: "*.updated_at"
+            go_type:
+              type: "time.Time"
+          - column: "*.finished_at"
+            go_type:
+              type: "sql.NullTime"
+          - column: "*.deleted_at"
+            go_type:
+              type: "sql.NullTime"
+          - column: "*.last_active"
+            go_type:
+              type: "time.Time"
+          - column: "*.resolved_at"
+            go_type:
+              type: "sql.NullTime"
+          - column: "*.completed_at"
+            go_type:
+              type: "sql.NullTime"
+          - column: "*.pushed_at"
+            go_type:
+              type: "time.Time"
+          - column: "*.expires_at"
+            go_type:
+              type: "sql.NullTime"
+          - column: "*.started_at"
+            go_type:
+              type: "sql.NullTime"

@@ -1,0 +1,13 @@
+version: "v1.0.1"
+date: "2026-02-04"
+title: "Bug fixes and improvements"
+summary: "Bug fixes for token counting, workflow builder stability, and workflow hub usability."
+items:
+  - title: "Fixed token counting for Gemini."
+    description: ""
+  - title: "Fixed workflow builder UI dropping data."
+    description: ""
+  - title: "Added more workflow builder guardrails and adjusted tools."
+    description: ""
+  - title: "Improved workflow hub and workflow naming."
+    description: ""

@@ -1,0 +1,527 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+import "google/protobuf/struct.proto";
+import "reliant/v1/common.proto";
+import "reliant/v1/workflow_v2.proto";
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+// NOTE: This proto is the external WorkflowService API contract.
+// Keep this stable while any clients still use the WorkflowService RPC surface.
+// Internal workflow execution/schema evolution happens in workflow_v2.proto.
+
+// WorkflowService handles workflow CRUD operations and validation
+service WorkflowService {
+  // ListWorkflows returns all available workflows from DB + builtins
+  rpc ListWorkflows(ListWorkflowsRequest) returns (ListWorkflowsResponse) {}
+
+  // SaveWorkflow creates or updates a workflow in the database
+  // Always validates and saves. Workflow is usable when valid and not hidden.
+  rpc SaveWorkflow(SaveWorkflowRequest) returns (SaveWorkflowResponse) {}
+
+  // GetWorkflow returns a specific workflow by slug
+  rpc GetWorkflow(GetWorkflowRequest) returns (GetWorkflowResponse) {}
+
+  // DeleteWorkflow deletes a workflow from the database
+  rpc DeleteWorkflow(DeleteWorkflowRequest) returns (DeleteWorkflowResponse) {}
+
+  // ValidateWorkflow validates a workflow without saving it
+  rpc ValidateWorkflow(ValidateWorkflowRequest) returns (ValidateWorkflowResponse) {}
+
+  // ImportWorkflow imports a workflow from YAML into the database
+  rpc ImportWorkflow(ImportWorkflowRequest) returns (ImportWorkflowResponse) {}
+
+  // ExportWorkflow exports a workflow from the database as YAML
+  rpc ExportWorkflow(ExportWorkflowRequest) returns (ExportWorkflowResponse) {}
+
+  // SetWorkflowVisibility toggles the hidden status of a workflow
+  rpc SetWorkflowVisibility(SetWorkflowVisibilityRequest) returns (SetWorkflowVisibilityResponse) {}
+
+  // CopyWorkflow creates a copy of an existing workflow with a new unique name
+  // The copy is saved to the user's DB with forked_from set to track origin
+  rpc CopyWorkflow(CopyWorkflowRequest) returns (CopyWorkflowResponse) {}
+
+  // BuilderChat sends a message to the workflow builder AI assistant
+  // The assistant can read and modify the workflow using specialized tools
+  rpc BuilderChat(BuilderChatRequest) returns (BuilderChatResponse) {}
+
+  // CreateWorkflowDraft creates an empty draft for the workflow builder
+  // Called when user clicks "New Workflow" - draft ID is needed before chat starts
+  rpc CreateWorkflowDraft(CreateWorkflowDraftRequest) returns (CreateWorkflowDraftResponse) {}
+
+  // AssociateChatWithWorkflowDraft links a chat to a workflow draft
+  // Called after chat creation to enable tools to find the draft
+  rpc AssociateChatWithWorkflowDraft(AssociateChatWithWorkflowDraftRequest) returns (AssociateChatWithWorkflowDraftResponse) {}
+
+}
+
+// ============================================
+// Core Types
+// ============================================
+// Legacy flattened workflow messages were removed after WorkflowService
+// request/response contracts fully migrated to V2 types in workflow_v2.proto.
+
+// WorkflowListItem represents a workflow in list responses with additional metadata
+message WorkflowListItem {
+  string name = 1;
+  string filename = 2;       // Filename without extension (used for API calls)
+  string description = 3;
+  int32 step_count = 4;
+  string source = 5;         // "builtin", "project", or "user"
+  // Field 6 removed (was status)
+  repeated Node nodes = 7;
+  repeated Edge edges = 8;
+  map<string, Input> inputs = 9; // Workflow inputs
+  map<string, string> outputs = 10; // Workflow outputs - CEL expressions
+  optional string updated_at = 11;  // Last update timestamp
+  bool is_hidden = 12; // Whether the workflow is hidden from the hub
+  optional string builder_chat_id = 13; // Chat ID associated with this workflow (if any)
+  bool has_preset_groups = 14; // True if workflow has any tags (top-level or group) that can have presets
+  bool is_valid = 15; // True if workflow passes validation (always true for builtin/project)
+  optional string draft_id = 16; // Draft ID for user workflows (stable ID for lookups, not present for builtin/project)
+}
+
+// ============================================
+// Validation Types
+// ============================================
+
+// HighlightSpan represents a character range to highlight in the condition
+message HighlightSpan {
+  int32 start = 1;   // Starting character position (0-based)
+  int32 end = 2;     // Ending character position (exclusive)
+  string reason = 3; // Why this span is highlighted
+}
+
+// ValidationError represents a structured validation error
+message ValidationError {
+  string type = 1;       // "syntax_error", "anti_pattern", "schema_violation"
+  string message = 2;    // Human-readable error message
+  string suggestion = 3; // Suggested fix
+  int32 edge_index = 4;  // Which edge has the error
+  string edge_from = 5;  // Edge source
+  string case_to = 6;    // Case target (identifies which case in the edge)
+  string condition = 7;  // The problematic condition
+  repeated HighlightSpan highlights = 8; // Character positions to highlight
+}
+
+// ============================================
+// ListWorkflows
+// ============================================
+
+message ListWorkflowsRequest {
+  string project_id = 1; // Required: project ID to list workflows for
+  optional string worktree_id = 2; // Optional: worktree ID for layered config (worktree > project > global)
+  bool include_hidden = 3; // If true, include items hidden by default (for management UIs)
+}
+
+message ListWorkflowsResponse {
+  repeated WorkflowListItem workflows = 1;
+  int32 total = 2;
+  // Workflows that failed to load (for management UIs to display errors)
+  repeated InvalidWorkflow invalid_workflows = 3;
+}
+
+// InvalidWorkflow represents a workflow that failed to load or validate.
+message InvalidWorkflow {
+  // Name/slug of the workflow
+  string name = 1;
+  // Source of the workflow: "builtin", "project", or "user"
+  string source = 2;
+  // Path to the workflow file (empty for user workflows)
+  string path = 3;
+  // Validation/loading errors
+  repeated string errors = 4;
+}
+
+// ============================================
+// GetWorkflow
+// ============================================
+
+message GetWorkflowRequest {
+  string project_id = 1; // Required: project ID
+  string name = 2; // Workflow filename (without extension)
+  optional string worktree_id = 3; // Optional: worktree ID for layered lookup (worktree > project > global)
+  optional string draft_id = 4; // Optional: lookup by draft ID directly (takes priority over name)
+}
+
+message GetWorkflowResponse {
+  Workflow workflow = 1;
+  string source = 2;             // Source of the workflow: "builtin", "project", or "user"
+  optional string draft_id = 3; // Draft ID for this workflow (if user-owned)
+  optional string builder_chat_id = 4; // Chat ID associated with this workflow (if any)
+  reserved 5;                    // Removed: updated_at (replaced by version)
+  optional string parse_error = 6; // If the stored YAML couldn't be parsed, contains the error message
+  optional string raw_definition = 7; // Raw YAML definition (only set when parse_error is present)
+  int64 version = 8;             // Current version number for OCC (0 for builtins)
+  optional string source_path = 9;  // File path for project workflows (enables save-back-to-file)
+  string yaml_definition = 10;     // Canonical YAML definition of the workflow (always populated)
+}
+
+// ============================================
+// DeleteWorkflow
+// ============================================
+
+message DeleteWorkflowRequest {
+  string project_id = 1; // Required: project ID
+  string name = 2; // Workflow filename to delete (without extension)
+  optional string worktree_id = 3; // Optional: worktree ID - if provided, deletes from worktree
+}
+
+message DeleteWorkflowResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// ============================================
+// ValidateWorkflow
+// ============================================
+
+message ValidateWorkflowRequest {
+  string project_id = 1; // Required: project ID (for loading sub-workflows during validation)
+  Workflow workflow = 2;
+}
+
+message ValidateWorkflowResponse {
+  bool valid = 1;
+  repeated ValidationError errors = 2;
+}
+
+// ============================================
+// BuilderChat - AI-assisted workflow building
+// ============================================
+
+message BuilderChatRequest {
+  string project_id = 1;         // Required: project ID for context
+  string session_id = 2;         // Required: session ID to maintain conversation history
+  string message = 3;            // User's message to the assistant
+  Workflow workflow = 4;         // Current workflow state in the builder
+}
+
+// ToolCallInfo describes a tool call made by the assistant
+message ToolCallInfo {
+  string name = 1;     // Tool name (e.g., "update_workflow")
+  string result = 2;   // Tool result summary
+}
+
+message BuilderChatResponse {
+  string message = 1;                // Assistant's response text
+  bool workflow_updated = 2;         // True if the workflow was modified
+  Workflow workflow = 3;             // Updated workflow (if modified)
+  repeated ToolCallInfo tool_calls = 4; // Tools that were called
+}
+
+// ============================================
+// SaveWorkflow - Unified create/update
+// ============================================
+
+message SaveWorkflowRequest {
+  string project_id = 1;             // Required: project ID
+  Workflow workflow = 2;             // Workflow definition to save
+  // Field 3 removed (was publish)
+  ConfigScope scope = 4;             // Where to save: global, project, or worktree
+  optional string worktree_id = 5;   // Required if scope is worktree
+  optional string builder_chat_id = 6; // Optional: chat ID from workflow builder assistant
+  reserved 7;                        // Removed: expected_updated_at (replaced by version)
+  optional int64 expected_version = 8; // OCC: expected version number - fails if workflow was modified since
+  optional string source_path = 9;   // If set, write YAML back to this file (for project workflow edits)
+  optional string draft_id = 10;     // If provided, update this draft by ID (allows renames)
+}
+
+message SaveWorkflowResponse {
+  bool success = 1;                  // True if operation succeeded
+  string message = 2;                // Status message
+  Workflow workflow = 3;             // Saved workflow
+  // Field 4 removed (was published)
+  bool is_valid = 5;                 // True if workflow passed validation
+  repeated ValidationError validation_errors = 6; // Validation errors (if any)
+  string id = 7;                     // Database ID of the saved workflow
+  string slug = 8;                   // Runtime reference slug
+  optional string builder_chat_id = 9; // Chat ID associated with this workflow (if any)
+  reserved 10;                       // Removed: updated_at (replaced by version)
+  int64 version = 11;                // Current version number for OCC
+  string yaml_definition = 12;       // Canonical YAML definition of the saved workflow
+}
+
+// ============================================
+// ImportWorkflow - Import YAML file to database
+// ============================================
+
+message ImportWorkflowRequest {
+  string project_id = 1;             // Required: project ID
+  bytes yaml_content = 2;            // YAML file content
+  ConfigScope scope = 3;             // Where to import: global, project, or worktree
+  optional string worktree_id = 4;   // Required if scope is worktree
+  bool overwrite = 5;                // If true, overwrite existing workflow with same slug
+}
+
+message ImportWorkflowResponse {
+  bool success = 1;
+  string message = 2;
+  Workflow workflow = 3;             // Imported workflow
+  string id = 4;                     // Database ID
+  string slug = 5;                   // Runtime reference slug
+  bool is_valid = 6;                 // Whether workflow passed validation
+  repeated ValidationError validation_errors = 7;
+  bool conflict = 8;                 // True if slug already exists (when overwrite=false)
+  string existing_id = 9;            // ID of existing workflow (if conflict)
+}
+
+// ============================================
+// ExportWorkflow - Export database workflow as YAML
+// ============================================
+
+message ExportWorkflowRequest {
+  string project_id = 1;             // Required: project ID
+  string slug = 2;                   // Workflow slug to export
+  optional string worktree_id = 3;   // Optional: worktree context for resolution
+}
+
+message ExportWorkflowResponse {
+  bool success = 1;
+  bytes yaml_content = 2;            // YAML file content
+  string filename = 3;               // Suggested filename (e.g., "my-workflow.yaml")
+  Workflow workflow = 4;             // The exported workflow definition
+}
+
+// ============================================
+// SetWorkflowVisibility
+// ============================================
+
+message SetWorkflowVisibilityRequest {
+  string project_id = 1; // Required: project ID
+  string slug = 2;       // Workflow slug
+  bool is_hidden = 3;    // True to hide, false to show
+}
+
+message SetWorkflowVisibilityResponse {
+  bool success = 1;
+  string message = 2;
+  WorkflowListItem workflow = 3; // Updated workflow list item
+}
+
+message CopyWorkflowRequest {
+  string project_id = 1;             // Required: project ID
+  string source_slug = 2;            // Slug of the workflow to copy
+  optional string new_name = 3;      // Optional: custom name for the copy (auto-generated if not provided)
+  optional string worktree_id = 4;   // Optional: worktree context for source resolution
+}
+
+message CopyWorkflowResponse {
+  bool success = 1;
+  string message = 2;
+  Workflow workflow = 3;              // The copied workflow
+  string slug = 4;                    // Slug of the new workflow
+  string id = 5;                      // ID of the new workflow draft
+}
+
+// ============================================
+// Workflow Scenarios - Test workflows with mocked events
+// ============================================
+
+// ScenarioService handles workflow scenario testing
+service ScenarioService {
+  // ListScenarios returns all scenarios for a workflow
+  rpc ListScenarios(ListScenariosRequest) returns (ListScenariosResponse) {}
+
+  // CreateScenario creates a new scenario and optionally runs it
+  rpc CreateScenario(CreateScenarioRequest) returns (CreateScenarioResponse) {}
+
+  // RunScenario runs a scenario against a workflow
+  rpc RunScenario(RunScenarioRequest) returns (RunScenarioResponse) {}
+
+  // DeleteScenario deletes a scenario
+  rpc DeleteScenario(DeleteScenarioRequest) returns (DeleteScenarioResponse) {}
+
+  // UploadScenario saves a scenario YAML file to the project directory
+  rpc UploadScenario(UploadScenarioRequest) returns (UploadScenarioResponse) {}
+
+  // ExportScenario exports a scenario to YAML format
+  rpc ExportScenario(ExportScenarioRequest) returns (ExportScenarioResponse) {}
+}
+
+// SimulatedEvent represents a single event in the simulation.
+// The output_json contains the mock output that will be returned by the node,
+// matching the activity's output structure directly (no translation needed).
+message SimulatedEvent {
+  // Node targets a specific node (supports qualified IDs for inner loop nodes).
+  // Use dot-notation: "loop_id.inner_node_id" or "outer.inner.node_id".
+  // If omitted, events are applied sequentially.
+  string node = 1;
+
+  // Output is the mock output returned by the node as JSON.
+  // This should match the activity's output structure directly:
+  //   - call_llm: message, response_text, tool_calls, input_tokens, etc.
+  //   - execute_tools: message, tool_results, thread_token_count, etc.
+  //   - approval: approval_id, status, action_taken, data
+  //   - run: exit_code, stdout, stderr
+  string output_json = 2;
+}
+
+// ScenarioExpectation defines what we expect from the simulation
+message ScenarioExpectation {
+  string outcome = 1;                // Expected outcome: completed, error
+  repeated string reached = 2;       // Nodes that should be executed
+  repeated string not_reached = 3;   // Nodes that should NOT be executed
+  string error_contains = 4;         // Substring in error message
+  string error_node = 5;             // Node where error should occur
+}
+
+// ScenarioDefinition defines a complete test scenario
+message ScenarioDefinition {
+  string name = 1;                   // Scenario name
+  string description = 2;            // What this scenario tests
+  repeated SimulatedEvent events = 3; // Sequence of simulated events
+  ScenarioExpectation expect = 4;    // Expected outcome
+  string inputs_json = 5;            // Override workflow inputs (JSON)
+}
+
+// ErrorDetails contains information about an error that occurred
+message ErrorDetails {
+  string node = 1;       // Node where error occurred
+  string step = 2;       // Step within the node
+  string message = 3;    // Error message
+  string expression = 4; // CEL expression that failed
+}
+
+// ExecutionDetails contains details about the simulation execution
+message ExecutionDetails {
+  repeated string nodes_reached = 1;  // Nodes that were executed
+  string outcome = 2;                 // "completed" or "error"
+  ErrorDetails error = 3;             // Error details if outcome is "error"
+  int64 duration_ms = 4;              // Execution duration in milliseconds
+}
+
+// ScenarioResult contains the result of running a scenario
+message ScenarioResult {
+  string status = 1;                  // passed, failed, error
+  string scenario_name = 2;           // Name of the scenario
+  ExecutionDetails execution = 3;     // Execution details
+  ScenarioExpectation expected = 4;   // Expected outcome (if set)
+  repeated string mismatches = 5;     // Expectation mismatches
+}
+
+// Scenario is a saved scenario with metadata
+message Scenario {
+  string id = 1;
+  string workflow_draft_id = 2;       // FK to workflow draft (optional)
+  string user_id = 3;
+  string name = 4;
+  string description = 5;
+  repeated SimulatedEvent events = 6;
+  ScenarioExpectation expect = 7;
+  string last_run_status = 8;         // passed, failed, error
+  ScenarioResult last_run_result = 9;
+  string created_at = 10;
+  string updated_at = 11;
+  string source = 12;                 // "user" (DB) or "project" (file)
+  string path = 13;                   // File path for project scenarios
+}
+
+// ListScenarios
+message ListScenariosRequest {
+  string project_id = 1;
+  string workflow_slug = 2;  // Workflow to list scenarios for
+}
+
+message ListScenariosResponse {
+  repeated Scenario scenarios = 1;
+  string scenarios_dir = 2;           // Directory path for file-based scenarios
+}
+
+// CreateScenario
+message CreateScenarioRequest {
+  string project_id = 1;
+  string workflow_slug = 2;           // Workflow to test (optional if workflow_yaml provided)
+  string workflow_yaml = 3;           // Raw YAML to test (optional)
+  ScenarioDefinition scenario = 4;    // Scenario to create
+  bool run = 5;                       // Run immediately after creating
+  bool save = 6;                      // Save the scenario for future runs
+}
+
+message CreateScenarioResponse {
+  bool success = 1;
+  string message = 2;
+  Scenario scenario = 3;              // Created scenario (if save=true)
+  ScenarioResult result = 4;          // Run result (if run=true)
+}
+
+// RunScenario
+message RunScenarioRequest {
+  string project_id = 1;
+  string scenario_id = 2;             // ID of saved scenario to run
+  // OR run ad-hoc:
+  string workflow_slug = 3;           // Workflow to test
+  ScenarioDefinition scenario = 4;    // Ad-hoc scenario to run
+}
+
+message RunScenarioResponse {
+  ScenarioResult result = 1;
+}
+
+// DeleteScenario
+message DeleteScenarioRequest {
+  string project_id = 1;
+  string scenario_id = 2;
+}
+
+message DeleteScenarioResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// UploadScenario - saves a scenario YAML file to the project directory
+message UploadScenarioRequest {
+  string project_id = 1;
+  string workflow_slug = 2;           // Workflow to associate with
+  string filename = 3;                // Filename without extension (e.g., "happy-path")
+  string yaml_content = 4;            // YAML content of the scenario
+}
+
+message UploadScenarioResponse {
+  bool success = 1;
+  string message = 2;
+  string path = 3;                    // Full path to the created file
+  Scenario scenario = 4;              // The created scenario
+}
+
+// ExportScenario - exports a scenario to YAML format
+message ExportScenarioRequest {
+  string project_id = 1;
+  string scenario_id = 2;             // ID of the scenario to export
+}
+
+message ExportScenarioResponse {
+  string yaml_content = 1;            // YAML content of the scenario
+  string filename = 2;                // Suggested filename
+}
+
+// ============================================
+// CreateWorkflowDraft - Create empty draft for builder
+// ============================================
+
+// CreateWorkflowDraftRequest creates an empty draft for the workflow builder.
+// Called when user clicks "New Workflow" to get a draft ID before any chat starts.
+message CreateWorkflowDraftRequest {
+  string project_id = 1;              // Required: project context
+}
+
+message CreateWorkflowDraftResponse {
+  string draft_id = 1;                // UUID of the created draft
+  string slug = 2;                    // Generated slug for the draft
+  string name = 3;                    // Generated display name (e.g., "swift-fox-a1b2")
+}
+
+// AssociateChatWithWorkflowDraftRequest links a chat to a workflow draft.
+// Called after chat creation so tools can find the draft by chat ID.
+message AssociateChatWithWorkflowDraftRequest {
+  string chat_id = 1;                 // Required: the chat to associate
+  string draft_id = 2;                // Required: the workflow draft ID
+}
+
+message AssociateChatWithWorkflowDraftResponse {
+  // Empty response - success indicated by lack of error
+}
+

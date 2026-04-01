@@ -1,0 +1,265 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+import "reliant/v1/common.proto";
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+// MCPService handles MCP (Model Context Protocol) server management
+service MCPService {
+  // ListServers returns all configured MCP servers with their status
+  rpc ListServers(ListServersRequest) returns (ListServersResponse) {}
+  
+  // GetServer returns detailed information about a specific MCP server
+  rpc GetServer(GetServerRequest) returns (GetServerResponse) {}
+
+  // GetServerTools returns the list of tools exposed by a specific MCP server
+  rpc GetServerTools(GetServerToolsRequest) returns (GetServerToolsResponse) {}
+  
+  // InstallServer installs a new MCP server
+  rpc InstallServer(InstallServerRequest) returns (InstallServerResponse) {}
+  
+  // UninstallServer removes an MCP server
+  rpc UninstallServer(UninstallServerRequest) returns (UninstallServerResponse) {}
+  
+  // RestartServer restarts an MCP server
+  rpc RestartServer(RestartServerRequest) returns (RestartServerResponse) {}
+  
+  // ListRecommended returns a list of recommended MCP servers
+  rpc ListRecommended(ListRecommendedRequest) returns (ListRecommendedResponse) {}
+  
+  // UpdateServerConfig updates the configuration of an MCP server
+  rpc UpdateServerConfig(UpdateServerConfigRequest) returns (UpdateServerConfigResponse) {}
+
+  // SetServerEnabled toggles whether a server is enabled without uninstalling
+  rpc SetServerEnabled(SetServerEnabledRequest) returns (SetServerEnabledResponse) {}
+
+  // MoveServerScope changes where a server config is stored (global/project/project-local)
+  rpc MoveServerScope(MoveServerScopeRequest) returns (MoveServerScopeResponse) {}
+}
+
+// MCPServerStatus indicates the health state of an MCP server
+enum MCPServerStatus {
+  MCP_SERVER_STATUS_UNSPECIFIED = 0;
+  MCP_SERVER_STATUS_HEALTHY = 1;
+  MCP_SERVER_STATUS_UNHEALTHY = 2;
+  MCP_SERVER_STATUS_DISCONNECTED = 3;
+  MCP_SERVER_STATUS_DISABLED = 4;
+}
+
+// ============================================
+// Core Types
+// ============================================
+
+// MCPServerConfig represents the configuration for an MCP server
+message MCPServerConfig {
+  string command = 1;
+  repeated string args = 2;
+  repeated string env = 3;
+  string type = 4;
+  optional string url = 5;
+  map<string, string> headers = 6;
+}
+
+// MCPServerInfo contains basic server info from MCP protocol
+message MCPServerInfo {
+  string name = 1;
+  string version = 2;
+}
+
+// MCPTool describes a tool exposed by an MCP server
+message MCPTool {
+  string name = 1;
+  string description = 2;
+}
+
+// MCPServer represents an installed MCP server with its status
+message MCPServer {
+  string name = 1;
+  MCPServerStatus status = 2;
+  bool connected = 3;
+  bool healthy = 4;
+  MCPServerConfig config = 5;
+  optional MCPServerInfo server_info = 6;
+  int32 tool_count = 7;
+  bool resources_enabled = 8;
+  bool prompts_enabled = 9;
+  optional string last_error = 10;
+  bool enabled = 11;
+  ConfigScope scope = 12;
+}
+
+// ConfigField represents a configuration field that needs user input
+message ConfigField {
+  string key = 1;
+  string label = 2;
+  string type = 3;  // text, password, url
+  bool required = 4;
+  optional string placeholder = 5;
+  optional string help_text = 6;
+  optional string validation_regex = 7;
+  optional string validation_message = 8;
+}
+
+// RecommendedServer represents a recommended MCP server that can be installed
+message RecommendedServer {
+  string name = 1;
+  string display_name = 2;
+  string description = 3;
+  string category = 4;
+  optional bool setup_required = 5;
+  optional string setup_instructions = 6;
+  optional string config_template = 7;
+  repeated ConfigField config_fields = 8;
+  optional string docs_url = 9;
+  MCPServerConfig config = 10;
+  bool installed = 11;
+}
+
+// ============================================
+// ListServers
+// ============================================
+
+message ListServersRequest {
+  string project_id = 1;
+}
+
+message ListServersResponse {
+  repeated MCPServer servers = 1;
+  int32 total = 2;
+}
+
+// ============================================
+// GetServer
+// ============================================
+
+message GetServerRequest {
+  string project_id = 1;
+  string name = 2;
+}
+
+message GetServerResponse {
+  MCPServer server = 1;
+}
+
+message GetServerToolsRequest {
+  string project_id = 1;
+  string name = 2;
+}
+
+message GetServerToolsResponse {
+  repeated MCPTool tools = 1;
+  int32 total = 2;
+}
+
+// ============================================
+// InstallServer
+// ============================================
+
+message InstallServerRequest {
+  string project_id = 1;
+  string name = 2;
+  MCPServerConfig config = 3;
+  // scope determines where the config is saved (global, project, or project_local)
+  ConfigScope scope = 4;
+}
+
+message InstallServerResponse {
+  bool success = 1;
+  string message = 2;
+  string name = 3;
+}
+
+// ============================================
+// UninstallServer
+// ============================================
+
+message UninstallServerRequest {
+  string project_id = 1;
+  string name = 2;
+}
+
+message UninstallServerResponse {
+  bool success = 1;
+  string message = 2;
+  string name = 3;
+}
+
+// ============================================
+// RestartServer
+// ============================================
+
+message RestartServerRequest {
+  string project_id = 1;
+  string name = 2;
+}
+
+message RestartServerResponse {
+  bool success = 1;
+  string message = 2;
+  string name = 3;
+}
+
+// ============================================
+// ListRecommended
+// ============================================
+
+message ListRecommendedRequest {
+  string project_id = 1;
+}
+
+message ListRecommendedResponse {
+  repeated RecommendedServer recommended = 1;
+  int32 total = 2;
+}
+
+// ============================================
+// UpdateServerConfig
+// ============================================
+
+message UpdateServerConfigRequest {
+  string project_id = 1;
+  string name = 2;
+  map<string, string> env = 3;
+}
+
+message UpdateServerConfigResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// ============================================
+// SetServerEnabled
+// ============================================
+
+message SetServerEnabledRequest {
+  string project_id = 1;
+  string name = 2;
+  bool enabled = 3;
+}
+
+message SetServerEnabledResponse {
+  bool success = 1;
+  string message = 2;
+  string name = 3;
+  bool enabled = 4;
+}
+
+// ============================================
+// MoveServerScope
+// ============================================
+
+message MoveServerScopeRequest {
+  string project_id = 1;
+  string name = 2;
+  ConfigScope scope = 3;
+}
+
+message MoveServerScopeResponse {
+  bool success = 1;
+  string message = 2;
+  string name = 3;
+  ConfigScope scope = 4;
+}
