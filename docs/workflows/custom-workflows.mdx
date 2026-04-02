@@ -3,7 +3,7 @@ title: "Creating Custom Workflows"
 description: "Build your own workflows to automate multi-step tasks and enforce processes"
 ---
 
-Reliant workflows let you automate complex multi-step tasks, enforce development processes, and coordinate multiple agents. This guide walks you through creating your own workflows, starting with simple examples and building up to more advanced patterns.
+Reliant workflows let you automate complex multi-step tasks, enforce development processes, and coordinate multiple agents. There are three ways to create workflows, from fully visual to fully manual.
 
 ![Workflow Builder UI showing a TDD loop workflow](/images/screenshots/workflow-builder-tdd.png)
 
@@ -20,6 +20,34 @@ Before building a custom workflow, consider whether you actually need one. Workf
 **Build multi-agent coordination**: When you need multiple agents working together—whether in debate, parallel competition, or sequential handoff—workflows provide the orchestration.
 
 If you just need to run a single agent with a specific prompt, consider using [Presets](/workflows/presets) instead. Workflows are for when you need control flow, loops, or multiple agents.
+
+## Three Ways to Create Workflows
+
+Reliant provides three methods for creating custom workflows, each suited to different situations.
+
+### YAML (Manual)
+
+Write workflow definitions directly in YAML files placed in `.reliant/workflows/`. This gives you full control over every aspect of the workflow—nodes, edges, conditions, loops, thread configuration, and inputs. Most of this guide covers YAML authoring in detail.
+
+Best for: Fine-tuning workflows, understanding exactly what's happening, version-controlled workflow definitions.
+
+### Visual Editor
+
+The visual editor provides a graphical interface for building workflows. You can drag and drop nodes, draw edges between them, and configure node properties through forms. The visual editor reads and writes the same YAML format, so you can switch between the visual editor and hand-editing YAML at any time.
+
+Best for: Exploring workflow structure visually, quickly prototyping node graphs, understanding how edges route execution.
+
+### AI Builder Assistant
+
+The AI builder assistant creates workflows through conversation. Describe what you want the workflow to do, and the assistant generates the workflow definition for you. It can analyze your codebase to suggest appropriate tools, prompts, and patterns.
+
+The AI builder always creates [scenario tests](/workflows/testing#scenario-testing) and runs [static validation](/workflows/testing#static-validation) for every workflow it produces. This means workflows created by the AI builder come with built-in test coverage from the start.
+
+Best for: Getting started quickly, creating workflows for unfamiliar patterns, ensuring test coverage from day one.
+
+<Tip>
+All three methods produce the same YAML format. A workflow created with the AI builder can be edited in the visual editor or by hand, and vice versa.
+</Tip>
 
 ## Workflow File Location
 
@@ -1063,15 +1091,9 @@ Use the `condition` field to save messages only in certain cases:
 
 ### Validation Errors
 
-Reliant validates workflows on load. Common errors:
+Reliant validates workflows on load and reports structural problems before your workflow ever runs. If your workflow has validation errors, it won't appear in the workflow picker.
 
-**"input X has no default and is not required"**: Every input must have either `default` or `required: true`.
-
-**"node X not found"**: An edge references a non-existent node ID. Check spelling.
-
-**"entry node X not found"**: The `entry` field references a node that doesn't exist.
-
-**"loop must have either 'workflow' or 'inline'"**: Loop nodes need either an external workflow reference or an inline definition.
+For a full list of validation checks and common errors, see [Static Validation](/workflows/testing#static-validation).
 
 ### Common Mistakes
 
@@ -1273,6 +1295,7 @@ edges:
 
 Now that you understand workflow fundamentals:
 
+- **[Testing Workflows](/workflows/testing)**: Validate structure and test runtime behavior with scenarios
 - **[Multi-Agent Patterns](/workflows/patterns)**: Learn advanced orchestration patterns like debate, parallel competition, and auditing
 - **[Presets](/workflows/presets)**: Create reusable parameter bundles for your workflows
 - **[Types Reference](/reference/types)**: Review workflow config types and output helper types
