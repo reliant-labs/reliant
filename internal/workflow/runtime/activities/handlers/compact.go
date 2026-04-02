@@ -50,15 +50,17 @@ type GenerateTitleOutput struct {
 // 3. Create summary message with role=system in new context_sequence
 // 4. Return success - workflow continues with updated context
 type CompactActivity struct {
-	repo    db.Repository
-	threads *threads.Service
+	repo           db.Repository
+	threads        *threads.Service
+	driverResolver drivers.DriverResolver
 }
 
 // NewCompactActivity creates a new CompactActivity
-func NewCompactActivity(repo db.Repository) *CompactActivity {
+func NewCompactActivity(repo db.Repository, resolver drivers.DriverResolver) *CompactActivity {
 	return &CompactActivity{
-		repo:    repo,
-		threads: threads.NewService(repo),
+		repo:           repo,
+		threads:        threads.NewService(repo),
+		driverResolver: resolver,
 	}
 }
 
@@ -179,13 +181,15 @@ func (a *CompactActivity) saveCompactionMessage(ctx context.Context, chatID, thr
 // GenerateTitleActivity implements TypedActivity[GenerateTitleInput, GenerateTitleOutput]
 // Generates a title for a chat based on its first message
 type GenerateTitleActivity struct {
-	repo db.Repository
+	repo           db.Repository
+	driverResolver drivers.DriverResolver
 }
 
 // NewGenerateTitleActivity creates a new GenerateTitleActivity
-func NewGenerateTitleActivity(repo db.Repository) *GenerateTitleActivity {
+func NewGenerateTitleActivity(repo db.Repository, resolver drivers.DriverResolver) *GenerateTitleActivity {
 	return &GenerateTitleActivity{
-		repo: repo,
+		repo:           repo,
+		driverResolver: resolver,
 	}
 }
 
@@ -332,7 +336,11 @@ func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *d
 		},
 	}
 
-	driver, err := drivers.GetDriver(ctx, chat.UserID, preferences,
+	resolve := drivers.GetDriver
+	if a.driverResolver != nil {
+		resolve = a.driverResolver
+	}
+	driver, err := resolve(ctx, chat.UserID, preferences,
 		llm.WithModel(selectedModel),
 		llm.WithReasoningDisabled(), // Disable thinking for compaction - no reasoning budget needed
 		llm.WithMaxTokens(40000),
@@ -394,7 +402,11 @@ func (a *GenerateTitleActivity) generateTitle(ctx context.Context, userID, first
 		},
 	}
 
-	driver, err := drivers.GetDriver(ctx, userID, preferences,
+	resolve := drivers.GetDriver
+	if a.driverResolver != nil {
+		resolve = a.driverResolver
+	}
+	driver, err := resolve(ctx, userID, preferences,
 		llm.WithModel(model),
 		llm.WithMaxTokens(25), // Strict limit for short titles
 		llm.WithIgnoreDefaultPrompts(),

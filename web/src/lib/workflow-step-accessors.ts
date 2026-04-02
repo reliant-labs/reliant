@@ -24,9 +24,6 @@ function getOneofString(value: unknown): string | undefined {
 }
 
 export function getSubWorkflowRef(step: Step): string | undefined {
-  const flattened = getOneofString(step.ref)
-  if (flattened) return flattened
-
   if (step.args?.case === 'workflow') {
     return getOneofString(step.args.value.ref)
   }
@@ -39,8 +36,6 @@ export function getSubWorkflowRef(step: Step): string | undefined {
 }
 
 export function getSubWorkflowInline(step: Step): Workflow | undefined {
-  if (step.inline) return step.inline
-
   if (step.args?.case === 'workflow' && step.args.value.inline) {
     return step.args.value.inline as Workflow
   }
@@ -57,8 +52,7 @@ export function getLoopRef(step: Step): string | undefined {
     return getSubWorkflowRef(step)
   }
 
-  const flattened = getOneofString(step.ref)
-  return flattened
+  return undefined
 }
 
 export function getLoopInline(step: Step): Workflow | undefined {
@@ -66,13 +60,10 @@ export function getLoopInline(step: Step): Workflow | undefined {
     return getSubWorkflowInline(step)
   }
 
-  return step.inline
+  return undefined
 }
 
 export function getLoopWhile(step: Step): string | undefined {
-  const flattened = getOneofString(step.while)
-  if (flattened) return flattened
-
   if (step.args?.case === 'loop') {
     const whileExpr = step.args.value.while
     if (whileExpr && typeof whileExpr === 'object' && 'expr' in whileExpr) {

@@ -28,8 +28,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/mcp"
-	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/natsutil"
+	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/temporal"
@@ -205,7 +205,7 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("failed to create streaming hub: %w", err)
 	}
-	defer streamingHub.Close()
+	defer func() { _ = streamingHub.Close() }()
 
 	// Single NATS connection for update hubs and daemon routing
 	nc, err := natsutil.Connect(opts.NATSURL)
@@ -229,8 +229,8 @@ func Run(ctx context.Context, opts Options) error {
 		chatUpdateHub = streaming.NewMemoryUpdateHub[db.ChatUpdate]("ChatUpdate")
 		logging.Info("Update hubs initialized (memory)")
 	}
-	defer userUpdateHub.Close()
-	defer chatUpdateHub.Close()
+	defer func() { _ = userUpdateHub.Close() }()
+	defer func() { _ = chatUpdateHub.Close() }()
 
 	// Wire repo update notifiers to push events to update hubs
 	repo.SetUpdateNotifiers(
@@ -411,8 +411,9 @@ func Run(ctx context.Context, opts Options) error {
 
 	healthAddr := fmt.Sprintf("%s:%d", opts.BindAddress, opts.HealthPort)
 	healthServer := &http.Server{
-		Addr:    healthAddr,
-		Handler: healthMux,
+		Addr:              healthAddr,
+		Handler:           healthMux,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 	go func() {
 		logging.Info("Health endpoint started", "address", healthAddr)

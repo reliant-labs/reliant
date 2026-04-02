@@ -32,11 +32,11 @@ type Config struct {
 // ConfigFromEnv builds a Config from environment variables.
 func ConfigFromEnv(serviceName string) Config {
 	return Config{
-		ServiceName:   getEnv("OTEL_SERVICE_NAME", serviceName),
-		Environment:   getEnv("RELIANT_ENV", "development"),
-		Version:       getEnv("RELIANT_VERSION", "dev"),
-		OTLPEndpoint:  os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
-		OTLPInsecure:  os.Getenv("OTEL_EXPORTER_OTLP_INSECURE") != "false",
+		ServiceName:       getEnv("OTEL_SERVICE_NAME", serviceName),
+		Environment:       getEnv("RELIANT_ENV", "development"),
+		Version:           getEnv("RELIANT_VERSION", "dev"),
+		OTLPEndpoint:      os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
+		OTLPInsecure:      os.Getenv("OTEL_EXPORTER_OTLP_INSECURE") != "false",
 		PrometheusEnabled: os.Getenv("PROMETHEUS_ENABLED") != "false",
 	}
 }
@@ -46,8 +46,6 @@ type Provider struct {
 	config     Config
 	shutdownFn func(ctx context.Context) error
 }
-
-var globalProvider *Provider
 
 // Init initializes Prometheus metrics and OTel tracing based on the config.
 // Must be called early in startup, after logging.
@@ -95,7 +93,6 @@ func Init(cfg Config) (*Provider, error) {
 		return firstErr
 	}
 
-	globalProvider = p
 	return p, nil
 }
 

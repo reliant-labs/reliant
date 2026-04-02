@@ -40,6 +40,7 @@ import (
 //  6. While condition fails again, yield fires again → needs_attention (second yield)
 //  7. Test verifies the resume produced new messages
 func TestYieldResume_WithUserData(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -146,6 +147,7 @@ func TestYieldResume_WithUserData(t *testing.T) {
 //  5. Loop exits (does NOT re-enter), workflow completes
 //  6. Test verifies no additional LLM calls were made after yield
 func TestYieldContinue_ExitsLoop(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -212,6 +214,7 @@ func TestYieldContinue_ExitsLoop(t *testing.T) {
 //  4. User sends reply → resume, iteration 2: LLM returns text-only → yield #3
 //  5. User clicks "Continue" → loop exits, workflow completes
 func TestYieldResume_MultipleRounds(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -363,6 +366,7 @@ func TestYieldResume_MultipleRounds(t *testing.T) {
 //  5. Verify: message saved to yield's thread, not the root thread
 //  6. Verify: next LLM call includes the user's reply in history
 func TestYieldReply_MessageInCorrectThread(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 

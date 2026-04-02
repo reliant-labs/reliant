@@ -25,9 +25,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/mcp"
-	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/mcpconfig"
 	"github.com/reliant-labs/reliant/internal/natsutil"
+	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/temporal"
@@ -131,7 +131,7 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}
-	defer repo.Close()
+	defer func() { _ = repo.Close() }()
 
 	// API key provider (allows LLM drivers to resolve per-user keys from DB)
 	drivers.InitializeAPIKeyProvider(repo)
@@ -193,7 +193,7 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("failed to create streaming hub: %w", err)
 	}
-	defer streamingHub.Close()
+	defer func() { _ = streamingHub.Close() }()
 
 	logging.Info("Streaming hub initialized", "driver", opts.StreamingDriver)
 
@@ -209,8 +209,8 @@ func Run(ctx context.Context, opts Options) error {
 	userUpdateHub := streaming.NewNATSUpdateHub[db.UserUpdate](nc, "user.updates", "UserUpdate")
 	chatUpdateHub := streaming.NewNATSUpdateHub[db.ChatUpdate](nc, "chat.updates", "ChatUpdate")
 	logging.Info("Update hubs initialized (NATS)")
-	defer userUpdateHub.Close()
-	defer chatUpdateHub.Close()
+	defer func() { _ = userUpdateHub.Close() }()
+	defer func() { _ = chatUpdateHub.Close() }()
 
 	// Wire repo update notifiers to push events to update hubs
 	repo.SetUpdateNotifiers(
@@ -311,8 +311,9 @@ func Run(ctx context.Context, opts Options) error {
 	})
 
 	healthServer := &http.Server{
-		Addr:    fmt.Sprintf(":%d", opts.HealthPort),
-		Handler: healthMux,
+		Addr:              fmt.Sprintf(":%d", opts.HealthPort),
+		Handler:           healthMux,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 	go func() {
 		logging.Info("Health endpoint started", "port", opts.HealthPort)
@@ -363,7 +364,7 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	if mcpManager != nil {
-		mcpManager.Close()
+		_ = mcpManager.Close()
 	}
 
 	analytics.Shutdown()

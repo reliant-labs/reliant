@@ -147,10 +147,10 @@ func handleGitInfo(ctx context.Context, payload []byte) ([]byte, error) {
 		parts := strings.Fields(strings.TrimSpace(string(out)))
 		if len(parts) == 2 {
 			if a, err := strconv.Atoi(parts[0]); err == nil && a >= 0 && a <= int(^uint32(0)>>1) {
-				resp.Ahead = int32(a)
+				resp.Ahead = int32(a) //nolint:gosec // bounds checked above
 			}
 			if b, err := strconv.Atoi(parts[1]); err == nil && b >= 0 && b <= int(^uint32(0)>>1) {
-				resp.Behind = int32(b)
+				resp.Behind = int32(b) //nolint:gosec // bounds checked above
 			}
 		}
 	}

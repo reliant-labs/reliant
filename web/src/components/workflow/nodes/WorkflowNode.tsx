@@ -37,7 +37,7 @@ export const WorkflowNode = memo(({ id, data, selected }: WorkflowNodeProps) => 
   const isUserWorkflow = workflowRef?.startsWith("workflow://") ?? false
 
   // Count inline workflow nodes
-  const inlineNodeCount = inlineWorkflow?.steps?.length ?? 0
+  const inlineNodeCount = inlineWorkflow?.nodes?.length ?? 0
 
   // Can expand if there's an inline workflow to edit
   const canExpand = !!inlineWorkflow
@@ -133,7 +133,7 @@ export const WorkflowNode = memo(({ id, data, selected }: WorkflowNodeProps) => 
             {Object.entries(inputs).slice(0, 2).map(([key, value]) => (
               <div key={key} className="truncate max-w-[180px]">
                 <span className="text-muted-foreground">{key}:</span>{' '}
-                {String(unwrapProtoValue(value) ?? '')}
+                {String(unwrapProtoValue(value as import('@bufbuild/protobuf/wkt').Value | undefined) ?? '')}
               </div>
             ))}
             {Object.keys(inputs).length > 2 && (

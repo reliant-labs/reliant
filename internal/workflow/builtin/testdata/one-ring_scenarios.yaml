@@ -62,7 +62,7 @@ expect:
 name: plan_only
 description: >
   steps: [plan]. Planning runs. Everything else is skipped.
-  impl_loop ref'd workflow runs but eval_strategy defaults to "pass".
+  impl_loop and write_tests are skipped due to conditions.
 
 inputs:
   steps: [plan]
@@ -77,10 +77,10 @@ expect:
   reached:
     - planning
     - planning.plan
-    - impl_loop
     - success
   not_reached:
     - write_tests
+    - impl_loop
 
 ---
 name: full_pipeline_all_pass

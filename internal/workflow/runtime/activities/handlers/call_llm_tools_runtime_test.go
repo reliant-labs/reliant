@@ -8,7 +8,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/config"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llm"
-	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/mcp"
@@ -81,17 +80,16 @@ func TestCallLLMActivity_ToolParametersReachMockDriver(t *testing.T) {
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
 	mockDriver := &toolCaptureMockDriver{}
-	originalOverride := drivers.Override
-	drivers.Override = mockDriver
-	defer func() {
-		drivers.Override = originalOverride
-	}()
+	driverResolver := func(ctx context.Context, userID string, prefs models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) {
+		return mockDriver, nil
+	}
 
 	activityInstance := NewCallLLMActivity(
 		h.Repo(),
 		nil,
 		tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}),
 		&staticConfigProvider{},
+		driverResolver,
 	)
 
 	tests := []struct {
@@ -182,17 +180,16 @@ func TestCallLLMActivity_CreateChatStylePayloadToolFilterCELEvaluation(t *testin
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
 	mockDriver := &toolCaptureMockDriver{}
-	originalOverride := drivers.Override
-	drivers.Override = mockDriver
-	defer func() {
-		drivers.Override = originalOverride
-	}()
+	driverResolver := func(ctx context.Context, userID string, prefs models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) {
+		return mockDriver, nil
+	}
 
 	activityInstance := NewCallLLMActivity(
 		h.Repo(),
 		nil,
 		tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}),
 		&staticConfigProvider{},
+		driverResolver,
 	)
 
 	payloadInputs := map[string]interface{}{
@@ -272,17 +269,16 @@ func TestCallLLMActivity_ResolvedToolFilterContainsNoTemplates(t *testing.T) {
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
 	mockDriver := &toolCaptureMockDriver{}
-	originalOverride := drivers.Override
-	drivers.Override = mockDriver
-	defer func() {
-		drivers.Override = originalOverride
-	}()
+	driverResolver := func(ctx context.Context, userID string, prefs models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) {
+		return mockDriver, nil
+	}
 
 	activityInstance := NewCallLLMActivity(
 		h.Repo(),
 		nil,
 		tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}),
 		&staticConfigProvider{},
+		driverResolver,
 	)
 
 	resolvedToolFilter := []string{"tag:default", "spawn:builtin://agent(general,researcher)"}
@@ -361,11 +357,9 @@ func TestCallLLMActivity_UsesWorkingDirForMCPEnumerationScope(t *testing.T) {
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
 	mockDriver := &toolCaptureMockDriver{}
-	originalOverride := drivers.Override
-	drivers.Override = mockDriver
-	defer func() {
-		drivers.Override = originalOverride
-	}()
+	driverResolver := func(ctx context.Context, userID string, prefs models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) {
+		return mockDriver, nil
+	}
 
 	mcpManager := mcp.NewManager()
 	defer func() {
@@ -379,6 +373,7 @@ func TestCallLLMActivity_UsesWorkingDirForMCPEnumerationScope(t *testing.T) {
 		nil,
 		tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo(), MCPManager: mcpManager}),
 		resolver,
+		driverResolver,
 	)
 
 	input := ActivityInput{

@@ -426,8 +426,8 @@ function NumberInput({
             const parsed = parseFloat(inputValue);
             if (isNaN(parsed)) return;
             let clamped = parsed;
-            if (getInputMin(schema) !== undefined) clamped = Math.max(getInputMin(schema), clamped);
-            if (getInputMax(schema) !== undefined) clamped = Math.min(getInputMax(schema), clamped);
+            if (getInputMin(schema) !== undefined) clamped = Math.max(getInputMin(schema)!, clamped);
+            if (getInputMax(schema) !== undefined) clamped = Math.min(getInputMax(schema)!, clamped);
             nativeOnChange(clamped);
           };
 
@@ -484,7 +484,7 @@ function NumberInput({
           return (
             <input
               type="number"
-              value={displayValue === "" ? "" : displayValue}
+              value={displayValue === "" ? "" : displayValue as string | number | undefined}
               onChange={(e) => {
                 const val = e.target.value;
                 if (val === "") {
@@ -918,7 +918,7 @@ function ModelInput({
         renderNative={({ value: nativeValue, onChange: nativeOnChange, disabled: nativeDisabled }) => (
           <ModelDropdown
             schema={schema}
-            value={nativeValue as string}
+            value={nativeValue as ModelSelectorValue}
             onChange={(v) => nativeOnChange(v)}
             disabled={nativeDisabled}
             isChatInputContext={isChatInputContext}

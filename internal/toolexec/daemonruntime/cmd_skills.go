@@ -209,11 +209,6 @@ func handleSkillsDeleteGlobal(_ context.Context, payload []byte) ([]byte, error)
 		return json.Marshal(skillsDeleteGlobalResponse{Error: err.Error(), ErrorCode: "internal"})
 	}
 
-	// Verification check
-	if _, invalidateErr := os.Stat(absTarget); !os.IsNotExist(invalidateErr) {
-		// Log-worthy but not a failure — the delete completed
-	}
-
 	return json.Marshal(skillsDeleteGlobalResponse{
 		Success:           true,
 		DefinitionContent: string(blob),

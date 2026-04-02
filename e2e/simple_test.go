@@ -20,6 +20,7 @@ import (
 // TestSimple_HelloWorld tests the simplest agent interaction:
 // User says "hello", assistant responds with text only.
 func TestSimple_HelloWorld(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -50,6 +51,7 @@ func TestSimple_HelloWorld(t *testing.T) {
 
 // TestSimple_MultiTurnConversation tests multiple message exchanges
 func TestSimple_MultiTurnConversation(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -82,6 +84,7 @@ func TestSimple_MultiTurnConversation(t *testing.T) {
 
 // TestSimple_ToolCall tests a workflow that includes a tool call
 func TestSimple_ToolCall(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -120,6 +123,7 @@ func TestSimple_ToolCall(t *testing.T) {
 
 // TestSimple_MessageContent tests that message content is saved correctly
 func TestSimple_MessageContent(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -142,6 +146,7 @@ func TestSimple_MessageContent(t *testing.T) {
 
 // TestSimple_ChatUpdates tests that chat_updates are created for streaming
 func TestSimple_ChatUpdates(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -165,6 +170,7 @@ func TestSimple_ChatUpdates(t *testing.T) {
 // 1) streaming deltas are flat payloads (no payload.message wrapper)
 // 2) persistent message updates are wrapped under payload.message
 func TestSimple_ChatUpdates_StreamingAndMessageContracts(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -220,6 +226,7 @@ done:
 
 // TestSimple_LLMCallCount tests that the mock LLM tracks calls correctly
 func TestSimple_LLMCallCount(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -251,6 +258,7 @@ func TestSimple_LLMCallCount(t *testing.T) {
 
 // TestAssertions_WaitFor tests the WaitFor helper
 func TestAssertions_WaitFor(t *testing.T) {
+	t.Parallel()
 	counter := 0
 
 	// This should complete quickly

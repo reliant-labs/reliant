@@ -40,9 +40,15 @@ type GlobOutput struct {
 
 // BashOutput is the structured output from the bash tool.
 type BashOutput struct {
-	Stdout       string `json:"stdout"`
-	Stderr       string `json:"stderr"`
-	ExitCode     int    `json:"exit_code"`
+	Stdout   string `json:"stdout"`
+	Stderr   string `json:"stderr"`
+	ExitCode int    `json:"exit_code"`
+}
+
+// BashBackgroundOutput is returned when a command is started in the background.
+type BashBackgroundOutput struct {
+	ProcessID    string `json:"process_id"`
+	Command      string `json:"command"`
 	Backgrounded bool   `json:"backgrounded"`
 }
 

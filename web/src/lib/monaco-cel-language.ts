@@ -181,7 +181,7 @@ export const CEL_LIGHT_TOKEN_RULES: import('monaco-editor').editor.ITokenThemeRu
 export function registerCELLanguage(monaco: Monaco): void {
   // Guard against double registration
   const languages = monaco.languages.getLanguages();
-  if (languages.some(lang => lang.id === 'cel')) {
+  if (languages.some((lang: { id: string }) => lang.id === 'cel')) {
     return;
   }
 

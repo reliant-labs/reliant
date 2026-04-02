@@ -282,8 +282,8 @@ func runMonolith(_ *cobra.Command, _ []string, dataDir, projectPath *string) err
 	// Create memory update hubs for user and chat events
 	userUpdateHub := streaming.NewMemoryUpdateHub[db.UserUpdate]("UserUpdate")
 	chatUpdateHub := streaming.NewMemoryUpdateHub[db.ChatUpdate]("ChatUpdate")
-	defer userUpdateHub.Close()
-	defer chatUpdateHub.Close()
+	defer func() { _ = userUpdateHub.Close() }()
+	defer func() { _ = chatUpdateHub.Close() }()
 
 	// Wire repo update notifiers to push events to update hubs
 	concreteRepo, ok := server.Database().(*db.Repo)

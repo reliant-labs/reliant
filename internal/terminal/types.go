@@ -21,7 +21,6 @@ type Session struct {
 	LastActive time.Time
 	mu         sync.Mutex
 	done       chan struct{}
-	writeMu    sync.Mutex // Separate mutex for WebSocket writes
 }
 
 // ResizeMessage represents terminal resize event

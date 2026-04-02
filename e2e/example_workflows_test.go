@@ -53,6 +53,7 @@ var ExampleWorkflows = []string{
 
 // TestExampleWorkflows_AllFilesExist verifies all example workflow files exist.
 func TestExampleWorkflows_AllFilesExist(t *testing.T) {
+	t.Parallel()
 	for _, wf := range ExampleWorkflows {
 		path := getWorkflowPath(wf)
 		_, err := os.Stat(path)
@@ -67,6 +68,7 @@ func TestExampleWorkflows_AllFilesExist(t *testing.T) {
 // TestExampleWorkflows_ParseAndValidate ensures all workflow YAML files
 // parse correctly, validate structurally, and have valid edges.
 func TestExampleWorkflows_ParseAndValidate(t *testing.T) {
+	t.Parallel()
 	for _, wfFile := range ExampleWorkflows {
 		t.Run(getWorkflowName(wfFile), func(t *testing.T) {
 			path := getWorkflowPath(wfFile)
@@ -100,6 +102,7 @@ func TestExampleWorkflows_ParseAndValidate(t *testing.T) {
 // TestExampleWorkflows_EdgesValid validates that all workflow edges have
 // valid structure and target existing nodes.
 func TestExampleWorkflows_EdgesValid(t *testing.T) {
+	t.Parallel()
 	for _, wfFile := range ExampleWorkflows {
 		t.Run(getWorkflowName(wfFile), func(t *testing.T) {
 			path := getWorkflowPath(wfFile)

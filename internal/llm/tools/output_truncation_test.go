@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,7 +23,7 @@ func TestViewToolOutputTruncation(t *testing.T) {
 	// Create the view tool
 	tool := &viewTool{}
 	worktree := &rctx.WorktreeInfo{ID: "test", Path: tempDir}
-	ctx := rctx.NewToolContext(context.Background(), "test-chat", "0", nil, worktree).WithMessageID("test-msg")
+	ctx := rctx.NewToolContext(context.Background(), "test-chat", "0", nil, worktree).WithDaemon(daemon.NewLocalClient()).WithMessageID("test-msg")
 
 	t.Run("Small file under limit is not truncated", func(t *testing.T) {
 		// Create a small file (~10KB)
@@ -102,7 +103,7 @@ func TestViewToolLongLineTruncation(t *testing.T) {
 
 	tool := &viewTool{}
 	worktree := &rctx.WorktreeInfo{ID: "test", Path: tempDir}
-	ctx := rctx.NewToolContext(context.Background(), "test-chat", "0", nil, worktree).WithMessageID("test-msg")
+	ctx := rctx.NewToolContext(context.Background(), "test-chat", "0", nil, worktree).WithDaemon(daemon.NewLocalClient()).WithMessageID("test-msg")
 
 	t.Run("Long lines are truncated with ellipsis", func(t *testing.T) {
 		// Create a file with a very long line (like minified JS)
@@ -131,7 +132,7 @@ func TestGrepContentModeTruncation(t *testing.T) {
 
 	tool := &grepTool{}
 	worktree := &rctx.WorktreeInfo{ID: "test", Path: tempDir}
-	ctx := rctx.NewToolContext(context.Background(), "test-chat", "0", nil, worktree).WithMessageID("test-msg")
+	ctx := rctx.NewToolContext(context.Background(), "test-chat", "0", nil, worktree).WithDaemon(daemon.NewLocalClient()).WithMessageID("test-msg")
 
 	t.Run("Long matched lines are truncated in content mode", func(t *testing.T) {
 		// Create a file with long lines containing the search pattern
@@ -184,7 +185,7 @@ func TestGrepResultLimitTruncation(t *testing.T) {
 
 	tool := &grepTool{}
 	worktree := &rctx.WorktreeInfo{ID: "test", Path: tempDir}
-	ctx := rctx.NewToolContext(context.Background(), "test-chat", "0", nil, worktree).WithMessageID("test-msg")
+	ctx := rctx.NewToolContext(context.Background(), "test-chat", "0", nil, worktree).WithDaemon(daemon.NewLocalClient()).WithMessageID("test-msg")
 
 	t.Run("Results limited to defaultResultLimit", func(t *testing.T) {
 		// Create many files with the pattern

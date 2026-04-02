@@ -25,7 +25,8 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/integration"
-	"github.com/reliant-labs/reliant/internal/llm/drivers"
+	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/models"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
@@ -174,16 +175,6 @@ func NewTestHarness(t *testing.T) *TestHarness {
 		t.Logf("Warning: failed to copy workflow files: %v", err)
 	}
 
-	// Change to temp directory so workflow files can be found
-	// The workflow loader uses relative paths from the current working directory
-	originalDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("failed to get current directory: %v", err)
-	}
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatalf("failed to change to temp directory: %v", err)
-	}
-
 	// Generate a unique task queue suffix for this test harness
 	// This ensures test isolation when sharing a Temporal server
 	taskQueueSuffix := uuid.New().String()[:8]
@@ -200,9 +191,6 @@ func NewTestHarness(t *testing.T) *TestHarness {
 
 	// Note: Mock model is now defined in models.yaml with visibility: dev
 
-	// Set mock LLM as global override BEFORE creating server
-	drivers.Override = h.MockLLM
-
 	// Use shared Temporal server from TestMain to avoid port conflicts
 	// and speed up tests (no need to start/stop Temporal for each test)
 	sharedTemporalServer := GetSharedTemporalServer()
@@ -210,14 +198,21 @@ func NewTestHarness(t *testing.T) *TestHarness {
 	// Create integration server config with mock executors
 	// Pass the shared Temporal server to avoid creating a new one
 	// Use unique task queue suffix for test isolation
+	// Create a per-test driver resolver that returns this harness's mock LLM.
+	// This avoids the global drivers.Override which is not safe for parallel tests.
+	mockResolver := func(ctx context.Context, userID string, preferences models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) {
+		return h.MockLLM, nil
+	}
+
 	serverConfig := &integration.Config{
 		DatabasePath:           tmpDir,
 		ExternalTemporalServer: sharedTemporalServer,
 		TaskQueueSuffix:        taskQueueSuffix,
 		AnthropicAPIKey:        "test-api-key", // Not used due to mock
 		WorktreeBaseDir:        tmpDir + "/worktrees",
-		ToolExecutorOverride:   h.MockTools, // Inject mock tool executor
-		RunExecutorOverride:    h.MockRun,   // Inject mock run executor
+		ToolExecutorOverride:   h.MockTools,  // Inject mock tool executor
+		RunExecutorOverride:    h.MockRun,    // Inject mock run executor
+		DriverResolver:         mockResolver, // Inject mock LLM driver per-test
 	}
 
 	// Create and start integration server
@@ -265,19 +260,11 @@ func NewTestHarness(t *testing.T) *TestHarness {
 
 	// Register cleanup
 	h.cleanup = append(h.cleanup, func() {
-		drivers.Override = nil
-	})
-	h.cleanup = append(h.cleanup, func() {
 		h.MockApproval.Stop()
 	})
 	h.cleanup = append(h.cleanup, func() {
 		_ = server.Stop()
 	})
-	// Restore original working directory
-	h.cleanup = append(h.cleanup, func() {
-		_ = os.Chdir(originalDir)
-	})
-
 	return h
 }
 

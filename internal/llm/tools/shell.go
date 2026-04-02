@@ -2,6 +2,7 @@
 package tools
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -220,9 +221,13 @@ func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolRes
 			ProcessID: processID,
 		}
 
-		responseText := fmt.Sprintf("Started background process with ID: %s\nCommand: %s\nUse BashOutput tool to get output, BashKill to terminate",
-			processID, params.Command)
-		response := WithResponseMetadata(NewTextResponse(responseText), metadata)
+		bgOutput := BashBackgroundOutput{
+			ProcessID:    processID,
+			Command:      params.Command,
+			Backgrounded: true,
+		}
+		bgJSON, _ := json.Marshal(bgOutput)
+		response := WithResponseMetadata(NewTextResponse(string(bgJSON)), metadata)
 		response.Backgrounded = true
 		return response, nil
 	}
@@ -252,32 +257,17 @@ func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolRes
 		stdout = getTailLines(stdout, params.TailLines)
 		stderr = getTailLines(stderr, params.TailLines)
 	} else {
-		// Apply max output truncation
+		// Truncate stdout/stderr individually before JSON marshaling
+		// to keep the JSON envelope intact
 		stdout = truncateOutputWithLimit(stdout, maxOutput)
-		stderr = truncateOutputWithLimit(stderr, maxOutput/2) // Give stderr less space
+		stderr = truncateOutputWithLimit(stderr, maxOutput/2)
 	}
 
-	errorMessage := stderr
 	if interrupted {
-		if errorMessage != "" {
-			errorMessage += "\n"
+		if stderr != "" {
+			stderr += "\n"
 		}
-		errorMessage += "Command was aborted before completion"
-	} else if exitCode != 0 {
-		if errorMessage != "" {
-			errorMessage += "\n"
-		}
-		errorMessage += fmt.Sprintf("Exit code %d", exitCode)
-	}
-
-	hasBothOutputs := stdout != "" && stderr != ""
-
-	if hasBothOutputs {
-		stdout += "\n"
-	}
-
-	if errorMessage != "" {
-		stdout += "\n" + errorMessage
+		stderr += "Command was aborted before completion"
 	}
 
 	wasTruncated := len(stdout) < originalStdoutSize || len(stderr) < originalStderrSize
@@ -290,62 +280,14 @@ func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolRes
 		OriginalSize: originalStdoutSize + originalStderrSize,
 	}
 
-	if stdout == "" {
-		return WithResponseMetadata(NewTextResponse("no output"), metadata), nil
+	output := BashOutput{
+		Stdout:   stdout,
+		Stderr:   stderr,
+		ExitCode: exitCode,
 	}
-	return WithResponseMetadata(NewTextResponse(stdout), metadata), nil
-}
+	outputJSON, _ := json.Marshal(output)
 
-// shellCommandResult holds the result of a shell command execution
-type shellCommandResult struct {
-	Stdout       string
-	Stderr       string
-	ExitCode     int
-	Interrupted  bool
-	Backgrounded bool
-	ProcessID    string
-}
-
-// executeShellCommand is implemented in platform-specific files:
-// - shell_unix.go: uses bash -c
-// - shell_windows.go: uses powershell.exe -NoProfile -Command
-
-// getToolCallID extracts the tool call ID from the context for background signal handling
-func getToolCallID(rctx *rctx.ToolContext) string {
-	// Preserved for background signal handling but currently unused
-	// with daemon-based execution
-	return ""
-}
-
-// formatShellEnvVars converts a map of environment variables to a slice of "KEY=VALUE" strings
-func formatShellEnvVars(env map[string]string) []string {
-	var result []string
-	for key, value := range env {
-		result = append(result, fmt.Sprintf("%s=%s", key, value))
-	}
-	return result
-}
-
-// getShellExitCode extracts the exit code from an error
-func getShellExitCode(err error) int {
-	if err == nil {
-		return 0
-	}
-	// Try to get exit code from exec.ExitError
-	if exitErr, ok := err.(interface{ ExitCode() int }); ok {
-		return exitErr.ExitCode()
-	}
-	return -1
-}
-
-// logShellInfo logs info for shell execution
-func logShellInfo(format string, args ...interface{}) {
-	logging.Info(fmt.Sprintf("[Shell] "+format, args...))
-}
-
-// logShellError logs errors for shell execution
-func logShellError(format string, args ...interface{}) {
-	logging.Error(fmt.Sprintf("[Shell] "+format, args...))
+	return WithResponseMetadata(NewTextResponse(string(outputJSON)), metadata), nil
 }
 
 // countShellLines counts the number of lines in a string

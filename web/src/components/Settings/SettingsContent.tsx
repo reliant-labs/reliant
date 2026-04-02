@@ -1,7 +1,6 @@
 import { CombinedGeneralSettings } from "./CombinedGeneralSettings";
 import { AboutSection } from "./AboutSection";
 import { DeveloperSettings } from "./DeveloperSettings";
-import { DesignSandboxSettings } from "./DesignSandboxSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { KeyboardShortcutsSettings } from "./KeyboardShortcutsSettings";
 import { AccountSettings } from "./AccountSettings";
@@ -125,14 +124,6 @@ export function SettingsContent({
     return (
       <div className="h-full">
         <WorkspacesSection />
-      </div>
-    );
-  }
-
-  if (activeSection === "design-sandbox") {
-    return (
-      <div className="h-full">
-        <DesignSandboxSettings />
       </div>
     );
   }

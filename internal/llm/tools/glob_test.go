@@ -47,6 +47,7 @@ func TestGlobTool_WorktreeDirectory(t *testing.T) {
 	}
 
 	toolCtx := &rctx.ToolContext{
+		Daemon:   daemon.NewLocalClient(),
 		Context:  context.Background(),
 		Worktree: &rctx.WorktreeInfo{Path: worktreePath},
 	}
@@ -158,6 +159,7 @@ func TestGlobTool_SkipsActualHiddenDirs(t *testing.T) {
 	}
 
 	toolCtx := &rctx.ToolContext{
+		Daemon:   daemon.NewLocalClient(),
 		Context:  context.Background(),
 		Worktree: &rctx.WorktreeInfo{Path: tmpDir},
 	}
@@ -245,6 +247,7 @@ func TestGlobTool_AbsolutePathInWorktree(t *testing.T) {
 	}
 
 	toolCtx := &rctx.ToolContext{
+		Daemon:   daemon.NewLocalClient(),
 		Context:  context.Background(),
 		Worktree: &rctx.WorktreeInfo{Path: worktreePath},
 	}
@@ -302,6 +305,7 @@ func TestGlobTool_RelativePatterns(t *testing.T) {
 	}
 
 	toolCtx := &rctx.ToolContext{
+		Daemon:   daemon.NewLocalClient(),
 		Context:  context.Background(),
 		Worktree: &rctx.WorktreeInfo{Path: tmpDir},
 	}
@@ -480,6 +484,7 @@ func TestGlobTool_RelativePath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			toolCtx := &rctx.ToolContext{
+				Daemon:   daemon.NewLocalClient(),
 				Context:  context.Background(),
 				Worktree: &rctx.WorktreeInfo{Path: tt.worktree},
 			}
@@ -549,6 +554,7 @@ func TestGlobTool_PatternNormalization(t *testing.T) {
 
 	t.Run("./ prefix is stripped and finds files", func(t *testing.T) {
 		toolCtx := &rctx.ToolContext{
+			Daemon:   daemon.NewLocalClient(),
 			Context:  context.Background(),
 			Worktree: &rctx.WorktreeInfo{Path: projectDir},
 		}
@@ -579,6 +585,7 @@ func TestGlobTool_PatternNormalization(t *testing.T) {
 
 	t.Run("./*.go prefix finds root files", func(t *testing.T) {
 		toolCtx := &rctx.ToolContext{
+			Daemon:   daemon.NewLocalClient(),
 			Context:  context.Background(),
 			Worktree: &rctx.WorktreeInfo{Path: projectDir},
 		}
@@ -607,6 +614,7 @@ func TestGlobTool_PatternNormalization(t *testing.T) {
 	t.Run("../*.go pattern adjusts search path", func(t *testing.T) {
 		srcDir := filepath.Join(projectDir, "src")
 		toolCtx := &rctx.ToolContext{
+			Daemon:   daemon.NewLocalClient(),
 			Context:  context.Background(),
 			Worktree: &rctx.WorktreeInfo{Path: srcDir},
 		}
@@ -635,6 +643,7 @@ func TestGlobTool_PatternNormalization(t *testing.T) {
 	t.Run("../**/*.go pattern finds all files in parent", func(t *testing.T) {
 		srcDir := filepath.Join(projectDir, "src")
 		toolCtx := &rctx.ToolContext{
+			Daemon:   daemon.NewLocalClient(),
 			Context:  context.Background(),
 			Worktree: &rctx.WorktreeInfo{Path: srcDir},
 		}
@@ -664,6 +673,7 @@ func TestGlobTool_PatternNormalization(t *testing.T) {
 
 	t.Run("../sibling/**/*.go adjusts path correctly", func(t *testing.T) {
 		toolCtx := &rctx.ToolContext{
+			Daemon:   daemon.NewLocalClient(),
 			Context:  context.Background(),
 			Worktree: &rctx.WorktreeInfo{Path: projectDir},
 		}
@@ -691,6 +701,7 @@ func TestGlobTool_PatternNormalization(t *testing.T) {
 
 	t.Run("absolute path in pattern returns helpful error", func(t *testing.T) {
 		toolCtx := &rctx.ToolContext{
+			Daemon:   daemon.NewLocalClient(),
 			Context:  context.Background(),
 			Worktree: &rctx.WorktreeInfo{Path: projectDir},
 		}
@@ -718,6 +729,7 @@ func TestGlobTool_PatternNormalization(t *testing.T) {
 
 	t.Run("./src/**/*.go prefix stripped with directory component", func(t *testing.T) {
 		toolCtx := &rctx.ToolContext{
+			Daemon:   daemon.NewLocalClient(),
 			Context:  context.Background(),
 			Worktree: &rctx.WorktreeInfo{Path: projectDir},
 		}

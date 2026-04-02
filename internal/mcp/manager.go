@@ -918,8 +918,16 @@ func (m *Manager) loadProjectServersFromConfig(ctx context.Context, projectPath 
 			logging.Warn("Failed provider-backed project config resolution; skipping MCP project autoload",
 				"projectPath", projectPath,
 				"error", err)
+			// Fall back to filesystem-based config when the resolver fails.
+			userServers = configloader.LoadMCPServersFromProjectScopes(projectPath)
 		} else if cfg != nil && len(cfg.MCPServers) > 0 {
 			userServers = cfg.MCPServers
+			// Overlay filesystem local-scope (worktree) configs on top of resolved config.
+			// This allows per-worktree overrides even when using a provider-backed resolver.
+			localServers := configloader.LoadMCPServersFromProjectScopes(projectPath)
+			for name, server := range localServers {
+				userServers[name] = server
+			}
 		}
 	}
 

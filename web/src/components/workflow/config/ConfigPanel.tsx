@@ -330,13 +330,13 @@ export function ConfigPanel({
       if (isWorkflowStep(step)) {
         onUpdate(
           withWorkflowArgs(step as WorkflowStep, {
-            project: p ? { path: celString(p.path ?? "") } : undefined,
+            project: p ? { path: celString(p.path ?? "") } as any : undefined,
           }) as Step,
         );
       } else if (isLoopStep(step)) {
         onUpdate(
           withLoopArgs(step as LoopStep, {
-            project: p ? { path: celString(p.path ?? "") } : undefined,
+            project: p ? { path: celString(p.path ?? "") } as any : undefined,
           }) as Step,
         );
       }

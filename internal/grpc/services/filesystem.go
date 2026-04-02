@@ -1071,7 +1071,7 @@ func (s *FileSystemService) ListDirectory(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("path must be absolute"))
 	}
 
-	dirEntries, err := os.ReadDir(path)
+	dirEntries, err := s.fs.ReadDir(path)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("cannot read directory: %w", err))
 	}

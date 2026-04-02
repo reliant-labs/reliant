@@ -12,6 +12,7 @@ import (
 // This specifically tests the fix for the "undeclared reference to 'thread'" error.
 // If this test fails, there's a CEL namespace configuration issue.
 func TestBasicChat_ThreadNamespace(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -47,6 +48,7 @@ func TestBasicChat_ThreadNamespace(t *testing.T) {
 // TestBasicChat_WorkflowCompletes tests that the workflow completes successfully.
 // This is a basic smoke test for the agent workflow.
 func TestBasicChat_WorkflowCompletes(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 

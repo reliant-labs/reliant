@@ -621,6 +621,8 @@ export const TOOL_FORMATTERS: Record<string, ToolFormatter> = {
   grep: formatGrepParams,
   websearch: formatWebsearchParams,
   shell: formatShellParams,
+  bash: formatShellParams,
+  powershell: formatShellParams,
   run_command: formatShellParams,
   diagnostics: formatDiagnosticsParams,
   glob: formatGlobParams,

@@ -29,15 +29,21 @@ import (
 // It handles skills.delete_global by deleting the skill directory from the local filesystem.
 type settingsTestDaemonRouter struct{}
 
-func (r *settingsTestDaemonRouter) IsDaemonOnline(_ context.Context, userID string) (bool, error) { return true, nil }
+func (r *settingsTestDaemonRouter) IsDaemonOnline(_ context.Context, userID string) (bool, error) {
+	return true, nil
+}
 func (r *settingsTestDaemonRouter) SendToolRequest(_ context.Context, _ string, _ *toolexec.ToolExecutionRequest) error {
 	return nil
 }
-func (r *settingsTestDaemonRouter) SendToolExecutionCancel(_ context.Context, _, _, _ string) error { return nil }
+func (r *settingsTestDaemonRouter) SendToolExecutionCancel(_ context.Context, _, _, _ string) error {
+	return nil
+}
 func (r *settingsTestDaemonRouter) SendKillProcess(_ context.Context, _, _ string) error {
 	return nil
 }
-func (r *settingsTestDaemonRouter) SendLoadProjectConfigs(_ context.Context, _, _ string, _ string) error { return nil }
+func (r *settingsTestDaemonRouter) SendLoadProjectConfigs(_ context.Context, _, _ string, _ string) error {
+	return nil
+}
 func (r *settingsTestDaemonRouter) SendWatchProjectConfigs(_ context.Context, _ string, _ string, _ bool) error {
 	return nil
 }
@@ -45,6 +51,77 @@ func (r *settingsTestDaemonRouter) SendToolRequestSync(_ context.Context, _ stri
 	return &toolexec.ToolExecutionResponse{Success: true}, nil
 }
 func (r *settingsTestDaemonRouter) SendDaemonCommand(_ context.Context, _ string, commandType string, payload []byte, _ int32) ([]byte, error) {
+	if commandType == "skills.read_skill_assets" {
+		var req map[string]string
+		if err := json.Unmarshal(payload, &req); err != nil {
+			return nil, err
+		}
+		skillDir := req["skill_dir"]
+		if skillDir == "" {
+			return json.Marshal(map[string]interface{}{"assets": []interface{}{}})
+		}
+		assetsRoot := filepath.Join(skillDir, "assets")
+		info, statErr := os.Stat(assetsRoot)
+		if statErr != nil || !info.IsDir() {
+			return json.Marshal(map[string]interface{}{"assets": []interface{}{}})
+		}
+		var assets []map[string]string
+		_ = filepath.WalkDir(assetsRoot, func(path string, d os.DirEntry, walkErr error) error {
+			if walkErr != nil || d.IsDir() {
+				return nil
+			}
+			rel, relErr := filepath.Rel(skillDir, path)
+			if relErr != nil {
+				return nil
+			}
+			ext := filepath.Ext(rel)
+			mimeType := ""
+			switch ext {
+			case ".png":
+				mimeType = "image/png"
+			case ".jpg", ".jpeg":
+				mimeType = "image/jpeg"
+			case ".gif":
+				mimeType = "image/gif"
+			case ".svg":
+				mimeType = "image/svg+xml"
+			case ".webp":
+				mimeType = "image/webp"
+			default:
+				return nil
+			}
+			blob, readErr := os.ReadFile(path)
+			if readErr != nil {
+				return nil
+			}
+			rel = filepath.ToSlash(rel)
+			assets = append(assets, map[string]string{
+				"relative_path": rel,
+				"mime_type":     mimeType,
+				"content_b64":   base64.StdEncoding.EncodeToString(blob),
+			})
+			return nil
+		})
+		if assets == nil {
+			assets = []map[string]string{}
+		}
+		return json.Marshal(map[string]interface{}{"assets": assets})
+	}
+	if commandType == "skills.read_file" {
+		var req map[string]string
+		if err := json.Unmarshal(payload, &req); err != nil {
+			return nil, err
+		}
+		filePath := req["path"]
+		content, err := os.ReadFile(filePath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return json.Marshal(map[string]interface{}{"content": "", "found": false})
+			}
+			return nil, err
+		}
+		return json.Marshal(map[string]interface{}{"content": string(content), "found": true})
+	}
 	if commandType == "skills.delete_global" {
 		var req map[string]string
 		if err := json.Unmarshal(payload, &req); err != nil {
@@ -677,7 +754,7 @@ func TestSettingsService_GetInstalledSkillDefinition_UsesSkillIDFromList(t *test
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := NewSettingsService(repo, nil)
+	svc := NewSettingsService(repo, &settingsTestDaemonRouter{})
 	ctx := newSettingsServiceTestContext()
 	setSkillsFeatureFlagForSettingsTests(t, repo, true)
 
@@ -775,7 +852,7 @@ func TestSettingsService_SetSkillEnabled_TogglesProjectSkill(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	svc := NewSettingsService(repo, nil)
+	svc := NewSettingsService(repo, &settingsTestDaemonRouter{})
 	ctx := newSettingsServiceTestContext()
 	setSkillsFeatureFlagForSettingsTests(t, repo, true)
 

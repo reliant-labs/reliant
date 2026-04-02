@@ -25,6 +25,7 @@ import (
 // iter.iteration tracking and while-condition evaluation across many cycles
 // with properly typed *v3.IterContext.
 func TestAgent_ManyIterations(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -119,6 +120,7 @@ func TestAgent_ManyIterations(t *testing.T) {
 // 2. Correct messages are saved (user + 2*(assistant+tool))
 // 3. The workflow yields (chat state = needs_attention)
 func TestAgent_MaxTurnsEnforcement(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -177,6 +179,7 @@ func TestAgent_MaxTurnsEnforcement(t *testing.T) {
 // TestAgent_MaxTurnsWithSingleTurn tests the edge case where max_turns=1.
 // Only one iteration should execute before the loop yields.
 func TestAgent_MaxTurnsWithSingleTurn(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -221,6 +224,7 @@ func TestAgent_MaxTurnsWithSingleTurn(t *testing.T) {
 // type/casting issues in the iter context that might only manifest after several
 // iterations.
 func TestAgent_SixIterations(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -263,6 +267,7 @@ func TestAgent_SixIterations(t *testing.T) {
 // TestAgent_MaxTurnsThreeIterations verifies max_turns=3 stops at exactly 3 iterations.
 // Uses a different max_turns value to ensure the parameter is respected correctly.
 func TestAgent_MaxTurnsThreeIterations(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 

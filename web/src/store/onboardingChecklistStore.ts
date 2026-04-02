@@ -350,7 +350,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
         const isDefaultWorkflow = (name?: string) =>
           !name || name === "" || name === "agent" || name === "builtin://agent";
         const usedCustomWorkflow = Array.from(chats.values()).some(
-          (chat) => !isDefaultWorkflow(chat.workflow_name),
+          (chat) => !isDefaultWorkflow(chat.workflowName),
         );
         if (usedCustomWorkflow) {
           newItems.add("use-custom-workflow");
@@ -442,7 +442,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
             const isDefault = (name?: string) =>
               !name || name === "" || name === "agent" || name === "builtin://agent";
             const usedCustom = Array.from(state.chats.values()).some(
-              (chat) => !isDefault(chat.workflow_name),
+              (chat) => !isDefault(chat.workflowName),
             );
             if (usedCustom) {
               get().markComplete("use-custom-workflow");

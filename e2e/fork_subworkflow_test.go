@@ -41,6 +41,7 @@ import (
 // This test uses the builtin one-ring workflow which has fork mode sub-workflows.
 // This test should FAIL with the current code if the bug exists.
 func TestForkSubWorkflow_InheritsParentContext(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -194,6 +195,7 @@ func TestForkSubWorkflow_InheritsParentContext(t *testing.T) {
 // TestForkSubWorkflow_MultiLevel tests fork inheritance through multiple levels
 // This tests A → B (fork) → C (fork) to ensure the chain works correctly
 func TestForkSubWorkflow_MultiLevel(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -280,6 +282,7 @@ nodes:
 
 // TestForkSubWorkflow_ForkAtOrdinal tests that fork respects the ordinal boundary
 func TestForkSubWorkflow_ForkAtOrdinal(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 

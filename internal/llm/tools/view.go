@@ -192,18 +192,36 @@ func (v *viewTool) Execute(rctx *rctx.ToolContext, params ViewParams) (ToolRespo
 	// Truncate long lines in the returned content
 	content := truncateLongLines(fc.Content)
 
+	// Apply byte-level truncation if content exceeds MaxReadSize.
+	byteLimitReached := false
+	if len(content) > MaxReadSize {
+		// Trim to the last complete line before the limit.
+		truncContent := content[:MaxReadSize]
+		if idx := strings.LastIndex(truncContent, "\n"); idx > 0 {
+			content = truncContent[:idx]
+		} else {
+			content = truncContent
+		}
+		byteLimitReached = true
+	}
+
 	output := "<file>\n"
 	// Format the output with line numbers
 	output += addLineNumbers(content, params.Offset+1)
 
 	// Build actionable truncation message when not all content was shown
-	hasMore := fc.Truncated
+	hasMore := fc.Truncated || byteLimitReached
 	if hasMore {
 		linesRead := countLines(content)
 		nextOffset := params.Offset + linesRead
 		fileSize := formatFileSize(stat.Size)
 
-		reason := fmt.Sprintf("%d line limit reached", params.Limit)
+		var reason string
+		if byteLimitReached {
+			reason = "byte limit reached"
+		} else {
+			reason = fmt.Sprintf("%d line limit reached", params.Limit)
+		}
 
 		output += fmt.Sprintf(
 			"\n\n--- Truncated: Showing lines %d-%d of %d total (%s, %s) ---\n"+

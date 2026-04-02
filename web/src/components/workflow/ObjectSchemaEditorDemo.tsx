@@ -3,7 +3,9 @@
 
 import { useState } from "react";
 import { ObjectSchemaEditor } from "./ObjectSchemaEditor";
-import type { InputSchema } from "./WorkflowParamInput";
+import type { PropertySchema } from "./WorkflowParamInput";
+
+type InputSchema = PropertySchema;
 
 export function ObjectSchemaEditorDemo() {
   // Example schema for a code review result

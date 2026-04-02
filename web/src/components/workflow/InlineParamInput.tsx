@@ -624,8 +624,8 @@ function InlineNumberInput({
     const parsed = parseFloat(tempValue);
     if (!isNaN(parsed)) {
       let clamped = parsed;
-      if (getInputMin(schema) !== undefined) clamped = Math.max(getInputMin(schema), clamped);
-      if (getInputMax(schema) !== undefined) clamped = Math.min(getInputMax(schema), clamped);
+      if (getInputMin(schema) !== undefined) clamped = Math.max(getInputMin(schema)!, clamped);
+      if (getInputMax(schema) !== undefined) clamped = Math.min(getInputMax(schema)!, clamped);
       onChange(clamped);
     }
   };

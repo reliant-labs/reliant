@@ -37,6 +37,7 @@ import { useActiveBuilderChats } from '../../store/chatStoreHooks'
 import { ProtoFieldRenderer } from './ProtoFieldRenderer'
 import { inputDefToSchema } from '../../lib/nodeFieldAdapter'
 import type { InputDef } from '../../lib/inputHelpers'
+import { getInputPresetConfig, getInputDefault, getInputDescription, setInputEnumValues } from '../../lib/inputHelpers'
 import { useModels } from '../../store/globalDataStore'
 import { useThinkingCapability, reconcileThinkingLevel } from '../../hooks/useThinkingCapability'
 
@@ -641,11 +642,12 @@ function PresetConfigModal({
         }
 
         // Add named groups (inputs with type: "group")
-        const workflowInputs = workflow.inputs || workflow.params
+        const workflowInputs = workflow.inputs
         if (workflowInputs) {
           for (const [groupName, param] of Object.entries(workflowInputs)) {
-            if (param.type === "group" && param.presetConfig?.tag) {
-              groupInfos.push({ name: groupName, label: groupName, tag: param.presetConfig.tag })
+            const presetCfg = getInputPresetConfig(param as InputDef)
+            if (param.type === "group" && presetCfg?.tag) {
+              groupInfos.push({ name: groupName, label: groupName, tag: presetCfg.tag })
             }
           }
         }
@@ -1024,36 +1026,24 @@ interface PresetEditModalProps {
 const DEFAULT_PARAM_SCHEMAS: Record<string, InputDef> = {
   mode: {
     type: 'enum',
-    enum: ['manual', 'auto', 'plan'],
-    default: 'auto',
-    description: 'Execution mode: manual = requires approval, auto = auto-approves, plan = read-only tools'
-  },
+    config: { case: 'enumInput', value: { base: { description: 'Execution mode: manual = requires approval, auto = auto-approves, plan = read-only tools' }, enumValues: ['manual', 'auto', 'plan'], default: 'auto' } },
+  } as InputDef,
   temperature: {
     type: 'number',
-    default: 1.0,
-    min: 0,
-    max: 1,
-    description: 'Response randomness (0 = focused, 1 = creative)'
-  },
+    config: { case: 'numberInput', value: { base: { description: 'Response randomness (0 = focused, 1 = creative)' }, default: 1.0, min: 0, max: 1 } },
+  } as InputDef,
   thinking_level: {
     type: 'enum',
-    enum: ['low', 'medium', 'high'],
-    default: 'medium',
-    description: 'Extended thinking level (support is model/provider dependent)'
-  },
+    config: { case: 'enumInput', value: { base: { description: 'Extended thinking level (support is model/provider dependent)' }, enumValues: ['low', 'medium', 'high'], default: 'medium' } },
+  } as InputDef,
   max_turns: {
     type: 'integer',
-    default: 100,
-    min: 1,
-    max: 500,
-    description: 'Maximum agent loop iterations'
-  },
+    config: { case: 'integerInput', value: { base: { description: 'Maximum agent loop iterations' }, default: BigInt(100), min: BigInt(1), max: BigInt(500) } },
+  } as InputDef,
   compaction_threshold: {
     type: 'integer',
-    default: 185000,
-    min: 10000,
-    description: 'Token count to trigger context compaction'
-  }
+    config: { case: 'integerInput', value: { base: { description: 'Token count to trigger context compaction' }, default: BigInt(185000), min: BigInt(10000) } },
+  } as InputDef,
 }
 
 function PresetEditModal({ preset, projectId, availablePresets = [], onSave, onClose }: PresetEditModalProps) {
@@ -1109,7 +1099,7 @@ function PresetEditModal({ preset, projectId, availablePresets = [], onSave, onC
         await Promise.all(workflowsToFetch.map(async (wf: WorkflowResponse) => {
           try {
             const details = await workflowGrpc.getWorkflow(projectId, { name: wf.name })
-            const workflowInputs = details.workflow?.inputs || details.workflow?.params
+            const workflowInputs = details.workflow?.inputs
             if (workflowInputs) {
               // Merge inputs into schema
               Object.entries(workflowInputs).forEach(([key, schema]) => {
@@ -1219,7 +1209,7 @@ function PresetEditModal({ preset, projectId, availablePresets = [], onSave, onC
     const schema = referenceSchema[paramToAdd]
     setParams(prev => ({
       ...prev,
-      [paramToAdd]: schema.default ?? ''
+      [paramToAdd]: getInputDefault(schema) ?? ''
     }))
     setParamToAdd('')
   }
@@ -1309,7 +1299,7 @@ function PresetEditModal({ preset, projectId, availablePresets = [], onSave, onC
                         readOnly={!isEditable || isSaving}
                         availablePresets={availablePresets}
                         schema={key === 'thinking_level' && referenceSchema[key]
-                          ? { ...referenceSchema[key], enum: supportedThinkingLevels }
+                          ? setInputEnumValues(referenceSchema[key], supportedThinkingLevels)
                           : referenceSchema[key]}
                         formValues={params}
                     />
@@ -1333,7 +1323,7 @@ function PresetEditModal({ preset, projectId, availablePresets = [], onSave, onC
                   <option value="">Select parameter to add...</option>
                   {availableParamsToAdd.map(key => (
                     <option key={key} value={key}>
-                      {key} {referenceSchema[key]?.description ? ` - ${referenceSchema[key].description.slice(0, 50)}...` : ''}
+                      {key} {getInputDescription(referenceSchema[key]) ? ` - ${getInputDescription(referenceSchema[key])!.slice(0, 50)}...` : ''}
                     </option>
                   ))}
                 </select>
@@ -1506,7 +1496,7 @@ function PresetViewModal({ preset, projectId, onCopy, onClose }: PresetViewModal
                         ))}
                       </div>
                     ) : typeof value === 'object' && value !== null ? (
-                      <pre className="whitespace-pre-wrap text-[10px] bg-background/50 p-2 rounded border border-border/50">{JSON.stringify(unwrapProtoValue(value) ?? value, null, 2)}</pre>
+                      <pre className="whitespace-pre-wrap text-[10px] bg-background/50 p-2 rounded border border-border/50">{JSON.stringify(unwrapProtoValue(value as any) ?? value, null, 2)}</pre>
                     ) : (
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-muted text-muted-foreground">
                         {formatValueForDisplay(value)}

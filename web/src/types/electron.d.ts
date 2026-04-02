@@ -92,6 +92,10 @@ export interface ElectronAPI {
   onFullscreenChanged: (callback: (isFullscreen: boolean) => void) => () => void;
   onOpenProject: (callback: (projectPath: string) => void) => () => void;
 
+  // OAuth
+  getOAuthRedirectUrl: () => Promise<{ success: boolean; redirectUrl?: string; error?: string }>;
+  onOAuthCallback: (callback: (callbackUrl: string) => void) => void;
+
   // Auth storage
   authLoad: () => Promise<{ success: boolean; session?: any; error?: string }>;
   authSave: (session: any) => Promise<{ success: boolean; error?: string }>;

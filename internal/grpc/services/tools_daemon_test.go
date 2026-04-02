@@ -94,12 +94,10 @@ func TestToolsDaemonServiceCloseIsIdempotent(t *testing.T) {
 }
 
 func TestDaemonRegistrationUserIDRejectsSpoofedRegisterUserID(t *testing.T) {
-	// Monolith mode: context has an authenticated user.
-	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "trusted-user")
-
-	_, err := daemonRegistrationUserID(ctx, &reliantv1.DaemonRegister{UserId: "spoofed-user"})
+	// No auth context: PAT authentication required.
+	_, err := daemonRegistrationUserID(context.Background(), &reliantv1.DaemonRegister{UserId: "spoofed-user"})
 	require.Error(t, err)
-	require.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 }
 
 func TestDaemonRegistrationUserIDAcceptsMatchingOrEmptyRegisterUserID(t *testing.T) {
@@ -116,21 +114,22 @@ func TestDaemonRegistrationUserIDAcceptsMatchingOrEmptyRegisterUserID(t *testing
 }
 
 func TestDaemonRegistrationUserIDCloudModeTrustsRegisterMessage(t *testing.T) {
-	// Cloud mode: no user ID in context (token-only auth).
-	resolved, err := daemonRegistrationUserID(context.Background(), &reliantv1.DaemonRegister{UserId: "cloud-user-123"})
+	// With auth context, returns the context user ID (register message user ID is ignored).
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "cloud-user-123")
+	resolved, err := daemonRegistrationUserID(ctx, &reliantv1.DaemonRegister{UserId: "cloud-user-123"})
 	require.NoError(t, err)
 	require.Equal(t, "cloud-user-123", resolved)
 }
 
 func TestDaemonRegistrationUserIDCloudModeRequiresRegisterUserID(t *testing.T) {
-	// Cloud mode: no user ID in context, and register message has no user_id.
+	// No auth context: PAT authentication required.
 	_, err := daemonRegistrationUserID(context.Background(), &reliantv1.DaemonRegister{UserId: ""})
 	require.Error(t, err)
-	require.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 
 	_, err = daemonRegistrationUserID(context.Background(), nil)
 	require.Error(t, err)
-	require.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 }
 
 func TestHandleProjectDiscoveryCreatesProjectAndRequestsConfig(t *testing.T) {

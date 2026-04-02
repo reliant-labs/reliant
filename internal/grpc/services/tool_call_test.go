@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
@@ -25,7 +26,9 @@ type forwardCancelCall struct {
 	reason    string
 }
 
-func (f *fakeDaemonRouter) IsDaemonOnline(_ context.Context, userID string) (bool, error) { return true, nil }
+func (f *fakeDaemonRouter) IsDaemonOnline(_ context.Context, userID string) (bool, error) {
+	return true, nil
+}
 func (f *fakeDaemonRouter) SendToolRequest(ctx context.Context, userID string, request *toolexec.ToolExecutionRequest) error {
 	return nil
 }
@@ -42,7 +45,9 @@ func (f *fakeDaemonRouter) SendDaemonCommand(ctx context.Context, userID string,
 func (f *fakeDaemonRouter) SendToolRequestSync(_ context.Context, _ string, _ *toolexec.ToolExecutionRequest) (*toolexec.ToolExecutionResponse, error) {
 	return &toolexec.ToolExecutionResponse{Success: true}, nil
 }
-func (f *fakeDaemonRouter) SendLoadProjectConfigs(_ context.Context, _, _ string, _ string) error { return nil }
+func (f *fakeDaemonRouter) SendLoadProjectConfigs(_ context.Context, _, _ string, _ string) error {
+	return nil
+}
 func (f *fakeDaemonRouter) SendWatchProjectConfigs(_ context.Context, _ string, _ string, _ bool) error {
 	return nil
 }
@@ -66,7 +71,7 @@ func TestCancelToolCall_SetsCancelSignalAndSucceeds(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	ctx := context.Background()
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 	now := time.Now().UTC()
 
 	chatID := uuid.New().String()
@@ -125,5 +130,4 @@ func TestCancelToolCall_SetsCancelSignalAndSucceeds(t *testing.T) {
 	require.True(t, shell.GetCancelSignal().IsCancelled(toolCallID))
 }
 
-func toolCallTestStringPtr(s string) *string { return &s }
-func toolCallTestIntPtr(v int) *int          { return &v }
+func toolCallTestIntPtr(v int) *int { return &v }

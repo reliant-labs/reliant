@@ -10,6 +10,7 @@ import (
 )
 
 func TestRegression_CreateChatWorkflowParams_ToolFilterResolvesToNonEmptyAvailableTools(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -34,6 +35,7 @@ func TestRegression_CreateChatWorkflowParams_ToolFilterResolvesToNonEmptyAvailab
 }
 
 func TestRegression_ActiveSendMessageWorkflowParams_ToolFilterResolvesToNonEmptyAvailableTools(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 

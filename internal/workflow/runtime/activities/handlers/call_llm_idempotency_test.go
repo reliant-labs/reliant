@@ -58,12 +58,10 @@ func (m *mockLLMDriverForIdempotency) ValidateKey(ctx context.Context) error {
 	return nil
 }
 
-// setupMockLLMDriver sets up the mock driver and returns a cleanup function
-func setupMockLLMDriver() func() {
-	original := drivers.Override
-	drivers.Override = &mockLLMDriverForIdempotency{}
-	return func() {
-		drivers.Override = original
+// mockLLMDriverResolver returns a DriverResolver that always returns the mock driver.
+func mockLLMDriverResolver() drivers.DriverResolver {
+	return func(ctx context.Context, userID string, prefs models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) {
+		return &mockLLMDriverForIdempotency{}, nil
 	}
 }
 
@@ -107,8 +105,7 @@ func callLLMInputEmpty(chatID, threadID string) ActivityInput {
 
 func TestCallLLMActivity_Idempotency(t *testing.T) {
 	// Setup mock LLM driver
-	cleanupMock := setupMockLLMDriver()
-	defer cleanupMock()
+	resolver := mockLLMDriverResolver()
 
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
@@ -154,7 +151,7 @@ func TestCallLLMActivity_Idempotency(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create activity (nil toolsFactory since we're testing idempotency, not tool execution)
-	activityInstance := NewCallLLMActivity(h.Repo(), nil, nil)
+	activityInstance := NewCallLLMActivity(h.Repo(), nil, nil, nil, resolver)
 
 	input := callLLMInput(chatID, threadID, "mock-model")
 
@@ -264,8 +261,7 @@ func TestCallLLMActivity_CleansUpIncompleteBlocks(t *testing.T) {
 	t.Skip("Skipping: Temporal test framework doesn't properly simulate activity retry behavior")
 
 	// Setup mock LLM driver
-	cleanupMock := setupMockLLMDriver()
-	defer cleanupMock()
+	resolver := mockLLMDriverResolver()
 
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
@@ -356,7 +352,7 @@ func TestCallLLMActivity_CleansUpIncompleteBlocks(t *testing.T) {
 
 	t.Run("Cleanup removes incomplete message and starts fresh", func(t *testing.T) {
 		// Create activity
-		activityInstance := NewCallLLMActivity(h.Repo(), nil, nil)
+		activityInstance := NewCallLLMActivity(h.Repo(), nil, nil, nil, resolver)
 
 		input := callLLMInput(chatID, threadID, "mock-model")
 
@@ -392,8 +388,7 @@ func TestCallLLMActivity_CleansUpIncompleteBlocks(t *testing.T) {
 
 func TestCallLLMActivity_NoOrphanedRecords(t *testing.T) {
 	// Setup mock LLM driver
-	cleanupMock := setupMockLLMDriver()
-	defer cleanupMock()
+	resolver := mockLLMDriverResolver()
 
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
@@ -440,7 +435,7 @@ func TestCallLLMActivity_NoOrphanedRecords(t *testing.T) {
 
 	t.Run("Multiple retries don't create orphaned records", func(t *testing.T) {
 		// Create activity
-		activityInstance := NewCallLLMActivity(h.Repo(), nil, nil)
+		activityInstance := NewCallLLMActivity(h.Repo(), nil, nil, nil, resolver)
 
 		input := callLLMInput(chatID, threadID, "mock-model")
 
@@ -490,8 +485,7 @@ func TestCallLLMActivity_NoOrphanedRecords(t *testing.T) {
 
 func TestCallLLMActivity_ActivityIDTracking(t *testing.T) {
 	// Setup mock LLM driver
-	cleanupMock := setupMockLLMDriver()
-	defer cleanupMock()
+	resolver := mockLLMDriverResolver()
 
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
@@ -538,7 +532,7 @@ func TestCallLLMActivity_ActivityIDTracking(t *testing.T) {
 
 	t.Run("Activity ID is tracked in message", func(t *testing.T) {
 		// Create activity
-		activityInstance := NewCallLLMActivity(h.Repo(), nil, nil)
+		activityInstance := NewCallLLMActivity(h.Repo(), nil, nil, nil, resolver)
 
 		input := callLLMInputEmpty(chatID, threadID)
 
@@ -578,8 +572,7 @@ func TestCallLLMActivity_ActivityIDTracking(t *testing.T) {
 
 func TestCallLLMActivity_ThreadHandling(t *testing.T) {
 	// Setup mock LLM driver
-	cleanupMock := setupMockLLMDriver()
-	defer cleanupMock()
+	resolver := mockLLMDriverResolver()
 
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
@@ -600,7 +593,7 @@ func TestCallLLMActivity_ThreadHandling(t *testing.T) {
 
 	t.Run("Empty thread path returns error", func(t *testing.T) {
 		// Create activity
-		activityInstance := NewCallLLMActivity(h.Repo(), nil, nil)
+		activityInstance := NewCallLLMActivity(h.Repo(), nil, nil, nil, resolver)
 
 		// Execute with empty thread path - should return error
 		input := callLLMInputEmpty(chatID, "")
@@ -642,7 +635,7 @@ func TestCallLLMActivity_ThreadHandling(t *testing.T) {
 		require.NoError(t, err)
 
 		// Create activity
-		activityInstance := NewCallLLMActivity(h.Repo(), nil, nil)
+		activityInstance := NewCallLLMActivity(h.Repo(), nil, nil, nil, resolver)
 
 		// Execute with specific thread path (must match the thread we created)
 		input := callLLMInputEmpty(chatID, childThreadID)
@@ -663,8 +656,7 @@ func TestCallLLMActivity_ThreadHandling(t *testing.T) {
 
 func TestCallLLMActivity_ThinkingLevel(t *testing.T) {
 	// Setup mock LLM driver
-	cleanupMock := setupMockLLMDriver()
-	defer cleanupMock()
+	resolver := mockLLMDriverResolver()
 
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
@@ -709,7 +701,7 @@ func TestCallLLMActivity_ThinkingLevel(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	activityInstance := NewCallLLMActivity(h.Repo(), nil, nil)
+	activityInstance := NewCallLLMActivity(h.Repo(), nil, nil, nil, resolver)
 
 	t.Run("ThinkingLevel parameter is accepted without error", func(t *testing.T) {
 		input := ActivityInput{

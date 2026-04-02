@@ -217,7 +217,7 @@ func NewIdleTimeoutReader(r io.ReadCloser, timeout time.Duration) *IdleTimeoutRe
 	itr.timer = time.AfterFunc(timeout, func() {
 		logging.Warn("[IdleTimeoutReader] Stream idle timeout reached, closing connection",
 			"timeout", timeout)
-		itr.Close()
+		_ = itr.Close()
 	})
 	return itr
 }

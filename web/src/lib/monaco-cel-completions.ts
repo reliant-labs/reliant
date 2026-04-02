@@ -533,7 +533,7 @@ export function registerCELEditorContext(
     monaco.languages.registerCompletionItemProvider('cel', {
       triggerCharacters: ['.', '{'],
 
-      provideCompletionItems(model, position) {
+      provideCompletionItems(model: import('monaco-editor').editor.ITextModel, position: import('monaco-editor').Position) {
         const uri = model.uri.toString()
         const getCtx = contextRegistry.get(uri)
         if (!getCtx) return { suggestions: [] }

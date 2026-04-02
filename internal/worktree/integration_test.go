@@ -6,7 +6,6 @@ package worktree
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,8 +22,8 @@ func setupRealGitRepo(t *testing.T) (string, func()) {
 	// Create and initialize git repository
 	require.NoError(t, os.MkdirAll(repoDir, 0755))
 
-	// Initialize git repo
-	cmd := exec.Command("git", "init")
+	// Initialize git repo with main as default branch
+	cmd := exec.Command("git", "init", "-b", "main")
 	cmd.Dir = repoDir
 	require.NoError(t, cmd.Run())
 
@@ -93,9 +92,8 @@ func TestIntegrationCreateWorktreeWithRealGit(t *testing.T) {
 	// Create worktree service
 	tempDir := t.TempDir()
 	baseDir := filepath.Join(tempDir, "worktrees")
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
-	service, err := NewService(logger, baseDir, repoDir)
+	service, err := NewService(baseDir, repoDir)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -147,9 +145,8 @@ func TestIntegrationResumeWorktree(t *testing.T) {
 
 	tempDir := t.TempDir()
 	baseDir := filepath.Join(tempDir, "worktrees")
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	service, err := NewService(logger, baseDir, repoDir)
+	service, err := NewService(baseDir, repoDir)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -163,8 +160,8 @@ func TestIntegrationResumeWorktree(t *testing.T) {
 	wt1, err := service.Create(ctx, "resume-test", opts)
 	require.NoError(t, err)
 
-	// Resume the worktree
-	wt2, err := service.Resume(ctx, "resume-test")
+	// Get the worktree (previously Resume)
+	wt2, err := service.Get(ctx, "resume-test")
 	require.NoError(t, err)
 	assert.Equal(t, wt1.ID, wt2.ID)
 	assert.Equal(t, wt1.Path, wt2.Path)
@@ -187,9 +184,8 @@ func TestIntegrationDeleteWorktree(t *testing.T) {
 
 	tempDir := t.TempDir()
 	baseDir := filepath.Join(tempDir, "worktrees")
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	service, err := NewService(logger, baseDir, repoDir)
+	service, err := NewService(baseDir, repoDir)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -231,9 +227,8 @@ func TestIntegrationMultipleWorktrees(t *testing.T) {
 
 	tempDir := t.TempDir()
 	baseDir := filepath.Join(tempDir, "worktrees")
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	service, err := NewService(logger, baseDir, repoDir)
+	service, err := NewService(baseDir, repoDir)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -281,9 +276,8 @@ func TestIntegrationWorktreeWithCommits(t *testing.T) {
 
 	tempDir := t.TempDir()
 	baseDir := filepath.Join(tempDir, "worktrees")
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	service, err := NewService(logger, baseDir, repoDir)
+	service, err := NewService(baseDir, repoDir)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -335,9 +329,8 @@ func TestIntegrationCompleteWorktreeWithUncommittedChanges(t *testing.T) {
 
 	tempDir := t.TempDir()
 	baseDir := filepath.Join(tempDir, "worktrees")
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	service, err := NewService(logger, baseDir, repoDir)
+	service, err := NewService(baseDir, repoDir)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -377,9 +370,8 @@ func TestIntegrationCleanupMultipleWorktrees(t *testing.T) {
 
 	tempDir := t.TempDir()
 	baseDir := filepath.Join(tempDir, "worktrees")
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	service, err := NewService(logger, baseDir, repoDir)
+	service, err := NewService(baseDir, repoDir)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -434,10 +426,9 @@ func TestIntegrationRepositoryIDConsistency(t *testing.T) {
 	defer cleanup()
 
 	tempDir := t.TempDir()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
 	// Create service instance 1
-	service1, err := NewService(logger, tempDir, repoDir)
+	service1, err := NewService(tempDir, repoDir)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -445,8 +436,14 @@ func TestIntegrationRepositoryIDConsistency(t *testing.T) {
 	repoID1, err := s1.generateRepoID(ctx)
 	require.NoError(t, err)
 
-	// Create service instance 2 with same repo
-	service2, err := NewService(logger, tempDir, repoDir)
+	// Create worktree with first service
+	opts := CreateOptions{Branch: "feature/consistency-test"}
+	wt1, err := service1.Create(ctx, "consistency-test", opts)
+	require.NoError(t, err)
+
+	// Create service instance 2 with same repo AFTER worktree was created,
+	// so it loads the persisted metadata from disk.
+	service2, err := NewService(tempDir, repoDir)
 	require.NoError(t, err)
 
 	s2 := service2.(*service)
@@ -455,11 +452,6 @@ func TestIntegrationRepositoryIDConsistency(t *testing.T) {
 
 	// Repository IDs should be identical
 	assert.Equal(t, repoID1, repoID2)
-
-	// Create worktree with first service
-	opts := CreateOptions{Branch: "feature/consistency-test"}
-	wt1, err := service1.Create(ctx, "consistency-test", opts)
-	require.NoError(t, err)
 
 	// Should be able to access with second service
 	wt2, err := service2.Get(ctx, "consistency-test")

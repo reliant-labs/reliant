@@ -1341,7 +1341,8 @@ func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.
 		}
 
 		// Claude uses OAuth tokens persisted by Reliant.
-		if provider == "claude" {
+		switch provider {
+		case "claude":
 			tokens, tokenErr := s.database.GetClaudeAuthTokens(ctx, userID)
 			if tokenErr != nil {
 				logging.Warn("Failed to load Claude auth tokens", "error", tokenErr)
@@ -1357,7 +1358,7 @@ func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.
 			status.Configured = configured
 			status.HasApiKey = configured
 			// Don't set MaskedKey for Claude - no API key to display
-		} else if provider == "codex" {
+		case "codex":
 			// Codex uses OAuth tokens persisted by Reliant.
 			tokens, tokenErr := s.database.GetCodexAuthTokens(ctx, userID)
 			if tokenErr != nil {
@@ -1374,7 +1375,7 @@ func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.
 			status.Configured = configured
 			status.HasApiKey = configured
 			// Don't set MaskedKey for Codex - no API key to display
-		} else {
+		default:
 			maskedKey, hasKey := apiKeys[string(provider)]
 			status.Configured = hasKey
 			status.HasApiKey = hasKey
@@ -1439,7 +1440,7 @@ func (s *SettingsService) UpdateProviderAPIKey(ctx context.Context, req *connect
 
 	if provider == "claude" {
 		if strings.TrimSpace(req.Msg.ApiKey) != "" {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("Claude does not use manual API keys. Use Login with Claude in Settings"))
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("claude does not use manual API keys; use Login with Claude in Settings"))
 		}
 
 		if err := s.database.DeleteClaudeAuthTokens(ctx, userID); err != nil {

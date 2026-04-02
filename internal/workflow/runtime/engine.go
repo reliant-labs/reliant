@@ -42,11 +42,6 @@ func getModeFromInputs(inputs map[string]interface{}) string {
 // DefaultPresetGroup is the reserved group name for ungrouped/top-level inputs.
 const DefaultPresetGroup = "default"
 
-// isStructuralType returns true if the node type is a structural type (not an activity).
-func isStructuralType(nodeType string) bool {
-	return model.IsStructuralNode(nodeType)
-}
-
 // isActivityType returns true if the node type represents a known Temporal activity.
 // Returns true only for known node types that are not structural.
 // Unknown types (including the string "null") return false and fall through

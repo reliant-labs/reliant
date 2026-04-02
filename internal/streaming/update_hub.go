@@ -41,7 +41,7 @@ func (e UpdateEvent[T]) MarshalJSON() ([]byte, error) {
 		SequenceNumber int64  `json:"seq"`
 		Payload        T      `json:"payload"`
 	}
-	return json.Marshal(wire{Key: e.Key, SequenceNumber: e.SequenceNumber, Payload: e.Payload})
+	return json.Marshal(wire(e))
 }
 
 // UnmarshalJSON implements JSON decoding for NATS transport.

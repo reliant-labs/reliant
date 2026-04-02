@@ -159,13 +159,13 @@ function hasResolvedThreadInteract(
 
 export const CONTEXTUAL_TIP_DEFINITIONS: ContextualTipDefinition[] = [
   {
-    id: "spawned-thread-intro",
+    id: "spawned-thread-intro" as ContextualTipId,
     title: "A new thread was created",
     body: "This is a spawned sub-conversation running alongside the main chat. Open it to inspect what happened or continue work there.",
     targetSelector: "[data-contextual-tip='spawned-thread-item']",
     priority: 100,
     cooldownMs: THREAD_TIP_COOLDOWN_MS,
-    shouldShow: (context, state) => {
+    shouldShow: (context: ContextualTipTriggerContext, state: Record<ContextualTipId, ContextualTipStateRecord>) => {
       const record = state["spawned-thread-intro"];
       if (!context.onboardingComplete || context.isWizardActive) return false;
       if (isTipDismissed(record)) return false;
@@ -177,13 +177,13 @@ export const CONTEXTUAL_TIP_DEFINITIONS: ContextualTipDefinition[] = [
     },
   },
   {
-    id: "spawned-thread-interact",
+    id: "spawned-thread-interact" as ContextualTipId,
     title: "You can open or pause this thread",
     body: "Spawned threads are interactive. Click into one to chat directly, or use the hand button to force-yield it when you want control back.",
     targetSelector: "[data-contextual-tip='spawned-thread-force-yield']",
     priority: 90,
     cooldownMs: THREAD_TIP_COOLDOWN_MS,
-    shouldShow: (context, state) => {
+    shouldShow: (context: ContextualTipTriggerContext, state: Record<ContextualTipId, ContextualTipStateRecord>) => {
       const record = state["spawned-thread-interact"];
       if (!context.onboardingComplete || context.isWizardActive) return false;
       if (isTipDismissed(record)) return false;
@@ -195,13 +195,13 @@ export const CONTEXTUAL_TIP_DEFINITIONS: ContextualTipDefinition[] = [
     },
   },
   {
-    id: "thread-model",
+    id: "thread-model" as ContextualTipId,
     title: "Threads are independent agents within a chat",
     body: "Threads can be spawned dynamically by an agent, or created deterministically within a workflow. You can interact with each thread independently, send messages to guide that agent, or even branch a thread into a top-level chat.",
     targetSelector: "[data-contextual-tip='spawned-thread-item']",
     priority: 75,
     cooldownMs: THREAD_TIP_COOLDOWN_MS,
-    shouldShow: (context, state) => {
+    shouldShow: (context: ContextualTipTriggerContext, state: Record<ContextualTipId, ContextualTipStateRecord>) => {
       const record = state["thread-model"];
       if (!context.onboardingComplete || context.isWizardActive) return false;
       if (isTipDismissed(record)) return false;
@@ -214,13 +214,13 @@ export const CONTEXTUAL_TIP_DEFINITIONS: ContextualTipDefinition[] = [
     },
   },
   {
-    id: "chat-branching",
+    id: "chat-branching" as ContextualTipId,
     title: "Branch any message into a new conversation",
     body: "Click the branch icon on any message to create a new chat that picks up from that point. It's a great way to explore alternate approaches without losing your original conversation.",
     targetSelector: "[data-contextual-tip='branch-button']",
     priority: 70,
     cooldownMs: THREAD_TIP_COOLDOWN_MS,
-    shouldShow: (context, state) => {
+    shouldShow: (context: ContextualTipTriggerContext, state: Record<ContextualTipId, ContextualTipStateRecord>) => {
       const record = state["chat-branching"];
       if (!context.onboardingComplete || context.isWizardActive) return false;
       if (isTipDismissed(record)) return false;
@@ -232,13 +232,13 @@ export const CONTEXTUAL_TIP_DEFINITIONS: ContextualTipDefinition[] = [
     },
   },
   {
-    id: "worktree-after-nth-chat",
+    id: "worktree-after-nth-chat" as ContextualTipId,
     title: "Try a workspace for isolated work",
     body: "You’ve started a few chats already. Workspaces let you branch off into isolated git contexts so feature work and experiments stay cleanly separated.",
     targetSelector: "[data-onboarding='workspace-buttons'], [data-onboarding='workspace-indicator']",
     priority: 80,
     cooldownMs: CONTEXTUAL_TIPS_COOLDOWN_MS,
-    shouldShow: (context, state) => {
+    shouldShow: (context: ContextualTipTriggerContext, state: Record<ContextualTipId, ContextualTipStateRecord>) => {
       const record = state["worktree-after-nth-chat"];
       if (!context.onboardingComplete || context.isWizardActive) return false;
       if (isTipDismissed(record)) return false;

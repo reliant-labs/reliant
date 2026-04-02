@@ -90,10 +90,7 @@ func handleFSReadFile(_ context.Context, payload []byte) ([]byte, error) {
 		return nil, fmt.Errorf("read %s: %w", req.Path, err)
 	}
 
-	truncated := false
-	if limit > 0 && totalLines > offset+limit {
-		truncated = true
-	}
+	truncated := limit > 0 && totalLines > offset+limit
 
 	resp := daemon.FileContent{
 		Content:    strings.Join(lines, "\n"),
