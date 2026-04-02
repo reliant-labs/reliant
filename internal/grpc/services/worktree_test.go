@@ -4,6 +4,8 @@ package services
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,9 +18,92 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// worktreeTestDaemonRouter implements toolexec.DaemonRouter for worktree tests.
+type worktreeTestDaemonRouter struct{}
+
+func (r *worktreeTestDaemonRouter) IsDaemonOnline(_ context.Context, _ string) (bool, error) {
+	return true, nil
+}
+func (r *worktreeTestDaemonRouter) SendToolRequest(_ context.Context, _ string, _ *toolexec.ToolExecutionRequest) error {
+	return nil
+}
+func (r *worktreeTestDaemonRouter) SendToolRequestSync(_ context.Context, _ string, _ *toolexec.ToolExecutionRequest) (*toolexec.ToolExecutionResponse, error) {
+	return &toolexec.ToolExecutionResponse{Success: true}, nil
+}
+func (r *worktreeTestDaemonRouter) SendToolExecutionCancel(_ context.Context, _, _, _ string) error {
+	return nil
+}
+func (r *worktreeTestDaemonRouter) SendKillProcess(_ context.Context, _, _ string) error {
+	return nil
+}
+func (r *worktreeTestDaemonRouter) SendDaemonCommand(_ context.Context, _ string, commandType string, payload []byte, _ int32) ([]byte, error) {
+	switch commandType {
+	case "worktree.validate_path":
+		var req map[string]string
+		_ = json.Unmarshal(payload, &req)
+		path := req["path"]
+		if _, err := os.Stat(path); err != nil {
+			return json.Marshal(map[string]interface{}{"exists": false, "error": "not_found"})
+		}
+		return json.Marshal(map[string]interface{}{"exists": true})
+	case "worktree.revert":
+		var req struct {
+			WorktreePath string   `json:"worktree_path"`
+			Files        []string `json:"files"`
+		}
+		_ = json.Unmarshal(payload, &req)
+
+		type revertResult struct {
+			File    string `json:"file"`
+			Success bool   `json:"success"`
+			Error   string `json:"error,omitempty"`
+		}
+		var results []revertResult
+		for _, file := range req.Files {
+			absPath := filepath.Join(req.WorktreePath, file)
+			cmd := exec.Command("git", "checkout", "--", file)
+			cmd.Dir = req.WorktreePath
+			if err := cmd.Run(); err != nil {
+				if _, statErr := os.Stat(absPath); statErr == nil {
+					_ = os.RemoveAll(absPath)
+					results = append(results, revertResult{File: file, Success: true})
+				} else {
+					results = append(results, revertResult{File: file, Success: false, Error: "file not in changed state"})
+				}
+			} else {
+				results = append(results, revertResult{File: file, Success: true})
+			}
+		}
+		return json.Marshal(map[string]interface{}{"results": results})
+	}
+	return nil, fmt.Errorf("unhandled command: %s", commandType)
+}
+func (r *worktreeTestDaemonRouter) SendLoadProjectConfigs(_ context.Context, _, _, _ string) error {
+	return nil
+}
+func (r *worktreeTestDaemonRouter) SendWatchProjectConfigs(_ context.Context, _, _ string, _ bool) error {
+	return nil
+}
+func (r *worktreeTestDaemonRouter) SendTerminalInput(_ context.Context, _, _ string, _ []byte) error {
+	return nil
+}
+func (r *worktreeTestDaemonRouter) SendTerminalResize(_ context.Context, _, _ string, _, _ uint32) error {
+	return nil
+}
+func (r *worktreeTestDaemonRouter) SubscribeTerminalOutput(_ context.Context, _, _ string) (<-chan *toolexec.TerminalOutputEvent, func(), error) {
+	ch := make(chan *toolexec.TerminalOutputEvent)
+	return ch, func() { close(ch) }, nil
+}
+func (r *worktreeTestDaemonRouter) SubscribeProcessOutput(_ context.Context, _, _ string, _ bool) (<-chan *toolexec.ProcessOutputEvent, func(), error) {
+	ch := make(chan *toolexec.ProcessOutputEvent)
+	return ch, func() { close(ch) }, nil
+}
+func (r *worktreeTestDaemonRouter) Close() error { return nil }
 
 // setupTestGitRepoWithRemote creates a git repo with a bare remote
 func setupTestGitRepoWithRemote(t *testing.T, defaultBranch string) (repoDir string, remoteDir string) {
@@ -70,7 +155,7 @@ func setupTestWorktreeServiceForRevert(t *testing.T) (*WorktreeService, *sql.DB,
 	require.NoError(t, db.RunMigrations(sqlDB))
 
 	repo := db.NewRepo(sqlDB)
-	svc := NewWorktreeService(repo, nil, nil)
+	svc := NewWorktreeService(repo, nil, &worktreeTestDaemonRouter{})
 
 	userID := uuid.New().String()
 	projectID := uuid.New().String()

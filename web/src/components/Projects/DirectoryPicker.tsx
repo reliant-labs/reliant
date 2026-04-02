@@ -23,7 +23,7 @@ export function DirectoryPicker({
   onClose,
   onSelect,
 }: DirectoryPickerProps) {
-  const [currentPath, setCurrentPath] = useState("");
+  const [, setCurrentPath] = useState("");
   const [resolvedPath, setResolvedPath] = useState("");
   const [entries, setEntries] = useState<DirectoryEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);

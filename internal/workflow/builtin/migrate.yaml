@@ -463,7 +463,7 @@ nodes:
           type: workflow
           ref: builtin://agent
           presets:
-            default: workflow_builder
+            default: general
           args:
             model: "{{inputs.model}}"
             mode: auto

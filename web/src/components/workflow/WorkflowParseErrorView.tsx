@@ -64,7 +64,7 @@ export function WorkflowParseErrorView({
     nodes: [],
     edges: [],
     entry: [],
-    params: {},
+    inputs: {},
     outputs: {},
     apiVersion: "",
   };

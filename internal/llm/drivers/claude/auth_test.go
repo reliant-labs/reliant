@@ -331,7 +331,7 @@ func TestRefreshClaudeTokens_InvalidGrantError(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 	// For refresh_token grant type, invalid_grant maps to "session expired" message
-	if err.Error() != "Claude session expired: please reconnect Claude" {
+	if err.Error() != "claude session expired: please reconnect Claude" {
 		t.Errorf("unexpected error message: %s", err.Error())
 	}
 }

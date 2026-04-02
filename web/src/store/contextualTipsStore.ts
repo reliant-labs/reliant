@@ -273,18 +273,24 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
   },
 
   subscribeToSources: () => {
-    const unsubscribeChat = useChatStore.subscribe(() => {
-      void get().reevaluate();
-    });
-    const unsubscribeThreads = useThreadActivityStore.subscribe(() => {
-      void get().reevaluate();
-    });
-    const unsubscribeWorktrees = useWorktreeStore.subscribe(() => {
-      void get().reevaluate();
-    });
-    const unsubscribeOnboarding = useOnboardingChecklistStore.subscribe(() => {
-      void get().reevaluate();
-    });
+    // Debounce reevaluate calls from store subscriptions to avoid
+    // evaluating tips against transient intermediate states (e.g. during
+    // chat navigation where activeChatId updates after the chats map).
+    // Without this, tips can briefly flash and get their shownCount
+    // incorrectly incremented before the state settles.
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const debouncedReevaluate = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null;
+        void get().reevaluate();
+      }, 150);
+    };
+
+    const unsubscribeChat = useChatStore.subscribe(debouncedReevaluate);
+    const unsubscribeThreads = useThreadActivityStore.subscribe(debouncedReevaluate);
+    const unsubscribeWorktrees = useWorktreeStore.subscribe(debouncedReevaluate);
+    const unsubscribeOnboarding = useOnboardingChecklistStore.subscribe(debouncedReevaluate);
 
     const handleThreadInteracted = () => {
       void get().markFeatureEngaged("threadInteraction");
@@ -304,6 +310,7 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
     window.addEventListener("contextual-tip-params-opened", handleParamsOpened);
 
     return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
       unsubscribeChat();
       unsubscribeThreads();
       unsubscribeWorktrees();

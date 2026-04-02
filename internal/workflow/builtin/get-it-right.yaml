@@ -183,6 +183,8 @@ nodes:
         - id: review
           type: workflow
           ref: builtin://structured-agent
+          presets:
+            default: general
           args:
             model: "{{inputs.model}}"
             mode: "{{inputs.mode}}"

@@ -14,6 +14,7 @@ import (
 // A workflow with a call_llm node branches to different save_message nodes based on
 // whether the LLM response includes tool calls or not.
 func TestEdgeRouting_ConditionalBranching(t *testing.T) {
+	t.Parallel()
 	// Workflow: step_a (call_llm) -> branch based on tool_calls presence
 	//   - If tool_calls present  -> branch_tool_use (save_message "Took the TOOL_USE branch")
 	//   - If no tool_calls       -> branch_end_turn (save_message "Took the END_TURN branch")

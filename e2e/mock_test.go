@@ -15,6 +15,7 @@ import (
 // ============================================================================
 
 func TestMockRunExecutor_ExactMatch(t *testing.T) {
+	t.Parallel()
 	mock := NewMockRunExecutor()
 	mock.On("go test ./...", MockRunResponse{
 		Stdout:   "PASS",
@@ -31,6 +32,7 @@ func TestMockRunExecutor_ExactMatch(t *testing.T) {
 }
 
 func TestMockRunExecutor_GlobPattern(t *testing.T) {
+	t.Parallel()
 	mock := NewMockRunExecutor()
 	mock.OnPattern("npm run *", MockRunResponse{
 		Stdout:   "Done",
@@ -49,6 +51,7 @@ func TestMockRunExecutor_GlobPattern(t *testing.T) {
 }
 
 func TestMockRunExecutor_RegexPattern(t *testing.T) {
+	t.Parallel()
 	mock := NewMockRunExecutor()
 	mock.OnRegex(`git (add|commit).*`, MockRunResponse{
 		Stdout:   "Git operation completed",
@@ -63,6 +66,7 @@ func TestMockRunExecutor_RegexPattern(t *testing.T) {
 }
 
 func TestMockRunExecutor_SequentialResponses(t *testing.T) {
+	t.Parallel()
 	mock := NewMockRunExecutor()
 	mock.OnSequence("go test ./...",
 		MockRunResponse{ExitCode: 1, Stderr: "FAIL"},
@@ -86,6 +90,7 @@ func TestMockRunExecutor_SequentialResponses(t *testing.T) {
 }
 
 func TestMockRunExecutor_DefaultResponse(t *testing.T) {
+	t.Parallel()
 	mock := NewMockRunExecutor()
 
 	// Unknown command should get default response
@@ -95,6 +100,7 @@ func TestMockRunExecutor_DefaultResponse(t *testing.T) {
 }
 
 func TestMockRunExecutor_CallCountFor(t *testing.T) {
+	t.Parallel()
 	mock := NewMockRunExecutor()
 	mock.OnPattern("go *", MockRunResponse{ExitCode: 0})
 	mock.OnPattern("npm *", MockRunResponse{ExitCode: 0})
@@ -112,6 +118,7 @@ func TestMockRunExecutor_CallCountFor(t *testing.T) {
 // ============================================================================
 
 func TestMockToolExecutor_BasicUsage(t *testing.T) {
+	t.Parallel()
 	mock := NewMockToolExecutor()
 	mock.On("bash", MockToolResponse{
 		Result:  "hello world",
@@ -128,6 +135,7 @@ func TestMockToolExecutor_BasicUsage(t *testing.T) {
 }
 
 func TestMockToolExecutor_PatternMatch(t *testing.T) {
+	t.Parallel()
 	mock := NewMockToolExecutor()
 	mock.OnPattern("file_.*", MockToolResponse{
 		Result:  "file operation completed",
@@ -142,6 +150,7 @@ func TestMockToolExecutor_PatternMatch(t *testing.T) {
 }
 
 func TestMockToolExecutor_SequentialResponses(t *testing.T) {
+	t.Parallel()
 	mock := NewMockToolExecutor()
 	mock.OnSequence("bash",
 		MockToolResponse{Result: "first", Success: true},
@@ -156,6 +165,7 @@ func TestMockToolExecutor_SequentialResponses(t *testing.T) {
 }
 
 func TestMockToolExecutor_AssertionHelpers(t *testing.T) {
+	t.Parallel()
 	mock := NewMockToolExecutor()
 	mock.On("bash", MockToolResponse{Success: true})
 	mock.On("view", MockToolResponse{Success: true})
@@ -177,6 +187,7 @@ func TestMockToolExecutor_AssertionHelpers(t *testing.T) {
 // ============================================================================
 
 func TestMockApprovalResponder_GlobMatch(t *testing.T) {
+	t.Parallel()
 	// Test the globMatch function directly
 	require.True(t, globMatch("Delete *", "Delete files"))
 	require.True(t, globMatch("*dangerous*", "This is dangerous operation"))
@@ -190,6 +201,7 @@ func TestMockApprovalResponder_GlobMatch(t *testing.T) {
 // ============================================================================
 
 func TestGlobMatch(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		pattern string
 		str     string
@@ -217,6 +229,7 @@ func TestGlobMatch(t *testing.T) {
 }
 
 func TestMockRunExecutor_Delay(t *testing.T) {
+	t.Parallel()
 	mock := NewMockRunExecutor()
 	mock.On("slow-command", MockRunResponse{
 		Stdout: "done",
@@ -237,6 +250,7 @@ func TestMockRunExecutor_Delay(t *testing.T) {
 // TestMockExecutor_InterfaceCompliance verifies that MockRunExecutor implements
 // the handlers.RunExecutor interface properly.
 func TestMockExecutor_InterfaceCompliance(t *testing.T) {
+	t.Parallel()
 	// Test that MockRunExecutor implements the RunExecutor interface
 	mock := NewMockRunExecutor()
 	mock.On("echo hello", MockRunResponse{
@@ -264,6 +278,7 @@ func TestMockExecutor_InterfaceCompliance(t *testing.T) {
 // TestMockToolExecutor_InterfaceCompliance verifies that MockToolExecutor implements
 // the toolexec.ToolExecutor interface properly.
 func TestMockToolExecutor_InterfaceCompliance(t *testing.T) {
+	t.Parallel()
 	// Test that MockToolExecutor implements the ToolExecutor interface
 	mock := NewMockToolExecutor()
 	mock.On("bash", MockToolResponse{
@@ -287,6 +302,7 @@ func TestMockToolExecutor_InterfaceCompliance(t *testing.T) {
 // and passes them to the server config. This is a unit test that doesn't
 // require running full workflows.
 func TestHarness_MocksAreInjected(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 

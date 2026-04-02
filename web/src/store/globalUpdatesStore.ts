@@ -432,6 +432,10 @@ function handleChatStateChange(update: UserUpdate) {
           createdAt: update.created_at,
           updatedAt: update.created_at,
           lastActive: update.created_at,
+          selectedPresets: {},
+          needsRecovery: false,
+          activity: 0,
+          unread: false,
         };
         useChatStore.getState().addArchivedChat(minimalChat);
         logger.info(`${LOG_PREFIX} Chat archived (optimistic removal handled): ${chat_id.slice(0, 8)}`);
@@ -478,6 +482,10 @@ function handleChatStateChange(update: UserUpdate) {
           createdAt: update.created_at,
           updatedAt: update.created_at,
           lastActive: update.created_at,
+          selectedPresets: {},
+          needsRecovery: false,
+          activity: 0,
+          unread: false,
         };
         useChatStore.setState((state) => {
           const newChats = new Map(state.chats);

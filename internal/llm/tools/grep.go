@@ -230,10 +230,14 @@ func (g *grepTool) Execute(rctx *rctx.ToolContext, params GrepParams) (ToolRespo
 					currentFile = m.File
 					output += fmt.Sprintf("%s:\n", m.File)
 				}
+				content := m.Content
+				if len(content) > MaxLineLength {
+					content = content[:MaxLineLength] + fmt.Sprintf("... (%d chars total)", len(m.Content))
+				}
 				if m.Line > 0 {
-					output += fmt.Sprintf("  Line %d: %s\n", m.Line, m.Content)
+					output += fmt.Sprintf("  Line %d: %s\n", m.Line, content)
 				} else {
-					output += fmt.Sprintf("  %s\n", m.Content)
+					output += fmt.Sprintf("  %s\n", content)
 				}
 			}
 		}

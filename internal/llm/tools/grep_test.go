@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
@@ -35,6 +36,7 @@ func TestGrepContentModeRecordsFileAwareness(t *testing.T) {
 	}
 
 	toolCtx := &rctx.ToolContext{
+		Daemon:   daemon.NewLocalClient(),
 		Context:  context.Background(),
 		ChatID:   chatID,
 		Thread:   thread,
@@ -86,6 +88,7 @@ func TestGrepNonContentModeDoesNotRecordAwareness(t *testing.T) {
 			ClearFileRecordsForThread(chatID, thread)
 
 			toolCtx := &rctx.ToolContext{
+				Daemon:   daemon.NewLocalClient(),
 				Context:  context.Background(),
 				ChatID:   chatID,
 				Thread:   thread,
@@ -145,6 +148,7 @@ func helper() {
 	}
 
 	toolCtx := &rctx.ToolContext{
+		Daemon:   daemon.NewLocalClient(),
 		Context:  context.Background(),
 		Worktree: &rctx.WorktreeInfo{Path: tmpDir},
 	}
@@ -240,6 +244,7 @@ func TestGrepWorktreePaths(t *testing.T) {
 	}
 
 	toolCtx := &rctx.ToolContext{
+		Daemon:   daemon.NewLocalClient(),
 		Context:  context.Background(),
 		Worktree: &rctx.WorktreeInfo{Path: worktreePath},
 	}
@@ -303,6 +308,7 @@ func TestGlobWorktreePaths(t *testing.T) {
 	}
 
 	toolCtx := &rctx.ToolContext{
+		Daemon:   daemon.NewLocalClient(),
 		Context:  context.Background(),
 		Worktree: &rctx.WorktreeInfo{Path: worktreePath},
 	}
@@ -356,6 +362,7 @@ func TestGlobSimplePatterns(t *testing.T) {
 	}
 
 	toolCtx := &rctx.ToolContext{
+		Daemon:   daemon.NewLocalClient(),
 		Context:  context.Background(),
 		Worktree: &rctx.WorktreeInfo{Path: tmpDir},
 	}
@@ -452,6 +459,7 @@ func TestGrepTool_GlobPatternNormalization(t *testing.T) {
 
 	t.Run("./ prefix in glob is stripped", func(t *testing.T) {
 		toolCtx := &rctx.ToolContext{
+			Daemon:   daemon.NewLocalClient(),
 			Context:  context.Background(),
 			Worktree: &rctx.WorktreeInfo{Path: projectDir},
 		}
@@ -483,6 +491,7 @@ func TestGrepTool_GlobPatternNormalization(t *testing.T) {
 
 	t.Run("absolute path in glob returns helpful error", func(t *testing.T) {
 		toolCtx := &rctx.ToolContext{
+			Daemon:   daemon.NewLocalClient(),
 			Context:  context.Background(),
 			Worktree: &rctx.WorktreeInfo{Path: projectDir},
 		}
@@ -512,6 +521,7 @@ func TestGrepTool_GlobPatternNormalization(t *testing.T) {
 	t.Run("../ in glob adjusts search path", func(t *testing.T) {
 		srcDir := filepath.Join(projectDir, "src")
 		toolCtx := &rctx.ToolContext{
+			Daemon:   daemon.NewLocalClient(),
 			Context:  context.Background(),
 			Worktree: &rctx.WorktreeInfo{Path: srcDir},
 		}

@@ -99,7 +99,7 @@ func versionLess(a, b string) bool {
 		for _, part := range parts {
 			part = strings.Split(part, "-")[0]
 			var n int
-			fmt.Sscanf(part, "%d", &n)
+			_, _ = fmt.Sscanf(part, "%d", &n) // best-effort parse; n defaults to 0
 			out = append(out, n)
 		}
 		return out

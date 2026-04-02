@@ -79,8 +79,6 @@ func loadProjectWorkflow(t *testing.T, name string) (*reliantv1.Workflow, []byte
 
 // allProjectWorkflows lists all expected custom workflow names.
 var allProjectWorkflows = []string{
-	"bmad-lite",
-	"gsd",
 	"router",
 	"simplify-first",
 	"spec-driven",

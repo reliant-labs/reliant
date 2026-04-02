@@ -242,7 +242,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
       });
       editorRef.current.revealLineInCenter(file.line);
 
-      if (file.lineEnd && file.lineEnd > file.line) {
+      if (file.line && file.lineEnd && file.lineEnd > file.line) {
         decorationsRef.current = editorRef.current.deltaDecorations(
           decorationsRef.current,
           [

@@ -14,7 +14,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/features"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llm"
-	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -228,17 +227,16 @@ func executeCallLLMForChatWithProvider(t *testing.T, h *IdempotencyTestHelper, c
 	t.Helper()
 
 	mockDriver := &skillsFallbackMockDriver{}
-	originalOverride := drivers.Override
-	drivers.Override = mockDriver
-	defer func() {
-		drivers.Override = originalOverride
-	}()
+	resolver := func(ctx context.Context, userID string, prefs models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) {
+		return mockDriver, nil
+	}
 
 	activityInstance := NewCallLLMActivity(
 		h.Repo(),
 		nil,
 		tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}),
 		provider,
+		resolver,
 	)
 
 	input := ActivityInput{
@@ -394,6 +392,7 @@ func TestGetAvailableToolsWithSpawn_SkillsFeatureDisabled_HidesInstallSkill(t *t
 		nil,
 		tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}),
 		&staticConfigProvider{},
+		nil,
 	)
 
 	t.Setenv(features.SkillsEnabledEnvVar, "false")
@@ -550,6 +549,7 @@ Use read-only investigation flow.`)
 		nil,
 		tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}),
 		&explicitConfigProvider{cfg: config.Config{Skills: config.SkillsConfig{ActivationMode: "explicit"}}},
+		nil,
 	)
 
 	toolResult := activityInstance.getAvailableToolsWithSpawn(ctx, chat, projectPath, []string{"view", "edit"}, chat.ID)

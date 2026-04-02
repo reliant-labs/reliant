@@ -22,7 +22,7 @@ interface YamlEditorModalProps {
 export function YamlEditorModal({
   isOpen,
   onClose,
-  _workflow,
+  workflow: _workflow,
   onApply,
   isReadOnly = false,
   yamlDefinition,

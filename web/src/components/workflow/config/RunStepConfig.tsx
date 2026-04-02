@@ -22,7 +22,7 @@ export function RunStepConfig({
           value={getStepCommand(step)}
           onChange={(e) =>
             onUpdate(
-              withRunArgs(step, { command: celString(e.target.value) }) as RunStep,
+              withRunArgs(step, { command: celString(e.target.value) as any }) as RunStep,
             )
           }
           className="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-ring focus:border-ring bg-background text-foreground font-mono text-sm disabled:opacity-60 disabled:cursor-not-allowed"

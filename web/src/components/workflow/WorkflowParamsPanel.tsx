@@ -83,7 +83,7 @@ export function WorkflowParamsPanel({
   groupTags = {},
   selectedPresets = {},
   presets = [],
-  isChatInputContext = false,
+  isChatInputContext: _isChatInputContext = false,
 }: WorkflowParamsPanelProps) {
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set([""])); // Default group expanded
@@ -450,12 +450,12 @@ export function WorkflowParamsPanel({
       const filteredValue = Array.isArray(currentValue)
         ? (currentValue as string[]).filter(v => presetNames.has(v))
         : currentValue;
-      const presetSchema: InputDef = {
+      const presetSchema = {
         ...schema,
         type: "enum",
         multi: true,
         enum: matchingPresets.map(p => p.name),
-      };
+      } as unknown as InputDef;
       return (
         <div key={name} className={cn(unset && "pl-2 border-l-2 border-red-500")}>
           <ProtoFieldRenderer
@@ -464,8 +464,6 @@ export function WorkflowParamsPanel({
             onChange={(value) => handleParamChange(name, value)}
             disabled={disabled}
             hideCELToggle={true}
-            formValues={values}
-            isChatInputContext={isChatInputContext}
           />
         </div>
       );
@@ -479,8 +477,6 @@ export function WorkflowParamsPanel({
           onChange={(value) => handleParamChange(name, value)}
           disabled={disabled}
           hideCELToggle={true}
-          formValues={values}
-          isChatInputContext={isChatInputContext}
         />
       </div>
     );

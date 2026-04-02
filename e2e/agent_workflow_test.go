@@ -40,6 +40,7 @@ var (
 // TestAgent_SimplePromptResponse tests the most basic agent flow:
 // User sends prompt -> Agent responds with text only.
 func TestAgent_SimplePromptResponse(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -73,6 +74,7 @@ func TestAgent_SimplePromptResponse(t *testing.T) {
 
 // TestAgent_EmptyResponse tests handling of empty LLM responses.
 func TestAgent_EmptyResponse(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -94,6 +96,7 @@ func TestAgent_EmptyResponse(t *testing.T) {
 
 // TestAgent_SingleToolCall tests the flow when agent makes a single tool call.
 func TestAgent_SingleToolCall(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -157,6 +160,7 @@ func TestAgent_SingleToolCall(t *testing.T) {
 // step error directly instead of masking it behind edge-routing CEL "no such key"
 // errors from evaluating conditions on failed step outputs.
 func TestAgent_ExecuteToolsFailureDoesNotTriggerCELNoSuchKey(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -226,6 +230,7 @@ nodes:
 
 // TestAgent_MultipleToolCallsInSequence tests chained tool calls.
 func TestAgent_MultipleToolCallsInSequence(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -268,6 +273,7 @@ func TestAgent_MultipleToolCallsInSequence(t *testing.T) {
 
 // TestAgent_ParallelToolCalls tests when agent requests multiple tools at once.
 func TestAgent_ParallelToolCalls(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -310,6 +316,7 @@ func TestAgent_ParallelToolCalls(t *testing.T) {
 
 // TestAgent_MultiTurnConversation tests multiple back-and-forth exchanges.
 func TestAgent_MultiTurnConversation(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -354,6 +361,7 @@ func TestAgent_MultiTurnConversation(t *testing.T) {
 
 // TestAgent_MultiTurnWithTools tests multi-turn conversation with tool use.
 func TestAgent_MultiTurnWithTools(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -392,6 +400,7 @@ func TestAgent_MultiTurnWithTools(t *testing.T) {
 
 // TestAgent_ApprovalGate_AutoApprove tests that auto_approve=true skips approval.
 func TestAgent_ApprovalGate_AutoApprove(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -418,6 +427,7 @@ func TestAgent_ApprovalGate_AutoApprove(t *testing.T) {
 
 // TestAgent_ToolExecutionError tests handling of tool execution errors.
 func TestAgent_ToolExecutionError(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -454,6 +464,7 @@ func TestAgent_ToolExecutionError(t *testing.T) {
 
 // TestAgent_LLMContextPreserved tests that context is maintained across tool calls.
 func TestAgent_LLMContextPreserved(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -486,6 +497,7 @@ func TestAgent_LLMContextPreserved(t *testing.T) {
 
 // TestAgent_TokenUsageTracked tests that token usage is recorded in messages.
 func TestAgent_TokenUsageTracked(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -509,6 +521,7 @@ func TestAgent_TokenUsageTracked(t *testing.T) {
 
 // TestAgent_ThreadDefault tests that the root thread ID equals the chat ID.
 func TestAgent_ThreadDefault(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 

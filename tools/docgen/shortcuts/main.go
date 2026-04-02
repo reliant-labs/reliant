@@ -15,6 +15,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -71,6 +72,10 @@ func main() {
 
 	// Generate TypeScript
 	ts := generateTypeScript(config)
+	if err := os.MkdirAll(filepath.Dir(tsOutput), 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating directory for TypeScript output: %v\n", err)
+		os.Exit(1)
+	}
 	if err := os.WriteFile(tsOutput, []byte(ts), 0644); err != nil {
 		fmt.Fprintf(os.Stderr, "Error writing TypeScript: %v\n", err)
 		os.Exit(1)
@@ -78,6 +83,10 @@ func main() {
 
 	// Generate Markdown
 	md := generateMarkdown(config)
+	if err := os.MkdirAll(filepath.Dir(mdOutput), 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating directory for Markdown output: %v\n", err)
+		os.Exit(1)
+	}
 	if err := os.WriteFile(mdOutput, []byte(md), 0644); err != nil {
 		fmt.Fprintf(os.Stderr, "Error writing Markdown: %v\n", err)
 		os.Exit(1)

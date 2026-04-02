@@ -31,19 +31,21 @@ func TestNewInterceptorsOrdersRecoveryErrorReporterTimeoutAndAuth(t *testing.T) 
 	auth := &testNamedInterceptor{}
 
 	result := newInterceptors(timeout, auth)
-	require.Len(t, result, 4)
-	require.IsType(t, &interceptors.RecoveryInterceptor{}, result[0])
-	require.IsType(t, &interceptors.ErrorReporterInterceptor{}, result[1])
-	require.Same(t, timeout, result[2])
-	require.Same(t, auth, result[3])
+	require.Len(t, result, 5)
+	require.IsType(t, &interceptors.ObservabilityInterceptor{}, result[0])
+	require.IsType(t, &interceptors.RecoveryInterceptor{}, result[1])
+	require.IsType(t, &interceptors.ErrorReporterInterceptor{}, result[2])
+	require.Same(t, timeout, result[3])
+	require.Same(t, auth, result[4])
 }
 
 func TestNewInterceptorsSkipsNilAuthInterceptor(t *testing.T) {
 	timeout := &testNamedInterceptor{}
 
 	result := newInterceptors(timeout, (*interceptors.AuthInterceptor)(nil))
-	require.Len(t, result, 3)
-	require.IsType(t, &interceptors.RecoveryInterceptor{}, result[0])
-	require.IsType(t, &interceptors.ErrorReporterInterceptor{}, result[1])
-	require.Same(t, timeout, result[2])
+	require.Len(t, result, 4)
+	require.IsType(t, &interceptors.ObservabilityInterceptor{}, result[0])
+	require.IsType(t, &interceptors.RecoveryInterceptor{}, result[1])
+	require.IsType(t, &interceptors.ErrorReporterInterceptor{}, result[2])
+	require.Same(t, timeout, result[3])
 }

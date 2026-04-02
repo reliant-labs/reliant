@@ -25,6 +25,7 @@ import (
 // ============================================================================
 
 func TestSpawnTool_CreatesChildWorkflow(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 

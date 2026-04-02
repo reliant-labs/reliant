@@ -10,16 +10,17 @@
  * without knowing which config case is active.
  */
 
+import type { MessageInitShape } from "@bufbuild/protobuf";
 import type {
-  Input,
   InputBase,
   PropertySchema as ProtoPropertySchema,
   PresetsConfig,
 } from "../gen/reliant/v1/workflow_v2_pb";
+import { InputSchema } from "../gen/reliant/v1/workflow_v2_pb";
 import { protoValueToJs } from "../api/proto-utils";
 
-/** Proto Input — use getters to read fields through the config oneof. */
-export type InputDef = Input;
+/** Proto Input init shape — use getters to read fields through the config oneof. */
+export type InputDef = MessageInitShape<typeof InputSchema>;
 
 // ---------------------------------------------------------------------------
 // Internal utilities
@@ -184,9 +185,9 @@ export function getInputAdditionalProperties(input: InputDef): boolean | undefin
 /** Get nested inputs from a group input */
 export function getInputNestedInputs(
   input: InputDef,
-): Record<string, Input> | undefined {
+): Record<string, InputDef> | undefined {
   const cv = getConfigValue(input);
-  return cv?.inputs as Record<string, Input> | undefined;
+  return cv?.inputs as Record<string, InputDef> | undefined;
 }
 
 /** Get preset config from a group input */

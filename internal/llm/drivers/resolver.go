@@ -27,7 +27,12 @@ import (
 
 var ErrUnsupportedFamily = errors.New("unsupported model family")
 var MockAllowed = false
-var Override llm.Driver
+
+// DriverResolver is a function that resolves an LLM driver from user preferences.
+// This is the dependency-injection seam for testing: production code uses
+// drivers.GetDriver (the default), while tests inject a resolver that returns
+// a mock driver.
+type DriverResolver func(ctx context.Context, userID string, preferences models.Preferences, opts ...llm.DriverOption) (llm.Driver, error)
 
 // baseDriver provides base implementation for drivers
 type baseDriver struct {
@@ -76,11 +81,6 @@ func GetDriverForModel(model models.Model, driverID models.Family, opts ...llm.D
 		o(&options)
 	}
 	options.Model = model
-
-	// Check override first (for testing) before validating model
-	if Override != nil {
-		return Override, nil
-	}
 
 	// Verify this driver supports the model
 	if !models.CanDriverUseModel(driverID, model.ID) {
@@ -145,11 +145,6 @@ func ParseModelIDWithDriver(modelID string) (string, string) {
 
 // defaultGetDriver tries to get a driver using the provided model preferences
 func defaultGetDriver(ctx context.Context, userID string, preferences models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) {
-	// Check if we have an override driver set (for testing)
-	if Override != nil {
-		return Override, nil
-	}
-
 	// Check if we're in replay mode
 	if ReplayMode.Enabled && ReplayMode.Driver != nil {
 		return ReplayMode.Driver, nil
