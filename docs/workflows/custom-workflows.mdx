@@ -3,7 +3,7 @@ title: "Creating Custom Workflows"
 description: "Build your own workflows to automate multi-step tasks and enforce processes"
 ---
 
-Reliant workflows let you automate complex multi-step tasks, enforce development processes, and coordinate multiple agents. This guide walks you through creating your own workflows, starting with simple examples and building up to more advanced patterns.
+Reliant workflows let you automate complex multi-step tasks, enforce development processes, and coordinate multiple agents. There are three ways to create workflows, from fully visual to fully manual.
 
 ![Workflow Builder UI showing a TDD loop workflow](/images/screenshots/workflow-builder-tdd.png)
 
@@ -20,6 +20,34 @@ Before building a custom workflow, consider whether you actually need one. Workf
 **Build multi-agent coordination**: When you need multiple agents working together—whether in debate, parallel competition, or sequential handoff—workflows provide the orchestration.
 
 If you just need to run a single agent with a specific prompt, consider using [Presets](/workflows/presets) instead. Workflows are for when you need control flow, loops, or multiple agents.
+
+## Three Ways to Create Workflows
+
+Reliant provides three methods for creating custom workflows, each suited to different situations.
+
+### YAML (Manual)
+
+Write workflow definitions directly in YAML files placed in `.reliant/workflows/`. This gives you full control over every aspect of the workflow—nodes, edges, conditions, loops, thread configuration, and inputs. Most of this guide covers YAML authoring in detail.
+
+Best for: Fine-tuning workflows, understanding exactly what's happening, version-controlled workflow definitions.
+
+### Visual Editor
+
+The visual editor provides a graphical interface for building workflows. You can drag and drop nodes, draw edges between them, and configure node properties through forms. The visual editor reads and writes the same YAML format, so you can switch between the visual editor and hand-editing YAML at any time.
+
+Best for: Exploring workflow structure visually, quickly prototyping node graphs, understanding how edges route execution.
+
+### AI Builder Assistant
+
+The AI builder assistant creates workflows through conversation. Describe what you want the workflow to do, and the assistant generates the workflow definition for you. It can analyze your codebase to suggest appropriate tools, prompts, and patterns.
+
+The AI builder always creates [scenario tests](/workflows/testing#scenario-testing) and runs [static validation](/workflows/testing#static-validation) for every workflow it produces. This means workflows created by the AI builder come with built-in test coverage from the start.
+
+Best for: Getting started quickly, creating workflows for unfamiliar patterns, ensuring test coverage from day one.
+
+<Tip>
+All three methods produce the same YAML format. A workflow created with the AI builder can be edited in the visual editor or by hand, and vice versa.
+</Tip>
 
 ## Workflow File Location
 
@@ -42,7 +70,17 @@ Reliant automatically discovers workflow files in your project's `.reliant/workf
 
 **Discovery**: When you start Reliant, it scans for `.yaml` files in `.reliant/workflows/`. Changes require restarting Reliant or reloading workflows.
 
+Commit your `.reliant/workflows/` directory to version control to share workflows with your team.
+
 ## Anatomy of a Workflow
+
+```mermaid
+flowchart TD
+    M[Metadata<br/>name, version, status, tag] --> I[Inputs<br/>parameters the workflow accepts]
+    I --> E[Entry<br/>starting node IDs]
+    E --> N[Nodes<br/>execution units]
+    N --> ED[Edges<br/>flow control between nodes]
+```
 
 A workflow file has five key sections. Here's the minimal structure:
 
@@ -1049,31 +1087,13 @@ Use the `condition` field to save messages only in certain cases:
 
 ---
 
-## Testing Workflows
-
-### Running Your Workflow
-
-Test a workflow by selecting it in the Reliant UI or using the CLI:
-
-```bash
-# Run interactively
-reliant run --workflow my-workflow
-
-# With specific inputs
-reliant run --workflow my-workflow --input model=claude-4.5-sonnet
-```
+## Common Pitfalls and Caveats
 
 ### Validation Errors
 
-Reliant validates workflows on load. Common errors:
+Reliant validates workflows on load and reports structural problems before your workflow ever runs. If your workflow has validation errors, it won't appear in the workflow picker.
 
-**"input X has no default and is not required"**: Every input must have either `default` or `required: true`.
-
-**"node X not found"**: An edge references a non-existent node ID. Check spelling.
-
-**"entry node X not found"**: The `entry` field references a node that doesn't exist.
-
-**"loop must have either 'workflow' or 'inline'"**: Loop nodes need either an external workflow reference or an inline definition.
+For a full list of validation checks and common errors, see [Static Validation](/workflows/testing#static-validation).
 
 ### Common Mistakes
 
@@ -1092,58 +1112,6 @@ condition: nodes.test.exit_code == 0
 **Missing outputs in loops**: The `while` condition uses `outputs.*`. Make sure your loop's inline workflow defines the outputs you're checking.
 
 **Node reference timing**: You can only reference a node's outputs after that node has completed. Edge conditions can only use nodes that are upstream from the current node.
-
-## Config-as-Code
-
-### Version Control
-
-Workflow files are meant to be checked into git alongside your code:
-
-<Tree>
-  <Tree.Folder name="your-project" defaultOpen>
-    <Tree.Folder name=".reliant" defaultOpen>
-      <Tree.Folder name="workflows" defaultOpen>
-        <Tree.File name="code-review.yaml" />
-        <Tree.File name="deploy-check.yaml" />
-        <Tree.File name="security-audit.yaml" />
-      </Tree.Folder>
-    </Tree.Folder>
-    <Tree.Folder name="src" />
-    <Tree.File name=".gitignore" />
-  </Tree.Folder>
-</Tree>
-
-This gives you:
-
-- **History**: Track who changed what and when
-- **Review**: Workflow changes go through code review
-- **Consistency**: Everyone on the team uses the same workflows
-- **Rollback**: Easily revert problematic workflow changes
-
-### Team Sharing
-
-When workflows are in your repository:
-
-1. Team members get workflows automatically when they clone or pull
-2. Workflow changes can be reviewed alongside code changes
-3. Branch-specific workflows are possible (feature branches can experiment)
-
-### Workflow Versioning
-
-Use the `version` field to track workflow iterations:
-
-```yaml
-name: code-review
-version: v1.2.0
-```
-
-Follow semantic versioning:
-
-- **Patch** (`v1.0.1`): Bug fixes, prompt tweaks
-- **Minor** (`v1.1.0`): New optional inputs, additional steps
-- **Major** (`v2.0.0`): Breaking changes to inputs or behavior
-
-## Common Pitfalls and Caveats
 
 These are the most common issues when building workflows. Understanding them will save you debugging time.
 
@@ -1327,6 +1295,7 @@ edges:
 
 Now that you understand workflow fundamentals:
 
+- **[Testing Workflows](/workflows/testing)**: Validate structure and test runtime behavior with scenarios
 - **[Multi-Agent Patterns](/workflows/patterns)**: Learn advanced orchestration patterns like debate, parallel competition, and auditing
 - **[Presets](/workflows/presets)**: Create reusable parameter bundles for your workflows
 - **[Types Reference](/reference/types)**: Review workflow config types and output helper types

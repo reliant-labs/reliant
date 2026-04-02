@@ -1,213 +1,180 @@
 ---
 title: "Skills"
-description: "Use Agent Skills-compatible SKILL.md skills"
+description: "Reusable agent instructions that customize how Reliant works"
 ---
 
-Reliant standardizes on the **Agent Skills** format and supports **`SKILL.md`** as the skill definition file.
+Skills are reusable sets of instructions that customize how Reliant's agents behave for specific tasks. Think of them as saved expertise — a skill for "frontend design" or "incident response" gives agents the right context, examples, and rules without you repeating yourself every time. Skills use the shared **Agent Skills** format (`SKILL.md`), so they're portable across tools that support the standard.
 
-## Supported format
+## Quick start
 
-A skill is discovered from a directory under a skills root and must contain:
-
-- `SKILL.md` (YAML frontmatter + markdown body)
+Create a skill by adding a `SKILL.md` file in a skill directory:
 
 ```text
-<scope>/skills/<skill-name>/SKILL.md
+.reliant/skills/my-skill/SKILL.md
 ```
 
-### SKILL.md required fields
+A minimal `SKILL.md` looks like this:
 
-- `name`
-- `description`
+```markdown
+---
+name: my-skill
+description: A short description of what this skill does
+---
 
-`SKILL.md` validation enforced by Reliant:
+Your skill instructions go here as markdown.
+Agents will follow these instructions when the skill is active.
+```
 
-- `name` must be 1-64 chars, lowercase unicode letters, digits, and hyphen with no leading or trailing hyphen and no consecutive hyphens
-- `name` must match the parent skill directory name after normalization
-- `description` must be 1-1024 chars
-- `compatibility`, if provided, must be 1-500 chars
-- unknown frontmatter fields are rejected
+That's it — Reliant discovers and loads it automatically.
 
-Optional fields:
+## How discovery works
 
-- `license`
-- `compatibility`
-- `metadata` as a string-to-string map
-- `allowed-tools` as a space-delimited tool list such as `Bash(git:*) Read`
+Reliant looks for skills in four locations, checked in order. When two skills share the same name, the first one found wins:
 
-When `allowed-tools` is set on an active skill, Reliant filters the tool set exposed for that turn and emits warning notices for blocked tools.
+```mermaid
+flowchart LR
+    A[".reliant.local/skills"] --> B[".reliant/skills"]
+    B --> C["~/.reliant/skills"]
+    C --> D["Builtins"]
+    style A fill:#4a9,stroke:#333,color:#fff
+    style D fill:#888,stroke:#333,color:#fff
+```
 
-## Discovery scopes and precedence
+| Scope | Path | Use case |
+|---|---|---|
+| Project local | `.reliant.local/skills/` | Personal overrides (gitignored) |
+| Project | `.reliant/skills/` | Shared team skills (committed) |
+| Global | `~/.reliant/skills/` | Your skills across all projects |
+| Builtins | Embedded in Reliant | Default skills |
 
-Reliant discovers skills from these roots, highest to lowest precedence:
+Only Reliant-managed roots are scanned at runtime. If you have skills in other tool folders (`.claude/skills`, `.codex/skills`, etc.), import them into a Reliant root first — see [Migration](#migrating-skills-from-other-tools) below.
 
-1. `.reliant.local/skills/**`
-2. `.reliant/skills/**`
-3. `~/.reliant/skills/**`
-4. embedded builtins
+## SKILL.md format
 
-If multiple skills share the same normalized name, higher precedence wins.
+### Required fields
+
+- **`name`** — 1–64 characters, lowercase letters, digits, and hyphens. No leading/trailing hyphens, no consecutive hyphens. Must match the parent directory name.
+- **`description`** — 1–1024 characters.
+
+### Optional fields
+
+- **`license`** — License identifier.
+- **`compatibility`** — 1–500 characters describing compatibility notes.
+- **`metadata`** — A string-to-string map for custom key-value pairs.
+- **`allowed-tools`** — Space-delimited tool list (e.g. `Bash(git:*) Read`). When set, Reliant restricts tools to this list for the skill's turn and warns about blocked tools.
+
+Unknown frontmatter fields are rejected.
 
 ## Supporting files
 
-Non-definition files in the skill directory are treated as supporting files and can be provided to the model when that skill is selected.
-
-Examples:
+Non-definition files in the skill directory are treated as supporting material and can be provided to agents when the skill is active:
 
 - `examples/*.md`
 - `templates/*.txt`
 - `reference.md`
 
-Guardrails:
+**What gets excluded:**
 
-- the definition file itself is excluded
-- legal and meta files are excluded by default
-- OpenAI-specific metadata paths such as `agents/**` are excluded
-- image assets under `assets/**` are excluded
-- symlinks are ignored
-- content is bounded and truncated for prompt safety
-- invalid or unreadable files are skipped with diagnostics
+- The `SKILL.md` definition itself
+- Legal/meta files (LICENSE, etc.)
+- OpenAI-specific metadata paths (`agents/**`)
+- Image assets under `assets/**`
+- Symlinks
+- Unreadable files (skipped with diagnostics)
 
-### Configuring supporting-file and retrieval limits
+Content is bounded and truncated to stay within prompt limits.
 
-You can configure limits in any supported config scope such as `~/.reliant/config.yaml`, `.reliant/config.yaml`, or `.reliant.local/config.yaml`:
+### Configuring limits
+
+Control how much supporting-file content gets loaded via any config scope (`~/.reliant/config.yaml`, `.reliant/config.yaml`, or `.reliant.local/config.yaml`):
 
 ```yaml
 skills:
   supportingFiles:
-    maxFiles: 8
-    maxBytes: 4096
+    maxFiles: 8      # max files read from disk per skill
+    maxBytes: 4096   # max bytes per file
   retrieval:
-    maxFiles: 8
-    maxChunks: 12
-    chunkBytes: 1200
-    chunkOverlap: 200
-    maxPromptBytes: 12000
+    maxFiles: 8      # max files considered by retrieval ranking
+    maxChunks: 12    # max ranked chunks retained
+    chunkBytes: 1200 # chunk size for segmenting content
+    chunkOverlap: 200 # overlap between chunks
+    maxPromptBytes: 12000 # final prompt budget for supporting content
 ```
 
-Field meanings:
+Safe defaults are applied if values are unset or invalid.
 
-- `skills.supportingFiles.maxFiles`: hard cap on supporting files read from disk for the active skill
-- `skills.supportingFiles.maxBytes`: hard cap per supporting file read from disk
-- `skills.retrieval.maxFiles`: max supporting files considered by retrieval and ranking
-- `skills.retrieval.maxChunks`: max ranked chunks retained across supporting files
-- `skills.retrieval.chunkBytes`: chunk size used for segmenting supporting-file content
-- `skills.retrieval.chunkOverlap`: overlap between consecutive chunks
-- `skills.retrieval.maxPromptBytes`: final prompt budget for supporting-file content
+## How skills are loaded into prompts
 
-If unset or invalid, Reliant applies safe defaults.
+Reliant keeps prompt usage efficient by loading skill content progressively:
+
+- A compact `<available_skills>` block is always injected so agents know what's available.
+- Discovery reads only metadata at startup — full content is deferred.
+- Full instructions are injected only for the **active** skill.
+- Supporting-file content goes through chunking, relevance ranking, and prompt-budget caps.
+- Warnings surface as `<skills_notice>` entries in the prompt and as chat notices.
 
 ## Invocation
 
-Skills support two activation modes configured via `skills.activationMode`:
+### Activation mode
+
+Control how skills get activated via `skills.activationMode`:
 
 ```yaml
 skills:
-  activationMode: auto   # default: auto | explicit
+  activationMode: auto   # auto | explicit
 ```
 
-- `auto` (default): Reliant chooses the most relevant skill from message context.
-- `explicit`: Reliant activates a skill only when the user invokes one directly.
+- **`auto`** (default) — Reliant picks the most relevant skill based on message context.
+- **`explicit`** — Skills only activate when you invoke one directly.
 
-Skills also support two integration modes configured via `skills.integrationMode`:
+### Explicit invocation
+
+You can always invoke a skill directly in chat:
+
+- `/skill-name` — exact match
+- `/skill skill-name` — unique prefix resolution
+
+If the invocation is missing or ambiguous, Reliant shows a notice in chat.
+
+### Integration mode
+
+Control how supporting files are surfaced via `skills.integrationMode`:
 
 ```yaml
 skills:
-  integrationMode: filesystem   # default: filesystem | tool
+  integrationMode: filesystem   # filesystem | tool
 ```
 
-- `filesystem` (default): include filesystem location hints in `<available_skills>` and load supporting files for active-skill prompt context.
-- `tool`: suppress filesystem location hints in `<available_skills>` and avoid injecting supporting-file payloads into `<active_skill>`.
-
-### Discovery boundary behavior
-
-Reliant runtime discovery is limited to Reliant-managed roots such as `.reliant.local`, `.reliant`, and `~/.reliant`, plus builtins.
-
-- External provider folders like `.claude`, `.codex`, and `.agents` are not scanned during runtime discovery.
-- To use skills from those folders, import or install them into a Reliant-managed root first.
-
-Explicit invocation syntax remains available in both modes:
-
-- `/skill-name` for an exact match
-- `/skill skill-name` for unique prefix resolution
-
-If invocation is missing or ambiguous, or discovery has invalid entries, Reliant surfaces runtime notices in chat.
-
-## Progressive disclosure
-
-Reliant keeps prompt usage efficient:
-
-- always injects compact `<available_skills>` metadata as canonical XML
-- discovery is metadata-first for startup and selection efficiency
-- injects full skill instructions only for the active skill
-- retrieves supporting-file content with bounded chunking, relevance ranking, and prompt-budget caps
-- adds prompt-level `<skills_notice>` entries for warnings
-- emits chat info or warning notices for activation and supporting-file truncation or limit behavior
-
-## Compatibility matrix
-
-Reliant aligns with the shared Agent Skills packaging model used across major tooling ecosystems.
-
-| Capability | Claude-style skills | Codex-style skills | Reliant |
-|---|---|---|---|
-| `SKILL.md` with YAML frontmatter | ✅ Full support | ✅ Core support | ✅ Full support |
-| Skill folder supporting files and resources | ✅ Supported | ✅ Supported | ✅ Supported |
-| Progressive disclosure | ✅ Supported | ✅ Supported | ✅ Supported |
-| Multi-scope local, project, and global discovery | ✅ Supported via Reliant scopes | ✅ Supported via Reliant scopes | ✅ Supported |
-| Runtime parse and validation diagnostics | ✅ Supported | ✅ Supported | ✅ Supported |
-| Configurable supporting-file limits | ⚠️ Through Reliant runtime | ⚠️ Through Reliant runtime | ✅ Full control |
-
-Legend:
-- ✅ = fully supported in Reliant
-- ⚠️ = partially supported or adapted
-
-## Explicitly not supported
-
-To keep behavior predictable and secure, Reliant intentionally does not implement certain external-tool features:
-
-- Claude or Codex plugin ecosystems and plugin execution contracts
-- external-tool-specific runtime side effects that bypass Reliant tool governance
-- external-tool installer UX semantics that conflict with Reliant installation and policy model
-
-## Migration guide
-
-### From external skill folders
-
-If you already have skills in other tool folders such as `.claude/skills`, `.codex/skills`, or `.agents/skills`, import them into Reliant-managed roots.
-
-Recommended migration path:
-
-1. Keep shared or team skills in `.reliant/skills/`
-2. Keep personal variants in `.reliant.local/skills/`
-3. Use Settings → Skills import actions or `install_skill` to copy from external folders into Reliant roots
+- **`filesystem`** (default) — Include filesystem location hints and load supporting files into prompt context.
+- **`tool`** — Suppress filesystem hints and avoid injecting supporting-file content.
 
 ## Skill installer
 
-Reliant includes an `install_skill` tool for installing skills into Reliant-managed destinations.
+Reliant includes an `install_skill` tool for installing skills into managed destinations.
 
-> Feature gate: the entire skills feature, including runtime activation, settings APIs, and `install_skill`, is disabled unless `features.skills_enabled=true`.
+> **Feature gate:** The skills feature (runtime activation, settings APIs, and `install_skill`) requires `features.skills_enabled=true`.
 
-Supported sources:
+### Sources
 
-- local skill directory path that contains `SKILL.md`
-- git URL with optional `source_subpath`
+- Local directory containing `SKILL.md`
+- Git URL with optional `source_subpath`
 - GitHub `tree` and `blob` URLs
 
-Destination scopes:
+### Destination scopes
 
-- `project` → `.reliant/skills/...`
-- `project_local` → `.reliant.local/skills/...`
-- `global` → `~/.reliant/skills/...`
+- `project` → `.reliant/skills/`
+- `project_local` → `.reliant.local/skills/`
+- `global` → `~/.reliant/skills/`
 
-Conflict policies:
+### Conflict policies
 
-- `skip` (default): keep existing files and skip conflicts
-- `overwrite`: replace existing files
-- `rename`: install into a suffixed directory name when destination exists
+- **`skip`** (default) — Keep existing files, skip conflicts.
+- **`overwrite`** — Replace existing files.
+- **`rename`** — Install into a suffixed directory. Not supported for `SKILL.md` skills because the skill name must match the parent directory name.
 
-> Note: `rename` is not supported for `SKILL.md` skills because Agent Skills require the skill name to match the parent directory name.
+### Examples
 
-Dry-run preview:
+**Dry-run preview:**
 
 ```json
 {
@@ -218,7 +185,7 @@ Dry-run preview:
 }
 ```
 
-Apply install:
+**Apply install:**
 
 ```json
 {
@@ -228,7 +195,7 @@ Apply install:
 }
 ```
 
-Install from git plus subfolder:
+**Install from git with subfolder:**
 
 ```json
 {
@@ -241,7 +208,7 @@ Install from git plus subfolder:
 }
 ```
 
-Install directly from a GitHub tree URL:
+**Install from a GitHub tree URL:**
 
 ```json
 {
@@ -252,44 +219,46 @@ Install directly from a GitHub tree URL:
 }
 ```
 
-Safety behavior:
+### Safety guarantees
 
-- strictly validates installer `scope` and `conflict_policy` values
-- rejects symlinks in source and destination write targets
-- rejects path traversal and escaping paths, including `source_subpath`
-- uses staging and rollback semantics to avoid partial installs on failure
-- performs post-install discovery validation
-- skips excluded non-runtime files so unusable files do not consume disk or prompt budget
+- Validates `scope` and `conflict_policy` values strictly
+- Rejects symlinks in source and destination
+- Rejects path traversal (including in `source_subpath`)
+- Uses staging + rollback to avoid partial installs on failure
+- Runs post-install discovery validation
+- Skips excluded non-runtime files
 
 ## Frontend skills management
 
-Reliant includes a **Settings → Skills** page to make chat-first skill workflows easier:
+The **Settings → Skills** page provides a UI for managing skills:
 
-- view discovered skills in `.reliant.local/skills`, `.reliant/skills`, and `~/.reliant/skills`
-- see scope, format, and definition location
-- install from a backend-defined recommended skills section
-- quick-import skills from common tool folders such as `.claude/skills`, `.codex/skills`, `.agents/skills`, and `.cursor/skills`
-- run installer directly from the UI in dry-run or install mode
-- copy ready-to-run installer prompts for chat execution
-- copy skill definitions on demand from summary rows
-- copy a starter prompt for the built-in skill creator
+- View discovered skills across all scopes with format and location details
+- Install from recommended skills or import from other tool folders (`.claude/skills`, `.codex/skills`, `.agents/skills`, `.cursor/skills`)
+- Run the installer in dry-run or install mode directly from the UI
+- Copy installer prompts for chat-based execution
+- Copy skill definitions and starter prompts for the built-in skill creator
 
-Current behavior supports both modes:
+Both direct UI execution and assistant-assisted chat execution use the same backend installer and guardrails.
 
-- **Direct execution** from Settings → Skills
-- **Assistant-assisted execution** via generated prompts and chat
+## Migrating skills from other tools
 
-Both paths run through the same backend installer logic and guardrails.
+If you have skills in `.claude/skills`, `.codex/skills`, `.agents/skills`, or similar folders:
 
-## Codex interoperability notes
+1. Put shared/team skills in `.reliant/skills/`
+2. Put personal variants in `.reliant.local/skills/`
+3. Use **Settings → Skills** import actions or the `install_skill` tool to copy them into Reliant roots
 
-Reliant aligns with Codex's core skill packaging model including skill directories, `SKILL.md`, supporting resources, and progressive disclosure.
+## Compatibility
 
-For Codex-specific ecosystem features such as installer and catalog conventions or tool-specific metadata files, Reliant's approach is:
+Reliant supports the shared Agent Skills format used by Claude and Codex, including `SKILL.md` with YAML frontmatter, supporting files, and multi-scope discovery.
 
-1. ingest what is portable
-2. ignore or map what is tool-specific where safe
-3. prefer Reliant-native controls for policy, limits, governance, and workflow attachment
+**What Reliant does not support:**
+
+- Plugin ecosystems or plugin execution contracts from other tools
+- Runtime side effects that bypass Reliant's tool governance
+- External installer behaviors that conflict with Reliant's installation model
+
+These boundaries exist to keep behavior predictable and the tool set secure. For Codex-specific ecosystem features (installer conventions, tool-specific metadata files), Reliant ingests what's portable, ignores what's tool-specific, and uses its own controls for policy, limits, and governance.
 
 ## Related topics
 

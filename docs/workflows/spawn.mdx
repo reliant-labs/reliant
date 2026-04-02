@@ -31,6 +31,19 @@ When an agent calls the spawn tool:
 
 The parent agent can then use this result to inform its next steps.
 
+```mermaid
+sequenceDiagram
+    participant P as Parent Agent
+    participant S as Spawn Tool
+    participant C as Child Workflow
+    P->>S: spawn(preset, prompt)
+    S->>C: Create new thread + apply preset
+    C->>C: Agent loop (LLM → tools → repeat)
+    C-->>S: Final response
+    S-->>P: [preset] Result text
+    P->>P: Continue with result
+```
+
 ## Configuring Spawn
 
 Spawn availability is controlled by the `spawn_presets` input in workflows that use the agent loop. This input determines which presets appear as options in the spawn tool.

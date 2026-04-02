@@ -33,32 +33,29 @@
             "group": "Workflows",
             "pages": [
               "workflows/overview",
-              "workflows/workflow-control",
-              "workflows/patterns",
-              "workflows/presets",
-              "workflows/presets-reference.generated",
-              "workflows/spawn",
-              "workflows/sharing",
               "workflows/custom-workflows",
-              "workflows/testing"
+              "workflows/presets",
+              "workflows/workflow-control",
+              "workflows/spawn",
+              "workflows/patterns",
+              "workflows/testing",
+              "examples/workflow-snippets"
             ]
           },
           {
-            "group": "Examples",
-            "pages": [
-              "examples/workflow-snippets",
-              "examples/use-cases"
-            ]
-          },
-          {
-            "group": "Features",
+            "group": "Workspace & Git",
             "pages": [
               "features/worktrees",
-              "features/threads",
               "features/branching",
-              "features/processes",
-              "features/git-integration",
-              "features/skills"
+              "features/git-integration"
+            ]
+          },
+          {
+            "group": "Agent Features",
+            "pages": [
+              "features/threads",
+              "features/skills",
+              "features/processes"
             ]
           },
           {
@@ -81,7 +78,6 @@
           {
             "group": "Reference",
             "pages": [
-              "reference/cli",
               "reference/nodes",
               "reference/types",
               "reference/cel-expressions",
@@ -98,7 +94,12 @@
               "help/faq",
               "help/troubleshooting",
               "help/feedback",
-              "help/privacy",
+              "help/privacy"
+            ]
+          },
+          {
+            "group": "About",
+            "pages": [
               "changelog",
               "license-faq"
             ]

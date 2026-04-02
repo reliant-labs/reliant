@@ -5,6 +5,17 @@ description: "Pause, resume, and update parameters while workflows run"
 
 Reliant gives you control over running workflows. You can pause execution, update parameters on the fly, and send messages to specific threads.
 
+```mermaid
+stateDiagram-v2
+    [*] --> Running
+    Running --> Paused: Esc / Stop button
+    Running --> Paused: Step failure
+    Paused --> Running: Resume / Send message
+    Paused --> Paused: Update parameters
+    Paused --> Paused: Message sub-agent thread
+    Paused --> Paused: Branch conversation
+```
+
 ## Pause and Resume
 
 Pause a running workflow when you need to:

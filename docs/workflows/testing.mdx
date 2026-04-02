@@ -1,15 +1,52 @@
 ---
-title: "Scenario Testing"
-description: "Test workflows with simulated events before deploying them"
+title: "Testing Workflows"
+description: "Validate workflow structure and test runtime behavior before deploying"
 ---
 
-Scenario testing lets you verify workflow behavior without running real LLM calls or tool executions. You define simulated events such as mocked LLM responses and tool results, then assert expected outcomes.
+Reliant provides two levels of workflow testing: **static validation** catches structural problems in your workflow definition, and **scenario testing** verifies runtime behavior with simulated events. Together, they ensure your workflows are both well-formed and behave correctly.
 
-## How It Works
+## Static Validation
+
+Reliant validates every workflow when it's loaded. This catches structural problems before your workflow ever runs.
+
+### What Gets Validated
+
+Static validation checks for:
+
+- **Entry point validity**: Every node listed in `entry` must exist in the workflow
+- **Node references**: Edges can't reference non-existent node IDs
+- **Input completeness**: Every input must have either a `default` value or `required: true`
+- **Loop structure**: Loop nodes must have either a `workflow` reference or an `inline` definition
+- **Edge consistency**: Edge targets must be valid node IDs within the workflow
+- **Reserved names**: Input groups can't use reserved names like `default`
+- **CEL expression syntax**: Template expressions and conditions are checked for valid syntax
+
+### Common Validation Errors
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| "input X has no default and is not required" | Input missing both `default` and `required: true` | Add one of the two |
+| "node X not found" | Edge references a non-existent node ID | Check spelling of node IDs |
+| "entry node X not found" | `entry` lists a node that doesn't exist | Match entry names to node IDs |
+| "loop must have either 'workflow' or 'inline'" | Loop node missing its body | Add an `inline` definition or `workflow` reference |
+
+Static validation runs automatically—there's no separate command to invoke it. If your workflow has validation errors, Reliant reports them when loading the workflow and it won't appear in the workflow picker.
+
+You can also trigger validation explicitly using the `validate_workflow` tool in the workflow builder, which is useful when iterating on a workflow definition.
+
+### When Static Validation Isn't Enough
+
+Static validation confirms your workflow is structurally sound, but it can't tell you whether the workflow actually does what you intend. A workflow can pass all validation checks and still route to the wrong node, loop forever, or produce unexpected outputs. That's where scenario testing comes in.
+
+## Scenario Testing
+
+Scenario testing lets you verify workflow runtime behavior without running real LLM calls or tool executions. You define simulated events—mocked LLM responses and tool results—then assert expected outcomes like which nodes were reached, what outputs were produced, and whether the workflow completed successfully.
+
+### How It Works
 
 The scenario simulator executes your workflow's node graph, but instead of calling real activities, it uses your mocked events to produce node outputs. It follows the same edge routing, condition evaluation, and loop logic as the real executor.
 
-## Scenario Structure
+### Scenario Structure
 
 A scenario YAML file defines:
 
@@ -40,7 +77,7 @@ expect:
   reached: [call_llm, save_result]
 ```
 
-## Event Types
+### Event Types
 
 | Type | Fields | Description |
 |------|--------|-------------|
@@ -50,7 +87,7 @@ expect:
 | `llm_error` | `error` | Simulates an LLM API error |
 | `user_input` | `user_text` | Simulates user sending a message |
 
-### Event Fields
+#### Event Fields
 
 ```yaml
 events:
@@ -82,7 +119,7 @@ events:
     user_text: "Yes, please continue"
 ```
 
-## Targeting Nodes
+### Targeting Nodes
 
 By default, events are consumed sequentially — the first triggered node gets the first event, and so on. Use the `node` field to target a specific node:
 
@@ -99,7 +136,7 @@ events:
 
 Multiple events for the same node are consumed in order each time that node is triggered.
 
-### Inner Nodes (Loops and Sub-Workflows)
+#### Inner Nodes (Loops and Sub-Workflows)
 
 For workflows with inline loops or inline sub-workflows using `type: workflow` with `inline:`, you can target individual nodes inside them using dot-separated qualified IDs:
 
@@ -146,7 +183,7 @@ events:
     text: "Inner step done"
 ```
 
-### How inline simulation works
+#### How inline simulation works
 
 For **inline loops** with an `inline:` definition, the simulator:
 1. Creates a sub-state-machine for the inline workflow
@@ -165,7 +202,7 @@ For **inline workflow nodes** with `type: workflow` and `inline:`, the simulator
 
 For **referenced** loops or workflows with `ref:` to an external workflow, the simulator mocks the entire node as a black box using the ref name as the mock ID, since external workflows cannot be loaded in the simulator.
 
-## Expectations
+### Expectations
 
 The `expect` section defines assertions:
 
@@ -207,7 +244,7 @@ expect:
   error_node: call_llm
 ```
 
-## Partial Testing
+### Partial Testing
 
 Use `start_at` and `state` to test from a specific point in the workflow:
 
@@ -236,9 +273,9 @@ expect:
   not_reached: [call_llm]  # skipped because we started after it
 ```
 
-## Loop Testing Patterns
+### Loop Testing Patterns
 
-### Single Iteration (Exit Immediately)
+#### Single Iteration (Exit Immediately)
 
 ```yaml
 name: loop_exits_immediately
@@ -252,7 +289,7 @@ expect:
   not_reached: [agent_loop.execute_tools]
 ```
 
-### Multi-Iteration Loop
+#### Multi-Iteration Loop
 
 Provide events for each iteration. The simulator consumes events per-node sequentially:
 
@@ -287,7 +324,7 @@ expect:
   reached: [agent_loop, agent_loop.call_llm, agent_loop.execute_tools]
 ```
 
-### Testing Loop Output Routing
+#### Testing Loop Output Routing
 
 When a loop's inline workflow declares `outputs:`, those evaluated outputs are available for downstream edge conditions:
 
@@ -318,7 +355,7 @@ expect:
   not_reached: [fallback]
 ```
 
-## Using Scenario Tools
+### Using Scenario Tools
 
 In the workflow builder, use these tools to manage scenarios:
 

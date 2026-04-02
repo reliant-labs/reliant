@@ -21,6 +21,22 @@ Thread behavior is controlled at the **workflow and node level** using `ThreadCo
 
 Configure thread behavior on workflow or loop nodes using the `thread` field:
 
+```mermaid
+flowchart LR
+    subgraph inherit["inherit (default)"]
+        P1[Parent Thread] --- C1[Child Node]
+        P1 --- C1b[Messages shared]
+    end
+    subgraph new["new"]
+        P2[Parent Thread] ~~~ C2[Child Thread]
+        C2 --- C2b["Empty (isolated)"]
+    end
+    subgraph fork["fork"]
+        P3[Parent Thread] -->|copy messages| C3[Child Thread]
+        C3 --- C3b[Diverges independently]
+    end
+```
+
 **inherit** (default): Use the parent's thread. Messages appear in the same conversation. This is how most single-agent interactions work.
 
 ```yaml

@@ -1,14 +1,14 @@
 # Reliant Electron Desktop App
 
-This directory contains the Electron wrapper for the Reliant AI coding assistant, which packages the web application with the Go backend into a native desktop application.
+Packages the web app + Go backend into a native desktop application.
 
 ## Architecture
 
-The Electron app consists of:
-- **Main Process (`src/main.js`)**: Manages the application lifecycle, backend process, and window creation
+- **Main Process (`src/main.js`)**: App lifecycle, backend process management, window creation
 - **Preload Script (`src/preload.js`)**: Safely exposes APIs to the renderer process
-- **Web App**: The React frontend from `../web/` directory
-- **Go Backend**: The API server from the main project directory
+- **Supporting Modules** (`src/`): Backend management, window management, auth storage, auto-updates, logging, data migration
+- **Web App**: React frontend from `../web/`
+- **Go Backend**: API server from the main project directory
 
 ## Development
 
@@ -20,67 +20,36 @@ The Electron app consists of:
 
 ### Setup
 
-1. Install dependencies:
 ```bash
 npm install
-```
-
-2. Start development mode:
-```bash
 npm run dev
 ```
 
-This will:
-- Start the Go backend on a dynamically assigned port (see `.env.ports`)
-- Start the Vite dev server on port 3000
-- Launch Electron with hot reloading
+This starts the Go backend (dynamic port via `.env.ports`), Vite dev server on port 3000, and Electron with hot reloading.
 
-### Alternative: Run from project root
+### From project root
 
 ```bash
-# From the project root
 npm run start:electron
 ```
 
 ## Building
 
-### Development Build
-
 ```bash
+# Development build
 npm run build
-```
 
-### Production Package
-
-```bash
+# Production package (outputs to ../dist/)
 npm run package
-```
 
-This creates platform-specific packages in the `../dist/` directory.
-
-### From Project Root
-
-```bash
-# Full build including backend and web
+# From project root (full build including backend + web)
 npm run build:electron
-
-# Package only
 npm run package:electron
 ```
 
 ## Configuration
 
-The Electron app automatically:
-- Finds available ports for backend and frontend
-- Configures the web app to connect to the correct backend URL
-- Handles backend process lifecycle
-- Provides platform-specific features
-
-## Features
-
-### Multi-Instance Support
-
-The backend can support multiple web app instances running simultaneously, each connecting via gRPC streaming to the same Go backend process.
+The Electron app automatically handles port allocation, backend URL configuration, backend process lifecycle, and platform-specific features.
 
 ### Platform Integration
 
@@ -88,57 +57,43 @@ The backend can support multiple web app instances running simultaneously, each 
 - **Windows**: NSIS installer, system tray
 - **Linux**: AppImage distribution
 
-### Security
+## API Communication
 
-- Context isolation enabled
-- Node integration disabled in renderer
-- Preload script for safe API exposure
-- External link handling
+The web app detects when running in Electron and connects to the local backend:
+- **HTTP API**: `http://localhost:<backend-port>/api`
+- **gRPC Streaming**: Real-time communication via gRPC
 
 ## File Structure
 
 ```
 electron/
 ├── src/
-│   ├── main.js          # Main Electron process
-│   └── preload.js       # Preload script for renderer
-├── build/
-│   ├── icon.png         # App icon
-│   └── entitlements.mac.plist  # macOS entitlements
-├── package.json         # Electron app config
-└── README.md           # This file
+│   ├── main.js              # Main Electron process
+│   ├── preload.js            # Preload script for renderer
+│   ├── backend-manager.js    # Go backend lifecycle
+│   ├── backend-auth.js       # Backend authentication
+│   ├── auth-storage.js       # Auth token storage
+│   ├── window-manager.js     # Window creation/management
+│   ├── window-config.js      # Window configuration
+│   ├── window-state-client.js # Window state persistence
+│   ├── browser-manager.js    # External browser handling
+│   ├── chunked-downloader.js # Download management
+│   ├── data-migration.js     # Data migration utilities
+│   ├── logger.js             # Logging
+│   └── update-helper.sh      # Update script
+├── electron-builder.js           # Build config (production)
+├── electron-builder.common.js    # Shared build config
+├── electron-builder.dev.js       # Build config (dev)
+├── electron-builder.pr.js        # Build config (PR)
+├── electron-builder.alpha.js     # Build config (alpha)
+├── package.json
+└── README.md
 ```
-
-## API Communication
-
-The web app automatically detects when running in Electron and configures itself to communicate with the local backend:
-
-- **HTTP API**: Direct connection to `http://localhost:<backend-port>/api`
-- **gRPC Streaming**: Real-time communication via gRPC streaming to the backend
 
 ## Troubleshooting
 
 ### Backend fails to start
-
-1. Check that a port was allocated (see `.env.ports`)
-2. Ensure Go is installed and in PATH
-3. Check console logs in DevTools
-
-### Web app can't connect
-
-1. Verify backend is running (check console)
-2. Check network tab in DevTools for failed requests
-3. Ensure firewall allows local connections
+Check that a port was allocated in `.env.ports` and that Go is in PATH. Check console logs in DevTools.
 
 ### Build fails
-
-1. Ensure all dependencies are installed
-2. Check that web app builds successfully first
-3. Verify Go backend compiles
-
-## Development Tips
-
-- Use `Ctrl+Shift+I` (or `Cmd+Opt+I` on macOS) to open DevTools
-- Backend logs appear in the main Electron console
-- Frontend logs appear in the renderer DevTools console
-- Set `NODE_ENV=development` for additional debug output
+Ensure web app builds successfully first (`npm run build` in `web/`), then verify Go backend compiles.
