@@ -175,16 +175,6 @@ func NewTestHarness(t *testing.T) *TestHarness {
 		t.Logf("Warning: failed to copy workflow files: %v", err)
 	}
 
-	// Change to temp directory so workflow files can be found
-	// The workflow loader uses relative paths from the current working directory
-	originalDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("failed to get current directory: %v", err)
-	}
-	if err := os.Chdir(tmpDir); err != nil {
-		t.Fatalf("failed to change to temp directory: %v", err)
-	}
-
 	// Generate a unique task queue suffix for this test harness
 	// This ensures test isolation when sharing a Temporal server
 	taskQueueSuffix := uuid.New().String()[:8]
@@ -275,11 +265,6 @@ func NewTestHarness(t *testing.T) *TestHarness {
 	h.cleanup = append(h.cleanup, func() {
 		_ = server.Stop()
 	})
-	// Restore original working directory
-	h.cleanup = append(h.cleanup, func() {
-		_ = os.Chdir(originalDir)
-	})
-
 	return h
 }
 
