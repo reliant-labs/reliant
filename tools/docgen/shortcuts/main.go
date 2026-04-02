@@ -70,6 +70,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err := os.MkdirAll(filepath.Dir(tsOutput), 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating TypeScript output directory: %v\n", err)
+		os.Exit(1)
+	}
+	if err := os.MkdirAll(filepath.Dir(mdOutput), 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating Markdown output directory: %v\n", err)
+		os.Exit(1)
+	}
+
 	// Generate TypeScript
 	ts := generateTypeScript(config)
 	if err := os.MkdirAll(filepath.Dir(tsOutput), 0755); err != nil {

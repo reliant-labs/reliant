@@ -46,7 +46,7 @@ NC := \033[0m # No Color
 MINTLIFY_DOCS_DIR := docs
 MINTLIFY_PORT ?= 3000
 
-.PHONY: all build build-all clean test test-race test-coverage test-ci deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-preset generate-mintlify-reference generate-changelog docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit verify-yaml-bindings build-api-server build-temporal-worker build-tools-daemon build-services docker-build
+.PHONY: all build build-all clean test test-race test-coverage test-ci deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-preset generate-changelog docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit verify-yaml-bindings build-api-server build-temporal-worker build-tools-daemon build-services docker-build
 
 # Default target
 all: deps fmt vet test build
@@ -313,7 +313,7 @@ WEB_SRC_DIR=web/src
 CHANGELOG_DIR=$(MINTLIFY_DOCS_DIR)/data/releases
 
 ## generate: Generate all docs and presets (run during build)
-generate: verify-yaml-bindings schema-generate sqlc generate-schema generate-scenario-schema generate-refcheck generate-cel-reference generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-models generate-presets generate-workflow-builder-preset generate-mintlify-reference generate-changelog
+generate: verify-yaml-bindings schema-generate sqlc generate-schema generate-scenario-schema generate-refcheck generate-cel-reference generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-models generate-presets generate-workflow-builder-preset generate-changelog
 	@echo "$(GREEN)✅ All generated files up to date$(NC)"
 
 ## generate-schema: Generate workflow schema reference from proto types
@@ -379,12 +379,6 @@ generate-cli:
 	@echo "$(YELLOW)Generating CLI reference...$(NC)"
 	@$(GOCMD) run ./tools/docgen/cli/... $(REFERENCE_DIR)/cli.md
 	@echo "$(GREEN)✅ CLI reference generated$(NC)"
-
-## generate-mintlify-reference: Generate Mintlify-safe reference docs from generated reference markdown
-generate-mintlify-reference: verify-yaml-bindings schema-generate sqlc generate-schema generate-scenario-schema generate-cli generate-tools-ref generate-nodes generate-types generate-models
-	@echo "$(YELLOW)Generating Mintlify reference docs...$(NC)"
-	@python3 ./scripts/generate-mintlify-reference.py
-	@echo "$(GREEN)✅ Mintlify reference docs generated$(NC)"
 
 ## generate-presets: Generate preset reference from YAML files
 generate-presets:

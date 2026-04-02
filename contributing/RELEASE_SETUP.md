@@ -38,7 +38,7 @@ These commands use `./scripts/release.sh` to:
 
 ## Changelog
 
-Before creating a release tag, update the changelog:
+Before creating a published stable release tag, update the changelog:
 
 ```bash
 # See PRs since last release, grouped by label
@@ -56,7 +56,7 @@ make changelog-draft VERSION=vX.Y.Z SINCE_TAG=vX.Y.(Z-1)
 make generate-changelog
 ```
 
-`scripts/release.sh` now enforces this prerequisite: it refuses to create the release commit/tag unless the matching YAML changelog exists, has a matching `version`, non-empty `title` and `summary`, and at least one item.
+`scripts/release.sh` enforces this prerequisite for published stable releases: it refuses to create the release commit/tag unless the matching YAML changelog exists, has a matching `version`, non-empty `title` and `summary`, and at least one item. RC prereleases created with `make release-rc` skip changelog source validation and Mintlify changelog regeneration because they are not published changelog entries.
 
 ### Recovering a missed changelog email
 
