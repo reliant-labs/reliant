@@ -11,7 +11,6 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/daemon"
@@ -58,7 +57,7 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	}
 
 	// Put child in its own process group
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	setExecProcessGroup(cmd)
 
 	if len(req.Env) > 0 {
 		cmd.Env = os.Environ()

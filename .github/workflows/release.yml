@@ -450,6 +450,7 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: auto
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
         run: |
           CONFIG="${{ needs.prepare.outputs.config }}"
           CHANNEL="${{ needs.prepare.outputs.channel }}"
@@ -578,6 +579,7 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: auto
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
         run: |
           CONFIG="${{ needs.prepare.outputs.config }}"
           CHANNEL="${{ needs.prepare.outputs.channel }}"
@@ -706,6 +708,7 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: auto
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           # Azure Trusted Signing (Artifact Signing)
           # NOTE: electron-builder reads these via the Invoke-TrustedSigning PowerShell module.
           # Minimal supported auth method is service principal with secret.
