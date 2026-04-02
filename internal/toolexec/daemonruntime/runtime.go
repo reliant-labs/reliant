@@ -66,7 +66,6 @@ type daemonClient struct {
 
 type StartOptions struct {
 	BootstrapConfig bootstrap.DaemonBootstrapConfig
-	WorkingDir      string
 }
 
 func Start(ctx context.Context, opts StartOptions) error {
@@ -74,7 +73,7 @@ func Start(ctx context.Context, opts StartOptions) error {
 		return fmt.Errorf("daemon runtime bootstrap config invalid: %w", err)
 	}
 
-	client, err := newDaemonClient(opts.BootstrapConfig, opts.WorkingDir)
+	client, err := newDaemonClient(opts.BootstrapConfig)
 	if err != nil {
 		return err
 	}
@@ -91,8 +90,9 @@ func Start(ctx context.Context, opts StartOptions) error {
 	return nil
 }
 
-func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, workingDir string) (*daemonClient, error) {
-	cwd := strings.TrimSpace(workingDir)
+func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, error) {
+	// Resolve CWD: prefer DAEMON_WORKING_DIR env var (used in Docker), else os.Getwd().
+	cwd := strings.TrimSpace(os.Getenv("DAEMON_WORKING_DIR"))
 	if cwd == "" {
 		resolvedCwd, err := os.Getwd()
 		if err != nil {

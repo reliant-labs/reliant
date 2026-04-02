@@ -150,16 +150,15 @@ After registering, run 'reliant daemon start' to connect.`,
 
 func newDaemonStartCmd() *cobra.Command {
 	var (
-		port        string
-		grpcURL     string
-		projectPath string
-		dataDir     string
-		token       string
-		userID      string
-		background  bool
-		tlsCert     string
-		tlsKey      string
-		tlsMode     string
+		port       string
+		grpcURL    string
+		dataDir    string
+		token      string
+		userID     string
+		background bool
+		tlsCert    string
+		tlsKey     string
+		tlsMode    string
 	)
 
 	cmd := &cobra.Command{
@@ -258,14 +257,12 @@ Credential resolution order:
 
 			err := daemonruntime.Start(ctx, daemonruntime.StartOptions{
 				BootstrapConfig: bootstrap.DaemonBootstrapConfig{
-					UserID:      userID,
-					AuthToken:   token,
-					GRPCURL:     grpcURL,
-					TLSMode:     parsedTLSMode,
-					ProjectRoot: projectPath,
-					DataDir:     dataDir,
+					UserID:    userID,
+					AuthToken: token,
+					GRPCURL:   grpcURL,
+					TLSMode:   parsedTLSMode,
+					DataDir:   dataDir,
 				},
-				WorkingDir: projectPath,
 			})
 			if err != nil {
 				return fmt.Errorf("tools-daemon exited with error: %w", err)
@@ -278,7 +275,6 @@ Credential resolution order:
 
 	cmd.Flags().StringVar(&port, "port", envOrDefault("TOOLS_DAEMON_PORT", "9190"), "Daemon listen port")
 	cmd.Flags().StringVar(&grpcURL, "grpc-url", envOrDefault("DAEMON_GRPC_URL", ""), "gRPC server URL to connect to")
-	cmd.Flags().StringVar(&projectPath, "project-path", envOrDefault("DAEMON_WORKING_DIR", "."), "Project root directory")
 	cmd.Flags().StringVar(&dataDir, "data-dir", envOrDefault("DAEMON_DATA_DIR", "./data"), "Data directory")
 	cmd.Flags().StringVar(&token, "token", envOrDefault("DAEMON_PAT", ""), "Personal access token (overrides daemon credentials file)")
 	cmd.Flags().StringVar(&userID, "user-id", envOrDefault("DAEMON_AUTH_USER_ID", ""), "User ID (overrides daemon credentials file)")

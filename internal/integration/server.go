@@ -96,9 +96,6 @@ type Config struct {
 	// Worktree
 	WorktreeBaseDir string // Base directory for worktrees (defaults to ~/.reliant/worktrees)
 
-	// Project
-	ProjectPath string // Path to project root (for loading .reliant.json, etc.) - only used in development
-
 	// Testing overrides - when set, these will be used instead of creating real executors
 	// This allows e2e tests to inject mocks without modifying the server code
 	ToolExecutorOverride toolexec.ToolExecutor // Mock tool executor for testing
@@ -498,11 +495,6 @@ func (s *Server) Reconciler() *reconciliation.Reconciler {
 // SharedTaskQueueName returns the shared task queue name (with optional test suffix)
 func (s *Server) SharedTaskQueueName() string {
 	return workersetup.TaskQueueName(s.config.TaskQueueSuffix)
-}
-
-// ProjectPath returns the project path from config
-func (s *Server) ProjectPath() string {
-	return s.config.ProjectPath
 }
 
 // DataDir returns the data directory path where databases and state files are stored

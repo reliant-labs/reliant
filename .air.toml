@@ -3,7 +3,7 @@ testdata_dir = "testdata"
 tmp_dir = "tmp"
 
 [build]
-  args_bin = ["monolith", "--project-path", "."]
+  args_bin = ["monolith"]
   bin = "./dist/reliant"
   # Build to temp file then atomically rename to prevent race condition where
   # Temporal SDK tries to read the binary while it's being rebuilt.
