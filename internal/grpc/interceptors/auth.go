@@ -326,6 +326,16 @@ func NewTimeoutInterceptor() *TimeoutInterceptor {
 			"/reliant.v1.WorktreeService/GetWorktreePR":        30 * time.Second,
 			"/reliant.v1.WorktreeService/CreateWorktreePR":     30 * time.Second,
 			"/reliant.v1.WorktreeService/RevertFiles":          30 * time.Second,
+			// MCP operations - external process management can be slow
+			"/reliant.v1.MCPService/InstallServer":      60 * time.Second,
+			"/reliant.v1.MCPService/RestartServer":      60 * time.Second,
+			"/reliant.v1.MCPService/UpdateServerConfig": 60 * time.Second,
+			"/reliant.v1.MCPService/UninstallServer":    60 * time.Second,
+			// OAuth flows - user must complete login in browser (120s app timeout + buffer)
+			"/reliant.v1.DaemonService/StartOAuthFlow": 150 * time.Second,
+			// OAuth token exchange - external network call
+			"/reliant.v1.SettingsService/CompleteClaudeOAuth": 30 * time.Second,
+			"/reliant.v1.SettingsService/CompleteCodexOAuth":  30 * time.Second,
 		},
 	}
 }

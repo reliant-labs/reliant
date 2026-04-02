@@ -136,6 +136,23 @@ export const UPLOAD_TIMEOUT_MS = 60000;
 // Worktree operations timeout - git commands can take 10-30s
 export const WORKTREE_OPERATION_TIMEOUT_MS = 30000;
 
+/**
+ * Extended timeout for OAuth flows — user must complete login in browser.
+ * The actual user-facing timeout is 120s; we add buffer so the gRPC layer
+ * never fires before the application-level timeout.
+ */
+export const OAUTH_TIMEOUT_MS = 150000;
+
+/**
+ * Extended timeout for OAuth token exchange with external providers.
+ */
+export const OAUTH_EXCHANGE_TIMEOUT_MS = 30000;
+
+/**
+ * Extended timeout for provider API key validation (external network call).
+ */
+export const PROVIDER_VALIDATION_TIMEOUT_MS = 20000;
+
 // ============================================================================
 // UI Constants
 // ============================================================================

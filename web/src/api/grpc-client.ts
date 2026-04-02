@@ -35,6 +35,9 @@ import {
   MCP_OPERATION_TIMEOUT_MS,
   UPLOAD_TIMEOUT_MS,
   WORKTREE_OPERATION_TIMEOUT_MS,
+  OAUTH_TIMEOUT_MS,
+  OAUTH_EXCHANGE_TIMEOUT_MS,
+  PROVIDER_VALIDATION_TIMEOUT_MS,
 } from "../lib/constants";
 
 /**
@@ -172,6 +175,14 @@ const LONG_TIMEOUT_METHODS: Record<string, number> = {
   "GetWorktreePR": WORKTREE_OPERATION_TIMEOUT_MS,
   "CreateWorktreePR": WORKTREE_OPERATION_TIMEOUT_MS,
   "RevertFiles": WORKTREE_OPERATION_TIMEOUT_MS,
+  // OAuth flows - user must complete login in browser (120s app timeout + buffer)
+  "StartOAuthFlow": OAUTH_TIMEOUT_MS,
+  // OAuth token exchange - external network call
+  "CompleteClaudeOAuth": OAUTH_EXCHANGE_TIMEOUT_MS,
+  "CompleteCodexOAuth": OAUTH_EXCHANGE_TIMEOUT_MS,
+  // Provider API key validation - external network call
+  "ValidateProviderAPIKey": PROVIDER_VALIDATION_TIMEOUT_MS,
+  "UpdateProviderAPIKey": PROVIDER_VALIDATION_TIMEOUT_MS,
   // Streaming methods should not have client-side timeout
   // These are server-streaming RPCs that manage their own lifecycle via AbortController
   "StreamUserUpdates": 0,
