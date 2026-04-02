@@ -89,9 +89,9 @@ func Run(authorizeURLTemplate string, timeoutSeconds int) (*Result, error) {
 		fmt.Fprint(w, `<!DOCTYPE html><html><body style="font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#1a1a2e;color:#e0e0e0"><div style="text-align:center"><h2>Authentication Successful</h2><p>You can close this tab and return to Reliant.</p></div></body></html>`)
 	})
 
-	server := &http.Server{Handler: mux}
-	go server.Serve(listener)
-	defer server.Close()
+	server := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	go server.Serve(listener) //nolint:errcheck // best-effort serve in background goroutine
+	defer func() { _ = server.Close() }()
 
 	if err := OpenBrowser(authorizeURL); err != nil {
 		return nil, fmt.Errorf("failed to open browser: %w", err)

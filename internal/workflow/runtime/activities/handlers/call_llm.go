@@ -65,20 +65,27 @@ type CallLLMActivity struct {
 	hub            streaming.StreamingHub
 	toolsFactory   *tools.ToolsFactory
 	configProvider cfgpkg.ConfigProvider
+	driverResolver drivers.DriverResolver
 }
 
-// NewCallLLMActivity creates a new CallLLMActivity
-func NewCallLLMActivity(repo db.Repository, hub streaming.StreamingHub, toolsFactory *tools.ToolsFactory, providers ...cfgpkg.ConfigProvider) *CallLLMActivity {
-	var provider cfgpkg.ConfigProvider
-	if len(providers) > 0 {
-		provider = providers[0]
-	}
+// NewCallLLMActivity creates a new CallLLMActivity.
+// The optional variadic arguments accept a cfgpkg.ConfigProvider and/or a drivers.DriverResolver.
+func NewCallLLMActivity(repo db.Repository, hub streaming.StreamingHub, toolsFactory *tools.ToolsFactory, cfgProvider cfgpkg.ConfigProvider, resolver drivers.DriverResolver) *CallLLMActivity {
 	return &CallLLMActivity{
 		repo:           repo,
 		hub:            hub,
 		toolsFactory:   toolsFactory,
-		configProvider: provider,
+		configProvider: cfgProvider,
+		driverResolver: resolver,
 	}
+}
+
+// resolveDriver returns the injected resolver or falls back to the default.
+func (a *CallLLMActivity) resolveDriver(ctx context.Context, userID string, prefs models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) {
+	if a.driverResolver != nil {
+		return a.driverResolver(ctx, userID, prefs, opts...)
+	}
+	return drivers.GetDriver(ctx, userID, prefs, opts...)
 }
 
 // Name returns the activity name for registration
@@ -220,17 +227,21 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		return nil, fmt.Errorf("model is required - must be provided via workflow inputs")
 	}
 
-	// Check for driver override (used in e2e tests) BEFORE model resolution.
-	// When override is set, skip normal model resolution since the override driver
-	// provides its own model.
+	// Resolve model for the LLM call.
+	// When a custom driver resolver is injected (e.g., in tests), skip normal
+	// model resolution since the injected resolver provides its own driver/model.
 	var legacyModel models.Model
 	var modelIDWithDriver string
 
-	if drivers.Override != nil {
-		// Use the override driver's model directly
-		legacyModel = drivers.Override.Model()
+	if a.driverResolver != nil {
+		// Probe the injected resolver for its model
+		probeDriver, probeErr := a.driverResolver(ctx, chat.UserID, nil)
+		if probeErr != nil {
+			return nil, fmt.Errorf("injected driver resolver failed: %w", probeErr)
+		}
+		legacyModel = probeDriver.Model()
 		modelIDWithDriver = string(legacyModel.ID)
-		activity.GetLogger(ctx).Info("[CallLLM] Using driver override",
+		activity.GetLogger(ctx).Info("[CallLLM] Using injected driver resolver",
 			"modelID", legacyModel.ID)
 	} else {
 		// Get available drivers to check which providers the user has configured
@@ -358,7 +369,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		driverOpts = append(driverOpts, llm.WithReasoningEffort(model.CelStringValue(args.GetThinkingLevel())))
 	}
 
-	driver, err := drivers.GetDriver(ctx, chat.UserID, preferences, driverOpts...)
+	driver, err := a.resolveDriver(ctx, chat.UserID, preferences, driverOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get LLM driver: %w", err)
 	}

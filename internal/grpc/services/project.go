@@ -28,7 +28,6 @@ import (
 type ProjectService struct {
 	reliantv1connect.UnimplementedProjectServiceHandler
 	database     db.Repository
-	mcpProxy     *daemonMCPProxy
 	daemonRouter toolexec.DaemonRouter
 }
 

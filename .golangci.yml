@@ -70,6 +70,9 @@ linters:
         # Print to stdout/stderr - if these fail, program is in bad state
         - fmt.Printf
         - fmt.Println
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - fmt.Fprint
         # OS operations - often best-effort cleanup
         - os.Remove
         - os.Setenv

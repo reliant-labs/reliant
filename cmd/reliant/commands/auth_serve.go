@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/auth/oauthcallback"
 	"github.com/spf13/cobra"
@@ -93,7 +94,7 @@ func runAuthServe(cmd *cobra.Command, port int) error {
 	fmt.Fprintf(cmd.OutOrStdout(), "OAuth helper server listening on http://%s\n", addr)
 	fmt.Fprintf(cmd.OutOrStdout(), "Press Ctrl+C to stop\n")
 
-	server := &http.Server{Addr: addr, Handler: mux}
+	server := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 
 	// Graceful shutdown on interrupt
 	go func() {
@@ -101,7 +102,7 @@ func runAuthServe(cmd *cobra.Command, port int) error {
 		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 		<-sigCh
 		fmt.Fprintln(cmd.OutOrStdout(), "\nShutting down...")
-		server.Close()
+		_ = server.Close()
 	}()
 
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {

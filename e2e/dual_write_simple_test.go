@@ -18,6 +18,7 @@ import (
 
 // TestDualWrite_Simple validates the dual-write pattern without Temporal infrastructure
 func TestDualWrite_Simple(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	// Create temporary database

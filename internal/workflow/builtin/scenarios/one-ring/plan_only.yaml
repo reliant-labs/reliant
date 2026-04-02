@@ -4,7 +4,7 @@
 # impl_loop runs but inner nodes are skipped.
 
 name: plan_only
-description: "steps: [plan] — only planning runs, everything else skipped"
+description: "steps: [plan]. Planning runs. Everything else is skipped. impl_loop ref'd workflow runs but eval_strategy defaults to \"pass\"."
 
 inputs:
   steps: [plan]
@@ -19,7 +19,7 @@ expect:
   reached:
     - planning
     - planning.plan
-    - impl_loop
     - success
   not_reached:
     - write_tests
+    - impl_loop

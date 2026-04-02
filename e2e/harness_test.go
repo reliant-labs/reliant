@@ -25,7 +25,8 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/integration"
-	"github.com/reliant-labs/reliant/internal/llm/drivers"
+	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/models"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
@@ -200,9 +201,6 @@ func NewTestHarness(t *testing.T) *TestHarness {
 
 	// Note: Mock model is now defined in models.yaml with visibility: dev
 
-	// Set mock LLM as global override BEFORE creating server
-	drivers.Override = h.MockLLM
-
 	// Use shared Temporal server from TestMain to avoid port conflicts
 	// and speed up tests (no need to start/stop Temporal for each test)
 	sharedTemporalServer := GetSharedTemporalServer()
@@ -210,14 +208,21 @@ func NewTestHarness(t *testing.T) *TestHarness {
 	// Create integration server config with mock executors
 	// Pass the shared Temporal server to avoid creating a new one
 	// Use unique task queue suffix for test isolation
+	// Create a per-test driver resolver that returns this harness's mock LLM.
+	// This avoids the global drivers.Override which is not safe for parallel tests.
+	mockResolver := func(ctx context.Context, userID string, preferences models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) {
+		return h.MockLLM, nil
+	}
+
 	serverConfig := &integration.Config{
 		DatabasePath:           tmpDir,
 		ExternalTemporalServer: sharedTemporalServer,
 		TaskQueueSuffix:        taskQueueSuffix,
 		AnthropicAPIKey:        "test-api-key", // Not used due to mock
 		WorktreeBaseDir:        tmpDir + "/worktrees",
-		ToolExecutorOverride:   h.MockTools, // Inject mock tool executor
-		RunExecutorOverride:    h.MockRun,   // Inject mock run executor
+		ToolExecutorOverride:   h.MockTools,  // Inject mock tool executor
+		RunExecutorOverride:    h.MockRun,    // Inject mock run executor
+		DriverResolver:         mockResolver, // Inject mock LLM driver per-test
 	}
 
 	// Create and start integration server
@@ -264,9 +269,6 @@ func NewTestHarness(t *testing.T) *TestHarness {
 	h.waitForWorkersReady(t)
 
 	// Register cleanup
-	h.cleanup = append(h.cleanup, func() {
-		drivers.Override = nil
-	})
 	h.cleanup = append(h.cleanup, func() {
 		h.MockApproval.Stop()
 	})

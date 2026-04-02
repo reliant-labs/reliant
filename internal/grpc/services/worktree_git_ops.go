@@ -63,18 +63,3 @@ func (s *WorktreeService) pullViaDaemon(ctx context.Context, userID, worktreePat
 	}
 	return resp.Output, nil
 }
-
-func (s *WorktreeService) getDefaultBranchViaDaemon(ctx context.Context, userID, repoPath string) string {
-	var resp struct {
-		DefaultBranch string `json:"default_branch"`
-	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.get_default_branch", map[string]string{
-		"repo_path": repoPath,
-	}, &resp); err != nil {
-		return "main"
-	}
-	if resp.DefaultBranch == "" {
-		return "main"
-	}
-	return resp.DefaultBranch
-}

@@ -729,7 +729,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
         if (b.isWorkflow) return 1;
         return a.name.localeCompare(b.name);
       });
-    }, [workflowTagInfo, presetsByTag]);
+    }, [workflowTagInfo]);
 
     // Compute which params are covered by the CURRENTLY SELECTED presets
     // (not all presets, just the ones the user has selected)

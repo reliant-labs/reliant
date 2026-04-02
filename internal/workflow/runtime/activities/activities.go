@@ -4,6 +4,7 @@ package activities
 import (
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -23,7 +24,8 @@ type Activities struct {
 	ToolExecutor   toolexec.ToolExecutor
 	DaemonRouter   toolexec.DaemonRouter // Routes commands to user's daemon (required for cloud worktree ops)
 	ConfigProvider config.ConfigProvider
-	RunExecutor    handlers.RunExecutor // Optional: for testing shell command execution
+	RunExecutor    handlers.RunExecutor   // Optional: for testing shell command execution
+	DriverResolver drivers.DriverResolver // Optional: custom LLM driver resolver (nil = use drivers.GetDriver)
 	TemporalClient client.Client
 }
 

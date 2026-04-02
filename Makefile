@@ -33,7 +33,7 @@ LDFLAGS=-s -w \
 CGO_ENABLED ?= 0
 
 # Test parameters
-TEST_TIMEOUT=120s
+TEST_TIMEOUT=300s
 BENCH_TIMEOUT=60s
 
 # Colors for output

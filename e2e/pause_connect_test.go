@@ -72,6 +72,7 @@ func (h *TestHarness) newConnectTestServer(t *testing.T) (reliantv1connect.ChatS
 // generating HTTP routing entries, so the frontend's client.pauseChat() was
 // undefined at runtime and calls silently failed.
 func TestPauseChat_ConnectHTTPRouting(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -129,6 +130,7 @@ func TestPauseChat_ConnectHTTPRouting(t *testing.T) {
 // TestPauseChat_ConnectHTTPRouting_InvalidChat verifies that PauseChat returns
 // a proper error (not CodeUnimplemented) when called with a nonexistent chat.
 func TestPauseChat_ConnectHTTPRouting_InvalidChat(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -157,6 +159,7 @@ func TestPauseChat_ConnectHTTPRouting_InvalidChat(t *testing.T) {
 // This is the most realistic test — it exercises the same code path as the
 // frontend: HTTP client -> Connect mux -> handler -> Temporal signal.
 func TestPauseAndResume_ViaConnectHTTP(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 

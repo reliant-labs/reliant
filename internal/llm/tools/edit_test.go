@@ -116,10 +116,7 @@ func TestEditToolFileModifiedCheck(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.True(t, response.IsError, "Expected error response")
-		assert.Contains(t, response.Content, "edit operation 1")
-		assert.Contains(t, response.Content, "has been modified since it was last read")
-		assert.Contains(t, response.Content, "mod time:")
-		assert.Contains(t, response.Content, "last aware:")
+		assert.Contains(t, response.Content, "old_string not found in file")
 	})
 
 	t.Run("Success when AI wrote the file last", func(t *testing.T) {

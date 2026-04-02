@@ -137,7 +137,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// ========================================================================
 
 	v2.RegisterActivity(registry, handlers.NewSaveMessageActivity(deps.Repo))
-	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(deps.Repo, deps.StreamingHub, deps.ToolsFactory, deps.ConfigProvider))
+	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(deps.Repo, deps.StreamingHub, deps.ToolsFactory, deps.ConfigProvider, deps.DriverResolver))
 
 	// ========================================================================
 	// TOOL EXECUTION ACTIVITIES
@@ -149,8 +149,8 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// CONTEXT MANAGEMENT ACTIVITIES
 	// ========================================================================
 
-	v2.RegisterActivity(registry, handlers.NewCompactActivity(deps.Repo))
-	v2.RegisterActivity(registry, handlers.NewGenerateTitleActivity(deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewCompactActivity(deps.Repo, deps.DriverResolver))
+	v2.RegisterActivity(registry, handlers.NewGenerateTitleActivity(deps.Repo, deps.DriverResolver))
 
 	// ========================================================================
 	// APPROVAL ACTIVITIES

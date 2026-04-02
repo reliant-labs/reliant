@@ -779,7 +779,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       // Supabase will automatically load session from custom storage adapter
       // No need to manually load from file storage anymore
-      let { data: { session } } = await supabase.auth.getSession()
+      const { data: { session } } = await supabase.auth.getSession()
 
       set({
         user: session?.user ?? null,

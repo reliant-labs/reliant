@@ -177,7 +177,7 @@ func Login(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 		resultCh <- loginEvent{result: result}
 	})
 
-	srv := &http.Server{Handler: mux}
+	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 
 	// Serve in background; shut down when ctx is done.
 	go func() { _ = srv.Serve(listener) }()

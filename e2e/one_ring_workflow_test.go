@@ -42,6 +42,7 @@ import (
 //  2. implement agent (fork from impl_loop)
 //  3. review agent (structured-agent: must call submit_evaluation tool)
 func TestOneRing_PlanAndImplement(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -112,6 +113,7 @@ func TestOneRing_PlanAndImplement(t *testing.T) {
 //   - Planning fork contains: plan summary, criticism, revision
 //   - Main thread contains only: user message + final plan summary
 func TestOneRing_PlanningPhaseThreadIsolation(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -198,6 +200,7 @@ func TestOneRing_PlanningPhaseThreadIsolation(t *testing.T) {
 // Steps: implement + lint + review
 // Expected: 2 iterations of the impl_loop, workflow completes
 func TestOneRing_LoopIteratesOnFailure(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -272,6 +275,7 @@ func TestOneRing_LoopIteratesOnFailure(t *testing.T) {
 // Steps: implement + review (no lint/test/build)
 // Expected: 1 iteration, workflow completes quickly
 func TestOneRing_LoopExitsOnSuccess(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -315,13 +319,17 @@ func TestOneRing_LoopExitsOnSuccess(t *testing.T) {
 // Steps: implement + review, max_retries=2
 // Expected: exactly 2 iterations, then workflow completes (not infinite loop)
 func TestOneRing_MaxRetriesExhausted(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
-	// Mock LLM: implement responses + review always fails
-	// We need enough responses for max_retries iterations.
-	// Each iteration: implement(1 call) + evaluate(1 call) = 2 calls per iter
-	// With max_retries=2: 4 LLM calls total
+	// Mock LLM: implement responses + review always fails with "continue" strategy.
+	// We use "continue" (not "refactor") so the refactor agent isn't spawned — that
+	// would consume extra mock responses. The test validates that the outer attempt
+	// loop stops after max_retries iterations regardless of the failing review.
+	//
+	// Each iteration: implement agent (1 call) + review structured-agent (1 call) = 2 per iter
+	// With max_retries=2: 4 LLM calls total.
 	h.MockLLM.SetResponses(
 		"Implementation attempt 1",
 	)
@@ -331,7 +339,7 @@ func TestOneRing_MaxRetriesExhausted(t *testing.T) {
 			Name: "submit_evaluation",
 			Input: map[string]interface{}{
 				"grade":    "fail",
-				"strategy": "refactor",
+				"strategy": "continue",
 				"feedback": "Missing error handling",
 			},
 		}},
@@ -345,7 +353,7 @@ func TestOneRing_MaxRetriesExhausted(t *testing.T) {
 			Name: "submit_evaluation",
 			Input: map[string]interface{}{
 				"grade":    "fail",
-				"strategy": "refactor",
+				"strategy": "continue",
 				"feedback": "Still missing edge cases",
 			},
 		}},
@@ -380,6 +388,7 @@ func TestOneRing_MaxRetriesExhausted(t *testing.T) {
 // This exercises the full end-to-end pipeline with all steps enabled.
 // All checks pass and review passes on first iteration.
 func TestOneRing_FullPipeline(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 

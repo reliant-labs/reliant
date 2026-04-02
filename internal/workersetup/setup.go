@@ -6,6 +6,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/streaming"
@@ -35,6 +36,7 @@ type Config struct {
 
 	// Optional overrides (for testing)
 	RunExecutorOverride handlers.RunExecutor
+	DriverResolver      drivers.DriverResolver // Custom LLM driver resolver (nil = production default)
 
 	// Task queue configuration
 	TaskQueueSuffix string // Optional suffix for test isolation
@@ -78,9 +80,12 @@ func StartWorker(cfg *Config) (*Handle, *v2.ActivityRegistry, error) {
 		cfg.ConfigProvider,
 	)
 
-	// Apply run executor override if provided (for testing)
+	// Apply overrides for testing
 	if cfg.RunExecutorOverride != nil {
 		activityDeps.RunExecutor = cfg.RunExecutorOverride
+	}
+	if cfg.DriverResolver != nil {
+		activityDeps.DriverResolver = cfg.DriverResolver
 	}
 
 	// Register all activities

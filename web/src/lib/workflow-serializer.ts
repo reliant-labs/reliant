@@ -1,5 +1,5 @@
 import * as yaml from 'js-yaml'
-import type { Workflow, Step, WorkflowStep, Param, Edge, EdgeCase, WorkflowUI, SwitchMetadata, SwitchCase } from '../types/workflow'
+import type { Workflow, Step, Param, Edge, EdgeCase, WorkflowUI, SwitchMetadata, SwitchCase } from '../types/workflow'
 import {
   getInputDescription,
   getInputUI,
@@ -738,4 +738,3 @@ function parseRawUI(raw: { positions?: Record<string, { x: number; y: number }>;
     locked: raw.locked === true,
   }
 }
-

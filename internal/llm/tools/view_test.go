@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,7 +32,7 @@ func TestViewToolLimitLogic(t *testing.T) {
 	// Create the underlying tool directly
 	tool := &viewTool{}
 	worktree := &rctx.WorktreeInfo{ID: "test", Path: tempDir}
-	ctx := rctx.NewToolContext(context.Background(), "test-chat", "0", nil, worktree)
+	ctx := rctx.NewToolContext(context.Background(), "test-chat", "0", nil, worktree).WithDaemon(daemon.NewLocalClient())
 
 	tests := []struct {
 		name          string
@@ -126,7 +127,7 @@ func TestViewToolLimitEdgeCases(t *testing.T) {
 	// Create the underlying tool directly
 	tool := &viewTool{}
 	worktree := &rctx.WorktreeInfo{ID: "test", Path: tempDir}
-	ctx := rctx.NewToolContext(context.Background(), "test-chat", "0", nil, worktree).WithMessageID("test-message")
+	ctx := rctx.NewToolContext(context.Background(), "test-chat", "0", nil, worktree).WithDaemon(daemon.NewLocalClient()).WithMessageID("test-message")
 
 	// Test case that matches the reported issue: offset 820, limit 2000, total lines 948
 	t.Run("Bug reproduction: offset 820, limit 2000", func(t *testing.T) {

@@ -22,6 +22,7 @@ import (
 //  2. Causes the Temporal workflow to stop (cancelled/terminated status)
 //  3. Stops producing new messages after cancellation
 func TestCancellation_RunningWorkflow(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 

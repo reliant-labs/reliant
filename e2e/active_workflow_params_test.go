@@ -14,6 +14,7 @@ import (
 )
 
 func TestActiveWorkflowRunning_SendMessageAppliesPresetAndParamUpdates(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -78,6 +79,7 @@ func TestActiveWorkflowRunning_SendMessageAppliesPresetAndParamUpdates(t *testin
 }
 
 func TestActiveWorkflowPaused_SendMessageAppliesPresetAndParamUpdates(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 

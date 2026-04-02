@@ -101,19 +101,12 @@ type Config struct {
 
 	// Testing overrides - when set, these will be used instead of creating real executors
 	// This allows e2e tests to inject mocks without modifying the server code
-	ToolExecutorOverride toolexec.ToolExecutor // Mock tool executor for testing
-	RunExecutorOverride  handlers.RunExecutor  // Mock run executor for testing
+	ToolExecutorOverride toolexec.ToolExecutor  // Mock tool executor for testing
+	RunExecutorOverride  handlers.RunExecutor   // Mock run executor for testing
+	DriverResolver       drivers.DriverResolver // Custom LLM driver resolver (nil = production default)
 
 	// SilentLogging suppresses all logging output (for tests)
 	SilentLogging bool
-}
-
-// taskQueueName returns the full task queue name with optional suffix
-func (c *Config) taskQueueName(baseName string) string {
-	if c.TaskQueueSuffix == "" {
-		return baseName
-	}
-	return baseName + "-" + c.TaskQueueSuffix
 }
 
 // NewServer creates a new integrated server
@@ -285,6 +278,7 @@ func (s *Server) Start(ctx context.Context) error {
 		DaemonRouter:        s.daemonRouter, // may be nil in test overrides, but wired for production
 		ConfigProvider:      storedConfigProvider,
 		RunExecutorOverride: s.config.RunExecutorOverride,
+		DriverResolver:      s.config.DriverResolver,
 		TaskQueueSuffix:     s.config.TaskQueueSuffix,
 	})
 	if err != nil {

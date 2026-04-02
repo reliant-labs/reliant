@@ -55,6 +55,12 @@ describe('runCodexOAuthFlow', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     setCryptoMock()
+    // Simulate Electron environment so the daemon path is used
+    ;(window as any).electronAPI = {}
+  })
+
+  afterEach(() => {
+    delete (window as any).electronAPI
   })
 
   it('calls daemon, validates state, and exchanges code', async () => {
@@ -168,7 +174,8 @@ describe('runCodexOAuthFlow', () => {
 
     expect(startOAuthViaDaemonMock).toHaveBeenCalledWith(
       expect.any(String),
-      30 // 30000ms / 1000
+      30, // 30000ms / 1000
+      undefined
     )
   })
 })

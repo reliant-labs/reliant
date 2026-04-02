@@ -26,6 +26,7 @@ import (
 //  7. Verify the workflow continues and new messages appear
 //  8. Wait for workflow completion
 func TestPauseAndResume(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 

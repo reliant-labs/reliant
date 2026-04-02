@@ -30,6 +30,7 @@ import (
 
 // TestWorkflowActivity_RootRunning tests that a chat shows as active when root workflow is running.
 func TestWorkflowActivity_RootRunning(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -71,6 +72,7 @@ func TestWorkflowActivity_RootRunning(t *testing.T) {
 
 // TestWorkflowActivity_RootCompleted tests that a chat shows as inactive when root workflow completes.
 func TestWorkflowActivity_RootCompleted(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -113,6 +115,7 @@ func TestWorkflowActivity_RootCompleted(t *testing.T) {
 // TestWorkflowActivity_ChildRunning tests that a chat shows as active when ANY child workflow is running.
 // This is the key rule: main workflow is active if ANY sub-workflow is active.
 func TestWorkflowActivity_ChildRunning(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -170,6 +173,7 @@ func TestWorkflowActivity_ChildRunning(t *testing.T) {
 
 // TestWorkflowActivity_ParallelChildrenRunning tests that parallel child workflows all contribute to activity.
 func TestWorkflowActivity_ParallelChildrenRunning(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -229,6 +233,7 @@ func TestWorkflowActivity_ParallelChildrenRunning(t *testing.T) {
 
 // TestWorkflowActivity_AllChildrenComplete tests that activity clears only when ALL workflows complete.
 func TestWorkflowActivity_AllChildrenComplete(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -288,6 +293,7 @@ func TestWorkflowActivity_AllChildrenComplete(t *testing.T) {
 
 // TestWorkflowActivity_PartialChildComplete tests that one child completing while another runs keeps activity.
 func TestWorkflowActivity_PartialChildComplete(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -360,6 +366,7 @@ func TestWorkflowActivity_PartialChildComplete(t *testing.T) {
 // Thread records ("thread:*" and legacy "fork:*") track thread lifecycle, not workflow execution.
 // They complete when their owning workflow completes via cascade.
 func TestWorkflowActivity_ForkMetadataExcluded(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -441,6 +448,7 @@ func TestWorkflowActivity_ForkMetadataExcluded(t *testing.T) {
 
 // TestWorkflowActivity_ForkMetadataWithRealChild tests thread metadata is excluded while real children are counted.
 func TestWorkflowActivity_ForkMetadataWithRealChild(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -512,6 +520,7 @@ func TestWorkflowActivity_ForkMetadataWithRealChild(t *testing.T) {
 
 // TestWorkflowActivity_CancelledWorkflow tests that cancelled workflows don't show as active.
 func TestWorkflowActivity_CancelledWorkflow(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -554,6 +563,7 @@ func TestWorkflowActivity_CancelledWorkflow(t *testing.T) {
 
 // TestWorkflowActivity_FailedWorkflow tests that failed workflows don't show as active.
 func TestWorkflowActivity_FailedWorkflow(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -596,6 +606,7 @@ func TestWorkflowActivity_FailedWorkflow(t *testing.T) {
 
 // TestWorkflowActivity_MultipleChats tests querying activity state for multiple chats at once.
 func TestWorkflowActivity_MultipleChats(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -676,6 +687,7 @@ func TestWorkflowActivity_MultipleChats(t *testing.T) {
 
 // TestWorkflowActivity_NestedHierarchy tests deeply nested workflow hierarchies.
 func TestWorkflowActivity_NestedHierarchy(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -748,6 +760,7 @@ func TestWorkflowActivity_NestedHierarchy(t *testing.T) {
 
 // TestWorkflowActivity_TransitionSequence tests the full lifecycle of workflow activity state.
 func TestWorkflowActivity_TransitionSequence(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 

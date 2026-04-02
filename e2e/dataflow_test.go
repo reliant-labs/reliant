@@ -31,6 +31,7 @@ import (
 //
 // If this test fails, edge bindings are broken.
 func TestDataFlow_AgentWorkflow_CallLLMToSaveMessage(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
@@ -99,6 +100,7 @@ func TestDataFlow_AgentWorkflow_CallLLMToSaveMessage(t *testing.T) {
 
 // TestDataFlow_LoopBinding tests that bindings work across loop iterations
 func TestDataFlow_LoopBinding(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 

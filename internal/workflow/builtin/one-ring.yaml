@@ -327,6 +327,7 @@ nodes:
 
   - id: impl_loop
     type: workflow
+    condition: "'implement' in inputs.steps"
     ref: builtin://get-it-right
     args:
       model: "{{inputs.model}}"
@@ -389,9 +390,9 @@ nodes:
 
 outputs:
   plan_summary: "{{nodes.planning.plan_summary}}"
-  review_grade: "{{nodes.impl_loop.review_grade}}"
-  eval_strategy: "{{nodes.impl_loop.eval_strategy}}"
-  iterations: "{{nodes.impl_loop.iterations}}"
+  review_grade: "{{has(nodes.impl_loop) && has(nodes.impl_loop.review_grade) ? nodes.impl_loop.review_grade : 'N/A'}}"
+  eval_strategy: "{{has(nodes.impl_loop) && has(nodes.impl_loop.eval_strategy) ? nodes.impl_loop.eval_strategy : 'pass'}}"
+  iterations: "{{has(nodes.impl_loop) && has(nodes.impl_loop.iterations) ? nodes.impl_loop.iterations : 0}}"
 
 edges:
   - from: planning

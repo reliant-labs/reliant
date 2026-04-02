@@ -92,7 +92,7 @@ func (c *LocalClient) ReadFile(ctx context.Context, path string, opts *ReadFileO
 	totalLines := offset + len(lines) + remaining
 
 	content := strings.Join(lines, "\n")
-	truncated := (limit > 0 && len(lines) >= limit) || remaining > 0
+	truncated := remaining > 0
 
 	return &FileContent{
 		Content:    content,
@@ -506,6 +506,9 @@ func parseRgOutput(output, outputMode, baseDir string) []SearchMatch {
 			}
 
 		case "content":
+			// Ripgrep uses ":" as separator for match lines and "-" for context lines.
+			// Match line format: file:line:content
+			// Context line format: file-line-content
 			parts := strings.SplitN(line, ":", 3)
 			if len(parts) == 3 {
 				filePath := resolveRgPath(parts[0], baseDir)
@@ -515,6 +518,20 @@ func parseRgOutput(output, outputMode, baseDir string) []SearchMatch {
 					Line:    lineNum,
 					Content: parts[2],
 				})
+			} else {
+				// Try context-line separator "-"
+				parts = strings.SplitN(line, "-", 3)
+				if len(parts) == 3 {
+					if _, err := strconv.Atoi(parts[1]); err == nil {
+						filePath := resolveRgPath(parts[0], baseDir)
+						lineNum, _ := strconv.Atoi(parts[1])
+						matches = append(matches, SearchMatch{
+							File:    filePath,
+							Line:    lineNum,
+							Content: parts[2],
+						})
+					}
+				}
 			}
 		}
 	}

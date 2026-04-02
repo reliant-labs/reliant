@@ -117,33 +117,23 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 		return "", "", -1, false, fmt.Errorf("nil result from tool executor")
 	}
 
-	// The bash tool returns combined output as content
-	output := result.Content
-
 	if result.IsError {
 		// Tool reported an error — treat as non-zero exit
-		return "", output, 1, false, nil
+		return "", result.Content, 1, false, nil
 	}
 
-	// Extract exit code from metadata if available
-	resultExitCode := 0
-	if result.Metadata != "" {
-		var meta map[string]interface{}
-		if err := json.Unmarshal([]byte(result.Metadata), &meta); err == nil {
-			if ec, ok := meta["exit_code"]; ok {
-				switch v := ec.(type) {
-				case float64:
-					resultExitCode = int(v)
-				case json.Number:
-					if n, err := v.Int64(); err == nil {
-						resultExitCode = int(n)
-					}
-				}
-			}
-		}
+	// The bash tool returns structured JSON: {"stdout": "...", "stderr": "...", "exit_code": 0}
+	var bashOutput struct {
+		Stdout   string `json:"stdout"`
+		Stderr   string `json:"stderr"`
+		ExitCode int    `json:"exit_code"`
+	}
+	if err := json.Unmarshal([]byte(result.Content), &bashOutput); err != nil {
+		// Fallback: treat content as plain text stdout (e.g. legacy format)
+		return result.Content, "", 0, false, nil
 	}
 
-	return output, "", resultExitCode, false, nil
+	return bashOutput.Stdout, bashOutput.Stderr, bashOutput.ExitCode, false, nil
 }
 
 // resolveRunExecutorContext loads the IDs needed for remote execution from the DB.

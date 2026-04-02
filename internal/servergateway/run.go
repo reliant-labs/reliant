@@ -200,7 +200,7 @@ func Run(ctx context.Context, opts Options) error {
 	if err := toolBridge.Start(); err != nil {
 		return fmt.Errorf("failed to start NATS tool bridge: %w", err)
 	}
-	defer toolBridge.Close()
+	defer func() { _ = toolBridge.Close() }()
 	logging.Info("NATS tool bridge started — forwarding tool requests to daemon streams")
 
 	// Daemon gRPC server (bidi streaming endpoint for tools-daemon connections)
@@ -353,8 +353,9 @@ func Run(ctx context.Context, opts Options) error {
 
 	healthAddr := fmt.Sprintf("%s:%d", opts.BindAddress, opts.HealthPort)
 	healthServer := &http.Server{
-		Addr:    healthAddr,
-		Handler: healthMux,
+		Addr:              healthAddr,
+		Handler:           healthMux,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 	go func() {
 		logging.Info("Health endpoint started", "address", healthAddr)

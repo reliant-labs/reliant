@@ -12,6 +12,7 @@ import (
 )
 
 func TestAgentWorkflowStartWithParams_RecordsToolsAndExecutesToolCall(t *testing.T) {
+	t.Parallel()
 	h := NewTestHarness(t)
 	defer h.Cleanup()
 
