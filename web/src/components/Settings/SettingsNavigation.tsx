@@ -1,5 +1,5 @@
 import { cn } from "../../lib/utils";
-import { Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, FolderOpen, Globe, FolderGit2, Bell, Palette, MessageSquare } from "lucide-react";
+import { Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, FolderOpen, Globe, FolderGit2, Bell, MessageSquare } from "lucide-react";
 import { LuBookMarked } from "react-icons/lu";
 import { McpIcon } from "../icons/McpIcon";
 
@@ -18,8 +18,7 @@ export type SettingsSection =
   | "mcp"
   | "feedback"
   | "about"
-  | "developer"
-  | "design-sandbox";
+  | "developer";
 
 interface SettingsNavigationProps {
   activeSection: SettingsSection;
@@ -104,11 +103,6 @@ const settingsSections = [
     label: "Developer",
     icon: Code,
   },
-  {
-    id: "design-sandbox" as const,
-    label: "Design Sandbox",
-    icon: Palette,
-  },
 ] as const;
 
 /** Section IDs in sidebar display order; use for keyboard nav so it matches the visible list. */
@@ -118,7 +112,7 @@ export function getVisibleSettingsSectionIds(skillsEnabled: boolean): SettingsSe
 
   return settingsSections
     .filter((section) => {
-      if (section.id === "developer" || section.id === "design-sandbox") {
+      if (section.id === "developer") {
         return isDevelopment;
       }
       if (section.id === "skills") {
