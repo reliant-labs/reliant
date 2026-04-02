@@ -28,6 +28,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/mcp"
+	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/natsutil"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/telemetry"
@@ -126,6 +127,19 @@ func Run(ctx context.Context, opts Options) error {
 	})
 	defer logging.Close() //nolint:errcheck
 
+	// Initialize observability (Prometheus metrics + OTel tracing)
+	obsCfg := observability.ConfigFromEnv("reliant-api")
+	obsProvider, err := observability.Init(obsCfg)
+	if err != nil {
+		logging.Warn("Failed to initialize observability", "error", err)
+	} else {
+		defer func() {
+			if err := obsProvider.Shutdown(); err != nil {
+				logging.Warn("Failed to shutdown observability", "error", err)
+			}
+		}()
+	}
+
 	logging.Info("Starting Reliant API server (stateless)",
 		"api_port", opts.APIPort,
 		"grpc_port", opts.GRPCPort,
@@ -221,12 +235,12 @@ func Run(ctx context.Context, opts Options) error {
 	// Wire repo update notifiers to push events to update hubs
 	repo.SetUpdateNotifiers(
 		func(update *db.UserUpdate) {
-			userUpdateHub.Publish(streaming.UpdateEvent[db.UserUpdate]{
+			userUpdateHub.Publish(context.Background(), streaming.UpdateEvent[db.UserUpdate]{
 				Key: update.UserID, SequenceNumber: update.SequenceNumber, Payload: *update,
 			})
 		},
 		func(chatID string, seqNum int64, update db.ChatUpdate) {
-			chatUpdateHub.Publish(streaming.UpdateEvent[db.ChatUpdate]{
+			chatUpdateHub.Publish(context.Background(), streaming.UpdateEvent[db.ChatUpdate]{
 				Key: chatID, SequenceNumber: seqNum, Payload: update,
 			})
 		},
@@ -349,6 +363,8 @@ func Run(ctx context.Context, opts Options) error {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = fmt.Fprintf(w, `{"status": "ok", "message": "peak reset"}`)
 		})
+
+		pprofMux.Handle("/metrics", observability.MetricsHandler())
 
 		pprofAddr := fmt.Sprintf("127.0.0.1:%d", opts.PprofPort)
 		logging.Info("Starting pprof server", "address", pprofAddr)

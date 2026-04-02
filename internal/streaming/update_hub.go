@@ -74,7 +74,7 @@ type UpdateSubscription[T any] interface {
 type UpdateHub[T any] interface {
 	// Publish broadcasts an update event to all subscribers for the event's key.
 	// Non-blocking — slow consumers may miss events (they catch up from DB).
-	Publish(event UpdateEvent[T])
+	Publish(ctx context.Context, event UpdateEvent[T])
 
 	// Subscribe creates a new subscription for events matching the given key.
 	// The subscription is automatically cleaned up when ctx is cancelled.

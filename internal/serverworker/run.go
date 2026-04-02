@@ -25,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/mcp"
+	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/mcpconfig"
 	"github.com/reliant-labs/reliant/internal/natsutil"
 	"github.com/reliant-labs/reliant/internal/streaming"
@@ -80,6 +81,19 @@ func Run(ctx context.Context, opts Options) error {
 		Compress:   true,
 	})
 	defer logging.Close() //nolint:errcheck
+
+	// Initialize observability (Prometheus metrics + OTel tracing)
+	obsCfg := observability.ConfigFromEnv("reliant-worker")
+	obsProvider, err := observability.Init(obsCfg)
+	if err != nil {
+		logging.Warn("Failed to initialize observability", "error", err)
+	} else {
+		defer func() {
+			if err := obsProvider.Shutdown(); err != nil {
+				logging.Warn("Failed to shutdown observability", "error", err)
+			}
+		}()
+	}
 
 	logging.Info("Starting temporal-worker",
 		"temporal_host", opts.TemporalHost,
@@ -201,12 +215,12 @@ func Run(ctx context.Context, opts Options) error {
 	// Wire repo update notifiers to push events to update hubs
 	repo.SetUpdateNotifiers(
 		func(update *db.UserUpdate) {
-			userUpdateHub.Publish(streaming.UpdateEvent[db.UserUpdate]{
+			userUpdateHub.Publish(context.Background(), streaming.UpdateEvent[db.UserUpdate]{
 				Key: update.UserID, SequenceNumber: update.SequenceNumber, Payload: *update,
 			})
 		},
 		func(chatID string, seqNum int64, update db.ChatUpdate) {
-			chatUpdateHub.Publish(streaming.UpdateEvent[db.ChatUpdate]{
+			chatUpdateHub.Publish(context.Background(), streaming.UpdateEvent[db.ChatUpdate]{
 				Key: chatID, SequenceNumber: seqNum, Payload: update,
 			})
 		},
@@ -266,6 +280,7 @@ func Run(ctx context.Context, opts Options) error {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok","service":"temporal-worker"}`))
 	})
+	healthMux.Handle("/metrics", observability.MetricsHandler())
 	healthMux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		var failures []string

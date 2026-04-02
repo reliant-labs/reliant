@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/observability"
 )
 
 // StreamAndAccumulate calls the driver's StreamResponse and accumulates all chunks
@@ -31,6 +32,8 @@ func StreamAndAccumulate(
 	messages []message.Message,
 	tools []tools.Tool,
 ) (*llm.DriverResponse, error) {
+	streamStart := time.Now()
+
 	logging.Debug("[ACCUMULATOR] Starting streaming with accumulation",
 		"driver", driver.Name(),
 		"promptCount", len(prompts),
@@ -128,14 +131,36 @@ func StreamAndAccumulate(
 
 StreamingDone:
 
+	duration := time.Since(streamStart).Seconds()
+	provider := driver.Name()
+
 	// Check if streaming ended with an error
 	if streamError != nil {
+		observability.LLMRequestsTotal.WithLabelValues(provider, "error").Inc()
+		observability.LLMStreamDuration.WithLabelValues(provider).Observe(duration)
+		observability.LLMRequestDuration.WithLabelValues(provider).Observe(duration)
 		return nil, fmt.Errorf("streaming failed: %w", streamError)
 	}
 
 	// Check if we got a final response
 	if finalResponse == nil {
+		observability.LLMRequestsTotal.WithLabelValues(provider, "error").Inc()
+		observability.LLMStreamDuration.WithLabelValues(provider).Observe(duration)
+		observability.LLMRequestDuration.WithLabelValues(provider).Observe(duration)
 		return nil, fmt.Errorf("stream ended without final response (processed %d events)", eventCount)
+	}
+
+	// Record request metrics
+	observability.LLMRequestsTotal.WithLabelValues(provider, "success").Inc()
+	observability.LLMStreamDuration.WithLabelValues(provider).Observe(duration)
+	observability.LLMRequestDuration.WithLabelValues(provider).Observe(duration)
+
+	// Record token usage metrics with input/output split
+	if finalResponse.Usage.InputTokens > 0 {
+		observability.LLMTokensTotal.WithLabelValues(provider, "input").Add(float64(finalResponse.Usage.InputTokens))
+	}
+	if finalResponse.Usage.OutputTokens > 0 {
+		observability.LLMTokensTotal.WithLabelValues(provider, "output").Add(float64(finalResponse.Usage.OutputTokens))
 	}
 
 	// Build the complete response

@@ -4,8 +4,12 @@ import "./components/workflow/workflow-theme.css";
 import "./lib/debug.ts";
 import "./lib/theme";
 import "./lib/tabSwitchProfiler"; // Tab switch performance profiler
+import { initOTelTracing } from "./lib/otel";
 import { logger } from "./lib/logger";
 import { Root } from "./components/Root";
+
+// Initialize OpenTelemetry tracing (no-op if VITE_OTEL_EXPORTER_OTLP_ENDPOINT is not set)
+initOTelTracing();
 import { monacoManager } from "./lib/monacoManager";
 import { waitForConfig, isConfigReady } from "./lib/configReady";
 // globalDataStore prefetch is now called from AuthGuard after authentication

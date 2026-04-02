@@ -7,6 +7,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -16,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 )
@@ -93,6 +95,7 @@ func StartWorker(cfg *Config) (*Handle, *v2.ActivityRegistry, error) {
 		MaxHeartbeatThrottleInterval:     500 * time.Millisecond,
 		BuildID:                          v2workflow.WorkerBuildID,
 		DeadlockDetectionTimeout:         30 * time.Second,
+		Interceptors:                     []interceptor.WorkerInterceptor{observability.NewOTelWorkerInterceptor()},
 	}
 
 	w := worker.New(cfg.TemporalClient, cfg.taskQueueName(), workerOpts)

@@ -38,10 +38,10 @@ type StreamingConfig struct {
 type StreamingHub interface {
 	// Publish broadcasts a streaming delta to all subscribers of a chat.
 	// Non-blocking — slow consumers may miss events.
-	Publish(chatID string, delta StreamingDelta)
+	Publish(ctx context.Context, chatID string, delta StreamingDelta)
 
 	// PublishEvent is a convenience method that extracts chatID from a ChatEvent.
-	PublishEvent(event ChatEvent)
+	PublishEvent(ctx context.Context, event ChatEvent)
 
 	// Subscribe creates a new subscription for events from a specific chat.
 	// The subscription is automatically cleaned up when ctx is cancelled.

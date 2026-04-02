@@ -25,11 +25,11 @@ type forwardCancelCall struct {
 	reason    string
 }
 
-func (f *fakeDaemonRouter) IsDaemonOnline(userID string) (bool, error) { return true, nil }
+func (f *fakeDaemonRouter) IsDaemonOnline(_ context.Context, userID string) (bool, error) { return true, nil }
 func (f *fakeDaemonRouter) SendToolRequest(ctx context.Context, userID string, request *toolexec.ToolExecutionRequest) error {
 	return nil
 }
-func (f *fakeDaemonRouter) SendToolExecutionCancel(userID, requestID, reason string) error {
+func (f *fakeDaemonRouter) SendToolExecutionCancel(_ context.Context, userID, requestID, reason string) error {
 	f.cancelCalls = append(f.cancelCalls, forwardCancelCall{userID: userID, requestID: requestID, reason: reason})
 	return nil
 }
@@ -42,8 +42,10 @@ func (f *fakeDaemonRouter) SendDaemonCommand(ctx context.Context, userID string,
 func (f *fakeDaemonRouter) SendToolRequestSync(_ context.Context, _ string, _ *toolexec.ToolExecutionRequest) (*toolexec.ToolExecutionResponse, error) {
 	return &toolexec.ToolExecutionResponse{Success: true}, nil
 }
-func (f *fakeDaemonRouter) SendLoadProjectConfigs(_, _ string, _ string) error       { return nil }
-func (f *fakeDaemonRouter) SendWatchProjectConfigs(_ string, _ string, _ bool) error { return nil }
+func (f *fakeDaemonRouter) SendLoadProjectConfigs(_ context.Context, _, _ string, _ string) error { return nil }
+func (f *fakeDaemonRouter) SendWatchProjectConfigs(_ context.Context, _ string, _ string, _ bool) error {
+	return nil
+}
 func (f *fakeDaemonRouter) SendTerminalInput(_ context.Context, _, _ string, _ []byte) error {
 	return nil
 }

@@ -41,8 +41,8 @@ func (r *LocalDaemonRouter) SetLazyStarter(fn LazyDaemonStartFunc) {
 // ensureDaemon triggers lazy daemon startup for the given userID if no daemon
 // is connected and a lazy starter is registered. It waits briefly for the
 // daemon to connect after triggering startup.
-func (r *LocalDaemonRouter) ensureDaemon(userID string) {
-	if r.mgr.IsDaemonOnline(userID) {
+func (r *LocalDaemonRouter) ensureDaemon(ctx context.Context, userID string) {
+	if r.mgr.IsDaemonOnline(ctx, userID) {
 		return
 	}
 	if r.lazyStarter == nil {
@@ -62,7 +62,7 @@ func (r *LocalDaemonRouter) ensureDaemon(userID string) {
 	// The daemon runtime connects via bidi stream which takes a moment.
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		if r.mgr.IsDaemonOnline(userID) {
+		if r.mgr.IsDaemonOnline(ctx, userID) {
 			logging.Info("In-process daemon connected after lazy start", "userID", userID)
 			return
 		}
@@ -71,27 +71,27 @@ func (r *LocalDaemonRouter) ensureDaemon(userID string) {
 	logging.Warn("In-process daemon did not connect within timeout after lazy start", "userID", userID)
 }
 
-func (r *LocalDaemonRouter) IsDaemonOnline(userID string) (bool, error) {
-	r.ensureDaemon(userID)
-	return r.mgr.IsDaemonOnline(userID), nil
+func (r *LocalDaemonRouter) IsDaemonOnline(ctx context.Context, userID string) (bool, error) {
+	r.ensureDaemon(ctx, userID)
+	return r.mgr.IsDaemonOnline(ctx, userID), nil
 }
 
 func (r *LocalDaemonRouter) SendToolRequest(ctx context.Context, userID string, request *ToolExecutionRequest) error {
-	r.ensureDaemon(userID)
+	r.ensureDaemon(ctx, userID)
 	return r.mgr.SendToolRequest(ctx, userID, request)
 }
 
-func (r *LocalDaemonRouter) SendToolExecutionCancel(userID, requestID, reason string) error {
-	return r.mgr.SendToolExecutionCancel(userID, requestID, reason)
+func (r *LocalDaemonRouter) SendToolExecutionCancel(ctx context.Context, userID, requestID, reason string) error {
+	return r.mgr.SendToolExecutionCancel(ctx, userID, requestID, reason)
 }
 
 func (r *LocalDaemonRouter) SendKillProcess(ctx context.Context, userID, processID string) error {
-	r.ensureDaemon(userID)
+	r.ensureDaemon(ctx, userID)
 	return r.mgr.SendKillProcess(userID, processID)
 }
 
 func (r *LocalDaemonRouter) SendDaemonCommand(ctx context.Context, userID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
-	r.ensureDaemon(userID)
+	r.ensureDaemon(ctx, userID)
 
 	req := &reliantv1.DaemonCommandRequest{
 		RequestId:   uuid.New().String(),
@@ -110,37 +110,37 @@ func (r *LocalDaemonRouter) SendDaemonCommand(ctx context.Context, userID string
 }
 
 func (r *LocalDaemonRouter) SendToolRequestSync(ctx context.Context, userID string, request *ToolExecutionRequest) (*ToolExecutionResponse, error) {
-	r.ensureDaemon(userID)
+	r.ensureDaemon(ctx, userID)
 	return r.mgr.SendToolRequestSync(ctx, userID, request)
 }
 
-func (r *LocalDaemonRouter) SendLoadProjectConfigs(userID string, projectPath string, requestID string) error {
-	r.ensureDaemon(userID)
-	return r.mgr.SendLoadProjectConfigs(userID, projectPath, requestID)
+func (r *LocalDaemonRouter) SendLoadProjectConfigs(ctx context.Context, userID string, projectPath string, requestID string) error {
+	r.ensureDaemon(ctx, userID)
+	return r.mgr.SendLoadProjectConfigs(ctx, userID, projectPath, requestID)
 }
 
-func (r *LocalDaemonRouter) SendWatchProjectConfigs(userID string, projectPath string, includeInitial bool) error {
-	r.ensureDaemon(userID)
-	return r.mgr.SendWatchProjectConfigs(userID, projectPath, includeInitial)
+func (r *LocalDaemonRouter) SendWatchProjectConfigs(ctx context.Context, userID string, projectPath string, includeInitial bool) error {
+	r.ensureDaemon(ctx, userID)
+	return r.mgr.SendWatchProjectConfigs(ctx, userID, projectPath, includeInitial)
 }
 
 func (r *LocalDaemonRouter) SendTerminalInput(ctx context.Context, userID string, sessionID string, data []byte) error {
-	r.ensureDaemon(userID)
+	r.ensureDaemon(ctx, userID)
 	return r.mgr.SendTerminalInput(userID, sessionID, data)
 }
 
 func (r *LocalDaemonRouter) SendTerminalResize(ctx context.Context, userID string, sessionID string, cols, rows uint32) error {
-	r.ensureDaemon(userID)
+	r.ensureDaemon(ctx, userID)
 	return r.mgr.SendTerminalResize(userID, sessionID, cols, rows)
 }
 
 func (r *LocalDaemonRouter) SubscribeTerminalOutput(ctx context.Context, userID string, sessionID string) (<-chan *TerminalOutputEvent, func(), error) {
-	r.ensureDaemon(userID)
+	r.ensureDaemon(ctx, userID)
 	return r.mgr.SubscribeTerminalOutput(userID, sessionID)
 }
 
 func (r *LocalDaemonRouter) SubscribeProcessOutput(ctx context.Context, userID string, processID string, newOnly bool) (<-chan *ProcessOutputEvent, func(), error) {
-	r.ensureDaemon(userID)
+	r.ensureDaemon(ctx, userID)
 	return r.mgr.SubscribeProcessOutput(userID, processID, newOnly)
 }
 

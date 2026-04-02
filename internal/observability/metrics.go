@@ -1,0 +1,312 @@
+// Copyright (c) 2025 Reliant Labs
+package observability
+
+import (
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
+	"go.opentelemetry.io/otel"
+	otelprom "go.opentelemetry.io/otel/exporters/prometheus"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+)
+
+// ─── HTTP Metrics ───────────────────────────────────────────────────────────
+
+var (
+	HTTPRequestsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "http",
+			Name:      "requests_total",
+			Help:      "Total HTTP requests by method, path, and status code.",
+		},
+		[]string{"method", "path", "status"},
+	)
+	HTTPRequestDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "reliant",
+			Subsystem: "http",
+			Name:      "request_duration_seconds",
+			Help:      "HTTP request latency in seconds.",
+			Buckets:   prometheus.DefBuckets,
+		},
+		[]string{"method", "path", "status"},
+	)
+	HTTPInFlight = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: "reliant",
+			Subsystem: "http",
+			Name:      "in_flight_requests",
+			Help:      "Number of in-flight HTTP requests.",
+		},
+	)
+)
+
+// ─── gRPC / ConnectRPC Metrics ──────────────────────────────────────────────
+
+var (
+	GRPCRequestsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "grpc",
+			Name:      "requests_total",
+			Help:      "Total gRPC/ConnectRPC requests by service, method, and status code.",
+		},
+		[]string{"service", "method", "code"},
+	)
+	GRPCRequestDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "reliant",
+			Subsystem: "grpc",
+			Name:      "request_duration_seconds",
+			Help:      "gRPC/ConnectRPC request latency in seconds.",
+			Buckets:   prometheus.DefBuckets,
+		},
+		[]string{"service", "method", "code"},
+	)
+	GRPCInFlight = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: "reliant",
+			Subsystem: "grpc",
+			Name:      "in_flight_requests",
+			Help:      "Number of in-flight gRPC/ConnectRPC requests.",
+		},
+	)
+)
+
+// ─── NATS Metrics ───────────────────────────────────────────────────────────
+
+var (
+	NATSPublishTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "nats",
+			Name:      "publish_total",
+			Help:      "Total NATS messages published by subject pattern.",
+		},
+		[]string{"subject"},
+	)
+	NATSReceiveTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "nats",
+			Name:      "receive_total",
+			Help:      "Total NATS messages received by subject pattern.",
+		},
+		[]string{"subject"},
+	)
+	NATSRequestDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "reliant",
+			Subsystem: "nats",
+			Name:      "request_duration_seconds",
+			Help:      "NATS request-reply latency in seconds.",
+			Buckets:   prometheus.DefBuckets,
+		},
+		[]string{"subject"},
+	)
+	NATSErrorsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "nats",
+			Name:      "errors_total",
+			Help:      "Total NATS operation errors by subject and error type.",
+		},
+		[]string{"subject", "error_type"},
+	)
+)
+
+// ─── Database Metrics ───────────────────────────────────────────────────────
+
+var (
+	DBQueryDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "reliant",
+			Subsystem: "db",
+			Name:      "query_duration_seconds",
+			Help:      "Database query latency in seconds.",
+			Buckets:   prometheus.DefBuckets,
+		},
+		[]string{"operation", "driver"},
+	)
+	DBErrorsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "db",
+			Name:      "errors_total",
+			Help:      "Total database errors by operation.",
+		},
+		[]string{"operation", "driver"},
+	)
+	DBPendingWrites = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: "reliant",
+			Subsystem: "db",
+			Name:      "pending_writes",
+			Help:      "Number of pending database write operations.",
+		},
+	)
+	DBPeakPendingWrites = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: "reliant",
+			Subsystem: "db",
+			Name:      "peak_pending_writes",
+			Help:      "Peak number of pending database write operations.",
+		},
+	)
+)
+
+// ─── LLM Metrics ────────────────────────────────────────────────────────────
+
+var (
+	LLMRequestsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "llm",
+			Name:      "requests_total",
+			Help:      "Total LLM API requests by provider and status.",
+		},
+		[]string{"provider", "status"},
+	)
+	LLMRequestDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "reliant",
+			Subsystem: "llm",
+			Name:      "request_duration_seconds",
+			Help:      "LLM API request latency in seconds.",
+			Buckets:   []float64{0.1, 0.5, 1, 2, 5, 10, 30, 60, 120, 300},
+		},
+		[]string{"provider"},
+	)
+	LLMTokensTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "llm",
+			Name:      "tokens_total",
+			Help:      "Total LLM tokens used by provider and direction.",
+		},
+		[]string{"provider", "direction"}, // direction: "input" or "output"
+	)
+	LLMStreamDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "reliant",
+			Subsystem: "llm",
+			Name:      "stream_duration_seconds",
+			Help:      "LLM streaming response duration in seconds.",
+			Buckets:   []float64{1, 5, 10, 30, 60, 120, 300, 600},
+		},
+		[]string{"provider"},
+	)
+)
+
+// ─── Dead-End Error Metrics ─────────────────────────────────────────────────
+
+var (
+	DeadEndErrorsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Name:      "dead_end_errors_total",
+			Help:      "Errors that are logged but not propagated to callers.",
+		},
+		[]string{"level", "package", "message"},
+	)
+	StreamingErrorsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "streaming",
+			Name:      "errors_total",
+			Help:      "Streaming delta errors by type.",
+		},
+		[]string{"error_type"},
+	)
+	ToolExecutionErrorsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "tool_execution",
+			Name:      "errors_total",
+			Help:      "Tool execution errors by type.",
+		},
+		[]string{"error_type"},
+	)
+)
+
+// ─── Temporal Metrics ───────────────────────────────────────────────────────
+
+var (
+	TemporalWorkflowsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "temporal",
+			Name:      "workflows_total",
+			Help:      "Total Temporal workflow executions by type and status.",
+		},
+		[]string{"workflow_type", "status"},
+	)
+	TemporalActivityDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "reliant",
+			Subsystem: "temporal",
+			Name:      "activity_duration_seconds",
+			Help:      "Temporal activity execution duration in seconds.",
+			Buckets:   []float64{0.01, 0.05, 0.1, 0.5, 1, 5, 10, 30, 60},
+		},
+		[]string{"activity_type"},
+	)
+)
+
+// initMetrics registers all Prometheus collectors with the global registry.
+func initMetrics() {
+	// Standard Go runtime and process collectors.
+	Registry.MustRegister(collectors.NewGoCollector())
+	Registry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+
+	// Application metrics.
+	Registry.MustRegister(
+		// HTTP
+		HTTPRequestsTotal,
+		HTTPRequestDuration,
+		HTTPInFlight,
+		// gRPC
+		GRPCRequestsTotal,
+		GRPCRequestDuration,
+		GRPCInFlight,
+		// NATS
+		NATSPublishTotal,
+		NATSReceiveTotal,
+		NATSRequestDuration,
+		NATSErrorsTotal,
+		// DB
+		DBQueryDuration,
+		DBErrorsTotal,
+		DBPendingWrites,
+		DBPeakPendingWrites,
+		// LLM
+		LLMRequestsTotal,
+		LLMRequestDuration,
+		LLMTokensTotal,
+		LLMStreamDuration,
+		// Dead-end errors
+		DeadEndErrorsTotal,
+		StreamingErrorsTotal,
+		ToolExecutionErrorsTotal,
+		// Temporal
+		TemporalWorkflowsTotal,
+		TemporalActivityDuration,
+	)
+}
+
+// initOTelMetrics creates an OTel MeterProvider backed by the Prometheus registry,
+// enabling OTel-instrumented libraries (otelhttp, etc.) to export via /metrics.
+func initOTelMetrics() (*sdkmetric.MeterProvider, error) {
+	exporter, err := otelprom.New(
+		otelprom.WithRegisterer(Registry),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	mp := sdkmetric.NewMeterProvider(
+		sdkmetric.WithReader(exporter),
+	)
+	otel.SetMeterProvider(mp)
+	return mp, nil
+}

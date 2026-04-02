@@ -22,7 +22,7 @@ func TestHub_PublishSubscribe(t *testing.T) {
 		DeltaType: DeltaTypeContentBlockDelta,
 		Delta:     "Hello, World!",
 	}
-	hub.Publish(chatID, delta)
+	hub.Publish(context.Background(), chatID, delta)
 
 	// Receive the delta
 	select {
@@ -54,7 +54,7 @@ func TestHub_MultipleSubscribers(t *testing.T) {
 		DeltaType: DeltaTypeMessageStart,
 		Delta:     "broadcast",
 	}
-	hub.Publish(chatID, delta)
+	hub.Publish(context.Background(), chatID, delta)
 
 	// Both should receive the delta
 	for i, sub := range []Subscription{sub1, sub2} {
@@ -115,7 +115,7 @@ func TestHub_DifferentChats(t *testing.T) {
 	sub2 := hub.Subscribe(ctx, chat2)
 
 	// Publish to chat1 only
-	hub.Publish(chat1, StreamingDelta{Delta: "for-chat-1"})
+	hub.Publish(context.Background(), chat1, StreamingDelta{Delta: "for-chat-1"})
 
 	// sub1 should receive it
 	select {
@@ -154,7 +154,7 @@ func TestHub_ConcurrentPublish(t *testing.T) {
 		go func(publisherID int) {
 			defer wg.Done()
 			for j := 0; j < messagesPerPublisher; j++ {
-				hub.Publish(chatID, StreamingDelta{
+				hub.Publish(context.Background(), chatID, StreamingDelta{
 					DeltaType:  DeltaTypeContentBlockDelta,
 					BlockIndex: publisherID*100 + j,
 				})
@@ -199,9 +199,9 @@ func TestHub_Stats(t *testing.T) {
 	// Subscribe and publish
 	hub.Subscribe(ctx, "chat-1")
 	hub.Subscribe(ctx, "chat-2")
-	hub.Publish("chat-1", StreamingDelta{})
-	hub.Publish("chat-1", StreamingDelta{})
-	hub.Publish("chat-2", StreamingDelta{})
+	hub.Publish(context.Background(), "chat-1", StreamingDelta{})
+	hub.Publish(context.Background(), "chat-1", StreamingDelta{})
+	hub.Publish(context.Background(), "chat-2", StreamingDelta{})
 
 	stats = hub.Stats()
 	if stats.TotalPublished != 3 {

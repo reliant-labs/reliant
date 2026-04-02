@@ -23,6 +23,7 @@ import (
 	sqlitedb "github.com/reliant-labs/reliant/internal/db/sqlite/generated"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/observability"
 	"go.temporal.io/sdk/activity"
 )
 
@@ -356,6 +357,7 @@ func ResetPeakPendingWrites() {
 // Returns the current queue depth after increment.
 func trackWriteQueueDepth() int64 {
 	current := atomic.AddInt64(&pendingWrites, 1)
+	observability.DBPendingWrites.Set(float64(current))
 
 	// Update peak if this is a new high (CAS loop)
 	for {
@@ -364,6 +366,7 @@ func trackWriteQueueDepth() int64 {
 			break
 		}
 		if atomic.CompareAndSwapInt64(&peakPendingWrites, peak, current) {
+			observability.DBPeakPendingWrites.Set(float64(current))
 			break
 		}
 	}
@@ -407,6 +410,7 @@ func (r *Repo) executeTransaction(ctx context.Context, tx *sql.Tx, f func(ctx co
 	result.commitDuration = time.Since(commitTime)
 
 	if err != nil {
+		observability.DBErrorsTotal.WithLabelValues("commit", string(r.driver)).Inc()
 		result.err = err
 		return result
 	}
@@ -441,6 +445,7 @@ func logTransactionTiming(metrics *txMetrics, result *txResult) {
 func (r *Repo) RunTx(ctx context.Context, f func(ctx context.Context) error) error {
 	// Check if database is initialized
 	if r.DB == nil {
+		observability.DBErrorsTotal.WithLabelValues("transaction", string(r.driver)).Inc()
 		return errors.New("database connection not initialized")
 	}
 
@@ -456,7 +461,10 @@ func (r *Repo) RunTx(ctx context.Context, f func(ctx context.Context) error) err
 	// Track pending writes for monitoring
 	if r.serializeWrites {
 		trackWriteQueueDepth()
-		defer atomic.AddInt64(&pendingWrites, -1)
+		defer func() {
+			newVal := atomic.AddInt64(&pendingWrites, -1)
+			observability.DBPendingWrites.Set(float64(newVal))
+		}()
 
 		// Acquire write mutex to serialize write transactions for SQLite.
 		r.writeMu.Lock()
@@ -469,7 +477,10 @@ func (r *Repo) RunTx(ctx context.Context, f func(ctx context.Context) error) err
 		defer r.writeMu.Unlock()
 	}
 
-	return r.runTxWithRetries(ctx, f, metrics)
+	err := r.runTxWithRetries(ctx, f, metrics)
+	duration := time.Since(metrics.txStartTime).Seconds()
+	observability.DBQueryDuration.WithLabelValues("transaction", string(r.driver)).Observe(duration)
+	return err
 }
 
 // runTxWithRetries executes the transaction with retry logic
@@ -522,6 +533,7 @@ func (r *Repo) runTxWithRetries(ctx context.Context, f func(ctx context.Context)
 		"retries", metrics.totalRetries,
 		"lastError", lastErr,
 		"duration", time.Since(metrics.txStartTime))
+	observability.DBErrorsTotal.WithLabelValues("transaction", string(r.driver)).Inc()
 
 	if lastErr != nil {
 		return errors.New("transaction failed after retries: " + lastErr.Error())

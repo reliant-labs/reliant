@@ -210,7 +210,7 @@ func (s *ProjectService) CreateProject(
 	// This is fire-and-forget — the seed row above ensures the workflow
 	// can start even if the daemon hasn't responded yet.
 	if s.daemonRouter != nil {
-		if err := s.daemonRouter.SendLoadProjectConfigs(userID, req.Msg.Path, uuid.New().String()); err != nil {
+		if err := s.daemonRouter.SendLoadProjectConfigs(ctx, userID, req.Msg.Path, uuid.New().String()); err != nil {
 			logging.Warn("Failed to request daemon config load for new project",
 				"error", err,
 				"project_id", project.ID,
