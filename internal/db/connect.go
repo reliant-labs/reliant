@@ -9,10 +9,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/XSAM/otelsql"
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -99,6 +101,11 @@ func connectSQLite(cfg DatabaseConfig) (*sql.DB, error) {
 	if err != nil {
 		logging.Error("Failed to open database", "path", dbPath, "error", err)
 		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+
+	// Register OTel for DB stats metrics
+	if _, regErr := otelsql.RegisterDBStatsMetrics(db, otelsql.WithAttributes(attribute.String("db.system", "sqlite"))); regErr != nil {
+		logging.Warn("Failed to register DB stats metrics", "error", regErr)
 	}
 
 	// Verify connection
@@ -191,6 +198,11 @@ func connectPostgres(cfg DatabaseConfig) (*sql.DB, error) {
 	db, err := sql.Open("pgx", cfg.URL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open postgres database: %w", err)
+	}
+
+	// Register OTel for DB stats metrics
+	if _, regErr := otelsql.RegisterDBStatsMetrics(db, otelsql.WithAttributes(attribute.String("db.system", "postgresql"))); regErr != nil {
+		logging.Warn("Failed to register DB stats metrics", "error", regErr)
 	}
 
 	if err := db.Ping(); err != nil {

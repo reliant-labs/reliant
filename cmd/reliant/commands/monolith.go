@@ -32,6 +32,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/monolith"
+	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/pidlock"
 	skillcatalog "github.com/reliant-labs/reliant/internal/skills/catalog"
 	"github.com/reliant-labs/reliant/internal/streaming"
@@ -91,6 +92,19 @@ func runMonolith(_ *cobra.Command, _ []string, dataDir, projectPath *string) err
 	})
 	// Ensure logs are flushed on shutdown
 	defer logging.Close() //nolint:errcheck // Best-effort cleanup on shutdown
+
+	// Initialize observability (Prometheus metrics + OTel tracing)
+	obsCfg := observability.ConfigFromEnv("reliant-monolith")
+	obsProvider, err := observability.Init(obsCfg)
+	if err != nil {
+		logging.Warn("Failed to initialize observability", "error", err)
+	} else {
+		defer func() {
+			if err := obsProvider.Shutdown(); err != nil {
+				logging.Warn("Failed to shutdown observability", "error", err)
+			}
+		}()
+	}
 
 	// Ensure RELIANT_DATA_DIR is set for workflow activities that need to locate files
 	// This is critical for attachment loading in the LLM context building
@@ -278,12 +292,12 @@ func runMonolith(_ *cobra.Command, _ []string, dataDir, projectPath *string) err
 	}
 	concreteRepo.SetUpdateNotifiers(
 		func(update *db.UserUpdate) {
-			userUpdateHub.Publish(streaming.UpdateEvent[db.UserUpdate]{
+			userUpdateHub.Publish(context.Background(), streaming.UpdateEvent[db.UserUpdate]{
 				Key: update.UserID, SequenceNumber: update.SequenceNumber, Payload: *update,
 			})
 		},
 		func(chatID string, seqNum int64, update db.ChatUpdate) {
-			chatUpdateHub.Publish(streaming.UpdateEvent[db.ChatUpdate]{
+			chatUpdateHub.Publish(context.Background(), streaming.UpdateEvent[db.ChatUpdate]{
 				Key: chatID, SequenceNumber: seqNum, Payload: update,
 			})
 		},
@@ -372,6 +386,8 @@ func runMonolith(_ *cobra.Command, _ []string, dataDir, projectPath *string) err
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = fmt.Fprintf(w, `{"status": "ok", "message": "peak reset"}`)
 		})
+
+		pprofMux.Handle("/metrics", observability.MetricsHandler())
 
 		pprofAddr := fmt.Sprintf("127.0.0.1:%d", pprofPort)
 		logging.Info("Starting pprof server", "address", pprofAddr)

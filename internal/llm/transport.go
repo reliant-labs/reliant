@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/logging"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // DNS cache: stores resolved host → IP address with TTL.
@@ -177,7 +178,7 @@ func ResilientTransport() *http.Transport {
 // Convenience for drivers that pass an http.Client to SDK options.
 func ResilientHTTPClient() *http.Client {
 	return &http.Client{
-		Transport: ResilientTransport(),
+		Transport: otelhttp.NewTransport(ResilientTransport()),
 	}
 }
 
@@ -278,7 +279,7 @@ func WrapWithIdleTimeout(base http.RoundTripper) http.RoundTripper {
 func StreamingHTTPClient() *http.Client {
 	return &http.Client{
 		Transport: &idleTimeoutTransport{
-			base:    ResilientTransport(),
+			base:    otelhttp.NewTransport(ResilientTransport()),
 			timeout: StreamIdleTimeout,
 		},
 	}

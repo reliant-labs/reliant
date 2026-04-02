@@ -449,7 +449,9 @@ func (b *baseClient) usage(msg anthropic.Message) llm.TokenUsage {
 	total := msg.Usage.InputTokens + msg.Usage.OutputTokens +
 		msg.Usage.CacheCreationInputTokens + msg.Usage.CacheReadInputTokens
 	return llm.TokenUsage{
-		TokenCount: total,
+		TokenCount:   total,
+		InputTokens:  msg.Usage.InputTokens,
+		OutputTokens: msg.Usage.OutputTokens,
 	}
 }
 

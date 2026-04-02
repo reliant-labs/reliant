@@ -9,6 +9,7 @@ import (
 	"github.com/nats-io/nats.go"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/observability"
 )
 
 // NATSToolBridge subscribes to NATS tool/daemon request notifications and forwards
@@ -38,6 +39,10 @@ func (b *NATSToolBridge) Start() error {
 
 	// Subscribe to tool request notifications: tools.request.>
 	reqSub, err := b.nc.QueueSubscribe(toolRequestSubject+".>", daemonBridgeQueue, func(msg *nats.Msg) {
+		ctx, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.tools.request")
+		defer span.End()
+		observability.NATSReceiveTotal.WithLabelValues("tools.request").Inc()
+
 		// Extract userID from subject: tools.request.{userID}
 		parts := strings.SplitN(msg.Subject, ".", 3)
 		if len(parts) < 3 {
@@ -53,7 +58,8 @@ func (b *NATSToolBridge) Start() error {
 		}
 
 		// Forward to local daemon connection
-		if err := b.mgr.SendToolRequest(context.Background(), userID, &request); err != nil {
+		if err := b.mgr.SendToolRequest(ctx, userID, &request); err != nil {
+			observability.ToolExecutionErrorsTotal.WithLabelValues("forward_request").Inc()
 			logging.Warn("[NATSToolBridge] Failed to forward tool request", "error", err, "userID", userID)
 		}
 	})
@@ -64,6 +70,10 @@ func (b *NATSToolBridge) Start() error {
 
 	// Subscribe to cancel notifications: tools.cancel.>
 	cancelSub, err := b.nc.QueueSubscribe(toolCancelSubject+".>", daemonBridgeQueue, func(msg *nats.Msg) {
+		ctx, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.tools.cancel")
+		defer span.End()
+		observability.NATSReceiveTotal.WithLabelValues("tools.cancel").Inc()
+
 		parts := strings.SplitN(msg.Subject, ".", 3)
 		if len(parts) < 3 {
 			logging.Warn("[NATSToolBridge] Invalid cancel subject", "subject", msg.Subject)
@@ -80,7 +90,8 @@ func (b *NATSToolBridge) Start() error {
 			return
 		}
 
-		if err := b.mgr.SendToolExecutionCancel(userID, cancel.RequestID, cancel.Reason); err != nil {
+		if err := b.mgr.SendToolExecutionCancel(ctx, userID, cancel.RequestID, cancel.Reason); err != nil {
+			observability.ToolExecutionErrorsTotal.WithLabelValues("forward_cancel").Inc()
 			logging.Warn("[NATSToolBridge] Failed to forward cancel", "error", err, "userID", userID, "requestID", cancel.RequestID)
 		}
 	})
@@ -91,6 +102,10 @@ func (b *NATSToolBridge) Start() error {
 
 	// Subscribe to config load notifications: daemon.config.load.>
 	configLoadSub, err := b.nc.QueueSubscribe(configLoadSubject+".>", daemonBridgeQueue, func(msg *nats.Msg) {
+		ctx, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.daemon.config.load")
+		defer span.End()
+		observability.NATSReceiveTotal.WithLabelValues("daemon.config.load").Inc()
+
 		parts := strings.SplitN(msg.Subject, ".", 4)
 		if len(parts) < 4 {
 			logging.Warn("[NATSToolBridge] Invalid config load subject", "subject", msg.Subject)
@@ -107,7 +122,8 @@ func (b *NATSToolBridge) Start() error {
 			return
 		}
 
-		if err := b.mgr.SendLoadProjectConfigs(userID, req.ProjectPath, req.RequestID); err != nil {
+		if err := b.mgr.SendLoadProjectConfigs(ctx, userID, req.ProjectPath, req.RequestID); err != nil {
+			observability.ToolExecutionErrorsTotal.WithLabelValues("forward_config_load").Inc()
 			logging.Warn("[NATSToolBridge] Failed to forward config load", "error", err, "userID", userID)
 		}
 	})
@@ -118,6 +134,10 @@ func (b *NATSToolBridge) Start() error {
 
 	// Subscribe to config watch notifications: daemon.config.watch.>
 	configWatchSub, err := b.nc.QueueSubscribe(configWatchSubject+".>", daemonBridgeQueue, func(msg *nats.Msg) {
+		ctx, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.daemon.config.watch")
+		defer span.End()
+		observability.NATSReceiveTotal.WithLabelValues("daemon.config.watch").Inc()
+
 		parts := strings.SplitN(msg.Subject, ".", 4)
 		if len(parts) < 4 {
 			logging.Warn("[NATSToolBridge] Invalid config watch subject", "subject", msg.Subject)
@@ -134,7 +154,8 @@ func (b *NATSToolBridge) Start() error {
 			return
 		}
 
-		if err := b.mgr.SendWatchProjectConfigs(userID, req.ProjectPath, req.IncludeInitial); err != nil {
+		if err := b.mgr.SendWatchProjectConfigs(ctx, userID, req.ProjectPath, req.IncludeInitial); err != nil {
+			observability.ToolExecutionErrorsTotal.WithLabelValues("forward_config_watch").Inc()
 			logging.Warn("[NATSToolBridge] Failed to forward config watch", "error", err, "userID", userID)
 		}
 	})
@@ -150,13 +171,17 @@ func (b *NATSToolBridge) Start() error {
 
 	// Subscribe to online checks: tools.online.> (request-reply)
 	onlineSub, err := b.nc.Subscribe(toolOnlineSubject+".>", func(msg *nats.Msg) {
+		ctx, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.tools.online")
+		defer span.End()
+		observability.NATSReceiveTotal.WithLabelValues("tools.online").Inc()
+
 		parts := strings.SplitN(msg.Subject, ".", 3)
 		if len(parts) < 3 {
 			return
 		}
 		userID := parts[2]
 
-		if !b.mgr.IsDaemonOnline(userID) {
+		if !b.mgr.IsDaemonOnline(ctx, userID) {
 			// Daemon not connected locally — don't respond; let the
 			// instance that holds the connection answer instead.
 			return
@@ -170,6 +195,10 @@ func (b *NATSToolBridge) Start() error {
 
 	// Subscribe to kill process requests: daemon.process.kill.> (request-reply)
 	killSub, err := b.nc.Subscribe(daemonKillSubject+".>", func(msg *nats.Msg) {
+		ctx, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.daemon.process.kill")
+		defer span.End()
+		observability.NATSReceiveTotal.WithLabelValues("daemon.process.kill").Inc()
+
 		parts := strings.SplitN(msg.Subject, ".", 4)
 		if len(parts) < 4 {
 			logging.Warn("[NATSToolBridge] Invalid kill subject", "subject", msg.Subject)
@@ -178,7 +207,7 @@ func (b *NATSToolBridge) Start() error {
 		userID := parts[3]
 
 		// Only handle if the daemon is connected locally.
-		if !b.mgr.IsDaemonOnline(userID) {
+		if !b.mgr.IsDaemonOnline(ctx, userID) {
 			return
 		}
 
@@ -204,6 +233,10 @@ func (b *NATSToolBridge) Start() error {
 
 	// Subscribe to daemon command requests: daemon.command.> (request-reply)
 	cmdSub, err := b.nc.Subscribe(daemonCommandSubject+".>", func(msg *nats.Msg) {
+		ctx, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.daemon.command")
+		defer span.End()
+		observability.NATSReceiveTotal.WithLabelValues("daemon.command").Inc()
+
 		parts := strings.SplitN(msg.Subject, ".", 3)
 		if len(parts) < 3 {
 			logging.Warn("[NATSToolBridge] Invalid daemon command subject", "subject", msg.Subject)
@@ -212,7 +245,7 @@ func (b *NATSToolBridge) Start() error {
 		userID := parts[2]
 
 		// Only handle if the daemon is connected locally.
-		if !b.mgr.IsDaemonOnline(userID) {
+		if !b.mgr.IsDaemonOnline(ctx, userID) {
 			return
 		}
 
@@ -234,7 +267,7 @@ func (b *NATSToolBridge) Start() error {
 			TimeoutMs:   req.TimeoutMs,
 		}
 
-		resp, err := b.mgr.SendDaemonCommand(context.Background(), userID, protoReq)
+		resp, err := b.mgr.SendDaemonCommand(ctx, userID, protoReq)
 		if err != nil {
 			errResp, _ := json.Marshal(map[string]interface{}{
 				"success":       false,
@@ -258,6 +291,10 @@ func (b *NATSToolBridge) Start() error {
 
 	// Subscribe to synchronous tool execution requests: tools.request.sync.> (request-reply)
 	toolReqSyncSub, err := b.nc.Subscribe(toolRequestSyncSubject+".>", func(msg *nats.Msg) {
+		ctx, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.tools.request.sync")
+		defer span.End()
+		observability.NATSReceiveTotal.WithLabelValues("tools.request.sync").Inc()
+
 		parts := strings.SplitN(msg.Subject, ".", 4)
 		if len(parts) < 4 {
 			logging.Warn("[NATSToolBridge] Invalid sync tool request subject", "subject", msg.Subject)
@@ -266,7 +303,7 @@ func (b *NATSToolBridge) Start() error {
 		userID := parts[3]
 
 		// Only handle if the daemon is connected locally.
-		if !b.mgr.IsDaemonOnline(userID) {
+		if !b.mgr.IsDaemonOnline(ctx, userID) {
 			return
 		}
 
@@ -276,7 +313,7 @@ func (b *NATSToolBridge) Start() error {
 			return
 		}
 
-		resp, err := b.mgr.SendToolRequestSync(context.Background(), userID, &request)
+		resp, err := b.mgr.SendToolRequestSync(ctx, userID, &request)
 		if err != nil {
 			errResp, _ := json.Marshal(&ToolExecutionResponse{
 				Success:      false,

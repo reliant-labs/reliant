@@ -1737,7 +1737,7 @@ func (a *CallLLMActivity) writeStreamingDelta(ctx context.Context, chatID string
 	}
 
 	// Publish to hub (non-blocking)
-	hub.Publish(chatID, delta)
+	hub.Publish(ctx, chatID, delta)
 }
 
 // ============================================================================

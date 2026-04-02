@@ -36,7 +36,7 @@ func TestMemoryUpdateHub_SubscribeAndReceive(t *testing.T) {
 		SequenceNumber: 1,
 		Payload:        testUpdate{ID: "u1", Data: "hello"},
 	}
-	hub.Publish(event)
+	hub.Publish(context.Background(), event)
 
 	select {
 	case received := <-sub.Events():
@@ -65,7 +65,7 @@ func TestMemoryUpdateHub_KeyIsolation(t *testing.T) {
 	subA := hub.Subscribe(ctx, "key-A")
 	subB := hub.Subscribe(ctx, "key-B")
 
-	hub.Publish(UpdateEvent[testUpdate]{
+	hub.Publish(context.Background(), UpdateEvent[testUpdate]{
 		Key:     "key-A",
 		Payload: testUpdate{ID: "for-A"},
 	})
@@ -98,7 +98,7 @@ func TestMemoryUpdateHub_MultipleSubscribers(t *testing.T) {
 	sub2 := hub.Subscribe(ctx, "shared-key")
 	sub3 := hub.Subscribe(ctx, "shared-key")
 
-	hub.Publish(UpdateEvent[testUpdate]{
+	hub.Publish(context.Background(), UpdateEvent[testUpdate]{
 		Key:     "shared-key",
 		Payload: testUpdate{ID: "broadcast"},
 	})
@@ -123,7 +123,7 @@ func TestMemoryUpdateHub_Unsubscribe(t *testing.T) {
 	sub := hub.Subscribe(ctx, "key-unsub")
 
 	// Verify we can receive
-	hub.Publish(UpdateEvent[testUpdate]{
+	hub.Publish(context.Background(), UpdateEvent[testUpdate]{
 		Key:     "key-unsub",
 		Payload: testUpdate{ID: "before"},
 	})
@@ -147,7 +147,7 @@ func TestMemoryUpdateHub_Unsubscribe(t *testing.T) {
 	}
 
 	// Publishing after unsubscribe should not panic
-	hub.Publish(UpdateEvent[testUpdate]{
+	hub.Publish(context.Background(), UpdateEvent[testUpdate]{
 		Key:     "key-unsub",
 		Payload: testUpdate{ID: "after"},
 	})
@@ -185,7 +185,7 @@ func TestMemoryUpdateHub_SlowConsumerDrop(t *testing.T) {
 
 	// Fill the buffer completely (buffer size is updateSubscriberBufferSize = 64)
 	for i := 0; i < updateSubscriberBufferSize+10; i++ {
-		hub.Publish(UpdateEvent[testUpdate]{
+		hub.Publish(context.Background(), UpdateEvent[testUpdate]{
 			Key:            "key-slow",
 			SequenceNumber: int64(i),
 			Payload:        testUpdate{ID: "overflow"},
@@ -217,7 +217,7 @@ func TestMemoryUpdateHub_SequenceNumberOrdering(t *testing.T) {
 
 	count := 20
 	for i := 1; i <= count; i++ {
-		hub.Publish(UpdateEvent[testUpdate]{
+		hub.Publish(context.Background(), UpdateEvent[testUpdate]{
 			Key:            "key-order",
 			SequenceNumber: int64(i),
 			Payload:        testUpdate{ID: "ordered"},
@@ -240,7 +240,7 @@ func TestMemoryUpdateHub_EmptyPublish(t *testing.T) {
 	hub := NewMemoryUpdateHub[testUpdate]("test")
 
 	// Publishing with no subscribers should not panic
-	hub.Publish(UpdateEvent[testUpdate]{
+	hub.Publish(context.Background(), UpdateEvent[testUpdate]{
 		Key:            "no-subscribers",
 		SequenceNumber: 1,
 		Payload:        testUpdate{ID: "lonely"},
@@ -276,7 +276,7 @@ func TestMemoryUpdateHub_ConcurrentPublishSubscribe(t *testing.T) {
 		go func(pid int) {
 			defer wg.Done()
 			for j := 0; j < messagesPerPublisher; j++ {
-				hub.Publish(UpdateEvent[testUpdate]{
+				hub.Publish(context.Background(), UpdateEvent[testUpdate]{
 					Key:            "key-concurrent",
 					SequenceNumber: int64(pid*100 + j),
 					Payload:        testUpdate{ID: "concurrent"},

@@ -1,6 +1,7 @@
 import { createClient, ConnectError, Code } from "@connectrpc/connect";
 import type { Interceptor, Client } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-web";
+import { trace, context, SpanStatusCode, SpanKind, propagation } from '@opentelemetry/api';
 import { SystemService } from "../gen/reliant/v1/system_pb";
 import { PlanService } from "../gen/reliant/v1/plan_pb";
 import { TaskService } from "../gen/reliant/v1/task_pb";
@@ -221,6 +222,40 @@ const timeoutInterceptor: Interceptor = (next) => async (req) => {
   }
 };
 
+// OTel tracing interceptor — creates a span per RPC and injects W3C traceparent/tracestate headers
+const tracingInterceptor: Interceptor = (next) => async (req) => {
+  const tracer = trace.getTracer('reliant-frontend');
+  const spanName = `grpc.${req.service.typeName}/${req.method.name}`;
+
+  return tracer.startActiveSpan(spanName, { kind: SpanKind.CLIENT }, async (span) => {
+    try {
+      // Inject W3C trace context into request headers
+      const carrier: Record<string, string> = {};
+      propagation.inject(context.active(), carrier);
+      for (const [key, value] of Object.entries(carrier)) {
+        req.header.set(key, value);
+      }
+
+      span.setAttribute('rpc.system', 'connect');
+      span.setAttribute('rpc.service', req.service.typeName);
+      span.setAttribute('rpc.method', req.method.name);
+
+      const result = await next(req);
+      span.setStatus({ code: SpanStatusCode.OK });
+      return result;
+    } catch (error) {
+      span.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      span.recordException(error instanceof Error ? error : new Error(String(error)));
+      throw error;
+    } finally {
+      span.end();
+    }
+  });
+};
+
 // Connect error codes that are client-side / expected and should NOT be reported to Sentry.
 const SENTRY_SKIP_CODES = new Set([
   Code.Canceled,
@@ -436,7 +471,7 @@ export const getTransport = () => {
       baseUrl: currentBaseURL,
       // Order: timeout -> auth -> error logging
       // Timeout is outermost so it applies to the full request lifecycle
-      interceptors: [timeoutInterceptor, authInterceptor, errorInterceptor],
+      interceptors: [timeoutInterceptor, authInterceptor, tracingInterceptor, errorInterceptor],
       // Use JSON for easier debugging during migration
       // Can switch to binary later for performance
       useBinaryFormat: false,
@@ -502,7 +537,7 @@ export const initDaemonTransport = async (): Promise<void> => {
     _daemonBaseURL = daemonURL;
     _daemonTransport = createConnectTransport({
       baseUrl: daemonURL,
-      interceptors: [timeoutInterceptor, authInterceptor, daemonErrorInterceptor],
+      interceptors: [timeoutInterceptor, authInterceptor, tracingInterceptor, daemonErrorInterceptor],
       useBinaryFormat: false,
     });
     // Invalidate cached clients so they pick up the new transport

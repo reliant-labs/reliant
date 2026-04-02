@@ -11,6 +11,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/natsutil"
+	"github.com/reliant-labs/reliant/internal/observability"
 )
 
 const (
@@ -92,12 +93,13 @@ func NewNATSHub(natsURL string) (*NATSHub, error) {
 
 // Publish broadcasts a streaming delta to all subscribers of a chat via NATS.
 // Non-blocking — if publish fails, the event is logged and dropped.
-func (h *NATSHub) Publish(chatID string, delta StreamingDelta) {
+func (h *NATSHub) Publish(ctx context.Context, chatID string, delta StreamingDelta) {
 	h.publishCount.Add(1)
 
 	data, err := json.Marshal(delta)
 	if err != nil {
 		h.dropCount.Add(1)
+		observability.StreamingErrorsTotal.WithLabelValues("marshal").Inc()
 		logging.Warn("[NATSHub] Failed to marshal delta",
 			"chatID", chatID[:min(8, len(chatID))],
 			"error", err)
@@ -105,18 +107,22 @@ func (h *NATSHub) Publish(chatID string, delta StreamingDelta) {
 	}
 
 	subject := natsSubjectPfx + chatID
-	// PublishAsync is non-blocking; we intentionally ignore the ack future.
-	if _, err := h.js.PublishAsync(subject, data); err != nil {
+	msg := observability.NATSPublishMsg(ctx, subject, data)
+	// PublishMsgAsync is non-blocking; we intentionally ignore the ack future.
+	if _, err := h.js.PublishMsgAsync(msg); err != nil {
 		h.dropCount.Add(1)
+		observability.NATSErrorsTotal.WithLabelValues("streaming.chat", "publish").Inc()
 		logging.Warn("[NATSHub] Failed to publish delta",
 			"chatID", chatID[:min(8, len(chatID))],
 			"error", err)
+		return
 	}
+	observability.NATSPublishTotal.WithLabelValues("streaming.chat").Inc()
 }
 
 // PublishEvent is a convenience method that extracts chatID from a ChatEvent.
-func (h *NATSHub) PublishEvent(event ChatEvent) {
-	h.Publish(event.ChatID, event.Delta)
+func (h *NATSHub) PublishEvent(ctx context.Context, event ChatEvent) {
+	h.Publish(ctx, event.ChatID, event.Delta)
 }
 
 // Subscribe creates a new subscription for events from a specific chat.
@@ -157,6 +163,7 @@ func (h *NATSHub) consumeLoop(ctx context.Context, sub *NATSSubscription) {
 		FilterSubjects: []string{natsSubjectPfx + sub.chatID},
 	})
 	if err != nil {
+		observability.StreamingErrorsTotal.WithLabelValues("consumer_create").Inc()
 		logging.Warn("[NATSHub] Failed to create ordered consumer",
 			"chatID", sub.chatID[:min(8, len(sub.chatID))],
 			"error", err)
@@ -165,6 +172,7 @@ func (h *NATSHub) consumeLoop(ctx context.Context, sub *NATSSubscription) {
 
 	iter, err := consumer.Messages()
 	if err != nil {
+		observability.StreamingErrorsTotal.WithLabelValues("iterator_start").Inc()
 		logging.Warn("[NATSHub] Failed to start message iterator",
 			"chatID", sub.chatID[:min(8, len(sub.chatID))],
 			"error", err)
@@ -185,11 +193,19 @@ func (h *NATSHub) consumeLoop(ctx context.Context, sub *NATSSubscription) {
 			return
 		}
 
+		// Extract trace context from NATS message headers
+		carrierMsg := &nats.Msg{Header: msg.Headers()}
+		_, span := observability.StartNATSSpan(ctx, carrierMsg, "nats.consume.streaming.delta")
+
+		observability.NATSReceiveTotal.WithLabelValues("streaming.chat").Inc()
+
 		var delta StreamingDelta
 		if err := json.Unmarshal(msg.Data(), &delta); err != nil {
+			observability.StreamingErrorsTotal.WithLabelValues("unmarshal").Inc()
 			logging.Warn("[NATSHub] Failed to unmarshal delta",
 				"chatID", sub.chatID[:min(8, len(sub.chatID))],
 				"error", err)
+			span.End()
 			continue
 		}
 
@@ -198,11 +214,13 @@ func (h *NATSHub) consumeLoop(ctx context.Context, sub *NATSSubscription) {
 			// delivered
 		default:
 			h.dropCount.Add(1)
+			observability.StreamingErrorsTotal.WithLabelValues("slow_consumer").Inc()
 			logging.Warn("[NATSHub] Dropped event (slow consumer)",
 				"chatID", sub.chatID[:min(8, len(sub.chatID))],
 				"subscriberID", sub.id,
 				"deltaType", delta.DeltaType)
 		}
+		span.End()
 	}
 }
 

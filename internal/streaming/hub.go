@@ -121,7 +121,7 @@ func (h *MemoryHub) unsubscribe(sub *MemorySubscription) {
 
 // Publish broadcasts a streaming delta to all subscribers of a chat.
 // This is non-blocking - if a subscriber's buffer is full, the event is dropped.
-func (h *MemoryHub) Publish(chatID string, delta StreamingDelta) {
+func (h *MemoryHub) Publish(_ context.Context, chatID string, delta StreamingDelta) {
 	h.publishCount.Add(1)
 
 	chatSubs, ok := h.subscribers.Load(chatID)
@@ -148,8 +148,8 @@ func (h *MemoryHub) Publish(chatID string, delta StreamingDelta) {
 }
 
 // PublishEvent is a convenience method that extracts chatID from a ChatEvent.
-func (h *MemoryHub) PublishEvent(event ChatEvent) {
-	h.Publish(event.ChatID, event.Delta)
+func (h *MemoryHub) PublishEvent(ctx context.Context, event ChatEvent) {
+	h.Publish(ctx, event.ChatID, event.Delta)
 }
 
 // SubscriberCount returns the number of subscribers for a chat.

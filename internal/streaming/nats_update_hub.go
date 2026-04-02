@@ -8,6 +8,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/observability"
 )
 
 // ============================================================================
@@ -69,9 +70,10 @@ func NewNATSUpdateHub[T any](nc *nats.Conn, subjectPrefix string, name string) *
 }
 
 // Publish broadcasts an event via NATS.
-func (h *NATSUpdateHub[T]) Publish(event UpdateEvent[T]) {
+func (h *NATSUpdateHub[T]) Publish(ctx context.Context, event UpdateEvent[T]) {
 	data, err := json.Marshal(event)
 	if err != nil {
+		observability.StreamingErrorsTotal.WithLabelValues("marshal").Inc()
 		logging.Warn("[NATSUpdateHub:"+h.name+"] Failed to marshal event",
 			"key", truncateKey(event.Key),
 			"error", err)
@@ -79,11 +81,15 @@ func (h *NATSUpdateHub[T]) Publish(event UpdateEvent[T]) {
 	}
 
 	subject := h.subjectPrefix + "." + event.Key
-	if err := h.nc.Publish(subject, data); err != nil {
+	msg := observability.NATSPublishMsg(ctx, subject, data)
+	if err := h.nc.PublishMsg(msg); err != nil {
+		observability.NATSErrorsTotal.WithLabelValues("updates", "publish").Inc()
 		logging.Warn("[NATSUpdateHub:"+h.name+"] Failed to publish",
 			"subject", subject,
 			"error", err)
+		return
 	}
+	observability.NATSPublishTotal.WithLabelValues("updates").Inc()
 }
 
 // Subscribe creates a new subscription for events matching the given key.
@@ -105,6 +111,11 @@ func (h *NATSUpdateHub[T]) Subscribe(ctx context.Context, key string) UpdateSubs
 
 	subject := h.subjectPrefix + "." + key
 	natsSub, err := h.nc.Subscribe(subject, func(msg *nats.Msg) {
+		_, span := observability.StartNATSSpan(context.Background(), msg, "nats.consume.update")
+		defer span.End()
+
+		observability.NATSReceiveTotal.WithLabelValues("updates").Inc()
+
 		var event UpdateEvent[T]
 		if err := json.Unmarshal(msg.Data, &event); err != nil {
 			logging.Warn("[NATSUpdateHub:"+h.name+"] Failed to unmarshal event",
@@ -116,6 +127,7 @@ func (h *NATSUpdateHub[T]) Subscribe(ctx context.Context, key string) UpdateSubs
 		select {
 		case sub.events <- event:
 		default:
+			observability.StreamingErrorsTotal.WithLabelValues("slow_consumer").Inc()
 			logging.Warn("[NATSUpdateHub:"+h.name+"] Dropped event (slow consumer)",
 				"key", truncateKey(key),
 				"subscriberID", id,
@@ -123,6 +135,7 @@ func (h *NATSUpdateHub[T]) Subscribe(ctx context.Context, key string) UpdateSubs
 		}
 	})
 	if err != nil {
+		observability.StreamingErrorsTotal.WithLabelValues("subscribe").Inc()
 		logging.Error("[NATSUpdateHub:"+h.name+"] Failed to subscribe",
 			"subject", subject,
 			"error", err)

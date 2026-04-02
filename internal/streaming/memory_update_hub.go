@@ -73,7 +73,7 @@ func (h *MemoryUpdateHub[T]) Subscribe(ctx context.Context, key string) UpdateSu
 }
 
 // Publish broadcasts an event to all subscribers for the event's key.
-func (h *MemoryUpdateHub[T]) Publish(event UpdateEvent[T]) {
+func (h *MemoryUpdateHub[T]) Publish(_ context.Context, event UpdateEvent[T]) {
 	keySubs, ok := h.subscribers.Load(event.Key)
 	if !ok {
 		return
