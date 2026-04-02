@@ -182,8 +182,13 @@ security:
 	fi
 	@echo "$(GREEN)✅ Security scan complete$(NC)"
 
+## setup-hooks: Configure git to use project hooks
+setup-hooks:
+	@git config core.hooksPath .githooks
+	@echo "$(GREEN)✅ Git hooks configured (.githooks)$(NC)"
+
 ## deps: Download and tidy dependencies
-deps:
+deps: setup-hooks
 	@echo "$(YELLOW)Downloading dependencies...$(NC)"
 	$(GOMOD) download
 	$(GOMOD) tidy

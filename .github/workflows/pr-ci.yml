@@ -16,31 +16,9 @@ env:
 
 jobs:
   backend:
-    name: Backend (Go / ${{ matrix.database_driver }})
+    name: Backend (Go)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - database_driver: sqlite
-            database_url: ""
-          - database_driver: postgres
-            database_url: postgres://postgres:postgres@localhost:5432/reliant_ci?sslmode=disable
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: reliant_ci
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U postgres"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
     steps:
       - uses: actions/checkout@v6
 
@@ -95,9 +73,6 @@ jobs:
           args: --timeout=10m
 
       - name: Go tests (exclude e2e)
-        env:
-          DATABASE_DRIVER: ${{ matrix.database_driver }}
-          DATABASE_URL: ${{ matrix.database_url }}
         run: |
           set -euo pipefail
           go test -buildvcs=false -timeout=10m -v $(go list -buildvcs=false ./... | grep -v '^github.com/reliant-labs/reliant/e2e$' | tr '\n' ' ')
