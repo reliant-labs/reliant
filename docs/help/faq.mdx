@@ -33,13 +33,7 @@ Pause the workflow, select the target thread from the selector, then send your m
 
 ### What's inherit vs new vs fork?
 
-| Mode | Behavior |
-|------|----------|
-| **inherit** | Use parent's thread, messages appear together |
-| **new** | Start empty, no history |
-| **fork** | Copy parent's messages to new thread |
-
-See [Threads](/features/threads) for complete documentation.
+Thread modes control how sub-agents share conversation context. See [Threads](/features/threads) for a full explanation with examples.
 
 ## Workflows and Presets
 
@@ -79,7 +73,7 @@ When you need to branch on structured data—code review pass/fail, classificati
 All local:
 - **Conversations**: `~/Library/Application Support/reliant` (macOS) or `~/.config/reliant` (Linux)
 - **API keys**: System keychain
-- **No cloud sync, no telemetry**
+- **No cloud sync** — anonymous usage telemetry is on by default (opt out in Settings > Privacy)
 
 ### Are conversations sent to Reliant?
 
@@ -111,7 +105,7 @@ Current limitations we're aware of. We're working on these—check back for upda
 
 **`continue_as_new` uses newer workflow versions.** When a workflow continues as new, it may pick up a newer version of the workflow definition, causing inconsistent behavior.
 
-**Spawned agents limited to `spawn_agent` workflow.** The spawn node currently only works with the built-in `spawn_agent` workflow, not custom workflows.
+**Spawned agents limited to `builtin://agent` workflow.** The spawn node currently only works with the built-in `builtin://agent` workflow, not custom workflows.
 
 ### Experimental Features
 

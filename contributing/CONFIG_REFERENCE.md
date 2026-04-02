@@ -75,7 +75,7 @@ models:
   
   tag_preferences:
     fast: [gpt-4o-mini, claude-3-haiku]
-    flagship: [gpt-5.3-codex, claude-4.6-opus]
+    flagship: [claude-4.6-opus, gpt-4.1]
 
 # Shell configuration
 shell:
@@ -228,8 +228,6 @@ When using `DATABASE_DRIVER=postgres` in local development, `scripts/dev.sh` and
 
 These are primarily used internally by the Electron app. CLI users typically don't need to set them.
 
-**Deprecated:** `RELIANT_USER_DATA_PATH` is no longer used and should not be set.
-
 ---
 
 ## OAuth Helper Server (Web Mode)
@@ -284,8 +282,10 @@ The frontend automatically detects whether this server is running and shows the 
 ├── .reliant/                        # Project config (committed)
 │   ├── config.yaml                  # Project settings
 │   ├── mcp.json                     # Project MCP servers
-│   └── workflows/                   # Custom workflows
-│       └── my-workflow.yaml
+│   ├── workflows/                   # Custom workflows
+│   │   └── my-workflow.yaml
+│   └── presets/                     # Custom presets
+│       └── my-preset.yaml
 │
 ├── .reliant.local/                  # Local overrides (gitignored)
 │   └── config.yaml
@@ -295,20 +295,3 @@ The frontend automatically detects whether this server is running and shows the 
 ```
 
 ---
-
-## Migration from Previous Versions
-
-If you have configuration in old locations, Reliant will prompt you to migrate. You can also migrate manually:
-
-**From `~/.reliant/config.yaml` to new location:** No change needed—this is already the correct location.
-
-**From app data config (e.g., `~/Library/Application Support/reliant/.reliant/config.yaml`):**
-```bash
-# Copy your config to the new location
-cp ~/Library/Application\ Support/reliant/.reliant/config.yaml ~/.reliant/config.yaml
-
-# Review and remove the old file
-rm ~/Library/Application\ Support/reliant/.reliant/config.yaml
-```
-
-After migration, verify your models appear in Settings → AI.

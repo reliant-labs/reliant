@@ -42,7 +42,17 @@ Reliant automatically discovers workflow files in your project's `.reliant/workf
 
 **Discovery**: When you start Reliant, it scans for `.yaml` files in `.reliant/workflows/`. Changes require restarting Reliant or reloading workflows.
 
+Commit your `.reliant/workflows/` directory to version control to share workflows with your team.
+
 ## Anatomy of a Workflow
+
+```mermaid
+flowchart TD
+    M[Metadata<br/>name, version, status, tag] --> I[Inputs<br/>parameters the workflow accepts]
+    I --> E[Entry<br/>starting node IDs]
+    E --> N[Nodes<br/>execution units]
+    N --> ED[Edges<br/>flow control between nodes]
+```
 
 A workflow file has five key sections. Here's the minimal structure:
 
@@ -1049,19 +1059,7 @@ Use the `condition` field to save messages only in certain cases:
 
 ---
 
-## Testing Workflows
-
-### Running Your Workflow
-
-Test a workflow by selecting it in the Reliant UI or using the CLI:
-
-```bash
-# Run interactively
-reliant run --workflow my-workflow
-
-# With specific inputs
-reliant run --workflow my-workflow --input model=claude-4.5-sonnet
-```
+## Common Pitfalls and Caveats
 
 ### Validation Errors
 
@@ -1092,58 +1090,6 @@ condition: nodes.test.exit_code == 0
 **Missing outputs in loops**: The `while` condition uses `outputs.*`. Make sure your loop's inline workflow defines the outputs you're checking.
 
 **Node reference timing**: You can only reference a node's outputs after that node has completed. Edge conditions can only use nodes that are upstream from the current node.
-
-## Config-as-Code
-
-### Version Control
-
-Workflow files are meant to be checked into git alongside your code:
-
-<Tree>
-  <Tree.Folder name="your-project" defaultOpen>
-    <Tree.Folder name=".reliant" defaultOpen>
-      <Tree.Folder name="workflows" defaultOpen>
-        <Tree.File name="code-review.yaml" />
-        <Tree.File name="deploy-check.yaml" />
-        <Tree.File name="security-audit.yaml" />
-      </Tree.Folder>
-    </Tree.Folder>
-    <Tree.Folder name="src" />
-    <Tree.File name=".gitignore" />
-  </Tree.Folder>
-</Tree>
-
-This gives you:
-
-- **History**: Track who changed what and when
-- **Review**: Workflow changes go through code review
-- **Consistency**: Everyone on the team uses the same workflows
-- **Rollback**: Easily revert problematic workflow changes
-
-### Team Sharing
-
-When workflows are in your repository:
-
-1. Team members get workflows automatically when they clone or pull
-2. Workflow changes can be reviewed alongside code changes
-3. Branch-specific workflows are possible (feature branches can experiment)
-
-### Workflow Versioning
-
-Use the `version` field to track workflow iterations:
-
-```yaml
-name: code-review
-version: v1.2.0
-```
-
-Follow semantic versioning:
-
-- **Patch** (`v1.0.1`): Bug fixes, prompt tweaks
-- **Minor** (`v1.1.0`): New optional inputs, additional steps
-- **Major** (`v2.0.0`): Breaking changes to inputs or behavior
-
-## Common Pitfalls and Caveats
 
 These are the most common issues when building workflows. Understanding them will save you debugging time.
 

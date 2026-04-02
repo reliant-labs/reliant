@@ -79,8 +79,6 @@ See [LLM Guide](/reference/llm-guide) for complete details on model selection an
 
 Reliant includes a suite of built-in presets for common development roles. These are available immediately without configuration.
 
-For the full generated reference, see [Built-in Presets Reference](/workflows/presets-reference.generated).
-
 | Preset | Model | Key Tools | Purpose |
 |--------|-------|-----------|---------|
 | general | claude-4.6-opus | tag:default, tag:mcp | Versatile coding assistant with discovery-first approach. Can spawn specialized agents. |
@@ -213,6 +211,30 @@ Presets in `.reliant/presets/` are regular files that can be checked into versio
 2. Project presets (from `.reliant/presets/`)
 
 Project presets override built-in presets with the same name.
+
+### Configuration Precedence
+
+Reliant uses a layered configuration system where higher-priority sources override lower ones:
+
+1. **Runtime overrides** — Values set via UI or API
+2. **Project config** — `.reliant/` in your project
+3. **Global config** — `~/.reliant/` in your home directory
+4. **Built-in defaults** — Shipped with Reliant
+
+| Aspect | Database | File Config |
+|--------|----------|-------------|
+| **Storage** | SQLite in app data | `.reliant/` directory |
+| **Sharing** | Per-user | Via git |
+| **Editing** | Via UI | Via text editor |
+| **Use case** | Personal settings | Team standards |
+
+**Conversations and settings** are stored in the database and are not shareable.
+
+**Workflows and presets** can be stored in either location:
+- Database: Created via UI, personal to you
+- Files: Created in `.reliant/`, shareable via git
+
+If the same workflow or preset name exists in both locations, the file version wins. This lets you override built-in items with customized versions or test changes before committing.
 
 ## Examples
 

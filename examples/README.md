@@ -12,7 +12,7 @@ examples/
 ├── hooks/         # Example hook scripts
 ├── boolean-type-validation-demo.yaml
 ├── output-type-validation.yaml
-└── stateful-debug-example.md
+
 ```
 
 ## Workflows

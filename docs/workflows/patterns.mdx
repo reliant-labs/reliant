@@ -344,9 +344,26 @@ Without the `outputs` section, the `while` condition receives raw inner node out
 
 ## Multi-Agent Coordination
 
+```mermaid
+flowchart TD
+    START[Start] --> P[Proposer Agent]
+    P --> C[Critic Agent]
+    C -->|disagreements remain| P
+    C -->|consensus reached| DONE[Final Result]
+```
+
 Multiple agents working together, either in parallel or alternating.
 
 ### Parallel Execution with Join
+
+```mermaid
+flowchart TD
+    START[User Request] --> A1[Agent A] & A2[Agent B] & A3[Agent C]
+    A1 --> R[Reviewer Agent]
+    A2 --> R
+    A3 --> R
+    R --> BEST[Best Solution]
+```
 
 Launch multiple agents simultaneously, then wait for all to complete:
 

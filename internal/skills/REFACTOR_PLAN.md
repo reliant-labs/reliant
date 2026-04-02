@@ -26,46 +26,53 @@ This document maps the current flat `internal/skills` package into the target pi
 6. `service`
    - orchestration boundary consumed by integrations
 
+## Progress
+
+### Subpackages created
+- [x] `core` — shared primitives (`Scope`, `SkillFormat`, `Diagnostic`, `Notice`, `SupportingFile`)
+- [x] `catalog` — discovery, catalog index, parsing, validation, builtin skill creation
+- [x] `activation` — explicit invocation parsing, turn classification, auto selection
+- [x] `materialize` — full definition loading, supporting-file collection, runtime materialization
+- [x] `prompt` — available-skills rendering, active-skill rendering
+- [x] `service` — orchestration boundary
+
+### Remaining in root package (not yet migrated)
+- [ ] `policy` — `policy.go` still lives in root `skills/`; move to `policy/` subpackage
+- [ ] `engine.go` — may contain logic that should be split across `activation` and `materialize`
+- [ ] `invocation.go` — may overlap with `activation` subpackage
+- [ ] `runtime.go` — replace with `service.Resolve`; remove once integrations and tests migrate
+- [ ] `types.go` — remaining type definitions that haven't moved to `core`
+
 ## Current-to-target mapping
 
-### Current `types.go`
-- shared primitives (`Scope`, `SkillFormat`, `Diagnostic`, `Notice`, `SupportingFile`) -> `core`
-- compatibility aliases stay in `skills`
-- lifecycle structs should eventually split into:
+### `types.go`
+- Shared primitives (`Scope`, `SkillFormat`, `Diagnostic`, `Notice`, `SupportingFile`) → `core`
+- Lifecycle structs should split into:
   - `catalog.Definition`
   - `materialize.ActiveSkill`
 
-### Current `discovery.go`, `catalog_index.go`, `parser.go`, `validation.go`, `builtin_skill_creator.go`
-- move under `catalog`
-- preserve current exported `skills.DiscoverWithOptions`, `skills.DefaultCatalogIndex` via thin compatibility wrappers during migration
+### `discovery.go`, `catalog_index.go`, `parser.go`, `validation.go`, `builtin_skill_creator.go`
+- Move under `catalog`
 
-### Current `invocation.go`, `engine.go`
-- explicit invocation parsing + turn classification + auto selection -> `activation`
-- current `skills.ResolveActiveSkill` can remain as a compatibility facade while service migrates callers
+### `invocation.go`, `engine.go`
+- Explicit invocation parsing + turn classification + auto selection → `activation`
 
-### Current `strategy.go` + parts of `engine.go` + supporting-file helpers in `discovery.go`
-- move under `materialize`
-- integrate filesystem/tool shaping more explicitly around runtime materialization
+### `strategy.go` + parts of `engine.go` + supporting-file helpers in `discovery.go`
+- Move under `materialize`
+- Integrate filesystem/tool shaping more explicitly around runtime materialization
 
-### Current `policy.go`
-- move to `policy`
-- `skills.allowedToolsPolicyEngine` can become a thin wrapper or be retired once service owns orchestration
+### `policy.go`
+- Move to `policy` subpackage
+- `skills.allowedToolsPolicyEngine` can be retired once service owns orchestration
 
-### Current `prompt.go`
-- move to `prompt`
-- call sites should eventually consume structured prompt output instead of raw mixing in `ResolveTurnResult`
+### `prompt.go`
+- Move to `prompt`
+- Call sites should consume structured prompt output instead of raw mixing in `ResolveTurnResult`
 
-### Current `runtime.go`
-- replace with `service.Resolve`
-- keep `skills.DefaultRuntime().ResolveTurn` as temporary compatibility shim until integrations and tests migrate
+### `runtime.go`
+- Replace with `service.Resolve`
+- Remove once integrations and tests migrate
 
-### Current `call_llm.go`
-- consume `skills/service`
-- eventually remove direct knowledge of fragmented runtime internals
-
-## Compatibility strategy
-
-1. Introduce new subpackages with narrow types/tests.
-2. Re-export or alias shared primitives from `skills` to avoid broad breakage.
-3. Add `service.Resolve` as the new integration seam while delegating to current runtime initially.
-4. Gradually migrate internal implementations into subpackages, then simplify `runtime.go` down to a shim or remove it.
+### `call_llm.go`
+- Consume `skills/service`
+- Remove direct knowledge of fragmented runtime internals

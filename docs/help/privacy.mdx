@@ -33,15 +33,13 @@ When you chat with Reliant, messages are sent directly to your chosen AI provide
 
 ### Provider Privacy Policies
 
-Each provider has different data handling policies:
+Each provider has different data handling policies. Retention periods and training policies change over time, so always check the latest:
 
-| Provider | Data Retention | Training Usage |
-| --- | --- | --- |
-| Anthropic | 30 days (API) | Not used for training |
-| OpenAI | 30 days (API) | Not used for training (API) |
-| Google | Varies | Check their policy |
+- **Anthropic**: [anthropic.com/legal/privacy](https://www.anthropic.com/legal/privacy)
+- **OpenAI**: [openai.com/policies/privacy-policy](https://openai.com/policies/privacy-policy)
+- **Google**: [ai.google.dev/terms](https://ai.google.dev/terms)
 
-**Tip:** Review your provider's privacy policy. API usage typically has better privacy guarantees than consumer products.
+**Tip:** API usage typically has better privacy guarantees than consumer products. Review your provider's current privacy policy for specifics on data retention and training usage.
 
 ## Project Isolation
 
@@ -64,7 +62,9 @@ Reliant works offline for:
 
 ## Telemetry
 
-By default, Reliant does collect basic telemetry to understand what features you are using. This is not attached to any user information, and is only used for product feature decisions. If you opt-in to crash reporting, only:
+**Enabled by default:** Reliant collects basic, anonymous usage telemetry (e.g. which features are used). This is not attached to any user information and is only used for product feature decisions.
+
+**Opt-in only:** Crash reporting is off by default. If you opt in, only:
 
 - Crash stack traces (no code content)
 - Basic system info (OS version, Reliant version)
