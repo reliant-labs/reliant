@@ -47,8 +47,6 @@ type Provider struct {
 	shutdownFn func(ctx context.Context) error
 }
 
-var globalProvider *Provider
-
 // Init initializes Prometheus metrics and OTel tracing based on the config.
 // Must be called early in startup, after logging.
 func Init(cfg Config) (*Provider, error) {
@@ -95,7 +93,6 @@ func Init(cfg Config) (*Provider, error) {
 		return firstErr
 	}
 
-	globalProvider = p
 	return p, nil
 }
 

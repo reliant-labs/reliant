@@ -26,19 +26,19 @@ import (
 // worktreeTestDaemonRouter implements toolexec.DaemonRouter for worktree tests.
 type worktreeTestDaemonRouter struct{}
 
-func (r *worktreeTestDaemonRouter) IsDaemonOnline(userID string) (bool, error) { return true, nil }
-func (r *worktreeTestDaemonRouter) SendToolRequest(_ context.Context, _ string, _ *toolexec.ToolExecutionRequest) error {
-	return nil
+func (r *worktreeTestDaemonRouter) IsDaemonOnline(_ context.Context, _ string) (bool, error) {
+	return true, nil
 }
-func (r *worktreeTestDaemonRouter) SendToolExecutionCancel(_, _, _ string) error { return nil }
-func (r *worktreeTestDaemonRouter) SendKillProcess(_ context.Context, _, _ string) error {
+func (r *worktreeTestDaemonRouter) SendToolRequest(_ context.Context, _ string, _ *toolexec.ToolExecutionRequest) error {
 	return nil
 }
 func (r *worktreeTestDaemonRouter) SendToolRequestSync(_ context.Context, _ string, _ *toolexec.ToolExecutionRequest) (*toolexec.ToolExecutionResponse, error) {
 	return &toolexec.ToolExecutionResponse{Success: true}, nil
 }
-func (r *worktreeTestDaemonRouter) SendLoadProjectConfigs(_, _ string, _ string) error { return nil }
-func (r *worktreeTestDaemonRouter) SendWatchProjectConfigs(_ string, _ string, _ bool) error {
+func (r *worktreeTestDaemonRouter) SendToolExecutionCancel(_ context.Context, _, _, _ string) error {
+	return nil
+}
+func (r *worktreeTestDaemonRouter) SendKillProcess(_ context.Context, _, _ string) error {
 	return nil
 }
 func (r *worktreeTestDaemonRouter) SendDaemonCommand(_ context.Context, _ string, commandType string, payload []byte, _ int32) ([]byte, error) {
@@ -46,7 +46,6 @@ func (r *worktreeTestDaemonRouter) SendDaemonCommand(_ context.Context, _ string
 	case "worktree.validate_path":
 		var req map[string]string
 		_ = json.Unmarshal(payload, &req)
-		// Check if the path actually exists on disk
 		path := req["path"]
 		if _, err := os.Stat(path); err != nil {
 			return json.Marshal(map[string]interface{}{"exists": false, "error": "not_found"})
@@ -67,11 +66,9 @@ func (r *worktreeTestDaemonRouter) SendDaemonCommand(_ context.Context, _ string
 		var results []revertResult
 		for _, file := range req.Files {
 			absPath := filepath.Join(req.WorktreePath, file)
-			// Check if file is untracked by attempting git checkout; if that fails, try remove
 			cmd := exec.Command("git", "checkout", "--", file)
 			cmd.Dir = req.WorktreePath
 			if err := cmd.Run(); err != nil {
-				// Maybe it's untracked — just remove it
 				if _, statErr := os.Stat(absPath); statErr == nil {
 					_ = os.RemoveAll(absPath)
 					results = append(results, revertResult{File: file, Success: true})
@@ -85,6 +82,12 @@ func (r *worktreeTestDaemonRouter) SendDaemonCommand(_ context.Context, _ string
 		return json.Marshal(map[string]interface{}{"results": results})
 	}
 	return nil, fmt.Errorf("unhandled command: %s", commandType)
+}
+func (r *worktreeTestDaemonRouter) SendLoadProjectConfigs(_ context.Context, _, _, _ string) error {
+	return nil
+}
+func (r *worktreeTestDaemonRouter) SendWatchProjectConfigs(_ context.Context, _, _ string, _ bool) error {
+	return nil
 }
 func (r *worktreeTestDaemonRouter) SendTerminalInput(_ context.Context, _, _ string, _ []byte) error {
 	return nil
