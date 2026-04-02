@@ -29,15 +29,21 @@ import (
 // It handles skills.delete_global by deleting the skill directory from the local filesystem.
 type settingsTestDaemonRouter struct{}
 
-func (r *settingsTestDaemonRouter) IsDaemonOnline(_ context.Context, userID string) (bool, error) { return true, nil }
+func (r *settingsTestDaemonRouter) IsDaemonOnline(_ context.Context, userID string) (bool, error) {
+	return true, nil
+}
 func (r *settingsTestDaemonRouter) SendToolRequest(_ context.Context, _ string, _ *toolexec.ToolExecutionRequest) error {
 	return nil
 }
-func (r *settingsTestDaemonRouter) SendToolExecutionCancel(_ context.Context, _, _, _ string) error { return nil }
+func (r *settingsTestDaemonRouter) SendToolExecutionCancel(_ context.Context, _, _, _ string) error {
+	return nil
+}
 func (r *settingsTestDaemonRouter) SendKillProcess(_ context.Context, _, _ string) error {
 	return nil
 }
-func (r *settingsTestDaemonRouter) SendLoadProjectConfigs(_ context.Context, _, _ string, _ string) error { return nil }
+func (r *settingsTestDaemonRouter) SendLoadProjectConfigs(_ context.Context, _, _ string, _ string) error {
+	return nil
+}
 func (r *settingsTestDaemonRouter) SendWatchProjectConfigs(_ context.Context, _ string, _ string, _ bool) error {
 	return nil
 }

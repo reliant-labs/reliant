@@ -93,7 +93,6 @@ func TestIntegrationCreateWorktreeWithRealGit(t *testing.T) {
 	tempDir := t.TempDir()
 	baseDir := filepath.Join(tempDir, "worktrees")
 
-
 	service, err := NewService(baseDir, repoDir)
 	require.NoError(t, err)
 
@@ -147,7 +146,6 @@ func TestIntegrationResumeWorktree(t *testing.T) {
 	tempDir := t.TempDir()
 	baseDir := filepath.Join(tempDir, "worktrees")
 
-
 	service, err := NewService(baseDir, repoDir)
 	require.NoError(t, err)
 
@@ -186,7 +184,6 @@ func TestIntegrationDeleteWorktree(t *testing.T) {
 
 	tempDir := t.TempDir()
 	baseDir := filepath.Join(tempDir, "worktrees")
-
 
 	service, err := NewService(baseDir, repoDir)
 	require.NoError(t, err)
@@ -230,7 +227,6 @@ func TestIntegrationMultipleWorktrees(t *testing.T) {
 
 	tempDir := t.TempDir()
 	baseDir := filepath.Join(tempDir, "worktrees")
-
 
 	service, err := NewService(baseDir, repoDir)
 	require.NoError(t, err)
@@ -280,7 +276,6 @@ func TestIntegrationWorktreeWithCommits(t *testing.T) {
 
 	tempDir := t.TempDir()
 	baseDir := filepath.Join(tempDir, "worktrees")
-
 
 	service, err := NewService(baseDir, repoDir)
 	require.NoError(t, err)
@@ -335,7 +330,6 @@ func TestIntegrationCompleteWorktreeWithUncommittedChanges(t *testing.T) {
 	tempDir := t.TempDir()
 	baseDir := filepath.Join(tempDir, "worktrees")
 
-
 	service, err := NewService(baseDir, repoDir)
 	require.NoError(t, err)
 
@@ -376,7 +370,6 @@ func TestIntegrationCleanupMultipleWorktrees(t *testing.T) {
 
 	tempDir := t.TempDir()
 	baseDir := filepath.Join(tempDir, "worktrees")
-
 
 	service, err := NewService(baseDir, repoDir)
 	require.NoError(t, err)
@@ -433,7 +426,6 @@ func TestIntegrationRepositoryIDConsistency(t *testing.T) {
 	defer cleanup()
 
 	tempDir := t.TempDir()
-
 
 	// Create service instance 1
 	service1, err := NewService(tempDir, repoDir)
