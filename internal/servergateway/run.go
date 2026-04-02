@@ -39,6 +39,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/natsutil"
+	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/patauth"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -107,6 +108,19 @@ func Run(ctx context.Context, opts Options) error {
 		Compress:   true,
 	})
 	defer logging.Close() //nolint:errcheck
+
+	// Initialize observability (Prometheus metrics + OTel tracing)
+	obsCfg := observability.ConfigFromEnv("reliant-gateway")
+	obsProvider, err := observability.Init(obsCfg)
+	if err != nil {
+		logging.Warn("Failed to initialize observability", "error", err)
+	} else {
+		defer func() {
+			if err := obsProvider.Shutdown(); err != nil {
+				logging.Warn("Failed to shutdown observability", "error", err)
+			}
+		}()
+	}
 
 	logging.Info("Starting Reliant daemon-gateway",
 		"daemon_port", opts.ToolsDaemonPort,
@@ -220,6 +234,7 @@ func Run(ctx context.Context, opts Options) error {
 	// Build Connect handler options (interceptors)
 	var handlerOpts []connect.HandlerOption
 	handlerOpts = append(handlerOpts,
+		connect.WithInterceptors(interceptors.NewObservabilityInterceptor()),
 		connect.WithInterceptors(interceptors.NewRecoveryInterceptor()),
 		connect.WithInterceptors(interceptors.NewErrorReporterInterceptor()),
 		connect.WithInterceptors(interceptors.NewTimeoutInterceptor().Interceptor()),
@@ -312,6 +327,7 @@ func Run(ctx context.Context, opts Options) error {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok","service":"daemon-gateway"}`))
 	})
+	healthMux.Handle("/metrics", observability.MetricsHandler())
 	healthMux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		var failures []string

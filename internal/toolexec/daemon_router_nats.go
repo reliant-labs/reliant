@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
+	"github.com/reliant-labs/reliant/internal/observability"
 )
 
 // NATS subject patterns for tool execution and daemon routing.
@@ -45,8 +46,12 @@ func NewNATSDaemonRouter(nc *nats.Conn) *NATSDaemonRouter {
 	return &NATSDaemonRouter{nc: nc}
 }
 
-func (r *NATSDaemonRouter) IsDaemonOnline(userID string) (bool, error) {
-	msg, err := r.nc.Request(toolOnlineSubject+"."+userID, nil, 2*time.Second)
+func (r *NATSDaemonRouter) IsDaemonOnline(ctx context.Context, userID string) (bool, error) {
+	subject := toolOnlineSubject + "." + userID
+	reqMsg := observability.NATSPublishMsg(ctx, subject, nil)
+	start := time.Now()
+	msg, err := r.nc.RequestMsg(reqMsg, 2*time.Second)
+	observability.NATSRequestDuration.WithLabelValues("tools.online").Observe(time.Since(start).Seconds())
 	if err != nil {
 		// No subscribers means no api-server holds this daemon's connection.
 		// Timeout means the request went out but nobody answered (daemon genuinely offline).
@@ -55,6 +60,7 @@ func (r *NATSDaemonRouter) IsDaemonOnline(userID string) (bool, error) {
 			return false, nil
 		}
 		// Other errors (connection closed, etc.) are infrastructure failures.
+		observability.NATSErrorsTotal.WithLabelValues("tools.online", "request").Inc()
 		return false, fmt.Errorf("NATS IsDaemonOnline request failed: %w", err)
 	}
 	return string(msg.Data) == "true", nil
@@ -65,10 +71,17 @@ func (r *NATSDaemonRouter) SendToolRequest(ctx context.Context, userID string, r
 	if err != nil {
 		return err
 	}
-	return r.nc.Publish(toolRequestSubject+"."+userID, payload)
+	subject := toolRequestSubject + "." + userID
+	msg := observability.NATSPublishMsg(ctx, subject, payload)
+	if err := r.nc.PublishMsg(msg); err != nil {
+		observability.NATSErrorsTotal.WithLabelValues("tools.request", "publish").Inc()
+		return err
+	}
+	observability.NATSPublishTotal.WithLabelValues("tools.request").Inc()
+	return nil
 }
 
-func (r *NATSDaemonRouter) SendToolExecutionCancel(userID, requestID, reason string) error {
+func (r *NATSDaemonRouter) SendToolExecutionCancel(ctx context.Context, userID, requestID, reason string) error {
 	payload, err := json.Marshal(map[string]string{
 		"request_id": requestID,
 		"reason":     reason,
@@ -76,7 +89,14 @@ func (r *NATSDaemonRouter) SendToolExecutionCancel(userID, requestID, reason str
 	if err != nil {
 		return err
 	}
-	return r.nc.Publish(toolCancelSubject+"."+userID, payload)
+	subject := toolCancelSubject + "." + userID
+	msg := observability.NATSPublishMsg(ctx, subject, payload)
+	if err := r.nc.PublishMsg(msg); err != nil {
+		observability.NATSErrorsTotal.WithLabelValues("tools.cancel", "publish").Inc()
+		return err
+	}
+	observability.NATSPublishTotal.WithLabelValues("tools.cancel").Inc()
+	return nil
 }
 
 func (r *NATSDaemonRouter) SendKillProcess(ctx context.Context, userID, processID string) error {
@@ -87,8 +107,13 @@ func (r *NATSDaemonRouter) SendKillProcess(ctx context.Context, userID, processI
 		return err
 	}
 
-	msg, err := r.nc.Request(daemonKillSubject+"."+userID, payload, 10*time.Second)
+	subject := daemonKillSubject + "." + userID
+	reqMsg := observability.NATSPublishMsg(ctx, subject, payload)
+	start := time.Now()
+	msg, err := r.nc.RequestMsg(reqMsg, 10*time.Second)
+	observability.NATSRequestDuration.WithLabelValues("daemon.process.kill").Observe(time.Since(start).Seconds())
 	if err != nil {
+		observability.NATSErrorsTotal.WithLabelValues("daemon.process.kill", "request").Inc()
 		return fmt.Errorf("kill process via NATS failed: %w", err)
 	}
 
@@ -137,20 +162,26 @@ func (r *NATSDaemonRouter) SendDaemonCommand(ctx context.Context, userID string,
 		msg *nats.Msg
 		err error
 	}
+	subject := daemonCommandSubject + "." + userID
+	reqMsg := observability.NATSPublishMsg(ctx, subject, data)
 	resultCh := make(chan natsResult, 1)
+	start := time.Now()
 	go func() {
-		msg, err := r.nc.Request(daemonCommandSubject+"."+userID, data, timeout)
+		msg, err := r.nc.RequestMsg(reqMsg, timeout)
 		resultCh <- natsResult{msg, err}
 	}()
 
 	var msg *nats.Msg
 	select {
 	case res := <-resultCh:
+		observability.NATSRequestDuration.WithLabelValues("daemon.command").Observe(time.Since(start).Seconds())
 		if res.err != nil {
+			observability.NATSErrorsTotal.WithLabelValues("daemon.command", "request").Inc()
 			return nil, fmt.Errorf("daemon command via NATS failed: %w", res.err)
 		}
 		msg = res.msg
 	case <-ctx.Done():
+		observability.NATSErrorsTotal.WithLabelValues("daemon.command", "timeout").Inc()
 		return nil, fmt.Errorf("daemon command via NATS failed: %w", ctx.Err())
 	}
 
@@ -189,20 +220,26 @@ func (r *NATSDaemonRouter) SendToolRequestSync(ctx context.Context, userID strin
 		msg *nats.Msg
 		err error
 	}
+	subject := toolRequestSyncSubject + "." + userID
+	reqMsg := observability.NATSPublishMsg(ctx, subject, payload)
 	resultCh := make(chan natsResult, 1)
+	start := time.Now()
 	go func() {
-		msg, err := r.nc.Request(toolRequestSyncSubject+"."+userID, payload, timeout)
+		msg, err := r.nc.RequestMsg(reqMsg, timeout)
 		resultCh <- natsResult{msg, err}
 	}()
 
 	var msg *nats.Msg
 	select {
 	case res := <-resultCh:
+		observability.NATSRequestDuration.WithLabelValues("tools.request.sync").Observe(time.Since(start).Seconds())
 		if res.err != nil {
+			observability.NATSErrorsTotal.WithLabelValues("tools.request.sync", "request").Inc()
 			return nil, fmt.Errorf("tool request via NATS failed: %w", res.err)
 		}
 		msg = res.msg
 	case <-ctx.Done():
+		observability.NATSErrorsTotal.WithLabelValues("tools.request.sync", "timeout").Inc()
 		return nil, fmt.Errorf("tool request via NATS failed: %w", ctx.Err())
 	}
 
@@ -213,7 +250,7 @@ func (r *NATSDaemonRouter) SendToolRequestSync(ctx context.Context, userID strin
 	return &resp, nil
 }
 
-func (r *NATSDaemonRouter) SendLoadProjectConfigs(userID string, projectPath string, requestID string) error {
+func (r *NATSDaemonRouter) SendLoadProjectConfigs(ctx context.Context, userID string, projectPath string, requestID string) error {
 	payload, err := json.Marshal(map[string]string{
 		"project_path": projectPath,
 		"request_id":   requestID,
@@ -221,10 +258,17 @@ func (r *NATSDaemonRouter) SendLoadProjectConfigs(userID string, projectPath str
 	if err != nil {
 		return err
 	}
-	return r.nc.Publish(configLoadSubject+"."+userID, payload)
+	subject := configLoadSubject + "." + userID
+	msg := observability.NATSPublishMsg(ctx, subject, payload)
+	if err := r.nc.PublishMsg(msg); err != nil {
+		observability.NATSErrorsTotal.WithLabelValues("daemon.config.load", "publish").Inc()
+		return err
+	}
+	observability.NATSPublishTotal.WithLabelValues("daemon.config.load").Inc()
+	return nil
 }
 
-func (r *NATSDaemonRouter) SendWatchProjectConfigs(userID string, projectPath string, includeInitial bool) error {
+func (r *NATSDaemonRouter) SendWatchProjectConfigs(ctx context.Context, userID string, projectPath string, includeInitial bool) error {
 	payload, err := json.Marshal(map[string]interface{}{
 		"project_path":    projectPath,
 		"include_initial": includeInitial,
@@ -232,7 +276,14 @@ func (r *NATSDaemonRouter) SendWatchProjectConfigs(userID string, projectPath st
 	if err != nil {
 		return err
 	}
-	return r.nc.Publish(configWatchSubject+"."+userID, payload)
+	subject := configWatchSubject + "." + userID
+	msg := observability.NATSPublishMsg(ctx, subject, payload)
+	if err := r.nc.PublishMsg(msg); err != nil {
+		observability.NATSErrorsTotal.WithLabelValues("daemon.config.watch", "publish").Inc()
+		return err
+	}
+	observability.NATSPublishTotal.WithLabelValues("daemon.config.watch").Inc()
+	return nil
 }
 
 func (r *NATSDaemonRouter) SendTerminalInput(ctx context.Context, userID string, sessionID string, data []byte) error {
@@ -243,7 +294,14 @@ func (r *NATSDaemonRouter) SendTerminalInput(ctx context.Context, userID string,
 	if err != nil {
 		return err
 	}
-	return r.nc.Publish(terminalInputSubject+"."+userID+"."+sessionID, payload)
+	subject := terminalInputSubject + "." + userID + "." + sessionID
+	msg := observability.NATSPublishMsg(ctx, subject, payload)
+	if err := r.nc.PublishMsg(msg); err != nil {
+		observability.NATSErrorsTotal.WithLabelValues("daemon.terminal.input", "publish").Inc()
+		return err
+	}
+	observability.NATSPublishTotal.WithLabelValues("daemon.terminal.input").Inc()
+	return nil
 }
 
 func (r *NATSDaemonRouter) SendTerminalResize(ctx context.Context, userID string, sessionID string, cols, rows uint32) error {
@@ -255,7 +313,14 @@ func (r *NATSDaemonRouter) SendTerminalResize(ctx context.Context, userID string
 	if err != nil {
 		return err
 	}
-	return r.nc.Publish(terminalResizeSubject+"."+userID+"."+sessionID, payload)
+	subject := terminalResizeSubject + "." + userID + "." + sessionID
+	msg := observability.NATSPublishMsg(ctx, subject, payload)
+	if err := r.nc.PublishMsg(msg); err != nil {
+		observability.NATSErrorsTotal.WithLabelValues("daemon.terminal.resize", "publish").Inc()
+		return err
+	}
+	observability.NATSPublishTotal.WithLabelValues("daemon.terminal.resize").Inc()
+	return nil
 }
 
 func (r *NATSDaemonRouter) SubscribeTerminalOutput(ctx context.Context, userID string, sessionID string) (<-chan *TerminalOutputEvent, func(), error) {
@@ -291,12 +356,16 @@ func (r *NATSDaemonRouter) SubscribeProcessOutput(ctx context.Context, userID st
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := r.nc.Publish(processOutputSubscribeSubject+"."+userID, reqPayload); err != nil {
+	subject := processOutputSubscribeSubject + "." + userID
+	subMsg := observability.NATSPublishMsg(ctx, subject, reqPayload)
+	if err := r.nc.PublishMsg(subMsg); err != nil {
+		observability.NATSErrorsTotal.WithLabelValues("daemon.process.subscribe", "publish").Inc()
 		return nil, nil, fmt.Errorf("publish process output subscribe request via NATS: %w", err)
 	}
+	observability.NATSPublishTotal.WithLabelValues("daemon.process.subscribe").Inc()
 
 	ch := make(chan *ProcessOutputEvent, 128)
-	subject := processOutputSubject + "." + userID + "." + processID
+	subject = processOutputSubject + "." + userID + "." + processID
 
 	sub, err := r.nc.Subscribe(subject, func(msg *nats.Msg) {
 		var evt ProcessOutputEvent

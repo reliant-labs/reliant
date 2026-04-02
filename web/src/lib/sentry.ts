@@ -55,7 +55,7 @@ export async function initSentry() {
     tracesSampleRate: parseFloat(import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE) || (isPrerelease ? 1.0 : 0.1),
     replaysSessionSampleRate: parseFloat(import.meta.env.VITE_SENTRY_REPLAYS_SESSION_SAMPLE_RATE) || (isPrerelease ? 1.0 : 0.1),
     replaysOnErrorSampleRate: parseFloat(import.meta.env.VITE_SENTRY_REPLAYS_ERROR_SAMPLE_RATE) || 1.0,
-    tracePropagationTargets: ["localhost"],
+    tracePropagationTargets: ["localhost", /^\//],
     beforeSend(event, hint) {
       // Check privacy settings before sending
       const { crashReportingEnabled } = getPrivacySettings();

@@ -764,14 +764,14 @@ func newFakeMCPDaemonRouter(mgr *fakeMCPManagerRuntime) *fakeMCPDaemonRouter {
 	}
 }
 
-func (r *fakeMCPDaemonRouter) IsDaemonOnline(_ string) (bool, error) { return true, nil }
+func (r *fakeMCPDaemonRouter) IsDaemonOnline(_ context.Context, _ string) (bool, error) { return true, nil }
 func (r *fakeMCPDaemonRouter) SendToolRequest(_ context.Context, _ string, _ *toolexec.ToolExecutionRequest) error {
 	return nil
 }
-func (r *fakeMCPDaemonRouter) SendToolExecutionCancel(_, _, _ string) error         { return nil }
+func (r *fakeMCPDaemonRouter) SendToolExecutionCancel(_ context.Context, _, _, _ string) error { return nil }
 func (r *fakeMCPDaemonRouter) SendKillProcess(_ context.Context, _, _ string) error { return nil }
-func (r *fakeMCPDaemonRouter) SendLoadProjectConfigs(_, _ string, _ string) error   { return nil }
-func (r *fakeMCPDaemonRouter) SendWatchProjectConfigs(_ string, _ string, _ bool) error {
+func (r *fakeMCPDaemonRouter) SendLoadProjectConfigs(_ context.Context, _, _ string, _ string) error { return nil }
+func (r *fakeMCPDaemonRouter) SendWatchProjectConfigs(_ context.Context, _ string, _ string, _ bool) error {
 	return nil
 }
 func (r *fakeMCPDaemonRouter) SendToolRequestSync(_ context.Context, _ string, _ *toolexec.ToolExecutionRequest) (*toolexec.ToolExecutionResponse, error) {

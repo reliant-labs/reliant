@@ -16,6 +16,8 @@ import (
 	toolsPkg "github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/observability"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // mcpToolPrefix is the prefix added to tool names to make them appear as MCP tools
@@ -51,7 +53,7 @@ func NewClaudeCodeClient(opts llm.DriverOptions) *ClaudeCodeClient {
 
 	// Build the transport chain:
 	// tokenRefreshTransport -> lowercaseHeaderTransport -> ResilientTransport (DNS fallback + caching)
-	baseTransport := llm.ResilientTransport()
+	baseTransport := otelhttp.NewTransport(llm.ResilientTransport())
 
 	lcTransport := &lowercaseHeaderTransport{
 		base:    baseTransport,
@@ -407,6 +409,7 @@ func (c *ClaudeCodeClient) preparedMessages(prompts []string, messages []anthrop
 }
 
 func (c *ClaudeCodeClient) SendMessages(ctx context.Context, prompts []string, messages []message.Message, tools []toolsPkg.Tool) (*llm.DriverResponse, error) {
+	start := time.Now()
 	preparedMessages := c.preparedMessages(prompts, c.convertMessages(messages), c.convertTools(tools))
 
 	// Log session ID if provided
@@ -419,6 +422,8 @@ func (c *ClaudeCodeClient) SendMessages(ctx context.Context, prompts []string, m
 	anthropicResponse, err := c.client.Messages.New(ctx, preparedMessages)
 	if err != nil {
 		logging.Error("Error in ClaudeCode API call", "error", err)
+		observability.LLMRequestsTotal.WithLabelValues("claude-code", "error").Inc()
+		observability.LLMRequestDuration.WithLabelValues("claude-code").Observe(time.Since(start).Seconds())
 		return nil, err
 	}
 
@@ -441,13 +446,27 @@ func (c *ClaudeCodeClient) SendMessages(ctx context.Context, prompts []string, m
 	if err != nil {
 		// MalformedJSONError indicates transient streaming corruption
 		logging.Warn("ClaudeCode SendMessages: Tool call JSON validation failed (will retry)", "error", err)
+		observability.LLMRequestsTotal.WithLabelValues("claude-code", "error").Inc()
+		observability.LLMRequestDuration.WithLabelValues("claude-code").Observe(time.Since(start).Seconds())
 		return nil, err
+	}
+
+	usage := c.usage(*anthropicResponse)
+
+	// Record metrics
+	observability.LLMRequestsTotal.WithLabelValues("claude-code", "success").Inc()
+	observability.LLMRequestDuration.WithLabelValues("claude-code").Observe(time.Since(start).Seconds())
+	if usage.InputTokens > 0 {
+		observability.LLMTokensTotal.WithLabelValues("claude-code", "input").Add(float64(usage.InputTokens))
+	}
+	if usage.OutputTokens > 0 {
+		observability.LLMTokensTotal.WithLabelValues("claude-code", "output").Add(float64(usage.OutputTokens))
 	}
 
 	return &llm.DriverResponse{
 		Content:      content,
 		ToolCalls:    toolCalls,
-		Usage:        c.usage(*anthropicResponse),
+		Usage:        usage,
 		FinishReason: finishReason,
 	}, nil
 }

@@ -321,7 +321,7 @@ func (s *ToolsDaemonService) ConnectDaemon(
 	go s.runHeartbeat(conn)
 
 	for _, projectPath := range requestedProjectPaths {
-		if err := s.sendLoadAndWatchProjectConfig(conn, projectPath, true); err != nil {
+		if err := s.sendLoadAndWatchProjectConfig(ctx, conn, projectPath, true); err != nil {
 			logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to request initial project config load/watch",
 				"error", err,
 				"daemonID", conn.daemonID,
@@ -534,7 +534,7 @@ func (s *ToolsDaemonService) handleProjectDiscovery(ctx context.Context, conn *d
 			continue
 		}
 
-		if sendErr := s.sendLoadAndWatchProjectConfig(conn, path, true); sendErr != nil {
+		if sendErr := s.sendLoadAndWatchProjectConfig(ctx, conn, path, true); sendErr != nil {
 			logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed requesting config load/watch for discovered project",
 				"error", sendErr,
 				"projectPath", path,
@@ -598,7 +598,7 @@ func (s *ToolsDaemonService) handleProjectConfigDelta(ctx context.Context, conn 
 		return s.persistProjectConfigSnapshot(ctx, conn, snapshot, false)
 	}
 
-	return s.SendLoadProjectConfigs(conn.userID, projectPath, uuid.New().String())
+	return s.SendLoadProjectConfigs(ctx, conn.userID, projectPath, uuid.New().String())
 }
 
 func (s *ToolsDaemonService) persistProjectConfigSnapshot(ctx context.Context, conn *daemonConnection, snapshot *reliantv1.ProjectConfigSnapshot, force bool) error {
@@ -847,14 +847,14 @@ func flattenIndexedScenarios(scenarios []*reliantv1.IndexedScenario) *string {
 	return &value
 }
 
-func (s *ToolsDaemonService) sendLoadAndWatchProjectConfig(conn *daemonConnection, projectPath string, includeInitial bool) error {
+func (s *ToolsDaemonService) sendLoadAndWatchProjectConfig(ctx context.Context, conn *daemonConnection, projectPath string, includeInitial bool) error {
 	if conn == nil {
 		return nil
 	}
-	if err := s.SendLoadProjectConfigs(conn.userID, projectPath, uuid.New().String()); err != nil {
+	if err := s.SendLoadProjectConfigs(ctx, conn.userID, projectPath, uuid.New().String()); err != nil {
 		return err
 	}
-	return s.SendWatchProjectConfigs(conn.userID, projectPath, includeInitial)
+	return s.SendWatchProjectConfigs(ctx, conn.userID, projectPath, includeInitial)
 }
 
 func (s *ToolsDaemonService) sendToUserDaemon(userID string, msg *reliantv1.ServerMessage) error {
@@ -928,7 +928,7 @@ func (s *ToolsDaemonService) runHeartbeat(conn *daemonConnection) {
 // ============================================
 
 // IsDaemonOnline checks if a daemon is currently connected for the user
-func (s *ToolsDaemonService) IsDaemonOnline(userID string) bool {
+func (s *ToolsDaemonService) IsDaemonOnline(_ context.Context, userID string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	_, online := s.connections[userID]
@@ -1007,7 +1007,7 @@ func (s *ToolsDaemonService) GetConnectedUsers() []string {
 }
 
 // SendLoadProjectConfigs requests a full snapshot load for a project path.
-func (s *ToolsDaemonService) SendLoadProjectConfigs(userID string, projectPath string, requestID string) error {
+func (s *ToolsDaemonService) SendLoadProjectConfigs(_ context.Context, userID string, projectPath string, requestID string) error {
 	projectPath = normalizeProjectPath(projectPath)
 	if projectPath == "" {
 		return nil
@@ -1029,7 +1029,7 @@ func (s *ToolsDaemonService) SendLoadProjectConfigs(userID string, projectPath s
 }
 
 // SendWatchProjectConfigs subscribes daemon-side watchers for project config changes.
-func (s *ToolsDaemonService) SendWatchProjectConfigs(userID string, projectPath string, includeInitial bool) error {
+func (s *ToolsDaemonService) SendWatchProjectConfigs(_ context.Context, userID string, projectPath string, includeInitial bool) error {
 	projectPath = normalizeProjectPath(projectPath)
 	if projectPath == "" {
 		return nil
@@ -1193,7 +1193,7 @@ func (s *ToolsDaemonService) SendToolRequestSync(ctx context.Context, userID str
 }
 
 // SendToolExecutionCancel sends a tool cancellation request to connected daemon (scaffolding for PR1).
-func (s *ToolsDaemonService) SendToolExecutionCancel(userID, requestID, reason string) error {
+func (s *ToolsDaemonService) SendToolExecutionCancel(_ context.Context, userID, requestID, reason string) error {
 	if strings.TrimSpace(requestID) == "" {
 		return nil
 	}

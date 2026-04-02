@@ -10,11 +10,11 @@ import (
 
 type routerStub struct{}
 
-func (r *routerStub) IsDaemonOnline(userID string) (bool, error) { return true, nil }
+func (r *routerStub) IsDaemonOnline(_ context.Context, userID string) (bool, error) { return true, nil }
 func (r *routerStub) SendToolRequest(ctx context.Context, userID string, request *ToolExecutionRequest) error {
 	return nil
 }
-func (r *routerStub) SendToolExecutionCancel(userID, requestID, reason string) error { return nil }
+func (r *routerStub) SendToolExecutionCancel(_ context.Context, userID, requestID, reason string) error { return nil }
 func (r *routerStub) SendKillProcess(ctx context.Context, userID, processID string) error {
 	return nil
 }
@@ -24,10 +24,10 @@ func (r *routerStub) SendDaemonCommand(ctx context.Context, userID string, comma
 func (r *routerStub) SendToolRequestSync(ctx context.Context, userID string, request *ToolExecutionRequest) (*ToolExecutionResponse, error) {
 	return &ToolExecutionResponse{Success: true}, nil
 }
-func (r *routerStub) SendLoadProjectConfigs(userID string, projectPath string, requestID string) error {
+func (r *routerStub) SendLoadProjectConfigs(_ context.Context, userID string, projectPath string, requestID string) error {
 	return nil
 }
-func (r *routerStub) SendWatchProjectConfigs(userID string, projectPath string, includeInitial bool) error {
+func (r *routerStub) SendWatchProjectConfigs(_ context.Context, userID string, projectPath string, includeInitial bool) error {
 	return nil
 }
 func (r *routerStub) SendTerminalInput(_ context.Context, _, _ string, _ []byte) error {

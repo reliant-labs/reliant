@@ -270,7 +270,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	corsHandler := cors.Handler(cors.Options{
 		AllowedOrigins:   corsOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "Connect-Protocol-Version", "Connect-Timeout-Ms", "X-CSRF-Token"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "Connect-Protocol-Version", "Connect-Timeout-Ms", "X-CSRF-Token", "traceparent", "tracestate", "sentry-trace", "baggage"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: allowCreds,
 		MaxAge:           86400,
@@ -421,6 +421,7 @@ func newHandlerOptions(timeoutInterceptor connect.Interceptor, authInterceptors 
 // newInterceptors returns the ordered interceptor slice used by both main and daemon servers.
 func newInterceptors(timeoutInterceptor connect.Interceptor, authInterceptors ...connect.Interceptor) []connect.Interceptor {
 	out := []connect.Interceptor{
+		interceptors.NewObservabilityInterceptor(), // outermost: metrics + tracing
 		interceptors.NewRecoveryInterceptor(),
 		interceptors.NewErrorReporterInterceptor(),
 		timeoutInterceptor,

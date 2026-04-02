@@ -45,7 +45,7 @@ type ToolExecutionResponse struct {
 type DaemonRouter interface {
 	// IsDaemonOnline checks if a daemon is connected for the given user.
 	// Returns (online, nil) for definitive results, or (false, err) for infrastructure failures.
-	IsDaemonOnline(userID string) (bool, error)
+	IsDaemonOnline(ctx context.Context, userID string) (bool, error)
 
 	// SendToolRequest routes a tool execution request to the user's daemon (fire-and-forget).
 	SendToolRequest(ctx context.Context, userID string, request *ToolExecutionRequest) error
@@ -55,7 +55,7 @@ type DaemonRouter interface {
 	SendToolRequestSync(ctx context.Context, userID string, request *ToolExecutionRequest) (*ToolExecutionResponse, error)
 
 	// SendToolExecutionCancel cancels a running tool execution.
-	SendToolExecutionCancel(userID, requestID, reason string) error
+	SendToolExecutionCancel(ctx context.Context, userID, requestID, reason string) error
 
 	// SendKillProcess sends a kill signal to a background process on the user's daemon.
 	SendKillProcess(ctx context.Context, userID, processID string) error
@@ -64,10 +64,10 @@ type DaemonRouter interface {
 	SendDaemonCommand(ctx context.Context, userID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
 
 	// SendLoadProjectConfigs asks the daemon to load and send project configs.
-	SendLoadProjectConfigs(userID string, projectPath string, requestID string) error
+	SendLoadProjectConfigs(ctx context.Context, userID string, projectPath string, requestID string) error
 
 	// SendWatchProjectConfigs asks the daemon to start watching a project for config changes.
-	SendWatchProjectConfigs(userID string, projectPath string, includeInitial bool) error
+	SendWatchProjectConfigs(ctx context.Context, userID string, projectPath string, includeInitial bool) error
 
 	// SendTerminalInput sends raw PTY input bytes to a daemon terminal session.
 	SendTerminalInput(ctx context.Context, userID string, sessionID string, data []byte) error
@@ -91,14 +91,14 @@ type DaemonRouter interface {
 // DaemonConnectionManager is the subset of ToolsDaemonService needed by LocalDaemonRouter
 // and NATSToolBridge. This avoids importing the services package from toolexec.
 type DaemonConnectionManager interface {
-	IsDaemonOnline(userID string) bool
+	IsDaemonOnline(ctx context.Context, userID string) bool
 	SendToolRequest(ctx context.Context, userID string, request *ToolExecutionRequest) error
 	SendToolRequestSync(ctx context.Context, userID string, request *ToolExecutionRequest) (*ToolExecutionResponse, error)
-	SendToolExecutionCancel(userID, requestID, reason string) error
+	SendToolExecutionCancel(ctx context.Context, userID, requestID, reason string) error
 	SendKillProcess(userID, processID string) error
 	SendDaemonCommand(ctx context.Context, userID string, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error)
-	SendLoadProjectConfigs(userID string, projectPath string, requestID string) error
-	SendWatchProjectConfigs(userID string, projectPath string, includeInitial bool) error
+	SendLoadProjectConfigs(ctx context.Context, userID string, projectPath string, requestID string) error
+	SendWatchProjectConfigs(ctx context.Context, userID string, projectPath string, includeInitial bool) error
 	SendTerminalInput(userID string, sessionID string, data []byte) error
 	SendTerminalResize(userID string, sessionID string, cols, rows uint32) error
 	SubscribeTerminalOutput(userID string, sessionID string) (<-chan *TerminalOutputEvent, func(), error)

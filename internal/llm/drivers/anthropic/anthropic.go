@@ -3,6 +3,7 @@ package anthropic
 
 import (
 	"context"
+	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/bedrock"
@@ -12,6 +13,7 @@ import (
 	toolsPkg "github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/observability"
 )
 
 // AnthropicClient is the driver for the standard Anthropic API (sk-ant-* keys)
@@ -54,6 +56,7 @@ func (c *AnthropicClient) preparedMessages(prompts []string, messages []anthropi
 }
 
 func (c *AnthropicClient) SendMessages(ctx context.Context, prompts []string, messages []message.Message, tools []toolsPkg.Tool) (*llm.DriverResponse, error) {
+	start := time.Now()
 	preparedMessages := c.preparedMessages(prompts, c.convertMessages(messages), c.convertTools(tools))
 
 	// Log session ID if provided
@@ -66,6 +69,8 @@ func (c *AnthropicClient) SendMessages(ctx context.Context, prompts []string, me
 	anthropicResponse, err := c.client.Messages.New(ctx, preparedMessages)
 	if err != nil {
 		logging.Error("Error in Anthropic API call", "error", err)
+		observability.LLMRequestsTotal.WithLabelValues("anthropic", "error").Inc()
+		observability.LLMRequestDuration.WithLabelValues("anthropic").Observe(time.Since(start).Seconds())
 		return nil, err
 	}
 
@@ -88,13 +93,27 @@ func (c *AnthropicClient) SendMessages(ctx context.Context, prompts []string, me
 	if err != nil {
 		// MalformedJSONError indicates transient streaming corruption
 		logging.Warn("Anthropic SendMessages: Tool call JSON validation failed (will retry)", "error", err)
+		observability.LLMRequestsTotal.WithLabelValues("anthropic", "error").Inc()
+		observability.LLMRequestDuration.WithLabelValues("anthropic").Observe(time.Since(start).Seconds())
 		return nil, err
+	}
+
+	usage := c.usage(*anthropicResponse)
+
+	// Record metrics
+	observability.LLMRequestsTotal.WithLabelValues("anthropic", "success").Inc()
+	observability.LLMRequestDuration.WithLabelValues("anthropic").Observe(time.Since(start).Seconds())
+	if usage.InputTokens > 0 {
+		observability.LLMTokensTotal.WithLabelValues("anthropic", "input").Add(float64(usage.InputTokens))
+	}
+	if usage.OutputTokens > 0 {
+		observability.LLMTokensTotal.WithLabelValues("anthropic", "output").Add(float64(usage.OutputTokens))
 	}
 
 	return &llm.DriverResponse{
 		Content:      content,
 		ToolCalls:    toolCalls,
-		Usage:        c.usage(*anthropicResponse),
+		Usage:        usage,
 		FinishReason: finishReason,
 	}, nil
 }

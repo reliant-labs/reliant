@@ -6,18 +6,22 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/go-chi/httprate"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+
 	"github.com/reliant-labs/reliant/internal/api/handlers"
 	apimiddleware "github.com/reliant-labs/reliant/internal/api/middleware"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/pkgmgr"
 )
 
@@ -67,6 +71,7 @@ func NewServer(cfg *Config, database db.Repository, dataDir string) *Server {
 
 	// Middleware
 	r.Use(middleware.RequestID)
+	r.Use(otelHTTPMiddleware)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(apimiddleware.SentryRecoverer) // Custom recoverer that reports panics to Sentry
@@ -94,7 +99,7 @@ func NewServer(cfg *Config, database db.Repository, dataDir string) *Server {
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   corsOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "traceparent", "tracestate", "sentry-trace", "baggage"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: allowCreds,
 		MaxAge:           86400,
@@ -542,6 +547,33 @@ func recoverBackgroundProcesses(database db.Repository) {
 		logging.Info("Loaded running processes into BackgroundManager",
 			"count", loadedCount)
 	}
+}
+
+// otelHTTPMiddleware is a chi-compatible middleware that wraps handlers with
+// OpenTelemetry HTTP instrumentation (tracing) and records Prometheus metrics
+// (request count, duration, in-flight gauge).
+func otelHTTPMiddleware(next http.Handler) http.Handler {
+	// Wrap with OTel HTTP instrumentation for tracing
+	handler := otelhttp.NewHandler(next, "http.request")
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		observability.HTTPInFlight.Inc()
+		defer observability.HTTPInFlight.Dec()
+
+		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+		start := time.Now()
+
+		handler.ServeHTTP(ww, r)
+
+		duration := time.Since(start).Seconds()
+		status := strconv.Itoa(ww.Status())
+		path := chi.RouteContext(r.Context()).RoutePattern()
+		if path == "" {
+			path = r.URL.Path
+		}
+
+		observability.HTTPRequestsTotal.WithLabelValues(r.Method, path, status).Inc()
+		observability.HTTPRequestDuration.WithLabelValues(r.Method, path, status).Observe(duration)
+	})
 }
 
 // securityHeaders adds security-related HTTP headers to responses

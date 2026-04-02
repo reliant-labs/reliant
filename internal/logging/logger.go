@@ -78,6 +78,7 @@ func SetupWithTrace(defaultLevel slog.Level, enableTrace bool) {
 		Level: defaultLevel,
 	})
 	handler = newSentryHandler(handler)
+	handler = newMetricsHandler(handler)
 	slog.SetDefault(slog.New(handler))
 }
 
@@ -140,6 +141,7 @@ func SetupWithRotation(defaultLevel slog.Level, enableTrace bool, config *Rotati
 		Level: defaultLevel,
 	})
 	handler = newSentryHandler(handler)
+	handler = newMetricsHandler(handler)
 	slog.SetDefault(slog.New(handler))
 }
 
