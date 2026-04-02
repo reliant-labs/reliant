@@ -115,41 +115,7 @@ nodes:
 
 ## Development
 
-For Postgres-based local dev, run with `DATABASE_DRIVER=postgres` (for example `npm run dev:pg`).
-Reliant will use a shared local Postgres server while auto-provisioning a **per-worktree database** during startup, mirroring SQLite worktree isolation.
-
-To inspect the currently resolved DB context quickly (computed worktree DB name + active `DATABASE_URL`), run:
-
-```bash
-npm run db:info
-```
-
-See [docs/RELEASE_SETUP.md](docs/RELEASE_SETUP.md) for release process documentation.
-
-For WSL/Linux developer setup, see [docs/WSL_DEVELOPMENT_SETUP.md](docs/WSL_DEVELOPMENT_SETUP.md).
-On native Windows, use `npm run dev` for day-to-day development.
-Use `make` targets from Linux/macOS/WSL where Unix tooling (bash/sqlite3/goose) is available.
-
-## Star History
-
-<picture>
-  <source
-    media="(prefers-color-scheme: dark)"
-    srcset="
-      https://api.star-history.com/svg?repos=reliant-labs/reliant&type=Date&theme=dark
-    "
-  />
-  <source
-    media="(prefers-color-scheme: light)"
-    srcset="
-      https://api.star-history.com/svg?repos=reliant-labs/reliant&type=Date
-    "
-  />
-  <img
-    alt="Star History Chart"
-    src="https://api.star-history.com/svg?repos=reliant-labs/reliant&type=Date"
-  />
-</picture>
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and the [`contributing/`](contributing/) directory for detailed guides.
 
 ## License
 

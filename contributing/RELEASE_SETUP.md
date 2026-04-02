@@ -10,6 +10,33 @@ This document explains how to set up and manage releases for Reliant. Our releas
 - **Electron Auto-Updater** for automatic updates
 - **Apple Code Signing & Notarization** for macOS distribution
 
+```mermaid
+flowchart LR
+    TAG[Git Tag Push] --> GHA[GitHub Actions]
+    GHA --> BUILD[Build\nmacOS/Win/Linux]
+    BUILD --> SIGN[Code Sign\nApple/Windows]
+    SIGN --> R2[Upload to\nCloudflare R2]
+    R2 --> YML[Update\nlatest-mac.yml]
+    YML --> AUTO[Auto-Updater\nPicks Up]
+```
+
+## Table of Contents
+
+- [Quick Release Commands](#quick-release-commands)
+- [Changelog](#changelog)
+  - [Recovering a missed changelog email](#recovering-a-missed-changelog-email)
+  - [PR Labels for Changelog](#pr-labels-for-changelog)
+- [Download URLs](#download-urls)
+- [GitHub Actions Secrets Required](#github-actions-secrets-required)
+- [CloudFlare Workers Setup for "Latest" URLs](#cloudflare-workers-setup-for-latest-urls)
+- [Setting Up Apple Code Signing](#setting-up-apple-code-signing)
+- [Cloudflare R2 Configuration](#cloudflare-r2-configuration)
+- [Auto-Updater System](#auto-updater-system)
+- [Testing the Release System](#testing-the-release-system)
+- [Release Workflow Files](#release-workflow-files)
+- [Troubleshooting](#troubleshooting)
+- [License Files](#license-files)
+
 ## Quick Release Commands
 
 ```bash
