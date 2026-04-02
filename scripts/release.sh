@@ -98,8 +98,8 @@ fi
 echo -e "${GREEN}✅ New version: $NEW_VERSION${NC}"
 
 RELEASE_TAG="v$NEW_VERSION"
-CHANGELOG_FILE="mintlify-docs/data/releases/${RELEASE_TAG}.yaml"
-GENERATED_CHANGELOG="mintlify-docs/changelog.mdx"
+CHANGELOG_FILE="docs/data/releases/${RELEASE_TAG}.yaml"
+GENERATED_CHANGELOG="docs/changelog.mdx"
 REQUIRES_CHANGELOG=true
 
 if [[ $RELEASE_TYPE == "prerelease" ]]; then

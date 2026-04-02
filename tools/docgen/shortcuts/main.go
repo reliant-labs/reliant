@@ -15,6 +15,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -66,6 +67,15 @@ func main() {
 	var config ShortcutsConfig
 	if err := yaml.Unmarshal(data, &config); err != nil {
 		fmt.Fprintf(os.Stderr, "Error parsing YAML: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(tsOutput), 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating TypeScript output directory: %v\n", err)
+		os.Exit(1)
+	}
+	if err := os.MkdirAll(filepath.Dir(mdOutput), 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating Markdown output directory: %v\n", err)
 		os.Exit(1)
 	}
 
