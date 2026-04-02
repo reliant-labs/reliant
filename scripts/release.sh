@@ -100,49 +100,57 @@ echo -e "${GREEN}✅ New version: $NEW_VERSION${NC}"
 RELEASE_TAG="v$NEW_VERSION"
 CHANGELOG_FILE="mintlify-docs/data/releases/${RELEASE_TAG}.yaml"
 GENERATED_CHANGELOG="mintlify-docs/changelog.mdx"
+REQUIRES_CHANGELOG=true
 
-if [[ ! -f "$CHANGELOG_FILE" ]]; then
-    echo -e "${RED}Error: Missing changelog source: $CHANGELOG_FILE${NC}"
-    echo -e "${YELLOW}Create it before releasing:${NC}"
-    echo -e "${BLUE}  make changelog${NC}"
-    echo -e "${BLUE}  make changelog-draft VERSION=${RELEASE_TAG} [SINCE_TAG=vX.Y.Z]${NC}"
-    echo -e "${BLUE}  edit ${CHANGELOG_FILE}${NC}"
-    echo -e "${BLUE}  make generate-changelog${NC}"
-    exit 1
+if [[ $RELEASE_TYPE == "prerelease" ]]; then
+    REQUIRES_CHANGELOG=false
+    echo -e "${YELLOW}ℹ️  Skipping changelog validation for RC prerelease ${RELEASE_TAG}${NC}"
 fi
 
-if ! command -v yq >/dev/null 2>&1; then
-    echo -e "${RED}Error: yq is required to validate changelog YAML. Install with: brew install yq${NC}"
-    exit 1
+if [[ "$REQUIRES_CHANGELOG" == "true" ]]; then
+    if [[ ! -f "$CHANGELOG_FILE" ]]; then
+        echo -e "${RED}Error: Missing changelog source: $CHANGELOG_FILE${NC}"
+        echo -e "${YELLOW}Create it before releasing:${NC}"
+        echo -e "${BLUE}  make changelog${NC}"
+        echo -e "${BLUE}  make changelog-draft VERSION=${RELEASE_TAG} [SINCE_TAG=vX.Y.Z]${NC}"
+        echo -e "${BLUE}  edit ${CHANGELOG_FILE}${NC}"
+        echo -e "${BLUE}  make generate-changelog${NC}"
+        exit 1
+    fi
+
+    if ! command -v yq >/dev/null 2>&1; then
+        echo -e "${RED}Error: yq is required to validate changelog YAML. Install with: brew install yq${NC}"
+        exit 1
+    fi
+
+    VERSION_IN_CHANGELOG=$(yq -r '.version // ""' "$CHANGELOG_FILE")
+    TITLE_IN_CHANGELOG=$(yq -r '.title // ""' "$CHANGELOG_FILE")
+    SUMMARY_IN_CHANGELOG=$(yq -r '.summary // ""' "$CHANGELOG_FILE")
+    ITEM_COUNT=$(yq -r '(.items // []) | length' "$CHANGELOG_FILE")
+
+    if [[ "$VERSION_IN_CHANGELOG" != "$RELEASE_TAG" ]]; then
+        echo -e "${RED}Error: $CHANGELOG_FILE version is '$VERSION_IN_CHANGELOG', expected '$RELEASE_TAG'${NC}"
+        exit 1
+    fi
+
+    if [[ -z "$TITLE_IN_CHANGELOG" || "$TITLE_IN_CHANGELOG" == "null" ]]; then
+        echo -e "${RED}Error: $CHANGELOG_FILE is missing a release title${NC}"
+        exit 1
+    fi
+
+    if [[ -z "$SUMMARY_IN_CHANGELOG" || "$SUMMARY_IN_CHANGELOG" == "null" ]]; then
+        echo -e "${RED}Error: $CHANGELOG_FILE is missing a release summary${NC}"
+        exit 1
+    fi
+
+    if [[ "$ITEM_COUNT" == "0" ]]; then
+        echo -e "${RED}Error: $CHANGELOG_FILE must contain at least one changelog item${NC}"
+        exit 1
+    fi
+
+    echo -e "${YELLOW}📝 Regenerating Mintlify changelog from YAML...${NC}"
+    make generate-changelog
 fi
-
-VERSION_IN_CHANGELOG=$(yq -r '.version // ""' "$CHANGELOG_FILE")
-TITLE_IN_CHANGELOG=$(yq -r '.title // ""' "$CHANGELOG_FILE")
-SUMMARY_IN_CHANGELOG=$(yq -r '.summary // ""' "$CHANGELOG_FILE")
-ITEM_COUNT=$(yq -r '(.items // []) | length' "$CHANGELOG_FILE")
-
-if [[ "$VERSION_IN_CHANGELOG" != "$RELEASE_TAG" ]]; then
-    echo -e "${RED}Error: $CHANGELOG_FILE version is '$VERSION_IN_CHANGELOG', expected '$RELEASE_TAG'${NC}"
-    exit 1
-fi
-
-if [[ -z "$TITLE_IN_CHANGELOG" || "$TITLE_IN_CHANGELOG" == "null" ]]; then
-    echo -e "${RED}Error: $CHANGELOG_FILE is missing a release title${NC}"
-    exit 1
-fi
-
-if [[ -z "$SUMMARY_IN_CHANGELOG" || "$SUMMARY_IN_CHANGELOG" == "null" ]]; then
-    echo -e "${RED}Error: $CHANGELOG_FILE is missing a release summary${NC}"
-    exit 1
-fi
-
-if [[ "$ITEM_COUNT" == "0" ]]; then
-    echo -e "${RED}Error: $CHANGELOG_FILE must contain at least one changelog item${NC}"
-    exit 1
-fi
-
-echo -e "${YELLOW}📝 Regenerating Mintlify changelog from YAML...${NC}"
-make generate-changelog
 
 # Check if we're on main branch (protected)
 CURRENT_BRANCH=$(git branch --show-current)
@@ -155,7 +163,10 @@ fi
 
 # Create git tag with v prefix
 echo -e "${YELLOW}🏷️  Creating release commit and tag...${NC}"
-git add electron/package.json "$CHANGELOG_FILE" "$GENERATED_CHANGELOG"
+git add electron/package.json
+if [[ "$REQUIRES_CHANGELOG" == "true" ]]; then
+    git add "$CHANGELOG_FILE" "$GENERATED_CHANGELOG"
+fi
 git commit -m "chore: release v$NEW_VERSION"
 git tag "$RELEASE_TAG"
 
@@ -187,5 +198,9 @@ echo -e "${BLUE}  Latest: https://downloads.reliantlabs.io/Reliant-latest-mac-ar
 echo -e "${BLUE}  Versioned: https://downloads.reliantlabs.io/Reliant-${NEW_VERSION}-mac-arm64.dmg${NC}"
 echo -e "${BLUE}Tag: ${RELEASE_TAG}${NC}"
 echo -e "${BLUE}Commit: $(git rev-parse --short HEAD)${NC}"
-echo -e "${BLUE}Changelog source: ${CHANGELOG_FILE}${NC}"
-echo -e "${BLUE}Generated docs page: ${GENERATED_CHANGELOG}${NC}"
+if [[ "$REQUIRES_CHANGELOG" == "true" ]]; then
+    echo -e "${BLUE}Changelog source: ${CHANGELOG_FILE}${NC}"
+    echo -e "${BLUE}Generated docs page: ${GENERATED_CHANGELOG}${NC}"
+else
+    echo -e "${BLUE}Changelog: skipped for RC prerelease${NC}"
+fi
