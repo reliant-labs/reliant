@@ -150,7 +150,7 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
         element?.scrollIntoView({ block: "nearest" });
       }, 0);
     }
-  }, [activeViewer?.id, activeViewer?.type, activeViewer?.file?.path, activeSidebarTab]);
+  }, [activeViewer?.id, activeViewer?.type, activeViewer && 'file' in activeViewer ? (activeViewer as any).file?.path : undefined, activeSidebarTab]);
 
   // Handle arrow key navigation from file viewer
   useEffect(() => {

@@ -4,12 +4,12 @@ package llm
 import (
 	"context"
 	"net"
-	"net/http"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func TestIsDNSError(t *testing.T) {
@@ -157,7 +157,6 @@ func TestResilientHTTPClient(t *testing.T) {
 	require.NotNil(t, client)
 	require.NotNil(t, client.Transport)
 
-	tr, ok := client.Transport.(*http.Transport)
-	require.True(t, ok)
-	assert.Equal(t, 10, tr.MaxIdleConnsPerHost)
+	_, ok := client.Transport.(*otelhttp.Transport)
+	assert.True(t, ok, "transport should be *otelhttp.Transport wrapping resilient transport")
 }

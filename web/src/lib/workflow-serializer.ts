@@ -70,13 +70,16 @@ function cleanStepForYaml(step: Step): Record<string, unknown> {
       }
       result.inputs = inputs
     }
-  } else if (step.inputs && Object.keys(step.inputs).length > 0) {
-    // Action steps: use the UI generic inputs bag
-    const inputs: Record<string, unknown> = {}
-    for (const [key, value] of Object.entries(step.inputs)) {
-      inputs[key] = protoValueToPlain(value)
+  } else if (step.args?.value) {
+    // Action steps: inputs are in the typed args value record
+    const argsValue = step.args.value as Record<string, unknown>
+    if (Object.keys(argsValue).length > 0) {
+      const inputs: Record<string, unknown> = {}
+      for (const [key, value] of Object.entries(argsValue)) {
+        inputs[key] = protoValueToPlain(value)
+      }
+      result.inputs = inputs
     }
-    result.inputs = inputs
   }
 
   // Handle thread config (only workflow nodes have thread config)
@@ -193,8 +196,8 @@ function cleanWorkflowForYaml(workflow: Workflow): Record<string, unknown> {
     }
   }
 
-  // Add workflow inputs as "inputs" in YAML (canonical field is inputs; params is legacy alias)
-  const workflowInputs = workflow.inputs ?? workflow.params
+  // Add workflow inputs as "inputs" in YAML
+  const workflowInputs = workflow.inputs
   if (workflowInputs && Object.keys(workflowInputs).length > 0) {
     result.inputs = cleanParamsForYaml(workflowInputs)
   }
@@ -517,9 +520,12 @@ function parseRawStep(raw: Record<string, unknown>): Step {
     if (whileExpr) loopArgs.while = directCel(whileExpr)
     step.args = { case: 'loop' as const, value: loopArgs } as Step['args']
   } else {
-    // Action steps: inputs go in the UI generic bag
+    // Action steps: inputs go in the typed args value
     if (isRecord(raw.inputs)) {
-      step.inputs = raw.inputs
+      const actionCase = step.args?.case
+      if (actionCase) {
+        step.args = { case: actionCase as any, value: { ...(step.args?.value as Record<string, unknown> ?? {}), ...raw.inputs } } as Step['args']
+      }
     }
   }
 

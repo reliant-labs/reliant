@@ -84,7 +84,7 @@ export function LoopStepConfig({
           nodes: [],
           edges: [],
           outputs: {},
-        },
+        } as any,
       }) as LoopStep,
     );
   }
@@ -123,7 +123,7 @@ export function LoopStepConfig({
             inputs={inlineWorkflow.inputs}
             values={stepInputs}
             onChange={(inputs) =>
-              onUpdate(withLoopArgs(step, { args: inputs }) as LoopStep)
+              onUpdate(withLoopArgs(step, { args: inputs as any }) as LoopStep)
             }
           />
         )}
@@ -135,7 +135,7 @@ export function LoopStepConfig({
         onChange={(val) =>
           onUpdate(
             withLoopArgs(step, {
-              while: val ? directCel(val) : undefined,
+              while: val ? directCel(val) as any : undefined,
             }) as LoopStep,
           )
         }

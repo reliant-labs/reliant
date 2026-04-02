@@ -165,7 +165,7 @@ function PropertyEditor({
                 type: "object",
                 properties: schema.properties,
                 required: schema.required,
-              }}
+              } as InputDef}
               value={value}
               onChange={onChange}
               disabled={disabled}

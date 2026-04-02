@@ -122,8 +122,7 @@ async function getOrderedChatList(): Promise<Chat[]> {
         return chat.unread || activityState === "awaiting_approval";
       }
       if (filters.states!.includes("active")) {
-        return activityState === "thinking" || 
-               activityState === "streaming";
+        return activityState === "thinking";
       }
       if (filters.states!.includes("idle")) {
         return activityState === "idle";

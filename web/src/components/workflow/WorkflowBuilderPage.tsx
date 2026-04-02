@@ -415,8 +415,7 @@ export function WorkflowBuilderPage({
       // Update editing workflow state with canonical input aliasing
       const savedWorkflow: Workflow = {
         ...workflow,
-        inputs: workflow.inputs ?? workflow.params,
-        params: workflow.inputs ?? workflow.params,
+        inputs: workflow.inputs,
       };
       setEditingWorkflow(savedWorkflow);
 

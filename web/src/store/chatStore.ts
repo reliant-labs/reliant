@@ -1436,7 +1436,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       });
 
       // Stop polling per-chat events for the deselected chat
-      getGlobalUpdatesStore().unsubscribeFromChatDetails();
+      getGlobalUpdatesStore()?.unsubscribeFromChatDetails();
 
       // Clear from workspace state
       const projectId = useProjectStore.getState().currentProject?.id;
@@ -1560,7 +1560,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           if (!currentChat) return state;
 
           const newChats = new Map(state.chats);
-          newChats.set(chatId, { ...currentChat, workflow_name: options.workflow });
+          newChats.set(chatId, { ...currentChat, workflowName: options.workflow ?? undefined });
           return { chats: newChats };
         });
       }
@@ -3856,7 +3856,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
     // Unsubscribe from chat details in the unified stream
     try {
-      getGlobalUpdatesStore().unsubscribeFromChatDetails();
+      getGlobalUpdatesStore()?.unsubscribeFromChatDetails();
     } catch {
       // May fail during teardown
     }

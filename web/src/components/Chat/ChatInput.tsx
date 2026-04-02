@@ -50,7 +50,7 @@ import { usePendingYield } from "../../store/chatStoreHooks";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads } from "./thread-views/threadUtils";
 import { useActiveThreads } from "../../store/threadActivityStore";
-import { getInputNestedInputs, getInputPresetConfig, getInputUI } from "../../lib/inputHelpers";
+import { getInputDefault, getInputNestedInputs, getInputPresetConfig, getInputUI } from "../../lib/inputHelpers";
 
 /** Extract WorkflowInputs schema from a proto Workflow's inputs.
  *  Returns { inputs, groupTags, groupUIs } for use with WorkflowParamsPanel. */
@@ -777,8 +777,9 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
           return false;
         };
 
-        const hasDefault = schema.default !== undefined && schema.default !== null &&
-          !(schema.type === "model" && isEmptyModelValue(schema.default));
+        const schemaDefault = getInputDefault(schema);
+        const hasDefault = schemaDefault !== undefined && schemaDefault !== null &&
+          !(schema.type === "model" && isEmptyModelValue(schemaDefault));
 
         if (name.includes(".")) {
           const hasValue = workflowParams[name] !== undefined &&
@@ -1490,7 +1491,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                                 const existing = state.chats.get(chatId);
                                 if (!existing) return state;
                                 const newChats = new Map(state.chats);
-                                newChats.set(chatId, { ...existing, selected_presets: {} });
+                                newChats.set(chatId, { ...existing, selectedPresets: {} });
                                 return { chats: newChats };
                               });
                             }
@@ -1533,7 +1534,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                               key={paramName}
                               name={paramName}
                               schema={schema}
-                              value={workflowParams[paramName] ?? schema.default}
+                              value={workflowParams[paramName] ?? getInputDefault(schema)}
                               onChange={(value) =>
                                 handleWorkflowParamsChange({
                                   ...workflowParams,

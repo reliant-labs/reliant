@@ -1,7 +1,7 @@
 import { createClient, ConnectError, Code } from "@connectrpc/connect";
 import type { Interceptor, Client } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-web";
-import { trace, context, SpanStatusCode, SpanKind, propagation } from '@opentelemetry/api';
+import { trace, context, SpanStatusCode, SpanKind, propagation, type Span } from '@opentelemetry/api';
 import { SystemService } from "../gen/reliant/v1/system_pb";
 import { PlanService } from "../gen/reliant/v1/plan_pb";
 import { TaskService } from "../gen/reliant/v1/task_pb";
@@ -227,7 +227,7 @@ const tracingInterceptor: Interceptor = (next) => async (req) => {
   const tracer = trace.getTracer('reliant-frontend');
   const spanName = `grpc.${req.service.typeName}/${req.method.name}`;
 
-  return tracer.startActiveSpan(spanName, { kind: SpanKind.CLIENT }, async (span) => {
+  return tracer.startActiveSpan(spanName, { kind: SpanKind.CLIENT }, async (span: Span) => {
     try {
       // Inject W3C trace context into request headers
       const carrier: Record<string, string> = {};

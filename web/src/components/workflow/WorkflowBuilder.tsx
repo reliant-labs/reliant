@@ -81,6 +81,7 @@ import { useIsChatRunning } from "../../store/activityStore";
 import { useGlobalUpdatesStore } from "../../store/globalUpdatesStore";
 import { normalizeWorkflowRef } from "./useWorkflowInputs";
 import { celString, directCel } from "../../lib/celAdapter";
+import { getInputDescription, type InputDef } from "../../lib/inputHelpers";
 import { getSubWorkflowRef } from "../../lib/workflow-step-accessors";
 import {
   CELCompletionProvider,
@@ -128,7 +129,7 @@ function inlineStepToWorkflow(
       `Inline ${label.toLowerCase()} for ${step.id}`,
     nodes: inlineWorkflow.nodes || [],
     edges: inlineWorkflow.edges || [],
-    inputs: inlineWorkflow.inputs ?? inlineWorkflow.params,
+    inputs: inlineWorkflow.inputs,
     outputs: inlineWorkflow.outputs,
     entry: entryArray,
     ui: inlineWorkflow.ui,
@@ -144,7 +145,7 @@ function workflowToInlineDefinition(workflow: Workflow): Workflow {
     nodes: workflow.nodes,
     edges: workflow.edges,
     outputs: workflow.outputs,
-    inputs: workflow.inputs ?? workflow.params,
+    inputs: workflow.inputs,
     entry: workflow.entry || [],
     ui: workflow.ui,
   };
@@ -635,7 +636,7 @@ function WorkflowBuilderInner({
       // setWorkflowThread removed - not in proto
       setWorkflowApiVersion(initialWorkflow.apiVersion || "");
       // Also update inputs, outputs, entry - must be synced when loading a different workflow
-      setWorkflowInputs(initialWorkflow.inputs || initialWorkflow.params || {});
+      setWorkflowInputs(initialWorkflow.inputs || {});
       setWorkflowOutputs(initialWorkflow.outputs || {});
       setWorkflowEntry(initialWorkflow.entry);
     } else {
@@ -1197,8 +1198,8 @@ function WorkflowBuilderInner({
               if (isStepMatch(step)) {
                 const updatedStep =
                   step.type === "loop"
-                    ? withLoopArgs(step, { inline: updatedInline })
-                    : withWorkflowArgs(step, { inline: updatedInline });
+                    ? withLoopArgs(step, { inline: updatedInline } as any)
+                    : withWorkflowArgs(step, { inline: updatedInline } as any);
                 return {
                   ...node,
                   data: {
@@ -1970,7 +1971,7 @@ function WorkflowBuilderInner({
       for (const [key, param] of Object.entries(workflowInputs)) {
         inputParams[key] = {
           type: param.type ?? "string",
-          description: param.description,
+          description: getInputDescription(param as InputDef),
         };
       }
     }
@@ -2120,9 +2121,9 @@ function WorkflowBuilderInner({
       }
 
       // Update inputs
-      if (updatedWorkflow.inputs || updatedWorkflow.params) {
+      if (updatedWorkflow.inputs) {
         setWorkflowInputs(
-          updatedWorkflow.inputs || updatedWorkflow.params || {},
+          updatedWorkflow.inputs || {},
         );
       }
 
@@ -2412,15 +2413,15 @@ function WorkflowBuilderInner({
 
       // Add type-specific default fields
       if (stepType === "run") {
-        step = withRunArgs(step, { command: celString("") });
+        step = withRunArgs(step, { command: celString("") } as any);
       } else if (stepType === "workflow") {
-        step = withWorkflowArgs(step, { ref: celString("builtin://agent") });
+        step = withWorkflowArgs(step, { ref: celString("builtin://agent") } as any);
       } else if (stepType === "agent") {
         // agent is not a structural type, no args oneof needed
       } else if (stepType === "join") {
-        step.condition = directCel("all");
+        step.condition = directCel("all") as any;
       } else if (stepType === "loop") {
-        step = withLoopArgs(step, { while: directCel(""), ref: celString("") });
+        step = withLoopArgs(step, { while: directCel(""), ref: celString("") } as any);
       }
 
       // Determine React Flow node type
@@ -3129,7 +3130,7 @@ function WorkflowBuilderInner({
         }}
         isReadOnly={isBuiltinWorkflow}
         yamlDefinition={yamlDefinition}
-        projectId={currentProject.id}
+        projectId={currentProject?.id ?? ""}
       />
 
       {/* Scenario Panel Modal */}

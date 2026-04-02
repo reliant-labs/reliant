@@ -315,7 +315,7 @@ export const NodeDetailsPanel = memo(function NodeDetailsPanel({
             </div>
           )}
 
-          {!stepValue && !step?.inputs && (
+          {!stepValue && !(step && Object.keys(getActionArgsRecord(step) || {}).length > 0) && (
             <p className="text-xs text-muted-foreground italic">
               No configuration
             </p>

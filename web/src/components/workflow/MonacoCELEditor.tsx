@@ -164,7 +164,7 @@ export function MonacoCELEditor({
     // Single-line mode: Enter key behavior
     let keyDisposable: { dispose(): void } | null = null;
     if (!multiline) {
-      keyDisposable = editor.onKeyDown((e) => {
+      keyDisposable = editor.onKeyDown((e: import('monaco-editor').IKeyboardEvent) => {
         if (e.keyCode !== monaco.KeyCode.Enter) return;
 
         // If suggestion widget is visible, let Monaco handle it (accept suggestion)

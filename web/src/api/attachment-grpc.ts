@@ -121,7 +121,6 @@ export const attachmentGrpc = {
    */
   async attach(fileOrPath: File | { path: string; name: string; size: number }): Promise<Attachment> {
     // If it's a File object with a path property (Electron file), use that
-    const _filePath = 'path' in fileOrPath ? fileOrPath.path : (fileOrPath as any).path;
     const filename = 'path' in fileOrPath ? fileOrPath.name : fileOrPath.name;
     
     const attachmentType = getAttachmentType(filename);

@@ -5,11 +5,12 @@ import { ToolsSelector } from './ToolsSelector'
 import { presetGrpc, type Preset } from '../../api/preset-grpc'
 import { useProjectStore } from '../../store/projectStore'
 import { useModels } from '../../store/globalDataStore'
-import { protoValueToJs, jsToProtoValue } from '../../api/proto-utils'
+import { jsToProtoValue } from '../../api/proto-utils'
 import { formatValueForDisplay } from '../../lib/paramUtils'
 import type { Param } from '../../types/workflow'
 import {
   getInputUI,
+  getInputDefault,
   getInputEnumValues,
   getInputPattern,
   getInputMinLength,
@@ -20,12 +21,12 @@ import {
   getInputRequired,
   createInput,
   applyInputUpdates,
+  type InputDef,
 } from '../../lib/inputHelpers'
 
-// Helper to get the JS value from a proto Value field
-// The param.default field is MessageInit<Value> which is compatible with what protoValueToJs expects
-function getDefaultValue(defaultVal: unknown): unknown {
-  return protoValueToJs(defaultVal as any)
+// Helper to get the JS default value from a param (reads through config oneof)
+function getParamDefault(param: ParamLike): unknown {
+  return getInputDefault(param as InputDef)
 }
 
 // Helper to convert a JS value to proto Value for the default field
@@ -33,6 +34,11 @@ function toDefaultValue(val: unknown): unknown {
   if (val === undefined || val === null || val === '') return undefined
   return jsToProtoValue(val)
 }
+
+// ParamLike is a looser type for functions that access proto Input fields via helpers.
+// Param (MessageInitShape) lacks $typeName, so it can't be passed to helpers typed as Input.
+// Casting through this alias keeps call sites readable.
+type ParamLike = Param | ParamWithId
 
 interface WorkflowParamsEditorProps {
   params: Record<string, Param>
@@ -111,9 +117,9 @@ function useParamsState(params: Record<string, Param>, onUpdate: (params: Record
     return result
   }
 
-  const updateParam = (id: string, updates: Partial<ParamWithId>) => {
+  const updateParam = (id: string, updates: Record<string, unknown>) => {
     const newParams = localParams.map(p =>
-      p._id === id ? applyInputUpdates(p, updates) : p
+      p._id === id ? applyInputUpdates(p as InputDef, updates) as ParamWithId : p
     )
     setLocalParams(newParams)
     onUpdate(toExternalParams(newParams))
@@ -265,7 +271,7 @@ export function WorkflowParamsEditor({ params, onUpdate, onClose }: WorkflowPara
 
 interface ParamEditorProps {
   param: ParamWithId
-  onUpdate: (updates: Partial<ParamWithId>) => void
+  onUpdate: (updates: Record<string, unknown>) => void
   onRename: (newName: string) => void
   onRemove: () => void
 }
@@ -310,7 +316,7 @@ function ParamEditor({ param, onUpdate, onRename, onRemove }: ParamEditorProps) 
             const newType = e.target.value
             // Clear default when switching to a type that doesn't support it
             const newTypeConfig = PARAM_TYPES.find(t => t.value === newType)
-            const updates: Partial<ParamWithId> = { type: newType }
+            const updates: Record<string, unknown> = { type: newType }
             if (!newTypeConfig?.hasDefault) {
               updates.default = undefined
             }
@@ -366,7 +372,7 @@ function ParamEditor({ param, onUpdate, onRename, onRemove }: ParamEditorProps) 
           Visibility
         </label>
         <select
-          value={getInputUI(param) || 'config'}
+          value={getInputUI(param as InputDef) || 'config'}
           onChange={(e) => onUpdate({ ui: e.target.value as 'hidden' | 'config' | undefined })}
           className="w-full px-2 py-1.5 border border-input rounded text-sm focus:ring-2 focus:ring-ring focus:border-ring bg-background text-foreground"
         >
@@ -384,7 +390,7 @@ function ParamEditor({ param, onUpdate, onRename, onRemove }: ParamEditorProps) 
 
 interface TypeSpecificInputProps {
   param: ParamWithId
-  onUpdate: (updates: Partial<ParamWithId>) => void
+  onUpdate: (updates: Record<string, unknown>) => void
 }
 
 function TypeSpecificInput({ param, onUpdate }: TypeSpecificInputProps) {
@@ -417,7 +423,7 @@ function TypeSpecificInput({ param, onUpdate }: TypeSpecificInputProps) {
 }
 
 function EnumInput({ param, onUpdate }: TypeSpecificInputProps) {
-  const enumValues = getInputEnumValues(param) || []
+  const enumValues = getInputEnumValues(param as InputDef) || []
   
   return (
     <>
@@ -445,7 +451,7 @@ function EnumInput({ param, onUpdate }: TypeSpecificInputProps) {
             Default Value
           </label>
           <select
-            value={formatValueForDisplay(getDefaultValue(param.default)) ?? ''}
+            value={formatValueForDisplay(getParamDefault(param)) ?? ''}
             onChange={(e) => {
               const newDefault = e.target.value || undefined
               onUpdate({ 
@@ -466,7 +472,7 @@ function EnumInput({ param, onUpdate }: TypeSpecificInputProps) {
 }
 
 function BooleanDefaultInput({ param, onUpdate }: TypeSpecificInputProps) {
-  const defaultVal = getDefaultValue(param.default)
+  const defaultVal = getParamDefault(param)
   return (
     <div>
       <label className="block text-xs font-medium text-foreground mb-1">
@@ -493,7 +499,7 @@ function BooleanDefaultInput({ param, onUpdate }: TypeSpecificInputProps) {
 function ModelDefaultInput({ param, onUpdate }: TypeSpecificInputProps) {
   // Use the global models store so it updates when API keys change
   const { models, loading } = useModels()
-  const defaultVal = getDefaultValue(param.default)
+  const defaultVal = getParamDefault(param)
 
   return (
     <div>
@@ -525,7 +531,7 @@ function ModelDefaultInput({ param, onUpdate }: TypeSpecificInputProps) {
 function ToolsDefaultInput({ param, onUpdate }: TypeSpecificInputProps) {
   // Parse the default value from proto Value
   const parseDefault = (): string[] => {
-    const defaultVal = getDefaultValue(param.default)
+    const defaultVal = getParamDefault(param)
     if (!defaultVal) return []
     if (Array.isArray(defaultVal)) return defaultVal as string[]
     if (typeof defaultVal === 'string') {
@@ -570,7 +576,7 @@ function PresetMultiSelectInput({ param, onUpdate }: TypeSpecificInputProps) {
 
   // Parse the default value from proto Value
   const parseDefault = (): string[] => {
-    const defaultVal = getDefaultValue(param.default)
+    const defaultVal = getParamDefault(param)
     if (!defaultVal) return []
     if (Array.isArray(defaultVal)) return defaultVal as string[]
     if (typeof defaultVal === 'string') {
@@ -671,7 +677,7 @@ function NumberDefaultInput({ param, onUpdate }: TypeSpecificInputProps) {
       <input
         type="number"
         step={isInteger ? 1 : 'any'}
-        value={formatValueForDisplay(getDefaultValue(param.default)) ?? ''}
+        value={formatValueForDisplay(getParamDefault(param)) ?? ''}
         onChange={(e) => {
           const val = e.target.value
           const newDefault = val ? (isInteger ? parseInt(val, 10) : parseFloat(val)) : undefined
@@ -690,7 +696,7 @@ function NumberDefaultInput({ param, onUpdate }: TypeSpecificInputProps) {
 }
 
 function StringDefaultInput({ param, onUpdate }: TypeSpecificInputProps) {
-  const defaultVal = getDefaultValue(param.default)
+  const defaultVal = getParamDefault(param)
   return (
     <div>
       <label className="block text-xs font-medium text-foreground mb-1">
@@ -726,7 +732,7 @@ const ARRAY_VALIDATION_TYPES = ['array', 'tools', 'attachments']
 function ValidationSection({ param, onUpdate }: TypeSpecificInputProps) {
   const isStringType = param.type ? STRING_VALIDATION_TYPES.includes(param.type) : false
   const isArrayType = param.type ? ARRAY_VALIDATION_TYPES.includes(param.type) : false
-  const hasValidation = !!(getInputPattern(param) || getInputMinLength(param) || getInputMaxLength(param) || getInputMinItems(param) || getInputMaxItems(param))
+  const hasValidation = !!(getInputPattern(param as InputDef) || getInputMinLength(param as InputDef) || getInputMaxLength(param as InputDef) || getInputMinItems(param as InputDef) || getInputMaxItems(param as InputDef))
   const [isExpanded, setIsExpanded] = useState(hasValidation)
   
   // Only show for types that support validation
@@ -768,7 +774,7 @@ function ValidationSection({ param, onUpdate }: TypeSpecificInputProps) {
                 </label>
                 <input
                   type="text"
-                  value={getInputPattern(param) || ''}
+                  value={getInputPattern(param as InputDef) || ''}
                   onChange={(e) => onUpdate({ pattern: e.target.value || undefined })}
                   className="w-full px-2 py-1.5 border border-input rounded text-sm focus:ring-2 focus:ring-ring focus:border-ring bg-background text-foreground font-mono"
                   placeholder="^[a-z]+$"
@@ -787,7 +793,7 @@ function ValidationSection({ param, onUpdate }: TypeSpecificInputProps) {
                   <input
                     type="number"
                     min="0"
-                    value={getInputMinLength(param) ?? ''}
+                    value={getInputMinLength(param as InputDef) ?? ''}
                     onChange={(e) => onUpdate({
                       minLength: e.target.value ? parseInt(e.target.value, 10) : undefined
                     })}
@@ -802,7 +808,7 @@ function ValidationSection({ param, onUpdate }: TypeSpecificInputProps) {
                   <input
                     type="number"
                     min="0"
-                    value={getInputMaxLength(param) ?? ''}
+                    value={getInputMaxLength(param as InputDef) ?? ''}
                     onChange={(e) => onUpdate({ 
                       maxLength: e.target.value ? parseInt(e.target.value, 10) : undefined 
                     })}
@@ -824,7 +830,7 @@ function ValidationSection({ param, onUpdate }: TypeSpecificInputProps) {
                 <input
                   type="number"
                   min="0"
-                  value={getInputMinItems(param) ?? ''}
+                  value={getInputMinItems(param as InputDef) ?? ''}
                   onChange={(e) => onUpdate({
                     minItems: e.target.value ? parseInt(e.target.value, 10) : undefined
                   })}
@@ -839,7 +845,7 @@ function ValidationSection({ param, onUpdate }: TypeSpecificInputProps) {
                 <input
                   type="number"
                   min="0"
-                  value={getInputMaxItems(param) ?? ''}
+                  value={getInputMaxItems(param as InputDef) ?? ''}
                   onChange={(e) => onUpdate({ 
                     maxItems: e.target.value ? parseInt(e.target.value, 10) : undefined 
                   })}
@@ -861,8 +867,8 @@ function ValidationSection({ param, onUpdate }: TypeSpecificInputProps) {
 
 function ObjectSchemaDefinitionInput({ param, onUpdate }: TypeSpecificInputProps) {
   const [isExpanded, setIsExpanded] = useState(true)
-  const properties = getInputProperties(param) || {}
-  const required = getInputRequired(param) || []
+  const properties = getInputProperties(param as InputDef) || {}
+  const required = getInputRequired(param as InputDef) || []
   const propertyCount = Object.keys(properties).length
 
   // Add a new property to the schema
@@ -1001,7 +1007,7 @@ function ObjectSchemaDefinitionInput({ param, onUpdate }: TypeSpecificInputProps
         </label>
         <textarea
           value={(() => {
-            const defaultVal = getDefaultValue(param.default)
+            const defaultVal = getParamDefault(param)
             return defaultVal ? JSON.stringify(defaultVal, null, 2) : ''
           })()}
           onChange={(e) => {
@@ -1224,4 +1230,3 @@ function ObjectPropertyEditor({
     </div>
   )
 }
-

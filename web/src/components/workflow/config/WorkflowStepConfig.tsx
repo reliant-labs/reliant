@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Pencil, Eye } from "lucide-react";
 import { cn } from "../../../lib/utils";
-import type { Step, WorkflowStep } from "../../../types/workflow";
+import type { WorkflowStep } from "../../../types/workflow";
 import {
   isInlineWorkflow,
   getStepRef,
@@ -83,7 +83,7 @@ export function WorkflowStepConfig({
     workflowRef: selectedMode === "workflow" ? workflowRefValue : "",
     values: stepInputs,
     onValuesChange: (inputs) =>
-      onUpdate(withWorkflowArgs(step, { args: inputs }) as WorkflowStep),
+      onUpdate(withWorkflowArgs(step, { args: inputs as any }) as WorkflowStep),
     enabled: selectedMode === "workflow",
     storedPresets: stepPresets,
   });
@@ -180,7 +180,7 @@ export function WorkflowStepConfig({
             nodes: [],
             edges: [],
             outputs: {},
-          } as Step["inline"],
+          } as any,
         }) as WorkflowStep,
       );
     }
@@ -288,14 +288,14 @@ export function WorkflowStepConfig({
                   if (e.target.value === "custom") {
                     onUpdate(
                       withWorkflowArgs(step, {
-                        ref: celString(""),
+                        ref: celString("") as any,
                         args: {},
                       }) as WorkflowStep,
                     );
                   } else {
                     onUpdate(
                       withWorkflowArgs(step, {
-                        ref: celString(e.target.value),
+                        ref: celString(e.target.value) as any,
                         args: {},
                       }) as WorkflowStep,
                     );
@@ -340,7 +340,7 @@ export function WorkflowStepConfig({
               onChange={(e) =>
                 onUpdate(
                   withWorkflowArgs(step, {
-                    ref: celString(e.target.value),
+                    ref: celString(e.target.value) as any,
                   }) as WorkflowStep,
                 )
               }

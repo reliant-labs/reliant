@@ -109,7 +109,7 @@ function ensureWorkflowRefPrefix(ref: string): string {
 function buildInputGroups(workflowDef: Workflow | null): InputGroupDef[] {
   if (!workflowDef) return [];
 
-  const rawInputs = (workflowDef.inputs ?? workflowDef.params) as Record<string, any> | undefined;
+  const rawInputs = (workflowDef.inputs ?? (workflowDef as any).params) as Record<string, any> | undefined;
   if (!rawInputs || Object.keys(rawInputs).length === 0) return [];
 
   const groups: InputGroupDef[] = [];
