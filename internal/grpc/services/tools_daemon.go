@@ -44,6 +44,10 @@ type ToolsDaemonService struct {
 	connections map[string]*daemonConnection
 	mu          sync.RWMutex
 
+	// listeners are notified (outside the mutex) when daemons connect/disconnect.
+	listeners   []toolexec.DaemonConnectionListener
+	listenersMu sync.RWMutex
+
 	monitorCancel context.CancelFunc
 	monitorDone   chan struct{}
 }
@@ -121,6 +125,34 @@ func (s *ToolsDaemonService) Close() {
 	}
 }
 
+// AddConnectionListener registers a listener that will be notified when
+// daemon connections are established or torn down. Safe to call before Start.
+func (s *ToolsDaemonService) AddConnectionListener(l toolexec.DaemonConnectionListener) {
+	s.listenersMu.Lock()
+	s.listeners = append(s.listeners, l)
+	s.listenersMu.Unlock()
+}
+
+// notifyConnected calls OnDaemonConnected on all registered listeners.
+// Must be called OUTSIDE s.mu to avoid deadlocks.
+func (s *ToolsDaemonService) notifyConnected(userID, daemonID string) {
+	s.listenersMu.RLock()
+	defer s.listenersMu.RUnlock()
+	for _, l := range s.listeners {
+		l.OnDaemonConnected(userID, daemonID)
+	}
+}
+
+// notifyDisconnected calls OnDaemonDisconnected on all registered listeners.
+// Must be called OUTSIDE s.mu to avoid deadlocks.
+func (s *ToolsDaemonService) notifyDisconnected(userID, daemonID string) {
+	s.listenersMu.RLock()
+	defer s.listenersMu.RUnlock()
+	for _, l := range s.listeners {
+		l.OnDaemonDisconnected(userID, daemonID)
+	}
+}
+
 func (c *daemonConnection) closeDone() {
 	if c == nil {
 		return
@@ -175,6 +207,8 @@ func (s *ToolsDaemonService) sweepStaleDaemons(ctx context.Context, now time.Tim
 		return err
 	}
 
+	type removedConn struct{ userID, daemonID string }
+	var removed []removedConn
 	s.mu.Lock()
 	for userID, conn := range s.connections {
 		if conn == nil {
@@ -185,8 +219,14 @@ func (s *ToolsDaemonService) sweepStaleDaemons(ctx context.Context, now time.Tim
 		}
 		delete(s.connections, userID)
 		conn.closeDone()
+		removed = append(removed, removedConn{userID, conn.daemonID})
 	}
 	s.mu.Unlock()
+
+	// Notify listeners outside the mutex.
+	for _, rc := range removed {
+		s.notifyDisconnected(rc.userID, rc.daemonID)
+	}
 
 	logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Marked stale daemons disconnected",
 		"count", len(daemonIDs),
@@ -300,6 +340,9 @@ func (s *ToolsDaemonService) ConnectDaemon(
 		logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Replaced old daemon connection", "userID", userID)
 	}
 
+	// Notify listeners outside the mutex.
+	s.notifyConnected(userID, daemonID)
+
 	// Send cloud-refactor registration acknowledgment containing config pull hints.
 	regAck := &reliantv1.ServerMessage{
 		Message: &reliantv1.ServerMessage_RegistrationAck{
@@ -334,13 +377,20 @@ func (s *ToolsDaemonService) ConnectDaemon(
 	err = s.handleIncoming(ctx, conn)
 
 	// Cleanup on disconnect
+	var wasConnected bool
 	s.mu.Lock()
 	if s.connections[userID] == conn {
 		delete(s.connections, userID)
+		wasConnected = true
 	}
 	s.mu.Unlock()
 	conn.closeDone()
 	conn.closeAllSubscribers()
+
+	// Notify listeners outside the mutex.
+	if wasConnected {
+		s.notifyDisconnected(userID, daemonID)
+	}
 
 	disconnectedAt := time.Now().UTC()
 	if err := s.database.UpdateDaemonStatus(context.Background(), daemonID, db.DaemonStatusDisconnected, nil, nil, &disconnectedAt); err != nil {

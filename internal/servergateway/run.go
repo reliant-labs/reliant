@@ -170,13 +170,14 @@ func Run(ctx context.Context, opts Options) error {
 	// RemoteExecutor is used by DaemonServer to wire the local daemon router
 	remoteExecutor := toolexec.NewRemoteExecutor(nil)
 
-	// NATS tool bridge: subscribes to NATS subjects and forwards to local daemon streams
+	// NATS tool bridge: per-user subscriptions created/destroyed on daemon connect/disconnect
 	toolBridge := toolexec.NewNATSToolBridge(nc, toolsDaemonService)
+	toolsDaemonService.AddConnectionListener(toolBridge)
 	if err := toolBridge.Start(); err != nil {
 		return fmt.Errorf("failed to start NATS tool bridge: %w", err)
 	}
 	defer func() { _ = toolBridge.Close() }()
-	logging.Info("NATS tool bridge started — forwarding tool requests to daemon streams")
+	logging.Info("NATS tool bridge started — per-user subscriptions on daemon connect/disconnect")
 
 	// Daemon gRPC server (bidi streaming endpoint for tools-daemon connections)
 	daemonSrv := grpcserver.NewDaemonServer(&grpcserver.DaemonConfig{
