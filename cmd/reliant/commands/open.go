@@ -124,19 +124,17 @@ This is the "reliant ." command.`,
 					}
 
 					bootCfg := bootstrap.DaemonBootstrapConfig{
-						UserID:      userID,
-						AuthToken:   accessToken,
-						GRPCURL:     grpcURL,
-						TLSMode:     tlsMode,
-						ProjectRoot: projectPath,
-						DataDir:     dataDir,
+						UserID:    userID,
+						AuthToken: accessToken,
+						GRPCURL:   grpcURL,
+						TLSMode:   tlsMode,
+						DataDir:   dataDir,
 					}
 
 					fmt.Println("Starting tools daemon...")
 					go func() {
 						if err := daemonruntime.Start(daemonCtx, daemonruntime.StartOptions{
 							BootstrapConfig: bootCfg,
-							WorkingDir:      projectPath,
 						}); err != nil && daemonCtx.Err() == nil {
 							fmt.Fprintf(os.Stderr, "Daemon error: %v\n", err)
 						}

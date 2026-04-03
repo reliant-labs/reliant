@@ -17,12 +17,11 @@ const (
 
 // DaemonBootstrapConfig is the explicit launcher-provided config for tools-daemon.
 type DaemonBootstrapConfig struct {
-	UserID      string
-	AuthToken   string
-	GRPCURL     string
-	TLSMode     TLSMode
-	ProjectRoot string
-	DataDir     string
+	UserID    string
+	AuthToken string
+	GRPCURL   string
+	TLSMode   TLSMode
+	DataDir   string
 }
 
 func (c DaemonBootstrapConfig) Validate() error {
