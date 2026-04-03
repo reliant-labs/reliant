@@ -105,11 +105,22 @@ func skillsFeatureDisabledError() error {
 	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("skills feature is disabled"))
 }
 
+func reliantManagedAccessDisabledError() error {
+	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("reliant managed access feature is disabled"))
+}
+
 func (s *SettingsService) ensureSkillsFeatureEnabled(ctx context.Context, userID string) error {
 	if features.IsSkillsEnabledForContext(ctx, s.database, userID) {
 		return nil
 	}
 	return skillsFeatureDisabledError()
+}
+
+func (s *SettingsService) ensureReliantManagedAccessEnabled(ctx context.Context, userID string) error {
+	if features.IsReliantManagedAccessEnabledForContext(ctx, s.database, userID) {
+		return nil
+	}
+	return reliantManagedAccessDisabledError()
 }
 
 // upsertSetting creates or updates a setting
@@ -183,6 +194,170 @@ func (s *SettingsService) validateAPIKey(ctx context.Context, provider models.Fa
 	}
 
 	return true, "API key is valid"
+}
+
+func stringPtr(value string) *string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
+func maskStoredCredential(value string) *string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	masked := "***"
+	if len(value) > 8 {
+		masked = value[:4] + "..." + value[len(value)-4:]
+	}
+	return &masked
+}
+
+func (s *SettingsService) hasControlPlaneClient() bool {
+	return s.controlPlaneClient != nil && s.controlPlaneClient.Enabled()
+}
+
+func (s *SettingsService) getReliantStoredToken(ctx context.Context, userID string) (string, error) {
+	token, err := s.database.GetProviderAPIKey(ctx, userID, "reliant")
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
+	}
+	return strings.TrimSpace(token), nil
+}
+
+func requireUserJWT(ctx context.Context) (string, error) {
+	jwt, ok := auth.GetUserJWTFromContext(ctx)
+	jwt = strings.TrimSpace(jwt)
+	if !ok || jwt == "" {
+		return "", connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("signed-in session required"))
+	}
+	return jwt, nil
+}
+
+func controlPlaneErrorMessage(err error, fallback string) string {
+	if errors.Is(err, controlplane.ErrNotConfigured) {
+		return "Reliant control-plane client is not configured"
+	}
+	var rpcErr *controlplane.RPCError
+	if errors.As(err, &rpcErr) {
+		if message := strings.TrimSpace(rpcErr.Message); message != "" {
+			return message
+		}
+	}
+	if err != nil {
+		if message := strings.TrimSpace(err.Error()); message != "" {
+			return message
+		}
+	}
+	return fallback
+}
+
+func controlPlaneErrorCode(err error) string {
+	if errors.Is(err, controlplane.ErrNotConfigured) {
+		return "failed_precondition"
+	}
+	var rpcErr *controlplane.RPCError
+	if errors.As(err, &rpcErr) {
+		return strings.ToLower(strings.TrimSpace(rpcErr.Code))
+	}
+	return ""
+}
+
+func controlPlaneConnectCode(err error) connect.Code {
+	switch controlPlaneErrorCode(err) {
+	case "unauthenticated":
+		return connect.CodeUnauthenticated
+	case "failed_precondition":
+		return connect.CodeFailedPrecondition
+	case "resource_exhausted":
+		return connect.CodeResourceExhausted
+	case "unavailable":
+		return connect.CodeUnavailable
+	case "internal":
+		return connect.CodeInternal
+	}
+
+	var rpcErr *controlplane.RPCError
+	if errors.As(err, &rpcErr) && rpcErr.StatusCode >= 500 {
+		return connect.CodeUnavailable
+	}
+	if err != nil {
+		return connect.CodeUnavailable
+	}
+	return connect.CodeInternal
+}
+
+func mapControlPlaneError(err error, fallback string) error {
+	return connect.NewError(controlPlaneConnectCode(err), fmt.Errorf("%s", controlPlaneErrorMessage(err, fallback)))
+}
+
+func reliantProviderTokenToProto(token controlplane.DaemonToken) *reliantv1.ReliantProviderToken {
+	return &reliantv1.ReliantProviderToken{
+		Id:          token.ID,
+		Name:        token.Name,
+		TokenPrefix: token.TokenPrefix,
+		Ephemeral:   token.Ephemeral,
+		CreatedAt:   token.CreatedAt,
+		LastUsedAt:  stringPtr(token.LastUsedAt),
+		ExpiresAt:   stringPtr(token.ExpiresAt),
+		RevokedAt:   stringPtr(token.RevokedAt),
+	}
+}
+
+func reliantAccessStatusFromGrant(access *controlplane.GetCurrentLLMAccessResponse) *reliantv1.ReliantProviderAccessStatus {
+	if access == nil {
+		return nil
+	}
+	message := "Connected to Reliant"
+	if planCode := strings.TrimSpace(access.PlanCode); planCode != "" {
+		message = fmt.Sprintf("Connected to Reliant (%s)", planCode)
+	}
+	return &reliantv1.ReliantProviderAccessStatus{
+		State:               "connected",
+		Message:             message,
+		PlanId:              stringPtr(access.PlanID),
+		PlanCode:            stringPtr(access.PlanCode),
+		AllowedModels:       append([]string(nil), access.AllowedModels...),
+		RequestTags:         append([]string(nil), access.RequestTags...),
+		Spend:               access.Spend,
+		HardBudgetUsd:       access.HardBudgetUSD,
+		BudgetDuration:      access.BudgetDuration,
+		RpmLimit:            access.RPMLimit,
+		TpmLimit:            access.TPMLimit,
+		MaxParallelRequests: access.MaxParallelRequests,
+		KeyDuration:         access.KeyDuration,
+	}
+}
+
+func reliantAccessStatusFromError(err error, fallback string) *reliantv1.ReliantProviderAccessStatus {
+	if err == nil {
+		return nil
+	}
+	state := controlPlaneErrorCode(err)
+	if state == "" {
+		switch controlPlaneConnectCode(err) {
+		case connect.CodeUnauthenticated:
+			state = "unauthenticated"
+		case connect.CodeFailedPrecondition:
+			state = "failed_precondition"
+		case connect.CodeResourceExhausted:
+			state = "resource_exhausted"
+		case connect.CodeUnavailable:
+			state = "unavailable"
+		default:
+			state = "internal"
+		}
+	}
+	return &reliantv1.ReliantProviderAccessStatus{
+		State:   state,
+		Message: controlPlaneErrorMessage(err, fallback),
+	}
 }
 
 func isReliantSkillScope(scope skills.Scope) bool {
@@ -1302,26 +1477,19 @@ func (s *SettingsService) SavePrompts(ctx context.Context, req *connect.Request[
 func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.Request[reliantv1.GetProviderStatusesRequest]) (*connect.Response[reliantv1.GetProviderStatusesResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
-	// Get all API keys from dedicated table
 	keys, err := s.database.GetProviderAPIKeys(ctx, userID)
 	if err != nil {
 		logging.Error("Failed to get provider API keys", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get provider statuses"))
 	}
 
-	// Mask the keys for display
-	apiKeys := make(map[string]string)
+	apiKeys := make(map[string]string, len(keys))
 	for provider, key := range keys {
-		maskedKey := ""
-		if len(key) > 8 {
-			maskedKey = key[:4] + "..." + key[len(key)-4:]
-		} else if len(key) > 0 {
-			maskedKey = "***"
+		if masked := maskStoredCredential(key); masked != nil {
+			apiKeys[provider] = *masked
 		}
-		apiKeys[provider] = maskedKey
 	}
 
-	// Supported providers
 	providers := []models.Family{
 		"claude",
 		"codex",
@@ -1330,8 +1498,12 @@ func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.
 		"openai",
 		"gemini",
 	}
+	if features.IsReliantManagedAccessEnabledForContext(ctx, s.database, userID) {
+		providers = append([]models.Family{"reliant"}, providers...)
+	}
 
 	providerDisplayNames := map[models.Family]string{
+		"reliant":    "Reliant",
 		"claude":     "Claude Code",
 		"codex":      "Codex (ChatGPT)",
 		"openrouter": "OpenRouter",
@@ -1347,56 +1519,116 @@ func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.
 			DisplayName: providerDisplayNames[provider],
 		}
 
-		// Claude uses OAuth tokens persisted by Reliant.
 		switch provider {
+		case "reliant":
+			status.AuthMethod = stringPtr("reliant")
+			token, tokenErr := s.getReliantStoredToken(ctx, userID)
+			if tokenErr != nil {
+				logging.Warn("Failed to load Reliant provider token", "error", tokenErr)
+				status.Status = stringPtr("internal")
+				status.StatusMessage = stringPtr("Failed to load Reliant token")
+				statuses = append(statuses, status)
+				continue
+			}
+
+			status.Configured = token != ""
+			status.HasApiKey = token != ""
+			status.MaskedKey = maskStoredCredential(token)
+			if token == "" {
+				status.Status = stringPtr("not_configured")
+				status.StatusMessage = stringPtr("Reliant is not configured")
+				statuses = append(statuses, status)
+				continue
+			}
+
+			if !s.hasControlPlaneClient() {
+				status.Status = stringPtr("failed_precondition")
+				status.StatusMessage = stringPtr(controlPlaneErrorMessage(controlplane.ErrNotConfigured, "Reliant control-plane client is not configured"))
+				statuses = append(statuses, status)
+				continue
+			}
+
+			access, accessErr := s.controlPlaneClient.GetCurrentLLMAccess(ctx, token)
+			if accessErr != nil {
+				accessStatus := reliantAccessStatusFromError(accessErr, "Failed to load Reliant access")
+				status.Status = stringPtr(accessStatus.State)
+				status.StatusMessage = stringPtr(accessStatus.Message)
+			} else {
+				accessStatus := reliantAccessStatusFromGrant(access)
+				status.Status = stringPtr(accessStatus.State)
+				status.StatusMessage = stringPtr(accessStatus.Message)
+			}
 		case "claude":
+			status.AuthMethod = stringPtr("oauth")
 			tokens, tokenErr := s.database.GetClaudeAuthTokens(ctx, userID)
 			if tokenErr != nil {
 				logging.Warn("Failed to load Claude auth tokens", "error", tokenErr)
+				status.Status = stringPtr("internal")
+				status.StatusMessage = stringPtr("Failed to load Claude credentials")
+				statuses = append(statuses, status)
+				continue
 			}
-
-			configured := tokenErr == nil && tokens != nil && strings.TrimSpace(tokens.AccessToken) != ""
-			if configured {
-				if claude.IsTokenExpired(tokens.ExpiresAt) {
-					configured = false
-				}
+			if tokens == nil || strings.TrimSpace(tokens.AccessToken) == "" {
+				status.Status = stringPtr("not_configured")
+				status.StatusMessage = stringPtr("Claude is not connected")
+				statuses = append(statuses, status)
+				continue
 			}
-
-			status.Configured = configured
-			status.HasApiKey = configured
-			// Don't set MaskedKey for Claude - no API key to display
+			if claude.IsTokenExpired(tokens.ExpiresAt) {
+				status.Status = stringPtr("expired")
+				status.StatusMessage = stringPtr("Claude session expired. Please reconnect Claude.")
+				statuses = append(statuses, status)
+				continue
+			}
+			status.Configured = true
+			status.HasApiKey = true
+			status.Status = stringPtr("connected")
+			status.StatusMessage = stringPtr("Connected to Claude")
 		case "codex":
-			// Codex uses OAuth tokens persisted by Reliant.
+			status.AuthMethod = stringPtr("oauth")
 			tokens, tokenErr := s.database.GetCodexAuthTokens(ctx, userID)
 			if tokenErr != nil {
 				logging.Warn("Failed to load Codex auth tokens", "error", tokenErr)
+				status.Status = stringPtr("internal")
+				status.StatusMessage = stringPtr("Failed to load Codex credentials")
+				statuses = append(statuses, status)
+				continue
 			}
-
-			configured := tokenErr == nil && tokens != nil && strings.TrimSpace(tokens.AccessToken) != ""
-			if configured {
-				if codex.IsTokenExpired(tokens.AccessToken) {
-					configured = false
-				}
+			if tokens == nil || strings.TrimSpace(tokens.AccessToken) == "" {
+				status.Status = stringPtr("not_configured")
+				status.StatusMessage = stringPtr("Codex is not connected")
+				statuses = append(statuses, status)
+				continue
 			}
-
-			status.Configured = configured
-			status.HasApiKey = configured
-			// Don't set MaskedKey for Codex - no API key to display
+			if codex.IsTokenExpired(tokens.AccessToken) {
+				status.Status = stringPtr("expired")
+				status.StatusMessage = stringPtr("Codex session expired. Please reconnect Codex.")
+				statuses = append(statuses, status)
+				continue
+			}
+			status.Configured = true
+			status.HasApiKey = true
+			status.Status = stringPtr("connected")
+			status.StatusMessage = stringPtr("Connected to Codex")
 		default:
+			status.AuthMethod = stringPtr("api_key")
 			maskedKey, hasKey := apiKeys[string(provider)]
 			status.Configured = hasKey
 			status.HasApiKey = hasKey
 			if hasKey {
 				status.MaskedKey = &maskedKey
+				status.Status = stringPtr("connected")
+				status.StatusMessage = stringPtr("API key configured")
+			} else {
+				status.Status = stringPtr("not_configured")
+				status.StatusMessage = stringPtr("API key not configured")
 			}
 		}
 
 		statuses = append(statuses, status)
 	}
 
-	return connect.NewResponse(&reliantv1.GetProviderStatusesResponse{
-		Providers: statuses,
-	}), nil
+	return connect.NewResponse(&reliantv1.GetProviderStatusesResponse{Providers: statuses}), nil
 }
 
 // UpdateProviderAPIKey updates or deletes an API key for a provider
@@ -1410,8 +1642,6 @@ func (s *SettingsService) UpdateProviderAPIKey(ctx context.Context, req *connect
 			Action:     action,
 			AuthMethod: authMethod,
 		})
-
-		// Also fire api_key_configured for connect/update actions
 		if action == "connected" || action == "updated" {
 			existingKeys, err := s.database.GetProviderAPIKeys(ctx, userID)
 			totalProviders := 0
@@ -1431,8 +1661,8 @@ func (s *SettingsService) UpdateProviderAPIKey(ctx context.Context, req *connect
 		}
 	}
 
-	// Only supported providers
 	validProviders := map[string]bool{
+		"reliant":    true,
 		"claude":     true,
 		"codex":      true,
 		"anthropic":  true,
@@ -1440,42 +1670,32 @@ func (s *SettingsService) UpdateProviderAPIKey(ctx context.Context, req *connect
 		"gemini":     true,
 		"openrouter": true,
 	}
-
 	if !validProviders[provider] {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unsupported provider: %s", provider))
 	}
 
 	if provider == "claude" {
 		if strings.TrimSpace(req.Msg.ApiKey) != "" {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("claude does not use manual API keys; use Login with Claude in Settings"))
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("Claude does not use manual API keys. Use Login with Claude in Settings"))
 		}
-
 		if err := s.database.DeleteClaudeAuthTokens(ctx, userID); err != nil {
 			logging.Error("Failed to delete Claude auth tokens", "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to disconnect from Claude"))
 		}
-
 		if err := s.database.DeleteProviderAPIKey(ctx, userID, "claude"); err != nil {
 			logging.Warn("Failed to remove Claude provider marker", "error", err)
 		}
-
 		trackProviderEvent("disconnected", "oauth")
-
 		if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
 			logging.Warn("Failed to emit config_health refetch after Claude disconnect", "error", err)
 		}
-
-		return connect.NewResponse(&reliantv1.UpdateProviderAPIKeyResponse{
-			Success: true,
-			Message: "Disconnected from Claude",
-		}), nil
+		return connect.NewResponse(&reliantv1.UpdateProviderAPIKeyResponse{Success: true, Message: "Disconnected from Claude"}), nil
 	}
 
 	if provider == "codex" {
 		if strings.TrimSpace(req.Msg.ApiKey) != "" {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("codex does not use manual API keys. Use Login with Codex in Settings"))
 		}
-
 		if err := s.database.DeleteCodexAuthTokens(ctx, userID); err != nil {
 			logging.Error("Failed to delete Codex auth tokens", "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to disconnect from Codex"))
@@ -1485,32 +1705,78 @@ func (s *SettingsService) UpdateProviderAPIKey(ctx context.Context, req *connect
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to disconnect from Codex"))
 		}
 		trackProviderEvent("disconnected", "oauth")
-
 		if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
 			logging.Warn("Failed to emit config_health refetch after codex disconnect", "error", err)
 		}
+		return connect.NewResponse(&reliantv1.UpdateProviderAPIKeyResponse{Success: true, Message: "Disconnected from Codex"}), nil
+	}
 
-		return connect.NewResponse(&reliantv1.UpdateProviderAPIKeyResponse{
-			Success: true,
-			Message: "Disconnected from Codex",
-		}), nil
+	if provider == "reliant" {
+		if err := s.ensureReliantManagedAccessEnabled(ctx, userID); err != nil {
+			return nil, err
+		}
+		existingToken, err := s.getReliantStoredToken(ctx, userID)
+		if err != nil {
+			logging.Error("Failed to load existing Reliant token", "error", err)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update Reliant token"))
+		}
+		token := strings.TrimSpace(req.Msg.ApiKey)
+		if token == "" {
+			if err := s.database.DeleteProviderAPIKey(ctx, userID, "reliant"); err != nil {
+				logging.Error("Failed to delete Reliant provider token", "error", err)
+				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to disconnect from Reliant"))
+			}
+			trackProviderEvent("disconnected", "reliant")
+			if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
+				logging.Warn("Failed to emit config_health refetch after Reliant disconnect", "error", err)
+			}
+			return connect.NewResponse(&reliantv1.UpdateProviderAPIKeyResponse{Success: true, Message: "Disconnected from Reliant"}), nil
+		}
+		if !strings.HasPrefix(token, "cpat_") {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("Reliant tokens must start with cpat_"))
+		}
+
+		message := "Reliant token updated successfully"
+		if s.hasControlPlaneClient() {
+			access, accessErr := s.controlPlaneClient.GetCurrentLLMAccess(ctx, token)
+			if accessErr != nil {
+				if controlPlaneConnectCode(accessErr) == connect.CodeUnauthenticated {
+					return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%s", controlPlaneErrorMessage(accessErr, "Invalid Reliant token")))
+				}
+				message = fmt.Sprintf("Reliant token saved. Current access status: %s", controlPlaneErrorMessage(accessErr, "Access unavailable"))
+			} else if accessStatus := reliantAccessStatusFromGrant(access); accessStatus != nil {
+				message = accessStatus.Message
+			}
+		} else {
+			message = "Reliant token saved. Reliant control-plane client is not configured"
+		}
+
+		if err := s.database.SetProviderAPIKey(ctx, userID, "reliant", token); err != nil {
+			logging.Error("Failed to save Reliant provider token", "error", err)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save Reliant token"))
+		}
+		if existingToken == "" {
+			trackProviderEvent("connected", "reliant")
+		} else {
+			trackProviderEvent("updated", "reliant")
+		}
+		if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
+			logging.Warn("Failed to emit config_health refetch after Reliant token update", "error", err)
+		}
+		return connect.NewResponse(&reliantv1.UpdateProviderAPIKeyResponse{Success: true, Message: message}), nil
 	}
 
 	if len(req.Msg.ApiKey) == 0 {
-		// Delete the API key
 		if err := s.database.DeleteProviderAPIKey(ctx, userID, provider); err != nil {
 			logging.Error("Failed to delete provider API key", "provider", provider, "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete API key"))
 		}
 		trackProviderEvent("deleted", "api_key")
 	} else {
-		// Validate the API key first
 		valid, message := s.validateAPIKey(ctx, models.Family(provider), req.Msg.ApiKey)
 		if !valid {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%s", message))
 		}
-
-		// Save the API key to dedicated table
 		if err := s.database.SetProviderAPIKey(ctx, userID, provider, req.Msg.ApiKey); err != nil {
 			logging.Error("Failed to set provider API key", "provider", provider, "error", err)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save API key"))
@@ -1522,10 +1788,7 @@ func (s *SettingsService) UpdateProviderAPIKey(ctx context.Context, req *connect
 		logging.Warn("Failed to emit config_health refetch after UpdateProviderAPIKey", "error", err)
 	}
 
-	return connect.NewResponse(&reliantv1.UpdateProviderAPIKeyResponse{
-		Success: true,
-		Message: "API key updated successfully",
-	}), nil
+	return connect.NewResponse(&reliantv1.UpdateProviderAPIKeyResponse{Success: true, Message: "API key updated successfully"}), nil
 }
 
 // ValidateProviderAPIKey validates an API key for a provider
@@ -1533,64 +1796,237 @@ func (s *SettingsService) ValidateProviderAPIKey(ctx context.Context, req *conne
 	provider := models.Family(req.Msg.Provider)
 	userID := auth.MustGetUserID(ctx)
 
+	if provider == "reliant" {
+		if err := s.ensureReliantManagedAccessEnabled(ctx, userID); err != nil {
+			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{Valid: false, Message: "reliant managed access feature is disabled"}), nil
+		}
+		token := strings.TrimSpace(req.Msg.ApiKey)
+		if token == "" {
+			storedToken, err := s.getReliantStoredToken(ctx, userID)
+			if err != nil {
+				return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{Valid: false, Message: "Failed to load Reliant token"}), nil
+			}
+			token = storedToken
+		}
+		if token == "" {
+			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{Valid: false, Message: "Reliant is not configured"}), nil
+		}
+		if !strings.HasPrefix(token, "cpat_") {
+			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{Valid: false, Message: "Reliant tokens must start with cpat_"}), nil
+		}
+		if !s.hasControlPlaneClient() {
+			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{Valid: false, Message: "Reliant control-plane client is not configured"}), nil
+		}
+		access, err := s.controlPlaneClient.GetCurrentLLMAccess(ctx, token)
+		if err != nil {
+			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{Valid: false, Message: controlPlaneErrorMessage(err, "Failed to validate Reliant token")}), nil
+		}
+		if accessStatus := reliantAccessStatusFromGrant(access); accessStatus != nil {
+			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{Valid: true, Message: accessStatus.Message}), nil
+		}
+		return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{Valid: true, Message: "Connected to Reliant"}), nil
+	}
+
 	if provider == "claude" {
 		tokens, err := s.database.GetClaudeAuthTokens(ctx, userID)
 		if err != nil {
-			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
-				Valid:   false,
-				Message: "Failed to load Claude credentials",
-			}), nil
+			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{Valid: false, Message: "Failed to load Claude credentials"}), nil
 		}
 		if tokens == nil || strings.TrimSpace(tokens.AccessToken) == "" {
-			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
-				Valid:   false,
-				Message: "Claude is not connected",
-			}), nil
+			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{Valid: false, Message: "Claude is not connected"}), nil
 		}
 		if claude.IsTokenExpired(tokens.ExpiresAt) {
-			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
-				Valid:   false,
-				Message: "Claude session expired. Please reconnect Claude.",
-			}), nil
+			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{Valid: false, Message: "Claude session expired. Please reconnect Claude."}), nil
 		}
-		return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
-			Valid:   true,
-			Message: "Connected to Claude",
-		}), nil
+		return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{Valid: true, Message: "Connected to Claude"}), nil
 	}
 
 	if provider == "codex" {
 		tokens, err := s.database.GetCodexAuthTokens(ctx, userID)
 		if err != nil {
-			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
-				Valid:   false,
-				Message: "Failed to load Codex credentials",
-			}), nil
+			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{Valid: false, Message: "Failed to load Codex credentials"}), nil
 		}
 		if tokens == nil || strings.TrimSpace(tokens.AccessToken) == "" {
-			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
-				Valid:   false,
-				Message: "Codex is not connected",
-			}), nil
+			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{Valid: false, Message: "Codex is not connected"}), nil
 		}
 		if codex.IsTokenExpired(tokens.AccessToken) {
-			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
-				Valid:   false,
-				Message: "Codex session expired. Please reconnect Codex.",
-			}), nil
+			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{Valid: false, Message: "Codex session expired. Please reconnect Codex."}), nil
 		}
-		return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
-			Valid:   true,
-			Message: "Connected to Codex",
-		}), nil
+		return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{Valid: true, Message: "Connected to Codex"}), nil
 	}
 
 	valid, message := s.validateAPIKey(ctx, provider, req.Msg.ApiKey)
+	return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{Valid: valid, Message: message}), nil
+}
 
-	return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
-		Valid:   valid,
-		Message: message,
+func (s *SettingsService) CreateReliantProviderToken(ctx context.Context, req *connect.Request[reliantv1.CreateReliantProviderTokenRequest]) (*connect.Response[reliantv1.CreateReliantProviderTokenResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+	if err := s.ensureReliantManagedAccessEnabled(ctx, userID); err != nil {
+		return nil, err
+	}
+	userJWT, err := requireUserJWT(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !s.hasControlPlaneClient() {
+		return nil, mapControlPlaneError(controlplane.ErrNotConfigured, "Reliant control-plane client is not configured")
+	}
+	if req.Msg.ExpiresInSeconds != nil && req.Msg.GetExpiresInSeconds() < 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("expires_in_seconds must be >= 0"))
+	}
+
+	cpReq := controlplane.CreateUserTokenRequest{}
+	if req.Msg.Name != nil {
+		cpReq.Name = strings.TrimSpace(req.Msg.GetName())
+	}
+	if req.Msg.Ephemeral != nil {
+		cpReq.Ephemeral = req.Msg.GetEphemeral()
+	}
+	if req.Msg.ExpiresInSeconds != nil {
+		cpReq.ExpiresInSeconds = req.Msg.GetExpiresInSeconds()
+	}
+
+	cpResp, err := s.controlPlaneClient.CreateUserToken(ctx, userJWT, cpReq)
+	if err != nil {
+		return nil, mapControlPlaneError(err, "failed to create Reliant token")
+	}
+	if cpResp == nil || strings.TrimSpace(cpResp.Token) == "" {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("control-plane returned an empty Reliant token"))
+	}
+
+	token := strings.TrimSpace(cpResp.Token)
+	if err := s.database.SetProviderAPIKey(ctx, userID, "reliant", token); err != nil {
+		logging.Error("Failed to persist Reliant provider token", "error", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save Reliant token"))
+	}
+
+	analyticsClient := analytics.GetClientForUser(ctx, userID)
+	analyticsClient.TrackProviderSettingsUpdated(analytics.ProviderSettingsUpdatedMetrics{Provider: "reliant", Action: "connected", AuthMethod: "reliant"})
+	if existingKeys, err := s.database.GetProviderAPIKeys(ctx, userID); err == nil {
+		totalProviders := 0
+		for _, value := range existingKeys {
+			if value != "" {
+				totalProviders++
+			}
+		}
+		analyticsClient.TrackAPIKeyConfigured(analytics.APIKeyConfiguredMetrics{Provider: "reliant", AuthMethod: "reliant", IsFirstKey: totalProviders <= 1, TotalProviders: totalProviders})
+	}
+	if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
+		logging.Warn("Failed to emit config_health refetch after Reliant token create", "error", err)
+	}
+
+	return connect.NewResponse(&reliantv1.CreateReliantProviderTokenResponse{
+		Success:     true,
+		Message:     "Reliant token created successfully",
+		Token:       token,
+		DaemonToken: reliantProviderTokenToProto(cpResp.DaemonToken),
 	}), nil
+}
+
+func (s *SettingsService) ListReliantProviderTokens(ctx context.Context, req *connect.Request[reliantv1.ListReliantProviderTokensRequest]) (*connect.Response[reliantv1.ListReliantProviderTokensResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+	if err := s.ensureReliantManagedAccessEnabled(ctx, userID); err != nil {
+		return nil, err
+	}
+	userJWT, err := requireUserJWT(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !s.hasControlPlaneClient() {
+		return nil, mapControlPlaneError(controlplane.ErrNotConfigured, "Reliant control-plane client is not configured")
+	}
+
+	tokens, err := s.controlPlaneClient.ListUserTokens(ctx, userJWT)
+	if err != nil {
+		return nil, mapControlPlaneError(err, "failed to list Reliant tokens")
+	}
+	protoTokens := make([]*reliantv1.ReliantProviderToken, 0, len(tokens))
+	for _, token := range tokens {
+		protoTokens = append(protoTokens, reliantProviderTokenToProto(token))
+	}
+	return connect.NewResponse(&reliantv1.ListReliantProviderTokensResponse{Tokens: protoTokens}), nil
+}
+
+func (s *SettingsService) RevokeReliantProviderToken(ctx context.Context, req *connect.Request[reliantv1.RevokeReliantProviderTokenRequest]) (*connect.Response[reliantv1.RevokeReliantProviderTokenResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+	if err := s.ensureReliantManagedAccessEnabled(ctx, userID); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(req.Msg.TokenId) == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("token_id is required"))
+	}
+	userJWT, err := requireUserJWT(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !s.hasControlPlaneClient() {
+		return nil, mapControlPlaneError(controlplane.ErrNotConfigured, "Reliant control-plane client is not configured")
+	}
+	if err := s.controlPlaneClient.RevokeUserToken(ctx, userJWT, strings.TrimSpace(req.Msg.TokenId)); err != nil {
+		return nil, mapControlPlaneError(err, "failed to revoke Reliant token")
+	}
+
+	message := "Reliant token revoked"
+	if req.Msg.DeleteLocalCredential {
+		if err := s.database.DeleteProviderAPIKey(ctx, userID, "reliant"); err != nil {
+			logging.Error("Failed to delete local Reliant credential", "error", err)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to remove local Reliant credential"))
+		}
+		analytics.GetClientForUser(ctx, userID).TrackProviderSettingsUpdated(analytics.ProviderSettingsUpdatedMetrics{Provider: "reliant", Action: "disconnected", AuthMethod: "reliant"})
+		message = "Reliant token revoked and local credential removed"
+	}
+	if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
+		logging.Warn("Failed to emit config_health refetch after Reliant token revoke", "error", err)
+	}
+	return connect.NewResponse(&reliantv1.RevokeReliantProviderTokenResponse{Success: true, Message: message}), nil
+}
+
+func (s *SettingsService) GetReliantProviderStatus(ctx context.Context, req *connect.Request[reliantv1.GetReliantProviderStatusRequest]) (*connect.Response[reliantv1.GetReliantProviderStatusResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+	if err := s.ensureReliantManagedAccessEnabled(ctx, userID); err != nil {
+		return nil, err
+	}
+	storedToken, err := s.getReliantStoredToken(ctx, userID)
+	if err != nil {
+		logging.Error("Failed to load stored Reliant token", "error", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load Reliant provider status"))
+	}
+
+	resp := &reliantv1.GetReliantProviderStatusResponse{
+		Configured:  storedToken != "",
+		MaskedToken: maskStoredCredential(storedToken),
+		Tokens:      []*reliantv1.ReliantProviderToken{},
+	}
+
+	if s.hasControlPlaneClient() {
+		if userJWT, ok := auth.GetUserJWTFromContext(ctx); ok && strings.TrimSpace(userJWT) != "" {
+			tokens, listErr := s.controlPlaneClient.ListUserTokens(ctx, strings.TrimSpace(userJWT))
+			if listErr != nil {
+				logging.Warn("Failed to list Reliant provider tokens", "error", listErr)
+			} else {
+				for _, token := range tokens {
+					resp.Tokens = append(resp.Tokens, reliantProviderTokenToProto(token))
+				}
+			}
+		}
+	}
+
+	if storedToken == "" {
+		resp.Access = &reliantv1.ReliantProviderAccessStatus{State: "not_configured", Message: "Reliant is not configured"}
+		return connect.NewResponse(resp), nil
+	}
+	if !s.hasControlPlaneClient() {
+		resp.Access = reliantAccessStatusFromError(controlplane.ErrNotConfigured, "Reliant control-plane client is not configured")
+		return connect.NewResponse(resp), nil
+	}
+
+	access, accessErr := s.controlPlaneClient.GetCurrentLLMAccess(ctx, storedToken)
+	if accessErr != nil {
+		resp.Access = reliantAccessStatusFromError(accessErr, "Failed to load Reliant access status")
+	} else {
+		resp.Access = reliantAccessStatusFromGrant(access)
+	}
+	return connect.NewResponse(resp), nil
 }
 
 func (s *SettingsService) CompleteCodexOAuth(ctx context.Context, req *connect.Request[reliantv1.CompleteCodexOAuthRequest]) (*connect.Response[reliantv1.CompleteCodexOAuthResponse], error) {

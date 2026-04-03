@@ -1,4 +1,3 @@
-// Copyright (c) 2025 Reliant Labs
 package drivers
 
 import (
@@ -22,6 +21,7 @@ import (
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/openai"
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/openrouter"
+	_ "github.com/reliant-labs/reliant/internal/llm/drivers/reliant"
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/vertexai"
 )
 
@@ -105,6 +105,9 @@ func GetDriverForModel(model models.Model, driverID models.Family, opts ...llm.D
 // GetDriver allows injecting a custom driver function for testing
 var GetDriver func(ctx context.Context, userID string, preferences models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) = defaultGetDriver
 
+// AvailableDrivers snapshot without re-fetching credentials/configuration.
+var GetDriverWithConfig func(ctx context.Context, userID string, pref models.Preference, model models.Model, availableDrivers models.AvailableDrivers, opts ...llm.DriverOption) (llm.Driver, error) = defaultGetDriverWithConfig
+
 // ReplayMode holds the current replay configuration
 var ReplayMode struct {
 	Enabled  bool
@@ -151,14 +154,11 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 	}
 	logging.Debug("calling defaultGetDriver", "preferences", preferences)
 	for _, pref := range preferences {
-		// Parse model ID to extract base model and optional explicit driver
-		// Format: "model-id" or "model-id@driver" (e.g., "claude-4.5-sonnet@openrouter")
-		baseModelID, explicitDriverID := ParseModelIDWithDriver(string(pref.ModelID))
+		baseModelID, _ := ParseModelIDWithDriver(string(pref.ModelID))
 		modelID := models.ModelID(baseModelID)
 
-		logging.Debug("parsing model preference", "original", pref.ModelID, "baseModel", baseModelID, "explicitDriver", explicitDriverID)
+		logging.Debug("parsing model preference", "original", pref.ModelID, "baseModel", baseModelID)
 
-		// Get model details from registry
 		registry := models.MustGetRegistry()
 		def, ok := registry.GetDefinition(string(modelID))
 		if !ok {
@@ -167,100 +167,86 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 		}
 		model := def.ToModel()
 
-		// Use preference's token budget if specified, otherwise model's default
-		maxTokens := int64(def.Capabilities.MaxOutputTokens)
-		if pref.TokenBudget != nil {
-			maxTokens = *pref.TokenBudget
-		}
-
-		// Get available drivers
 		availableDrivers := GetAvailableDrivers(ctx, userID)
 
-		var driverConfig models.DriverConfig
-		var found bool
-
-		if explicitDriverID != "" {
-			// User explicitly selected a driver (e.g., "openrouter" or "local")
-			// Use that driver directly instead of auto-selecting
-			config, exists := availableDrivers.Drivers[models.DriverID(explicitDriverID)]
-			if exists && config.IsConfigured() {
-				// Verify this driver supports the model
-				if models.CanDriverUseModel(models.Family(explicitDriverID), modelID) {
-					driverConfig = config
-					found = true
-					logging.Debug("using explicit driver", "driver", explicitDriverID, "model", modelID)
-				} else {
-					logging.Warn("explicit driver does not support model", "driver", explicitDriverID, "model", modelID)
-				}
-			} else {
-				logging.Warn("explicit driver not available", "driver", explicitDriverID, "exists", exists, "isConfigured", config.IsConfigured())
-			}
-		}
-
-		// Fall back to auto-selection if no explicit driver or explicit driver wasn't available
-		if !found {
-			driverConfig, found = models.SelectBestDriver(model.ID, availableDrivers)
-			logging.Debug("auto-selected driver", "driverConfig", driverConfig, "found", found)
-		}
-
-		if !found {
-			continue // Try next model in preferences
-		}
-
-		// Build driver options with the API key from the selected driver
-		driverOpts := []llm.DriverOption{
-			llm.WithAPIKey(driverConfig.APIKey),
-			llm.WithModel(model),
-			llm.WithMaxTokens(maxTokens),
-		}
-
-		// Add base URL if specified for this driver
-		if driverConfig.BaseURL != "" {
-			driverOpts = append(driverOpts, llm.WithBaseURL(driverConfig.BaseURL))
-		}
-
-		// Pass Claude OAuth account metadata and token refresh if available
-		if driverConfig.AccountUUID != "" {
-			driverOpts = append(driverOpts, llm.WithAccountMetadata(driverConfig.AccountUUID, driverConfig.AccountEmail, driverConfig.OrganizationUUID))
-		}
-		if driverConfig.RefreshToken != "" {
-			refresher := BuildClaudeTokenRefresher(ctx, userID)
-			driverOpts = append(driverOpts, llm.WithTokenRefresher(refresher, driverConfig.RefreshToken, driverConfig.TokenExpiresAt))
-		}
-
-		// Add temperature if specified in preference AND supported by the model.
-		// Some models only support their default temperature and will hard-error if we send a value.
-		if pref.Temperature != nil {
-			switch model.TemperatureMode {
-			case "", models.TemperatureModeAny:
-				driverOpts = append(driverOpts, llm.WithTemperature(*pref.Temperature))
-			case models.TemperatureModeOmit:
-				// Intentionally omit temperature
-			default:
-				// Unknown mode: fail safe by omitting temperature
-			}
-		}
-
-		// Add disable cache if specified
-		if pref.DisableCache {
-			driverOpts = append(driverOpts, llm.WithDisableCache())
-		}
-
-		// Handle thinking mode configuration
-		driverOpts = append(driverOpts, llm.WithReasoningEffort(pref.ThinkingMode))
-
-		// Merge with any additional options passed in
-		driverOpts = append(driverOpts, opts...)
-
-		agentProvider, err := GetDriverForModel(model, models.Family(driverConfig.DriverID), driverOpts...)
+		agentProvider, err := GetDriverWithConfig(ctx, userID, pref, model, availableDrivers, opts...)
 		logging.Debug("provider, err", "provider", agentProvider, "err", err)
 		if err != nil {
 			continue
 		}
 
-		// Success!
 		return agentProvider, nil
 	}
 
 	return nil, fmt.Errorf("failed to get driver for preferences: no suitable models available: %v", preferences[0])
+}
+
+func defaultGetDriverWithConfig(ctx context.Context, userID string, pref models.Preference, model models.Model, availableDrivers models.AvailableDrivers, opts ...llm.DriverOption) (llm.Driver, error) {
+	baseModelID, explicitDriverID := ParseModelIDWithDriver(string(pref.ModelID))
+	modelID := models.ModelID(baseModelID)
+
+	var driverConfig models.DriverConfig
+	var found bool
+
+	if explicitDriverID != "" {
+		config, exists := availableDrivers.Drivers[models.DriverID(explicitDriverID)]
+		if exists && config.IsConfigured() && config.AllowsModel(modelID) {
+			if len(config.AllowedModels) > 0 || models.CanDriverUseModel(models.Family(explicitDriverID), modelID) {
+				driverConfig = config
+				found = true
+				logging.Debug("using explicit driver", "driver", explicitDriverID, "model", modelID)
+			} else {
+				logging.Warn("explicit driver does not support model", "driver", explicitDriverID, "model", modelID)
+			}
+		} else {
+			logging.Warn("explicit driver not available", "driver", explicitDriverID, "exists", exists, "isConfigured", config.IsConfigured())
+		}
+	}
+
+	if !found {
+		driverConfig, found = models.SelectBestDriver(model.ID, availableDrivers)
+		logging.Debug("auto-selected driver", "driverConfig", driverConfig, "found", found)
+	}
+
+	if !found {
+		return nil, fmt.Errorf("no suitable driver config available for model %s", model.ID)
+	}
+
+	maxTokens := model.DefaultMaxTokens
+	if pref.TokenBudget != nil {
+		maxTokens = *pref.TokenBudget
+	}
+
+	driverOpts := []llm.DriverOption{
+		llm.WithAPIKey(driverConfig.APIKey),
+		llm.WithModel(model),
+		llm.WithMaxTokens(maxTokens),
+	}
+	if driverConfig.BaseURL != "" {
+		driverOpts = append(driverOpts, llm.WithBaseURL(driverConfig.BaseURL))
+	}
+	if driverConfig.AccountUUID != "" {
+		driverOpts = append(driverOpts, llm.WithAccountMetadata(driverConfig.AccountUUID, driverConfig.AccountEmail, driverConfig.OrganizationUUID))
+	}
+	if driverConfig.RefreshToken != "" {
+		refresher := BuildClaudeTokenRefresher(ctx, userID)
+		driverOpts = append(driverOpts, llm.WithTokenRefresher(refresher, driverConfig.RefreshToken, driverConfig.TokenExpiresAt))
+	}
+	if pref.Temperature != nil {
+		switch model.TemperatureMode {
+		case "", models.TemperatureModeAny:
+			driverOpts = append(driverOpts, llm.WithTemperature(*pref.Temperature))
+		case models.TemperatureModeOmit:
+			// Intentionally omit temperature
+		default:
+			// Unknown mode: fail safe by omitting temperature
+		}
+	}
+	if pref.DisableCache {
+		driverOpts = append(driverOpts, llm.WithDisableCache())
+	}
+	driverOpts = append(driverOpts, llm.WithReasoningEffort(pref.ThinkingMode))
+	driverOpts = append(driverOpts, opts...)
+
+	return GetDriverForModel(model, models.Family(driverConfig.DriverID), driverOpts...)
 }

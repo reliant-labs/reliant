@@ -145,58 +145,66 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 		return ctx, nil, "", nil
 	}
 
-	// Dev mode bypass - use hardcoded dev user
+	// Prefer a real bearer token when one is present, even in development mode.
+	authHeader := strings.TrimSpace(header("Authorization"))
+	if authHeader != "" {
+		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+		if tokenString == authHeader {
+			logging.Warn("[gRPC Auth] Invalid authorization header format",
+				"procedure", procedure)
+			return nil, nil, "", connect.NewError(connect.CodeUnauthenticated,
+				fmt.Errorf("invalid authorization header format"))
+		}
+		if i.validator == nil {
+			logging.Warn("[gRPC Auth] Authorization header provided but JWT validator unavailable",
+				"procedure", procedure,
+				"dev_mode", i.devMode)
+			return nil, nil, "", connect.NewError(connect.CodeUnauthenticated,
+				fmt.Errorf("authorization token cannot be validated in this environment"))
+		}
+
+		claims, err := i.validator.ValidateToken(tokenString)
+		if err != nil {
+			logging.Warn("[gRPC Auth] Invalid token",
+				"error", err,
+				"procedure", procedure,
+				"dev_mode", i.devMode)
+			return nil, nil, "", connect.NewError(connect.CodeUnauthenticated,
+				fmt.Errorf("invalid or expired token"))
+		}
+
+		ctx = context.WithValue(ctx, auth.UserIDContextKey, claims.Sub)
+		ctx = context.WithValue(ctx, auth.UserRoleContextKey, claims.Role)
+		ctx = context.WithValue(ctx, auth.UserEmailContextKey, claims.Email)
+		ctx = context.WithValue(ctx, auth.UserJWTContextKey, tokenString)
+
+		logging.Debug("[gRPC Auth] Authenticated request",
+			"user_id", claims.Sub,
+			"role", claims.Role,
+			"email", claims.Email,
+			"procedure", procedure,
+			"dev_mode", i.devMode)
+
+		return ctx, claims, tokenString, nil
+	}
+
+	// Development fallback - use hardcoded dev user only when no bearer token is present.
 	if i.devMode {
 		ctx = context.WithValue(ctx, auth.UserIDContextKey, DevUser.Sub)
 		ctx = context.WithValue(ctx, auth.UserRoleContextKey, DevUser.Role)
 		ctx = context.WithValue(ctx, auth.UserEmailContextKey, DevUser.Email)
 
-		logging.Debug("[gRPC Auth] Dev mode - using dev user",
+		logging.Debug("[gRPC Auth] Dev mode - using dev user fallback",
 			"user_id", DevUser.Sub,
 			"procedure", procedure)
 
 		return ctx, DevUser, "", nil
 	}
 
-	// Extract token from Authorization header
-	authHeader := header("Authorization")
-	if authHeader == "" {
-		logging.Warn("[gRPC Auth] Missing authorization token",
-			"procedure", procedure)
-		return nil, nil, "", connect.NewError(connect.CodeUnauthenticated,
-			fmt.Errorf("missing authorization token"))
-	}
-
-	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-	if tokenString == authHeader {
-		logging.Warn("[gRPC Auth] Invalid authorization header format",
-			"procedure", procedure)
-		return nil, nil, "", connect.NewError(connect.CodeUnauthenticated,
-			fmt.Errorf("invalid authorization header format"))
-	}
-
-	// Validate token
-	claims, err := i.validator.ValidateToken(tokenString)
-	if err != nil {
-		logging.Warn("[gRPC Auth] Invalid token",
-			"error", err,
-			"procedure", procedure)
-		return nil, nil, "", connect.NewError(connect.CodeUnauthenticated,
-			fmt.Errorf("invalid or expired token"))
-	}
-
-	// Add claims to context
-	ctx = context.WithValue(ctx, auth.UserIDContextKey, claims.Sub)
-	ctx = context.WithValue(ctx, auth.UserRoleContextKey, claims.Role)
-	ctx = context.WithValue(ctx, auth.UserEmailContextKey, claims.Email)
-
-	logging.Debug("[gRPC Auth] Authenticated request",
-		"user_id", claims.Sub,
-		"role", claims.Role,
-		"email", claims.Email,
+	logging.Warn("[gRPC Auth] Missing authorization token",
 		"procedure", procedure)
-
-	return ctx, claims, tokenString, nil
+	return nil, nil, "", connect.NewError(connect.CodeUnauthenticated,
+		fmt.Errorf("missing authorization token"))
 }
 
 // trackSession handles analytics session tracking for authenticated users
@@ -309,9 +317,13 @@ func NewTimeoutInterceptor() *TimeoutInterceptor {
 			"/reliant.v1.MCPService/CallTool":    60 * time.Second,
 			// Attachment uploads - depends on file size
 			"/reliant.v1.AttachmentService/Upload": 60 * time.Second,
-			// Provider API key validation - Gemini requires minimum 10s deadline
-			"/reliant.v1.SettingsService/ValidateProviderAPIKey": 20 * time.Second,
-			"/reliant.v1.SettingsService/UpdateProviderAPIKey":   20 * time.Second,
+			// Provider settings and control-plane operations
+			"/reliant.v1.SettingsService/ValidateProviderAPIKey":     20 * time.Second,
+			"/reliant.v1.SettingsService/UpdateProviderAPIKey":       20 * time.Second,
+			"/reliant.v1.SettingsService/CreateReliantProviderToken": 20 * time.Second,
+			"/reliant.v1.SettingsService/ListReliantProviderTokens":  20 * time.Second,
+			"/reliant.v1.SettingsService/RevokeReliantProviderToken": 20 * time.Second,
+			"/reliant.v1.SettingsService/GetReliantProviderStatus":   20 * time.Second,
 			// Worktree operations - involve git commands that can take 10-30s
 			"/reliant.v1.WorktreeService/CreateWorktree":       30 * time.Second,
 			"/reliant.v1.WorktreeService/DeleteWorktree":       30 * time.Second,

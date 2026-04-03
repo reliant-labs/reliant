@@ -4,10 +4,15 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/features"
+	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -100,4 +105,38 @@ func TestBuildAvailableDrivers_CodexMarkerWithoutTokensIsSkipped(t *testing.T) {
 	anthropic, hasAnthropic := availableDrivers.Drivers["anthropic"]
 	require.True(t, hasAnthropic)
 	assert.Equal(t, "sk-ant-test", anthropic.APIKey)
+}
+
+func TestBuildAvailableDrivers_ReliantUsesExchangedRuntimeAccess(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+
+	t.Setenv(features.ReliantManagedAccessEnabledEnvVar, "true")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/controlplane.v1.LLMAccessService/GetCurrentLLMAccess", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"key":"sk-reliant-runtime","allowedModels":["claude-4.5-sonnet"]}`))
+	}))
+	defer server.Close()
+
+	InitializeAPIKeyProvider(
+		repo,
+		WithControlPlaneClient(controlplane.NewClient(controlplane.Config{BaseURL: server.URL})),
+		WithReliantRuntimeBaseURL("https://runtime.reliant.test/v1"),
+	)
+
+	ctx := context.Background()
+	userID := "test-user"
+	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "reliant", "cpat_test_token"))
+
+	availableDrivers, err := BuildAvailableDrivers(ctx, repo, userID)
+	require.NoError(t, err)
+
+	selected, ok := availableDrivers.Drivers[models.DriverID("reliant")]
+	require.True(t, ok, "reliant should be synthesized when runtime exchange succeeds")
+	assert.Equal(t, models.DriverID("reliant"), selected.DriverID)
+	assert.Equal(t, "sk-reliant-runtime", selected.APIKey)
+	assert.Equal(t, "https://runtime.reliant.test/v1", selected.BaseURL)
+	assert.Contains(t, selected.AllowedModels, models.ModelID("claude-4.5-sonnet"))
 }

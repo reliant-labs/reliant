@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/configadapter"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/envutil"
+	"github.com/reliant-labs/reliant/internal/features"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -157,10 +158,16 @@ func NewServer(cfg *Config) (*Server, error) {
 	wg.Wait()
 
 	// Initialize API key provider with database (after repo is created)
+	controlPlaneClient := controlplane.NewClientFromEnv()
+	reliantRuntimeBaseURL := envutil.GetEnv("RELIANT_RUNTIME_BASE_URL", "")
+	if !features.IsReliantManagedAccessEnabledForContext(ctx, nil, "") {
+		controlPlaneClient = nil
+		reliantRuntimeBaseURL = ""
+	}
 	drivers.InitializeAPIKeyProvider(
 		repo,
-		drivers.WithControlPlaneClient(controlplane.NewClientFromEnv()),
-		drivers.WithReliantRuntimeBaseURL(envutil.GetEnv("RELIANT_RUNTIME_BASE_URL", "")),
+		drivers.WithControlPlaneClient(controlPlaneClient),
+		drivers.WithReliantRuntimeBaseURL(reliantRuntimeBaseURL),
 	)
 
 	// Check for errors

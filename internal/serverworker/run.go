@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/envutil"
+	"github.com/reliant-labs/reliant/internal/features"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -136,6 +137,10 @@ func Run(ctx context.Context, opts Options) error {
 	// API key provider (allows LLM drivers to resolve per-user keys from DB)
 	controlPlaneClient := controlplane.NewClientFromEnv()
 	reliantRuntimeBaseURL := envutil.GetEnv("RELIANT_RUNTIME_BASE_URL", "")
+	if !features.IsReliantManagedAccessEnabledForContext(ctx, nil, "") {
+		controlPlaneClient = nil
+		reliantRuntimeBaseURL = ""
+	}
 	drivers.InitializeAPIKeyProvider(
 		repo,
 		drivers.WithControlPlaneClient(controlPlaneClient),

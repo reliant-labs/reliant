@@ -377,6 +377,62 @@ func TestSettingsService_GetProviderStatuses_CodexUsesPersistedTokenExpiry(t *te
 	assert.Nil(t, expiredCodexStatus.MaskedKey)
 }
 
+func TestSettingsService_ReliantManagedAccessDisabled_HidesAndBlocksSettingsFlows(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+
+	t.Setenv(features.ReliantManagedAccessEnabledEnvVar, "false")
+
+	svc := NewSettingsService(repo, nil)
+	ctx := newSettingsServiceTestContext()
+	userID := "test-user"
+
+	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "reliant", "cpat_disabled_test_token"))
+
+	t.Run("provider statuses omit reliant", func(t *testing.T) {
+		resp, err := svc.GetProviderStatuses(ctx, connect.NewRequest(&reliantv1.GetProviderStatusesRequest{}))
+		require.NoError(t, err)
+		for _, status := range resp.Msg.Providers {
+			assert.NotEqual(t, "reliant", status.Provider)
+		}
+	})
+
+	t.Run("validate returns disabled response", func(t *testing.T) {
+		resp, err := svc.ValidateProviderAPIKey(ctx, connect.NewRequest(&reliantv1.ValidateProviderAPIKeyRequest{
+			Provider: "reliant",
+		}))
+		require.NoError(t, err)
+		assert.False(t, resp.Msg.Valid)
+		assert.Equal(t, "reliant managed access feature is disabled", resp.Msg.Message)
+	})
+
+	t.Run("mutating and reliant rpc methods fail precondition", func(t *testing.T) {
+		_, err := svc.UpdateProviderAPIKey(ctx, connect.NewRequest(&reliantv1.UpdateProviderAPIKeyRequest{
+			Provider: "reliant",
+			ApiKey:   "cpat_new_disabled_token",
+		}))
+		require.Error(t, err)
+		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+		assert.Contains(t, err.Error(), "reliant managed access feature is disabled")
+
+		_, err = svc.CreateReliantProviderToken(ctx, connect.NewRequest(&reliantv1.CreateReliantProviderTokenRequest{}))
+		require.Error(t, err)
+		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+
+		_, err = svc.ListReliantProviderTokens(ctx, connect.NewRequest(&reliantv1.ListReliantProviderTokensRequest{}))
+		require.Error(t, err)
+		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+
+		_, err = svc.RevokeReliantProviderToken(ctx, connect.NewRequest(&reliantv1.RevokeReliantProviderTokenRequest{TokenId: "tok_disabled"}))
+		require.Error(t, err)
+		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+
+		_, err = svc.GetReliantProviderStatus(ctx, connect.NewRequest(&reliantv1.GetReliantProviderStatusRequest{}))
+		require.Error(t, err)
+		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	})
+}
+
 func setSkillsFeatureFlagForSettingsTests(t *testing.T, repo *db.Repo, enabled bool) {
 	t.Helper()
 	value := "false"

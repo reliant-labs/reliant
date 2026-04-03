@@ -89,6 +89,130 @@ func ValidateModelIsAvailable(ctx context.Context, userID string, modelID string
 	return nil
 }
 
+// ResolveModelSelector resolves a selector against configured drivers, including synthetic runtime providers.
+func ResolveModelSelector(selector models.ModelSelector, availableDrivers models.AvailableDrivers) (*models.ResolvedModel, error) {
+	if selector.ID == "" && len(selector.Tags) == 0 {
+		return nil, fmt.Errorf("ModelSelector must have either ID or Tags set")
+	}
+
+	reg := models.MustGetRegistry()
+	allModels := reg.ListAll()
+
+	if selector.ID != "" {
+		baseModelID, explicitDriverID := ParseModelIDWithDriver(selector.ID)
+		def, ok := reg.GetDefinition(baseModelID)
+		if !ok {
+			return nil, fmt.Errorf("model not found: %s", selector.ID)
+		}
+		modelID := models.ModelID(baseModelID)
+
+		if explicitDriverID != "" {
+			config, ok := availableDrivers.Drivers[models.DriverID(explicitDriverID)]
+			if !ok || !driverConfigCanServeModel(config, modelID) {
+				return nil, fmt.Errorf("none of required providers [%s] available for model %s", explicitDriverID, baseModelID)
+			}
+			return &models.ResolvedModel{Definition: *def, Provider: providerMappingForDriver(*def, explicitDriverID)}, nil
+		}
+
+		if len(selector.Providers) > 0 {
+			for _, provider := range selector.Providers {
+				config, ok := availableDrivers.Drivers[models.DriverID(provider)]
+				if ok && driverConfigCanServeModel(config, modelID) {
+					return &models.ResolvedModel{Definition: *def, Provider: providerMappingForDriver(*def, provider)}, nil
+				}
+			}
+		}
+
+		bestDriver, found := models.SelectBestDriver(modelID, availableDrivers)
+		if !found {
+			return nil, fmt.Errorf("no available provider for model %s", baseModelID)
+		}
+		return &models.ResolvedModel{Definition: *def, Provider: providerMappingForDriver(*def, string(bestDriver.DriverID))}, nil
+	}
+
+	weights := make([]int, len(selector.Tags))
+	for i := range selector.Tags {
+		weights[i] = 1 << (len(selector.Tags) - 1 - i)
+	}
+
+	type candidate struct {
+		def   models.ModelDefinition
+		score int
+		index int
+	}
+	candidates := make([]candidate, 0, len(allModels))
+	for i, def := range allModels {
+		score := scoreModelTags(def, selector.Tags, weights)
+		if score > 0 {
+			candidates = append(candidates, candidate{def: def, score: score, index: i})
+		}
+	}
+	if len(candidates) == 0 {
+		return nil, fmt.Errorf("no models found matching tags: %v", selector.Tags)
+	}
+	sort.SliceStable(candidates, func(i, j int) bool {
+		if candidates[i].score != candidates[j].score {
+			return candidates[i].score > candidates[j].score
+		}
+		return candidates[i].index < candidates[j].index
+	})
+
+	for _, cand := range candidates {
+		modelID := models.ModelID(cand.def.ID)
+		if len(selector.Providers) > 0 {
+			for _, provider := range selector.Providers {
+				config, ok := availableDrivers.Drivers[models.DriverID(provider)]
+				if ok && driverConfigCanServeModel(config, modelID) {
+					return &models.ResolvedModel{Definition: cand.def, Provider: providerMappingForDriver(cand.def, provider)}, nil
+				}
+			}
+		}
+
+		bestDriver, found := models.SelectBestDriver(modelID, availableDrivers)
+		if found {
+			return &models.ResolvedModel{Definition: cand.def, Provider: providerMappingForDriver(cand.def, string(bestDriver.DriverID))}, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no available provider for models with tags: %v (tried %d candidates)", selector.Tags, len(candidates))
+}
+
+func scoreModelTags(def models.ModelDefinition, tags []string, weights []int) int {
+	tagSet := make(map[string]struct{}, len(def.Tags))
+	for _, tag := range def.Tags {
+		tagSet[tag] = struct{}{}
+	}
+	var score int
+	for i, tag := range tags {
+		if _, ok := tagSet[tag]; ok {
+			score += weights[i]
+		}
+	}
+	return score
+}
+
+func driverConfigCanServeModel(config models.DriverConfig, modelID models.ModelID) bool {
+	if !config.IsConfigured() || !config.AllowsModel(modelID) {
+		return false
+	}
+	if len(config.AllowedModels) > 0 {
+		return true
+	}
+	return models.CanDriverUseModel(models.Family(config.DriverID), modelID)
+}
+
+func providerMappingForDriver(def models.ModelDefinition, driver string) models.ProviderMapping {
+	if driver == "reliant" {
+		return models.ProviderMapping{Driver: driver, APIModel: def.ID}
+	}
+	for _, provider := range def.Providers {
+		if provider.Driver == driver {
+			return provider
+		}
+	}
+	return models.ProviderMapping{Driver: driver, APIModel: def.ID}
+}
+
 // ValidateModelSelector validates that a model selector can be resolved with the user's configured API keys.
 // This is used for early validation during chat creation to fail fast if the model isn't available.
 //
@@ -126,23 +250,7 @@ func ValidateModelSelector(ctx context.Context, userID string, selector interfac
 		return fmt.Errorf("no API keys configured - please add an API key in Settings")
 	}
 
-	// Build availableProviders slice from configured drivers
-	availableProviders := make([]string, 0, len(availableDrivers.Drivers))
-	for driverID, driverConfig := range availableDrivers.Drivers {
-		// Use IsConfigured() which handles both API key drivers and local drivers (BaseURL)
-		if driverConfig.IsConfigured() {
-			availableProviders = append(availableProviders, string(driverID))
-		}
-	}
-
-	if len(availableProviders) == 0 {
-		return fmt.Errorf("no API keys configured - please add an API key in Settings")
-	}
-
-	// Try to resolve the model
-	registry := models.MustGetRegistry()
-	_, err = registry.Resolve(ms, availableProviders)
-	if err != nil {
+	if _, err := ResolveModelSelector(ms, availableDrivers); err != nil {
 		// Provide actionable error message
 		if ms.ID != "" {
 			return fmt.Errorf("model '%s' is not available: %w. Check your API key configuration in Settings", ms.ID, err)

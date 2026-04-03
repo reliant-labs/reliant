@@ -55,14 +55,44 @@ func (s *CatalogService) ListModels(
 
 	logging.Info("[ListModels] Building model list for user", "userID", userID, "totalModels", len(allModels), "availableDrivers", len(availableDrivers.Drivers))
 
-	// Build list of all model+driver combinations
-	// Key: "modelID@driverID" to ensure uniqueness
+	// Build list of all model+driver combinations.
+	// Key: "modelID@driverID" to ensure uniqueness when drivers are synthesized.
 	var modelList []*reliantv1.ModelInfo
+	seenModels := make(map[string]struct{})
+	appendModelForDriver := func(model *models.ModelDefinition, driverID string) {
+		uniqueID := model.ID + "@" + driverID
+		if _, seen := seenModels[uniqueID]; seen {
+			return
+		}
+		seenModels[uniqueID] = struct{}{}
 
+		driverDisplayName := getDriverDisplayName(driverID)
+		modelList = append(modelList, &reliantv1.ModelInfo{
+			Id:                  uniqueID,
+			Name:                model.Name,
+			Provider:            driverDisplayName,
+			DriverId:            driverID,
+			Capabilities:        capabilitiesToStrings(model.Capabilities),
+			ContextWindow:       int64(model.Capabilities.MaxContextWindow),
+			DefaultMaxTokens:    int64(model.Capabilities.MaxOutputTokens),
+			CostPer_1MIn:        model.Cost.InputPer1M,
+			CostPer_1MOut:       model.Cost.OutputPer1M,
+			CanReason:           model.Capabilities.CanReason,
+			SupportsAttachments: model.Capabilities.SupportsAttachments,
+			Tags:                model.Tags,
+			SupportsTools:       model.Capabilities.SupportsTools,
+			SupportsCaching:     model.Capabilities.SupportsCaching,
+			SupportedThinkingLevels: models.SupportedThinkingLevelsForModelDriver(
+				model.Capabilities.CanReason,
+				model.ID,
+				driverID,
+			),
+		})
+	}
+
+	reliantConfig, hasReliantDriver := availableDrivers.Drivers[models.DriverID("reliant")]
 	for _, model := range allModels {
-		// For each provider the model supports, check if user has that provider configured
 		for _, provider := range model.Providers {
-			// Local models don't need API keys - they're available if they exist in the registry
 			isLocalDriver := provider.Driver == "local"
 			if isLocalDriver {
 				logging.Info("[ListModels] Found local model", "modelID", model.ID, "driver", provider.Driver)
@@ -73,37 +103,11 @@ func (s *CatalogService) ListModels(
 					continue
 				}
 			}
+			appendModelForDriver(model, provider.Driver)
+		}
 
-			driverID := provider.Driver
-
-			// Create a unique ID that includes the driver
-			// Format: "claude-4.5-sonnet@openrouter"
-			uniqueID := model.ID + "@" + driverID
-
-			// Get display name for the driver (used for grouping in UI)
-			driverDisplayName := getDriverDisplayName(driverID)
-
-			modelList = append(modelList, &reliantv1.ModelInfo{
-				Id:                  uniqueID,
-				Name:                model.Name,
-				Provider:            driverDisplayName, // For UI grouping
-				DriverId:            driverID,          // For routing
-				Capabilities:        capabilitiesToStrings(model.Capabilities),
-				ContextWindow:       int64(model.Capabilities.MaxContextWindow),
-				DefaultMaxTokens:    int64(model.Capabilities.MaxOutputTokens),
-				CostPer_1MIn:        model.Cost.InputPer1M,
-				CostPer_1MOut:       model.Cost.OutputPer1M,
-				CanReason:           model.Capabilities.CanReason,
-				SupportsAttachments: model.Capabilities.SupportsAttachments,
-				Tags:                model.Tags,
-				SupportsTools:       model.Capabilities.SupportsTools,
-				SupportsCaching:     model.Capabilities.SupportsCaching,
-				SupportedThinkingLevels: models.SupportedThinkingLevelsForModelDriver(
-					model.Capabilities.CanReason,
-					model.ID,
-					driverID,
-				),
-			})
+		if hasReliantDriver && reliantConfig.IsConfigured() && len(reliantConfig.AllowedModels) > 0 && reliantConfig.AllowsModel(models.ModelID(model.ID)) {
+			appendModelForDriver(model, "reliant")
 		}
 	}
 
@@ -146,6 +150,7 @@ func getDriverDisplayName(driverID string) string {
 		"gemini":     "Google AI",
 		"openrouter": "OpenRouter",
 		"local":      "Local",
+		"reliant":    "reliant",
 	}
 	if name, ok := displayNames[driverID]; ok {
 		return name
@@ -164,6 +169,7 @@ func sortModelsByProvider(modelList []*reliantv1.ModelInfo) {
 		"Google AI":  4,
 		"OpenRouter": 5,
 		"Local":      6,
+		"reliant":    7,
 	}
 
 	reg := models.MustGetRegistry()

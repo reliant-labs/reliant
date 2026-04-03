@@ -22,6 +22,17 @@ type DriverConfig struct {
 	OrganizationUUID string    // Optional: Claude OAuth organization UUID
 	RefreshToken     string    // Optional: Claude OAuth refresh token for auto-refresh
 	TokenExpiresAt   time.Time // Optional: when the access token expires
+	AllowedModels    map[ModelID]struct{}
+}
+
+// AllowsModel returns true when the driver config permits the given model.
+// Empty allowlists mean the driver is not model-restricted.
+func (c DriverConfig) AllowsModel(modelID ModelID) bool {
+	if len(c.AllowedModels) == 0 {
+		return true
+	}
+	_, ok := c.AllowedModels[modelID]
+	return ok
 }
 
 // IsConfigured returns true if the driver has the required configuration.
@@ -52,7 +63,7 @@ func GetAvailableDriversForModel(modelID ModelID, availableDrivers AvailableDriv
 
 	var configs []DriverConfig
 	for _, driverID := range supportingDrivers {
-		if config, exists := availableDrivers.Drivers[DriverID(driverID)]; exists && config.IsConfigured() {
+		if config, exists := availableDrivers.Drivers[DriverID(driverID)]; exists && config.IsConfigured() && config.AllowsModel(modelID) {
 			configs = append(configs, config)
 		}
 	}

@@ -7,7 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/features"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/claude"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/codex"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
@@ -81,6 +83,14 @@ func BuildAvailableDrivers(ctx context.Context, repo db.Repository, userID strin
 			continue
 		}
 
+		if driverID == "reliant" {
+			config, ok := buildReliantDriverConfig(ctx, repo, userID)
+			if ok {
+				drivers[config.DriverID] = config
+			}
+			continue
+		}
+
 		// Get the actual unmasked API key for this provider
 		apiKey, err := repo.GetProviderAPIKey(ctx, userID, driverID)
 		if err != nil {
@@ -124,6 +134,78 @@ func BuildAvailableDrivers(ctx context.Context, repo db.Repository, userID strin
 		return models.AvailableDrivers{Drivers: make(map[models.DriverID]models.DriverConfig)}, nil
 	}
 	return models.AvailableDrivers{Drivers: drivers}, nil
+}
+
+func buildReliantDriverConfig(ctx context.Context, repo db.Repository, userID string) (models.DriverConfig, bool) {
+	if !features.IsReliantManagedAccessEnabledForContext(ctx, repo, userID) {
+		return models.DriverConfig{}, false
+	}
+	controlPlaneClient, runtimeBaseURL := getReliantRuntimeDependencies()
+	if controlPlaneClient == nil || !controlPlaneClient.Enabled() {
+		return models.DriverConfig{}, false
+	}
+	runtimeBaseURL = strings.TrimRight(strings.TrimSpace(runtimeBaseURL), "/")
+	if runtimeBaseURL == "" {
+		return models.DriverConfig{}, false
+	}
+
+	storedToken, err := repo.GetProviderAPIKey(ctx, userID, "reliant")
+	if err != nil {
+		logging.Warn("Failed to load stored Reliant token for runtime exchange", "user_id", userID, "error", err)
+		return models.DriverConfig{}, false
+	}
+	storedToken = strings.TrimSpace(storedToken)
+	if storedToken == "" || storedToken == "dummy" {
+		return models.DriverConfig{}, false
+	}
+
+	access, err := controlPlaneClient.GetCurrentLLMAccess(ctx, storedToken)
+	if err != nil {
+		logReliantExchangeFailure(userID, err)
+		return models.DriverConfig{}, false
+	}
+	apiKey := strings.TrimSpace(access.Key)
+	if apiKey == "" {
+		logging.Warn("Reliant runtime exchange returned empty key", "user_id", userID)
+		return models.DriverConfig{}, false
+	}
+
+	allowedModels := make(map[models.ModelID]struct{}, len(access.AllowedModels))
+	for _, modelID := range access.AllowedModels {
+		modelID = strings.TrimSpace(modelID)
+		if modelID == "" {
+			continue
+		}
+		allowedModels[models.ModelID(modelID)] = struct{}{}
+	}
+
+	return models.DriverConfig{
+		DriverID:      models.DriverID("reliant"),
+		APIKey:        apiKey,
+		BaseURL:       runtimeBaseURL,
+		Enabled:       true,
+		AllowedModels: allowedModels,
+	}, true
+}
+
+func logReliantExchangeFailure(userID string, err error) {
+	level := "warn"
+	if errorsIsNotConfigured(err) {
+		level = "debug"
+	}
+	fields := []any{"user_id", userID, "error", err}
+	if rpcErr, ok := err.(*controlplane.RPCError); ok {
+		fields = append(fields, "status_code", rpcErr.StatusCode, "code", rpcErr.Code)
+	}
+	if level == "debug" {
+		logging.Debug("Reliant runtime exchange unavailable", fields...)
+		return
+	}
+	logging.Warn("Reliant runtime exchange failed", fields...)
+}
+
+func errorsIsNotConfigured(err error) bool {
+	return err == controlplane.ErrNotConfigured
 }
 
 // BuildClaudeTokenRefresher returns a closure that refreshes Claude OAuth tokens
