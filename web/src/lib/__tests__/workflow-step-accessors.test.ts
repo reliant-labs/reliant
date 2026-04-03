@@ -10,14 +10,19 @@ describe('workflow-step-accessors', () => {
     entry: ['run-inner'],
   }
 
-  it('reads loop fields from flattened step properties', () => {
-    const step: Step = {
+  it('reads loop fields from args oneof', () => {
+    const step = {
       id: 'loop-1',
       type: 'loop',
-      ref: 'builtin://agent',
-      inline: inlineWorkflow,
-      while: 'iter.iteration < 5',
-    }
+      args: {
+        case: 'loop',
+        value: {
+          ref: { value: { case: 'literal', value: 'builtin://agent' } },
+          inline: inlineWorkflow,
+          while: { expr: 'iter.iteration < 5' },
+        },
+      },
+    } as unknown as Step
 
     expect(getLoopRef(step)).toBe('builtin://agent')
     expect(getLoopInline(step)).toEqual(inlineWorkflow)

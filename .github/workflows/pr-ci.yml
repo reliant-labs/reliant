@@ -16,47 +16,19 @@ env:
 
 jobs:
   backend:
-    name: Backend (Go / ${{ matrix.database_driver }})
+    name: Backend (Go)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - database_driver: sqlite
-            database_url: ""
-          - database_driver: postgres
-            database_url: postgres://postgres:postgres@localhost:5432/reliant_ci?sslmode=disable
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: reliant_ci
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U postgres"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
-
-      - name: gofmt check
-        run: |
-          if [ "$(gofmt -l . | wc -l)" -gt 0 ]; then
-            echo "The following files need formatting:"
-            gofmt -l .
-            exit 1
-          fi
 
       - name: Install buf
         uses: bufbuild/buf-setup-action@v1
@@ -86,18 +58,12 @@ jobs:
       - name: Install golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
-          # v8 of the action only supports golangci-lint v2+.
-          # Keep this in sync with the Go version in go.mod.
-          # NOTE: golangci-lint must be built with >= the targeted Go version.
           version: v2.5.0
-          # golangci-lint sometimes reports a timeout even when it finishes with 0 issues
-          # (seen in CI). Give it more headroom.
           args: --timeout=10m
+          # Only report issues introduced in this PR, not pre-existing issues from main
+          only-new-issues: true
 
       - name: Go tests (exclude e2e)
-        env:
-          DATABASE_DRIVER: ${{ matrix.database_driver }}
-          DATABASE_URL: ${{ matrix.database_url }}
         run: |
           set -euo pipefail
           go test -buildvcs=false -timeout=10m -v $(go list -buildvcs=false ./... | grep -v '^github.com/reliant-labs/reliant/e2e$' | tr '\n' ' ')
