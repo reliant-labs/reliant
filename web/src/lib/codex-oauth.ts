@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/react'
 import { settingsGrpc } from '@/api/settings-grpc'
 import { startOAuthViaDaemon } from '@/api/daemon-grpc'
 import { startOAuthViaLocalServer } from '@/lib/oauth-local'
@@ -114,6 +115,10 @@ export async function runCodexOAuthFlow(options: CodexOAuthOptions = {}): Promis
 
     // Validate state
     if (oauthResp.state !== state) {
+      Sentry.captureMessage('Codex OAuth state mismatch', {
+        tags: { component: 'oauth', provider: 'codex' },
+        level: 'warning',
+      })
       return errorResult('state_mismatch', 'OAuth state mismatch')
     }
 
@@ -127,8 +132,16 @@ export async function runCodexOAuthFlow(options: CodexOAuthOptions = {}): Promis
     if (result.success) {
       return { ok: true, message: result.message || 'Codex connected successfully' }
     }
+    Sentry.captureMessage('Codex OAuth token exchange failed', {
+      tags: { component: 'oauth', provider: 'codex' },
+      level: 'warning',
+    })
     return errorResult('token_exchange_failed', result.message || 'Token exchange failed')
   } catch (error: any) {
+    Sentry.captureException(error, {
+      tags: { component: 'oauth', provider: 'codex' },
+      level: 'warning',
+    })
     return errorResult('daemon_error', error.message || 'OAuth flow failed')
   }
 }

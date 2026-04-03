@@ -1018,6 +1018,12 @@ func (s *MCPService) InstallServer(
 	// No server-side DOCKER_HOST probing needed.
 
 	if err := s.preflightMCPServer(ctx, name, internalConfig); err != nil {
+		logging.Error("MCP server install failed",
+			"operation", "install",
+			"server", name,
+			"phase", "preflight",
+			"error", err,
+		)
 		return connect.NewResponse(&reliantv1.InstallServerResponse{
 			Success: false,
 			Message: fmt.Sprintf("Preflight failed: %v", err),
@@ -1062,6 +1068,12 @@ func (s *MCPService) InstallServer(
 			logging.Error("Failed to rollback stored MCP scope snapshot after skill bundle failure", "error", persistErr, "server", name)
 		}
 
+		logging.Error("MCP server install failed",
+			"operation", "install",
+			"server", name,
+			"phase", "skill_bundle",
+			"error", bundleErr,
+		)
 		return connect.NewResponse(&reliantv1.InstallServerResponse{
 			Success: false,
 			Message: fmt.Sprintf("Skill bundle installation failed; MCP install rolled back. Error: %v", bundleErr),
@@ -1075,7 +1087,12 @@ func (s *MCPService) InstallServer(
 
 	if internalConfig.Enabled {
 		if err := s.mcpManagerForUser(userID).AddProjectServer(startCtx, projectPath, name, internalConfig); err != nil {
-			logging.Warn("MCP server configuration saved but startup failed", "error", err, "name", name)
+			logging.Error("MCP server install failed",
+				"operation", "install",
+				"server", name,
+				"phase", "startup",
+				"error", err,
+			)
 			return connect.NewResponse(&reliantv1.InstallServerResponse{
 				Success: false,
 				Message: fmt.Sprintf("Server configuration saved, but failed to start. Fix configuration/runtime and retry restart. Error: %v", err),
@@ -1423,6 +1440,12 @@ func (s *MCPService) RestartServer(
 	intCfg := scopedConfigToInternal(scoped.Config)
 
 	if err := s.preflightMCPServer(ctx, name, intCfg); err != nil {
+		logging.Error("MCP server restart failed",
+			"operation", "restart",
+			"server", name,
+			"phase", "preflight",
+			"error", err,
+		)
 		return connect.NewResponse(&reliantv1.RestartServerResponse{
 			Success: false,
 			Message: fmt.Sprintf("Preflight failed: %v", err),
@@ -1434,7 +1457,12 @@ func (s *MCPService) RestartServer(
 	defer cancel()
 
 	if err := mgr.AddProjectServer(startCtx, projectPath, name, intCfg); err != nil {
-		logging.Warn("MCP server restart failed", "name", name, "error", err)
+		logging.Error("MCP server restart failed",
+			"operation", "restart",
+			"server", name,
+			"phase", "startup",
+			"error", err,
+		)
 		return connect.NewResponse(&reliantv1.RestartServerResponse{
 			Success: false,
 			Message: fmt.Sprintf("Failed to restart server: %v", err),
@@ -1720,6 +1748,12 @@ func (s *MCPService) SetServerEnabled(
 			defer cancel()
 
 			if err := s.preflightMCPServer(ctx, name, intCfg); err != nil {
+				logging.Error("MCP server enable/disable failed",
+					"operation", "set_enabled",
+					"server", name,
+					"phase", "preflight",
+					"error", err,
+				)
 				return connect.NewResponse(&reliantv1.SetServerEnabledResponse{
 					Success: false,
 					Message: fmt.Sprintf("Server enabled in config, but preflight failed: %v", err),
@@ -1729,6 +1763,12 @@ func (s *MCPService) SetServerEnabled(
 			}
 
 			if err := mgr.AddProjectServer(startCtx, projectPath, name, intCfg); err != nil {
+				logging.Error("MCP server enable/disable failed",
+					"operation", "set_enabled",
+					"server", name,
+					"phase", "startup",
+					"error", err,
+				)
 				return connect.NewResponse(&reliantv1.SetServerEnabledResponse{
 					Success: false,
 					Message: fmt.Sprintf("Server enabled in config, but failed to start: %v", err),
@@ -1850,6 +1890,12 @@ func (s *MCPService) MoveServerScope(
 			defer cancel()
 
 			if err := mgr.AddProjectServer(startCtx, projectPath, name, intCfg); err != nil {
+				logging.Error("MCP server scope move failed",
+					"operation", "move_scope",
+					"server", name,
+					"target_scope", targetScope.String(),
+					"error", err,
+				)
 				return connect.NewResponse(&reliantv1.MoveServerScopeResponse{
 					Success: false,
 					Message: fmt.Sprintf("Server moved to %s, but failed to start: %v", targetScope.String(), err),

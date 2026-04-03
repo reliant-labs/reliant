@@ -850,7 +850,7 @@ export function CombinedGeneralSettings({
                             Connected
                           </span>
                           {provider.maskedKey && (
-                            <span className="text-sm text-muted-foreground font-mono">
+                            <span className="text-sm text-muted-foreground font-mono" data-sentry-mask>
                               {provider.maskedKey}
                             </span>
                           )}

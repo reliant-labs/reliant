@@ -57,11 +57,11 @@ export function ErrorAlert({
           <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
           <div className="flex-1">
             {hasCommand ? (
-              <pre className="text-sm text-destructive whitespace-pre-wrap font-mono">
+              <pre className="text-sm text-destructive whitespace-pre-wrap font-mono" data-sentry-mask>
                 {error}
               </pre>
             ) : (
-              <p className="text-sm text-destructive">{error}</p>
+              <p className="text-sm text-destructive" data-sentry-mask>{error}</p>
             )}
           </div>
           {onDismiss && (

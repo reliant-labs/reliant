@@ -1604,7 +1604,7 @@ func (s *SettingsService) CompleteCodexOAuth(ctx context.Context, req *connect.R
 
 	tokens, err := codex.ExchangeCodexAuthorizationCode(code, codeVerifier, redirectURI)
 	if err != nil {
-		logging.Warn("Codex OAuth code exchange failed", "error", err)
+		logging.Error("Codex OAuth code exchange failed", "error", err)
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("failed to complete Codex OAuth: %w", err))
 	}
 
@@ -1658,7 +1658,7 @@ func (s *SettingsService) CompleteClaudeOAuth(ctx context.Context, req *connect.
 
 	tokens, err := claude.ExchangeClaudeAuthorizationCode(code, codeVerifier, redirectURI, state)
 	if err != nil {
-		logging.Warn("Claude OAuth code exchange failed", "error", err)
+		logging.Error("Claude OAuth code exchange failed", "error", err)
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("failed to complete Claude OAuth: %w", err))
 	}
 
