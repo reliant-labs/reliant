@@ -170,7 +170,6 @@ Designed to run as few stateful replicas.`,
 
 	// Ports
 	cmd.Flags().IntVar(&opts.ToolsDaemonPort, "daemon-port", serverEnvOrDefaultInt("TOOLS_DAEMON_PORT", 9190), "Daemon bidi-streaming gRPC listen port")
-	cmd.Flags().IntVar(&opts.FrontendPort, "frontend-port", serverEnvOrDefaultInt("FRONTEND_PORT", 9191), "Frontend proxy gRPC listen port")
 	cmd.Flags().IntVar(&opts.HealthPort, "health-port", serverEnvOrDefaultInt("HEALTH_PORT", 8080), "Health/readiness HTTP endpoint port")
 	cmd.Flags().StringVar(&opts.BindAddress, "bind-address", serverEnvOrDefault("BIND_ADDRESS", "0.0.0.0"), "Network address to bind to")
 
@@ -182,16 +181,10 @@ Designed to run as few stateful replicas.`,
 	// NATS
 	cmd.Flags().StringVar(&opts.NATSURL, "nats-url", serverEnvOrDefault("NATS_URL", ""), "NATS server URL (required)")
 
-	// CORS
-	cmd.Flags().StringVar(&opts.CORSAllowedOrigins, "cors-origins", serverEnvOrDefault("CORS_ALLOWED_ORIGINS", "*"), "Comma-separated CORS allowed origins, or * for all")
-
 	// TLS
 	cmd.Flags().StringVar(&opts.TLSCertFile, "tls-cert", serverEnvOrDefault("TLS_CERT_FILE", ""), "TLS certificate file path")
 	cmd.Flags().StringVar(&opts.TLSKeyFile, "tls-key", serverEnvOrDefault("TLS_KEY_FILE", ""), "TLS key file path")
 	cmd.Flags().BoolVar(&opts.DisableTLS, "disable-tls", serverEnvOrDefaultBool("DISABLE_TLS", false), "Disable TLS (use plaintext HTTP)")
-
-	// JWT
-	cmd.Flags().StringVar(&opts.JWTPublicKey, "jwt-public-key", serverEnvOrDefault("JWT_PUBLIC_KEY", ""), "JWT public key PEM for frontend auth")
 
 	return cmd
 }

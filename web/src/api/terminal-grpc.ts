@@ -36,7 +36,7 @@ export interface TerminalSessionInfo {
 export async function listTerminalSessions(): Promise<TerminalSessionInfo[]> {
   try {
     logger.info(`${LOG_PREFIX} Listing sessions`);
-    const client = await getTerminalClient();
+    const client = getTerminalClient();
     const response = await client.listSessions(
       create(ListTerminalSessionsRequestSchema, {})
     );
@@ -57,7 +57,7 @@ export async function closeTerminalSession(
 ): Promise<{ success: boolean; message: string }> {
   try {
     logger.info(`${LOG_PREFIX} Closing session`, { sessionId: sessionId.slice(0, 8) });
-    const client = await getTerminalClient();
+    const client = getTerminalClient();
     const response = await client.closeSession(
       create(CloseTerminalSessionRequestSchema, {
         sessionId,

@@ -7,7 +7,6 @@ declare global {
       grpcPort?: number;
       grpcUrl?: string;
       useTLS?: boolean;
-      daemonGatewayUrl?: string;
     };
   }
 }

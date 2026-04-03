@@ -3,7 +3,6 @@ import { useAuthStore } from "@/store/authStore";
 import { useGlobalDataStore } from "@/store/globalDataStore";
 import { useApiKeySetupStore } from "@/store/apiKeySetupStore";
 import { logger } from "@/lib/logger";
-import { initDaemonTransport } from "@/api/grpc-client";
 import { supabase } from "@/lib/supabase";
 
 // NOTE: OAuth callback handling is done in authStore.initialize() to avoid duplicate listeners
@@ -69,13 +68,6 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
 
         const start = performance.now();
 
-        // Start daemon transport discovery in parallel with prefetch.
-        // getDaemonTransport() will await this promise so FileSystem/Terminal/Background
-        // calls wait for the daemon URL rather than falling back to the main server.
-        const daemonReady = initDaemonTransport().catch((error) => {
-          logger.warn('[AuthInitializer] Daemon transport discovery failed:', error);
-        });
-
         // Trigger prefetch - this loads global data needed for the app
         try {
           await prefetch();
@@ -85,9 +77,6 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
           // Reset prefetch flag if global data fails, as it's critical for app function
           hasPrefetched.current = false;
         }
-
-        // Ensure daemon transport is ready before rendering project UI
-        await daemonReady;
 
         // Independently check API keys
         // Wait for checklist to initialize first to avoid showing modal during welcome

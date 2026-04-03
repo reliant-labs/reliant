@@ -16,6 +16,7 @@ type DaemonCredentials struct {
 	PAT          string    `json:"pat"`
 	UserID       string    `json:"user_id"`
 	ServerURL    string    `json:"server_url"`
+	GatewayURL   string    `json:"gateway_url,omitempty"`
 	RegisteredAt time.Time `json:"registered_at"`
 }
 

@@ -9,7 +9,7 @@ import { supabase } from "../../lib/supabase";
 import { cn } from "../../lib/utils";
 import { useTerminalStore } from "../../store/terminalStore";
 import { useSidebarStore } from "../../store/sidebarStore";
-import { getConfiguredGatewayURL } from "../../api/grpc-client";
+import { getGRPCBaseURLPublic } from "../../api/grpc-client";
 
 interface TerminalProps {
   sessionId: string;
@@ -195,17 +195,17 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
 
     // Connect to WebSocket
     const connectWebSocket = async () => {
-      // Use the configured daemon gateway URL for terminal WebSocket connections.
-      const gatewayURL = getConfiguredGatewayURL();
-      if (!gatewayURL) {
-        logger.error("[Terminal] No daemon gateway URL configured, terminal unavailable");
-        term.writeln("\r\n\x1b[91mTerminal unavailable — no gateway URL configured.\x1b[0m");
+      // Use the main gRPC base URL for terminal WebSocket connections.
+      const baseURL = getGRPCBaseURLPublic();
+      if (!baseURL) {
+        logger.error("[Terminal] No gRPC base URL configured, terminal unavailable");
+        term.writeln("\r\n\x1b[91mTerminal unavailable — no base URL configured.\x1b[0m");
         return () => {};
       }
 
-      const protocol = gatewayURL.startsWith("https") ? "wss:" : "ws:";
-      const host = gatewayURL.replace(/^https?:\/\//, "");
-      logger.info("[Terminal] Using daemon gateway for terminal WS", { gatewayURL });
+      const protocol = baseURL.startsWith("https") ? "wss:" : "ws:";
+      const host = baseURL.replace(/^https?:\/\//, "");
+      logger.info("[Terminal] Using gRPC base URL for terminal WS", { baseURL });
 
       // Get auth token
       const { data: { session } } = await supabase.auth.getSession();

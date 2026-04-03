@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/nats-io/nats.go"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/observability"
 )
 
@@ -39,14 +41,47 @@ const (
 // daemon operations to the api-server that holds the daemon's gRPC connection.
 type NATSDaemonRouter struct {
 	nc *nats.Conn
+	db db.Repository
 }
 
 // NewNATSDaemonRouter creates a new NATS-based daemon router.
-func NewNATSDaemonRouter(nc *nats.Conn) *NATSDaemonRouter {
-	return &NATSDaemonRouter{nc: nc}
+func NewNATSDaemonRouter(nc *nats.Conn, opts ...NATSRouterOption) *NATSDaemonRouter {
+	r := &NATSDaemonRouter{nc: nc}
+	for _, o := range opts {
+		o(r)
+	}
+	return r
+}
+
+// NATSRouterOption configures a NATSDaemonRouter.
+type NATSRouterOption func(*NATSDaemonRouter)
+
+// WithDatabase adds a DB repository for fast daemon-online checks.
+func WithDatabase(repo db.Repository) NATSRouterOption {
+	return func(r *NATSDaemonRouter) {
+		r.db = repo
+	}
 }
 
 func (r *NATSDaemonRouter) IsDaemonOnline(ctx context.Context, userID string) (bool, error) {
+	if r.db == nil {
+		return r.isDaemonOnlineViaNATS(ctx, userID)
+	}
+	daemons, err := r.db.ListDaemonsByUserID(ctx, userID)
+	if err != nil {
+		return false, fmt.Errorf("checking daemon status in DB: %w", err)
+	}
+	for _, d := range daemons {
+		if d.Status == db.DaemonStatusActive {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// isDaemonOnlineViaNATS is the legacy NATS request-reply check, used as fallback
+// when no DB is configured.
+func (r *NATSDaemonRouter) isDaemonOnlineViaNATS(ctx context.Context, userID string) (bool, error) {
 	subject := toolOnlineSubject + "." + userID
 	reqMsg := observability.NATSPublishMsg(ctx, subject, nil)
 	start := time.Now()
@@ -100,6 +135,12 @@ func (r *NATSDaemonRouter) SendToolExecutionCancel(ctx context.Context, userID, 
 }
 
 func (r *NATSDaemonRouter) SendKillProcess(ctx context.Context, userID, processID string) error {
+	if online, err := r.IsDaemonOnline(ctx, userID); err != nil {
+		return fmt.Errorf("checking daemon status: %w", err)
+	} else if !online {
+		return connect.NewError(connect.CodeUnavailable, fmt.Errorf("no daemon connected for user"))
+	}
+
 	payload, err := json.Marshal(map[string]string{
 		"process_id": processID,
 	})
@@ -128,6 +169,12 @@ func (r *NATSDaemonRouter) SendKillProcess(ctx context.Context, userID, processI
 }
 
 func (r *NATSDaemonRouter) SendDaemonCommand(ctx context.Context, userID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	if online, err := r.IsDaemonOnline(ctx, userID); err != nil {
+		return nil, fmt.Errorf("checking daemon status: %w", err)
+	} else if !online {
+		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("no daemon connected for user"))
+	}
+
 	req := struct {
 		RequestID   string          `json:"request_id"`
 		CommandType string          `json:"command_type"`
@@ -200,6 +247,12 @@ func (r *NATSDaemonRouter) SendDaemonCommand(ctx context.Context, userID string,
 }
 
 func (r *NATSDaemonRouter) SendToolRequestSync(ctx context.Context, userID string, request *ToolExecutionRequest) (*ToolExecutionResponse, error) {
+	if online, err := r.IsDaemonOnline(ctx, userID); err != nil {
+		return nil, fmt.Errorf("checking daemon status: %w", err)
+	} else if !online {
+		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("no daemon connected for user"))
+	}
+
 	payload, err := json.Marshal(request)
 	if err != nil {
 		return nil, fmt.Errorf("marshal tool request: %w", err)

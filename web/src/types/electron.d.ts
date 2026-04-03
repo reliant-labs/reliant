@@ -138,7 +138,6 @@ export interface ReliantConfig {
   isDev: boolean;
   useTLS: boolean;
   temporalUIPort?: number;
-  daemonGatewayUrl?: string;
 }
 
 declare global {

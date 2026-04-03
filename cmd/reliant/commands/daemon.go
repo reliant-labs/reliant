@@ -49,7 +49,7 @@ the Reliant cloud platform via a bidirectional gRPC stream.`,
 // 1. Ensures user is logged in (runs OAuth if not)
 // 2. Calls CreateDaemonToken RPC to get a PAT
 // 3. Writes daemon credentials to local file
-func registerDaemon(cmd *cobra.Command, grpcURL string) error {
+func registerDaemon(cmd *cobra.Command, apiURL, gwURL string) error {
 	// Step 1: Ensure we have an access token (OAuth login if needed)
 	accessToken, err := auth.ReadAccessTokenFromAuthFile()
 	if err != nil {
@@ -57,11 +57,7 @@ func registerDaemon(cmd *cobra.Command, grpcURL string) error {
 	}
 	if accessToken == "" {
 		fmt.Fprintln(cmd.OutOrStdout(), "Not logged in. Starting authentication...")
-		opts := auth.LoginOptions{
-			ServerURL: firstNonEmpty(os.Getenv("SUPABASE_URL")),
-			AnonKey:   os.Getenv("SUPABASE_ANON_KEY"),
-		}
-		result, err := auth.Login(cmd.Context(), opts)
+		result, err := auth.Login(cmd.Context(), auth.LoginOptions{})
 		if err != nil {
 			return fmt.Errorf("login failed: %w", err)
 		}
@@ -72,13 +68,13 @@ func registerDaemon(cmd *cobra.Command, grpcURL string) error {
 		accessToken = result.AccessToken
 	}
 
-	// Step 2: Call CreateDaemonToken RPC
+	// Step 2: Call CreateDaemonToken RPC (via the API server, not the gateway)
 	hostname, _ := os.Hostname()
 
 	httpClient := &http.Client{
 		Transport: &bearerAuthTransport{token: accessToken},
 	}
-	client := reliantv1connect.NewDaemonRegistryServiceClient(httpClient, grpcURL)
+	client := reliantv1connect.NewDaemonRegistryServiceClient(httpClient, apiURL)
 
 	resp, err := client.CreateDaemonToken(cmd.Context(), connect.NewRequest(&reliantv1.CreateDaemonTokenRequest{
 		Name: hostname,
@@ -91,7 +87,8 @@ func registerDaemon(cmd *cobra.Command, grpcURL string) error {
 	creds := &auth.DaemonCredentials{
 		PAT:          resp.Msg.GetToken(),
 		UserID:       resp.Msg.GetUserId(),
-		ServerURL:    grpcURL,
+		ServerURL:    apiURL,
+		GatewayURL:   gwURL,
 		RegisteredAt: time.Now().UTC(),
 	}
 	if err := auth.WriteDaemonCredentials(creds); err != nil {
@@ -101,8 +98,39 @@ func registerDaemon(cmd *cobra.Command, grpcURL string) error {
 	credsPath, _ := auth.DaemonCredentialsFilePath()
 	fmt.Fprintln(cmd.OutOrStdout(), "Daemon registered successfully")
 	fmt.Fprintf(cmd.OutOrStdout(), "  Credentials: %s\n", credsPath)
-	fmt.Fprintf(cmd.OutOrStdout(), "  Server:      %s\n", grpcURL)
+	fmt.Fprintf(cmd.OutOrStdout(), "  Server:      %s\n", apiURL)
+	fmt.Fprintf(cmd.OutOrStdout(), "  Gateway:     %s\n", gwURL)
 	return nil
+}
+
+// ensureDaemonCredentials returns existing daemon credentials or creates new ones.
+// This is the shared credential resolution logic used by both `open` and `daemon start`.
+func ensureDaemonCredentials(cmd *cobra.Command, apiURL, gwURL string) (*auth.DaemonCredentials, error) {
+	creds, err := auth.ReadDaemonCredentials()
+	if err != nil {
+		return nil, fmt.Errorf("reading daemon credentials: %w", err)
+	}
+	if creds != nil {
+		// Update gateway URL if it changed (e.g. flag override)
+		if gwURL != "" && creds.GatewayURL != gwURL {
+			creds.GatewayURL = gwURL
+			_ = auth.WriteDaemonCredentials(creds)
+		}
+		return creds, nil
+	}
+
+	// No credentials found — register
+	fmt.Fprintln(cmd.OutOrStdout(), "No daemon credentials found. Registering...")
+	if err := registerDaemon(cmd, apiURL, gwURL); err != nil {
+		return nil, fmt.Errorf("daemon registration failed: %w", err)
+	}
+
+	// Re-read the credentials we just wrote
+	creds, err = auth.ReadDaemonCredentials()
+	if err != nil || creds == nil {
+		return nil, fmt.Errorf("failed to read daemon credentials after registration")
+	}
+	return creds, nil
 }
 
 // bearerAuthTransport injects a Bearer token into HTTP requests.
@@ -141,7 +169,7 @@ After registering, run 'reliant daemon start' to connect.`,
 				return nil
 			}
 
-			return registerDaemon(cmd, serverURL)
+			return registerDaemon(cmd, serverURL, resolveGatewayURL())
 		},
 	}
 
@@ -153,8 +181,6 @@ func newDaemonStartCmd() *cobra.Command {
 		port       string
 		grpcURL    string
 		dataDir    string
-		token      string
-		userID     string
 		background bool
 		tlsCert    string
 		tlsKey     string
@@ -172,7 +198,7 @@ execution capabilities.
 Credential resolution order:
   1. Daemon credentials file (created by 'reliant daemon register')
   2. If logged in but not registered, auto-registers and creates credentials
-  3. --token / DAEMON_PAT flags (manual override)`,
+  3. If not logged in, prompts for login and then auto-registers`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if background {
 				// TODO: implement background fork/detach
@@ -181,85 +207,49 @@ Credential resolution order:
 
 			logging.Setup(slog.LevelInfo)
 
-			// Credential resolution: daemon creds file > auto-register > manual flags > error
-			if token == "" || userID == "" {
-				creds, err := auth.ReadDaemonCredentials()
-				if err != nil {
-					return fmt.Errorf("reading daemon credentials: %w", err)
-				}
-
-				if creds != nil {
-					// Use daemon credentials file
-					if token == "" {
-						token = creds.PAT
-					}
-					if userID == "" {
-						userID = creds.UserID
-					}
-					if grpcURL == "" {
-						grpcURL = creds.ServerURL
-					}
-				} else {
-					// No daemon creds — try auto-register if logged in
-					accessToken, _ := auth.ReadAccessTokenFromAuthFile()
-					if accessToken != "" {
-						targetURL := grpcURL
-						if targetURL == "" {
-							targetURL = serverURL
-						}
-						fmt.Fprintln(cmd.OutOrStdout(), "No daemon credentials found. Auto-registering...")
-						if err := registerDaemon(cmd, targetURL); err != nil {
-							return fmt.Errorf("auto-registration failed: %w", err)
-						}
-						// Re-read the credentials we just wrote
-						creds, err = auth.ReadDaemonCredentials()
-						if err != nil || creds == nil {
-							return fmt.Errorf("failed to read daemon credentials after registration")
-						}
-						token = creds.PAT
-						userID = creds.UserID
-						if grpcURL == "" {
-							grpcURL = creds.ServerURL
-						}
-					}
-				}
+			// Resolve credentials: existing creds > auto-register > login+register
+			creds, err := ensureDaemonCredentials(cmd, serverURL, resolveGatewayURL())
+			if err != nil {
+				return err
 			}
 
-			if token == "" || userID == "" {
-				return fmt.Errorf("not registered. Run 'reliant daemon register' to set up this machine")
+			// Gateway URL for the bidi stream: flag > credentials > derive from server
+			daemonGRPCURL := grpcURL
+			if daemonGRPCURL == "" {
+				daemonGRPCURL = creds.GatewayURL
+			}
+			if daemonGRPCURL == "" {
+				daemonGRPCURL = fmt.Sprintf("http://localhost:%s", port)
 			}
 
 			// Determine TLS mode: explicit flag/env > cert/key presence > h2c.
 			parsedTLSMode := bootstrap.TLSModeH2C
 
-			if grpcURL == "" {
-				grpcURL = fmt.Sprintf("http://localhost:%s", port)
-			}
 			if tlsMode != "" {
 				parsedTLSMode = bootstrap.TLSMode(tlsMode)
 			} else if tlsCert != "" && tlsKey != "" {
 				parsedTLSMode = bootstrap.TLSModeTLS
 				if !cmd.Flags().Changed("grpc-url") {
-					grpcURL = fmt.Sprintf("https://localhost:%s", port)
+					daemonGRPCURL = fmt.Sprintf("https://localhost:%s", port)
 				}
-			} else if strings.HasPrefix(grpcURL, "https://") {
+			} else if strings.HasPrefix(daemonGRPCURL, "https://") {
 				parsedTLSMode = bootstrap.TLSModeTLS
 			}
 
 			ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 			defer cancel()
 
-			logging.Info("Starting tools-daemon", "port", port, "tls_mode", string(parsedTLSMode), "data_dir", dataDir)
+			logging.Info("Starting tools-daemon", "port", port, "tls_mode", string(parsedTLSMode), "gateway_url", daemonGRPCURL, "data_dir", dataDir)
 
 			// Clean up background processes on shutdown.
 			defer shell.GetBackgroundManager().KillAllRunning()
 			defer shell.GetProcessMonitor().Stop()
 
-			err := daemonruntime.Start(ctx, daemonruntime.StartOptions{
+			err = daemonruntime.Start(ctx, daemonruntime.StartOptions{
 				BootstrapConfig: bootstrap.DaemonBootstrapConfig{
-					UserID:    userID,
-					AuthToken: token,
-					GRPCURL:   grpcURL,
+					UserID:    creds.UserID,
+					AuthToken: creds.PAT,
+					GRPCURL:   daemonGRPCURL,
 					TLSMode:   parsedTLSMode,
 					DataDir:   dataDir,
 				},
@@ -276,8 +266,7 @@ Credential resolution order:
 	cmd.Flags().StringVar(&port, "port", envOrDefault("TOOLS_DAEMON_PORT", "9190"), "Daemon listen port")
 	cmd.Flags().StringVar(&grpcURL, "grpc-url", envOrDefault("DAEMON_GRPC_URL", ""), "gRPC server URL to connect to")
 	cmd.Flags().StringVar(&dataDir, "data-dir", envOrDefault("DAEMON_DATA_DIR", "./data"), "Data directory")
-	cmd.Flags().StringVar(&token, "token", envOrDefault("DAEMON_PAT", ""), "Personal access token (overrides daemon credentials file)")
-	cmd.Flags().StringVar(&userID, "user-id", envOrDefault("DAEMON_AUTH_USER_ID", ""), "User ID (overrides daemon credentials file)")
+
 	cmd.Flags().BoolVar(&background, "background", false, "Run daemon in background (detached)")
 	cmd.Flags().StringVar(&tlsCert, "tls-cert", envOrDefault("TLS_CERT_FILE", ""), "TLS certificate file path")
 	cmd.Flags().StringVar(&tlsKey, "tls-key", envOrDefault("TLS_KEY_FILE", ""), "TLS key file path")
