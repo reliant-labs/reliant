@@ -1,17 +1,23 @@
-import { useState, useEffect, useRef, memo, useMemo } from "react";
+import { useState, useEffect, useRef, memo, useMemo, useCallback } from "react";
 import {
   FolderOpen,
   GitBranch,
   CheckCircle,
   AlertTriangle,
+  Check,
+  Copy,
 } from "lucide-react";
 import { ConnectError, Code } from "@connectrpc/connect";
+import { create } from "@bufbuild/protobuf";
 import { useProjectStore } from "../../store/projectStore";
 import { useApiKeySetupStore } from "../../store/apiKeySetupStore";
 import { ProjectPickerModal } from "./ProjectPickerModal";
 import { DirectoryPicker } from "./DirectoryPicker";
 import { projectGrpc } from "../../api/project-grpc";
+import { grpcClient } from "../../api/grpc-client";
 import { toast } from "../../lib/toast-manager";
+import { DaemonStatus, ListDaemonsRequestSchema } from "../../gen/reliant/v1/tools_daemon_pb";
+import type { DaemonInfo } from "../../gen/reliant/v1/tools_daemon_pb";
 
 import { settingsSync, SETTINGS_KEYS } from "../../services/settingsSync";
 import { GradientBackground } from "../GradientBackground";
@@ -30,6 +36,133 @@ interface Project {
 interface ProjectPickerProps {
   onProjectSelected: (project: Project) => void;
 }
+
+function CopyableCommand({ command }: { command: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback for non-secure contexts
+      const textArea = document.createElement("textarea");
+      textArea.value = command;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textArea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  }, [command]);
+
+  return (
+    <button
+      onClick={handleCopy}
+      className="group/copy w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg bg-background/80 border border-border/50 hover:border-primary/30 transition-colors cursor-pointer"
+    >
+      <code className="text-sm font-mono text-foreground">{command}</code>
+      {copied ? (
+        <Check className="w-4 h-4 text-green-500 flex-shrink-0" />
+      ) : (
+        <Copy className="w-4 h-4 text-muted-foreground group-hover/copy:text-foreground flex-shrink-0 transition-colors" />
+      )}
+    </button>
+  );
+}
+
+function useDaemonStatus() {
+  const [daemons, setDaemons] = useState<DaemonInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const check = async () => {
+      try {
+        const resp = await grpcClient.daemonRegistry().listDaemons(create(ListDaemonsRequestSchema));
+        if (!cancelled) {
+          setDaemons(resp.daemons);
+          setLoading(false);
+        }
+      } catch {
+        if (!cancelled) {
+          setDaemons([]);
+          setLoading(false);
+        }
+      }
+    };
+
+    check();
+    const interval = setInterval(check, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
+  const activeDaemon = daemons.find((d) => d.status === DaemonStatus.ACTIVE);
+  return { daemons, activeDaemon, loading };
+}
+
+function DaemonConnectionInstructions() {
+  return (
+    <div className="relative backdrop-blur-2xl bg-card/90 border border-border/50 rounded-2xl mb-6 overflow-hidden p-6">
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-lg font-semibold text-foreground">
+          Connect a Project
+        </h3>
+      </div>
+      <p className="text-sm text-muted-foreground mb-5">
+        To continue, you'll need to connect our tools daemon to your code so Reliant can access your files and run commands.
+      </p>
+
+      <div className="space-y-4">
+        {/* Step 1: Install */}
+        <div className="flex items-start gap-3">
+          <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center mt-0.5">
+            <span className="text-xs font-bold text-primary">1</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-foreground mb-1.5">Install Reliant</p>
+            <CopyableCommand command="brew install --cask reliant-labs/reliant/reliant" />
+            <p className="text-xs text-muted-foreground mt-1.5">
+              Or{" "}
+              <a
+                href="https://docs.reliantlabs.io/getting-started/installation#direct-download"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                download directly
+              </a>
+            </p>
+          </div>
+        </div>
+
+        {/* Step 2: Open project */}
+        <div className="flex items-start gap-3">
+          <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center mt-0.5">
+            <span className="text-xs font-bold text-primary">2</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-foreground mb-1.5">
+              Open your project
+            </p>
+            <CopyableCommand command="cd /your/project && reliant open ." />
+            <p className="text-xs text-muted-foreground mt-1.5">
+              This will sign you in, start the daemon, and connect your project.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 
 // Module-level guard: survives component remounts so init status is only fetched once per session
 let initStatusLoadedForSession = false;
@@ -131,6 +264,9 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   };
 
   const isElectron = !!window.electronAPI?.selectDirectory;
+  const isWebMode = !isElectron;
+  const { activeDaemon, loading: daemonLoading } = useDaemonStatus();
+  const showConnectionInstructions = isWebMode && !activeDaemon && !daemonLoading;
 
   const handleOpenExistingProject = async () => {
     // In browser mode, open the directory picker to browse the filesystem
@@ -294,36 +430,39 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
                 </svg>
                 <h1 className="text-4xl font-bold text-foreground">Reliant</h1>
               </div>
-              {/* Single Action Button - Compact */}
-              <div className="relative backdrop-blur-2xl bg-card/90 border border-border/50 rounded-2xl mb-6 overflow-hidden">
-                <button
-                  onClick={handleOpenExistingProject}
-                  onMouseEnter={() => setIsOpenButtonHovered(true)}
-                  onMouseLeave={() => setIsOpenButtonHovered(false)}
-                  className="group w-full p-6 transition-all duration-150 text-left active:scale-[0.99]"
-                  style={{
-                    backgroundColor: isOpenButtonHovered
-                      ? "hsl(var(--primary) / 0.15)"
-                      : "hsl(var(--primary) / 0.1)",
-                  }}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center">
-                        <FolderOpen className="w-6 h-6 text-primary" />
-                      </div>
-                      <div className="text-left">
-                        <h3 className="text-xl font-bold text-primary">
-                          Open Project
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                          Browse and select your project directory
-                        </p>
+              {showConnectionInstructions ? (
+                <DaemonConnectionInstructions />
+              ) : (
+                <div className="relative backdrop-blur-2xl bg-card/90 border border-border/50 rounded-2xl mb-6 overflow-hidden">
+                  <button
+                    onClick={handleOpenExistingProject}
+                    onMouseEnter={() => setIsOpenButtonHovered(true)}
+                    onMouseLeave={() => setIsOpenButtonHovered(false)}
+                    className="group w-full p-6 transition-all duration-150 text-left active:scale-[0.99]"
+                    style={{
+                      backgroundColor: isOpenButtonHovered
+                        ? "hsl(var(--primary) / 0.15)"
+                        : "hsl(var(--primary) / 0.1)",
+                    }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center">
+                          <FolderOpen className="w-6 h-6 text-primary" />
+                        </div>
+                        <div className="text-left">
+                          <h3 className="text-xl font-bold text-primary">
+                            Open Project
+                          </h3>
+                          <p className="text-sm text-muted-foreground">
+                            Browse and select your project directory
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </button>
-              </div>
+                  </button>
+                </div>
+              )}
 
               {/* Recent Projects - Compact List */}
               {displayedProjects.length > 0 && (

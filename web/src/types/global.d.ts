@@ -12,7 +12,6 @@ declare global {
       grpcPort?: number;
       grpcUrl?: string;
       useTLS?: boolean;
-      daemonGatewayUrl?: string;
     };
     electronAPI?: {
       getConfig: () => typeof window.RELIANT_CONFIG;

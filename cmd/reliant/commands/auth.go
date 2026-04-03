@@ -31,8 +31,6 @@ desktop app.`,
 }
 
 func newAuthLoginCmd() *cobra.Command {
-	var authServerURL string
-
 	cmd := &cobra.Command{
 		Use:   "login",
 		Short: "Log in to Reliant",
@@ -48,12 +46,7 @@ Supported providers: google, github, apple
   Linux:   ~/.config/reliant/auth/reliant-auth.json
   Windows: %APPDATA%\reliant\auth\reliant-auth.json`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			opts := auth.LoginOptions{
-				ServerURL: firstNonEmpty(authServerURL, os.Getenv("SUPABASE_URL")),
-				AnonKey:   os.Getenv("SUPABASE_ANON_KEY"),
-			}
-
-			result, err := auth.Login(cmd.Context(), opts)
+			result, err := auth.Login(cmd.Context(), auth.LoginOptions{})
 			if err != nil {
 				return fmt.Errorf("login failed: %w", err)
 			}
@@ -68,18 +61,7 @@ Supported providers: google, github, apple
 		},
 	}
 
-	cmd.Flags().StringVar(&authServerURL, "server", "", "Supabase server URL (default: $SUPABASE_URL or built-in)")
-
 	return cmd
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 func newAuthStatusCmd() *cobra.Command {

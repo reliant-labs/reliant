@@ -284,7 +284,7 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	// Daemon routing: reuses the same NATS connection
-	daemonRouter := toolexec.NewNATSDaemonRouter(nc)
+	daemonRouter := toolexec.NewNATSDaemonRouter(nc, toolexec.WithDatabase(repo))
 	natsChecker := nc.IsConnected
 	remoteExecutor.SetDaemonRouter(daemonRouter)
 	logging.Info("Using NATS daemon router — daemon services run in separate daemon-gateway process")

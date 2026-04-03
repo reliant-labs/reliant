@@ -8,10 +8,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"syscall"
 
@@ -24,7 +22,6 @@ import (
 
 func newOpenCmd() *cobra.Command {
 	var (
-		noBrowser  bool
 		noDaemon   bool
 		background bool
 	)
@@ -71,37 +68,11 @@ This is the "reliant ." command.`,
 				}
 			}
 
-			// 3. Check auth
-			var accessToken string
-			var userID string
-
-			accessToken, err = auth.ReadAccessTokenFromAuthFile()
-			if err != nil {
-				return fmt.Errorf("reading auth file: %w", err)
-			}
-			userID, err = auth.ReadUserIDFromAuthFile()
-			if err != nil {
-				return fmt.Errorf("reading user ID from auth file: %w", err)
-			}
-
-			if (accessToken == "" || userID == "") && !noDaemon {
-				fmt.Println("Not logged in. Starting login flow...")
-				result, loginErr := auth.Login(ctx, auth.LoginOptions{})
-				if loginErr != nil {
-					return fmt.Errorf("login failed: %w", loginErr)
-				}
-				if err := auth.WriteAuthSession(result.AccessToken, result.RefreshToken, result.UserID, result.Email); err != nil {
-					return fmt.Errorf("saving auth session: %w", err)
-				}
-				accessToken = result.AccessToken
-				userID = result.UserID
-				fmt.Printf("Logged in as %s\n", result.Email)
-			}
-
-			// 4. Best-effort project registration with cloud API
-			var projectID string
+			// 3. Best-effort project registration with cloud API
+			// (uses JWT access token if available — separate from daemon PAT)
+			accessToken, _ := auth.ReadAccessTokenFromAuthFile()
 			if accessToken != "" {
-				projectID = registerProject(ctx, serverURL, accessToken, projectPath)
+				registerProject(ctx, serverURL, accessToken, projectPath)
 			}
 
 			// 5. Start daemon (unless --no-daemon)
@@ -109,52 +80,46 @@ This is the "reliant ." command.`,
 			defer daemonCancel()
 
 			if !noDaemon {
-				if accessToken == "" || userID == "" {
-					fmt.Println("Skipping daemon: not authenticated.")
-				} else {
-					dataDir := filepath.Join(projectPath, ".reliant", "data")
-					if err := os.MkdirAll(dataDir, 0755); err != nil {
-						return fmt.Errorf("creating data directory: %w", err)
-					}
-
-					grpcURL := serverURL
-					tlsMode := bootstrap.TLSModeTLS
-					if strings.HasPrefix(grpcURL, "http://") {
-						tlsMode = bootstrap.TLSModeH2C
-					}
-
-					bootCfg := bootstrap.DaemonBootstrapConfig{
-						UserID:    userID,
-						AuthToken: accessToken,
-						GRPCURL:   grpcURL,
-						TLSMode:   tlsMode,
-						DataDir:   dataDir,
-					}
-
-					fmt.Println("Starting tools daemon...")
-					go func() {
-						if err := daemonruntime.Start(daemonCtx, daemonruntime.StartOptions{
-							BootstrapConfig: bootCfg,
-						}); err != nil && daemonCtx.Err() == nil {
-							fmt.Fprintf(os.Stderr, "Daemon error: %v\n", err)
-						}
-					}()
+				// Ensure we have a PAT for daemon auth (reuse existing or create new)
+				creds, credErr := ensureDaemonCredentials(cmd, serverURL, resolveGatewayURL())
+				if credErr != nil {
+					return fmt.Errorf("daemon credential setup failed: %w", credErr)
 				}
+
+				daemonGRPCURL := creds.GatewayURL
+				if daemonGRPCURL == "" {
+					daemonGRPCURL = resolveGatewayURL()
+				}
+
+				dataDir := filepath.Join(projectPath, ".reliant", "data")
+				if err := os.MkdirAll(dataDir, 0755); err != nil {
+					return fmt.Errorf("creating data directory: %w", err)
+				}
+
+				tlsMode := bootstrap.TLSModeTLS
+				if strings.HasPrefix(daemonGRPCURL, "http://") {
+					tlsMode = bootstrap.TLSModeH2C
+				}
+
+				bootCfg := bootstrap.DaemonBootstrapConfig{
+					UserID:    creds.UserID,
+					AuthToken: creds.PAT,
+					GRPCURL:   daemonGRPCURL,
+					TLSMode:   tlsMode,
+					DataDir:   dataDir,
+				}
+
+				fmt.Printf("Starting tools daemon (gateway: %s)...\n", daemonGRPCURL)
+				go func() {
+					if err := daemonruntime.Start(daemonCtx, daemonruntime.StartOptions{
+						BootstrapConfig: bootCfg,
+					}); err != nil && daemonCtx.Err() == nil {
+						fmt.Fprintf(os.Stderr, "Daemon error: %v\n", err)
+					}
+				}()
 			}
 
-			// 6. Open browser (unless --no-browser)
-			if !noBrowser {
-				browserURL := serverURL
-				if projectID != "" {
-					browserURL = serverURL + "/p/" + projectID
-				}
-				fmt.Printf("Opening %s in browser...\n", browserURL)
-				if err := openBrowserURL(browserURL); err != nil {
-					fmt.Fprintf(os.Stderr, "Could not open browser: %v\nPlease visit: %s\n", err, browserURL)
-				}
-			}
-
-			// 7. Block on signal (unless --background)
+			// 6. Block on signal (unless --background)
 			if background {
 				fmt.Println("Daemon started in background.")
 				return nil
@@ -170,7 +135,6 @@ This is the "reliant ." command.`,
 		},
 	}
 
-	cmd.Flags().BoolVar(&noBrowser, "no-browser", false, "Skip opening the browser")
 	cmd.Flags().BoolVar(&noDaemon, "no-daemon", false, "Skip starting the tools daemon")
 	cmd.Flags().BoolVar(&background, "background", false, "Start daemon in background and return to shell")
 
@@ -178,50 +142,23 @@ This is the "reliant ." command.`,
 }
 
 // registerProject does a best-effort POST to register the project with the cloud API.
-// Returns the project_id on success, or empty string on failure.
-func registerProject(ctx context.Context, srvURL, accessToken, projectPath string) string {
+func registerProject(ctx context.Context, srvURL, accessToken, projectPath string) {
 	projectName := filepath.Base(projectPath)
 	reqBody, err := json.Marshal(map[string]string{"name": projectName, "path": projectPath})
 	if err != nil {
-		return ""
+		return
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", srvURL+"/api/v1/projects", bytes.NewReader(reqBody))
 	if err != nil {
-		return ""
+		return
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return ""
+		return
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return ""
-	}
-
-	var result struct {
-		ProjectID string `json:"project_id"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return ""
-	}
-	return result.ProjectID
-}
-
-// openBrowserURL opens the given URL in the user's default browser.
-func openBrowserURL(url string) error {
-	switch runtime.GOOS {
-	case "darwin":
-		return exec.Command("open", url).Start()
-	case "linux":
-		return exec.Command("xdg-open", url).Start()
-	case "windows":
-		return exec.Command("cmd", "/c", "start", url).Start()
-	default:
-		return fmt.Errorf("unsupported platform %s", runtime.GOOS)
-	}
+	resp.Body.Close()
 }

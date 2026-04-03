@@ -3,15 +3,18 @@ package commands
 
 import (
 	"fmt"
+	"net/url"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
 
 var (
 	// Global persistent flags
-	verbose   bool
-	serverURL string
+	verbose    bool
+	serverURL  string
+	gatewayURL string
 )
 
 // NewRootCmd creates and returns the root Cobra command with all subcommands registered.
@@ -30,7 +33,8 @@ Reliant server components.`,
 
 	// Global persistent flags available to all subcommands
 	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
-	root.PersistentFlags().StringVar(&serverURL, "server", envOrDefault("RELIANT_SERVER_URL", "https://api.reliant.so"), "Cloud API server URL")
+	root.PersistentFlags().StringVar(&serverURL, "server", envOrDefault("RELIANT_SERVER_URL", "https://reliantapi.com"), "Cloud API server URL")
+	root.PersistentFlags().StringVar(&gatewayURL, "gateway", envOrDefault("RELIANT_GATEWAY_URL", ""), "Daemon gateway URL (defaults to gateway subdomain of --server)")
 
 	// Register subcommand groups
 	root.AddCommand(newMonolithCmd())
@@ -60,4 +64,43 @@ func envOrDefault(key, defaultVal string) string {
 		return v
 	}
 	return defaultVal
+}
+
+// resolveGatewayURL returns the gateway URL, deriving it from the server URL if not set.
+// e.g. https://staging.reliantapi.com -> https://gateway-staging.reliantapi.com
+//
+//	https://reliantapi.com -> https://gateway.reliantapi.com
+func resolveGatewayURL() string {
+	if gatewayURL != "" {
+		return gatewayURL
+	}
+
+	// Derive from server URL by adding "gateway" prefix to the host
+	parsed, err := url.Parse(serverURL)
+	if err != nil {
+		return serverURL
+	}
+
+	host := parsed.Hostname()
+	port := parsed.Port()
+
+	// Count dots to determine if there's a subdomain.
+	// "staging.reliantapi.com" has 2 dots -> has subdomain -> gateway-staging.reliantapi.com
+	// "reliantapi.com" has 1 dot -> no subdomain -> gateway.reliantapi.com
+	dotCount := strings.Count(host, ".")
+	if dotCount >= 2 {
+		// Has a subdomain: staging.reliantapi.com -> gateway-staging.reliantapi.com
+		parts := strings.SplitN(host, ".", 2)
+		host = "gateway-" + parts[0] + "." + parts[1]
+	} else {
+		// No subdomain: reliantapi.com -> gateway.reliantapi.com
+		host = "gateway." + host
+	}
+
+	if port != "" {
+		host = host + ":" + port
+	}
+
+	parsed.Host = host
+	return parsed.String()
 }

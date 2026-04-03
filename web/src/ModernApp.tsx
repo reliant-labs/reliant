@@ -68,7 +68,7 @@ import { useWorktreeStore } from "./store/worktreeStore";
 import { useGlobalUpdatesStore } from "./store/globalUpdatesStore";
 import { useProcessStore } from "./store/processStore";
 import { useBackgroundTasksStore } from "./store/backgroundTasksStore";
-import { isDaemonConfigured } from "./api/grpc-client";
+import { isGrpcReady } from "./api/grpc-client";
 import { useNotificationStore, startPermissionRefresh } from "./store/notificationStore";
 import { useWorkspaceStateStore } from "./store/workspaceStateStore";
 import { useWorkspaceRestore, useAutoSaveWorkspaceState } from "./hooks/useWorkspaceRestore";
@@ -973,10 +973,10 @@ function App() {
   useEffect(() => {
     if (!isBackendReady) return;
 
-    // Guard: daemon gateway must be configured, otherwise these calls
+    // Guard: gRPC must be ready, otherwise these calls
     // hit a non-existent server and produce ERR_CONNECTION_REFUSED.
-    if (!isDaemonConfigured()) {
-      logger.info("⏭️ Skipping background process fetch — daemon gateway not configured");
+    if (!isGrpcReady()) {
+      logger.info("⏭️ Skipping background process fetch — gRPC not ready");
       return;
     }
 

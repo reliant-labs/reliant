@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 
@@ -14,6 +15,13 @@ import (
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+)
+
+const (
+	// wsPingInterval is how often the server sends a websocket ping frame.
+	wsPingInterval = 30 * time.Second
+	// wsPongTimeout is how long the server waits for a pong before closing.
+	wsPongTimeout = 45 * time.Second
 )
 
 var wsUpgrader = websocket.Upgrader{
@@ -134,9 +142,17 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator *auth.JWTValidato
 		}
 		defer unsub()
 
+		// --- WebSocket keepalive ---
+		// Set initial pong deadline; each pong resets it.
+		_ = conn.SetReadDeadline(time.Now().Add(wsPongTimeout))
+		conn.SetPongHandler(func(string) error {
+			_ = conn.SetReadDeadline(time.Now().Add(wsPongTimeout))
+			return nil
+		})
+
 		// --- Pump goroutines ---
 		var wg sync.WaitGroup
-		wg.Add(2)
+		wg.Add(3)
 
 		var pumpErr error
 		var errOnce sync.Once
@@ -146,6 +162,25 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator *auth.JWTValidato
 				cancel()
 			})
 		}
+
+		// Ping pump: sends periodic pings to keep the connection alive
+		// through proxies and to detect dead clients.
+		go func() {
+			defer wg.Done()
+			ticker := time.NewTicker(wsPingInterval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					if err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(5*time.Second)); err != nil {
+						setPumpErr(nil)
+						return
+					}
+				}
+			}
+		}()
 
 		// Output pump: daemon -> WebSocket
 		go func() {

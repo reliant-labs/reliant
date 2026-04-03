@@ -41,26 +41,6 @@ import {
   PROVIDER_VALIDATION_TIMEOUT_MS,
 } from "../lib/constants";
 
-/**
- * Check for a statically configured daemon-gateway URL.
- * Priority: Electron config > Vite env var.
- * Returns the dedicated daemon gateway URL or null if not configured.
- */
-export const getConfiguredGatewayURL = (): string | null => {
-  // Check Electron config first
-  if (typeof window !== "undefined" && window.RELIANT_CONFIG?.daemonGatewayUrl) {
-    return window.RELIANT_CONFIG.daemonGatewayUrl;
-  }
-
-  // Check Vite env var (cloud deployment)
-  const gatewayUrl = (import.meta as { env?: { VITE_DAEMON_GATEWAY_URL?: string } }).env?.VITE_DAEMON_GATEWAY_URL;
-  if (gatewayUrl) {
-    return gatewayUrl;
-  }
-
-  return null;
-};
-
 // Detect if running in Electron and get gRPC URL
 // Returns null if config not yet available (Electron loading)
 const getGRPCBaseURL = (): string | null => {
@@ -342,82 +322,9 @@ const errorInterceptor: Interceptor = (next) => async (req) => {
   }
 };
 
-/**
- * Interceptor for daemon transport RPCs. On connection errors (network
- * failures, refused connections), automatically invalidates the cached
- * transport so the next getDaemonTransport() call re-discovers the daemon.
- * This handles daemon restarts, port changes, and sleep/wake recovery.
- */
-const daemonErrorInterceptor: Interceptor = (next) => async (req) => {
-  const startTime = Date.now();
-  try {
-    logger.info("[gRPC Client] Daemon request starting:", {
-      service: req.service.typeName,
-      method: req.method.name,
-      baseUrl: _daemonBaseURL,
-    });
-    const result = await next(req);
-    const duration = Date.now() - startTime;
-    logger.debug("[gRPC Client] Daemon request succeeded:", {
-      service: req.service.typeName,
-      method: req.method.name,
-      durationMs: duration,
-    });
-    return result;
-  } catch (error) {
-    const duration = Date.now() - startTime;
-    // Check if this is a connection-level failure (daemon unreachable)
-    const isConnectionError =
-      (error instanceof ConnectError && error.code === Code.Unavailable) ||
-      (error instanceof TypeError) || // fetch network errors
-      (error instanceof Error && error.message.includes("Failed to fetch"));
-
-    if (isConnectionError) {
-      logger.warn("[gRPC Client] Daemon connection error, invalidating transport for re-discovery", {
-        service: req.service.typeName,
-        method: req.method.name,
-        durationMs: duration,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      invalidateDaemonTransport();
-    } else {
-      logger.error("[gRPC Client] Daemon request failed:", {
-        service: req.service.typeName,
-        method: req.method.name,
-        durationMs: duration,
-        error: error instanceof Error ? error.message : String(error),
-        errorCode: (error as any)?.code,
-      });
-
-      // Report non-trivial errors to Sentry
-      const shouldReport =
-        !(error instanceof ConnectError) ||
-        !SENTRY_SKIP_CODES.has(error.code);
-
-      if (shouldReport) {
-        Sentry.captureException(error, {
-          tags: {
-            grpc_service: req.service.typeName,
-            grpc_method: req.method.name,
-            grpc_code: error instanceof ConnectError ? Code[error.code] : "unknown",
-            transport: "daemon",
-          },
-        });
-      }
-    }
-    throw error;
-  }
-};
-
 // Create the Connect transport
 let _transport: ReturnType<typeof createConnectTransport> | null = null;
 let _currentBaseURL: string | null = null;
-
-// Daemon frontend transport — routes to the daemon's frontend server
-// (BackgroundService, TerminalService)
-let _daemonTransport: ReturnType<typeof createConnectTransport> | null = null;
-let _daemonBaseURL: string | null = null;
-
 
 // Clear all cached clients (called when transport changes)
 const clearClientCache = () => {
@@ -435,7 +342,6 @@ const clearClientCache = () => {
   _mcpClient = null;
   _workflowClient = null;
   _filesystemClient = null;
-  _daemonFilesystemClient = null;
   _backgroundClient = null;
   _packageCommandsClient = null;
   _streamingClient = null;
@@ -445,9 +351,6 @@ const clearClientCache = () => {
   _presetClient = null;
   _scenarioClient = null;
   _daemonRegistryClient = null;
-  // Also clear daemon transport cache
-  _daemonTransport = null;
-  _daemonBaseURL = null;
 };
 
 export const getGRPCBaseURLPublic = (): string | null => getGRPCBaseURL();
@@ -495,85 +398,6 @@ export const getTransport = () => {
 // Check if gRPC client is ready (config available)
 export const isGrpcReady = (): boolean => {
   return getGRPCBaseURL() !== null;
-};
-
-/**
- * Resolve the effective transport URL for daemon-routed services.
- * In split/cloud mode this is the dedicated daemon gateway URL.
- * In monolith/local mode we fall back to the main gRPC endpoint.
- */
-const getEffectiveDaemonURL = (): string | null => {
-  return getConfiguredGatewayURL() ?? getGRPCBaseURL();
-};
-
-/**
- * Check whether daemon-routed services are configured.
- * This returns true for both split mode (dedicated daemon gateway) and
- * monolith mode (main gRPC endpoint fallback).
- */
-export const isDaemonConfigured = (): boolean => {
-  return getEffectiveDaemonURL() !== null;
-};
-
-/**
- * Get the daemon transport.
- * Uses the dedicated daemon gateway when configured, otherwise falls back to
- * the main gRPC endpoint in monolith/local mode.
- */
-export const getDaemonTransport = async (): Promise<ReturnType<typeof createConnectTransport>> => {
-  if (!_daemonTransport) {
-    await initDaemonTransport();
-  }
-  if (_daemonTransport) {
-    return _daemonTransport;
-  }
-  throw new Error("Daemon transport not available — no daemon-routed URL configured");
-};
-
-/**
- * Discover the daemon frontend URL and create a transport for it.
- * Call this early during app initialization. Once discovered, daemon-routed
- * service clients (Background, Terminal) will route to the daemon's frontend server.
- *
- * Safe to call multiple times — deduplicates concurrent calls.
- */
-export const initDaemonTransport = async (): Promise<void> => {
-  const daemonURL = getEffectiveDaemonURL();
-  if (!daemonURL) {
-    logger.error("[gRPC Client] No daemon transport URL configured — daemon services will be unavailable");
-    return;
-  }
-
-  if (_daemonBaseURL !== daemonURL) {
-    _daemonBaseURL = daemonURL;
-    _daemonTransport = createConnectTransport({
-      baseUrl: daemonURL,
-      interceptors: [timeoutInterceptor, authInterceptor, tracingInterceptor, daemonErrorInterceptor],
-      useBinaryFormat: false,
-    });
-    // Invalidate cached clients so they pick up the new transport
-    _filesystemClient = null;
-    _daemonFilesystemClient = null;
-    _backgroundClient = null;
-    _terminalClient = null;
-    logger.info("[gRPC Client] Using daemon-routed transport", {
-      baseUrl: daemonURL,
-      mode: getConfiguredGatewayURL() ? "dedicated_gateway" : "monolith_fallback",
-    });
-  }
-};
-
-/**
- * Invalidate the cached daemon transport so the next call re-discovers.
- * Called automatically when a daemon RPC fails, enabling transparent
- * reconnection on the next getDaemonTransport() call.
- */
-export const invalidateDaemonTransport = () => {
-  _daemonTransport = null;
-  _daemonBaseURL = null;
-  _daemonFilesystemClient = null;
-  _backgroundClient = null;
-  _terminalClient = null;
 };
 
 // Create typed clients for each service
@@ -631,16 +455,16 @@ export const createWorkflowClient = (): Client<typeof WorkflowService> => {
   return createClient(WorkflowService, getTransport());
 };
 
-export const createFileSystemClient = async (): Promise<Client<typeof FileSystemService>> => {
-  return createClient(FileSystemService, await getDaemonTransport());
+export const createFileSystemClient = (): Client<typeof FileSystemService> => {
+  return createClient(FileSystemService, getTransport());
 };
 
-export const createDaemonFileSystemClient = async (): Promise<Client<typeof FileSystemService>> => {
-  return createClient(FileSystemService, await getDaemonTransport());
+export const createDaemonFileSystemClient = (): Client<typeof FileSystemService> => {
+  return createClient(FileSystemService, getTransport());
 };
 
-export const createBackgroundClient = async (): Promise<Client<typeof BackgroundService>> => {
-  return createClient(BackgroundService, await getDaemonTransport());
+export const createBackgroundClient = (): Client<typeof BackgroundService> => {
+  return createClient(BackgroundService, getTransport());
 };
 
 export const createPackageCommandsClient = (): Client<typeof PackageCommandsService> => {
@@ -651,8 +475,8 @@ export const createStreamingClient = (): Client<typeof StreamingService> => {
   return createClient(StreamingService, getTransport());
 };
 
-export const createTerminalClient = async (): Promise<Client<typeof TerminalService>> => {
-  return createClient(TerminalService, await getDaemonTransport());
+export const createTerminalClient = (): Client<typeof TerminalService> => {
+  return createClient(TerminalService, getTransport());
 };
 
 export const createAttachmentClient = (): Client<typeof AttachmentService> => {
@@ -690,7 +514,6 @@ let _settingsClient: Client<typeof SettingsService> | null = null;
 let _mcpClient: Client<typeof MCPService> | null = null;
 let _workflowClient: Client<typeof WorkflowService> | null = null;
 let _filesystemClient: Client<typeof FileSystemService> | null = null;
-let _daemonFilesystemClient: Client<typeof FileSystemService> | null = null;
 let _backgroundClient: Client<typeof BackgroundService> | null = null;
 let _packageCommandsClient: Client<typeof PackageCommandsService> | null = null;
 let _streamingClient: Client<typeof StreamingService> | null = null;
@@ -793,23 +616,23 @@ export const getWorkflowClient = (): Client<typeof WorkflowService> => {
   return _workflowClient;
 };
 
-export const getFileSystemClient = async (): Promise<Client<typeof FileSystemService>> => {
+export const getFileSystemClient = (): Client<typeof FileSystemService> => {
   if (!_filesystemClient) {
-    _filesystemClient = await createFileSystemClient();
+    _filesystemClient = createFileSystemClient();
   }
   return _filesystemClient;
 };
 
-export const getDaemonFileSystemClient = async (): Promise<Client<typeof FileSystemService>> => {
-  if (!_daemonFilesystemClient) {
-    _daemonFilesystemClient = await createDaemonFileSystemClient();
+export const getDaemonFileSystemClient = (): Client<typeof FileSystemService> => {
+  if (!_filesystemClient) {
+    _filesystemClient = createDaemonFileSystemClient();
   }
-  return _daemonFilesystemClient;
+  return _filesystemClient;
 };
 
-export const getBackgroundClient = async (): Promise<Client<typeof BackgroundService>> => {
+export const getBackgroundClient = (): Client<typeof BackgroundService> => {
   if (!_backgroundClient) {
-    _backgroundClient = await createBackgroundClient();
+    _backgroundClient = createBackgroundClient();
   }
   return _backgroundClient;
 };
@@ -828,9 +651,9 @@ export const getStreamingClient = (): Client<typeof StreamingService> => {
   return _streamingClient;
 };
 
-export const getTerminalClient = async (): Promise<Client<typeof TerminalService>> => {
+export const getTerminalClient = (): Client<typeof TerminalService> => {
   if (!_terminalClient) {
-    _terminalClient = await createTerminalClient();
+    _terminalClient = createTerminalClient();
   }
   return _terminalClient;
 };

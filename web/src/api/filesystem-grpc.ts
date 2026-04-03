@@ -489,7 +489,7 @@ export const filesystemGrpc = {
 // ============================================
 
 export async function listDirectory(path: string): Promise<{ path: string; entries: DirectoryEntry[] }> {
-  const client = await getDaemonFileSystemClient();
+  const client = getDaemonFileSystemClient();
   const request = create(ListDirectoryRequestSchema, { path });
   const response = await client.listDirectory(request);
   return { path: response.path, entries: response.entries };

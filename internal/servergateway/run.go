@@ -5,11 +5,6 @@
 // It hosts ToolsDaemonService (bidi gRPC streams to tools-daemon processes) and
 // a NATS bridge that forwards tool execution requests from api-server replicas
 // and Temporal workers to the correct daemon stream.
-//
-// It also hosts a frontend-facing gRPC server that exposes FileSystemService,
-// BackgroundService, TerminalService, and DaemonService as proxy services.
-// Browsers call these endpoints; the proxy services route requests to the
-// appropriate daemon via NATS.
 package servergateway
 
 import (
@@ -20,22 +15,12 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 
-	"connectrpc.com/connect"
-	"github.com/go-chi/cors"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
-
-	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/certs"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/envutil"
-	"github.com/reliant-labs/reliant/internal/gen/reliant/v1/reliantv1connect"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
-	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/natsutil"
@@ -48,17 +33,10 @@ import (
 type Options struct {
 	// ToolsDaemonPort is the port for the daemon bidi-streaming gRPC server.
 	ToolsDaemonPort int
-	// FrontendPort is the port for the frontend-facing proxy gRPC server.
-	FrontendPort int
 	// HealthPort is the port for the health/readiness HTTP endpoint.
 	HealthPort int
 	// BindAddress is the network interface to bind to (e.g. "0.0.0.0").
 	BindAddress string
-
-	// JWTPublicKey is the PEM-encoded public key for frontend JWT auth.
-	JWTPublicKey string
-	// CORSAllowedOrigins is a comma-separated list of allowed origins.
-	CORSAllowedOrigins string
 
 	// DatabaseDriver is "sqlite" or "postgres".
 	DatabaseDriver string
@@ -92,8 +70,6 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("daemon-gateway: DATABASE_URL is required when DATABASE_DRIVER=postgres")
 	}
 
-	corsAllowedOrigins := strings.Split(opts.CORSAllowedOrigins, ",")
-
 	// -------------------------------------------------------------------------
 	// 2. Initialize subsystems
 	// -------------------------------------------------------------------------
@@ -124,7 +100,6 @@ func Run(ctx context.Context, opts Options) error {
 
 	logging.Info("Starting Reliant daemon-gateway",
 		"daemon_port", opts.ToolsDaemonPort,
-		"frontend_port", opts.FrontendPort,
 		"health_port", opts.HealthPort,
 		"db_driver", opts.DatabaseDriver,
 		"nats_url", opts.NATSURL,
@@ -195,13 +170,14 @@ func Run(ctx context.Context, opts Options) error {
 	// RemoteExecutor is used by DaemonServer to wire the local daemon router
 	remoteExecutor := toolexec.NewRemoteExecutor(nil)
 
-	// NATS tool bridge: subscribes to NATS subjects and forwards to local daemon streams
+	// NATS tool bridge: per-user subscriptions created/destroyed on daemon connect/disconnect
 	toolBridge := toolexec.NewNATSToolBridge(nc, toolsDaemonService)
+	toolsDaemonService.AddConnectionListener(toolBridge)
 	if err := toolBridge.Start(); err != nil {
 		return fmt.Errorf("failed to start NATS tool bridge: %w", err)
 	}
 	defer func() { _ = toolBridge.Close() }()
-	logging.Info("NATS tool bridge started — forwarding tool requests to daemon streams")
+	logging.Info("NATS tool bridge started — per-daemon subscriptions on connect/disconnect")
 
 	// Daemon gRPC server (bidi streaming endpoint for tools-daemon connections)
 	daemonSrv := grpcserver.NewDaemonServer(&grpcserver.DaemonConfig{
@@ -217,106 +193,6 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to start daemon gRPC server: %w", err)
 	}
 	logging.Info("Daemon gRPC server started", "port", opts.ToolsDaemonPort)
-
-	// -------------------------------------------------------------------------
-	// 3b. Frontend-facing proxy gRPC server
-	// -------------------------------------------------------------------------
-
-	// NATS-based daemon router for proxy services
-	daemonRouter := toolexec.NewNATSDaemonRouter(nc)
-
-	// Proxy services route browser requests through NATS to the correct daemon
-	fsProxy := services.NewFileSystemProxyService(daemonRouter, repo)
-	bgProxy := services.NewBackgroundProxyService(daemonRouter)
-	termProxy := services.NewTerminalProxyService(daemonRouter)
-	daemonProxy := services.NewDaemonProxyService(daemonRouter)
-
-	// Build Connect handler options (interceptors)
-	var handlerOpts []connect.HandlerOption
-	handlerOpts = append(handlerOpts,
-		connect.WithInterceptors(interceptors.NewObservabilityInterceptor()),
-		connect.WithInterceptors(interceptors.NewRecoveryInterceptor()),
-		connect.WithInterceptors(interceptors.NewErrorReporterInterceptor()),
-		connect.WithInterceptors(interceptors.NewTimeoutInterceptor().Interceptor()),
-	)
-	authInterceptor, err := interceptors.NewAuthInterceptor(opts.JWTPublicKey, nil)
-	if err != nil {
-		if envutil.GetEnv("RELIANT_ENV", "") != "dev" {
-			return fmt.Errorf("frontend auth interceptor required — set JWT_PUBLIC_KEY or RELIANT_ENV=dev: %w", err)
-		}
-		logging.Warn("Frontend auth interceptor disabled (dev mode)", "error", err)
-	}
-	if authInterceptor != nil {
-		handlerOpts = append(handlerOpts, connect.WithInterceptors(authInterceptor))
-	}
-
-	// Register ConnectRPC service handlers
-	frontendMux := http.NewServeMux()
-	fsPath, fsHandler := reliantv1connect.NewFileSystemServiceHandler(fsProxy, handlerOpts...)
-	bgPath, bgHandler := reliantv1connect.NewBackgroundServiceHandler(bgProxy, handlerOpts...)
-	termPath, termHandler := reliantv1connect.NewTerminalServiceHandler(termProxy, handlerOpts...)
-	daemonPath, daemonHandler := reliantv1connect.NewDaemonServiceHandler(daemonProxy, handlerOpts...)
-	frontendMux.Handle(fsPath, fsHandler)
-	frontendMux.Handle(bgPath, bgHandler)
-	frontendMux.Handle(termPath, termHandler)
-	frontendMux.Handle(daemonPath, daemonHandler)
-
-	// WebSocket terminal handler (browser bidi terminal I/O)
-	var jwtValidator *auth.JWTValidator
-	if opts.JWTPublicKey != "" {
-		jwtValidator, _ = auth.NewJWTValidator(opts.JWTPublicKey)
-	}
-	frontendMux.HandleFunc("/api/v2/terminal/ws", services.TerminalWSHandler(daemonRouter, jwtValidator))
-
-	// CORS middleware
-	allowCreds := true
-	for _, o := range corsAllowedOrigins {
-		if o == "*" {
-			allowCreds = false
-			break
-		}
-	}
-	corsHandler := cors.Handler(cors.Options{
-		AllowedOrigins:   corsAllowedOrigins,
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "Connect-Protocol-Version", "Connect-Timeout-Ms"},
-		ExposedHeaders:   []string{"Link"},
-		AllowCredentials: allowCreds,
-		MaxAge:           86400,
-	})
-
-	// Build handler with h2c or TLS
-	//
-	// CORS and security-headers middleware must wrap frontendMux *inside*
-	// h2c.NewHandler so they apply to HTTP/2 frames on hijacked connections.
-	var frontendHandler http.Handler
-	innerHandler := corsHandler(gatewaySecurityHeaders(frontendMux))
-	if tlsCertFile != "" && tlsKeyFile != "" {
-		frontendHandler = innerHandler
-	} else {
-		frontendHandler = h2c.NewHandler(innerHandler, &http2.Server{})
-	}
-
-	frontendAddr := fmt.Sprintf("%s:%d", opts.BindAddress, opts.FrontendPort)
-	frontendSrv := &http.Server{
-		Addr:              frontendAddr,
-		Handler:           frontendHandler,
-		ReadHeaderTimeout: 10 * time.Second,
-	}
-	go func() {
-		if tlsCertFile != "" && tlsKeyFile != "" {
-			logging.Info("Starting frontend gRPC server with TLS", "address", frontendAddr)
-			if err := frontendSrv.ListenAndServeTLS(tlsCertFile, tlsKeyFile); err != nil && err != http.ErrServerClosed {
-				logging.Error("Frontend server failed", "error", err)
-			}
-		} else {
-			logging.Info("Starting frontend gRPC server (h2c)", "address", frontendAddr)
-			if err := frontendSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				logging.Error("Frontend server failed", "error", err)
-			}
-		}
-	}()
-	logging.Info("Frontend gRPC server started", "port", opts.FrontendPort)
 
 	// -------------------------------------------------------------------------
 	// 4. Health endpoint
@@ -370,7 +246,6 @@ func Run(ctx context.Context, opts Options) error {
 	logging.Info("Reliant daemon-gateway ready",
 		"startup_duration", time.Since(startTime),
 		"daemon_port", opts.ToolsDaemonPort,
-		"frontend_port", opts.FrontendPort,
 		"health_port", opts.HealthPort,
 	)
 
@@ -398,14 +273,6 @@ func Run(ctx context.Context, opts Options) error {
 		logging.Error("Error stopping health endpoint", "error", err)
 	}
 
-	// Stop frontend server
-	logging.Info("Stopping frontend gRPC server")
-	frontendShutdownCtx, frontendCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer frontendCancel()
-	if err := frontendSrv.Shutdown(frontendShutdownCtx); err != nil {
-		logging.Error("Error stopping frontend gRPC server", "error", err)
-	}
-
 	// Stop daemon server (drains connections)
 	logging.Info("Stopping daemon gRPC server")
 	if err := daemonSrv.Stop(shutdownCtx); err != nil {
@@ -416,15 +283,4 @@ func Run(ctx context.Context, opts Options) error {
 
 	logging.Info("Daemon-gateway shut down gracefully")
 	return nil
-}
-
-// gatewaySecurityHeaders adds security-related HTTP headers to responses.
-func gatewaySecurityHeaders(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("X-Frame-Options", "DENY")
-		w.Header().Set("X-XSS-Protection", "1; mode=block")
-		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		next.ServeHTTP(w, r)
-	})
 }

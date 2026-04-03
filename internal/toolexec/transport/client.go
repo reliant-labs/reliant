@@ -1,9 +1,14 @@
 package transport
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
+	"net"
 	"net/http"
+	"time"
+
+	"golang.org/x/net/http2"
 
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
 )
@@ -34,17 +39,27 @@ func NewDaemonHTTPClient(cfg bootstrap.DaemonBootstrapConfig) (*http.Client, str
 
 	switch cfg.TLSMode {
 	case bootstrap.TLSModeH2C:
-		return wrap(&http.Transport{}), cfg.GRPCURL, nil
+		tr := &http2.Transport{
+			AllowHTTP:       true,
+			ReadIdleTimeout: 60 * time.Second,
+			PingTimeout:     15 * time.Second,
+			DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
+				return (&net.Dialer{}).DialContext(ctx, network, addr)
+			},
+		}
+		return wrap(tr), cfg.GRPCURL, nil
 	case bootstrap.TLSModeTLS:
-		tr := &http.Transport{
-			ForceAttemptHTTP2: true,
-			TLSClientConfig:   &tls.Config{InsecureSkipVerify: false, MinVersion: tls.VersionTLS12},
+		tr := &http2.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: false, MinVersion: tls.VersionTLS12},
+			ReadIdleTimeout: 60 * time.Second,
+			PingTimeout:     15 * time.Second,
 		}
 		return wrap(tr), cfg.GRPCURL, nil
 	case bootstrap.TLSModeInsecureTLSSkipVerify:
-		tr := &http.Transport{
-			ForceAttemptHTTP2: true,
-			TLSClientConfig:   &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
+		tr := &http2.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
+			ReadIdleTimeout: 60 * time.Second,
+			PingTimeout:     15 * time.Second,
 		}
 		return wrap(tr), cfg.GRPCURL, nil
 	default:

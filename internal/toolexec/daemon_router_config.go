@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/nats-io/nats.go"
+	"github.com/reliant-labs/reliant/internal/db"
 )
 
 // RouterDriver identifies which daemon router backend to use.
@@ -33,6 +34,7 @@ type RouterConfig struct {
 	Driver   RouterDriver
 	NATSConn *nats.Conn              // Required when Driver == RouterDriverNATS
 	Local    DaemonConnectionManager // Required when Driver == RouterDriverLocal
+	DB       db.Repository           // Optional: enables fast DB-based daemon online check for NATS router
 }
 
 // NewDaemonRouter creates a DaemonRouter based on config.
@@ -47,7 +49,11 @@ func NewDaemonRouter(cfg RouterConfig) (DaemonRouter, error) {
 		if cfg.NATSConn == nil {
 			return nil, fmt.Errorf("NATS connection required for nats router driver")
 		}
-		return NewNATSDaemonRouter(cfg.NATSConn), nil
+		var opts []NATSRouterOption
+		if cfg.DB != nil {
+			opts = append(opts, WithDatabase(cfg.DB))
+		}
+		return NewNATSDaemonRouter(cfg.NATSConn, opts...), nil
 	default:
 		return nil, fmt.Errorf("unknown router driver: %q", cfg.Driver)
 	}
