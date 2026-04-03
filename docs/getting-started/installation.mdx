@@ -5,25 +5,6 @@ description: "Download and install Reliant on macOS, Linux, and Windows"
 
 Get Reliant up and running on your system.
 
-## Install via Homebrew (macOS/Linux)
-
-The easiest way to install Reliant on **macOS and Linux** is via Homebrew.
-
-```bash
-brew install --cask reliant-labs/reliant/reliant
-```
-
-Or add the tap first, then install:
-
-```bash
-brew tap reliant-labs/reliant
-brew install --cask reliant
-```
-
-Homebrew automatically downloads the correct version for your Mac (Apple Silicon or Intel).
-
-> Homebrew must be installed first. Visit [brew.sh](https://brew.sh) if you don't have it.
-
 ## System Requirements
 
 ### Hardware
@@ -46,53 +27,97 @@ Homebrew automatically downloads the correct version for your Mac (Apple Silicon
 - **AI Provider Authentication**: Required (API key or OAuth login, depending on provider — see [Quick Start](/getting-started/quick-start))
 - **Git**: Optional but recommended
 
+## Install via Homebrew (macOS/Linux)
+
+The easiest way to install Reliant on **macOS and Linux** is via Homebrew.
+
+```bash
+brew install --cask reliant-labs/reliant/reliant
+```
+
+Or add the tap first, then install:
+
+```bash
+brew tap reliant-labs/reliant
+brew install --cask reliant
+```
+
+Homebrew automatically downloads the correct version for your Mac (Apple Silicon or Intel).
+
+> Homebrew must be installed first. Visit [brew.sh](https://brew.sh) if you don't have it.
+
 ## Direct Download
 
-### macOS
+| Platform | Architecture | Download |
+|----------|-------------|----------|
+| **macOS** | Apple Silicon | [Download .dmg](https://downloads.reliantlabs.io/Reliant-latest-mac-arm64.dmg?utm_source=docs&utm_medium=installation) |
+| **macOS** | Intel | [Download .dmg](https://downloads.reliantlabs.io/Reliant-latest-mac-x64.dmg?utm_source=docs&utm_medium=installation) |
+| **Windows** | x64 | [Download .exe](https://downloads.reliantlabs.io/Reliant-latest-win-x64.exe?utm_source=docs&utm_medium=installation) |
+| **Windows** | ARM64 | [Download .exe](https://downloads.reliantlabs.io/Reliant-latest-win-arm64.exe?utm_source=docs&utm_medium=installation) |
+| **Linux** | x86_64 | [Download .AppImage](https://downloads.reliantlabs.io/Reliant-latest-linux-x86_64.AppImage?utm_source=docs&utm_medium=installation) |
+| **Linux** | ARM64 | [Download .AppImage](https://downloads.reliantlabs.io/Reliant-latest-linux-arm64.AppImage?utm_source=docs&utm_medium=installation) |
 
-#### Apple Silicon
+> **Not sure which Mac?** Check Apple menu → About This Mac → Chip
 
-[Download for Apple Silicon](https://downloads.reliantlabs.io/Reliant-latest-mac-arm64.dmg?utm_source=docs&utm_medium=installation) — For Apple Silicon Macs
-
-#### Intel
-
-[Download for Intel](https://downloads.reliantlabs.io/Reliant-latest-mac-x64.dmg?utm_source=docs&utm_medium=installation) — For Intel-based Macs
-
-> **Not sure?** Check Apple menu → About This Mac → Chip
-
-### Windows
-
-#### x64
-
-[Download for Windows x64](https://downloads.reliantlabs.io/Reliant-latest-win-x64.exe?utm_source=docs&utm_medium=installation) — For 64-bit Windows
-
-#### ARM64
-
-[Download for Windows ARM](https://downloads.reliantlabs.io/Reliant-latest-win-arm64.exe?utm_source=docs&utm_medium=installation) — For ARM64 Windows
-
-### Linux
-
-#### x86_64
-
-[Download AppImage (x86_64)](https://downloads.reliantlabs.io/Reliant-latest-linux-x86_64.AppImage?utm_source=docs&utm_medium=installation)
-
-After downloading:
+**Linux users**: After downloading, make the AppImage executable and run it:
 
 ```bash
-chmod +x Reliant-latest-linux-x86_64.AppImage
-./Reliant-latest-linux-x86_64.AppImage
+chmod +x Reliant-latest-linux-*.AppImage
+./Reliant-latest-linux-*.AppImage
 ```
 
-#### ARM64
+## Build from Source
 
-[Download AppImage (ARM64)](https://downloads.reliantlabs.io/Reliant-latest-linux-arm64.AppImage?utm_source=docs&utm_medium=installation)
+Reliant is [open source on GitHub](https://github.com/reliant-labs/reliant). You can build the full Electron desktop app or just the Go backend CLI.
 
-After downloading:
+### Prerequisites
+
+- **Go** 1.25+ (see `go.mod`)
+- **Node.js** 18+
+- **Make**
+
+### Electron Desktop App
+
+Clone and run the full desktop application with hot reload:
 
 ```bash
-chmod +x Reliant-latest-linux-arm64.AppImage
-./Reliant-latest-linux-arm64.AppImage
+git clone https://github.com/reliant-labs/reliant.git
+cd reliant
+npm install
+make generate
+npm run dev
 ```
+
+To create a production build:
+
+```bash
+npm run build
+```
+
+### Go CLI Only
+
+If you only need the backend CLI (no Electron/UI):
+
+```bash
+git clone https://github.com/reliant-labs/reliant.git
+cd reliant
+make generate
+make build
+```
+
+The binary is output to `dist/reliant`. Move it somewhere on your `$PATH`:
+
+```bash
+sudo mv dist/reliant /usr/local/bin/reliant
+```
+
+Or build directly with `go install`:
+
+```bash
+go install github.com/reliant-labs/reliant/cmd/reliant@latest
+```
+
+> See [CONTRIBUTING.md](https://github.com/reliant-labs/reliant/blob/main/CONTRIBUTING.md) for the full development setup guide.
 
 ## Post-Installation
 
@@ -106,6 +131,15 @@ chmod +x Reliant-latest-linux-arm64.AppImage
 
 ```bash
 brew upgrade --cask reliant
+```
+
+### Via Source
+
+```bash
+cd reliant
+git pull
+npm install
+npm run dev   # or: make build
 ```
 
 ### Manual
