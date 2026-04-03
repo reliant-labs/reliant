@@ -1,7 +1,6 @@
 package filepreview
 
 import (
-	"mime"
 	"path/filepath"
 	"strings"
 )
@@ -192,10 +191,9 @@ func Classify(filePath string, sample []byte) Classification {
 		}
 	}
 
-	mimeType := mimeTypeFromExtension(ext)
 	return Classification{
 		ViewerKind: ViewerKindText,
-		MIMEType:   mimeType,
+		MIMEType:   "text/plain",
 		IsBinary:   false,
 		IsEditable: true,
 	}
@@ -235,16 +233,4 @@ func HasBinaryContent(content []byte) bool {
 		}
 	}
 	return false
-}
-
-func mimeTypeFromExtension(ext string) string {
-	if ext != "" {
-		if contentType := mime.TypeByExtension(ext); contentType != "" {
-			if idx := strings.Index(contentType, ";"); idx >= 0 {
-				return contentType[:idx]
-			}
-			return contentType
-		}
-	}
-	return "text/plain"
 }
