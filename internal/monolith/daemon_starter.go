@@ -32,7 +32,6 @@ type LazyDaemonStarter struct {
 	remoteToolExecutor      *toolexec.RemoteExecutor
 	tlsCertFile, tlsKeyFile string
 	toolsDaemonPort         int
-	projectPath             string
 	dataDir                 string
 
 	// Runtime state (protected by mu)
@@ -49,7 +48,6 @@ type LazyDaemonStarterConfig struct {
 	RemoteToolExecutor      *toolexec.RemoteExecutor
 	TLSCertFile, TLSKeyFile string
 	ToolsDaemonPort         int
-	ProjectPath             string
 	DataDir                 string
 }
 
@@ -62,7 +60,6 @@ func NewLazyDaemonStarter(cfg LazyDaemonStarterConfig) *LazyDaemonStarter {
 		tlsCertFile:          cfg.TLSCertFile,
 		tlsKeyFile:           cfg.TLSKeyFile,
 		toolsDaemonPort:      cfg.ToolsDaemonPort,
-		projectPath:          cfg.ProjectPath,
 		dataDir:              cfg.DataDir,
 	}
 }
@@ -93,7 +90,7 @@ func (s *LazyDaemonStarter) startLocked(userID string) error {
 	logging.Info("Starting in-process daemon (lazy)", "userID", userID)
 
 	// Preload skills catalog for known projects
-	projectPaths := []string{s.projectPath}
+	var projectPaths []string
 	projects, listErr := s.repo.ListProjects(context.Background(), db.ProjectFilters{UserID: userID, Limit: 100000, Offset: 0})
 	if listErr != nil {
 		logging.Warn("Failed listing projects for startup skills catalog preload", "error", listErr, "user_id", userID)
@@ -151,14 +148,12 @@ func (s *LazyDaemonStarter) startLocked(userID string) error {
 	go func() {
 		err := daemonruntime.Start(daemonCtx, daemonruntime.StartOptions{
 			BootstrapConfig: bootstrap.DaemonBootstrapConfig{
-				UserID:      userID,
-				AuthToken:   rawPAT,
-				GRPCURL:     daemonURL,
-				TLSMode:     daemonTLSMode,
-				ProjectRoot: s.projectPath,
-				DataDir:     s.dataDir,
+				UserID:    userID,
+				AuthToken: rawPAT,
+				GRPCURL:   daemonURL,
+				TLSMode:   daemonTLSMode,
+				DataDir:   s.dataDir,
 			},
-			WorkingDir: s.projectPath,
 		})
 		if err != nil && err != context.Canceled {
 			logging.Error("In-process daemon runtime exited", "error", err)

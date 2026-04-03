@@ -12,7 +12,6 @@ reliant monolith [flags]
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--data-dir` | `./data` or `RELIANT_DATA_DIR` | Base directory for databases, logs, and certificates |
-| `--project-path` | `.` or `RELIANT_PROJECT_PATH` | Path to the project root the backend serves |
 
 When the process starts, it initializes each embedded component in sequence, prints a status banner with the active ports, and blocks until it receives `SIGTERM`, `SIGINT`, or detects its parent process has exited (the "suicide pact" pattern used when launched by Electron).
 
@@ -84,7 +83,6 @@ The log level is controlled by the standard `LOG_LEVEL` environment variable. In
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `RELIANT_DATA_DIR` | `./data` | Base data directory for databases, logs, and certs |
-| `RELIANT_PROJECT_PATH` | `.` | Path to the project root |
 | `API_PORT` | `8080` | HTTP API server port |
 | `GRPC_PORT` | `9090` | gRPC/ConnectRPC server port |
 | `TOOLS_DAEMON_PORT` | `9190` | In-process tools daemon port |

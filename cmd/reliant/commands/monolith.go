@@ -34,7 +34,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/monolith"
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/pidlock"
-	skillcatalog "github.com/reliant-labs/reliant/internal/skills/catalog"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/temporal"
@@ -43,7 +42,6 @@ import (
 
 func newMonolithCmd() *cobra.Command {
 	var dataDir string
-	var projectPath string
 
 	cmd := &cobra.Command{
 		Use:   "monolith",
@@ -53,17 +51,16 @@ SQLite database, HTTP API, gRPC server, and in-process tools daemon.
 
 This is the local development mode used by the Electron desktop app.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runMonolith(cmd, args, &dataDir, &projectPath)
+			return runMonolith(cmd, args, &dataDir)
 		},
 	}
 
 	cmd.Flags().StringVar(&dataDir, "data-dir", envOrDefault("RELIANT_DATA_DIR", "./data"), "Base data directory (default: ./data or RELIANT_DATA_DIR)")
-	cmd.Flags().StringVar(&projectPath, "project-path", envOrDefault("RELIANT_PROJECT_PATH", "."), "Path to project root")
 
 	return cmd
 }
 
-func runMonolith(_ *cobra.Command, _ []string, dataDir, projectPath *string) error {
+func runMonolith(_ *cobra.Command, _ []string, dataDir *string) error {
 	// Load configuration from environment
 	// Frontend port 0 means auto-assign (find free consecutive ports)
 	frontendPort := envutil.GetEnvInt("TEMPORAL_FRONTEND_PORT", 0)
@@ -149,7 +146,6 @@ func runMonolith(_ *cobra.Command, _ []string, dataDir, projectPath *string) err
 			LogLevel:     temporalLogLevel,
 		},
 		AnthropicAPIKey: os.Getenv("ANTHROPIC_API_KEY"),
-		ProjectPath:     *projectPath,
 		// MCPServers are loaded per-project on-demand
 	}
 
@@ -181,10 +177,6 @@ func runMonolith(_ *cobra.Command, _ []string, dataDir, projectPath *string) err
 		logging.Info("[Sentry] Skipping initialization in development mode")
 		telemetry.SetReporter(telemetry.NewNoopReporter())
 	}
-
-	// Warm skills metadata index for the configured project root at startup so
-	// request-time discovery does not pay initial scan cost.
-	skillcatalog.DefaultCatalogIndex().PreloadProject(context.Background(), *projectPath)
 
 	// Start integration server (Temporal + Workers)
 	ctx := context.Background()
@@ -344,7 +336,6 @@ func runMonolith(_ *cobra.Command, _ []string, dataDir, projectPath *string) err
 		TLSCertFile:          tlsCertFile,
 		TLSKeyFile:           tlsKeyFile,
 		ToolsDaemonPort:      toolsDaemonPort,
-		ProjectPath:          *projectPath,
 		DataDir:              *dataDir,
 	})
 
