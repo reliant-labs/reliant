@@ -806,7 +806,7 @@ jobs:
           sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
           sudo chmod +x /usr/local/bin/yq
 
-      - name: Read Mintlify changelog YAML and trigger broadcast
+      - name: Read changelog YAML and trigger broadcast
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
           CUSTOMERIO_APP_API_KEY: ${{ secrets.CUSTOMERIO_APP_API_KEY }}
