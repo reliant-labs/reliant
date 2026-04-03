@@ -476,21 +476,27 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 		messages = append(messages, msg)
 	}
 
-	// First pass: collect attachment IDs and content blocks
+	// Batch fetch all content blocks for all messages
+	messageIDs := make([]string, 0, len(messages))
+	for _, msg := range messages {
+		messageIDs = append(messageIDs, msg.ID)
+	}
+
+	allBlocks, err := s.database.ListContentBlocksForMessages(ctx, messageIDs)
+	if err != nil {
+		logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to batch load content blocks",
+			"error", err, "chatID", chatID[:8], "messageCount", len(messages))
+		// Fallback: return empty blocks rather than fail
+		allBlocks = []*db.MessageContentBlock{}
+	}
+
+	// Group blocks by message ID
 	attachmentIDSet := make(map[string]bool)
 	messageBlocks := make(map[string][]*db.MessageContentBlock)
-	for _, msg := range messages {
-		blocks, err := s.database.ListContentBlocks(ctx, msg.ID)
-		if err != nil {
-			logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to get content blocks for message",
-				"error", err, "chatID", chatID[:8], "messageID", msg.ID[:8], "role", msg.Role)
-			continue
-		}
-		messageBlocks[msg.ID] = blocks
-		for _, block := range blocks {
-			if (block.BlockType == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE || block.BlockType == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_FILE_REFERENCE) && block.Content != nil {
-				attachmentIDSet[*block.Content] = true
-			}
+	for _, block := range allBlocks {
+		messageBlocks[block.MessageID] = append(messageBlocks[block.MessageID], block)
+		if (block.BlockType == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE || block.BlockType == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_FILE_REFERENCE) && block.Content != nil {
+			attachmentIDSet[*block.Content] = true
 		}
 	}
 

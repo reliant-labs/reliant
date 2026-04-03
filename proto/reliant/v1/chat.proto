@@ -300,6 +300,10 @@ message ListChatsRequest {
 message ListChatsResponse {
   repeated Chat chats = 1;
   int32 total = 2;
+  // Latest user update sequence number at the time of the query.
+  // The frontend uses this to connect the streaming RPC with sinceSeq = this value,
+  // avoiding redundant replay of events already reflected in the chat list.
+  int64 last_user_update_sequence = 3;
 }
 
 // GetChatRequest retrieves a chat by ID

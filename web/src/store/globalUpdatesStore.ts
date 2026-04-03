@@ -19,7 +19,7 @@ import { useActivityStore, ChatActivity } from "./activityStore";
 import { useThreadActivityStore } from "./threadActivityStore";
 import { BackgroundProcessStatus } from "../gen/reliant/v1/common_pb";
 import { UserUpdateType } from "../gen/reliant/v1/streaming_pb";
-import { useBackgroundTasksStore } from "./backgroundTasksStore";
+
 import { usePackageCommandsStore } from "./packageCommandsStore";
 import { useProcessStore } from "./processStore";
 import { useWorktreeStore } from "./worktreeStore";
@@ -88,6 +88,7 @@ interface GlobalUpdatesState {
   wsService: UserStreamingService | null;
   
   // Actions
+  setLastSequence: (seq: number) => void;
   connect: () => void;
   disconnect: () => void;
   subscribeToChatDetails: (chatId: string) => void;
@@ -109,6 +110,10 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
   lastSequence: 0,
   subscribedChatId: null,
   wsService: null,
+
+  setLastSequence: (seq: number) => {
+    set({ lastSequence: seq });
+  },
 
   connect: () => {
     const state = get();
@@ -872,12 +877,6 @@ function handleProcessStarted(update: UserUpdate) {
     ports: data.ports,
   };
 
-  const bgStore = useBackgroundTasksStore.getState();
-  useBackgroundTasksStore.setState({
-    processes: [...bgStore.processes.filter(p => p.id !== data.process_id), newProcess],
-  });
-
-  // Also update processStore with full process data
   const processStore = useProcessStore.getState();
   useProcessStore.setState({
     processes: [...processStore.processes.filter(p => p.id !== data.process_id), newProcess],
@@ -961,17 +960,6 @@ function handleProcessPortChanged(update: UserUpdate) {
     portCount: data.ports?.length || 0,
   });
 
-  // Update backgroundTasksStore
-  const bgStore = useBackgroundTasksStore.getState();
-  useBackgroundTasksStore.setState({
-    processes: bgStore.processes.map((p) =>
-      p.id === data.process_id
-        ? { ...p, ports: data.ports }
-        : p
-    ),
-  });
-
-  // Update processStore
   const procStore = useProcessStore.getState();
   useProcessStore.setState({
     processes: procStore.processes.map((p) =>
@@ -1013,40 +1001,6 @@ function updateProcessStatus(
     chat_id: data.chat_id || update.chat_id,
     ports: data.ports,
   };
-
-  // Update backgroundTasksStore - upsert pattern
-  const bgStore = useBackgroundTasksStore.getState();
-  const bgProcessExists = bgStore.processes.some((p) => p.id === data.process_id);
-  logger.info(`${LOG_PREFIX} Updating bgStore`, {
-    processId: data.process_id.slice(0, 8),
-    status,
-    exists: bgProcessExists,
-    storeCount: bgStore.processes.length,
-  });
-  if (bgProcessExists) {
-    useBackgroundTasksStore.setState({
-      processes: bgStore.processes.map((p) =>
-        p.id === data.process_id
-          ? {
-              ...p,
-              status,
-              exit_code: data.exit_code,
-              end_time: data.end_time,
-              ports: data.ports || p.ports,
-            }
-          : p
-      ),
-    });
-  } else {
-    // Process doesn't exist - add it
-    logger.debug(`${LOG_PREFIX} Adding missing process on status update`, {
-      processId: data.process_id.slice(0, 8),
-      status,
-    });
-    useBackgroundTasksStore.setState({
-      processes: [fullProcess, ...bgStore.processes],
-    });
-  }
 
   // Update processStore - upsert pattern
   const procStore = useProcessStore.getState();

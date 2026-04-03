@@ -107,10 +107,10 @@ export const api = {
 
     list: async (projectId?: string) => {
       if (!projectId) {
-        return [];
+        return { chats: [], lastUserUpdateSequence: 0 };
       }
       const result = await chatGrpc.list(projectId);
-      return result.chats;
+      return { chats: result.chats, lastUserUpdateSequence: result.lastUserUpdateSequence };
     },
 
     search: async (projectId: string, searchQuery: string) => {
@@ -542,4 +542,3 @@ export const api = {
 
   // Background processes - use backgroundGrpc directly from background-grpc.ts
 };
-

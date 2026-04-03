@@ -36,6 +36,7 @@ interface ProcessState {
   getProcessById: (id: string) => BackgroundProcess | undefined;
   getProcessCount: () => number;
   getRunningCount: () => number;
+  reset: () => void;
 }
 
 export const useProcessStore = create<ProcessState>((set, get) => ({
@@ -195,5 +196,19 @@ export const useProcessStore = create<ProcessState>((set, get) => ({
     return get().processes.filter(
       (p) => p.status === BackgroundProcessStatus.RUNNING,
     ).length;
+  },
+
+  reset: () => {
+    set({
+      processes: [],
+      isLoading: false,
+      isRefreshing: false,
+      error: null,
+      lastFetched: null,
+      currentWorktreeId: null,
+      selectedProcessId: null,
+      processOutput: null,
+      isLoadingOutput: false,
+    });
   },
 }));

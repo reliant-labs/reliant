@@ -787,6 +787,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       set({ isLoading: true, error: null });
       try {
         const response = await api.chatsV2.list(projectId);
+        const chatList = response.chats;
+        const lastUserUpdateSequence = response.lastUserUpdateSequence;
 
         // Preserve existing timestamps to prevent reordering on refresh
         // Only use backend timestamp if it's actually newer (real update)
@@ -794,7 +796,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
         // Create a map of API chats for deduplication
         const apiChatMap = new Map<string, Chat>();
-        (response || []).forEach((chat: Chat) => {
+        (chatList || []).forEach((chat: Chat) => {
           const existingTimestamp = currentChats.get(chat.id)?.updatedAt;
           // Use existing timestamp to preserve sort order
           // Backend may update timestamp on read, but we only want to update on actual changes
@@ -861,6 +863,19 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           }
         }
         useActivityStore.getState().setActivities(merged);
+
+        // Store the user update sequence for stream sync.
+        // This must happen BEFORE globalUpdatesStore.connect() so the
+        // stream starts from the right point.
+        if (lastUserUpdateSequence > 0) {
+          const globalStore = getGlobalUpdatesStore();
+          if (globalStore) {
+            const current = globalStore.lastSequence;
+            if (lastUserUpdateSequence > current) {
+              globalStore.setLastSequence(lastUserUpdateSequence);
+            }
+          }
+        }
       } catch (error) {
         logger.error("Failed to load chats:", error);
         set({ error: "Failed to load chats", isLoading: false });

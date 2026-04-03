@@ -413,7 +413,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const { useChatNavigationStore } = await import('./chatNavigationStore')
       const { useAttachmentStore } = await import('./attachmentStore')
       const { useTasksStore } = await import('./tasksStore')
-      const { useBackgroundTasksStore } = await import('./backgroundTasksStore')
+      const { useProcessStore } = await import('./processStore')
 
       // Reset all stores (order matters: navigation first to trigger chat cleanup, then everything else)
       useChatNavigationStore.getState().reset()
@@ -422,7 +422,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       useWorktreeStore.getState().reset()
       useAttachmentStore.getState().reset()
       useTasksStore.getState().reset()
-      useBackgroundTasksStore.getState().reset()
+      useProcessStore.getState().reset()
 
       set({
         user: null,

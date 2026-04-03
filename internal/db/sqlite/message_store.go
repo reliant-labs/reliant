@@ -168,6 +168,14 @@ func (s *messageStore) ListContentBlocks(ctx context.Context, messageID string) 
 	return contentBlocksFromSQLc(sqlcBlocks), nil
 }
 
+func (s *messageStore) ListContentBlocksForMessages(ctx context.Context, messageIDs []string) ([]*core.MessageContentBlock, error) {
+	sqlcBlocks, err := s.q.ListContentBlocksForMessages(ctx, messageIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list content blocks for messages: %w", err)
+	}
+	return contentBlocksFromSQLc(sqlcBlocks), nil
+}
+
 func (s *messageStore) UpdateContentBlock(ctx context.Context, block *core.MessageContentBlock) error {
 	return s.q.UpdateContentBlock(ctx, sqlitedb.UpdateContentBlockParams{
 		ID:        block.ID,

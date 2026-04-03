@@ -67,7 +67,7 @@ import { useTerminalStore } from "./store/terminalStore";
 import { useWorktreeStore } from "./store/worktreeStore";
 import { useGlobalUpdatesStore } from "./store/globalUpdatesStore";
 import { useProcessStore } from "./store/processStore";
-import { useBackgroundTasksStore } from "./store/backgroundTasksStore";
+
 import { isGrpcReady } from "./api/grpc-client";
 import { useNotificationStore, startPermissionRefresh } from "./store/notificationStore";
 import { useWorkspaceStateStore } from "./store/workspaceStateStore";
@@ -947,13 +947,29 @@ function App() {
     };
   }, [loadProjects]); // Run once on mount — workspace restore handles project selection
 
-  // Connect global WebSocket for real-time updates after backend is ready
+  // Connect global WebSocket for real-time updates after backend is ready.
+  // We await loadChats first so the lastUserUpdateSequence is stored before
+  // the stream connects — this prevents the stream from replaying events
+  // that were already loaded.
+  const projectId = currentProject?.id;
   useEffect(() => {
     if (!isBackendReady) return;
 
-    const globalUpdates = useGlobalUpdatesStore.getState();
-    globalUpdates.connect();
-    
+    let cancelled = false;
+
+    (async () => {
+      // Ensure chats are loaded first — loadChats stores the latest user update
+      // sequence which the stream uses as sinceSeq to avoid redundant replay.
+      if (projectId) {
+        await loadChats();
+      }
+
+      if (cancelled) return;
+
+      const globalUpdates = useGlobalUpdatesStore.getState();
+      globalUpdates.connect();
+    })();
+
     // Initialize notification store (loads settings from localStorage/DB)
     useNotificationStore.getState().initialize();
     
@@ -962,9 +978,10 @@ function App() {
 
     // Cleanup on unmount
     return () => {
-      globalUpdates.disconnect();
+      cancelled = true;
+      useGlobalUpdatesStore.getState().disconnect();
     };
-  }, [isBackendReady]);
+  }, [isBackendReady, projectId, loadChats]);
 
   // Fetch background processes on app mount to ensure we have current state
   // This is critical because processes survive server restarts and we need
@@ -985,7 +1002,6 @@ function App() {
     // we only need one initial fetch and let the event handler propagate.
     logger.info("🔄 Fetching background processes on app mount");
     useProcessStore.getState().fetchProcesses();
-    useBackgroundTasksStore.getState().fetchProcesses();
   }, [isBackendReady]);
 
   // Listen for toggle file browser requests
@@ -1036,16 +1052,15 @@ function App() {
   }, []);
 
   // Load chats when project changes (use stable ID to avoid re-fires from object reference changes)
-  const currentProjectId = currentProject?.id;
   useEffect(() => {
-    if (currentProjectId && isBackendReady) {
+    if (projectId && isBackendReady) {
       logger.info(
         "🔄 Project changed, loading chats for project:",
-        currentProjectId
+        projectId
       );
       loadChats();
     }
-  }, [currentProjectId, isBackendReady, loadChats]);
+  }, [projectId, isBackendReady, loadChats]);
 
   // Periodic error clearing to prevent persistent error states
   useEffect(() => {
@@ -1370,7 +1385,7 @@ function App() {
   // Check git initialization when a project is selected (use stable ID to avoid re-fires)
   // Skip during onboarding welcome to avoid dual modal confusion
   useEffect(() => {
-    if (currentProjectId && isBackendReady) {
+    if (projectId && isBackendReady) {
       // Wait for checklist state to be loaded from database
       if (!checklistInitialized) {
         logger.info("[ModernApp] Waiting for checklist state to initialize before git check");
@@ -1413,7 +1428,7 @@ function App() {
       checkWithFreshData();
     }
   }, [
-    currentProjectId,
+    projectId,
     checkGitInitialization,
     checkForRescan,
     isBackendReady,

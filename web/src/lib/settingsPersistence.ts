@@ -1,4 +1,5 @@
 import { api } from "../api/client";
+import { settingsSync } from "../services/settingsSync";
 import { logger } from "./logger";
 
 export interface PersistedStringSetting {
@@ -8,6 +9,14 @@ export interface PersistedStringSetting {
 export async function safeGetSetting(
   key: string,
 ): Promise<PersistedStringSetting | null> {
+  // Fast path: read from the in-memory cache populated by ListSettings
+  if (settingsSync.isInitialized()) {
+    const cached = settingsSync.getSettingFromCache(key);
+    // Cache hit → return it (null means the key genuinely doesn't exist)
+    return cached;
+  }
+
+  // Fallback: cache not ready yet, do an individual RPC
   try {
     return await api.settings.getSetting(key);
   } catch {
@@ -19,6 +28,9 @@ export async function upsertStringSetting(
   key: string,
   value: string,
 ): Promise<void> {
+  // Update the in-memory cache immediately so subsequent reads see the new value
+  settingsSync.updateCache(key, value);
+
   try {
     const existing = await api.settings.getSetting(key);
     if (existing) {
@@ -39,6 +51,7 @@ export async function upsertStringSetting(
 }
 
 export async function deleteSettingIfExists(key: string): Promise<void> {
+  settingsSync.removeFromCache(key);
   try {
     await api.settings.deleteSetting(key);
   } catch {

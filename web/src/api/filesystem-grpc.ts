@@ -95,6 +95,9 @@ export interface ReplaceInFilesResult {
 // Map of cache keys to in-flight promises for getFileContent
 const pendingRequests = new Map<string, Promise<string>>();
 
+// Map of cache keys to in-flight promises for getFileTree
+const pendingFileTreeRequests = new Map<string, Promise<FileNode[]>>();
+
 // ============================================
 // Conversion Functions: Proto -> Frontend
 // ============================================
@@ -191,17 +194,34 @@ export const filesystemGrpc = {
     worktreeId?: string,
     chatId?: string
   ): Promise<FileNode[]> {
-    const client = await grpcClient.filesystem();
-    const request = create(GetFileTreeRequestSchema, {
-      projectId,
-      path,
-      showHidden,
-      worktreeId,
-      chatId,
-    });
-    const response = await client.getFileTree(request);
-    const files = response.files.map(protoFileNodeToFrontend);
-    return sortFileTree(files);
+    const cacheKey = `${projectId}:${worktreeId || 'main'}:${path}:${showHidden}`;
+
+    const existingRequest = pendingFileTreeRequests.get(cacheKey);
+    if (existingRequest) {
+      return existingRequest;
+    }
+
+    const requestPromise = (async () => {
+      try {
+        const client = await grpcClient.filesystem();
+        const request = create(GetFileTreeRequestSchema, {
+          projectId,
+          path,
+          showHidden,
+          worktreeId,
+          chatId,
+        });
+        const response = await client.getFileTree(request);
+        const files = response.files.map(protoFileNodeToFrontend);
+        return sortFileTree(files);
+      } finally {
+        pendingFileTreeRequests.delete(cacheKey);
+      }
+    })();
+
+    pendingFileTreeRequests.set(cacheKey, requestPromise);
+
+    return requestPromise;
   },
 
   /**

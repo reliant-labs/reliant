@@ -254,6 +254,7 @@ export const chatGrpc = {
   ): Promise<{
     chats: Chat[];
     total: number;
+    lastUserUpdateSequence: number;
   }> {
     const client = grpcClient.chat();
     const request = create(ListChatsRequestSchema, {
@@ -264,6 +265,7 @@ export const chatGrpc = {
     return {
       chats: response.chats.map(convertProtoChat),
       total: response.total,
+      lastUserUpdateSequence: Number(response.lastUserUpdateSequence),
     };
   },
 
