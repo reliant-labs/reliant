@@ -177,7 +177,7 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("failed to start NATS tool bridge: %w", err)
 	}
 	defer func() { _ = toolBridge.Close() }()
-	logging.Info("NATS tool bridge started — per-user subscriptions on daemon connect/disconnect")
+	logging.Info("NATS tool bridge started — per-daemon subscriptions on connect/disconnect")
 
 	// Daemon gRPC server (bidi streaming endpoint for tools-daemon connections)
 	daemonSrv := grpcserver.NewDaemonServer(&grpcserver.DaemonConfig{

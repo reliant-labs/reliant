@@ -27,10 +27,10 @@ import (
 const (
 	LOG_PREFIX_TOOLS_DAEMON = "[🔧 ToolsDaemon]"
 
-	// Heartbeat interval for keeping connections alive
-	daemonHeartbeatInterval = 30 * time.Second
-	// Daemon is considered stale when no heartbeat has been seen for this duration.
-	daemonStaleAfter = 2 * time.Minute
+	// Heartbeat interval for keeping connections alive and for the stale sweep ticker.
+	daemonHeartbeatInterval = 15 * time.Second
+	// Daemon is considered stale when no heartbeat has been seen for this duration (2× heartbeat).
+	daemonStaleAfter = 30 * time.Second
 )
 
 // ToolsDaemonService implements bidirectional streaming for tool execution.

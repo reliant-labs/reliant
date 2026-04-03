@@ -266,7 +266,7 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   const isElectron = !!window.electronAPI?.selectDirectory;
   const isWebMode = !isElectron;
   const { activeDaemon, loading: daemonLoading } = useDaemonStatus();
-  const showConnectionInstructions = isWebMode && projects.length === 0 && !activeDaemon && !daemonLoading;
+  const showConnectionInstructions = isWebMode && !activeDaemon && !daemonLoading;
 
   const handleOpenExistingProject = async () => {
     // In browser mode, open the directory picker to browse the filesystem

@@ -1,0 +1,31 @@
+sequenceDiagram
+    actor User
+    participant FE as Frontend
+    participant API as API Server
+    participant TMP as Temporal
+    participant WKR as Worker
+    participant LLM as LLM Provider
+    participant DMN as Tools Daemon
+    participant STR as Streaming Layer
+
+    User->>FE: Send message
+    FE->>API: gRPC request
+    API->>TMP: Create workflow execution
+
+    loop Agent Loop
+        TMP->>WKR: Dispatch activity
+        WKR->>LLM: Inference request\n(conversation + tools)
+        LLM-->>WKR: Response with tool calls
+
+        opt Tool Execution
+            WKR->>DMN: Route tool request
+            Note over DMN: Execute shell, file,\nMCP, or terminal op
+            DMN-->>WKR: Tool result
+        end
+
+        WKR->>STR: Publish streaming updates
+        STR-->>FE: Push live updates
+        FE-->>User: Display response
+    end
+
+    Note over WKR,LLM: Loop continues until LLM\nreturns final response\nwith no tool calls

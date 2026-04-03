@@ -19,12 +19,21 @@ interface TerminalProps {
   className?: string;
 }
 
+const WS_RECONNECT_BASE_DELAY = 1000;
+const WS_RECONNECT_MAX_DELAY = 10000;
+const WS_MAX_RECONNECT_ATTEMPTS = 10;
+
 export function Terminal({ sessionId, workingDir, worktreeId, className }: TerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+  const intentionalCloseRef = useRef(false);
   const [isConnected, setIsConnected] = useState(false);
+  const [showReconnect, setShowReconnect] = useState(false);
+  const connectWebSocketRef = useRef<(() => Promise<(() => void) | undefined>) | null>(null);
   const updateSessionPID = useTerminalStore((state) => state.updateSessionPID);
   const activeSessionId = useTerminalStore((state) => state.activeSessionId);
 
@@ -226,6 +235,8 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
       ws.onopen = () => {
         logger.info("[Terminal] WebSocket connected");
         setIsConnected(true);
+        setShowReconnect(false);
+        reconnectAttemptsRef.current = 0;
         
         // Send initial resize to sync terminal dimensions
         setTimeout(() => {
@@ -279,60 +290,98 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
         term.write("\r\n\x1b[91mConnection error\x1b[0m\r\n");
       };
 
-      ws.onclose = () => {
-        logger.info("[Terminal] WebSocket closed");
+      ws.onclose = (event) => {
+        logger.info("[Terminal] WebSocket closed", { code: event.code, reason: event.reason });
         setIsConnected(false);
-        term.write("\r\n\x1b[93mConnection closed\x1b[0m\r\n");
-      };
 
-      // Handle terminal input
-      term.onData((data) => {
-        if (ws.readyState === WebSocket.OPEN) {
-          // Send raw data directly - xterm.js already provides the correct bytes
-          // Including escape sequences for special keys (arrows, backspace, etc.)
-          ws.send(data);
+        // Don't reconnect if intentionally closed (component unmount / user action).
+        if (intentionalCloseRef.current) {
+          term.write("\r\n\x1b[93mConnection closed\x1b[0m\r\n");
+          return;
         }
-      });
 
-      // Handle terminal resize
-      const handleResize = () => {
-        if (!fitAddonRef.current || !xtermRef.current) return;
-
-        fitAddonRef.current.fit();
-
-        if (ws.readyState === WebSocket.OPEN) {
-          // Resize messages must be JSON
-          ws.send(JSON.stringify({
-            type: "resize",
-            cols: xtermRef.current.cols,
-            rows: xtermRef.current.rows,
-          }));
+        // Normal exit (e.g. shell exited) — code 1000 means clean close.
+        if (event.code === 1000) {
+          term.write("\r\n\x1b[93mSession ended\x1b[0m\r\n");
+          return;
         }
-      };
 
-      // Setup resize observer
-      const resizeObserver = new ResizeObserver(handleResize);
-      if (terminalRef.current) {
-        resizeObserver.observe(terminalRef.current);
-      }
+        if (reconnectAttemptsRef.current >= WS_MAX_RECONNECT_ATTEMPTS) {
+          term.write("\r\n\x1b[91mConnection lost. Max reconnect attempts reached.\x1b[0m\r\n");
+          setShowReconnect(true);
+          return;
+        }
+
+        const attempt = reconnectAttemptsRef.current + 1;
+        const delay = Math.min(
+          WS_RECONNECT_BASE_DELAY * Math.pow(2, attempt - 1),
+          WS_RECONNECT_MAX_DELAY
+        );
+        reconnectAttemptsRef.current = attempt;
+        term.write(`\r\n\x1b[93mConnection lost. Reconnecting (${attempt}/${WS_MAX_RECONNECT_ATTEMPTS})...\x1b[0m\r\n`);
+
+        reconnectTimerRef.current = setTimeout(() => {
+          logger.info("[Terminal] Reconnecting", { attempt });
+          connectWebSocket();
+        }, delay);
+      };
 
       return () => {
-        resizeObserver.disconnect();
         if (ws.readyState === WebSocket.OPEN) {
           ws.close();
         }
       };
     };
 
-    let cleanup: (() => void) | undefined;
-    connectWebSocket().then(fn => { cleanup = fn; });
+    // Handle terminal input — use wsRef so reconnects work.
+    term.onData((data) => {
+      const currentWs = wsRef.current;
+      if (currentWs?.readyState === WebSocket.OPEN) {
+        currentWs.send(data);
+      }
+    });
+
+    // Handle terminal resize — use wsRef so reconnects work.
+    const handleResize = () => {
+      if (!fitAddonRef.current || !xtermRef.current) return;
+
+      fitAddonRef.current.fit();
+
+      const currentWs = wsRef.current;
+      if (currentWs?.readyState === WebSocket.OPEN) {
+        currentWs.send(JSON.stringify({
+          type: "resize",
+          cols: xtermRef.current.cols,
+          rows: xtermRef.current.rows,
+        }));
+      }
+    };
+
+    // Setup resize observer (once per mount)
+    const resizeObserver = new ResizeObserver(handleResize);
+    if (terminalRef.current) {
+      resizeObserver.observe(terminalRef.current);
+    }
+
+    connectWebSocketRef.current = connectWebSocket;
+
+    let wsCleanup: (() => void) | undefined;
+    connectWebSocket().then(fn => { wsCleanup = fn; });
 
     // Cleanup
     return () => {
       logger.info("[Terminal] Cleaning up terminal");
+      intentionalCloseRef.current = true;
 
-      if (cleanup) {
-        cleanup();
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+
+      resizeObserver.disconnect();
+
+      if (wsCleanup) {
+        wsCleanup();
       }
 
       if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -523,15 +572,33 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
     }
   }, [sessionId, sidebarWidth, diffHeightPercent]);
 
+  const handleReconnectClick = () => {
+    setShowReconnect(false);
+    reconnectAttemptsRef.current = 0;
+    intentionalCloseRef.current = false;
+    connectWebSocketRef.current?.();
+  };
+
   return (
     <div className={cn("relative w-full h-full", className)}>
       <div
         ref={terminalRef}
         className="w-full h-full"
       />
-      {!isConnected && (
+      {!isConnected && !showReconnect && (
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card border border-border text-foreground px-4 py-3 rounded-lg shadow-lg font-mono text-xs">
           Connecting to terminal...
+        </div>
+      )}
+      {showReconnect && (
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card border border-border text-foreground px-4 py-3 rounded-lg shadow-lg flex flex-col items-center gap-2">
+          <span className="font-mono text-xs text-muted-foreground">Terminal disconnected</span>
+          <button
+            onClick={handleReconnectClick}
+            className="px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+          >
+            Reconnect
+          </button>
         </div>
       )}
     </div>

@@ -17,40 +17,7 @@ reliant server worker    # Temporal workflow worker
 reliant server gateway   # Daemon connection gateway
 ```
 
-```mermaid
-flowchart TB
-    subgraph Clients
-        WEB[Web Browser]
-        DAEMON[Tools Daemon]
-    end
-    subgraph Cloud["Cloud Infrastructure"]
-        LB[Load Balancer]
-        subgraph API["API Servers (stateless, N replicas)"]
-            API1[API Server 1]
-            API2[API Server N]
-        end
-        subgraph Workers["Workers (stateless, N replicas)"]
-            W1[Worker 1]
-            W2[Worker N]
-        end
-        subgraph Gateways["Gateways (stateful, few replicas)"]
-            GW1[Gateway 1]
-        end
-        NATS[(NATS)]
-        PG[(Postgres)]
-        TEMP[(Temporal)]
-    end
-    WEB --> LB --> API
-    API1 & API2 --> PG
-    API1 & API2 --> TEMP
-    API1 & API2 --> NATS
-    W1 & W2 --> PG
-    W1 & W2 --> TEMP
-    W1 & W2 --> NATS
-    GW1 --> NATS
-    GW1 --> PG
-    DAEMON <-->|"gRPC bidi stream"| GW1
-```
+<img src="/images/architecture/distributed-architecture.png" alt="Distributed Architecture" />
 
 ## The Three Server Types
 

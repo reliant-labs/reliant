@@ -50,7 +50,7 @@ func NewNATSToolBridge(nc *nats.Conn, mgr DaemonConnectionManager) *NATSToolBrid
 
 // Start logs startup. Subscriptions are created lazily via OnDaemonConnected.
 func (b *NATSToolBridge) Start() error {
-	logging.Info("[NATSToolBridge] Started — subscriptions will be created per-user on daemon connect")
+	logging.Info("[NATSToolBridge] Started — subscriptions will be created per-daemon on connect")
 	return nil
 }
 
