@@ -2,12 +2,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "../../lib/utils";
 
+/** Delay before the coachmark fades in, giving transient state changes time to settle. */
+const SHOW_DELAY_MS = 300;
+
 interface ContextualTipCoachmarkProps {
   targetSelector: string;
   title: string;
   body: string;
   onDismiss: () => void;
   onDisableAll: () => void;
+  /** Called once the coachmark has become visible to the user. */
+  onConfirmShown: () => void;
+  /** Called when the target element cannot be found or has zero dimensions. */
+  onTargetMissing: () => void;
 }
 
 interface Rect {
@@ -36,17 +43,31 @@ export function ContextualTipCoachmark({
   body,
   onDismiss,
   onDisableAll,
+  onConfirmShown,
+  onTargetMissing,
 }: ContextualTipCoachmarkProps) {
   const [targetRect, setTargetRect] = useState<Rect | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState({ top: 24, left: 24 });
   const [isVisible, setIsVisible] = useState(false);
   const maskIdRef = useRef(`contextual-tip-mask-${Math.random().toString(36).slice(2, 8)}`);
+  const showDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasConfirmedRef = useRef(false);
+  // Keep stable references to callbacks to avoid re-triggering effects.
+  const onConfirmShownRef = useRef(onConfirmShown);
+  onConfirmShownRef.current = onConfirmShown;
+  const onTargetMissingRef = useRef(onTargetMissing);
+  onTargetMissingRef.current = onTargetMissing;
 
   const updatePosition = useCallback(() => {
     const target = document.querySelector(targetSelector);
     if (!target) {
       setTargetRect(null);
       setIsVisible(false);
+      if (showDelayRef.current) {
+        clearTimeout(showDelayRef.current);
+        showDelayRef.current = null;
+      }
+      onTargetMissingRef.current();
       return;
     }
 
@@ -54,6 +75,11 @@ export function ContextualTipCoachmark({
     if (rect.width === 0 || rect.height === 0) {
       setTargetRect(null);
       setIsVisible(false);
+      if (showDelayRef.current) {
+        clearTimeout(showDelayRef.current);
+        showDelayRef.current = null;
+      }
+      onTargetMissingRef.current();
       return;
     }
 
@@ -80,7 +106,8 @@ export function ContextualTipCoachmark({
       ),
     );
     setTooltipPosition({ top, left });
-    setIsVisible(true);
+    // Position is ready — the show-delay timer (started in the effect)
+    // will flip isVisible once enough time has passed.
   }, [targetSelector]);
 
   useEffect(() => {
@@ -89,12 +116,39 @@ export function ContextualTipCoachmark({
     window.addEventListener("scroll", updatePosition, true);
     const settleTimeout = window.setTimeout(updatePosition, 250);
 
+    // Delay making the coachmark visible so that transient activeTipId
+    // changes (from reevaluate running against intermediate store state)
+    // resolve before the user ever sees the overlay.
+    showDelayRef.current = setTimeout(() => {
+      showDelayRef.current = null;
+      // Re-check the target is still present before showing.
+      const target = document.querySelector(targetSelector);
+      if (!target) {
+        onTargetMissingRef.current();
+        return;
+      }
+      const rect = target.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) {
+        onTargetMissingRef.current();
+        return;
+      }
+      setIsVisible(true);
+      if (!hasConfirmedRef.current) {
+        hasConfirmedRef.current = true;
+        onConfirmShownRef.current();
+      }
+    }, SHOW_DELAY_MS);
+
     return () => {
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
       window.clearTimeout(settleTimeout);
+      if (showDelayRef.current) {
+        clearTimeout(showDelayRef.current);
+        showDelayRef.current = null;
+      }
     };
-  }, [updatePosition]);
+  }, [updatePosition, targetSelector]);
 
   const cutoutRect = useMemo(() => {
     if (!targetRect) return null;

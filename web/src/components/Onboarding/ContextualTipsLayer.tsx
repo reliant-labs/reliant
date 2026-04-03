@@ -9,6 +9,8 @@ export function ContextualTipsLayer() {
   const activeTipId = useContextualTipsStore((state) => state.activeTipId);
   const loadState = useContextualTipsStore((state) => state.loadState);
   const reevaluate = useContextualTipsStore((state) => state.reevaluate);
+  const confirmTipShown = useContextualTipsStore((state) => state.confirmTipShown);
+  const clearActiveTip = useContextualTipsStore((state) => state.clearActiveTip);
   const dismissTip = useContextualTipsStore((state) => state.dismissTip);
   const disableAllTips = useContextualTipsStore((state) => state.disableAllTips);
   const subscribeToSources = useContextualTipsStore((state) => state.subscribeToSources);
@@ -43,11 +45,14 @@ export function ContextualTipsLayer() {
 
   return (
     <ContextualTipCoachmark
+      key={activeTip.id}
       targetSelector={activeTip.targetSelector}
       title={activeTip.title}
       body={activeTip.body}
       onDismiss={() => void dismissTip(activeTip.id)}
       onDisableAll={() => void disableAllTips()}
+      onConfirmShown={() => confirmTipShown(activeTip.id)}
+      onTargetMissing={clearActiveTip}
     />
   );
 }
