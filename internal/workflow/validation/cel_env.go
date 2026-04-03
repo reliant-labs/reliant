@@ -181,6 +181,10 @@ func hasDynamicOutputs(wtc *WorkflowTypeContext, nodeID string) bool {
 	if !ok {
 		return false
 	}
+	// Router nodes always have dynamic outputs (selected workflow determined at runtime).
+	if nodeType == model.NodeTypeRouter {
+		return true
+	}
 	if nodeType == model.NodeTypeWorkflow || nodeType == model.NodeTypeLoop {
 		// Workflow/loop nodes with inline outputs have known fields.
 		// Ref-based workflow/loop nodes have NO output info and should be treated as dyn.

@@ -665,8 +665,16 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 			}
 
 			// Handle workflow nodes (recursive inline execution)
-			if node.GetType() == model.NodeTypeWorkflow {
-				inlineOutput, err := e.executeNestedWorkflow(triggered, subNodeOutputs, subInputs, uniqueActivityIDBase)
+			if node.GetType() == model.NodeTypeWorkflow || node.GetType() == model.NodeTypeRouter {
+				var inlineOutput map[string]interface{}
+				var err error
+
+				if node.GetType() == model.NodeTypeRouter {
+					// Router nodes handle their own workflow selection and execution
+					inlineOutput, err = e.executeNestedRouter(triggered, subNodeOutputs, subInputs, uniqueActivityIDBase)
+				} else {
+					inlineOutput, err = e.executeNestedWorkflow(triggered, subNodeOutputs, subInputs, uniqueActivityIDBase)
+				}
 				if err != nil {
 					return nil, err
 				}
@@ -1001,6 +1009,60 @@ func (e *InlineWorkflowExecutor) executeNestedWorkflow(
 	nestedExecutor.subWorkflowName = nestedWorkflowName
 
 	return nestedExecutor.Execute()
+}
+
+// executeNestedRouter handles router nodes within a sub-workflow.
+func (e *InlineWorkflowExecutor) executeNestedRouter(
+	triggered *core.TriggeredNode,
+	subNodeOutputs map[string]interface{},
+	subInputs map[string]interface{},
+	uniqueActivityIDBase string,
+) (map[string]interface{}, error) {
+	node := triggered.Node
+	nid := node.GetId()
+
+	// Evaluate node config
+	iterCtx := model.BuildIterContext(e.loopIteration)
+	evalResult, err := EvaluateNodeConfig(
+		node,
+		subNodeOutputs,
+		e.workflowID,
+		e.subWorkflowName,
+		subInputs,
+		iterCtx,
+		nil, // loopOutputs
+		e.execContext,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to evaluate nested router config for %s: %w", nid, err)
+	}
+
+	// Create router executor
+	routerExec := NewRouterExecutor(
+		e.ctx,
+		e.workflowID,
+		e.chatID,
+		e.subWorkflowName,
+		subInputs,
+		subNodeOutputs,
+		e.childTracker,
+		node,
+		evalResult,
+	)
+
+	// Wire up context
+	if e.execContext != nil {
+		routerExec = routerExec.WithExecContext(e.execContext)
+	}
+	if e.projectPath != "" {
+		routerExec = routerExec.WithProjectPath(e.projectPath)
+	}
+	routerExec = routerExec.
+		WithThreadTracker(e.threadTracker).
+		WithPauseController(e.pauseCtrl).
+		WithMakeThreadPauseCtrl(e.makeThreadPauseCtrl)
+
+	return routerExec.Execute()
 }
 
 // evaluateOutputs evaluates the sub-workflow's output expressions

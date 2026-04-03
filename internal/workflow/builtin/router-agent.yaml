@@ -1,0 +1,62 @@
+name: router-agent
+apiVersion: "0.0.5"
+description: >
+  Routes user requests to the most appropriate workflow and preset using LLM-based classification.
+  The router analyzes the user's intent and selects from configured candidate workflows,
+  then executes the selected workflow with the chosen preset.
+
+# No preset tag — the router workflow has its own distinct inputs.
+# The routed child workflows use presets, not the router itself.
+
+inputs:
+  mode:
+    type: enum
+    default: auto
+    enum:
+      - manual
+      - auto
+    description: "Execution mode"
+    ui: hidden
+  model:
+    type: model
+    default:
+      tags: [flagship]
+    description: "Model for the routed workflow (routing uses a fast model)"
+    ui: toolbar
+  user_message:
+    type: message
+    description: "The user's request to route"
+
+entry: [route]
+
+nodes:
+  - id: route
+    type: router
+    prompt: "{{inputs.user_message}}"
+    model:
+      tags: [fast, smart]
+    include_history: true
+    thread:
+      mode: new
+    workflows:
+      - ref: builtin://agent
+        presets:
+          - general
+          - researcher
+          - planner
+          - debug
+          - tester
+          - refactor
+          - documentation
+          - git
+          - ux
+      - ref: builtin://agent
+        presets:
+          - code_reviewer
+        description: "Code review specialist - use when the user wants code reviewed, audited, or analyzed for quality"
+
+outputs:
+  selected_workflow: "{{nodes.route.selected_workflow}}"
+  selected_preset: "{{nodes.route.selected_preset}}"
+  reasoning: "{{nodes.route.reasoning}}"
+  response_text: "{{nodes.route.outputs.response_text}}"

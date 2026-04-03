@@ -321,6 +321,27 @@ func validateNodeArgs(node *reliantv1.Node, nodePath []string, result *Result) {
 				"workflow/loop node requires either 'ref' or 'inline'")
 		}
 
+	case model.NodeTypeRouter:
+		args := node.GetRouter()
+		if args == nil {
+			result.AddError(CategoryStructure, nodePath, "args", "router node missing args")
+			return
+		}
+		if len(args.GetWorkflows()) == 0 {
+			result.AddError(CategoryStructure, nodePath, "workflows",
+				"router node requires at least one candidate workflow")
+		}
+		for i, candidate := range args.GetWorkflows() {
+			if candidate.GetRef() == "" {
+				result.AddError(CategoryStructure, nodePath, "workflows",
+					fmt.Sprintf("router candidate %d has empty ref", i))
+			}
+		}
+		if !model.CelStringIsSet(args.GetPrompt()) {
+			result.AddError(CategoryStructure, nodePath, "prompt",
+				"router node requires a prompt")
+		}
+
 	case model.NodeTypeJoin:
 		// Only "all" and "any" are valid join conditions
 		condExpr := model.ConditionExpr(node)
@@ -680,7 +701,7 @@ func nodeWritesToThread(node *reliantv1.Node) bool {
 	switch node.GetType() {
 	case model.NodeTypeSaveMessage:
 		return true
-	case model.NodeTypeWorkflow, model.NodeTypeLoop:
+	case model.NodeTypeWorkflow, model.NodeTypeLoop, model.NodeTypeRouter:
 		return true
 	}
 	return false

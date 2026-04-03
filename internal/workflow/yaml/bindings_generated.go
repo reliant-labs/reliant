@@ -115,6 +115,20 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 			"yield":      {},
 		},
 	},
+	"router": {
+		oneofFieldName: "router",
+		isStructural:   true,
+		argFieldKeys: map[string]struct{}{
+			"fallback":        {},
+			"include_history": {},
+			"model":           {},
+			"project":         {},
+			"prompt":          {},
+			"system_prompt":   {},
+			"thread":          {},
+			"workflows":       {},
+		},
+	},
 	"run": {
 		oneofFieldName: "run",
 		isStructural:   true,

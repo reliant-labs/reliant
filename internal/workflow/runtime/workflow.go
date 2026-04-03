@@ -1099,6 +1099,121 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				continue
 			}
 
+			// Handle router steps - LLM-driven workflow selection and execution
+			if step.Node.GetType() == model.NodeTypeRouter {
+				logger.Info("[Workflow Runtime] ========== EXECUTING ROUTER STEP ===========",
+					"stepID", step.Node.GetId(),
+				)
+
+				// Evaluate node config (resolve CEL expressions)
+				evalResult, err := EvaluateNodeConfig(
+					step.Node,
+					nodeOutputs,
+					workflowID,
+					input.WorkflowName,
+					input.Inputs,
+					nil, // Not in a loop
+					nil, // loopOutputs - not in a loop
+					execCtx,
+				)
+				if err != nil {
+					logger.Error("[Workflow Runtime] Failed to evaluate router step config",
+						"stepID", step.Node.GetId(),
+						"error", err,
+					)
+					notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName,
+						"config_evaluation_error",
+						fmt.Sprintf("Router step '%s' config evaluation failed: %s", step.Node.GetId(), err.Error()))
+					return nil, fmt.Errorf("router step %s config evaluation failed: %w", step.Node.GetId(), err)
+				}
+
+				// Create router executor
+				routerExec := NewRouterExecutor(
+					ctx,
+					workflowID,
+					input.ChatID,
+					input.WorkflowName,
+					input.Inputs,
+					nodeOutputs,
+					childTracker,
+					step.Node,
+					evalResult,
+				)
+
+				// Derive child execution context
+				childThreadMode := routerThreadMode(evalResult)
+				childIdentity := routerWorkflowIdentity(step.Node)
+				childExecCtx := execCtx.ForChild(step.Node.GetId(), childThreadMode, childIdentity, true)
+
+				// Initialize child thread for non-inherit modes
+				if childThreadMode != model.ThreadModeInherit {
+					nodeID := step.Node.GetId()
+					if initErr := initChildWorkflow(ChildWorkflowInitOpts{
+						Ctx:              ctx,
+						ChatID:           input.ChatID,
+						ParentWorkflowID: parentWorkflowID,
+						ChildWorkflowID:  workflowID,
+						ChildThreadID:    childExecCtx.Thread,
+						WorkflowName:     childIdentity,
+						ThreadTitle:      &nodeID,
+						ThreadMode:       childThreadMode,
+						ForkFromThread:   childExecCtx.ForkedFrom,
+						ParentThread:     thread,
+						SpawnedByNodeID:  step.Node.GetId(),
+						Logger:           logger,
+					}); initErr != nil {
+						logger.Error("[Workflow Runtime] Failed to initialize router child thread",
+							"stepID", step.Node.GetId(),
+							"error", initErr,
+						)
+						return nil, fmt.Errorf("failed to initialize router child thread for step %s: %w", step.Node.GetId(), initErr)
+					}
+				}
+
+				// Override project path if needed
+				childProjectPath := projectPath
+				if model.NodeProjectPath(evalResult) != "" {
+					childProjectPath = model.NodeProjectPath(evalResult)
+					childExecCtx.ProjectPath = childProjectPath
+				}
+
+				routerExec = routerExec.
+					WithExecContext(childExecCtx).
+					WithProjectPath(childProjectPath).
+					WithThreadTracker(threadTracker).
+					WithPauseController(makeThreadPauseCtrl(childExecCtx.Thread)).
+					WithMakeThreadPauseCtrl(makeThreadPauseCtrl)
+
+				// Launch router execution in parallel (same pattern as workflow nodes)
+				doneCh := workflow.NewChannel(ctx)
+				running := &RunningInlineWorkflow{
+					StepID:       step.Node.GetId(),
+					Node:         step.Node,
+					Event:        step.Event,
+					DoneCh:       doneCh,
+					EvalResult:   evalResult,
+					ChildExecCtx: childExecCtx,
+				}
+
+				routerCopy := routerExec
+				runningCopy := running
+
+				workflow.Go(ctx, func(gCtx workflow.Context) {
+					routerCopy = routerCopy.WithWorkflowContext(gCtx)
+					output, execErr := routerCopy.Execute()
+					runningCopy.Output = output
+					runningCopy.Error = execErr
+					runningCopy.DoneCh.Send(gCtx, true)
+				})
+
+				runningInlineWorkflows = append(runningInlineWorkflows, running)
+				logger.Info("[Workflow Runtime] Started router workflow in parallel",
+					"stepID", step.Node.GetId(),
+					"totalRunningInline", len(runningInlineWorkflows),
+				)
+				continue
+			}
+
 			logger.Info("[Workflow Runtime] ========== EXECUTING STEP ==========",
 				"stepID", step.Node.GetId(),
 				"type", string(step.Node.GetType()))
