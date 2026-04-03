@@ -39,6 +39,8 @@ interface ContextualTipsStoreState {
   };
   loadState: () => Promise<void>;
   reevaluate: () => Promise<void>;
+  confirmTipShown: (tipId: ContextualTipId) => void;
+  clearActiveTip: () => void;
   dismissTip: (tipId: ContextualTipId) => Promise<void>;
   disableAllTips: () => Promise<void>;
   markTipEngaged: (tipId: ContextualTipId) => Promise<void>;
@@ -195,24 +197,43 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
       return;
     }
 
+    // Only set the activeTipId here — shownCount is incremented later
+    // by confirmTipShown() once the coachmark is actually visible to the
+    // user.  This prevents data corruption from transient activeTipId
+    // changes during store-subscription reevaluation.
+    set({ activeTipId: nextTip.id });
+  },
+
+  confirmTipShown: (tipId) => {
+    const state = get();
+    if (state.activeTipId !== tipId) return;
+
+    const record = state.tipState[tipId];
+    if (!record) return;
+
     const shownAt = new Date().toISOString();
     const nextTipState = {
       ...state.tipState,
-      [nextTip.id]: {
-        ...state.tipState[nextTip.id],
-        shownCount: state.tipState[nextTip.id].shownCount + 1,
+      [tipId]: {
+        ...record,
+        shownCount: record.shownCount + 1,
         lastShownAt: shownAt,
       },
     };
 
     set({
-      activeTipId: nextTip.id,
       tipState: nextTipState,
       lastTipShownAt: shownAt,
     });
 
     persistLocalState(nextTipState, state.tipsDisabled);
     void persistRemoteState(nextTipState, state.tipsDisabled);
+  },
+
+  clearActiveTip: () => {
+    if (get().activeTipId !== null) {
+      set({ activeTipId: null });
+    }
   },
 
   dismissTip: async (tipId) => {
