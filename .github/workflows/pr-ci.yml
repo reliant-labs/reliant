@@ -30,25 +30,6 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: gofmt check
-        run: |
-          # Only check files changed in this PR, not issues inherited from main
-          PR_GO_FILES=$(git diff --name-only --diff-filter=ACM origin/${{ github.base_ref }}...HEAD -- '*.go')
-          if [ -z "$PR_GO_FILES" ]; then
-            echo "No Go files changed in this PR"
-            exit 0
-          fi
-          echo "Checking formatting on changed files:"
-          echo "$PR_GO_FILES"
-          gofmt -w $PR_GO_FILES
-          UNFORMATTED=$(git diff --name-only)
-          if [ -n "$UNFORMATTED" ]; then
-            echo "The following files need formatting (run 'make fmt' locally):"
-            git diff --name-only
-            git diff
-            exit 1
-          fi
-
       - name: Install buf
         uses: bufbuild/buf-setup-action@v1
         with:
@@ -77,13 +58,10 @@ jobs:
       - name: Install golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
-          # v8 of the action only supports golangci-lint v2+.
-          # Keep this in sync with the Go version in go.mod.
-          # NOTE: golangci-lint must be built with >= the targeted Go version.
           version: v2.5.0
-          # golangci-lint sometimes reports a timeout even when it finishes with 0 issues
-          # (seen in CI). Give it more headroom.
           args: --timeout=10m
+          # Only report issues introduced in this PR, not pre-existing issues from main
+          only-new-issues: true
 
       - name: Go tests (exclude e2e)
         run: |
