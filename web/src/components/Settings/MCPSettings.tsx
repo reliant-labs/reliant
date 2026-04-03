@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import * as Sentry from "@sentry/react";
 import { AlertCircle, RefreshCw, Plus } from "lucide-react";
 import {
   mcpGrpc,
@@ -183,6 +184,10 @@ export function MCPSettings() {
       await loadData();
     } catch (error) {
       console.error("Failed to install server:", error);
+      Sentry.captureException(error, {
+        tags: { component: 'mcp_settings', operation: 'install' },
+        extra: { serverName: server.displayName },
+      });
       toast.error(
         `Failed to install ${server.displayName}: ${getErrorMessage(error)}`,
       );
@@ -206,6 +211,10 @@ export function MCPSettings() {
       await loadData();
     } catch (error) {
       console.error("Failed to restart server:", error);
+      Sentry.captureException(error, {
+        tags: { component: 'mcp_settings', operation: 'restart' },
+        extra: { serverName },
+      });
       toast.error(`Failed to restart server: ${getErrorMessage(error)}`);
     } finally {
       setServerActions((prev) => {
@@ -226,6 +235,10 @@ export function MCPSettings() {
       await loadData();
     } catch (error) {
       console.error("Failed to uninstall server:", error);
+      Sentry.captureException(error, {
+        tags: { component: 'mcp_settings', operation: 'uninstall' },
+        extra: { serverName },
+      });
       toast.error(`Failed to uninstall server: ${getErrorMessage(error)}`);
     } finally {
       setServerActions((prev) => {
@@ -257,6 +270,10 @@ export function MCPSettings() {
       await loadData();
     } catch (error) {
       console.error("Failed to toggle server enabled state:", error);
+      Sentry.captureException(error, {
+        tags: { component: 'mcp_settings', operation: 'toggle_enabled' },
+        extra: { serverName },
+      });
       toast.error(
         `Failed to ${enabled ? "enable" : "disable"} server: ${getErrorMessage(error)}`,
       );
@@ -297,6 +314,10 @@ export function MCPSettings() {
       await loadData();
     } catch (error) {
       console.error("Failed to move server scope:", error);
+      Sentry.captureException(error, {
+        tags: { component: 'mcp_settings', operation: 'move_scope' },
+        extra: { serverName },
+      });
       toast.error(
         `Failed to change install location: ${getErrorMessage(error)}`,
       );
@@ -394,6 +415,10 @@ export function MCPSettings() {
       setWizardServer(null);
     } catch (error) {
       console.error("Failed to update configuration:", error);
+      Sentry.captureException(error, {
+        tags: { component: 'mcp_settings', operation: 'wizard_update' },
+        extra: { serverName: wizardServer.name },
+      });
       toast.error(`Failed to update configuration: ${getErrorMessage(error)}`);
       throw error;
     }
