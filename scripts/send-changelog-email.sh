@@ -8,12 +8,12 @@ if [[ -z "$VERSION" ]]; then
   exit 1
 fi
 
-RELEASE_FILE="${RELEASE_FILE:-mintlify-docs/data/releases/${VERSION}.yaml}"
+RELEASE_FILE="${RELEASE_FILE:-docs/data/releases/${VERSION}.yaml}"
 CHANGELOG_URL="${CHANGELOG_URL:-https://docs.reliantlabs.io/changelog#${VERSION}}"
 DRY_RUN="${DRY_RUN:-false}"
 
 if [[ ! -f "$RELEASE_FILE" ]]; then
-  echo "::warning::No Mintlify changelog file found at $RELEASE_FILE — skipping changelog email"
+  echo "::warning::No changelog file found at $RELEASE_FILE — skipping changelog email"
   exit 0
 fi
 
