@@ -125,6 +125,18 @@ nodes:
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and the [`contributing/`](contributing/) directory for detailed guides.
 
+### Optional: Reliant managed access for local development
+
+Reliant-managed provider access is disabled by default. To opt in locally, set these environment variables:
+
+```bash
+RELIANT_FEATURE_RELIANT_MANAGED_ACCESS_ENABLED=true
+RELIANT_CONTROLPLANE_URL=https://controlplane.reliantlabs.io
+RELIANT_RUNTIME_BASE_URL=https://runtime.reliantlabs.io/v1
+```
+
+With the feature flag unset or `false`, Reliant-specific managed-access settings and synthetic `@reliant` runtime models stay hidden and inactive.
+
 ## License
 
 Copyright (c) 2026 Reliant Labs, Inc. Licensed under the [Business Source License 1.1](LICENSE).
