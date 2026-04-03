@@ -193,10 +193,6 @@ services:
         condition: service_healthy
     environment:
       RELIANT_ENV: dev
-      # DAEMON_PAT and DAEMON_AUTH_USER_ID must be set for tools-daemon to authenticate.
-      # dev-cloud.sh auto-creates these; for manual use, set them in .env.cloud.
-      DAEMON_PAT: ${DAEMON_PAT:-}
-      DAEMON_AUTH_USER_ID: ${DAEMON_AUTH_USER_ID:-530eb7d2-1f6a-4305-890e-c05becebcf03}
       DAEMON_GRPC_URL: "http://daemon-gateway:9190"
       DAEMON_DATA_DIR: /data
       DAEMON_WORKING_DIR: /workspace

@@ -184,8 +184,10 @@ func NewServer(cfg *Config) (*Server, error) {
 	var terminalPath string
 	var terminalHandler http.Handler
 
-	if cfg.LocalMode && router != nil {
-		logging.Info("Registering proxy services on monolith gRPC server (FileSystem, Background, Terminal)")
+	if router != nil {
+		// Proxy services route browser requests through the daemon router (NATS in
+		// distributed mode, in-process in monolith mode) to the connected daemon.
+		logging.Info("Registering daemon proxy services (FileSystem, Background, Terminal)")
 
 		fsProxy := services.NewFileSystemProxyService(router, database)
 		filesystemPath, filesystemHandler = reliantv1connect.NewFileSystemServiceHandler(fsProxy, opts...)
@@ -203,7 +205,8 @@ func NewServer(cfg *Config) (*Server, error) {
 		}
 		mux.HandleFunc("/api/v2/terminal/ws", services.TerminalWSHandler(router, jwtValidator))
 	} else {
-		// Non-local mode: use DB-backed FileSystem and provider-backed Background
+		// No daemon router available: use DB-backed FileSystem and provider-backed Background.
+		// These provide read-only / limited functionality without a connected daemon.
 		filesystemService := services.NewFileSystemService(database)
 		filesystemPath, filesystemHandler = reliantv1connect.NewFileSystemServiceHandler(filesystemService, opts...)
 

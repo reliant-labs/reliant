@@ -148,6 +148,22 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 	}, nil
 }
 
+// isFatalError returns true for errors that should not be retried (e.g. auth failures).
+func isFatalError(err error) bool {
+	if err == nil {
+		return false
+	}
+	code := connect.CodeOf(err)
+	switch code {
+	case connect.CodeUnauthenticated, connect.CodePermissionDenied:
+		return true
+	case connect.CodeUnimplemented:
+		// Server doesn't have the ConnectDaemon endpoint — wrong URL.
+		return true
+	}
+	return false
+}
+
 func (d *daemonClient) run(ctx context.Context) error {
 	delay := transport.ReconnectMinDelay
 	for {
@@ -157,8 +173,23 @@ func (d *daemonClient) run(ctx context.Context) error {
 		}
 
 		sessionStart := time.Now()
-		if err := d.runSession(ctx); err != nil && !errors.Is(err, context.Canceled) {
-			logging.Warn(logPrefix+" Session ended; reconnecting", "error", err, "delay", delay)
+		err := d.runSession(ctx)
+		if err != nil && !errors.Is(err, context.Canceled) {
+			if isFatalError(err) {
+				logging.Error(logPrefix+" Fatal error — not reconnecting",
+					"error", err,
+					"code", connect.CodeOf(err).String(),
+					"grpc_url", d.bootCfg.GRPCURL,
+				)
+				d.stopAllStreams()
+				return fmt.Errorf("daemon connection failed (not retrying): %w", err)
+			}
+			logging.Warn(logPrefix+" Session ended; reconnecting",
+				"error", err,
+				"code", connect.CodeOf(err).String(),
+				"delay", delay,
+				"grpc_url", d.bootCfg.GRPCURL,
+			)
 		}
 
 		// Reset backoff after a session that lasted long enough to be considered
@@ -186,10 +217,12 @@ func (d *daemonClient) run(ctx context.Context) error {
 func (d *daemonClient) runSession(ctx context.Context) error {
 	httpClient, baseURL, err := transport.NewDaemonHTTPClient(d.bootCfg)
 	if err != nil {
-		return err
+		return fmt.Errorf("creating daemon HTTP client: %w", err)
 	}
 
-	client := reliantv1connect.NewToolsDaemonServiceClient(httpClient, baseURL)
+	logging.Info(logPrefix+" Connecting to gateway", "url", baseURL)
+
+	client := reliantv1connect.NewToolsDaemonServiceClient(httpClient, baseURL, connect.WithGRPC())
 
 	stream := client.ConnectDaemon(ctx)
 
@@ -204,7 +237,7 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 		}},
 	}
 	if err = d.send(stream, register); err != nil {
-		return fmt.Errorf("send register: %w", err)
+		return fmt.Errorf("sending daemon registration to %s: %w", baseURL, err)
 	}
 
 	if err := d.sendProjectDiscovery(stream); err != nil {
@@ -218,7 +251,7 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 	for {
 		msg, err := stream.Receive()
 		if err != nil {
-			return err
+			return fmt.Errorf("daemon stream receive: %w", err)
 		}
 		if msg == nil {
 			continue

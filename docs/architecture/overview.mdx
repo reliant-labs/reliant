@@ -11,43 +11,7 @@ The platform runs in two modes: a self-contained **monolith** for local and desk
 
 Every Reliant deployment consists of these components, regardless of mode:
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                       Frontend                          │
-│                   (Web / Electron)                       │
-└──────────┬──────────────────┬───────────────────────────┘
-           │ REST              │ gRPC/ConnectRPC
-           ▼                  ▼
-┌──────────────────┐ ┌────────────────────┐
-│  HTTP API Server │ │ gRPC/ConnectRPC    │
-│  (REST endpoints)│ │ Server (real-time  │
-│                  │ │ ops, streaming)    │
-└────────┬─────────┘ └────────┬───────────┘
-         │                    │
-         ▼                    ▼
-┌─────────────────────────────────────────┐
-│           Temporal Engine               │
-│   (durable workflow orchestration)      │
-└────────────────┬────────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────────┐
-│          Temporal Workers               │
-│   (execute workflow activities)         │
-│                                         │
-│  ┌─────────────┐  ┌──────────────────┐  │
-│  │ LLM Calls   │  │ Tool Routing     │  │
-│  │ (Anthropic,  │  │ (shell, files,   │  │
-│  │  OpenAI ...) │  │  MCP, terminals) │  │
-│  └─────────────┘  └───────┬──────────┘  │
-└────────────────────────────┼────────────┘
-                             │
-                             ▼
-              ┌──────────────────────────┐
-              │      Tools Daemon        │
-              │  (local tool execution)  │
-              └──────────────────────────┘
-```
+<img src="/images/architecture/core-components.png" alt="Core Components" />
 
 **HTTP API Server** — Serves REST endpoints consumed by the web frontend. Handles CRUD operations for chats, messages, projects, workflows, and settings.
 
@@ -98,23 +62,7 @@ Users run `reliant daemon start` on their local machine, which establishes a per
 
 A user message flows through the system in this sequence:
 
-```
-User ──► Frontend ──► API Server ──► Temporal ──► Worker
-                                                    │
-                                         ┌──────────┴──────────┐
-                                         │                     │
-                                         ▼                     ▼
-                                    LLM Provider         Tools Daemon
-                                    (inference)       (shell, files, MCP)
-                                         │                     │
-                                         └──────────┬──────────┘
-                                                    │
-                                                    ▼
-                                            Streaming Layer
-                                                    │
-                                                    ▼
-                                          Frontend (live updates)
-```
+<img src="/images/architecture/request-data-flow.png" alt="Request Data Flow" />
 
 1. The frontend sends the message via the gRPC server, which creates a chat workflow execution in Temporal.
 2. Temporal dispatches workflow activities to a worker. The worker calls the configured LLM provider with the conversation history and available tools.

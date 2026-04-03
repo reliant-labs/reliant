@@ -6,7 +6,6 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,18 +20,12 @@ import (
 
 const (
 	defaultSupabaseURL  = "https://dash.reliantlabs.io"
+	defaultSupabaseKey  = "sb_publishable_KKiB3B0EdEv7nguwKfEE5A_iY9rVXod"
 	defaultLoginTimeout = 120 * time.Second
 )
 
 // LoginOptions configures the OAuth PKCE login flow.
 type LoginOptions struct {
-	// ServerURL is the Supabase project URL. Falls back to SUPABASE_URL env var,
-	// then to the compiled-in default.
-	ServerURL string
-
-	// AnonKey is the Supabase publishable/anon key. Falls back to SUPABASE_ANON_KEY env var.
-	AnonKey string
-
 	// Timeout is the maximum time to wait for the browser callback.
 	// Defaults to 120s.
 	Timeout time.Duration
@@ -53,8 +46,8 @@ type oauthProvider struct {
 
 // Login performs login via a local web page that supports email/password and OAuth providers.
 func Login(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
-	serverURL := firstNonEmpty(opts.ServerURL, defaultSupabaseURL)
-	serverURL = strings.TrimRight(serverURL, "/")
+	serverURL := strings.TrimRight(defaultSupabaseURL, "/")
+	anonKey := defaultSupabaseKey
 
 	timeout := opts.Timeout
 	if timeout == 0 {
@@ -69,11 +62,6 @@ func Login(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 		return nil, fmt.Errorf("generating code verifier: %w", err)
 	}
 	challenge := computeCodeChallenge(verifier)
-
-	state, err := generateState()
-	if err != nil {
-		return nil, fmt.Errorf("generating state: %w", err)
-	}
 
 	// Start a temporary HTTP server on a random port.
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -94,7 +82,7 @@ func Login(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 	// Build OAuth authorization URLs.
 	var providers []oauthProvider
 	for _, p := range []string{"github", "google"} {
-		u, err := buildAuthURL(serverURL, redirectURI, challenge, state, p)
+		u, err := buildAuthURL(serverURL, redirectURI, challenge, p)
 		if err != nil {
 			return nil, fmt.Errorf("building auth URL for %s: %w", p, err)
 		}
@@ -124,7 +112,7 @@ func Login(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 			return
 		}
 
-		result, err := signInWithPassword(ctx, serverURL, opts.AnonKey, email, password)
+		result, err := signInWithPassword(ctx, serverURL, anonKey, email, password)
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusUnauthorized)
@@ -147,11 +135,6 @@ func Login(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 	// OAuth callback handler.
 	mux.HandleFunc("/auth/callback", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		if got := q.Get("state"); got != state {
-			resultCh <- loginEvent{err: fmt.Errorf("state mismatch: expected %s, got %s", state, got)}
-			http.Error(w, "state mismatch", http.StatusBadRequest)
-			return
-		}
 		if errMsg := q.Get("error_description"); errMsg != "" {
 			resultCh <- loginEvent{err: fmt.Errorf("auth error: %s", errMsg)}
 			http.Error(w, errMsg, http.StatusBadRequest)
@@ -165,7 +148,7 @@ func Login(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 		}
 
 		// Exchange code for tokens.
-		result, err := exchangeCodeForTokens(ctx, serverURL, opts.AnonKey, code, verifier, redirectURI)
+		result, err := exchangeCodeForTokens(ctx, serverURL, anonKey, code, verifier, redirectURI)
 		if err != nil {
 			resultCh <- loginEvent{err: fmt.Errorf("exchanging code for tokens: %w", err)}
 			http.Error(w, "token exchange failed", http.StatusInternalServerError)
@@ -225,17 +208,9 @@ func computeCodeChallenge(verifier string) string {
 	return base64.RawURLEncoding.EncodeToString(h[:])
 }
 
-func generateState() (string, error) {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(b), nil
-}
-
 // --- URL builder ---
 
-func buildAuthURL(serverURL, redirectURI, challenge, state, provider string) (string, error) {
+func buildAuthURL(serverURL, redirectURI, challenge, provider string) (string, error) {
 	u, err := url.Parse(serverURL + "/auth/v1/authorize")
 	if err != nil {
 		return "", err
@@ -245,7 +220,6 @@ func buildAuthURL(serverURL, redirectURI, challenge, state, provider string) (st
 	q.Set("redirect_to", redirectURI)
 	q.Set("code_challenge", challenge)
 	q.Set("code_challenge_method", "S256")
-	q.Set("state", state)
 	u.RawQuery = q.Encode()
 	return u.String(), nil
 }
@@ -287,16 +261,19 @@ type supabaseError struct {
 }
 
 func exchangeCodeForTokens(ctx context.Context, serverURL, anonKey, code, verifier, redirectURI string) (*LoginResult, error) {
-	body := url.Values{}
-	body.Set("grant_type", "pkce")
-	body.Set("auth_code", code)
-	body.Set("code_verifier", verifier)
+	jsonBody, err := json.Marshal(map[string]string{
+		"auth_code":     code,
+		"code_verifier": verifier,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshaling token request: %w", err)
+	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, serverURL+"/auth/v1/token?grant_type=pkce", strings.NewReader(body.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, serverURL+"/auth/v1/token?grant_type=pkce", strings.NewReader(string(jsonBody)))
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("apikey", anonKey)
 
 	resp, err := http.DefaultClient.Do(req)

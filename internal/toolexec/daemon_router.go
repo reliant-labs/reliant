@@ -88,6 +88,13 @@ type DaemonRouter interface {
 	Close() error
 }
 
+// DaemonConnectionListener is notified when daemon connections change.
+// Used by NATSToolBridge to manage per-daemon NATS subscriptions.
+type DaemonConnectionListener interface {
+	OnDaemonConnected(userID, daemonID string)
+	OnDaemonDisconnected(userID, daemonID string)
+}
+
 // DaemonConnectionManager is the subset of ToolsDaemonService needed by LocalDaemonRouter
 // and NATSToolBridge. This avoids importing the services package from toolexec.
 type DaemonConnectionManager interface {

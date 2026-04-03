@@ -5,6 +5,8 @@ description: "Running Reliant as a single self-contained process"
 
 Monolith mode runs every Reliant component — Temporal workflow engine, SQLite databases, HTTP API, gRPC server, and tools daemon — inside a single OS process. This is the deployment mode the Electron desktop app uses: one binary, no external dependencies, everything local.
 
+<img src="/images/architecture/monolith-architecture.png" alt="Monolith Architecture" />
+
 ```bash
 reliant monolith [flags]
 ```

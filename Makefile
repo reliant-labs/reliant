@@ -560,16 +560,17 @@ mint:
 	@echo "$(YELLOW)Starting Mintlify pilot docs...$(NC)"
 	@echo "$(BLUE)Docs root: $(MINTLIFY_DOCS_DIR)$(NC)"
 	@echo "$(BLUE)Site available at: http://localhost:$(MINTLIFY_PORT)/$(NC)"
-	@if command -v mint >/dev/null 2>&1; then \
+	@export NVM_DIR="$$HOME/.nvm" && unset npm_config_prefix && . "$$NVM_DIR/nvm.sh" && nvm use 22 --silent && \
+	if command -v mint >/dev/null 2>&1; then \
 		cd $(MINTLIFY_DOCS_DIR) && mint dev --port $(MINTLIFY_PORT); \
 	elif command -v mintlify >/dev/null 2>&1; then \
 		cd $(MINTLIFY_DOCS_DIR) && mintlify dev --port $(MINTLIFY_PORT); \
 	else \
 		echo "$(RED)Neither 'mint' nor 'mintlify' CLI is installed.$(NC)"; \
 		echo "Install one of them:"; \
-		echo "  npm i -g mint"; \
+		echo "  nvm use 22 && npm i -g mint"; \
 		echo "  # or"; \
-		echo "  npm i -g mintlify"; \
+		echo "  nvm use 22 && npm i -g mintlify"; \
 		exit 1; \
 	fi
 

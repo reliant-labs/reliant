@@ -1,0 +1,61 @@
+flowchart TB
+    subgraph Clients["Clients"]
+        direction LR
+        WEB["🌐 Web Browser"]
+        DAEMON["🖧 Tools Daemon\n<i>reliant daemon start</i>"]
+    end
+
+    subgraph Cloud["Cloud Infrastructure"]
+        LB["Load Balancer"]
+
+        subgraph APIServers["API Servers · stateless · N replicas"]
+            direction LR
+            API1["API Server 1"]
+            API2["API Server N"]
+        end
+
+        subgraph WorkerPool["Workers · stateless · N replicas"]
+            direction LR
+            W1["Worker 1"]
+            W2["Worker N"]
+        end
+
+        subgraph GatewayCluster["Gateways · stateful · few replicas"]
+            GW1["Gateway 1"]
+            GW2["Gateway N"]
+        end
+
+        NATS[("NATS\n<i>Event streaming\n& tool routing</i>")]
+        PG[("Postgres\n<i>Application data</i>")]
+        TEMP[("Temporal\n<i>Workflow\norchestration</i>")]
+    end
+
+    WEB -->|HTTPS| LB
+    LB --> API1 & API2
+
+    API1 & API2 --> PG
+    API1 & API2 --> TEMP
+    API1 & API2 --> NATS
+
+    W1 & W2 --> PG
+    W1 & W2 --> TEMP
+    W1 & W2 --> NATS
+
+    GW1 & GW2 --> NATS
+    GW1 & GW2 --> PG
+
+    DAEMON <-->|"gRPC bidi stream"| GW1
+
+    classDef client fill:#7C3AED,stroke:#5B21B6,color:#fff
+    classDef lb fill:#F59E0B,stroke:#D97706,color:#1F2937
+    classDef api fill:#4F46E5,stroke:#3730A3,color:#fff
+    classDef worker fill:#059669,stroke:#047857,color:#fff
+    classDef gateway fill:#D97706,stroke:#B45309,color:#fff
+    classDef infra fill:#64748B,stroke:#475569,color:#fff
+
+    class WEB,DAEMON client
+    class LB lb
+    class API1,API2 api
+    class W1,W2 worker
+    class GW1,GW2 gateway
+    class NATS,PG,TEMP infra

@@ -1,0 +1,53 @@
+flowchart TB
+    subgraph Frontend["🖥️ Frontend"]
+        direction LR
+        WEB["Web App"]
+        ELECTRON["Electron Desktop"]
+    end
+
+    subgraph Servers["API Layer"]
+        direction LR
+        HTTP["HTTP API Server\n<i>REST endpoints</i>"]
+        GRPC["gRPC / ConnectRPC Server\n<i>Real-time streaming & RPC</i>"]
+    end
+
+    subgraph Temporal["⚙️ Temporal Engine"]
+        TE["Durable Workflow\nOrchestration"]
+    end
+
+    subgraph Workers["Temporal Workers"]
+        direction LR
+        LLM["🧠 LLM Calls\n<i>Anthropic, OpenAI, etc.</i>"]
+        TOOLS["🔧 Tool Routing\n<i>Shell, files, MCP, terminals</i>"]
+    end
+
+    subgraph Daemon["🖧 Tools Daemon"]
+        TD["Local Tool Execution\n<i>Shell · Files · MCP · LSP</i>"]
+    end
+
+    DB[("💾 Database\n<i>SQLite / Postgres</i>")]
+    STREAM["📡 Streaming Layer\n<i>Memory / NATS</i>"]
+
+    Frontend -->|REST| HTTP
+    Frontend -->|gRPC| GRPC
+    HTTP --> TE
+    GRPC --> TE
+    TE --> Workers
+    TOOLS --> TD
+    Workers --> DB
+    Workers --> STREAM
+    STREAM --> Frontend
+
+    classDef frontend fill:#7C3AED,stroke:#5B21B6,color:#fff
+    classDef api fill:#4F46E5,stroke:#3730A3,color:#fff
+    classDef temporal fill:#0891B2,stroke:#0E7490,color:#fff
+    classDef worker fill:#059669,stroke:#047857,color:#fff
+    classDef daemon fill:#D97706,stroke:#B45309,color:#fff
+    classDef infra fill:#64748B,stroke:#475569,color:#fff
+
+    class WEB,ELECTRON frontend
+    class HTTP,GRPC api
+    class TE temporal
+    class LLM,TOOLS worker
+    class TD daemon
+    class DB,STREAM infra

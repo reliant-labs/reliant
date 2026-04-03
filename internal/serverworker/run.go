@@ -240,7 +240,7 @@ func Run(ctx context.Context, opts Options) error {
 	// -----------------------------------------------------------------
 	// 10. Tool execution routing via NATS
 	// -----------------------------------------------------------------
-	router := toolexec.NewNATSDaemonRouter(nc)
+	router := toolexec.NewNATSDaemonRouter(nc, toolexec.WithDatabase(repo))
 	remoteExecutor.SetDaemonRouter(router)
 	natsChecker := nc.IsConnected
 	logging.Info("Tool execution routing via NATS")
