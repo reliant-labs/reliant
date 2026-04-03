@@ -19,6 +19,19 @@ vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
   originalConsoleError(...args)
 })
 
+// Stub supabase so that importing grpc-client (which eagerly calls createClient)
+// doesn't throw "supabaseKey is required" in the test environment.
+vi.mock('@/lib/supabase', () => ({
+  supabase: {
+    auth: {
+      getSession: vi.fn(async () => ({ data: { session: null }, error: null })),
+      onAuthStateChange: vi.fn(() => ({
+        data: { subscription: { unsubscribe: vi.fn() } },
+      })),
+    },
+  },
+}))
+
 // Prevent auth/session bootstrap from making real gRPC calls in unit tests.
 vi.mock('@/api/grpc-unauth', () => ({
   devAuthGrpc: {
