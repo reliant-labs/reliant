@@ -18,8 +18,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/api"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/certs"
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/envutil"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -176,7 +178,13 @@ func Run(ctx context.Context, opts Options) error {
 	logging.Info("Database initialized", "driver", opts.DatabaseDriver)
 
 	// API key provider (allows LLM drivers to resolve per-user keys from DB)
-	drivers.InitializeAPIKeyProvider(repo)
+	controlPlaneClient := controlplane.NewClientFromEnv()
+	reliantRuntimeBaseURL := envutil.GetEnv("RELIANT_RUNTIME_BASE_URL", "")
+	drivers.InitializeAPIKeyProvider(
+		repo,
+		drivers.WithControlPlaneClient(controlPlaneClient),
+		drivers.WithReliantRuntimeBaseURL(reliantRuntimeBaseURL),
+	)
 
 	// External Temporal client
 	temporalClient, err := temporal.NewExternalClient(ctx, temporal.ExternalClientConfig{

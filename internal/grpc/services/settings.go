@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/features"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
@@ -41,15 +42,21 @@ import (
 // SettingsService implements the SettingsService RPC handlers
 type SettingsService struct {
 	reliantv1connect.UnimplementedSettingsServiceHandler
-	database     db.Repository
-	daemonRouter toolexec.DaemonRouter
+	database           db.Repository
+	daemonRouter       toolexec.DaemonRouter
+	controlPlaneClient *controlplane.Client
 }
 
 // NewSettingsService creates a new SettingsService
-func NewSettingsService(database db.Repository, daemonRouter toolexec.DaemonRouter) *SettingsService {
+func NewSettingsService(database db.Repository, daemonRouter toolexec.DaemonRouter, controlPlaneClient ...*controlplane.Client) *SettingsService {
+	var cpClient *controlplane.Client
+	if len(controlPlaneClient) > 0 {
+		cpClient = controlPlaneClient[0]
+	}
 	return &SettingsService{
-		database:     database,
-		daemonRouter: daemonRouter,
+		database:           database,
+		daemonRouter:       daemonRouter,
+		controlPlaneClient: cpClient,
 	}
 }
 

@@ -4,8 +4,10 @@ package drivers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -17,19 +19,52 @@ var (
 	providerMu           sync.Mutex
 )
 
-// APIKeyProvider manages API keys for drivers
+// APIKeyProvider manages API keys and shared runtime dependencies for drivers.
 type APIKeyProvider struct {
-	repo db.Repository
+	repo                  db.Repository
+	controlPlaneClient    *controlplane.Client
+	reliantRuntimeBaseURL string
+}
+
+// APIKeyProviderOption configures shared driver-resolution dependencies.
+type APIKeyProviderOption func(*APIKeyProvider)
+
+// WithControlPlaneClient injects the shared Reliant control-plane client used for runtime grant exchange.
+func WithControlPlaneClient(client *controlplane.Client) APIKeyProviderOption {
+	return func(p *APIKeyProvider) {
+		p.controlPlaneClient = client
+	}
+}
+
+// WithReliantRuntimeBaseURL sets the explicit OpenAI-compatible runtime base URL for Reliant-managed access.
+func WithReliantRuntimeBaseURL(baseURL string) APIKeyProviderOption {
+	return func(p *APIKeyProvider) {
+		p.reliantRuntimeBaseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	}
 }
 
 // InitializeAPIKeyProvider initializes or updates the global API key provider.
-// This can be called multiple times (e.g., in tests) to update the repo reference.
-func InitializeAPIKeyProvider(repo db.Repository) {
+// This can be called multiple times (e.g., in tests) to update shared references.
+func InitializeAPIKeyProvider(repo db.Repository, opts ...APIKeyProviderOption) {
 	providerMu.Lock()
 	defer providerMu.Unlock()
-	globalAPIKeyProvider = &APIKeyProvider{
-		repo: repo,
+
+	provider := &APIKeyProvider{repo: repo}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(provider)
+		}
 	}
+	globalAPIKeyProvider = provider
+}
+
+func getReliantRuntimeDependencies() (*controlplane.Client, string) {
+	providerMu.Lock()
+	defer providerMu.Unlock()
+	if globalAPIKeyProvider == nil {
+		return nil, ""
+	}
+	return globalAPIKeyProvider.controlPlaneClient, globalAPIKeyProvider.reliantRuntimeBaseURL
 }
 
 // ErrNoAPIKeysConfigured is returned when no API keys are available

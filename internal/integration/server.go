@@ -8,12 +8,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/mcpconfig"
 
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/configadapter"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/envutil"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -155,7 +157,11 @@ func NewServer(cfg *Config) (*Server, error) {
 	wg.Wait()
 
 	// Initialize API key provider with database (after repo is created)
-	drivers.InitializeAPIKeyProvider(repo)
+	drivers.InitializeAPIKeyProvider(
+		repo,
+		drivers.WithControlPlaneClient(controlplane.NewClientFromEnv()),
+		drivers.WithReliantRuntimeBaseURL(envutil.GetEnv("RELIANT_RUNTIME_BASE_URL", "")),
+	)
 
 	// Check for errors
 	if dbErr != nil {

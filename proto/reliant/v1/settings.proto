@@ -70,6 +70,19 @@ service SettingsService {
   // ValidateProviderAPIKey validates an API key for a provider
   rpc ValidateProviderAPIKey(ValidateProviderAPIKeyRequest) returns (ValidateProviderAPIKeyResponse) {}
 
+  // CreateReliantProviderToken creates a first-party Reliant provider token for the current user
+  // and stores the raw token client-side only.
+  rpc CreateReliantProviderToken(CreateReliantProviderTokenRequest) returns (CreateReliantProviderTokenResponse) {}
+
+  // ListReliantProviderTokens lists Reliant provider tokens for the current signed-in user.
+  rpc ListReliantProviderTokens(ListReliantProviderTokensRequest) returns (ListReliantProviderTokensResponse) {}
+
+  // RevokeReliantProviderToken revokes a Reliant provider token in the control-plane.
+  rpc RevokeReliantProviderToken(RevokeReliantProviderTokenRequest) returns (RevokeReliantProviderTokenResponse) {}
+
+  // GetReliantProviderStatus returns local/storage status plus the latest control-plane access state.
+  rpc GetReliantProviderStatus(GetReliantProviderStatusRequest) returns (GetReliantProviderStatusResponse) {}
+
   // CompleteCodexOAuth exchanges an OAuth authorization code + PKCE verifier
   // and marks Codex as connected for the current user.
   rpc CompleteCodexOAuth(CompleteCodexOAuthRequest) returns (CompleteCodexOAuthResponse) {}
@@ -200,6 +213,36 @@ message ProviderStatus {
   bool has_api_key = 3;
   optional string masked_key = 4;
   string display_name = 5;
+  optional string auth_method = 6;
+  optional string status = 7;
+  optional string status_message = 8;
+}
+
+message ReliantProviderToken {
+  string id = 1;
+  string name = 2;
+  string token_prefix = 3;
+  bool ephemeral = 4;
+  string created_at = 5;
+  optional string last_used_at = 6;
+  optional string expires_at = 7;
+  optional string revoked_at = 8;
+}
+
+message ReliantProviderAccessStatus {
+  string state = 1;
+  string message = 2;
+  optional string plan_id = 3;
+  optional string plan_code = 4;
+  repeated string allowed_models = 5;
+  repeated string request_tags = 6;
+  double spend = 7;
+  double hard_budget_usd = 8;
+  string budget_duration = 9;
+  int64 rpm_limit = 10;
+  int64 tpm_limit = 11;
+  int64 max_parallel_requests = 12;
+  string key_duration = 13;
 }
 
 // ============================================
@@ -400,6 +443,44 @@ message ValidateProviderAPIKeyRequest {
 message ValidateProviderAPIKeyResponse {
   bool valid = 1;
   string message = 2;
+}
+
+message CreateReliantProviderTokenRequest {
+  optional string name = 1;
+  optional bool ephemeral = 2;
+  optional int64 expires_in_seconds = 3;
+}
+
+message CreateReliantProviderTokenResponse {
+  bool success = 1;
+  string message = 2;
+  string token = 3;
+  optional ReliantProviderToken daemon_token = 4;
+}
+
+message ListReliantProviderTokensRequest {}
+
+message ListReliantProviderTokensResponse {
+  repeated ReliantProviderToken tokens = 1;
+}
+
+message RevokeReliantProviderTokenRequest {
+  string token_id = 1;
+  bool delete_local_credential = 2;
+}
+
+message RevokeReliantProviderTokenResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message GetReliantProviderStatusRequest {}
+
+message GetReliantProviderStatusResponse {
+  bool configured = 1;
+  optional string masked_token = 2;
+  repeated ReliantProviderToken tokens = 3;
+  optional ReliantProviderAccessStatus access = 4;
 }
 
 message CompleteCodexOAuthRequest {

@@ -11,6 +11,7 @@ const (
 	UserIDContextKey    contextKey = "user_id"
 	UserRoleContextKey  contextKey = "user_role"
 	UserEmailContextKey contextKey = "user_email"
+	UserJWTContextKey   contextKey = "user_jwt"
 )
 
 // GetUserIDFromContext extracts the user ID from the context
@@ -27,4 +28,19 @@ func MustGetUserID(ctx context.Context) string {
 		panic("user_id not found in context - auth middleware not applied?")
 	}
 	return userID
+}
+
+// GetUserJWTFromContext extracts the raw user JWT from the context.
+func GetUserJWTFromContext(ctx context.Context) (string, bool) {
+	jwt, ok := ctx.Value(UserJWTContextKey).(string)
+	return jwt, ok
+}
+
+// MustGetUserJWT extracts the raw user JWT from context and panics if not found.
+func MustGetUserJWT(ctx context.Context) string {
+	jwt, ok := GetUserJWTFromContext(ctx)
+	if !ok || jwt == "" {
+		panic("user_jwt not found in context - auth middleware not applied?")
+	}
+	return jwt
 }

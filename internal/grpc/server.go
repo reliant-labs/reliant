@@ -15,6 +15,7 @@ import (
 	"golang.org/x/net/http2/h2c"
 
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
@@ -61,6 +62,7 @@ type Config struct {
 	ToolExecutor       *toolexec.RemoteExecutor     // Optional remote tool executor to bind to daemon service
 	ToolsDaemonService *services.ToolsDaemonService // Optional pre-created daemon service to share across startup wiring
 	DaemonRouter       toolexec.DaemonRouter        // Optional pre-created daemon router; built from ToolsDaemonService if nil
+	ControlPlaneClient *controlplane.Client         // Optional Reliant control-plane client; defaults from env when nil
 
 	BackgroundProvider services.BackgroundProcessProvider // Provider for background process state
 
@@ -125,6 +127,11 @@ func NewServer(cfg *Config) (*Server, error) {
 		router = toolexec.NewLocalDaemonRouter(toolsDaemonService)
 	}
 
+	controlPlaneClient := cfg.ControlPlaneClient
+	if controlPlaneClient == nil {
+		controlPlaneClient = controlplane.NewClientFromEnv()
+	}
+
 	// Create services
 	systemService := services.NewSystemService(database, cfg.TemporalClient, cfg.NATSChecker, cfg.StreamingHub, cfg.LocalMode)
 	planService := services.NewPlanService(database)
@@ -136,7 +143,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	yieldService := services.NewYieldService(database, cfg.PauseService)
 	chatService := services.NewChatService(database, cfg.TemporalClient, cfg.PauseService, cfg.SharedTaskQueue)
 	messageService := services.NewMessageService(database)
-	settingsService := services.NewSettingsService(database, router)
+	settingsService := services.NewSettingsService(database, router, controlPlaneClient)
 	mcpService := services.NewMCPService(database, router)
 	workflowService := services.NewWorkflowService(database, router)
 	scenarioService := services.NewScenarioService(database, router)

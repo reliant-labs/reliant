@@ -17,8 +17,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/configadapter"
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/envutil"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -132,7 +134,13 @@ func Run(ctx context.Context, opts Options) error {
 	defer func() { _ = repo.Close() }()
 
 	// API key provider (allows LLM drivers to resolve per-user keys from DB)
-	drivers.InitializeAPIKeyProvider(repo)
+	controlPlaneClient := controlplane.NewClientFromEnv()
+	reliantRuntimeBaseURL := envutil.GetEnv("RELIANT_RUNTIME_BASE_URL", "")
+	drivers.InitializeAPIKeyProvider(
+		repo,
+		drivers.WithControlPlaneClient(controlPlaneClient),
+		drivers.WithReliantRuntimeBaseURL(reliantRuntimeBaseURL),
+	)
 
 	// -----------------------------------------------------------------
 	// 5. Temporal client
