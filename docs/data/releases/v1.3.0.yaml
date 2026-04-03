@@ -1,3 +1,4 @@
+version: "v1.3.0"
 date: "2026-04-03"
 title: "First open source release, onboarding polish, and split architecture support"
 summary: "Introduces the first open source release, improves onboarding and bug fixes, adds stronger support for remote daemons and split deployments, and expands telemetry and diagnostics."
