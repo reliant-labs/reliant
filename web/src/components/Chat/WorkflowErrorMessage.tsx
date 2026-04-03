@@ -164,7 +164,7 @@ export function WorkflowErrorMessage({ error }: WorkflowErrorMessageProps) {
             <div className="text-xs text-muted-foreground mb-1 font-medium">
               Full Error:
             </div>
-            <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap break-words bg-background/50 p-2 rounded border border-border/50">
+            <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap break-words bg-background/50 p-2 rounded border border-border/50" data-sentry-mask>
               {error.error_message}
             </pre>
           </div>

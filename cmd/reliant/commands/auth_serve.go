@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/auth/oauthcallback"
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/spf13/cobra"
 )
 
@@ -82,6 +83,7 @@ func runAuthServe(cmd *cobra.Command, port int) error {
 
 		result, err := oauthcallback.Run(req.AuthorizeURLTemplate, req.TimeoutSeconds)
 		if err != nil {
+			logging.Error("OAuth callback failed", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}

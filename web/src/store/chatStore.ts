@@ -17,6 +17,8 @@ import { YieldStatus } from "../gen/reliant/v1/yield_pb";
 import type { ProcessedMessage } from "../lib/messageProcessor";
 import { processMessage } from "../lib/messageProcessor";
 
+import * as Sentry from "@sentry/react";
+
 // Chat streaming is handled via the unified gRPC stream in globalUpdatesStore
 import type {
   ChatUpdate,
@@ -1358,6 +1360,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         await loadPlanAndTasks(chat.id);
       } catch (error) {
         logger.error("[ChatStore] Failed to load plan/tasks:", error);
+        Sentry.captureMessage('Failed to load plan and tasks', {
+          level: 'warning',
+          tags: { component: 'chat', operation: 'load_plan_tasks' },
+        });
       }
     })();
 
@@ -1382,6 +1388,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         });
       } catch (error) {
         logger.error("[ChatStore] Failed to load approvals:", error);
+        Sentry.captureMessage('Failed to load approvals', {
+          level: 'warning',
+          tags: { component: 'chat', operation: 'load_approvals' },
+        });
       }
     })();
 
@@ -1404,6 +1414,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         }
       } catch (error) {
         logger.error("[ChatStore] Failed to load pending yield:", error);
+        Sentry.captureMessage('Failed to load pending yield', {
+          level: 'warning',
+          tags: { component: 'chat', operation: 'load_pending_yield' },
+        });
       }
     })();
 
@@ -1673,6 +1687,11 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       });
     } catch (error) {
       logger.error("[ChatStore] Failed to load messages:", error);
+      Sentry.captureMessage('Failed to load chat messages', {
+        level: 'warning',
+        tags: { component: 'chat', operation: 'load_messages' },
+        extra: { error: String(error), chatId },
+      });
     }
   },
 
