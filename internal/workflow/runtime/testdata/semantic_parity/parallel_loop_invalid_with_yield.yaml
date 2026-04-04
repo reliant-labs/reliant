@@ -1,0 +1,44 @@
+name: parallel_loop_invalid_with_yield
+workflow_yaml: |
+  name: invalid-parallel-loop-with-yield
+  apiVersion: "1.0"
+  entry: [implement_all]
+  inputs:
+    components:
+      type: array
+  nodes:
+    - id: implement_all
+      type: loop
+      parallel: true
+      items: "{{inputs.components}}"
+      yield: "{{true}}"
+      ref: builtin://agent
+  edges: []
+canonical_workflow_ref: test://invalid-parallel-loop-with-yield
+
+core:
+  use_workflow_loader: false
+  expected_contracts: []
+
+validation:
+  should_pass: false
+  use_workflow_loader: false
+  error_contains: "parallel loop cannot use 'yield'"
+
+simulator:
+  expected_status: passed
+  scenario:
+    name: invalid_parallel_loop_with_yield
+    inputs:
+      components: [auth]
+    events:
+      - node: builtin://agent
+        output:
+          response_text: "should not matter"
+    expect:
+      outcome: completed
+      reached:
+        - implement_all
+
+runtime:
+  checks: []
