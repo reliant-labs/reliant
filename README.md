@@ -3,7 +3,7 @@
 **AI coding assistant with programmable workflows**
 
 <p align="center">
- <img width="2184" height="1390" alt="Reliant Screenshot" src="https://github.com/user-attachments/assets/cecdb7c2-1ee6-4c03-bc45-6b1feb44a8dd" />
+<img width="2184" height="1390" alt="546819518-cecdb7c2-1ee6-4c03-bc45-6b1feb44a8dd" src="https://reliantlabs.io/assets/Create_Workflows_ListItem.webp" /> 
 </p>
 
 Reliant is a desktop AI coding assistant that goes beyond chat. Interact with your codebase through natural conversation, then extend that interaction with programmable workflows that automate complex, multi-step development tasks.
@@ -119,4 +119,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and the [`contribut
 
 ## License
 
-Copyright (c) 2025 Reliant Labs. All rights reserved.
+Copyright (c) 2026 Reliant Labs. All rights reserved.
