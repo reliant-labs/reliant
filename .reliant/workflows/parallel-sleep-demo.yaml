@@ -1,0 +1,55 @@
+name: parallel-sleep-demo
+apiVersion: "0.0.5"
+description: |
+  Deterministic parallel loop demo.
+
+  The loop fans out inline `run` steps in parallel. Each branch prints a start marker,
+  sleeps for a fixed duration, then prints an end marker. This makes real concurrency
+  visible from wall-clock timing and from the recorded run output / step execution data.
+
+entry: [parallel_sleep]
+
+inputs:
+  mode:
+    type: enum
+    enum: [manual, auto, plan]
+    default: auto
+    description: Included for compatibility with standard workflow launch paths.
+  branches:
+    type: object
+    description: Map of branch name -> sleep duration in milliseconds.
+    default:
+      fast: 900
+      medium: 900
+      slow: 900
+
+outputs:
+  branch_count: "{{nodes.parallel_sleep._iterations}}"
+
+nodes:
+  - id: parallel_sleep
+    type: loop
+    parallel: true
+    items: "{{inputs.branches}}"
+    inline:
+      entry: [sleep_branch]
+      outputs:
+        branch: "{{iter.key}}"
+        exit_code: "{{nodes.sleep_branch.exit_code}}"
+        stdout: "{{nodes.sleep_branch.stdout}}"
+      nodes:
+        - id: sleep_branch
+          type: run
+          command: |
+            python3 -c "import time; branch='{{iter.key}}'; delay_ms=int({{iter.item}}); start=time.time_ns(); print(f'BRANCH_START name={branch} ts_ns={start} delay_ms={delay_ms}', flush=True); time.sleep(delay_ms / 1000.0); end=time.time_ns(); print(f'BRANCH_END name={branch} ts_ns={end} delay_ms={delay_ms}', flush=True)"
+  - id: summary
+    type: save_message
+    args:
+      role: assistant
+      content: |
+        Parallel sleep demo completed.
+        - Branches: {{nodes.parallel_sleep._iterations}}
+
+edges:
+  - from: parallel_sleep
+    default: [summary]
