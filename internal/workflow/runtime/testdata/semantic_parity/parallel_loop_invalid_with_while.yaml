@@ -26,7 +26,7 @@ validation:
   error_contains: "parallel loop cannot use 'while'"
 
 simulator:
-  expected_status: passed
+  expected_status: error
   scenario:
     name: invalid_parallel_loop_with_while
     inputs:
@@ -36,9 +36,7 @@ simulator:
         output:
           response_text: "should not matter"
     expect:
-      outcome: completed
-      reached:
-        - implement_all
+      outcome: error
 
 runtime:
   checks: []

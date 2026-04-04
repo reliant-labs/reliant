@@ -3,6 +3,7 @@ package runtime
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -599,6 +600,10 @@ func (s *WorkflowSimulator) executeParallelLoop(nodePath string, protoNode *reli
 	la := model.GetLoopArgs(protoNode)
 	itemsExpr := model.CelStringRaw(la.GetItems())
 
+	if itemsExpr == "" {
+		return nil, fmt.Errorf("parallel loop %s: items expression is empty", nodePath)
+	}
+
 	// Evaluate items expression
 	evalCtx := &wfcel.EdgeEvalContext{
 		Nodes:  s.nodeOutputs,
@@ -652,11 +657,16 @@ func (s *WorkflowSimulator) parallelLoopItems(rawItems interface{}) ([]interface
 	case []interface{}:
 		return v, nil
 	case map[string]interface{}:
+		mapKeys := make([]string, 0, len(v))
+		for key := range v {
+			mapKeys = append(mapKeys, key)
+		}
+		sort.Strings(mapKeys)
 		items := make([]interface{}, 0, len(v))
-		for key, value := range v {
+		for _, key := range mapKeys {
 			items = append(items, map[string]interface{}{
 				"_map_key":   key,
-				"_map_value": value,
+				"_map_value": v[key],
 			})
 		}
 		return items, nil

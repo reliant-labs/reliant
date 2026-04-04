@@ -4,6 +4,23 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
+func iterContextActivationValue(iter *model.IterContext) map[string]interface{} {
+	if iter == nil {
+		return map[string]interface{}{"iteration": 0, "index": 0}
+	}
+	activation := map[string]interface{}{
+		"iteration": iter.Iteration,
+		"index":     iter.Index,
+	}
+	if iter.Item != nil {
+		activation["item"] = iter.Item
+	}
+	if iter.Key != "" {
+		activation["key"] = iter.Key
+	}
+	return activation
+}
+
 // =============================================================================
 // CEL NAMESPACE CONSTANTS
 // =============================================================================
@@ -97,7 +114,7 @@ func (c *EdgeEvalContext) Activation() map[string]interface{} {
 		m[string(CELWorkflow)] = c.Workflow
 	}
 	if c.Iter != nil {
-		m[string(CELIter)] = c.Iter
+		m[string(CELIter)] = iterContextActivationValue(c.Iter)
 	}
 	if c.Outputs != nil {
 		m[string(CELOutputs)] = c.Outputs
@@ -124,7 +141,7 @@ type LoopEvalContext struct {
 func (c *LoopEvalContext) Activation() map[string]interface{} {
 	m := make(map[string]interface{})
 	if c.Iter != nil {
-		m[string(CELIter)] = c.Iter
+		m[string(CELIter)] = iterContextActivationValue(c.Iter)
 	}
 	if c.Outputs != nil {
 		m[string(CELOutputs)] = c.Outputs
@@ -195,7 +212,7 @@ func (c *NodeResolutionContext) Activation() map[string]interface{} {
 		m[string(CELNodes)] = c.Nodes
 	}
 	if c.Iter != nil {
-		m[string(CELIter)] = c.Iter
+		m[string(CELIter)] = iterContextActivationValue(c.Iter)
 	}
 	if c.Workflow != nil {
 		m[string(CELWorkflow)] = c.Workflow

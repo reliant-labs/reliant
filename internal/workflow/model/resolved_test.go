@@ -33,6 +33,15 @@ func TestNodeThreadMode(t *testing.T) {
 	if NodeThreadMode(nodeWithForkMode) != "fork" {
 		t.Errorf("fork mode = %q", NodeThreadMode(nodeWithForkMode))
 	}
+
+	loopWithNewThread := &reliantv1.Node{
+		Args: &reliantv1.Node_Loop{Loop: &reliantv1.LoopArgs{
+			Thread: &reliantv1.ThreadConfig{Mode: "new"},
+		}},
+	}
+	if NodeThreadMode(loopWithNewThread) != "new" {
+		t.Errorf("loop thread mode = %q", NodeThreadMode(loopWithNewThread))
+	}
 }
 
 func TestNodeInjectConfig(t *testing.T) {
@@ -56,6 +65,15 @@ func TestNodeInjectConfig(t *testing.T) {
 	if NodeInjectConfig(nodeWithInject) != inject {
 		t.Error("should return inject config")
 	}
+
+	loopWithInject := &reliantv1.Node{
+		Args: &reliantv1.Node_Loop{Loop: &reliantv1.LoopArgs{
+			Thread: &reliantv1.ThreadConfig{Inject: inject},
+		}},
+	}
+	if NodeInjectConfig(loopWithInject) != inject {
+		t.Error("loop should return inject config")
+	}
 }
 
 func TestNodeThreadMemo(t *testing.T) {
@@ -76,6 +94,17 @@ func TestNodeThreadMemo(t *testing.T) {
 	}
 	if NodeThreadMemo(nodeWithMemo) != true {
 		t.Error("memo true should return true")
+	}
+
+	loopWithMemo := &reliantv1.Node{
+		Args: &reliantv1.Node_Loop{Loop: &reliantv1.LoopArgs{
+			Thread: &reliantv1.ThreadConfig{
+				Memo: &reliantv1.CelBool{Value: &reliantv1.CelBool_Literal{Literal: true}},
+			},
+		}},
+	}
+	if NodeThreadMemo(loopWithMemo) != true {
+		t.Error("loop memo true should return true")
 	}
 }
 

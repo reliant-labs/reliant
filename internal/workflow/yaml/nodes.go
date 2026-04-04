@@ -167,11 +167,17 @@ func unmarshalStructuralArgs(node *yaml.Node, v2node *reliantv1.Node, binding ge
 			childKey := argsNode.Content[i].Value
 			childVal := argsNode.Content[i+1]
 			if _, isStructuralArgField := binding.argFieldKeys[childKey]; isStructuralArgField && childKey != yamlKeyArgs {
-				if _, exists := yamlMap[childKey]; exists {
-					return fmt.Errorf("node: duplicate structural arg key %q across inline and %s", childKey, yamlKeyArgs)
+				promoteStructuralKey := true
+				if hasInputArgsMapField && (childKey == "thread" || childKey == "project") && childVal.Kind != yaml.MappingNode {
+					promoteStructuralKey = false
 				}
-				yamlMap[childKey] = childVal
-				continue
+				if promoteStructuralKey {
+					if _, exists := yamlMap[childKey]; exists {
+						return fmt.Errorf("node: duplicate structural arg key %q across inline and %s", childKey, yamlKeyArgs)
+					}
+					yamlMap[childKey] = childVal
+					continue
+				}
 			}
 			if !hasInputArgsMapField {
 				return fmt.Errorf("node.%s: unknown key %q", yamlKeyArgs, childKey)

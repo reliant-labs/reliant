@@ -9,13 +9,16 @@ import (
 )
 
 // NodeThreadConfig returns the thread configuration for a node.
-// Only workflow nodes have thread config. Returns nil for all other node types.
+// Workflow and loop nodes can both carry thread config. Returns nil for all other node types.
 func NodeThreadConfig(node *reliantv1.Node) *reliantv1.ThreadConfig {
 	if node == nil {
 		return nil
 	}
 	if wf := node.GetWorkflow(); wf != nil {
 		return wf.GetThread()
+	}
+	if loop := node.GetLoop(); loop != nil {
+		return loop.GetThread()
 	}
 	return nil
 }
