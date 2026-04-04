@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 import { grpcClient } from "./grpc-client";
+import { singleflight } from "../lib/singleflight";
 import { create } from "@bufbuild/protobuf";
 import type { PresetInfo as ProtoPresetInfo } from "../gen/reliant/v1/preset_pb";
 import { jsToProtoValue, protoValueToJs } from "./proto-utils";
@@ -295,20 +296,24 @@ export const presetGrpc = {
     projectId: string,
     workflowName: string
   ): Promise<Record<string, string>> {
-    try {
-      const client = grpcClient.preset();
-      const request = create(GetDefaultPresetRequestSchema, {
-        projectId,
-        workflowName,
-      });
-      const response = await client.getDefaultPreset(request);
+    // Use singleflight to deduplicate concurrent calls with the same args
+    // (ChatInput, useWorkflowInputs, and PresetPicker all call this on mount)
+    return singleflight(`getDefaultPresets:${projectId}:${workflowName}`, async () => {
+      try {
+        const client = grpcClient.preset();
+        const request = create(GetDefaultPresetRequestSchema, {
+          projectId,
+          workflowName,
+        });
+        const response = await client.getDefaultPreset(request);
 
-      // Response.presets is the map from proto
-      return response.presets || {};
-    } catch (error) {
-      // Fail gracefully - return empty map
-      console.warn("[preset-grpc] Failed to get default presets:", error);
-      return {};
-    }
+        // Response.presets is the map from proto
+        return response.presets || {};
+      } catch (error) {
+        // Fail gracefully - return empty map
+        console.warn("[preset-grpc] Failed to get default presets:", error);
+        return {};
+      }
+    });
   },
 };

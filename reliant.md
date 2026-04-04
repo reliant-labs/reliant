@@ -2,6 +2,16 @@ IMPORTANT: The current status of the project is that we haven't launched. Thus w
 
 IMPORTANT: when doing migrations sqlite does now support ALTER TABLE DROP COLUMN
 
+### Architecture modes
+
+Reliant runs in two modes: **distributed** and **monolith**. They share most of the same code paths, so changes should preserve parity unless a mode-specific difference is intentional.
+
+We optimize for **distributed** mode:
+
+- Reliant is a **multi-tenant distributed system**; we use **NATS** to send messages to the tools daemon.
+- The **API server**, **worker**, and **daemon gateway** do **not** have access to the user's filesystem. Only the **daemon** does.
+- The **daemon may not run on the same device as the user**, so do not assume local-device or same-machine access patterns outside the daemon boundary.
+
 ### Configuration
 
 **Dynamic Ports:** Reliant uses dynamic port allocation to support multiple instances. Ports are discovered at startup and written to `.env.ports`.

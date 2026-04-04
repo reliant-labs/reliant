@@ -74,6 +74,7 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
   const openFileViewer = useViewerStore((state) => state.openFileViewer);
   const setCurrentProject = useViewerStore((state) => state.setCurrentProject);
   const activeViewer = useViewerStore((state) => state.getActiveViewer());
+  const activeFilePath = activeViewer?.type === "file" ? activeViewer.file.path : null;
 
   // Get active chat's worktree, with fallback to pendingNewChatWorktreeId, then currentWorktree for new chat view
   // Use useShallow to prevent infinite re-renders from object selector
@@ -125,32 +126,33 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
 
   // Sync file tree focus when active viewer changes to a file
   useEffect(() => {
-    if (activeViewer?.type === "file" && activeSidebarTab === "files") {
-      const filePath = activeViewer.file.path;
-      // Expand parents to make file visible
-      setExpandedPaths((prev) => {
-        const newExpanded = new Set(prev);
-        let parentPath = filePath.substring(0, filePath.lastIndexOf('/'));
-        let changed = false;
-        while (parentPath) {
-          if (!newExpanded.has(parentPath)) {
-            newExpanded.add(parentPath);
-            changed = true;
-          }
-          const lastSlash = parentPath.lastIndexOf('/');
-          parentPath = lastSlash > 0 ? parentPath.substring(0, lastSlash) : '';
-        }
-        return changed ? newExpanded : prev;
-      });
-      setFocusedPath(filePath);
-      
-      // Scroll to the file after React renders (instant, no animation)
-      setTimeout(() => {
-        const element = document.querySelector(`[data-path="${CSS.escape(filePath)}"]`);
-        element?.scrollIntoView({ block: "nearest" });
-      }, 0);
+    if (!activeFilePath || activeSidebarTab !== "files") {
+      return;
     }
-  }, [activeViewer?.id, activeViewer?.type, activeViewer && 'file' in activeViewer ? (activeViewer as any).file?.path : undefined, activeSidebarTab]);
+
+    // Expand parents to make file visible
+    setExpandedPaths((prev) => {
+      const newExpanded = new Set(prev);
+      let parentPath = activeFilePath.substring(0, activeFilePath.lastIndexOf('/'));
+      let changed = false;
+      while (parentPath) {
+        if (!newExpanded.has(parentPath)) {
+          newExpanded.add(parentPath);
+          changed = true;
+        }
+        const lastSlash = parentPath.lastIndexOf('/');
+        parentPath = lastSlash > 0 ? parentPath.substring(0, lastSlash) : '';
+      }
+      return changed ? newExpanded : prev;
+    });
+    setFocusedPath(activeFilePath);
+
+    // Scroll to the file after React renders (instant, no animation)
+    setTimeout(() => {
+      const element = document.querySelector(`[data-path="${CSS.escape(activeFilePath)}"]`);
+      element?.scrollIntoView({ block: "nearest" });
+    }, 0);
+  }, [activeFilePath, activeSidebarTab]);
 
   // Handle arrow key navigation from file viewer
   useEffect(() => {

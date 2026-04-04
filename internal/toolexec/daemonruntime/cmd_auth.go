@@ -25,13 +25,13 @@ type authStartOAuthResponse struct {
 	CallbackURL string `json:"callback_url"` // full callback URL with query params
 }
 
-func handleAuthStartOAuth(_ context.Context, payload []byte) ([]byte, error) {
+func handleAuthStartOAuth(ctx context.Context, payload []byte) ([]byte, error) {
 	var req authStartOAuthRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
 
-	result, err := oauthcallback.Run(req.AuthorizeURLTemplate, req.TimeoutSeconds)
+	result, err := oauthcallback.Run(ctx, req.AuthorizeURLTemplate, req.TimeoutSeconds)
 	if err != nil {
 		return nil, err
 	}

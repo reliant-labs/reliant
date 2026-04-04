@@ -53,7 +53,12 @@ type daemonClient struct {
 	localExecutor *toolexec.LocalToolExecutor
 	capabilities  []string
 
-	sendMu sync.Mutex
+	// sendCh decouples message producers from the stream I/O.
+	// All goroutines push messages here; a single runSender goroutine
+	// drains the channel and calls stream.Send(). This prevents work
+	// goroutines from blocking on the stream write mutex/I/O.
+	sendCh   chan *reliantv1.DaemonMessage
+	sendDone chan struct{} // closed when runSender exits
 
 	cancelMu     sync.Mutex
 	cancelByReq  map[string]context.CancelFunc
@@ -226,6 +231,7 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 
 	stream := client.ConnectDaemon(ctx)
 
+	// --- Registration: send directly before starting the sender goroutine ---
 	register := &reliantv1.DaemonMessage{
 		Message: &reliantv1.DaemonMessage_Register{Register: &reliantv1.DaemonRegister{
 			DaemonId:     d.daemonID,
@@ -236,17 +242,26 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 			Capabilities: d.capabilities,
 		}},
 	}
-	if err = d.send(stream, register); err != nil {
+	if err = stream.Send(register); err != nil {
 		return fmt.Errorf("sending daemon registration to %s: %w", baseURL, err)
 	}
 
-	if err := d.sendProjectDiscovery(stream); err != nil {
+	// --- Start the send channel + single writer goroutine ---
+	d.sendCh = make(chan *reliantv1.DaemonMessage, 256)
+	d.sendDone = make(chan struct{})
+	go d.runSender(stream)
+	defer func() {
+		close(d.sendCh) // signal runSender to exit
+		<-d.sendDone    // wait for it to drain
+	}()
+
+	if err := d.sendProjectDiscovery(); err != nil {
 		logging.Warn(logPrefix+" Failed to send project discovery", "error", err)
 	}
 
 	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
 	defer cancelHeartbeat()
-	go d.runHeartbeats(heartbeatCtx, stream)
+	go d.runHeartbeats(heartbeatCtx)
 
 	for {
 		msg, err := stream.Receive()
@@ -256,19 +271,19 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 		if msg == nil {
 			continue
 		}
-		if err := d.handleServerMessage(ctx, stream, msg); err != nil {
+		if err := d.handleServerMessage(ctx, msg); err != nil {
 			logging.Warn(logPrefix+" Failed handling server message", "error", err)
 		}
 	}
 }
 
-func (d *daemonClient) handleServerMessage(ctx context.Context, stream *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage], msg *reliantv1.ServerMessage) error {
+func (d *daemonClient) handleServerMessage(ctx context.Context, msg *reliantv1.ServerMessage) error {
 	switch m := msg.Message.(type) {
 	case *reliantv1.ServerMessage_ToolRequest:
 		if m.ToolRequest == nil {
 			return nil
 		}
-		go d.executeTool(stream, m.ToolRequest)
+		go d.executeTool(m.ToolRequest)
 		return nil
 
 	case *reliantv1.ServerMessage_ToolCancel:
@@ -284,10 +299,10 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, stream *connect.
 	case *reliantv1.ServerMessage_RegistrationAck:
 		if m.RegistrationAck != nil {
 			for _, projectPath := range m.RegistrationAck.RequestedProjectPaths {
-				if err := d.sendLoadProjectConfigResponse(stream, projectPath, uuid.New().String()); err != nil {
+				if err := d.sendLoadProjectConfigResponse(projectPath, uuid.New().String()); err != nil {
 					logging.Warn(logPrefix+" Failed responding to registration requested project load", "projectPath", projectPath, "error", err)
 				}
-				d.startProjectWatcher(ctx, stream, projectPath, true)
+				d.startProjectWatcher(ctx, projectPath, true)
 			}
 		}
 		return nil
@@ -296,13 +311,13 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, stream *connect.
 		if m.LoadProjectConfigs == nil {
 			return nil
 		}
-		return d.sendLoadProjectConfigResponse(stream, m.LoadProjectConfigs.ProjectPath, m.LoadProjectConfigs.RequestId)
+		return d.sendLoadProjectConfigResponse(m.LoadProjectConfigs.ProjectPath, m.LoadProjectConfigs.RequestId)
 
 	case *reliantv1.ServerMessage_WatchProjectConfigs:
 		if m.WatchProjectConfigs == nil {
 			return nil
 		}
-		d.startProjectWatcher(ctx, stream, m.WatchProjectConfigs.ProjectPath, m.WatchProjectConfigs.IncludeInitial)
+		d.startProjectWatcher(ctx, m.WatchProjectConfigs.ProjectPath, m.WatchProjectConfigs.IncludeInitial)
 		return nil
 
 	case *reliantv1.ServerMessage_UnwatchProjectConfigs:
@@ -316,35 +331,35 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, stream *connect.
 		if m.KillProcess == nil {
 			return nil
 		}
-		go d.handleKillProcess(stream, m.KillProcess)
+		go d.handleKillProcess(m.KillProcess)
 		return nil
 
 	case *reliantv1.ServerMessage_DaemonCommand:
 		if m.DaemonCommand == nil {
 			return nil
 		}
-		go d.handleDaemonCommand(stream, m.DaemonCommand)
+		go d.handleDaemonCommand(m.DaemonCommand)
 		return nil
 
 	case *reliantv1.ServerMessage_TerminalInput:
 		if m.TerminalInput == nil {
 			return nil
 		}
-		d.handleTerminalInput(stream, m.TerminalInput)
+		d.handleTerminalInput(m.TerminalInput)
 		return nil
 
 	case *reliantv1.ServerMessage_TerminalResize:
 		if m.TerminalResize == nil {
 			return nil
 		}
-		d.handleTerminalResize(stream, m.TerminalResize)
+		d.handleTerminalResize(m.TerminalResize)
 		return nil
 
 	case *reliantv1.ServerMessage_ProcessOutputSubscribe:
 		if m.ProcessOutputSubscribe == nil {
 			return nil
 		}
-		d.handleProcessOutputSubscribe(stream, m.ProcessOutputSubscribe)
+		d.handleProcessOutputSubscribe(m.ProcessOutputSubscribe)
 		return nil
 
 	case *reliantv1.ServerMessage_ProcessOutputUnsubscribe:
@@ -359,7 +374,7 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, stream *connect.
 	}
 }
 
-func (d *daemonClient) handleKillProcess(stream *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage], req *reliantv1.DaemonKillProcessRequest) {
+func (d *daemonClient) handleKillProcess(req *reliantv1.DaemonKillProcessRequest) {
 	bgManager := shell.GetBackgroundManager()
 	err := bgManager.KillProcess(req.ProcessId)
 
@@ -374,17 +389,20 @@ func (d *daemonClient) handleKillProcess(stream *connect.BidiStreamForClient[rel
 	if err != nil {
 		resp.GetKillProcessResponse().ErrorMessage = err.Error()
 	}
-	if sendErr := d.send(stream, resp); sendErr != nil {
+	if sendErr := d.send(resp); sendErr != nil {
 		logging.Warn(logPrefix+" Failed to send kill process response", "processID", req.ProcessId, "error", sendErr)
 	}
 }
 
-func (d *daemonClient) handleDaemonCommand(stream *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage], req *reliantv1.DaemonCommandRequest) {
-	ctx := context.Background()
+func (d *daemonClient) handleDaemonCommand(req *reliantv1.DaemonCommandRequest) {
+	ctx, cancel := context.WithCancel(context.Background())
 	if req.TimeoutMs > 0 {
-		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, time.Duration(req.TimeoutMs)*time.Millisecond)
-		defer cancel()
+	}
+	defer cancel()
+	if strings.TrimSpace(req.RequestId) != "" {
+		d.registerCancel(req.RequestId, cancel)
+		defer d.unregisterCancel(req.RequestId)
 	}
 
 	resultPayload, err := defaultRegistry.Handle(ctx, req.CommandType, req.Payload)
@@ -402,7 +420,7 @@ func (d *daemonClient) handleDaemonCommand(stream *connect.BidiStreamForClient[r
 	if err != nil {
 		resp.GetDaemonCommandResponse().ErrorMessage = err.Error()
 	}
-	if sendErr := d.send(stream, resp); sendErr != nil {
+	if sendErr := d.send(resp); sendErr != nil {
 		logging.Warn(logPrefix+" Failed to send daemon command response",
 			"requestID", req.RequestId, "commandType", req.CommandType, "error", sendErr)
 	}
@@ -414,12 +432,12 @@ func (d *daemonClient) handleDaemonCommand(stream *connect.BidiStreamForClient[r
 			SessionID string `json:"session_id"`
 		}
 		if json.Unmarshal(resultPayload, &created) == nil && created.SessionID != "" {
-			d.startTerminalOutputPump(stream, created.SessionID)
+			d.startTerminalOutputPump(created.SessionID)
 		}
 	}
 }
 
-func (d *daemonClient) runHeartbeats(ctx context.Context, stream *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage]) {
+func (d *daemonClient) runHeartbeats(ctx context.Context) {
 	ticker := time.NewTicker(transport.DaemonHeartbeatInterval)
 	defer ticker.Stop()
 
@@ -428,7 +446,7 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, stream *connect.BidiSt
 		case <-ctx.Done():
 			return
 		case now := <-ticker.C:
-			err := d.send(stream, &reliantv1.DaemonMessage{
+			err := d.send(&reliantv1.DaemonMessage{
 				Message: &reliantv1.DaemonMessage_Heartbeat{Heartbeat: &reliantv1.DaemonHeartbeat{Timestamp: now.UnixMilli()}},
 			})
 			if err != nil {
@@ -439,7 +457,7 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, stream *connect.BidiSt
 	}
 }
 
-func (d *daemonClient) executeTool(stream *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage], req *reliantv1.ToolRequest) {
+func (d *daemonClient) executeTool(req *reliantv1.ToolRequest) {
 	if req == nil {
 		return
 	}
@@ -535,15 +553,33 @@ func (d *daemonClient) executeTool(stream *connect.BidiStreamForClient[reliantv1
 			Backgrounded: result.Backgrounded,
 		}},
 	}
-	if err := d.send(stream, resp); err != nil {
+	if err := d.send(resp); err != nil {
 		logging.Warn(logPrefix+" Failed to send tool response via stream", "requestID", req.RequestId, "error", err)
 	}
 }
 
-func (d *daemonClient) send(stream *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage], msg *reliantv1.DaemonMessage) error {
-	d.sendMu.Lock()
-	defer d.sendMu.Unlock()
-	return stream.Send(msg)
+// send enqueues a message for the single runSender goroutine to write.
+// It returns an error only if the stream is shutting down.
+func (d *daemonClient) send(msg *reliantv1.DaemonMessage) error {
+	select {
+	case d.sendCh <- msg:
+		return nil
+	case <-d.sendDone:
+		return fmt.Errorf("daemon send channel closed")
+	}
+}
+
+// runSender is the single goroutine that drains sendCh and writes to the
+// bidi stream. This serialises writes (required — stream.Send is not
+// thread-safe) without blocking producers on I/O.
+func (d *daemonClient) runSender(stream *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage]) {
+	defer close(d.sendDone)
+	for msg := range d.sendCh {
+		if err := stream.Send(msg); err != nil {
+			logging.Warn(logPrefix+" runSender: stream.Send failed", "error", err)
+			return
+		}
+	}
 }
 
 func (d *daemonClient) registerCancel(requestID string, cancel context.CancelFunc) {
@@ -576,7 +612,7 @@ func (d *daemonClient) cancelToolExecution(requestID string) {
 	}
 }
 
-func (d *daemonClient) sendProjectDiscovery(stream *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage]) error {
+func (d *daemonClient) sendProjectDiscovery() error {
 	projectPath := strings.TrimSpace(os.Getenv("PROJECT_PATH"))
 	if projectPath == "" {
 		projectPath = d.cwd
@@ -608,7 +644,7 @@ func (d *daemonClient) sendProjectDiscovery(stream *connect.BidiStreamForClient[
 			}},
 		}},
 	}
-	return d.send(stream, msg)
+	return d.send(msg)
 }
 
 func pathLooksLikeGitRepo(projectPath string) bool {
@@ -622,7 +658,7 @@ func pathLooksLikeGitRepo(projectPath string) bool {
 	return st.IsDir() || !st.IsDir()
 }
 
-func (d *daemonClient) sendLoadProjectConfigResponse(stream *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage], projectPath, requestID string) error {
+func (d *daemonClient) sendLoadProjectConfigResponse(projectPath, requestID string) error {
 	snapshot, err := buildProjectSnapshot(projectPath)
 	resp := &reliantv1.LoadProjectConfigsResponse{
 		RequestId: requestID,
@@ -633,10 +669,10 @@ func (d *daemonClient) sendLoadProjectConfigResponse(stream *connect.BidiStreamF
 	}
 
 	msg := &reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_LoadProjectConfigsResponse{LoadProjectConfigsResponse: resp}}
-	return d.send(stream, msg)
+	return d.send(msg)
 }
 
-func (d *daemonClient) startProjectWatcher(ctx context.Context, stream *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage], projectPath string, includeInitial bool) {
+func (d *daemonClient) startProjectWatcher(ctx context.Context, projectPath string, includeInitial bool) {
 	projectPath = normalizePath(projectPath)
 	if projectPath == "" {
 		return
@@ -650,7 +686,7 @@ func (d *daemonClient) startProjectWatcher(ctx context.Context, stream *connect.
 	d.watchersByPr[projectPath] = cancel
 	d.watchersMu.Unlock()
 
-	go d.runProjectWatcher(watchCtx, stream, projectPath, includeInitial)
+	go d.runProjectWatcher(watchCtx, projectPath, includeInitial)
 }
 
 func (d *daemonClient) stopProjectWatcher(projectPath string) {
@@ -685,7 +721,7 @@ func (d *daemonClient) stopAllStreams() {
 	}
 }
 
-func (d *daemonClient) runProjectWatcher(ctx context.Context, stream *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage], projectPath string, includeInitial bool) {
+func (d *daemonClient) runProjectWatcher(ctx context.Context, projectPath string, includeInitial bool) {
 	var lastVersion string
 
 	sendSnapshotDelta := func() {
@@ -709,7 +745,7 @@ func (d *daemonClient) runProjectWatcher(ctx context.Context, stream *connect.Bi
 			SnapshotIfCompacted:   snapshot,
 		}
 		msg := &reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_ProjectConfigDelta{ProjectConfigDelta: delta}}
-		if err := d.send(stream, msg); err != nil {
+		if err := d.send(msg); err != nil {
 			logging.Warn(logPrefix+" Failed to send project config delta", "projectPath", projectPath, "error", err)
 		}
 	}

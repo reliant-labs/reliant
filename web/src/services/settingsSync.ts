@@ -6,6 +6,7 @@
  * persistence to both storage layers.
  */
 
+import type { Setting } from "../api/settings-grpc";
 import { api } from "../api/client";
 import { waitForConfig } from "../lib/configReady";
 import { logger } from "../lib/logger";
@@ -54,6 +55,8 @@ export class SettingsSyncService {
   private syncInProgress = new Set<string>();
   private initialized = false;
   private settingsAppliedToDOM = false;
+  private settingsCache = new Map<string, Setting>();
+  private initPromise: Promise<void> | null = null;
 
   /**
    * Initialize the settings sync service by loading all settings from the database
@@ -62,6 +65,14 @@ export class SettingsSyncService {
     if (this.initialized) {
       return;
     }
+    if (this.initPromise) {
+      return this.initPromise;
+    }
+    this.initPromise = this.doInitialize();
+    return this.initPromise;
+  }
+
+  private async doInitialize(): Promise<void> {
 
     const attemptLoad = async (retryCount = 0): Promise<void> => {
       try {
@@ -72,8 +83,13 @@ export class SettingsSyncService {
         const settings = response.settings || [];
         logger.info(`[SettingsSync] Received ${settings.length} total settings from database`);
         
-        // Load settings into localStorage (don't trigger sync back to DB)
-        // Include appearance.*, toolcalls.*, and notifications.* prefixes
+        // Cache ALL settings in memory
+        for (const setting of settings) {
+          this.settingsCache.set(setting.key, setting);
+        }
+        logger.info(`[SettingsSync] Cached ${this.settingsCache.size} settings in memory`);
+
+        // Load appearance/toolcalls/notifications settings into localStorage (don't trigger sync back to DB)
         let loadedCount = 0;
         const appearanceSettings: string[] = [];
         for (const setting of settings) {
@@ -155,6 +171,9 @@ export class SettingsSyncService {
       // Save to localStorage first (synchronous, immediate)
       localStorage.setItem(key, value);
 
+      // Update in-memory cache
+      this.updateCache(key, value);
+
       // Then sync to database (asynchronous)
       await this.syncToDatabase(key, value);
     } catch (error) {
@@ -208,6 +227,9 @@ export class SettingsSyncService {
     try {
       // Remove from localStorage
       localStorage.removeItem(key);
+
+      // Remove from in-memory cache
+      this.removeFromCache(key);
 
       // Remove from database (via gRPC)
       await api.settings.deleteSetting(key);
@@ -275,6 +297,48 @@ export class SettingsSyncService {
    */
   isInitialized(): boolean {
     return this.initialized;
+  }
+
+  /**
+   * Wait for initialization to complete. Resolves immediately if already initialized.
+   */
+  async waitForInit(): Promise<void> {
+    if (this.initialized) return;
+    if (this.initPromise) return this.initPromise;
+  }
+
+  /**
+   * Get a setting from the in-memory cache (populated by ListSettings on init).
+   * Returns null if the key is not in the cache or the cache isn't ready.
+   */
+  getSettingFromCache(key: string): Setting | null {
+    return this.settingsCache.get(key) ?? null;
+  }
+
+  /**
+   * Update the in-memory cache entry for a setting (called after writes).
+   */
+  updateCache(key: string, value: string): void {
+    const existing = this.settingsCache.get(key);
+    if (existing) {
+      this.settingsCache.set(key, { ...existing, value, updated_at: new Date().toISOString() });
+    } else {
+      this.settingsCache.set(key, {
+        id: '',
+        key,
+        value,
+        value_type: 'string',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+    }
+  }
+
+  /**
+   * Remove a setting from the in-memory cache.
+   */
+  removeFromCache(key: string): void {
+    this.settingsCache.delete(key);
   }
 
   /**

@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { logger } from '@/lib/logger'
 import { getIsDev } from '@/lib/constants'
 import { setSentryUser } from '@/lib/sentry'
+import { devAuthGrpc } from '@/api/grpc-unauth'
 
 const isElectron = !!window.electronAPI
 const getOAuthRedirectUrl = async (): Promise<string> => {
@@ -287,12 +288,38 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     })
 
     try {
+      if (isElectron) {
+        const oauthSession = await devAuthGrpc.startGitHubOAuthSignIn(120)
+        const { data, error } = await supabase.auth.setSession({
+          access_token: oauthSession.accessToken,
+          refresh_token: oauthSession.refreshToken,
+        })
+
+        if (error) {
+          logger.error('[AuthStore] Electron GitHub session hydration failed:', error)
+          set({ loading: false })
+          throw error
+        }
+
+        set({
+          user: data.user,
+          session: data.session,
+          loading: false,
+        })
+
+        await trackAuthFunnelEvent('oauth_succeeded', {
+          auth_method: 'github',
+          oauth_callback_transport: 'localhost',
+        })
+        return
+      }
+
       const redirectTo = await getOAuthRedirectUrl()
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'github',
         options: {
           redirectTo,
-          skipBrowserRedirect: true, // Always skip for manual handling
+          skipBrowserRedirect: true,
         },
       })
 
@@ -302,19 +329,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         throw error
       }
 
-      // Manually open the OAuth URL
       if (data?.url) {
-        if (isElectron && window.electronAPI) {
-          // In Electron, open in external browser
-          try {
-            await window.electronAPI.openExternal(data.url)
-          } catch (err) {
-            logger.error('[AuthStore] openExternal error:', err)
-          }
-        } else {
-          // In web, open in same window
-          window.location.href = data.url
-        }
+        window.location.href = data.url
       } else {
         logger.error('[AuthStore] No OAuth URL returned from Supabase')
       }
@@ -413,7 +429,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const { useChatNavigationStore } = await import('./chatNavigationStore')
       const { useAttachmentStore } = await import('./attachmentStore')
       const { useTasksStore } = await import('./tasksStore')
-      const { useBackgroundTasksStore } = await import('./backgroundTasksStore')
+      const { useProcessStore } = await import('./processStore')
 
       // Reset all stores (order matters: navigation first to trigger chat cleanup, then everything else)
       useChatNavigationStore.getState().reset()
@@ -422,7 +438,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       useWorktreeStore.getState().reset()
       useAttachmentStore.getState().reset()
       useTasksStore.getState().reset()
-      useBackgroundTasksStore.getState().reset()
+      useProcessStore.getState().reset()
 
       set({
         user: null,

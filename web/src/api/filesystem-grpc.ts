@@ -95,6 +95,9 @@ export interface ReplaceInFilesResult {
 // Map of cache keys to in-flight promises for getFileContent
 const pendingRequests = new Map<string, Promise<string>>();
 
+// Map of cache keys to in-flight promises for getFileTree
+const pendingFileTreeRequests = new Map<string, Promise<FileNode[]>>();
+
 // ============================================
 // Conversion Functions: Proto -> Frontend
 // ============================================
@@ -153,8 +156,20 @@ function protoPreviewInfoToFrontend(proto: ProtoFilePreviewInfo): FilePreviewInf
 }
 
 // ============================================
-// Sorting Helper
+// Tree Helpers
 // ============================================
+
+/**
+ * Recursively filters out hidden files/directories (names starting with '.')
+ */
+function filterHiddenFiles(nodes: FileNode[]): FileNode[] {
+  return nodes
+    .filter(node => !node.name.startsWith('.'))
+    .map(node => ({
+      ...node,
+      children: node.children ? filterHiddenFiles(node.children) : undefined,
+    }));
+}
 
 /**
  * Sorts file tree nodes: directories first (alphabetically), then files (alphabetically)
@@ -191,17 +206,34 @@ export const filesystemGrpc = {
     worktreeId?: string,
     chatId?: string
   ): Promise<FileNode[]> {
-    const client = await grpcClient.filesystem();
-    const request = create(GetFileTreeRequestSchema, {
-      projectId,
-      path,
-      showHidden,
-      worktreeId,
-      chatId,
-    });
-    const response = await client.getFileTree(request);
-    const files = response.files.map(protoFileNodeToFrontend);
-    return sortFileTree(files);
+    // Always fetch with showHidden=true so all callers share one in-flight request.
+    // Callers that want hidden files filtered get the result filtered client-side.
+    const cacheKey = `${projectId}:${worktreeId || 'main'}:${path}`;
+
+    let promise = pendingFileTreeRequests.get(cacheKey);
+    if (!promise) {
+      promise = (async () => {
+        try {
+          const client = await grpcClient.filesystem();
+          const request = create(GetFileTreeRequestSchema, {
+            projectId,
+            path,
+            showHidden: true,
+            worktreeId,
+            chatId,
+          });
+          const response = await client.getFileTree(request);
+          const files = response.files.map(protoFileNodeToFrontend);
+          return sortFileTree(files);
+        } finally {
+          pendingFileTreeRequests.delete(cacheKey);
+        }
+      })();
+      pendingFileTreeRequests.set(cacheKey, promise);
+    }
+
+    const result = await promise;
+    return showHidden ? result : filterHiddenFiles(result);
   },
 
   /**

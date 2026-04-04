@@ -13,7 +13,8 @@
 # deploy time: `user: root` in compose or securityContext in k8s.
 
 # ── Build ────────────────────────────────────────────────────────────────────
-FROM golang:1.25-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
+ARG TARGETARCH
 RUN apk add --no-cache git
 WORKDIR /app
 COPY go.mod go.sum ./
@@ -21,7 +22,7 @@ RUN go mod download
 COPY . .
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg \
-    CGO_ENABLED=0 go build -o /reliant ./cmd/reliant/
+    CGO_ENABLED=0 GOARCH=${TARGETARCH} go build -o /reliant ./cmd/reliant/
 
 # ── Runtime ──────────────────────────────────────────────────────────────────
 FROM alpine:3.21

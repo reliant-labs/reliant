@@ -247,6 +247,11 @@ func (i *AuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 
 		i.trackSession(ctx, claims, rawToken)
 
+		// Stash x-daemon-last-seen header in context for downstream daemon router.
+		if v := req.Header().Get("x-daemon-last-seen"); v != "" {
+			ctx = WithDaemonLastSeen(ctx, v)
+		}
+
 		return next(ctx, req)
 	}
 }
@@ -332,7 +337,8 @@ func NewTimeoutInterceptor() *TimeoutInterceptor {
 			"/reliant.v1.MCPService/UpdateServerConfig": 60 * time.Second,
 			"/reliant.v1.MCPService/UninstallServer":    60 * time.Second,
 			// OAuth flows - user must complete login in browser (120s app timeout + buffer)
-			"/reliant.v1.DaemonService/StartOAuthFlow": 150 * time.Second,
+			"/reliant.v1.DaemonService/StartOAuthFlow":         150 * time.Second,
+			"/reliant.v1.SystemService/StartGitHubOAuthSignIn": 150 * time.Second,
 			// OAuth token exchange - external network call
 			"/reliant.v1.SettingsService/CompleteClaudeOAuth": 30 * time.Second,
 			"/reliant.v1.SettingsService/CompleteCodexOAuth":  30 * time.Second,

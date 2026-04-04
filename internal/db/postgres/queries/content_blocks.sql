@@ -31,6 +31,11 @@ UPDATE message_content_blocks SET
     updated_at = NOW()
 WHERE id = $4;
 
+-- name: ListContentBlocksForMessages :many
+SELECT * FROM message_content_blocks
+WHERE message_id IN (sqlc.slice('message_ids'))
+ORDER BY message_id, position ASC;
+
 -- name: AppendToContentBlock :exec
 UPDATE message_content_blocks
 SET content = COALESCE(content, '') || $1,

@@ -38,7 +38,7 @@ params:
 
     Look at your task list — if tasks don't have dependencies between them, spawn agents for each and work on them concurrently. This is one of your biggest advantages over a human developer.
     
-    **NOTE**: spawning agents is not just good for parallel work, but also to conserve context which yields better results.
+    **NOTE**: spawning agents is not just good for parallel work, but also to conserve context which yields better results. You should prefer spawning agents over tackling work yourself.
   spawn_presets:
   - general
   - researcher

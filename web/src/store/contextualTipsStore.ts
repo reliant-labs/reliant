@@ -158,7 +158,17 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
       return;
     }
 
+    // Pessimistic: don't evaluate until dependent stores have completed
+    // their initial load.  Before that, empty arrays (worktrees: [],
+    // chats: Map()) are indistinguishable from "loaded but empty" and
+    // tips would evaluate against incomplete data — e.g. deciding the
+    // user has no worktrees when they simply haven't loaded yet.
     const chatState = useChatStore.getState();
+    const worktreeState = useWorktreeStore.getState();
+    if (!chatState.hasLoaded || !worktreeState.hasLoaded) {
+      return;
+    }
+
     const activeChatId = chatState.activeChatId;
     const activeMessages = activeChatId ? chatState.messages[activeChatId] || [] : [];
     const activeThreads = activeChatId
@@ -173,8 +183,7 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
         chats: Array.from(chatState.chats.values()),
         activeMessages,
         activeThreads,
-        hasNonMainWorktree: useWorktreeStore
-          .getState()
+        hasNonMainWorktree: worktreeState
           .worktrees.some((worktree) => !worktree.is_main && !worktree.deleted_at),
         threadInteractionEngaged: state.featureEngagement.threadInteraction || Boolean(state.tipState["spawned-thread-intro"].engagedAt),
         threadForceYieldEngaged: state.featureEngagement.threadForceYield,
@@ -197,10 +206,6 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
       return;
     }
 
-    // Only set the activeTipId here — shownCount is incremented later
-    // by confirmTipShown() once the coachmark is actually visible to the
-    // user.  This prevents data corruption from transient activeTipId
-    // changes during store-subscription reevaluation.
     set({ activeTipId: nextTip.id });
   },
 

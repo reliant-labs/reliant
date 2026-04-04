@@ -19,7 +19,7 @@ import { useActivityStore, ChatActivity } from "./activityStore";
 import { useThreadActivityStore } from "./threadActivityStore";
 import { BackgroundProcessStatus } from "../gen/reliant/v1/common_pb";
 import { UserUpdateType } from "../gen/reliant/v1/streaming_pb";
-import { useBackgroundTasksStore } from "./backgroundTasksStore";
+
 import { usePackageCommandsStore } from "./packageCommandsStore";
 import { useProcessStore } from "./processStore";
 import { useWorktreeStore } from "./worktreeStore";
@@ -30,6 +30,7 @@ import { logger } from "../lib/logger";
 import { showWorkflowCompletionNotification, showApprovalRequiredNotification, getNotificationPermission } from "../lib/notifications";
 import { getNotificationSoundOptions, useNotificationStore } from "./notificationStore";
 import { triggerRefetch, type RefetchType } from "./refetchStore";
+import { setDaemonLastSeen } from "../api/grpc-client";
 
 const LOG_PREFIX = "[🌐 GlobalUpdates]";
 
@@ -81,6 +82,9 @@ interface GlobalUpdatesState {
   connectionStatus: ConnectionStatus;
   lastSequence: number;
   
+  // Last known daemon heartbeat (unix seconds). Set via DAEMON_HEARTBEAT events.
+  daemonLastSeen: number | null;
+  
   // Currently subscribed chat ID for detail events
   subscribedChatId: string | null;
   
@@ -88,6 +92,7 @@ interface GlobalUpdatesState {
   wsService: UserStreamingService | null;
   
   // Actions
+  setLastSequence: (seq: number) => void;
   connect: () => void;
   disconnect: () => void;
   subscribeToChatDetails: (chatId: string) => void;
@@ -107,8 +112,13 @@ interface GlobalUpdatesState {
 export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
   connectionStatus: "disconnected",
   lastSequence: 0,
+  daemonLastSeen: null,
   subscribedChatId: null,
   wsService: null,
+
+  setLastSequence: (seq: number) => {
+    set({ lastSequence: seq });
+  },
 
   connect: () => {
     const state = get();
@@ -233,6 +243,15 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
         case UserUpdateType.REFETCH:
           handleRefetch(update);
           break;
+        case UserUpdateType.DAEMON_HEARTBEAT: {
+          const data = typeof update.data === "string" ? JSON.parse(update.data) : update.data;
+          if (data?.last_heartbeat) {
+            const ts = data.last_heartbeat as number;
+            set({ daemonLastSeen: ts });
+            setDaemonLastSeen(ts);
+          }
+          break;
+        }
         default:
           logger.debug(`${LOG_PREFIX} Unhandled update type: ${update.update_type}`);
       }
@@ -872,12 +891,6 @@ function handleProcessStarted(update: UserUpdate) {
     ports: data.ports,
   };
 
-  const bgStore = useBackgroundTasksStore.getState();
-  useBackgroundTasksStore.setState({
-    processes: [...bgStore.processes.filter(p => p.id !== data.process_id), newProcess],
-  });
-
-  // Also update processStore with full process data
   const processStore = useProcessStore.getState();
   useProcessStore.setState({
     processes: [...processStore.processes.filter(p => p.id !== data.process_id), newProcess],
@@ -961,17 +974,6 @@ function handleProcessPortChanged(update: UserUpdate) {
     portCount: data.ports?.length || 0,
   });
 
-  // Update backgroundTasksStore
-  const bgStore = useBackgroundTasksStore.getState();
-  useBackgroundTasksStore.setState({
-    processes: bgStore.processes.map((p) =>
-      p.id === data.process_id
-        ? { ...p, ports: data.ports }
-        : p
-    ),
-  });
-
-  // Update processStore
   const procStore = useProcessStore.getState();
   useProcessStore.setState({
     processes: procStore.processes.map((p) =>
@@ -1013,40 +1015,6 @@ function updateProcessStatus(
     chat_id: data.chat_id || update.chat_id,
     ports: data.ports,
   };
-
-  // Update backgroundTasksStore - upsert pattern
-  const bgStore = useBackgroundTasksStore.getState();
-  const bgProcessExists = bgStore.processes.some((p) => p.id === data.process_id);
-  logger.info(`${LOG_PREFIX} Updating bgStore`, {
-    processId: data.process_id.slice(0, 8),
-    status,
-    exists: bgProcessExists,
-    storeCount: bgStore.processes.length,
-  });
-  if (bgProcessExists) {
-    useBackgroundTasksStore.setState({
-      processes: bgStore.processes.map((p) =>
-        p.id === data.process_id
-          ? {
-              ...p,
-              status,
-              exit_code: data.exit_code,
-              end_time: data.end_time,
-              ports: data.ports || p.ports,
-            }
-          : p
-      ),
-    });
-  } else {
-    // Process doesn't exist - add it
-    logger.debug(`${LOG_PREFIX} Adding missing process on status update`, {
-      processId: data.process_id.slice(0, 8),
-      status,
-    });
-    useBackgroundTasksStore.setState({
-      processes: [fullProcess, ...bgStore.processes],
-    });
-  }
 
   // Update processStore - upsert pattern
   const procStore = useProcessStore.getState();

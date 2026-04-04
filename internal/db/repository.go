@@ -64,6 +64,7 @@ type Repository interface {
 	GetContentBlock(ctx context.Context, id string) (*MessageContentBlock, error)
 	GetContentBlockByToolCallID(ctx context.Context, toolCallID string) (*MessageContentBlock, error)
 	ListContentBlocks(ctx context.Context, messageID string) ([]*MessageContentBlock, error)
+	ListContentBlocksForMessages(ctx context.Context, messageIDs []string) ([]*MessageContentBlock, error)
 	UpdateContentBlock(ctx context.Context, block *MessageContentBlock) error
 	AppendToContentBlock(ctx context.Context, blockID string, delta string) error
 	AppendContentBlockDelta(ctx context.Context, chatID string, blockID string, delta string) error
@@ -236,7 +237,6 @@ type Repository interface {
 	GetLatestUserUpdateSequence(ctx context.Context, userID string) (int64, error)
 	GetUserUpdatesSince(ctx context.Context, userID string, sinceSeq int64, limit int) ([]UserUpdate, error)
 	CreateUserUpdate(ctx context.Context, update *UserUpdate) error
-
 	// Chat State Management
 	UpdateChatState(ctx context.Context, chatID string, state ChatState, reason string) error
 	UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error

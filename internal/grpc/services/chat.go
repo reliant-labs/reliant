@@ -839,9 +839,18 @@ func (s *ChatService) ListChats(
 		protoChats[i] = chatToProto(c)
 	}
 
+	// Get latest user update sequence for stream sync —
+	// the frontend uses this to connect the streaming RPC without redundant event replay.
+	latestSeq, err := s.database.GetLatestUserUpdateSequence(ctx, userID)
+	if err != nil {
+		// Non-fatal: log and return 0 so the frontend falls back to full replay
+		logging.Warn("Failed to get latest user update sequence", "error", err, "userID", userID)
+	}
+
 	return connect.NewResponse(&reliantv1.ListChatsResponse{
-		Chats: protoChats,
-		Total: int32(len(protoChats)),
+		Chats:                  protoChats,
+		Total:                  int32(len(protoChats)),
+		LastUserUpdateSequence: latestSeq,
 	}), nil
 }
 

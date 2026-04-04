@@ -37,7 +37,7 @@ import {
 import { useChatStore } from "../../store/chatStore";
 import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
-import { useBackgroundTasksStore } from "../../store/backgroundTasksStore";
+import { useProcessStore } from "../../store/processStore";
 import { useProjectStore } from "../../store/projectStore";
 import { cn, toTitleCase } from "../../lib/utils";
 import { Tooltip } from "../ui/Tooltip";
@@ -600,7 +600,7 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
   
   const worktrees = useWorktreeStore((state) => state.worktrees);
   const switchWorktreeContext = useWorktreeStore((state) => state.switchWorktreeContext);
-  const fetchProcesses = useBackgroundTasksStore(
+  const fetchProcesses = useProcessStore(
     (state) => state.fetchProcesses
   );
   const currentProject = useProjectStore((state) => state.currentProject);

@@ -89,14 +89,33 @@ func (s *PresetService) ListPresets(
 		}
 	}
 
+	// Batch-fetch visibility state (2 queries instead of 2×N)
+	presetItemType := int32(reliantv1.HiddenItemType_HIDDEN_ITEM_TYPE_PRESET)
+	overrides, err := s.database.ListVisibilityOverrides(ctx, userID, presetItemType)
+	if err != nil {
+		logging.Warn("Failed to batch-load visibility overrides for presets", "error", err)
+		overrides = nil
+	}
+	hiddenDefaults, err := s.database.ListHiddenItemDefaults(ctx, presetItemType)
+	if err != nil {
+		logging.Warn("Failed to batch-load hidden defaults for presets", "error", err)
+		hiddenDefaults = nil
+	}
+	hiddenDefaultSet := make(map[string]bool, len(hiddenDefaults))
+	for _, slug := range hiddenDefaults {
+		hiddenDefaultSet[slug] = true
+	}
+
 	// Set is_hidden and filter by visibility (unless include_hidden is set)
 	protoPresets := make([]*reliantv1.PresetInfo, 0, len(presetsBySlug))
 	for _, p := range presetsBySlug {
-		visible, err := s.database.IsItemVisible(ctx, userID, int32(reliantv1.HiddenItemType_HIDDEN_ITEM_TYPE_PRESET), p.Slug)
-		isHidden := err == nil && !visible
-		p.IsHidden = isHidden
+		visible, ok := overrides[p.Slug]
+		if !ok {
+			visible = !hiddenDefaultSet[p.Slug]
+		}
+		p.IsHidden = !visible
 
-		if req.Msg.IncludeHidden || !isHidden {
+		if req.Msg.IncludeHidden || visible {
 			protoPresets = append(protoPresets, p)
 		}
 	}
@@ -217,14 +236,33 @@ func (s *PresetService) ListPresetsForWorkflow(
 		}
 	}
 
+	// Batch-fetch visibility state (2 queries instead of 2×N)
+	presetItemType := int32(reliantv1.HiddenItemType_HIDDEN_ITEM_TYPE_PRESET)
+	overrides, err := s.database.ListVisibilityOverrides(ctx, userID, presetItemType)
+	if err != nil {
+		logging.Warn("Failed to batch-load visibility overrides for presets", "error", err)
+		overrides = nil
+	}
+	hiddenDefaults, err := s.database.ListHiddenItemDefaults(ctx, presetItemType)
+	if err != nil {
+		logging.Warn("Failed to batch-load hidden defaults for presets", "error", err)
+		hiddenDefaults = nil
+	}
+	hiddenDefaultSet := make(map[string]bool, len(hiddenDefaults))
+	for _, slug := range hiddenDefaults {
+		hiddenDefaultSet[slug] = true
+	}
+
 	// Set is_hidden and filter by visibility (unless include_hidden is set)
 	protoPresets := make([]*reliantv1.PresetInfo, 0, len(presetsBySlug))
 	for _, p := range presetsBySlug {
-		visible, err := s.database.IsItemVisible(ctx, userID, int32(reliantv1.HiddenItemType_HIDDEN_ITEM_TYPE_PRESET), p.Slug)
-		isHidden := err == nil && !visible
-		p.IsHidden = isHidden
+		visible, ok := overrides[p.Slug]
+		if !ok {
+			visible = !hiddenDefaultSet[p.Slug]
+		}
+		p.IsHidden = !visible
 
-		if req.Msg.IncludeHidden || !isHidden {
+		if req.Msg.IncludeHidden || visible {
 			protoPresets = append(protoPresets, p)
 		}
 	}

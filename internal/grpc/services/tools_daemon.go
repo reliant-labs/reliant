@@ -21,6 +21,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -50,6 +51,10 @@ type ToolsDaemonService struct {
 
 	monitorCancel context.CancelFunc
 	monitorDone   chan struct{}
+
+	// userUpdateHub is used to publish ephemeral daemon heartbeat events
+	// to the frontend via the streaming connection. Set via SetUserUpdateHub.
+	userUpdateHub streaming.UpdateHub[db.UserUpdate]
 }
 
 // daemonConnection represents an active daemon connection
@@ -112,6 +117,12 @@ func NewToolsDaemonServiceWithoutMonitor(database db.Repository) *ToolsDaemonSer
 	}
 }
 
+// SetUserUpdateHub configures the hub used to publish ephemeral daemon
+// heartbeat events to the frontend streaming connection.
+func (s *ToolsDaemonService) SetUserUpdateHub(hub streaming.UpdateHub[db.UserUpdate]) {
+	s.userUpdateHub = hub
+}
+
 // Close stops background workers owned by the daemon service.
 func (s *ToolsDaemonService) Close() {
 	if s == nil {
@@ -151,6 +162,30 @@ func (s *ToolsDaemonService) notifyDisconnected(userID, daemonID string) {
 	for _, l := range s.listeners {
 		l.OnDaemonDisconnected(userID, daemonID)
 	}
+}
+
+// publishDaemonHeartbeat publishes an ephemeral daemon heartbeat event
+// through the UserUpdateHub so the frontend knows the daemon is alive.
+// This is NOT persisted to the database — it's a fire-and-forget notification.
+func (s *ToolsDaemonService) publishDaemonHeartbeat(_ context.Context, userID, daemonID string, ts time.Time) {
+	if s.userUpdateHub == nil {
+		return
+	}
+	data, _ := json.Marshal(map[string]interface{}{
+		"daemon_id":      daemonID,
+		"last_heartbeat": ts.Unix(),
+	})
+	s.userUpdateHub.Publish(context.Background(), streaming.UpdateEvent[db.UserUpdate]{
+		Key: userID,
+		Payload: db.UserUpdate{
+			UserID:     userID,
+			UpdateType: db.UserUpdateDaemonHeartbeat,
+			EntityType: db.EntityTypeSystem,
+			EntityID:   daemonID,
+			Data:       data,
+			CreatedAt:  ts,
+		},
+	})
 }
 
 func (c *daemonConnection) closeDone() {
@@ -343,6 +378,10 @@ func (s *ToolsDaemonService) ConnectDaemon(
 	// Notify listeners outside the mutex.
 	s.notifyConnected(userID, daemonID)
 
+	// Publish an immediate heartbeat so the frontend knows the daemon is
+	// online without waiting for the first periodic heartbeat (up to 15s).
+	s.publishDaemonHeartbeat(context.Background(), userID, daemonID, time.Now().UTC())
+
 	// Send cloud-refactor registration acknowledgment containing config pull hints.
 	regAck := &reliantv1.ServerMessage{
 		Message: &reliantv1.ServerMessage_RegistrationAck{
@@ -441,9 +480,11 @@ func (s *ToolsDaemonService) handleIncoming(ctx context.Context, conn *daemonCon
 			}
 
 		case *reliantv1.DaemonMessage_Heartbeat:
-			if err := s.database.UpdateDaemonHeartbeat(ctx, conn.daemonID, time.Now().UTC()); err != nil {
+			now := time.Now().UTC()
+			if err := s.database.UpdateDaemonHeartbeat(ctx, conn.daemonID, now); err != nil {
 				logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to update heartbeat", "daemonID", conn.daemonID, "error", err)
 			}
+			s.publishDaemonHeartbeat(ctx, conn.userID, conn.daemonID, now)
 
 		case *reliantv1.DaemonMessage_ProjectDiscovery:
 			if err := s.handleProjectDiscovery(ctx, conn, m.ProjectDiscovery); err != nil {
@@ -1165,10 +1206,12 @@ func (s *ToolsDaemonService) SendDaemonCommand(ctx context.Context, userID strin
 	case resp := <-respCh:
 		return resp, nil
 	case <-time.After(timeout):
+		s.cancelDaemonCommand(userID, req.RequestId, "daemon command timed out")
 		return nil, fmt.Errorf("daemon command %q timed out after %s", req.CommandType, timeout)
 	case <-conn.done:
 		return nil, fmt.Errorf("daemon disconnected while waiting for command %q response", req.CommandType)
 	case <-ctx.Done():
+		s.cancelDaemonCommand(userID, req.RequestId, "daemon command caller cancelled")
 		return nil, ctx.Err()
 	}
 }
@@ -1242,7 +1285,15 @@ func (s *ToolsDaemonService) SendToolRequestSync(ctx context.Context, userID str
 	}
 }
 
-// SendToolExecutionCancel sends a tool cancellation request to connected daemon (scaffolding for PR1).
+func (s *ToolsDaemonService) cancelDaemonCommand(userID, requestID, reason string) {
+	if err := s.SendToolExecutionCancel(context.Background(), userID, requestID, reason); err != nil {
+		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to send daemon command cancel", "userID", userID, "requestID", requestID, "error", err)
+	}
+}
+
+// SendToolExecutionCancel sends a cancellation request to connected daemon.
+// This currently reuses the tool_cancel transport and request_id correlation for
+// both tool executions and generic daemon commands.
 func (s *ToolsDaemonService) SendToolExecutionCancel(_ context.Context, userID, requestID, reason string) error {
 	if strings.TrimSpace(requestID) == "" {
 		return nil
