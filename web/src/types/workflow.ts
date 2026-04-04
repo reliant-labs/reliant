@@ -23,7 +23,7 @@ import type {
   SubWorkflowArgs,
   LoopArgs,
 } from "../gen/reliant/v1/workflow_v2_pb";
-import { normalizeCelString } from "../lib/celAdapter";
+import { normalizeCelBoolean, normalizeCelString } from "../lib/celAdapter";
 import { TYPE_TO_CASE as ACTION_TYPE_TO_CASE } from "../lib/actionStepArgs";
 // =============================================================================
 // CORE TYPES - Plain objects derived from V2 proto via MessageInitShape
@@ -243,6 +243,41 @@ export function getStepWhile(step: Step): string {
   return ''
 }
 
+/** Get parallel flag from a loop step. Returns boolean or CEL expression string. */
+export function getStepParallel(step: Step): boolean | string | undefined {
+  if (step.args?.case === 'loop') {
+    const loopArgs = step.args.value as Partial<LoopArgs>
+    if (loopArgs?.parallel !== undefined) {
+      return normalizeCelBoolean(loopArgs.parallel, false)
+    }
+  }
+  return undefined
+}
+
+/** Get items CEL/string expression from a loop step */
+export function getStepItems(step: Step): string {
+  if (step.args?.case === 'loop') {
+    return normalizeCelString((step.args.value as Partial<LoopArgs>)?.items)
+  }
+  return ''
+}
+
+/** Get iteration key expression from a loop step */
+export function getStepKey(step: Step): string {
+  if (step.args?.case === 'loop') {
+    return normalizeCelString((step.args.value as Partial<LoopArgs>)?.key)
+  }
+  return ''
+}
+
+/** Get on_failure setting from a loop step */
+export function getStepOnFailure(step: Step): string {
+  if (step.args?.case === 'loop') {
+    return normalizeCelString((step.args.value as Partial<LoopArgs>)?.onFailure)
+  }
+  return ''
+}
+
 /** Get the inputs map (args) from a workflow or loop step */
 export function getStepInputs(step: Step): Record<string, unknown> {
   if (step.args?.case === 'workflow') {
@@ -285,13 +320,16 @@ export function getStepProject(step: Step): ProjectConfig | undefined {
   return undefined
 }
 
-/** Get thread config from a workflow step (reads from args oneof) */
+/** Get thread config from a workflow or loop step (reads from args oneof) */
 export function getStepThread(step: Step): NodeThreadConfig | undefined {
   if (step.args?.case === 'workflow') {
     return (step.args.value as Partial<SubWorkflowArgs>)?.thread as NodeThreadConfig | undefined
   }
-  if (step.type === 'workflow' && step.args?.value) {
-    return (step.args.value as Partial<SubWorkflowArgs>)?.thread as NodeThreadConfig | undefined
+  if (step.args?.case === 'loop') {
+    return (step.args.value as Partial<LoopArgs>)?.thread as NodeThreadConfig | undefined
+  }
+  if ((step.type === 'workflow' || step.type === 'loop') && step.args?.value) {
+    return (step.args.value as Partial<SubWorkflowArgs & LoopArgs>)?.thread as NodeThreadConfig | undefined
   }
   return undefined
 }
@@ -397,5 +435,3 @@ function normalizeSwitchSource(from: string): string {
 export function getSwitchNodeId(from: string): string {
   return `switch-${encodeSwitchKey(normalizeSwitchSource(from))}`;
 }
-
-

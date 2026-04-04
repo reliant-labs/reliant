@@ -9,6 +9,7 @@ import {
   isJoinStep,
   getStepInline,
   getStepRef,
+  getStepParallel,
 } from "../../../types/workflow";
 import type { NodeInputField } from "../../../gen/reliant/v1/catalog_pb";
 
@@ -198,12 +199,37 @@ export function NodeOutputsPanel({
       },
     ];
   } else if (isLoopStep(step)) {
+    const isParallel = getStepParallel(step) === true || typeof getStepParallel(step) === "string";
     const systemFields: OutputField[] = [
       {
         name: "_iterations",
         type: "integer",
         description: "Total loop iterations completed",
       },
+      ...(isParallel
+        ? [
+            {
+              name: "_results",
+              type: "map",
+              description: "Map of iteration key to sub-workflow outputs for each parallel iteration",
+            },
+            {
+              name: "_completed",
+              type: "integer",
+              description: "Count of successful parallel iterations",
+            },
+            {
+              name: "_failed",
+              type: "integer",
+              description: "Count of failed parallel iterations",
+            },
+            {
+              name: "_parallel",
+              type: "boolean",
+              description: "Whether the loop executed in parallel mode",
+            },
+          ]
+        : []),
     ];
 
     const inline = getStepInline(step);
@@ -284,6 +310,15 @@ export function NodeOutputsPanel({
         Reference these outputs in downstream nodes using{" "}
         <code className="bg-muted px-1 rounded">nodes.{stepId}.field</code>
       </div>
+
+      {isLoopStep(step) && (getStepParallel(step) === true || typeof getStepParallel(step) === "string") && (
+        <div className="cpv2-info-banner mb-3">
+          <Info className="w-3.5 h-3.5 shrink-0" />
+          <span>
+            Parallel loops expose per-iteration outputs via <code className="bg-muted px-1 rounded">nodes.{stepId}._results</code> plus summary fields for completed, failed, and parallel execution state.
+          </span>
+        </div>
+      )}
 
       {/* Info banner for ref-based workflow/loop */}
       {infoBanner && (

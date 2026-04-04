@@ -12,7 +12,7 @@ import { memo } from 'react'
 import { Handle, Position, useNodeConnections, NodeResizer } from '@xyflow/react'
 import { RefreshCw, ChevronLeft, ChevronRight, CheckCircle2, XCircle, Loader2, Circle, Minimize2 } from 'lucide-react'
 import type { LoopStep } from '../../../types/workflow'
-import { getStepWhile } from '../../../types/workflow'
+import { getStepWhile, getStepParallel, getStepItems, getStepKey, getStepOnFailure } from '../../../types/workflow'
 import type { NodeExecutionStatus } from '../../../lib/workflow-flow'
 import { buildHandleClassName } from './NodeStatusWrapper'
 import { normalizeWorkflowRef } from '../useWorkflowInputs'
@@ -154,6 +154,11 @@ export const ExpandedLoopNode = memo(({ id, data, selected }: ExpandedLoopNodePr
     maxIterations,
   } = data
   const stepWhile = getStepWhile(step)
+  const stepParallel = getStepParallel(step)
+  const stepItems = getStepItems(step)
+  const stepKey = getStepKey(step)
+  const stepOnFailure = getStepOnFailure(step)
+  const isParallel = stepParallel === true || typeof stepParallel === 'string'
 
   const targetConnections = useNodeConnections({ handleType: 'target' })
   const sourceConnections = useNodeConnections({ handleType: 'source' })
@@ -273,12 +278,29 @@ export const ExpandedLoopNode = memo(({ id, data, selected }: ExpandedLoopNodePr
           {/* This is just the container */}
         </div>
 
-        {/* Footer with while condition */}
-        {stepWhile && (
-          <div className="px-3 py-1.5 bg-violet-50/70 dark:bg-violet-900/50 border-t border-violet-200 dark:border-violet-700">
-            <div className="text-[10px] text-violet-600 dark:text-violet-400 font-mono truncate" title={stepWhile}>
-              while: {stepWhile}
-            </div>
+        {/* Footer with loop config summary */}
+        {(stepWhile || stepItems || (isParallel && (stepKey || stepOnFailure))) && (
+          <div className="px-3 py-1.5 bg-violet-50/70 dark:bg-violet-900/50 border-t border-violet-200 dark:border-violet-700 space-y-1">
+            {stepItems && (
+              <div className="text-[10px] text-violet-600 dark:text-violet-400 font-mono truncate" title={stepItems}>
+                items: {stepItems}
+              </div>
+            )}
+            {stepWhile && (
+              <div className="text-[10px] text-violet-600 dark:text-violet-400 font-mono truncate" title={stepWhile}>
+                while: {stepWhile}
+              </div>
+            )}
+            {isParallel && stepKey && (
+              <div className="text-[10px] text-violet-600 dark:text-violet-400 font-mono truncate" title={stepKey}>
+                key: {stepKey}
+              </div>
+            )}
+            {isParallel && stepOnFailure && (
+              <div className="text-[10px] text-violet-600 dark:text-violet-400 truncate">
+                on_failure: {stepOnFailure}
+              </div>
+            )}
           </div>
         )}
       </div>
