@@ -65,16 +65,18 @@ export function InlineLoopInputsEditor({
   );
 }
 
-const PARALLEL_FIELD_SCHEMA: ProtoFieldSchema = {
-  key: "parallel",
-  label: "Run iterations in parallel",
-  widget: "checkbox",
-  valueKind: "boolean",
-  celCapable: true,
-  defaultValue: false,
-  omitIfDefault: true,
+const LOOP_MODE_SCHEMA: ProtoFieldSchema = {
+  key: "mode",
+  label: "Mode",
+  widget: "select",
+  valueKind: "string",
+  defaultValue: "sequential",
+  options: [
+    { value: "sequential", label: "Sequential" },
+    { value: "parallel", label: "Parallel" },
+  ],
   helpText:
-    "Run all iterations concurrently. Parallel loops require Items and use per-iteration outputs in _results.",
+    "Sequential loops use While. Parallel loops use Items and expose per-iteration outputs via _results.",
 };
 
 const ON_FAILURE_SCHEMA: ProtoFieldSchema = {
@@ -106,9 +108,38 @@ export function LoopStepConfig({
   const stepInputs = getStepInputs(step);
   const parallelValue = getStepParallel(step);
   const itemsValue = getStepItems(step);
+  const whileValue = getStepWhile(step);
   const keyValue = getStepKey(step);
   const onFailureValue = getStepOnFailure(step) || "continue";
   const isParallel = parallelValue === true || (typeof parallelValue === "string" && parallelValue.length > 0);
+  const modeValue = isParallel ? "parallel" : "sequential";
+
+  const handleModeChange = (value: unknown) => {
+    const nextMode = value === "parallel" ? "parallel" : "sequential";
+
+    if (nextMode === modeValue) {
+      return;
+    }
+
+    if (nextMode === "parallel") {
+      onUpdate(
+        withLoopArgs(step, {
+          parallel: true,
+          while: undefined,
+        }) as LoopStep,
+      );
+      return;
+    }
+
+    onUpdate(
+      withLoopArgs(step, {
+        parallel: undefined,
+        items: undefined,
+        key: undefined,
+        onFailure: undefined,
+      }) as LoopStep,
+    );
+  };
 
   // Initialize inline workflow if it doesn't exist
   const inlineWorkflow = getStepInline(step);
@@ -166,41 +197,32 @@ export function LoopStepConfig({
         )}
 
       <ProtoFieldRenderer
-        schema={PARALLEL_FIELD_SCHEMA}
-        value={parallelValue}
-        onChange={(value) =>
-          onUpdate(
-            withLoopArgs(step, {
-              parallel:
-                value === undefined || value === false || value === ""
-                  ? undefined
-                  : typeof value === "string"
-                    ? celString(value) as any
-                    : Boolean(value),
-            }) as LoopStep,
-          )
-        }
+        schema={LOOP_MODE_SCHEMA}
+        value={modeValue}
+        onChange={handleModeChange}
         disabled={isReadOnly}
-        celContext="thread"
+        celContext="workflow"
       />
 
-      <CELExpressionInput
-        label="Items"
-        helpTooltip="CEL expression that evaluates to a list or map of iteration items. Required for parallel loops, optional for sequential loops."
-        value={itemsValue}
-        onChange={(val) =>
-          onUpdate(
-            withLoopArgs(step, {
-              items: val ? celString(val) as any : undefined,
-            }) as LoopStep,
-          )
-        }
-        placeholder="nodes.decompose.output.components"
-        celContext="workflow"
-        disabled={isReadOnly}
-        hideCELHint
-        showCELIndicator={false}
-      />
+      {isParallel && (
+        <CELExpressionInput
+          label="Items"
+          helpTooltip="CEL expression that evaluates to a list or map of iteration items for parallel execution."
+          value={itemsValue}
+          onChange={(val) =>
+            onUpdate(
+              withLoopArgs(step, {
+                items: val ? celString(val) as any : undefined,
+              }) as LoopStep,
+            )
+          }
+          placeholder="nodes.decompose.output.components"
+          celContext="workflow"
+          disabled={isReadOnly}
+          hideCELHint
+          showCELIndicator={false}
+        />
+      )}
 
       {isParallel && (
         <CELExpressionInput
@@ -242,7 +264,7 @@ export function LoopStepConfig({
         <CELExpressionInput
           label="While (optional)"
           helpTooltip="CEL expression that ends the loop when true. Access iteration outputs via 'outputs' namespace."
-          value={getStepWhile(step)}
+          value={whileValue}
           onChange={(val) =>
             onUpdate(
               withLoopArgs(step, {
