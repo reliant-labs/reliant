@@ -3,7 +3,12 @@ package openai
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
+
+	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/models"
+	llmtools "github.com/reliant-labs/reliant/internal/llm/tools"
 )
 
 func TestNormalizeResponsesToolSchema_EmptyObjectStaysObject(t *testing.T) {
@@ -287,6 +292,79 @@ func TestValidateResponsesToolSchemaStrict_RejectsNonObjectItems(t *testing.T) {
 			t.Fatal("expected non-object items nested under anyOf to be rejected")
 		}
 	})
+}
+
+func TestSanitizeChatToolSchema_RemovesBooleanSchemaNodesFromChatPayload(t *testing.T) {
+	registry := models.MustGetRegistry()
+	def, ok := registry.GetDefinition(string(models.GPT54Mini))
+	if !ok {
+		t.Fatalf("missing model %s", models.GPT54Mini)
+	}
+
+	client := NewClient(llm.DriverOptions{Model: def.ToModel()})
+	tool := llmtools.NewSchemaOnlyTool(
+		"mcp__example__broken",
+		"Broken MCP-like schema",
+		map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"config": map[string]any{
+					"type":                 "object",
+					"additionalProperties": false,
+					"properties": map[string]any{
+						"enabled": map[string]any{"type": "boolean"},
+					},
+				},
+				"values": map[string]any{
+					"type":  "array",
+					"items": false,
+				},
+				"mode": map[string]any{
+					"anyOf": []any{
+						false,
+						map[string]any{"type": "string"},
+					},
+				},
+			},
+			"required": []string{"config", "values", "mode"},
+		},
+	)
+
+	converted := client.ConvertTools([]llmtools.Tool{tool})
+	if len(converted) != 1 || converted[0].OfFunction == nil {
+		t.Fatalf("expected single function tool")
+	}
+
+	payload, err := json.Marshal(converted[0].OfFunction.Function.Parameters)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	payloadStr := string(payload)
+	if strings.Contains(payloadStr, `"additionalProperties":false`) {
+		t.Fatalf("expected chat payload to strip boolean additionalProperties, got %s", payloadStr)
+	}
+	if strings.Contains(payloadStr, `"items":false`) || strings.Contains(payloadStr, `"items":true`) {
+		t.Fatalf("expected chat payload to rewrite boolean items, got %s", payloadStr)
+	}
+	if strings.Contains(payloadStr, `[false,`) || strings.Contains(payloadStr, `,false]`) || strings.Contains(payloadStr, `,false,`) {
+		t.Fatalf("expected chat payload combinators to avoid boolean schema entries, got %s", payloadStr)
+	}
+
+	var root map[string]any
+	if err := json.Unmarshal(payload, &root); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	props, ok := root["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected properties map in payload")
+	}
+	values, ok := props["values"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected values property map")
+	}
+	if _, ok := values["items"].(map[string]any); !ok {
+		t.Fatalf("expected values.items to be object schema, got %#v", values["items"])
+	}
 }
 
 func TestRewriteMapSchemaToKVArray(t *testing.T) {

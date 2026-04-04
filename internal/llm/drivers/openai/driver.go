@@ -163,11 +163,29 @@ func (o *OpenaiClient) ConvertTools(tools []tools.Tool) []openai.ChatCompletionT
 			required = []string{}
 		}
 
-		// Convert properties from OrderedMap to regular map for OpenAI
+		// Convert properties from OrderedMap to regular map for OpenAI.
+		// Sanitize nested boolean JSON Schema nodes because some OpenAI-compatible
+		// gateway stacks (notably LiteLLM -> Vertex Gemini) choke on boolean schema
+		// values inside tool parameter properties even when OpenAI itself accepts them.
 		properties := make(map[string]interface{})
 		if schema.Properties != nil {
 			for pair := schema.Properties.Oldest(); pair != nil; pair = pair.Next() {
-				properties[pair.Key] = pair.Value
+				propertyJSON, err := json.Marshal(pair.Value)
+				if err != nil {
+					properties[pair.Key] = pair.Value
+					continue
+				}
+				var propertyValue any
+				if err := json.Unmarshal(propertyJSON, &propertyValue); err != nil {
+					properties[pair.Key] = pair.Value
+					continue
+				}
+				if propertyMap, ok := propertyValue.(map[string]any); ok {
+					SanitizeChatToolSchema(propertyMap)
+					properties[pair.Key] = propertyMap
+					continue
+				}
+				properties[pair.Key] = propertyValue
 			}
 		}
 

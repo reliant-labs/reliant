@@ -173,6 +173,56 @@ func ValidateResponsesToolSchemaStrict(schema map[string]any) error {
 	return validateResponsesToolSchemaStrictAtPath(schema, "$")
 }
 
+// SanitizeChatToolSchema mutates a chat-completions tool schema into a safer
+// OpenAI-compatible subset for gateway stacks that choke on boolean JSON Schema
+// nodes (for example additionalProperties=false or items=false nested inside
+// property definitions).
+//
+// Unlike NormalizeResponsesToolSchema, this is intentionally conservative:
+// - root schema handling happens in ConvertTools
+// - nested object/array/combinator structure is preserved where possible
+// - boolean schema nodes are deleted or replaced with empty object schemas
+func SanitizeChatToolSchema(schema map[string]any) {
+	if schema == nil {
+		return
+	}
+	for key, raw := range schema {
+		switch key {
+		case "additionalProperties":
+			if _, ok := raw.(bool); ok {
+				delete(schema, key)
+				continue
+			}
+		case "items", "contains", "not", "if", "then", "else", "unevaluatedProperties", "propertyNames":
+			if _, ok := raw.(bool); ok {
+				schema[key] = map[string]any{}
+				continue
+			}
+		}
+
+		schema[key] = sanitizeChatToolSchemaValue(raw)
+	}
+}
+
+func sanitizeChatToolSchemaValue(value any) any {
+	switch v := value.(type) {
+	case map[string]any:
+		SanitizeChatToolSchema(v)
+		return v
+	case []any:
+		for i, item := range v {
+			if _, ok := item.(bool); ok {
+				v[i] = map[string]any{}
+				continue
+			}
+			v[i] = sanitizeChatToolSchemaValue(item)
+		}
+		return v
+	default:
+		return value
+	}
+}
+
 func validateResponsesToolSchemaStrictAtPath(schema map[string]any, path string) error {
 	if schema == nil {
 		return fmt.Errorf("%s: schema is nil", path)
