@@ -12,15 +12,16 @@ description: |
        the next implement iteration handles that.
 
   Context management:
-    Only the review feedback is saved to the parent thread (compact).
-    Implementation narratives, diffs, and check details are NOT saved — avoiding
-    context pollution across iterations. The refactor already cleaned the workspace,
-    so the next implement only needs the reviewer's guidance + the original request.
+    Review feedback AND implementation summaries are saved to the parent thread.
+    The reviewer accumulates context across iterations (memo: true) so it can
+    build on its own prior analysis. Implementation forks are still fresh each
+    iteration, but the agent sees accumulated review feedback + implementation
+    summaries from the parent thread.
 
   Thread architecture:
-    attempt loop inherits main thread (parent thread = original user message + review feedback).
-    implement forks — fresh each iteration. Sees original request + accumulated review feedback.
-    review forks — gets diff and check results via inject (node references).
+    attempt loop inherits main thread (parent thread = original user message + review/impl feedback).
+    implement forks — fresh each iteration. Sees original request + accumulated review feedback + implementation summaries.
+    review forks — memo'd across iterations. Builds on its own prior analysis + check results via inject.
     refactor forks — gets review feedback via inject (node references).
 
 entry: [attempt]
@@ -154,13 +155,18 @@ nodes:
 
                 Implement the requested changes. Start by investigating the relevant code, then make your changes and run tests to verify them.
 
-                The review feedback from previous attempts (if any) is in the conversation above. Use it to guide your implementation.
+                The review feedback and implementation summaries from previous attempts (if any) are in the conversation above. Use them to guide your implementation.
 
                 After finishing, summarize:
                 1. What you changed and why
                 2. What tests you ran and their results
                 3. What surprised you about the codebase
                 4. What you're uncertain about
+          save_message:
+            role: assistant
+            content: |
+              ## Implementation Notes (Attempt {{iter.iteration + 1}})
+              {{output.response_text}}
 
         - id: lint
           type: run
@@ -225,7 +231,7 @@ nodes:
                     - What specific improvements should the next attempt make
           thread:
             mode: fork
-            memo: false
+            memo: true
             inject:
               role: user
               content: |
@@ -238,15 +244,18 @@ nodes:
 
                 {{inputs.start_app_command != '' ? 'The application is running at: http://localhost:' + string(inputs.app_port) + ' — spawn the ux_reviewer to audit it via Chrome DevTools.' : ''}}
 
-                Analyze the implementation attempt. Your job:
+                Analyze the implementation attempt. Your prior reviews (if any) are in this thread — use them to track progress across attempts.
+
+                Your job:
                 1. Is the implementation correct and complete? Grade it.
                 2. Decide the strategy: pass, continue, or refactor.
                 3. Write detailed feedback for the next attempt.
 
-                **Your feedback is the ONLY bridge to the next attempt.**
-                The next agent starts fresh — it won't see the code diff or your full analysis.
+                **Your feedback is the primary bridge to the next attempt.**
+                The next implement agent starts with a fresh fork but sees your accumulated review
+                feedback and implementation summaries on the parent thread.
                 Be thorough: describe what worked, what didn't, what patterns in the codebase
-                matter, and what approach should be taken.
+                matter, and what approach should be taken. Reference your prior reviews when relevant.
 
                 **Strategy guidance:**
                 - **pass**: implementation is correct and complete. Break the loop.
