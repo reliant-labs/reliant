@@ -1,11 +1,8 @@
-// Copyright (c) 2025 Reliant Labs
 package daemonruntime
 
 import (
 	"io"
 	"sync"
-
-	"connectrpc.com/connect"
 
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -26,20 +23,25 @@ func newTerminalPumpTracker() *terminalPumpTracker {
 	}
 }
 
-func (t *terminalPumpTracker) add(sessionID string, stop func()) {
+func (t *terminalPumpTracker) add(id string, stop func()) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	// If there's already a pump for this session, stop it first.
-	if existing, ok := t.pumps[sessionID]; ok {
-		existing()
-	}
-	t.pumps[sessionID] = stop
+	t.pumps[id] = stop
 }
 
-func (t *terminalPumpTracker) remove(sessionID string) {
+func (t *terminalPumpTracker) remove(id string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	delete(t.pumps, sessionID)
+	delete(t.pumps, id)
+}
+
+func (t *terminalPumpTracker) stop(id string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if stop, ok := t.pumps[id]; ok {
+		stop()
+		delete(t.pumps, id)
+	}
 }
 
 func (t *terminalPumpTracker) stopAll() {
@@ -53,7 +55,6 @@ func (t *terminalPumpTracker) stopAll() {
 
 // handleTerminalInput writes raw bytes into the PTY for the given session.
 func (d *daemonClient) handleTerminalInput(
-	stream *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage],
 	msg *reliantv1.TerminalInputMessage,
 ) {
 	if terminalManager == nil {
@@ -70,7 +71,7 @@ func (d *daemonClient) handleTerminalInput(
 		logging.Warn(logPrefix+" Failed to write terminal input",
 			"sessionID", sessionID, "error", err)
 		// Notify the server that the session has an error.
-		_ = d.send(stream, &reliantv1.DaemonMessage{
+		_ = d.send(&reliantv1.DaemonMessage{
 			Message: &reliantv1.DaemonMessage_TerminalSessionEvent{
 				TerminalSessionEvent: &reliantv1.TerminalSessionEvent{
 					SessionId: sessionID,
@@ -84,7 +85,6 @@ func (d *daemonClient) handleTerminalInput(
 
 // handleTerminalResize resizes the PTY for the given session.
 func (d *daemonClient) handleTerminalResize(
-	stream *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage],
 	msg *reliantv1.TerminalResizeMessage,
 ) {
 	if terminalManager == nil {
@@ -101,7 +101,7 @@ func (d *daemonClient) handleTerminalResize(
 	if err := terminalManager.Resize(sessionID, cols, rows); err != nil {
 		logging.Warn(logPrefix+" Failed to resize terminal",
 			"sessionID", sessionID, "cols", cols, "rows", rows, "error", err)
-		_ = d.send(stream, &reliantv1.DaemonMessage{
+		_ = d.send(&reliantv1.DaemonMessage{
 			Message: &reliantv1.DaemonMessage_TerminalSessionEvent{
 				TerminalSessionEvent: &reliantv1.TerminalSessionEvent{
 					SessionId: sessionID,
@@ -118,7 +118,6 @@ func (d *daemonClient) handleTerminalResize(
 // the stream. It sends a TerminalSessionEvent when the session closes or
 // encounters an error.
 func (d *daemonClient) startTerminalOutputPump(
-	stream *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage],
 	sessionID string,
 ) {
 	if terminalManager == nil {
@@ -154,7 +153,7 @@ func (d *daemonClient) startTerminalOutputPump(
 			if n > 0 {
 				chunk := make([]byte, n)
 				copy(chunk, buf[:n])
-				sendErr := d.send(stream, &reliantv1.DaemonMessage{
+				sendErr := d.send(&reliantv1.DaemonMessage{
 					Message: &reliantv1.DaemonMessage_TerminalOutput{
 						TerminalOutput: &reliantv1.TerminalOutputMessage{
 							SessionId: sessionID,
@@ -176,7 +175,7 @@ func (d *daemonClient) startTerminalOutputPump(
 					eventType = reliantv1.TerminalSessionEvent_EVENT_TYPE_ERROR
 					msg = err.Error()
 				}
-				_ = d.send(stream, &reliantv1.DaemonMessage{
+				_ = d.send(&reliantv1.DaemonMessage{
 					Message: &reliantv1.DaemonMessage_TerminalSessionEvent{
 						TerminalSessionEvent: &reliantv1.TerminalSessionEvent{
 							SessionId: sessionID,

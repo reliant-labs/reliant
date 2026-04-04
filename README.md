@@ -6,6 +6,14 @@
 <img width="2184" height="1390" alt="546819518-cecdb7c2-1ee6-4c03-bc45-6b1feb44a8dd" src="https://reliantlabs.io/assets/Create_Workflows_ListItem.webp" /> 
 </p>
 
+<p align="center">
+  <a href="https://reliantlabs.io">Website</a>
+  ·
+  <a href="https://docs.reliantlabs.io/docs/">Docs</a>
+  ·
+  <a href="https://join.slack.com/t/reliant-pn51441/shared_invite/zt-3g6mhfnhx-~CWMzNRZUylWHevlJXO89A">Slack</a>
+</p>
+
 Reliant is a desktop AI coding assistant that goes beyond chat. Interact with your codebase through natural conversation, then extend that interaction with programmable workflows that automate complex, multi-step development tasks.
 
 ## Key Features
@@ -28,14 +36,14 @@ brew install --cask reliant-labs/reliant/reliant
 
 ### Direct Download
 
-| Platform | Download |
-|----------|----------|
-| macOS (Apple Silicon) | [Reliant-latest-mac-arm64.dmg](https://downloads.reliantlabs.io/Reliant-latest-mac-arm64.dmg) |
-| macOS (Intel) | [Reliant-latest-mac-x64.dmg](https://downloads.reliantlabs.io/Reliant-latest-mac-x64.dmg) |
-| Windows (x64) | [Reliant-latest-win-x64.exe](https://downloads.reliantlabs.io/Reliant-latest-win-x64.exe) |
-| Windows (ARM) | [Reliant-latest-win-arm64.exe](https://downloads.reliantlabs.io/Reliant-latest-win-arm64.exe) |
-| Linux (x86_64) | [Reliant-latest-linux-x86_64.AppImage](https://downloads.reliantlabs.io/Reliant-latest-linux-x86_64.AppImage) |
-| Linux (ARM64) | [Reliant-latest-linux-arm64.AppImage](https://downloads.reliantlabs.io/Reliant-latest-linux-arm64.AppImage) |
+| Platform              | Download                                                                                                      |
+| --------------------- | ------------------------------------------------------------------------------------------------------------- |
+| macOS (Apple Silicon) | [Reliant-latest-mac-arm64.dmg](https://downloads.reliantlabs.io/Reliant-latest-mac-arm64.dmg)                 |
+| macOS (Intel)         | [Reliant-latest-mac-x64.dmg](https://downloads.reliantlabs.io/Reliant-latest-mac-x64.dmg)                     |
+| Windows (x64)         | [Reliant-latest-win-x64.exe](https://downloads.reliantlabs.io/Reliant-latest-win-x64.exe)                     |
+| Windows (ARM)         | [Reliant-latest-win-arm64.exe](https://downloads.reliantlabs.io/Reliant-latest-win-arm64.exe)                 |
+| Linux (x86_64)        | [Reliant-latest-linux-x86_64.AppImage](https://downloads.reliantlabs.io/Reliant-latest-linux-x86_64.AppImage) |
+| Linux (ARM64)         | [Reliant-latest-linux-arm64.AppImage](https://downloads.reliantlabs.io/Reliant-latest-linux-arm64.AppImage)   |
 
 ## Quick Start
 
@@ -67,11 +75,11 @@ The agent reads your codebase, plans changes, implements them, and verifies they
 
 ### Execution Modes
 
-| Mode | Description |
-|------|-------------|
-| **Auto** | Agent works autonomously, auto-approving tool calls |
-| **Manual** | You approve each tool execution |
-| **Plan** | Read-only exploration, outputs a task plan |
+| Mode       | Description                                         |
+| ---------- | --------------------------------------------------- |
+| **Auto**   | Agent works autonomously, auto-approving tool calls |
+| **Manual** | You approve each tool execution                     |
+| **Plan**   | Read-only exploration, outputs a task plan          |
 
 ### Workflows as Code
 
@@ -96,16 +104,16 @@ nodes:
 
 ## Supported Providers
 
-| Provider | Models |
-|----------|--------|
-| Anthropic | Claude 4 Opus, Claude 4 Sonnet, Claude 3.5 Sonnet, Claude 3.5 Haiku |
-| OpenAI | GPT-4.1, GPT-4o, O1, O3, O4-mini |
-| Google | Gemini 2.5 Pro, Gemini 2.5 Flash, Gemini 2.0 Flash |
-| GitHub Copilot | Access to Claude, GPT, Gemini, and O-series models |
-| AWS Bedrock | Claude models via AWS |
-| Azure OpenAI | GPT models via Azure |
-| Groq | Llama, Mixtral |
-| OpenRouter | 100+ models from various providers |
+| Provider       | Models                                                              |
+| -------------- | ------------------------------------------------------------------- |
+| Anthropic      | Claude 4 Opus, Claude 4 Sonnet, Claude 3.5 Sonnet, Claude 3.5 Haiku |
+| OpenAI         | GPT-4.1, GPT-4o, O1, O3, O4-mini                                    |
+| Google         | Gemini 2.5 Pro, Gemini 2.5 Flash, Gemini 2.0 Flash                  |
+| GitHub Copilot | Access to Claude, GPT, Gemini, and O-series models                  |
+| AWS Bedrock    | Claude models via AWS                                               |
+| Azure OpenAI   | GPT models via Azure                                                |
+| Groq           | Llama, Mixtral                                                      |
+| OpenRouter     | 100+ models from various providers                                  |
 
 ## Community
 
@@ -119,4 +127,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and the [`contribut
 
 ## License
 
-Copyright (c) 2026 Reliant Labs. All rights reserved.
+Copyright (c) 2026 Reliant Labs, Inc. Licensed under the [Business Source License 1.1](LICENSE).

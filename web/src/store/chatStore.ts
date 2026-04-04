@@ -557,6 +557,7 @@ interface ChatStoreState {
 
   // Global loading/error states
   isLoading: boolean;
+  hasLoaded: boolean;
   error: string | null;
 
   // Track chats currently being deleted (to prevent duplicate delete operations)
@@ -767,6 +768,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   activeChatId: null,
   pendingNewChatWorktreeId: null,
   isLoading: false,
+  hasLoaded: false,
   error: null,
   deletingChatIds: new Set(),
   pendingStatusFetches: {},
@@ -835,6 +837,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           chats: mergedChats,
           chatOrder,
           isLoading: false,
+          hasLoaded: true,
         });
 
         // Merge activity from ListChats into activityStore.
@@ -878,7 +881,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         }
       } catch (error) {
         logger.error("Failed to load chats:", error);
-        set({ error: "Failed to load chats", isLoading: false });
+        set({ error: "Failed to load chats", isLoading: false, hasLoaded: true });
       }
     });
   },
@@ -3925,6 +3928,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       activeChatId: null,
       pendingNewChatWorktreeId: null,
       isLoading: false,
+      hasLoaded: false,
       error: null,
       deletingChatIds: new Set(),
       pendingStatusFetches: {},

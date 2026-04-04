@@ -920,18 +920,16 @@ function App() {
 
         if (!mounted) return;
 
-        // Load projects first
-        await loadProjects();
-
-        // Check if a project is already selected (e.g. from a previous session)
-        const project = useProjectStore.getState().currentProject;
-        if (project) {
-          await useChatStore.getState().loadChats();
+        // Projects are loaded in parallel by Root.tsx's Promise.all.
+        // Safety net: if they haven't loaded yet (e.g. Root.tsx load failed), retry here.
+        const projectStore = useProjectStore.getState();
+        if (projectStore.projects.length === 0 && !projectStore.isLoading) {
+          await loadProjects();
         }
 
         if (!mounted) return;
 
-        // Backend is ready after successful project/chat load
+        // Backend is ready — workspace restore and project-change effects handle loadChats.
         setIsBackendReady(true);
       } catch (err) {
         logger.error("Failed to initialize app:", err);

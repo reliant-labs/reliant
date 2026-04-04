@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 import { grpcClient } from "./grpc-client";
+import { singleflight } from "../lib/singleflight";
 import { ConnectError, Code } from "@connectrpc/connect";
 import { create } from "@bufbuild/protobuf";
 import { ConfigScope } from "../gen/reliant/v1/common_pb";
@@ -633,10 +634,14 @@ export const settingsGrpc = {
   // ============================================
 
   async getProviderStatuses(): Promise<ProviderStatus[]> {
-    const client = grpcClient.settings();
-    const request = create(GetProviderStatusesRequestSchema, {});
-    const response = await client.getProviderStatuses(request);
-    return response.providers.map(protoProviderStatusToFrontend);
+    // Use singleflight to deduplicate concurrent calls
+    // (onboardingChecklistStore and apiKeySetupStore both call this on page load)
+    return singleflight('getProviderStatuses', async () => {
+      const client = grpcClient.settings();
+      const request = create(GetProviderStatusesRequestSchema, {});
+      const response = await client.getProviderStatuses(request);
+      return response.providers.map(protoProviderStatusToFrontend);
+    });
   },
 
   async updateProviderAPIKey(

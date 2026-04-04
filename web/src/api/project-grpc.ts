@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 import { grpcClient } from "./grpc-client";
+import { singleflight } from "../lib/singleflight";
 import { create } from "@bufbuild/protobuf";
 import type { 
   Project as ProtoProject,
@@ -306,14 +307,18 @@ export const projectGrpc = {
 
   // Get project initialization status
   async getInitStatus(projectId: string): Promise<ProjectInitStatus> {
-    const client = grpcClient.project();
-    const request = create(GetProjectInitStatusRequestSchema, { projectId });
-    const response = await client.getProjectInitStatus(request);
-    return {
-      initialized: response.initialized,
-      project_id: response.projectId,
-      message: response.message,
-    };
+    // Use singleflight to deduplicate concurrent calls for the same project
+    // (StrictMode or component remounts can trigger duplicate fetches)
+    return singleflight(`getInitStatus:${projectId}`, async () => {
+      const client = grpcClient.project();
+      const request = create(GetProjectInitStatusRequestSchema, { projectId });
+      const response = await client.getProjectInitStatus(request);
+      return {
+        initialized: response.initialized,
+        project_id: response.projectId,
+        message: response.message,
+      };
+    });
   },
 
   // Initialize a project
