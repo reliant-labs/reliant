@@ -301,14 +301,15 @@ func TestProjectWorkflows_BuiltinRefsAreValid(t *testing.T) {
 	}
 
 	validBuiltins := map[string]bool{
-		"builtin://agent":            true,
-		"builtin://structured-agent": true,
-		"builtin://auditing-agent":   true,
-		"builtin://discovery-relay":  true,
-		"builtin://get-it-right":     true,
-		"builtin://one-ring":         true,
-		"builtin://parallel-compete": true,
-		"builtin://ralph-wiggum":     true,
+		"builtin://agent":                true,
+		"builtin://structured-agent":     true,
+		"builtin://auditing-agent":       true,
+		"builtin://discovery-relay":      true,
+		"builtin://get-it-right":         true,
+		"builtin://one-ring":             true,
+		"builtin://parallel-compete":     true,
+		"builtin://parallel-loop-sample": true,
+		"builtin://ralph-wiggum":         true,
 	}
 
 	for _, name := range allProjectWorkflows {
