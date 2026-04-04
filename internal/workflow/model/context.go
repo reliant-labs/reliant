@@ -2,7 +2,10 @@ package model
 
 // IterContext provides iteration context for loop CEL expressions.
 type IterContext struct {
-	Iteration int `json:"iteration"`
+	Iteration int         `json:"iteration"`
+	Index     int         `json:"index"`
+	Item      interface{} `json:"item,omitempty"`
+	Key       string      `json:"key,omitempty"`
 }
 
 // WorkflowContext provides workflow metadata for CEL expressions.
@@ -21,5 +24,17 @@ type WorkflowContext struct {
 func BuildIterContext(iteration int) map[string]interface{} {
 	return map[string]interface{}{
 		"iteration": iteration,
+		"index":     iteration,
+	}
+}
+
+// BuildParallelIterContext creates an iteration context for parallel loop CEL evaluation.
+// Includes item (current element), index (position), and optionally key (map key).
+func BuildParallelIterContext(index int, item interface{}, key string) map[string]interface{} {
+	return map[string]interface{}{
+		"iteration": index,
+		"index":     index,
+		"item":      item,
+		"key":       key,
 	}
 }

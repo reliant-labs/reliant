@@ -94,8 +94,12 @@ func NewInlineLoopExecutor(
 	if !hasRef && !hasInline {
 		return nil, fmt.Errorf("loop step %s must specify either 'ref' or 'inline'", nid)
 	}
-	if model.DirectCelExpr(la.GetWhile()) == "" {
+	isParallel := model.CelBoolValue(la.GetParallel())
+	if !isParallel && model.DirectCelExpr(la.GetWhile()) == "" {
 		return nil, fmt.Errorf("loop step %s must specify 'while' condition", nid)
+	}
+	if isParallel && !model.CelStringIsSet(la.GetItems()) {
+		return nil, fmt.Errorf("parallel loop step %s must specify 'items'", nid)
 	}
 
 	logger := workflow.GetLogger(ctx)
@@ -302,6 +306,12 @@ func (e *InlineLoopExecutor) loadPresetParams(presetName string) (map[string]int
 // 5. Return aggregated output
 func (e *InlineLoopExecutor) Execute() (*reliantv1.LoopOutput, error) {
 	la := model.GetLoopArgs(e.loopStep.Node)
+
+	// Branch to parallel execution if parallel is set
+	if model.CelBoolValue(la.GetParallel()) {
+		return e.ExecuteParallel()
+	}
+
 	e.logger.Info("[InlineLoop] Starting inline loop execution",
 		"loopID", e.loopID,
 		"while", model.DirectCelExpr(la.GetWhile()),
@@ -800,11 +810,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 					return nil, fmt.Errorf("nested loop %s failed: %w", step.Node.GetId(), err)
 				}
 
-				nestedLoopOutputs := map[string]interface{}{}
-				if outputStruct := nestedOutput.GetOutputs(); outputStruct != nil {
-					nestedLoopOutputs = outputStruct.AsMap()
-				}
-				nestedOutputMap := model.LoopOutputToMap(int(nestedOutput.GetIterations()), nestedLoopOutputs)
+				nestedOutputMap := model.ProtoLoopOutputToMap(nestedOutput)
 
 				// Store nested loop output
 				iterNodeOutputs[step.Node.GetId()] = nestedOutputMap

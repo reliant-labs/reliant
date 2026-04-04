@@ -2,11 +2,17 @@ package model
 
 import (
 	"encoding/json"
+
+	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 )
 
 // Standard field names for output maps.
 const (
 	LoopOutputIterationsField = "_iterations"
+	LoopOutputResultsField    = "_results"
+	LoopOutputCompletedField  = "_completed"
+	LoopOutputFailedField     = "_failed"
+	LoopOutputParallelField   = "_parallel"
 	JoinOutputSourcesField    = "_sources"
 	SkippedOutputField        = "skipped"
 )
@@ -63,6 +69,42 @@ func LoopOutputToMap(iterations int, outputs map[string]interface{}) map[string]
 	}
 	result[LoopOutputIterationsField] = iterations
 	return result
+}
+
+// ParallelLoopOutputToMap converts parallel loop output to map for CEL context.
+// Results is a map of key → sub-workflow outputs. Includes aggregate counts.
+func ParallelLoopOutputToMap(iterations int, results map[string]interface{}, completed int, failed int) map[string]interface{} {
+	return map[string]interface{}{
+		LoopOutputIterationsField: iterations,
+		LoopOutputResultsField:    results,
+		LoopOutputCompletedField:  completed,
+		LoopOutputFailedField:     failed,
+		LoopOutputParallelField:   true,
+	}
+}
+
+// ProtoLoopOutputToMap converts a proto LoopOutput to a map for CEL context.
+// Handles both sequential and parallel loop outputs.
+func ProtoLoopOutputToMap(output *reliantv1.LoopOutput) map[string]interface{} {
+	if output.GetParallel() {
+		resultsMap := make(map[string]interface{}, len(output.GetResults()))
+		for k, v := range output.GetResults() {
+			if v != nil {
+				resultsMap[k] = v.AsMap()
+			}
+		}
+		return ParallelLoopOutputToMap(
+			int(output.GetIterations()),
+			resultsMap,
+			int(output.GetCompleted()),
+			int(output.GetFailed()),
+		)
+	}
+	outputs := map[string]interface{}{}
+	if outputStruct := output.GetOutputs(); outputStruct != nil {
+		outputs = outputStruct.AsMap()
+	}
+	return LoopOutputToMap(int(output.GetIterations()), outputs)
 }
 
 // JoinOutputToMap converts join output to map for CEL context.

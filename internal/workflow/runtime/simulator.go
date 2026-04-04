@@ -581,10 +581,76 @@ func (s *WorkflowSimulator) Run(mocker StepMocker) error {
 // For referenced (external) loops, it falls back to black-box mocking since
 // external workflows can't be loaded without Temporal.
 func (s *WorkflowSimulator) executeLoop(nodePath string, protoNode *reliantv1.Node, mocker StepMocker) (map[string]interface{}, error) {
+	// Check for parallel loop
+	la := model.GetLoopArgs(protoNode)
+	if model.CelBoolValue(la.GetParallel()) {
+		return s.executeParallelLoop(nodePath, protoNode, mocker)
+	}
 	if s.invocationMode(nodePath, protoNode) == core.InvocationModeInline {
 		return s.executeInlineLoop(nodePath, protoNode, mocker)
 	}
 	return s.executeRefLoop(nodePath, protoNode, mocker)
+}
+
+// executeParallelLoop simulates a parallel loop by running iterations sequentially
+// but producing the parallel output format (results map).
+// In simulation, there's no real parallelism — we just mock each iteration.
+func (s *WorkflowSimulator) executeParallelLoop(nodePath string, protoNode *reliantv1.Node, mocker StepMocker) (map[string]interface{}, error) {
+	la := model.GetLoopArgs(protoNode)
+	itemsExpr := model.CelStringRaw(la.GetItems())
+
+	// Evaluate items expression
+	evalCtx := &wfcel.EdgeEvalContext{
+		Nodes:  s.nodeOutputs,
+		Inputs: s.workflowInputs,
+	}
+	rawItems, err := wfcel.EvaluateTemplate(itemsExpr, evalCtx)
+	if err != nil {
+		return nil, fmt.Errorf("parallel loop %s: failed to evaluate items %q: %w", nodePath, itemsExpr, err)
+	}
+
+	// Convert to list
+	var items []interface{}
+	switch v := rawItems.(type) {
+	case []interface{}:
+		items = v
+	case map[string]interface{}:
+		for _, val := range v {
+			items = append(items, val)
+		}
+	default:
+		return nil, fmt.Errorf("parallel loop %s: items must be list or map, got %T", nodePath, rawItems)
+	}
+
+	results := make(map[string]interface{}, len(items))
+	completed := 0
+
+	mockID := model.CelStringRaw(la.GetRef())
+	if contract, ok := s.subWorkflowContract(nodePath); ok && contract.WorkflowRef != "" {
+		mockID = contract.WorkflowRef
+	}
+	if mockID == "" {
+		mockID = nodePath
+	}
+
+	for i, item := range items {
+		// Determine key
+		key := fmt.Sprintf("%d", i)
+		if s, ok := item.(string); ok {
+			key = s
+		}
+
+		// Build inputs for this iteration
+		iterInputs := s.assembleSubWorkflowInputs(nodePath, protoNode)
+		iterInputs["loop"] = map[string]interface{}{"iteration": i}
+		iterInputs["iter"] = model.BuildParallelIterContext(i, item, key)
+
+		mockOutput := mocker(mockID, iterInputs)
+		results[key] = mockOutput
+		completed++
+	}
+
+	return model.ParallelLoopOutputToMap(len(items), results, completed, 0), nil
 }
 
 // executeRefLoop handles external workflow reference loops with black-box mocking.
