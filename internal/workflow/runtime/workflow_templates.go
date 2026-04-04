@@ -64,6 +64,8 @@ func ResolveWorkflowTemplates(raw map[string]interface{}, inputs map[string]inte
 		"command":      true, // Run commands can reference inputs.*/nodes.* for dynamic command construction
 		"yield":        true, // Loop yield condition uses {{inputs.yield}}, evaluated at runtime by evaluateYieldCondition
 		"ref":          true, // Dynamic workflow refs (e.g., nodes.classify.response.workflow), evaluated at runtime
+		"items":        true, // Parallel loop items may resolve to arrays/maps or reference inputs.*, evaluated at runtime
+		"key":          true, // Parallel loop keys can reference iter.*, evaluated per iteration at runtime
 	}
 
 	resolved, err := resolveWorkflowTemplatesRecursive(raw, context, topLevelSkip, runtimeEvaluatedKeys, false)

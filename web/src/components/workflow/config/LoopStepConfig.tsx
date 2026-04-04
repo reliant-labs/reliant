@@ -1,8 +1,13 @@
 import { Edit3, Eye } from "lucide-react";
+import type { ProtoFieldSchema } from "../../../types/workflowFieldSchema";
 import type { LoopStep } from "../../../types/workflow";
 import {
   getStepInline,
   getStepWhile,
+  getStepParallel,
+  getStepItems,
+  getStepKey,
+  getStepOnFailure,
   getStepInputs,
   withLoopArgs,
 } from "../../../types/workflow";
@@ -10,7 +15,7 @@ import { CELExpressionInput } from "../CELInput";
 import { ProtoFieldRenderer } from "../ProtoFieldRenderer";
 import { inputDefToSchema } from "../../../lib/nodeFieldAdapter";
 import { getInputUI } from "../../../lib/inputHelpers";
-import { directCel } from "../../../lib/celAdapter";
+import { directCel, celString } from "../../../lib/celAdapter";
 
 /**
  * Editor for inline loop inputs - displays inputs defined in the inline workflow
@@ -60,6 +65,35 @@ export function InlineLoopInputsEditor({
   );
 }
 
+const LOOP_MODE_SCHEMA: ProtoFieldSchema = {
+  key: "mode",
+  label: "Mode",
+  widget: "select",
+  valueKind: "string",
+  defaultValue: "sequential",
+  options: [
+    { value: "sequential", label: "Sequential" },
+    { value: "parallel", label: "Parallel" },
+  ],
+  helpText:
+    "Sequential loops use While. Parallel loops use Items and expose per-iteration outputs via _results.",
+};
+
+const ON_FAILURE_SCHEMA: ProtoFieldSchema = {
+  key: "on_failure",
+  label: "On Failure",
+  widget: "select",
+  valueKind: "string",
+  defaultValue: "continue",
+  omitIfDefault: true,
+  options: [
+    { value: "continue", label: "continue — keep other iterations running" },
+    { value: "fail_fast", label: "fail_fast — cancel remaining iterations" },
+    { value: "fail_all", label: "fail_all — wait for all, then fail if any failed" },
+  ],
+  helpText: "Controls how parallel loops behave when an iteration fails.",
+};
+
 export function LoopStepConfig({
   step,
   onUpdate,
@@ -72,6 +106,40 @@ export function LoopStepConfig({
   isReadOnly?: boolean;
 }) {
   const stepInputs = getStepInputs(step);
+  const parallelValue = getStepParallel(step);
+  const itemsValue = getStepItems(step);
+  const whileValue = getStepWhile(step);
+  const keyValue = getStepKey(step);
+  const onFailureValue = getStepOnFailure(step) || "continue";
+  const isParallel = parallelValue === true || (typeof parallelValue === "string" && parallelValue.length > 0);
+  const modeValue = isParallel ? "parallel" : "sequential";
+
+  const handleModeChange = (value: unknown) => {
+    const nextMode = value === "parallel" ? "parallel" : "sequential";
+
+    if (nextMode === modeValue) {
+      return;
+    }
+
+    if (nextMode === "parallel") {
+      onUpdate(
+        withLoopArgs(step, {
+          parallel: true,
+          while: undefined,
+        }) as LoopStep,
+      );
+      return;
+    }
+
+    onUpdate(
+      withLoopArgs(step, {
+        parallel: undefined,
+        items: undefined,
+        key: undefined,
+        onFailure: undefined,
+      }) as LoopStep,
+    );
+  };
 
   // Initialize inline workflow if it doesn't exist
   const inlineWorkflow = getStepInline(step);
@@ -128,23 +196,95 @@ export function LoopStepConfig({
           />
         )}
 
-      <CELExpressionInput
-        label="While (optional)"
-        helpTooltip="CEL expression that ends the loop when true. Access iteration outputs via 'outputs' namespace."
-        value={getStepWhile(step)}
-        onChange={(val) =>
-          onUpdate(
-            withLoopArgs(step, {
-              while: val ? directCel(val) as any : undefined,
-            }) as LoopStep,
-          )
-        }
-        placeholder="outputs.done == true"
-        celContext="loop_while"
+      <ProtoFieldRenderer
+        schema={LOOP_MODE_SCHEMA}
+        value={modeValue}
+        onChange={handleModeChange}
         disabled={isReadOnly}
-        hideCELHint
-        showCELIndicator={false}
+        celContext="workflow"
       />
+
+      {isParallel && (
+        <CELExpressionInput
+          label="Items"
+          helpTooltip="CEL expression that evaluates to a list or map of iteration items for parallel execution."
+          value={itemsValue}
+          onChange={(val) =>
+            onUpdate(
+              withLoopArgs(step, {
+                items: val ? celString(val) as any : undefined,
+              }) as LoopStep,
+            )
+          }
+          placeholder="nodes.decompose.output.components"
+          celContext="workflow"
+          disabled={isReadOnly}
+          hideCELHint
+          showCELIndicator={false}
+        />
+      )}
+
+      {isParallel && (
+        <CELExpressionInput
+          label="Key (optional)"
+          helpTooltip="CEL expression used to key each iteration in nodes.<loop>._results. Defaults to the iteration index."
+          value={keyValue}
+          onChange={(val) =>
+            onUpdate(
+              withLoopArgs(step, {
+                key: val || undefined,
+              }) as LoopStep,
+            )
+          }
+          placeholder="{{iter.item.name}}"
+          celContext="workflow"
+          disabled={isReadOnly}
+          hideCELHint
+          showCELIndicator={false}
+        />
+      )}
+
+      {isParallel && (
+        <ProtoFieldRenderer
+          schema={ON_FAILURE_SCHEMA}
+          value={onFailureValue}
+          onChange={(value) =>
+            onUpdate(
+              withLoopArgs(step, {
+                onFailure: typeof value === "string" ? value : undefined,
+              }) as LoopStep,
+            )
+          }
+          disabled={isReadOnly}
+          celContext="workflow"
+        />
+      )}
+
+      {!isParallel && (
+        <CELExpressionInput
+          label="While (optional)"
+          helpTooltip="CEL expression that ends the loop when true. Access iteration outputs via 'outputs' namespace."
+          value={whileValue}
+          onChange={(val) =>
+            onUpdate(
+              withLoopArgs(step, {
+                while: val ? directCel(val) as any : undefined,
+              }) as LoopStep,
+            )
+          }
+          placeholder="outputs.done == true"
+          celContext="loop_while"
+          disabled={isReadOnly}
+          hideCELHint
+          showCELIndicator={false}
+        />
+      )}
+
+      {isParallel && (
+        <p className="text-xs text-muted-foreground">
+          Parallel loop outputs are available under <code className="bg-muted px-1 rounded">nodes.{step.id || "loop"}._results</code>, with summary fields for completed, failed, and parallel execution state.
+        </p>
+      )}
     </>
   );
 }

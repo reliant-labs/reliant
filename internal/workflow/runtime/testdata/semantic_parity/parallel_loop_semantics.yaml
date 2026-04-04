@@ -1,0 +1,79 @@
+name: parallel_loop_semantics
+workflow_yaml: |
+  name: parallel-loop-semantics
+  apiVersion: "1.0"
+  entry: [implement_all]
+  inputs:
+    components:
+      type: array
+    component_map:
+      type: object
+  nodes:
+    - id: implement_all
+      type: loop
+      parallel: true
+      items: "{{inputs.components}}"
+      key: "{{iter.item.name}}"
+      ref: builtin://agent
+      args:
+        prompt: "Implement {{iter.item.name}}"
+    - id: map_all
+      type: loop
+      parallel: true
+      items: "{{inputs.component_map}}"
+      ref: builtin://agent
+      args:
+        prompt: "Implement {{iter.key}}"
+  edges:
+    - from: implement_all
+      default: map_all
+canonical_workflow_ref: test://parallel-loop-semantics
+
+core:
+  use_workflow_loader: false
+  expected_contracts: []
+
+validation:
+  should_pass: true
+  use_workflow_loader: false
+
+simulator:
+  expected_status: passed
+  scenario:
+    name: parallel_loop_list_then_map
+    inputs:
+      components:
+        - name: auth
+          spec: login flow
+        - name: billing
+          spec: invoice flow
+      component_map:
+        auth:
+          spec: login flow
+        billing:
+          spec: invoice flow
+    events:
+      - node: builtin://agent
+        output:
+          response_text: "list auth complete"
+          component: auth
+      - node: builtin://agent
+        output:
+          response_text: "list billing complete"
+          component: billing
+      - node: builtin://agent
+        output:
+          response_text: "map auth complete"
+          component: auth
+      - node: builtin://agent
+        output:
+          response_text: "map billing complete"
+          component: billing
+    expect:
+      outcome: completed
+      reached:
+        - implement_all
+        - map_all
+
+runtime:
+  checks: []

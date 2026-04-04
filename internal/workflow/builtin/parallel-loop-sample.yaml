@@ -1,0 +1,47 @@
+name: parallel-loop-sample
+apiVersion: "0.0.5"
+description: |
+  Minimal sample showing a parallel loop over items with a custom key.
+  Each item runs a builtin agent in parallel and the workflow routes based on
+  iteration count, while scenarios assert the keyed aggregate result map.
+entry: [run_checks]
+
+outputs:
+  summary: "{{has(nodes.passed) ? 'all checks passed' : 'manual review required'}}"
+
+inputs:
+  checks:
+    type: array
+    description: Checks to run in parallel. Each item should be a unique string key.
+
+nodes:
+  - id: run_checks
+    type: loop
+    parallel: true
+    items: "{{inputs.checks}}"
+    key: "{{iter.key}}"
+    ref: builtin://agent
+    args:
+      mode: auto
+      prompt: "Run the assigned check and return a status."
+
+  - id: passed
+    type: save_message
+    args:
+      role: assistant
+      content: |
+        All parallel checks passed.
+
+  - id: needs_review
+    type: save_message
+    args:
+      role: assistant
+      content: |
+        Manual review required.
+
+edges:
+  - from: run_checks
+    cases:
+      - to: passed
+        condition: "nodes.run_checks._iterations == 2"
+    default: needs_review

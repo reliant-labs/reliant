@@ -100,8 +100,15 @@ func TestSemanticParityFixtures(t *testing.T) {
 		fixture := fixture
 		t.Run(fixture.Name, func(t *testing.T) {
 			workflowDef, err := loadWorkflowForSemanticFixture(fixture)
-			if err != nil {
-				t.Fatalf("failed to load workflow for fixture %q: %v", fixture.Name, err)
+			validationErr := err
+			if validationErr != nil && fixture.Validation.ShouldPass {
+				t.Fatalf("failed to load workflow for fixture %q: %v", fixture.Name, validationErr)
+			}
+			if workflowDef == nil {
+				workflowDef, err = loadWorkflowForSemanticFixtureWithoutValidation(fixture)
+				if err != nil {
+					t.Fatalf("failed to parse workflow for fixture %q without validation: %v", fixture.Name, err)
+				}
 			}
 
 			canonicalRef := strings.TrimSpace(fixture.CanonicalWorkflowRef)
@@ -138,6 +145,12 @@ func TestSemanticParityFixtures(t *testing.T) {
 			})
 
 			t.Run("validation_acceptance_rejection", func(t *testing.T) {
+				if !fixture.Validation.ShouldPass && validationErr != nil {
+					if fixture.Validation.ErrorContains != "" && !strings.Contains(validationErr.Error(), fixture.Validation.ErrorContains) {
+						t.Fatalf("expected validation error containing %q, got: %s", fixture.Validation.ErrorContains, validationErr.Error())
+					}
+					return
+				}
 				validationOptions := &validation.ValidationOptions{}
 				if fixture.Validation.UseWorkflowLoader {
 					validationOptions.WorkflowLoader = builtinLoader
@@ -158,6 +171,12 @@ func TestSemanticParityFixtures(t *testing.T) {
 
 			if fixture.Simulator.Scenario != nil {
 				t.Run("simulator_execution_expectations", func(t *testing.T) {
+					if validationErr != nil && !fixture.Validation.ShouldPass {
+						if fixture.Simulator.ExpectedStatus != "error" {
+							t.Fatalf("simulator status mismatch: got %q want %q (%s)", "error", fixture.Simulator.ExpectedStatus, validationErr.Error())
+						}
+						return
+					}
 					status, mismatch := runSemanticParityScenario(workflowDef, canonicalRef, builtinLoader, fixture.Simulator.Scenario)
 					if status != fixture.Simulator.ExpectedStatus {
 						t.Fatalf("simulator status mismatch: got %q want %q (%s)", status, fixture.Simulator.ExpectedStatus, mismatch)
@@ -454,6 +473,16 @@ func loadSemanticParityFixtures(dir string) ([]semanticParityFixture, error) {
 func loadWorkflowForSemanticFixture(fixture semanticParityFixture) (*reliantv1.Workflow, error) {
 	if strings.TrimSpace(fixture.WorkflowYAML) != "" {
 		return ParseWorkflowProtoBytes([]byte(fixture.WorkflowYAML))
+	}
+	if strings.TrimSpace(fixture.WorkflowRef) == "" {
+		return nil, fmt.Errorf("fixture must set workflow_ref or workflow_yaml")
+	}
+	return semanticParityBuiltinWorkflowLoader()(fixture.WorkflowRef)
+}
+
+func loadWorkflowForSemanticFixtureWithoutValidation(fixture semanticParityFixture) (*reliantv1.Workflow, error) {
+	if strings.TrimSpace(fixture.WorkflowYAML) != "" {
+		return ParseWorkflowProtoBytesNoValidation([]byte(fixture.WorkflowYAML))
 	}
 	if strings.TrimSpace(fixture.WorkflowRef) == "" {
 		return nil, fmt.Errorf("fixture must set workflow_ref or workflow_yaml")

@@ -2,7 +2,16 @@ import { memo } from 'react'
 import { Handle, Position, useNodeConnections } from '@xyflow/react'
 import { RefreshCw, CheckCircle2, XCircle, Circle, Loader2, Maximize2 } from 'lucide-react'
 import type { LoopStep } from '../../../types/workflow'
-import { getStepRef, getStepInline, getStepWhile } from '../../../types/workflow'
+import {
+  getStepRef,
+  getStepInline,
+  getStepWhile,
+  getStepParallel,
+  getStepItems,
+  getStepKey,
+  getStepOnFailure,
+  getStepThread,
+} from '../../../types/workflow'
 import type { NodeExecutionStatus } from '../../../lib/workflow-flow'
 import { NodeStatusWrapper, buildHandleClassName } from './NodeStatusWrapper'
 
@@ -57,6 +66,12 @@ export const LoopNode = memo(({ id, data, selected }: LoopNodeProps) => {
   const loopRef = getStepRef(step)
   const loopInline = getStepInline(step)
   const loopWhile = getStepWhile(step)
+  const loopParallel = getStepParallel(step)
+  const loopItems = getStepItems(step)
+  const loopKey = getStepKey(step)
+  const loopOnFailure = getStepOnFailure(step)
+  const loopThread = getStepThread(step)
+  const isParallel = loopParallel === true || typeof loopParallel === 'string'
   const canExpand = !!(loopRef || loopInline)
   
   // Runtime max iterations (may come from custom params at runtime)
@@ -147,6 +162,36 @@ export const LoopNode = memo(({ id, data, selected }: LoopNodeProps) => {
           </div>
         ) : null}
         
+        {isParallel && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="text-xs px-2 py-1 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300">
+              Parallel
+            </div>
+            {loopOnFailure && (
+              <div className="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground">
+                on_failure: {loopOnFailure}
+              </div>
+            )}
+            {loopThread?.mode && loopThread.mode !== 'inherit' && (
+              <div className="text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground">
+                thread: {loopThread.mode}
+              </div>
+            )}
+          </div>
+        )}
+
+        {loopItems && (
+          <div className="text-xs text-muted-foreground font-mono bg-muted px-2 py-1 rounded truncate" title={loopItems}>
+            items: {loopItems}
+          </div>
+        )}
+
+        {isParallel && loopKey && (
+          <div className="text-xs text-muted-foreground font-mono bg-muted px-2 py-1 rounded truncate" title={loopKey}>
+            key: {loopKey}
+          </div>
+        )}
+
         {/* Iteration progress - show dots for small number, progress bar for many */}
         {showDots && (
           <div className="flex items-center gap-1 flex-wrap">
@@ -198,7 +243,11 @@ export const LoopNode = memo(({ id, data, selected }: LoopNodeProps) => {
         {!hasExecutionInfo && (
           <div className="text-xs text-muted-foreground">
             Runs {loopRef ? loopRef : (loopInline ? 'inline workflow' : 'workflow')}
-            {loopWhile ? ' while condition holds' : ' in a loop'}
+            {isParallel
+              ? ' for each item in parallel'
+              : loopWhile
+                ? ' while condition holds'
+                : ' in a loop'}
           </div>
         )}
         

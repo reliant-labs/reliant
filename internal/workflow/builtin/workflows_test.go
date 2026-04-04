@@ -124,6 +124,7 @@ func TestBuiltinWorkflowLoading(t *testing.T) {
 		"get-it-right",
 		"one-ring",
 		"parallel-compete",
+		"parallel-loop-sample",
 		"ralph-wiggum",
 		"structured-agent",
 	}

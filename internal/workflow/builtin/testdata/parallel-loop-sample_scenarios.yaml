@@ -1,0 +1,69 @@
+---
+name: keyed_parallel_results_route_to_pass
+description: Parallel loop uses the checks list and custom key expression to produce keyed aggregate results, then routes to the pass node when two iterations ran.
+inputs:
+  checks:
+    - auth
+    - billing
+
+events:
+  - node: builtin://agent
+    output:
+      status: pass
+      response_text: auth passed
+  - node: builtin://agent
+    output:
+      status: fail
+      response_text: billing failed
+
+expect:
+  outcome: completed
+  reached:
+    - run_checks
+    - passed
+  not_reached:
+    - needs_review
+  node_outputs:
+    run_checks:
+      _iterations: 2
+      _completed: 2
+      _failed: 0
+      _parallel: true
+      _results:
+        auth:
+          status: pass
+          response_text: auth passed
+        billing:
+          status: fail
+          response_text: billing failed
+
+---
+name: single_item_routes_to_review
+description: A single parallel-loop item still produces the keyed aggregate shape and falls back to manual review because the iteration count does not match the pass branch.
+inputs:
+  checks:
+    - auth
+
+events:
+  - node: builtin://agent
+    output:
+      status: pass
+      response_text: auth passed
+
+expect:
+  outcome: completed
+  reached:
+    - run_checks
+    - needs_review
+  not_reached:
+    - passed
+  node_outputs:
+    run_checks:
+      _iterations: 1
+      _completed: 1
+      _failed: 0
+      _parallel: true
+      _results:
+        auth:
+          status: pass
+          response_text: auth passed

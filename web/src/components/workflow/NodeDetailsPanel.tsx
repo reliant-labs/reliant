@@ -25,7 +25,17 @@ import type {
   NodeExecutionStatus,
 } from "../../lib/workflow-flow";
 import type { Step } from "../../types/workflow";
-import { getStepCommand, getStepRef, getStepInline, getStepWhile } from "../../types/workflow";
+import {
+  getStepCommand,
+  getStepRef,
+  getStepInline,
+  getStepWhile,
+  getStepParallel,
+  getStepItems,
+  getStepKey,
+  getStepOnFailure,
+  getStepThread,
+} from "../../types/workflow";
 import type {
   StepExecution,
   WorkflowExecution,
@@ -220,6 +230,12 @@ export const NodeDetailsPanel = memo(function NodeDetailsPanel({
   const { step, executionStatus } = nodeData;
   const nodeType = getNodeType(step);
   const stepValue = getStepValue(step);
+  const loopParallel = step?.type === "loop" ? getStepParallel(step) : undefined;
+  const loopItems = step?.type === "loop" ? getStepItems(step) : "";
+  const loopKey = step?.type === "loop" ? getStepKey(step) : "";
+  const loopOnFailure = step?.type === "loop" ? getStepOnFailure(step) : "";
+  const loopThread = step?.type === "loop" ? getStepThread(step) : undefined;
+  const isParallelLoop = loopParallel === true || typeof loopParallel === "string";
 
   // For loop nodes, track selected iteration
   const isLoopNode = nodeType === "Loop";
@@ -298,14 +314,50 @@ export const NodeDetailsPanel = memo(function NodeDetailsPanel({
             </div>
           )}
 
-          {step?.type === "loop" && getStepWhile(step) && (
+          {step?.type === "loop" && (
             <div className="mt-2 space-y-1">
-              <div className="text-xs">
-                <span className="text-muted-foreground">While:</span>{" "}
-                <code className="text-foreground bg-muted px-1 rounded">
-                  {getStepWhile(step)}
-                </code>
-              </div>
+              {loopItems && (
+                <div className="text-xs">
+                  <span className="text-muted-foreground">Items:</span>{" "}
+                  <code className="text-foreground bg-muted px-1 rounded break-all">
+                    {loopItems}
+                  </code>
+                </div>
+              )}
+              {getStepWhile(step) && (
+                <div className="text-xs">
+                  <span className="text-muted-foreground">While:</span>{" "}
+                  <code className="text-foreground bg-muted px-1 rounded break-all">
+                    {getStepWhile(step)}
+                  </code>
+                </div>
+              )}
+              {isParallelLoop && (
+                <div className="text-xs">
+                  <span className="text-muted-foreground">Mode:</span>{" "}
+                  <span className="text-foreground">parallel</span>
+                </div>
+              )}
+              {isParallelLoop && loopKey && (
+                <div className="text-xs">
+                  <span className="text-muted-foreground">Key:</span>{" "}
+                  <code className="text-foreground bg-muted px-1 rounded break-all">
+                    {loopKey}
+                  </code>
+                </div>
+              )}
+              {isParallelLoop && loopOnFailure && (
+                <div className="text-xs">
+                  <span className="text-muted-foreground">On failure:</span>{" "}
+                  <span className="text-foreground">{loopOnFailure}</span>
+                </div>
+              )}
+              {isParallelLoop && loopThread?.mode && (
+                <div className="text-xs">
+                  <span className="text-muted-foreground">Thread mode:</span>{" "}
+                  <span className="text-foreground">{loopThread.mode}</span>
+                </div>
+              )}
               {getStepRef(step) && (
                 <div className="text-xs">
                   <span className="text-muted-foreground">Workflow:</span>{" "}

@@ -868,11 +868,8 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 
 				// Store loop output for edge routing
 				// Sub-workflow outputs are surfaced directly: nodes.loop_id.field
-				loopOutputs := map[string]interface{}{}
-				if outputStruct := loopOutput.GetOutputs(); outputStruct != nil {
-					loopOutputs = outputStruct.AsMap()
-				}
-				loopOutputMap := model.LoopOutputToMap(int(loopOutput.GetIterations()), loopOutputs)
+				// ProtoLoopOutputToMap handles both sequential and parallel loop output formats.
+				loopOutputMap := model.ProtoLoopOutputToMap(loopOutput)
 				nodeOutputStore.Set(step.Node.GetId(), loopOutputMap)
 
 				// Note: save_message on loop nodes is executed on ENTRY by InlineLoopExecutor.executeEntrySaveMessage()

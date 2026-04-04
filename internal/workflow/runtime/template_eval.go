@@ -272,9 +272,21 @@ func EvaluateNodeConfig(
 		builder = builder.WithExecContext(execContext)
 	}
 	if iterContext != nil {
+		iter := &model.IterContext{}
 		if iterVal, ok := iterContext["iteration"].(int); ok {
-			builder = builder.WithIter(&model.IterContext{Iteration: iterVal})
+			iter.Iteration = iterVal
+			iter.Index = iterVal
 		}
+		if indexVal, ok := iterContext["index"].(int); ok {
+			iter.Index = indexVal
+		}
+		if itemVal, ok := iterContext["item"]; ok {
+			iter.Item = itemVal
+		}
+		if keyVal, ok := iterContext["key"].(string); ok {
+			iter.Key = keyVal
+		}
+		builder = builder.WithIter(iter)
 	}
 	if loopOutputs != nil {
 		builder = builder.WithOutputs(loopOutputs)

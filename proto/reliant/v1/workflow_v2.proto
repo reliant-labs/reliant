@@ -480,8 +480,12 @@ message SubWorkflowArgs {
 // LoopArgs configures a loop node — repeats a sub-workflow while a condition is true.
 // Extends SubWorkflowArgs with loop-specific fields.
 //
-// Output fields accessible via nodes.<id>.*:
-//   _iterations, plus flattened sub-workflow outputs from final iteration
+// Sequential mode (default): executes iterations one at a time with while condition.
+// Output fields: _iterations, plus flattened sub-workflow outputs from final iteration.
+//
+// Parallel mode (parallel: true): executes all iterations concurrently using items list.
+// Output fields: _iterations, _results (map of iteration key → sub-workflow outputs),
+//   _completed (count of successful iterations), _failed (count of failed iterations).
 message LoopArgs {
   option (node_meta) = {
     node_type: "loop"
@@ -503,11 +507,37 @@ message LoopArgs {
   // Project configures the working directory.
   ProjectConfig project = 5 [(reliant) = { description: "Working directory override for loop body" hidden: true }];
   // While is a direct CEL expression evaluated after each iteration.
-  // Loop continues while true. Required.
+  // Loop continues while true. Required for sequential loops.
   // Has access to: outputs.* (sub-workflow output), iter.iteration (0-indexed count).
-  DirectCelBool while = 6 [(reliant) = { description: "CEL condition: loop continues while true" required: true }];
+  DirectCelBool while = 6 [(reliant) = { description: "CEL condition: loop continues while true" }];
   // Yield is a CEL expression. When true and while is false, yield to user before exiting.
+  // Not allowed when parallel is true.
   string yield = 7 [(reliant) = { description: "CEL expression to yield to user on loop exit" }];
+
+  // === Parallel loop fields ===
+
+  // Parallel enables concurrent execution of all iterations.
+  // When true, items is required and while/yield are disallowed.
+  // Each iteration runs in its own thread with isolated context.
+  CelBool parallel = 8 [(reliant) = { description: "Execute all iterations concurrently" }];
+  // Items is a CEL expression that evaluates to a list or map.
+  // For lists: iter.item is the element, iter.index is the position.
+  // For maps: iter.key is the map key, iter.item is the map value, iter.index is the position.
+  // Required when parallel is true. Can also be used with sequential loops.
+  CelString items = 9 [(reliant) = { description: "CEL expression evaluating to a list or map to iterate over" }];
+  // Key is a CEL expression evaluated per iteration to produce the output map key.
+  // Has access to iter.item, iter.index, iter.key.
+  // Defaults to string(iter.index) if not specified.
+  // Only used when parallel is true.
+  string key = 10 [(reliant) = { description: "CEL expression for output map key per iteration" }];
+  // OnFailure controls behavior when a parallel iteration fails.
+  // Values: "continue" (default, others keep running), "fail_fast" (cancel remaining),
+  //   "fail_all" (wait for all, then fail if any failed).
+  string on_failure = 11 [(reliant) = { description: "Failure policy for parallel iterations" enum_values: "continue|fail_fast|fail_all" }];
+  // Thread configures how parallel iterations relate to conversation threads.
+  // Each parallel iteration creates its own thread. Defaults to mode: new.
+  // Only used when parallel is true.
+  ThreadConfig thread = 12 [(reliant) = { description: "Thread mode for parallel iterations" }];
 }
 
 // JoinArgs configures a join node — synchronizes parallel branches.
@@ -834,10 +864,16 @@ message WorkflowOutput {
 }
 
 // LoopOutput is the output from loop nodes.
-// User-defined outputs are in outputs; _iterations is the system field.
+// Sequential mode: user-defined outputs are in outputs; _iterations is the system field.
+// Parallel mode: _results is a map of key → sub-workflow outputs; _completed/_failed are counts.
 message LoopOutput {
   int32 iterations = 1;               // Total iterations completed (JSON: "_iterations")
-  google.protobuf.Struct outputs = 2; // Final iteration outputs
+  google.protobuf.Struct outputs = 2; // Final iteration outputs (sequential mode)
+  // Parallel mode fields:
+  map<string, google.protobuf.Struct> results = 3; // Map of key → iteration outputs (parallel mode, JSON: "_results")
+  int32 completed = 4;                // Count of successful iterations (parallel mode, JSON: "_completed")
+  int32 failed = 5;                   // Count of failed iterations (parallel mode, JSON: "_failed")
+  bool parallel = 6;                  // Whether this was a parallel loop execution
 }
 
 // JoinOutput is the output from a join node.

@@ -1,0 +1,33 @@
+name: parallel_loop_invalid_missing_items
+workflow_yaml: |
+  name: invalid-parallel-loop-missing-items
+  apiVersion: "1.0"
+  entry: [implement_all]
+  nodes:
+    - id: implement_all
+      type: loop
+      parallel: true
+      ref: builtin://agent
+  edges: []
+canonical_workflow_ref: test://invalid-parallel-loop-missing-items
+
+core:
+  use_workflow_loader: false
+  expected_contracts: []
+
+validation:
+  should_pass: false
+  use_workflow_loader: false
+  error_contains: "parallel loop requires 'items'"
+
+simulator:
+  expected_status: error
+  scenario:
+    name: invalid_parallel_loop_missing_items
+    inputs: {}
+    events: []
+    expect:
+      outcome: error
+
+runtime:
+  checks: []

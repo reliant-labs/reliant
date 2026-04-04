@@ -3,6 +3,7 @@ package runtime
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -581,10 +582,154 @@ func (s *WorkflowSimulator) Run(mocker StepMocker) error {
 // For referenced (external) loops, it falls back to black-box mocking since
 // external workflows can't be loaded without Temporal.
 func (s *WorkflowSimulator) executeLoop(nodePath string, protoNode *reliantv1.Node, mocker StepMocker) (map[string]interface{}, error) {
+	// Check for parallel loop
+	la := model.GetLoopArgs(protoNode)
+	if model.CelBoolValue(la.GetParallel()) {
+		return s.executeParallelLoop(nodePath, protoNode, mocker)
+	}
 	if s.invocationMode(nodePath, protoNode) == core.InvocationModeInline {
 		return s.executeInlineLoop(nodePath, protoNode, mocker)
 	}
 	return s.executeRefLoop(nodePath, protoNode, mocker)
+}
+
+// executeParallelLoop simulates a parallel loop by running iterations sequentially
+// but producing the parallel output format (results map).
+// In simulation, there's no real parallelism — we just mock each iteration.
+func (s *WorkflowSimulator) executeParallelLoop(nodePath string, protoNode *reliantv1.Node, mocker StepMocker) (map[string]interface{}, error) {
+	la := model.GetLoopArgs(protoNode)
+	itemsExpr := model.CelStringRaw(la.GetItems())
+
+	if itemsExpr == "" {
+		return nil, fmt.Errorf("parallel loop %s: items expression is empty", nodePath)
+	}
+
+	// Evaluate items expression
+	evalCtx := &wfcel.EdgeEvalContext{
+		Nodes:  s.nodeOutputs,
+		Inputs: s.workflowInputs,
+	}
+	rawItems, err := wfcel.EvaluateTemplate(itemsExpr, evalCtx)
+	if err != nil {
+		return nil, fmt.Errorf("parallel loop %s: failed to evaluate items %q: %w", nodePath, itemsExpr, err)
+	}
+
+	items, err := s.parallelLoopItems(rawItems)
+	if err != nil {
+		return nil, fmt.Errorf("parallel loop %s: %w", nodePath, err)
+	}
+
+	results := make(map[string]interface{}, len(items))
+	completed := 0
+
+	mockID := model.CelStringRaw(la.GetRef())
+	if contract, ok := s.subWorkflowContract(nodePath); ok && contract.WorkflowRef != "" {
+		mockID = contract.WorkflowRef
+	}
+	if mockID == "" {
+		mockID = nodePath
+	}
+
+	iterationKeys, err := s.parallelLoopKeys(items, la.GetKey())
+	if err != nil {
+		return nil, fmt.Errorf("parallel loop %s: %w", nodePath, err)
+	}
+
+	for i, item := range items {
+		key := iterationKeys[i]
+		iterItem := s.parallelLoopIterItem(item)
+
+		// Build inputs for this iteration
+		iterInputs := s.assembleSubWorkflowInputs(nodePath, protoNode)
+		iterInputs["loop"] = map[string]interface{}{"iteration": i}
+		iterInputs["iter"] = model.BuildParallelIterContext(i, iterItem, key)
+
+		mockOutput := mocker(mockID, iterInputs)
+		results[key] = mockOutput
+		completed++
+	}
+
+	return model.ParallelLoopOutputToMap(len(items), results, completed, 0), nil
+}
+
+func (s *WorkflowSimulator) parallelLoopItems(rawItems interface{}) ([]interface{}, error) {
+	switch v := rawItems.(type) {
+	case []interface{}:
+		return v, nil
+	case map[string]interface{}:
+		mapKeys := make([]string, 0, len(v))
+		for key := range v {
+			mapKeys = append(mapKeys, key)
+		}
+		sort.Strings(mapKeys)
+		items := make([]interface{}, 0, len(v))
+		for _, key := range mapKeys {
+			items = append(items, map[string]interface{}{
+				"_map_key":   key,
+				"_map_value": v[key],
+			})
+		}
+		return items, nil
+	default:
+		return nil, fmt.Errorf("items must be list or map, got %T", rawItems)
+	}
+}
+
+func (s *WorkflowSimulator) parallelLoopKeys(items []interface{}, keyExpr string) ([]string, error) {
+	keys := make([]string, len(items))
+	seen := make(map[string]int, len(items))
+
+	for i, item := range items {
+		key := ""
+		if keyExpr == "" {
+			key = s.parallelLoopDefaultKey(i, item)
+		} else {
+			iterItem := s.parallelLoopIterItem(item)
+			evalCtx := &wfcel.LoopEvalContext{
+				Iter: &model.IterContext{
+					Iteration: i,
+					Index:     i,
+					Item:      iterItem,
+					Key:       s.parallelLoopDefaultKey(i, item),
+				},
+				Inputs: s.workflowInputs,
+			}
+			result, err := wfcel.EvaluateTemplate(keyExpr, evalCtx)
+			if err != nil {
+				return nil, fmt.Errorf("failed to evaluate key expression %q for iteration %d: %w", keyExpr, i, err)
+			}
+			key = fmt.Sprintf("%v", result)
+		}
+
+		if prevIndex, exists := seen[key]; exists {
+			return nil, fmt.Errorf("duplicate iteration key %q at indices %d and %d", key, prevIndex, i)
+		}
+		seen[key] = i
+		keys[i] = key
+	}
+
+	return keys, nil
+}
+
+func (s *WorkflowSimulator) parallelLoopDefaultKey(index int, item interface{}) string {
+	if itemMap, ok := item.(map[string]interface{}); ok {
+		if mapKey, ok := itemMap["_map_key"].(string); ok {
+			return mapKey
+		}
+	}
+	if itemString, ok := item.(string); ok {
+		return itemString
+	}
+	return fmt.Sprintf("%d", index)
+}
+
+func (s *WorkflowSimulator) parallelLoopIterItem(item interface{}) interface{} {
+	if itemMap, ok := item.(map[string]interface{}); ok {
+		if mapValue, hasMapValue := itemMap["_map_value"]; hasMapValue {
+			return mapValue
+		}
+	}
+	return item
 }
 
 // executeRefLoop handles external workflow reference loops with black-box mocking.

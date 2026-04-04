@@ -65,11 +65,14 @@ type MockRunResponse struct {
 
 // MockRunCall records a command execution for later assertions
 type MockRunCall struct {
-	Command   string
-	Args      []string
-	Dir       string
-	Env       map[string]string
-	Timestamp time.Time
+	Command        string
+	Args           []string
+	Dir            string
+	Env            map[string]string
+	Timestamp      time.Time
+	EndTimestamp   time.Time
+	Completed      bool
+	ExecutionDelay time.Duration
 }
 
 // NewMockRunExecutor creates a new mock run executor
@@ -205,7 +208,7 @@ func (m *MockRunExecutor) ExecuteCommand(
 ) (stdout, stderr string, exitCode int, interrupted bool, err error) {
 	m.mu.Lock()
 
-	// Record the call
+	callIndex := len(m.Calls)
 	m.Calls = append(m.Calls, MockRunCall{
 		Command:   command,
 		Args:      nil,
@@ -214,15 +217,18 @@ func (m *MockRunExecutor) ExecuteCommand(
 		Timestamp: time.Now(),
 	})
 
+	resp := *m.DefaultResponse
+
 	// Check for sequential responses first
 	if len(m.sequentialResponses) > 0 {
-		resp := m.sequentialResponses[m.sequentialIndex%len(m.sequentialResponses)]
+		resp = m.sequentialResponses[m.sequentialIndex%len(m.sequentialResponses)]
 		m.sequentialIndex++
 		m.mu.Unlock()
 
 		if resp.Delay > 0 {
 			time.Sleep(resp.Delay)
 		}
+		m.recordCompletion(callIndex, resp.Delay)
 		return resp.Stdout, resp.Stderr, resp.ExitCode, false, resp.Error
 	}
 
@@ -230,25 +236,38 @@ func (m *MockRunExecutor) ExecuteCommand(
 	for i := range m.responses {
 		pattern := &m.responses[i]
 		if m.matches(pattern, command) {
-			resp := pattern.responses[pattern.callCount%len(pattern.responses)]
+			resp = pattern.responses[pattern.callCount%len(pattern.responses)]
 			pattern.callCount++
 			m.mu.Unlock()
 
 			if resp.Delay > 0 {
 				time.Sleep(resp.Delay)
 			}
+			m.recordCompletion(callIndex, resp.Delay)
 			return resp.Stdout, resp.Stderr, resp.ExitCode, false, resp.Error
 		}
 	}
 
-	// Return default response
-	resp := m.DefaultResponse
 	m.mu.Unlock()
 
 	if resp.Delay > 0 {
 		time.Sleep(resp.Delay)
 	}
+	m.recordCompletion(callIndex, resp.Delay)
 	return resp.Stdout, resp.Stderr, resp.ExitCode, false, resp.Error
+}
+
+func (m *MockRunExecutor) recordCompletion(callIndex int, delay time.Duration) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if callIndex < 0 || callIndex >= len(m.Calls) {
+		return
+	}
+
+	m.Calls[callIndex].EndTimestamp = time.Now()
+	m.Calls[callIndex].Completed = true
+	m.Calls[callIndex].ExecutionDelay = delay
 }
 
 // matches checks if a command matches a pattern

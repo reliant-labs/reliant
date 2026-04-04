@@ -200,7 +200,7 @@ func namespaceDefault(ns CELNamespace) interface{} {
 	case CELWorkflow:
 		return &model.WorkflowContext{}
 	case CELIter:
-		return &model.IterContext{Iteration: 0}
+		return map[string]interface{}{"iteration": 0, "index": 0}
 	default:
 		return make(map[string]interface{})
 	}
@@ -214,7 +214,7 @@ func getNamespaceDecl(ns CELNamespace) cel.EnvOption {
 	case CELWorkflow:
 		return cel.Variable(string(ns), cel.ObjectType("model.WorkflowContext"))
 	case CELIter:
-		return cel.Variable(string(ns), cel.ObjectType("model.IterContext"))
+		return cel.Variable(string(ns), cel.DynType)
 	default:
 		// Dynamic namespaces (inputs, nodes, output, outputs)
 		return cel.Variable(string(ns), cel.DynType)
