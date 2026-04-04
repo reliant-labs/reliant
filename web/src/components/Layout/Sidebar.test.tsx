@@ -1,0 +1,150 @@
+import { render } from "@testing-library/react";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { Sidebar } from "./Sidebar";
+import { ChatState, ChatActivity } from "../../gen/reliant/v1/chat_pb";
+import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
+import { useChatStore } from "../../store/chatStore";
+import { useActivityStore } from "../../store/activityStore";
+import { useWorktreeStore } from "../../store/worktreeStore";
+import { useProcessStore } from "../../store/processStore";
+import { useProjectStore } from "../../store/projectStore";
+import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
+
+vi.mock("../ui/Tooltip", () => ({
+  Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
+
+vi.mock("../ui/Button", () => ({
+  Button: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => (
+    <button {...props}>{children}</button>
+  ),
+}));
+
+vi.mock("../ui/ContextMenu", () => ({
+  ContextMenu: () => null,
+}));
+
+vi.mock("../ui/Dropdown", () => ({
+  Dropdown: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+}));
+
+vi.mock("../ui/ActivityDot", () => ({
+  ActivityDot: () => <div data-testid="activity-dot" />,
+}));
+
+vi.mock("../../hooks/useDebounce", () => ({
+  useDebounce: <T,>(value: T) => value,
+}));
+
+describe("Sidebar selected chat scroll", () => {
+  const loadArchivedChats = vi.fn(async () => undefined);
+  const fetchProcesses = vi.fn();
+  const switchWorktreeContext = vi.fn(async () => undefined);
+  const scrollIntoViewMock = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    scrollIntoViewMock.mockReset();
+
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoViewMock,
+    });
+
+    useChatStore.setState({
+      chats: new Map([
+        [
+          "chat-1",
+          {
+            id: "chat-1",
+            title: "Selected chat",
+            createdAt: "2024-01-01T00:00:00.000Z",
+            updatedAt: "2024-01-01T00:00:00.000Z",
+            lastMessageAt: "2024-01-01T00:00:00.000Z",
+            unread: false,
+            state: ChatState.ACTIVE,
+            worktreeId: "worktree-1",
+            projectId: "project-1",
+          },
+        ],
+      ]),
+      activeChatId: "chat-1",
+      archivedChats: [],
+      archivedChatsLoaded: true,
+      loadArchivedChats,
+      selectChat: vi.fn(),
+      deleteChat: vi.fn(async () => undefined),
+      renameChat: vi.fn(async () => undefined),
+      markUnread: vi.fn(async () => undefined),
+    } as Partial<ReturnType<typeof useChatStore.getState>>);
+
+    useActivityStore.setState({
+      activities: new Map([["chat-1", ChatActivity.IDLE]]),
+    } as Partial<ReturnType<typeof useActivityStore.getState>>);
+
+    useWorktreeStore.setState({
+      worktrees: [
+        {
+          id: "worktree-1",
+          name: "Workspace",
+          path: "/tmp/worktree",
+          branch: "feature/test",
+          base_branch: "main",
+          project_id: "project-1",
+          status: WorktreeStatus.ACTIVE,
+          is_main: false,
+          created_at: "2024-01-01T00:00:00.000Z",
+          updated_at: "2024-01-01T00:00:00.000Z",
+          last_active: "2024-01-01T00:00:00.000Z",
+        },
+      ],
+      currentWorktree: null,
+      switchWorktreeContext,
+    } as Partial<ReturnType<typeof useWorktreeStore.getState>>);
+
+    useProcessStore.setState({
+      fetchProcesses,
+    } as Partial<ReturnType<typeof useProcessStore.getState>>);
+
+    useProjectStore.setState({
+      currentProject: {
+        id: "project-1",
+        name: "Project",
+        path: "/tmp/project",
+        is_git_repo: true,
+        worktree_count: 1,
+        created_at: "2024-01-01T00:00:00.000Z",
+        updated_at: "2024-01-01T00:00:00.000Z",
+        last_active: "2024-01-01T00:00:00.000Z",
+      },
+    } as Partial<ReturnType<typeof useProjectStore.getState>>);
+
+    useChatListPreferencesStore.setState({
+      sortOrder: "recent_activity",
+      viewMode: "grouped",
+      filters: {},
+      setSortOrder: vi.fn(),
+      setViewMode: vi.fn(),
+      setFilters: vi.fn(),
+      resetFilters: vi.fn(),
+      resetAll: vi.fn(),
+    });
+  });
+
+  it("scrolls the selected chat into view with auto behavior", async () => {
+    vi.useFakeTimers();
+
+    render(<Sidebar />);
+
+    vi.advanceTimersByTime(100);
+
+    expect(scrollIntoViewMock).toHaveBeenCalledWith({
+      block: "nearest",
+      behavior: "auto",
+    });
+
+    vi.useRealTimers();
+  });
+});
