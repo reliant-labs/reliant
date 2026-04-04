@@ -276,17 +276,21 @@ func (s *ProjectService) GetProject(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
 	}
 
-	// Live-check git status via daemon so we never show a stale modal
-	var checkGitResp struct {
-		IsGitRepo bool `json:"is_git_repo"`
-	}
-	if err := s.sendProjectDaemonCommand(ctx, userID, "project.check_git", map[string]string{"path": project.Path}, &checkGitResp); err != nil {
-		logging.Warn("GetProject: failed to live-check git status, using DB value", "error", err, "projectID", project.ID)
-	} else if checkGitResp.IsGitRepo != project.IsGitRepo {
-		project.IsGitRepo = checkGitResp.IsGitRepo
-		project.UpdatedAt = time.Now().UTC()
-		if updateErr := s.database.UpdateProject(ctx, project, userID); updateErr != nil {
-			logging.Warn("GetProject: failed to persist updated git status", "error", updateErr, "projectID", project.ID)
+	// Live-check git status via daemon so we never show a stale modal.
+	// Once IsGitRepo is true it's monotonic (a repo stays a repo), so skip the
+	// daemon round-trip in that case to avoid ~500ms of latency.
+	if !project.IsGitRepo {
+		var checkGitResp struct {
+			IsGitRepo bool `json:"is_git_repo"`
+		}
+		if err := s.sendProjectDaemonCommand(ctx, userID, "project.check_git", map[string]string{"path": project.Path}, &checkGitResp); err != nil {
+			logging.Warn("GetProject: failed to live-check git status, using DB value", "error", err, "projectID", project.ID)
+		} else if checkGitResp.IsGitRepo != project.IsGitRepo {
+			project.IsGitRepo = checkGitResp.IsGitRepo
+			project.UpdatedAt = time.Now().UTC()
+			if updateErr := s.database.UpdateProject(ctx, project, userID); updateErr != nil {
+				logging.Warn("GetProject: failed to persist updated git status", "error", updateErr, "projectID", project.ID)
+			}
 		}
 	}
 

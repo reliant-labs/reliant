@@ -951,16 +951,14 @@ function App() {
   // that were already loaded.
   const projectId = currentProject?.id;
   useEffect(() => {
-    if (!isBackendReady) return;
+    if (!isBackendReady || !projectId) return;
 
     let cancelled = false;
 
     (async () => {
       // Ensure chats are loaded first — loadChats stores the latest user update
       // sequence which the stream uses as sinceSeq to avoid redundant replay.
-      if (projectId) {
-        await loadChats();
-      }
+      await loadChats();
 
       if (cancelled) return;
 

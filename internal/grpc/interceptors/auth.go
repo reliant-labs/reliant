@@ -247,6 +247,11 @@ func (i *AuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 
 		i.trackSession(ctx, claims, rawToken)
 
+		// Stash x-daemon-last-seen header in context for downstream daemon router.
+		if v := req.Header().Get("x-daemon-last-seen"); v != "" {
+			ctx = WithDaemonLastSeen(ctx, v)
+		}
+
 		return next(ctx, req)
 	}
 }

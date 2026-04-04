@@ -10,6 +10,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/nats-io/nats.go"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/observability"
 )
 
@@ -61,6 +62,20 @@ func WithDatabase(repo db.Repository) NATSRouterOption {
 	return func(r *NATSDaemonRouter) {
 		r.db = repo
 	}
+}
+
+// daemonStaleThreshold is 2× the daemon heartbeat interval. If the frontend
+// reports a heartbeat within this window we skip the DB query.
+const daemonStaleThreshold = 30 * time.Second
+
+// isDaemonReachable checks whether the daemon is online. It first looks at
+// the x-daemon-last-seen header stashed in ctx by the auth interceptor. If
+// the header is recent enough the DB query is skipped entirely.
+func (r *NATSDaemonRouter) isDaemonReachable(ctx context.Context, userID string) (bool, error) {
+	if interceptors.DaemonLastSeenFresh(ctx, daemonStaleThreshold) {
+		return true, nil
+	}
+	return r.IsDaemonOnline(ctx, userID)
 }
 
 func (r *NATSDaemonRouter) IsDaemonOnline(ctx context.Context, userID string) (bool, error) {
@@ -135,7 +150,7 @@ func (r *NATSDaemonRouter) SendToolExecutionCancel(ctx context.Context, userID, 
 }
 
 func (r *NATSDaemonRouter) SendKillProcess(ctx context.Context, userID, processID string) error {
-	if online, err := r.IsDaemonOnline(ctx, userID); err != nil {
+	if online, err := r.isDaemonReachable(ctx, userID); err != nil {
 		return fmt.Errorf("checking daemon status: %w", err)
 	} else if !online {
 		return connect.NewError(connect.CodeUnavailable, fmt.Errorf("no daemon connected for user"))
@@ -169,7 +184,7 @@ func (r *NATSDaemonRouter) SendKillProcess(ctx context.Context, userID, processI
 }
 
 func (r *NATSDaemonRouter) SendDaemonCommand(ctx context.Context, userID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
-	if online, err := r.IsDaemonOnline(ctx, userID); err != nil {
+	if online, err := r.isDaemonReachable(ctx, userID); err != nil {
 		return nil, fmt.Errorf("checking daemon status: %w", err)
 	} else if !online {
 		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("no daemon connected for user"))
@@ -247,7 +262,7 @@ func (r *NATSDaemonRouter) SendDaemonCommand(ctx context.Context, userID string,
 }
 
 func (r *NATSDaemonRouter) SendToolRequestSync(ctx context.Context, userID string, request *ToolExecutionRequest) (*ToolExecutionResponse, error) {
-	if online, err := r.IsDaemonOnline(ctx, userID); err != nil {
+	if online, err := r.isDaemonReachable(ctx, userID); err != nil {
 		return nil, fmt.Errorf("checking daemon status: %w", err)
 	} else if !online {
 		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("no daemon connected for user"))

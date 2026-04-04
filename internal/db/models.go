@@ -330,6 +330,9 @@ const (
 
 	// Refetch signals - tell frontend to re-fetch specific data
 	UserUpdateRefetch UserUpdateType = reliantv1.UserUpdateType_USER_UPDATE_TYPE_REFETCH
+
+	// Daemon heartbeat - ephemeral signal so frontend knows daemon is alive
+	UserUpdateDaemonHeartbeat UserUpdateType = reliantv1.UserUpdateType_USER_UPDATE_TYPE_DAEMON_HEARTBEAT
 )
 
 // UserUpdateEntityType represents the type of entity a user update is about (proto enum integer).

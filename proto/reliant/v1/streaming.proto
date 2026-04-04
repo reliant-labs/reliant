@@ -51,6 +51,7 @@ enum UserUpdateType {
   USER_UPDATE_TYPE_PROCESS_PORT_CHANGED = 17;
   USER_UPDATE_TYPE_NOTIFICATION = 18;
   USER_UPDATE_TYPE_REFETCH = 19;
+  USER_UPDATE_TYPE_DAEMON_HEARTBEAT = 20;
 }
 
 // EntityType categorizes the type of entity an update relates to

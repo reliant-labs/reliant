@@ -25,7 +25,7 @@ interface ProcessState {
   isLoadingOutput: boolean;
   
   // Actions
-  fetchProcesses: (worktreeId?: string, isBackgroundRefresh?: boolean) => Promise<void>;
+  fetchProcesses: (worktreeId?: string, isBackgroundRefresh?: boolean, options?: { force?: boolean }) => Promise<void>;
   fetchProcessOutput: (processId: string, isBackgroundRefresh?: boolean) => Promise<void>;
   killProcess: (processId: string, worktreeId?: string) => Promise<void>;
   selectProcess: (processId: string | null) => void;
@@ -50,8 +50,14 @@ export const useProcessStore = create<ProcessState>((set, get) => ({
   processOutput: null,
   isLoadingOutput: false,
 
-  fetchProcesses: async (worktreeId?: string, isBackgroundRefresh = false) => {
+  fetchProcesses: async (worktreeId?: string, isBackgroundRefresh = false, options?: { force?: boolean }) => {
     const state = get();
+    
+    // Dedup: skip redundant fetches within a short window (e.g. multiple components mounting)
+    if (!options?.force && state.lastFetched && Date.now() - state.lastFetched < 3000) {
+      logger.debug("[ProcessStore] Skipping fetch (dedup window)", { lastFetched: state.lastFetched });
+      return;
+    }
     
     // If switching worktrees, show loading. Otherwise, just refresh quietly.
     const isWorktreeChange = worktreeId !== state.currentWorktreeId;
@@ -146,7 +152,7 @@ export const useProcessStore = create<ProcessState>((set, get) => ({
       }));
 
       // Refresh to get accurate state from server
-      await get().fetchProcesses(worktreeId);
+      await get().fetchProcesses(worktreeId, false, { force: true });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to kill process";
 
@@ -156,7 +162,7 @@ export const useProcessStore = create<ProcessState>((set, get) => ({
 
       if (isAlreadyStopped) {
         logger.info("[ProcessStore] Process was already stopped", { processId });
-        await get().fetchProcesses(worktreeId);
+        await get().fetchProcesses(worktreeId, false, { force: true });
         return;
       }
 

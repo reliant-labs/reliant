@@ -116,6 +116,11 @@ func NewServer(cfg *Config) (*Server, error) {
 		}
 	}
 
+	// Wire the user update hub so daemon heartbeats can be pushed to the frontend.
+	if cfg.UserUpdateHub != nil {
+		toolsDaemonService.SetUserUpdateHub(cfg.UserUpdateHub)
+	}
+
 	// Build a DaemonRouter for services that need transport-agnostic daemon access.
 	router := cfg.DaemonRouter
 	if router == nil {

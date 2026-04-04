@@ -30,6 +30,7 @@ import { logger } from "../lib/logger";
 import { showWorkflowCompletionNotification, showApprovalRequiredNotification, getNotificationPermission } from "../lib/notifications";
 import { getNotificationSoundOptions, useNotificationStore } from "./notificationStore";
 import { triggerRefetch, type RefetchType } from "./refetchStore";
+import { setDaemonLastSeen } from "../api/grpc-client";
 
 const LOG_PREFIX = "[🌐 GlobalUpdates]";
 
@@ -81,6 +82,9 @@ interface GlobalUpdatesState {
   connectionStatus: ConnectionStatus;
   lastSequence: number;
   
+  // Last known daemon heartbeat (unix seconds). Set via DAEMON_HEARTBEAT events.
+  daemonLastSeen: number | null;
+  
   // Currently subscribed chat ID for detail events
   subscribedChatId: string | null;
   
@@ -108,6 +112,7 @@ interface GlobalUpdatesState {
 export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
   connectionStatus: "disconnected",
   lastSequence: 0,
+  daemonLastSeen: null,
   subscribedChatId: null,
   wsService: null,
 
@@ -238,6 +243,15 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
         case UserUpdateType.REFETCH:
           handleRefetch(update);
           break;
+        case UserUpdateType.DAEMON_HEARTBEAT: {
+          const data = typeof update.data === "string" ? JSON.parse(update.data) : update.data;
+          if (data?.last_heartbeat) {
+            const ts = data.last_heartbeat as number;
+            set({ daemonLastSeen: ts });
+            setDaemonLastSeen(ts);
+          }
+          break;
+        }
         default:
           logger.debug(`${LOG_PREFIX} Unhandled update type: ${update.update_type}`);
       }
