@@ -16,6 +16,8 @@ import type {
   Setting as ProtoSetting,
   UserPrompt as ProtoUserPrompt,
   ProviderStatus as ProtoProviderStatus,
+  ReliantProviderToken as ProtoReliantProviderToken,
+  ReliantProviderAccessStatus as ProtoReliantProviderAccessStatus,
   InstalledSkill as ProtoInstalledSkill,
   RecommendedSkill as ProtoRecommendedSkill,
   SkillDiscoveryDiagnostic as ProtoSkillDiscoveryDiagnostic,
@@ -41,6 +43,10 @@ import {
   GetProviderStatusesRequestSchema,
   UpdateProviderAPIKeyRequestSchema,
   ValidateProviderAPIKeyRequestSchema,
+  CreateReliantProviderTokenRequestSchema,
+  ListReliantProviderTokensRequestSchema,
+  RevokeReliantProviderTokenRequestSchema,
+  GetReliantProviderStatusRequestSchema,
   CompleteCodexOAuthRequestSchema,
   CompleteClaudeOAuthRequestSchema,
   // Sub-phase 6e: Privacy
@@ -88,6 +94,43 @@ export interface ProviderStatus {
   has_api_key: boolean;
   masked_key?: string;
   display_name: string;
+  auth_method?: string;
+  status?: string;
+  status_message?: string;
+}
+
+export interface ReliantProviderToken {
+  id: string;
+  name: string;
+  token_prefix: string;
+  ephemeral: boolean;
+  created_at: string;
+  last_used_at?: string;
+  expires_at?: string;
+  revoked_at?: string;
+}
+
+export interface ReliantProviderAccessStatus {
+  state: string;
+  message: string;
+  plan_id?: string;
+  plan_code?: string;
+  allowed_models: string[];
+  request_tags: string[];
+  spend: number;
+  hard_budget_usd: number;
+  budget_duration: string;
+  rpm_limit: number;
+  tpm_limit: number;
+  max_parallel_requests: number;
+  key_duration: string;
+}
+
+export interface ReliantProviderStatus {
+  configured: boolean;
+  masked_token?: string;
+  tokens: ReliantProviderToken[];
+  access?: ReliantProviderAccessStatus;
 }
 
 export interface Preferences {
@@ -246,6 +289,44 @@ function protoProviderStatusToFrontend(
     has_api_key: proto.hasApiKey,
     masked_key: proto.maskedKey || undefined,
     display_name: proto.displayName,
+    auth_method: proto.authMethod || undefined,
+    status: proto.status || undefined,
+    status_message: proto.statusMessage || undefined,
+  };
+}
+
+function protoReliantProviderTokenToFrontend(
+  proto: ProtoReliantProviderToken
+): ReliantProviderToken {
+  return {
+    id: proto.id,
+    name: proto.name,
+    token_prefix: proto.tokenPrefix,
+    ephemeral: proto.ephemeral,
+    created_at: proto.createdAt,
+    last_used_at: proto.lastUsedAt || undefined,
+    expires_at: proto.expiresAt || undefined,
+    revoked_at: proto.revokedAt || undefined,
+  };
+}
+
+function protoReliantProviderAccessStatusToFrontend(
+  proto: ProtoReliantProviderAccessStatus
+): ReliantProviderAccessStatus {
+  return {
+    state: proto.state,
+    message: proto.message,
+    plan_id: proto.planId || undefined,
+    plan_code: proto.planCode || undefined,
+    allowed_models: proto.allowedModels,
+    request_tags: proto.requestTags,
+    spend: proto.spend,
+    hard_budget_usd: proto.hardBudgetUsd,
+    budget_duration: proto.budgetDuration,
+    rpm_limit: Number(proto.rpmLimit),
+    tpm_limit: Number(proto.tpmLimit),
+    max_parallel_requests: Number(proto.maxParallelRequests),
+    key_duration: proto.keyDuration,
   };
 }
 
@@ -679,6 +760,76 @@ export const settingsGrpc = {
     return {
       valid: response.valid,
       message: response.message,
+    };
+  },
+
+  async createReliantProviderToken(input?: {
+    name?: string;
+    ephemeral?: boolean;
+    expires_in_seconds?: number;
+  }): Promise<{
+    success: boolean;
+    message: string;
+    token: string;
+    daemon_token?: ReliantProviderToken;
+  }> {
+    const client = grpcClient.settings();
+    const request = create(CreateReliantProviderTokenRequestSchema, {
+      name: input?.name,
+      ephemeral: input?.ephemeral,
+      expiresInSeconds:
+        typeof input?.expires_in_seconds === "number"
+          ? BigInt(Math.trunc(input.expires_in_seconds))
+          : undefined,
+    });
+    const response = await client.createReliantProviderToken(request);
+    return {
+      success: response.success,
+      message: response.message,
+      token: response.token,
+      daemon_token: response.daemonToken
+        ? protoReliantProviderTokenToFrontend(response.daemonToken)
+        : undefined,
+    };
+  },
+
+  async listReliantProviderTokens(): Promise<ReliantProviderToken[]> {
+    const client = grpcClient.settings();
+    const request = create(ListReliantProviderTokensRequestSchema, {});
+    const response = await client.listReliantProviderTokens(request);
+    return response.tokens.map(protoReliantProviderTokenToFrontend);
+  },
+
+  async revokeReliantProviderToken(
+    tokenId: string,
+    deleteLocalCredential = false
+  ): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    const client = grpcClient.settings();
+    const request = create(RevokeReliantProviderTokenRequestSchema, {
+      tokenId,
+      deleteLocalCredential,
+    });
+    const response = await client.revokeReliantProviderToken(request);
+    return {
+      success: response.success,
+      message: response.message,
+    };
+  },
+
+  async getReliantProviderStatus(): Promise<ReliantProviderStatus> {
+    const client = grpcClient.settings();
+    const request = create(GetReliantProviderStatusRequestSchema, {});
+    const response = await client.getReliantProviderStatus(request);
+    return {
+      configured: response.configured,
+      masked_token: response.maskedToken || undefined,
+      tokens: response.tokens.map(protoReliantProviderTokenToFrontend),
+      access: response.access
+        ? protoReliantProviderAccessStatusToFrontend(response.access)
+        : undefined,
     };
   },
 

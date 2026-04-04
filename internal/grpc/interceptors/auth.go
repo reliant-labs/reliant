@@ -156,6 +156,18 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 				fmt.Errorf("invalid authorization header format"))
 		}
 		if i.validator == nil {
+			if i.devMode {
+				ctx = context.WithValue(ctx, auth.UserIDContextKey, DevUser.Sub)
+				ctx = context.WithValue(ctx, auth.UserRoleContextKey, DevUser.Role)
+				ctx = context.WithValue(ctx, auth.UserEmailContextKey, DevUser.Email)
+				ctx = context.WithValue(ctx, auth.UserJWTContextKey, tokenString)
+
+				logging.Info("[gRPC Auth] JWT validator unavailable in dev mode; using dev claims and preserving raw bearer token",
+					"procedure", procedure)
+
+				return ctx, DevUser, tokenString, nil
+			}
+
 			logging.Warn("[gRPC Auth] Authorization header provided but JWT validator unavailable",
 				"procedure", procedure,
 				"dev_mode", i.devMode)

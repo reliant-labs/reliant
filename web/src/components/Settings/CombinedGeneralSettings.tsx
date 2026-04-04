@@ -1,41 +1,81 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Loader2,
   AlertCircle,
   Check,
+  CheckCircle2,
+  ChevronDown,
+  Copy,
   Eye,
   EyeOff,
+  Loader2,
   Plus,
+  RefreshCw,
   Settings2,
   TestTube,
-  ChevronDown,
   Trash2,
-  CheckCircle2,
-  XCircle,
 } from "lucide-react";
 import { Toggle } from "../ui/Toggle";
 import { cn } from "../../lib/utils";
 import { api } from "../../api/client";
 import { useGlobalDataStore } from "../../store/globalDataStore";
 import {
-  useApiKeySetupStore,
   resetApiKeySetupDismissed,
+  useApiKeySetupStore,
 } from "../../store/apiKeySetupStore";
 import { useCodexOAuth, useClaudeOAuth, useOAuthAvailability } from "../../hooks";
 
-interface CombinedGeneralSettingsProps {
-  providers: Array<{
-    provider: string;
-    displayName: string;
-    hasApiKey: boolean;
-    maskedKey?: string;
-    configured: boolean;
-  }>;
-  onProvidersUpdate?: () => void;
+interface ProviderSummary {
+  provider: string;
+  displayName: string;
+  hasApiKey: boolean;
+  maskedKey?: string;
+  configured: boolean;
+  authMethod?: string;
+  status?: string;
+  statusMessage?: string;
 }
 
-// Providers visible in the UI (other providers are hidden but implementations remain)
+interface CombinedGeneralSettingsProps {
+  providers: ProviderSummary[];
+  onProvidersUpdate?: () => void | Promise<void>;
+}
+
+interface ReliantTokenRecord {
+  id: string;
+  name: string;
+  token_prefix: string;
+  ephemeral: boolean;
+  created_at: string;
+  last_used_at?: string;
+  expires_at?: string;
+  revoked_at?: string;
+}
+
+interface ReliantAccessRecord {
+  state: string;
+  message: string;
+  plan_id?: string;
+  plan_code?: string;
+  allowed_models: string[];
+  request_tags: string[];
+  spend: number;
+  hard_budget_usd: number;
+  budget_duration: string;
+  rpm_limit: number;
+  tpm_limit: number;
+  max_parallel_requests: number;
+  key_duration: string;
+}
+
+interface ReliantProviderRecord {
+  configured: boolean;
+  masked_token?: string;
+  tokens: ReliantTokenRecord[];
+  access?: ReliantAccessRecord;
+}
+
 const VISIBLE_PROVIDERS = [
+  "reliant",
   "claude",
   "codex",
   "anthropic",
@@ -45,6 +85,15 @@ const VISIBLE_PROVIDERS = [
 ] as const;
 
 const providerConfigs = {
+  reliant: {
+    name: "Reliant",
+    docsUrl: "",
+    keyFormat: "cpat_...",
+    description:
+      "Managed Reliant access. Create a Reliant token here or store an existing one; runtime access is exchanged and limited by your plan.",
+    usesOAuth: false,
+    isManaged: true,
+  },
   claude: {
     name: "Claude Code",
     docsUrl: "https://claude.ai",
@@ -52,102 +101,169 @@ const providerConfigs = {
     description:
       "Claude 4.5 and 4.6 models via Claude OAuth (uses Claude authentication)",
     usesOAuth: "claude" as const,
+    isManaged: false,
   },
   codex: {
     name: "Codex (ChatGPT)",
     docsUrl: "https://github.com/openai/codex",
     keyFormat: "",
     description:
-      "GPT-5.3 Codex (flagship) via ChatGPT backend (uses Codex authentication)",
+      "GPT-5.3 Codex via ChatGPT backend (uses Codex authentication)",
     usesOAuth: "codex" as const,
-  },
-  openrouter: {
-    name: "OpenRouter",
-    docsUrl: "https://openrouter.ai/keys",
-    keyFormat: "sk-or-...",
-    description:
-      "Access 400+ AI models through one API (Claude, GPT, Gemini, Grok)",
-    usesOAuth: false,
+    isManaged: false,
   },
   anthropic: {
     name: "Anthropic",
     docsUrl: "https://console.anthropic.com/settings/keys",
     keyFormat: "sk-ant-...",
-    description: "Claude 3.5, Claude 3, and other Anthropic models",
+    description: "Claude models through Anthropic API keys",
     usesOAuth: false,
+    isManaged: false,
   },
   openai: {
     name: "OpenAI",
     docsUrl: "https://platform.openai.com/api-keys",
     keyFormat: "sk-...",
-    description: "GPT-4, GPT-3.5, and other OpenAI models",
+    description: "GPT models through OpenAI API keys",
     usesOAuth: false,
+    isManaged: false,
   },
   gemini: {
     name: "Google Gemini",
     docsUrl: "https://makersuite.google.com/app/apikey",
     keyFormat: "AIza...",
-    description: "Gemini Pro, Gemini Ultra, and other Google models",
+    description: "Gemini models through Google API keys",
     usesOAuth: false,
+    isManaged: false,
   },
-  azure: {
-    name: "Azure OpenAI",
-    docsUrl: "https://portal.azure.com/",
-    keyFormat: "deployment-specific",
-    description: "OpenAI models hosted on Azure",
+  openrouter: {
+    name: "OpenRouter",
+    docsUrl: "https://openrouter.ai/keys",
+    keyFormat: "sk-or-...",
+    description: "Access multiple model families through OpenRouter",
     usesOAuth: false,
+    isManaged: false,
   },
-  bedrock: {
-    name: "AWS Bedrock",
-    docsUrl: "https://console.aws.amazon.com/bedrock/",
-    keyFormat: "AWS credentials",
-    description: "Claude, Llama, and other models on AWS",
-    usesOAuth: false,
-  },
-  copilot: {
-    name: "GitHub Copilot",
-    docsUrl: "https://github.com/settings/copilot",
-    keyFormat: "GitHub token",
-    description: "GitHub Copilot API access",
-    usesOAuth: false,
-  },
-  groq: {
-    name: "Groq",
-    docsUrl: "https://console.groq.com/keys",
-    keyFormat: "gsk_...",
-    description: "Fast inference with Groq LPU",
-    usesOAuth: false,
-  },
-  vertexai: {
-    name: "Vertex AI",
-    docsUrl: "https://console.cloud.google.com/vertex-ai",
-    keyFormat: "GCP credentials",
-    description: "Google Cloud AI models",
-    usesOAuth: false,
-  },
-  xai: {
-    name: "xAI",
-    docsUrl: "https://x.ai/",
-    keyFormat: "xai-...",
-    description: "Grok and other xAI models",
-    usesOAuth: false,
-  },
-  local: {
-    name: "Local Models",
-    docsUrl: "",
-    keyFormat: "N/A",
-    description: "Ollama, llama.cpp, and other local models",
-    usesOAuth: false,
-  },
-};
+} as const;
 
 type ProviderId = keyof typeof providerConfigs;
 
-// Comprehensive error message parser for all API providers
-const parseErrorMessage = (errorText: string, provider: string): string => {
-  const lowerError = errorText.toLowerCase();
+const isProviderConnected = (provider: {
+  configured: boolean;
+  hasApiKey: boolean;
+}) => provider.configured || provider.hasApiKey;
 
-  // Claude specific errors
+const statusBadgeClasses = (status?: string) => {
+  switch ((status || "").toLowerCase()) {
+    case "connected":
+      return "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20";
+    case "not_configured":
+      return "bg-muted text-muted-foreground border border-border";
+    case "subscription_required":
+    case "billing_required":
+    case "failed_precondition":
+      return "bg-amber-500/10 text-amber-700 border border-amber-500/20";
+    case "resource_exhausted":
+    case "rate_limit":
+    case "quota_exceeded":
+    case "quota":
+    case "unauthenticated":
+    case "internal":
+      return "bg-red-500/10 text-red-600 border border-red-500/20";
+    default:
+      return "bg-muted text-muted-foreground border border-border";
+  }
+};
+
+const statusLabel = (status?: string) => {
+  switch ((status || "").toLowerCase()) {
+    case "connected":
+      return "Connected";
+    case "not_configured":
+      return "Not configured";
+    case "subscription_required":
+      return "Subscription required";
+    case "billing_required":
+      return "Billing required";
+    case "resource_exhausted":
+      return "Usage limited";
+    case "failed_precondition":
+      return "Setup required";
+    case "unauthenticated":
+      return "Invalid token";
+    case "internal":
+      return "Error";
+    case "unavailable":
+      return "Unavailable";
+    default:
+      return status ? status.replace(/_/g, " ") : "Unknown";
+  }
+};
+
+const formatDateTime = (value?: string) => {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+};
+
+const formatCurrency = (value?: number) => {
+  if (typeof value !== "number") return "—";
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  }).format(value);
+};
+
+const parseErrorMessage = (errorText: string, provider: string): string => {
+  const lowerError = (errorText || "").toLowerCase();
+
+  if (provider === "reliant") {
+    if (lowerError.includes("signed-in session required")) {
+      return "You need to be signed in to Reliant before creating or managing tokens.";
+    }
+    if (
+      lowerError.includes("missing authorization token") ||
+      lowerError.includes("invalid authorization header")
+    ) {
+      return "Your Reliant session is missing or invalid. Please sign in again and retry.";
+    }
+    if (
+      lowerError.includes("control-plane client is not configured") ||
+      lowerError.includes("reliant control-plane client is not configured")
+    ) {
+      return "This Reliant dev server is missing RELIANT_CONTROLPLANE_URL, so managed Reliant token actions are unavailable in this worktree.";
+    }
+    if (lowerError.includes("not configured")) {
+      return "Reliant is not configured yet. Create or store a Reliant token to continue.";
+    }
+    if (
+      lowerError.includes("unauthenticated") ||
+      lowerError.includes("invalid token") ||
+      lowerError.includes("invalid reliant token")
+    ) {
+      return "Reliant could not verify this token or session. Try signing in again or create a fresh token.";
+    }
+    if (lowerError.includes("subscription")) {
+      return "A Reliant subscription is required for managed access.";
+    }
+    if (lowerError.includes("billing")) {
+      return "Reliant billing is required before this token can be used.";
+    }
+    if (lowerError.includes("quota")) {
+      return "Reliant quota is exhausted for this token or plan.";
+    }
+    if (
+      lowerError.includes("rate limit") ||
+      lowerError.includes("resource_exhausted")
+    ) {
+      return "Reliant rate limit reached. Wait a moment and try again.";
+    }
+    if (lowerError.includes("control-plane client is not configured")) {
+      return "Reliant managed access is not available in this environment.";
+    }
+  }
+
   if (provider === "claude") {
     if (lowerError.includes("not authenticated")) {
       return "Claude is not connected. Please use Login with Claude.";
@@ -158,15 +274,8 @@ const parseErrorMessage = (errorText: string, provider: string): string => {
     if (lowerError.includes("unauthorized") || lowerError.includes("401")) {
       return "Claude authentication failed. Please reconnect with Login with Claude.";
     }
-    if (lowerError.includes("rate limit") || lowerError.includes("429")) {
-      return "Claude rate limit exceeded. Please wait a moment before trying again.";
-    }
-    if (lowerError.includes("session") || lowerError.includes("invalid")) {
-      return "Claude session error. Please reconnect with Login with Claude.";
-    }
   }
 
-  // Codex (ChatGPT) specific errors
   if (provider === "codex") {
     if (lowerError.includes("not authenticated")) {
       return "Codex is not connected. Please use Login with Codex.";
@@ -177,121 +286,17 @@ const parseErrorMessage = (errorText: string, provider: string): string => {
     if (lowerError.includes("unauthorized") || lowerError.includes("401")) {
       return "Codex authentication failed. Please reconnect with Login with Codex.";
     }
-    if (lowerError.includes("rate limit") || lowerError.includes("429")) {
-      return "Codex rate limit exceeded. Please wait a moment before trying again.";
-    }
-    if (lowerError.includes("session") || lowerError.includes("invalid")) {
-      return "Codex session error. Please reconnect with Login with Codex.";
-    }
   }
 
-  // OpenRouter specific errors
   if (provider === "openrouter") {
     if (lowerError.includes("no endpoints found matching your data policy")) {
-      return "OpenRouter requires privacy settings configuration. Please visit https://openrouter.ai/settings/privacy to configure your data policy, then try again.";
+      return "OpenRouter requires privacy settings configuration. Visit OpenRouter privacy settings, then try again.";
     }
     if (lowerError.includes("unauthorized") || lowerError.includes("401")) {
-      return "Invalid OpenRouter API key. Please check your key at https://openrouter.ai/keys";
-    }
-    if (lowerError.includes("quota") || lowerError.includes("limit")) {
-      return "OpenRouter quota exceeded. Please check your usage limits at https://openrouter.ai/activity";
+      return "Invalid OpenRouter API key. Please check your key.";
     }
   }
 
-  // Anthropic specific errors
-  if (provider === "anthropic") {
-    if (lowerError.includes("model:") && lowerError.includes("not found")) {
-      // Extract the specific model name from the error if possible
-      const modelMatch = errorText.match(/model:\s*([^\s,]+)/i);
-      const modelName = modelMatch ? modelMatch[1] : "the specified model";
-      return `The model "${modelName}" was not found. This model may not exist, may require beta access, or may not be available in your region. Your API key is valid, but please check https://console.anthropic.com/ for available models.`;
-    }
-    if (lowerError.includes("unauthorized") || lowerError.includes("401")) {
-      return "Invalid Anthropic API key. Please check your key at https://console.anthropic.com/settings/keys";
-    }
-    if (lowerError.includes("rate limit") || lowerError.includes("429")) {
-      return "Anthropic rate limit exceeded. Please wait a moment before trying again.";
-    }
-    if (lowerError.includes("quota") || lowerError.includes("usage")) {
-      return "Anthropic usage limit reached. Please check your account usage at https://console.anthropic.com/account/usage";
-    }
-  }
-
-  // OpenAI specific errors
-  if (provider === "openai") {
-    if (lowerError.includes("unauthorized") || lowerError.includes("401")) {
-      return "Invalid OpenAI API key. Please check your key at https://platform.openai.com/api-keys";
-    }
-    if (lowerError.includes("quota") || lowerError.includes("billing")) {
-      return "OpenAI billing issue. Please check your account and billing at https://platform.openai.com/account/billing";
-    }
-    if (lowerError.includes("rate limit") || lowerError.includes("429")) {
-      return "OpenAI rate limit exceeded. Please upgrade your plan or wait before trying again.";
-    }
-  }
-
-  // Google Gemini specific errors
-  if (provider === "gemini") {
-    if (lowerError.includes("unauthorized") || lowerError.includes("401")) {
-      return "Invalid Google API key. Please check your key at https://makersuite.google.com/app/apikey";
-    }
-    if (lowerError.includes("quota") || lowerError.includes("limit")) {
-      return "Google API quota exceeded. Please check your quota limits in the Google Cloud Console.";
-    }
-  }
-
-  // Groq specific errors
-  if (provider === "groq") {
-    if (lowerError.includes("unauthorized") || lowerError.includes("401")) {
-      return "Invalid Groq API key. Please check your key at https://console.groq.com/keys";
-    }
-    if (lowerError.includes("rate limit") || lowerError.includes("429")) {
-      return "Groq rate limit exceeded. Please wait before trying again.";
-    }
-  }
-
-  // xAI specific errors
-  if (provider === "xai") {
-    if (lowerError.includes("unauthorized") || lowerError.includes("401")) {
-      return "Invalid xAI API key. Please check your account at https://x.ai/";
-    }
-  }
-
-  // Azure specific errors
-  if (provider === "azure") {
-    if (lowerError.includes("unauthorized") || lowerError.includes("401")) {
-      return "Invalid Azure credentials. Please check your Azure OpenAI deployment configuration.";
-    }
-    if (lowerError.includes("deployment")) {
-      return "Azure deployment issue. Please verify your deployment name and region in the Azure portal.";
-    }
-  }
-
-  // AWS Bedrock specific errors
-  if (provider === "bedrock") {
-    if (lowerError.includes("unauthorized") || lowerError.includes("403")) {
-      return "Invalid AWS credentials or insufficient permissions. Please check your IAM permissions for Bedrock.";
-    }
-    if (lowerError.includes("region")) {
-      return "AWS region issue. Please ensure Bedrock is available in your configured region.";
-    }
-  }
-
-  // GitHub Copilot specific errors
-  if (provider === "copilot") {
-    if (lowerError.includes("unauthorized") || lowerError.includes("401")) {
-      return "Invalid GitHub token. Please check your Copilot subscription and token permissions.";
-    }
-  }
-
-  // Vertex AI specific errors
-  if (provider === "vertexai") {
-    if (lowerError.includes("unauthorized") || lowerError.includes("403")) {
-      return "Invalid GCP credentials. Please check your service account permissions for Vertex AI.";
-    }
-  }
-
-  // Generic authentication errors
   if (
     lowerError.includes("unauthorized") ||
     lowerError.includes("authentication") ||
@@ -302,12 +307,10 @@ const parseErrorMessage = (errorText: string, provider: string): string => {
     return "Invalid API key. Please check your credentials and try again.";
   }
 
-  // Generic rate limiting
   if (lowerError.includes("rate limit") || lowerError.includes("429")) {
     return "Rate limit exceeded. Please wait a moment before trying again.";
   }
 
-  // Generic quota/billing issues
   if (
     lowerError.includes("quota") ||
     lowerError.includes("limit") ||
@@ -317,29 +320,8 @@ const parseErrorMessage = (errorText: string, provider: string): string => {
     return "Usage limit or billing issue. Please check your account status.";
   }
 
-  // Network/connection errors
-  if (
-    lowerError.includes("network") ||
-    lowerError.includes("connection") ||
-    lowerError.includes("timeout") ||
-    lowerError.includes("refused")
-  ) {
-    return "Connection failed. Please check your internet connection and try again.";
-  }
-
-  // Server errors
-  if (
-    lowerError.includes("500") ||
-    lowerError.includes("502") ||
-    lowerError.includes("503") ||
-    lowerError.includes("server error")
-  ) {
-    return "Provider server error. Please try again in a few moments.";
-  }
-
-  // If no specific pattern matches, return a cleaned version of the original error
   return errorText.length > 200
-    ? "API validation failed. Please check your key and try again."
+    ? "Validation failed. Please check your credentials and try again."
     : errorText;
 };
 
@@ -347,7 +329,6 @@ export function CombinedGeneralSettings({
   providers,
   onProvidersUpdate,
 }: CombinedGeneralSettingsProps) {
-  // Add Provider State
   const [selectedProvider, setSelectedProvider] = useState<string>("");
   const [apiKey, setApiKey] = useState<string>("");
   const [showKey, setShowKey] = useState<boolean>(false);
@@ -358,79 +339,187 @@ export function CombinedGeneralSettings({
     message: string;
   } | null>(null);
 
-  // Edit Provider State
   const [editingProvider, setEditingProvider] = useState<string | null>(null);
-  const [editApiKeys, setEditApiKeys] = useState<{ [key: string]: string }>({});
-  const [showEditKeys, setShowEditKeys] = useState<{ [key: string]: boolean }>(
-    {}
-  );
+  const [editApiKeys, setEditApiKeys] = useState<Record<string, string>>({});
+  const [showEditKeys, setShowEditKeys] = useState<Record<string, boolean>>({});
   const [deletingProvider, setDeletingProvider] = useState<string | null>(null);
 
-  // Streaming preference state
   const [streamingEnabled, setStreamingEnabled] = useState<boolean>(false);
   const [loadingPreferences, setLoadingPreferences] = useState<boolean>(true);
+
+  const [reliantProvider, setReliantProvider] = useState<ReliantProviderRecord | null>(null);
+  const [reliantLoading, setReliantLoading] = useState<boolean>(false);
+  const [reliantActionLoading, setReliantActionLoading] = useState<string | null>(null);
+  const [reliantTokenName, setReliantTokenName] = useState<string>("");
+  const [createdReliantToken, setCreatedReliantToken] = useState<string>("");
+  const [copiedReliantToken, setCopiedReliantToken] = useState<boolean>(false);
 
   const codexOAuth = useCodexOAuth();
   const claudeOAuth = useClaudeOAuth();
   const oauthAvailability = useOAuthAvailability();
 
-  // Filter to only show visible providers (hide others but keep implementations)
-  const configuredProviders = providers.filter(
-    (p) =>
-      p.hasApiKey &&
-      VISIBLE_PROVIDERS.includes(
-        p.provider as (typeof VISIBLE_PROVIDERS)[number]
-      )
+  const currentReliantSummary = useMemo(
+    () => providers.find((p) => p.provider === "reliant"),
+    [providers]
   );
-  const availableProviders = Object.entries(providerConfigs).filter(
-    ([id]) =>
-      VISIBLE_PROVIDERS.includes(id as (typeof VISIBLE_PROVIDERS)[number]) &&
-      !providers.find((p) => p.provider === id && p.hasApiKey)
-  ) as [ProviderId, (typeof providerConfigs)[ProviderId]][];
+
+  const configuredProviders = useMemo(
+    () =>
+      providers.filter(
+        (p) =>
+          isProviderConnected(p) &&
+          VISIBLE_PROVIDERS.includes(p.provider as (typeof VISIBLE_PROVIDERS)[number])
+      ),
+    [providers]
+  );
+
+  const availableProviders = useMemo(
+    () =>
+      Object.entries(providerConfigs).filter(
+        ([id]) =>
+          VISIBLE_PROVIDERS.includes(id as (typeof VISIBLE_PROVIDERS)[number]) &&
+          !providers.find((p) => p.provider === id && isProviderConnected(p))
+      ) as [ProviderId, (typeof providerConfigs)[ProviderId]][],
+    [providers]
+  );
+
+  const selectedConfig = selectedProvider
+    ? providerConfigs[selectedProvider as ProviderId]
+    : undefined;
+
+  const refreshReliantStatus = useCallback(async () => {
+    setReliantLoading(true);
+    try {
+      const status = await api.settings.getReliantProviderStatus();
+      setReliantProvider(status);
+    } catch (error) {
+      console.error("Failed to load Reliant provider status:", error);
+    } finally {
+      setReliantLoading(false);
+    }
+  }, []);
+
+  const refreshProviderSurfaces = useCallback(
+    async (hasConfiguredProvider?: boolean) => {
+      await Promise.resolve(onProvidersUpdate?.());
+      await refreshReliantStatus();
+      await useGlobalDataStore.getState().refetchModels();
+      window.dispatchEvent(new CustomEvent("api-key-saved"));
+      if (typeof hasConfiguredProvider === "boolean") {
+        useApiKeySetupStore.setState({
+          hasApiKey: hasConfiguredProvider,
+          showModal: false,
+        });
+      }
+    },
+    [onProvidersUpdate, refreshReliantStatus]
+  );
+
+  useEffect(() => {
+    void refreshReliantStatus();
+  }, [refreshReliantStatus]);
+
+  useEffect(() => {
+    const loadPreferences = async () => {
+      try {
+        const data = await api.settings.getPreferences();
+        setStreamingEnabled((data.streaming_enabled as boolean) ?? false);
+      } catch (error) {
+        console.error("Failed to load preferences:", error);
+      } finally {
+        setLoadingPreferences(false);
+      }
+    };
+
+    void loadPreferences();
+  }, []);
+
+  const handleStreamingToggle = async (enabled: boolean) => {
+    try {
+      await api.settings.updatePreferences({ streaming_enabled: enabled });
+      setStreamingEnabled(enabled);
+    } catch (error) {
+      console.error("Failed to update streaming preference:", error);
+    }
+  };
+
+  const handleCopyCreatedReliantToken = async () => {
+    if (!createdReliantToken || !navigator.clipboard?.writeText) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(createdReliantToken);
+      setCopiedReliantToken(true);
+      setTimeout(() => setCopiedReliantToken(false), 2000);
+    } catch (error) {
+      console.error("Failed to copy Reliant token:", error);
+    }
+  };
 
   const handleDeleteProvider = async (provider: string) => {
-    const config = providerConfigs[provider as keyof typeof providerConfigs];
+    const config = providerConfigs[provider as ProviderId];
     if (
-      !confirm(
-        `Are you sure you want to remove the API key for ${
-          config?.name || provider
-        }?`
+      !window.confirm(
+        `Are you sure you want to remove ${config?.name || provider} from Reliant?`
       )
     ) {
       return;
     }
 
     setDeletingProvider(provider);
+    setValidationMessage(null);
+
     try {
-      await api.settings.updateProvider(provider, ""); // Empty key triggers deletion
-      onProvidersUpdate?.();
-
-      // Refresh models immediately - the API call already waits for the database write to complete
-      await useGlobalDataStore.getState().refetchModels();
-
-      // Dispatch event to notify all model inputs to refresh
-      window.dispatchEvent(new CustomEvent('api-key-saved'));
-
-      // Check if this was the last API key - if so, reset the API key setup state
-      // so the modal will show again when user navigates to project/chat screens
-      const remainingWithKeys = providers.filter(
-        (p) => p.hasApiKey && p.provider !== provider
+      await api.settings.updateProvider(provider, "");
+      const remainingConfigured = providers.filter(
+        (p) => p.provider !== provider && isProviderConnected(p)
       );
-      if (remainingWithKeys.length === 0) {
-        // Reset the dismissed state and hasApiKey so modal can show again
+      const hasConfiguredProvider = remainingConfigured.length > 0;
+      await refreshProviderSurfaces(hasConfiguredProvider);
+
+      if (!hasConfiguredProvider) {
         resetApiKeySetupDismissed();
         useApiKeySetupStore.setState({ hasApiKey: false });
       }
+
+      setEditingProvider((current) => (current === provider ? null : current));
+      setValidationMessage({
+        valid: true,
+        message:
+          provider === "reliant"
+            ? "Reliant disconnected successfully."
+            : `${config?.name || provider} removed successfully.`,
+      });
+      setTimeout(() => setValidationMessage(null), 3000);
     } catch (error) {
-      console.error("Failed to delete provider:", error);
+      const message = error instanceof Error ? error.message : "Failed to remove provider";
+      setValidationMessage({
+        valid: false,
+        message: parseErrorMessage(message, provider),
+      });
     } finally {
       setDeletingProvider(null);
     }
   };
 
   const handleSaveApiKey = async (provider?: string) => {
-    const targetProvider = provider || selectedProvider;
+    const targetProvider = (provider || selectedProvider) as ProviderId;
     const targetKey = provider ? editApiKeys[provider] : apiKey;
+
+    if (!targetProvider) {
+      return;
+    }
+
+    if (!targetKey?.trim()) {
+      setValidationMessage({
+        valid: false,
+        message:
+          targetProvider === "reliant"
+            ? "Paste a cpat_ token to store it locally."
+            : "Please enter an API key.",
+      });
+      return;
+    }
 
     if (!provider) {
       setSaving(true);
@@ -438,40 +527,32 @@ export function CombinedGeneralSettings({
     setValidationMessage(null);
 
     try {
-      await api.settings.updateProvider(targetProvider, targetKey || "");
-      onProvidersUpdate?.();
-
-      // Refresh models immediately - the API call already waits for the database write to complete
-      await useGlobalDataStore.getState().refetchModels();
-
-      // Dispatch event to notify all model inputs to refresh
-      window.dispatchEvent(new CustomEvent('api-key-saved'));
+      await api.settings.updateProvider(targetProvider, targetKey.trim());
+      await refreshProviderSurfaces(true);
 
       if (provider) {
-        // Editing existing provider
         setEditingProvider(null);
-        setEditApiKeys({ ...editApiKeys, [provider]: "" });
+        setEditApiKeys((current) => ({ ...current, [provider]: "" }));
+        setShowEditKeys((current) => ({ ...current, [provider]: false }));
       } else {
-        // Adding new provider
         setSelectedProvider("");
         setApiKey("");
-        setValidationMessage({
-          valid: true,
-          message: "API key saved successfully",
-        });
-        setTimeout(() => setValidationMessage(null), 3000);
+        setShowKey(false);
       }
-    } catch (error) {
-      console.error("Failed to save API key:", error);
-      const errorText =
-        error instanceof Error ? error.message : "Invalid API key";
-
-      // Use comprehensive error parser
-      const errorMessage = parseErrorMessage(errorText, targetProvider);
 
       setValidationMessage({
+        valid: true,
+        message:
+          targetProvider === "reliant"
+            ? "Reliant token saved successfully."
+            : "API key saved successfully.",
+      });
+      setTimeout(() => setValidationMessage(null), 3000);
+    } catch (error) {
+      const errorText = error instanceof Error ? error.message : "Invalid API key";
+      setValidationMessage({
         valid: false,
-        message: errorMessage,
+        message: parseErrorMessage(errorText, targetProvider),
       });
     } finally {
       if (!provider) {
@@ -480,70 +561,53 @@ export function CombinedGeneralSettings({
     }
   };
 
-  // Load streaming and notification preferences on mount
-  useEffect(() => {
-    const loadPreferences = async () => {
-      try {
-        const data = await api.settings.getPreferences();
-        setStreamingEnabled((data.streaming_enabled as boolean) ?? false);
-        // Convert backend settings to interaction mode
-      } catch (error) {
-        console.error("Failed to load preferences:", error);
-      } finally {
-        setLoadingPreferences(false);
-      }
-    };
-    loadPreferences();
-  }, []);
+  const handleValidateApiKey = async (providerOverride?: ProviderId, keyOverride?: string) => {
+    const targetProvider = providerOverride || (selectedProvider as ProviderId);
+    const targetKey = typeof keyOverride === "string" ? keyOverride : apiKey;
 
-  // Handle streaming toggle
-  const handleStreamingToggle = async (enabled: boolean) => {
-    try {
-      await api.settings.updatePreferences({
-        streaming_enabled: enabled,
-      });
-      setStreamingEnabled(enabled);
-    } catch (error) {
-      console.error("Failed to update streaming preference:", error);
+    if (!targetProvider) {
+      return;
     }
-  };
 
-  // Validate API key via gRPC
-  const handleValidateApiKey = async () => {
+    if (targetProvider !== "reliant" && !targetKey.trim()) {
+      setValidationMessage({ valid: false, message: "Please enter an API key." });
+      return;
+    }
+
     setValidating(true);
     setValidationMessage(null);
 
     try {
       const result = await api.settings.validateProviderAPIKey(
-        selectedProvider,
-        apiKey
+        targetProvider,
+        targetProvider === "reliant" ? targetKey.trim() : targetKey.trim()
       );
-      let message =
-        result.message || "Connection failed. Please check your API key.";
+      const message = result.valid
+        ? result.message ||
+          (targetProvider === "reliant"
+            ? "Reliant access looks healthy."
+            : "Connection successful! API key is valid.")
+        : parseErrorMessage(
+            result.message || "Connection failed. Please check your credentials.",
+            targetProvider
+          );
 
-      // Use comprehensive error parser for validation errors
-      if (!result.valid) {
-        message = parseErrorMessage(message, selectedProvider);
+      setValidationMessage({ valid: result.valid, message });
+      if (targetProvider === "reliant") {
+        await refreshReliantStatus();
       }
-
-      setValidationMessage({
-        valid: result.valid,
-        message: result.valid
-          ? "Connection successful! API key is valid."
-          : message,
-      });
     } catch (error) {
-      console.error("Failed to validate API key:", error);
+      const errorText = error instanceof Error ? error.message : "Failed to validate provider";
       setValidationMessage({
         valid: false,
-        message: "Failed to test connection. Please try again.",
+        message: parseErrorMessage(errorText, targetProvider),
       });
     } finally {
       setValidating(false);
     }
   };
 
-  const handleConnectOAuth = async (oauthType: string) => {
+  const handleConnectOAuth = async (oauthType: "claude" | "codex") => {
     setValidating(true);
     setValidationMessage(null);
 
@@ -552,22 +616,12 @@ export function CombinedGeneralSettings({
 
     try {
       const result = await oauthHook.start();
-
       if (!result.ok) {
-        setValidationMessage({
-          valid: false,
-          message: result.message,
-        });
+        setValidationMessage({ valid: false, message: result.message });
         return;
       }
 
-      onProvidersUpdate?.();
-
-      // Refresh models
-      await useGlobalDataStore.getState().refetchModels();
-      window.dispatchEvent(new CustomEvent("api-key-saved"));
-
-      // Reset form
+      await refreshProviderSurfaces(true);
       setSelectedProvider("");
       setValidationMessage({
         valid: true,
@@ -575,7 +629,6 @@ export function CombinedGeneralSettings({
       });
       setTimeout(() => setValidationMessage(null), 3000);
     } catch (error) {
-      console.error(`Failed to connect ${displayName}:`, error);
       const errorMessage = error instanceof Error ? error.message : "Connection failed";
       setValidationMessage({
         valid: false,
@@ -586,21 +639,458 @@ export function CombinedGeneralSettings({
     }
   };
 
+  const handleCreateReliantToken = async () => {
+    setReliantActionLoading("create");
+    setValidationMessage(null);
+
+    try {
+      const result = await api.settings.createReliantProviderToken({
+        name: reliantTokenName.trim() || undefined,
+      });
+
+      if (!result.success) {
+        throw new Error(result.message || "Failed to create Reliant token");
+      }
+
+      setCreatedReliantToken(result.token);
+      setCopiedReliantToken(false);
+      setSelectedProvider("");
+      setEditingProvider("reliant");
+      setApiKey("");
+      setReliantTokenName("");
+
+      if (result.token && navigator.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(result.token);
+          setCopiedReliantToken(true);
+          setTimeout(() => setCopiedReliantToken(false), 2000);
+        } catch (error) {
+          console.error("Failed to copy created Reliant token:", error);
+        }
+      }
+
+      setValidationMessage({
+        valid: true,
+        message:
+          result.message ||
+          "Reliant token created, saved locally, and copied to your clipboard.",
+      });
+
+      let refreshFailed = false;
+      try {
+        await refreshProviderSurfaces(true);
+      } catch (error) {
+        refreshFailed = true;
+        console.error("Failed to refresh provider surfaces after Reliant token creation:", error);
+      }
+
+      if (refreshFailed) {
+        setValidationMessage({
+          valid: true,
+          message:
+            "Reliant token created successfully. Some follow-up refresh steps failed, so you may need to refresh the UI before status updates appear.",
+        });
+      }
+      setTimeout(() => setValidationMessage(null), 4000);
+    } catch (error) {
+      const errorText = error instanceof Error ? error.message : "Failed to create Reliant token";
+      setValidationMessage({
+        valid: false,
+        message: parseErrorMessage(errorText, "reliant"),
+      });
+    } finally {
+      setReliantActionLoading(null);
+    }
+  };
+
+  const handleRevokeReliantToken = async (tokenId: string) => {
+    if (!window.confirm("Revoke this Reliant token? This cannot be undone.")) {
+      return;
+    }
+
+    setReliantActionLoading(`revoke:${tokenId}`);
+    setValidationMessage(null);
+
+    try {
+      const result = await api.settings.revokeReliantProviderToken(tokenId, false);
+      if (!result.success) {
+        throw new Error(result.message || "Failed to revoke Reliant token");
+      }
+      await refreshReliantStatus();
+      setValidationMessage({
+        valid: true,
+        message: result.message || "Reliant token revoked.",
+      });
+      setTimeout(() => setValidationMessage(null), 3000);
+    } catch (error) {
+      const errorText = error instanceof Error ? error.message : "Failed to revoke Reliant token";
+      setValidationMessage({
+        valid: false,
+        message: parseErrorMessage(errorText, "reliant"),
+      });
+    } finally {
+      setReliantActionLoading(null);
+    }
+  };
+
+  const renderValidationBanner = validationMessage ? (
+    <div
+      className={cn(
+        "flex items-start gap-2 rounded-md border p-3 text-sm",
+        validationMessage.valid
+          ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-700"
+          : "border-red-500/20 bg-red-500/10 text-red-600"
+      )}
+    >
+      {validationMessage.valid ? (
+        <CheckCircle2 className="mt-0.5 h-4 w-4" />
+      ) : (
+        <AlertCircle className="mt-0.5 h-4 w-4" />
+      )}
+      <span>{validationMessage.message}</span>
+    </div>
+  ) : null;
+
+  const renderReliantAccessSummary = () => {
+    const access = reliantProvider?.access;
+    const providerStatus = currentReliantSummary?.status;
+    const providerMessage = currentReliantSummary?.statusMessage;
+
+    return (
+      <div className="space-y-4 rounded-lg border border-border bg-muted/20 p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium">Managed access status</span>
+          <span
+            className={cn(
+              "inline-flex items-center rounded-full px-2 py-1 text-xs font-medium",
+              statusBadgeClasses(providerStatus || access?.state)
+            )}
+          >
+            {statusLabel(providerStatus || access?.state)}
+          </span>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          {providerMessage || access?.message || "Reliant status will appear here once configured."}
+        </p>
+
+        {access && (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <div className="rounded-md border border-border bg-background p-3">
+              <div className="text-xs uppercase text-muted-foreground">Plan</div>
+              <div className="mt-1 text-sm font-medium">
+                {access.plan_code || access.plan_id || "—"}
+              </div>
+            </div>
+            <div className="rounded-md border border-border bg-background p-3">
+              <div className="text-xs uppercase text-muted-foreground">Spend</div>
+              <div className="mt-1 text-sm font-medium">
+                {formatCurrency(access.spend)}
+              </div>
+            </div>
+            <div className="rounded-md border border-border bg-background p-3">
+              <div className="text-xs uppercase text-muted-foreground">Hard budget</div>
+              <div className="mt-1 text-sm font-medium">
+                {formatCurrency(access.hard_budget_usd)}
+              </div>
+            </div>
+            <div className="rounded-md border border-border bg-background p-3">
+              <div className="text-xs uppercase text-muted-foreground">RPM / TPM</div>
+              <div className="mt-1 text-sm font-medium">
+                {access.rpm_limit || 0} / {access.tpm_limit || 0}
+              </div>
+            </div>
+            <div className="rounded-md border border-border bg-background p-3">
+              <div className="text-xs uppercase text-muted-foreground">Parallel requests</div>
+              <div className="mt-1 text-sm font-medium">
+                {access.max_parallel_requests || 0}
+              </div>
+            </div>
+            <div className="rounded-md border border-border bg-background p-3">
+              <div className="text-xs uppercase text-muted-foreground">Key duration</div>
+              <div className="mt-1 text-sm font-medium">{access.key_duration || "—"}</div>
+            </div>
+          </div>
+        )}
+
+        {access?.allowed_models?.length ? (
+          <div className="space-y-2">
+            <div className="text-xs uppercase text-muted-foreground">Allowed models</div>
+            <div className="flex flex-wrap gap-2">
+              {access.allowed_models.map((model) => (
+                <span
+                  key={model}
+                  className="rounded-full border border-border bg-background px-2 py-1 text-xs"
+                >
+                  {model}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
+  const renderReliantTokenList = () => (
+    <div className="space-y-3 rounded-lg border border-border bg-card p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h4 className="text-sm font-semibold">Control-plane tokens</h4>
+          <p className="text-xs text-muted-foreground">
+            Reliant tokens are stored locally as control-plane credentials. Runtime model keys are exchanged on demand.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void refreshReliantStatus()}
+          disabled={reliantLoading}
+          className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-50"
+        >
+          {reliantLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
+          Refresh
+        </button>
+      </div>
+
+      {reliantProvider?.masked_token ? (
+        <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
+          <div className="text-xs uppercase text-muted-foreground">Stored token</div>
+          <div className="mt-1 font-mono text-foreground">{reliantProvider.masked_token}</div>
+        </div>
+      ) : null}
+
+      {createdReliantToken ? (
+        <div className="rounded-md border border-emerald-500/20 bg-emerald-500/10 p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-medium text-emerald-700">New Reliant token</div>
+              <p className="mt-1 break-all font-mono text-xs text-emerald-700/90">
+                {createdReliantToken}
+              </p>
+              <p className="mt-2 text-xs text-emerald-700/80">
+                This token is shown once. Copy it now if you need it outside Reliant.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleCopyCreatedReliantToken()}
+              className="inline-flex items-center gap-2 rounded-md border border-emerald-500/30 bg-background px-3 py-1.5 text-sm text-emerald-700 hover:bg-background/80"
+            >
+              <Copy className="h-4 w-4" />
+              {copiedReliantToken ? "Copied" : "Copy"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="space-y-2">
+        {reliantProvider?.tokens?.length ? (
+          reliantProvider.tokens.map((token) => (
+            <div
+              key={token.id}
+              className="flex flex-col gap-3 rounded-md border border-border bg-background p-3 md:flex-row md:items-center md:justify-between"
+            >
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">{token.name || token.token_prefix}</span>
+                  <span className="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground">
+                    {token.token_prefix}
+                  </span>
+                  {token.ephemeral ? (
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                      Ephemeral
+                    </span>
+                  ) : null}
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Created {formatDateTime(token.created_at)}
+                  {token.last_used_at ? ` • Last used ${formatDateTime(token.last_used_at)}` : ""}
+                  {token.expires_at ? ` • Expires ${formatDateTime(token.expires_at)}` : ""}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleRevokeReliantToken(token.id)}
+                disabled={reliantActionLoading === `revoke:${token.id}`}
+                className="inline-flex items-center gap-2 rounded-md border border-destructive/20 px-3 py-1.5 text-sm text-destructive hover:bg-destructive/10 disabled:opacity-50"
+              >
+                {reliantActionLoading === `revoke:${token.id}` ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                Revoke
+              </button>
+            </div>
+          ))
+        ) : (
+          <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
+            No Reliant tokens returned from the control plane yet.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderReliantManager = (mode: "add" | "edit") => {
+    const editValue = editApiKeys.reliant || "";
+    const showingEditValue = mode === "edit";
+    const inputValue = showingEditValue ? editValue : apiKey;
+    const inputShown = showingEditValue ? !!showEditKeys.reliant : showKey;
+    const setInputValue = (value: string) => {
+      if (showingEditValue) {
+        setEditApiKeys((current) => ({ ...current, reliant: value }));
+      } else {
+        setApiKey(value);
+      }
+      setValidationMessage(null);
+    };
+
+    return (
+      <div className="space-y-4">
+        <div className="rounded-lg border border-border bg-muted/30 p-4">
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-foreground">Managed Reliant access</p>
+            <p className="text-sm text-muted-foreground">
+              Create a Reliant token here and Reliant will store it locally, then exchange it
+              for runtime model access automatically.
+            </p>
+          </div>
+        </div>
+
+        {renderValidationBanner}
+        {renderReliantAccessSummary()}
+
+        <div className="space-y-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-foreground">Create a Reliant token</p>
+            <p className="text-sm text-muted-foreground">
+              This is the normal setup path. The token is stored locally right away and the full
+              cpat_ value is shown once in case you need to copy it elsewhere.
+            </p>
+          </div>
+          <input
+            type="text"
+            value={reliantTokenName}
+            onChange={(e) => setReliantTokenName(e.target.value)}
+            placeholder="Optional token name"
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          />
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void handleCreateReliantToken()}
+              disabled={reliantActionLoading === "create"}
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {reliantActionLoading === "create" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
+              Create token
+            </button>
+            <button
+              type="button"
+              onClick={() => void refreshReliantStatus()}
+              disabled={reliantLoading}
+              className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm hover:bg-accent disabled:opacity-50"
+            >
+              {reliantLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              Refresh status
+            </button>
+          </div>
+        </div>
+
+        <details className="rounded-lg border border-border bg-card p-4">
+          <summary className="cursor-pointer list-none text-sm font-medium text-foreground">
+            Use an existing token instead
+          </summary>
+          <div className="mt-4 space-y-2">
+            <p className="text-sm text-muted-foreground">
+              Paste a cpat_ token only if you already created one in another Reliant client or on
+              another device.
+            </p>
+            <div className="relative">
+              <input
+                type={inputShown ? "text" : "password"}
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                placeholder="cpat_..."
+                className="w-full rounded-md border border-input bg-background px-3 py-2 pr-10 font-mono text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  if (showingEditValue) {
+                    setShowEditKeys((current) => ({
+                      ...current,
+                      reliant: !current.reliant,
+                    }));
+                  } else {
+                    setShowKey((current) => !current);
+                  }
+                }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {inputShown ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void handleValidateApiKey("reliant", inputValue)}
+                disabled={validating}
+                className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm hover:bg-accent disabled:opacity-50"
+              >
+                {validating ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <TestTube className="h-4 w-4" />
+                )}
+                Check access
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSaveApiKey(showingEditValue ? "reliant" : undefined)}
+                disabled={!inputValue.trim() || saving}
+                className="inline-flex items-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-4 py-2 text-sm text-primary hover:bg-primary/15 disabled:opacity-50"
+              >
+                {saving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Check className="h-4 w-4" />
+                )}
+                {showingEditValue ? "Save token" : "Store token"}
+              </button>
+            </div>
+          </div>
+        </details>
+
+        {renderReliantTokenList()}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       <div data-onboarding="ai-providers-settings">
-        <h2 className="text-2xl font-bold tracking-tight">
-          AI Provider Configuration
-        </h2>
+        <h2 className="text-2xl font-bold tracking-tight">AI Provider Configuration</h2>
         <p className="text-muted-foreground">
           Connect your AI providers to enable model access and conversations.
         </p>
       </div>
 
-      {/* Add Provider Section */}
       {availableProviders.length > 0 && (
-        <div className="border border-border rounded-lg p-6 bg-card">
-          <h3 className="text-lg font-semibold mb-4">Add New Provider</h3>
+        <div className="rounded-lg border border-border bg-card p-6">
+          <h3 className="mb-4 text-lg font-semibold">Add New Provider</h3>
 
           <div className="space-y-4">
             <div className="space-y-2">
@@ -609,11 +1099,13 @@ export function CombinedGeneralSettings({
                 <select
                   value={selectedProvider}
                   onChange={(e) => {
-                    const providerId = e.target.value;
-                    setSelectedProvider(providerId);
+                    setSelectedProvider(e.target.value);
+                    setApiKey("");
+                    setShowKey(false);
+                    setCreatedReliantToken("");
                     setValidationMessage(null);
                   }}
-                  className="w-full px-3 py-2 pr-10 border border-input bg-background rounded-md appearance-none cursor-pointer"
+                  className="w-full appearance-none rounded-md border border-input bg-background px-3 py-2 pr-10"
                 >
                   <option value="">Choose a provider...</option>
                   {availableProviders.map(([id, config]) => (
@@ -622,18 +1114,19 @@ export function CombinedGeneralSettings({
                     </option>
                   ))}
                 </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none text-muted-foreground" />
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               </div>
             </div>
 
-            {selectedProvider && (
-              providerConfigs[selectedProvider as ProviderId]?.usesOAuth ? (
-                /* OAuth Section */
-                <div className="space-y-4">
-                  <div className="p-4 rounded-lg border border-border bg-muted/30">
-                    <div className="space-y-2">
+            {selectedProvider && selectedConfig && (
+              <>
+                {selectedConfig.isManaged ? (
+                  renderReliantManager("add")
+                ) : selectedConfig.usesOAuth ? (
+                  <div className="space-y-4">
+                    <div className="rounded-lg border border-border bg-muted/30 p-4">
                       <p className="text-sm font-medium text-foreground">
-                        Authenticate via {providerConfigs[selectedProvider as ProviderId]?.name}
+                        Authenticate via {selectedConfig.name}
                       </p>
                       <p className="text-sm text-muted-foreground">
                         {oauthAvailability.available
@@ -646,295 +1139,287 @@ export function CombinedGeneralSettings({
                         </code>
                       )}
                     </div>
-                  </div>
 
-                  {validationMessage && (
-                    <div
-                      className={cn(
-                        "flex items-center gap-2 text-sm p-3 rounded-lg",
-                        validationMessage.valid
-                          ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
-                          : "bg-red-500/10 text-red-600 border border-red-500/20"
-                      )}
-                    >
-                      {validationMessage.valid ? (
-                        <CheckCircle2 className="w-4 h-4" />
+                    {renderValidationBanner}
+
+                    <div className="flex justify-end">
+                      {oauthAvailability.available ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleConnectOAuth(selectedConfig.usesOAuth)}
+                          disabled={validating}
+                          className="inline-flex items-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-4 py-2 text-sm text-primary hover:bg-primary/15 disabled:opacity-50"
+                        >
+                          {validating ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Connecting...
+                            </>
+                          ) : (
+                            <>Login with {selectedConfig.name}</>
+                          )}
+                        </button>
                       ) : (
-                        <XCircle className="w-4 h-4" />
+                        <button
+                          className="px-4 py-2 text-sm font-medium border rounded-md transition-colors disabled:opacity-50"
+                          onClick={oauthAvailability.recheck}
+                          disabled={oauthAvailability.loading}
+                        >
+                          {oauthAvailability.loading ? "Checking…" : "Retry"}
+                        </button>
                       )}
-                      {validationMessage.message}
                     </div>
-                  )}
-
-                  <div className="flex justify-end">
-                    {oauthAvailability.available ? (
-                      <button
-                        className="px-4 py-2 text-sm font-medium border-2 rounded-md transition-colors disabled:opacity-50 flex items-center gap-2"
-                        style={{
-                          backgroundColor: "hsl(var(--primary) / 0.1)",
-                          color: "hsl(var(--primary))",
-                          borderColor: "hsl(var(--primary))",
-                        }}
-                        onClick={() => handleConnectOAuth(providerConfigs[selectedProvider as ProviderId]?.usesOAuth as string)}
-                        disabled={validating}
-                      >
-                        {validating ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Checking...
-                          </>
-                        ) : (
-                          <>Login with {providerConfigs[selectedProvider as ProviderId]?.name}</>
-                        )}
-                      </button>
-                    ) : (
-                      <button
-                        className="px-4 py-2 text-sm font-medium border rounded-md transition-colors disabled:opacity-50"
-                        onClick={oauthAvailability.recheck}
-                        disabled={oauthAvailability.loading}
-                      >
-                        {oauthAvailability.loading ? "Checking…" : "Retry"}
-                      </button>
-                    )}
                   </div>
-                </div>
-              ) : (
-                /* Standard API Key Input Section */
-                <>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">API Key</label>
-                    <div className="relative">
-                      <input
-                        type={showKey ? "text" : "password"}
-                        value={apiKey}
-                        onChange={(e) => {
-                          setApiKey(e.target.value);
-                          setValidationMessage(null);
-                        }}
-                        placeholder={`Enter your ${
-                          providerConfigs[
-                            selectedProvider as ProviderId
-                          ]?.name
-                        } API key`}
-                        className="w-full px-3 py-2 border border-input bg-background rounded-md pr-10 font-mono text-sm"
-                      />
+                ) : (
+                  <div className="space-y-4">
+                    <div className="rounded-lg border border-border bg-muted/30 p-4">
+                      <p className="text-sm font-medium text-foreground">{selectedConfig.name}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {selectedConfig.description}
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">API key</label>
+                      <div className="relative">
+                        <input
+                          type={showKey ? "text" : "password"}
+                          value={apiKey}
+                          onChange={(e) => {
+                            setApiKey(e.target.value);
+                            setValidationMessage(null);
+                          }}
+                          placeholder={selectedConfig.keyFormat}
+                          className="w-full rounded-md border border-input bg-background px-3 py-2 pr-10 font-mono text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowKey((current) => !current)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        >
+                          {showKey ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Get your API key from{" "}
+                        <a
+                          href={selectedConfig.docsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline"
+                        >
+                          {selectedConfig.name}
+                        </a>
+                        .
+                      </p>
+                    </div>
+
+                    {renderValidationBanner}
+
+                    <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={() => setShowKey(!showKey)}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        onClick={() => void handleValidateApiKey()}
+                        disabled={!apiKey.trim() || validating}
+                        className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm hover:bg-accent disabled:opacity-50"
                       >
-                        {showKey ? (
-                          <EyeOff className="h-4 w-4" />
+                        {validating ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
-                          <Eye className="h-4 w-4" />
+                          <TestTube className="h-4 w-4" />
                         )}
+                        Test Connection
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleSaveApiKey()}
+                        disabled={!apiKey.trim() || saving}
+                        className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                      >
+                        {saving ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Plus className="h-4 w-4" />
+                        )}
+                        Add Provider
                       </button>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Get your API key from{" "}
-                      <a
-                        href={
-                          providerConfigs[
-                            selectedProvider as ProviderId
-                          ]?.docsUrl
-                        }
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary hover:underline"
-                      >
-                        {
-                          providerConfigs[
-                            selectedProvider as ProviderId
-                          ]?.name
-                        }{" "}
-                        Console
-                      </a>
-                    </p>
                   </div>
-
-                  {validationMessage && (
-                    <div
-                      className={cn(
-                        "flex items-start gap-2 p-3 rounded-md",
-                        validationMessage.valid
-                          ? "bg-success/10 text-success border border-success/20"
-                          : "bg-destructive/10 text-destructive border border-destructive/20"
-                      )}
-                    >
-                      {validationMessage.valid ? (
-                        <Check className="h-4 w-4 mt-0.5" />
-                      ) : (
-                        <AlertCircle className="h-4 w-4 mt-0.5" />
-                      )}
-                      <span className="text-sm">{validationMessage.message}</span>
-                    </div>
-                  )}
-
-                  <div className="flex gap-2">
-                    <button
-                      className="px-4 py-2 text-sm font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground rounded-md transition-colors disabled:opacity-50 flex items-center gap-2"
-                      onClick={handleValidateApiKey}
-                      disabled={!apiKey || validating}
-                    >
-                      {validating ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Testing...
-                        </>
-                      ) : (
-                        <>
-                          <TestTube className="h-4 w-4" />
-                          Test Connection
-                        </>
-                      )}
-                    </button>
-                    <button
-                      className="px-4 py-2 text-sm font-medium border-2 rounded-md transition-colors disabled:opacity-50 flex items-center gap-2"
-                      style={{
-                        backgroundColor: "hsl(var(--primary) / 0.1)",
-                        color: "hsl(var(--primary))",
-                        borderColor: "hsl(var(--primary))",
-                      }}
-                      onClick={() => handleSaveApiKey()}
-                      disabled={!apiKey || saving}
-                    >
-                      {saving ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Saving...
-                        </>
-                      ) : (
-                        <>
-                          <Plus className="h-4 w-4" />
-                          Add Provider
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </>
-              )
+                )}
+              </>
             )}
           </div>
         </div>
       )}
 
-      {/* Configured Providers List */}
       {configuredProviders.length > 0 && (
         <div>
-          <h3 className="text-lg font-semibold mb-4">Configured Providers</h3>
+          <h3 className="mb-4 text-lg font-semibold">Configured Providers</h3>
           <div className="space-y-3">
             {configuredProviders.map((provider) => {
-              const config =
-                providerConfigs[
-                  provider.provider as ProviderId
-                ];
+              const config = providerConfigs[provider.provider as ProviderId];
+              const isReliant = provider.provider === "reliant";
+              const badgeStatus = provider.status || (isProviderConnected(provider) ? "connected" : "not_configured");
+
               return (
                 <div
                   key={provider.provider}
-                  className="border border-border rounded-lg bg-card p-4"
+                  className="rounded-lg border border-border bg-card p-4"
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
                         <span className="text-xs font-semibold text-primary">
                           {config?.name?.charAt(0) || "P"}
                         </span>
                       </div>
-                      <div>
-                        <h4 className="font-semibold">
-                          {provider.displayName}
-                        </h4>
-                        <div className="flex items-center gap-3 mt-1">
-                          <span className="flex items-center gap-1 text-sm text-success">
-                            <Check className="h-3 w-3" />
-                            Connected
+                      <div className="space-y-1">
+                        <h4 className="font-semibold">{provider.displayName}</h4>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className={cn(
+                              "inline-flex items-center rounded-full px-2 py-1 text-xs font-medium",
+                              statusBadgeClasses(badgeStatus)
+                            )}
+                          >
+                            {statusLabel(badgeStatus)}
                           </span>
-                          {provider.maskedKey && (
-                            <span className="text-sm text-muted-foreground font-mono" data-sentry-mask>
-                              {provider.maskedKey}
+                          {provider.authMethod ? (
+                            <span className="rounded-full border border-border px-2 py-1 text-xs text-muted-foreground">
+                              {provider.authMethod === "oauth"
+                                ? "OAuth"
+                                : provider.authMethod === "reliant"
+                                  ? "Managed"
+                                  : "API key"}
                             </span>
-                          )}
+                          ) : null}
+                          {(provider.maskedKey || (isReliant && reliantProvider?.masked_token)) ? (
+                            <span className="font-mono text-sm text-muted-foreground" data-sentry-mask>
+                              {provider.maskedKey || reliantProvider?.masked_token}
+                            </span>
+                          ) : null}
                         </div>
+                        {provider.statusMessage ? (
+                          <p className="text-sm text-muted-foreground">
+                            {provider.statusMessage}
+                          </p>
+                        ) : null}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {/* Hide Update button for providers that use OAuth auth (like Codex) */}
-                      {!config?.usesOAuth && (
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {isReliant ? (
                         <button
-                          className="px-3 py-1.5 text-sm border border-border rounded-md hover:bg-accent transition-colors flex items-center gap-1"
+                          type="button"
+                          onClick={() =>
+                            setEditingProvider((current) =>
+                              current === provider.provider ? null : provider.provider
+                            )
+                          }
+                          className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent"
+                        >
+                          <Settings2 className="h-4 w-4" />
+                          {editingProvider === provider.provider ? "Hide" : "Manage"}
+                        </button>
+                      ) : !config?.usesOAuth ? (
+                        <button
+                          type="button"
                           onClick={() => {
                             if (editingProvider === provider.provider) {
                               setEditingProvider(null);
-                              setEditApiKeys({
-                                ...editApiKeys,
+                              setEditApiKeys((current) => ({
+                                ...current,
                                 [provider.provider]: "",
-                              });
-                              setShowEditKeys({
-                                ...showEditKeys,
+                              }));
+                              setShowEditKeys((current) => ({
+                                ...current,
                                 [provider.provider]: false,
-                              });
+                              }));
                             } else {
                               setEditingProvider(provider.provider);
-                              setEditApiKeys({
-                                ...editApiKeys,
+                              setEditApiKeys((current) => ({
+                                ...current,
                                 [provider.provider]: "",
-                              });
+                              }));
                             }
+                            setValidationMessage(null);
                           }}
+                          className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent"
                         >
-                          <Settings2 className="w-4 h-4" />
-                          {editingProvider === provider.provider
-                            ? "Cancel"
-                            : "Update"}
+                          <Settings2 className="h-4 w-4" />
+                          {editingProvider === provider.provider ? "Cancel" : "Update"}
                         </button>
-                      )}
+                      ) : null}
+
+                      {isReliant ? (
+                        <button
+                          type="button"
+                          onClick={() => void refreshReliantStatus()}
+                          disabled={reliantLoading}
+                          className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-50"
+                        >
+                          {reliantLoading ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <RefreshCw className="h-4 w-4" />
+                          )}
+                          Refresh
+                        </button>
+                      ) : null}
+
                       <button
-                        className="px-3 py-1.5 text-sm border border-destructive/20 text-destructive rounded-md hover:bg-destructive/10 transition-colors flex items-center gap-1"
-                        onClick={() => handleDeleteProvider(provider.provider)}
+                        type="button"
+                        onClick={() => void handleDeleteProvider(provider.provider)}
                         disabled={deletingProvider === provider.provider}
+                        className="inline-flex items-center gap-2 rounded-md border border-destructive/20 px-3 py-1.5 text-sm text-destructive hover:bg-destructive/10 disabled:opacity-50"
                       >
                         {deletingProvider === provider.provider ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="h-4 w-4" />
                         )}
-                        {config?.usesOAuth ? "Disconnect" : "Delete"}
+                        {config?.usesOAuth || isReliant ? "Disconnect" : "Delete"}
                       </button>
                     </div>
                   </div>
 
-                  {/* Only show edit section for providers that use API-key auth */}
-                  {editingProvider === provider.provider && !config?.usesOAuth && (
-                    <div className="border-t border-border mt-4 pt-4 space-y-4">
+                  {renderValidationBanner}
+
+                  {editingProvider === provider.provider && isReliant ? (
+                    <div className="mt-4 border-t border-border pt-4">
+                      {renderReliantManager("edit")}
+                    </div>
+                  ) : null}
+
+                  {editingProvider === provider.provider && !isReliant && !config?.usesOAuth ? (
+                    <div className="mt-4 space-y-4 border-t border-border pt-4">
                       <div className="space-y-2">
-                        <label className="text-sm font-medium">
-                          Update API Key
-                        </label>
+                        <label className="text-sm font-medium">Update API Key</label>
                         <div className="relative">
                           <input
-                            type={
-                              showEditKeys[provider.provider]
-                                ? "text"
-                                : "password"
-                            }
+                            type={showEditKeys[provider.provider] ? "text" : "password"}
                             value={editApiKeys[provider.provider] || ""}
                             onChange={(e) => {
-                              setEditApiKeys({
-                                ...editApiKeys,
+                              setEditApiKeys((current) => ({
+                                ...current,
                                 [provider.provider]: e.target.value,
-                              });
+                              }));
+                              setValidationMessage(null);
                             }}
                             placeholder="Enter new API key to update"
-                            className="w-full px-3 py-2 border border-input bg-background rounded-md pr-10 font-mono text-sm"
+                            className="w-full rounded-md border border-input bg-background px-3 py-2 pr-10 font-mono text-sm"
                           />
                           <button
                             type="button"
                             onClick={() =>
-                              setShowEditKeys({
-                                ...showEditKeys,
-                                [provider.provider]:
-                                  !showEditKeys[provider.provider],
-                              })
+                              setShowEditKeys((current) => ({
+                                ...current,
+                                [provider.provider]: !current[provider.provider],
+                              }))
                             }
                             className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                           >
@@ -946,23 +1431,41 @@ export function CombinedGeneralSettings({
                           </button>
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          Note: For security, existing API keys cannot be
-                          viewed. Enter a new key to update.
+                          Existing API keys cannot be viewed. Enter a new key to replace the current one.
                         </p>
                       </div>
 
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <button
-                          className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded-md transition-colors disabled:opacity-50 flex items-center gap-2"
-                          onClick={() => handleSaveApiKey(provider.provider)}
+                          type="button"
+                          onClick={() =>
+                            void handleValidateApiKey(
+                              provider.provider as ProviderId,
+                              editApiKeys[provider.provider] || ""
+                            )
+                          }
+                          disabled={!editApiKeys[provider.provider] || validating}
+                          className="inline-flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm hover:bg-accent disabled:opacity-50"
+                        >
+                          {validating ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <TestTube className="h-4 w-4" />
+                          )}
+                          Test Connection
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleSaveApiKey(provider.provider)}
                           disabled={!editApiKeys[provider.provider]}
+                          className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                         >
                           <Check className="h-4 w-4" />
                           Save Changes
                         </button>
                       </div>
                     </div>
-                  )}
+                  ) : null}
                 </div>
               );
             })}
@@ -970,19 +1473,17 @@ export function CombinedGeneralSettings({
         </div>
       )}
 
-      {/* Chat Preferences Section */}
-      <div className="mt-6 border border-border rounded-lg bg-card p-4">
-        <h3 className="text-base font-semibold mb-4">Chat Preferences</h3>
+      <div className="mt-6 rounded-lg border border-border bg-card p-4">
+        <h3 className="mb-4 text-base font-semibold">Chat Preferences</h3>
 
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-6">
             <div>
               <label htmlFor="streaming-toggle" className="text-sm font-medium">
                 Response Streaming
               </label>
-              <p className="text-xs text-muted-foreground mt-1">
-                Enable streaming to see AI responses as they're generated.
-                Disable for faster complete responses.
+              <p className="mt-1 text-xs text-muted-foreground">
+                Enable streaming to see AI responses as they are generated. Disable it for faster complete responses.
               </p>
             </div>
             <Toggle
@@ -990,18 +1491,13 @@ export function CombinedGeneralSettings({
               checked={streamingEnabled}
               onChange={handleStreamingToggle}
               disabled={loadingPreferences}
-              label={`${
-                streamingEnabled ? "Disable" : "Enable"
-              } response streaming`}
+              label={`${streamingEnabled ? "Disable" : "Enable"} response streaming`}
             />
           </div>
 
-          <div className="text-xs text-muted-foreground elevation-1 p-3 rounded-md">
-            <strong>Note:</strong> When streaming is disabled, responses arrive
-            all at once after processing is complete. This can be faster for
-            short responses but provides no visual feedback during generation.
+          <div className="rounded-md p-3 text-xs text-muted-foreground elevation-1">
+            <strong>Note:</strong> When streaming is disabled, responses arrive all at once after processing is complete.
           </div>
-
         </div>
       </div>
     </div>

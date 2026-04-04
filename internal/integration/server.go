@@ -160,7 +160,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	// Initialize API key provider with database (after repo is created)
 	controlPlaneClient := controlplane.NewClientFromEnv()
 	reliantRuntimeBaseURL := envutil.GetEnv("RELIANT_RUNTIME_BASE_URL", "")
-	if !features.IsReliantManagedAccessEnabledForContext(ctx, nil, "") {
+	if !features.IsReliantManagedAccessEnabledForContext(context.Background(), nil, "") {
 		controlPlaneClient = nil
 		reliantRuntimeBaseURL = ""
 	}

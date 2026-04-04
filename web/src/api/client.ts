@@ -381,6 +381,9 @@ export const api = {
         hasApiKey: p.has_api_key,
         maskedKey: p.masked_key,
         displayName: p.display_name,
+        authMethod: p.auth_method,
+        status: p.status,
+        statusMessage: p.status_message,
       }));
     },
 
@@ -397,6 +400,9 @@ export const api = {
         hasApiKey: found.has_api_key,
         maskedKey: found.masked_key,
         displayName: found.display_name,
+        authMethod: found.auth_method,
+        status: found.status,
+        statusMessage: found.status_message,
       };
     },
 
@@ -413,6 +419,25 @@ export const api = {
 
     validateProviderAPIKey: async (provider: string, apiKey: string) => {
       return settingsGrpc.validateProviderAPIKey(provider, apiKey);
+    },
+
+    createReliantProviderToken: async (input?: {
+      name?: string;
+      ephemeral?: boolean;
+      expires_in_seconds?: number;
+    }) => {
+      return settingsGrpc.createReliantProviderToken(input);
+    },
+
+    revokeReliantProviderToken: async (
+      tokenId: string,
+      deleteLocalCredential?: boolean
+    ) => {
+      return settingsGrpc.revokeReliantProviderToken(tokenId, deleteLocalCredential);
+    },
+
+    getReliantProviderStatus: async () => {
+      return settingsGrpc.getReliantProviderStatus();
     },
 
     completeCodexOAuth: async (code: string, codeVerifier: string, redirectURI: string) => {

@@ -97,16 +97,10 @@ const daemonLastSeenInterceptor: Interceptor = (next) => async (req) => {
   return await next(req);
 };
 
-// Auth interceptor to add JWT token to requests
+// Auth interceptor to add JWT token to requests.
+// In local dev, prefer a real persisted session JWT when present; otherwise
+// fall back to the backend's dev-user behavior by omitting Authorization.
 const authInterceptor: Interceptor = (next) => async (req) => {
-  // In dev mode, skip auth - backend will use DevUser
-  if (getIsDev()) {
-    logger.info("[gRPC Client] Dev mode - skipping auth:", {
-      method: req.method.name,
-    });
-    return await next(req);
-  }
-
   try {
     const {
       data: { session },
@@ -117,6 +111,11 @@ const authInterceptor: Interceptor = (next) => async (req) => {
       logger.info("[gRPC Client] Auth token set for request:", {
         method: req.method.name,
         tokenLength: session.access_token.length,
+        isDev: getIsDev(),
+      });
+    } else if (getIsDev()) {
+      logger.info("[gRPC Client] Dev mode - no persisted JWT, falling back to backend dev user:", {
+        method: req.method.name,
       });
     } else {
       logger.warn("[gRPC Client] No auth token available for request:", {

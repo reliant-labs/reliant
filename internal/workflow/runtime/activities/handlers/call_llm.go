@@ -281,9 +281,9 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			modelSelector.Providers = protoModel.GetProviders()
 		}
 
-		// Resolve model using the new registry
-		registry := models.MustGetRegistry()
-		resolved, err := registry.Resolve(modelSelector, availableProviders)
+		// Resolve model using the driver-aware resolver so synthetic providers
+		// like @reliant work the same way they do in catalog/model validation.
+		resolved, err := drivers.ResolveModelSelector(modelSelector, availableDrivers)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve model: %w. Please check your API key configuration in Settings", err)
 		}

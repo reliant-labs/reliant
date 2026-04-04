@@ -813,12 +813,35 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // Always register OAuth callback listener in Electron, including dev mode.
     setupElectronOAuthCallbackListener(set)
 
-    // Dev mode: skip auth and use dev user (backend uses DevUser)
+    // Dev mode: prefer a persisted real auth session when available, but keep
+    // the dev-user fallback for local workflows that do not need a real JWT.
     // Use runtime check so Electron packaged apps always follow RELIANT_CONFIG.isDev
     if (getIsDev()) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session?.access_token && session.user) {
+          logger.info('[AuthStore] Dev mode - using persisted real session', {
+            userId: session.user.id,
+            email: session.user.email,
+            tokenLength: session.access_token.length,
+          })
+          set({
+            user: session.user,
+            session,
+            loading: false,
+            initialized: true,
+          })
+          return
+        }
+      } catch (error) {
+        logger.warn('[AuthStore] Dev mode - failed to load persisted session, falling back to dev user', {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+
       // Read user ID from VITE_DEV_USER_ID env var, fallback to a default
       const devUserId = import.meta.env.VITE_DEV_USER_ID || 'dev-user-id';
-      logger.info('[AuthStore] Dev mode - using dev user', { userId: devUserId })
+      logger.info('[AuthStore] Dev mode - using dev user fallback', { userId: devUserId })
       set({
         // Use configured user ID from .env so developers can use their own data
         // Include email_confirmed_at to bypass email verification requirement
