@@ -1342,6 +1342,10 @@ func TestBuiltinWorkflow_ParallelCompete(t *testing.T) {
 	testBuiltinWorkflowFile(t, "parallel-compete.yaml")
 }
 
+func TestBuiltinWorkflow_ParallelLoopSample(t *testing.T) {
+	testBuiltinWorkflowFile(t, "parallel-loop-sample.yaml")
+}
+
 func TestBuiltinWorkflow_AuditingAgent(t *testing.T) {
 	testBuiltinWorkflowFile(t, "auditing-agent.yaml")
 }

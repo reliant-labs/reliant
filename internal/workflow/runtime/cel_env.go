@@ -117,10 +117,14 @@ func (b *CELContextBuilder) Build() map[string]interface{} {
 
 	// iter.* namespace - typed struct for compile-time validation
 	if b.iter != nil {
-		context["iter"] = b.iter
+		context["iter"] = map[string]interface{}{
+			"iteration": b.iter.Iteration,
+			"index":     b.iter.Index,
+			"item":      b.iter.Item,
+			"key":       b.iter.Key,
+		}
 	} else {
-		// Provide empty struct to avoid nil pointer issues
-		context["iter"] = &model.IterContext{Iteration: 0}
+		context["iter"] = map[string]interface{}{"iteration": 0, "index": 0}
 	}
 
 	// output.* namespace - current activity output (dynamic, save_message only)

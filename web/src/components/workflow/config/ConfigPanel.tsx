@@ -73,7 +73,7 @@ function isValidNodeId(id: string): boolean {
 
 /** Whether this step type supports thread configuration */
 function hasThreadSupport(step: Step): boolean {
-  return isWorkflowStep(step);
+  return isWorkflowStep(step) || isLoopStep(step);
 }
 
 /** Whether this step type supports project configuration */
@@ -235,11 +235,11 @@ export function ConfigPanel({
     [step, onUpdate],
   );
 
-  // Badge computation (thread only on workflow steps)
-  const wfThread = getStepThread(step);
-  const threadMode = wfThread?.mode || 'inherit';
+  // Badge computation (workflow + loop thread support)
+  const stepThread = getStepThread(step);
+  const threadMode = stepThread?.mode || 'inherit';
   const hasThreadBadge = threadMode !== 'inherit';
-  const hasInjectBadge = !!wfThread?.inject?.content;
+  const hasInjectBadge = !!stepThread?.inject?.content;
   const hasSaveMessageConfig = !!step.saveMessage;
   const hasProjectConfig = !!getStepProject(step)?.path;
   const hasConditionConfig = !!getConditionExpression(step.condition);
@@ -459,11 +459,15 @@ export function ConfigPanel({
             <span>Controls what thread context is passed to the child workflow.</span>
           </div>
           <NodeThreadConfigEditor
-            config={wfThread}
+            config={stepThread}
             onChange={(thread) => {
-              onUpdate(withWorkflowArgs(step, { thread: thread as any }));
+              onUpdate(
+                (isLoopStep(step)
+                  ? withLoopArgs(step, { thread: thread as any })
+                  : withWorkflowArgs(step, { thread: thread as any })) as Step,
+              );
             }}
-            isInLoop={isInLoop}
+            isInLoop={isInLoop || isLoopStep(step)}
             isReadOnly={isReadOnly}
             variant="flat"
             section="thread"
@@ -479,11 +483,15 @@ export function ConfigPanel({
             <span>Adds a message to the thread <strong>before</strong> this node executes.</span>
           </div>
           <NodeThreadConfigEditor
-            config={wfThread}
+            config={stepThread}
             onChange={(thread) => {
-              onUpdate(withWorkflowArgs(step, { thread: thread as any }));
+              onUpdate(
+                (isLoopStep(step)
+                  ? withLoopArgs(step, { thread: thread as any })
+                  : withWorkflowArgs(step, { thread: thread as any })) as Step,
+              );
             }}
-            isInLoop={isInLoop}
+            isInLoop={isInLoop || isLoopStep(step)}
             isReadOnly={isReadOnly}
             variant="flat"
             section="inject"

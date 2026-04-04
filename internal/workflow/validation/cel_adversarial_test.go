@@ -1088,6 +1088,7 @@ func TestCELAdversarial_BuiltinWorkflows(t *testing.T) {
 		"one-ring.yaml",
 		"auditing-agent.yaml",
 		"parallel-compete.yaml",
+		"parallel-loop-sample.yaml",
 		"structured-agent.yaml",
 	}
 

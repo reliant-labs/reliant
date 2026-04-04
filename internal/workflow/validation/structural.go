@@ -266,16 +266,48 @@ func validateNodeArgs(node *reliantv1.Node, nodePath []string, result *Result) {
 			result.AddError(CategoryStructure, nodePath, "args", "loop node missing args")
 			return
 		}
-		if !model.DirectCelIsSet(args.GetWhile()) {
-			result.AddError(CategoryStructure, nodePath, "while", "required")
+
+		isParallel := model.CelBoolIsSet(args.GetParallel()) && model.CelBoolValue(args.GetParallel())
+		hasItems := model.CelStringIsSet(args.GetItems())
+
+		if isParallel {
+			// Parallel loop: requires items, disallows while/yield
+			if !hasItems {
+				result.AddError(CategoryStructure, nodePath, "items",
+					"parallel loop requires 'items' (CEL expression evaluating to a list or map)")
+			}
+			if model.DirectCelIsSet(args.GetWhile()) {
+				result.AddError(CategoryStructure, nodePath, "while",
+					"parallel loop cannot use 'while' — iteration count is determined by 'items'")
+			}
+			if args.GetYield() != "" {
+				result.AddError(CategoryStructure, nodePath, "yield",
+					"parallel loop cannot use 'yield' — all iterations run concurrently")
+			}
+			// Validate on_failure enum
+			if onFailure := args.GetOnFailure(); onFailure != "" {
+				switch onFailure {
+				case "continue", "fail_fast", "fail_all":
+					// valid
+				default:
+					result.AddError(CategoryStructure, nodePath, "on_failure",
+						fmt.Sprintf("invalid on_failure value '%s': must be 'continue', 'fail_fast', or 'fail_all'", onFailure))
+				}
+			}
+		} else {
+			// Sequential loop: requires while
+			if !model.DirectCelIsSet(args.GetWhile()) {
+				result.AddError(CategoryStructure, nodePath, "while", "required for sequential loop")
+			}
 		}
+
 		// Sub-workflow: must have ref or inline
 		if !model.CelStringIsSet(args.GetRef()) && args.GetInline() == nil {
 			result.AddError(CategoryStructure, nodePath, "ref",
 				"workflow/loop node requires either 'ref' or 'inline'")
 		}
-		// Loops are passthrough — they always inherit the parent's thread.
-		// Thread config is on SubWorkflowArgs only, so loops can't have it at the proto level.
+		// Sequential loops are passthrough — they always inherit the parent's thread.
+		// Parallel loops have their own thread config (defaults to mode: new).
 
 	case model.NodeTypeWorkflow:
 		args := node.GetWorkflow()

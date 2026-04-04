@@ -143,7 +143,10 @@ func getNamespaceDecl(ns wfcel.CELNamespace, typeCtx *WorkflowTypeContext) cel.E
 	case wfcel.CELWorkflow:
 		return cel.Variable(string(ns), cel.ObjectType("model.WorkflowContext"))
 	case wfcel.CELIter:
-		return cel.Variable(string(ns), cel.ObjectType("model.IterContext"))
+		// Parallel loops expose dynamic fields like iter.item and iter.key in addition
+		// to the standard iteration/index counters, so validation must allow dynamic
+		// field access here.
+		return cel.Variable(string(ns), cel.DynType)
 	case wfcel.CELNodes:
 		if typeCtx != nil {
 			return cel.Variable(string(ns), cel.ObjectType("nodes"))

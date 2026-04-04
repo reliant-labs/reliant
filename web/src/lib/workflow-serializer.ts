@@ -23,11 +23,16 @@ import {
   getStepRef,
   getStepInline,
   getStepWhile,
+  getStepParallel,
+  getStepItems,
+  getStepKey,
+  getStepOnFailure,
   getStepInputs,
   getStepPresets,
   getStepProject,
   getStepThread,
   withWorkflowArgs,
+  withLoopArgs,
 } from '../types/workflow'
 import { directCel, celString, normalizeCelString } from './celAdapter'
 
@@ -54,6 +59,14 @@ function cleanStepForYaml(step: Step): Record<string, unknown> {
   if (ref) result.ref = ref
   const whileExpr = getStepWhile(step)
   if (whileExpr) result.while = whileExpr
+  const parallelValue = getStepParallel(step)
+  if (parallelValue !== undefined && parallelValue !== false) result.parallel = parallelValue
+  const itemsExpr = getStepItems(step)
+  if (itemsExpr) result.items = itemsExpr
+  const keyExpr = getStepKey(step)
+  if (keyExpr) result.key = keyExpr
+  const onFailure = getStepOnFailure(step)
+  if (onFailure) result.on_failure = onFailure
   const condStr = normalizeCelString(step.condition)
   if (condStr) result.condition = condStr
   const timeoutStr = normalizeCelString(step.timeout)
@@ -82,7 +95,7 @@ function cleanStepForYaml(step: Step): Record<string, unknown> {
     }
   }
 
-  // Handle thread config (only workflow nodes have thread config)
+  // Handle thread config on workflow/loop nodes
   const stepThread = getStepThread(step)
   if (stepThread) {
     const thread: Record<string, unknown> = {}
@@ -518,6 +531,18 @@ function parseRawStep(raw: Record<string, unknown>): Step {
     }
     const whileExpr = parseOptionalString(raw.while)
     if (whileExpr) loopArgs.while = directCel(whileExpr)
+    const parallel = raw.parallel
+    if (typeof parallel === 'boolean') {
+      loopArgs.parallel = parallel
+    } else if (typeof parallel === 'string') {
+      loopArgs.parallel = celString(parallel)
+    }
+    const items = parseOptionalString(raw.items)
+    if (items) loopArgs.items = celString(items)
+    const key = parseOptionalString(raw.key)
+    if (key) loopArgs.key = key
+    const onFailure = parseOptionalString(raw.on_failure)
+    if (onFailure) loopArgs.onFailure = onFailure
     step.args = { case: 'loop' as const, value: loopArgs } as Step['args']
   } else {
     // Action steps: inputs go in the typed args value
@@ -529,8 +554,8 @@ function parseRawStep(raw: Record<string, unknown>): Step {
     }
   }
 
-  // Thread config — only workflow nodes have thread config
-  if (isRecord(raw.thread) && step.type === 'workflow') {
+  // Thread config — supported on workflow nodes and parallel loops
+  if (isRecord(raw.thread) && (step.type === 'workflow' || step.type === 'loop')) {
     const thread: Record<string, unknown> = {}
 
     const mode = parseOptionalString(raw.thread.mode)
@@ -554,7 +579,9 @@ function parseRawStep(raw: Record<string, unknown>): Step {
     }
 
     if (Object.keys(thread).length > 0) {
-      step = withWorkflowArgs(step, { thread: thread as any })
+      step = step.type === 'loop'
+        ? withLoopArgs(step, { thread: thread as any })
+        : withWorkflowArgs(step, { thread: thread as any })
     }
   }
 

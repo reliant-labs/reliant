@@ -4,7 +4,13 @@ import {
   deserializeWorkflowFromYAML,
 } from "../workflow-serializer";
 import type { Workflow, Step } from "../../types/workflow";
-import { getStepThread } from "../../types/workflow";
+import {
+  getStepThread,
+  getStepParallel,
+  getStepItems,
+  getStepKey,
+  getStepOnFailure,
+} from "../../types/workflow";
 import { celString, celExpr, celLiteral, directCel } from "../celAdapter";
 import {
   getInputEnumValues,
@@ -365,6 +371,51 @@ describe("Workflow Serializer Round-Trip", () => {
         content: celLiteral("Hello world"),
       },
     });
+  });
+
+  it("should preserve parallel loop fields on round-trip", () => {
+    const workflow: Workflow = {
+      name: "test-parallel-loop",
+      nodes: [
+        {
+          id: "implement_all",
+          type: "loop",
+          args: {
+            case: "loop" as const,
+            value: {
+              ref: celLiteral("builtin://get-it-right"),
+              args: {
+                prompt: "{{iter.item.spec}}",
+              },
+              presets: {},
+              yield: "",
+              parallel: true,
+              items: celExpr("{{nodes.decompose.output.components}}"),
+              key: "{{iter.item.name}}",
+              onFailure: "continue",
+              thread: {
+                mode: "new",
+              },
+            },
+          } as Step["args"],
+        } as Step,
+      ],
+      edges: [],
+    };
+
+    const yaml = serializeWorkflowToYAML(workflow);
+    expect(yaml).toContain("parallel: true");
+    expect(yaml).toContain("items:");
+    expect(yaml).toContain("key: '{{iter.item.name}}'");
+    expect(yaml).toContain("on_failure: continue");
+    expect(yaml).toContain("thread:");
+
+    const deserialized = deserializeWorkflowFromYAML(yaml);
+    expect(getStepParallel(deserialized.nodes[0])).toBe(true);
+    expect(getStepItems(deserialized.nodes[0])).toBe("{{nodes.decompose.output.components}}");
+    expect(getStepKey(deserialized.nodes[0])).toBe("{{iter.item.name}}");
+    expect(getStepOnFailure(deserialized.nodes[0])).toBe("continue");
+    expect(getStepThread(deserialized.nodes[0])).toMatchObject({ mode: "new" });
   });
 
   it("should preserve entry field on round-trip", () => {

@@ -649,11 +649,8 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 
 				// Store loop output and create completion event
 				nid := node.GetId()
-				loopOutputs := map[string]interface{}{}
-				if outputStruct := loopOutput.GetOutputs(); outputStruct != nil {
-					loopOutputs = outputStruct.AsMap()
-				}
-				loopOutputMap := model.LoopOutputToMap(int(loopOutput.GetIterations()), loopOutputs)
+				// ProtoLoopOutputToMap handles both sequential and parallel loop output formats.
+				loopOutputMap := model.ProtoLoopOutputToMap(loopOutput)
 				subNodeOutputs[nid] = loopOutputMap
 				loopEvent := &core.WorkflowEvent{
 					ID:           fmt.Sprintf("%s-loop-%s", uniqueActivityIDBase, nid),

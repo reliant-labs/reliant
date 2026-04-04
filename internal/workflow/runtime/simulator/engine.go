@@ -30,7 +30,7 @@ func NewEngine(workflow *reliantv1.Workflow) *Engine {
 
 // NewEngineFromYAML creates a new simulation engine from workflow YAML
 func NewEngineFromYAML(workflowYAML string) (*Engine, error) {
-	wf, err := v2.ParseWorkflowProtoBytes([]byte(workflowYAML))
+	wf, err := v2.ParseWorkflowProtoBytesNoValidation([]byte(workflowYAML))
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse workflow: %w", err)
 	}
