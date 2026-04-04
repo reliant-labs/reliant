@@ -13,6 +13,7 @@ import { useWorkspaceStateStore } from './workspaceStateStore';
 import { useBrowserStore } from './browserStore';
 import { ConnectError } from "@connectrpc/connect";
 import { logger } from '../lib/logger';
+import { singleflight } from '../lib/singleflight';
 
 // Re-export CleanupMetadata from gRPC types
 export type { CleanupMetadata };
@@ -93,6 +94,7 @@ interface WorktreeStore {
   currentWorktree: Worktree | null;
   discoveredWorktrees: DiscoveredWorktree[];
   isLoading: boolean;
+  hasLoaded: boolean;
   isDiscovering: boolean;
   deletingId: string | null;
   error: string | null;
@@ -121,23 +123,29 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
   currentWorktree: null,
   discoveredWorktrees: [],
   isLoading: false,
+  hasLoaded: false,
   isDiscovering: false,
   deletingId: null,
   error: null,
 
   loadWorktrees: async (projectId?: string) => {
+    if (!projectId) {
+      // gRPC requires projectId - return empty if not provided
+      set({ worktrees: [], isLoading: false, hasLoaded: true });
+      return;
+    }
     set({ isLoading: true, error: null });
     try {
-      if (!projectId) {
-        // gRPC requires projectId - return empty if not provided
-        set({ worktrees: [], isLoading: false });
-        return;
-      }
-      const response = await worktreeGrpc.list(projectId);
-      const loadedWorktrees = response.worktrees.map(grpcToStore);
+      // Use singleflight to deduplicate concurrent calls for the same project
+      // (e.g., selectProject + useWorkspaceRestore both calling loadWorktrees)
+      const loadedWorktrees = await singleflight(`loadWorktrees:${projectId}`, async () => {
+        const response = await worktreeGrpc.list(projectId);
+        return response.worktrees.map(grpcToStore);
+      });
       set({
         worktrees: loadedWorktrees,
-        isLoading: false
+        isLoading: false,
+        hasLoaded: true,
       });
       
       // Auto-select main worktree if no worktree is currently selected
@@ -155,7 +163,8 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
     } catch (error) {
       set({
         error: getErrorMessage(error, 'Failed to load worktrees'),
-        isLoading: false
+        isLoading: false,
+        hasLoaded: true,
       });
     }
   },
@@ -635,6 +644,7 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
       currentWorktree: null,
       discoveredWorktrees: [],
       isLoading: false,
+      hasLoaded: false,
       isDiscovering: false,
       deletingId: null,
       error: null,

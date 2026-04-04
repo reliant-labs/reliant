@@ -7,8 +7,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"connectrpc.com/connect"
-
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -66,7 +64,6 @@ func (t *processOutputSubTracker) stopAll() {
 // manager for new output lines and sends ProcessOutputChunkMessage on the
 // stream.
 func (d *daemonClient) handleProcessOutputSubscribe(
-	stream *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage],
 	msg *reliantv1.ProcessOutputSubscribeMessage,
 ) {
 	processID := msg.GetProcessId()
@@ -123,7 +120,7 @@ func (d *daemonClient) handleProcessOutputSubscribe(
 
 			for _, line := range lines {
 				seqNum := seq.Add(1)
-				sendErr := d.send(stream, &reliantv1.DaemonMessage{
+				sendErr := d.send(&reliantv1.DaemonMessage{
 					Message: &reliantv1.DaemonMessage_ProcessOutputChunk{
 						ProcessOutputChunk: &reliantv1.ProcessOutputChunkMessage{
 							ProcessId: processID,
@@ -158,7 +155,7 @@ func (d *daemonClient) handleProcessOutputSubscribe(
 				if strings.Contains(status, "kill") {
 					msg = "process was killed"
 				}
-				_ = d.send(stream, &reliantv1.DaemonMessage{
+				_ = d.send(&reliantv1.DaemonMessage{
 					Message: &reliantv1.DaemonMessage_ProcessOutputChunk{
 						ProcessOutputChunk: &reliantv1.ProcessOutputChunkMessage{
 							ProcessId:  processID,

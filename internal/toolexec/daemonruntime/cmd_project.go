@@ -10,10 +10,16 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/gitutil"
 )
+
+// gitRepoCache caches positive is_git_repo results.
+// Once a path is known to be a git repo, it stays that way.
+// Negative results are never cached (user may run git init).
+var gitRepoCache sync.Map // path -> bool (only true values stored)
 
 func init() {
 	RegisterCommand("project.check_git", handleCheckGit)
@@ -40,8 +46,18 @@ func handleCheckGit(_ context.Context, payload []byte) ([]byte, error) {
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
-	resp := checkGitResponse{IsGitRepo: gitutil.IsGitRepository(req.Path)}
-	return json.Marshal(resp)
+
+	// Return cached positive result — git repos don't become non-git
+	if cached, ok := gitRepoCache.Load(req.Path); ok && cached.(bool) {
+		return json.Marshal(checkGitResponse{IsGitRepo: true})
+	}
+
+	isGit := gitutil.IsGitRepository(req.Path)
+	if isGit {
+		gitRepoCache.Store(req.Path, true)
+	}
+
+	return json.Marshal(checkGitResponse{IsGitRepo: isGit})
 }
 
 // --- project.init_files ---
@@ -186,11 +202,6 @@ func handleGitBranches(ctx context.Context, payload []byte) ([]byte, error) {
 
 	resp := gitBranchesResponse{}
 
-	// Prune stale remote tracking branches
-	pruneCmd := exec.CommandContext(ctx, "git", "fetch", "--prune")
-	pruneCmd.Dir = req.Path
-	_ = pruneCmd.Run()
-
 	// Check if HEAD is detached
 	var isDetached bool
 	var detachedCommitSHA string
@@ -207,48 +218,55 @@ func handleGitBranches(ctx context.Context, payload []byte) ([]byte, error) {
 
 	nowUnix := time.Now().Unix()
 
-	// Local branches
-	localCmd := exec.CommandContext(ctx, "git", "branch", "--format=%(refname:short)|%(HEAD)|%(upstream:short)|%(committerdate:unix)")
-	localCmd.Dir = req.Path
-	localOutput, err := localCmd.CombinedOutput()
+	// List all branches (local + remote) in one command
+	refCmd := exec.CommandContext(ctx, "git", "for-each-ref",
+		"--format=%(refname)|%(refname:short)|%(HEAD)|%(upstream:short)|%(committerdate:unix)",
+		"refs/heads/", "refs/remotes/")
+	refCmd.Dir = req.Path
+	refOutput, err := refCmd.Output()
 	if err != nil {
 		return json.Marshal(resp)
 	}
 
-	localBranchNames := make(map[string]bool)
-	localLines := strings.Split(strings.TrimSpace(string(localOutput)), "\n")
-	for _, line := range localLines {
+	lines := strings.Split(strings.TrimSpace(string(refOutput)), "\n")
+	for _, line := range lines {
 		if line == "" {
 			continue
 		}
 		parts := strings.Split(line, "|")
-		if len(parts) < 2 {
+		if len(parts) < 5 {
 			continue
 		}
-		name := strings.TrimSpace(parts[0])
-		isCurrent := parts[1] == "*"
 
+		fullRef := strings.TrimSpace(parts[0])
+		name := strings.TrimSpace(parts[1])
+		isCurrent := parts[2] == "*"
+		upstream := strings.TrimSpace(parts[3])
+		isRemote := strings.HasPrefix(fullRef, "refs/remotes/")
+
+		// Skip HEAD pointer and origin-only entries
+		if isRemote && (strings.HasSuffix(name, "/HEAD") || name == "origin") {
+			continue
+		}
+		// Skip detached HEAD notation
 		if strings.HasPrefix(name, "(HEAD detached") {
 			continue
 		}
-		localBranchNames[name] = true
 
-		upstream := ""
-		if len(parts) > 2 {
-			upstream = strings.TrimSpace(parts[2])
+		// Upstream is only meaningful for local branches
+		if isRemote {
+			upstream = ""
 		}
 
 		var lastCommitAge int64
-		if len(parts) > 3 {
-			if commitTime, err := strconv.ParseInt(strings.TrimSpace(parts[3]), 10, 64); err == nil {
-				lastCommitAge = nowUnix - commitTime
-			}
+		if commitTime, err := strconv.ParseInt(strings.TrimSpace(parts[4]), 10, 64); err == nil {
+			lastCommitAge = nowUnix - commitTime
 		}
 
 		resp.Branches = append(resp.Branches, gitBranch{
 			Name:          name,
 			IsCurrent:     isCurrent && !isDetached,
-			IsRemote:      false,
+			IsRemote:      isRemote,
 			Upstream:      upstream,
 			LastCommitAge: lastCommitAge,
 		})
@@ -266,38 +284,6 @@ func handleGitBranches(ctx context.Context, payload []byte) ([]byte, error) {
 			IsDetached: true,
 			CommitSHA:  detachedCommitSHA,
 		}}, resp.Branches...)
-	}
-
-	// Remote branches
-	remoteCmd := exec.CommandContext(ctx, "git", "branch", "-r", "--format=%(refname:short)|%(committerdate:unix)")
-	remoteCmd.Dir = req.Path
-	remoteOutput, err := remoteCmd.CombinedOutput()
-	if err == nil {
-		remoteLines := strings.Split(strings.TrimSpace(string(remoteOutput)), "\n")
-		for _, line := range remoteLines {
-			if line == "" {
-				continue
-			}
-			parts := strings.Split(line, "|")
-			if len(parts) < 1 {
-				continue
-			}
-			name := strings.TrimSpace(parts[0])
-			if strings.HasSuffix(name, "/HEAD") || name == "origin" {
-				continue
-			}
-			var lastCommitAge int64
-			if len(parts) > 1 {
-				if commitTime, err := strconv.ParseInt(strings.TrimSpace(parts[1]), 10, 64); err == nil {
-					lastCommitAge = nowUnix - commitTime
-				}
-			}
-			resp.Branches = append(resp.Branches, gitBranch{
-				Name:          name,
-				IsRemote:      true,
-				LastCommitAge: lastCommitAge,
-			})
-		}
 	}
 
 	return json.Marshal(resp)

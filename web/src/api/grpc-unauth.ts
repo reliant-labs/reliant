@@ -15,6 +15,7 @@ import {
   DevAuthLoadRequestSchema,
   DevAuthSaveRequestSchema,
   DevAuthClearRequestSchema,
+  StartGitHubOAuthSignInRequestSchema,
   SystemService,
 } from "../gen/reliant/v1/system_pb";
 import { buildLocalhostUrl } from "../lib/protocol";
@@ -97,6 +98,24 @@ const getTransport = () => {
  * These don't require authentication (used before auth is established)
  */
 export const devAuthGrpc = {
+  async startGitHubOAuthSignIn(timeoutSeconds = 120): Promise<{
+    accessToken: string
+    refreshToken: string
+    userId: string
+    email: string
+  }> {
+    const client = createClient(SystemService, getTransport());
+    const response = await client.startGitHubOAuthSignIn(
+      create(StartGitHubOAuthSignInRequestSchema, { timeoutSeconds })
+    );
+    return {
+      accessToken: response.accessToken,
+      refreshToken: response.refreshToken,
+      userId: response.userId,
+      email: response.email,
+    };
+  },
+
   /**
    * Load auth session from file (development only)
    */

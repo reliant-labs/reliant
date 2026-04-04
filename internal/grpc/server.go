@@ -88,6 +88,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		"/reliant.v1.SystemService/Ready",
 		"/reliant.v1.SystemService/Info",
 		"/reliant.v1.SystemService/Version",
+		"/reliant.v1.SystemService/StartGitHubOAuthSignIn",
 		// DevAuth methods for browser dev mode - allows auth to work before JWT is available
 		"/reliant.v1.SystemService/DevAuthLoad",
 		"/reliant.v1.SystemService/DevAuthSave",
@@ -114,6 +115,11 @@ func NewServer(cfg *Config) (*Server, error) {
 		} else {
 			toolsDaemonService = services.NewToolsDaemonServiceWithoutMonitor(database)
 		}
+	}
+
+	// Wire the user update hub so daemon heartbeats can be pushed to the frontend.
+	if cfg.UserUpdateHub != nil {
+		toolsDaemonService.SetUserUpdateHub(cfg.UserUpdateHub)
 	}
 
 	// Build a DaemonRouter for services that need transport-agnostic daemon access.

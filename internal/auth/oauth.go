@@ -44,6 +44,94 @@ type oauthProvider struct {
 	url  string
 }
 
+// LoginWithOAuthProvider performs a direct OAuth PKCE login for a single provider
+// using a localhost callback listener and returns the resulting Supabase tokens.
+func LoginWithOAuthProvider(ctx context.Context, provider string, opts LoginOptions) (*LoginResult, error) {
+	serverURL := strings.TrimRight(defaultSupabaseURL, "/")
+	anonKey := defaultSupabaseKey
+
+	timeout := opts.Timeout
+	if timeout == 0 {
+		timeout = defaultLoginTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	verifier, err := generateCodeVerifier()
+	if err != nil {
+		return nil, fmt.Errorf("generating code verifier: %w", err)
+	}
+	challenge := computeCodeChallenge(verifier)
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return nil, fmt.Errorf("starting callback listener: %w", err)
+	}
+	port := listener.Addr().(*net.TCPAddr).Port
+	redirectURI := fmt.Sprintf("http://127.0.0.1:%d/auth/callback", port)
+
+	type loginEvent struct {
+		result *LoginResult
+		err    error
+	}
+	resultCh := make(chan loginEvent, 1)
+
+	authorizeURL, err := buildAuthURL(serverURL, redirectURI, challenge, provider)
+	if err != nil {
+		return nil, fmt.Errorf("building auth URL for %s: %w", provider, err)
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/auth/callback", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if errMsg := q.Get("error_description"); errMsg != "" {
+			resultCh <- loginEvent{err: fmt.Errorf("auth error: %s", errMsg)}
+			http.Error(w, errMsg, http.StatusBadRequest)
+			return
+		}
+		code := q.Get("code")
+		if code == "" {
+			resultCh <- loginEvent{err: fmt.Errorf("no code in callback")}
+			http.Error(w, "missing code", http.StatusBadRequest)
+			return
+		}
+
+		result, err := exchangeCodeForTokens(ctx, serverURL, anonKey, code, verifier, redirectURI)
+		if err != nil {
+			resultCh <- loginEvent{err: fmt.Errorf("exchanging code for tokens: %w", err)}
+			http.Error(w, "token exchange failed", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = io.WriteString(w, successHTML)
+		resultCh <- loginEvent{result: result}
+	})
+
+	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	go func() { _ = srv.Serve(listener) }()
+	defer func() {
+		shutCtx, shutCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer shutCancel()
+		_ = srv.Shutdown(shutCtx)
+	}()
+
+	fmt.Printf("Opening browser to log in with %s...\n", provider)
+	if err := openBrowser(authorizeURL); err != nil {
+		fmt.Printf("Could not open browser automatically.\nPlease visit:\n  %s\n", authorizeURL)
+	}
+
+	select {
+	case ev := <-resultCh:
+		if ev.err != nil {
+			return nil, ev.err
+		}
+		return ev.result, nil
+	case <-ctx.Done():
+		return nil, fmt.Errorf("login timed out after %s — no callback received", timeout)
+	}
+}
+
 // Login performs login via a local web page that supports email/password and OAuth providers.
 func Login(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 	serverURL := strings.TrimRight(defaultSupabaseURL, "/")

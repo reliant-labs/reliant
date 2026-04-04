@@ -39,7 +39,9 @@ export function CreateWorktreeModal({
   const currentProject = useProjectStore((state) => state.currentProject);
   const refreshCurrentProject = useProjectStore((state) => state.refreshCurrentProject);
   const [showInitGitModal, setShowInitGitModal] = useState(false);
-  const { branches, isLoading: isBranchesLoading, error: branchesError, refetch: refetchBranches } = useBranches(projectId);
+  // Only fetch branches when the modal is actually open to avoid duplicate RPCs
+  // (multiple CreateWorktreeModal instances mount on page load with isOpen=false)
+  const { branches, isLoading: isBranchesLoading, error: branchesError, refetch: refetchBranches } = useBranches(isOpen ? projectId : undefined);
 
   // Find the default base branch:
   // 1. If sourceWorktreeBranch is provided (branching from existing workspace), use it

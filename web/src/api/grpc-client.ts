@@ -80,6 +80,23 @@ const getGRPCBaseURL = (): string | null => {
   return fallbackUrl;
 };
 
+// ---- Daemon last-seen header ----
+// Module-level state set by globalUpdatesStore to avoid circular imports.
+let _daemonLastSeen: number | null = null;
+/** Called by globalUpdatesStore when a DAEMON_HEARTBEAT event arrives. */
+export function setDaemonLastSeen(unixSeconds: number): void {
+  _daemonLastSeen = unixSeconds;
+}
+
+// Attaches x-daemon-last-seen header so the server can skip the
+// IsDaemonOnline DB query when the daemon was recently seen.
+const daemonLastSeenInterceptor: Interceptor = (next) => async (req) => {
+  if (_daemonLastSeen !== null) {
+    req.header.set("x-daemon-last-seen", String(_daemonLastSeen));
+  }
+  return await next(req);
+};
+
 // Auth interceptor to add JWT token to requests
 const authInterceptor: Interceptor = (next) => async (req) => {
   // In dev mode, skip auth - backend will use DevUser
@@ -385,7 +402,7 @@ export const getTransport = () => {
       baseUrl: currentBaseURL,
       // Order: timeout -> auth -> error logging
       // Timeout is outermost so it applies to the full request lifecycle
-      interceptors: [timeoutInterceptor, authInterceptor, tracingInterceptor, errorInterceptor],
+      interceptors: [timeoutInterceptor, authInterceptor, daemonLastSeenInterceptor, tracingInterceptor, errorInterceptor],
       // Use JSON for easier debugging during migration
       // Can switch to binary later for performance
       useBinaryFormat: false,

@@ -601,6 +601,13 @@ func (r *Repo) ListContentBlocks(ctx context.Context, messageID string) ([]*Mess
 	return r.messages.ListContentBlocks(ctx, messageID)
 }
 
+func (r *Repo) ListContentBlocksForMessages(ctx context.Context, messageIDs []string) ([]*MessageContentBlock, error) {
+	if len(messageIDs) == 0 {
+		return []*MessageContentBlock{}, nil
+	}
+	return r.messages.ListContentBlocksForMessages(ctx, messageIDs)
+}
+
 func (r *Repo) UpdateContentBlock(ctx context.Context, block *MessageContentBlock) error {
 	if block == nil {
 		return fmt.Errorf("content block cannot be nil")

@@ -6,6 +6,7 @@ import { App } from "./App";
 import { isConfigReady, waitForConfig } from "../lib/configReady";
 import { logger } from "../lib/logger";
 import { LoadingSpinner } from "./Layout/LoadingSpinner";
+import { useProjectStore } from "../store/projectStore";
 
 /**
  * Root component that initializes privacy settings before rendering the app.
@@ -39,11 +40,16 @@ export function Root() {
           }
         }
 
-        // Initialize privacy settings and settings sync
-        // These now have their own retry logic with waitForConfig
+        // Initialize privacy settings, settings sync, and load projects in parallel.
+        // Loading projects here (instead of in ModernApp) eliminates a ~1s serial gap
+        // where the UI was blocked behind loadProjects() before any Wave 2 RPCs fired.
         await Promise.all([
           initialize(),
           settingsSync.initialize(),
+          useProjectStore.getState().loadProjects().catch((err) => {
+            // Non-fatal: ModernApp init has a safety net fallback
+            logger.warn('[Root] loadProjects failed (will retry in ModernApp):', err);
+          }),
         ]);
 
         // CRITICAL: Apply appearance settings to DOM immediately after settingsSync initializes

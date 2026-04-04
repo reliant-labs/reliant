@@ -62,6 +62,10 @@ interface GlobalDataState {
   refetchPresets: (projectId: string) => Promise<void>;
 }
 
+// In-flight dedup: collapse concurrent calls for the same projectId into one request
+let pendingWorkflowFetch: { projectId: string; promise: Promise<void> } | null = null;
+let pendingPresetFetch: { projectId: string; promise: Promise<void> } | null = null;
+
 export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
   // Initial state
   models: [],
@@ -174,34 +178,54 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
   },
 
   refetchWorkflows: async (projectId: string) => {
-    set({ workflowsLoading: true, workflowsError: null });
-    try {
-      const response = await api.workflows.list(projectId);
-      set({ workflows: response.workflows || [], workflowsLoading: false });
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to fetch workflows";
-      logger.error("[GlobalDataStore] Failed to refetch workflows:", error);
-      set({ workflowsError: errorMessage, workflowsLoading: false });
+    // Deduplicate concurrent calls for the same project
+    if (pendingWorkflowFetch && pendingWorkflowFetch.projectId === projectId) {
+      return pendingWorkflowFetch.promise;
     }
+    set({ workflowsLoading: true, workflowsError: null });
+    const promise = (async () => {
+      try {
+        const response = await api.workflows.list(projectId);
+        set({ workflows: response.workflows || [], workflowsLoading: false });
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Failed to fetch workflows";
+        logger.error("[GlobalDataStore] Failed to refetch workflows:", error);
+        set({ workflowsError: errorMessage, workflowsLoading: false });
+      } finally {
+        pendingWorkflowFetch = null;
+      }
+    })();
+    pendingWorkflowFetch = { projectId, promise };
+    return promise;
   },
 
   refetchPresets: async (projectId: string) => {
-    set({ presetsLoading: true, presetsError: null });
-    try {
-      const presets = await presetGrpc.listPresets(projectId);
-      // Increment presetsVersion to trigger re-fetch in usePresetsForWorkflow
-      set((state) => ({
-        presets,
-        presetsLoading: false,
-        presetsVersion: state.presetsVersion + 1,
-      }));
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to fetch presets";
-      logger.error("[GlobalDataStore] Failed to refetch presets:", error);
-      set({ presetsError: errorMessage, presetsLoading: false });
+    // Deduplicate concurrent calls for the same project
+    if (pendingPresetFetch && pendingPresetFetch.projectId === projectId) {
+      return pendingPresetFetch.promise;
     }
+    set({ presetsLoading: true, presetsError: null });
+    const promise = (async () => {
+      try {
+        const presets = await presetGrpc.listPresets(projectId);
+        // Increment presetsVersion to trigger re-fetch in usePresetsForWorkflow
+        set((state) => ({
+          presets,
+          presetsLoading: false,
+          presetsVersion: state.presetsVersion + 1,
+        }));
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Failed to fetch presets";
+        logger.error("[GlobalDataStore] Failed to refetch presets:", error);
+        set({ presetsError: errorMessage, presetsLoading: false });
+      } finally {
+        pendingPresetFetch = null;
+      }
+    })();
+    pendingPresetFetch = { projectId, promise };
+    return promise;
   },
 }));
 

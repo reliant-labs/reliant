@@ -108,6 +108,8 @@ export function ApiKeySetupModal() {
 
   useEffect(() => {
     if (!showModal) {
+      codexOAuth.cancel();
+      claudeOAuth.cancel();
       setApiKey("");
       setValidationResult(null);
       setIsValidating(false);
@@ -115,7 +117,7 @@ export function ApiKeySetupModal() {
       setShowKey(false);
       setSelectedProvider("claude");
     }
-  }, [showModal]);
+  }, [showModal, codexOAuth, claudeOAuth]);
 
   const handleConnectOAuth = useCallback(async (oauthType: "codex" | "claude") => {
     setIsValidating(true);

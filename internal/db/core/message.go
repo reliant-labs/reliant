@@ -83,6 +83,7 @@ type MessageStore interface {
 	CreateContentBlockIfNotExists(ctx context.Context, block *MessageContentBlock) error
 	GetContentBlock(ctx context.Context, id string) (*MessageContentBlock, error)
 	ListContentBlocks(ctx context.Context, messageID string) ([]*MessageContentBlock, error)
+	ListContentBlocksForMessages(ctx context.Context, messageIDs []string) ([]*MessageContentBlock, error)
 	UpdateContentBlock(ctx context.Context, block *MessageContentBlock) error
 	AppendToContentBlock(ctx context.Context, blockID string, delta string) error
 	UpdateMessage(ctx context.Context, msg *Message) error

@@ -81,7 +81,7 @@ func runAuthServe(cmd *cobra.Command, port int) error {
 			return
 		}
 
-		result, err := oauthcallback.Run(req.AuthorizeURLTemplate, req.TimeoutSeconds)
+		result, err := oauthcallback.Run(r.Context(), req.AuthorizeURLTemplate, req.TimeoutSeconds)
 		if err != nil {
 			logging.Error("OAuth callback failed", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})

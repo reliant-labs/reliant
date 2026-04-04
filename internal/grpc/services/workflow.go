@@ -192,13 +192,33 @@ func (s *WorkflowService) ListWorkflows(
 		}
 	}
 
+	// Batch-fetch visibility state for builtin workflows (2 queries instead of 2×N)
+	workflowItemType := int32(reliantv1.HiddenItemType_HIDDEN_ITEM_TYPE_WORKFLOW)
+	wfOverrides, err := s.database.ListVisibilityOverrides(ctx, userID, workflowItemType)
+	if err != nil {
+		logging.Warn("Failed to batch-load visibility overrides for workflows", "error", err)
+		wfOverrides = nil
+	}
+	wfHiddenDefaults, err := s.database.ListHiddenItemDefaults(ctx, workflowItemType)
+	if err != nil {
+		logging.Warn("Failed to batch-load hidden defaults for workflows", "error", err)
+		wfHiddenDefaults = nil
+	}
+	wfHiddenDefaultSet := make(map[string]bool, len(wfHiddenDefaults))
+	for _, slug := range wfHiddenDefaults {
+		wfHiddenDefaultSet[slug] = true
+	}
+
 	// Filter by visibility and convert map to slice
 	workflows := make([]*reliantv1.WorkflowListItem, 0, len(workflowsBySlug))
 	for _, wf := range workflowsBySlug {
 		// Check visibility for builtin workflows (unless include_hidden is set)
 		if wf.Source == "builtin" && !req.Msg.IncludeHidden {
-			visible, err := s.database.IsItemVisible(ctx, userID, int32(reliantv1.HiddenItemType_HIDDEN_ITEM_TYPE_WORKFLOW), wf.Name)
-			if err == nil && !visible {
+			visible, ok := wfOverrides[wf.Name]
+			if !ok {
+				visible = !wfHiddenDefaultSet[wf.Name]
+			}
+			if !visible {
 				continue
 			}
 		}
