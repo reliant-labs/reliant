@@ -119,4 +119,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and the [`contribut
 
 ## License
 
-Copyright (c) 2025 Reliant Labs. All rights reserved.
+Copyright (c) 2026 Reliant Labs. All rights reserved.
