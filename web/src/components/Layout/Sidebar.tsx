@@ -1305,7 +1305,7 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
       if (chatElement) {
         chatElement.scrollIntoView({
           block: "nearest",
-          behavior: "instant",
+          behavior: "auto",
         });
       }
     }, 100);
