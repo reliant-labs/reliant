@@ -1,5 +1,4 @@
 import { Edit3, Eye } from "lucide-react";
-import { Eye, Edit3 } from "lucide-react";
 import type { ProtoFieldSchema } from "../../../types/workflowFieldSchema";
 import type { LoopStep } from "../../../types/workflow";
 import {
