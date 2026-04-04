@@ -214,10 +214,8 @@ func (s *WorkflowService) ListWorkflows(
 	for _, wf := range workflowsBySlug {
 		// Check visibility for builtin workflows (unless include_hidden is set)
 		if wf.Source == "builtin" && !req.Msg.IncludeHidden {
-			visible := true
-			if vis, ok := wfOverrides[wf.Name]; ok {
-				visible = vis
-			} else {
+			visible, ok := wfOverrides[wf.Name]
+			if !ok {
 				visible = !wfHiddenDefaultSet[wf.Name]
 			}
 			if !visible {

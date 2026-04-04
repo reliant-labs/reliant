@@ -1206,10 +1206,12 @@ func (s *ToolsDaemonService) SendDaemonCommand(ctx context.Context, userID strin
 	case resp := <-respCh:
 		return resp, nil
 	case <-time.After(timeout):
+		s.cancelDaemonCommand(userID, req.RequestId, "daemon command timed out")
 		return nil, fmt.Errorf("daemon command %q timed out after %s", req.CommandType, timeout)
 	case <-conn.done:
 		return nil, fmt.Errorf("daemon disconnected while waiting for command %q response", req.CommandType)
 	case <-ctx.Done():
+		s.cancelDaemonCommand(userID, req.RequestId, "daemon command caller cancelled")
 		return nil, ctx.Err()
 	}
 }
@@ -1283,7 +1285,15 @@ func (s *ToolsDaemonService) SendToolRequestSync(ctx context.Context, userID str
 	}
 }
 
-// SendToolExecutionCancel sends a tool cancellation request to connected daemon (scaffolding for PR1).
+func (s *ToolsDaemonService) cancelDaemonCommand(userID, requestID, reason string) {
+	if err := s.SendToolExecutionCancel(context.Background(), userID, requestID, reason); err != nil {
+		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to send daemon command cancel", "userID", userID, "requestID", requestID, "error", err)
+	}
+}
+
+// SendToolExecutionCancel sends a cancellation request to connected daemon.
+// This currently reuses the tool_cancel transport and request_id correlation for
+// both tool executions and generic daemon commands.
 func (s *ToolsDaemonService) SendToolExecutionCancel(_ context.Context, userID, requestID, reason string) error {
 	if strings.TrimSpace(requestID) == "" {
 		return nil

@@ -4,6 +4,7 @@
 package oauthcallback
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -29,6 +30,8 @@ type Result struct {
 	RedirectURI string `json:"redirect_uri"`
 	CallbackURL string `json:"callback_url"`
 }
+
+var openBrowser = OpenBrowser
 
 // InferConfig inspects the authorize URL to determine callback settings.
 func InferConfig(authorizeURLTemplate string) CallbackConfig {
@@ -61,9 +64,12 @@ func InferConfig(authorizeURLTemplate string) CallbackConfig {
 // Run starts a temporary HTTP server, opens the browser, and waits for the
 // OAuth callback or timeout. It returns the authorization code, state and
 // redirect URI.
-func Run(authorizeURLTemplate string, timeoutSeconds int) (*Result, error) {
+func Run(ctx context.Context, authorizeURLTemplate string, timeoutSeconds int) (*Result, error) {
 	if timeoutSeconds <= 0 {
 		timeoutSeconds = 120
+	}
+	if ctx == nil {
+		ctx = context.Background()
 	}
 
 	cfg := InferConfig(authorizeURLTemplate)
@@ -93,9 +99,17 @@ func Run(authorizeURLTemplate string, timeoutSeconds int) (*Result, error) {
 	go server.Serve(listener) //nolint:errcheck // best-effort serve in background goroutine
 	defer func() { _ = server.Close() }()
 
-	if err := OpenBrowser(authorizeURL); err != nil {
+	go func() {
+		<-ctx.Done()
+		_ = server.Close()
+	}()
+
+	if err := openBrowser(authorizeURL); err != nil {
 		return nil, fmt.Errorf("failed to open browser: %w", err)
 	}
+
+	timeoutTimer := time.NewTimer(time.Duration(timeoutSeconds) * time.Second)
+	defer timeoutTimer.Stop()
 
 	select {
 	case cbURL := <-callbackCh:
@@ -106,8 +120,10 @@ func Run(authorizeURLTemplate string, timeoutSeconds int) (*Result, error) {
 			RedirectURI: redirectURI,
 			CallbackURL: cbURL.String(),
 		}, nil
-	case <-time.After(time.Duration(timeoutSeconds) * time.Second):
+	case <-timeoutTimer.C:
 		return nil, fmt.Errorf("OAuth callback timed out after %d seconds", timeoutSeconds)
+	case <-ctx.Done():
+		return nil, fmt.Errorf("OAuth callback cancelled: %w", ctx.Err())
 	}
 }
 

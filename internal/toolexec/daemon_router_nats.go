@@ -243,6 +243,7 @@ func (r *NATSDaemonRouter) SendDaemonCommand(ctx context.Context, userID string,
 		}
 		msg = res.msg
 	case <-ctx.Done():
+		_ = r.SendToolExecutionCancel(context.Background(), userID, req.RequestID, "daemon command caller cancelled")
 		observability.NATSErrorsTotal.WithLabelValues("daemon.command", "timeout").Inc()
 		return nil, fmt.Errorf("daemon command via NATS failed: %w", ctx.Err())
 	}

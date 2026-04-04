@@ -109,10 +109,8 @@ func (s *PresetService) ListPresets(
 	// Set is_hidden and filter by visibility (unless include_hidden is set)
 	protoPresets := make([]*reliantv1.PresetInfo, 0, len(presetsBySlug))
 	for _, p := range presetsBySlug {
-		visible := true
-		if vis, ok := overrides[p.Slug]; ok {
-			visible = vis
-		} else {
+		visible, ok := overrides[p.Slug]
+		if !ok {
 			visible = !hiddenDefaultSet[p.Slug]
 		}
 		p.IsHidden = !visible
@@ -258,10 +256,8 @@ func (s *PresetService) ListPresetsForWorkflow(
 	// Set is_hidden and filter by visibility (unless include_hidden is set)
 	protoPresets := make([]*reliantv1.PresetInfo, 0, len(presetsBySlug))
 	for _, p := range presetsBySlug {
-		visible := true
-		if vis, ok := overrides[p.Slug]; ok {
-			visible = vis
-		} else {
+		visible, ok := overrides[p.Slug]
+		if !ok {
 			visible = !hiddenDefaultSet[p.Slug]
 		}
 		p.IsHidden = !visible

@@ -19,6 +19,11 @@ service SystemService {
   // Version returns detailed version information
   rpc Version(VersionRequest) returns (VersionResponse) {}
 
+  // StartGitHubOAuthSignIn completes the Electron-local GitHub sign-in flow
+  // by opening the provider in the system browser, waiting for the localhost
+  // callback, exchanging the PKCE code, and returning Supabase session tokens.
+  rpc StartGitHubOAuthSignIn(StartGitHubOAuthSignInRequest) returns (StartGitHubOAuthSignInResponse) {}
+
   // DevAuthLoad loads the global auth session (development only)
   rpc DevAuthLoad(DevAuthLoadRequest) returns (DevAuthLoadResponse) {}
 
@@ -85,6 +90,22 @@ message VersionResponse {
   string date = 3;
   // Git branch name
   string branch = 4;
+}
+
+// ============================================
+// GitHub OAuth Sign-In Messages
+// ============================================
+
+message StartGitHubOAuthSignInRequest {
+  // Maximum time to wait for the browser callback in seconds. Defaults to 120.
+  int32 timeout_seconds = 1;
+}
+
+message StartGitHubOAuthSignInResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  string user_id = 3;
+  string email = 4;
 }
 
 // ============================================

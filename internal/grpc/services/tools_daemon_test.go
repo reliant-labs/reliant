@@ -93,6 +93,48 @@ func TestToolsDaemonServiceCloseIsIdempotent(t *testing.T) {
 	svc.Close()
 }
 
+func TestSendDaemonCommandCancelsInFlightCommandWhenCallerContextEnds(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+
+	svc := NewToolsDaemonService(repo)
+	defer svc.Close()
+
+	conn := &daemonConnection{
+		userID:          "test-user",
+		daemonID:        uuid.New().String(),
+		sendCh:          make(chan *reliantv1.ServerMessage, 4),
+		done:            make(chan struct{}),
+		pendingCommands: make(map[string]chan *reliantv1.DaemonCommandResponse),
+	}
+	svc.mu.Lock()
+	svc.connections[conn.userID] = conn
+	svc.mu.Unlock()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	resultCh := make(chan error, 1)
+	requestID := "oauth-req"
+	go func() {
+		_, err := svc.SendDaemonCommand(ctx, conn.userID, &reliantv1.DaemonCommandRequest{
+			RequestId:   requestID,
+			CommandType: "auth.start_oauth",
+			TimeoutMs:   120000,
+		})
+		resultCh <- err
+	}()
+
+	commandMsg := <-conn.sendCh
+	require.Equal(t, requestID, commandMsg.GetDaemonCommand().GetRequestId())
+
+	cancel()
+
+	cancelMsg := <-conn.sendCh
+	require.Equal(t, requestID, cancelMsg.GetToolCancel().GetRequestId())
+
+	err := <-resultCh
+	require.ErrorIs(t, err, context.Canceled)
+}
+
 func TestDaemonRegistrationUserIDRejectsSpoofedRegisterUserID(t *testing.T) {
 	// No auth context: PAT authentication required.
 	_, err := daemonRegistrationUserID(context.Background(), &reliantv1.DaemonRegister{UserId: "spoofed-user"})

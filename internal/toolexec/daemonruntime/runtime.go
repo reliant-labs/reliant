@@ -395,11 +395,14 @@ func (d *daemonClient) handleKillProcess(req *reliantv1.DaemonKillProcessRequest
 }
 
 func (d *daemonClient) handleDaemonCommand(req *reliantv1.DaemonCommandRequest) {
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 	if req.TimeoutMs > 0 {
-		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, time.Duration(req.TimeoutMs)*time.Millisecond)
-		defer cancel()
+	}
+	defer cancel()
+	if strings.TrimSpace(req.RequestId) != "" {
+		d.registerCancel(req.RequestId, cancel)
+		defer d.unregisterCancel(req.RequestId)
 	}
 
 	resultPayload, err := defaultRegistry.Handle(ctx, req.CommandType, req.Payload)

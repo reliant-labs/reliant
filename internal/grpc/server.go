@@ -88,6 +88,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		"/reliant.v1.SystemService/Ready",
 		"/reliant.v1.SystemService/Info",
 		"/reliant.v1.SystemService/Version",
+		"/reliant.v1.SystemService/StartGitHubOAuthSignIn",
 		// DevAuth methods for browser dev mode - allows auth to work before JWT is available
 		"/reliant.v1.SystemService/DevAuthLoad",
 		"/reliant.v1.SystemService/DevAuthSave",

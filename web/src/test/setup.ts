@@ -35,6 +35,12 @@ vi.mock('@/lib/supabase', () => ({
 // Prevent auth/session bootstrap from making real gRPC calls in unit tests.
 vi.mock('@/api/grpc-unauth', () => ({
   devAuthGrpc: {
+    startGitHubOAuthSignIn: vi.fn(async () => ({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      userId: 'user-id',
+      email: 'user@example.com',
+    })),
     load: vi.fn(async () => ({ success: false })),
     save: vi.fn(async () => ({ success: true })),
     clear: vi.fn(async () => ({ success: true })),

@@ -35,15 +35,6 @@ func (t *terminalPumpTracker) remove(id string) {
 	delete(t.pumps, id)
 }
 
-func (t *terminalPumpTracker) stop(id string) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if stop, ok := t.pumps[id]; ok {
-		stop()
-		delete(t.pumps, id)
-	}
-}
-
 func (t *terminalPumpTracker) stopAll() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
