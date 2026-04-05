@@ -39,6 +39,10 @@ import {
   withWorkflowArgs,
   withLoopArgs,
 } from "../../types/workflow";
+import {
+  deriveWorkflowEntryFromEdges,
+  sanitizeWorkflowReferences,
+} from "./workflowRef";
 import { autoLayoutWorkflow } from "../../lib/workflow-layout";
 import {
   convertEdgesToFlowElements,
@@ -938,19 +942,15 @@ function WorkflowBuilderInner({
       }
     }
 
-    // Compute entry field from visual edges (single entry = string, multiple = array)
-    // Use user-set workflowEntry if available, otherwise derive from edges
-    // Always use array format for proto compatibility
-    let computedEntry: string[] | undefined;
-
-    if (workflowEntry !== undefined) {
-      // Use explicitly set entry - normalize to array
-      computedEntry = Array.isArray(workflowEntry)
-        ? workflowEntry
-        : [workflowEntry];
-    } else if (entryTargets.length > 0) {
+    // Compute entry field from visual edges. Connections from the workflow start node
+    // should take precedence over any previously edited workflowEntry state.
+    let computedEntry = deriveWorkflowEntryFromEdges(workflowEntry, edges);
+    if (!computedEntry && entryTargets.length > 0) {
       computedEntry = entryTargets;
     }
+
+    const { entry: sanitizedEntry, outputs: sanitizedOutputs } =
+      sanitizeWorkflowReferences(computedEntry, workflowOutputs, steps.map((step) => step.id));
 
     return {
       name: workflowName,
@@ -966,14 +966,13 @@ function WorkflowBuilderInner({
       apiVersion: workflowApiVersion || undefined,
       nodes: steps,
       edges: workflowEdges.length > 0 ? workflowEdges : undefined, // Only include if non-empty
-      entry: computedEntry, // Use entry field instead of "from: started" edges
+      entry: sanitizedEntry, // Use entry field instead of "from: started" edges
       inputs:
         Object.keys(workflowInputs).length > 0
           ? (workflowInputs as Workflow["inputs"])
           : undefined,
 
-      outputs:
-        Object.keys(workflowOutputs).length > 0 ? workflowOutputs : undefined,
+      outputs: sanitizedOutputs,
       ui: {
         positions,
         ...(Object.keys(switches).length > 0 && { switches }),
@@ -2378,7 +2377,7 @@ function WorkflowBuilderInner({
   // Structural types that have their own node components
   // Defined as a constant outside useCallback to avoid recreation
   const STRUCTURAL_TYPES = useMemo(
-    () => new Set(["run", "workflow", "agent", "join", "loop"]),
+    () => new Set(["run", "workflow", "agent", "join", "loop", "router"]),
     [],
   );
 
@@ -2422,6 +2421,8 @@ function WorkflowBuilderInner({
         step.condition = directCel("all") as any;
       } else if (stepType === "loop") {
         step = withLoopArgs(step, { while: directCel(""), ref: celString("") } as any);
+      } else if (stepType === "router") {
+        // Router args are initialized by initStepArgs — no additional defaults needed
       }
 
       // Determine React Flow node type

@@ -101,7 +101,7 @@ func writeInputSchema(sb *strings.Builder, inputs map[string]*reliantv1.Input) {
 
 		inputType := model.GetInputType(input)
 		desc := getInputDescription(input)
-		required := !model.IsInputRequired(input) // IsInputRequired returns true if has default
+		required := model.IsInputRequired(input)
 
 		sb.WriteString(fmt.Sprintf("- **`%s`** (%s)", name, inputType))
 		if required {
@@ -146,9 +146,13 @@ func writeInputSchema(sb *strings.Builder, inputs map[string]*reliantv1.Input) {
 // buildRoutingResponseSchema returns the JSON schema for the routing decision.
 func buildRoutingResponseSchema(candidates []routerWorkflowInfo) map[string]interface{} {
 	// Build enum of workflow refs
+	seen := make(map[string]bool)
 	workflowRefs := make([]interface{}, 0, len(candidates))
 	for _, c := range candidates {
-		workflowRefs = append(workflowRefs, c.Ref)
+		if !seen[c.Ref] {
+			seen[c.Ref] = true
+			workflowRefs = append(workflowRefs, c.Ref)
+		}
 	}
 
 	// Build enum of all available preset names (deduplicated)
@@ -170,7 +174,7 @@ func buildRoutingResponseSchema(candidates []routerWorkflowInfo) map[string]inte
 	schema := map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
-			"workflow": map[string]interface{}{
+			model.NodeTypeWorkflow: map[string]interface{}{
 				"type":        "string",
 				"enum":        workflowRefs,
 				"description": "The workflow reference to route to",
@@ -189,7 +193,7 @@ func buildRoutingResponseSchema(candidates []routerWorkflowInfo) map[string]inte
 				"description": "Brief explanation of why this workflow and preset were selected",
 			},
 		},
-		"required": []interface{}{"workflow", "preset", "prompt", "reasoning"},
+		"required": []interface{}{model.NodeTypeWorkflow, "preset", "prompt", "reasoning"},
 	}
 
 	return schema

@@ -337,11 +337,6 @@ func validateNodeArgs(node *reliantv1.Node, nodePath []string, result *Result) {
 					fmt.Sprintf("router candidate %d has empty ref", i))
 			}
 		}
-		if !model.CelStringIsSet(args.GetPrompt()) {
-			result.AddError(CategoryStructure, nodePath, "prompt",
-				"router node requires a prompt")
-		}
-
 	case model.NodeTypeJoin:
 		// Only "all" and "any" are valid join conditions
 		condExpr := model.ConditionExpr(node)

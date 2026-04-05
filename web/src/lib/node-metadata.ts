@@ -7,7 +7,7 @@
  */
 
 import {
-  Zap, GitCommit, GitBranch, FolderGit2, Cog, Database, FileText,
+  Zap, GitCommit, GitBranch, GitFork, FolderGit2, Cog, Database, FileText,
   Settings, Play, Check, Clock, Trash, Trash2, RefreshCw, Save, Upload,
   Download, Send, Lock, Unlock, Key, Search, Filter, Plus, Minus, Edit,
   Copy, Move, Archive, Unlink, Link, Eye, EyeOff, Bell, BellOff, Terminal,
@@ -42,10 +42,13 @@ const ICON_MAP: Record<string, LucideIcon> = {
   'join': GitMerge,
   'loop': RefreshCw,
   'switch': GitBranch,
+  'router': GitFork,
 
   // Generic icon-hint values (kebab & lowercase)
   'git-commit': GitCommit,
   'git-branch': GitBranch,
+  'git-fork': GitFork,
+  'GitFork': GitFork,
   'git': GitCommit,
   'worktree': GitBranch,
   'worktree-create': FolderGit2,
@@ -153,6 +156,7 @@ const NODE_COLOR_MAP: Record<string, NodeColorSet> = {
   'join':             { bg: 'bg-teal-500',     text: 'text-teal-600',    border: 'border-teal-500' },
   'loop':             { bg: 'bg-violet-500',   text: 'text-violet-600',  border: 'border-violet-500' },
   'switch':           { bg: 'bg-sky-500',      text: 'text-sky-600',     border: 'border-sky-500' },
+  'router':           { bg: 'bg-amber-500',    text: 'text-amber-600',   border: 'border-amber-500' },
 }
 
 /** Category-level fallback colors. */
@@ -182,6 +186,7 @@ const NODE_THEME_MAP: Record<string, NodeTheme> = {
   'join': 'teal',
   'loop': 'violet',
   'switch': 'sky',
+  'router': 'amber',
 }
 
 const CATEGORY_THEME_MAP: Record<string, NodeTheme> = {

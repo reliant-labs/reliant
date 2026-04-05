@@ -1761,96 +1761,112 @@ func v2celFieldInfoToValidation(rf *wfcel.FieldInfo) *FieldInfo {
 	return info
 }
 
-// rewriteNodesAccess rewrites "nodes.X.field" to "nodes_X.field" for CEL validation.
-// This allows us to use typed variables (nodes_X) for compile-time field validation
-// while keeping the user-facing syntax (nodes.X) unchanged.
+// rewriteNodesAccess lowers user-facing node access syntax into encoded synthetic
+// validator variables for CEL compilation.
 //
-// Example:
-//
-//	"nodes.my_loop._iterations > 0" -> "nodes_my_loop._iterations > 0"
-//	"nodes.call_llm.message.text"   -> "nodes_call_llm.message.text"
-//
-// Note: We preserve "has(nodes.X)" patterns because has() macro requires
-// a field selection expression (e.g., has(a.b)), not a bare variable.
+// It is source-aware rather than simple substring replacement so we only rewrite
+// actual `nodes.<nodeID>` accesses, preserve string literals, and keep
+// `has(nodes.<nodeID>)` intact because CEL presence macros require a field
+// selection expression rather than a bare synthetic variable.
 func rewriteNodesAccess(expr string, nodeIDs []string) string {
-	result := expr
-	for _, nodeID := range nodeIDs {
-		// Replace "nodes.<nodeID>." with "nodes_<nodeID>."
-		// BUT preserve "has(nodes.<nodeID>)" patterns
-		oldPattern := "nodes." + nodeID + "."
-		newPattern := "nodes_" + nodeID + "."
-		result = strings.ReplaceAll(result, oldPattern, newPattern)
+	orderedNodeIDs := make([]string, len(nodeIDs))
+	copy(orderedNodeIDs, nodeIDs)
+	sort.SliceStable(orderedNodeIDs, func(i, j int) bool {
+		return len(orderedNodeIDs[i]) > len(orderedNodeIDs[j])
+	})
 
-		// Handle "nodes.<nodeID>)" for cases like "size(nodes.x)" - BUT NOT has()
-		// has(nodes.X) must remain as-is because has() macro needs a field selection
-		// Replace "nodes.<nodeID>)" with "nodes_<nodeID>)" ONLY if not preceded by "has("
-		oldPattern = "nodes." + nodeID + ")"
-		newPattern = "nodes_" + nodeID + ")"
-		// Use a regex-like approach to avoid replacing inside has()
-		result = replaceExceptInHas(result, oldPattern, newPattern)
+	var result strings.Builder
+	result.Grow(len(expr))
 
-		// Handle end of expression "nodes.<nodeID>" with no trailing char
-		if strings.HasSuffix(result, "nodes."+nodeID) {
-			result = strings.TrimSuffix(result, "nodes."+nodeID) + "nodes_" + nodeID
+	inSingleQuote := false
+	inDoubleQuote := false
+	escaped := false
+
+	for i := 0; i < len(expr); {
+		ch := expr[i]
+
+		if escaped {
+			result.WriteByte(ch)
+			escaped = false
+			i++
+			continue
 		}
+
+		if ch == '\\' && (inSingleQuote || inDoubleQuote) {
+			result.WriteByte(ch)
+			escaped = true
+			i++
+			continue
+		}
+
+		if !inDoubleQuote && ch == '\'' {
+			inSingleQuote = !inSingleQuote
+			result.WriteByte(ch)
+			i++
+			continue
+		}
+		if !inSingleQuote && ch == '"' {
+			inDoubleQuote = !inDoubleQuote
+			result.WriteByte(ch)
+			i++
+			continue
+		}
+
+		if !inSingleQuote && !inDoubleQuote && strings.HasPrefix(expr[i:], "nodes.") {
+			matchedNodeID := ""
+			for _, nodeID := range orderedNodeIDs {
+				if strings.HasPrefix(expr[i+len("nodes."):], nodeID) {
+					matchedNodeID = nodeID
+					break
+				}
+			}
+			if matchedNodeID != "" {
+				nextIndex := i + len("nodes.") + len(matchedNodeID)
+				nextChar, hasNextChar := byte(0), false
+				if nextIndex < len(expr) {
+					nextChar = expr[nextIndex]
+					hasNextChar = true
+				}
+
+				if !hasNextChar || isNodeAccessTerminator(nextChar) || nextChar == '.' {
+					preserveBareHasAccess := nextChar != '.' && hasDirectHasPrefix(expr, i)
+					if preserveBareHasAccess {
+						result.WriteString("nodes.")
+						result.WriteString(matchedNodeID)
+					} else {
+						result.WriteString(nodeCELVariableName(matchedNodeID))
+					}
+					i = nextIndex
+					continue
+				}
+			}
+		}
+
+		result.WriteByte(ch)
+		i++
 	}
-	return result
+
+	return result.String()
 }
 
-// replaceExceptInHas replaces oldPattern with newPattern except when the pattern
-// is inside a has() macro call. This preserves has(nodes.X) as valid CEL.
-func replaceExceptInHas(s, oldPattern, newPattern string) string {
-	// Find all occurrences of oldPattern
-	result := s
-	idx := 0
-	for {
-		foundIdx := strings.Index(result[idx:], oldPattern)
-		if foundIdx == -1 {
-			break
-		}
-		pos := idx + foundIdx
-
-		// Check if this is inside a has() call by looking backwards for "has("
-		// We need to find the matching opening paren
-		isInHas := false
-		if pos >= 4 {
-			// Look for "has(" before this position
-			prefixStart := pos - 100
-			if prefixStart < 0 {
-				prefixStart = 0
-			}
-			prefix := result[prefixStart:pos]
-			// Find the last "has(" in the prefix
-			hasIdx := strings.LastIndex(prefix, "has(")
-			if hasIdx != -1 {
-				// Check if we're inside the has() call by counting parens
-				hasParen := prefixStart + hasIdx + 4 // position after "has("
-				parenDepth := 1
-				for i := hasParen; i < pos; i++ {
-					switch result[i] {
-					case '(':
-						parenDepth++
-					case ')':
-						parenDepth--
-					}
-				}
-				// If parenDepth > 0, we're still inside the has() call
-				if parenDepth > 0 {
-					isInHas = true
-				}
-			}
-		}
-
-		if !isInHas {
-			// Replace this occurrence
-			result = result[:pos] + newPattern + result[pos+len(oldPattern):]
-			idx = pos + len(newPattern)
-		} else {
-			// Skip this occurrence
-			idx = pos + len(oldPattern)
-		}
+func isNodeAccessTerminator(ch byte) bool {
+	switch ch {
+	case ' ', '\t', '\n', '\r', ')', ']', '}', ',', '?', ':', '+', '-', '*', '/', '%', '<', '>', '=', '!', '&', '|':
+		return true
+	default:
+		return false
 	}
-	return result
+}
+
+func hasDirectHasPrefix(expr string, pos int) bool {
+	j := pos - 1
+	for j >= 0 && (expr[j] == ' ' || expr[j] == '\t' || expr[j] == '\n' || expr[j] == '\r') {
+		j--
+	}
+	if j < 3 {
+		return false
+	}
+	return expr[j-3:j+1] == "has("
 }
 
 // ValidateCELWithCompilation validates CEL expressions by actually compiling them.

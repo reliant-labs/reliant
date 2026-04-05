@@ -3,6 +3,7 @@ import {
   GitMerge, 
   RefreshCw, 
   GitBranch,
+  GitFork,
   ChevronDown,
   ChevronRight,
 } from 'lucide-react'
@@ -149,6 +150,16 @@ export function FloatingWorkflowSidebar({
               <GitBranch className="w-5 h-5 text-white" />
             </div>
             <span className="text-sm font-medium text-foreground leading-none">Switch</span>
+          </button>
+
+          <button
+            onClick={() => onAddStep('router')}
+            className="flex items-center gap-3 px-2 py-2.5 rounded-lg hover:bg-muted transition-colors text-left w-full"
+          >
+            <div className="w-9 h-9 bg-amber-500 rounded-lg flex items-center justify-center flex-shrink-0">
+              <GitFork className="w-5 h-5 text-white" />
+            </div>
+            <span className="text-sm font-medium text-foreground leading-none">Router</span>
           </button>
         </div>
       )}

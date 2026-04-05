@@ -3,6 +3,7 @@ package validation
 
 import (
 	"reflect"
+	"strings"
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/ext"
@@ -19,6 +20,14 @@ import (
 // Format: "node_output.{nodeID}"
 func nodeOutputTypeName(nodeID string) string {
 	return "node_output." + nodeID
+}
+
+func encodedNodeCELIdentifier(nodeID string) string {
+	return strings.NewReplacer("-", "_", ".", "_", ":", "_").Replace(nodeID)
+}
+
+func nodeCELVariableName(nodeID string) string {
+	return "nodes_" + encodedNodeCELIdentifier(nodeID)
 }
 
 // getNodeOutputCELType returns the CEL type for a node's output using the registry.
@@ -59,12 +68,12 @@ func newValidationCELEnv(namespaces []wfcel.CELNamespace, typeCtx *WorkflowTypeC
 	if typeCtx != nil {
 		for nodeID, nodeType := range typeCtx.NodeTypes {
 			if hasDynamicOutputs(typeCtx, nodeID) {
-				opts = append(opts, cel.Variable("nodes_"+nodeID, cel.DynType))
+				opts = append(opts, cel.Variable(nodeCELVariableName(nodeID), cel.DynType))
 				continue
 			}
 			celType := getNodeOutputCELType(typeCtx.Registry, nodeType, nodeID)
 			if celType != nil {
-				opts = append(opts, cel.Variable("nodes_"+nodeID, celType))
+				opts = append(opts, cel.Variable(nodeCELVariableName(nodeID), celType))
 			}
 		}
 	}

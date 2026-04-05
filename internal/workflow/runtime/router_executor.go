@@ -203,7 +203,10 @@ func (r *RouterExecutor) loadCandidates(args *reliantv1.RouterArgs) error {
 		}
 
 		// Load valid presets for this workflow
-		validPresets, _ := presetLoader.LoadForWorkflow(wf)
+		validPresets, presetValidationErrors := presetLoader.LoadForWorkflow(wf)
+		if len(presetValidationErrors) > 0 {
+			return fmt.Errorf("failed to load presets for workflow %q: %s", ref, presetValidationErrors[0].Message)
+		}
 		filteredPresets := filterPresetsByAllowed(validPresets, candidate.GetPresets())
 
 		info := routerWorkflowInfo{
@@ -225,11 +228,8 @@ func (r *RouterExecutor) makeRoutingDecision(args *reliantv1.RouterArgs) error {
 	customPrompt := model.CelStringValue(args.GetSystemPrompt())
 	systemPrompt := buildRoutingSystemPrompt(r.candidates, customPrompt)
 
-	// Build the user prompt (the input to route on)
-	userPrompt := model.CelStringValue(args.GetPrompt())
-	if userPrompt == "" {
-		return fmt.Errorf("router node %s has empty prompt", r.node.GetId())
-	}
+	// Fixed routing instruction — history provides all the context the LLM needs
+	userPrompt := "Route this conversation to the most appropriate workflow and preset based on the conversation history."
 
 	// Build the response schema
 	schema := buildRoutingResponseSchema(r.candidates)
@@ -266,20 +266,10 @@ func (r *RouterExecutor) makeRoutingDecision(args *reliantv1.RouterArgs) error {
 	}
 	callLLMNode.GetCallLlm().Messages = messages
 
-	// Determine the thread for the routing LLM call
+	// Always include conversation history for routing context
 	routerThread := ""
 	if r.execContext != nil {
 		routerThread = r.execContext.Thread
-	}
-
-	// Check include_history - if false, we use an empty thread context
-	// so the CallLLM only sees the messages we provide
-	includeHistory := true // default
-	if model.CelBoolIsSet(args.GetIncludeHistory()) {
-		includeHistory = model.CelBoolValue(args.GetIncludeHistory())
-	}
-	if !includeHistory {
-		routerThread = "" // Empty thread = no history loaded
 	}
 
 	// Build runtime context for the CallLLM activity
@@ -337,43 +327,28 @@ func (r *RouterExecutor) parseRoutingDecision(output map[string]interface{}) err
 		return fmt.Errorf("routing decision has empty preset selection")
 	}
 
-	// Validate workflow ref is one of the candidates
-	validWorkflow := false
-	for _, c := range r.candidates {
-		if c.Ref == decision.Workflow {
-			validWorkflow = true
-			break
-		}
-	}
-	if !validWorkflow {
+	selectedCandidate, ok := r.candidateForWorkflow(decision.Workflow)
+	if !ok {
 		return fmt.Errorf("routing decision selected unknown workflow %q", decision.Workflow)
 	}
 
-	// Validate preset is available for the selected workflow
-	validPreset := false
-	for _, c := range r.candidates {
-		if c.Ref == decision.Workflow {
-			for _, p := range c.Presets {
-				if p.Name == decision.Preset {
-					validPreset = true
-					break
-				}
-			}
-			break
-		}
-	}
-	if !validPreset {
-		// Check if there's a fallback
+	if !presetAllowedForCandidate(selectedCandidate, decision.Preset) {
 		args := model.GetRouterArgs(r.evalResult)
-		if fallback := args.GetFallback(); fallback != "" {
-			r.logger.Info("[Router] Invalid preset selection, using fallback",
-				"selectedPreset", decision.Preset,
-				"fallback", fallback,
-			)
-			decision.Preset = fallback
-		} else {
+		fallback := ""
+		if args != nil {
+			fallback = strings.TrimSpace(args.GetFallback())
+		}
+		if fallback == "" {
 			return fmt.Errorf("routing decision selected invalid preset %q for workflow %q", decision.Preset, decision.Workflow)
 		}
+		if !presetAllowedForCandidate(selectedCandidate, fallback) {
+			return fmt.Errorf("router fallback preset %q is invalid for workflow %q", fallback, decision.Workflow)
+		}
+		r.logger.Info("[Router] Invalid preset selection, using fallback",
+			"selectedPreset", decision.Preset,
+			"fallback", fallback,
+		)
+		decision.Preset = fallback
 	}
 
 	r.decision = &decision
@@ -388,8 +363,23 @@ func (r *RouterExecutor) executeSelectedWorkflow() (map[string]interface{}, erro
 
 	args := model.GetRouterArgs(r.evalResult)
 
-	// Build a synthetic SubWorkflowArgs-like node for the InlineWorkflowExecutor
-	// We construct a workflow node that references the selected workflow with the selected preset
+	// Build a synthetic workflow node for the InlineWorkflowExecutor.
+	// The router's rewritten prompt is injected into the child thread as a user message
+	// so the selected workflow receives the routed request even if it does not expose
+	// a dedicated string input for it.
+	syntheticThread := args.GetThread()
+	if syntheticThread == nil {
+		syntheticThread = &reliantv1.ThreadConfig{}
+	}
+	if prompt := strings.TrimSpace(r.decision.Prompt); prompt != "" {
+		syntheticThread = &reliantv1.ThreadConfig{
+			Mode: syntheticThread.GetMode(),
+			Inject: &reliantv1.InjectConfig{
+				Role:    &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "user"}},
+				Content: &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: prompt}},
+			},
+		}
+	}
 	syntheticNode := &reliantv1.Node{
 		Id:   r.node.GetId(),
 		Type: model.NodeTypeWorkflow,
@@ -397,9 +387,9 @@ func (r *RouterExecutor) executeSelectedWorkflow() (map[string]interface{}, erro
 			Workflow: &reliantv1.SubWorkflowArgs{
 				Ref: &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: r.decision.Workflow}},
 				Presets: map[string]string{
-					"default": r.decision.Preset,
+					DefaultPresetGroup: r.decision.Preset,
 				},
-				Thread:  args.GetThread(),
+				Thread:  syntheticThread,
 				Project: args.GetProject(),
 			},
 		},
@@ -438,21 +428,13 @@ func (r *RouterExecutor) executeSelectedWorkflow() (map[string]interface{}, erro
 			core.InputAssemblyStageDefaults,
 		},
 		Presets: map[string]string{
-			"default": r.decision.Preset,
+			DefaultPresetGroup: r.decision.Preset,
 		},
 	}
 
-	// Determine thread mode for the child workflow
-	threadMode := model.ThreadModeNew // Default for router children
-	if args.GetThread() != nil && args.GetThread().GetMode() != "" {
-		threadMode = args.GetThread().GetMode()
-	}
-
-	// Derive child execution context
-	var childExecCtx *ExecutionContext
-	if r.execContext != nil {
-		childExecCtx = r.execContext.ForChild(r.node.GetId(), threadMode, r.decision.Workflow, true)
-	}
+	// The parent workflow already initialized the router child execution context/thread.
+	// Re-deriving here would incorrectly produce a fork-of-a-fork or new-of-a-new thread.
+	childExecCtx := r.execContext
 
 	// Wire up the executor
 	inlineExecutor = inlineExecutor.
@@ -499,4 +481,22 @@ func routerWorkflowIdentity(node *reliantv1.Node) string {
 		return "router[" + strings.Join(refs, ",") + "]"
 	}
 	return "router"
+}
+
+func (r *RouterExecutor) candidateForWorkflow(workflowRef string) (routerWorkflowInfo, bool) {
+	for _, candidate := range r.candidates {
+		if candidate.Ref == workflowRef {
+			return candidate, true
+		}
+	}
+	return routerWorkflowInfo{}, false
+}
+
+func presetAllowedForCandidate(candidate routerWorkflowInfo, presetName string) bool {
+	for _, candidatePreset := range candidate.Presets {
+		if candidatePreset.Name == presetName {
+			return true
+		}
+	}
+	return false
 }

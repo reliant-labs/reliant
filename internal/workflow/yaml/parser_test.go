@@ -692,6 +692,151 @@ nodes:
 	}
 }
 
+func TestNodeDispatch_Router(t *testing.T) {
+	t.Run("full config", func(t *testing.T) {
+		yaml := `
+name: test
+nodes:
+  - id: route
+    type: router
+    workflows:
+      - ref: builtin://researcher
+        presets: [default, deep]
+        description: Research tasks
+      - ref: builtin://coder
+        presets: [fast]
+        description: Coding tasks
+    system_prompt: You are a routing assistant
+    model:
+      tags: [flagship]
+    thread:
+      mode: inherit
+    fallback: builtin://researcher
+`
+		wf, err := ParseWorkflow([]byte(yaml))
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		args := wf.Nodes[0].GetRouter()
+		if args == nil {
+			t.Fatal("expected RouterArgs")
+		}
+
+		// workflows
+		if len(args.Workflows) != 2 {
+			t.Fatalf("workflows: got %d, want 2", len(args.Workflows))
+		}
+		w0 := args.Workflows[0]
+		if w0.Ref != "builtin://researcher" {
+			t.Errorf("workflows[0].ref: got %q", w0.Ref)
+		}
+		if len(w0.Presets) != 2 || w0.Presets[0] != "default" || w0.Presets[1] != "deep" {
+			t.Errorf("workflows[0].presets: got %v", w0.Presets)
+		}
+		if w0.Description != "Research tasks" {
+			t.Errorf("workflows[0].description: got %q", w0.Description)
+		}
+		w1 := args.Workflows[1]
+		if w1.Ref != "builtin://coder" {
+			t.Errorf("workflows[1].ref: got %q", w1.Ref)
+		}
+		if len(w1.Presets) != 1 || w1.Presets[0] != "fast" {
+			t.Errorf("workflows[1].presets: got %v", w1.Presets)
+		}
+
+		// scalar fields
+		if args.SystemPrompt.GetLiteral() != "You are a routing assistant" {
+			t.Errorf("system_prompt: got %q", args.SystemPrompt.GetLiteral())
+		}
+		if args.Model.GetLiteral() == nil {
+			t.Fatal("expected model")
+		}
+		if args.Thread == nil || args.Thread.Mode != "inherit" {
+			t.Errorf("thread.mode: got %v", args.Thread)
+		}
+		if args.Fallback != "builtin://researcher" {
+			t.Errorf("fallback: got %q", args.Fallback)
+		}
+	})
+
+	t.Run("minimal config", func(t *testing.T) {
+		yaml := `
+name: test
+nodes:
+  - id: route
+    type: router
+    workflows:
+      - ref: builtin://agent
+`
+		wf, err := ParseWorkflow([]byte(yaml))
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		args := wf.Nodes[0].GetRouter()
+		if args == nil {
+			t.Fatal("expected RouterArgs")
+		}
+		if len(args.Workflows) != 1 {
+			t.Fatalf("workflows: got %d, want 1", len(args.Workflows))
+		}
+		if args.Workflows[0].Ref != "builtin://agent" {
+			t.Errorf("workflows[0].ref: got %q", args.Workflows[0].Ref)
+		}
+		if args.SystemPrompt != nil {
+			t.Errorf("system_prompt: expected nil, got %v", args.SystemPrompt)
+		}
+		if args.Fallback != "" {
+			t.Errorf("fallback: expected empty, got %q", args.Fallback)
+		}
+	})
+
+	t.Run("multiple candidates", func(t *testing.T) {
+		yaml := `
+name: test
+nodes:
+  - id: route
+    type: router
+    workflows:
+      - ref: builtin://researcher
+        description: For research
+      - ref: builtin://coder
+        description: For coding
+      - ref: builtin://reviewer
+        description: For review
+      - ref: builtin://debugger
+        description: For debugging
+`
+		wf, err := ParseWorkflow([]byte(yaml))
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		args := wf.Nodes[0].GetRouter()
+		if args == nil {
+			t.Fatal("expected RouterArgs")
+		}
+		if len(args.Workflows) != 4 {
+			t.Fatalf("workflows: got %d, want 4", len(args.Workflows))
+		}
+		expected := []struct {
+			ref  string
+			desc string
+		}{
+			{"builtin://researcher", "For research"},
+			{"builtin://coder", "For coding"},
+			{"builtin://reviewer", "For review"},
+			{"builtin://debugger", "For debugging"},
+		}
+		for i, exp := range expected {
+			if args.Workflows[i].Ref != exp.ref {
+				t.Errorf("workflows[%d].ref: got %q, want %q", i, args.Workflows[i].Ref, exp.ref)
+			}
+			if args.Workflows[i].Description != exp.desc {
+				t.Errorf("workflows[%d].description: got %q, want %q", i, args.Workflows[i].Description, exp.desc)
+			}
+		}
+	})
+}
+
 // ---------------------------------------------------------------------------
 // V2Input dispatch tests
 // ---------------------------------------------------------------------------

@@ -32,10 +32,8 @@ entry: [route]
 nodes:
   - id: route
     type: router
-    prompt: "{{inputs.user_message}}"
     model:
       tags: [fast, smart]
-    include_history: true
     thread:
       mode: new
     workflows:

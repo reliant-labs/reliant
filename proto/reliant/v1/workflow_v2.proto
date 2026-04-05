@@ -589,17 +589,12 @@ message RouterArgs {
 
   // Workflows lists candidate workflows the router can select from. Required.
   repeated RouterWorkflowCandidate workflows = 1 [(reliant) = { description: "Candidate workflows to route to" required: true }];
-  // Prompt is the input for the routing LLM to decide on. Required.
-  // Typically {{messages}} or a user message expression.
-  CelString prompt = 2 [(reliant) = { description: "Input for the routing decision" required: true }];
+  reserved 2, 5;
+  reserved "prompt", "include_history";
   // SystemPrompt overrides the default routing system prompt.
   CelString system_prompt = 3 [(reliant) = { description: "Custom system prompt for the routing LLM" }];
   // Model selects which LLM to use for the routing decision.
   CelModelSelector model = 4 [(reliant) = { description: "Model for routing decision (defaults to fast model)" }];
-  // IncludeHistory controls whether the routing LLM sees the full conversation history.
-  // When true, the router loads the thread's message history for context.
-  // When false, only the prompt value is sent as a single message.
-  CelBool include_history = 5 [(reliant) = { description: "Include conversation history in routing context" default_value: "true" }];
   // Thread configures how the selected child workflow relates to conversation threads.
   ThreadConfig thread = 6 [(reliant) = { description: "Thread mode for the selected workflow: inherit, new, or fork" }];
   // Fallback is the preset name to use if routing fails. Empty = error on failure.

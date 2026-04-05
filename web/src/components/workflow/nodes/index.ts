@@ -12,6 +12,7 @@ export { JoinNode } from './JoinNode'
 export { LoopNode } from './LoopNode'
 export { ExpandedLoopNode } from './ExpandedLoopNode'
 export { SwitchNode } from './SwitchNode'
+export { RouterNode } from './RouterNode'
 export { getExecutionStatusClasses, getStatusIndicatorClasses, getNodeStatusStyles } from './executionStatus'
 export { NodeStatusWrapper, buildHandleClassName, type NodeTheme } from './NodeStatusWrapper'
 
@@ -23,6 +24,7 @@ import { JoinNode } from './JoinNode'
 import { LoopNode } from './LoopNode'
 import { ExpandedLoopNode } from './ExpandedLoopNode'
 import { SwitchNode } from './SwitchNode'
+import { RouterNode } from './RouterNode'
 
 /**
  * Node type registry for ReactFlow
@@ -37,4 +39,5 @@ export const nodeTypes = {
   expandedLoopNode: ExpandedLoopNode,
   eventNode: EventNode,
   switchNode: SwitchNode,
+  routerNode: RouterNode,
 }

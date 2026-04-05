@@ -24,6 +24,7 @@ func TestIsActivityType_StructuralTypes(t *testing.T) {
 		"workflow",
 		"loop",
 		"join",
+		"router",
 	}
 	for _, nt := range structuralTypes {
 		if isActivityType(nt) {

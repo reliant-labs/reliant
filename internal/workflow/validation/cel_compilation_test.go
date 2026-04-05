@@ -60,6 +60,71 @@ edges:
 	assert.True(t, found, "expected error about type mismatch")
 }
 
+func TestEncodedNodeCELIdentifier(t *testing.T) {
+	assert.Equal(t, "simple_node", encodedNodeCELIdentifier("simple_node"))
+	assert.Equal(t, "router_1775339690239", encodedNodeCELIdentifier("router-1775339690239"))
+	assert.Equal(t, "loop_inner_node", encodedNodeCELIdentifier("loop.inner:node"))
+}
+
+func TestRewriteNodesAccess_EncodesHyphenatedNodeIDs(t *testing.T) {
+	rewritten := rewriteNodesAccess(
+		"nodes.router-1775339690239.response_text == '' || size(nodes.router-1775339690239.message.text) == 0",
+		[]string{"router-1775339690239"},
+	)
+	assert.Equal(t, "nodes_router_1775339690239.response_text == '' || size(nodes_router_1775339690239.message.text) == 0", rewritten)
+}
+
+func TestRewriteNodesAccess_PreservesHasAndBareNodeAccess(t *testing.T) {
+	rewritten := rewriteNodesAccess(
+		"has(nodes.router-1775339690239) || size(nodes.router-1775339690239) == 0 || nodes.router-1775339690239 != null",
+		[]string{"router-1775339690239"},
+	)
+	assert.Equal(
+		t,
+		"has(nodes.router-1775339690239) || size(nodes_router_1775339690239) == 0 || nodes_router_1775339690239 != null",
+		rewritten,
+	)
+}
+
+func TestRewriteNodesAccess_IgnoresStringLiteralsAndLongestMatchWins(t *testing.T) {
+	rewritten := rewriteNodesAccess(
+		"'nodes.router-1.response_text' + nodes.router-1.response_text + nodes.router-1a.response_text",
+		[]string{"router-1", "router-1a"},
+	)
+	assert.Equal(
+		t,
+		"'nodes.router-1.response_text' + nodes_router_1.response_text + nodes_router_1a.response_text",
+		rewritten,
+	)
+}
+
+func TestValidateCELWithCompilation_HyphenatedNodeIDOutputs(t *testing.T) {
+	workflowYAML := `
+name: test-hyphenated-node-id
+entry: [router-1775339690239]
+nodes:
+  - id: router-1775339690239
+    type: router
+    workflows:
+      - ref: builtin://agent
+outputs:
+  message: "{{nodes.router-1775339690239.message}}"
+  response_text: "{{nodes.router-1775339690239.response_text}}"
+`
+
+	wf, err := wfyaml.ParseWorkflow([]byte(workflowYAML))
+	require.NoError(t, err)
+
+	result := &Result{}
+	ValidateCELWithCompilation(wf, result, nil)
+
+	errors := result.Errors()
+	for _, e := range errors {
+		t.Logf("Unexpected error: %s - %s", e.Path, e.Message)
+	}
+	assert.Empty(t, errors, "expected no validation errors for hyphenated node output access")
+}
+
 // TestValidateCELWithCompilation_ValidFieldAccess tests that valid field access passes.
 func TestValidateCELWithCompilation_ValidFieldAccess(t *testing.T) {
 	workflowYAML := `
