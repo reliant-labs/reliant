@@ -32,6 +32,7 @@ type Config struct {
 	ToolsFactory   *tools.ToolsFactory
 	ToolExecutor   toolexec.ToolExecutor
 	DaemonRouter   toolexec.DaemonRouter // Routes commands to user's daemon (nil = worktree ops unavailable)
+	MCPBinder      toolexec.MCPContextBinder
 	ConfigProvider config.ConfigProvider
 
 	// Optional overrides (for testing)
@@ -76,6 +77,7 @@ func StartWorker(cfg *Config) (*Handle, *v2.ActivityRegistry, error) {
 		cfg.ToolsFactory,
 		cfg.ToolExecutor,
 		cfg.DaemonRouter,
+		cfg.MCPBinder,
 		cfg.TemporalClient,
 		cfg.ConfigProvider,
 	)

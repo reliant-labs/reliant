@@ -80,7 +80,6 @@ func TestMCPToolAdapterName_UsesLogicalServerName(t *testing.T) {
 		"/tmp/project",
 		"chrome-devtools",
 		mcp.Tool{Name: "fill_form"},
-		nil,
 	)
 	if err != nil {
 		t.Fatalf("expected adapter construction to succeed: %v", err)
@@ -96,7 +95,6 @@ func TestNewProjectMCPToolAdapter_RejectsScopedServerIdentifier(t *testing.T) {
 		"/tmp/project",
 		"/tmp/project::chrome-devtools",
 		mcp.Tool{Name: "fill_form"},
-		nil,
 	)
 	if err == nil {
 		t.Fatal("expected scoped server identifier to be rejected")
@@ -129,8 +127,7 @@ func TestValidateMCPLogicalServerName(t *testing.T) {
 }
 
 func TestMCPToolRegistryBuildAdapters_PrunesDuplicateLogicalToolNamesDeterministically(t *testing.T) {
-	registry := NewMCPToolRegistry(nil)
-	registry.projectPath = "/tmp/project"
+	registry := NewMCPToolRegistry(nil, "/tmp/project")
 	serverTools := map[string][]mcp.Tool{
 		"alpha": {
 			{Name: "dup", Description: "second"},

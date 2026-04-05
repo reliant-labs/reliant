@@ -23,6 +23,7 @@ type Activities struct {
 	ToolsFactory   *tools.ToolsFactory
 	ToolExecutor   toolexec.ToolExecutor
 	DaemonRouter   toolexec.DaemonRouter // Routes commands to user's daemon (required for cloud worktree ops)
+	MCPBinder      toolexec.MCPContextBinder
 	ConfigProvider config.ConfigProvider
 	RunExecutor    handlers.RunExecutor   // Optional: for testing shell command execution
 	DriverResolver drivers.DriverResolver // Optional: custom LLM driver resolver (nil = use drivers.GetDriver)
@@ -37,6 +38,7 @@ func NewActivities(
 	toolsFactory *tools.ToolsFactory,
 	toolExecutor toolexec.ToolExecutor,
 	daemonRouter toolexec.DaemonRouter,
+	mcpBinder toolexec.MCPContextBinder,
 	temporalClient client.Client,
 	configProvider config.ConfigProvider,
 ) *Activities {
@@ -47,6 +49,7 @@ func NewActivities(
 		ToolsFactory:   toolsFactory,
 		ToolExecutor:   toolExecutor,
 		DaemonRouter:   daemonRouter,
+		MCPBinder:      mcpBinder,
 		ConfigProvider: configProvider,
 		RunExecutor:    nil, // Use default executor
 		TemporalClient: temporalClient,

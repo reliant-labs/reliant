@@ -1630,10 +1630,13 @@ func (e *InlineLoopExecutor) debugTrace(checkpoint string, data map[string]inter
 	})
 
 	input := map[string]interface{}{
-		"chat_id":     e.chatID,
-		"workflow_id": e.workflowID,
-		"checkpoint":  checkpoint,
-		"data":        data,
+		"chat_id":        e.chatID,
+		"workflow_id":    e.workflowID,
+		"step_id":        e.loopStep.Node.GetId(),
+		"loop_node_id":   e.loopID,
+		"loop_iteration": e.iteration,
+		"checkpoint":     checkpoint,
+		"data":           data,
 	}
 
 	var result map[string]interface{}

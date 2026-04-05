@@ -119,9 +119,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 		return storedConfigProvider.GetProjectConfig(ctx, config.ProjectRef{ProjectID: projectPath})
 	})
 
-	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{
-		MCPManager: mcpManager,
-	})
+	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{})
 
 	caps := toolsFactory.ListAvailableToolsForLocation(tools.ToolRunsOnDaemon)
 	sort.Strings(caps)

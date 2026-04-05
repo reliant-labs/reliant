@@ -1,4 +1,3 @@
-// Copyright (c) 2025 Reliant Labs
 package tools
 
 import (
@@ -15,19 +14,18 @@ import (
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
-// MCPToolAdapter adapts an MCP tool to the internal Tool interface
+// MCPToolAdapter adapts an MCP tool to the internal Tool interface.
 type MCPToolAdapter struct {
 	projectPath string
 	serverName  string
 	tool        mcp.Tool
-	manager     *mcp.Manager
 
 	// Cached schema
 	schema *jsonschema.Schema
 }
 
-// NewMCPToolAdapter creates a new adapter for an MCP tool
-func NewMCPToolAdapter(serverName string, tool mcp.Tool, manager *mcp.Manager) (*MCPToolAdapter, error) {
+// NewMCPToolAdapter creates a new adapter for an MCP tool.
+func NewMCPToolAdapter(serverName string, tool mcp.Tool) (*MCPToolAdapter, error) {
 	if err := validateMCPLogicalServerName(serverName); err != nil {
 		return nil, err
 	}
@@ -35,17 +33,14 @@ func NewMCPToolAdapter(serverName string, tool mcp.Tool, manager *mcp.Manager) (
 	adapter := &MCPToolAdapter{
 		serverName: strings.TrimSpace(serverName),
 		tool:       tool,
-		manager:    manager,
 	}
 
-	// Parse and cache the schema
 	adapter.parseSchema()
-
 	return adapter, nil
 }
 
 // NewProjectMCPToolAdapter creates a project-scoped adapter for an MCP tool.
-func NewProjectMCPToolAdapter(projectPath, serverName string, tool mcp.Tool, manager *mcp.Manager) (*MCPToolAdapter, error) {
+func NewProjectMCPToolAdapter(projectPath, serverName string, tool mcp.Tool) (*MCPToolAdapter, error) {
 	if err := validateMCPLogicalServerName(serverName); err != nil {
 		return nil, err
 	}
@@ -54,48 +49,43 @@ func NewProjectMCPToolAdapter(projectPath, serverName string, tool mcp.Tool, man
 		projectPath: projectPath,
 		serverName:  strings.TrimSpace(serverName),
 		tool:        tool,
-		manager:     manager,
 	}
 
 	adapter.parseSchema()
 	return adapter, nil
 }
 
-// Name returns the tool name with server prefix to avoid conflicts
+// Name returns the tool name with server prefix to avoid conflicts.
 func (a *MCPToolAdapter) Name() string {
-	// Prefix with server name to avoid conflicts
 	return fmt.Sprintf("mcp__%s__%s", a.serverName, a.tool.Name)
 }
 
-// Description returns the tool description
+// Description returns the tool description.
 func (a *MCPToolAdapter) Description() string {
 	desc := a.tool.Description
 	if desc == "" {
 		desc = fmt.Sprintf("MCP tool from %s", a.serverName)
 	}
-	// Add server info to description
 	return fmt.Sprintf("%s [via MCP:%s]", desc, a.serverName)
 }
 
-// RequiresPermission returns permission requirements for the MCP tool
-func (a *MCPToolAdapter) RequiresPermission(rctx *rctx.ToolContext, params ToolCall) (bool, error) {
-	// Get working directory for permission context
+// RequiresPermission returns permission requirements for the MCP tool.
+func (a *MCPToolAdapter) RequiresPermission(_ *rctx.ToolContext, _ ToolCall) (bool, error) {
 	return true, nil
 }
 
-// ParamSchema returns the JSON schema for the tool parameters
+// ParamSchema returns the JSON schema for the tool parameters.
 func (a *MCPToolAdapter) ParamSchema() *jsonschema.Schema {
 	return a.schema
 }
 
-// Run executes the MCP tool and returns the result
-func (a *MCPToolAdapter) Run(rctx *rctx.ToolContext, params ToolCall) (ToolResponse, error) {
+// Run executes the MCP tool and returns the result.
+func (a *MCPToolAdapter) Run(toolCtx *rctx.ToolContext, params ToolCall) (ToolResponse, error) {
 	logging.Info("Executing MCP tool",
 		"server", a.serverName,
 		"tool", a.tool.Name,
 		"id", params.ID)
 
-	// Parse the input parameters
 	var arguments map[string]interface{}
 	if params.Input != "" {
 		if err := json.Unmarshal([]byte(params.Input), &arguments); err != nil {
@@ -104,15 +94,19 @@ func (a *MCPToolAdapter) Run(rctx *rctx.ToolContext, params ToolCall) (ToolRespo
 		}
 	}
 
-	// Call the MCP tool
+	runtime := runtimeFromToolContext(toolCtx)
+	if runtime == nil {
+		return NewTextErrorResponse("MCP runtime is not configured for this execution"), nil
+	}
+
 	var (
 		result *mcp.ToolResult
 		err    error
 	)
 	if strings.TrimSpace(a.projectPath) != "" {
-		result, err = a.manager.ProjectCallTool(a.projectPath, a.serverName, a.tool.Name, arguments)
+		result, err = runtime.ProjectCallTool(a.projectPath, a.serverName, a.tool.Name, arguments)
 	} else {
-		result, err = a.manager.CallTool(a.serverName, a.tool.Name, arguments)
+		result, err = runtime.CallTool(a.serverName, a.tool.Name, arguments)
 	}
 	if err != nil {
 		logging.Error("MCP tool execution failed",
@@ -122,13 +116,10 @@ func (a *MCPToolAdapter) Run(rctx *rctx.ToolContext, params ToolCall) (ToolRespo
 		return NewTextErrorResponse(fmt.Sprintf("MCP tool error: %v", err)), nil
 	}
 
-	// Convert MCP result to internal format
 	return a.convertResult(result), nil
 }
 
-// parseSchema converts the MCP tool schema to jsonschema.Schema
 func (a *MCPToolAdapter) parseSchema() {
-	// If no schema provided, create a minimal one
 	if a.tool.InputSchema == nil {
 		a.schema = &jsonschema.Schema{
 			Type:        "object",
@@ -138,8 +129,6 @@ func (a *MCPToolAdapter) parseSchema() {
 	}
 
 	normalizedSchema := normalizeSchemaForInvopop(a.tool.InputSchema)
-
-	// Convert the map to jsonschema.Schema
 	schemaData, err := json.Marshal(normalizedSchema)
 	if err != nil {
 		logging.Warn("Failed to marshal MCP tool schema",
@@ -160,7 +149,6 @@ func (a *MCPToolAdapter) parseSchema() {
 		return
 	}
 
-	// Ensure description is set
 	if schema.Description == "" {
 		schema.Description = a.Description()
 	}
@@ -185,9 +173,6 @@ func (a *MCPToolAdapter) buildLooseFallbackSchema() *jsonschema.Schema {
 	}
 }
 
-// normalizeSchemaForInvopop converts common JSON Schema variants to forms
-// accepted by invopop/jsonschema's Schema struct decoder.
-// In particular, many MCP servers emit union types like: "type": ["object", "null"].
 func normalizeSchemaForInvopop(value interface{}) interface{} {
 	switch v := value.(type) {
 	case map[string]interface{}:
@@ -283,15 +268,13 @@ func extractSchemaHints(input map[string]interface{}) ([]string, []string) {
 	return propertyNames, requiredNames
 }
 
-// convertResult converts MCP tool result to internal ToolResponse
+// convertResult converts MCP tool result to internal ToolResponse.
 func (a *MCPToolAdapter) convertResult(result *mcp.ToolResult) ToolResponse {
 	if result == nil || len(result.Content) == 0 {
 		return NewTextResponse("Tool executed successfully with no output")
 	}
 
-	// Combine all content into a single response
 	var contentParts []string
-
 	for _, content := range result.Content {
 		switch content.Type {
 		case "text":
@@ -299,72 +282,56 @@ func (a *MCPToolAdapter) convertResult(result *mcp.ToolResult) ToolResponse {
 				contentParts = append(contentParts, content.Text)
 			}
 		case "image":
-			// Handle image content
 			if content.Data != "" && content.MimeType != "" {
-				contentParts = append(contentParts,
-					fmt.Sprintf("[Image: %s]", content.MimeType))
+				contentParts = append(contentParts, fmt.Sprintf("[Image: %s]", content.MimeType))
 			}
 		case "resource":
-			// Handle resource content
 			if content.Text != "" {
 				contentParts = append(contentParts, content.Text)
 			}
 		default:
-			// Handle unknown content types
 			if content.Text != "" {
 				contentParts = append(contentParts, content.Text)
 			}
 		}
 	}
 
-	// Join all content parts
 	responseText := strings.Join(contentParts, "\n")
-
 	if result.IsError {
 		return NewTextErrorResponse(responseText)
 	}
-
 	return NewTextResponse(responseText)
 }
 
-// MCPToolRegistry manages MCP tools from multiple servers
+// MCPToolRegistry manages MCP tools from multiple servers.
 type MCPToolRegistry struct {
-	manager     *mcp.Manager
+	runtime     MCPRuntime
 	projectPath string
 	tools       map[string]Tool
 	mu          sync.RWMutex
 }
 
-// NewMCPToolRegistry creates a new MCP tool registry
-func NewMCPToolRegistry(manager *mcp.Manager) *MCPToolRegistry {
+// NewMCPToolRegistry creates a new MCP tool registry.
+func NewMCPToolRegistry(runtime MCPRuntime, projectPath string) *MCPToolRegistry {
 	return &MCPToolRegistry{
-		manager: manager,
-		tools:   make(map[string]Tool),
-	}
-}
-
-// NewProjectMCPToolRegistry creates a project-scoped MCP tool registry.
-func NewProjectMCPToolRegistry(manager *mcp.Manager, projectPath string) *MCPToolRegistry {
-	return &MCPToolRegistry{
-		manager:     manager,
+		runtime:     runtime,
 		projectPath: projectPath,
 		tools:       make(map[string]Tool),
 	}
 }
 
-// RefreshTools updates the registry with current MCP tools
+// RefreshTools updates the registry with current MCP tools.
 func (r *MCPToolRegistry) RefreshTools() error {
 	logging.Debug("Refreshing MCP tool registry")
 
-	// Get all tools from all servers
 	var (
 		serverTools map[string][]mcp.Tool
 		err         error
 	)
 	if strings.TrimSpace(r.projectPath) != "" {
-		serverTools, err = r.manager.ListProjectTools(r.projectPath)
+		serverTools, err = r.runtime.ListProjectTools(r.projectPath)
 	} else {
-		serverTools, err = r.manager.ListAllTools()
+		serverTools, err = r.runtime.ListAllTools()
 	}
 	if err != nil {
 		return fmt.Errorf("failed to list MCP tools: %w", err)
@@ -375,7 +342,6 @@ func (r *MCPToolRegistry) RefreshTools() error {
 		return err
 	}
 
-	// Update the registry
 	r.mu.Lock()
 	r.tools = newTools
 	r.mu.Unlock()
@@ -413,16 +379,14 @@ func (r *MCPToolRegistry) buildAdaptersFromServerTools(serverTools map[string][]
 				err     error
 			)
 			if strings.TrimSpace(r.projectPath) != "" {
-				adapter, err = NewProjectMCPToolAdapter(r.projectPath, serverName, tool, r.manager)
+				adapter, err = NewProjectMCPToolAdapter(r.projectPath, serverName, tool)
 			} else {
-				adapter, err = NewMCPToolAdapter(serverName, tool, r.manager)
+				adapter, err = NewMCPToolAdapter(serverName, tool)
 			}
 			if err != nil {
 				return nil, fmt.Errorf("failed to build MCP adapter (server=%q tool=%q): %w", serverName, tool.Name, err)
 			}
 			toolName := adapter.Name()
-
-			// Deterministically keep first occurrence by sorted server iteration.
 			if _, exists := newTools[toolName]; exists {
 				if !loggedDuplicateNames[toolName] {
 					logging.Warn("Pruned duplicate MCP tool name deterministically",
@@ -444,27 +408,20 @@ func (r *MCPToolRegistry) buildAdaptersFromServerTools(serverTools map[string][]
 	return newTools, nil
 }
 
-// GetTools returns all MCP tools as Tool interfaces
-// Tools are refreshed from the manager each time to pick up newly loaded servers
-// Tools are sorted by name to ensure consistent ordering for LLM cache hits
+// GetTools returns all MCP tools as Tool interfaces.
 func (r *MCPToolRegistry) GetTools() []Tool {
-	// Refresh tools from manager to pick up any newly loaded servers
 	if err := r.RefreshTools(); err != nil {
 		logging.Warn("Failed to refresh MCP tools", "error", err)
-		// Continue with existing tools
 	}
 
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	// Collect tools into slice
 	tools := make([]Tool, 0, len(r.tools))
 	for _, tool := range r.tools {
 		tools = append(tools, tool)
 	}
 
-	// Sort tools by name to ensure consistent ordering for cache hits
-	// This is critical because map iteration order is random in Go
 	sort.Slice(tools, func(i, j int) bool {
 		return tools[i].Name() < tools[j].Name()
 	})
@@ -472,7 +429,7 @@ func (r *MCPToolRegistry) GetTools() []Tool {
 	return tools
 }
 
-// GetTool returns a specific MCP tool by name
+// GetTool returns a specific MCP tool by name.
 func (r *MCPToolRegistry) GetTool(name string) (Tool, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

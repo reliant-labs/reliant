@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/mcp"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	wfmodel "github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/stretchr/testify/assert"
@@ -90,6 +91,7 @@ func TestCallLLMActivity_ToolParametersReachMockDriver(t *testing.T) {
 		tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}),
 		&staticConfigProvider{},
 		driverResolver,
+		nil,
 	)
 
 	tests := []struct {
@@ -190,6 +192,7 @@ func TestCallLLMActivity_CreateChatStylePayloadToolFilterCELEvaluation(t *testin
 		tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}),
 		&staticConfigProvider{},
 		driverResolver,
+		nil,
 	)
 
 	payloadInputs := map[string]interface{}{
@@ -279,6 +282,7 @@ func TestCallLLMActivity_ResolvedToolFilterContainsNoTemplates(t *testing.T) {
 		tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}),
 		&staticConfigProvider{},
 		driverResolver,
+		nil,
 	)
 
 	resolvedToolFilter := []string{"tag:default", "spawn:builtin://agent(general,researcher)"}
@@ -371,9 +375,10 @@ func TestCallLLMActivity_UsesWorkingDirForMCPEnumerationScope(t *testing.T) {
 	activityInstance := NewCallLLMActivity(
 		h.Repo(),
 		nil,
-		tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo(), MCPManager: mcpManager}),
+		tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}),
 		resolver,
 		driverResolver,
+		toolexec.NewLocalMCPContextBinder(mcpManager),
 	)
 
 	input := ActivityInput{
