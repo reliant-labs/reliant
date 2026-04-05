@@ -303,7 +303,6 @@ func runMonolith(_ *cobra.Command, _ []string, dataDir *string) error {
 		Database:           server.Database(),
 		ToolsFactory:       server.ToolsFactory(),
 		TemporalClient:     server.Client(),
-		MCPManager:         server.MCPManager(),
 		StreamingHub:       server.StreamingHub(),
 		UserUpdateHub:      userUpdateHub,
 		ChatUpdateHub:      chatUpdateHub,

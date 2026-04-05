@@ -1,68 +1,32 @@
-// Copyright (c) 2025 Reliant Labs
 package tools
 
-import (
-	"github.com/reliant-labs/reliant/internal/mcp"
-)
-
-// MCPToolProvider manages MCP tools for agents (project-scoped)
+// MCPToolProvider manages MCP tools for agents (project-scoped).
 type MCPToolProvider struct {
-	manager     *mcp.Manager
 	projectPath string
-	registry    *MCPToolRegistry
 }
 
-// NewMCPToolProvider creates a new project-scoped MCP tool provider
-func NewMCPToolProvider(manager *mcp.Manager) *MCPToolProvider {
-	if manager == nil {
-		return nil
-	}
-
-	provider := &MCPToolProvider{
-		manager:  manager,
-		registry: NewMCPToolRegistry(manager),
-	}
-
-	return provider
+// NewMCPToolProvider creates a new unscoped MCP tool provider.
+func NewMCPToolProvider() *MCPToolProvider {
+	return &MCPToolProvider{}
 }
 
 // NewProjectMCPToolProvider creates a project-scoped MCP tool provider.
-func NewProjectMCPToolProvider(manager *mcp.Manager, projectPath string) *MCPToolProvider {
-	if manager == nil {
-		return nil
-	}
-
-	provider := &MCPToolProvider{
-		manager:     manager,
-		projectPath: projectPath,
-		registry:    NewProjectMCPToolRegistry(manager, projectPath),
-	}
-
-	return provider
+func NewProjectMCPToolProvider(projectPath string) *MCPToolProvider {
+	return &MCPToolProvider{projectPath: projectPath}
 }
 
-// GetTools returns all available MCP tools from this provider
-func (p *MCPToolProvider) GetTools() []Tool {
-	if p == nil || p.registry == nil {
+// GetTools returns all available MCP tools from this provider for the given runtime.
+func (p *MCPToolProvider) GetTools(runtime MCPRuntime) []Tool {
+	if p == nil || runtime == nil {
 		return []Tool{}
 	}
-	return p.registry.GetTools()
+	registry := NewMCPToolRegistry(runtime, p.projectPath)
+	return registry.GetTools()
 }
 
-// RefreshTools refreshes the MCP tool registry
-func (p *MCPToolProvider) RefreshTools() error {
-	if p == nil || p.registry == nil {
-		return nil
-	}
-	return p.registry.RefreshTools()
-}
-
-// GetManager returns the MCP manager instance
-func (p *MCPToolProvider) GetManager() *mcp.Manager {
-	if p == nil {
-		return nil
-	}
-	return p.manager
+// RefreshTools exists for API compatibility; registries are built per call.
+func (p *MCPToolProvider) RefreshTools(_ MCPRuntime) error {
+	return nil
 }
 
 // ProjectPath returns the provider project scope (empty for global/unscoped providers).

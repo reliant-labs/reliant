@@ -15,10 +15,13 @@ import (
 
 // DebugTraceInput contains checkpoint information for debugging workflow execution
 type DebugTraceInput struct {
-	ChatID     string                 `json:"chat_id" reliant:"-"`
-	WorkflowID string                 `json:"workflow_id"`
-	Checkpoint string                 `json:"checkpoint"`
-	Data       map[string]interface{} `json:"data"`
+	ChatID        string                 `json:"chat_id" reliant:"-"`
+	WorkflowID    string                 `json:"workflow_id"`
+	StepID        string                 `json:"step_id"`
+	LoopNodeID    string                 `json:"loop_node_id,omitempty"`
+	LoopIteration int                    `json:"loop_iteration"`
+	Checkpoint    string                 `json:"checkpoint"`
+	Data          map[string]interface{} `json:"data"`
 }
 
 // DebugTraceOutput is empty - this is fire-and-forget

@@ -27,9 +27,11 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/preset"
+	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/skills"
 	skillservice "github.com/reliant-labs/reliant/internal/skills/service"
 	"github.com/reliant-labs/reliant/internal/streaming"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
@@ -66,17 +68,19 @@ type CallLLMActivity struct {
 	toolsFactory   *tools.ToolsFactory
 	configProvider cfgpkg.ConfigProvider
 	driverResolver drivers.DriverResolver
+	mcpBinder      toolexec.MCPContextBinder
 }
 
 // NewCallLLMActivity creates a new CallLLMActivity.
 // The optional variadic arguments accept a cfgpkg.ConfigProvider and/or a drivers.DriverResolver.
-func NewCallLLMActivity(repo db.Repository, hub streaming.StreamingHub, toolsFactory *tools.ToolsFactory, cfgProvider cfgpkg.ConfigProvider, resolver drivers.DriverResolver) *CallLLMActivity {
+func NewCallLLMActivity(repo db.Repository, hub streaming.StreamingHub, toolsFactory *tools.ToolsFactory, cfgProvider cfgpkg.ConfigProvider, resolver drivers.DriverResolver, mcpBinder toolexec.MCPContextBinder) *CallLLMActivity {
 	return &CallLLMActivity{
 		repo:           repo,
 		hub:            hub,
 		toolsFactory:   toolsFactory,
 		configProvider: cfgProvider,
 		driverResolver: resolver,
+		mcpBinder:      mcpBinder,
 	}
 }
 
@@ -211,6 +215,18 @@ func (a *CallLLMActivity) getProjectConfig(ctx context.Context, project *db.Proj
 		return nil, err
 	}
 	return cfg, nil
+}
+
+func (a *CallLLMActivity) mcpRuntimeFromContext(ctx context.Context) tools.MCPRuntime {
+	if a.mcpBinder == nil {
+		return nil
+	}
+	toolCtx := rctx.NewToolContext(ctx, "", "", nil, nil)
+	bound := a.mcpBinder.Bind(toolCtx)
+	if bound == nil {
+		return nil
+	}
+	return bound.MCP
 }
 
 // streamLLMResponse streams an LLM response to content_block_chunks (UI-only) and collects data in memory
@@ -862,11 +878,12 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, _ *db.
 		activity.GetLogger(ctx).Debug(msg, keyvals...)
 	}
 
-	// Ensure MCP servers for this project are loaded before getting MCP tools
-	// Use a short timeout to avoid blocking the activity for too long
+	// Ensure MCP servers for this project are loaded before getting MCP tools.
+	// Execution-time MCP binding for actual tool runs happens at the executor boundary.
 	var failedMCPServers []string
-	if mcpManager := projectScopedToolsFactory.GetMCPManager(); mcpManager != nil {
-		result := mcpManager.EnsureProjectServersLoaded(ctx, scopePath)
+	toolRuntime := a.mcpRuntimeFromContext(ctx)
+	if toolRuntime != nil {
+		result := toolRuntime.EnsureProjectServersLoaded(ctx, scopePath)
 		if result.HasFailures() {
 			failedMCPServers = result.FailedServers
 			logWarn("Some MCP servers failed to load (tools from these servers will be unavailable)",
@@ -876,7 +893,7 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, _ *db.
 	}
 
 	// Get MCP tool names for filter expansion
-	mcpTools := projectScopedToolsFactory.GetMCPTools()
+	mcpTools := projectScopedToolsFactory.GetMCPTools(toolRuntime)
 	mcpToolNames := make([]string, len(mcpTools))
 	for i, t := range mcpTools {
 		mcpToolNames[i] = t.Name()

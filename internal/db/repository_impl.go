@@ -286,33 +286,17 @@ func (r *Repo) SaveMessageToThread(ctx context.Context, chatID, thread string, r
 		attachments := []map[string]interface{}{}
 		if len(attachmentIDsForMetadata) > 0 {
 			attachmentsData, err := r.GetAttachmentsByIDs(txCtx, attachmentIDsForMetadata)
-			if err == nil {
-				for _, att := range attachmentsData {
-					attachments = append(attachments, map[string]interface{}{
-						"id":        att.ID,
-						"filename":  att.Filename,
-						"size":      att.Size,
-						"mime_type": att.MimeType,
-						"url":       fmt.Sprintf("/api/attachments/%s", att.ID),
-					})
-				}
+			if err != nil {
+				return fmt.Errorf("failed to get attachment metadata: %w", err)
 			}
-			if len(attachments) == 0 {
-				for _, attachmentID := range attachmentIDsForMetadata {
-					defaultFilename := "file"
-					defaultMime := "application/octet-stream"
-					if attachmentBlockTypeByID[attachmentID] == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE {
-						defaultFilename = "image"
-						defaultMime = "image/jpeg"
-					}
-					attachments = append(attachments, map[string]interface{}{
-						"id":        attachmentID,
-						"filename":  defaultFilename,
-						"size":      0,
-						"mime_type": defaultMime,
-						"url":       fmt.Sprintf("/api/attachments/%s", attachmentID),
-					})
-				}
+			for _, att := range attachmentsData {
+				attachments = append(attachments, map[string]interface{}{
+					"id":        att.ID,
+					"filename":  att.Filename,
+					"size":      att.Size,
+					"mime_type": att.MimeType,
+					"url":       fmt.Sprintf("/api/attachments/%s", att.ID),
+				})
 			}
 		}
 

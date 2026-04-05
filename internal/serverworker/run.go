@@ -24,8 +24,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
-	"github.com/reliant-labs/reliant/internal/mcp"
-	"github.com/reliant-labs/reliant/internal/mcpconfig"
 	"github.com/reliant-labs/reliant/internal/natsutil"
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/streaming"
@@ -155,22 +153,13 @@ func Run(ctx context.Context, opts Options) error {
 	// -----------------------------------------------------------------
 	// 6. Tools factory + remote executor
 	// -----------------------------------------------------------------
-	mcpManager := mcp.NewManager()
 	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{
-		Repo:       repo,
-		MCPManager: mcpManager,
+		Repo: repo,
 	})
 	remoteExecutor := toolexec.NewRemoteExecutor(nil)
 
-	// Stored config provider + MCP project config resolver
+	// Stored config provider
 	storedConfigProvider := config.NewStoredConfigProvider(configadapter.NewRepoConfigStore(repo))
-	mcpManager.SetProjectConfigResolver(func(ctx context.Context, projectPath string) (*config.Config, error) {
-		project, err := mcpconfig.ResolveProjectForMCPPath(ctx, repo, projectPath)
-		if err != nil {
-			return nil, err
-		}
-		return storedConfigProvider.GetProjectConfig(ctx, config.ProjectRef{ProjectID: project.ID})
-	})
 
 	// -----------------------------------------------------------------
 	// 7. Streaming hub
@@ -248,6 +237,7 @@ func Run(ctx context.Context, opts Options) error {
 	// Wire server-side tool execution so ToolRunsOnServer / ToolRunsAnywhere
 	// tools execute in the worker process without a daemon round-trip.
 	serverExecutor := toolexec.NewLocalToolExecutor(toolsFactory)
+	serverExecutor.SetMCPContextBinder(toolexec.NewDaemonMCPContextBinder(router))
 	remoteExecutor.SetServerExecutor(serverExecutor)
 	// Per-request daemon clients via NATS for server-side tools that still
 	// need daemon filesystem/exec access.
@@ -265,6 +255,7 @@ func Run(ctx context.Context, opts Options) error {
 		ToolsFactory:   toolsFactory,
 		ToolExecutor:   remoteExecutor,
 		DaemonRouter:   remoteExecutor.DaemonRouter(),
+		MCPBinder:      toolexec.NewDaemonMCPContextBinder(router),
 		ConfigProvider: storedConfigProvider,
 	})
 	if err != nil {
@@ -361,10 +352,6 @@ func Run(ctx context.Context, opts Options) error {
 	defer healthCancel()
 	if err := healthServer.Shutdown(healthCtx); err != nil {
 		logging.Error("Health server shutdown error", "error", err)
-	}
-
-	if mcpManager != nil {
-		_ = mcpManager.Close()
 	}
 
 	analytics.Shutdown()

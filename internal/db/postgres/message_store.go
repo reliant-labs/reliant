@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
@@ -11,12 +12,13 @@ import (
 )
 
 type messageStore struct {
-	q pgdb.Querier
+	q  pgdb.Querier
+	db pgdb.DBTX
 }
 
 // NewMessageStore creates the Postgres message store implementation.
-func NewMessageStore(q pgdb.Querier) core.MessageStore {
-	return &messageStore{q: q}
+func NewMessageStore(q pgdb.Querier, db pgdb.DBTX) core.MessageStore {
+	return &messageStore{q: q, db: db}
 }
 
 func (s *messageStore) CreateMessage(ctx context.Context, msg *core.Message) error {
@@ -171,11 +173,53 @@ func (s *messageStore) ListContentBlocks(ctx context.Context, messageID string) 
 }
 
 func (s *messageStore) ListContentBlocksForMessages(ctx context.Context, messageIDs []string) ([]*core.MessageContentBlock, error) {
-	sqlcBlocks, err := s.q.ListContentBlocksForMessages(ctx, messageIDs)
+	if len(messageIDs) == 0 {
+		return []*core.MessageContentBlock{}, nil
+	}
+
+	// Build the IN clause with Postgres positional parameters ($1, $2, $3, ...)
+	// The sqlc-generated code doesn't properly handle sqlc.slice() for Postgres
+	// with database/sql - it generates IN ($1) which only matches the first ID.
+	placeholders := make([]string, len(messageIDs))
+	args := make([]interface{}, len(messageIDs))
+	for i, id := range messageIDs {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = id
+	}
+
+	query := fmt.Sprintf(
+		`SELECT id, message_id, position, block_type, content, tool_name, tool_input, tool_call_id, is_error, version, node_id, node_path, activity_id, workflow_run_id, attempt_number, thought_signature, created_at, updated_at
+		FROM message_content_blocks
+		WHERE message_id IN (%s)
+		ORDER BY message_id, position ASC`,
+		strings.Join(placeholders, ", "),
+	)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list content blocks for messages: %w", err)
 	}
-	return contentBlocksFromPG(sqlcBlocks), nil
+	defer rows.Close()
+
+	var blocks []pgdb.MessageContentBlock
+	for rows.Next() {
+		var b pgdb.MessageContentBlock
+		if err := rows.Scan(
+			&b.ID, &b.MessageID, &b.Position, &b.BlockType,
+			&b.Content, &b.ToolName, &b.ToolInput, &b.ToolCallID,
+			&b.IsError, &b.Version, &b.NodeID, &b.NodePath,
+			&b.ActivityID, &b.WorkflowRunID, &b.AttemptNumber,
+			&b.ThoughtSignature, &b.CreatedAt, &b.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan content block: %w", err)
+		}
+		blocks = append(blocks, b)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate content blocks: %w", err)
+	}
+
+	return contentBlocksFromPG(blocks), nil
 }
 
 func (s *messageStore) UpdateContentBlock(ctx context.Context, block *core.MessageContentBlock) error {

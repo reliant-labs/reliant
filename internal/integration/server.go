@@ -213,8 +213,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// For now, most services are nil - tools will have limited functionality
 	// Pass the db.Repo for v2-specific tools like the agent tool
 	s.toolsFactory = tools.NewToolsFactory(&tools.ToolsOptions{
-		Repo:       s.database,   // Pass the v2 repository for agent tool
-		MCPManager: s.mcpManager, // Pass MCP manager for MCP tools (will be populated on-demand)
+		Repo: s.database, // Pass the v2 repository for agent tool
 	})
 
 	// Create tool executor. In production we always route through daemon/gRPC semantics.
@@ -273,6 +272,7 @@ func (s *Server) Start(ctx context.Context) error {
 		ToolsFactory:        s.toolsFactory,
 		ToolExecutor:        s.toolExecutor,
 		DaemonRouter:        s.daemonRouter, // may be nil in test overrides, but wired for production
+		MCPBinder:           toolexec.NewLocalMCPContextBinder(s.mcpManager),
 		ConfigProvider:      storedConfigProvider,
 		RunExecutorOverride: s.config.RunExecutorOverride,
 		DriverResolver:      s.config.DriverResolver,
@@ -464,11 +464,6 @@ func (s *Server) ToolsDaemonService() *services.ToolsDaemonService {
 // Returns nil if the server was started with test overrides (ToolExecutorOverride).
 func (s *Server) DaemonRouter() toolexec.DaemonRouter {
 	return s.daemonRouter
-}
-
-// MCPManager returns the MCP manager
-func (s *Server) MCPManager() *mcp.Manager {
-	return s.mcpManager
 }
 
 // StreamingHub returns the streaming hub used by this server

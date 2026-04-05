@@ -3,13 +3,11 @@ package tools
 
 import (
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/mcp"
 )
 
 // ToolsOptions contains all potential dependency injection parameters for tools
 type ToolsOptions struct {
-	MCPManager     *mcp.Manager // Project-specific MCP manager
-	MCPProjectPath string       // Optional MCP project scope path for MCP tool discovery/calls
+	MCPProjectPath string // Optional MCP project scope path for MCP tool discovery/calls
 	// Repository
 	Repo db.Repository
 	// Additional options can be added here as needed
@@ -34,33 +32,22 @@ func NewToolsFactory(opts *ToolsOptions) *ToolsFactory {
 
 	f := &ToolsFactory{opts: opts}
 
-	// Initialize MCP provider if MCPManager is provided
-	if opts.MCPManager != nil {
-		if opts.MCPProjectPath != "" {
-			f.mcpProvider = NewProjectMCPToolProvider(opts.MCPManager, opts.MCPProjectPath)
-		} else {
-			f.mcpProvider = NewMCPToolProvider(opts.MCPManager)
-		}
+	// Initialize MCP provider lazily; execution-time MCP runtime is resolved from tool context.
+	if opts.MCPProjectPath != "" {
+		f.mcpProvider = NewProjectMCPToolProvider(opts.MCPProjectPath)
+	} else {
+		f.mcpProvider = NewMCPToolProvider()
 	}
 
 	return f
 }
 
-// GetMCPTools returns MCP tools from this factory's provider
-func (f *ToolsFactory) GetMCPTools() []Tool {
+// GetMCPTools returns MCP tools from this factory's provider using the given runtime.
+func (f *ToolsFactory) GetMCPTools(runtime MCPRuntime) []Tool {
 	if f.mcpProvider == nil {
 		return []Tool{}
 	}
-	tools := f.mcpProvider.GetTools()
-	return tools
-}
-
-// GetMCPManager returns the MCP manager from this factory's options
-func (f *ToolsFactory) GetMCPManager() *mcp.Manager {
-	if f.opts == nil {
-		return nil
-	}
-	return f.opts.MCPManager
+	return f.mcpProvider.GetTools(runtime)
 }
 
 // GetRepo returns the repository dependency used by this factory.
@@ -85,7 +72,6 @@ func (f *ToolsFactory) WithMCPProjectPath(projectPath string) *ToolsFactory {
 
 	return NewToolsFactory(&ToolsOptions{
 		Repo:           f.opts.Repo,
-		MCPManager:     f.opts.MCPManager,
 		MCPProjectPath: projectPath,
 	})
 }
@@ -297,8 +283,8 @@ func (f *ToolsFactory) RunScenario() Tool {
 	return NewRunScenarioTool(f.opts.Repo)
 }
 
-// GetToolByName returns a tool by name
-func (f *ToolsFactory) GetToolByName(name string) Tool {
+// GetToolByName returns a tool by name using the given execution-time MCP runtime.
+func (f *ToolsFactory) GetToolByName(name string, runtime MCPRuntime) Tool {
 	// SPECIAL CASE: agent tool is schema-only and workflow-native
 	// It doesn't execute through the normal tool registry
 	// Return a schema-only stub that will error if executed
@@ -334,7 +320,7 @@ func (f *ToolsFactory) GetToolByName(name string) Tool {
 
 	// If not found in registry, check MCP tools
 	if f.mcpProvider != nil {
-		mcpTools := f.mcpProvider.GetTools()
+		mcpTools := f.mcpProvider.GetTools(runtime)
 		for _, tool := range mcpTools {
 			if tool.Name() == name {
 				return tool
@@ -364,23 +350,6 @@ func (f *ToolsFactory) ListAvailableToolsForLocation(location ToolLocation) []st
 		if def.RunsOn == location || def.RunsOn == ToolRunsAnywhere || location == "" {
 			names = append(names, def.Name)
 		}
-	}
-	// Also include MCP tools for daemon and anywhere locations
-	if location == ToolRunsOnDaemon || location == ToolRunsAnywhere || location == "" {
-		names = append(names, f.listMCPToolNames()...)
-	}
-	return names
-}
-
-// listMCPToolNames returns the names of all MCP tools from this factory's provider.
-func (f *ToolsFactory) listMCPToolNames() []string {
-	if f.mcpProvider == nil {
-		return nil
-	}
-	mcpTools := f.mcpProvider.GetTools()
-	names := make([]string, len(mcpTools))
-	for i, t := range mcpTools {
-		names[i] = t.Name()
 	}
 	return names
 }
