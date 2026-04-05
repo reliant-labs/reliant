@@ -116,6 +116,13 @@ function App() {
   const presetsError = useGlobalDataStore((s) => s.presetsError);
   const lastGlobalFetchProjectIdRef = useRef<string | null>(null);
 
+  // Update browser tab title with current project name
+  useEffect(() => {
+    document.title = currentProject?.name
+      ? `Reliant - ${currentProject.name}`
+      : "Reliant";
+  }, [currentProject?.name]);
+
   useEffect(() => {
     const projectId = currentProject?.id;
     if (!isBackendReady || !projectId) return;

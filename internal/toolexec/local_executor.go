@@ -18,6 +18,7 @@ import (
 type LocalToolExecutor struct {
 	toolsFactory *tools.ToolsFactory
 	daemon       daemon.Client
+	mcpBinder    MCPContextBinder
 }
 
 // NewLocalToolExecutor creates a new local tool executor
@@ -31,6 +32,11 @@ func NewLocalToolExecutor(toolsFactory *tools.ToolsFactory) *LocalToolExecutor {
 // When set, tools receive it via rctx.ToolContext.Daemon.
 func (e *LocalToolExecutor) SetDaemonClient(d daemon.Client) {
 	e.daemon = d
+}
+
+// SetMCPContextBinder sets the execution-time MCP binder.
+func (e *LocalToolExecutor) SetMCPContextBinder(binder MCPContextBinder) {
+	e.mcpBinder = binder
 }
 
 // ExecutionResult holds the result of local tool execution
@@ -138,6 +144,9 @@ func (e *LocalToolExecutor) executeTool(
 	if daemonClient != nil {
 		toolContext = toolContext.WithDaemon(daemonClient)
 	}
+	if e.mcpBinder != nil {
+		toolContext = e.mcpBinder.Bind(toolContext)
+	}
 
 	toolsFactory := e.toolsFactory
 	if toolsFactory != nil {
@@ -155,7 +164,7 @@ func (e *LocalToolExecutor) executeTool(
 	}
 
 	// Get tool from factory (project-scoped for MCP tools)
-	tool = toolsFactory.GetToolByName(toolName)
+	tool = toolsFactory.GetToolByName(toolName, toolContext.MCP)
 	if tool == nil {
 		return &ExecutionResult{
 			Success:      false,

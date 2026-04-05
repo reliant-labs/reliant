@@ -21,7 +21,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
-	"github.com/reliant-labs/reliant/internal/mcp"
 	"github.com/reliant-labs/reliant/internal/pat"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -47,19 +46,17 @@ type Server struct {
 // Config holds gRPC server configuration
 type Config struct {
 	Port               int
-	BindAddress        string              // Bind address (default: "127.0.0.1", use "0.0.0.0" for containers)
-	JWTPublicKey       string              // RSA public key for JWT validation
-	CORSAllowedOrigins []string            // Allowed CORS origins; defaults to ["*"] if empty
-	Database           db.Repository       // Database repository
-	ToolsFactory       *tools.ToolsFactory // Tools factory for catalog service
-	TemporalClient     client.Client       // Temporal client for workflow operations
-	MCPManager         *mcp.Manager        // MCP manager for server management
-
-	StreamingHub    streaming.StreamingHub             // Streaming hub for ephemeral events
-	UserUpdateHub   streaming.UpdateHub[db.UserUpdate] // Update hub for user-level events
-	ChatUpdateHub   streaming.UpdateHub[db.ChatUpdate] // Update hub for chat-level events
-	PauseService    *workflow.PauseService             // Pause service for unified pause/resume operations
-	SharedTaskQueue string                             // Shared workflow task queue name
+	BindAddress        string                             // Bind address (default: "127.0.0.1", use "0.0.0.0" for containers)
+	JWTPublicKey       string                             // RSA public key for JWT validation
+	CORSAllowedOrigins []string                           // Allowed CORS origins; defaults to ["*"] if empty
+	Database           db.Repository                      // Database repository
+	ToolsFactory       *tools.ToolsFactory                // Tools factory for catalog service
+	TemporalClient     client.Client                      // Temporal client for workflow operations
+	StreamingHub       streaming.StreamingHub             // Streaming hub for ephemeral events
+	UserUpdateHub      streaming.UpdateHub[db.UserUpdate] // Update hub for user-level events
+	ChatUpdateHub      streaming.UpdateHub[db.ChatUpdate] // Update hub for chat-level events
+	PauseService       *workflow.PauseService             // Pause service for unified pause/resume operations
+	SharedTaskQueue    string                             // Shared workflow task queue name
 
 	ToolExecutor       *toolexec.RemoteExecutor     // Optional remote tool executor to bind to daemon service
 	ToolsDaemonService *services.ToolsDaemonService // Optional pre-created daemon service to share across startup wiring

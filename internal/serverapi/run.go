@@ -192,8 +192,7 @@ func Run(ctx context.Context, opts Options) error {
 	// Tools factory + remote executor
 	mcpManager := mcp.NewManager()
 	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{
-		Repo:       repo,
-		MCPManager: mcpManager,
+		Repo: repo,
 	})
 	remoteExecutor := toolexec.NewRemoteExecutor(nil)
 
@@ -291,6 +290,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	// Wire server-side tool execution
 	serverExecutor := toolexec.NewLocalToolExecutor(toolsFactory)
+	serverExecutor.SetMCPContextBinder(toolexec.NewLocalMCPContextBinder(mcpManager))
 	remoteExecutor.SetServerExecutor(serverExecutor)
 	remoteExecutor.SetDaemonClientFactory(func(userID string) daemon.Client {
 		return daemon.NewRemoteClient(daemonRouter, userID)
@@ -326,7 +326,6 @@ func Run(ctx context.Context, opts Options) error {
 		Database:           repo,
 		ToolsFactory:       toolsFactory,
 		TemporalClient:     temporalClient,
-		MCPManager:         mcpManager,
 		StreamingHub:       streamingHub,
 		UserUpdateHub:      userUpdateHub,
 		ChatUpdateHub:      chatUpdateHub,

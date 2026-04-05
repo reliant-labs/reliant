@@ -237,6 +237,7 @@ func executeCallLLMForChatWithProvider(t *testing.T, h *IdempotencyTestHelper, c
 		tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}),
 		provider,
 		resolver,
+		nil,
 	)
 
 	input := ActivityInput{
@@ -392,6 +393,7 @@ func TestGetAvailableToolsWithSpawn_SkillsFeatureDisabled_HidesInstallSkill(t *t
 		nil,
 		tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}),
 		&staticConfigProvider{},
+		nil,
 		nil,
 	)
 
@@ -549,6 +551,7 @@ Use read-only investigation flow.`)
 		nil,
 		tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}),
 		&explicitConfigProvider{cfg: config.Config{Skills: config.SkillsConfig{ActivationMode: "explicit"}}},
+		nil,
 		nil,
 	)
 

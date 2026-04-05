@@ -424,9 +424,9 @@ func GetToolRegistry() []ToolDefinition {
 		{ToolBashOutput, (*ToolsFactory).BashOutput, []ToolTag{TagExecution, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnDaemon},
 		{ToolBashKill, (*ToolsFactory).BashKill, []ToolTag{TagExecution, TagDefault}, ToolRunsOnDaemon},
 
-		// Network tools
-		{ToolFetch, (*ToolsFactory).Fetch, []ToolTag{TagWeb, TagReadOnly, TagPlan, TagDefault}, ToolRunsAnywhere},
-		{ToolWebSearch, (*ToolsFactory).WebSearch, []ToolTag{TagWeb, TagReadOnly, TagPlan, TagDefault}, ToolRunsAnywhere},
+		// Network tools — routed to daemon so HTTP requests originate from the user's machine
+		{ToolFetch, (*ToolsFactory).Fetch, []ToolTag{TagWeb, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnDaemon},
+		{ToolWebSearch, (*ToolsFactory).WebSearch, []ToolTag{TagWeb, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnDaemon},
 
 		// Planning tools
 		{ToolCreatePlan, (*ToolsFactory).CreatePlan, []ToolTag{TagPlanning, TagPlan, TagDefault}, ToolRunsOnServer},

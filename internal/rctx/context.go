@@ -7,6 +7,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/mcp"
 )
 
 // WorktreeInfo contains worktree-related context
@@ -32,6 +33,10 @@ type ToolContext struct {
 	// Daemon provides filesystem and execution primitives on the user's machine.
 	// Nil when no daemon is available (tools that need it should check and return an error).
 	Daemon daemon.Client
+
+	// MCP provides execution-time MCP access for tool discovery and invocation.
+	// Implementations may be local-manager-backed or daemon/NATS-backed.
+	MCP mcp.Runtime
 }
 
 // NewToolContext creates a context for V2 tool execution
@@ -50,6 +55,13 @@ func NewToolContext(ctx context.Context, chatID, thread string, proj *db.Project
 func (tc *ToolContext) WithDaemon(d daemon.Client) *ToolContext {
 	newTC := *tc
 	newTC.Daemon = d
+	return &newTC
+}
+
+// WithMCP returns a copy of the ToolContext with the given MCP runtime.
+func (tc *ToolContext) WithMCP(runtime mcp.Runtime) *ToolContext {
+	newTC := *tc
+	newTC.MCP = runtime
 	return &newTC
 }
 

@@ -127,14 +127,14 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) *Repo {
 	if driver == DriverPostgres {
 		planTasks = postgresstore.NewPlanTaskStore(pgQueries)
 		chats = postgresstore.NewChatStore(pgQueries, q)
-		messages = postgresstore.NewMessageStore(pgQueries)
+		messages = postgresstore.NewMessageStore(pgQueries, q)
 		approvals = postgresstore.NewApprovalStore(pgQueries)
 		projects = postgresstore.NewProjectStore(pgQueries)
 		worktrees = postgresstore.NewWorktreeStore(pgQueries)
 		settings = postgresstore.NewSettingStore(pgQueries, q, func(query string) string {
 			return (&Repo{driver: DriverPostgres}).bindQuery(query)
 		})
-		attachments = postgresstore.NewAttachmentStore(pgQueries)
+		attachments = postgresstore.NewAttachmentStore(pgQueries, q)
 		workflows = postgresstore.NewWorkflowStore(pgQueries)
 		threads = postgresstore.NewThreadStore(pgQueries)
 		contextWindows = postgresstore.NewContextWindowStore(pgQueries)
@@ -303,6 +303,13 @@ func isRetryableError(err error) bool {
 		strings.Contains(errMsg, "could not serialize") ||
 		strings.Contains(errMsg, "deadlock") ||
 		strings.Contains(errMsg, "transaction conflict") {
+		return true
+	}
+
+	// Postgres: transaction already aborted by a prior failed statement (SQLSTATE 25P02).
+	// Retrying the whole transaction from scratch will start a fresh BEGIN.
+	if strings.Contains(errMsg, "25p02") ||
+		strings.Contains(errMsg, "current transaction is aborted") {
 		return true
 	}
 
@@ -603,8 +610,16 @@ func (w *WrappedDBTX) QueryRowContext(ctx context.Context, query string, args ..
 	return w.DB(ctx).QueryRowContext(ctx, query, args...)
 }
 
-// execContextWithRetry executes a query with automatic retry on lock errors
+// execContextWithRetry executes a query with automatic retry on lock errors.
+// Retries are skipped when inside a transaction — on Postgres, a failed statement
+// poisons the entire transaction so retrying individual statements is futile.
+// Transaction-level retries in RunTx handle recovery instead.
 func (w *WrappedDBTX) execContextWithRetry(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	// Skip statement-level retries when inside a transaction
+	if _, inTx := ctx.Value(txKey).(sqlitedb.DBTX); inTx {
+		return w.DB(ctx).ExecContext(ctx, query, args...)
+	}
+
 	var lastErr error
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
@@ -633,8 +648,16 @@ func (w *WrappedDBTX) execContextWithRetry(ctx context.Context, query string, ar
 	return nil, errors.New("exec failed after retries")
 }
 
-// queryContextWithRetry executes a query with automatic retry on lock errors
+// queryContextWithRetry executes a query with automatic retry on lock errors.
+// Retries are skipped when inside a transaction — on Postgres, a failed statement
+// poisons the entire transaction so retrying individual statements is futile.
+// Transaction-level retries in RunTx handle recovery instead.
 func (w *WrappedDBTX) queryContextWithRetry(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	// Skip statement-level retries when inside a transaction
+	if _, inTx := ctx.Value(txKey).(sqlitedb.DBTX); inTx {
+		return w.DB(ctx).QueryContext(ctx, query, args...)
+	}
+
 	var lastErr error
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {

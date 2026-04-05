@@ -306,6 +306,59 @@ func TestExecuteToolsInput_LoopContextFields(t *testing.T) {
 	})
 }
 
+func TestDebugTraceInput_LoopContextFields(t *testing.T) {
+	t.Run("struct has step and loop context fields", func(t *testing.T) {
+		input := DebugTraceInput{
+			ChatID:        "test-chat",
+			WorkflowID:    "test-workflow",
+			StepID:        "loop-step",
+			LoopNodeID:    "agent_loop",
+			LoopIteration: 3,
+			Checkpoint:    "iteration_start",
+			Data: map[string]interface{}{
+				"iteration": 3,
+			},
+		}
+
+		assert.Equal(t, "loop-step", input.StepID)
+		assert.Equal(t, "agent_loop", input.LoopNodeID)
+		assert.Equal(t, 3, input.LoopIteration)
+	})
+
+	t.Run("JSON roundtrip preserves step and loop context", func(t *testing.T) {
+		original := DebugTraceInput{
+			ChatID:        "chat-1",
+			WorkflowID:    "workflow-1",
+			StepID:        "loop-step-1",
+			LoopNodeID:    "agent_loop",
+			LoopIteration: 4,
+			Checkpoint:    "iteration_start",
+			Data: map[string]interface{}{
+				"iteration": 4,
+			},
+		}
+
+		jsonData, err := json.Marshal(original)
+		require.NoError(t, err)
+
+		var jsonMap map[string]interface{}
+		err = json.Unmarshal(jsonData, &jsonMap)
+		require.NoError(t, err)
+
+		assert.Equal(t, "loop-step-1", jsonMap["step_id"])
+		assert.Equal(t, "agent_loop", jsonMap["loop_node_id"])
+		assert.Equal(t, float64(4), jsonMap["loop_iteration"])
+
+		var restored DebugTraceInput
+		err = json.Unmarshal(jsonData, &restored)
+		require.NoError(t, err)
+
+		assert.Equal(t, original.StepID, restored.StepID)
+		assert.Equal(t, original.LoopNodeID, restored.LoopNodeID)
+		assert.Equal(t, original.LoopIteration, restored.LoopIteration)
+	})
+}
+
 // =============================================================================
 // Regression Test: Temporal Deserialization
 // =============================================================================
@@ -412,5 +465,30 @@ func TestTemporalDeserializationRegression(t *testing.T) {
 			"REGRESSION: ExecuteTools loop_iteration not deserialized")
 
 		t.Logf("✓ ExecuteTools deserialization regression test passed")
+	})
+
+	t.Run("DebugTrace: JSON with step and loop context deserializes correctly", func(t *testing.T) {
+		temporalJSON := `{
+			"chat_id": "chat-123",
+			"workflow_id": "wf-789",
+			"step_id": "loop-step",
+			"loop_node_id": "agent_loop",
+			"loop_iteration": 5,
+			"checkpoint": "iteration_start",
+			"data": {"iteration": 5}
+		}`
+
+		var input DebugTraceInput
+		err := json.Unmarshal([]byte(temporalJSON), &input)
+		require.NoError(t, err)
+
+		assert.Equal(t, "loop-step", input.StepID,
+			"REGRESSION: DebugTrace step_id not deserialized")
+		assert.Equal(t, "agent_loop", input.LoopNodeID,
+			"REGRESSION: DebugTrace loop_node_id not deserialized")
+		assert.Equal(t, 5, input.LoopIteration,
+			"REGRESSION: DebugTrace loop_iteration not deserialized")
+
+		t.Logf("✓ DebugTrace deserialization regression test passed")
 	})
 }

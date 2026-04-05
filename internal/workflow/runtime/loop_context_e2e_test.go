@@ -109,11 +109,13 @@ func TestExtractActivityInputInfo(t *testing.T) {
 
 		info := extractActivityInputInfo(inputMap)
 
+		assert.Equal(t, "extract-step", info.StepID)
+		assert.Equal(t, "extract-workflow", info.WorkflowID)
 		assert.Equal(t, "extract_loop", info.LoopNodeID)
 		assert.Equal(t, 4, info.LoopIteration)
 
-		t.Logf("✓ extractActivityInputInfo extracted loop_node_id=%s, loop_iteration=%d",
-			info.LoopNodeID, info.LoopIteration)
+		t.Logf("✓ extractActivityInputInfo extracted step_id=%s, loop_node_id=%s, loop_iteration=%d",
+			info.StepID, info.LoopNodeID, info.LoopIteration)
 	})
 
 	t.Run("extracts loop context from map with int iteration", func(t *testing.T) {

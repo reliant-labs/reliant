@@ -30,6 +30,7 @@ func init() {
 	RegisterCommand("mcp.server_status", handleMCPServerStatus)
 	RegisterCommand("mcp.manage_server", handleMCPManageServer)
 	RegisterCommand("mcp.list_tools", handleMCPListTools)
+	RegisterCommand("mcp.call_tool", handleMCPCallTool)
 	RegisterCommand("mcp.ensure_loaded", handleMCPEnsureLoaded)
 }
 
@@ -437,6 +438,48 @@ func handleMCPListTools(_ context.Context, payload []byte) ([]byte, error) {
 	}
 
 	return json.Marshal(mcpListToolsResponse{Tools: tools})
+}
+
+// --- mcp.call_tool ---
+
+type mcpCallToolRequest struct {
+	ProjectPath string                 `json:"project_path"`
+	ServerName  string                 `json:"server_name"`
+	ToolName    string                 `json:"tool_name"`
+	Arguments   map[string]interface{} `json:"arguments"`
+}
+
+type mcpCallToolResponse struct {
+	Result *mcp.ToolResult `json:"result,omitempty"`
+	Error  string          `json:"error,omitempty"`
+}
+
+func handleMCPCallTool(_ context.Context, payload []byte) ([]byte, error) {
+	if mcpMgr == nil {
+		return json.Marshal(mcpCallToolResponse{Error: "MCP manager not initialized"})
+	}
+
+	var req mcpCallToolRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return nil, fmt.Errorf("invalid payload: %w", err)
+	}
+	if req.ServerName == "" || req.ToolName == "" {
+		return json.Marshal(mcpCallToolResponse{Error: "server_name and tool_name are required"})
+	}
+
+	var (
+		result *mcp.ToolResult
+		err    error
+	)
+	if req.ProjectPath != "" {
+		result, err = mcpMgr.ProjectCallTool(req.ProjectPath, req.ServerName, req.ToolName, req.Arguments)
+	} else {
+		result, err = mcpMgr.CallTool(req.ServerName, req.ToolName, req.Arguments)
+	}
+	if err != nil {
+		return json.Marshal(mcpCallToolResponse{Error: err.Error()})
+	}
+	return json.Marshal(mcpCallToolResponse{Result: result})
 }
 
 // --- mcp.ensure_loaded ---
