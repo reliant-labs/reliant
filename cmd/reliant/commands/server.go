@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/serverapi"
 	"github.com/reliant-labs/reliant/internal/servergateway"
 	"github.com/reliant-labs/reliant/internal/serverworker"
@@ -101,8 +102,12 @@ Designed to run as N replicas behind a load balancer.`,
 	cmd.Flags().StringVar(&opts.NATSURL, "nats-url", serverEnvOrDefault("NATS_URL", ""), "NATS server URL (required)")
 	cmd.Flags().StringVar(&opts.StreamingDriver, "streaming-driver", serverEnvOrDefault("STREAMING_DRIVER", "nats"), "Streaming driver (memory or nats)")
 
-	// CORS
-	cmd.Flags().String("cors-origins", serverEnvOrDefault("CORS_ALLOWED_ORIGINS", "*"), "Comma-separated CORS allowed origins, or * for all")
+	// CORS — default to wildcard in dev, restrictive in production
+	corsDefault := "https://reliant-prod.web.app,https://reliantlabs.io"
+	if config.IsDevelopmentEnvironment() {
+		corsDefault = "*"
+	}
+	cmd.Flags().String("cors-origins", serverEnvOrDefault("CORS_ALLOWED_ORIGINS", corsDefault), "Comma-separated CORS allowed origins, or * for all")
 
 	// TLS
 	cmd.Flags().StringVar(&opts.TLSCertFile, "tls-cert", serverEnvOrDefault("TLS_CERT_FILE", ""), "TLS certificate file path")

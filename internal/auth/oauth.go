@@ -12,17 +12,28 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
 	"time"
 )
 
+var (
+	defaultSupabaseURL = envOrDefault("RELIANT_AUTH_URL", "https://dash.reliantlabs.io")
+	defaultSupabaseKey = envOrDefault("RELIANT_AUTH_KEY", "sb_publishable_KKiB3B0EdEv7nguwKfEE5A_iY9rVXod")
+)
+
 const (
-	defaultSupabaseURL  = "https://dash.reliantlabs.io"
-	defaultSupabaseKey  = "sb_publishable_KKiB3B0EdEv7nguwKfEE5A_iY9rVXod"
 	defaultLoginTimeout = 120 * time.Second
 )
+
+func envOrDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
 
 // LoginOptions configures the OAuth PKCE login flow.
 type LoginOptions struct {

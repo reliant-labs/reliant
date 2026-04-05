@@ -109,7 +109,7 @@ func Run(ctx context.Context, opts Options) error {
 		jwtPublicKey = string(data)
 	}
 	if jwtPublicKey == "" {
-		jwtPublicKey = auth.SupabasePublicKeyPEM
+		jwtPublicKey = auth.GetJWTPublicKey()
 	}
 
 	// -----------------------------------------------------------------

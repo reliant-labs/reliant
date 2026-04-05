@@ -187,9 +187,9 @@ func runMonolith(_ *cobra.Command, _ []string, dataDir *string) error {
 	}
 	logging.Info("✓ Integration server started", "duration", time.Since(serverStartTime))
 
-	// Use embedded JWT public key
-	jwtPublicKey := auth.SupabasePublicKeyPEM
-	logging.Info("Using embedded ES256 JWT public key")
+	// JWT public key: RELIANT_JWT_PUBLIC_KEY env var > embedded Supabase key
+	jwtPublicKey := auth.GetJWTPublicKey()
+	logging.Info("Using ES256 JWT public key")
 
 	// Generate/load TLS certificates for HTTP/2 support (unless DISABLE_TLS is set)
 	// TLS certificate configuration. Priority:
@@ -213,8 +213,12 @@ func runMonolith(_ *cobra.Command, _ []string, dataDir *string) error {
 		tlsKeyFile = certPaths.KeyFile
 	}
 
-	// CORS origins: "*" → wildcard, otherwise comma-separated list of origins
-	corsOriginsRaw := envutil.GetEnv("CORS_ALLOWED_ORIGINS", "*")
+	// CORS origins: default to wildcard in dev, restrictive in production.
+	corsDefault := "https://reliant-prod.web.app,https://reliantlabs.io"
+	if config.IsDevelopmentEnvironment() {
+		corsDefault = "*"
+	}
+	corsOriginsRaw := envutil.GetEnv("CORS_ALLOWED_ORIGINS", corsDefault)
 	var corsAllowedOrigins []string
 	if corsOriginsRaw == "*" {
 		corsAllowedOrigins = []string{"*"}
