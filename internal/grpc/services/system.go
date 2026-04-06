@@ -142,22 +142,27 @@ func (s *SystemService) Version(
 	return connect.NewResponse(resp), nil
 }
 
-// StartGitHubOAuthSignIn completes the Electron-local GitHub sign-in flow.
-func (s *SystemService) StartGitHubOAuthSignIn(
+// StartOAuthSignIn completes the Electron-local OAuth sign-in flow for any provider.
+func (s *SystemService) StartOAuthSignIn(
 	ctx context.Context,
-	req *connect.Request[reliantv1.StartGitHubOAuthSignInRequest],
-) (*connect.Response[reliantv1.StartGitHubOAuthSignInResponse], error) {
+	req *connect.Request[reliantv1.StartOAuthSignInRequest],
+) (*connect.Response[reliantv1.StartOAuthSignInResponse], error) {
 	if !s.localMode {
-		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("GitHub OAuth sign-in requires local desktop mode"))
+		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("OAuth sign-in requires local desktop mode"))
+	}
+
+	provider := req.Msg.Provider
+	if provider == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("provider is required"))
 	}
 
 	timeout := time.Duration(req.Msg.TimeoutSeconds) * time.Second
-	result, err := auth.LoginWithOAuthProvider(ctx, "github", auth.LoginOptions{Timeout: timeout})
+	result, err := auth.LoginWithOAuthProvider(ctx, provider, auth.LoginOptions{Timeout: timeout})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to complete GitHub OAuth sign-in: %w", err))
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to complete %s OAuth sign-in: %w", provider, err))
 	}
 
-	return connect.NewResponse(&reliantv1.StartGitHubOAuthSignInResponse{
+	return connect.NewResponse(&reliantv1.StartOAuthSignInResponse{
 		AccessToken:  result.AccessToken,
 		RefreshToken: result.RefreshToken,
 		UserId:       result.UserID,

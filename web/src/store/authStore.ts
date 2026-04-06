@@ -248,22 +248,51 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     })
 
     try {
+      if (isElectron) {
+        const oauthSession = await devAuthGrpc.startOAuthSignIn('google', 120)
+        const { data, error } = await supabase.auth.setSession({
+          access_token: oauthSession.accessToken,
+          refresh_token: oauthSession.refreshToken,
+        })
+
+        if (error) {
+          logger.error('[AuthStore] Electron Google session hydration failed:', error)
+          set({ loading: false })
+          throw error
+        }
+
+        set({
+          user: data.user,
+          session: data.session,
+          loading: false,
+        })
+
+        await trackAuthFunnelEvent('oauth_succeeded', {
+          auth_method: 'google',
+          oauth_callback_transport: 'localhost',
+        })
+        return
+      }
+
       const redirectTo = await getOAuthRedirectUrl()
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo,
           skipBrowserRedirect: true,
-          // Reverted to standard scopes for now
-          // scopes: 'email profile openid https://www.googleapis.com/auth/cloud-platform',
         },
       })
 
-      if (error) throw error
+      if (error) {
+        logger.error('[AuthStore] OAuth error:', error)
+        set({ loading: false })
+        throw error
+      }
 
-      // In Electron, manually open the OAuth URL in external browser
-      if (isElectron && data?.url && window.electronAPI) {
-        await window.electronAPI.openExternal(data.url)
+      if (data?.url) {
+        window.location.href = data.url
+      } else {
+        logger.error('[AuthStore] No OAuth URL returned from Supabase')
       }
 
       set({ loading: false })
@@ -274,6 +303,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         failure_reason: normalizeFailureReason(error),
         latency_ms: Date.now() - startedAt,
       })
+      logger.error('[AuthStore] Catch block error:', error)
       set({ loading: false })
       throw error
     }
@@ -289,7 +319,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     try {
       if (isElectron) {
-        const oauthSession = await devAuthGrpc.startGitHubOAuthSignIn(120)
+        const oauthSession = await devAuthGrpc.startOAuthSignIn('github', 120)
         const { data, error } = await supabase.auth.setSession({
           access_token: oauthSession.accessToken,
           refresh_token: oauthSession.refreshToken,
@@ -358,6 +388,32 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     })
 
     try {
+      if (isElectron) {
+        const oauthSession = await devAuthGrpc.startOAuthSignIn('apple', 120)
+        const { data, error } = await supabase.auth.setSession({
+          access_token: oauthSession.accessToken,
+          refresh_token: oauthSession.refreshToken,
+        })
+
+        if (error) {
+          logger.error('[AuthStore] Electron Apple session hydration failed:', error)
+          set({ loading: false })
+          throw error
+        }
+
+        set({
+          user: data.user,
+          session: data.session,
+          loading: false,
+        })
+
+        await trackAuthFunnelEvent('oauth_succeeded', {
+          auth_method: 'apple',
+          oauth_callback_transport: 'localhost',
+        })
+        return
+      }
+
       const redirectTo = await getOAuthRedirectUrl()
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'apple',
@@ -367,11 +423,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         },
       })
 
-      if (error) throw error
+      if (error) {
+        logger.error('[AuthStore] OAuth error:', error)
+        set({ loading: false })
+        throw error
+      }
 
-      // In Electron, manually open the OAuth URL in external browser
-      if (isElectron && data?.url && window.electronAPI) {
-        await window.electronAPI.openExternal(data.url)
+      if (data?.url) {
+        window.location.href = data.url
+      } else {
+        logger.error('[AuthStore] No OAuth URL returned from Supabase')
       }
 
       set({ loading: false })
@@ -382,6 +443,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         failure_reason: normalizeFailureReason(error),
         latency_ms: Date.now() - startedAt,
       })
+      logger.error('[AuthStore] Catch block error:', error)
       set({ loading: false })
       throw error
     }
@@ -486,17 +548,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         throw error
       }
 
-      // In Electron, manually open the OAuth URL in external browser
       if (isElectron && data?.url && window.electronAPI) {
         logger.info('[AuthStore] linkGithubAccount: Opening external browser')
         await window.electronAPI.openExternal(data.url)
         logger.info('[AuthStore] linkGithubAccount: External browser opened')
+      } else if (data?.url) {
+        window.location.href = data.url
       } else {
-        logger.warn('[AuthStore] linkGithubAccount: Not opening external browser', {
-          isElectron,
-          hasUrl: !!data?.url,
-          hasElectronAPI: !!window.electronAPI,
-        })
+        logger.error('[AuthStore] linkGithubAccount: No link URL returned from Supabase')
       }
 
       set({ loading: false })
@@ -542,17 +601,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         throw error
       }
 
-      // In Electron, manually open the OAuth URL in external browser
       if (isElectron && data?.url && window.electronAPI) {
         logger.info('[AuthStore] linkGoogleAccount: Opening external browser')
         await window.electronAPI.openExternal(data.url)
         logger.info('[AuthStore] linkGoogleAccount: External browser opened')
+      } else if (data?.url) {
+        window.location.href = data.url
       } else {
-        logger.warn('[AuthStore] linkGoogleAccount: Not opening external browser', {
-          isElectron,
-          hasUrl: !!data?.url,
-          hasElectronAPI: !!window.electronAPI,
-        })
+        logger.error('[AuthStore] linkGoogleAccount: No link URL returned from Supabase')
       }
 
       set({ loading: false })
@@ -577,9 +633,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       if (error) throw error
 
-      // In Electron, manually open the OAuth URL in external browser
       if (isElectron && data?.url && window.electronAPI) {
         await window.electronAPI.openExternal(data.url)
+      } else if (data?.url) {
+        window.location.href = data.url
+      } else {
+        logger.error('[AuthStore] linkAppleAccount: No link URL returned from Supabase')
       }
 
       set({ loading: false })
