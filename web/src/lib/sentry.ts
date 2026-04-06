@@ -116,6 +116,12 @@ export async function initSentry() {
       if (!crashReportingEnabled) {
         return null;
       }
+
+      // Filter out noise errors that aren't actionable bugs
+      if (shouldDropEvent(event, hint)) {
+        return null;
+      }
+
       if (isDev) {
         console.error("Sentry Event:", event, hint);
       }
@@ -124,6 +130,58 @@ export async function initSentry() {
   });
 
   console.log(`[Sentry] Initialized (environment: ${sentryEnvironment}, release: reliant@${version}, replayRate: ${replaySessionRate})`);
+}
+
+/**
+ * Patterns that indicate non-actionable errors which should not be reported to Sentry.
+ * These are user-initiated cancellations, expected transient failures, or configuration issues.
+ */
+const NOISE_ERROR_PATTERNS = [
+  // User-initiated cancellations
+  "aborted a request",
+  "signal is aborted",
+  "streaming cancelled by user",
+  "the operation was aborted",
+  // Transient network errors (backend unavailable during startup/shutdown)
+  "failed to fetch",
+  "load failed",
+  "networkerror",
+] as const;
+
+/** Error types (by name) that are always dropped. */
+const NOISE_ERROR_NAMES = new Set([
+  "AbortError",
+]);
+
+function shouldDropEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): boolean {
+  const error = hint.originalException;
+
+  // Drop by error name
+  if (error instanceof Error && NOISE_ERROR_NAMES.has(error.name)) {
+    return true;
+  }
+
+  // Drop by error message pattern
+  const message = (error instanceof Error ? error.message : String(error ?? "")).toLowerCase();
+  if (NOISE_ERROR_PATTERNS.some((p) => message.includes(p))) {
+    return true;
+  }
+
+  // Also check event exception values (for errors where hint doesn't have the original)
+  const exceptionValues = event.exception?.values;
+  if (exceptionValues) {
+    for (const ex of exceptionValues) {
+      if (ex.type && NOISE_ERROR_NAMES.has(ex.type)) {
+        return true;
+      }
+      const val = (ex.value ?? "").toLowerCase();
+      if (NOISE_ERROR_PATTERNS.some((p) => val.includes(p))) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 export function setSentryUser(user: { id: string; email?: string } | null) {
