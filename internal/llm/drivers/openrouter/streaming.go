@@ -3,15 +3,16 @@ package openrouter
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -59,67 +60,67 @@ func (c *Client) streamWithCacheControl(ctx context.Context, prompts []string, m
 			"temperature": c.Options.Temperature,
 			"max_tokens":  c.Options.MaxTokens,
 			"stream":      true,
+			"stream_options": map[string]interface{}{
+				"include_usage": true,
+			},
 		}
 
 		if len(convertedTools) > 0 {
 			request["tools"] = convertedTools
 		}
 
-		// Marshal request to JSON
 		requestBody, err := json.Marshal(request)
 		if err != nil {
 			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: fmt.Errorf("failed to marshal request: %w", err)}
 			return
 		}
 
-		// Log the request
 		logging.Debug("OpenRouter streaming request with cache control",
 			"model", request["model"],
 			"hasTools", len(convertedTools) > 0,
 			"messageCount", len(convertedMessages.([]map[string]interface{})))
 
-		// Create HTTP request
-		url := c.Options.BaseURL
-		if url == "" {
-			url = "https://openrouter.ai/api/v1"
-		}
-		url += "/chat/completions"
-
-		httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(requestBody))
-		if err != nil {
-			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: fmt.Errorf("failed to create request: %w", err)}
-			return
-		}
-
-		// Set headers
-		httpReq.Header.Set("Content-Type", "application/json")
-		httpReq.Header.Set("Authorization", "Bearer "+c.Options.ApiKey)
-		httpReq.Header.Set("HTTP-Referer", "https://github.com/reliant-labs/reliant")
-		httpReq.Header.Set("X-Title", "Reliant Labs")
-
-		// Add user identifier for OpenRouter tracking
-		httpReq.Header.Set("X-User", "reliant-"+getMachineIdentifier())
-
-		// Add Anthropic beta header for cache control
-		if strings.Contains(c.Options.Model.APIModel, "anthropic/") {
-			httpReq.Header.Set("anthropic-beta", "prompt-caching-2024-07-31")
-		}
-
-		// Add any extra headers
-		if c.Options.ExtraHeaders != nil {
-			for key, value := range c.Options.ExtraHeaders {
-				httpReq.Header.Set(key, value)
-			}
-		}
-
-		// Use shared streaming HTTP client with DNS resilience, ResponseHeaderTimeout,
-		// and idle stream timeout to detect silent hangs during streaming.
+		// Connect with retry logic for transient errors
 		streamClient := llm.StreamingHTTPClient()
+		var resp *http.Response
+		for attempt := 1; ; attempt++ {
+			httpReq, err := c.newOpenRouterRequest(ctx, requestBody)
+			if err != nil {
+				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: fmt.Errorf("failed to create request: %w", err)}
+				return
+			}
 
-		resp, err := streamClient.Do(httpReq)
-		if err != nil {
-			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: fmt.Errorf("failed to send request: %w", err)}
-			return
+			resp, err = streamClient.Do(httpReq)
+			if err != nil {
+				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: fmt.Errorf("failed to send request: %w", err)}
+				return
+			}
+
+			if resp.StatusCode == http.StatusOK {
+				break
+			}
+
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+
+			if !isRetryableStatus(resp.StatusCode) || attempt > models.MaxRetries {
+				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))}
+				return
+			}
+
+			delay := retryDelay(attempt, resp)
+			logging.Warn("OpenRouter retrying streaming request",
+				"status", resp.StatusCode,
+				"attempt", attempt,
+				"maxRetries", models.MaxRetries,
+				"delay", delay)
+			select {
+			case <-ctx.Done():
+				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: ctx.Err()}
+				return
+			case <-time.After(delay):
+				continue
+			}
 		}
 		defer resp.Body.Close()
 
@@ -129,19 +130,13 @@ func (c *Client) streamWithCacheControl(ctx context.Context, prompts []string, m
 			resp.Body.Close()
 		}()
 
-		// Check for HTTP errors
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))}
-			return
-		}
-
 		// Process SSE stream
 		scanner := bufio.NewScanner(resp.Body)
 		var currentContent strings.Builder
 		// Track tool calls by index to handle multiple concurrent calls
 		toolCallsByIndex := make([]*message.ToolCall, 0)
 		var allToolCalls []message.ToolCall
+		var streamUsage llm.TokenUsage
 
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -165,6 +160,19 @@ func (c *Client) streamWithCacheControl(ctx context.Context, prompts []string, m
 				if err := json.Unmarshal([]byte(data), &event); err != nil {
 					logging.Debug("Failed to parse SSE event", "error", err, "data", data)
 					continue
+				}
+
+				// Parse usage from final chunk (when stream_options.include_usage is set)
+				if usage, ok := event["usage"].(map[string]interface{}); ok {
+					if pt, ok := usage["prompt_tokens"].(float64); ok {
+						streamUsage.InputTokens = int64(pt)
+					}
+					if ct, ok := usage["completion_tokens"].(float64); ok {
+						streamUsage.OutputTokens = int64(ct)
+					}
+					if tt, ok := usage["total_tokens"].(float64); ok {
+						streamUsage.TokenCount = int64(tt)
+					}
 				}
 
 				// Process the event
@@ -256,25 +264,13 @@ func (c *Client) streamWithCacheControl(ctx context.Context, prompts []string, m
 						toolCallsByIndex = make([]*message.ToolCall, 0)
 
 						// Send complete event
-						finishReasonEnum := message.FinishReasonEndTurn
-						switch finishReason {
-						case "stop":
-							finishReasonEnum = message.FinishReasonEndTurn
-						case "length":
-							finishReasonEnum = message.FinishReasonMaxTokens
-						case "tool_calls":
-							finishReasonEnum = message.FinishReasonToolUse
-						}
-
 						eventChan <- llm.DriverEvent{
 							Type: llm.EventComplete,
 							Response: &llm.DriverResponse{
 								Content:      currentContent.String(),
 								ToolCalls:    allToolCalls,
-								FinishReason: finishReasonEnum,
-								Usage:        llm.TokenUsage{
-									// Usage will be in the final non-streaming message if available
-								},
+								FinishReason: mapFinishReason(finishReason),
+								Usage:        streamUsage,
 							},
 						}
 					}
@@ -326,6 +322,9 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 			"temperature": c.Options.Temperature,
 			"max_tokens":  c.Options.MaxTokens,
 			"stream":      true,
+			"stream_options": map[string]interface{}{
+				"include_usage": true,
+			},
 		}
 
 		if len(convertedTools) > 0 {
@@ -341,55 +340,59 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 				"effort", c.Options.ReasoningEffort)
 		}
 
-		// Marshal request to JSON
 		requestBody, err := json.Marshal(request)
 		if err != nil {
 			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: fmt.Errorf("failed to marshal request: %w", err)}
 			return
 		}
 
-		// Log the request
 		logging.Debug("OpenRouter Gemini streaming request",
 			"model", request["model"],
 			"hasTools", len(convertedTools) > 0,
 			"messageCount", len(convertedMessages),
 			"hasReasoning", request["reasoning"] != nil)
 
-		// Create HTTP request
-		url := c.Options.BaseURL
-		if url == "" {
-			url = "https://openrouter.ai/api/v1"
-		}
-		url += "/chat/completions"
-
-		httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(requestBody))
-		if err != nil {
-			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: fmt.Errorf("failed to create request: %w", err)}
-			return
-		}
-
-		// Set headers
-		httpReq.Header.Set("Content-Type", "application/json")
-		httpReq.Header.Set("Authorization", "Bearer "+c.Options.ApiKey)
-		httpReq.Header.Set("HTTP-Referer", "https://github.com/reliant-labs/reliant")
-		httpReq.Header.Set("X-Title", "Reliant Labs")
-		httpReq.Header.Set("X-User", "reliant-"+getMachineIdentifier())
-
-		// Add any extra headers
-		if c.Options.ExtraHeaders != nil {
-			for key, value := range c.Options.ExtraHeaders {
-				httpReq.Header.Set(key, value)
-			}
-		}
-
-		// Use shared streaming HTTP client with DNS resilience, ResponseHeaderTimeout,
-		// and idle stream timeout to detect silent hangs during streaming.
+		// Connect with retry logic for transient errors
 		streamClient := llm.StreamingHTTPClient()
+		var resp *http.Response
+		for attempt := 1; ; attempt++ {
+			httpReq, err := c.newOpenRouterRequest(ctx, requestBody)
+			if err != nil {
+				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: fmt.Errorf("failed to create request: %w", err)}
+				return
+			}
 
-		resp, err := streamClient.Do(httpReq)
-		if err != nil {
-			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: fmt.Errorf("failed to send request: %w", err)}
-			return
+			resp, err = streamClient.Do(httpReq)
+			if err != nil {
+				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: fmt.Errorf("failed to send request: %w", err)}
+				return
+			}
+
+			if resp.StatusCode == http.StatusOK {
+				break
+			}
+
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+
+			if !isRetryableStatus(resp.StatusCode) || attempt > models.MaxRetries {
+				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))}
+				return
+			}
+
+			delay := retryDelay(attempt, resp)
+			logging.Warn("OpenRouter retrying Gemini streaming request",
+				"status", resp.StatusCode,
+				"attempt", attempt,
+				"maxRetries", models.MaxRetries,
+				"delay", delay)
+			select {
+			case <-ctx.Done():
+				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: ctx.Err()}
+				return
+			case <-time.After(delay):
+				continue
+			}
 		}
 		defer resp.Body.Close()
 
@@ -399,19 +402,13 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 			resp.Body.Close()
 		}()
 
-		// Check for HTTP errors
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))}
-			return
-		}
-
 		// Process SSE stream
 		scanner := bufio.NewScanner(resp.Body)
 		var currentContent strings.Builder
 		// Track tool calls by index to handle multiple concurrent calls
 		toolCallsByIndex := make([]*message.ToolCall, 0)
 		var allToolCalls []message.ToolCall
+		var streamUsage llm.TokenUsage
 		// Track reasoning_details for Gemini thought signatures
 		reasoningByID := make(map[string]ReasoningDetail)
 
@@ -437,6 +434,19 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 				if err := json.Unmarshal([]byte(data), &event); err != nil {
 					logging.Debug("Failed to parse SSE event", "error", err, "data", data)
 					continue
+				}
+
+				// Parse usage from final chunk (when stream_options.include_usage is set)
+				if usage, ok := event["usage"].(map[string]interface{}); ok {
+					if pt, ok := usage["prompt_tokens"].(float64); ok {
+						streamUsage.InputTokens = int64(pt)
+					}
+					if ct, ok := usage["completion_tokens"].(float64); ok {
+						streamUsage.OutputTokens = int64(ct)
+					}
+					if tt, ok := usage["total_tokens"].(float64); ok {
+						streamUsage.TokenCount = int64(tt)
+					}
 				}
 
 				// Process the event
@@ -574,23 +584,13 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 						toolCallsByIndex = make([]*message.ToolCall, 0)
 
 						// Send complete event
-						finishReasonEnum := message.FinishReasonEndTurn
-						switch finishReason {
-						case "stop":
-							finishReasonEnum = message.FinishReasonEndTurn
-						case "length":
-							finishReasonEnum = message.FinishReasonMaxTokens
-						case "tool_calls":
-							finishReasonEnum = message.FinishReasonToolUse
-						}
-
 						eventChan <- llm.DriverEvent{
 							Type: llm.EventComplete,
 							Response: &llm.DriverResponse{
 								Content:      currentContent.String(),
 								ToolCalls:    allToolCalls,
-								FinishReason: finishReasonEnum,
-								Usage:        llm.TokenUsage{},
+								FinishReason: mapFinishReason(finishReason),
+								Usage:        streamUsage,
 							},
 						}
 					}

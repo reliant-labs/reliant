@@ -321,13 +321,6 @@ func (e *InlineLoopExecutor) Execute() (*reliantv1.LoopOutput, error) {
 		"hasExecContext", e.execContext != nil,
 	)
 
-	// Debug trace: loop_start
-	e.debugTrace("loop_start", map[string]interface{}{
-		"loopID":           e.loopID,
-		"while":            model.DirectCelExpr(la.GetWhile()),
-		"workflowIdentity": e.workflowIdentity(),
-		"loadStrategy":     e.loadStrategy(),
-	})
 	// Handle entry message save:
 	// IMPORTANT: For loops, we do NOT auto-save the trigger message here.
 	// The trigger message was already saved by the root workflow before the loop started.
@@ -340,13 +333,6 @@ func (e *InlineLoopExecutor) Execute() (*reliantv1.LoopOutput, error) {
 	if err := e.loadSubWorkflow(); err != nil {
 		return nil, fmt.Errorf("failed to load loop sub-workflow: %w", err)
 	}
-
-	// Debug trace: subworkflow_loaded
-	e.debugTrace("subworkflow_loaded", map[string]interface{}{
-		"loopID":    e.loopID,
-		"nodeCount": len(e.subWorkflow.GetNodes()),
-		"edgeCount": len(e.subWorkflow.GetEdges()),
-	})
 
 	// Track outputs from the last iteration
 	var lastIterationOutputs map[string]interface{}
@@ -380,12 +366,6 @@ func (e *InlineLoopExecutor) Execute() (*reliantv1.LoopOutput, error) {
 			"loopID", e.loopID,
 			"iteration", e.iteration,
 		)
-
-		// Debug trace: iteration_start
-		e.debugTrace("iteration_start", map[string]interface{}{
-			"loopID":    e.loopID,
-			"iteration": e.iteration,
-		})
 
 		// Execute this iteration
 		iterOutputs, err := e.executeIteration()
@@ -1617,33 +1597,4 @@ func isTerminalError(err error) bool {
 	}
 
 	return false
-}
-
-// debugTrace emits a debug checkpoint activity for tracing workflow execution.
-// This is fire-and-forget - errors are logged but don't affect execution.
-func (e *InlineLoopExecutor) debugTrace(checkpoint string, data map[string]interface{}) {
-	activityCtx := workflow.WithActivityOptions(e.ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: 5 * time.Second,
-		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts: 1, // No retries for debug traces
-		},
-	})
-
-	input := map[string]interface{}{
-		"chat_id":        e.chatID,
-		"workflow_id":    e.workflowID,
-		"step_id":        e.loopStep.Node.GetId(),
-		"loop_node_id":   e.loopID,
-		"loop_iteration": e.iteration,
-		"checkpoint":     checkpoint,
-		"data":           data,
-	}
-
-	var result map[string]interface{}
-	err := workflow.ExecuteActivity(activityCtx, "DebugTrace", input).Get(e.ctx, &result)
-	if err != nil {
-		e.logger.Warn("[InlineLoop] Debug trace failed",
-			"checkpoint", checkpoint,
-			"error", err)
-	}
 }
