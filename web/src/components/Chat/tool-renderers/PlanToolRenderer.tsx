@@ -47,7 +47,8 @@ function CreatePlanContent({
   const title = (data?.title || data?.Title) as string;
   const description = (data?.description || data?.Description) as string;
   const complexity = (data?.complexity || data?.Complexity) as string;
-  const tasks = (data?.tasks || data?.Tasks) as TaskItem[];
+  const rawTasks = data?.tasks || data?.Tasks;
+  const tasks = Array.isArray(rawTasks) ? rawTasks as TaskItem[] : undefined;
 
   if (!title && !description && (!tasks || tasks.length === 0)) {
     return (
