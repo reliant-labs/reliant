@@ -87,17 +87,20 @@ func shouldSkipReporting(code connect.Code, err error) bool {
 		return true
 	}
 
-	// Skip common transient errors
+	// Skip common transient/non-actionable errors
 	errMsg := strings.ToLower(err.Error())
-	transientPatterns := []string{
+	skipPatterns := []string{
 		"context canceled",
-		"context deadline exceeded",
 		"connection reset",
 		"broken pipe",
 		"client disconnected",
+		"exit status 128",
+		"sqlite3: interrupted",
+		"streaming cancelled by user",
+		"signal: killed",
 	}
 
-	for _, pattern := range transientPatterns {
+	for _, pattern := range skipPatterns {
 		if strings.Contains(errMsg, pattern) {
 			return true
 		}

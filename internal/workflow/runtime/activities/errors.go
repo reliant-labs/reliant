@@ -123,6 +123,8 @@ func autoClassify(err error) error {
 		"cannot be nil",
 		"unknown model",
 		"unsupported",
+		// User hasn't configured an API key for any matching provider
+		"no available provider",
 		// CEL errors are deterministic — retrying won't help
 		"cel compilation error",
 		"cel evaluation error",

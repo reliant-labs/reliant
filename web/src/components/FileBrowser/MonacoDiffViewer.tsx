@@ -168,7 +168,10 @@ export function MonacoDiffViewer({ file }: MonacoDiffViewerProps) {
               
               // Also set scroll directly as backup
               requestAnimationFrame(() => {
-                const scrollableElement = modifiedEditor.getScrollableElement();
+                // getScrollableElement may not exist on all Monaco versions
+                const scrollableElement = typeof modifiedEditor.getScrollableElement === 'function'
+                  ? modifiedEditor.getScrollableElement()
+                  : null;
                 if (scrollableElement) {
                   const lineTop = modifiedEditor.getTopForLineNumber(firstDiffLine);
                   if (lineTop !== -1 && lineTop >= 0) {
@@ -411,7 +414,10 @@ export function MonacoDiffViewer({ file }: MonacoDiffViewerProps) {
             requestAnimationFrame(() => {
               try {
                 // Try to get scrollable element and set scroll directly
-                const scrollableElement = modifiedEditor.getScrollableElement();
+                // getScrollableElement may not exist on all Monaco versions
+                const scrollableElement = typeof modifiedEditor.getScrollableElement === 'function'
+                  ? modifiedEditor.getScrollableElement()
+                  : null;
                 if (scrollableElement) {
                   const lineTop = modifiedEditor.getTopForLineNumber(firstDiffLine);
                   if (lineTop !== -1 && lineTop >= 0) {
