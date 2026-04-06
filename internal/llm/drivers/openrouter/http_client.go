@@ -2,7 +2,6 @@
 package openrouter
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -11,10 +10,11 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -167,60 +167,53 @@ func (c *Client) sendWithCacheControl(ctx context.Context, prompts []string, mes
 		"messageCount", len(request.Messages),
 		"bodyPreview", string(requestBody)[:previewLen])
 
-	// Create HTTP request
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", c.Options.BaseURL+"/chat/completions", bytes.NewReader(requestBody))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	// Set headers
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+c.Options.ApiKey)
-	httpReq.Header.Set("HTTP-Referer", "https://github.com/reliant-labs/reliant")
-	httpReq.Header.Set("X-Title", "Reliant Labs")
-
-	// Add user identifier for OpenRouter tracking
-	httpReq.Header.Set("X-User", "reliant-"+getMachineIdentifier())
-
-	// Add Anthropic beta header for cache control (might be needed)
-	if strings.Contains(c.Options.Model.APIModel, "anthropic/") {
-		httpReq.Header.Set("anthropic-beta", "prompt-caching-2024-07-31")
-	}
-
-	// Add any extra headers
-	if c.Options.ExtraHeaders != nil {
-		for key, value := range c.Options.ExtraHeaders {
-			httpReq.Header.Set(key, value)
-		}
-	}
-
-	// Send request using resilient HTTP client with DNS resilience and
-	// ResponseHeaderTimeout. Non-streaming so no idle timeout needed.
+	// Send request with retry logic for transient errors
 	httpClient := llm.ResilientHTTPClient()
+	var body []byte
+	for attempt := 1; ; attempt++ {
+		httpReq, err := c.newOpenRouterRequest(ctx, requestBody)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
 
-	resp, err := httpClient.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
+		resp, err := httpClient.Do(httpReq)
+		if err != nil {
+			return nil, fmt.Errorf("failed to send request: %w", err)
+		}
 
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
+		body, err = io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("failed to read response: %w", err)
+		}
 
-	// Log response status for debugging
-	bodyLen2 := len(body)
-	previewLen2 := 500
-	if bodyLen2 < previewLen2 {
-		previewLen2 = bodyLen2
-	}
-	logging.Debug("OpenRouter response", "status", resp.StatusCode, "bodySize", bodyLen2, "preview", string(body[:previewLen2]))
+		bodyLen2 := len(body)
+		previewLen2 := 500
+		if bodyLen2 < previewLen2 {
+			previewLen2 = bodyLen2
+		}
+		logging.Debug("OpenRouter response", "status", resp.StatusCode, "bodySize", bodyLen2, "preview", string(body[:previewLen2]))
 
-	// Check for HTTP errors
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+		if resp.StatusCode == http.StatusOK {
+			break
+		}
+
+		if !isRetryableStatus(resp.StatusCode) || attempt > models.MaxRetries {
+			return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+		}
+
+		delay := retryDelay(attempt, resp)
+		logging.Warn("OpenRouter retrying request",
+			"status", resp.StatusCode,
+			"attempt", attempt,
+			"maxRetries", models.MaxRetries,
+			"delay", delay)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(delay):
+			continue
+		}
 	}
 
 	// Parse response
@@ -282,22 +275,14 @@ func (c *Client) sendWithCacheControl(ctx context.Context, prompts []string, mes
 	}
 
 	// Determine finish reason
-	finishReason := message.FinishReasonEndTurn
-	switch choice.FinishReason {
-	case "stop":
-		finishReason = message.FinishReasonEndTurn
-	case "length":
-		finishReason = message.FinishReasonMaxTokens
-	case "tool_calls":
-		finishReason = message.FinishReasonToolUse
-	}
-
+	finishReason := mapFinishReason(choice.FinishReason)
 	if len(toolCalls) > 0 {
 		finishReason = message.FinishReasonToolUse
 	}
 
 	// Calculate token usage with cache information
 	inputTokens := openRouterResp.Usage.PromptTokens
+	outputTokens := openRouterResp.Usage.CompletionTokens
 	cachedTokens := openRouterResp.Usage.PromptTokensDetails.CachedTokens
 	cacheCreationTokens := openRouterResp.Usage.CacheCreationInputTokens
 	cacheReadTokens := openRouterResp.Usage.CacheReadInputTokens
@@ -308,15 +293,16 @@ func (c *Client) sendWithCacheControl(ctx context.Context, prompts []string, mes
 		"cachedTokens", cachedTokens,
 		"cacheCreationInputTokens", cacheCreationTokens,
 		"cacheReadInputTokens", cacheReadTokens,
-		"completionTokens", openRouterResp.Usage.CompletionTokens)
+		"completionTokens", outputTokens)
 
 	return &llm.DriverResponse{
 		Content:      choice.Message.Content,
 		ToolCalls:    toolCalls,
 		FinishReason: finishReason,
 		Usage: llm.TokenUsage{
-			// TokenCount = TotalTokens (prompt + response + full context)
-			TokenCount: int64(openRouterResp.Usage.TotalTokens),
+			TokenCount:   int64(openRouterResp.Usage.TotalTokens),
+			InputTokens:  int64(inputTokens),
+			OutputTokens: int64(outputTokens),
 		},
 	}, nil
 }
@@ -381,53 +367,53 @@ func (c *Client) sendWithGeminiSupport(ctx context.Context, prompts []string, me
 		"hasReasoning", request.Reasoning != nil,
 		"bodyPreview", string(requestBody)[:previewLen])
 
-	// Create HTTP request
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", c.Options.BaseURL+"/chat/completions", bytes.NewReader(requestBody))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	// Set headers
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+c.Options.ApiKey)
-	httpReq.Header.Set("HTTP-Referer", "https://github.com/reliant-labs/reliant")
-	httpReq.Header.Set("X-Title", "Reliant Labs")
-	httpReq.Header.Set("X-User", "reliant-"+getMachineIdentifier())
-
-	// Add any extra headers
-	if c.Options.ExtraHeaders != nil {
-		for key, value := range c.Options.ExtraHeaders {
-			httpReq.Header.Set(key, value)
-		}
-	}
-
-	// Send request using resilient HTTP client with DNS resilience and
-	// ResponseHeaderTimeout. Non-streaming so no idle timeout needed.
+	// Send request with retry logic for transient errors
 	httpClient := llm.ResilientHTTPClient()
+	var body []byte
+	for attempt := 1; ; attempt++ {
+		httpReq, err := c.newOpenRouterRequest(ctx, requestBody)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
 
-	resp, err := httpClient.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
+		resp, err := httpClient.Do(httpReq)
+		if err != nil {
+			return nil, fmt.Errorf("failed to send request: %w", err)
+		}
 
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
+		body, err = io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("failed to read response: %w", err)
+		}
 
-	// Log response
-	bodyLen2 := len(body)
-	previewLen2 := 500
-	if bodyLen2 < previewLen2 {
-		previewLen2 = bodyLen2
-	}
-	logging.Debug("OpenRouter Gemini response", "status", resp.StatusCode, "bodySize", bodyLen2, "preview", string(body[:previewLen2]))
+		bodyLen2 := len(body)
+		previewLen2 := 500
+		if bodyLen2 < previewLen2 {
+			previewLen2 = bodyLen2
+		}
+		logging.Debug("OpenRouter Gemini response", "status", resp.StatusCode, "bodySize", bodyLen2, "preview", string(body[:previewLen2]))
 
-	// Check for HTTP errors
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+		if resp.StatusCode == http.StatusOK {
+			break
+		}
+
+		if !isRetryableStatus(resp.StatusCode) || attempt > models.MaxRetries {
+			return nil, fmt.Errorf("API request failed with status %d: %s", resp.StatusCode, string(body))
+		}
+
+		delay := retryDelay(attempt, resp)
+		logging.Warn("OpenRouter retrying Gemini request",
+			"status", resp.StatusCode,
+			"attempt", attempt,
+			"maxRetries", models.MaxRetries,
+			"delay", delay)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(delay):
+			continue
+		}
 	}
 
 	// Parse response
@@ -486,16 +472,7 @@ func (c *Client) sendWithGeminiSupport(ctx context.Context, prompts []string, me
 	}
 
 	// Determine finish reason
-	finishReason := message.FinishReasonEndTurn
-	switch choice.FinishReason {
-	case "stop":
-		finishReason = message.FinishReasonEndTurn
-	case "length":
-		finishReason = message.FinishReasonMaxTokens
-	case "tool_calls":
-		finishReason = message.FinishReasonToolUse
-	}
-
+	finishReason := mapFinishReason(choice.FinishReason)
 	if len(toolCalls) > 0 {
 		finishReason = message.FinishReasonToolUse
 	}
@@ -505,8 +482,9 @@ func (c *Client) sendWithGeminiSupport(ctx context.Context, prompts []string, me
 		ToolCalls:    toolCalls,
 		FinishReason: finishReason,
 		Usage: llm.TokenUsage{
-			// TokenCount = TotalTokens (prompt + response + full context)
-			TokenCount: int64(openRouterResp.Usage.TotalTokens),
+			TokenCount:   int64(openRouterResp.Usage.TotalTokens),
+			InputTokens:  int64(openRouterResp.Usage.PromptTokens),
+			OutputTokens: int64(openRouterResp.Usage.CompletionTokens),
 		},
 	}, nil
 }

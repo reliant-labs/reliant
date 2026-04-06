@@ -193,12 +193,6 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	v2.RegisterActivity(registry, handlers.NewLoadPresetParamsActivity(deps.Repo))
 
 	// ========================================================================
-	// DEBUG ACTIVITIES (for testing/debugging workflow execution)
-	// ========================================================================
-
-	v2.RegisterActivity(registry, handlers.NewDebugTraceActivity(deps.Repo))
-
-	// ========================================================================
 	// YIELD ACTIVITIES
 	// ========================================================================
 

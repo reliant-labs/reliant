@@ -19,8 +19,6 @@ const (
 	CategoryGit     ActivityCategory = "git"
 	CategoryAgentic ActivityCategory = "agentic"
 	CategoryUtility ActivityCategory = "utility"
-	CategoryDebug   ActivityCategory = "debug"
-
 	// Internal categories — used by non-builder-visible activities.
 	CategoryWorktree           ActivityCategory = "git"
 	CategoryMessageProcessing  ActivityCategory = "agentic"

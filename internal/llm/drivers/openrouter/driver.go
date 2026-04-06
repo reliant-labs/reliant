@@ -2,9 +2,13 @@
 package openrouter
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/cache"
@@ -12,20 +16,28 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivers/registry"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/observability"
 )
 
 const Family models.Family = "openrouter"
+
+const (
+	openRouterDefaultURL = "https://openrouter.ai/api/v1"
+	openRouterReferer    = "https://github.com/reliant-labs/reliant"
+	openRouterTitle      = "Reliant"
+)
 
 // createClient is the driver factory function for the registry
 func createClient(opts *llm.DriverOptions) (registry.Client, error) {
 	// Apply OpenRouter-specific defaults
 	if opts.BaseURL == "" {
-		opts.BaseURL = "https://openrouter.ai/api/v1"
+		opts.BaseURL = openRouterDefaultURL
 	}
 	opts.ExtraHeaders = map[string]string{
-		"HTTP-Referer": "reliant-labs.io",
-		"X-Title":      "Reliant",
+		"HTTP-Referer": openRouterReferer,
+		"X-Title":      openRouterTitle,
 	}
 	return NewClient(*opts), nil
 }
@@ -64,6 +76,83 @@ type Client struct {
 	*openai.OpenaiClient
 }
 
+// newOpenRouterRequest creates an HTTP POST request to the OpenRouter chat completions
+// endpoint with all standard headers set.
+func (c *Client) newOpenRouterRequest(ctx context.Context, body []byte) (*http.Request, error) {
+	url := c.Options.BaseURL
+	if url == "" {
+		url = openRouterDefaultURL
+	}
+	url += "/chat/completions"
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	c.setOpenRouterHeaders(req)
+	return req, nil
+}
+
+// setOpenRouterHeaders sets the standard OpenRouter headers on an HTTP request.
+func (c *Client) setOpenRouterHeaders(req *http.Request) {
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.Options.ApiKey)
+	req.Header.Set("HTTP-Referer", openRouterReferer)
+	req.Header.Set("X-Title", openRouterTitle)
+	req.Header.Set("X-User", "reliant-"+getMachineIdentifier())
+
+	// Add Anthropic beta header for cache control
+	if strings.HasPrefix(c.Options.Model.APIModel, "anthropic/") {
+		req.Header.Set("anthropic-beta", "prompt-caching-2024-07-31")
+	}
+
+	// Add any extra headers from options
+	for key, value := range c.Options.ExtraHeaders {
+		req.Header.Set(key, value)
+	}
+}
+
+// mapFinishReason converts an OpenRouter finish reason string to our enum.
+func mapFinishReason(reason string) message.FinishReason {
+	switch reason {
+	case "stop":
+		return message.FinishReasonEndTurn
+	case "length":
+		return message.FinishReasonMaxTokens
+	case "tool_calls":
+		return message.FinishReasonToolUse
+	case "content_filter":
+		return message.FinishReasonError
+	default:
+		logging.Warn("OpenRouter unknown finish reason, treating as unknown", "finish_reason", reason)
+		return message.FinishReasonUnknown
+	}
+}
+
+// isRetryableStatus returns true if the HTTP status code warrants a retry.
+func isRetryableStatus(code int) bool {
+	return code == 429 || code == 500 || code == 502 || code == 503 || code == 529
+}
+
+// retryDelay calculates the delay before the next retry attempt using exponential
+// backoff with 20% jitter. If the response includes a Retry-After header (in seconds),
+// that value is used instead.
+func retryDelay(attempt int, resp *http.Response) time.Duration {
+	backoffMs := 2000 * (1 << (attempt - 1)) // 2s, 4s, 8s, ...
+	jitterMs := int(float64(backoffMs) * 0.2)
+	delayMs := backoffMs + jitterMs
+
+	if resp != nil {
+		if ra := resp.Header.Get("Retry-After"); ra != "" {
+			if secs, err := strconv.Atoi(ra); err == nil {
+				delayMs = secs * 1000
+			}
+		}
+	}
+
+	return time.Duration(delayMs) * time.Millisecond
+}
+
 // Name returns the name of the driver
 func (c *Client) Name() string {
 	return "openrouter"
@@ -79,11 +168,10 @@ func NewClient(opts llm.DriverOptions) *Client {
 	}
 }
 
-// isAnthropicModel checks if the current model is an Anthropic model
+// isAnthropicModel checks if the current model is an Anthropic model.
+// Uses the API model prefix (e.g. "anthropic/claude-...") for reliable detection.
 func (c *Client) isAnthropicModel() bool {
-	modelStr := string(c.Options.Model.ID)
-	return strings.Contains(modelStr, "claude") || strings.Contains(modelStr, "haiku") ||
-		strings.Contains(modelStr, "sonnet") || strings.Contains(modelStr, "opus")
+	return strings.HasPrefix(c.Options.Model.APIModel, "anthropic/")
 }
 
 // isGeminiModel checks if the current model is a Google Gemini model
@@ -363,18 +451,42 @@ func (c *Client) convertMessagesWithCacheControl(prompts []string, messages []me
 // - Cache control for Anthropic models
 // - Reasoning details (thought signatures) for Gemini models
 func (c *Client) SendMessages(ctx context.Context, prompts []string, messages []message.Message, tools []tools.Tool) (*llm.DriverResponse, error) {
+	start := time.Now()
+
+	var resp *llm.DriverResponse
+	var err error
+
 	// Gemini models need custom handling for reasoning_details (thought signatures)
 	if c.isGeminiModel() {
-		return c.sendWithGeminiSupport(ctx, prompts, messages, tools)
+		resp, err = c.sendWithGeminiSupport(ctx, prompts, messages, tools)
+	} else if c.isAnthropicModel() && !c.Options.DisableCache {
+		// Anthropic models need explicit cache control via custom HTTP client
+		resp, err = c.sendWithCacheControl(ctx, prompts, messages, tools)
+	} else {
+		// Other models use standard OpenAI implementation
+		resp, err = c.OpenaiClient.SendMessages(ctx, prompts, messages, tools)
 	}
 
-	// Anthropic models need explicit cache control via custom HTTP client
-	if c.isAnthropicModel() && !c.Options.DisableCache {
-		return c.sendWithCacheControl(ctx, prompts, messages, tools)
+	// Record observability metrics
+	duration := time.Since(start).Seconds()
+	if err != nil {
+		observability.LLMRequestsTotal.WithLabelValues("openrouter", "error").Inc()
+		observability.LLMRequestDuration.WithLabelValues("openrouter").Observe(duration)
+		return nil, err
 	}
 
-	// Other models use standard OpenAI implementation
-	return c.OpenaiClient.SendMessages(ctx, prompts, messages, tools)
+	observability.LLMRequestsTotal.WithLabelValues("openrouter", "success").Inc()
+	observability.LLMRequestDuration.WithLabelValues("openrouter").Observe(duration)
+	if resp != nil {
+		if resp.Usage.InputTokens > 0 {
+			observability.LLMTokensTotal.WithLabelValues("openrouter", "input").Add(float64(resp.Usage.InputTokens))
+		}
+		if resp.Usage.OutputTokens > 0 {
+			observability.LLMTokensTotal.WithLabelValues("openrouter", "output").Add(float64(resp.Usage.OutputTokens))
+		}
+	}
+
+	return resp, nil
 }
 
 // StreamResponse overrides for models needing custom handling:

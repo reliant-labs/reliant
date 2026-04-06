@@ -611,9 +611,6 @@ func (h *TestHarness) WaitForWorkflowCompleteWithError(t *testing.T, chatID, run
 			t.Logf("  Event %d: %s", e.EventId, e.EventType.String())
 		}
 
-		// Dump debug traces from chat_updates
-		h.DumpDebugTraces(t, chatID)
-
 		t.Fatalf("workflow failed: %v", err)
 	}
 	t.Logf("Workflow completed successfully: %+v", result)
@@ -641,25 +638,6 @@ func (h *TestHarness) WaitForWorkflowCompleteWithTimeout(t *testing.T, workflowI
 			if desc.WorkflowExecutionInfo.Status != enums.WORKFLOW_EXECUTION_STATUS_RUNNING {
 				return
 			}
-		}
-	}
-}
-
-// DumpDebugTraces dumps all debug traces from chat_updates for debugging
-func (h *TestHarness) DumpDebugTraces(t *testing.T, chatID string) {
-	t.Helper()
-
-	ctx := context.Background()
-	updates, err := h.DB.GetUpdatesSince(ctx, chatID, 0, 1000)
-	if err != nil {
-		t.Logf("Failed to get chat_updates: %v", err)
-		return
-	}
-
-	t.Logf("DEBUG TRACES (from chat_updates, type=execution_log):")
-	for _, update := range updates {
-		if update.UpdateType == reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_EXECUTION_LOG {
-			t.Logf("  [%d] %s: %s", update.SequenceNumber, update.EntityID, update.Data)
 		}
 	}
 }
@@ -702,8 +680,6 @@ func (h *TestHarness) LogWorkflowDiagnostics(t *testing.T, chatID string) {
 			t.Logf("  PENDING activity type=%s id=%s", a.ActivityType, a.ActivityID)
 		}
 	}
-
-	h.DumpDebugTraces(t, chatID)
 
 	updates, err := h.DB.GetUpdatesSince(ctx, chatID, 0, 200)
 	if err == nil {
