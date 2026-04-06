@@ -132,6 +132,9 @@ func (r *RouterExecutor) Execute() (map[string]interface{}, error) {
 		return nil, fmt.Errorf("failed to load router candidates: %w", err)
 	}
 
+	// Check for pause between loading candidates and making routing decision
+	r.pauseCtrl.DoCheckPause(r.ctx)
+
 	if err := r.makeRoutingDecision(args); err != nil {
 		return nil, fmt.Errorf("routing decision failed: %w", err)
 	}
@@ -143,19 +146,38 @@ func (r *RouterExecutor) Execute() (map[string]interface{}, error) {
 		"reasoning", r.decision.Reasoning,
 	)
 
+	// Update the thread title now that we know the selected workflow/preset.
+	// The InlineWorkflowExecutor will pick this up when it emits thread_created.
+	if r.execContext != nil {
+		r.execContext.ThreadTitle = routerThreadTitle(r.decision)
+	}
+
+	// Check for pause between routing decision and workflow execution
+	r.pauseCtrl.DoCheckPause(r.ctx)
+
 	// Phase 2: Execute the selected workflow
 	childOutputs, err := r.executeSelectedWorkflow()
 	if err != nil {
 		return nil, fmt.Errorf("selected workflow execution failed: %w", err)
 	}
 
-	// Build combined output
 	output := map[string]interface{}{
 		"selected_workflow": r.decision.Workflow,
 		"selected_preset":   r.decision.Preset,
 		"prompt":            r.decision.Prompt,
 		"reasoning":         r.decision.Reasoning,
 		"outputs":           childOutputs,
+	}
+
+	// Evaluate declared outputs if present
+	if declaredOutputs := args.GetOutputs(); len(declaredOutputs) > 0 {
+		evaluated, err := evaluateOutputsMap(declaredOutputs, output, r.logger)
+		if err != nil {
+			return nil, fmt.Errorf("failed to evaluate router outputs: %w", err)
+		}
+		for k, v := range evaluated {
+			output[k] = v
+		}
 	}
 
 	return output, nil
@@ -168,7 +190,9 @@ func (r *RouterExecutor) loadCandidates(args *reliantv1.RouterArgs) error {
 		return fmt.Errorf("router node %s has no candidate workflows", r.node.GetId())
 	}
 
-	activityCtx := workflow.WithActivityOptions(r.ctx, workflow.ActivityOptions{
+	// Use pause-aware activity context so activities get cancelled on pause signal
+	baseCtx := r.pauseCtrl.GetActivityCtx(r.ctx)
+	activityCtx := workflow.WithActivityOptions(baseCtx, workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    time.Second,
@@ -266,10 +290,17 @@ func (r *RouterExecutor) makeRoutingDecision(args *reliantv1.RouterArgs) error {
 	}
 	callLLMNode.GetCallLlm().Messages = messages
 
-	// Always include conversation history for routing context
+	// Use the PARENT thread for loading conversation history.
+	// The router's exec context has a child thread (new/fork) for the selected
+	// workflow to execute on, but the routing decision needs the conversation
+	// history which lives on the parent thread.
 	routerThread := ""
 	if r.execContext != nil {
-		routerThread = r.execContext.Thread
+		if r.execContext.ParentThread != "" {
+			routerThread = r.execContext.ParentThread
+		} else {
+			routerThread = r.execContext.Thread
+		}
 	}
 
 	// Build runtime context for the CallLLM activity
@@ -285,8 +316,9 @@ func (r *RouterExecutor) makeRoutingDecision(args *reliantv1.RouterArgs) error {
 		Node:    callLLMNode,
 	}
 
-	// Dispatch the CallLLM activity
-	activityCtx := workflow.WithActivityOptions(r.ctx, workflow.ActivityOptions{
+	// Dispatch the CallLLM activity using pause-aware context
+	baseCtx := r.pauseCtrl.GetActivityCtx(r.ctx)
+	activityCtx := workflow.WithActivityOptions(baseCtx, workflow.ActivityOptions{
 		StartToCloseTimeout: 5 * time.Minute, // Routing should be fast but give it some room
 		HeartbeatTimeout:    30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
@@ -297,26 +329,34 @@ func (r *RouterExecutor) makeRoutingDecision(args *reliantv1.RouterArgs) error {
 		},
 	})
 
-	var rawOutput map[string]interface{}
-	if err := workflow.ExecuteActivity(activityCtx, "CallLLM", input).Get(r.ctx, &rawOutput); err != nil {
+	var output reliantv1.CallLLMOutput
+	if err := workflow.ExecuteActivity(activityCtx, "CallLLM", input).Get(r.ctx, &output); err != nil {
 		return fmt.Errorf("routing CallLLM failed: %w", err)
 	}
 
 	// Parse the routing decision from the response
-	return r.parseRoutingDecision(rawOutput)
+	return r.parseRoutingDecision(&output)
 }
 
 // parseRoutingDecision extracts the structured routing decision from CallLLM output.
-func (r *RouterExecutor) parseRoutingDecision(output map[string]interface{}) error {
-	// The response tool output is in the response_text field as JSON
-	responseText, ok := output["response_text"].(string)
-	if !ok || responseText == "" {
-		return fmt.Errorf("routing decision has no response_text")
-	}
-
+func (r *RouterExecutor) parseRoutingDecision(output *reliantv1.CallLLMOutput) error {
+	// Prefer structured response_data (populated by CallLLM when a response_tool
+	// is configured). Fall back to response_text for plain-text responses.
 	var decision routerDecision
-	if err := json.Unmarshal([]byte(responseText), &decision); err != nil {
-		return fmt.Errorf("failed to parse routing decision JSON: %w (raw: %s)", err, responseText)
+	if rd := output.GetResponseData(); rd != nil {
+		rdJSON, err := rd.MarshalJSON()
+		if err != nil {
+			return fmt.Errorf("failed to marshal response_data: %w", err)
+		}
+		if err := json.Unmarshal(rdJSON, &decision); err != nil {
+			return fmt.Errorf("failed to parse routing decision from response_data: %w", err)
+		}
+	} else if responseText := output.GetResponseText(); responseText != "" {
+		if err := json.Unmarshal([]byte(responseText), &decision); err != nil {
+			return fmt.Errorf("failed to parse routing decision JSON: %w (raw: %s)", err, responseText)
+		}
+	} else {
+		return fmt.Errorf("routing decision has no response_data or response_text")
 	}
 
 	// Validate the decision
@@ -378,6 +418,41 @@ func (r *RouterExecutor) executeSelectedWorkflow() (map[string]interface{}, erro
 				Role:    &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "user"}},
 				Content: &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: prompt}},
 			},
+		}
+
+		// The parent workflow already created the child thread (in workflow.go initChildWorkflow)
+		// before the routing decision was available, so no inject message was saved.
+		// Save the routed prompt as a user message now so the selected workflow has history.
+		if r.execContext != nil && r.execContext.Thread != "" {
+			activityCtx := workflow.WithActivityOptions(r.ctx, workflow.ActivityOptions{
+				StartToCloseTimeout: 30 * time.Second,
+				RetryPolicy: &temporal.RetryPolicy{
+					InitialInterval:    time.Second,
+					BackoffCoefficient: 2.0,
+					MaximumInterval:    10 * time.Second,
+					MaximumAttempts:    3,
+				},
+			})
+			flatInput := &types.SaveMessageInput{
+				ChatID:     r.chatID,
+				Thread:     r.execContext.Thread,
+				Role:       "user",
+				Content:    prompt,
+				WorkflowID: r.workflowID,
+			}
+			rtx := types.RuntimeContext{
+				ChatID:     r.chatID,
+				Thread:     r.execContext.Thread,
+				WorkflowID: r.workflowID,
+			}
+			saveInput := types.ActivityInput{Runtime: rtx, Node: buildSaveMessageNode(flatInput)}
+			if err := workflow.ExecuteActivity(activityCtx, "SaveMessage", saveInput).Get(r.ctx, nil); err != nil {
+				return nil, fmt.Errorf("failed to save router inject message: %w", err)
+			}
+			r.logger.Info("[Router] Saved routed prompt to child thread",
+				"thread", r.execContext.Thread,
+				"promptLength", len(prompt),
+			)
 		}
 	}
 	syntheticNode := &reliantv1.Node{
@@ -499,4 +574,20 @@ func presetAllowedForCandidate(candidate routerWorkflowInfo, presetName string) 
 		}
 	}
 	return false
+}
+
+// routerThreadTitle builds a human-readable thread title from the routing decision.
+// Examples: "agent / code-review", "builtin://agent / general"
+func routerThreadTitle(decision *routerDecision) string {
+	if decision == nil {
+		return ""
+	}
+	// Strip builtin:// prefix for cleaner display
+	workflow := decision.Workflow
+	workflow = strings.TrimPrefix(workflow, "builtin://")
+
+	if decision.Preset != "" {
+		return workflow + " / " + decision.Preset
+	}
+	return workflow
 }
