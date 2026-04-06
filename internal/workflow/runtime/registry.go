@@ -120,6 +120,8 @@ func classifyError(err error) error {
 		"too many tokens",    // Alternative token limit error message
 		"maximum context",    // Context length exceeded
 		"context length",     // Context length error
+		// User hasn't configured an API key for any matching provider
+		"no available provider",
 	}
 
 	for _, pattern := range terminalPatterns {

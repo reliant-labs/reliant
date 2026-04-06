@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/reliant-labs/reliant/internal/telemetry"
 )
@@ -65,6 +66,22 @@ func (h *sentryHandler) WithGroup(name string) slog.Handler {
 	}
 }
 
+// sentrySilentPatterns are errors that should be completely silent — not
+// reported to Sentry and not re-logged. These are user-initiated cancellations
+// that are a normal part of operation.
+var sentrySilentPatterns = []string{
+	"context canceled",
+	"streaming cancelled by user",
+}
+
+// sentryWarnPatterns are errors that should NOT go to Sentry but should still
+// be logged as warnings for operational visibility.
+var sentryWarnPatterns = []string{
+	"sqlite3: interrupted",
+	"exit status 128",
+	"signal: killed",
+}
+
 // reportToSentry extracts error information from the log record and sends it
 // to Sentry. Runs in a separate goroutine to avoid blocking log callers.
 func (h *sentryHandler) reportToSentry(r slog.Record) {
@@ -89,6 +106,20 @@ func (h *sentryHandler) reportToSentry(r slog.Record) {
 		capturedErr = errors.New(r.Message)
 	}
 
+	// Completely silent — user-initiated cancellations.
+	if matchesAny(capturedErr, sentrySilentPatterns) {
+		return
+	}
+
+	// Warn-only — log for visibility but don't send to Sentry.
+	if matchesAny(capturedErr, sentryWarnPatterns) {
+		Warn("[Sentry] Suppressed non-actionable error",
+			"error", capturedErr.Error(),
+			"log_message", r.Message,
+		)
+		return
+	}
+
 	// Add the log message as extra context when we have a real error.
 	extra["log_message"] = r.Message
 
@@ -105,6 +136,20 @@ func (h *sentryHandler) reportToSentry(r slog.Record) {
 	}
 
 	telemetry.CaptureExceptionWithContext(capturedErr, tags, extra)
+}
+
+// matchesAny returns true if the error message contains any of the given patterns.
+func matchesAny(err error, patterns []string) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	for _, p := range patterns {
+		if strings.Contains(msg, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // collectAttr processes a single slog.Attr, extracting error values and
