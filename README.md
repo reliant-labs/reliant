@@ -104,16 +104,21 @@ nodes:
 
 ## Supported Providers
 
-| Provider       | Models                                                              |
-| -------------- | ------------------------------------------------------------------- |
-| Anthropic      | Claude 4 Opus, Claude 4 Sonnet, Claude 3.5 Sonnet, Claude 3.5 Haiku |
-| OpenAI         | GPT-4.1, GPT-4o, O1, O3, O4-mini                                    |
-| Google         | Gemini 2.5 Pro, Gemini 2.5 Flash, Gemini 2.0 Flash                  |
-| GitHub Copilot | Access to Claude, GPT, Gemini, and O-series models                  |
-| AWS Bedrock    | Claude models via AWS                                               |
-| Azure OpenAI   | GPT models via Azure                                                |
-| Groq           | Llama, Mixtral                                                      |
-| OpenRouter     | 100+ models from various providers                                  |
+We support the latest models from:
+
+| Provider       |
+| -------------- |
+| Anthropic      |
+| OpenAI         |
+| Google         |
+| GitHub Copilot |
+| AWS Bedrock    |
+| Azure OpenAI   |
+| Groq           |
+| OpenRouter     |
+| Bring Your Own |
+
+You can also configure Reliant to point to your own ChatGPT compatible provider.
 
 ## Community
 
