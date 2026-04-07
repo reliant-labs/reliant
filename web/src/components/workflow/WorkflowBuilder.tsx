@@ -35,10 +35,15 @@ import {
   getSwitchNodeId,
   getStepInline,
   initStepArgs,
+  mergeStepUpdate,
   withRunArgs,
   withWorkflowArgs,
   withLoopArgs,
 } from "../../types/workflow";
+import {
+  deriveWorkflowEntryFromEdges,
+  sanitizeWorkflowReferences,
+} from "./workflowRef";
 import { autoLayoutWorkflow } from "../../lib/workflow-layout";
 import {
   convertEdgesToFlowElements,
@@ -323,7 +328,7 @@ function WorkflowBuilderInner({
   // Get current project for the chat assistant
   const currentProject = useProjectStore((state) => state.currentProject);
 
-  // Helper function to normalize names (replace spaces with hyphens, trim trailing spaces)
+  // Helper function to normalize workflow names (replace spaces with hyphens, trim trailing spaces)
   const normalizeName = (value: string): string => {
     return value.trim().replace(/\s+/g, "-");
   };
@@ -938,19 +943,15 @@ function WorkflowBuilderInner({
       }
     }
 
-    // Compute entry field from visual edges (single entry = string, multiple = array)
-    // Use user-set workflowEntry if available, otherwise derive from edges
-    // Always use array format for proto compatibility
-    let computedEntry: string[] | undefined;
-
-    if (workflowEntry !== undefined) {
-      // Use explicitly set entry - normalize to array
-      computedEntry = Array.isArray(workflowEntry)
-        ? workflowEntry
-        : [workflowEntry];
-    } else if (entryTargets.length > 0) {
+    // Compute entry field from visual edges. Connections from the workflow start node
+    // should take precedence over any previously edited workflowEntry state.
+    let computedEntry = deriveWorkflowEntryFromEdges(workflowEntry, edges);
+    if (!computedEntry && entryTargets.length > 0) {
       computedEntry = entryTargets;
     }
+
+    const { entry: sanitizedEntry, outputs: sanitizedOutputs } =
+      sanitizeWorkflowReferences(computedEntry, workflowOutputs, steps.map((step) => step.id));
 
     return {
       name: workflowName,
@@ -966,14 +967,13 @@ function WorkflowBuilderInner({
       apiVersion: workflowApiVersion || undefined,
       nodes: steps,
       edges: workflowEdges.length > 0 ? workflowEdges : undefined, // Only include if non-empty
-      entry: computedEntry, // Use entry field instead of "from: started" edges
+      entry: sanitizedEntry, // Use entry field instead of "from: started" edges
       inputs:
         Object.keys(workflowInputs).length > 0
           ? (workflowInputs as Workflow["inputs"])
           : undefined,
 
-      outputs:
-        Object.keys(workflowOutputs).length > 0 ? workflowOutputs : undefined,
+      outputs: sanitizedOutputs,
       ui: {
         positions,
         ...(Object.keys(switches).length > 0 && { switches }),
@@ -1558,14 +1558,18 @@ function WorkflowBuilderInner({
       setNodes((nds) =>
         nds.map((node) => {
           if (node.id === updatedStep.id) {
-            const nodeType = getStepType(updatedStep);
+            const currentStep = (node.data as FlowNodeData).step as Step | undefined;
+            const mergedStep = currentStep
+              ? mergeStepUpdate(currentStep, updatedStep)
+              : updatedStep;
+            const nodeType = getStepType(mergedStep);
             return {
               ...node,
-              id: updatedStep.id,
+              id: mergedStep.id,
               type: getFlowNodeType(nodeType),
               data: {
-                step: updatedStep,
-                label: updatedStep.id,
+                step: mergedStep,
+                label: mergedStep.id,
               },
             };
           }
@@ -1576,12 +1580,16 @@ function WorkflowBuilderInner({
       // Update selected node
       setSelectedNode((current) => {
         if (current?.id === updatedStep.id) {
+          const currentStep = (current.data as FlowNodeData).step as Step | undefined;
+          const mergedStep = currentStep
+            ? mergeStepUpdate(currentStep, updatedStep)
+            : updatedStep;
           return {
             ...current,
-            id: updatedStep.id,
+            id: mergedStep.id,
             data: {
-              step: updatedStep,
-              label: updatedStep.id,
+              step: mergedStep,
+              label: mergedStep.id,
             },
           } as Node;
         }
@@ -1957,12 +1965,20 @@ function WorkflowBuilderInner({
   const celCompletionContext = useMemo<CELCompletionContextValue>(() => {
     const nodeIds: string[] = [];
     const nodeTypeMap: Record<string, string> = {};
+    const nodeDeclaredOutputs: Record<string, string[]> = {};
     for (const node of nodes) {
       if (node.type === "eventNode" || node.type === "switchNode") continue;
       const step = (node.data as FlowNodeData).step as Step | undefined;
       nodeIds.push(node.id);
       if (step?.type) {
         nodeTypeMap[node.id] = step.type;
+      }
+      // Collect declared outputs from router nodes
+      if (step?.type === "router" && step.args?.case === "router") {
+        const routerOutputs = (step.args.value as Record<string, unknown>)?.outputs as Record<string, string> | undefined;
+        if (routerOutputs && Object.keys(routerOutputs).length > 0) {
+          nodeDeclaredOutputs[node.id] = Object.keys(routerOutputs);
+        }
       }
     }
     const inputParams: Record<string, { type: string; description?: string }> =
@@ -1976,7 +1992,7 @@ function WorkflowBuilderInner({
       }
     }
     const edgeList = edges.map((e) => ({ source: e.source, target: e.target }));
-    return { nodeIds, nodeTypeMap, inputParams, edges: edgeList };
+    return { nodeIds, nodeTypeMap, inputParams, edges: edgeList, nodeDeclaredOutputs };
   }, [nodes, edges, workflowInputs]);
 
   // Handle workflow updates from the chat assistant
@@ -2378,7 +2394,7 @@ function WorkflowBuilderInner({
   // Structural types that have their own node components
   // Defined as a constant outside useCallback to avoid recreation
   const STRUCTURAL_TYPES = useMemo(
-    () => new Set(["run", "workflow", "agent", "join", "loop"]),
+    () => new Set(["run", "workflow", "agent", "join", "loop", "router"]),
     [],
   );
 
@@ -2388,8 +2404,8 @@ function WorkflowBuilderInner({
       takeSnapshot(nodes, edges);
       markDirty();
 
-      // Use the actual step type as the ID prefix (e.g., call_llm-123, run-456)
-      const id = `${stepType}-${Date.now()}`;
+      // Use a CEL-safe ID prefix (e.g., call_llm_123, run_456)
+      const id = `${stepType}_${Date.now()}`;
       // Place new node at the center of the current viewport
       const wrapper = reactFlowWrapper.current;
       const vpCenterX = (wrapper?.clientWidth ?? 1200) / 2;
@@ -2422,6 +2438,8 @@ function WorkflowBuilderInner({
         step.condition = directCel("all") as any;
       } else if (stepType === "loop") {
         step = withLoopArgs(step, { while: directCel(""), ref: celString("") } as any);
+      } else if (stepType === "router") {
+        // Router args are initialized by initStepArgs — no additional defaults needed
       }
 
       // Determine React Flow node type
@@ -2454,7 +2472,7 @@ function WorkflowBuilderInner({
     takeSnapshot(nodes, edges);
     markDirty();
 
-    const id = `switch-${Date.now()}`;
+    const id = `switch_${Date.now()}`;
     // Place new switch at the center of the current viewport
     const wrapperEl = reactFlowWrapper.current;
     const switchVpCenterX = (wrapperEl?.clientWidth ?? 1200) / 2;
@@ -2475,8 +2493,8 @@ function WorkflowBuilderInner({
       data: {
         label: "Switch",
         cases: [
-          { id: `case-${Date.now()}-1`, condition: "", label: "" }, // First case (will need condition)
-          { id: `case-${Date.now()}-2`, condition: "", label: "" }, // Default case (last, no condition)
+          { id: `case_${Date.now()}_1`, condition: "", label: "" }, // First case (will need condition)
+          { id: `case_${Date.now()}_2`, condition: "", label: "" }, // Default case (last, no condition)
         ],
       },
       draggable: canDragNodes,
@@ -3007,7 +3025,7 @@ function WorkflowBuilderInner({
                 className="w-full px-3 py-2 bg-background border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring"
               />
               <p className="text-xs text-muted-foreground mt-1">
-                Use lowercase letters, numbers, and hyphens
+                Use lowercase letters, numbers, and underscores for node IDs
               </p>
             </div>
 

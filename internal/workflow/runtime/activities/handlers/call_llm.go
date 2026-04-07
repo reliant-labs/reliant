@@ -36,6 +36,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"go.temporal.io/sdk/activity"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // ============================================================================
@@ -154,21 +155,23 @@ func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, a
 		return nil, fmt.Errorf("failed to load conversation history: %w", err)
 	}
 
-	if len(history) == 0 {
+	if len(history) == 0 && len(args.GetMessages()) == 0 {
 		return nil, fmt.Errorf("cannot call LLM with empty message history (chat=%s, thread=%s)", rtx.ChatID, thread)
 	}
 
 	// Defense-in-depth: warn if the conversation doesn't end with a user/tool message.
 	// This helps diagnose thread routing mismatches where SendMessage saves to a
 	// different thread than CallLLM reads from.
-	if lastMsg := history[len(history)-1]; lastMsg.Role != message.User && lastMsg.Role != message.Tool && lastMsg.Role != message.Agent {
-		logger.Warn("[CallLLM] Conversation does not end with user/tool message - possible thread mismatch",
-			"chatID", rtx.ChatID,
-			"thread", thread,
-			"lastRole", lastMsg.Role,
-			"lastMsgID", lastMsg.ID,
-			"historyLen", len(history),
-		)
+	if len(history) > 0 {
+		if lastMsg := history[len(history)-1]; lastMsg.Role != message.User && lastMsg.Role != message.Tool && lastMsg.Role != message.Agent {
+			logger.Warn("[CallLLM] Conversation does not end with user/tool message - possible thread mismatch",
+				"chatID", rtx.ChatID,
+				"thread", thread,
+				"lastRole", lastMsg.Role,
+				"lastMsgID", lastMsg.ID,
+				"historyLen", len(history),
+			)
+		}
 	}
 
 	// Stream LLM response and collect data in memory
@@ -784,6 +787,27 @@ streamLoop:
 			Role: "assistant",
 			Text: responseText,
 		},
+	}
+
+	// When a response_tool is configured, the LLM returns structured data as a
+	// tool call rather than text. Extract the response tool's input into
+	// ResponseData (structured) and ResponseText (raw JSON string) so consumers
+	// can use whichever form they need.
+	if rt := args.GetResponseTool(); rt != nil {
+		rtName := model.CelStringValue(rt.GetName())
+		for _, tc := range toolCalls {
+			if tc.Name == rtName {
+				output.ResponseText = tc.Input
+				output.Message.Text = tc.Input
+				var parsed map[string]interface{}
+				if err := json.Unmarshal([]byte(tc.Input), &parsed); err == nil {
+					if s, err := structpb.NewStruct(parsed); err == nil {
+						output.ResponseData = s
+					}
+				}
+				break
+			}
+		}
 	}
 
 	return output, nil

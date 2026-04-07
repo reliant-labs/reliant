@@ -22,7 +22,7 @@ import {
 } from './workflow-node-dimensions'
 
 // Structural node types that have their own React Flow components
-const STRUCTURAL_FLOW_TYPES = new Set(['run', 'workflow', 'join', 'loop'])
+const STRUCTURAL_FLOW_TYPES = new Set(['run', 'workflow', 'join', 'loop', 'router'])
 
 type ConditionValue = string | { expr?: string } | undefined
 
@@ -499,6 +499,7 @@ const NODE_DIMENSIONS: Record<string, { width: number; height: number }> = {
   loopNode: { width: SHARED_NODE_DIMENSIONS.loop.width, height: SHARED_NODE_DIMENSIONS.loop.height },
   expandedLoopNode: { width: 400, height: 300 },
   switchNode: { width: SHARED_NODE_DIMENSIONS.switch.width, height: SHARED_NODE_DIMENSIONS.switch.height },
+  routerNode: { width: SHARED_NODE_DIMENSIONS.router.width, height: SHARED_NODE_DIMENSIONS.router.height },
 }
 
 const DEFAULT_NODE_DIMS = { width: SHARED_DEFAULT_DIMENSIONS.width, height: SHARED_DEFAULT_DIMENSIONS.height }

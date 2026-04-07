@@ -1099,6 +1099,121 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				continue
 			}
 
+			// Handle router steps - LLM-driven workflow selection and execution
+			if step.Node.GetType() == model.NodeTypeRouter {
+				logger.Info("[Workflow Runtime] ========== EXECUTING ROUTER STEP ===========",
+					"stepID", step.Node.GetId(),
+				)
+
+				// Evaluate node config (resolve CEL expressions)
+				evalResult, err := EvaluateNodeConfig(
+					step.Node,
+					nodeOutputs,
+					workflowID,
+					input.WorkflowName,
+					input.Inputs,
+					nil, // Not in a loop
+					nil, // loopOutputs - not in a loop
+					execCtx,
+				)
+				if err != nil {
+					logger.Error("[Workflow Runtime] Failed to evaluate router step config",
+						"stepID", step.Node.GetId(),
+						"error", err,
+					)
+					notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName,
+						"config_evaluation_error",
+						fmt.Sprintf("Router step '%s' config evaluation failed: %s", step.Node.GetId(), err.Error()))
+					return nil, fmt.Errorf("router step %s config evaluation failed: %w", step.Node.GetId(), err)
+				}
+
+				// Create router executor
+				routerExec := NewRouterExecutor(
+					ctx,
+					workflowID,
+					input.ChatID,
+					input.WorkflowName,
+					input.Inputs,
+					nodeOutputs,
+					childTracker,
+					step.Node,
+					evalResult,
+				)
+
+				// Derive child execution context
+				childThreadMode := routerThreadMode(evalResult)
+				childIdentity := routerWorkflowIdentity(step.Node)
+				childExecCtx := execCtx.ForChild(step.Node.GetId(), childThreadMode, childIdentity, true)
+
+				// Initialize child thread for non-inherit modes
+				if childThreadMode != model.ThreadModeInherit {
+					nodeID := step.Node.GetId()
+					if initErr := initChildWorkflow(ChildWorkflowInitOpts{
+						Ctx:              ctx,
+						ChatID:           input.ChatID,
+						ParentWorkflowID: parentWorkflowID,
+						ChildWorkflowID:  workflowID,
+						ChildThreadID:    childExecCtx.Thread,
+						WorkflowName:     childIdentity,
+						ThreadTitle:      &nodeID,
+						ThreadMode:       childThreadMode,
+						ForkFromThread:   childExecCtx.ForkedFrom,
+						ParentThread:     thread,
+						SpawnedByNodeID:  step.Node.GetId(),
+						Logger:           logger,
+					}); initErr != nil {
+						logger.Error("[Workflow Runtime] Failed to initialize router child thread",
+							"stepID", step.Node.GetId(),
+							"error", initErr,
+						)
+						return nil, fmt.Errorf("failed to initialize router child thread for step %s: %w", step.Node.GetId(), initErr)
+					}
+				}
+
+				// Override project path if needed
+				childProjectPath := projectPath
+				if model.NodeProjectPath(evalResult) != "" {
+					childProjectPath = model.NodeProjectPath(evalResult)
+					childExecCtx.ProjectPath = childProjectPath
+				}
+
+				routerExec = routerExec.
+					WithExecContext(childExecCtx).
+					WithProjectPath(childProjectPath).
+					WithThreadTracker(threadTracker).
+					WithPauseController(makeThreadPauseCtrl(childExecCtx.Thread)).
+					WithMakeThreadPauseCtrl(makeThreadPauseCtrl)
+
+				// Launch router execution in parallel (same pattern as workflow nodes)
+				doneCh := workflow.NewChannel(ctx)
+				running := &RunningInlineWorkflow{
+					StepID:       step.Node.GetId(),
+					Node:         step.Node,
+					Event:        step.Event,
+					DoneCh:       doneCh,
+					EvalResult:   evalResult,
+					ChildExecCtx: childExecCtx,
+				}
+
+				routerCopy := routerExec
+				runningCopy := running
+
+				workflow.Go(ctx, func(gCtx workflow.Context) {
+					routerCopy = routerCopy.WithWorkflowContext(gCtx)
+					output, execErr := routerCopy.Execute()
+					runningCopy.Output = output
+					runningCopy.Error = execErr
+					runningCopy.DoneCh.Send(gCtx, true)
+				})
+
+				runningInlineWorkflows = append(runningInlineWorkflows, running)
+				logger.Info("[Workflow Runtime] Started router workflow in parallel",
+					"stepID", step.Node.GetId(),
+					"totalRunningInline", len(runningInlineWorkflows),
+				)
+				continue
+			}
+
 			logger.Info("[Workflow Runtime] ========== EXECUTING STEP ==========",
 				"stepID", step.Node.GetId(),
 				"type", string(step.Node.GetType()))
@@ -1265,46 +1380,81 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 							ChildExecCtx: running.ChildExecCtx,
 						}
 
-						retryContract, contractErr := coreSemantics.RequireContractForNode(running.StepID, model.NodeTypeWorkflow)
-						if contractErr != nil {
-							return nil, contractErr
-						}
+						// Distinguish between router nodes and regular workflow nodes
+						nodeType := running.Node.GetType()
+						if nodeType == model.NodeTypeRouter {
+							// Re-create RouterExecutor for router nodes
+							routerExec := NewRouterExecutor(
+								ctx,
+								workflowID,
+								input.ChatID,
+								input.WorkflowName,
+								input.Inputs,
+								nodeOutputs,
+								childTracker,
+								running.Node,
+								running.EvalResult,
+							)
+							routerExec = routerExec.
+								WithExecContext(running.ChildExecCtx).
+								WithProjectPath(running.ChildExecCtx.ProjectPath).
+								WithThreadTracker(threadTracker).
+								WithPauseController(makeThreadPauseCtrl(running.ChildExecCtx.Thread)).
+								WithMakeThreadPauseCtrl(makeThreadPauseCtrl)
 
-						retryExecutor, retryErr := NewInlineWorkflowExecutor(
-							ctx,
-							workflowID,
-							input.ChatID,
-							input.WorkflowName,
-							input.Inputs,
-							nodeOutputs,
-							childTracker,
-							running.Node,
-							running.EvalResult,
-							"", // No parent loop
-							-1, // No loop iteration
-						)
-						if retryErr != nil {
-							return nil, fmt.Errorf("failed to re-create executor for step %s after pause: %w", running.StepID, retryErr)
-						}
-						retryExecutor = retryExecutor.WithInvocationContract(retryContract).
-							WithThreadTracker(threadTracker).
-							WithExecContext(running.ChildExecCtx).
-							WithProjectPath(running.ChildExecCtx.ProjectPath).
-							WithPauseController(makeThreadPauseCtrl(running.ChildExecCtx.Thread)).
-							WithMakeThreadPauseCtrl(makeThreadPauseCtrl)
+							routerCopy := routerExec
+							runningCopy := retryRunning
+							workflow.Go(ctx, func(gCtx workflow.Context) {
+								routerCopy = routerCopy.WithWorkflowContext(gCtx)
+								output, execErr := routerCopy.Execute()
+								runningCopy.Output = output
+								runningCopy.Error = execErr
+								runningCopy.DoneCh.Send(gCtx, true)
+							})
+						} else {
+							// Regular workflow node - use InlineWorkflowExecutor
+							retryContract, contractErr := coreSemantics.RequireContractForNode(running.StepID, model.NodeTypeWorkflow)
+							if contractErr != nil {
+								return nil, contractErr
+							}
 
-						executorCopy := retryExecutor
-						runningCopy := retryRunning
-						workflow.Go(ctx, func(gCtx workflow.Context) {
-							executorCopy = executorCopy.WithWorkflowContext(gCtx)
-							output, execErr := executorCopy.Execute()
-							runningCopy.Output = output
-							runningCopy.Error = execErr
-							runningCopy.DoneCh.Send(gCtx, true)
-						})
+							retryExecutor, retryErr := NewInlineWorkflowExecutor(
+								ctx,
+								workflowID,
+								input.ChatID,
+								input.WorkflowName,
+								input.Inputs,
+								nodeOutputs,
+								childTracker,
+								running.Node,
+								running.EvalResult,
+								"", // No parent loop
+								-1, // No loop iteration
+							)
+							if retryErr != nil {
+								return nil, fmt.Errorf("failed to re-create executor for step %s after pause: %w", running.StepID, retryErr)
+							}
+							retryExecutor = retryExecutor.WithInvocationContract(retryContract).
+								WithThreadTracker(threadTracker).
+								WithExecContext(running.ChildExecCtx).
+								WithProjectPath(running.ChildExecCtx.ProjectPath).
+								WithPauseController(makeThreadPauseCtrl(running.ChildExecCtx.Thread)).
+								WithMakeThreadPauseCtrl(makeThreadPauseCtrl)
+
+							executorCopy := retryExecutor
+							runningCopy := retryRunning
+							workflow.Go(ctx, func(gCtx workflow.Context) {
+								executorCopy = executorCopy.WithWorkflowContext(gCtx)
+								output, execErr := executorCopy.Execute()
+								runningCopy.Output = output
+								runningCopy.Error = execErr
+								runningCopy.DoneCh.Send(gCtx, true)
+							})
+						}
 						runningInlineWorkflows = append(runningInlineWorkflows, retryRunning)
 						logger.Info("[Workflow Runtime] Re-launched inline workflow after pause",
 							"stepID", running.StepID,
+							"nodeType", nodeType,
 						)
 						continue
 					}

@@ -20,6 +20,7 @@ export interface MonacoCELEditorProps {
   inputParams?: Record<string, { type: string; description?: string }>;
   celContext?: 'default' | 'loop_while' | 'edge_condition' | 'save_message' | 'thread';
   currentNodeType?: string;
+  nodeDeclaredOutputs?: Record<string, string[]>;
   className?: string;
 }
 
@@ -38,6 +39,7 @@ export function MonacoCELEditor({
   inputParams = {},
   celContext = 'default',
   currentNodeType,
+  nodeDeclaredOutputs,
   className,
 }: MonacoCELEditorProps) {
   const monaco = useMonaco();
@@ -47,6 +49,12 @@ export function MonacoCELEditor({
   const isUpdatingRef = useRef(false);
   const [isFocused, setIsFocused] = useState(false);
 
+  // Keep onChange in a ref so the Monaco listener always calls the latest callback
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  });
+
   // Keep context in a ref so the completion provider callback always sees fresh values
   const contextRef = useRef<CELCompletionContext>({
     nodeIds,
@@ -55,6 +63,7 @@ export function MonacoCELEditor({
     celContext,
     pureExpression,
     currentNodeType,
+    nodeDeclaredOutputs,
   });
 
   // Update context ref when props change
@@ -66,8 +75,9 @@ export function MonacoCELEditor({
       celContext,
       pureExpression,
       currentNodeType,
+      nodeDeclaredOutputs,
     };
-  }, [nodeIds, nodeTypeMap, inputParams, celContext, pureExpression, currentNodeType]);
+  }, [nodeIds, nodeTypeMap, inputParams, celContext, pureExpression, currentNodeType, nodeDeclaredOutputs]);
 
   const height = multiline ? rows * 20 : 32;
 
@@ -149,7 +159,7 @@ export function MonacoCELEditor({
     const contentDisposable = editor.onDidChangeModelContent(() => {
       if (isUpdatingRef.current) return;
       const currentValue = editor.getValue();
-      onChange(currentValue);
+      onChangeRef.current(currentValue);
     });
 
     // Focus / blur tracking

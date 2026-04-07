@@ -72,6 +72,7 @@ export function CELInput({
   const resolvedNodeIds = nodeIds ?? ctx?.nodeIds;
   const resolvedNodeTypeMap = nodeTypeMap ?? ctx?.nodeTypeMap;
   const resolvedInputParams = inputParams ?? ctx?.inputParams;
+  const resolvedNodeDeclaredOutputs = ctx?.nodeDeclaredOutputs;
 
   return (
     <div className="relative">
@@ -103,6 +104,7 @@ export function CELInput({
         inputParams={resolvedInputParams}
         celContext={celContext}
         currentNodeType={currentNodeType}
+        nodeDeclaredOutputs={resolvedNodeDeclaredOutputs}
         className={className}
       />
 

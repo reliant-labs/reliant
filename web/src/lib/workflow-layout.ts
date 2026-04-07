@@ -10,7 +10,7 @@ import {
 const { LAYER_SPACING, MIN_NODE_SPACING, START_X, START_Y } = LAYOUT_CONSTANTS;
 
 // Structural node types that have their own dimensions
-const STRUCTURAL_TYPES = new Set(["run", "workflow", "agent", "join", "loop"]);
+const STRUCTURAL_TYPES = new Set(["run", "workflow", "agent", "join", "loop", "router"]);
 
 type ConditionValue = string | { expr?: string } | undefined;
 type LegacyEdgeTarget = string | string[] | undefined;

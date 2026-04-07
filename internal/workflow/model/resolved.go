@@ -20,6 +20,9 @@ func NodeThreadConfig(node *reliantv1.Node) *reliantv1.ThreadConfig {
 	if loop := node.GetLoop(); loop != nil {
 		return loop.GetThread()
 	}
+	if rt := node.GetRouter(); rt != nil {
+		return rt.GetThread()
+	}
 	return nil
 }
 
@@ -107,6 +110,11 @@ func NodeProjectPath(node *reliantv1.Node) string {
 	}
 	if loopArgs := node.GetLoop(); loopArgs != nil {
 		if projectConfig := loopArgs.GetProject(); projectConfig != nil {
+			return CelStringValue(projectConfig.GetPath())
+		}
+	}
+	if routerArgs := node.GetRouter(); routerArgs != nil {
+		if projectConfig := routerArgs.GetProject(); projectConfig != nil {
 			return CelStringValue(projectConfig.GetPath())
 		}
 	}

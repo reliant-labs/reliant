@@ -38,6 +38,10 @@ interface RefetchStoreState {
 // External subscriber registry (not in Zustand state to avoid re-renders)
 const subscribers = new Map<RefetchType, Set<RefetchCallback>>();
 
+// Debounce timers per refetch type — collapses rapid-fire events into one callback
+const debounceTimers = new Map<RefetchType, ReturnType<typeof setTimeout>>();
+const DEBOUNCE_MS = 300;
+
 export const useRefetchStore = create<RefetchStoreState>()(() => ({
   counters: {
     worktree_changes: 0,
@@ -60,29 +64,41 @@ export function triggerRefetch(
 ): void {
   logger.debug(`${LOG_PREFIX} Triggering refetch: ${type}`, { entityId });
 
-  // Bump the counter (for useEffect-based consumers)
-  useRefetchStore.setState((state) => ({
-    counters: {
-      ...state.counters,
-      [type]: state.counters[type] + 1,
-    },
-  }));
+  // Clear any pending debounce for this type — we always use the latest entityId
+  const existing = debounceTimers.get(type);
+  if (existing) {
+    clearTimeout(existing);
+  }
 
-  const event: RefetchEvent = { type, entityId };
+  const timer = setTimeout(() => {
+    debounceTimers.delete(type);
 
-  // Notify callback subscribers
-  const subs = subscribers.get(type);
-  if (subs) {
-    for (const cb of subs) {
-      try {
-        cb(event);
-      } catch (err) {
-        logger.warn(`${LOG_PREFIX} Subscriber error for ${type}`, {
-          error: err,
-        });
+    // Bump the counter (for useEffect-based consumers)
+    useRefetchStore.setState((state) => ({
+      counters: {
+        ...state.counters,
+        [type]: state.counters[type] + 1,
+      },
+    }));
+
+    const event: RefetchEvent = { type, entityId };
+
+    // Notify callback subscribers
+    const subs = subscribers.get(type);
+    if (subs) {
+      for (const cb of subs) {
+        try {
+          cb(event);
+        } catch (err) {
+          logger.warn(`${LOG_PREFIX} Subscriber error for ${type}`, {
+            error: err,
+          });
+        }
       }
     }
-  }
+  }, DEBOUNCE_MS);
+
+  debounceTimers.set(type, timer);
 }
 
 /**

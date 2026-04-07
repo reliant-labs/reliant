@@ -202,6 +202,7 @@ message Node {
     SubWorkflowArgs workflow = 21;
     LoopArgs loop = 22;
     JoinArgs join = 23;
+    RouterArgs router = 24;
   }
 }
 
@@ -560,6 +561,53 @@ message JoinArgs {
   // No additional fields. Join uses Node.condition for satisfaction mode.
 }
 
+// RouterWorkflowCandidate describes a workflow that the router can select.
+message RouterWorkflowCandidate {
+  // Ref is a workflow reference string (e.g., "builtin://agent", "project://my-flow").
+  string ref = 1;
+  // Presets limits which presets are available for this workflow. Empty = all valid presets.
+  repeated string presets = 2;
+  // Description overrides the workflow's own description for routing context.
+  string description = 3;
+}
+
+// RouterArgs configures a router node — uses an LLM to select and execute a workflow.
+// The router presents candidate workflows to an LLM, which picks the best match
+// for the given input, then executes the selected workflow as a sub-workflow.
+//
+// Output fields accessible via nodes.<id>.*:
+//   selected_workflow, selected_preset, prompt, reasoning, outputs
+message RouterArgs {
+  option (node_meta) = {
+    node_type: "router"
+    display_name: "Router"
+    description: "Route to a workflow based on LLM classification"
+    is_structural: true
+    category: "flow"
+    icon: "GitFork"
+  };
+
+  // Workflows lists candidate workflows the router can select from. Required.
+  repeated RouterWorkflowCandidate workflows = 1 [(reliant) = { description: "Candidate workflows to route to" required: true }];
+  reserved 2, 5;
+  reserved "prompt", "include_history";
+  // SystemPrompt overrides the default routing system prompt.
+  CelString system_prompt = 3 [(reliant) = { description: "Custom system prompt for the routing LLM" }];
+  // Model selects which LLM to use for the routing decision.
+  CelModelSelector model = 4 [(reliant) = { description: "Model for routing decision (defaults to fast model)" }];
+  // Thread configures how the selected child workflow relates to conversation threads.
+  ThreadConfig thread = 6 [(reliant) = { description: "Thread mode for the selected workflow: inherit, new, or fork" }];
+  // Fallback is the preset name to use if routing fails. Empty = error on failure.
+  string fallback = 7 [(reliant) = { description: "Fallback preset if routing decision fails" }];
+  // Project configures the working directory for the selected sub-workflow.
+  ProjectConfig project = 8 [(reliant) = { description: "Working directory override for selected workflow" visibility_contexts: "advanced" }];
+  // Outputs declares named outputs for the router node. Each entry maps an output name
+  // to a CEL expression evaluated against the router's execution context (selected_workflow,
+  // selected_preset, prompt, reasoning, outputs). This allows downstream nodes to access
+  // router results as top-level fields: nodes.<router_id>.<output_name>.
+  map<string, string> outputs = 9 [(reliant) = { description: "Declared output mappings (name → CEL expression)" visibility_contexts: "advanced" }];
+}
+
 // =============================================================================
 // EDGE TYPES
 // =============================================================================
@@ -800,6 +848,11 @@ message CallLLMOutput {
   ThinkingOutput thinking = 5;
   string upstream_request_id = 6;  // Provider request correlation ID (e.g. x-oai-request-id)
   string upstream_proxyman_id = 7; // Proxyman flow correlation ID (e.g. x-proxyman-id)
+  // Structured data from a response_tool call. When the node is configured with a
+  // response_tool and the LLM returns a tool call to it, CallLLM parses the tool
+  // call input JSON and stores it here. Consumers can read this directly instead
+  // of parsing response_text or digging through tool_calls.
+  google.protobuf.Struct response_data = 8;
 }
 
 // ExecuteToolsOutput is the output from execute_tools nodes.
@@ -879,6 +932,17 @@ message LoopOutput {
 // JoinOutput is the output from a join node.
 message JoinOutput {
   repeated google.protobuf.Struct sources = 1; // Output from each source branch (JSON: "_sources")
+}
+
+// RouterOutput is the output from a router node.
+// Child workflow outputs are accessed via the `outputs` sub-field,
+// e.g. nodes.router.outputs.message.
+message RouterOutput {
+  string selected_workflow = 1;      // The workflow ref that was selected
+  string selected_preset = 2;        // The preset that was selected
+  string prompt = 3;                 // The rewritten prompt for the selected workflow
+  string reasoning = 4;              // LLM's reasoning for the selection
+  google.protobuf.Struct outputs = 5; // Child workflow outputs (accessed via nodes.router.outputs.<field>)
 }
 
 // SkippedOutput is the output for nodes skipped due to conditions.

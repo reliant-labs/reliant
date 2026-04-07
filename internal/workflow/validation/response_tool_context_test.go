@@ -46,7 +46,7 @@ outputs:
 	require.NoError(t, err)
 
 	result := &Result{}
-	validateCEL(wf, result)
+	ValidateCELWithCompilation(wf, result, nil)
 
 	// Should have no errors for valid access
 	errors := result.Errors()
@@ -107,7 +107,7 @@ outputs:
 	require.NoError(t, err)
 
 	result := &Result{}
-	validateCEL(wf, result)
+	ValidateCELWithCompilation(wf, result, nil)
 	// Should have an error about wrong tool access
 	errors := result.Errors()
 	found := false
@@ -147,7 +147,7 @@ outputs:
 	require.NoError(t, err)
 
 	result := &Result{}
-	validateCEL(wf, result)
+	ValidateCELWithCompilation(wf, result, nil)
 
 	// Dynamic source - should be lenient (no errors about response tools)
 	for _, e := range result.Errors() {
@@ -178,7 +178,7 @@ outputs:
 	require.NoError(t, err)
 
 	result := &Result{}
-	validateCEL(wf, result)
+	ValidateCELWithCompilation(wf, result, nil)
 
 	// No response tool = lenient
 	for _, e := range result.Errors() {
@@ -214,7 +214,7 @@ outputs:
 	require.NoError(t, err)
 
 	result := &Result{}
-	validateCEL(wf, result)
+	ValidateCELWithCompilation(wf, result, nil)
 
 	// Dynamic tool name - should be lenient
 	for _, e := range result.Errors() {
@@ -259,7 +259,7 @@ outputs:
 	require.NoError(t, err)
 
 	result := &Result{}
-	validateCEL(wf, result)
+	ValidateCELWithCompilation(wf, result, nil)
 
 	assert.Empty(t, result.Errors(), "simple tool_calls pattern should resolve correctly")
 }
@@ -293,7 +293,7 @@ outputs:
 	require.NoError(t, err)
 
 	result := &Result{}
-	validateCEL(wf, result)
+	ValidateCELWithCompilation(wf, result, nil)
 
 	// Dynamic source should be lenient
 	for _, e := range result.Errors() {

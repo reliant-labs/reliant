@@ -36,6 +36,12 @@ export interface ToolApprovalUpdate {
   action_taken?: string;
 }
 
+// RouterDecisionInfo carries routing decision metadata from a router node.
+export interface RouterDecisionInfo {
+  workflow: string;
+  preset: string;
+}
+
 // ActiveThreadUpdate represents an active thread update from the backend
 export interface ActiveThreadUpdate {
   update_type: "thread";
@@ -54,6 +60,7 @@ export interface ActiveThreadUpdate {
   spawned_by_tool_call_id?: string;
   spawned_by_node_id?: string;
   thread_title?: string;
+  router_decision?: RouterDecisionInfo;
   created_at: string;
   completed_at?: string;
 }

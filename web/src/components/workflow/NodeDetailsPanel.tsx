@@ -40,6 +40,17 @@ import type {
   StepExecution,
   WorkflowExecution,
 } from "../Chat/ExecutionSidebar/types";
+
+interface RouterWorkflowCandidate {
+  ref?: string;
+  presets?: string[];
+  description?: string;
+}
+
+interface RouterArgsShape {
+  workflows?: RouterWorkflowCandidate[];
+  fallback?: string;
+}
 import type { LoopIterationInfo } from "./hooks/useExecutionStatus";
 import { getNodeDisplayName } from "../../lib/node-metadata";
 import { unwrapProtoInputs } from "../../lib/protoValueUtils";
@@ -171,6 +182,20 @@ function getConditionExpression(condition: Step["condition"]): string {
   return condition?.expr ?? "";
 }
 
+function getRouterArgs(step?: Step): RouterArgsShape | undefined {
+  if (step?.args?.case === "router") {
+    return step.args.value as RouterArgsShape;
+  }
+  if (step?.type === "router" && step.args?.value) {
+    return step.args.value as RouterArgsShape;
+  }
+  return undefined;
+}
+
+function displayWorkflowRef(ref: string): string {
+  return ref.replace(/^(builtin|project|workflow):\/\//, "");
+}
+
 /** Get the main value (workflow ref, command, etc.) from proto Step */
 function getStepValue(step?: Step): string | null {
   if (!step) return null;
@@ -198,6 +223,13 @@ function getStepValue(step?: Step): string | null {
   if (step.type === "join") {
     const joinCondition = getConditionExpression(step.condition);
     if (joinCondition) return joinCondition;
+  }
+  if (step.type === "router") {
+    const routerArgs = getRouterArgs(step);
+    const firstCandidate = routerArgs?.workflows?.[0]?.ref;
+    if (firstCandidate) return displayWorkflowRef(firstCandidate);
+    if (routerArgs?.fallback) return `fallback: ${routerArgs.fallback}`;
+    return "router";
   }
   return null;
 }
@@ -236,6 +268,7 @@ export const NodeDetailsPanel = memo(function NodeDetailsPanel({
   const loopOnFailure = step?.type === "loop" ? getStepOnFailure(step) : "";
   const loopThread = step?.type === "loop" ? getStepThread(step) : undefined;
   const isParallelLoop = loopParallel === true || typeof loopParallel === "string";
+  const routerArgs = getRouterArgs(step);
 
   // For loop nodes, track selected iteration
   const isLoopNode = nodeType === "Loop";
@@ -367,11 +400,55 @@ export const NodeDetailsPanel = memo(function NodeDetailsPanel({
             </div>
           )}
 
-          {!stepValue && !(step && Object.keys(getActionArgsRecord(step) || {}).length > 0) && (
-            <p className="text-xs text-muted-foreground italic">
-              No configuration
-            </p>
+          {step?.type === "router" && (
+            <div className="mt-2 space-y-2">
+              <div>
+                <span className="text-xs text-muted-foreground">Candidates:</span>
+                {routerArgs?.workflows?.length ? (
+                  <ul className="mt-1 space-y-1">
+                    {routerArgs.workflows.map((candidate, index) => (
+                      <li
+                        key={`${candidate.ref || "candidate"}-${index}`}
+                        className="rounded border border-border bg-muted/30 px-2 py-1.5 text-xs"
+                      >
+                        <div className="font-medium text-foreground break-all">
+                          {displayWorkflowRef(candidate.ref || `candidate ${index + 1}`)}
+                        </div>
+                        {candidate.presets && candidate.presets.length > 0 && (
+                          <div className="mt-0.5 text-muted-foreground">
+                            Presets: {candidate.presets.join(", ")}
+                          </div>
+                        )}
+                        {candidate.description && (
+                          <div className="mt-0.5 text-muted-foreground">
+                            {candidate.description}
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-1 text-xs text-muted-foreground italic">
+                    No candidate workflows configured
+                  </p>
+                )}
+              </div>
+              {routerArgs?.fallback && (
+                <div className="text-xs">
+                  <span className="text-muted-foreground">Fallback:</span>{" "}
+                  <span className="text-foreground break-all">{routerArgs.fallback}</span>
+                </div>
+              )}
+            </div>
           )}
+
+          {!stepValue &&
+            step?.type !== "router" &&
+            !(step && Object.keys(getActionArgsRecord(step) || {}).length > 0) && (
+              <p className="text-xs text-muted-foreground italic">
+                No configuration
+              </p>
+            )}
         </Section>
 
         {/* Execution Section */}

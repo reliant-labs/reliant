@@ -241,10 +241,10 @@ func TestStaticAnalysisWithOptions_InlineInputInheritanceContract(t *testing.T) 
 		Inputs: map[string]*reliantv1.Input{
 			"model": stringInput(nil),
 		},
-		Entry: []string{"run-inline"},
+		Entry: []string{"run_inline"},
 		Nodes: []*reliantv1.Node{
 			{
-				Id:   "run-inline",
+				Id:   "run_inline",
 				Type: "workflow",
 				Args: &reliantv1.Node_Workflow{Workflow: &reliantv1.SubWorkflowArgs{
 					Inline: &reliantv1.Workflow{
@@ -394,10 +394,10 @@ func TestStaticAnalysisWithOptions_PresetValidation(t *testing.T) {
 	// Create a parent workflow that references a child workflow
 	parentWf := &reliantv1.Workflow{
 		Name:  "parent",
-		Entry: []string{"call-child"},
+		Entry: []string{"call_child"},
 		Nodes: []*reliantv1.Node{
 			{
-				Id:   "call-child",
+				Id:   "call_child",
 				Type: "workflow",
 				Args: &reliantv1.Node_Workflow{Workflow: &reliantv1.SubWorkflowArgs{
 					Ref:     &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "child"}},

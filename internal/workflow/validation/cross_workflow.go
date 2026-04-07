@@ -3,7 +3,6 @@ package validation
 
 import (
 	"fmt"
-	"reflect"
 	"sort"
 	"strings"
 
@@ -166,9 +165,9 @@ func validateProtoInputsAgainstSchema(
 	}
 
 	// Build type context from parent workflow for CEL type validation
-	var typeCtx *typeContext
+	var typeCtx *WorkflowTypeContext
 	if parentWf != nil {
-		typeCtx = buildTypeContext(parentWf)
+		typeCtx = BuildWorkflowTypeContext(parentWf, nil)
 	}
 
 	// Build merged inputs: preset params (base) + provided args (override)
@@ -392,15 +391,10 @@ func protoInputToCELType(input *reliantv1.Input) *cel.Type {
 }
 
 // validateProtoCELExpressionType validates that a CEL expression returns a type compatible with the expected proto input.
-func validateProtoCELExpressionType(expr string, expectedInput *reliantv1.Input, typeCtx *typeContext, argPath []string, result *Result) {
+func validateProtoCELExpressionType(expr string, expectedInput *reliantv1.Input, typeCtx *WorkflowTypeContext, argPath []string, result *Result) {
 	expectedType := protoInputToCELType(expectedInput)
 	if expectedType == nil {
 		return
-	}
-
-	var wtCtx *WorkflowTypeContext
-	if typeCtx != nil {
-		wtCtx = typeContextToWorkflowTypeContext(typeCtx)
 	}
 
 	namespaces := []wfcel.CELNamespace{
@@ -410,7 +404,7 @@ func validateProtoCELExpressionType(expr string, expectedInput *reliantv1.Input,
 		wfcel.CELIter,
 	}
 
-	env, err := newValidationCELEnv(namespaces, wtCtx)
+	env, err := newValidationCELEnv(namespaces, typeCtx)
 	if err != nil {
 		return
 	}
@@ -456,68 +450,6 @@ func isProtoTypeCompatible(actualType, expectedType *cel.Type, input *reliantv1.
 	}
 
 	return false
-}
-
-// typeContextToWorkflowTypeContext converts a validation typeContext to a WorkflowTypeContext for CEL.
-func typeContextToWorkflowTypeContext(tc *typeContext) *WorkflowTypeContext {
-	if tc == nil {
-		return nil
-	}
-
-	celCtx := &WorkflowTypeContext{
-		InputFields:  make(map[string]*FieldInfo),
-		InputGroups:  make(map[string]map[string]*FieldInfo),
-		NodeOutputs:  make(map[string]map[string]*FieldInfo),
-		OutputFields: make(map[string]*FieldInfo),
-		NodeTypes:    make(map[string]string),
-		Registry:     sharedRegistry,
-	}
-
-	// Convert inputs
-	for inputName, inputType := range tc.inputTypes {
-		celCtx.InputFields[inputName] = &FieldInfo{
-			Name: inputName,
-			Kind: celTypeNameToReflectKind(inputType),
-		}
-	}
-
-	// Convert input groups
-	for groupName, fieldNames := range tc.inputGroups {
-		groupFields := make(map[string]*FieldInfo)
-		for _, fieldName := range fieldNames {
-			groupFields[fieldName] = &FieldInfo{
-				Name: fieldName,
-			}
-		}
-		celCtx.InputGroups[groupName] = groupFields
-	}
-
-	// Convert nodes
-	for nodeID, nodeType := range tc.nodes {
-		celCtx.NodeTypes[nodeID] = string(nodeType)
-	}
-
-	return celCtx
-}
-
-// celTypeNameToReflectKind converts a CEL type name string to reflect.Kind.
-func celTypeNameToReflectKind(celType string) reflect.Kind {
-	switch celType {
-	case "string":
-		return reflect.String
-	case "int":
-		return reflect.Int64
-	case "float", "double":
-		return reflect.Float64
-	case "bool":
-		return reflect.Bool
-	case "array", "list":
-		return reflect.Slice
-	case "object", "map":
-		return reflect.Map
-	default:
-		return reflect.Invalid
-	}
 }
 
 // extractCELExpression extracts a CEL expression from a template string.

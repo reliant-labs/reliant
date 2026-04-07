@@ -15,6 +15,7 @@ const (
 	NodeTypeWorkflow       = "workflow"
 	NodeTypeLoop           = "loop"
 	NodeTypeJoin           = "join"
+	NodeTypeRouter         = "router"
 )
 
 // Thread mode constants.

@@ -36,6 +36,8 @@ export const NODE_DIMENSIONS: Record<string, NodeDims> = {
   loop: { width: 280, height: 160, minHeight: 130 },
   // Switch nodes have a header (44px) + cases (40px each)
   switch: { width: 200, height: 170, minHeight: 100 },
+  // Router nodes have a header + candidate sub-boxes
+  router: { width: 260, height: 160, minHeight: 120 },
   // Event node (workflow start)
   event: { width: 150, height: 60, minHeight: 60 },
 }

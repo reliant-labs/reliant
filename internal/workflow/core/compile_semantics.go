@@ -231,6 +231,21 @@ func subWorkflowFromNode(node *reliantv1.Node) (subWorkflowArgs, InvocationMode,
 		}, InvocationModeRef, true
 	}
 
+	// Router nodes have dynamic workflow selection at runtime.
+	// Use a placeholder ref — the actual workflow is chosen by the LLM at execution time.
+	if node.GetRouter() != nil {
+		args := node.GetRouter()
+		// Use the first candidate workflow ref as the placeholder identity.
+		// The real ref is determined at runtime by the routing LLM.
+		placeholderRef := "router"
+		if candidates := args.GetWorkflows(); len(candidates) > 0 {
+			placeholderRef = candidates[0].GetRef()
+		}
+		return subWorkflowArgs{
+			Ref: placeholderRef,
+		}, InvocationModeRef, true
+	}
+
 	return subWorkflowArgs{}, "", false
 }
 

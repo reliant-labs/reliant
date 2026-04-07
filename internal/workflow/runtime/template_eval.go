@@ -292,6 +292,11 @@ func EvaluateNodeConfig(
 		builder = builder.WithOutputs(loopOutputs)
 	}
 
+	// Apply model defaults for node types that have a model field.
+	// The router node uses its model for the routing LLM call; if omitted,
+	// fall back to inputs.model — the same convention every call_llm node uses.
+	node = applyModelDefault(node)
+
 	// ResolveCELFields walks the proto node message, evaluates all CelX wrapper fields,
 	// and returns a deep copy with resolved concrete values.
 	resolvedMsg, err := wfcel.ResolveCELFields(node, builder)
@@ -314,6 +319,29 @@ func EvaluateNodeConfig(
 	resolveResponseToolSchema(resolvedNode, builder)
 
 	return resolvedNode, nil
+}
+
+// defaultModelExpr is the CEL expression used when a node's model field is not set.
+// This matches the convention used by all call_llm nodes: model: "{{inputs.model}}".
+var defaultModelExpr = &reliantv1.CelModelSelector{
+	Value: &reliantv1.CelModelSelector_Expr{Expr: "{{inputs.model}}"},
+}
+
+// applyModelDefault returns a node with model defaults applied for node types
+// that have a model field. If the model is already set, the original node is
+// returned unmodified. Otherwise the default expression is set on the node so
+// that ResolveCELFields can evaluate it normally.
+// NOTE: This mutates the input node's args. This is safe because
+// ResolveCELFields deep-copies the node before resolution, and setting an
+// idempotent default expression is harmless on repeated calls.
+func applyModelDefault(node *reliantv1.Node) *reliantv1.Node {
+	switch node.GetType() {
+	case model.NodeTypeRouter:
+		if args := node.GetRouter(); args != nil && !model.CelModelSelectorIsSet(args.GetModel()) {
+			args.Model = defaultModelExpr
+		}
+	}
+	return node
 }
 
 // resolveResponseToolSchema unwraps the "__cel_expr__" sentinel from ResponseTool.Schema.

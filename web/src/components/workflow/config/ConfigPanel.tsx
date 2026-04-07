@@ -8,6 +8,7 @@ import type {
   WorkflowStep,
   JoinStep,
   LoopStep,
+  RouterStep,
 } from "../../../types/workflow";
 import {
   isRunStep,
@@ -15,6 +16,7 @@ import {
   isWorkflowStep,
   isJoinStep,
   isLoopStep,
+  isRouterStep,
   getStepCommand,
   getStepProject,
   getStepRef,
@@ -33,12 +35,13 @@ import { ActionStepConfig } from "./ActionStepConfig";
 import { WorkflowStepConfig } from "./WorkflowStepConfig";
 import { JoinStepConfig } from "./JoinStepConfig";
 import { LoopStepConfig } from "./LoopStepConfig";
+import { RouterStepConfig } from "./RouterStepConfig";
 import { NodeOutputsPanel } from "./NodeOutputsPanel";
 import { ConfigPanelTabBar, type ConfigTab } from "./ConfigPanelTabBar";
 
 import { getCatalogClient } from "../../../api/grpc-client";
 import type { NodeInfo } from "../../../gen/reliant/v1/catalog_pb";
-import { withWorkflowArgs, withLoopArgs } from "../../../types/workflow";
+import { withWorkflowArgs, withLoopArgs, withRouterArgs } from "../../../types/workflow";
 import "./config-panel.css";
 
 interface ConfigPanelProps {
@@ -66,19 +69,19 @@ interface ConfigPanelProps {
   isReadOnly?: boolean;
 }
 
-// Validate node ID format - allows alphanumeric, hyphens, and underscores
+// Validate node ID format - CEL-safe identifiers only.
 function isValidNodeId(id: string): boolean {
-  return /^[a-zA-Z][a-zA-Z0-9_-]*$/.test(id);
+  return /^[a-zA-Z][a-zA-Z0-9_]*$/.test(id);
 }
 
 /** Whether this step type supports thread configuration */
 function hasThreadSupport(step: Step): boolean {
-  return isWorkflowStep(step) || isLoopStep(step);
+  return isWorkflowStep(step) || isLoopStep(step) || isRouterStep(step);
 }
 
 /** Whether this step type supports project configuration */
 function hasProjectSupport(step: Step): boolean {
-  return isWorkflowStep(step) || isLoopStep(step);
+  return isWorkflowStep(step) || isLoopStep(step) || isRouterStep(step);
 }
 
 export function ConfigPanel({
@@ -145,7 +148,7 @@ export function ConfigPanel({
     }
     if (!isValidNodeId(trimmedId)) {
       setIdError(
-        "ID must start with a letter and contain only letters, numbers, hyphens, or underscores",
+        "ID must start with a letter and contain only letters, numbers, or underscores",
       );
       return;
     }
@@ -321,10 +324,13 @@ export function ConfigPanel({
     if (isLoopStep(step)) {
       return "Loop";
     }
+    if (isRouterStep(step)) {
+      return "Router";
+    }
     return "Step";
   };
 
-  // Helper to update project on workflow/loop steps
+  // Helper to update project on workflow/loop/router steps
   const updateProject = useCallback(
     (p: { path?: string } | undefined) => {
       if (isWorkflowStep(step)) {
@@ -338,6 +344,12 @@ export function ConfigPanel({
           withLoopArgs(step as LoopStep, {
             project: p ? { path: celString(p.path ?? "") } as any : undefined,
           }) as Step,
+        );
+      } else if (isRouterStep(step)) {
+        onUpdate(
+          withRouterArgs(step, {
+            project: p ? { path: celString(p.path ?? "") } : undefined,
+          }),
         );
       }
     },
@@ -448,6 +460,13 @@ export function ConfigPanel({
               isReadOnly={isReadOnly}
             />
           )}
+          {isRouterStep(step) && (
+            <RouterStepConfig
+              step={step as RouterStep}
+              onUpdate={onUpdate}
+              isReadOnly={isReadOnly}
+            />
+          )}
         </>
       )}
 
@@ -461,11 +480,13 @@ export function ConfigPanel({
           <NodeThreadConfigEditor
             config={stepThread}
             onChange={(thread) => {
-              onUpdate(
-                (isLoopStep(step)
-                  ? withLoopArgs(step, { thread: thread as any })
-                  : withWorkflowArgs(step, { thread: thread as any })) as Step,
-              );
+              if (isRouterStep(step)) {
+                onUpdate(withRouterArgs(step, { thread: thread as any }));
+              } else if (isLoopStep(step)) {
+                onUpdate(withLoopArgs(step, { thread: thread as any }));
+              } else {
+                onUpdate(withWorkflowArgs(step, { thread: thread as any }));
+              }
             }}
             isInLoop={isInLoop || isLoopStep(step)}
             isReadOnly={isReadOnly}
@@ -485,11 +506,13 @@ export function ConfigPanel({
           <NodeThreadConfigEditor
             config={stepThread}
             onChange={(thread) => {
-              onUpdate(
-                (isLoopStep(step)
-                  ? withLoopArgs(step, { thread: thread as any })
-                  : withWorkflowArgs(step, { thread: thread as any })) as Step,
-              );
+              if (isRouterStep(step)) {
+                onUpdate(withRouterArgs(step, { thread: thread as any }));
+              } else if (isLoopStep(step)) {
+                onUpdate(withLoopArgs(step, { thread: thread as any }));
+              } else {
+                onUpdate(withWorkflowArgs(step, { thread: thread as any }));
+              }
             }}
             isInLoop={isInLoop || isLoopStep(step)}
             isReadOnly={isReadOnly}
@@ -504,7 +527,7 @@ export function ConfigPanel({
         <NodeOutputsPanel
           step={step}
           catalogOutputFields={
-            (isActionStep(step) || isRunStep(step))
+            (isActionStep(step) || isRunStep(step) || isRouterStep(step))
               ? catalogNodes.find((n) => n.id === step.type)?.outputFields
               : undefined
           }

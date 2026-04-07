@@ -117,6 +117,14 @@ func GetJoinArgs(n *reliantv1.Node) *reliantv1.JoinArgs {
 	return n.GetJoin()
 }
 
+// GetRouterArgs returns the RouterArgs if this is a router node, nil otherwise.
+func GetRouterArgs(n *reliantv1.Node) *reliantv1.RouterArgs {
+	if n == nil {
+		return nil
+	}
+	return n.GetRouter()
+}
+
 // FindNode finds a node by ID in a workflow. Returns nil if not found.
 func FindNode(wf *reliantv1.Workflow, id string) *reliantv1.Node {
 	if wf == nil {

@@ -105,6 +105,9 @@ export async function initSentry() {
         maskAllInputs: true,
         blockAllMedia: false,
       }),
+      ...(import.meta.env.VITE_SENTRY_REPLAY_CANVAS === "true"
+        ? [Sentry.replayCanvasIntegration()]
+        : []),
     ],
     tracesSampleRate: parseFloat(import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE) || (isPrerelease ? 1.0 : 0.1),
     replaysSessionSampleRate: replaySessionRate,
