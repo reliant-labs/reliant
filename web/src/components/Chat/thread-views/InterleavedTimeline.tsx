@@ -744,11 +744,25 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     };
   }, []);
 
+  // Track whether initial scroll has settled. On mount, atBottomRef starts
+  // true and followOutput would return "smooth" — causing Virtuoso to slowly
+  // smooth-scroll through the entire conversation. Use "auto" (instant) until
+  // the first atBottom callback confirms we've settled at the bottom.
+  const initialScrollDoneRef = useRef(false);
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      initialScrollDoneRef.current = true;
+    });
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
   // Only auto-scroll when user is at the bottom.
   // Use atBottomRef instead of Virtuoso's isAtBottom argument because
   // Virtuoso can transiently report isAtBottom=true during footer re-layouts.
   const handleFollowOutput = useCallback(() => {
-    if (atBottomRef.current) return "smooth";
+    if (atBottomRef.current) {
+      return initialScrollDoneRef.current ? "smooth" : "auto";
+    }
     return false;
   }, []);
 
