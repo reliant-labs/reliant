@@ -40,10 +40,6 @@ export function deriveWorkflowEntryFromEdges(
   return Array.isArray(explicitEntry) ? explicitEntry : [explicitEntry];
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 function rewriteOrDropOutputExpression(
   expression: string,
   validNodeIds: Set<string>,

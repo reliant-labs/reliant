@@ -185,13 +185,13 @@ func (f *findAndReplaceTool) Execute(rctx *rctx.ToolContext, params FindAndRepla
 	// Build response message
 	var responseText strings.Builder
 	if params.Preview {
-		responseText.WriteString(fmt.Sprintf("Preview: %d match(es) across %d file(s) would be replaced (no changes applied)\n\n", totalMatches, len(filesChanged)))
+		fmt.Fprintf(&responseText, "Preview: %d match(es) across %d file(s) would be replaced (no changes applied)\n\n", totalMatches, len(filesChanged))
 	} else {
-		responseText.WriteString(fmt.Sprintf("Successfully replaced %d occurrence(s) across %d file(s)\n\n", totalMatches, len(filesChanged)))
+		fmt.Fprintf(&responseText, "Successfully replaced %d occurrence(s) across %d file(s)\n\n", totalMatches, len(filesChanged))
 	}
 
 	for _, file := range filesChanged {
-		responseText.WriteString(fmt.Sprintf("• %s: %d replacement(s)\n", file, matchesByFile[file]))
+		fmt.Fprintf(&responseText, "• %s: %d replacement(s)\n", file, matchesByFile[file])
 	}
 
 	finalResponse := fmt.Sprintf("<result>\n%s\n</result>\n", responseText.String())

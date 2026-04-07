@@ -142,19 +142,19 @@ For usage information and examples, see the [Presets Guide](/docs/workflows/pres
 		}
 		desc = strings.ReplaceAll(desc, "|", "\\|")
 
-		sb.WriteString(fmt.Sprintf("| `%s` | %s | %s | %s |\n",
+		fmt.Fprintf(&sb, "| `%s` | %s | %s | %s |\n",
 			p.Name,
 			formatModel(p.Params.Model),
 			toolsStr,
 			desc,
-		))
+		)
 	}
 
 	sb.WriteString("\n## Preset Details\n\n")
 
 	// Generate detailed sections for each preset
 	for _, p := range presets {
-		sb.WriteString(fmt.Sprintf("### %s\n\n", p.Name))
+		fmt.Fprintf(&sb, "### %s\n\n", p.Name)
 
 		if p.Description != "" {
 			sb.WriteString(p.Description + "\n\n")
@@ -163,15 +163,15 @@ For usage information and examples, see the [Presets Guide](/docs/workflows/pres
 		// Parameters table
 		sb.WriteString("| Parameter | Value |\n")
 		sb.WriteString("|-----------|-------|\n")
-		sb.WriteString(fmt.Sprintf("| **Model** | %s |\n", formatModel(p.Params.Model)))
-		sb.WriteString(fmt.Sprintf("| **Tag** | `%s` |\n", p.Tag))
+		fmt.Fprintf(&sb, "| **Model** | %s |\n", formatModel(p.Params.Model))
+		fmt.Fprintf(&sb, "| **Tag** | `%s` |\n", p.Tag)
 
 		if len(p.Params.Tools) > 0 {
-			sb.WriteString(fmt.Sprintf("| **Tools** | %s |\n", formatToolsForDetail(p.Params.Tools)))
+			fmt.Fprintf(&sb, "| **Tools** | %s |\n", formatToolsForDetail(p.Params.Tools))
 		}
 
 		if len(p.Params.SpawnPresets) > 0 {
-			sb.WriteString(fmt.Sprintf("| **Spawn Presets** | %s |\n", formatSpawnPresets(p.Params.SpawnPresets)))
+			fmt.Fprintf(&sb, "| **Spawn Presets** | %s |\n", formatSpawnPresets(p.Params.SpawnPresets))
 		}
 
 		sb.WriteString("\n---\n\n")

@@ -191,7 +191,7 @@ func (t *listWorkflowsTool) Execute(ctx *rctx.ToolContext, args ListWorkflowsPar
 		if !wf.isValid {
 			valid = "✗"
 		}
-		sb.WriteString(fmt.Sprintf("| `%s` | %s | %s | %s |\n", wf.name, wf.source, valid, desc))
+		fmt.Fprintf(&sb, "| `%s` | %s | %s | %s |\n", wf.name, wf.source, valid, desc)
 	}
 
 	sb.WriteString("\nUse `get_workflow(name=\"...\")` to view the full workflow YAML.\n")
@@ -266,8 +266,8 @@ func (t *getWorkflowTool) Execute(ctx *rctx.ToolContext, args GetWorkflowParams)
 func formatWorkflowDraftResponse(draft *db.WorkflowDraft) (ToolResponse, error) {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("# Workflow: %s\n\n", draft.Name))
-	sb.WriteString(fmt.Sprintf("**ID:** `%s`\n", draft.ID))
+	fmt.Fprintf(&sb, "# Workflow: %s\n\n", draft.Name)
+	fmt.Fprintf(&sb, "**ID:** `%s`\n", draft.ID)
 	if draft.IsValid {
 		sb.WriteString("**Status:** valid\n")
 	} else {
@@ -277,13 +277,13 @@ func formatWorkflowDraftResponse(draft *db.WorkflowDraft) (ToolResponse, error) 
 		sb.WriteString("**Visibility:** hidden\n")
 	}
 	if draft.Description != nil && *draft.Description != "" {
-		sb.WriteString(fmt.Sprintf("**Description:** %s\n", *draft.Description))
+		fmt.Fprintf(&sb, "**Description:** %s\n", *draft.Description)
 	}
 
 	// Validate the workflow
 	_, validationErr := v2.ParseWorkflowProtoBytes([]byte(draft.Definition))
 	if validationErr != nil {
-		sb.WriteString(fmt.Sprintf("\n**⚠ Validation Errors:**\n```\n%s\n```\n", validationErr.Error()))
+		fmt.Fprintf(&sb, "\n**⚠ Validation Errors:**\n```\n%s\n```\n", validationErr.Error())
 	} else {
 		sb.WriteString("**Validation:** ✓ Valid\n")
 	}
@@ -295,7 +295,7 @@ func formatWorkflowDraftResponse(draft *db.WorkflowDraft) (ToolResponse, error) 
 	}
 	sb.WriteString("```\n\n")
 	sb.WriteString("---\n")
-	sb.WriteString(fmt.Sprintf("**Updated at:** `%s`\n", draft.UpdatedAt.Format(time.RFC3339)))
+	fmt.Fprintf(&sb, "**Updated at:** `%s`\n", draft.UpdatedAt.Format(time.RFC3339))
 	sb.WriteString("\nUse `edit_workflow` for small changes or `write_workflow` to replace entirely.\n")
 
 	return NewTextResponse(sb.String()), nil

@@ -185,9 +185,9 @@ func (t *layoutLibraryTool) listLayouts() (ToolResponse, error) {
 	var sb strings.Builder
 	sb.WriteString("Available Layouts:\n\n")
 	for _, layout := range layouts {
-		sb.WriteString(fmt.Sprintf("• %s\n", layout.Name))
-		sb.WriteString(fmt.Sprintf("  Description: %s\n", layout.Description))
-		sb.WriteString(fmt.Sprintf("  Use Case: %s\n\n", layout.UseCase))
+		fmt.Fprintf(&sb, "• %s\n", layout.Name)
+		fmt.Fprintf(&sb, "  Description: %s\n", layout.Description)
+		fmt.Fprintf(&sb, "  Use Case: %s\n\n", layout.UseCase)
 	}
 
 	response := NewTextResponse(sb.String())

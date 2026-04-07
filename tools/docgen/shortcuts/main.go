@@ -190,7 +190,7 @@ function createCmdCtrlBinding(key: string, options: { shift?: boolean } = {}): K
 `)
 
 	for _, cat := range config.Categories {
-		sb.WriteString(fmt.Sprintf(" *   - %s\n", cat))
+		fmt.Fprintf(&sb, " *   - %s\n", cat)
 	}
 
 	sb.WriteString(` */
@@ -241,14 +241,14 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
 			bindingCode = fmt.Sprintf("{ %s }", strings.Join(parts, ", "))
 		}
 
-		sb.WriteString(fmt.Sprintf(`  %s: {
+		fmt.Fprintf(&sb, `  %s: {
     id: '%s',
     name: '%s',
     description: '%s',
     category: '%s',
     defaultBinding: %s,
     handler: '%s'
-  }`, s.ID, s.ID, escapeJS(s.Name), escapeJS(s.Description), s.Category, bindingCode, s.Handler))
+  }`, s.ID, s.ID, escapeJS(s.Name), escapeJS(s.Description), s.Category, bindingCode, s.Handler)
 
 		if i < len(config.Shortcuts)-1 {
 			sb.WriteString(",")
@@ -302,7 +302,7 @@ Reliant includes keyboard shortcuts for common actions. All shortcuts can be cus
 			continue
 		}
 
-		sb.WriteString(fmt.Sprintf("## %s\n\n", cat))
+		fmt.Fprintf(&sb, "## %s\n\n", cat)
 		sb.WriteString("| Shortcut | Action |\n")
 		sb.WriteString("|----------|--------|\n")
 
@@ -313,7 +313,7 @@ Reliant includes keyboard shortcuts for common actions. All shortcuts can be cus
 
 		for _, s := range shortcuts {
 			displayBinding := formatBindingForDocs(s.Binding)
-			sb.WriteString(fmt.Sprintf("| `%s` | %s |\n", displayBinding, s.Name))
+			fmt.Fprintf(&sb, "| `%s` | %s |\n", displayBinding, s.Name)
 		}
 		sb.WriteString("\n")
 	}

@@ -148,23 +148,23 @@ Models are tagged to help with selection. You can also [bring your own model](/d
 			continue
 		}
 
-		sb.WriteString(fmt.Sprintf("## %s\n\n", p.title))
+		fmt.Fprintf(&sb, "## %s\n\n", p.title)
 		sb.WriteString("| Model ID | Name | Tags | Context | Capabilities | Providers |\n")
 		sb.WriteString("|----------|------|------|---------|--------------|----------|\n")
 
 		for _, def := range modelList {
-			sb.WriteString(fmt.Sprintf("| `%s` | %s | %s | %s | %s | %s |\n",
+			fmt.Fprintf(&sb, "| `%s` | %s | %s | %s | %s | %s |\n",
 				def.ID,
 				def.Name,
 				formatTags(def.Tags),
 				formatContextWindow(def.Capabilities.MaxContextWindow),
 				formatCapabilities(def.Capabilities),
 				formatProviders(def.Providers),
-			))
+			)
 		}
 
 		if p.desc != "" {
-			sb.WriteString(fmt.Sprintf("\n**Note:** %s\n", p.desc))
+			fmt.Fprintf(&sb, "\n**Note:** %s\n", p.desc)
 		}
 		sb.WriteString("\n---\n\n")
 	}
@@ -341,18 +341,18 @@ Find models by capability. Use these tables to answer "what are my options for X
 			continue
 		}
 
-		sb.WriteString(fmt.Sprintf("### %s\n\n", ti.name))
-		sb.WriteString(fmt.Sprintf("_%s_\n\n", ti.desc))
+		fmt.Fprintf(&sb, "### %s\n\n", ti.name)
+		fmt.Fprintf(&sb, "_%s_\n\n", ti.desc)
 		sb.WriteString("| Model | Provider | Context | Capabilities |\n")
 		sb.WriteString("|-------|----------|---------|-------------|\n")
 
 		for _, def := range tagged {
-			sb.WriteString(fmt.Sprintf("| `%s` | %s | %s | %s |\n",
+			fmt.Fprintf(&sb, "| `%s` | %s | %s | %s |\n",
 				def.ID,
 				getProviderName(def.ID),
 				formatContextWindow(def.Capabilities.MaxContextWindow),
 				formatCapabilities(def.Capabilities),
-			))
+			)
 		}
 		sb.WriteString("\n")
 	}

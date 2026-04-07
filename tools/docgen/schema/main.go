@@ -243,7 +243,7 @@ Regenerate: make generate-schema
 `)
 
 	for _, t := range types {
-		sb.WriteString(fmt.Sprintf("## %s\n\n", t.Name))
+		fmt.Fprintf(&sb, "## %s\n\n", t.Name)
 
 		if t.Description != "" {
 			sb.WriteString(t.Description + "\n\n")
@@ -272,8 +272,8 @@ Regenerate: make generate-schema
 				}
 				desc = strings.ReplaceAll(desc, "|", "\\|")
 
-				sb.WriteString(fmt.Sprintf("| `%s` | %s | %s | %s |\n",
-					f.JSONName, f.Type, required, desc))
+				fmt.Fprintf(&sb, "| `%s` | %s | %s | %s |\n",
+					f.JSONName, f.Type, required, desc)
 			}
 			sb.WriteString("\n")
 		}

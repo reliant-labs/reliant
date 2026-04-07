@@ -62,29 +62,29 @@ func (e *Error) Error() string {
 	var sb strings.Builder
 
 	// Category prefix
-	sb.WriteString(fmt.Sprintf("[%s]", e.Category))
+	fmt.Fprintf(&sb, "[%s]", e.Category)
 
 	// Source
 	if e.Source != "" {
-		sb.WriteString(fmt.Sprintf(" %s", e.Source))
+		fmt.Fprintf(&sb, " %s", e.Source)
 	}
 
 	// Path (for nested locations)
 	if len(e.Path) > 0 {
-		sb.WriteString(fmt.Sprintf(" -> %s", strings.Join(e.Path, " -> ")))
+		fmt.Fprintf(&sb, " -> %s", strings.Join(e.Path, " -> "))
 	}
 
 	// Field
 	if e.Field != "" {
-		sb.WriteString(fmt.Sprintf(" [%s]", e.Field))
+		fmt.Fprintf(&sb, " [%s]", e.Field)
 	}
 
 	// Message
-	sb.WriteString(fmt.Sprintf(": %s", e.Message))
+	fmt.Fprintf(&sb, ": %s", e.Message)
 
 	// Suggestion
 	if e.Suggestion != "" {
-		sb.WriteString(fmt.Sprintf(" (%s)", e.Suggestion))
+		fmt.Fprintf(&sb, " (%s)", e.Suggestion)
 	}
 
 	return sb.String()

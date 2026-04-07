@@ -31,14 +31,14 @@ type OutputLimitError struct {
 
 func (e *OutputLimitError) Error() string {
 	var msg strings.Builder
-	msg.WriteString(fmt.Sprintf("Output from %s tool exceeds maximum size limit\n", e.ToolName))
-	msg.WriteString(fmt.Sprintf("Output size: %d bytes (%.1f KB)\n", e.OutputSize, float64(e.OutputSize)/1024))
-	msg.WriteString(fmt.Sprintf("Maximum allowed: %d bytes (%.1f KB)\n", e.MaxSize, float64(e.MaxSize)/1024))
+	fmt.Fprintf(&msg, "Output from %s tool exceeds maximum size limit\n", e.ToolName)
+	fmt.Fprintf(&msg, "Output size: %d bytes (%.1f KB)\n", e.OutputSize, float64(e.OutputSize)/1024)
+	fmt.Fprintf(&msg, "Maximum allowed: %d bytes (%.1f KB)\n", e.MaxSize, float64(e.MaxSize)/1024)
 
 	if len(e.Suggestions) > 0 {
 		msg.WriteString("\nSuggestions to reduce output:\n")
 		for _, suggestion := range e.Suggestions {
-			msg.WriteString(fmt.Sprintf("  • %s\n", suggestion))
+			fmt.Fprintf(&msg, "  • %s\n", suggestion)
 		}
 	}
 

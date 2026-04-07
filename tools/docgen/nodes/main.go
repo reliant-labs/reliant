@@ -210,7 +210,7 @@ func init() {
 	for _, key := range keys {
 		desc := descriptions[key]
 		desc = strings.ReplaceAll(desc, `"`, `\"`)
-		sb.WriteString(fmt.Sprintf("\tFieldDescriptions[%q] = %q\n", key, desc))
+		fmt.Fprintf(&sb, "\tFieldDescriptions[%q] = %q\n", key, desc)
 	}
 
 	sb.WriteString(`}
@@ -343,8 +343,8 @@ These fields are available on **all** node types. They provide shared functional
 			requiredStr = "Yes"
 		}
 		desc := escapeMarkdownTable(f.Description)
-		sb.WriteString(fmt.Sprintf("| `%s` | %s | %s | %s |\n",
-			f.Name, f.Type, requiredStr, desc))
+		fmt.Fprintf(&sb, "| `%s` | %s | %s | %s |\n",
+			f.Name, f.Type, requiredStr, desc)
 	}
 
 	sb.WriteString(`
@@ -439,10 +439,10 @@ description: Auto-generated API reference for workflow node type Input/Output sc
 	}
 
 	for _, nodeType := range nodeTypes {
-		sb.WriteString(fmt.Sprintf("## %s\n\n", nodeType.DisplayName))
+		fmt.Fprintf(&sb, "## %s\n\n", nodeType.DisplayName)
 
 		if nodeType.Description != "" {
-			sb.WriteString(fmt.Sprintf("%s\n\n", cleanDescription(nodeType.Description)))
+			fmt.Fprintf(&sb, "%s\n\n", cleanDescription(nodeType.Description))
 		}
 
 		if len(nodeType.InputFields) > 0 {
@@ -478,8 +478,8 @@ description: Auto-generated API reference for workflow node type Input/Output sc
 					}
 				}
 
-				sb.WriteString(fmt.Sprintf("| `%s` | %s | %s | %s | %s |\n",
-					f.Name, f.Type, required, defaultVal, escapeMarkdownTable(desc)))
+				fmt.Fprintf(&sb, "| `%s` | %s | %s | %s | %s |\n",
+					f.Name, f.Type, required, defaultVal, escapeMarkdownTable(desc))
 			}
 			sb.WriteString("\n")
 		}
@@ -497,15 +497,15 @@ description: Auto-generated API reference for workflow node type Input/Output sc
 					desc = cleanDescription(desc)
 				}
 
-				sb.WriteString(fmt.Sprintf("| `%s` | %s | %s |\n", f.Name, f.Type, escapeMarkdownTable(desc)))
+				fmt.Fprintf(&sb, "| `%s` | %s | %s |\n", f.Name, f.Type, escapeMarkdownTable(desc))
 
 				// Expand nested types inline if this is an object or array field
 				if shouldExpandField(f.Type) {
 					if helper, ok := helperTypes[f.Name]; ok {
 						for _, subField := range helper.Fields {
 							fieldPath := fmt.Sprintf("%s.%s", helper.AccessPath, subField.Name)
-							sb.WriteString(fmt.Sprintf("| `%s` | %s | %s |\n",
-								fieldPath, subField.Type, escapeMarkdownTable(subField.Description)))
+							fmt.Fprintf(&sb, "| `%s` | %s | %s |\n",
+								fieldPath, subField.Type, escapeMarkdownTable(subField.Description))
 						}
 					}
 				}
