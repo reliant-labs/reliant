@@ -146,10 +146,14 @@ func (r *RouterExecutor) Execute() (map[string]interface{}, error) {
 		"reasoning", r.decision.Reasoning,
 	)
 
-	// Update the thread title now that we know the selected workflow/preset.
+	// Update the thread title and routing metadata now that we know the selected workflow/preset.
 	// The InlineWorkflowExecutor will pick this up when it emits thread_created.
 	if r.execContext != nil {
 		r.execContext.ThreadTitle = routerThreadTitle(r.decision)
+		r.execContext.RouterDecision = &RouterDecisionMeta{
+			Workflow: strings.TrimPrefix(r.decision.Workflow, "builtin://"),
+			Preset:   r.decision.Preset,
+		}
 	}
 
 	// Check for pause between routing decision and workflow execution

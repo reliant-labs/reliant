@@ -30,6 +30,10 @@ type ExecutionContext struct {
 	ForkedFrom   string // If mode=fork, the parent thread we copied context from
 	ParentThread string // The parent's thread (used for mode=inherit and mode=fork resolution)
 
+	// RouterDecision is set when this context was created by a router node.
+	// Contains the routing decision metadata for display in the UI.
+	RouterDecision *RouterDecisionMeta
+
 	// ProjectPath is the working directory for this execution.
 	// All tools, preset loading, and nested child workflows operate within this directory.
 	// Set via the project.path configuration on workflow/loop nodes.
@@ -43,6 +47,12 @@ type ExecutionContext struct {
 	// Parent context - set for child workflows
 	// nil if this is a root workflow
 	Parent *ParentContext
+}
+
+// RouterDecisionMeta holds routing decision metadata for display in the UI.
+type RouterDecisionMeta struct {
+	Workflow string `json:"workflow"` // Selected workflow ref (e.g., "agent")
+	Preset   string `json:"preset"`   // Selected preset (e.g., "code-review")
 }
 
 // ExecLoopContext tracks loop execution state at runtime.

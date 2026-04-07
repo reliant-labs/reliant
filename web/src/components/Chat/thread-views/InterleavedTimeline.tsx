@@ -15,7 +15,7 @@
 import React, { useMemo, useCallback, useRef, useState, useEffect, memo } from "react";
 import { MessageRole } from "../../../gen/reliant/v1/chat_pb";
 import { Virtuoso, type VirtuosoHandle, type ListRange } from "react-virtuoso";
-import { GitBranch, ArrowRightLeft, Plus, ArrowUp } from "lucide-react";
+import { GitBranch, ArrowRightLeft, Plus, ArrowUp, Route } from "lucide-react";
 import { Tooltip } from "../../ui/Tooltip";
 import { ChatMessage } from "../ChatMessage";
 import { CompactionMessage, isCompactionMessage } from "../CompactionMessage";
@@ -35,7 +35,7 @@ import type { WorkflowExecution, StepExecution } from "../ExecutionSidebar/types
 import { cn } from "../../../lib/utils";
 import { getActivitySteps } from "./activityIndicators";
 import { ActivityIndicator } from "./ActivityIndicator";
-import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads } from "./threadUtils";
+import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads, resolveRouterDecisionFromActiveThreads } from "./threadUtils";
 import { useChatStore } from "../../../store/chatStore";
 import { useActiveThreads } from "../../../store/threadActivityStore";
 
@@ -66,6 +66,11 @@ interface InterleavedTimelineProps {
 /** Thread creation mechanism */
 type ThreadOrigin = "fork" | "new" | "main";
 
+interface RouterDecision {
+  workflow: string;
+  preset: string;
+}
+
 interface WorkflowDisplay {
   id: string;
   thread: string;
@@ -75,6 +80,8 @@ interface WorkflowDisplay {
   isMain: boolean;
   /** How this thread was created: fork (inherits context), new (fresh), or main */
   origin: ThreadOrigin;
+  /** Routing decision metadata, set when thread was created by a router node */
+  routerDecision?: RouterDecision;
 }
 
 type TimelineItem =
@@ -164,12 +171,14 @@ function getWorkflowName(wf: WorkflowExecution | undefined): string {
   return "Agent";
 }
 
-/** Transition divider - used for thread starts and handoffs */
+/** Transition divider - used for thread starts, handoffs, and routing decisions */
 interface TransitionDividerProps {
-  icon: "fork" | "new" | "handoff";
+  icon: "fork" | "new" | "handoff" | "route";
   label: string;
   name: string;
   color: string;
+  /** Routing decision details, shown when icon is "route" */
+  routingInfo?: { workflow: string; preset: string };
 }
 
 const TransitionDivider = memo(function TransitionDivider({
@@ -177,24 +186,54 @@ const TransitionDivider = memo(function TransitionDivider({
   label,
   name,
   color,
+  routingInfo,
 }: TransitionDividerProps) {
-  const Icon = icon === "fork" ? GitBranch : icon === "new" ? Plus : ArrowRightLeft;
+  const Icon = icon === "fork" ? GitBranch : icon === "route" ? Route : icon === "new" ? Plus : ArrowRightLeft;
 
   return (
     <div className="flex items-center gap-3 py-2 px-4">
       <div className="flex-1 h-px bg-border" />
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <Icon className="h-3.5 w-3.5" style={{ color }} />
-        <span
-          className="font-medium px-1.5 py-0.5 rounded"
-          style={{
-            color,
-            backgroundColor: `${color}15`,
-          }}
-        >
-          {name}
-        </span>
-        <span>{label}</span>
+        {routingInfo ? (
+          <>
+            <span className="text-muted-foreground">Routed to</span>
+            <span
+              className="font-medium px-1.5 py-0.5 rounded"
+              style={{
+                color,
+                backgroundColor: `${color}15`,
+              }}
+            >
+              {routingInfo.workflow}
+            </span>
+            {routingInfo.preset && (
+              <span
+                className="font-medium px-1.5 py-0.5 rounded"
+                style={{
+                  color: `${color}cc`,
+                  backgroundColor: `${color}10`,
+                }}
+              >
+                {routingInfo.preset}
+              </span>
+            )}
+            <span>{label}</span>
+          </>
+        ) : (
+          <>
+            <span
+              className="font-medium px-1.5 py-0.5 rounded"
+              style={{
+                color,
+                backgroundColor: `${color}15`,
+              }}
+            >
+              {name}
+            </span>
+            <span>{label}</span>
+          </>
+        )}
       </div>
       <div className="flex-1 h-px bg-border" />
     </div>
@@ -221,6 +260,23 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   const timelineItems = useMemo(() => {
     // Build workflow lookups from execution tree
     const { byId, displays } = buildWorkflowLookups(workflowExecution, chatId);
+
+    // Augment displays with router decision data from streaming updates
+    for (const at of activeThreads) {
+      if (at.router_decision) {
+        const existing = displays.get(at.thread);
+        if (existing && !existing.routerDecision) {
+          existing.routerDecision = at.router_decision;
+        }
+      }
+      // Also augment thread title if display fell back to "Thread"
+      if (at.thread_title) {
+        const existing = displays.get(at.thread);
+        if (existing && existing.name === "Thread") {
+          existing.name = formatNodeId(at.thread_title);
+        }
+      }
+    }
 
     // Create default display for main thread if no workflow execution yet
     if (!displays.has(chatId)) {
@@ -268,6 +324,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
         // Resolve name from activeThreads streaming data (has thread_title/spawned_by_node_id)
         const isMain = thread === chatId || thread === "0";
         const resolvedName = !isMain ? resolveThreadNameFromActiveThreads(thread, activeThreads) : undefined;
+        const routerDec = !isMain ? resolveRouterDecisionFromActiveThreads(thread, activeThreads) : undefined;
         display = {
           id: thread,
           thread,
@@ -275,6 +332,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
           color: getThreadColor(thread, isMain),
           isMain,
           origin: isMain ? "main" : "new",
+          routerDecision: routerDec,
         };
         displays.set(thread, display);
       }
@@ -661,12 +719,16 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   const renderItem = useCallback((_index: number, item: (typeof flatItems)[number]) => {
     if (item.type === "thread-start") {
       const isFork = item.workflow.origin === "fork";
+      const isRouter = !!item.workflow.routerDecision;
+      const icon = isRouter ? "route" : isFork ? "fork" : "new";
+      const label = isFork ? `forked from ${item.parentName}` : `from ${item.parentName}`;
       return (
         <TransitionDivider
-          icon={isFork ? "fork" : "new"}
-          label={isFork ? `forked from ${item.parentName}` : `from ${item.parentName}`}
+          icon={icon}
+          label={label}
           name={item.workflow.name}
           color={item.workflow.color}
+          routingInfo={item.workflow.routerDecision}
         />
       );
     }

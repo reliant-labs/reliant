@@ -1065,6 +1065,44 @@ func (e *InlineWorkflowExecutor) executeNestedRouter(
 	return routerExec.Execute()
 }
 
+// evaluateOutputsMap evaluates a map of CEL expressions against the given context.
+// Each entry in outputsMap maps an output name to a CEL expression string.
+// Returns a map of output names to their evaluated values.
+func evaluateOutputsMap(outputsMap map[string]string, celContext map[string]interface{}, logger log.Logger) (map[string]interface{}, error) {
+	outputs := make(map[string]interface{})
+	for name, expr := range outputsMap {
+		// Unwrap template syntax if present.
+		// TrimSpace first: YAML folded scalars (>) append a trailing newline
+		// which would cause the "}}" suffix check to fail.
+		exprStr := strings.TrimSpace(expr)
+		if len(exprStr) > 4 && exprStr[:2] == "{{" && exprStr[len(exprStr)-2:] == "}}" {
+			exprStr = exprStr[2 : len(exprStr)-2]
+		}
+
+		result, err := evaluateCELValue(exprStr, celContext)
+		if err != nil {
+			logger.Warn("Output evaluation failed",
+				"output", name,
+				"expr", expr,
+				"error", err,
+			)
+			// Set to nil on error rather than failing
+			outputs[name] = nil
+			continue
+		}
+
+		if result == nil {
+			logger.Warn("Output evaluated to nil",
+				"output", name,
+				"expr", expr,
+			)
+		}
+		outputs[name] = result
+	}
+
+	return outputs, nil
+}
+
 // evaluateOutputs evaluates the sub-workflow's output expressions
 func (e *InlineWorkflowExecutor) evaluateOutputs(nodeOutputs, inputs map[string]interface{}) (map[string]interface{}, error) {
 	if len(e.subWorkflow.Outputs) == 0 {
@@ -1080,54 +1118,7 @@ func (e *InlineWorkflowExecutor) evaluateOutputs(nodeOutputs, inputs map[string]
 		},
 	}
 
-	outputs := make(map[string]interface{})
-	for name, expr := range e.subWorkflow.Outputs {
-		// Unwrap template syntax if present.
-		// TrimSpace first: YAML folded scalars (>) append a trailing newline
-		// which would cause the "}}" suffix check to fail.
-		exprStr := strings.TrimSpace(expr)
-		if len(exprStr) > 4 && exprStr[:2] == "{{" && exprStr[len(exprStr)-2:] == "}}" {
-			exprStr = exprStr[2 : len(exprStr)-2]
-		}
-
-		result, err := evaluateCELValue(exprStr, celContext)
-		if err != nil {
-			// Log with more context to help debug silent failures
-			e.logger.Warn("[InlineWorkflow] Output evaluation failed",
-				"nodeID", e.nodeID,
-				"subWorkflow", e.subWorkflowName,
-				"output", name,
-				"expr", expr,
-				"error", err,
-				"nodeOutputsKeys", getMapKeys(nodeOutputs),
-			)
-			// Set to nil on error rather than failing
-			outputs[name] = nil
-			continue
-		}
-
-		// Debug log when result is nil or empty - helps catch silent data loss
-		if result == nil {
-			e.logger.Warn("[InlineWorkflow] Output evaluated to nil",
-				"nodeID", e.nodeID,
-				"subWorkflow", e.subWorkflowName,
-				"output", name,
-				"expr", expr,
-				"nodeOutputsKeys", getMapKeys(nodeOutputs),
-			)
-		} else if str, ok := result.(string); ok && str == "" {
-			e.logger.Warn("[InlineWorkflow] Output evaluated to empty string",
-				"nodeID", e.nodeID,
-				"subWorkflow", e.subWorkflowName,
-				"output", name,
-				"expr", expr,
-				"nodeOutputsKeys", getMapKeys(nodeOutputs),
-			)
-		}
-		outputs[name] = result
-	}
-
-	return outputs, nil
+	return evaluateOutputsMap(e.subWorkflow.Outputs, celContext, e.logger)
 }
 
 // emitThreadCreated emits a thread_created event for threads owned by this node.
@@ -1188,6 +1179,14 @@ func (e *InlineWorkflowExecutor) emitThreadCreated() {
 	// Add forked_from_thread if this is a fork
 	if e.execContext.ThreadMode == model.ThreadModeFork && e.execContext.ForkedFrom != "" {
 		input["forked_from_thread"] = e.execContext.ForkedFrom
+	}
+
+	// Add router decision metadata if this thread was created by a router node
+	if e.execContext.RouterDecision != nil {
+		input["router_decision"] = map[string]string{
+			"workflow": e.execContext.RouterDecision.Workflow,
+			"preset":   e.execContext.RouterDecision.Preset,
+		}
 	}
 
 	// Fire-and-forget: don't block waiting for the result.
