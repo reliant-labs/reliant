@@ -847,7 +847,13 @@ function handleChatActivityChanged(update: UserUpdate) {
   // Single source of truth: update the activity store
   useActivityStore.getState().setActivity(chat_id, activity);
 
-  // Clear pending approvals and thread activity when activity goes idle
+  // Clear pending approvals when activity goes idle.
+  // NOTE: Thread activity is intentionally NOT cleared here. Thread metadata
+  // (thread_title, router_decision, spawned_by_node_id) must persist across
+  // pause/resume so the timeline can display thread names and routing decisions.
+  // The useIsThreadActive hook returns false when the chat is not RUNNING,
+  // so threads won't appear as active. Thread data is cleared in
+  // cleanupChatState/evictChatData when the chat is fully torn down.
   if (activity === ChatActivity.IDLE) {
     useChatStore.setState((state) => ({
       pendingApprovals: {
@@ -855,7 +861,6 @@ function handleChatActivityChanged(update: UserUpdate) {
         [chat_id]: [],
       },
     }));
-    useThreadActivityStore.getState().clearThreads(chat_id);
   }
 }
 

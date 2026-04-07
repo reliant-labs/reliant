@@ -173,11 +173,11 @@ function getWorkflowName(wf: WorkflowExecution | undefined): string {
 
 /** Transition divider - used for thread starts, handoffs, and routing decisions */
 interface TransitionDividerProps {
-  icon: "fork" | "new" | "handoff" | "route";
+  icon: "fork" | "new" | "handoff";
   label: string;
   name: string;
   color: string;
-  /** Routing decision details, shown when icon is "route" */
+  /** Routing decision details, shown before the thread mode icon */
   routingInfo?: { workflow: string; preset: string };
 }
 
@@ -188,15 +188,15 @@ const TransitionDivider = memo(function TransitionDivider({
   color,
   routingInfo,
 }: TransitionDividerProps) {
-  const Icon = icon === "fork" ? GitBranch : icon === "route" ? Route : icon === "new" ? Plus : ArrowRightLeft;
+  const Icon = icon === "fork" ? GitBranch : icon === "new" ? Plus : ArrowRightLeft;
 
   return (
     <div className="flex items-center gap-3 py-2 px-4">
       <div className="flex-1 h-px bg-border" />
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Icon className="h-3.5 w-3.5" style={{ color }} />
         {routingInfo ? (
           <>
+            <Route className="h-3.5 w-3.5" style={{ color }} />
             <span className="text-muted-foreground">Routed to</span>
             <span
               className="font-medium px-1.5 py-0.5 rounded"
@@ -218,10 +218,12 @@ const TransitionDivider = memo(function TransitionDivider({
                 {routingInfo.preset}
               </span>
             )}
+            <Icon className="h-3 w-3 opacity-60" />
             <span>{label}</span>
           </>
         ) : (
           <>
+            <Icon className="h-3.5 w-3.5" style={{ color }} />
             <span
               className="font-medium px-1.5 py-0.5 rounded"
               style={{
@@ -719,12 +721,10 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   const renderItem = useCallback((_index: number, item: (typeof flatItems)[number]) => {
     if (item.type === "thread-start") {
       const isFork = item.workflow.origin === "fork";
-      const isRouter = !!item.workflow.routerDecision;
-      const icon = isRouter ? "route" : isFork ? "fork" : "new";
       const label = isFork ? `forked from ${item.parentName}` : `from ${item.parentName}`;
       return (
         <TransitionDivider
-          icon={icon}
+          icon={isFork ? "fork" : "new"}
           label={label}
           name={item.workflow.name}
           color={item.workflow.color}
