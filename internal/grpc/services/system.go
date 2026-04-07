@@ -156,8 +156,7 @@ func (s *SystemService) StartOAuthSignIn(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("provider is required"))
 	}
 
-	timeout := time.Duration(req.Msg.TimeoutSeconds) * time.Second
-	result, err := auth.LoginWithOAuthProvider(ctx, provider, auth.LoginOptions{Timeout: timeout})
+	result, err := auth.LoginWithOAuthProvider(ctx, provider, auth.LoginOptions{})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to complete %s OAuth sign-in: %w", provider, err))
 	}

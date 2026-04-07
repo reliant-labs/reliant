@@ -69,7 +69,6 @@ func runAuthServe(cmd *cobra.Command, port int) error {
 
 		var req struct {
 			AuthorizeURLTemplate string `json:"authorize_url_template"`
-			TimeoutSeconds       int    `json:"timeout_seconds"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
@@ -81,7 +80,7 @@ func runAuthServe(cmd *cobra.Command, port int) error {
 			return
 		}
 
-		result, err := oauthcallback.Run(r.Context(), req.AuthorizeURLTemplate, req.TimeoutSeconds)
+		result, err := oauthcallback.Run(r.Context(), req.AuthorizeURLTemplate)
 		if err != nil {
 			logging.Error("OAuth callback failed", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})

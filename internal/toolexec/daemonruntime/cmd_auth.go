@@ -15,7 +15,6 @@ func init() {
 
 type authStartOAuthRequest struct {
 	AuthorizeURLTemplate string `json:"authorize_url_template"` // URL with {redirect_uri} placeholder
-	TimeoutSeconds       int    `json:"timeout_seconds"`        // default 120
 }
 
 type authStartOAuthResponse struct {
@@ -31,7 +30,7 @@ func handleAuthStartOAuth(ctx context.Context, payload []byte) ([]byte, error) {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
 
-	result, err := oauthcallback.Run(ctx, req.AuthorizeURLTemplate, req.TimeoutSeconds)
+	result, err := oauthcallback.Run(ctx, req.AuthorizeURLTemplate)
 	if err != nil {
 		return nil, err
 	}

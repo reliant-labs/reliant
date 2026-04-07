@@ -173,7 +173,7 @@ const LONG_TIMEOUT_METHODS: Record<string, number> = {
   "GetWorktreePR": WORKTREE_OPERATION_TIMEOUT_MS,
   "CreateWorktreePR": WORKTREE_OPERATION_TIMEOUT_MS,
   "RevertFiles": WORKTREE_OPERATION_TIMEOUT_MS,
-  // OAuth flows - user must complete login in browser (120s app timeout + buffer)
+  // OAuth flows — no timeout, user can take as long as needed (cancelled via AbortController)
   "StartOAuthFlow": OAUTH_TIMEOUT_MS,
   // OAuth token exchange - external network call
   "CompleteClaudeOAuth": OAUTH_EXCHANGE_TIMEOUT_MS,

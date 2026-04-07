@@ -98,7 +98,7 @@ const getTransport = () => {
  * These don't require authentication (used before auth is established)
  */
 export const devAuthGrpc = {
-  async startOAuthSignIn(provider: string, timeoutSeconds = 120): Promise<{
+  async startOAuthSignIn(provider: string): Promise<{
     accessToken: string
     refreshToken: string
     userId: string
@@ -106,7 +106,7 @@ export const devAuthGrpc = {
   }> {
     const client = createClient(SystemService, getTransport());
     const response = await client.startOAuthSignIn(
-      create(StartOAuthSignInRequestSchema, { provider, timeoutSeconds })
+      create(StartOAuthSignInRequestSchema, { provider })
     );
     return {
       accessToken: response.accessToken,

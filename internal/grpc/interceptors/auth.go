@@ -336,9 +336,10 @@ func NewTimeoutInterceptor() *TimeoutInterceptor {
 			"/reliant.v1.MCPService/RestartServer":      60 * time.Second,
 			"/reliant.v1.MCPService/UpdateServerConfig": 60 * time.Second,
 			"/reliant.v1.MCPService/UninstallServer":    60 * time.Second,
-			// OAuth flows - user must complete login in browser (120s app timeout + buffer)
-			"/reliant.v1.DaemonService/StartOAuthFlow":   150 * time.Second,
-			"/reliant.v1.SystemService/StartOAuthSignIn": 150 * time.Second,
+			// OAuth flows — no timeout, user can take as long as needed.
+			// Cancellation is handled by the frontend AbortController.
+			"/reliant.v1.DaemonService/StartOAuthFlow":   0,
+			"/reliant.v1.SystemService/StartOAuthSignIn": 0,
 			// OAuth token exchange - external network call
 			"/reliant.v1.SettingsService/CompleteClaudeOAuth": 30 * time.Second,
 			"/reliant.v1.SettingsService/CompleteCodexOAuth":  30 * time.Second,
@@ -358,12 +359,13 @@ func (t *TimeoutInterceptor) Interceptor() connect.UnaryInterceptorFunc {
 				timeout = methodTimeout
 			}
 
-			// Create context with timeout (if not already set)
-			// Check if context already has a deadline
-			if _, hasDeadline := ctx.Deadline(); !hasDeadline {
-				var cancel context.CancelFunc
-				ctx, cancel = context.WithTimeout(ctx, timeout)
-				defer cancel()
+			// Guard: timeout == 0 would create an immediately-expired context.
+			if timeout > 0 {
+				if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+					var cancel context.CancelFunc
+					ctx, cancel = context.WithTimeout(ctx, timeout)
+					defer cancel()
+				}
 			}
 
 			return next(ctx, req)

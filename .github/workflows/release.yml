@@ -439,6 +439,32 @@ jobs:
         working-directory: electron
         run: npm ci --legacy-peer-deps --prefer-offline
 
+      - name: Generate runtime build config
+        working-directory: electron
+        env:
+          STATSIG_CLIENT_KEY: ${{ secrets.STATSIG_CLIENT_KEY }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          cat > src/build-config.js <<'SCRIPT'
+          module.exports = {
+          SCRIPT
+          # Use node to safely JSON-encode values (handles special chars in secrets)
+          node -e "
+            const config = {
+              STATSIG_CLIENT_KEY: process.env.STATSIG_CLIENT_KEY || '',
+              SENTRY_DSN: process.env.SENTRY_DSN || '',
+              SENTRY_ENABLED: 'true',
+              SENTRY_TRACES_SAMPLE_RATE: '0.1',
+              SUPABASE_URL: process.env.SUPABASE_URL || '',
+              SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || '',
+            };
+            const lines = Object.entries(config).map(([k,v]) => '  ' + JSON.stringify(k) + ': ' + JSON.stringify(v) + ',');
+            console.log(lines.join('\n'));
+          " >> src/build-config.js
+          echo '};' >> src/build-config.js
+
       - name: Build and Publish macOS apps (Signed & Notarized)
         working-directory: electron
         env:
@@ -573,6 +599,32 @@ jobs:
         working-directory: electron
         run: npm ci --legacy-peer-deps --prefer-offline
 
+      - name: Generate runtime build config
+        working-directory: electron
+        env:
+          STATSIG_CLIENT_KEY: ${{ secrets.STATSIG_CLIENT_KEY }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          cat > src/build-config.js <<'SCRIPT'
+          module.exports = {
+          SCRIPT
+          # Use node to safely JSON-encode values (handles special chars in secrets)
+          node -e "
+            const config = {
+              STATSIG_CLIENT_KEY: process.env.STATSIG_CLIENT_KEY || '',
+              SENTRY_DSN: process.env.SENTRY_DSN || '',
+              SENTRY_ENABLED: 'true',
+              SENTRY_TRACES_SAMPLE_RATE: '0.1',
+              SUPABASE_URL: process.env.SUPABASE_URL || '',
+              SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || '',
+            };
+            const lines = Object.entries(config).map(([k,v]) => '  ' + JSON.stringify(k) + ': ' + JSON.stringify(v) + ',');
+            console.log(lines.join('\n'));
+          " >> src/build-config.js
+          echo '};' >> src/build-config.js
+
       - name: Build and Publish Linux apps
         working-directory: electron
         env:
@@ -701,6 +753,33 @@ jobs:
       - name: Install electron dependencies
         working-directory: electron
         run: npm ci --legacy-peer-deps --prefer-offline
+
+      - name: Generate runtime build config
+        working-directory: electron
+        shell: bash
+        env:
+          STATSIG_CLIENT_KEY: ${{ secrets.STATSIG_CLIENT_KEY }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          cat > src/build-config.js <<'SCRIPT'
+          module.exports = {
+          SCRIPT
+          # Use node to safely JSON-encode values (handles special chars in secrets)
+          node -e "
+            const config = {
+              STATSIG_CLIENT_KEY: process.env.STATSIG_CLIENT_KEY || '',
+              SENTRY_DSN: process.env.SENTRY_DSN || '',
+              SENTRY_ENABLED: 'true',
+              SENTRY_TRACES_SAMPLE_RATE: '0.1',
+              SUPABASE_URL: process.env.SUPABASE_URL || '',
+              SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || '',
+            };
+            const lines = Object.entries(config).map(([k,v]) => '  ' + JSON.stringify(k) + ': ' + JSON.stringify(v) + ',');
+            console.log(lines.join('\n'));
+          " >> src/build-config.js
+          echo '};' >> src/build-config.js
 
       - name: Build and Publish Windows apps
         working-directory: electron
