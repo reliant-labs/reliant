@@ -208,6 +208,7 @@ temporal.db-wal
 electron/dist/
 electron/resources/bin/
 electron/resources/server/
+electron/src/build-config.js
 
 # Cursor
 .cursor/

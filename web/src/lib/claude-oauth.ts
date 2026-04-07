@@ -8,7 +8,6 @@ const CLAUDE_OAUTH_CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e'
 const CLAUDE_OAUTH_DEFAULT_SCOPE =
   'org:create_api_key user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload'
 export const CLAUDE_OAUTH_STATE_PREFIX = 'reliant:oauth:claude:'
-const DEFAULT_TIMEOUT_MS = 2 * 60 * 1000
 
 type ClaudeOAuthErrorCode =
   | 'pkce_generation_failed'
@@ -30,7 +29,6 @@ export type ClaudeOAuthResult =
     }
 
 export interface ClaudeOAuthOptions {
-  timeoutMs?: number
   signal?: AbortSignal
   authorizeUrl?: string
   clientId?: string
@@ -67,7 +65,6 @@ const generateCodeChallenge = async (codeVerifier: string): Promise<string> => {
 }
 
 export async function runClaudeOAuthFlow(options: ClaudeOAuthOptions = {}): Promise<ClaudeOAuthResult> {
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const statePrefix = options.statePrefix ?? CLAUDE_OAUTH_STATE_PREFIX
   const authorizeUrl = options.authorizeUrl ?? CLAUDE_OAUTH_AUTHORIZE_URL
   const clientId = options.clientId ?? CLAUDE_OAUTH_CLIENT_ID
@@ -99,11 +96,10 @@ export async function runClaudeOAuthFlow(options: ClaudeOAuthOptions = {}): Prom
     // In Electron the daemon handles the localhost callback; in web mode
     // the user runs `reliant auth serve` which exposes an HTTP endpoint.
     const isElectron = !!window.electronAPI
-    const timeoutSec = Math.ceil(timeoutMs / 1000)
 
     const oauthResp = isElectron
-      ? await startOAuthViaDaemon(authorizeURLTemplate, timeoutSec, options.signal)
-      : await startOAuthViaLocalServer(authorizeURLTemplate, timeoutSec, options.signal)
+      ? await startOAuthViaDaemon(authorizeURLTemplate, options.signal)
+      : await startOAuthViaLocalServer(authorizeURLTemplate, options.signal)
 
     // Validate state
     if (oauthResp.state !== state) {

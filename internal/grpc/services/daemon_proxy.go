@@ -39,18 +39,15 @@ func (s *DaemonProxyService) StartOAuthFlow(
 
 	payload, err := json.Marshal(map[string]any{
 		"authorize_url_template": req.Msg.AuthorizeUrlTemplate,
-		"timeout_seconds":        req.Msg.TimeoutSeconds,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("marshal request: %w", err))
 	}
 
-	timeoutMs := int32((int(req.Msg.TimeoutSeconds) + 10) * 1000)
-	if timeoutMs <= 0 {
-		timeoutMs = 130000 // 130 seconds default
-	}
-
-	respBytes, err := s.router.SendDaemonCommand(ctx, userID, "auth.start_oauth", payload, timeoutMs)
+	// Use a generous NATS-level timeout (1 hour). OAuth flows have no
+	// application-level timeout — the frontend AbortController handles
+	// cancellation, which propagates via ctx.
+	respBytes, err := s.router.SendDaemonCommand(ctx, userID, "auth.start_oauth", payload, 3_600_000)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("OAuth flow failed: %w", err))
 	}

@@ -23,7 +23,7 @@ func TestRunCancelsWhenContextDone(t *testing.T) {
 		cancel()
 	}()
 
-	result, err := Run(ctx, "https://auth.openai.com/oauth/authorize?redirect_uri={redirect_uri}", 120)
+	result, err := Run(ctx, "https://auth.openai.com/oauth/authorize?redirect_uri={redirect_uri}")
 	if err == nil {
 		t.Fatal("expected cancellation error")
 	}
@@ -82,7 +82,7 @@ func TestRunReusesCompatibleExistingListener(t *testing.T) {
 		_, _ = http.Get("http://127.0.0.1:1455/auth/callback?code=test-code&state=test-state")
 	}()
 
-	result, err := Run(context.Background(), "https://auth.openai.com/oauth/authorize?redirect_uri={redirect_uri}", 5)
+	result, err := Run(context.Background(), "https://auth.openai.com/oauth/authorize?redirect_uri={redirect_uri}")
 	if err != nil {
 		t.Fatalf("Run error: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestRunFailsForIncompatibleExistingListener(t *testing.T) {
 	defer httpServer.Close()
 	go func() { _ = httpServer.Serve(listener) }()
 
-	_, err = Run(context.Background(), "https://auth.openai.com/oauth/authorize?redirect_uri={redirect_uri}", 5)
+	_, err = Run(context.Background(), "https://auth.openai.com/oauth/authorize?redirect_uri={redirect_uri}")
 	if err == nil {
 		t.Fatal("expected error")
 	}

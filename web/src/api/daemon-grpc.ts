@@ -11,10 +11,9 @@ import { getTransport } from "./grpc-client";
  */
 export async function startOAuthViaDaemon(
   authorizeUrlTemplate: string,
-  timeoutSeconds: number,
   signal?: AbortSignal
 ): Promise<StartOAuthFlowResponse> {
   const transport = getTransport();
   const client = createClient(DaemonService, transport);
-  return client.startOAuthFlow({ authorizeUrlTemplate, timeoutSeconds }, { signal });
+  return client.startOAuthFlow({ authorizeUrlTemplate }, { signal });
 }

@@ -20,7 +20,6 @@ export interface OAuthStartResult {
  */
 export async function startOAuthViaLocalServer(
   authorizeUrlTemplate: string,
-  timeoutSeconds: number,
   signal?: AbortSignal,
 ): Promise<OAuthStartResult> {
   const resp = await fetch(`${OAUTH_LOCAL_SERVER_URL}/oauth/start`, {
@@ -28,7 +27,6 @@ export async function startOAuthViaLocalServer(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       authorize_url_template: authorizeUrlTemplate,
-      timeout_seconds: timeoutSeconds,
     }),
     signal,
   })

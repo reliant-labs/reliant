@@ -12,7 +12,6 @@ const CODEX_OAUTH_ADDITIONAL_AUTHORIZE_PARAMS: Record<string, string> = {
   originator: 'pi',
 }
 export const CODEX_OAUTH_STATE_PREFIX = 'reliant:oauth:codex:'
-const DEFAULT_TIMEOUT_MS = 2 * 60 * 1000
 
 type CodexOAuthErrorCode =
   | 'pkce_generation_failed'
@@ -34,7 +33,6 @@ export type CodexOAuthResult =
     }
 
 export interface CodexOAuthOptions {
-  timeoutMs?: number
   signal?: AbortSignal
   authorizeUrl?: string
   clientId?: string
@@ -71,7 +69,6 @@ const generateCodeChallenge = async (codeVerifier: string): Promise<string> => {
 }
 
 export async function runCodexOAuthFlow(options: CodexOAuthOptions = {}): Promise<CodexOAuthResult> {
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const statePrefix = options.statePrefix ?? CODEX_OAUTH_STATE_PREFIX
   const authorizeUrl = options.authorizeUrl ?? CODEX_OAUTH_AUTHORIZE_URL
   const clientId = options.clientId ?? CODEX_OAUTH_CLIENT_ID
@@ -107,11 +104,10 @@ export async function runCodexOAuthFlow(options: CodexOAuthOptions = {}): Promis
     // In Electron the daemon handles the localhost callback; in web mode
     // the user runs `reliant auth serve` which exposes an HTTP endpoint.
     const isElectron = !!window.electronAPI
-    const timeoutSec = Math.ceil(timeoutMs / 1000)
 
     const oauthResp = isElectron
-      ? await startOAuthViaDaemon(authorizeURLTemplate, timeoutSec, options.signal)
-      : await startOAuthViaLocalServer(authorizeURLTemplate, timeoutSec, options.signal)
+      ? await startOAuthViaDaemon(authorizeURLTemplate, options.signal)
+      : await startOAuthViaLocalServer(authorizeURLTemplate, options.signal)
 
     // Validate state
     if (oauthResp.state !== state) {
