@@ -99,8 +99,6 @@ message VersionResponse {
 message StartOAuthSignInRequest {
   // OAuth provider name (e.g., "github", "google", "apple")
   string provider = 1;
-  // Maximum time to wait for the browser callback in seconds. Defaults to 120.
-  int32 timeout_seconds = 2;
 }
 
 message StartOAuthSignInResponse {

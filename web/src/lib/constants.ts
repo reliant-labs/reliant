@@ -137,11 +137,11 @@ export const UPLOAD_TIMEOUT_MS = 60000;
 export const WORKTREE_OPERATION_TIMEOUT_MS = 30000;
 
 /**
- * Extended timeout for OAuth flows — user must complete login in browser.
- * The actual user-facing timeout is 120s; we add buffer so the gRPC layer
- * never fires before the application-level timeout.
+ * OAuth flows have no fixed timeout — the user can take as long as needed to
+ * complete authentication in the browser. Cancellation is handled by the
+ * AbortController in the UI hooks (useClaudeOAuth / useCodexOAuth).
  */
-export const OAUTH_TIMEOUT_MS = 150000;
+export const OAUTH_TIMEOUT_MS = 0;
 
 /**
  * Extended timeout for OAuth token exchange with external providers.

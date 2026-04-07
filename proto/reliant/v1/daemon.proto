@@ -15,8 +15,6 @@ service DaemonService {
 message StartOAuthFlowRequest {
   // Full OAuth authorize URL with {redirect_uri} placeholder.
   string authorize_url_template = 1;
-  // Timeout in seconds for the user to complete auth (default 120).
-  int32 timeout_seconds = 2;
 }
 
 message StartOAuthFlowResponse {

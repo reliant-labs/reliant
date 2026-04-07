@@ -24,9 +24,7 @@ var (
 	defaultSupabaseKey = envOrDefault("RELIANT_AUTH_KEY", "sb_publishable_KKiB3B0EdEv7nguwKfEE5A_iY9rVXod")
 )
 
-const (
-	defaultLoginTimeout = 120 * time.Second
-)
+const ()
 
 func envOrDefault(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
@@ -36,11 +34,7 @@ func envOrDefault(key, fallback string) string {
 }
 
 // LoginOptions configures the OAuth PKCE login flow.
-type LoginOptions struct {
-	// Timeout is the maximum time to wait for the browser callback.
-	// Defaults to 120s.
-	Timeout time.Duration
-}
+type LoginOptions struct{}
 
 // LoginResult holds the tokens and user info returned after a successful login.
 type LoginResult struct {
@@ -60,13 +54,6 @@ type oauthProvider struct {
 func LoginWithOAuthProvider(ctx context.Context, provider string, opts LoginOptions) (*LoginResult, error) {
 	serverURL := strings.TrimRight(defaultSupabaseURL, "/")
 	anonKey := defaultSupabaseKey
-
-	timeout := opts.Timeout
-	if timeout == 0 {
-		timeout = defaultLoginTimeout
-	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
 
 	verifier, err := generateCodeVerifier()
 	if err != nil {
@@ -139,7 +126,7 @@ func LoginWithOAuthProvider(ctx context.Context, provider string, opts LoginOpti
 		}
 		return ev.result, nil
 	case <-ctx.Done():
-		return nil, fmt.Errorf("login timed out after %s — no callback received", timeout)
+		return nil, fmt.Errorf("login cancelled: %w", ctx.Err())
 	}
 }
 
@@ -147,13 +134,6 @@ func LoginWithOAuthProvider(ctx context.Context, provider string, opts LoginOpti
 func Login(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 	serverURL := strings.TrimRight(defaultSupabaseURL, "/")
 	anonKey := defaultSupabaseKey
-
-	timeout := opts.Timeout
-	if timeout == 0 {
-		timeout = defaultLoginTimeout
-	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
 
 	// PKCE parameters (used by OAuth providers).
 	verifier, err := generateCodeVerifier()
@@ -276,7 +256,7 @@ func Login(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 		fmt.Printf("Could not open browser automatically.\nPlease visit:\n  %s\n", loginPageURL)
 	}
 
-	// Wait for result or timeout.
+	// Wait for result or context cancellation.
 	select {
 	case ev := <-resultCh:
 		if ev.err != nil {
@@ -284,7 +264,7 @@ func Login(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
 		}
 		return ev.result, nil
 	case <-ctx.Done():
-		return nil, fmt.Errorf("login timed out after %s — no callback received", timeout)
+		return nil, fmt.Errorf("login cancelled: %w", ctx.Err())
 	}
 }
 

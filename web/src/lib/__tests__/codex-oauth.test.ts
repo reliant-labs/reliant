@@ -176,27 +176,4 @@ describe("runCodexOAuthFlow", () => {
     });
   });
 
-  it("passes timeout to daemon in seconds", async () => {
-    startOAuthViaDaemonMock.mockImplementation(async (urlTemplate: string) => {
-      const url = new URL(
-        urlTemplate.replace("{redirect_uri}", "http://127.0.0.1:9999/callback"),
-      );
-      const state = url.searchParams.get("state") || "";
-      return {
-        code: "test-code",
-        state,
-        redirectUri: "http://127.0.0.1:9999/callback",
-      } as any;
-    });
-
-    completeCodexOAuthMock.mockResolvedValue({ success: true, message: "OK" });
-
-    await runCodexOAuthFlow({ timeoutMs: 30000 });
-
-    expect(startOAuthViaDaemonMock).toHaveBeenCalledWith(
-      expect.any(String),
-      30, // 30000ms / 1000
-      undefined, // signal
-    );
-  });
 });

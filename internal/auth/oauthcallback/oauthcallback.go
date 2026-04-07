@@ -89,12 +89,9 @@ func InferConfig(authorizeURLTemplate string) CallbackConfig {
 }
 
 // Run starts a temporary HTTP server, opens the browser, and waits for the
-// OAuth callback or timeout. It returns the authorization code, state and
-// redirect URI.
-func Run(ctx context.Context, authorizeURLTemplate string, timeoutSeconds int) (*Result, error) {
-	if timeoutSeconds <= 0 {
-		timeoutSeconds = 120
-	}
+// OAuth callback or context cancellation. It returns the authorization code,
+// state and redirect URI.
+func Run(ctx context.Context, authorizeURLTemplate string) (*Result, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -134,7 +131,7 @@ func Run(ctx context.Context, authorizeURLTemplate string, timeoutSeconds int) (
 		return nil, fmt.Errorf("failed to open browser: %w", err)
 	}
 
-	return waitForResult(ctx, timeoutSeconds, server.resultCh)
+	return waitForResult(ctx, server.resultCh)
 }
 
 func newCallbackServer(authorizeURLTemplate string, cfg CallbackConfig) (*callbackServer, string, error) {
@@ -189,7 +186,7 @@ func (s *callbackServer) handleProbe(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *callbackServer) handleResult(w http.ResponseWriter, r *http.Request) {
-	result, err := waitForResult(r.Context(), 0, s.resultCh)
+	result, err := waitForResult(r.Context(), s.resultCh)
 	if err != nil {
 		status := http.StatusGatewayTimeout
 		if errors.Is(err, context.Canceled) {
@@ -203,35 +200,10 @@ func (s *callbackServer) handleResult(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(result)
 }
 
-func waitForResult(ctx context.Context, timeoutSeconds int, resultCh <-chan *Result) (*Result, error) {
-	var timeoutTimer *time.Timer
-	if timeoutSeconds > 0 {
-		timeoutTimer = time.NewTimer(time.Duration(timeoutSeconds) * time.Second)
-		defer timeoutTimer.Stop()
-	}
-
+func waitForResult(ctx context.Context, resultCh <-chan *Result) (*Result, error) {
 	select {
 	case result := <-resultCh:
 		return result, nil
-	case <-ctx.Done():
-		return nil, fmt.Errorf("OAuth callback cancelled: %w", ctx.Err())
-	default:
-	}
-
-	if timeoutTimer == nil {
-		select {
-		case result := <-resultCh:
-			return result, nil
-		case <-ctx.Done():
-			return nil, fmt.Errorf("OAuth callback cancelled: %w", ctx.Err())
-		}
-	}
-
-	select {
-	case result := <-resultCh:
-		return result, nil
-	case <-timeoutTimer.C:
-		return nil, fmt.Errorf("OAuth callback timed out after %d seconds", timeoutSeconds)
 	case <-ctx.Done():
 		return nil, fmt.Errorf("OAuth callback cancelled: %w", ctx.Err())
 	}
