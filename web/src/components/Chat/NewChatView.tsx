@@ -186,6 +186,12 @@ export function NewChatView({
   }, [showWorkspaceDropdown]);
 
   useEffect(() => {
+    // Wait until project is loaded before running migration detection.
+    // Without this gate, the effect fires multiple times as propsWorktreeId,
+    // selectedWorkspaceId, and currentProject?.id stabilize during hydration,
+    // causing 2-3 redundant GetFileTree calls.
+    if (!currentProject?.id) return;
+
     let cancelled = false;
 
     const detectMigrationSources = async () => {

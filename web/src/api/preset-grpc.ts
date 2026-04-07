@@ -122,18 +122,20 @@ export const presetGrpc = {
    * @param includeHidden - If true, include items hidden by default (for management UIs)
    */
   async listPresetsWithErrors(projectId: string, includeHidden = false): Promise<ListPresetsResult> {
-    const client = grpcClient.preset();
-    const request = create(ListPresetsRequestSchema, { projectId, includeHidden });
-    const response = await client.listPresets(request);
-    return {
-      presets: response.presets.map(protoPresetToFrontend),
-      invalidPresets: (response.invalidPresets || []).map(inv => ({
-        name: inv.name,
-        source: inv.source as "builtin" | "project" | "user",
-        path: inv.path,
-        errors: [...inv.errors],
-      })),
-    };
+    return singleflight(`listPresets:${projectId}:${includeHidden}`, async () => {
+      const client = grpcClient.preset();
+      const request = create(ListPresetsRequestSchema, { projectId, includeHidden });
+      const response = await client.listPresets(request);
+      return {
+        presets: response.presets.map(protoPresetToFrontend),
+        invalidPresets: (response.invalidPresets || []).map(inv => ({
+          name: inv.name,
+          source: inv.source as "builtin" | "project" | "user",
+          path: inv.path,
+          errors: [...inv.errors],
+        })),
+      };
+    });
   },
 
   /**
@@ -164,22 +166,24 @@ export const presetGrpc = {
    * @param includeHidden - If true, include items hidden by default (for management UIs)
    */
   async listPresetsForWorkflowWithErrors(projectId: string, workflowName: string, includeHidden = false): Promise<ListPresetsResult> {
-    const client = grpcClient.preset();
-    const request = create(ListPresetsForWorkflowRequestSchema, {
-      projectId,
-      workflowName,
-      includeHidden,
+    return singleflight(`listPresetsForWorkflow:${projectId}:${workflowName}:${includeHidden}`, async () => {
+      const client = grpcClient.preset();
+      const request = create(ListPresetsForWorkflowRequestSchema, {
+        projectId,
+        workflowName,
+        includeHidden,
+      });
+      const response = await client.listPresetsForWorkflow(request);
+      return {
+        presets: response.presets.map(protoPresetToFrontend),
+        invalidPresets: (response.invalidPresets || []).map(inv => ({
+          name: inv.name,
+          source: inv.source as "builtin" | "project" | "user",
+          path: inv.path,
+          errors: [...inv.errors],
+        })),
+      };
     });
-    const response = await client.listPresetsForWorkflow(request);
-    return {
-      presets: response.presets.map(protoPresetToFrontend),
-      invalidPresets: (response.invalidPresets || []).map(inv => ({
-        name: inv.name,
-        source: inv.source as "builtin" | "project" | "user",
-        path: inv.path,
-        errors: [...inv.errors],
-      })),
-    };
   },
 
   /**

@@ -103,18 +103,7 @@ function App() {
   const [isBackendReady, setIsBackendReady] = useState(false);
 
   // Ensure global, project-scoped data (workflows/presets) is loaded whenever a project
-  // becomes available. This makes hard-refresh + workspace restore reliable and prevents
-  // the chat workflow selector from showing "No workflows available" until a manual
-  // project switch happens.
-  const refetchWorkflows = useGlobalDataStore((s) => s.refetchWorkflows);
-  const refetchPresets = useGlobalDataStore((s) => s.refetchPresets);
   const cachedWorkflows = useGlobalDataStore((s) => s.workflows);
-  const workflowsLoading = useGlobalDataStore((s) => s.workflowsLoading);
-  const workflowsError = useGlobalDataStore((s) => s.workflowsError);
-  const cachedPresets = useGlobalDataStore((s) => s.presets);
-  const presetsLoading = useGlobalDataStore((s) => s.presetsLoading);
-  const presetsError = useGlobalDataStore((s) => s.presetsError);
-  const lastGlobalFetchProjectIdRef = useRef<string | null>(null);
 
   // Update browser tab title with current project name
   useEffect(() => {
@@ -123,34 +112,9 @@ function App() {
       : "Reliant";
   }, [currentProject?.name]);
 
-  useEffect(() => {
-    const projectId = currentProject?.id;
-    if (!isBackendReady || !projectId) return;
-
-    const projectChanged = lastGlobalFetchProjectIdRef.current !== projectId;
-    const workflowsMissing = cachedWorkflows.length === 0 && !workflowsLoading && !workflowsError;
-    const presetsMissing = cachedPresets.length === 0 && !presetsLoading && !presetsError;
-
-    // Fetch if:
-    // - we switched projects, OR
-    // - we have a project but the caches are empty (common on hard refresh)
-    if (projectChanged || workflowsMissing || presetsMissing) {
-      lastGlobalFetchProjectIdRef.current = projectId;
-      refetchWorkflows(projectId).catch(() => {});
-      refetchPresets(projectId).catch(() => {});
-    }
-  }, [
-    currentProject?.id,
-    isBackendReady,
-    refetchWorkflows,
-    refetchPresets,
-    cachedWorkflows.length,
-    workflowsLoading,
-    workflowsError,
-    cachedPresets.length,
-    presetsLoading,
-    presetsError,
-  ]);
+  // NOTE: Workflows and presets are fetched by projectStore.setCurrentProject().
+  // With singleflight at the gRPC layer, duplicate concurrent calls are deduplicated
+  // automatically, so no secondary trigger is needed here.
 
   // UI state - use persisted values as defaults, initialized lazily from workspace state
   // NOTE: We use lazy initialization with getState() instead of subscribing to the whole

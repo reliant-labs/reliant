@@ -13,7 +13,6 @@ import { UserStreamingService } from "../api/streaming-grpc";
 import type { UserUpdate, ChatUpdate, ConnectionStatus, MessagePaginationInfo, ContextUsageInfo } from "../types/streaming";
 import { useChatStore, initGlobalUpdatesStoreRef } from "./chatStore";
 import type { Chat } from "../api/client";
-import { api } from "../api/client";
 import { ChatState } from "../gen/reliant/v1/chat_pb";
 import { useActivityStore, ChatActivity } from "./activityStore";
 import { useThreadActivityStore } from "./threadActivityStore";
@@ -38,43 +37,15 @@ const LOG_PREFIX = "[🌐 GlobalUpdates]";
 const appStartTime = Date.now();
 
 /**
- * Debounced batch hydration for archived chat metadata.
- * Collects chat IDs over a short window, then performs a single fetch
- * to hydrate all of them at once. This avoids 644+ individual promise chains
- * when the stream replays archived CHAT_STATE_CHANGE events on connect.
+ * Trigger archived chats load through the store, which has its own singleflight
+ * and archivedChatsLoaded guard. This replaces the old approach of calling
+ * api.chatsV2.listArchived() directly, which bypassed deduplication and caused
+ * redundant 1.1 MB fetches racing with the Sidebar's initial load.
  */
-const pendingHydrationChatIds = new Set<string>();
-let hydrationTimer: ReturnType<typeof setTimeout> | null = null;
-
-function scheduleArchivedChatHydration(chatId: string): void {
-  pendingHydrationChatIds.add(chatId);
-  if (hydrationTimer !== null) return; // Already scheduled
-  hydrationTimer = setTimeout(() => {
-    hydrationTimer = null;
-    const chatIds = new Set(pendingHydrationChatIds);
-    pendingHydrationChatIds.clear();
-    void flushArchivedChatHydration(chatIds);
-  }, 100);
-}
-
-async function flushArchivedChatHydration(chatIds: Set<string>): Promise<void> {
-  try {
-    logger.debug(`${LOG_PREFIX} Batch hydrating archived chat metadata for ${chatIds.size} chat(s)`);
-    const allArchived = await api.chatsV2.listArchived();
-    const archivedById = new Map(allArchived.map((c) => [c.id, c]));
-
-    useChatStore.setState((s) => ({
-      archivedChats: s.archivedChats.map((c) => {
-        if (!chatIds.has(c.id)) return c;
-        const hydrated = archivedById.get(c.id);
-        if (!hydrated) return c;
-        return { ...c, worktreeName: hydrated.worktreeName, worktreeDeletedAt: hydrated.worktreeDeletedAt };
-      }),
-    }));
-  } catch (e) {
-    // Best-effort; archived list will still be correct on next reload.
-    logger.debug(`${LOG_PREFIX} Failed to hydrate archived chat metadata`, { error: e });
-  }
+function scheduleArchivedChatHydration(_chatId: string): void {
+  // Route through the store — it will no-op if already loaded, and uses
+  // singleflight to deduplicate concurrent calls.
+  void useChatStore.getState().loadArchivedChats();
 }
 
 interface GlobalUpdatesState {
@@ -129,7 +100,20 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
       return;
     }
 
-    logger.info(`${LOG_PREFIX} Connecting unified gRPC stream`);
+    // Guard: don't connect with sinceSeq=0 if chats haven't loaded yet.
+    // The ModernApp effect ensures loadChats() completes (setting lastSequence)
+    // before calling connect(). If something else calls connect() early
+    // (e.g. subscribeToChatDetails before loadChats), bail out — the
+    // ModernApp effect will handle the connection properly.
+    if (state.lastSequence === 0 && !useChatStore.getState().hasLoaded) {
+      logger.info(`${LOG_PREFIX} Deferring connect — chats not loaded yet (lastSequence=0)`);
+      return;
+    }
+
+    logger.info(`${LOG_PREFIX} Connecting unified gRPC stream`, {
+      lastSequence: state.lastSequence,
+      subscribedChatId: state.subscribedChatId?.slice(0, 8),
+    });
 
     const wsService = new UserStreamingService({
       onUpdate: (updates) => get().handleUpdate(updates),
@@ -144,7 +128,11 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
     });
 
     set({ wsService });
-    wsService.start(state.lastSequence);
+    // Forward subscribedChatId and projectId so the initial connection
+    // includes the chat subscription and project scope — avoids redundant
+    // disconnect/reconnect and filters catch-up replay to this project.
+    const projectId = useProjectStore.getState().currentProject?.id;
+    wsService.start(state.lastSequence, state.subscribedChatId ?? undefined, 0, projectId);
   },
 
   disconnect: () => {
@@ -1093,9 +1081,3 @@ function handleRefetch(update: UserUpdate) {
 // Break the circular dependency: chatStore needs to call globalUpdatesStore
 // methods, but can't import it directly. This registers the reference.
 initGlobalUpdatesStoreRef({ useGlobalUpdatesStore } as typeof import("./globalUpdatesStore"));
-
-// Export a helper to auto-connect when the app loads
-export function initGlobalUpdates() {
-  const store = useGlobalUpdatesStore.getState();
-  store.connect();
-}
