@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"time"
+
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/ptr"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
@@ -14,7 +16,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"google.golang.org/protobuf/types/known/structpb"
-	"time"
 )
 
 // parallelIterationResult holds the outcome of a single parallel iteration.

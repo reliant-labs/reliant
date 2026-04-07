@@ -93,7 +93,7 @@ func (t *getSchemaTool) Execute(rctx *rctx.ToolContext, args GetSchemaParams) (T
 // buildNotFoundMessage creates a helpful error message with suggestions
 func buildNotFoundMessage(name string) string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Type '%s' not found.\n\n", name))
+	fmt.Fprintf(&sb, "Type '%s' not found.\n\n", name)
 
 	// Collect all available types for suggestions
 	nodeTypes := reference.ListNodeTypes()
@@ -160,7 +160,7 @@ func getNodeTypeDoc(typeName string) (string, error) {
 	var sb strings.Builder
 
 	// Header
-	sb.WriteString(fmt.Sprintf("# Node Type: %s\n\n", info.TypeName))
+	fmt.Fprintf(&sb, "# Node Type: %s\n\n", info.TypeName)
 
 	// Description
 	sb.WriteString("## Description\n\n")
@@ -180,14 +180,14 @@ func getNodeTypeDoc(typeName string) (string, error) {
 			// Escape pipes and newlines for markdown table
 			desc := strings.ReplaceAll(field.Description, "|", "\\|")
 			desc = strings.ReplaceAll(desc, "\n", " ")
-			sb.WriteString(fmt.Sprintf("| `%s` | %s | %s | %s |\n", field.Name, field.Type, required, desc))
+			fmt.Fprintf(&sb, "| `%s` | %s | %s | %s |\n", field.Name, field.Type, required, desc)
 		}
 		sb.WriteString("\n")
 
 		// Detailed field descriptions
 		sb.WriteString("### Field Details\n\n")
 		for _, field := range info.Fields {
-			sb.WriteString(fmt.Sprintf("**%s** (%s)", field.Name, field.Type))
+			fmt.Fprintf(&sb, "**%s** (%s)", field.Name, field.Type)
 			if field.Required {
 				sb.WriteString(" - *required*")
 			}
@@ -205,7 +205,7 @@ func getNodeTypeDoc(typeName string) (string, error) {
 		sb.WriteString("## Output Fields\n\n")
 		sb.WriteString("Access via `nodes.<id>.*` in CEL expressions:\n\n")
 		for _, field := range info.OutputFields {
-			sb.WriteString(fmt.Sprintf("- `%s` (%s)\n", field.Name, field.Type))
+			fmt.Fprintf(&sb, "- `%s` (%s)\n", field.Name, field.Type)
 		}
 		sb.WriteString("\n")
 	}
@@ -233,7 +233,7 @@ func getInputTypeDoc(typeName string) (string, error) {
 	var sb strings.Builder
 
 	// Header
-	sb.WriteString(fmt.Sprintf("# Input Type: %s\n\n", info.TypeName))
+	fmt.Fprintf(&sb, "# Input Type: %s\n\n", info.TypeName)
 
 	// Description
 	if info.Description != "" {
@@ -255,7 +255,7 @@ func getInputTypeDoc(typeName string) (string, error) {
 			// Escape pipes and newlines for markdown table
 			desc := strings.ReplaceAll(field.Description, "|", "\\|")
 			desc = strings.ReplaceAll(desc, "\n", " ")
-			sb.WriteString(fmt.Sprintf("| `%s` | %s | %s | %s |\n", field.Name, field.Type, required, desc))
+			fmt.Fprintf(&sb, "| `%s` | %s | %s | %s |\n", field.Name, field.Type, required, desc)
 		}
 		sb.WriteString("\n")
 	}
@@ -287,7 +287,7 @@ func getSharedTypeDoc(typeName string) (string, error) {
 	} else if strings.HasSuffix(typeName, "Config") {
 		category = "Config Type"
 	}
-	sb.WriteString(fmt.Sprintf("# %s: %s\n\n", category, info.Name))
+	fmt.Fprintf(&sb, "# %s: %s\n\n", category, info.Name)
 
 	// Description
 	if info.Description != "" {
@@ -309,14 +309,14 @@ func getSharedTypeDoc(typeName string) (string, error) {
 			// Escape pipes and newlines for markdown table
 			desc := strings.ReplaceAll(field.Description, "|", "\\|")
 			desc = strings.ReplaceAll(desc, "\n", " ")
-			sb.WriteString(fmt.Sprintf("| `%s` | %s | %s | %s |\n", field.Name, field.Type, required, desc))
+			fmt.Fprintf(&sb, "| `%s` | %s | %s | %s |\n", field.Name, field.Type, required, desc)
 		}
 		sb.WriteString("\n")
 
 		// Detailed field descriptions
 		sb.WriteString("### Field Details\n\n")
 		for _, field := range info.Fields {
-			sb.WriteString(fmt.Sprintf("**%s** (%s)", field.Name, field.Type))
+			fmt.Fprintf(&sb, "**%s** (%s)", field.Name, field.Type)
 			if field.Required {
 				sb.WriteString(" - *required*")
 			}

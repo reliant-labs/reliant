@@ -164,6 +164,7 @@ func TestCallLLM_ResponseTool_PopulatesResponseData(t *testing.T) {
 		nil,
 		&staticConfigProvider{},
 		driverResolver,
+		nil,
 	)
 
 	input := buildResponseToolInput(chat.ID, &reliantv1.ResponseTool{
@@ -217,6 +218,7 @@ func TestCallLLM_ResponseTool_NoResponseToolConfigured(t *testing.T) {
 		nil,
 		&staticConfigProvider{},
 		driverResolver,
+		nil,
 	)
 
 	// No ResponseTool in the input
@@ -263,6 +265,7 @@ func TestCallLLM_ResponseTool_TextAndToolCall(t *testing.T) {
 		nil,
 		&staticConfigProvider{},
 		driverResolver,
+		nil,
 	)
 
 	input := buildResponseToolInput(chat.ID, &reliantv1.ResponseTool{

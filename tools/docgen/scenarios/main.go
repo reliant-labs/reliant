@@ -286,7 +286,7 @@ and expectations (assertions about what should happen).
 `)
 
 	for _, t := range types {
-		sb.WriteString(fmt.Sprintf("## %s\n\n", t.Name))
+		fmt.Fprintf(&sb, "## %s\n\n", t.Name)
 
 		if t.Description != "" {
 			// Format description to handle code blocks
@@ -319,8 +319,8 @@ and expectations (assertions about what should happen).
 				}
 				desc = strings.ReplaceAll(desc, "|", "\\|")
 
-				sb.WriteString(fmt.Sprintf("| `%s` | %s | %s | %s |\n",
-					f.JSONName, f.Type, required, desc))
+				fmt.Fprintf(&sb, "| `%s` | %s | %s | %s |\n",
+					f.JSONName, f.Type, required, desc)
 			}
 			sb.WriteString("\n")
 		}
