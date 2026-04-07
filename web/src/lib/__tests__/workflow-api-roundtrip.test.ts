@@ -195,13 +195,13 @@ describe("Workflow API Round-Trip", () => {
       description: "Test all node types preserve their fields",
       nodes: [
         {
-          id: "run-node",
+          id: "run_node",
           type: "run",
           command: "echo 'Hello World'",
           timeout: "5m",
         },
         {
-          id: "workflow-node",
+          id: "workflow_node",
           type: "workflow",
           args: {
             case: 'workflow' as const,
@@ -221,12 +221,12 @@ describe("Workflow API Round-Trip", () => {
           },
         } as Step,
         {
-          id: "join-node",
+          id: "join_node",
           type: "join",
           condition: "all",
         },
         {
-          id: "approval-node",
+          id: "approval_node",
           type: "approval",
           inputs: {
             prompt: "Approve this step?",
@@ -234,7 +234,7 @@ describe("Workflow API Round-Trip", () => {
           },
         },
         {
-          id: "save-msg-node",
+          id: "save_msg_node",
           type: "save_message",
           inputs: {
             role: "user",
@@ -249,11 +249,11 @@ describe("Workflow API Round-Trip", () => {
     const serialized = JSON.parse(JSON.stringify(workflow));
     
     // Verify each node type preserved its fields
-    const runNode = serialized.nodes.find((n: Step) => n.id === "run-node");
+    const runNode = serialized.nodes.find((n: Step) => n.id === "run_node");
     expect(runNode.command).toBe("echo 'Hello World'");
     expect(runNode.timeout).toBe("5m");
     
-    const workflowNode = serialized.nodes.find((n: Step) => n.id === "workflow-node");
+    const workflowNode = serialized.nodes.find((n: Step) => n.id === "workflow_node");
     expect(workflowNode.args.value.ref).toBe("builtin://agent");
     expect(workflowNode.args.value.args).toBeDefined();
     expect(workflowNode.args.value.args.message).toBe("Test message");
@@ -261,14 +261,14 @@ describe("Workflow API Round-Trip", () => {
     expect(workflowNode.args.value.thread).toBeDefined();
     expect(workflowNode.args.value.thread.mode).toBe("new");
     
-    const joinNode = serialized.nodes.find((n: Step) => n.id === "join-node");
+    const joinNode = serialized.nodes.find((n: Step) => n.id === "join_node");
     expect(joinNode.condition).toBe("all");
     
-    const approvalNode = serialized.nodes.find((n: Step) => n.id === "approval-node");
+    const approvalNode = serialized.nodes.find((n: Step) => n.id === "approval_node");
     expect(approvalNode.inputs).toBeDefined();
     expect(approvalNode.inputs.prompt).toBe("Approve this step?");
     
-    const saveNode = serialized.nodes.find((n: Step) => n.id === "save-msg-node");
+    const saveNode = serialized.nodes.find((n: Step) => n.id === "save_msg_node");
     expect(saveNode.inputs).toBeDefined();
     expect(saveNode.inputs.role).toBe("user");
     expect(saveNode.inputs.content).toBe("Saved message content");

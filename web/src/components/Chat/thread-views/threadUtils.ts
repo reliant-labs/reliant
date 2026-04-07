@@ -2,7 +2,7 @@
  * Thread utilities - color generation and display helpers
  */
 
-import type { ActiveThreadUpdate } from "../../../types/streaming";
+import type { ActiveThreadUpdate, RouterDecisionInfo } from "../../../types/streaming";
 
 /**
  * Generate a consistent color for a thread based on its ID
@@ -51,4 +51,15 @@ export function resolveThreadNameFromActiveThreads(
   if (update.thread_title) return formatNodeId(update.thread_title);
   if (update.spawned_by_node_id) return formatNodeId(update.spawned_by_node_id);
   return undefined;
+}
+
+/**
+ * Resolve router decision metadata from activeThreads streaming data.
+ */
+export function resolveRouterDecisionFromActiveThreads(
+  threadId: string,
+  activeThreads: ActiveThreadUpdate[]
+): RouterDecisionInfo | undefined {
+  const update = activeThreads.find((t) => t.thread === threadId);
+  return update?.router_decision;
 }

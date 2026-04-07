@@ -150,12 +150,18 @@ func (s *WorkflowService) ListWorkflows(
 		invalidWorkflows = append(invalidWorkflows, projectInvalid...)
 	}
 
-	// 3. Load user's workflows from database (user-owned, available across all projects)
-	// User workflows have highest priority and override project files with same slug
+	// 3. Load user's workflows from database (user-owned, available across all projects).
+	// Default listing is chat-safe and only returns runnable drafts. Management UIs such as
+	// the Workflow Hub can opt into the full draft list with include_hidden=true.
 	userID := auth.MustGetUserID(ctx)
-	dbDrafts, err := s.database.ListWorkflowDraftsByUser(ctx, userID)
+	var dbDrafts []*db.WorkflowDraft
+	if req.Msg.IncludeHidden {
+		dbDrafts, err = s.database.ListWorkflowDraftsByUser(ctx, userID)
+	} else {
+		dbDrafts, err = s.database.ListUsableWorkflowsByUser(ctx, userID)
+	}
 	if err != nil {
-		logging.Error("Failed to list workflows from database", "error", err, "user_id", userID)
+		logging.Error("Failed to list workflows from database", "error", err, "user_id", userID, "include_hidden", req.Msg.IncludeHidden)
 		// Continue with builtins and project workflows
 	} else {
 		for _, draft := range dbDrafts {
@@ -186,8 +192,7 @@ func (s *WorkflowService) ListWorkflows(
 				updatedAt := draft.UpdatedAt.Format(time.RFC3339)
 				item.UpdatedAt = &updatedAt
 			}
-			// Use draft.Slug directly as the map key - this is the stable ID stored in the database.
-			// Frontend should use DraftId for lookups to avoid slug generation inconsistencies.
+			// Use draft.Slug directly as the map key - this is the stable runtime identifier.
 			workflowsBySlug[draft.Slug] = item
 		}
 	}

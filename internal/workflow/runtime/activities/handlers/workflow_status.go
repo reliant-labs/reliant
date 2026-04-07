@@ -20,18 +20,25 @@ import (
 // ============================================================================
 
 // WorkflowStatusInput is the input for WorkflowStatus activity
+// RouterDecisionInfo carries routing decision metadata for UI display.
+type RouterDecisionInfo struct {
+	Workflow string `json:"workflow"` // Selected workflow ref
+	Preset   string `json:"preset"`   // Selected preset
+}
+
 type WorkflowStatusInput struct {
-	ChatID              string `json:"chat_id" reliant:"-"`
-	WorkflowID          string `json:"workflow_id"`
-	WorkflowName        string `json:"workflow_name"`
-	Status              string `json:"status"`                            // "started", "completed", "failed", "cancelled", or "yielded"
-	ParentWorkflowID    string `json:"parent_workflow_id,omitempty"`      // Parent workflow UUID (empty for root)
-	Thread              string `json:"thread,omitempty"`                  // Thread path for message isolation
-	ThreadTitle         string `json:"thread_title,omitempty"`            // Human-readable title for the thread (e.g., preset name or node ID)
-	Title               string `json:"title,omitempty"`                   // Title/prompt (for child workflows, shown in UI swim lane header)
-	SpawnedByToolCallID string `json:"spawned_by_tool_call_id,omitempty"` // Tool call ID that spawned this workflow
-	SpawnedByNodeID     string `json:"spawned_by_node_id,omitempty"`      // Node ID that spawned this child workflow
-	LoopIteration       *int64 `json:"loop_iteration,omitempty"`          // Iteration index when spawned by a loop node
+	ChatID              string              `json:"chat_id" reliant:"-"`
+	WorkflowID          string              `json:"workflow_id"`
+	WorkflowName        string              `json:"workflow_name"`
+	Status              string              `json:"status"`                            // "started", "completed", "failed", "cancelled", or "yielded"
+	ParentWorkflowID    string              `json:"parent_workflow_id,omitempty"`      // Parent workflow UUID (empty for root)
+	Thread              string              `json:"thread,omitempty"`                  // Thread path for message isolation
+	ThreadTitle         string              `json:"thread_title,omitempty"`            // Human-readable title for the thread (e.g., preset name or node ID)
+	Title               string              `json:"title,omitempty"`                   // Title/prompt (for child workflows, shown in UI swim lane header)
+	SpawnedByToolCallID string              `json:"spawned_by_tool_call_id,omitempty"` // Tool call ID that spawned this workflow
+	SpawnedByNodeID     string              `json:"spawned_by_node_id,omitempty"`      // Node ID that spawned this child workflow
+	LoopIteration       *int64              `json:"loop_iteration,omitempty"`          // Iteration index when spawned by a loop node
+	RouterDecision      *RouterDecisionInfo `json:"router_decision,omitempty"`         // Routing decision metadata (set when spawned by a router node)
 }
 
 // WorkflowStatusOutput is the output from WorkflowStatus activity
@@ -279,6 +286,12 @@ func (a *WorkflowStatusActivity) emitThreadUpdate(ctx context.Context, input Wor
 	}
 	if input.SpawnedByNodeID != "" {
 		updateData["spawned_by_node_id"] = input.SpawnedByNodeID
+	}
+	if input.RouterDecision != nil {
+		updateData["router_decision"] = map[string]string{
+			"workflow": input.RouterDecision.Workflow,
+			"preset":   input.RouterDecision.Preset,
+		}
 	}
 
 	updateDataJSON, err := json.Marshal(updateData)

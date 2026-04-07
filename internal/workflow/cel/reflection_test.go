@@ -272,7 +272,7 @@ func TestTypeRegistry_NodeTypes(t *testing.T) {
 	expectedTypes := []string{
 		"call_llm", "execute_tools", "compact", "approval",
 		"save_message_node", "create_worktree", "run",
-		"workflow", "loop", "join",
+		"workflow", "loop", "join", "router",
 	}
 	for _, et := range expectedTypes {
 		if !typeSet[et] {
@@ -350,6 +350,47 @@ func TestTypeRegistry_OutputFieldsForNodeType(t *testing.T) {
 	}
 	if _, ok := fieldMap["stderr"]; !ok {
 		t.Error("expected 'stderr' output field for run")
+	}
+}
+
+func TestTypeRegistry_RouterOutputType(t *testing.T) {
+	reg := NewTypeRegistry()
+
+	md, ok := reg.OutputForNodeType("router")
+	if !ok {
+		t.Fatal("expected output descriptor for 'router'")
+	}
+	if string(md.FullName()) != "reliant.v1.RouterOutput" {
+		t.Errorf("expected full name = %q, got %q", "reliant.v1.RouterOutput", md.FullName())
+	}
+
+	fields := reg.OutputFieldsForNodeType("router")
+	if len(fields) == 0 {
+		t.Fatal("expected output fields for router, got none")
+	}
+
+	fieldMap := make(map[string]FieldInfo)
+	for _, f := range fields {
+		fieldMap[f.Name] = f
+	}
+
+	expectedFields := []string{"selected_workflow", "selected_preset", "prompt", "reasoning", "outputs"}
+	for _, name := range expectedFields {
+		if _, ok := fieldMap[name]; !ok {
+			t.Errorf("expected %q output field for router", name)
+		}
+	}
+}
+
+func TestTypeRegistry_RouterArgsType(t *testing.T) {
+	reg := NewTypeRegistry()
+
+	md, ok := reg.ArgsForNodeType("router")
+	if !ok {
+		t.Fatal("expected args descriptor for 'router'")
+	}
+	if string(md.FullName()) != "reliant.v1.RouterArgs" {
+		t.Errorf("expected full name = %q, got %q", "reliant.v1.RouterArgs", md.FullName())
 	}
 }
 

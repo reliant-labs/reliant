@@ -9,6 +9,8 @@ export interface CELCompletionContextValue {
   inputParams: Record<string, { type: string; description?: string }>;
   /** Edges in the workflow (for upstream computation) */
   edges?: Array<{ source: string; target: string }>;
+  /** Per-node declared output keys (e.g., from router outputs map) */
+  nodeDeclaredOutputs?: Record<string, string[]>;
 }
 
 const CELCompletionCtx = createContext<CELCompletionContextValue | null>(null);

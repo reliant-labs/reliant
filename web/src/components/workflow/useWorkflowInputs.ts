@@ -10,6 +10,7 @@ import { usePreferencesStore } from "../../store/preferencesStore";
 import type { InputGroupDef } from "./WorkflowInputGroup";
 import type { InputDef } from "../../lib/inputHelpers";
 import { isConfigurableInput, getInputNestedInputs, getInputPresetConfig, getInputUI, getInputDefault } from "../../lib/inputHelpers";
+import { canonicalizeBuiltinWorkflowRef } from "./workflowRef";
 
 // ============================================
 // Types
@@ -197,7 +198,16 @@ export function useWorkflowInputs({
     const fetchDef = async () => {
       setLoadingDef(true);
       try {
-        const result = await workflowGrpc.getWorkflow(projectId, { name: workflowRef });
+        const builtinWorkflowRefs = (await workflowGrpc.listWorkflows(projectId))
+          .filter((workflow) => workflow.source === "builtin")
+          .map((workflow) => workflow.name);
+        const canonicalWorkflowRef = canonicalizeBuiltinWorkflowRef(
+          workflowRef,
+          builtinWorkflowRefs,
+        );
+        const result = await workflowGrpc.getWorkflow(projectId, {
+          name: canonicalWorkflowRef,
+        });
         setWorkflowDef(result.workflow ?? null);
         // Reset presets when workflow changes
         setSelectedPresets({});

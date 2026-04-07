@@ -28,7 +28,7 @@ var validJSONSchemaTypes = map[string]bool{
 // =============================================================================
 
 // identifierPattern defines valid user-defined identifiers.
-var identifierPattern = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]*$`)
+var identifierPattern = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_]*$`)
 
 // validateIdentifier checks if a name is a valid user-defined identifier.
 func validateIdentifier(name string, context string) *validationError {
@@ -47,7 +47,7 @@ func validateIdentifier(name string, context string) *validationError {
 	if !identifierPattern.MatchString(name) {
 		return &validationError{
 			path:    context,
-			message: fmt.Sprintf("invalid %s '%s': must start with a letter and contain only letters, digits, underscores, or hyphens", context, name),
+			message: fmt.Sprintf("invalid %s '%s': must start with a letter and contain only letters, digits, or underscores", context, name),
 		}
 	}
 	return nil
@@ -70,7 +70,7 @@ func validateOutputName(name string) *validationError {
 	if !identifierPattern.MatchString(name) {
 		return &validationError{
 			path:    "output name",
-			message: fmt.Sprintf("invalid output name '%s': must start with a letter and contain only letters, digits, underscores, or hyphens", name),
+			message: fmt.Sprintf("invalid output name '%s': must start with a letter and contain only letters, digits, or underscores", name),
 		}
 	}
 	return nil
@@ -321,6 +321,22 @@ func validateNodeArgs(node *reliantv1.Node, nodePath []string, result *Result) {
 				"workflow/loop node requires either 'ref' or 'inline'")
 		}
 
+	case model.NodeTypeRouter:
+		args := node.GetRouter()
+		if args == nil {
+			result.AddError(CategoryStructure, nodePath, "args", "router node missing args")
+			return
+		}
+		if len(args.GetWorkflows()) == 0 {
+			result.AddError(CategoryStructure, nodePath, "workflows",
+				"router node requires at least one candidate workflow")
+		}
+		for i, candidate := range args.GetWorkflows() {
+			if candidate.GetRef() == "" {
+				result.AddError(CategoryStructure, nodePath, "workflows",
+					fmt.Sprintf("router candidate %d has empty ref", i))
+			}
+		}
 	case model.NodeTypeJoin:
 		// Only "all" and "any" are valid join conditions
 		condExpr := model.ConditionExpr(node)
@@ -680,7 +696,7 @@ func nodeWritesToThread(node *reliantv1.Node) bool {
 	switch node.GetType() {
 	case model.NodeTypeSaveMessage:
 		return true
-	case model.NodeTypeWorkflow, model.NodeTypeLoop:
+	case model.NodeTypeWorkflow, model.NodeTypeLoop, model.NodeTypeRouter:
 		return true
 	}
 	return false

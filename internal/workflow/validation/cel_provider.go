@@ -240,6 +240,10 @@ func (p *workflowTypeProvider) findInputFieldType(inputName string) (*types.Fiel
 		if _, ok := p.typeCtx.InputGroups[inputName]; ok {
 			return &types.FieldType{Type: types.NewObjectType("inputs." + inputName)}, true
 		}
+		// Inline workflows receive inputs dynamically via args; allow any field as dyn.
+		if p.typeCtx.LenientInputs {
+			return &types.FieldType{Type: types.DynType}, true
+		}
 		return nil, false
 	}
 
@@ -252,7 +256,7 @@ func (p *workflowTypeProvider) findInputFieldType(inputName string) (*types.Fiel
 }
 
 func (p *workflowTypeProvider) findOutputFieldType(outputName string) (*types.FieldType, bool) {
-	if p.typeCtx.OutputFields == nil {
+	if len(p.typeCtx.OutputFields) == 0 {
 		return &types.FieldType{Type: types.DynType}, true
 	}
 

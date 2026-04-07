@@ -44,7 +44,7 @@ nodes:
 	require.NoError(t, err)
 
 	result := NewResult()
-	validateCEL(wf, result)
+	ValidateCELWithCompilation(wf, result, nil)
 
 	// Should have a warning about conditional access
 	warnings := result.Warnings()
@@ -86,7 +86,7 @@ nodes:
 	require.NoError(t, err)
 
 	result := NewResult()
-	validateCEL(wf, result)
+	ValidateCELWithCompilation(wf, result, nil)
 
 	// Should have no warnings about conditional access
 	warnings := result.ByCategory(CategoryConditionalAccess)
@@ -126,7 +126,7 @@ nodes:
 	require.NoError(t, err)
 
 	result := NewResult()
-	validateCEL(wf, result)
+	ValidateCELWithCompilation(wf, result, nil)
 
 	// Should have no warnings about conditional access
 	warnings := result.ByCategory(CategoryConditionalAccess)
@@ -168,7 +168,7 @@ edges:
 	require.NoError(t, err)
 
 	result := NewResult()
-	validateCEL(wf, result)
+	ValidateCELWithCompilation(wf, result, nil)
 
 	// Should have no warnings about conditional access
 	warnings := result.ByCategory(CategoryConditionalAccess)
@@ -210,7 +210,7 @@ edges:
 	require.NoError(t, err)
 
 	result := NewResult()
-	validateCEL(wf, result)
+	ValidateCELWithCompilation(wf, result, nil)
 
 	// Should have no warnings about conditional access
 	warnings := result.ByCategory(CategoryConditionalAccess)
@@ -252,7 +252,7 @@ edges:
 	require.NoError(t, err)
 
 	result := NewResult()
-	validateCEL(wf, result)
+	ValidateCELWithCompilation(wf, result, nil)
 
 	// Should have no warnings about conditional access
 	warnings := result.ByCategory(CategoryConditionalAccess)
@@ -301,7 +301,7 @@ edges:
 	require.NoError(t, err)
 
 	result := NewResult()
-	validateCEL(wf, result)
+	ValidateCELWithCompilation(wf, result, nil)
 
 	// Should have no warnings about conditional access for join nodes
 	warnings := result.ByCategory(CategoryConditionalAccess)
@@ -348,7 +348,7 @@ edges:
 	require.NoError(t, err)
 
 	result := NewResult()
-	validateCEL(wf, result)
+	ValidateCELWithCompilation(wf, result, nil)
 
 	// Should have a warning about conditional access in edge condition
 	warnings := result.ByCategory(CategoryConditionalAccess)
@@ -390,7 +390,7 @@ outputs:
 	require.NoError(t, err)
 
 	result := NewResult()
-	validateCEL(wf, result)
+	ValidateCELWithCompilation(wf, result, nil)
 
 	// Should have a warning about conditional access in output expression
 	warnings := result.ByCategory(CategoryConditionalAccess)
@@ -446,7 +446,7 @@ nodes:
 	require.NoError(t, err)
 
 	result := NewResult()
-	validateCEL(wf, result)
+	ValidateCELWithCompilation(wf, result, nil)
 
 	// Should have warnings about both conditional nodes
 	warnings := result.ByCategory(CategoryConditionalAccess)

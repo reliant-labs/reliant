@@ -130,6 +130,86 @@ func TestCompileSubWorkflowSemanticContracts(t *testing.T) {
 			},
 		},
 		{
+			name: "router node uses first candidate ref as placeholder identity",
+			workflow: &reliantv1.Workflow{
+				Name: "root",
+				Nodes: []*reliantv1.Node{
+					{
+						Id:   "route",
+						Type: "router",
+						Args: &reliantv1.Node_Router{
+							Router: &reliantv1.RouterArgs{
+								Workflows: []*reliantv1.RouterWorkflowCandidate{
+									{Ref: "builtin://agent", Presets: []string{"general", "researcher"}},
+									{Ref: "builtin://code-review"},
+								},
+							},
+						},
+					},
+				},
+			},
+			options: CompileOptions{CanonicalWorkflowRef: "builtin://root"},
+			assert: func(t *testing.T, program *Program, err error) {
+				t.Helper()
+				if err != nil {
+					t.Fatalf("compile returned error: %v", err)
+				}
+				contract, ok := program.Semantics.SubWorkflows["route"]
+				if !ok {
+					t.Fatalf("expected contract for node path route")
+				}
+				if contract.NodeType != "router" {
+					t.Fatalf("node type mismatch: got %q", contract.NodeType)
+				}
+				if contract.WorkflowRef != "builtin://agent" {
+					t.Fatalf("workflow ref mismatch: got %q, want %q", contract.WorkflowRef, "builtin://agent")
+				}
+				if contract.InvocationMode != InvocationModeRef {
+					t.Fatalf("invocation mode mismatch: got %q", contract.InvocationMode)
+				}
+				if contract.LoadStrategy != LoadStrategyLoadByWorkflowRef {
+					t.Fatalf("load strategy mismatch: got %q", contract.LoadStrategy)
+				}
+				if contract.InputPolicy != InputPolicyRefPresetsArgsDefaults {
+					t.Fatalf("input policy mismatch: got %q", contract.InputPolicy)
+				}
+			},
+		},
+		{
+			name: "router node with no candidates falls back to placeholder ref",
+			workflow: &reliantv1.Workflow{
+				Name: "root",
+				Nodes: []*reliantv1.Node{
+					{
+						Id:   "route",
+						Type: "router",
+						Args: &reliantv1.Node_Router{
+							Router: &reliantv1.RouterArgs{
+								Workflows: []*reliantv1.RouterWorkflowCandidate{},
+							},
+						},
+					},
+				},
+			},
+			options: CompileOptions{CanonicalWorkflowRef: "builtin://root"},
+			assert: func(t *testing.T, program *Program, err error) {
+				t.Helper()
+				if err != nil {
+					t.Fatalf("compile returned error: %v", err)
+				}
+				contract, ok := program.Semantics.SubWorkflows["route"]
+				if !ok {
+					t.Fatalf("expected contract for node path route")
+				}
+				if contract.WorkflowRef != "router" {
+					t.Fatalf("workflow ref mismatch: got %q, want %q", contract.WorkflowRef, "router")
+				}
+				if contract.NodeType != "router" {
+					t.Fatalf("node type mismatch: got %q", contract.NodeType)
+				}
+			},
+		},
+		{
 			name: "nested inline under ref inherits referenced workflow identity",
 			workflow: &reliantv1.Workflow{
 				Name: "root",

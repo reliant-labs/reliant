@@ -386,6 +386,113 @@ func TestCycleDetection(t *testing.T) {
 // INLINE WORKFLOW TESTS
 // =============================================================================
 
+func TestRouterNodeValidation(t *testing.T) {
+	tests := []struct {
+		name        string
+		workflow    *reliantv1.Workflow
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "valid router node",
+			workflow: &reliantv1.Workflow{
+				Name:  "test",
+				Entry: []string{"route"},
+				Nodes: []*reliantv1.Node{
+					{
+						Id:   "route",
+						Type: "router",
+						Args: &reliantv1.Node_Router{
+							Router: &reliantv1.RouterArgs{
+								Workflows: []*reliantv1.RouterWorkflowCandidate{
+									{Ref: "builtin://agent", Presets: []string{"general"}},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "router with empty workflows list",
+			workflow: &reliantv1.Workflow{
+				Name:  "test",
+				Entry: []string{"route"},
+				Nodes: []*reliantv1.Node{
+					{
+						Id:   "route",
+						Type: "router",
+						Args: &reliantv1.Node_Router{
+							Router: &reliantv1.RouterArgs{
+								Workflows: []*reliantv1.RouterWorkflowCandidate{},
+							},
+						},
+					},
+				},
+			},
+			wantErr:     true,
+			errContains: "workflow",
+		},
+		{
+			name: "router candidate with empty ref",
+			workflow: &reliantv1.Workflow{
+				Name:  "test",
+				Entry: []string{"route"},
+				Nodes: []*reliantv1.Node{
+					{
+						Id:   "route",
+						Type: "router",
+						Args: &reliantv1.Node_Router{
+							Router: &reliantv1.RouterArgs{
+								Workflows: []*reliantv1.RouterWorkflowCandidate{
+									{Ref: "", Presets: []string{"general"}},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantErr:     true,
+			errContains: "ref",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := StaticAnalysis(tt.workflow, nil)
+
+			var routerErrors []string
+			for _, err := range result.Errors() {
+				if strings.Contains(strings.ToLower(err.Message), tt.errContains) {
+					routerErrors = append(routerErrors, err.Message)
+				}
+			}
+
+			if tt.wantErr {
+				if len(routerErrors) == 0 {
+					allErrors := result.Errors()
+					errMsgs := make([]string, len(allErrors))
+					for i, e := range allErrors {
+						errMsgs[i] = e.Message
+					}
+					t.Errorf("expected router error containing %q, got errors: %v", tt.errContains, errMsgs)
+				}
+			} else {
+				// For valid case, check there are no errors at all
+				allErrors := result.Errors()
+				if len(allErrors) > 0 {
+					errMsgs := make([]string, len(allErrors))
+					for i, e := range allErrors {
+						errMsgs[i] = e.Message
+					}
+					t.Errorf("expected no errors for valid router, got: %v", errMsgs)
+				}
+			}
+		})
+	}
+}
+
 func TestInlineWorkflowCycleDetection(t *testing.T) {
 	// Test that cycle detection also works for inline workflows
 	workflow := &reliantv1.Workflow{

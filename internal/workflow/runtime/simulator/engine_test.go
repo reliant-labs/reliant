@@ -983,3 +983,155 @@ func TestEngine_RunScenario_RefLoopBlackBox(t *testing.T) {
 		assert.Equal(t, StatusPassed, result.Status, "mismatches: %v", result.Mismatches)
 	})
 }
+
+// --- Router node test workflows ---
+
+const workflowWithRouter = `
+name: test-router
+apiVersion: "1.0"
+entry: [route]
+nodes:
+  - id: route
+    type: router
+    prompt: "route this request"
+    model:
+      tags: [fast]
+    workflows:
+      - ref: builtin://agent
+        presets: [general, researcher]
+      - ref: builtin://agent
+        presets: [code_reviewer]
+  - id: save_result
+    type: save_message
+    role: "assistant"
+    content: "Routing complete"
+edges:
+  - from: route
+    default: save_result
+`
+
+const workflowWithRouterConditionalEdge = `
+name: test-router-conditional
+apiVersion: "1.0"
+entry: [route]
+nodes:
+  - id: route
+    type: router
+    prompt: "route this"
+    workflows:
+      - ref: builtin://agent
+        presets: [general, researcher]
+  - id: success
+    type: save_message
+    role: "assistant"
+    content: "Success"
+  - id: fallback
+    type: save_message
+    role: "assistant"
+    content: "Fallback"
+edges:
+  - from: route
+    cases:
+      - to: success
+        condition: "nodes.route.selected_preset == 'researcher'"
+    default: fallback
+`
+
+// routerOutput builds the mock output map for a router node.
+func routerOutput(workflow, preset, prompt, reasoning string) map[string]interface{} {
+	return map[string]interface{}{
+		"selected_workflow": workflow,
+		"selected_preset":   preset,
+		"prompt":            prompt,
+		"reasoning":         reasoning,
+		"outputs":           map[string]interface{}{"response_text": "completed"},
+	}
+}
+
+func TestEngine_RunScenario_RouterNode(t *testing.T) {
+	t.Run("happy path - router completes and downstream executes", func(t *testing.T) {
+		engine, err := NewEngineFromYAML(workflowWithRouter)
+		require.NoError(t, err)
+
+		scenario := &Scenario{
+			Name:        "router_happy_path",
+			Description: "Router completes, downstream save_message executes",
+			Events: []SimulatedEvent{
+				{
+					Node:   "route",
+					Output: routerOutput("builtin://agent", "researcher", "Research the auth module", "User wants investigation"),
+				},
+			},
+			Expect: &Expectation{
+				Outcome: OutcomeCompleted,
+				Reached: []string{"route", "save_result"},
+			},
+		}
+
+		result := engine.RunScenario(scenario)
+		t.Logf("NodesReached: %v", result.Execution.NodesReached)
+		t.Logf("Mismatches: %v", result.Mismatches)
+
+		assert.Equal(t, StatusPassed, result.Status, "mismatches: %v", result.Mismatches)
+		assert.Contains(t, result.Execution.NodesReached, "route")
+		assert.Contains(t, result.Execution.NodesReached, "save_result")
+	})
+
+	t.Run("conditional edge routes to success on matching preset", func(t *testing.T) {
+		engine, err := NewEngineFromYAML(workflowWithRouterConditionalEdge)
+		require.NoError(t, err)
+
+		scenario := &Scenario{
+			Name:        "router_conditional_researcher",
+			Description: "Router selects researcher preset, edge routes to success",
+			Events: []SimulatedEvent{
+				{
+					Node:   "route",
+					Output: routerOutput("builtin://agent", "researcher", "Research this", "Needs research"),
+				},
+			},
+			Expect: &Expectation{
+				Outcome:    OutcomeCompleted,
+				Reached:    []string{"route", "success"},
+				NotReached: []string{"fallback"},
+			},
+		}
+
+		result := engine.RunScenario(scenario)
+		t.Logf("NodesReached: %v", result.Execution.NodesReached)
+		t.Logf("Mismatches: %v", result.Mismatches)
+
+		assert.Equal(t, StatusPassed, result.Status, "mismatches: %v", result.Mismatches)
+		assert.Contains(t, result.Execution.NodesReached, "success")
+		assert.NotContains(t, result.Execution.NodesReached, "fallback")
+	})
+
+	t.Run("conditional edge routes to fallback on non-matching preset", func(t *testing.T) {
+		engine, err := NewEngineFromYAML(workflowWithRouterConditionalEdge)
+		require.NoError(t, err)
+
+		scenario := &Scenario{
+			Name:        "router_conditional_general",
+			Description: "Router selects general preset, edge routes to fallback",
+			Events: []SimulatedEvent{
+				{
+					Node:   "route",
+					Output: routerOutput("builtin://agent", "general", "General query", "Not research"),
+				},
+			},
+			Expect: &Expectation{
+				Outcome:    OutcomeCompleted,
+				Reached:    []string{"route", "fallback"},
+				NotReached: []string{"success"},
+			},
+		}
+
+		result := engine.RunScenario(scenario)
+		t.Logf("NodesReached: %v", result.Execution.NodesReached)
+		t.Logf("Mismatches: %v", result.Mismatches)
+
+		assert.Equal(t, StatusPassed, result.Status, "mismatches: %v", result.Mismatches)
+		assert.Contains(t, result.Execution.NodesReached, "fallback")
+		assert.NotContains(t, result.Execution.NodesReached, "success")
+	})
+}

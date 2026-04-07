@@ -124,6 +124,7 @@ export type RunStep = Step & { type: "run" };
 export type WorkflowStep = Step & { type: "workflow" };
 export type JoinStep = Step & { type: "join" };
 export type LoopStep = Step & { type: "loop" };
+export type RouterStep = Step & { type: "router" };
 export type ActionStep = Step;
 
 // =============================================================================
@@ -148,7 +149,7 @@ export interface ResponseToolDefinition {
 // HELPER FUNCTIONS
 // =============================================================================
 
-const STRUCTURAL_TYPES = new Set(["run", "workflow", "join", "loop"]);
+const STRUCTURAL_TYPES = new Set(["run", "workflow", "join", "loop", "router"]);
 
 export function isRunStep(step: Step): step is RunStep {
   return step.type === "run";
@@ -172,6 +173,10 @@ export function isJoinStep(step: Step): step is JoinStep {
 
 export function isLoopStep(step: Step): step is LoopStep {
   return step.type === "loop";
+}
+
+export function isRouterStep(step: Step): step is RouterStep {
+  return step.type === "router";
 }
 
 export function isInlineLoop(step: Step): boolean {
@@ -314,6 +319,9 @@ export function getStepProject(step: Step): ProjectConfig | undefined {
   if (step.args?.case === 'loop') {
     return (step.args.value as Partial<LoopArgs>)?.project as ProjectConfig | undefined
   }
+  if (step.args?.case === 'router') {
+    return (step.args.value as Record<string, unknown>)?.project as ProjectConfig | undefined
+  }
   if ((step.type === 'workflow' || step.type === 'loop') && step.args?.value) {
     return (step.args.value as Partial<SubWorkflowArgs>)?.project as ProjectConfig | undefined
   }
@@ -330,6 +338,9 @@ export function getStepThread(step: Step): NodeThreadConfig | undefined {
   }
   if ((step.type === 'workflow' || step.type === 'loop') && step.args?.value) {
     return (step.args.value as Partial<SubWorkflowArgs & LoopArgs>)?.thread as NodeThreadConfig | undefined
+  }
+  if (step.args?.case === 'router') {
+    return (step.args.value as Record<string, unknown>)?.thread as NodeThreadConfig | undefined
   }
   return undefined
 }
@@ -371,6 +382,47 @@ export function withLoopArgs(step: Step, updates: Partial<LoopArgs>): Step {
   } as Step
 }
 
+/** Update fields on a router step's args. Preserves existing args. */
+export function withRouterArgs(step: Step, updates: Record<string, unknown>): Step {
+  const current = step.args?.case === 'router'
+    ? { ...(step.args.value as Record<string, unknown>) }
+    : { workflows: [] }
+  return {
+    ...step,
+    args: { case: 'router' as const, value: { ...current, ...updates } },
+  } as Step
+}
+
+/**
+ * Merge a step update onto the current step while preserving same-case nested args fields
+ * that may be omitted by stale editor snapshots.
+ */
+export function mergeStepUpdate(currentStep: Step, updatedStep: Step): Step {
+  if (
+    currentStep.id !== updatedStep.id ||
+    currentStep.type !== updatedStep.type ||
+    currentStep.args?.case !== updatedStep.args?.case ||
+    currentStep.args?.value == null ||
+    updatedStep.args?.value == null ||
+    typeof currentStep.args.value !== 'object' ||
+    typeof updatedStep.args.value !== 'object'
+  ) {
+    return updatedStep
+  }
+
+  return {
+    ...currentStep,
+    ...updatedStep,
+    args: {
+      case: updatedStep.args.case,
+      value: {
+        ...(currentStep.args.value as Record<string, unknown>),
+        ...(updatedStep.args.value as Record<string, unknown>),
+      },
+    },
+  } as Step
+}
+
 /** Initialize args oneof for a new step based on its type */
 export function initStepArgs(type: string): Step['args'] {
   switch (type) {
@@ -380,6 +432,8 @@ export function initStepArgs(type: string): Step['args'] {
       return { case: 'workflow' as const, value: { args: {}, presets: {} } } as Step['args']
     case 'loop':
       return { case: 'loop' as const, value: { args: {}, presets: {}, yield: '' } } as Step['args']
+    case 'router':
+      return { case: 'router' as const, value: { workflows: [] } } as Step['args']
     default: {
       // Action step types get their typed args.case from the catalog mapping
       const actionCase = ACTION_TYPE_TO_CASE[type]
