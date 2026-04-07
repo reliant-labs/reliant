@@ -124,6 +124,30 @@ linters:
         # G404: Weak random (math/rand vs crypto/rand) - Used only for non-security
         # purposes: retry jitter, port selection, temp file names. Not for crypto.
         - G404
+        # G117: Marshaled struct with secret-pattern field names - We intentionally
+        # serialize auth tokens (access_token, refresh_token) for storage/transport.
+        - G117
+        # G118: Goroutine with background context - Intentional fire-and-forget or
+        # long-lived goroutines that outlive the request scope by design.
+        - G118
+        # G120: Form parsing without body size limit - Only used in internal dev
+        # server endpoints, not exposed to public traffic.
+        - G120
+        # G122: filepath.Walk race-prone path - Acceptable for a CLI tool that
+        # operates on the local filesystem under user control.
+        - G122
+        # G702: Command injection via taint - Same rationale as G204; the tool
+        # executes shell commands with user-provided inputs by design.
+        - G702
+        # G703: Path traversal via taint - Same rationale as G304; the tool reads
+        # and writes files at user-specified paths by design.
+        - G703
+        # G704: SSRF via taint - We make intentional HTTP requests to external
+        # services (OAuth providers, API endpoints) with user-configured URLs.
+        - G704
+        # G706: Log injection via taint - We use structured logging (slog) with
+        # key-value pairs; the tainted data is in value position, not format string.
+        - G706
 
 output:
   formats:

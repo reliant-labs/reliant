@@ -125,26 +125,26 @@ func (b *bashListTool) Execute(rctx *rctx.ToolContext, params BashListParams) (T
 			output.WriteString("\n---\n\n")
 		}
 
-		output.WriteString(fmt.Sprintf("Process ID: %s\n", p.ID))
-		output.WriteString(fmt.Sprintf("Status: %s\n", p.Status))
-		output.WriteString(fmt.Sprintf("Command: %s\n", p.Command))
-		output.WriteString(fmt.Sprintf("Started: %s\n", p.StartTime.Format(time.RFC3339)))
+		fmt.Fprintf(&output, "Process ID: %s\n", p.ID)
+		fmt.Fprintf(&output, "Status: %s\n", p.Status)
+		fmt.Fprintf(&output, "Command: %s\n", p.Command)
+		fmt.Fprintf(&output, "Started: %s\n", p.StartTime.Format(time.RFC3339))
 
 		if p.Status == "running" {
 			duration := time.Since(p.StartTime)
-			output.WriteString(fmt.Sprintf("Running for: %s\n", formatDuration(duration)))
+			fmt.Fprintf(&output, "Running for: %s\n", formatDuration(duration))
 		} else if p.EndTime != nil {
-			output.WriteString(fmt.Sprintf("Ended: %s\n", p.EndTime.Format(time.RFC3339)))
+			fmt.Fprintf(&output, "Ended: %s\n", p.EndTime.Format(time.RFC3339))
 			duration := p.EndTime.Sub(p.StartTime)
-			output.WriteString(fmt.Sprintf("Duration: %s\n", formatDuration(duration)))
+			fmt.Fprintf(&output, "Duration: %s\n", formatDuration(duration))
 		}
 
 		if p.ExitCode != nil {
-			output.WriteString(fmt.Sprintf("Exit Code: %d\n", *p.ExitCode))
+			fmt.Fprintf(&output, "Exit Code: %d\n", *p.ExitCode)
 		}
 	}
 
-	output.WriteString(fmt.Sprintf("\n\nTotal: %d processes (%d running)\n", len(filteredProcesses), runningCount))
+	fmt.Fprintf(&output, "\n\nTotal: %d processes (%d running)\n", len(filteredProcesses), runningCount)
 
 	metadata := BashListResponseMetadata{
 		TotalProcesses:   len(filteredProcesses),

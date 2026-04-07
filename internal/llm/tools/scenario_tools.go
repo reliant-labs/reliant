@@ -213,7 +213,7 @@ func (t *viewScenarioTool) Execute(ctx *rctx.ToolContext, args ViewScenarioParam
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("# Scenario: %s\n\n", scenario.Name))
+	fmt.Fprintf(&sb, "# Scenario: %s\n\n", scenario.Name)
 
 	// Status
 	status := "Not run"
@@ -227,9 +227,9 @@ func (t *viewScenarioTool) Execute(ctx *rctx.ToolContext, args ViewScenarioParam
 			status = "⚠ Error"
 		}
 	}
-	sb.WriteString(fmt.Sprintf("**Last Run Status:** %s\n", status))
+	fmt.Fprintf(&sb, "**Last Run Status:** %s\n", status)
 	if scenario.LastRunAt.Valid {
-		sb.WriteString(fmt.Sprintf("**Last Run:** %s\n\n", scenario.LastRunAt.Time.Format("2006-01-02 15:04:05")))
+		fmt.Fprintf(&sb, "**Last Run:** %s\n\n", scenario.LastRunAt.Time.Format("2006-01-02 15:04:05"))
 	}
 
 	sb.WriteString("```yaml\n")
@@ -240,7 +240,7 @@ func (t *viewScenarioTool) Execute(ctx *rctx.ToolContext, args ViewScenarioParam
 	sb.WriteString("```\n\n")
 
 	sb.WriteString("---\n")
-	sb.WriteString(fmt.Sprintf("**Updated at:** `%s`\n", scenario.UpdatedAt.Format(time.RFC3339)))
+	fmt.Fprintf(&sb, "**Updated at:** `%s`\n", scenario.UpdatedAt.Format(time.RFC3339))
 
 	// Last run result
 	if scenario.LastRunResult.Valid && scenario.LastRunResult.String != "" {

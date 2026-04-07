@@ -115,8 +115,8 @@ This reference documents the structured types used in workflow definitions and n
 `)
 
 	// Generate Config Types section
-	sb.WriteString(fmt.Sprintf("## %s\n\n", configTypes.Name))
-	sb.WriteString(fmt.Sprintf("%s\n\n", configTypes.Description))
+	fmt.Fprintf(&sb, "## %s\n\n", configTypes.Name)
+	fmt.Fprintf(&sb, "%s\n\n", configTypes.Description)
 
 	// Sort config types for consistent output
 	sortedConfigTypes := make([]string, len(configTypes.Types))
@@ -128,8 +128,8 @@ This reference documents the structured types used in workflow definitions and n
 	}
 
 	// Generate Output Types section
-	sb.WriteString(fmt.Sprintf("## %s\n\n", outputTypes.Name))
-	sb.WriteString(fmt.Sprintf("%s\n\n", outputTypes.Description))
+	fmt.Fprintf(&sb, "## %s\n\n", outputTypes.Name)
+	fmt.Fprintf(&sb, "%s\n\n", outputTypes.Description)
 
 	// Sort output types for consistent output
 	sortedOutputTypes := make([]string, len(outputTypes.Types))

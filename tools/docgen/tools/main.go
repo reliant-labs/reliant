@@ -159,7 +159,7 @@ description: Auto-generated quick reference for all tools (tags, names, descript
 	sb.WriteString("| Tag | Description |\n")
 	sb.WriteString("|-----|-------------|\n")
 	for _, tag := range tagInfos {
-		sb.WriteString(fmt.Sprintf("| `tag:%s` | %s |\n", tag.Name, tag.Description))
+		fmt.Fprintf(&sb, "| `tag:%s` | %s |\n", tag.Name, tag.Description)
 	}
 	sb.WriteString("\n---\n\n")
 
@@ -233,7 +233,7 @@ description: Auto-generated quick reference for all tools (tags, names, descript
 		if len(cat.Tools) == 0 {
 			continue
 		}
-		sb.WriteString(fmt.Sprintf("- [%s](#%s) (%d tools)\n", cat.Name, cat.Anchor, len(cat.Tools)))
+		fmt.Fprintf(&sb, "- [%s](#%s) (%d tools)\n", cat.Name, cat.Anchor, len(cat.Tools))
 	}
 	sb.WriteString("\n---\n\n")
 
@@ -244,9 +244,9 @@ description: Auto-generated quick reference for all tools (tags, names, descript
 		}
 
 		// Section Header
-		sb.WriteString(fmt.Sprintf("## %s\n\n", cat.Name))
+		fmt.Fprintf(&sb, "## %s\n\n", cat.Name)
 		if cat.Description != "" {
-			sb.WriteString(fmt.Sprintf("_%s_\n\n", cat.Description))
+			fmt.Fprintf(&sb, "_%s_\n\n", cat.Description)
 		}
 
 		// Summary Table
@@ -259,20 +259,20 @@ description: Auto-generated quick reference for all tools (tags, names, descript
 				tagsStr = "-"
 			}
 			// Link to the details anchor below
-			sb.WriteString(fmt.Sprintf("| [`%s`](#%s) | %s | %s |\n",
+			fmt.Fprintf(&sb, "| [`%s`](#%s) | %s | %s |\n",
 				tool.Name,
 				strings.ToLower(tool.Name),
 				tagsStr,
 				shortDesc,
-			))
+			)
 		}
 		sb.WriteString("\n")
 
 		// Tool Details for this category
 		for _, tool := range cat.Tools {
-			sb.WriteString(fmt.Sprintf("### %s\n\n", tool.Name))
+			fmt.Fprintf(&sb, "### %s\n\n", tool.Name)
 			if len(tool.Tags) > 0 {
-				sb.WriteString(fmt.Sprintf("**Tags:** `%s`\n\n", strings.Join(tool.Tags, "`, `")))
+				fmt.Fprintf(&sb, "**Tags:** `%s`\n\n", strings.Join(tool.Tags, "`, `"))
 			}
 
 			if tool.Description != "" {

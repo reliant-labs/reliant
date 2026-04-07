@@ -212,10 +212,10 @@ func (r *Result) Error() string {
 
 	var sb strings.Builder
 	errs := r.Errors()
-	sb.WriteString(fmt.Sprintf("validation failed with %d error(s):\n", len(errs)))
+	fmt.Fprintf(&sb, "validation failed with %d error(s):\n", len(errs))
 
 	for i, err := range errs {
-		sb.WriteString(fmt.Sprintf("  %d. %s\n", i+1, err.Error()))
+		fmt.Fprintf(&sb, "  %d. %s\n", i+1, err.Error())
 	}
 
 	return sb.String()

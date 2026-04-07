@@ -78,7 +78,7 @@ func (t *getCELReferenceTool) Execute(rctx *rctx.ToolContext, args GetCELReferen
 	sb.WriteString("## Namespaces\n\n")
 
 	for _, ns := range reference.CELNamespaces {
-		sb.WriteString(fmt.Sprintf("### %s.*\n\n", ns.Name))
+		fmt.Fprintf(&sb, "### %s.*\n\n", ns.Name)
 
 		// Clean up description (remove prefix like "CELInputs provides")
 		desc := ns.Description
@@ -94,7 +94,7 @@ func (t *getCELReferenceTool) Execute(rctx *rctx.ToolContext, args GetCELReferen
 			sb.WriteString("| Field | Type | Description |\n")
 			sb.WriteString("|-------|------|-------------|\n")
 			for _, f := range ns.Fields {
-				sb.WriteString(fmt.Sprintf("| `%s.%s` | %s | %s |\n", ns.Name, f.Name, f.Type, f.Description))
+				fmt.Fprintf(&sb, "| `%s.%s` | %s | %s |\n", ns.Name, f.Name, f.Type, f.Description)
 			}
 			sb.WriteString("\n")
 		} else if ns.IsDynamic {
@@ -130,7 +130,7 @@ func (t *getCELReferenceTool) Execute(rctx *rctx.ToolContext, args GetCELReferen
 	sb.WriteString("| Function | Description | Example |\n")
 	sb.WriteString("|----------|-------------|--------|\n")
 	for _, fn := range reference.CELFunctions {
-		sb.WriteString(fmt.Sprintf("| `%s` | %s | `%s` |\n", fn.Signature, fn.Description, fn.Example))
+		fmt.Fprintf(&sb, "| `%s` | %s | `%s` |\n", fn.Signature, fn.Description, fn.Example)
 	}
 	sb.WriteString("\n")
 

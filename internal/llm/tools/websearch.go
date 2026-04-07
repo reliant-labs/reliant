@@ -158,7 +158,7 @@ func (t *webSearchTool) Execute(rctx *rctx.ToolContext, params WebSearchParams) 
 		var warningBuf strings.Builder
 		warningBuf.WriteString("**QUERY WARNINGS:**\n")
 		for _, w := range queryWarnings {
-			warningBuf.WriteString(fmt.Sprintf("- %s\n", w))
+			fmt.Fprintf(&warningBuf, "- %s\n", w)
 		}
 		warningBuf.WriteString("\n")
 		formattedResults = warningBuf.String() + formattedResults
@@ -292,9 +292,9 @@ func formatWebSearchResults(results []searchResult, params WebSearchParams) stri
 	var buffer strings.Builder
 
 	buffer.WriteString("# Web Search Results\n\n")
-	buffer.WriteString(fmt.Sprintf("Query: **%s**\n", params.Query))
+	fmt.Fprintf(&buffer, "Query: **%s**\n", params.Query)
 	buffer.WriteString("Source: DuckDuckGo\n")
-	buffer.WriteString(fmt.Sprintf("Results: %d\n\n", len(results)))
+	fmt.Fprintf(&buffer, "Results: %d\n\n", len(results))
 
 	if len(results) == 0 {
 		buffer.WriteString("No results found. Try a different query.\n")
@@ -304,14 +304,14 @@ func formatWebSearchResults(results []searchResult, params WebSearchParams) stri
 	buffer.WriteString("---\n\n")
 
 	for i, result := range results {
-		buffer.WriteString(fmt.Sprintf("## %d. %s\n\n", i+1, result.Title))
+		fmt.Fprintf(&buffer, "## %d. %s\n\n", i+1, result.Title)
 
 		if result.URL != "" {
-			buffer.WriteString(fmt.Sprintf("**URL:** %s\n\n", result.URL))
+			fmt.Fprintf(&buffer, "**URL:** %s\n\n", result.URL)
 		}
 
 		if result.Description != "" {
-			buffer.WriteString(fmt.Sprintf("%s\n\n", result.Description))
+			fmt.Fprintf(&buffer, "%s\n\n", result.Description)
 		}
 
 		buffer.WriteString("---\n\n")

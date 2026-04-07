@@ -115,7 +115,7 @@ func (t *listPresetsTool) Execute(rctx *rctx.ToolContext, args ListPresetsParams
 		if tag == "" {
 			tag = "-"
 		}
-		sb.WriteString(fmt.Sprintf("| `%s` | %s | %s |\n", p.name, tag, desc))
+		fmt.Fprintf(&sb, "| `%s` | %s | %s |\n", p.name, tag, desc)
 	}
 
 	sb.WriteString("\nUse `get_preset(name=\"...\")` to view the full preset configuration.\n")
@@ -202,9 +202,9 @@ func (t *getPresetTool) Execute(rctx *rctx.ToolContext, args GetPresetParams) (T
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("# Preset: %s\n\n", preset.Name))
+	fmt.Fprintf(&sb, "# Preset: %s\n\n", preset.Name)
 	if preset.Description != "" {
-		sb.WriteString(fmt.Sprintf("**Description:** %s\n\n", preset.Description))
+		fmt.Fprintf(&sb, "**Description:** %s\n\n", preset.Description)
 	}
 	sb.WriteString("```yaml\n")
 	sb.WriteString(string(data))

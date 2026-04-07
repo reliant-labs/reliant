@@ -38,7 +38,7 @@ func buildRoutingSystemPrompt(candidates []routerWorkflowInfo, customSystemPromp
 		if i > 0 {
 			sb.WriteString("\n---\n\n")
 		}
-		sb.WriteString(fmt.Sprintf("## Workflow: `%s`\n\n", c.Ref))
+		fmt.Fprintf(&sb, "## Workflow: `%s`\n\n", c.Ref)
 
 		// Description
 		desc := c.Description
@@ -46,7 +46,7 @@ func buildRoutingSystemPrompt(candidates []routerWorkflowInfo, customSystemPromp
 			desc = c.Workflow.GetDescription()
 		}
 		if desc != "" {
-			sb.WriteString(fmt.Sprintf("**Description:** %s\n\n", desc))
+			fmt.Fprintf(&sb, "**Description:** %s\n\n", desc)
 		}
 
 		// Inputs
@@ -60,9 +60,9 @@ func buildRoutingSystemPrompt(candidates []routerWorkflowInfo, customSystemPromp
 		if len(c.Presets) > 0 {
 			sb.WriteString("### Available Presets\n\n")
 			for _, p := range c.Presets {
-				sb.WriteString(fmt.Sprintf("- **`%s`**", p.Name))
+				fmt.Fprintf(&sb, "- **`%s`**", p.Name)
 				if p.Description != "" {
-					sb.WriteString(fmt.Sprintf(": %s", p.Description))
+					fmt.Fprintf(&sb, ": %s", p.Description)
 				}
 				sb.WriteString("\n")
 			}
@@ -103,18 +103,18 @@ func writeInputSchema(sb *strings.Builder, inputs map[string]*reliantv1.Input) {
 		desc := getInputDescription(input)
 		required := model.IsInputRequired(input)
 
-		sb.WriteString(fmt.Sprintf("- **`%s`** (%s)", name, inputType))
+		fmt.Fprintf(sb, "- **`%s`** (%s)", name, inputType)
 		if required {
 			sb.WriteString(" *required*")
 		}
 		if desc != "" {
-			sb.WriteString(fmt.Sprintf(" — %s", desc))
+			fmt.Fprintf(sb, " — %s", desc)
 		}
 
 		// Type-specific details
 		details := getInputTypeDetails(input)
 		if details != "" {
-			sb.WriteString(fmt.Sprintf(" [%s]", details))
+			fmt.Fprintf(sb, " [%s]", details)
 		}
 
 		sb.WriteString("\n")
@@ -132,9 +132,9 @@ func writeInputSchema(sb *strings.Builder, inputs map[string]*reliantv1.Input) {
 					gi := groupInputs[gn]
 					giType := model.GetInputType(gi)
 					giDesc := getInputDescription(gi)
-					sb.WriteString(fmt.Sprintf("  - **`%s.%s`** (%s)", name, gn, giType))
+					fmt.Fprintf(sb, "  - **`%s.%s`** (%s)", name, gn, giType)
 					if giDesc != "" {
-						sb.WriteString(fmt.Sprintf(" — %s", giDesc))
+						fmt.Fprintf(sb, " — %s", giDesc)
 					}
 					sb.WriteString("\n")
 				}

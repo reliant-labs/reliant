@@ -169,7 +169,7 @@ func generateCELQuickReference() string {
 	sb.WriteString("| Namespace | Description |\n")
 	sb.WriteString("|-----------|-------------|\n")
 	for _, ns := range reference.CELNamespaces {
-		sb.WriteString(fmt.Sprintf("| `%s.*` | %s |\n", ns.Name, ns.Description))
+		fmt.Fprintf(&sb, "| `%s.*` | %s |\n", ns.Name, ns.Description)
 	}
 	sb.WriteString("\n")
 
@@ -178,7 +178,7 @@ func generateCELQuickReference() string {
 	sb.WriteString("| Function | Example |\n")
 	sb.WriteString("|----------|--------|\n")
 	for _, fn := range reference.CELFunctions {
-		sb.WriteString(fmt.Sprintf("| `%s` | `%s` |\n", fn.Signature, fn.Example))
+		fmt.Fprintf(&sb, "| `%s` | `%s` |\n", fn.Signature, fn.Example)
 	}
 	sb.WriteString("\n")
 
@@ -242,7 +242,7 @@ func generateBuiltinWorkflowsList() (string, error) {
 	})
 
 	for _, wf := range workflows {
-		sb.WriteString(fmt.Sprintf("| `%s` | %s |\n", wf.Name, wf.Description))
+		fmt.Fprintf(&sb, "| `%s` | %s |\n", wf.Name, wf.Description)
 	}
 
 	return sb.String(), nil
@@ -284,7 +284,7 @@ func generateNodeTypesSummary() string {
 				desc = strings.ToUpper(string(desc[0])) + desc[1:]
 			}
 		}
-		sb.WriteString(fmt.Sprintf("| `%s` | %s |\n", typeName, desc))
+		fmt.Fprintf(&sb, "| `%s` | %s |\n", typeName, desc)
 	}
 
 	return sb.String()
@@ -312,7 +312,7 @@ func generateInputTypesSummary() string {
 				desc = strings.ToUpper(string(desc[0])) + desc[1:]
 			}
 		}
-		sb.WriteString(fmt.Sprintf("| `%s` | %s |\n", typeName, desc))
+		fmt.Fprintf(&sb, "| `%s` | %s |\n", typeName, desc)
 	}
 
 	return sb.String()
