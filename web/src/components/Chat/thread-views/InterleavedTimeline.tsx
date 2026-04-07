@@ -617,17 +617,23 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   const prevThreadKey = useRef<string>(threadKey);
   const lastRangeRef = useRef<ListRange | null>(null);
 
-  // Save current scroll position for the active thread whenever range changes
+  // Save current scroll position for the active thread whenever range changes.
+  // Use a ref to track the computed pinned index and only call setState when
+  // the value actually changes to avoid unnecessary re-renders during scroll
+  // that can trigger Virtuoso layout recalculations and cause jitter.
+  const pinnedUserMessageIdxRef = useRef<number | null>(null);
   const handleRangeChanged = useCallback((range: ListRange) => {
     lastRangeRef.current = range;
     const firstVisible = range.startIndex;
 
-    // Update pinned user message
+    // Compute pinned user message
     const layerUserIdx = userMessageForItem[firstVisible] ?? null;
-    if (layerUserIdx !== null && layerUserIdx < firstVisible) {
-      setPinnedUserMessageIdx(layerUserIdx);
-    } else {
-      setPinnedUserMessageIdx(null);
+    const nextPinned = (layerUserIdx !== null && layerUserIdx < firstVisible) ? layerUserIdx : null;
+
+    // Only trigger a React re-render when the pinned index actually changes
+    if (nextPinned !== pinnedUserMessageIdxRef.current) {
+      pinnedUserMessageIdxRef.current = nextPinned;
+      setPinnedUserMessageIdx(nextPinned);
     }
   }, [userMessageForItem]);
 
@@ -701,12 +707,42 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   const pinnedMessage = pinnedUserMessageIdx !== null ? flatItems[pinnedUserMessageIdx] : null;
   const pinnedUserMsg = pinnedMessage?.type === "message" ? pinnedMessage.message : null;
 
-  // Track atBottom for followOutput callback
+  // Track atBottom for followOutput callback.
+  // Stabilize the "at bottom" state: transitioning away from bottom is debounced
+  // to prevent transient false reports (from footer re-layouts, smooth scroll
+  // animations, or overscroll bounce) from interrupting followOutput and
+  // causing visible jitter.
   const atBottomRef = useRef(true);
+  const atBottomTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleAtBottomChange = useCallback((atBottom: boolean) => {
-    atBottomRef.current = atBottom;
-    onAtBottomStateChange?.(atBottom);
+    if (atBottom) {
+      // Immediately mark as at bottom (no delay)
+      if (atBottomTimerRef.current) {
+        clearTimeout(atBottomTimerRef.current);
+        atBottomTimerRef.current = null;
+      }
+      atBottomRef.current = true;
+      onAtBottomStateChange?.(true);
+    } else {
+      // Debounce leaving bottom: only commit after 150ms of sustained "not at bottom"
+      if (!atBottomTimerRef.current) {
+        atBottomTimerRef.current = setTimeout(() => {
+          atBottomTimerRef.current = null;
+          atBottomRef.current = false;
+          onAtBottomStateChange?.(false);
+        }, 150);
+      }
+    }
   }, [onAtBottomStateChange]);
+
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => {
+      if (atBottomTimerRef.current) {
+        clearTimeout(atBottomTimerRef.current);
+      }
+    };
+  }, []);
 
   // Only auto-scroll when user is at the bottom.
   // Use atBottomRef instead of Virtuoso's isAtBottom argument because
