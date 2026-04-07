@@ -53,7 +53,7 @@ outputs:
 	require.NoError(t, err)
 
 	result := &Result{}
-	validateCEL(wf, result)
+	ValidateCELWithCompilation(wf, result, nil)
 
 	// Should have no errors for valid response_data access
 	errors := result.Errors()
@@ -94,7 +94,7 @@ outputs:
 	require.NoError(t, err)
 
 	result := &Result{}
-	validateCEL(wf, result)
+	ValidateCELWithCompilation(wf, result, nil)
 
 	// Should have an error about unknown response tool
 	errors := result.Errors()
@@ -145,7 +145,7 @@ outputs:
 	require.NoError(t, err)
 
 	result := &Result{}
-	validateCEL(wf, result)
+	ValidateCELWithCompilation(wf, result, nil)
 
 	// Should have an error about unknown field
 	errors := result.Errors()
@@ -190,7 +190,7 @@ outputs:
 	require.NoError(t, err)
 
 	result := &Result{}
-	validateCEL(wf, result)
+	ValidateCELWithCompilation(wf, result, nil)
 
 	// Should NOT have errors - we're lenient when no response tool is defined
 	// (could be MCP tools or dynamically generated tools)
@@ -247,7 +247,7 @@ edges:
 	require.NoError(t, err)
 
 	result := &Result{}
-	validateCEL(wf, result)
+	ValidateCELWithCompilation(wf, result, nil)
 
 	// Should have an error about unknown field in edge condition
 	errors := result.Errors()
@@ -316,7 +316,7 @@ outputs:
 	require.NoError(t, err)
 
 	result := &Result{}
-	validateCEL(wf, result)
+	ValidateCELWithCompilation(wf, result, nil)
 
 	// Should have an error about accessing 'summary' from review_tools
 	errors := result.Errors()

@@ -35,6 +35,8 @@ export interface CELCompletionContext {
   pureExpression: boolean
   /** Current node type — used to resolve `output.*` fields in save_message/loop contexts */
   currentNodeType?: string
+  /** Per-node declared output keys (e.g., router declared outputs) */
+  nodeDeclaredOutputs?: Record<string, string[]>
 }
 
 export interface ParsedCELContext {
@@ -349,8 +351,22 @@ function resolveCompletions(
     const nodeId = parsed.path[1]
     const nodeType = ctx.nodeTypeMap[nodeId]
     if (nodeType) {
+      const schemaFields = getFieldCompletions(getNodeOutputSchema(nodeType))
+      // Merge declared output keys (e.g., from router outputs map)
+      const declaredKeys = ctx.nodeDeclaredOutputs?.[nodeId] ?? []
+      const declaredFields: CompletionEntry[] = declaredKeys
+        .filter((k) => !schemaFields.some((f) => f.label === k))
+        .map((k) => ({
+          label: k,
+          kind: 'field',
+          insertText: k,
+          detail: 'declared output',
+          documentation: `Declared output of node "${nodeId}"`,
+          sortGroup: 1,
+        }))
       return [
-        ...getFieldCompletions(getNodeOutputSchema(nodeType)),
+        ...declaredFields,
+        ...schemaFields,
         ...getMemberFunctionCompletions(),
       ]
     }

@@ -393,6 +393,36 @@ export function withRouterArgs(step: Step, updates: Record<string, unknown>): St
   } as Step
 }
 
+/**
+ * Merge a step update onto the current step while preserving same-case nested args fields
+ * that may be omitted by stale editor snapshots.
+ */
+export function mergeStepUpdate(currentStep: Step, updatedStep: Step): Step {
+  if (
+    currentStep.id !== updatedStep.id ||
+    currentStep.type !== updatedStep.type ||
+    currentStep.args?.case !== updatedStep.args?.case ||
+    currentStep.args?.value == null ||
+    updatedStep.args?.value == null ||
+    typeof currentStep.args.value !== 'object' ||
+    typeof updatedStep.args.value !== 'object'
+  ) {
+    return updatedStep
+  }
+
+  return {
+    ...currentStep,
+    ...updatedStep,
+    args: {
+      case: updatedStep.args.case,
+      value: {
+        ...(currentStep.args.value as Record<string, unknown>),
+        ...(updatedStep.args.value as Record<string, unknown>),
+      },
+    },
+  } as Step
+}
+
 /** Initialize args oneof for a new step based on its type */
 export function initStepArgs(type: string): Step['args'] {
   switch (type) {

@@ -77,11 +77,7 @@ func StaticAnalysisWithOptions(wf *reliantv1.Workflow, opts *ValidationOptions) 
 		return result
 	}
 
-	// Layer 2: CEL expression validation (regex-based)
-	validateCEL(wf, result)
-
-	// Layer 2b: CEL type checking (compilation-based)
-	// This catches type mismatches in comparisons like int > string
+	// Layer 2: CEL expression validation (compilation-based)
 	ValidateCELWithCompilation(wf, result, opts.WorkflowLoader)
 
 	// Layer 3: Parallel write detection

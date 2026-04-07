@@ -83,6 +83,11 @@ type WorkflowTypeContext struct {
 	// beyond the proto schema (e.g., call_llm with response tools/structured output).
 	// For these nodes, unknown field access in CEL returns dyn instead of an error.
 	NodesWithExtendedOutputs map[string]bool
+
+	// LenientInputs skips strict input field validation. Set for inline workflows
+	// that receive inputs dynamically via args from the parent, so input names
+	// cannot be validated statically.
+	LenientInputs bool
 }
 
 // =============================================================================

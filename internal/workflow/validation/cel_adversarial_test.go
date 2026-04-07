@@ -826,7 +826,7 @@ edges:
     to: test
 `,
 			shouldError: false,
-			shouldWarn:  false, // Explicit null check
+			shouldWarn:  true, // Ternary null check guards the access, but AST walker doesn't track ternary control flow
 			desc:        "explicit null check should be safe",
 		},
 		{
@@ -852,7 +852,7 @@ edges:
     to: test
 `,
 			shouldError: false,
-			shouldWarn:  false, // Note: conditional node warnings are tracked separately by validateCEL, not ValidateCELWithCompilation
+			shouldWarn:  true, // Direct access to conditional node output without null guard
 			desc:        "access to conditional node (warning handled by different code path)",
 		},
 		{

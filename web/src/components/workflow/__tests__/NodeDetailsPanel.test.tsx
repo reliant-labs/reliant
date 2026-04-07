@@ -10,7 +10,7 @@ describe("NodeDetailsPanel", () => {
       label: "Router",
       executionStatus: "completed",
       step: {
-        id: "router-1",
+        id: "router_1",
         type: "router",
         args: {
           case: "router",
@@ -36,7 +36,7 @@ describe("NodeDetailsPanel", () => {
     render(
       <NodeDetailsPanel
         nodeData={nodeData}
-        nodeId="router-1"
+        nodeId="router_1"
         stepExecutions={stepExecutions}
         onClose={vi.fn()}
       />,

@@ -537,7 +537,7 @@ func TestNodeDispatch_Run(t *testing.T) {
 	yaml := `
 name: test
 nodes:
-  - id: run-tests
+  - id: run_tests
     type: run
     command: "npm test"
     env:
@@ -1296,9 +1296,9 @@ outputs:
 func TestRoundTrip_StructuralNodes(t *testing.T) {
 	input := `
 name: structural
-entry: [run-cmd]
+entry: [run_cmd]
 nodes:
-  - id: run-cmd
+  - id: run_cmd
     type: run
     command: "echo hello"
   - id: sub

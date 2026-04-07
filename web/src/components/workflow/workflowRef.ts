@@ -47,7 +47,6 @@ function escapeRegExp(value: string): string {
 function rewriteOrDropOutputExpression(
   expression: string,
   validNodeIds: Set<string>,
-  fallbackNodeId?: string,
 ): string | undefined {
   const matches = Array.from(
     expression.matchAll(/\bnodes\.([A-Za-z][A-Za-z0-9_-]*)\b/g),
@@ -55,23 +54,14 @@ function rewriteOrDropOutputExpression(
   const referencedNodeIds = Array.from(new Set(matches.map((match) => match[1])));
   const staleNodeIds = referencedNodeIds.filter((nodeId) => !validNodeIds.has(nodeId));
 
-  if (staleNodeIds.length > 0 && !fallbackNodeId) {
+  // Drop outputs that reference deleted nodes. Rewriting the node ID while keeping
+  // the old field suffix (e.g. .message) is wrong when the replacement node has a
+  // different type with different output fields.
+  if (staleNodeIds.length > 0) {
     return undefined;
   }
 
-  let rewrittenExpression = expression;
-  for (const staleNodeId of staleNodeIds) {
-    const dottedNodePattern = new RegExp(
-      `\\bnodes\\.${escapeRegExp(staleNodeId)}\\b`,
-      "g",
-    );
-    rewrittenExpression = rewrittenExpression.replace(
-      dottedNodePattern,
-      `nodes.${fallbackNodeId}`,
-    );
-  }
-
-  return rewrittenExpression;
+  return expression;
 }
 
 export function sanitizeWorkflowReferences(
@@ -89,7 +79,6 @@ export function sanitizeWorkflowReferences(
       )
     : [];
   const sanitizedEntry = normalizedEntry.length > 0 ? normalizedEntry : undefined;
-  const fallbackNodeId = sanitizedEntry?.length === 1 ? sanitizedEntry[0] : undefined;
 
   if (!outputs || Object.keys(outputs).length === 0) {
     return { entry: sanitizedEntry, outputs: undefined };
@@ -99,7 +88,7 @@ export function sanitizeWorkflowReferences(
     Object.entries(outputs)
       .map(([outputName, expression]) => [
         outputName,
-        rewriteOrDropOutputExpression(expression, validNodeIdSet, fallbackNodeId),
+        rewriteOrDropOutputExpression(expression, validNodeIdSet),
       ])
       .filter((entry): entry is [string, string] => typeof entry[1] === "string"),
   );

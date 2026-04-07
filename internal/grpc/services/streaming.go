@@ -692,26 +692,33 @@ func (s *StreamingService) sendUserUpdateBatches(ctx context.Context, userID str
 			break
 		}
 
-		// Convert updates
+		// Convert updates, skipping ephemeral types that should not be replayed.
+		// REFETCH events are real-time signals ("re-fetch this data now"); replaying
+		// historical ones on catch-up causes hundreds of redundant API calls.
 		protoUpdates := make([]*reliantv1.UserUpdateData, 0, len(updates))
 		maxSeq := currentSeq
 		for _, update := range updates {
 			if update.SequenceNumber > maxSeq {
 				maxSeq = update.SequenceNumber
 			}
+			if update.UpdateType == db.UserUpdateRefetch {
+				continue
+			}
 			protoUpdates = append(protoUpdates, s.userUpdateToProto(update))
 		}
 
-		// Send batch
-		event := &reliantv1.UserStreamEvent{
-			Event: &reliantv1.UserStreamEvent_Updates{
-				Updates: &reliantv1.UserUpdateBatch{
-					Updates: protoUpdates,
+		// Send batch (skip if all updates were filtered out)
+		if len(protoUpdates) > 0 {
+			event := &reliantv1.UserStreamEvent{
+				Event: &reliantv1.UserStreamEvent_Updates{
+					Updates: &reliantv1.UserUpdateBatch{
+						Updates: protoUpdates,
+					},
 				},
-			},
-		}
-		if err := stream.Send(event); err != nil {
-			return err
+			}
+			if err := stream.Send(event); err != nil {
+				return err
+			}
 		}
 
 		currentSeq = maxSeq

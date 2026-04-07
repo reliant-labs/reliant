@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import { X, Plus } from "lucide-react";
+import { X, Plus, Trash2 } from "lucide-react";
 import type { Step, RouterStep } from "../../../types/workflow";
 import { withRouterArgs } from "../../../types/workflow";
-import { CELInput } from "../CELInput";
+import { CELInput, CELExpressionInput } from "../CELInput";
 import { ModelDropdown, extractModelId } from "../ModelDropdown";
 import { MultiSelectDropdown } from "../../ui/MultiSelectDropdown";
 import { celString, normalizeCelString } from "../../../lib/celAdapter";
@@ -388,6 +388,122 @@ export function RouterStepConfig({
           disabled={isReadOnly}
         />
       </div>
+
+      {/* Declared Outputs */}
+      <RouterOutputsEditor
+        outputs={args.outputs as Record<string, string> ?? {}}
+        onUpdate={(outputs) => onUpdate(withRouterArgs(step, { outputs }))}
+        isReadOnly={isReadOnly}
+      />
     </>
+  );
+}
+
+// ── Router Outputs Editor ──
+
+function RouterOutputsEditor({
+  outputs,
+  onUpdate,
+  isReadOnly,
+}: {
+  outputs: Record<string, string>;
+  onUpdate: (outputs: Record<string, string>) => void;
+  isReadOnly: boolean;
+}) {
+  const [newKey, setNewKey] = useState("");
+
+  const addOutput = () => {
+    const key = newKey.trim();
+    if (!key || outputs[key] !== undefined) return;
+    onUpdate({ ...outputs, [key]: "" });
+    setNewKey("");
+  };
+
+  const updateOutput = (key: string, value: string) => {
+    onUpdate({ ...outputs, [key]: value });
+  };
+
+  const removeOutput = (key: string) => {
+    const next = { ...outputs };
+    delete next[key];
+    onUpdate(next);
+  };
+
+  const entries = Object.entries(outputs);
+
+  return (
+    <div>
+      <label className="block text-xs uppercase tracking-wider text-muted-foreground font-medium mb-1">
+        Declared Outputs
+      </label>
+      <p className="text-xs text-muted-foreground mb-2">
+        Map output names to CEL expressions evaluated in the router context.
+        Downstream nodes access these as{" "}
+        <code className="bg-muted px-1 rounded">nodes.&lt;router_id&gt;.&lt;name&gt;</code>.
+      </p>
+
+      {entries.length > 0 && (
+        <div className="space-y-2 mb-2">
+          {entries.map(([key, value]) => (
+            <div key={key} className="space-y-1">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-foreground font-mono">
+                  {key}
+                </label>
+                {!isReadOnly && (
+                  <button
+                    type="button"
+                    onClick={() => removeOutput(key)}
+                    className="p-0.5 text-muted-foreground hover:text-destructive transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              <CELExpressionInput
+                value={value}
+                onChange={(val) => updateOutput(key, val)}
+                placeholder="outputs.result"
+                hideCELHint
+                disabled={isReadOnly}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!isReadOnly && (
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={newKey}
+            onChange={(e) => setNewKey(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addOutput()}
+            placeholder="output_name"
+            className="flex-1 px-2.5 py-1.5 text-sm border border-input rounded-md bg-background text-foreground font-mono focus:ring-2 focus:ring-ring focus:border-ring"
+          />
+          <button
+            type="button"
+            onClick={addOutput}
+            disabled={!newKey.trim() || outputs[newKey] !== undefined}
+            className="flex items-center gap-1 px-2.5 py-1.5 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add
+          </button>
+        </div>
+      )}
+
+      <div className="text-[11px] text-muted-foreground mt-2 space-y-0.5">
+        <p className="font-medium">Available in expressions:</p>
+        <ul className="list-disc list-inside">
+          <li><code className="text-[11px]">selected_workflow</code> &mdash; chosen workflow ref</li>
+          <li><code className="text-[11px]">selected_preset</code> &mdash; chosen preset</li>
+          <li><code className="text-[11px]">prompt</code> &mdash; prompt sent to child workflow</li>
+          <li><code className="text-[11px]">reasoning</code> &mdash; router reasoning</li>
+          <li><code className="text-[11px]">outputs.*</code> &mdash; child workflow outputs</li>
+        </ul>
+      </div>
+    </div>
   );
 }

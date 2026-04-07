@@ -41,49 +41,49 @@ describe("workflowRef helpers", () => {
   });
 
   describe("sanitizeWorkflowReferences", () => {
-    it("drops orphaned entry ids and rewrites stale output node refs when a single valid entry remains", () => {
+    it("drops orphaned entry ids and drops stale output node refs", () => {
       const sanitized = sanitizeWorkflowReferences(
-        ["agent_loop", "router-1775337214113"],
+        ["agent_loop", "router_1775337214113"],
         {
           result: "nodes.agent_loop.output",
-          mixed: "nodes.agent_loop.output + nodes.router-1775337214113.output",
+          mixed: "nodes.agent_loop.output + nodes.router_1775337214113.output",
+          valid: "nodes.router_1775337214113.output",
         },
-        ["router-1775337214113"],
+        ["router_1775337214113"],
       );
 
-      expect(sanitized.entry).toEqual(["router-1775337214113"]);
+      expect(sanitized.entry).toEqual(["router_1775337214113"]);
+      // Stale refs are dropped, not rewritten — the replacement node may have different output fields
       expect(sanitized.outputs).toEqual({
-        result: "nodes.router-1775337214113.output",
-        mixed:
-          "nodes.router-1775337214113.output + nodes.router-1775337214113.output",
+        valid: "nodes.router_1775337214113.output",
       });
     });
 
     it("preserves existing valid dotted node refs", () => {
       const sanitized = sanitizeWorkflowReferences(
-        ["router_ok", "router-123"],
+        ["router_ok", "router_123"],
         {
           dottedSafe: "nodes.router_ok.output",
-          dottedHyphenated: "nodes.router-123.output",
+          dottedSafeNumbered: "nodes.router_123.output",
         },
-        ["router_ok", "router-123"],
+        ["router_ok", "router_123"],
       );
 
-      expect(sanitized.entry).toEqual(["router_ok", "router-123"]);
+      expect(sanitized.entry).toEqual(["router_ok", "router_123"]);
       expect(sanitized.outputs).toEqual({
         dottedSafe: "nodes.router_ok.output",
-        dottedHyphenated: "nodes.router-123.output",
+        dottedSafeNumbered: "nodes.router_123.output",
       });
     });
 
     it("drops stale output expressions when no single fallback node exists", () => {
       const sanitized = sanitizeWorkflowReferences(
-        ["missing-node"],
+        ["missing_node"],
         {
-          result: "nodes.missing-node.output",
+          result: "nodes.missing_node.output",
           preserved: "inputs.query",
         },
-        ["router-a", "router-b"],
+        ["router_a", "router_b"],
       );
 
       expect(sanitized.entry).toBeUndefined();

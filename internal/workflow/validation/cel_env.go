@@ -114,6 +114,7 @@ func newSaveMessageCELEnv(nodeType, nodeID string, typeCtx *WorkflowTypeContext)
 			NodeTypes:        typeCtx.NodeTypes,
 			Registry:         typeCtx.Registry,
 			ConditionalNodes: typeCtx.ConditionalNodes,
+			LenientInputs:    typeCtx.LenientInputs,
 		}
 	} else {
 		nodeTypeCtx = &WorkflowTypeContext{
@@ -137,6 +138,7 @@ func newSaveMessageCELEnv(nodeType, nodeID string, typeCtx *WorkflowTypeContext)
 		wfcel.CELInputs,
 		wfcel.CELWorkflow,
 		wfcel.CELNodes,
+		wfcel.CELIter,
 		wfcel.CELOutput,
 	}
 
@@ -190,18 +192,20 @@ func hasDynamicOutputs(wtc *WorkflowTypeContext, nodeID string) bool {
 	if !ok {
 		return false
 	}
-	// Router nodes always have dynamic outputs (selected workflow determined at runtime).
-	if nodeType == model.NodeTypeRouter {
-		return true
-	}
+	// Workflow and loop nodes flatten child workflow outputs to the top level.
+	// The proto output type doesn't describe the full runtime shape — child outputs are
+	// added dynamically. When we have resolved candidate outputs (inline or via loader),
+	// we use typed ObjectType so the provider can validate field name access. When we
+	// can't resolve outputs (e.g., unresolved refs, no loader), we fall back to dyn.
+	//
+	// Router has fixed top-level fields (5 proto fields); child outputs are nested
+	// under the `outputs` sub-field, so the proto type exactly describes the top-level shape.
 	if nodeType == model.NodeTypeWorkflow || nodeType == model.NodeTypeLoop {
-		// Workflow/loop nodes with inline outputs have known fields.
-		// Ref-based workflow/loop nodes have NO output info and should be treated as dyn.
 		outputs, hasOutputs := wtc.NodeOutputs[nodeID]
 		if hasOutputs && len(outputs) > 0 {
-			return true
+			return false
 		}
-		// No output info → ref-based node with dynamic outputs.
+		// No output info → ref-based node without resolved outputs. Must be dyn.
 		if !hasOutputs {
 			return true
 		}

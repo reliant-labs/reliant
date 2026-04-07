@@ -7,6 +7,7 @@ import {
   isWorkflowStep,
   isLoopStep,
   isJoinStep,
+  isRouterStep,
   getStepInline,
   getStepRef,
   getStepParallel,
@@ -299,6 +300,31 @@ export function NodeOutputsPanel({
         }
       }
     }
+  } else if (isRouterStep(step)) {
+    // Fixed system fields from catalog (or hardcoded fallback)
+    const systemFields: OutputField[] = catalogOutputFields
+      ? catalogToOutputFields(catalogOutputFields)
+      : [
+          { name: "selected_workflow", type: "string", description: "The workflow ref selected by the router" },
+          { name: "selected_preset", type: "string", description: "The preset selected by the router" },
+          { name: "prompt", type: "string", description: "The prompt sent to the selected workflow" },
+          { name: "reasoning", type: "string", description: "The router's reasoning for its selection" },
+          { name: "outputs", type: "map", description: "Outputs from the selected child workflow" },
+        ];
+
+    // User-declared output names from routerArgs.outputs
+    const routerOutputs = step.args?.case === "router"
+      ? (step.args.value as Record<string, unknown>)?.outputs as Record<string, string> | undefined
+      : undefined;
+    const declaredFields: OutputField[] = routerOutputs
+      ? Object.keys(routerOutputs).map((key) => ({
+          name: key,
+          type: "dynamic",
+          description: "Declared router output",
+        }))
+      : [];
+
+    fields = [...declaredFields, ...systemFields];
   } else if (isActionStep(step) || isRunStep(step)) {
     fields = catalogToOutputFields(catalogOutputFields);
   }

@@ -28,7 +28,7 @@ var validJSONSchemaTypes = map[string]bool{
 // =============================================================================
 
 // identifierPattern defines valid user-defined identifiers.
-var identifierPattern = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]*$`)
+var identifierPattern = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_]*$`)
 
 // validateIdentifier checks if a name is a valid user-defined identifier.
 func validateIdentifier(name string, context string) *validationError {
@@ -47,7 +47,7 @@ func validateIdentifier(name string, context string) *validationError {
 	if !identifierPattern.MatchString(name) {
 		return &validationError{
 			path:    context,
-			message: fmt.Sprintf("invalid %s '%s': must start with a letter and contain only letters, digits, underscores, or hyphens", context, name),
+			message: fmt.Sprintf("invalid %s '%s': must start with a letter and contain only letters, digits, or underscores", context, name),
 		}
 	}
 	return nil
@@ -70,7 +70,7 @@ func validateOutputName(name string) *validationError {
 	if !identifierPattern.MatchString(name) {
 		return &validationError{
 			path:    "output name",
-			message: fmt.Sprintf("invalid output name '%s': must start with a letter and contain only letters, digits, underscores, or hyphens", name),
+			message: fmt.Sprintf("invalid output name '%s': must start with a letter and contain only letters, digits, or underscores", name),
 		}
 	}
 	return nil

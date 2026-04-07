@@ -69,9 +69,9 @@ interface ConfigPanelProps {
   isReadOnly?: boolean;
 }
 
-// Validate node ID format - allows alphanumeric, hyphens, and underscores
+// Validate node ID format - CEL-safe identifiers only.
 function isValidNodeId(id: string): boolean {
-  return /^[a-zA-Z][a-zA-Z0-9_-]*$/.test(id);
+  return /^[a-zA-Z][a-zA-Z0-9_]*$/.test(id);
 }
 
 /** Whether this step type supports thread configuration */
@@ -148,7 +148,7 @@ export function ConfigPanel({
     }
     if (!isValidNodeId(trimmedId)) {
       setIdError(
-        "ID must start with a letter and contain only letters, numbers, hyphens, or underscores",
+        "ID must start with a letter and contain only letters, numbers, or underscores",
       );
       return;
     }
@@ -527,7 +527,7 @@ export function ConfigPanel({
         <NodeOutputsPanel
           step={step}
           catalogOutputFields={
-            (isActionStep(step) || isRunStep(step))
+            (isActionStep(step) || isRunStep(step) || isRouterStep(step))
               ? catalogNodes.find((n) => n.id === step.type)?.outputFields
               : undefined
           }
