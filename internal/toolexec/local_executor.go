@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -148,9 +149,14 @@ func (e *LocalToolExecutor) executeTool(
 		toolContext = e.mcpBinder.Bind(toolContext)
 	}
 
+	workingDir := toolContext.WorkingDir()
+	if toolContext.MCP != nil && workingDir != "" && strings.HasPrefix(strings.TrimSpace(toolName), "mcp__") {
+		toolContext.MCP.EnsureProjectServersLoaded(toolContext.Context, workingDir)
+	}
+
 	toolsFactory := e.toolsFactory
 	if toolsFactory != nil {
-		toolsFactory = toolsFactory.WithMCPProjectPath(toolContext.WorkingDir())
+		toolsFactory = toolsFactory.WithMCPProjectPath(workingDir)
 	}
 
 	if toolsFactory == nil {
