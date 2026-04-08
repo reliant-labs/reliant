@@ -17,6 +17,7 @@ type DriverConfig struct {
 	APIKey           string
 	BaseURL          string    // Optional: for custom endpoints (required for local drivers)
 	Enabled          bool      // Whether this driver is available for use
+	UserID           string    // Optional: Reliant (Supabase) user ID for device ID generation
 	AccountUUID      string    // Optional: Claude OAuth account UUID
 	AccountEmail     string    // Optional: Claude OAuth account email
 	OrganizationUUID string    // Optional: Claude OAuth organization UUID
