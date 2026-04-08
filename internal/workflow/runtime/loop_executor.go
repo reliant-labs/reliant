@@ -299,11 +299,12 @@ func (e *InlineLoopExecutor) loadPresetParams(presetName string) (map[string]int
 
 // Execute runs the loop inline and returns the loop output.
 // This is the main entry point - it handles the full loop lifecycle:
-// 1. Execute entry save_message if configured
-// 2. Load sub-workflow definition
-// 3. Execute iterations inline with execContext
-// 4. Evaluate while condition after each iteration
-// 5. Return aggregated output
+// 1. Load sub-workflow definition
+// 2. Execute iterations inline with execContext
+// 3. Evaluate while condition after each iteration
+// 4. Return aggregated output
+// Note: save_message (if configured) is executed by the parent workflow after loop completion,
+// consistent with how all other node types handle save_message.
 func (e *InlineLoopExecutor) Execute() (*reliantv1.LoopOutput, error) {
 	la := model.GetLoopArgs(e.loopStep.Node)
 
@@ -320,14 +321,6 @@ func (e *InlineLoopExecutor) Execute() (*reliantv1.LoopOutput, error) {
 		"hasSaveMessage", e.loopStep.Node.GetSaveMessage() != nil,
 		"hasExecContext", e.execContext != nil,
 	)
-
-	// Handle entry message save:
-	// IMPORTANT: For loops, we do NOT auto-save the trigger message here.
-	// The trigger message was already saved by the root workflow before the loop started.
-	// The execContext is passed to loops for thread tracking, not for message saving.
-	if err := e.executeEntrySaveMessage(); err != nil {
-		return nil, fmt.Errorf("failed to execute loop entry save_message: %w", err)
-	}
 
 	// Load sub-workflow definition
 	if err := e.loadSubWorkflow(); err != nil {
@@ -1478,61 +1471,6 @@ func (e *InlineLoopExecutor) executeYield() (*YieldOutput, error) {
 		YieldID:     createOutput.YieldID,
 		ActionTaken: actionTaken,
 	}, nil
-}
-
-// executeEntrySaveMessage executes the save_message block before the first loop iteration.
-// This allows loops to save an initial message (e.g., user message) without requiring
-// a separate step before the loop.
-//
-// Unlike post-action save_message blocks, this runs BEFORE any activity, so there's no
-// `output.*` namespace - only `workflow.*` and `nodes.*` are available for CEL evaluation.
-func (e *InlineLoopExecutor) executeEntrySaveMessage() error {
-	if e.loopStep.Node.GetSaveMessage() == nil {
-		return nil
-	}
-
-	e.logger.Info("[InlineLoop] Executing entry save_message",
-		"loopID", e.loopID,
-	)
-
-	// Build workflow context for CEL evaluation
-	// Note: No `output.*` namespace since this runs before any activity
-	workflowContext := buildWorkflowContext(
-		e.workflowID,
-		e.workflowName,
-		e.chatID,
-		e.workflowInputs,
-	)
-
-	// Use empty map for activityOutput since this is an entry action (no preceding output)
-	emptyOutput := make(map[string]interface{})
-
-	// Execute the save_message using the shared inline function
-	// Note: Not passing loop context since this is the entry point, not part of an iteration
-	_, err := executeSaveMessageInline(
-		e.ctx,
-		e.loopStep.Node,
-		emptyOutput, // No activity output for entry save
-		workflowContext,
-		e.nodeOutputs, // Parent workflow's step outputs
-		e.chatID,
-		e.workflowID,
-		"",            // No loop node ID (this is the entry point)
-		0,             // No loop iteration
-		e.execContext, // Pass execContext for thread.* namespace access
-	)
-	if err != nil {
-		e.logger.Error("[InlineLoop] Entry save_message failed",
-			"loopID", e.loopID,
-			"error", err,
-		)
-		return err
-	}
-
-	e.logger.Info("[InlineLoop] Entry save_message completed",
-		"loopID", e.loopID,
-	)
-	return nil
 }
 
 // injectHandoffReminder saves a system message to the thread when a yield resolves

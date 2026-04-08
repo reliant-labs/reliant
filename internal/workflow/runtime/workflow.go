@@ -875,8 +875,30 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				loopOutputMap := model.ProtoLoopOutputToMap(loopOutput)
 				nodeOutputStore.Set(step.Node.GetId(), loopOutputMap)
 
-				// Note: save_message on loop nodes is executed on ENTRY by InlineLoopExecutor.executeEntrySaveMessage()
-				// We don't execute it again here after loop completion to avoid duplicate messages.
+				// Execute save_message if configured on the loop node
+				// Consistent with all other node types: save_message fires on completion.
+				if step.Node.GetSaveMessage() != nil {
+					_, err := ExecuteSaveMessageForNode(
+						ctx,
+						step.Node,
+						loopOutputMap,
+						nodeOutputs,
+						workflowID,
+						input.WorkflowName,
+						input.ChatID,
+						input.Inputs,
+						execCtx,
+						"", // Not inside a nested loop
+						0,  // Not inside a nested loop
+					)
+					if err != nil {
+						logger.Error("[Workflow Runtime] save_message failed for loop",
+							"stepID", step.Node.GetId(),
+							"error", err,
+						)
+						// Don't fail - save_message errors are logged but non-fatal
+					}
+				}
 
 				// Update thread liveness - mark loop step as completed
 				if threadTracker != nil {
