@@ -182,6 +182,7 @@ export const CONTEXTUAL_TIP_DEFINITIONS: ContextualTipDefinition[] = [
       const record = state["spawned-thread-interact"];
       if (!context.onboardingComplete || context.isWizardActive) return false;
       if (isTipDismissed(record)) return false;
+      if (record.shownCount > 0) return false;
       if (!hasSeenThreadTip(state)) return false;
       if (hasResolvedThreadInteract(context, state)) return false;
       if (!hasSpawnedThreadWithMessages(context, 2)) return false;
@@ -200,6 +201,7 @@ export const CONTEXTUAL_TIP_DEFINITIONS: ContextualTipDefinition[] = [
       const record = state["thread-model"];
       if (!context.onboardingComplete || context.isWizardActive) return false;
       if (isTipDismissed(record)) return false;
+      if (record.shownCount > 0) return false;
       if (!hasSeenThreadTip(state)) return false;
       if (state["spawned-thread-interact"].shownCount === 0 && !isTipDismissed(state["spawned-thread-interact"])) {
         return false;
@@ -219,6 +221,7 @@ export const CONTEXTUAL_TIP_DEFINITIONS: ContextualTipDefinition[] = [
       const record = state["chat-branching"];
       if (!context.onboardingComplete || context.isWizardActive) return false;
       if (isTipDismissed(record)) return false;
+      if (record.shownCount > 0) return false;
       if (context.branchingEngaged) return false;
       if (!hasSeenThreadTip(state)) return false;
       if (context.activeMessages.length < 4) return false;
@@ -237,6 +240,7 @@ export const CONTEXTUAL_TIP_DEFINITIONS: ContextualTipDefinition[] = [
       const record = state["worktree-after-nth-chat"];
       if (!context.onboardingComplete || context.isWizardActive) return false;
       if (isTipDismissed(record)) return false;
+      if (record.shownCount > 0) return false;
       if (context.hasNonMainWorktree) return false;
       if (context.chats.length < NTH_CHAT_WORKTREE_THRESHOLD) return false;
       if (isWithinCooldown(context.lastTipShownAt, CONTEXTUAL_TIPS_COOLDOWN_MS, context.now)) return false;
