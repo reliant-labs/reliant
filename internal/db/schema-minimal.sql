@@ -486,21 +486,20 @@ CREATE INDEX idx_threads_conversation ON threads(conversation_id);
 CREATE INDEX idx_threads_parent ON threads(parent_thread_id) WHERE parent_thread_id IS NOT NULL;
 CREATE INDEX idx_threads_workflow ON threads(workflow_id) WHERE workflow_id IS NOT NULL;
 CREATE TABLE IF NOT EXISTS "workflows" (
-    id TEXT PRIMARY KEY,
+    id TEXT PRIMARY KEY NOT NULL,
     parent_id TEXT,
     chat_id TEXT NOT NULL,
     workflow_name TEXT NOT NULL,
     thread TEXT NOT NULL,
-    status INTEGER NOT NULL DEFAULT 2,
     spawned_by_node_id TEXT,
     loop_iteration INTEGER,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at DATETIME NOT NULL,
     completed_at DATETIME,
-    worker_started_at DATETIME,
-    worker_stopped_at DATETIME,
+    expired_at DATETIME,
+    status INTEGER NOT NULL DEFAULT 2,
 
-    FOREIGN KEY (parent_id) REFERENCES "workflows"(id) ON DELETE SET NULL,
-    FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
+    FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
+    FOREIGN KEY (parent_id) REFERENCES workflows(id) ON DELETE SET NULL
 );
 CREATE INDEX idx_workflows_parent ON workflows(parent_id);
 CREATE INDEX idx_workflows_chat ON workflows(chat_id);
