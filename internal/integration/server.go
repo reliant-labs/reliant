@@ -173,6 +173,16 @@ func NewServer(cfg *Config) (*Server, error) {
 	}, nil
 }
 
+func attachIntegrationServerExecutor(remote *toolexec.RemoteExecutor, toolsFactory *tools.ToolsFactory, mcpManager *mcp.Manager) {
+	if remote == nil {
+		return
+	}
+
+	serverExec := toolexec.NewLocalToolExecutor(toolsFactory)
+	serverExec.SetMCPContextBinder(toolexec.NewLocalMCPContextBinder(mcpManager))
+	remote.SetServerExecutor(serverExec)
+}
+
 // GenerateTitleWorkflow is a thin inline wrapper around V2_GenerateTitle activity
 // This provides async execution, retries, and observability
 
@@ -225,8 +235,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.toolExecutor = s.remoteToolExecutor
 
 		// Wire server-side tool execution.
-		serverExec := toolexec.NewLocalToolExecutor(s.toolsFactory)
-		s.remoteToolExecutor.SetServerExecutor(serverExec)
+		attachIntegrationServerExecutor(s.remoteToolExecutor, s.toolsFactory, s.mcpManager)
 
 		// Create ToolsDaemonService + LocalDaemonRouter so the worker has
 		// a fully wired DaemonRouter from the start.  This MUST happen

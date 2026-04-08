@@ -1,12 +1,14 @@
-// Copyright (c) 2025 Reliant Labs
 package daemonruntime
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 	"unicode/utf8"
 
+	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestUTF8Sanitization(t *testing.T) {
@@ -55,4 +57,24 @@ func TestUTF8Sanitization(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNewDaemonClient_BindsLocalMCPContextBinder(t *testing.T) {
+	t.Setenv("DAEMON_WORKING_DIR", t.TempDir())
+
+	client, err := newDaemonClient(bootstrap.DaemonBootstrapConfig{
+		UserID:    "test-user",
+		AuthToken: "test-token",
+		GRPCURL:   "http://127.0.0.1:9999",
+		TLSMode:   bootstrap.TLSModeH2C,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, client)
+	require.NotNil(t, client.localExecutor)
+	require.NotNil(t, client.mcpManager)
+
+	execValue := reflect.ValueOf(client.localExecutor).Elem()
+	binderField := execValue.FieldByName("mcpBinder")
+	require.True(t, binderField.IsValid(), "local executor should expose mcpBinder field")
+	assert.False(t, binderField.IsNil(), "daemon local executor should have an MCP binder attached")
 }
