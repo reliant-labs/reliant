@@ -256,7 +256,19 @@ export const useWorkflows = () => {
   const workflows = useGlobalDataStore((state) => state.workflows);
   const workflowsLoading = useGlobalDataStore((state) => state.workflowsLoading);
   const workflowsError = useGlobalDataStore((state) => state.workflowsError);
-  return { workflows, loading: workflowsLoading, error: workflowsError };
+  const isPrefetching = useGlobalDataStore((state) => state.isPrefetching);
+  const refetchWorkflows = useGlobalDataStore((state) => state.refetchWorkflows);
+  const projectId = useProjectStore((state) => state.currentProject?.id);
+
+  // Fetch on demand: if workflows are empty and nothing is already loading, trigger a fetch.
+  // This handles cases where the project store's refetchWorkflows call raced or failed.
+  React.useEffect(() => {
+    if (projectId && workflows.length === 0 && !workflowsLoading && !isPrefetching) {
+      refetchWorkflows(projectId);
+    }
+  }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return { workflows, loading: workflowsLoading || isPrefetching, error: workflowsError };
 };
 
 export const usePresets = () => {
