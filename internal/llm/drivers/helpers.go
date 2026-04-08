@@ -55,6 +55,7 @@ func BuildAvailableDrivers(ctx context.Context, repo db.Repository, userID strin
 				DriverID:         models.DriverID("anthropic"),
 				APIKey:           accessToken,
 				Enabled:          true,
+				UserID:           userID,
 				AccountUUID:      tokens.AccountUUID,
 				AccountEmail:     tokens.AccountEmail,
 				OrganizationUUID: tokens.OrganizationUUID,

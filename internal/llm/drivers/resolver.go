@@ -221,7 +221,7 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 
 		// Pass Claude OAuth account metadata and token refresh if available
 		if driverConfig.AccountUUID != "" {
-			driverOpts = append(driverOpts, llm.WithAccountMetadata(driverConfig.AccountUUID, driverConfig.AccountEmail, driverConfig.OrganizationUUID))
+			driverOpts = append(driverOpts, llm.WithAccountMetadata(driverConfig.UserID, driverConfig.AccountUUID, driverConfig.AccountEmail, driverConfig.OrganizationUUID))
 		}
 		if driverConfig.RefreshToken != "" {
 			refresher := BuildClaudeTokenRefresher(ctx, userID)

@@ -114,6 +114,7 @@ type DriverOptions struct {
 	IgnoreDefaultPrompts bool // Skip the second Claude Code prompt (used for compaction)
 
 	// Claude OAuth account metadata (from stored tokens, replaces .claude.json)
+	UserID           string // Reliant (Supabase) user ID for device ID generation
 	AccountUUID      string
 	AccountEmail     string
 	OrganizationUUID string
