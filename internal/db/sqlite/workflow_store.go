@@ -29,7 +29,7 @@ func (s *workflowStore) GetWorkflow(ctx context.Context, id string) (*core.Workf
 		}
 		return nil, err
 	}
-	return workflowFromSQLc(row), nil
+	return workflowFromGetWorkflowRow(row), nil
 }
 
 func (s *workflowStore) GetWorkflowByThread(ctx context.Context, chatID, thread string) (*core.Workflow, error) {
@@ -40,7 +40,7 @@ func (s *workflowStore) GetWorkflowByThread(ctx context.Context, chatID, thread 
 		}
 		return nil, err
 	}
-	return workflowFromSQLc(row), nil
+	return workflowFromGetWorkflowByThreadRow(row), nil
 }
 
 func (s *workflowStore) ListWorkflowsByChat(ctx context.Context, chatID string) ([]*core.Workflow, error) {
@@ -48,7 +48,11 @@ func (s *workflowStore) ListWorkflowsByChat(ctx context.Context, chatID string) 
 	if err != nil {
 		return nil, err
 	}
-	return workflowsFromSQLc(rows), nil
+	items := make([]*core.Workflow, len(rows))
+	for i, row := range rows {
+		items[i] = workflowFromListWorkflowsByChatRow(row)
+	}
+	return items, nil
 }
 
 func (s *workflowStore) ListChildWorkflows(ctx context.Context, parentID string) ([]*core.Workflow, error) {
@@ -56,7 +60,11 @@ func (s *workflowStore) ListChildWorkflows(ctx context.Context, parentID string)
 	if err != nil {
 		return nil, err
 	}
-	return workflowsFromSQLc(rows), nil
+	items := make([]*core.Workflow, len(rows))
+	for i, row := range rows {
+		items[i] = workflowFromListChildWorkflowsRow(row)
+	}
+	return items, nil
 }
 
 func (s *workflowStore) ListRootWorkflows(ctx context.Context, chatID string) ([]*core.Workflow, error) {
@@ -64,7 +72,11 @@ func (s *workflowStore) ListRootWorkflows(ctx context.Context, chatID string) ([
 	if err != nil {
 		return nil, err
 	}
-	return workflowsFromSQLc(rows), nil
+	items := make([]*core.Workflow, len(rows))
+	for i, row := range rows {
+		items[i] = workflowFromListRootWorkflowsRow(row)
+	}
+	return items, nil
 }
 
 func (s *workflowStore) GetRootWorkflowStatusForChats(ctx context.Context, chatIDs []string) (map[string]core.WorkflowStatus, error) {
@@ -113,7 +125,14 @@ func (s *workflowStore) UpdateWorkflowName(ctx context.Context, id string, workf
 }
 
 func (s *workflowStore) CompleteChildWorkflows(ctx context.Context, parentWorkflowID string) error {
-	return s.q.CompleteChildWorkflows(ctx, sql.NullString{String: parentWorkflowID, Valid: true})
+	parentID := sql.NullString{String: parentWorkflowID, Valid: true}
+	if err := s.q.CompleteRunningChildWorkflows(ctx, parentID); err != nil {
+		return err
+	}
+	if err := s.q.CompletePausedChildWorkflows(ctx, parentID); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *workflowStore) PauseRunningWorkflowsByChat(ctx context.Context, chatID string) error {
@@ -137,7 +156,11 @@ func (s *workflowStore) ListWorkflowsByStatus(ctx context.Context, status core.W
 	if err != nil {
 		return nil, err
 	}
-	return workflowsFromSQLc(rows), nil
+	items := make([]*core.Workflow, len(rows))
+	for i, row := range rows {
+		items[i] = workflowFromListWorkflowsByStatusRow(row)
+	}
+	return items, nil
 }
 
 func (s *workflowStore) ListRootWorkflowsByStatus(ctx context.Context, status core.WorkflowStatus) ([]*core.Workflow, error) {
@@ -145,7 +168,11 @@ func (s *workflowStore) ListRootWorkflowsByStatus(ctx context.Context, status co
 	if err != nil {
 		return nil, err
 	}
-	return workflowsFromSQLc(rows), nil
+	items := make([]*core.Workflow, len(rows))
+	for i, row := range rows {
+		items[i] = workflowFromListRootWorkflowsByStatusRow(row)
+	}
+	return items, nil
 }
 
 func (s *workflowStore) UpdateWorkflowWorkerStarted(ctx context.Context, workflowID string) error {
@@ -237,30 +264,61 @@ func (s *workflowStore) RemoveCommandFavorite(ctx context.Context, userID, proje
 	})
 }
 
-func workflowFromSQLc(row sqlitedb.Workflow) *core.Workflow {
+func workflowFromFields(
+	id string,
+	parentID sql.NullString,
+	chatID string,
+	workflowName string,
+	thread string,
+	status int64,
+	spawnedByNodeID sql.NullString,
+	loopIteration sql.NullInt64,
+	createdAt time.Time,
+	completedAt sql.NullTime,
+) *core.Workflow {
 	return &core.Workflow{
-		ID:              row.ID,
-		ParentID:        nullStringToPtr(row.ParentID),
-		ChatID:          row.ChatID,
-		WorkflowName:    row.WorkflowName,
-		Thread:          row.Thread,
-		Status:          core.WorkflowStatus(int32(row.Status)),
-		SpawnedByNodeID: nullStringToPtr(row.SpawnedByNodeID),
-		LoopIteration:   workflowNullInt64ToPtr(row.LoopIteration),
-		CreatedAt:       row.CreatedAt,
-		CompletedAt:     workflowNullTimeToPtr(row.CompletedAt),
+		ID:              id,
+		ParentID:        nullStringToPtr(parentID),
+		ChatID:          chatID,
+		WorkflowName:    workflowName,
+		Thread:          thread,
+		Status:          core.WorkflowStatus(int32(status)),
+		SpawnedByNodeID: nullStringToPtr(spawnedByNodeID),
+		LoopIteration:   workflowNullInt64ToPtr(loopIteration),
+		CreatedAt:       createdAt,
+		CompletedAt:     workflowNullTimeToPtr(completedAt),
 		// SQLite schema does not persist worker lifecycle timestamps.
 		WorkerStartedAt: nil,
 		WorkerStoppedAt: nil,
 	}
 }
 
-func workflowsFromSQLc(rows []sqlitedb.Workflow) []*core.Workflow {
-	items := make([]*core.Workflow, len(rows))
-	for i, row := range rows {
-		items[i] = workflowFromSQLc(row)
-	}
-	return items
+func workflowFromGetWorkflowRow(row sqlitedb.GetWorkflowRow) *core.Workflow {
+	return workflowFromFields(row.ID, row.ParentID, row.ChatID, row.WorkflowName, row.Thread, row.Status, row.SpawnedByNodeID, row.LoopIteration, row.CreatedAt, row.CompletedAt)
+}
+
+func workflowFromGetWorkflowByThreadRow(row sqlitedb.GetWorkflowByThreadRow) *core.Workflow {
+	return workflowFromFields(row.ID, row.ParentID, row.ChatID, row.WorkflowName, row.Thread, row.Status, row.SpawnedByNodeID, row.LoopIteration, row.CreatedAt, row.CompletedAt)
+}
+
+func workflowFromListWorkflowsByChatRow(row sqlitedb.ListWorkflowsByChatRow) *core.Workflow {
+	return workflowFromFields(row.ID, row.ParentID, row.ChatID, row.WorkflowName, row.Thread, row.Status, row.SpawnedByNodeID, row.LoopIteration, row.CreatedAt, row.CompletedAt)
+}
+
+func workflowFromListChildWorkflowsRow(row sqlitedb.ListChildWorkflowsRow) *core.Workflow {
+	return workflowFromFields(row.ID, row.ParentID, row.ChatID, row.WorkflowName, row.Thread, row.Status, row.SpawnedByNodeID, row.LoopIteration, row.CreatedAt, row.CompletedAt)
+}
+
+func workflowFromListRootWorkflowsRow(row sqlitedb.ListRootWorkflowsRow) *core.Workflow {
+	return workflowFromFields(row.ID, row.ParentID, row.ChatID, row.WorkflowName, row.Thread, row.Status, row.SpawnedByNodeID, row.LoopIteration, row.CreatedAt, row.CompletedAt)
+}
+
+func workflowFromListWorkflowsByStatusRow(row sqlitedb.ListWorkflowsByStatusRow) *core.Workflow {
+	return workflowFromFields(row.ID, row.ParentID, row.ChatID, row.WorkflowName, row.Thread, row.Status, row.SpawnedByNodeID, row.LoopIteration, row.CreatedAt, row.CompletedAt)
+}
+
+func workflowFromListRootWorkflowsByStatusRow(row sqlitedb.ListRootWorkflowsByStatusRow) *core.Workflow {
+	return workflowFromFields(row.ID, row.ParentID, row.ChatID, row.WorkflowName, row.Thread, row.Status, row.SpawnedByNodeID, row.LoopIteration, row.CreatedAt, row.CompletedAt)
 }
 
 func workflowToCreateParams(workflow *core.Workflow) sqlitedb.CreateWorkflowParams {

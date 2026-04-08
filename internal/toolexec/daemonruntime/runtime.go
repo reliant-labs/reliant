@@ -125,6 +125,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 	sort.Strings(caps)
 
 	localExec := toolexec.NewLocalToolExecutor(toolsFactory)
+	localExec.SetMCPContextBinder(toolexec.NewLocalMCPContextBinder(mcpManager))
 	// The daemon runtime IS the local machine, so give the executor a
 	// LocalClient so filesystem tools (glob, view, etc.) can operate.
 	localExec.SetDaemonClient(daemon.NewLocalClient())
