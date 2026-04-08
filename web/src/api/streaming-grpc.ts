@@ -374,6 +374,7 @@ function convertExecutionLog(
 export class UserStreamingService {
   private callbacks: GlobalWebSocketCallbacks;
   private abortController: AbortController | null = null;
+  private projectId: string | undefined = undefined;
   private isIntentionallyClosed = false;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 10;
@@ -397,6 +398,7 @@ export class UserStreamingService {
     fromSeq: number = 0,
     subscribeChatId?: string,
     chatFromSeq: number = 0,
+    projectId?: string,
   ): void {
     if (this.abortController && !this.abortController.signal.aborted) {
       logger.warn(`${LOG_PREFIX_STREAM} Already connected`);
@@ -413,6 +415,7 @@ export class UserStreamingService {
     this.lastSequence = BigInt(fromSeq);
     this.lastChatSequence = BigInt(chatFromSeq);
     this.subscribedChatId = subscribeChatId;
+    this.projectId = projectId;
 
     void this.establishConnection();
   }
@@ -486,6 +489,7 @@ export class UserStreamingService {
         sinceSeq: this.lastSequence,
         subscribeChatId: this.subscribedChatId,
         chatSinceSeq: this.lastChatSequence,
+        projectId: this.projectId,
       });
 
       logger.info(`${LOG_PREFIX_STREAM} Connecting to unified gRPC stream`, {

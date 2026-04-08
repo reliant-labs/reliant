@@ -1,9 +1,7 @@
-import { useState, useEffect, useRef, memo, useMemo, useCallback } from "react";
+import { useState, useEffect, memo, useMemo, useCallback } from "react";
 import {
   FolderOpen,
   GitBranch,
-  CheckCircle,
-  AlertTriangle,
   Check,
   Copy,
 } from "lucide-react";
@@ -13,7 +11,7 @@ import { useProjectStore } from "../../store/projectStore";
 import { useApiKeySetupStore } from "../../store/apiKeySetupStore";
 import { ProjectPickerModal } from "./ProjectPickerModal";
 import { DirectoryPicker } from "./DirectoryPicker";
-import { projectGrpc } from "../../api/project-grpc";
+
 import { grpcClient } from "../../api/grpc-client";
 import { toast } from "../../lib/toast-manager";
 import { DaemonStatus, ListDaemonsRequestSchema } from "../../gen/reliant/v1/tools_daemon_pb";
@@ -164,9 +162,6 @@ function DaemonConnectionInstructions() {
 
 
 
-// Module-level guard: survives component remounts so init status is only fetched once per session
-let initStatusLoadedForSession = false;
-
 function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   const projects = useProjectStore((state) => state.projects);
   const loadProjects = useProjectStore((state) => state.loadProjects);
@@ -177,50 +172,6 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null);
   const [isOpenButtonHovered, setIsOpenButtonHovered] = useState(false);
   const [showAllProjects, setShowAllProjects] = useState(false);
-  const [initializationStatus, setInitializationStatus] = useState<
-    Record<string, boolean>
-  >({});
-  const [initializationErrors, setInitializationErrors] = useState<
-    Record<string, string>
-  >({});
-  const initStatusInFlightRef = useRef(false);
-
-
-
-  // Load initialization status for all projects
-  const loadInitializationStatus = async (projectList: Project[]) => {
-    if (initStatusInFlightRef.current) return;
-    initStatusInFlightRef.current = true;
-    const statusPromises = projectList.map(async (project) => {
-      try {
-        const status = await projectGrpc.getInitStatus(project.id);
-        return { id: project.id, initialized: status.initialized, error: null };
-      } catch (error) {
-        console.error(
-          `Failed to check initialization status for project ${project.id}:`,
-          error
-        );
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error";
-        return { id: project.id, initialized: false, error: errorMessage };
-      }
-    });
-
-    const results = await Promise.all(statusPromises);
-    const statusMap: Record<string, boolean> = {};
-    const errorMap: Record<string, string> = {};
-
-    results.forEach(({ id, initialized, error }) => {
-      statusMap[id] = initialized;
-      if (error) {
-        errorMap[id] = error;
-      }
-    });
-
-    setInitializationStatus(statusMap);
-    setInitializationErrors(errorMap);
-    initStatusInFlightRef.current = false;
-  };
 
   useEffect(() => {
     // Initialize theme based on database or system preference
@@ -241,13 +192,7 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
     ensureApiKeyOrShowModal();
   }, [ensureApiKeyOrShowModal]);
 
-  // Load initialization status when projects are loaded (once per session, survives remounts)
-  useEffect(() => {
-    if (projects.length > 0 && !initStatusLoadedForSession) {
-      initStatusLoadedForSession = true;
-      loadInitializationStatus(projects);
-    }
-  }, [projects]);
+
 
   const handleProjectClick = (project: Project) => {
     onProjectSelected(project);
@@ -508,21 +453,7 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
                                 <GitBranch className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />
                               )}
 
-                              {initializationErrors[project.id] ? (
-                                <span
-                                  title={`Error: ${
-                                    initializationErrors[project.id]
-                                  }`}
-                                >
-                                  <AlertTriangle className="w-3 h-3 text-destructive flex-shrink-0" />
-                                </span>
-                              ) : (
-                                initializationStatus[project.id] && (
-                                  <span title="Project is initialized">
-                                    <CheckCircle className="w-3 h-3 text-success flex-shrink-0" />
-                                  </span>
-                                )
-                              )}
+
                             </div>
 
                             {/* Right: Path */}
