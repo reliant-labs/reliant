@@ -95,16 +95,21 @@ export function ContextualTipCoachmark({
     window.addEventListener("resize", updatePosition);
     window.addEventListener("scroll", updatePosition, true);
 
-    if (!hasConfirmedRef.current) {
-      hasConfirmedRef.current = true;
-      onConfirmShownRef.current();
-    }
-
     return () => {
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
   }, [updatePosition, targetSelector]);
+
+  // Only confirm the tip as "shown" once we know the target is visible.
+  // Previously this fired on mount before updatePosition could determine
+  // whether the target existed, inflating shownCount for invisible tips.
+  useEffect(() => {
+    if (targetRect && !hasConfirmedRef.current) {
+      hasConfirmedRef.current = true;
+      onConfirmShownRef.current();
+    }
+  }, [targetRect]);
 
   const cutoutRect = useMemo(() => {
     if (!targetRect) return null;
