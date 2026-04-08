@@ -29,6 +29,12 @@ type PauseController struct {
 	// requested for this executor's thread. Returns true if yield was requested.
 	CheckYield func() bool
 
+	// ClearYield resets the force-yield flag for this thread after it has been
+	// consumed. Without this, stale yield flags persist for the lifetime of the
+	// Temporal execution and cause subsequent transient errors to be
+	// misinterpreted as force-yields.
+	ClearYield func()
+
 	// RequestPause triggers a self-pause from within the workflow. Used when
 	// a retryable error (like a rate limit) exhausts Temporal's retry budget.
 	// After calling this, callers should call DoCheckPause to block until resume.
@@ -50,6 +56,13 @@ func (pc *PauseController) DoCheckYield() bool {
 		return pc.CheckYield()
 	}
 	return false
+}
+
+// DoClearYield calls ClearYield if the receiver and the function are non-nil.
+func (pc *PauseController) DoClearYield() {
+	if pc != nil && pc.ClearYield != nil {
+		pc.ClearYield()
+	}
 }
 
 // GetActivityCtx returns the current cancellable activity context.

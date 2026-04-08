@@ -290,7 +290,7 @@ func TestWorkflowStatus_YieldedUpdatesStatusAndCompletesOwnedThreads(t *testing.
 	require.NoError(t, err)
 
 	// Create a running thread metadata record owned by the child workflow.
-	// This should be completed by CompleteChildThreadRecords when yielded is processed.
+	// This should be completed by CompleteChildWorkflows when yielded is processed.
 	threadRecord := &db.Workflow{
 		ID:           threadRecordWorkflowID,
 		ParentID:     &childWorkflowID,

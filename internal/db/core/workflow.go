@@ -49,7 +49,7 @@ type WorkflowStore interface {
 	CompareAndSwapWorkflowStatus(ctx context.Context, id string, newStatus, expectedStatus WorkflowStatus) (bool, error)
 	UpdateWorkflowStatus(ctx context.Context, id string, status WorkflowStatus) error
 	UpdateWorkflowName(ctx context.Context, id string, workflowName string) error
-	CompleteChildThreadRecords(ctx context.Context, parentWorkflowID string) error
+	CompleteChildWorkflows(ctx context.Context, parentWorkflowID string) error
 	DeleteWorkflow(ctx context.Context, id string) error
 	DeleteWorkflowsByChat(ctx context.Context, chatID string) error
 	ListWorkflowsByStatus(ctx context.Context, status WorkflowStatus) ([]*Workflow, error)

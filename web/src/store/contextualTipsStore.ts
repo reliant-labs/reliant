@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import { logger } from "../lib/logger";
 import {
-  CONTEXTUAL_TIPS_LOCAL_STORAGE_KEYS,
   CONTEXTUAL_TIPS_SETTINGS_KEYS,
   DEFAULT_CONTEXTUAL_TIP_STATE,
   type ContextualTipId,
@@ -49,34 +48,7 @@ interface ContextualTipsStoreState {
   reset: () => void;
 }
 
-function getStoredLocalState(): Record<ContextualTipId, ContextualTipStateRecord> {
-  try {
-    const raw = localStorage.getItem(CONTEXTUAL_TIPS_LOCAL_STORAGE_KEYS.STATE);
-    if (!raw) return createDefaultContextualTipState();
-    return {
-      ...createDefaultContextualTipState(),
-      ...JSON.parse(raw),
-    };
-  } catch {
-    return createDefaultContextualTipState();
-  }
-}
-
-function persistLocalState(
-  tipState: Record<ContextualTipId, ContextualTipStateRecord>,
-  tipsDisabled: boolean,
-): void {
-  localStorage.setItem(
-    CONTEXTUAL_TIPS_LOCAL_STORAGE_KEYS.STATE,
-    JSON.stringify(tipState),
-  );
-  localStorage.setItem(
-    CONTEXTUAL_TIPS_LOCAL_STORAGE_KEYS.DISABLED,
-    tipsDisabled ? "true" : "false",
-  );
-}
-
-async function persistRemoteState(
+async function persistState(
   tipState: Record<ContextualTipId, ContextualTipStateRecord>,
   tipsDisabled: boolean,
 ): Promise<void> {
@@ -115,7 +87,7 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
       safeGetSetting(CONTEXTUAL_TIPS_SETTINGS_KEYS.DISABLED),
     ]);
 
-    let tipState = getStoredLocalState();
+    let tipState = createDefaultContextualTipState();
     if (remoteStateSetting?.value) {
       try {
         tipState = {
@@ -127,17 +99,13 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
       }
     }
 
-    const tipsDisabled =
-      remoteDisabledSetting?.value === "true" ||
-      localStorage.getItem(CONTEXTUAL_TIPS_LOCAL_STORAGE_KEYS.DISABLED) === "true";
+    const tipsDisabled = remoteDisabledSetting?.value === "true";
 
     const lastTipShownAt = Object.values(tipState)
       .map((record) => record.lastShownAt)
       .filter((value): value is string => Boolean(value))
       .sort()
       .at(-1) ?? null;
-
-    persistLocalState(tipState, tipsDisabled);
 
     set({
       isInitialized: true,
@@ -231,8 +199,7 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
       lastTipShownAt: shownAt,
     });
 
-    persistLocalState(nextTipState, state.tipsDisabled);
-    void persistRemoteState(nextTipState, state.tipsDisabled);
+    void persistState(nextTipState, state.tipsDisabled);
   },
 
   clearActiveTip: () => {
@@ -256,16 +223,14 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
       activeTipId: state.activeTipId === tipId ? null : state.activeTipId,
     });
 
-    persistLocalState(nextTipState, state.tipsDisabled);
-    await persistRemoteState(nextTipState, state.tipsDisabled);
+    await persistState(nextTipState, state.tipsDisabled);
     await get().reevaluate();
   },
 
   disableAllTips: async () => {
     const state = get();
     set({ tipsDisabled: true, activeTipId: null });
-    persistLocalState(state.tipState, true);
-    await persistRemoteState(state.tipState, true);
+    await persistState(state.tipState, true);
   },
 
   markTipEngaged: async (tipId) => {
@@ -283,8 +248,7 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
       activeTipId: state.activeTipId === tipId ? null : state.activeTipId,
     });
 
-    persistLocalState(nextTipState, state.tipsDisabled);
-    await persistRemoteState(nextTipState, state.tipsDisabled);
+    await persistState(nextTipState, state.tipsDisabled);
     await get().reevaluate();
   },
 
@@ -348,8 +312,6 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
   },
 
   reset: () => {
-    localStorage.removeItem(CONTEXTUAL_TIPS_LOCAL_STORAGE_KEYS.STATE);
-    localStorage.removeItem(CONTEXTUAL_TIPS_LOCAL_STORAGE_KEYS.DISABLED);
     set({
       isInitialized: false,
       isLoading: false,

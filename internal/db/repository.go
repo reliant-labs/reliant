@@ -288,11 +288,11 @@ type Repository interface {
 	GetRootWorkflowStatusForChats(ctx context.Context, chatIDs []string) (map[string]WorkflowStatus, error) // Returns map of chatID -> root workflow status
 	CompareAndSwapWorkflowStatus(ctx context.Context, id string, newStatus, expectedStatus WorkflowStatus) (bool, error)
 	UpdateWorkflowStatus(ctx context.Context, id string, status WorkflowStatus) error
-	EnsureWorkflowRunning(ctx context.Context, workflowID, chatID string)          // Idempotent: no-op if already running
-	UpdateWorkflowName(ctx context.Context, id string, workflowName string) error  // Only allowed when status is 'pending'
-	CompleteChildThreadRecords(ctx context.Context, parentWorkflowID string) error // Cascade completion to owned threads
-	PauseRunningWorkflowsByChat(ctx context.Context, chatID string) error          // Pause all running workflows for a chat
-	ResumeWorkflowsByChat(ctx context.Context, chatID string) error                // Resume all paused workflows for a chat
+	EnsureWorkflowRunning(ctx context.Context, workflowID, chatID string)         // Idempotent: no-op if already running
+	UpdateWorkflowName(ctx context.Context, id string, workflowName string) error // Only allowed when status is 'pending'
+	CompleteChildWorkflows(ctx context.Context, parentWorkflowID string) error    // Cascade completion to all child workflows
+	PauseRunningWorkflowsByChat(ctx context.Context, chatID string) error         // Pause all running workflows for a chat
+	ResumeWorkflowsByChat(ctx context.Context, chatID string) error               // Resume all paused workflows for a chat
 	DeleteWorkflow(ctx context.Context, id string) error
 	DeleteWorkflowsByChat(ctx context.Context, chatID string) error
 	// Startup recovery queries

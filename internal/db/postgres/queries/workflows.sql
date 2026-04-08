@@ -104,15 +104,16 @@ WHERE w.parent_id IS NULL
   )
 ORDER BY w.chat_id;
 
--- name: CompleteChildThreadRecords :exec
--- Complete all "thread:*" records owned by a parent workflow.
--- Called when a workflow completes to mark all threads it owns as completed.
--- This ensures thread tabs correctly show completed state.
+-- name: CompleteChildWorkflows :exec
+-- Complete all child workflow records owned by a parent workflow.
+-- Called when a workflow reaches a terminal state to cascade completion to all
+-- children (spawn children, thread records, etc.) that are not yet terminal.
+-- Matches running (2) and paused (6) children — prevents orphaned children
+-- from keeping the chat permanently stuck as "active".
 UPDATE workflows 
 SET status = 3, completed_at = NOW()
 WHERE parent_id = $1 
-  AND workflow_name LIKE 'thread:%'
-  AND status = 2;
+  AND status IN (2, 6);
 
 -- name: ListWorkflowsByStatus :many
 -- List all workflows with a specific status (e.g., 2=running, 6=paused).

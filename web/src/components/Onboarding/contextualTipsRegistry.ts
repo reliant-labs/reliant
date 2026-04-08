@@ -50,11 +50,6 @@ export const CONTEXTUAL_TIPS_SETTINGS_KEYS = {
   STATE: "contextual_tips.state",
 } as const;
 
-export const CONTEXTUAL_TIPS_LOCAL_STORAGE_KEYS = {
-  DISABLED: "reliant.contextualTips.disabled",
-  STATE: "reliant.contextualTips.state",
-} as const;
-
 export const DEFAULT_CONTEXTUAL_TIP_STATE: Record<ContextualTipId, ContextualTipStateRecord> = {
   "spawned-thread-intro": {
     shownCount: 0,

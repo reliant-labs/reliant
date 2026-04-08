@@ -73,6 +73,10 @@ func (m *mockPauseRepo) UpdateWorkflowStatus(_ context.Context, id string, statu
 	return nil
 }
 
+func (m *mockPauseRepo) CompleteChildWorkflows(_ context.Context, _ string) error {
+	return nil
+}
+
 func (m *mockPauseRepo) PauseRunningWorkflowsByChat(_ context.Context, _ string) error {
 	return nil
 }

@@ -614,6 +614,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			CheckYield: func() bool {
 				return yieldRequestedThreads[thread]
 			},
+			ClearYield: func() {
+				delete(yieldRequestedThreads, thread)
+			},
 		}
 	}
 
@@ -2209,6 +2212,9 @@ func executeSpawnInline(
 				"toolCallID", config.toolCallID,
 				"childWorkflowID", config.childWorkflowID,
 			)
+			// Clear the yield flag so it doesn't persist and cause future
+			// transient errors to be misinterpreted as force-yields.
+			pauseCtrl.DoClearYield()
 			notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, targetWorkflow, "yielded", parentWorkflowID, config.childThread, nil)
 			return &spawnInlineResult{
 				ToolCallID: config.toolCallID,

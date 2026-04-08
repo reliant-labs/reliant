@@ -223,7 +223,7 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 		}
 		// Cascade completion to any thread records owned by this workflow
 		// Thread records ("thread:*") are created by fork()/new() in action configs
-		return a.repo.CompleteChildThreadRecords(ctx, input.WorkflowID)
+		return a.repo.CompleteChildWorkflows(ctx, input.WorkflowID)
 
 	case "yielded":
 		// Yielded child workflows are terminal from the child's perspective.
@@ -231,19 +231,19 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 		if err := a.repo.UpdateWorkflowStatus(ctx, input.WorkflowID, db.WorkflowStatusCompleted); err != nil {
 			return err
 		}
-		return a.repo.CompleteChildThreadRecords(ctx, input.WorkflowID)
+		return a.repo.CompleteChildWorkflows(ctx, input.WorkflowID)
 
 	case "failed":
 		if err := a.repo.UpdateWorkflowStatus(ctx, input.WorkflowID, db.WorkflowStatusFailed); err != nil {
 			return err
 		}
-		return a.repo.CompleteChildThreadRecords(ctx, input.WorkflowID)
+		return a.repo.CompleteChildWorkflows(ctx, input.WorkflowID)
 
 	case "cancelled":
 		if err := a.repo.UpdateWorkflowStatus(ctx, input.WorkflowID, db.WorkflowStatusCancelled); err != nil {
 			return err
 		}
-		return a.repo.CompleteChildThreadRecords(ctx, input.WorkflowID)
+		return a.repo.CompleteChildWorkflows(ctx, input.WorkflowID)
 
 	case "paused":
 		// Self-pause: workflow is pausing itself (e.g., due to rate limit exhaustion).
