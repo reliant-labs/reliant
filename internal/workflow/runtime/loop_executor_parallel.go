@@ -41,11 +41,6 @@ func (e *InlineLoopExecutor) ExecuteParallel() (*reliantv1.LoopOutput, error) {
 		"workflowIdentity", e.workflowIdentity(),
 	)
 
-	// Execute entry save_message if configured
-	if err := e.executeEntrySaveMessage(); err != nil {
-		return nil, fmt.Errorf("failed to execute loop entry save_message: %w", err)
-	}
-
 	// Load sub-workflow definition (loaded once, shared across iterations)
 	if err := e.loadSubWorkflow(); err != nil {
 		return nil, fmt.Errorf("failed to load loop sub-workflow: %w", err)

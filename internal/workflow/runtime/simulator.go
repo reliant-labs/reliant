@@ -795,7 +795,7 @@ func (s *WorkflowSimulator) executeInlineLoop(nodePath string, protoNode *relian
 	const maxSimulationIterations = 1000
 
 	for iterations < maxSimulationIterations {
-		iterOutputs, err := s.executeLoopIteration(nodePath, subWorkflow, protoNode, mocker, iterations)
+		iterOutputs, err := s.executeLoopIteration(nodePath, subWorkflow, protoNode, mocker, iterations, lastIterOutputs)
 		if err != nil {
 			return nil, err
 		}
@@ -830,6 +830,7 @@ func (s *WorkflowSimulator) executeLoopIteration(
 	loopNode *reliantv1.Node,
 	mocker StepMocker,
 	iteration int,
+	prevIterOutputs map[string]interface{},
 ) (map[string]interface{}, error) {
 	// Create state machine for sub-workflow
 	subSM := NewSimplifiedStateMachine("sim-workflow", subWorkflow)
@@ -979,9 +980,9 @@ func (s *WorkflowSimulator) executeLoopIteration(
 				"sim-workflow",
 				workflowIdentity,
 				subInputs,
-				nil, // loop context handled via subInputs
-				nil, // loopOutputs
-				nil, // no execContext in simulation
+				nil,             // loop context handled via subInputs
+				prevIterOutputs, // previous iteration outputs for outputs.* namespace
+				nil,             // no execContext in simulation
 			)
 
 			if err != nil {
@@ -1049,7 +1050,7 @@ func (s *WorkflowSimulator) executeNestedLoop(qualifiedPrefix string, protoNode 
 	const maxSimulationIterations = 1000
 
 	for iterations < maxSimulationIterations {
-		iterOutputs, err := s.executeNestedLoopIteration(qualifiedPrefix, inlineWf, protoNode, mocker, iterations)
+		iterOutputs, err := s.executeNestedLoopIteration(qualifiedPrefix, inlineWf, protoNode, mocker, iterations, lastIterOutputs)
 		if err != nil {
 			return nil, err
 		}
@@ -1125,6 +1126,7 @@ func (s *WorkflowSimulator) executeNestedLoopIteration(
 	loopNode *reliantv1.Node,
 	mocker StepMocker,
 	iteration int,
+	prevIterOutputs map[string]interface{},
 ) (map[string]interface{}, error) {
 	subSM := NewSimplifiedStateMachine("sim-workflow", subWorkflow)
 	innerOutputs := make(map[string]interface{})
@@ -1253,7 +1255,7 @@ func (s *WorkflowSimulator) executeNestedLoopIteration(
 			evalResult, err := EvaluateNodeConfig(
 				triggered.Node, innerOutputs,
 				"sim-workflow", workflowIdentity, subInputs,
-				nil, nil, nil,
+				nil, prevIterOutputs, nil,
 			)
 			if err != nil {
 				return nil, fmt.Errorf("failed to evaluate config for node %s: %w", qualifiedID, err)
