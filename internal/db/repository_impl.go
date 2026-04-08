@@ -3067,10 +3067,11 @@ func (r *Repo) UpdateWorkflowName(ctx context.Context, id string, workflowName s
 	return r.workflows.UpdateWorkflowName(ctx, id, workflowName)
 }
 
-// CompleteChildThreadRecords marks all "thread:*" records owned by a parent workflow as completed.
-// This is called when a workflow completes to cascade completion to its owned threads.
-func (r *Repo) CompleteChildThreadRecords(ctx context.Context, parentWorkflowID string) error {
-	return r.workflows.CompleteChildThreadRecords(ctx, parentWorkflowID)
+// CompleteChildWorkflows marks all child workflow records owned by a parent as completed.
+// Called when a workflow reaches a terminal state to cascade to all children
+// (spawn children, thread records, etc.) that are still running.
+func (r *Repo) CompleteChildWorkflows(ctx context.Context, parentWorkflowID string) error {
+	return r.workflows.CompleteChildWorkflows(ctx, parentWorkflowID)
 }
 
 func (r *Repo) PauseRunningWorkflowsByChat(ctx context.Context, chatID string) error {

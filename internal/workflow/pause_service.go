@@ -49,12 +49,25 @@ func (ps *PauseService) PauseWorkflow(ctx context.Context, workflowID, chatID, r
 	err := ps.temporalClient.SignalWorkflow(ctx, workflowID, "", SignalPause, nil)
 	if err != nil {
 		if isWorkflowAlreadyDoneErr(err) {
-			// Workflow already finished — reconcile DB status and return success
+			// Workflow already finished — reconcile DB status and return success.
+			// reconcileTerminalStatus also cascades completion to child workflows.
 			logging.Warn("[PauseService] Workflow already completed, reconciling DB status",
 				"workflowID", workflowID,
+				"chatID", chatID,
 				"signalError", err,
 			)
 			ps.reconcileTerminalStatus(ctx, workflowID)
+			// Also bulk-pause any remaining running workflows for this chat
+			// (covers children that aren't direct descendants of this workflow).
+			if chatID != "" {
+				if pErr := ps.database.PauseRunningWorkflowsByChat(ctx, chatID); pErr != nil {
+					logging.Error("[PauseService] Failed to pause remaining workflows after reconciliation",
+						"workflowID", workflowID,
+						"chatID", chatID,
+						"error", pErr,
+					)
+				}
+			}
 			return nil
 		}
 		return fmt.Errorf("failed to send pause signal: %w", err)
@@ -123,6 +136,17 @@ func (ps *PauseService) reconcileTerminalStatus(ctx context.Context, workflowID 
 		logging.Error("[PauseService] Failed to reconcile workflow status",
 			"workflowID", workflowID,
 			"targetStatus", status,
+			"error", err,
+		)
+		return
+	}
+
+	// Cascade completion to child workflows. When a root workflow's Temporal
+	// execution has expired, children's status notifications were likely lost
+	// too — leaving them stuck at running/paused and the chat permanently "active".
+	if err := ps.database.CompleteChildWorkflows(ctx, workflowID); err != nil {
+		logging.Error("[PauseService] Failed to cascade completion to child workflows",
+			"workflowID", workflowID,
 			"error", err,
 		)
 	}

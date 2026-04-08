@@ -707,58 +707,26 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   const pinnedMessage = pinnedUserMessageIdx !== null ? flatItems[pinnedUserMessageIdx] : null;
   const pinnedUserMsg = pinnedMessage?.type === "message" ? pinnedMessage.message : null;
 
-  // Track atBottom for followOutput callback.
-  // Stabilize the "at bottom" state: transitioning away from bottom is debounced
-  // to prevent transient false reports (from footer re-layouts, smooth scroll
-  // animations, or overscroll bounce) from interrupting followOutput and
-  // causing visible jitter.
+  // --- Scroll-follow state ---
+  // atBottomRef mirrors Virtuoso's atBottomStateChange — no debounce needed.
+  // The Footer always renders bottom padding and atBottomThreshold is set to
+  // 80px, which together create a rubber-band zone that absorbs overscroll
+  // bounces and footer re-layouts so atBottom doesn't flap.
   const atBottomRef = useRef(true);
-  const atBottomTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleAtBottomChange = useCallback((atBottom: boolean) => {
-    if (atBottom) {
-      // Immediately mark as at bottom (no delay)
-      if (atBottomTimerRef.current) {
-        clearTimeout(atBottomTimerRef.current);
-        atBottomTimerRef.current = null;
-      }
-      atBottomRef.current = true;
-      onAtBottomStateChange?.(true);
-    } else {
-      // Debounce leaving bottom: only commit after 150ms of sustained "not at bottom"
-      if (!atBottomTimerRef.current) {
-        atBottomTimerRef.current = setTimeout(() => {
-          atBottomTimerRef.current = null;
-          atBottomRef.current = false;
-          onAtBottomStateChange?.(false);
-        }, 150);
-      }
-    }
+    atBottomRef.current = atBottom;
+    onAtBottomStateChange?.(atBottom);
   }, [onAtBottomStateChange]);
 
-  // Clean up timer on unmount
-  useEffect(() => {
-    return () => {
-      if (atBottomTimerRef.current) {
-        clearTimeout(atBottomTimerRef.current);
-      }
-    };
-  }, []);
-
-  // Track whether initial scroll has settled. On mount, atBottomRef starts
-  // true and followOutput would return "smooth" — causing Virtuoso to slowly
-  // smooth-scroll through the entire conversation. Use "auto" (instant) until
-  // the first atBottom callback confirms we've settled at the bottom.
+  // On mount, atBottomRef starts true and followOutput would return "smooth"
+  // — causing Virtuoso to slowly smooth-scroll through the entire conversation.
+  // Use "auto" (instant jump) until the first frame settles.
   const initialScrollDoneRef = useRef(false);
   useEffect(() => {
-    const raf = requestAnimationFrame(() => {
-      initialScrollDoneRef.current = true;
-    });
+    const raf = requestAnimationFrame(() => { initialScrollDoneRef.current = true; });
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  // Only auto-scroll when user is at the bottom.
-  // Use atBottomRef instead of Virtuoso's isAtBottom argument because
-  // Virtuoso can transiently report isAtBottom=true during footer re-layouts.
   const handleFollowOutput = useCallback(() => {
     if (atBottomRef.current) {
       return initialScrollDoneRef.current ? "smooth" : "auto";
@@ -911,9 +879,14 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
 
   const virtuosoComponents = useMemo(() => ({
     Footer: function VirtuosoFooter({ context }: { context?: { footer?: React.ReactNode } }) {
-      if (!context?.footer) return null;
+      // Always render bottom padding — this acts as a rubber-band zone so
+      // overscroll bounces stay within the atBottomThreshold and atBottom
+      // doesn't flap between true/false.
+      if (!context?.footer) {
+        return <div className="pb-4" />;
+      }
       return (
-        <div className="px-4 sm:px-6 lg:px-8 pb-2">
+        <div className="px-4 sm:px-6 lg:px-8 pb-4">
           <div className="max-w-[1200px] mx-auto">
             {context.footer}
           </div>
@@ -975,7 +948,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
         computeItemKey={computeItemKey}
         initialTopMostItemIndex={flatItems.length - 1}
         followOutput={handleFollowOutput}
-        atBottomThreshold={50}
+        atBottomThreshold={80}
         overscan={200}
         increaseViewportBy={200}
         itemContent={wrappedRenderItem}

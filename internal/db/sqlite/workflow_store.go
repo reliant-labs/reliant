@@ -112,8 +112,8 @@ func (s *workflowStore) UpdateWorkflowName(ctx context.Context, id string, workf
 	return nil
 }
 
-func (s *workflowStore) CompleteChildThreadRecords(ctx context.Context, parentWorkflowID string) error {
-	return s.q.CompleteChildThreadRecords(ctx, sql.NullString{String: parentWorkflowID, Valid: true})
+func (s *workflowStore) CompleteChildWorkflows(ctx context.Context, parentWorkflowID string) error {
+	return s.q.CompleteChildWorkflows(ctx, sql.NullString{String: parentWorkflowID, Valid: true})
 }
 
 func (s *workflowStore) PauseRunningWorkflowsByChat(ctx context.Context, chatID string) error {
