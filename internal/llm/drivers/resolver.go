@@ -22,6 +22,7 @@ import (
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/openai"
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/openrouter"
+	_ "github.com/reliant-labs/reliant/internal/llm/drivers/reliant"
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/vertexai"
 )
 

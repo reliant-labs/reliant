@@ -401,6 +401,8 @@ models:
         api_model: claude-sonnet-4-5-20250929
       - driver: openrouter
         api_model: anthropic/claude-sonnet-4.5
+      - driver: reliant
+        api_model: claude-sonnet-4
     default_thinking_level: medium
     default_temperature: 1.0
     default_compaction_threshold: 185000
@@ -487,6 +489,8 @@ models:
         api_model: gemini-2.5-pro
       - driver: openrouter
         api_model: google/gemini-2.5-pro
+      - driver: reliant
+        api_model: gemini-2.5-pro
     default_thinking_level: high
     default_temperature: 1.0
     default_compaction_threshold: 900000
@@ -599,6 +603,8 @@ models:
         api_model: gemini-2.5-flash
       - driver: openrouter
         api_model: google/gemini-2.5-flash
+      - driver: reliant
+        api_model: gemini-2.5-flash
     default_thinking_level: low
     default_temperature: 1.0
     default_compaction_threshold: 900000

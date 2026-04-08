@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -139,10 +139,19 @@ func (s *SettingsService) validateAPIKey(ctx context.Context, provider models.Fa
 	}
 	testModel := providerDefs[0].ToModel()
 
-	driver, err := drivers.GetDriverForModel(testModel, provider,
+	driverOpts := []llm.DriverOption{
 		llm.WithAPIKey(apiKey),
 		llm.WithMaxTokens(100),
-	)
+	}
+	// Reliant provider needs a base URL for the LiteLLM proxy
+	if provider == "reliant" {
+		baseURL := os.Getenv("RELIANT_API_BASE_URL")
+		if baseURL == "" {
+			baseURL = "https://api.reliant.dev/v1"
+		}
+		driverOpts = append(driverOpts, llm.WithBaseURL(baseURL))
+	}
+	driver, err := drivers.GetDriverForModel(testModel, provider, driverOpts...)
 	if err != nil {
 		logging.Error("Failed to create driver for validation", "provider", provider, "error", err)
 		return false, fmt.Sprintf("Failed to initialize provider: %v", err)
@@ -892,6 +901,7 @@ func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.
 	providers := []models.Family{
 		"claude",
 		"codex",
+		"reliant",
 		"openrouter",
 		"anthropic",
 		"openai",
@@ -901,6 +911,7 @@ func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.
 	providerDisplayNames := map[models.Family]string{
 		"claude":     "Claude Code",
 		"codex":      "Codex (ChatGPT)",
+		"reliant":    "Reliant",
 		"openrouter": "OpenRouter",
 		"anthropic":  "Anthropic",
 		"openai":     "OpenAI",
@@ -1002,6 +1013,7 @@ func (s *SettingsService) UpdateProviderAPIKey(ctx context.Context, req *connect
 	validProviders := map[string]bool{
 		"claude":     true,
 		"codex":      true,
+		"reliant":    true,
 		"anthropic":  true,
 		"openai":     true,
 		"gemini":     true,

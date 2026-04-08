@@ -4,6 +4,7 @@ package drivers
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -99,6 +100,13 @@ func BuildAvailableDrivers(ctx context.Context, repo db.Repository, userID strin
 			switch driverID {
 			case "openrouter":
 				config.BaseURL = "https://openrouter.ai/api/v1"
+			case "reliant":
+				// Reliant uses a LiteLLM proxy - base URL comes from the stored key's associated config
+				// or from RELIANT_API_BASE_URL environment variable
+				config.BaseURL = os.Getenv("RELIANT_API_BASE_URL")
+				if config.BaseURL == "" {
+					config.BaseURL = "https://api.reliant.dev/v1"
+				}
 				// case "groq":
 				// 	config.BaseURL = "https://api.groq.com/openai/v1"
 				// case "xai":

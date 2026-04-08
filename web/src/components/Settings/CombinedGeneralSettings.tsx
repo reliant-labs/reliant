@@ -39,6 +39,7 @@ interface CombinedGeneralSettingsProps {
 const VISIBLE_PROVIDERS = [
   "claude",
   "codex",
+  "reliant",
   "anthropic",
   "openai",
   "gemini",
@@ -61,6 +62,14 @@ const providerConfigs = {
     description:
       "GPT-5.3 Codex (flagship) via ChatGPT backend (uses Codex authentication)",
     usesOAuth: "codex" as const,
+  },
+  reliant: {
+    name: "Reliant",
+    docsUrl: "https://reliant.dev/docs",
+    keyFormat: "sk-...",
+    description:
+      "Access AI models through your Reliant organization (Gemini, Claude, GPT)",
+    usesOAuth: false,
   },
   openrouter: {
     name: "OpenRouter",

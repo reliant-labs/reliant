@@ -31,6 +31,7 @@ var ProviderPriority = map[string]int{
 	"gemini":     1,
 	"xai":        1,
 	"vertexai":   1,
+	"reliant":    1,
 	"local":      2,
 	"openrouter": 10,
 }
