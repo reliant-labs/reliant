@@ -2,6 +2,8 @@
 package anthropic
 
 import (
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -13,10 +15,18 @@ type UserMetadata struct {
 	UserID string `json:"user_id"`
 }
 
+// userIDPayload is the JSON structure sent in metadata.user_id to the Claude API.
+type userIDPayload struct {
+	DeviceID    string `json:"device_id"`
+	AccountUUID string `json:"account_uuid"`
+	SessionID   string `json:"session_id"`
+}
+
 // GetUserMetadata constructs user metadata from stored Claude OAuth account data.
 // accountUUID is the account UUID from the OAuth token response.
 // sessionID is an optional session identifier.
-func GetUserMetadata(apiKey string, sessionID *string, accountUUID string) (*UserMetadata, error) {
+// reliantUserID is the Supabase user ID used to derive the device ID.
+func GetUserMetadata(apiKey string, sessionID *string, accountUUID, reliantUserID string) (*UserMetadata, error) {
 	// Only process if this is an sk-ant-oat key
 	if !strings.HasPrefix(apiKey, "sk-ant-oat") {
 		return nil, nil
@@ -33,13 +43,22 @@ func GetUserMetadata(apiKey string, sessionID *string, accountUUID string) (*Use
 		sess = uuid.New().String()
 	}
 
-	// Format the user ID as expected by Claude Code API
-	formattedUserID := fmt.Sprintf("%s_account_%s_session_%s",
-		accountUUID,
-		accountUUID,
-		sess)
+	// Derive a stable device ID: SHA256(reliantUserID + accountUUID)
+	h := sha256.Sum256([]byte(reliantUserID + accountUUID))
+	deviceID := fmt.Sprintf("%x", h)
+
+	payload := userIDPayload{
+		DeviceID:    deviceID,
+		AccountUUID: accountUUID,
+		SessionID:   sess,
+	}
+
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal user ID payload: %w", err)
+	}
 
 	return &UserMetadata{
-		UserID: formattedUserID,
+		UserID: string(encoded),
 	}, nil
 }

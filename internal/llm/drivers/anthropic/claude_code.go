@@ -11,6 +11,7 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
+	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	toolsPkg "github.com/reliant-labs/reliant/internal/llm/tools"
@@ -36,6 +37,13 @@ func NewClaudeCodeClient(opts llm.DriverOptions) *ClaudeCodeClient {
 	// For sk-ant-oat keys, we DON'T use WithAPIKey (which sets X-Api-Key header)
 	// Instead, we use Bearer authentication with exact header casing to match Claude Code
 
+	// Ensure we always have a stable session ID so the header and payload user_id
+	// carry the same value. Generate one if the caller didn't provide one.
+	if opts.SessionID == nil || *opts.SessionID == "" {
+		generated := uuid.New().String()
+		opts.SessionID = &generated
+	}
+
 	// Headers that need exact lowercase casing (Go canonicalizes by default)
 	lowercaseHeaders := map[string]string{
 		"host":           "api.anthropic.com",
@@ -43,12 +51,15 @@ func NewClaudeCodeClient(opts llm.DriverOptions) *ClaudeCodeClient {
 		"authorization":  "Bearer " + opts.ApiKey,
 		"x-app":          "cli",
 		"content-type":   "application/json",
-		"anthropic-beta": "claude-code-20250219,oauth-2025-04-20,context-management-2025-06-27,prompt-caching-scope-2026-01-05,adaptive-thinking-2026-01-28",
+		"anthropic-beta": "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,redact-thinking-2026-02-12,context-management-2025-06-27,prompt-caching-scope-2026-01-05,advanced-tool-use-2025-11-20,effort-2025-11-24",
 		"anthropic-dangerous-direct-browser-access": "true",
 		"anthropic-version":                         "2023-06-01",
 		"accept-language":                           "*",
 		"sec-fetch-mode":                            "cors",
 		"accept-encoding":                           "br, gzip, deflate",
+	}
+	if opts.SessionID != nil && *opts.SessionID != "" {
+		lowercaseHeaders["x-claude-code-session-id"] = *opts.SessionID
 	}
 
 	// Build the transport chain:
@@ -82,12 +93,12 @@ func NewClaudeCodeClient(opts llm.DriverOptions) *ClaudeCodeClient {
 		option.WithHeader("X-Stainless-Retry-Count", "0"),
 		option.WithHeader("X-Stainless-Timeout", "600"),
 		option.WithHeader("X-Stainless-Lang", "js"),
-		option.WithHeader("X-Stainless-Package-Version", "0.70.0"),
+		option.WithHeader("X-Stainless-Package-Version", "0.81.0"),
 		option.WithHeader("X-Stainless-OS", "MacOS"),
 		option.WithHeader("X-Stainless-Arch", "arm64"),
 		option.WithHeader("X-Stainless-Runtime", "node"),
-		option.WithHeader("X-Stainless-Runtime-Version", "v25.5.0"),
-		option.WithHeader("User-Agent", "claude-cli/2.1.32 (external, cli)"),
+		option.WithHeader("X-Stainless-Runtime-Version", "v25.9.0"),
+		option.WithHeader("User-Agent", "claude-cli/2.1.94 (external, cli)"),
 	)
 
 	// Support validate (short timeout for validation requests)
@@ -150,6 +161,10 @@ func (t *lowercaseHeaderTransport) RoundTrip(req *http.Request) (*http.Response,
 		// Set with exact casing using map access (bypasses canonicalization)
 		req.Header[key] = []string{value}
 	}
+
+	// Fresh UUID per request, matching Claude Code's x-client-request-id behavior
+	req.Header["x-client-request-id"] = []string{uuid.New().String()}
+
 	return t.base.RoundTrip(req)
 }
 
@@ -187,18 +202,40 @@ func (c *ClaudeCodeClient) convertTools(tools []toolsPkg.Tool) []anthropic.ToolU
 			InputSchema: inputSchema,
 		}
 
-		// Cache only the last tool
-		if !c.options.DisableCache && i == len(tools)-1 {
-			logging.Debug("ClaudeCode: Caching last tool", "name", toolName, "index", i)
-			toolParam.CacheControl = anthropic.CacheControlEphemeralParam{
-				Type: "ephemeral",
-			}
-		}
-
 		anthropicTools[i] = anthropic.ToolUnionParam{OfTool: &toolParam}
 	}
 
 	return anthropicTools
+}
+
+// prepareSystemPrompts overrides the base implementation with Claude Code-specific cache rules:
+// - getClaudeCodeMainPrompt (index 2 when IgnoreDefaultPrompts=false): ephemeral with ttl=1h, scope=global
+// - last system prompt: regular ephemeral
+// - tools: no cache control
+func (c *ClaudeCodeClient) prepareSystemPrompts(prompts []string) []anthropic.TextBlockParam {
+	systemPrompts := []anthropic.TextBlockParam{}
+	for i, prompt := range prompts {
+		if len(strings.TrimSpace(prompt)) == 0 {
+			logging.Warn("ClaudeCode: Skipping empty system prompt", "index", i, "totalPrompts", len(prompts))
+			continue
+		}
+		block := anthropic.TextBlockParam{Text: prompt}
+		if !c.options.DisableCache {
+			// Index 2 is getClaudeCodeMainPrompt: [0]=billing, [1]="You are Claude Code", [2]=main prompt
+			if !c.options.IgnoreDefaultPrompts && i == 2 {
+				cc := anthropic.CacheControlEphemeralParam{
+					Type: "ephemeral",
+					TTL:  anthropic.CacheControlEphemeralTTLTTL1h,
+				}
+				cc.SetExtraFields(map[string]any{"scope": "global"})
+				block.CacheControl = cc
+			} else if i == len(prompts)-1 {
+				block.CacheControl = anthropic.CacheControlEphemeralParam{Type: "ephemeral"}
+			}
+		}
+		systemPrompts = append(systemPrompts, block)
+	}
+	return systemPrompts
 }
 
 // toolCalls overrides the base implementation to strip the MCP prefix from tool names
@@ -384,9 +421,9 @@ func (c *ClaudeCodeClient) preparedMessages(prompts []string, messages []anthrop
 	// Prepend Claude Code prompts: always include base prompt, optionally include second prompt
 	if c.options.IgnoreDefaultPrompts {
 		// Only include the first (base) prompt - skip the second prompt (used for compaction)
-		prompts = append([]string{getClaudeCodeBasePrompt()}, prompts...)
+		prompts = append(getClaudeCodeBasePrompt(), prompts...)
 	} else {
-		prompts = append([]string{getClaudeCodeBasePrompt(), getClaudeCodeSecondPrompt(c.options.WorkingDirectory)}, prompts...)
+		prompts = append(append(getClaudeCodeBasePrompt(), getClaudeCodeMainPrompt()), prompts...)
 	}
 	params := anthropic.MessageNewParams{
 		Model:     anthropic.Model(c.options.Model.APIModel),
@@ -398,7 +435,7 @@ func (c *ClaudeCodeClient) preparedMessages(prompts []string, messages []anthrop
 	}
 
 	// Attach user metadata for Claude Code keys using stored OAuth account data
-	if metadata, err := GetUserMetadata(c.options.ApiKey, c.options.SessionID, c.options.AccountUUID); err == nil && metadata != nil {
+	if metadata, err := GetUserMetadata(c.options.ApiKey, c.options.SessionID, c.options.AccountUUID, c.options.UserID); err == nil && metadata != nil {
 		params.Metadata.UserID = anthropic.String(metadata.UserID)
 		logging.Debug("ClaudeCode: Attached user metadata", "user_id", metadata.UserID)
 	} else if err != nil {

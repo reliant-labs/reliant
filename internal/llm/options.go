@@ -108,8 +108,9 @@ func WithIgnoreDefaultPrompts() DriverOption {
 }
 
 // WithAccountMetadata sets Claude OAuth account metadata (replaces .claude.json)
-func WithAccountMetadata(accountUUID, accountEmail, organizationUUID string) DriverOption {
+func WithAccountMetadata(userID, accountUUID, accountEmail, organizationUUID string) DriverOption {
 	return func(opts *DriverOptions) {
+		opts.UserID = userID
 		opts.AccountUUID = accountUUID
 		opts.AccountEmail = accountEmail
 		opts.OrganizationUUID = organizationUUID
