@@ -75,6 +75,7 @@ func (s *StreamingService) StreamUserUpdates(
 	sinceSeq := req.Msg.SinceSeq
 	subscribeChatID := req.Msg.GetSubscribeChatId()
 	chatSinceSeq := req.Msg.ChatSinceSeq
+	projectID := req.Msg.GetProjectId() // empty string if not set
 
 	// --- User-level initialization ---
 	latestSeq, err := s.database.GetLatestUserUpdateSequence(ctx, userID)
@@ -97,7 +98,7 @@ func (s *StreamingService) StreamUserUpdates(
 
 	// Send any user updates since sinceSeq
 	if latestSeq > sinceSeq {
-		if err := s.sendUserUpdateBatches(ctx, userID, sinceSeq, latestSeq, stream); err != nil {
+		if err := s.sendUserUpdateBatches(ctx, userID, sinceSeq, latestSeq, projectID, stream); err != nil {
 			logging.Error(LOG_PREFIX_STREAM_USER+" Failed to send updates", "error", err, "userID", userID)
 			return err
 		}
@@ -195,6 +196,10 @@ func (s *StreamingService) StreamUserUpdates(
 				continue
 			}
 			lastUserSeq = event.SequenceNumber
+			// Filter by project if the client requested project-scoped updates
+			if projectID != "" && (event.Payload.ProjectID == nil || *event.Payload.ProjectID != projectID) {
+				continue
+			}
 			if err := s.sendSingleUserUpdate(event.Payload, stream); err != nil {
 				return err
 			}
@@ -679,7 +684,7 @@ func formatChatUpdateDataJSON(updateType reliantv1.ChatUpdateType, rawData json.
 }
 
 // sendUserUpdateBatches sends user updates in batches
-func (s *StreamingService) sendUserUpdateBatches(ctx context.Context, userID string, startSeq, latestSeq int64, stream *connect.ServerStream[reliantv1.UserStreamEvent]) error {
+func (s *StreamingService) sendUserUpdateBatches(ctx context.Context, userID string, startSeq, latestSeq int64, projectID string, stream *connect.ServerStream[reliantv1.UserStreamEvent]) error {
 	currentSeq := startSeq
 
 	for currentSeq < latestSeq {
@@ -702,6 +707,10 @@ func (s *StreamingService) sendUserUpdateBatches(ctx context.Context, userID str
 				maxSeq = update.SequenceNumber
 			}
 			if update.UpdateType == db.UserUpdateRefetch {
+				continue
+			}
+			// Filter by project if the client requested project-scoped updates
+			if projectID != "" && (update.ProjectID == nil || *update.ProjectID != projectID) {
 				continue
 			}
 			protoUpdates = append(protoUpdates, s.userUpdateToProto(update))

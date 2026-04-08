@@ -194,7 +194,8 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
     setFocusedPath(null);
     setExpandedPaths(new Set());
     // Note: showHidden is now persisted in UI store and won't reset on project change
-    setTreeKey((prev) => prev + 1); // Force FileTree to remount
+    // Don't remount via treeKey — FileTree's own useEffect on [worktreeId] handles re-fetch.
+    // Remounting caused 2-3 redundant GetFileTree calls during initial hydration.
   }, [currentProject?.id, activeWorktreeId, setCurrentProject]);
 
   // Listen for file operation undo events to refresh the tree and expand paths

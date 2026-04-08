@@ -2,6 +2,7 @@
 // Workflow gRPC API client - uses proto types directly (no conversion layer)
 
 import { grpcClient } from "./grpc-client";
+import { singleflight } from "../lib/singleflight";
 import { create, type MessageInitShape } from "@bufbuild/protobuf";
 import type {
   WorkflowListItem as ProtoWorkflowListItem,
@@ -229,21 +230,23 @@ export const workflowGrpc = {
     projectId: string,
     includeHidden = false,
   ): Promise<ListWorkflowsResult> {
-    const client = grpcClient.workflow();
-    const request = create(ListWorkflowsRequestSchema, {
-      projectId,
-      includeHidden,
+    return singleflight(`listWorkflows:${projectId}:${includeHidden}`, async () => {
+      const client = grpcClient.workflow();
+      const request = create(ListWorkflowsRequestSchema, {
+        projectId,
+        includeHidden,
+      });
+      const response = await client.listWorkflows(request);
+      return {
+        workflows: response.workflows.map(listItemToResponse),
+        invalidWorkflows: (response.invalidWorkflows || []).map((inv) => ({
+          name: inv.name,
+          source: inv.source as "builtin" | "project" | "user",
+          path: inv.path,
+          errors: [...inv.errors],
+        })),
+      };
     });
-    const response = await client.listWorkflows(request);
-    return {
-      workflows: response.workflows.map(listItemToResponse),
-      invalidWorkflows: (response.invalidWorkflows || []).map((inv) => ({
-        name: inv.name,
-        source: inv.source as "builtin" | "project" | "user",
-        path: inv.path,
-        errors: [...inv.errors],
-      })),
-    };
   },
 
   /**

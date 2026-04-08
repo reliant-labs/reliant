@@ -140,6 +140,7 @@ message StreamUserUpdatesRequest {
   int64 since_seq = 1;                         // User-level sequence number to start from
   optional string subscribe_chat_id = 2;       // Subscribe to per-chat detail events for this chat
   int64 chat_since_seq = 3;                    // Chat-level sequence number to start from (0 for initial sync snapshot)
+  optional string project_id = 4;              // Scope updates to this project (omit for all projects)
 }
 
 // UserStreamEvent represents a single event in the unified update stream.

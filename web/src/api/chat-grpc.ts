@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 import { grpcClient } from "./grpc-client";
+import { singleflight } from "../lib/singleflight";
 import { create } from "@bufbuild/protobuf";
 import { jsToProtoValue, protoValueToJs, type ProtoValue } from "./proto-utils";
 import {
@@ -340,19 +341,21 @@ export const chatGrpc = {
     chats: ArchivedChat[];
     total: number;
   }> {
-    const client = grpcClient.chat();
-    const request = create(ListArchivedChatsRequestSchema, {});
-    const response = await client.listArchivedChats(request);
-    return {
-      chats: response.chats.map(ac => {
-        const { $typeName: _, chat, ...rest } = ac;
-        return {
-          ...rest,
-          chat: chat ? convertProtoChat(chat) : undefined,
-        };
-      }),
-      total: response.total,
-    };
+    return singleflight('listArchivedChats', async () => {
+      const client = grpcClient.chat();
+      const request = create(ListArchivedChatsRequestSchema, {});
+      const response = await client.listArchivedChats(request);
+      return {
+        chats: response.chats.map(ac => {
+          const { $typeName: _, chat, ...rest } = ac;
+          return {
+            ...rest,
+            chat: chat ? convertProtoChat(chat) : undefined,
+          };
+        }),
+        total: response.total,
+      };
+    });
   },
 
   // Send a user message and continue workflow
