@@ -128,16 +128,14 @@ WHERE parent_id = ?
 -- name: ListWorkflowsByStatus :many
 -- List all workflows with a specific status (e.g., 2=running, 6=paused).
 -- Used for startup recovery to restart workers for active workflows.
-SELECT id, parent_id, chat_id, workflow_name, thread, status, spawned_by_node_id, loop_iteration, created_at, completed_at
-FROM workflows
+SELECT id, parent_id, chat_id, workflow_name, thread, spawned_by_node_id, loop_iteration, created_at, completed_at, expired_at, status FROM workflows
 WHERE status = ?
 ORDER BY created_at ASC;
 
 -- name: ListRootWorkflowsByStatus :many
 -- List root workflows (parent_id IS NULL) with a specific status.
 -- Root workflows are the entry points that need dedicated workers.
-SELECT id, parent_id, chat_id, workflow_name, thread, status, spawned_by_node_id, loop_iteration, created_at, completed_at
-FROM workflows
+SELECT id, parent_id, chat_id, workflow_name, thread, spawned_by_node_id, loop_iteration, created_at, completed_at, expired_at, status FROM workflows
 WHERE parent_id IS NULL AND status = ?
 ORDER BY created_at ASC;
 
