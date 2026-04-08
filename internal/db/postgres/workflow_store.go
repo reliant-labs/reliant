@@ -79,12 +79,15 @@ func (s *workflowStore) ListRootWorkflows(ctx context.Context, chatID string) ([
 }
 
 func (s *workflowStore) GetRootWorkflowStatusForChats(ctx context.Context, chatIDs []string) (map[string]core.WorkflowStatus, error) {
-	rows, err := s.q.GetRootWorkflowStatusForChats(ctx, chatIDs)
-	if err != nil {
-		return nil, err
-	}
-	result := make(map[string]core.WorkflowStatus, len(rows))
-	for _, row := range rows {
+	result := make(map[string]core.WorkflowStatus, len(chatIDs))
+	for _, chatID := range chatIDs {
+		row, err := s.q.GetRootWorkflowStatusForChat(ctx, chatID)
+		if err != nil {
+			if err == sql.ErrNoRows {
+				continue
+			}
+			return nil, err
+		}
 		if status, ok := row.Status.(int32); ok {
 			result[row.ChatID] = core.WorkflowStatus(status)
 		} else if status, ok := row.Status.(int64); ok {
