@@ -1,4 +1,3 @@
-// Copyright (c) 2025 Reliant Labs
 package reliant
 
 import (
@@ -9,18 +8,23 @@ import (
 
 const Family models.Family = "reliant"
 
+// SupportedModels is the curated Reliant-backed allowlist exposed in the app.
+// Keep this aligned with the control-plane allowlist used for key provisioning.
+var SupportedModels = []models.ModelID{
+	models.Claude45Sonnet,
+	models.Gemini25Pro,
+	models.Gemini25Flash,
+	models.Gemini25FlashLite,
+	models.Gemini3FlashPreview,
+	models.Gemini31ProPreview,
+	models.Gemini31FlashLitePreview,
+}
+
 func createClient(opts *llm.DriverOptions) (registry.Client, error) {
 	return NewClient(*opts), nil
 }
 
 func init() {
-	// Register models that have reliant as a provider from the YAML registry.
-	reg := models.MustGetRegistry()
-	reliantModels := reg.ListModelsByProvider("reliant")
-	m := make([]models.ModelID, 0, len(reliantModels))
-	for _, def := range reliantModels {
-		m = append(m, models.ModelID(def.ID))
-	}
-	models.RegisterDriverModels(Family, m)
+	models.RegisterDriverModels(Family, SupportedModels)
 	registry.RegisterDriver(Family, createClient)
 }

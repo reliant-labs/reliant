@@ -1,0 +1,103 @@
+syntax = "proto3";
+
+package controlplane.v1;
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/controlplane/v1;controlplanev1";
+
+// Minimal control-plane admin subset used by Reliant app-side authenticated key sync.
+
+enum LLMKeyStatus {
+  LLM_KEY_STATUS_UNSPECIFIED = 0;
+  LLM_KEY_STATUS_ACTIVE = 1;
+  LLM_KEY_STATUS_REVOKED = 2;
+  LLM_KEY_STATUS_EXPIRED = 3;
+}
+
+message User {
+  string id = 1;
+  string external_id = 2;
+  string email = 3;
+  string name = 4;
+}
+
+message Organization {
+  string id = 1;
+  string name = 2;
+  string slug = 3;
+}
+
+message LLMKey {
+  string id = 1;
+  string org_id = 2;
+  string name = 3;
+  repeated string models = 4;
+  LLMKeyStatus status = 7;
+}
+
+service UserService {
+  rpc GetCurrentUser(GetCurrentUserRequest) returns (GetCurrentUserResponse) {}
+}
+
+message GetCurrentUserRequest {}
+
+message GetCurrentUserResponse {
+  User user = 1;
+  repeated Organization organizations = 2;
+}
+
+service OrgService {
+  rpc CreateOrg(CreateOrgRequest) returns (CreateOrgResponse) {}
+  rpc ListOrgs(ListOrgsRequest) returns (ListOrgsResponse) {}
+}
+
+message CreateOrgRequest {
+  string name = 1;
+  string slug = 2;
+}
+
+message CreateOrgResponse {
+  Organization org = 1;
+}
+
+message ListOrgsRequest {}
+
+message ListOrgsResponse {
+  repeated Organization orgs = 1;
+}
+
+service LLMGatewayService {
+  rpc CreateLLMKey(CreateLLMKeyRequest) returns (CreateLLMKeyResponse) {}
+  rpc ListLLMKeys(ListLLMKeysRequest) returns (ListLLMKeysResponse) {}
+  rpc RotateLLMKey(RotateLLMKeyRequest) returns (RotateLLMKeyResponse) {}
+}
+
+message CreateLLMKeyRequest {
+  string org_id = 1;
+  string name = 2;
+  repeated string models = 3;
+  optional double max_budget = 4;
+  string budget_duration = 5;
+}
+
+message CreateLLMKeyResponse {
+  LLMKey key = 1;
+  string plaintext_key = 2;
+}
+
+message ListLLMKeysRequest {
+  string org_id = 1;
+}
+
+message ListLLMKeysResponse {
+  repeated LLMKey keys = 1;
+}
+
+message RotateLLMKeyRequest {
+  string key_id = 1;
+  string grace_period = 2;
+}
+
+message RotateLLMKeyResponse {
+  LLMKey key = 1;
+  string plaintext_key = 2;
+}

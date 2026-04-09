@@ -39,15 +39,17 @@ import (
 // SettingsService implements the SettingsService RPC handlers
 type SettingsService struct {
 	reliantv1connect.UnimplementedSettingsServiceHandler
-	database     db.Repository
-	daemonRouter toolexec.DaemonRouter
+	database           db.Repository
+	daemonRouter       toolexec.DaemonRouter
+	controlPlaneClient controlPlaneClient
 }
 
 // NewSettingsService creates a new SettingsService
 func NewSettingsService(database db.Repository, daemonRouter toolexec.DaemonRouter) *SettingsService {
 	return &SettingsService{
-		database:     database,
-		daemonRouter: daemonRouter,
+		database:           database,
+		daemonRouter:       daemonRouter,
+		controlPlaneClient: newControlPlaneClient(""),
 	}
 }
 

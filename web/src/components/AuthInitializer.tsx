@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useAuthStore } from "@/store/authStore";
 import { useGlobalDataStore } from "@/store/globalDataStore";
 import { useApiKeySetupStore } from "@/store/apiKeySetupStore";
+import { api } from "@/api/client";
 import { logger } from "@/lib/logger";
 
 // NOTE: OAuth callback handling is done in authStore.initialize() to avoid duplicate listeners
@@ -51,16 +52,30 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
 
       const start = performance.now();
 
-      // Trigger prefetch - this loads global data needed for the app
-      prefetch()
-        .then(() => {
-          logger.info('[AuthInitializer] Global data prefetch completed in', (performance.now() - start).toFixed(2), 'ms');
-        })
-        .catch((error) => {
-          logger.warn('[AuthInitializer] Global data prefetch failed:', error);
-          // Reset prefetch flag if global data fails, as it's critical for app function
-          hasPrefetched.current = false;
-        });
+      (async () => {
+        try {
+          const syncResult = await api.settings.syncReliantProvider();
+          logger.info('[AuthInitializer] Reliant provider sync completed', {
+            synced: syncResult.synced,
+            createdOrg: syncResult.created_org,
+            createdKey: syncResult.created_key,
+            rotatedKey: syncResult.rotated_key,
+          });
+        } catch (error) {
+          logger.warn('[AuthInitializer] Reliant provider sync failed:', error);
+        }
+
+        // Trigger prefetch - this loads global data needed for the app
+        prefetch()
+          .then(() => {
+            logger.info('[AuthInitializer] Global data prefetch completed in', (performance.now() - start).toFixed(2), 'ms');
+          })
+          .catch((error) => {
+            logger.warn('[AuthInitializer] Global data prefetch failed:', error);
+            // Reset prefetch flag if global data fails, as it's critical for app function
+            hasPrefetched.current = false;
+          });
+      })();
 
       // Independently check API keys
       // Wait for checklist to initialize first to avoid showing modal during welcome

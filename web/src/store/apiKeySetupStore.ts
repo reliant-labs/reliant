@@ -11,11 +11,23 @@ import { logger } from "../lib/logger";
 
 const DISMISSED_KEY = "reliant.apiKeySetup.dismissed";
 
+const AUTO_MANAGED_PROVIDERS = new Set(["reliant"]);
+
 /** Match onboarding `detectCompletedItems` / checklist: key or OAuth-backed provider. */
 function hasAnyProviderCredentials(
-  providers: { hasApiKey: boolean; configured: boolean }[],
+  providers: { provider?: string; hasApiKey: boolean; configured: boolean }[],
 ): boolean {
   return providers.some((p) => p.hasApiKey || p.configured);
+}
+
+function hasAnyManualProviderCredentials(
+  providers: { provider?: string; hasApiKey: boolean; configured: boolean }[],
+): boolean {
+  return providers.some(
+    (p) =>
+      !AUTO_MANAGED_PROVIDERS.has((p.provider || "").toLowerCase()) &&
+      (p.hasApiKey || p.configured)
+  );
 }
 
 interface ApiKeySetupState {
@@ -100,9 +112,11 @@ export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
       logger.info("[ApiKeySetupStore] Checking for configured API keys...");
       const providers = await api.settings.getProviders();
       const hasAnyKey = hasAnyProviderCredentials(providers);
+      const hasAnyManualKey = hasAnyManualProviderCredentials(providers);
       
       logger.info("[ApiKeySetupStore] API key check result", {
         hasAnyKey,
+        hasAnyManualKey,
         providers: providers.map((p) => ({ 
           provider: p.provider, 
           hasKey: p.hasApiKey 
@@ -110,7 +124,7 @@ export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
       });
 
       set({
-        showModal: !hasAnyKey,
+        showModal: !hasAnyKey && !hasAnyManualKey,
         isChecking: false,
         hasChecked: true,
         hasApiKey: hasAnyKey,
@@ -179,15 +193,16 @@ export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
       logger.info("[ApiKeySetupStore] Ensuring API key is configured...");
       const providers = await api.settings.getProviders();
       const hasAnyKey = hasAnyProviderCredentials(providers);
+      const hasAnyManualKey = hasAnyManualProviderCredentials(providers);
 
-      logger.info("[ApiKeySetupStore] API key ensure result", { hasAnyKey });
+      logger.info("[ApiKeySetupStore] API key ensure result", { hasAnyKey, hasAnyManualKey });
 
       set({
         hasApiKey: hasAnyKey,
         hasChecked: true,
         isChecking: false,
-        // Show modal if no key is configured
-        showModal: !hasAnyKey,
+        // Show modal only if neither auto-managed nor manual providers are configured
+        showModal: !hasAnyKey && !hasAnyManualKey,
       });
     } catch (error) {
       logger.error("[ApiKeySetupStore] Failed to ensure API key:", error);
