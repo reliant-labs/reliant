@@ -290,6 +290,11 @@ func EvaluateNodeConfig(
 	}
 	if loopOutputs != nil {
 		builder = builder.WithOutputs(loopOutputs)
+	} else if iterContext != nil {
+		// In a loop but no previous iteration outputs yet (iteration 0).
+		// Declare outputs as an empty map so CEL compilation succeeds for
+		// expressions that reference outputs.* behind a ternary guard.
+		builder = builder.WithOutputs(make(map[string]interface{}))
 	}
 
 	// Apply model defaults for node types that have a model field.
