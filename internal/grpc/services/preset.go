@@ -369,8 +369,8 @@ func (s *PresetService) loadPresetByNameFromDB(ctx context.Context, projectID, n
 	return nil, fmt.Errorf("preset not found: %s", name)
 }
 
-// loadWorkflow loads a workflow by name from embedded builtins or DB-stored project
-// workflows (synced by the tools daemon from .reliant/workflows/ on disk).
+// loadWorkflow loads a workflow by name using the normal resolution path:
+// builtin -> user DB draft -> DB-stored project workflow.
 // No filesystem access — the API server may run in the cloud without disk access.
 func (s *PresetService) loadWorkflow(ctx context.Context, workflowName, projectID string) (*reliantv1.Workflow, error) {
 	parseYAML := func(data []byte) (*reliantv1.Workflow, error) {
@@ -393,7 +393,18 @@ func (s *PresetService) loadWorkflow(ctx context.Context, workflowName, projectI
 		return parseYAML(data)
 	}
 
-	// 3. Try DB-stored project workflows (synced by daemon from .reliant/workflows/ on disk).
+	// 3. Try usable user DB drafts.
+	userID := auth.MustGetUserID(ctx)
+	slug := strings.ToLower(strings.ReplaceAll(workflowName, " ", "-"))
+	draft, dbErr := s.database.GetUsableWorkflowBySlug(ctx, userID, slug)
+	if dbErr != nil {
+		return nil, fmt.Errorf("failed to load user workflow draft %q: %w", workflowName, dbErr)
+	}
+	if draft != nil {
+		return parseDraftDefinitionV2([]byte(draft.Definition))
+	}
+
+	// 4. Try DB-stored project workflows (synced by daemon from .reliant/workflows/ on disk).
 	// The workflow name inside the YAML may differ from the filename (e.g., file "blog.yaml"
 	// with name "blog-content-pipeline"), so we look up by slug in the stored config.
 	if projectID != "" {
@@ -401,7 +412,6 @@ func (s *PresetService) loadWorkflow(ctx context.Context, workflowName, projectI
 		if dbErr == nil {
 			workflows, parseErr := cfg.ParseStoredWorkflows(record.ProjectWorkflowsJSON)
 			if parseErr == nil {
-				slug := strings.ToLower(strings.ReplaceAll(workflowName, " ", "-"))
 				sw := cfg.FindStoredWorkflowBySlug(workflows, slug)
 				if sw != nil {
 					return parseYAML([]byte(sw.YAMLContent))

@@ -266,6 +266,89 @@ params:
 	})
 }
 
+func TestPresetService_ListPresetsForWorkflow_UsesUserWorkflowDrafts(t *testing.T) {
+	service, sqlDB, projectID := setupTestPresetService(t)
+	defer sqlDB.Close()
+
+	var userID string
+	err := sqlDB.QueryRow("SELECT user_id FROM projects WHERE id = ?", projectID).Scan(&userID)
+	if err != nil {
+		t.Fatalf("failed to get user: %v", err)
+	}
+
+	repo := db.NewRepo(sqlDB)
+	ctx := createTestContext(userID)
+
+	workflowYAML := `
+name: Custom Agent Draft
+apiVersion: "0.0.5"
+presets:
+  tag: agent
+entry: [ask]
+inputs:
+  model:
+    type: model
+  system_prompt:
+    type: string
+    default: ""
+  thinking_level:
+    type: enum
+    enum: [low, medium, high, xhigh]
+    default: high
+  tools:
+    type: tools
+    default: ["tag:default", "tag:mcp"]
+  spawn_presets:
+    type: preset
+    tags: [agent]
+    multi: true
+    default: [general, researcher, code_reviewer]
+nodes:
+  - id: ask
+    type: call_llm
+    args:
+      model: "{{inputs.model}}"
+      messages:
+        - role: user
+          content: test
+`
+	err = repo.CreateWorkflowDraft(ctx, &db.WorkflowDraft{
+		ID:         uuid.NewString(),
+		UserID:     userID,
+		Name:       "Custom Agent Draft",
+		Slug:       "custom-agent-draft",
+		Definition: workflowYAML,
+		IsValid:    true,
+		IsHidden:   false,
+		Version:    1,
+	})
+	if err != nil {
+		t.Fatalf("CreateWorkflowDraft failed: %v", err)
+	}
+
+	resp, err := service.ListPresetsForWorkflow(ctx, connect.NewRequest(&reliantv1.ListPresetsForWorkflowRequest{
+		ProjectId:    projectID,
+		WorkflowName: "Custom Agent Draft",
+	}))
+	if err != nil {
+		t.Fatalf("ListPresetsForWorkflow failed: %v", err)
+	}
+
+	presetNames := make(map[string]bool)
+	for _, p := range resp.Msg.Presets {
+		presetNames[p.Name] = true
+	}
+
+	t.Run("returns builtin agent presets for compatible user drafts", func(t *testing.T) {
+		if !presetNames["general"] {
+			t.Fatalf("expected builtin agent preset 'general' for user draft, got %v", presetNames)
+		}
+		if !presetNames["researcher"] {
+			t.Fatalf("expected builtin agent preset 'researcher' for user draft, got %v", presetNames)
+		}
+	})
+}
+
 func TestPresetService_CreatePreset(t *testing.T) {
 	service, sqlDB, projectID := setupTestPresetService(t)
 	defer sqlDB.Close()
