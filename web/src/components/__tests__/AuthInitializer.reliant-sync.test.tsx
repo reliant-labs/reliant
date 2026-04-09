@@ -3,7 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   initialize: vi.fn(),
+  initializePrivacy: vi.fn(),
   syncReliantProvider: vi.fn(),
+  listSettingsInitialize: vi.fn(),
+  applyAppearanceSettingsToDOM: vi.fn(),
+  loadProjects: vi.fn(),
+  initSentry: vi.fn(),
   prefetch: vi.fn(),
   checkApiKeys: vi.fn(),
   reset: vi.fn(),
@@ -30,6 +35,30 @@ vi.mock('@/store/authStore', () => ({
     },
     { getState: vi.fn() }
   ),
+}))
+
+vi.mock('@/store/privacyStore', () => ({
+  usePrivacyStore: (selector: (state: { initialize: typeof mocks.initializePrivacy }) => unknown) =>
+    selector({ initialize: mocks.initializePrivacy }),
+}))
+
+vi.mock('@/store/projectStore', () => ({
+  useProjectStore: {
+    getState: () => ({
+      loadProjects: mocks.loadProjects,
+    }),
+  },
+}))
+
+vi.mock('@/services/settingsSync', () => ({
+  settingsSync: {
+    initialize: mocks.listSettingsInitialize,
+    applyAppearanceSettingsToDOM: mocks.applyAppearanceSettingsToDOM,
+  },
+}))
+
+vi.mock('@/lib/sentry', () => ({
+  initSentry: mocks.initSentry,
 }))
 
 vi.mock('@/store/globalDataStore', () => ({
@@ -72,6 +101,10 @@ describe('AuthInitializer Reliant sync', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.useFakeTimers()
+    mocks.initializePrivacy.mockResolvedValue(undefined)
+    mocks.listSettingsInitialize.mockResolvedValue(undefined)
+    mocks.loadProjects.mockResolvedValue(undefined)
+    mocks.initSentry.mockResolvedValue(undefined)
     mocks.syncReliantProvider.mockResolvedValue({
       synced: true,
       created_org: false,
@@ -89,7 +122,7 @@ describe('AuthInitializer Reliant sync', () => {
     vi.useRealTimers()
   })
 
-  it('syncs Reliant before prefetch and API key checks', async () => {
+  it('initializes authenticated startup before Reliant sync and prefetch', async () => {
     const { AuthInitializer } = await import('@/components/AuthInitializer')
 
     render(
@@ -104,10 +137,21 @@ describe('AuthInitializer Reliant sync', () => {
       await Promise.resolve()
     })
 
+    expect(mocks.initializePrivacy).toHaveBeenCalledTimes(1)
+    expect(mocks.listSettingsInitialize).toHaveBeenCalledTimes(1)
+    expect(mocks.loadProjects).toHaveBeenCalledTimes(1)
+    expect(mocks.applyAppearanceSettingsToDOM).toHaveBeenCalledTimes(1)
+    expect(mocks.initSentry).toHaveBeenCalledTimes(1)
+
     expect(mocks.syncReliantProvider).toHaveBeenCalledTimes(1)
     expect(mocks.prefetch).toHaveBeenCalledTimes(1)
     expect(mocks.checkApiKeys).toHaveBeenCalledTimes(1)
 
+    expect(mocks.initializePrivacy.mock.invocationCallOrder[0]).toBeLessThan(mocks.syncReliantProvider.mock.invocationCallOrder[0])
+    expect(mocks.listSettingsInitialize.mock.invocationCallOrder[0]).toBeLessThan(mocks.syncReliantProvider.mock.invocationCallOrder[0])
+    expect(mocks.loadProjects.mock.invocationCallOrder[0]).toBeLessThan(mocks.syncReliantProvider.mock.invocationCallOrder[0])
+    expect(mocks.applyAppearanceSettingsToDOM.mock.invocationCallOrder[0]).toBeLessThan(mocks.syncReliantProvider.mock.invocationCallOrder[0])
+    expect(mocks.initSentry.mock.invocationCallOrder[0]).toBeLessThan(mocks.syncReliantProvider.mock.invocationCallOrder[0])
     expect(mocks.syncReliantProvider.mock.invocationCallOrder[0]).toBeLessThan(mocks.prefetch.mock.invocationCallOrder[0])
     expect(mocks.prefetch.mock.invocationCallOrder[0]).toBeLessThan(mocks.checkApiKeys.mock.invocationCallOrder[0])
   })

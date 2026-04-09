@@ -4,6 +4,8 @@ package controlplane.v1;
 
 option go_package = "github.com/reliant-labs/reliant/internal/gen/controlplane/v1;controlplanev1";
 
+import "google/protobuf/timestamp.proto";
+
 // Minimal control-plane admin subset used by Reliant app-side authenticated key sync.
 
 enum LLMKeyStatus {
@@ -32,6 +34,40 @@ message LLMKey {
   string name = 3;
   repeated string models = 4;
   LLMKeyStatus status = 7;
+}
+
+message ReliantEntitlement {
+  string user_id = 1;
+  string status = 2;
+  string plan_id = 3;
+  string plan_name = 4;
+  bool reliant_enabled = 5;
+  repeated string allowed_models = 6;
+  int64 monthly_spend_cap_cents = 7;
+  int32 requests_per_minute = 8;
+  int32 max_concurrent_requests = 9;
+  bool hard_cap = 10;
+  bool overage_allowed = 11;
+  google.protobuf.Timestamp current_period_start = 12;
+  google.protobuf.Timestamp current_period_end = 13;
+  string source_type = 14;
+  string source_ref_id = 15;
+  google.protobuf.Timestamp updated_at = 16;
+}
+
+message ManagedReliantAccess {
+  string id = 1;
+  string user_id = 2;
+  string status = 3;
+  string active_llm_key_id = 4;
+  int32 credential_version = 5;
+  optional int32 entitlement_snapshot_version = 6;
+  google.protobuf.Timestamp last_rotated_at = 7;
+  google.protobuf.Timestamp last_provisioned_at = 8;
+  string last_error = 9;
+  string internal_org_id = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp updated_at = 12;
 }
 
 service UserService {
@@ -63,6 +99,39 @@ message ListOrgsRequest {}
 
 message ListOrgsResponse {
   repeated Organization orgs = 1;
+}
+
+service BillingService {
+  rpc GetCurrentUserReliantState(GetCurrentUserReliantStateRequest) returns (GetCurrentUserReliantStateResponse) {}
+  rpc RepairCurrentUserReliantAccess(RepairCurrentUserReliantAccessRequest) returns (RepairCurrentUserReliantAccessResponse) {}
+  rpc RotateCurrentUserReliantAccess(RotateCurrentUserReliantAccessRequest) returns (RotateCurrentUserReliantAccessResponse) {}
+}
+
+message GetCurrentUserReliantStateRequest {}
+
+message GetCurrentUserReliantStateResponse {
+  ReliantEntitlement entitlement = 1;
+  ManagedReliantAccess managed_access = 2;
+}
+
+message RepairCurrentUserReliantAccessRequest {}
+
+message RepairCurrentUserReliantAccessResponse {
+  ReliantEntitlement entitlement = 1;
+  ManagedReliantAccess managed_access = 2;
+  bool repaired = 3;
+}
+
+message RotateCurrentUserReliantAccessRequest {
+  optional string grace_period = 1;
+}
+
+message RotateCurrentUserReliantAccessResponse {
+  ReliantEntitlement entitlement = 1;
+  ManagedReliantAccess managed_access = 2;
+  bool rotated = 3;
+  bool replaced = 4;
+  string plaintext_key = 5;
 }
 
 service LLMGatewayService {

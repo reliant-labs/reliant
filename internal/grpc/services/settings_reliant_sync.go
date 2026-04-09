@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"regexp"
 	"strings"
 	"time"
 
@@ -16,27 +15,20 @@ import (
 	controlplanev1 "github.com/reliant-labs/reliant/internal/gen/controlplane/v1"
 	"github.com/reliant-labs/reliant/internal/gen/controlplane/v1/controlplanev1connect"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
-	reliantdriver "github.com/reliant-labs/reliant/internal/llm/drivers/reliant"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
 const (
-	reliantProviderID                   = "reliant"
-	reliantSyncInitializedSettingKey    = "providers.reliant.sync_initialized"
-	defaultControlPlaneBaseURL         = "http://localhost:8090"
-	reliantKeyNamePrefix               = "Reliant App"
-	reliantKeyRotationGracePeriod      = "24h"
+	reliantProviderID                = "reliant"
+	reliantSyncInitializedSettingKey = "providers.reliant.sync_initialized"
+	defaultControlPlaneBaseURL       = "http://localhost:8090"
+	reliantKeyRotationGracePeriod    = "24h"
 )
 
-var nonSlugChars = regexp.MustCompile(`[^a-z0-9-]+`)
-
 type controlPlaneClient interface {
-	GetCurrentUser(ctx context.Context, authHeader string) (*controlplanev1.GetCurrentUserResponse, error)
-	ListOrgs(ctx context.Context, authHeader string) (*controlplanev1.ListOrgsResponse, error)
-	CreateOrg(ctx context.Context, authHeader, name, slug string) (*controlplanev1.CreateOrgResponse, error)
-	ListLLMKeys(ctx context.Context, authHeader, orgID string) (*controlplanev1.ListLLMKeysResponse, error)
-	CreateLLMKey(ctx context.Context, authHeader, orgID, name string, models []string) (*controlplanev1.CreateLLMKeyResponse, error)
-	RotateLLMKey(ctx context.Context, authHeader, keyID, gracePeriod string) (*controlplanev1.RotateLLMKeyResponse, error)
+	GetCurrentUserReliantState(ctx context.Context, authHeader string) (*controlplanev1.GetCurrentUserReliantStateResponse, error)
+	RepairCurrentUserReliantAccess(ctx context.Context, authHeader string) (*controlplanev1.RepairCurrentUserReliantAccessResponse, error)
+	RotateCurrentUserReliantAccess(ctx context.Context, authHeader, gracePeriod string) (*controlplanev1.RotateCurrentUserReliantAccessResponse, error)
 }
 
 type connectControlPlaneClient struct {
@@ -64,70 +56,37 @@ func getControlPlaneBaseURL() string {
 	return defaultControlPlaneBaseURL
 }
 
-func (c *connectControlPlaneClient) GetCurrentUser(ctx context.Context, authHeader string) (*controlplanev1.GetCurrentUserResponse, error) {
-	client := controlplanev1connect.NewUserServiceClient(c.httpClient, c.baseURL)
-	req := connect.NewRequest(&controlplanev1.GetCurrentUserRequest{})
+func (c *connectControlPlaneClient) GetCurrentUserReliantState(ctx context.Context, authHeader string) (*controlplanev1.GetCurrentUserReliantStateResponse, error) {
+	client := controlplanev1connect.NewBillingServiceClient(c.httpClient, c.baseURL)
+	req := connect.NewRequest(&controlplanev1.GetCurrentUserReliantStateRequest{})
 	attachAuthorization(req, authHeader)
-	resp, err := client.GetCurrentUser(ctx, req)
+	resp, err := client.GetCurrentUserReliantState(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 	return resp.Msg, nil
 }
 
-func (c *connectControlPlaneClient) ListOrgs(ctx context.Context, authHeader string) (*controlplanev1.ListOrgsResponse, error) {
-	client := controlplanev1connect.NewOrgServiceClient(c.httpClient, c.baseURL)
-	req := connect.NewRequest(&controlplanev1.ListOrgsRequest{})
+func (c *connectControlPlaneClient) RepairCurrentUserReliantAccess(ctx context.Context, authHeader string) (*controlplanev1.RepairCurrentUserReliantAccessResponse, error) {
+	client := controlplanev1connect.NewBillingServiceClient(c.httpClient, c.baseURL)
+	req := connect.NewRequest(&controlplanev1.RepairCurrentUserReliantAccessRequest{})
 	attachAuthorization(req, authHeader)
-	resp, err := client.ListOrgs(ctx, req)
+	resp, err := client.RepairCurrentUserReliantAccess(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 	return resp.Msg, nil
 }
 
-func (c *connectControlPlaneClient) CreateOrg(ctx context.Context, authHeader, name, slug string) (*controlplanev1.CreateOrgResponse, error) {
-	client := controlplanev1connect.NewOrgServiceClient(c.httpClient, c.baseURL)
-	req := connect.NewRequest(&controlplanev1.CreateOrgRequest{Name: name, Slug: slug})
-	attachAuthorization(req, authHeader)
-	resp, err := client.CreateOrg(ctx, req)
-	if err != nil {
-		return nil, err
+func (c *connectControlPlaneClient) RotateCurrentUserReliantAccess(ctx context.Context, authHeader, gracePeriod string) (*controlplanev1.RotateCurrentUserReliantAccessResponse, error) {
+	client := controlplanev1connect.NewBillingServiceClient(c.httpClient, c.baseURL)
+	msg := &controlplanev1.RotateCurrentUserReliantAccessRequest{}
+	if trimmed := strings.TrimSpace(gracePeriod); trimmed != "" {
+		msg.GracePeriod = &trimmed
 	}
-	return resp.Msg, nil
-}
-
-func (c *connectControlPlaneClient) ListLLMKeys(ctx context.Context, authHeader, orgID string) (*controlplanev1.ListLLMKeysResponse, error) {
-	client := controlplanev1connect.NewLLMGatewayServiceClient(c.httpClient, c.baseURL)
-	req := connect.NewRequest(&controlplanev1.ListLLMKeysRequest{OrgId: orgID})
+	req := connect.NewRequest(msg)
 	attachAuthorization(req, authHeader)
-	resp, err := client.ListLLMKeys(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	return resp.Msg, nil
-}
-
-func (c *connectControlPlaneClient) CreateLLMKey(ctx context.Context, authHeader, orgID, name string, models []string) (*controlplanev1.CreateLLMKeyResponse, error) {
-	client := controlplanev1connect.NewLLMGatewayServiceClient(c.httpClient, c.baseURL)
-	req := connect.NewRequest(&controlplanev1.CreateLLMKeyRequest{
-		OrgId:  orgID,
-		Name:   name,
-		Models: models,
-	})
-	attachAuthorization(req, authHeader)
-	resp, err := client.CreateLLMKey(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	return resp.Msg, nil
-}
-
-func (c *connectControlPlaneClient) RotateLLMKey(ctx context.Context, authHeader, keyID, gracePeriod string) (*controlplanev1.RotateLLMKeyResponse, error) {
-	client := controlplanev1connect.NewLLMGatewayServiceClient(c.httpClient, c.baseURL)
-	req := connect.NewRequest(&controlplanev1.RotateLLMKeyRequest{KeyId: keyID, GracePeriod: gracePeriod})
-	attachAuthorization(req, authHeader)
-	resp, err := client.RotateLLMKey(ctx, req)
+	resp, err := client.RotateCurrentUserReliantAccess(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -164,97 +123,6 @@ func maskProviderKey(raw string) string {
 	return ""
 }
 
-func deriveReliantOrgName(email string) string {
-	trimmed := strings.TrimSpace(email)
-	if trimmed == "" {
-		return "Reliant"
-	}
-	local := trimmed
-	if at := strings.Index(local, "@"); at > 0 {
-		local = local[:at]
-	}
-	local = strings.TrimSpace(strings.NewReplacer(".", " ", "_", " ", "-", " ").Replace(local))
-	if local == "" {
-		return "Reliant"
-	}
-	parts := strings.Fields(local)
-	for i, p := range parts {
-		parts[i] = strings.ToUpper(p[:1]) + p[1:]
-	}
-	return strings.Join(parts, " ") + "'s Reliant"
-}
-
-func deriveReliantOrgSlug(email, userID string) string {
-	base := strings.ToLower(strings.TrimSpace(email))
-	if at := strings.Index(base, "@"); at > 0 {
-		base = base[:at]
-	}
-	base = strings.ReplaceAll(base, "_", "-")
-	base = nonSlugChars.ReplaceAllString(base, "-")
-	base = strings.Trim(base, "-")
-	if len(base) > 40 {
-		base = strings.Trim(base[:40], "-")
-	}
-	if len(base) < 3 {
-		base = "reliant"
-	}
-
-	suffix := strings.ToLower(strings.TrimSpace(userID))
-	suffix = nonSlugChars.ReplaceAllString(suffix, "")
-	if len(suffix) > 8 {
-		suffix = suffix[:8]
-	}
-
-	candidate := strings.Trim(base+"-"+suffix, "-")
-	if candidate == "" {
-		candidate = "reliant-org"
-	}
-	if candidate[0] < 'a' || candidate[0] > 'z' {
-		candidate = "r-" + candidate
-	}
-	if len(candidate) > 50 {
-		candidate = strings.Trim(candidate[:50], "-")
-	}
-	if len(candidate) < 3 {
-		candidate = "reliant-org"
-	}
-	return candidate
-}
-
-func selectOrgFromCurrentUser(resp *controlplanev1.GetCurrentUserResponse) *controlplanev1.Organization {
-	if resp == nil || len(resp.Organizations) == 0 {
-		return nil
-	}
-	return resp.Organizations[0]
-}
-
-func selectFirstOrg(resp *controlplanev1.ListOrgsResponse) *controlplanev1.Organization {
-	if resp == nil || len(resp.Orgs) == 0 {
-		return nil
-	}
-	return resp.Orgs[0]
-}
-
-func selectActiveReliantKey(resp *controlplanev1.ListLLMKeysResponse) *controlplanev1.LLMKey {
-	if resp == nil {
-		return nil
-	}
-	for _, key := range resp.Keys {
-		if key != nil && key.Status == controlplanev1.LLMKeyStatus_LLM_KEY_STATUS_ACTIVE {
-			return key
-		}
-	}
-	return nil
-}
-
-func supportedReliantModelStrings() []string {
-	out := make([]string, 0, len(reliantdriver.SupportedModels))
-	for _, modelID := range reliantdriver.SupportedModels {
-		out = append(out, string(modelID))
-	}
-	return out
-}
-
 func (s *SettingsService) isReliantSyncInitialized(ctx context.Context, userID string) (bool, error) {
 	setting, err := s.database.GetSetting(ctx, userID, nil, reliantSyncInitializedSettingKey)
 	if err != nil {
@@ -282,76 +150,43 @@ func (s *SettingsService) SyncReliantProvider(ctx context.Context, req *connect.
 		client = newControlPlaneClient("")
 	}
 
-	cpUser, err := client.GetCurrentUser(ctx, authHeader)
-	if err != nil {
-		logging.Error("Failed to fetch current control-plane user", "error", err)
-		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("failed to load Reliant account state"))
-	}
-
-	org := selectOrgFromCurrentUser(cpUser)
-	createdOrg := false
-	if org == nil {
-		if orgsResp, err := client.ListOrgs(ctx, authHeader); err == nil {
-			org = selectFirstOrg(orgsResp)
-		} else {
-			logging.Warn("Failed to list control-plane orgs during Reliant sync", "error", err)
-		}
-	}
-	if org == nil {
-		email, _ := ctx.Value(auth.UserEmailContextKey).(string)
-		createResp, err := client.CreateOrg(ctx, authHeader, deriveReliantOrgName(email), deriveReliantOrgSlug(email, userID))
-		if err != nil {
-			logging.Error("Failed to create control-plane org during Reliant sync", "error", err)
-			return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("failed to create Reliant organization"))
-		}
-		org = createResp.Org
-		createdOrg = true
-	}
-	if org == nil || strings.TrimSpace(org.Id) == "" {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("control-plane org resolution failed"))
-	}
-
-	existingLocalKey, _ := s.database.GetProviderAPIKey(ctx, userID, reliantProviderID)
 	syncInitialized, err := s.isReliantSyncInitialized(ctx, userID)
 	if err != nil {
 		logging.Error("Failed to load Reliant sync migration state", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load Reliant sync state"))
 	}
 
-	keysResp, err := client.ListLLMKeys(ctx, authHeader, org.Id)
+	stateResp, err := client.GetCurrentUserReliantState(ctx, authHeader)
 	if err != nil {
-		logging.Error("Failed to list Reliant control-plane keys", "orgID", org.Id, "error", err)
-		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("failed to load Reliant key state"))
-	}
-	activeKey := selectActiveReliantKey(keysResp)
-	shouldMigrateLegacyLocalKey := !syncInitialized && strings.TrimSpace(existingLocalKey) != "" && !req.Msg.ForceRotate
-
-	var plaintextKey string
-	createdKey := false
-	rotatedKey := false
-
-	switch {
-	case activeKey == nil:
-		createResp, err := client.CreateLLMKey(ctx, authHeader, org.Id, reliantKeyNamePrefix, supportedReliantModelStrings())
-		if err != nil {
-			logging.Error("Failed to create Reliant control-plane key", "orgID", org.Id, "error", err)
-			return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("failed to create Reliant key"))
-		}
-		plaintextKey = strings.TrimSpace(createResp.PlaintextKey)
-		createdKey = true
-	case req.Msg.ForceRotate || strings.TrimSpace(existingLocalKey) == "" || shouldMigrateLegacyLocalKey:
-		rotateResp, err := client.RotateLLMKey(ctx, authHeader, activeKey.Id, reliantKeyRotationGracePeriod)
-		if err != nil {
-			logging.Error("Failed to rotate Reliant control-plane key", "keyID", activeKey.Id, "error", err)
-			return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("failed to rotate Reliant key"))
-		}
-		plaintextKey = strings.TrimSpace(rotateResp.PlaintextKey)
-		rotatedKey = true
-	default:
-		plaintextKey = existingLocalKey
+		logging.Error("Failed to fetch current Reliant managed state", "error", err)
+		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("failed to load Reliant account state"))
 	}
 
-	if strings.TrimSpace(plaintextKey) == "" {
+	managedAccess := stateResp.GetManagedAccess()
+	needsRepair := managedAccess == nil || strings.TrimSpace(managedAccess.GetInternalOrgId()) == ""
+	if !needsRepair && strings.TrimSpace(managedAccess.GetActiveLlmKeyId()) == "" {
+		needsRepair = true
+	}
+	if req.Msg.GetForceRotate() {
+		needsRepair = false
+	}
+	if needsRepair {
+		repairResp, err := client.RepairCurrentUserReliantAccess(ctx, authHeader)
+		if err != nil {
+			logging.Error("Failed to repair managed Reliant access before sync", "error", err)
+			return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("failed to repair Reliant access"))
+		}
+		managedAccess = repairResp.GetManagedAccess()
+	}
+
+	rotateResp, err := client.RotateCurrentUserReliantAccess(ctx, authHeader, reliantKeyRotationGracePeriod)
+	if err != nil {
+		logging.Error("Failed to rotate managed Reliant access", "error", err)
+		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("failed to rotate Reliant key"))
+	}
+
+	plaintextKey := strings.TrimSpace(rotateResp.GetPlaintextKey())
+	if plaintextKey == "" {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("no Reliant plaintext key available to sync"))
 	}
 
@@ -368,7 +203,7 @@ func (s *SettingsService) SyncReliantProvider(ctx context.Context, req *connect.
 
 	analyticsClient := analytics.GetClientForUser(ctx, userID)
 	action := "updated"
-	if createdKey {
+	if rotateResp.GetReplaced() {
 		action = "connected"
 	}
 	analyticsClient.TrackProviderSettingsUpdated(analytics.ProviderSettingsUpdatedMetrics{
@@ -402,9 +237,9 @@ func (s *SettingsService) SyncReliantProvider(ctx context.Context, req *connect.
 		Success:    true,
 		Message:    "Reliant provider synced",
 		Synced:     true,
-		CreatedOrg: createdOrg,
-		CreatedKey: createdKey,
-		RotatedKey: rotatedKey,
+		CreatedOrg: false,
+		CreatedKey: rotateResp.GetReplaced(),
+		RotatedKey: rotateResp.GetRotated(),
 		Provider:   makeReliantProviderStatus(true, masked),
 	}), nil
 }

@@ -15,74 +15,54 @@ import (
 )
 
 type fakeControlPlaneClient struct {
-	getCurrentUserResp *controlplanev1.GetCurrentUserResponse
-	listOrgsResp       *controlplanev1.ListOrgsResponse
-	createOrgResp      *controlplanev1.CreateOrgResponse
-	listKeysResp       *controlplanev1.ListLLMKeysResponse
-	createKeyResp      *controlplanev1.CreateLLMKeyResponse
-	rotateKeyResp      *controlplanev1.RotateLLMKeyResponse
+	getCurrentUserReliantStateResp     *controlplanev1.GetCurrentUserReliantStateResponse
+	repairCurrentUserReliantAccessResp *controlplanev1.RepairCurrentUserReliantAccessResponse
+	rotateCurrentUserReliantAccessResp *controlplanev1.RotateCurrentUserReliantAccessResponse
 
-	getCurrentUserErr error
-	listOrgsErr       error
-	createOrgErr      error
-	listKeysErr       error
-	createKeyErr      error
-	rotateKeyErr      error
+	getCurrentUserReliantStateErr     error
+	repairCurrentUserReliantAccessErr error
+	rotateCurrentUserReliantAccessErr error
 
-	createOrgCalls int
-	createKeyCalls int
-	rotateKeyCalls int
-	lastAuthHeader string
-	lastCreateSlug string
+	repairCalls     int
+	rotateCalls     int
+	lastAuthHeader  string
+	lastGracePeriod string
 }
 
-func (f *fakeControlPlaneClient) GetCurrentUser(_ context.Context, authHeader string) (*controlplanev1.GetCurrentUserResponse, error) {
+func (f *fakeControlPlaneClient) GetCurrentUserReliantState(_ context.Context, authHeader string) (*controlplanev1.GetCurrentUserReliantStateResponse, error) {
 	f.lastAuthHeader = authHeader
-	return f.getCurrentUserResp, f.getCurrentUserErr
-}
-
-func (f *fakeControlPlaneClient) ListOrgs(_ context.Context, authHeader string) (*controlplanev1.ListOrgsResponse, error) {
-	f.lastAuthHeader = authHeader
-	return f.listOrgsResp, f.listOrgsErr
-}
-
-func (f *fakeControlPlaneClient) CreateOrg(_ context.Context, authHeader, name, slug string) (*controlplanev1.CreateOrgResponse, error) {
-	f.lastAuthHeader = authHeader
-	f.createOrgCalls++
-	f.lastCreateSlug = slug
-	if f.createOrgResp == nil {
-		f.createOrgResp = &controlplanev1.CreateOrgResponse{Org: &controlplanev1.Organization{Id: "org-created", Name: name, Slug: slug}}
+	if f.getCurrentUserReliantStateResp == nil {
+		f.getCurrentUserReliantStateResp = &controlplanev1.GetCurrentUserReliantStateResponse{}
 	}
-	return f.createOrgResp, f.createOrgErr
+	return f.getCurrentUserReliantStateResp, f.getCurrentUserReliantStateErr
 }
 
-func (f *fakeControlPlaneClient) ListLLMKeys(_ context.Context, authHeader, _ string) (*controlplanev1.ListLLMKeysResponse, error) {
+func (f *fakeControlPlaneClient) RepairCurrentUserReliantAccess(_ context.Context, authHeader string) (*controlplanev1.RepairCurrentUserReliantAccessResponse, error) {
 	f.lastAuthHeader = authHeader
-	return f.listKeysResp, f.listKeysErr
-}
-
-func (f *fakeControlPlaneClient) CreateLLMKey(_ context.Context, authHeader, orgID, name string, models []string) (*controlplanev1.CreateLLMKeyResponse, error) {
-	f.lastAuthHeader = authHeader
-	f.createKeyCalls++
-	if f.createKeyResp == nil {
-		f.createKeyResp = &controlplanev1.CreateLLMKeyResponse{
-			Key:          &controlplanev1.LLMKey{Id: "key-created", OrgId: orgID, Name: name, Models: models, Status: controlplanev1.LLMKeyStatus_LLM_KEY_STATUS_ACTIVE},
-			PlaintextKey: "rlnt_created_key",
+	f.repairCalls++
+	if f.repairCurrentUserReliantAccessResp == nil {
+		f.repairCurrentUserReliantAccessResp = &controlplanev1.RepairCurrentUserReliantAccessResponse{
+			ManagedAccess: &controlplanev1.ManagedReliantAccess{
+				InternalOrgId:  "org-1",
+				ActiveLlmKeyId: "key-1",
+			},
+			Repaired: true,
 		}
 	}
-	return f.createKeyResp, f.createKeyErr
+	return f.repairCurrentUserReliantAccessResp, f.repairCurrentUserReliantAccessErr
 }
 
-func (f *fakeControlPlaneClient) RotateLLMKey(_ context.Context, authHeader, keyID, gracePeriod string) (*controlplanev1.RotateLLMKeyResponse, error) {
+func (f *fakeControlPlaneClient) RotateCurrentUserReliantAccess(_ context.Context, authHeader, gracePeriod string) (*controlplanev1.RotateCurrentUserReliantAccessResponse, error) {
 	f.lastAuthHeader = authHeader
-	f.rotateKeyCalls++
-	if f.rotateKeyResp == nil {
-		f.rotateKeyResp = &controlplanev1.RotateLLMKeyResponse{
-			Key:          &controlplanev1.LLMKey{Id: keyID, OrgId: "org-1", Name: "Reliant App", Status: controlplanev1.LLMKeyStatus_LLM_KEY_STATUS_ACTIVE},
-			PlaintextKey: fmt.Sprintf("rotated-%s-%s", keyID, gracePeriod),
+	f.lastGracePeriod = gracePeriod
+	f.rotateCalls++
+	if f.rotateCurrentUserReliantAccessResp == nil {
+		f.rotateCurrentUserReliantAccessResp = &controlplanev1.RotateCurrentUserReliantAccessResponse{
+			Rotated:      true,
+			PlaintextKey: fmt.Sprintf("rotated-%s", gracePeriod),
 		}
 	}
-	return f.rotateKeyResp, f.rotateKeyErr
+	return f.rotateCurrentUserReliantAccessResp, f.rotateCurrentUserReliantAccessErr
 }
 
 func newReliantSyncTestContext() context.Context {
@@ -91,13 +71,24 @@ func newReliantSyncTestContext() context.Context {
 	return ctx
 }
 
-func TestSettingsService_SyncReliantProviderCreatesOrgAndKey(t *testing.T) {
+func TestSettingsService_SyncReliantProviderRepairsMissingManagedAccessThenRotates(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
 	cp := &fakeControlPlaneClient{
-		getCurrentUserResp: &controlplanev1.GetCurrentUserResponse{User: &controlplanev1.User{Id: "cp-user", Email: "test.user@example.com"}},
-		listOrgsResp:       &controlplanev1.ListOrgsResponse{},
+		getCurrentUserReliantStateResp: &controlplanev1.GetCurrentUserReliantStateResponse{},
+		repairCurrentUserReliantAccessResp: &controlplanev1.RepairCurrentUserReliantAccessResponse{
+			ManagedAccess: &controlplanev1.ManagedReliantAccess{
+				InternalOrgId:  "org-1",
+				ActiveLlmKeyId: "key-1",
+			},
+			Repaired: true,
+		},
+		rotateCurrentUserReliantAccessResp: &controlplanev1.RotateCurrentUserReliantAccessResponse{
+			Rotated:      true,
+			Replaced:     true,
+			PlaintextKey: "rlnt_repaired_key",
+		},
 	}
 	svc := NewSettingsService(repo, nil)
 	svc.controlPlaneClient = cp
@@ -107,114 +98,45 @@ func TestSettingsService_SyncReliantProviderCreatesOrgAndKey(t *testing.T) {
 	resp, err := svc.SyncReliantProvider(newReliantSyncTestContext(), req)
 	require.NoError(t, err)
 	require.True(t, resp.Msg.Success)
-	assert.True(t, resp.Msg.CreatedOrg)
-	assert.True(t, resp.Msg.CreatedKey)
-	assert.False(t, resp.Msg.RotatedKey)
 	assert.Equal(t, "Bearer sync-token", cp.lastAuthHeader)
-	assert.Equal(t, 1, cp.createOrgCalls)
-	assert.Equal(t, 1, cp.createKeyCalls)
-	assert.Equal(t, 0, cp.rotateKeyCalls)
-	assert.Contains(t, cp.lastCreateSlug, "test")
+	assert.Equal(t, 1, cp.repairCalls)
+	assert.Equal(t, 1, cp.rotateCalls)
+	assert.Equal(t, reliantKeyRotationGracePeriod, cp.lastGracePeriod)
+	assert.True(t, resp.Msg.CreatedKey)
+	assert.True(t, resp.Msg.RotatedKey)
+	assert.False(t, resp.Msg.CreatedOrg)
 
 	stored, err := repo.GetProviderAPIKey(newReliantSyncTestContext(), "test-user", "reliant")
 	require.NoError(t, err)
-	assert.Equal(t, "rlnt_created_key", stored)
+	assert.Equal(t, "rlnt_repaired_key", stored)
 	require.NotNil(t, resp.Msg.Provider)
 	assert.True(t, resp.Msg.Provider.Configured)
 	assert.True(t, resp.Msg.Provider.HasApiKey)
-}
 
-func TestSettingsService_SyncReliantProviderRotatesWhenLocalKeyMissing(t *testing.T) {
-	repo, cleanup := db.SetupTestDB(t)
-	defer cleanup()
-
-	cp := &fakeControlPlaneClient{
-		getCurrentUserResp: &controlplanev1.GetCurrentUserResponse{
-			User: &controlplanev1.User{Id: "cp-user", Email: "test.user@example.com"},
-			Organizations: []*controlplanev1.Organization{{Id: "org-1", Name: "Test Org", Slug: "test-org"}},
-		},
-		listKeysResp: &controlplanev1.ListLLMKeysResponse{
-			Keys: []*controlplanev1.LLMKey{{Id: "key-1", OrgId: "org-1", Name: "Reliant App", Status: controlplanev1.LLMKeyStatus_LLM_KEY_STATUS_ACTIVE}},
-		},
-		rotateKeyResp: &controlplanev1.RotateLLMKeyResponse{
-			Key:          &controlplanev1.LLMKey{Id: "key-1", OrgId: "org-1", Name: "Reliant App", Status: controlplanev1.LLMKeyStatus_LLM_KEY_STATUS_ACTIVE},
-			PlaintextKey: "rlnt_rotated_key",
-		},
-	}
-	svc := NewSettingsService(repo, nil)
-	svc.controlPlaneClient = cp
-
-	req := connect.NewRequest(&reliantv1.SyncReliantProviderRequest{})
-	req.Header().Set("Authorization", "Bearer sync-token")
-	resp, err := svc.SyncReliantProvider(newReliantSyncTestContext(), req)
-	require.NoError(t, err)
-	assert.False(t, resp.Msg.CreatedOrg)
-	assert.False(t, resp.Msg.CreatedKey)
-	assert.True(t, resp.Msg.RotatedKey)
-	assert.Equal(t, 1, cp.rotateKeyCalls)
-
-	stored, err := repo.GetProviderAPIKey(newReliantSyncTestContext(), "test-user", "reliant")
-	require.NoError(t, err)
-	assert.Equal(t, "rlnt_rotated_key", stored)
-}
-
-func TestSettingsService_SyncReliantProviderMigratesLegacyExistingLocalKeyOnce(t *testing.T) {
-	repo, cleanup := db.SetupTestDB(t)
-	defer cleanup()
-	ctx := newReliantSyncTestContext()
-	require.NoError(t, repo.SetProviderAPIKey(ctx, "test-user", "reliant", "existing-local-key"))
-
-	cp := &fakeControlPlaneClient{
-		getCurrentUserResp: &controlplanev1.GetCurrentUserResponse{
-			User: &controlplanev1.User{Id: "cp-user", Email: "test.user@example.com"},
-			Organizations: []*controlplanev1.Organization{{Id: "org-1", Name: "Test Org", Slug: "test-org"}},
-		},
-		listKeysResp: &controlplanev1.ListLLMKeysResponse{
-			Keys: []*controlplanev1.LLMKey{{Id: "key-1", OrgId: "org-1", Name: "Reliant App", Status: controlplanev1.LLMKeyStatus_LLM_KEY_STATUS_ACTIVE}},
-		},
-		rotateKeyResp: &controlplanev1.RotateLLMKeyResponse{
-			Key:          &controlplanev1.LLMKey{Id: "key-1", OrgId: "org-1", Name: "Reliant App", Status: controlplanev1.LLMKeyStatus_LLM_KEY_STATUS_ACTIVE},
-			PlaintextKey: "rlnt_migrated_key",
-		},
-	}
-	svc := NewSettingsService(repo, nil)
-	svc.controlPlaneClient = cp
-
-	req := connect.NewRequest(&reliantv1.SyncReliantProviderRequest{})
-	req.Header().Set("Authorization", "Bearer sync-token")
-	resp, err := svc.SyncReliantProvider(ctx, req)
-	require.NoError(t, err)
-	assert.True(t, resp.Msg.Success)
-	assert.False(t, resp.Msg.CreatedKey)
-	assert.True(t, resp.Msg.RotatedKey)
-	assert.Equal(t, 0, cp.createKeyCalls)
-	assert.Equal(t, 1, cp.rotateKeyCalls)
-
-	stored, err := repo.GetProviderAPIKey(ctx, "test-user", "reliant")
-	require.NoError(t, err)
-	assert.Equal(t, "rlnt_migrated_key", stored)
-
-	marker, err := repo.GetSetting(ctx, "test-user", nil, reliantSyncInitializedSettingKey)
+	marker, err := repo.GetSetting(newReliantSyncTestContext(), "test-user", nil, reliantSyncInitializedSettingKey)
 	require.NoError(t, err)
 	assert.Equal(t, "true", marker.Value)
 }
 
-func TestSettingsService_SyncReliantProviderReusesExistingLocalKeyAfterInitialization(t *testing.T) {
+func TestSettingsService_SyncReliantProviderRotatesExistingManagedAccess(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 	ctx := newReliantSyncTestContext()
 	require.NoError(t, repo.SetProviderAPIKey(ctx, "test-user", "reliant", "existing-local-key"))
-
 	svc := NewSettingsService(repo, nil)
 	require.NoError(t, svc.upsertSetting(ctx, "test-user", nil, reliantSyncInitializedSettingKey, "true"))
 
 	cp := &fakeControlPlaneClient{
-		getCurrentUserResp: &controlplanev1.GetCurrentUserResponse{
-			User: &controlplanev1.User{Id: "cp-user", Email: "test.user@example.com"},
-			Organizations: []*controlplanev1.Organization{{Id: "org-1", Name: "Test Org", Slug: "test-org"}},
+		getCurrentUserReliantStateResp: &controlplanev1.GetCurrentUserReliantStateResponse{
+			ManagedAccess: &controlplanev1.ManagedReliantAccess{
+				InternalOrgId:  "org-1",
+				ActiveLlmKeyId: "key-1",
+			},
 		},
-		listKeysResp: &controlplanev1.ListLLMKeysResponse{
-			Keys: []*controlplanev1.LLMKey{{Id: "key-1", OrgId: "org-1", Name: "Reliant App", Status: controlplanev1.LLMKeyStatus_LLM_KEY_STATUS_ACTIVE}},
+		rotateCurrentUserReliantAccessResp: &controlplanev1.RotateCurrentUserReliantAccessResponse{
+			Rotated:      true,
+			Replaced:     false,
+			PlaintextKey: "rlnt_rotated_key",
 		},
 	}
 	svc.controlPlaneClient = cp
@@ -224,33 +146,28 @@ func TestSettingsService_SyncReliantProviderReusesExistingLocalKeyAfterInitializ
 	resp, err := svc.SyncReliantProvider(ctx, req)
 	require.NoError(t, err)
 	assert.True(t, resp.Msg.Success)
-	assert.Equal(t, 0, cp.createKeyCalls)
-	assert.Equal(t, 0, cp.rotateKeyCalls)
+	assert.Equal(t, 0, cp.repairCalls)
+	assert.Equal(t, 1, cp.rotateCalls)
+	assert.False(t, resp.Msg.CreatedKey)
+	assert.True(t, resp.Msg.RotatedKey)
 
 	stored, err := repo.GetProviderAPIKey(ctx, "test-user", "reliant")
 	require.NoError(t, err)
-	assert.Equal(t, "existing-local-key", stored)
+	assert.Equal(t, "rlnt_rotated_key", stored)
 }
 
-func TestSettingsService_SyncReliantProviderForceRotateOverridesInitializedLocalKey(t *testing.T) {
+func TestSettingsService_SyncReliantProviderForceRotateSkipsRepair(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 	ctx := newReliantSyncTestContext()
 	require.NoError(t, repo.SetProviderAPIKey(ctx, "test-user", "reliant", "existing-local-key"))
-
 	svc := NewSettingsService(repo, nil)
 	require.NoError(t, svc.upsertSetting(ctx, "test-user", nil, reliantSyncInitializedSettingKey, "true"))
 
 	cp := &fakeControlPlaneClient{
-		getCurrentUserResp: &controlplanev1.GetCurrentUserResponse{
-			User: &controlplanev1.User{Id: "cp-user", Email: "test.user@example.com"},
-			Organizations: []*controlplanev1.Organization{{Id: "org-1", Name: "Test Org", Slug: "test-org"}},
-		},
-		listKeysResp: &controlplanev1.ListLLMKeysResponse{
-			Keys: []*controlplanev1.LLMKey{{Id: "key-1", OrgId: "org-1", Name: "Reliant App", Status: controlplanev1.LLMKeyStatus_LLM_KEY_STATUS_ACTIVE}},
-		},
-		rotateKeyResp: &controlplanev1.RotateLLMKeyResponse{
-			Key:          &controlplanev1.LLMKey{Id: "key-1", OrgId: "org-1", Name: "Reliant App", Status: controlplanev1.LLMKeyStatus_LLM_KEY_STATUS_ACTIVE},
+		getCurrentUserReliantStateResp: &controlplanev1.GetCurrentUserReliantStateResponse{},
+		rotateCurrentUserReliantAccessResp: &controlplanev1.RotateCurrentUserReliantAccessResponse{
+			Rotated:      true,
 			PlaintextKey: "rlnt_force_rotated_key",
 		},
 	}
@@ -261,12 +178,39 @@ func TestSettingsService_SyncReliantProviderForceRotateOverridesInitializedLocal
 	resp, err := svc.SyncReliantProvider(ctx, req)
 	require.NoError(t, err)
 	assert.True(t, resp.Msg.Success)
+	assert.Equal(t, 0, cp.repairCalls)
+	assert.Equal(t, 1, cp.rotateCalls)
 	assert.True(t, resp.Msg.RotatedKey)
-	assert.Equal(t, 1, cp.rotateKeyCalls)
 
 	stored, err := repo.GetProviderAPIKey(ctx, "test-user", "reliant")
 	require.NoError(t, err)
 	assert.Equal(t, "rlnt_force_rotated_key", stored)
+}
+
+func TestSettingsService_SyncReliantProviderFailsWhenRotateReturnsNoPlaintext(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+
+	cp := &fakeControlPlaneClient{
+		getCurrentUserReliantStateResp: &controlplanev1.GetCurrentUserReliantStateResponse{
+			ManagedAccess: &controlplanev1.ManagedReliantAccess{
+				InternalOrgId:  "org-1",
+				ActiveLlmKeyId: "key-1",
+			},
+		},
+		rotateCurrentUserReliantAccessResp: &controlplanev1.RotateCurrentUserReliantAccessResponse{
+			Rotated:      true,
+			PlaintextKey: "",
+		},
+	}
+	svc := NewSettingsService(repo, nil)
+	svc.controlPlaneClient = cp
+
+	req := connect.NewRequest(&reliantv1.SyncReliantProviderRequest{})
+	req.Header().Set("Authorization", "Bearer sync-token")
+	_, err := svc.SyncReliantProvider(newReliantSyncTestContext(), req)
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 }
 
 func TestSettingsService_SyncReliantProviderRequiresAuthorizationHeader(t *testing.T) {

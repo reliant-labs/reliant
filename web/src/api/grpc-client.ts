@@ -96,13 +96,7 @@ const daemonLastSeenInterceptor: Interceptor = (next) => async (req) => {
 
 // Auth interceptor to add JWT token to requests
 const authInterceptor: Interceptor = (next) => async (req) => {
-  // In dev mode, skip auth - backend will use DevUser
-  if (getIsDev()) {
-    logger.info("[gRPC Client] Dev mode - skipping auth:", {
-      method: req.method.name,
-    });
-    return await next(req);
-  }
+  const isDev = getIsDev();
 
   // Check for API key auth first (stored by ApiKeyLogin)
   const apiKey = localStorage.getItem('reliant-api-key');
@@ -124,6 +118,12 @@ const authInterceptor: Interceptor = (next) => async (req) => {
       logger.info("[gRPC Client] Auth token set for request:", {
         method: req.method.name,
         tokenLength: session.access_token.length,
+        isDev,
+      });
+    } else if (isDev) {
+      logger.info("[gRPC Client] Dev mode - no auth token available, relying on backend DevUser:", {
+        method: req.method.name,
+        hasSession: !!session,
       });
     } else {
       logger.warn("[gRPC Client] No auth token available for request:", {
@@ -133,10 +133,17 @@ const authInterceptor: Interceptor = (next) => async (req) => {
       });
     }
   } catch (error) {
-    logger.error("[gRPC Client] Error getting session in interceptor:", {
-      method: req.method.name,
-      error: error instanceof Error ? error.message : String(error),
-    });
+    if (isDev) {
+      logger.warn("[gRPC Client] Dev mode - failed to read session, relying on backend DevUser:", {
+        method: req.method.name,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    } else {
+      logger.error("[gRPC Client] Error getting session in interceptor:", {
+        method: req.method.name,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   return await next(req);
