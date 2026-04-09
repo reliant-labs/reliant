@@ -13,6 +13,16 @@ Regenerate with: make generate-changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.4.0" description="April 9, 2026">
+### Workflow routing, faster loads, and stronger distributed reliability
+
+- **Smarter workflow building** with the new router node for choosing between multiple workflows, support for parallel loops, surfaced presets in custom workflows, and better context retention during iterative flows.
+- **Faster startup and streaming performance** by reducing what loads on initial app open, scoping streamed updates more efficiently, and improving provider retry behavior for OpenRouter.
+- **Stronger distributed and remote daemon reliability** with better remote daemon behavior, MCP requests correctly routed through the daemon boundary in distributed mode, and daemon heartbeat updates pushed more reliably over gRPC.
+- **Auth and security improvements** including JWT validation hardening, CORS improvements, fixes for Google login and OAuth callback/timeout issues, and better reliability for Claude subscription login flows.
+- **Bug fixes across workflows, MCP, and web** including fixes for loop execution and CEL compilation on first iteration, workflow loading in web, MCP reliability, empty task handling, message saving in loops, thread state, tip display, and general validation and SQL query issues.
+</Update>
+
 <Update label="v1.3.0" description="April 3, 2026">
 ### First open source release, onboarding polish, and split architecture support
 
