@@ -83,5 +83,6 @@ params:
   - list_tasks
   - update_task
   - layout_library
+  - component_library
   model:
     tags: [flagship]
