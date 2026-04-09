@@ -201,6 +201,11 @@ func (f *ToolsFactory) LayoutLibrary() Tool {
 	return NewLayoutLibraryTool()
 }
 
+// Component library
+func (f *ToolsFactory) ComponentLibrary() Tool {
+	return NewComponentLibraryTool()
+}
+
 // Worktree tools
 func (f *ToolsFactory) Worktree() Tool {
 	return NewWorktreeTool(f.opts.Repo)

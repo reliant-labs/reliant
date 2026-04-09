@@ -256,9 +256,10 @@ func TestTagReadOnly(t *testing.T) {
 		"bash_list", "bash_output", // execution listing
 		"fetch", "websearch", // web reading
 		"get_plan", "list_tasks", // planning reading (not create/update)
-		"list_ready_tasks", // dependency reading
-		"sourcegraph",      // analysis
-		"layout_library",   // layout reading
+		"list_ready_tasks",  // dependency reading
+		"sourcegraph",       // analysis
+		"layout_library",    // layout reading
+		"component_library", // component library reading
 	}
 
 	// Non read-only tools that should NOT be included
@@ -305,8 +306,9 @@ func TestTagPlan(t *testing.T) {
 		"create_plan", "update_plan", "get_plan", // planning tools
 		"list_tasks", "add_task", "update_task", "create_subtask", // task tools
 		"add_dependency", "remove_dependency", "list_ready_tasks", // dependency tools
-		"sourcegraph",    // analysis
-		"layout_library", // layout reading
+		"sourcegraph",       // analysis
+		"layout_library",    // layout reading
+		"component_library", // component library reading
 	}
 
 	// Tools that should NOT be available in planning mode

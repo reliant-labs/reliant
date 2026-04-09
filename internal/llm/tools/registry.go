@@ -78,7 +78,8 @@ const (
 	ToolMetadataWriter = "metadata_writer"
 
 	// Layout tools
-	ToolLayoutLibrary = "layout_library"
+	ToolLayoutLibrary    = "layout_library"
+	ToolComponentLibrary = "component_library"
 
 	// Workflow editing tools
 	ToolCreateWorkflow = "create_workflow"
@@ -451,8 +452,9 @@ func GetToolRegistry() []ToolDefinition {
 		// Metadata tools
 		{ToolMetadataWriter, (*ToolsFactory).MetadataWriter, []ToolTag{}, ToolRunsAnywhere},
 
-		// Layout tools
+		// Layout & component tools
 		{ToolLayoutLibrary, (*ToolsFactory).LayoutLibrary, []ToolTag{TagReadOnly, TagPlan}, ToolRunsAnywhere},
+		{ToolComponentLibrary, (*ToolsFactory).ComponentLibrary, []ToolTag{TagDefault, TagReadOnly, TagPlan}, ToolRunsAnywhere},
 
 		// Worktree tools
 		{ToolWorktree, (*ToolsFactory).Worktree, []ToolTag{TagDefault}, ToolRunsAnywhere},
