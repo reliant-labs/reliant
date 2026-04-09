@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Square, Paperclip, GitBranch, Minimize2, ArrowRight } from "lucide-react";
+import { Square, Paperclip, GitBranch, Minimize2, ArrowRight, MessageCircle } from "lucide-react";
 import { IoMdReturnLeft } from "react-icons/io";
 import { ChatButton } from "./ChatButton";
 
@@ -14,6 +14,7 @@ interface UseChatButtonsProps {
   // Yield
   hasPendingYield?: boolean;
   onContinueYield?: () => void;
+  isAskUser?: boolean;
 
   // File actions
   onAttach: () => void;
@@ -33,6 +34,12 @@ interface UseChatButtonsProps {
   forceStreaming?: boolean;
   onToggleForceStreaming?: () => void;
 
+  // Discuss
+  isDiscussMode?: boolean;
+  canDiscuss?: boolean;
+  onToggleDiscuss?: () => void;
+  isPaused?: boolean;
+
   // Responsiveness
   compact?: boolean;
 }
@@ -45,6 +52,7 @@ export function useChatButtons({
   disabled,
   hasPendingYield = false,
   onContinueYield,
+  isAskUser = false,
   onAttach,
   uploading,
   onToggleRecentChanges,
@@ -55,6 +63,10 @@ export function useChatButtons({
   isDev = false,
   forceStreaming = false,
   onToggleForceStreaming,
+  isDiscussMode = false,
+  canDiscuss = false,
+  onToggleDiscuss,
+  isPaused = false,
   compact = false,
 }: UseChatButtonsProps) {
   const effectiveStreaming = isStreaming || forceStreaming;
@@ -159,8 +171,29 @@ export function useChatButtons({
       </ChatButton>
     ),
 
+    // Discuss button - shown when workflow is paused and supports discuss mode
+    discuss: canDiscuss && isPaused && onToggleDiscuss ? (
+      <ChatButton
+        key="discuss"
+        onClick={onToggleDiscuss}
+        tooltip={isDiscussMode ? "Exit discussion mode" : "Discuss without resuming"}
+        compact={compact}
+        className={
+          isDiscussMode
+            ? "bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/30"
+            : "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20 hover:bg-blue-500/20"
+        }
+      >
+        <span className={compact ? "" : "inline-flex items-center gap-1"}>
+          {!compact && <span className="text-[10px]">{isDiscussMode ? "End Discuss" : "Discuss"}</span>}
+          <MessageCircle className={compact ? "w-3 h-3" : "w-3 h-3"} />
+        </span>
+      </ChatButton>
+    ) : null,
+
     // Continue button - shown when yield is pending (agent is waiting for user to continue)
-    continueYield: hasPendingYield && onContinueYield ? (
+    // Hidden when ask_user is active since QuestionPrompt has its own submit
+    continueYield: hasPendingYield && onContinueYield && !isAskUser ? (
       <ChatButton
         key="continueYield"
         onClick={onContinueYield}

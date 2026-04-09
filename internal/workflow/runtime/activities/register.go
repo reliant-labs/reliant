@@ -27,7 +27,6 @@ var nodeTypeActivities = map[string]nodeTypeActivityDef{
 	model.NodeTypeExecuteTools:   {"ExecuteTools", reflect.TypeOf(reliantv1.ExecuteToolsArgs{}), reflect.TypeOf((*reliantv1.ExecuteToolsOutput)(nil))},
 	model.NodeTypeCompact:        {"Compact", reflect.TypeOf(reliantv1.CompactArgs{}), reflect.TypeOf(handlers.CompactOutput{})},
 	model.NodeTypeCreateWorktree: {"CreateWorktree", reflect.TypeOf(reliantv1.CreateWorktreeArgs{}), reflect.TypeOf(handlers.CreateWorktreeOutput{})},
-	model.NodeTypeApproval:       {"Approval", reflect.TypeOf(reliantv1.ApprovalArgs{}), reflect.TypeOf(handlers.ApprovalOutput{})},
 	model.NodeTypeSaveMessage:    {"SaveMessage", reflect.TypeOf(reliantv1.SaveMessageNodeArgs{}), reflect.TypeOf(reliantv1.SaveMessageOutput{})},
 }
 
@@ -48,7 +47,15 @@ func init() {
 		reflect.TypeOf(handlers.DeleteWorktreeOutput{}))
 	schema.RegisterActivityMetadata((*handlers.DeleteWorktreeActivity)(nil))
 
-	// Approval and SaveMessage are registered via nodeTypeActivities map above.
+	// ApprovalCreate (not visible in builder, no metadata registration)
+	schema.RegisterActivityType("ApprovalCreate",
+		reflect.TypeOf(handlers.ApprovalCreateInput{}),
+		reflect.TypeOf(handlers.ApprovalCreateOutput{}))
+
+	// ApprovalResolve (not visible in builder, no metadata registration)
+	schema.RegisterActivityType("ApprovalResolve",
+		reflect.TypeOf(handlers.ApprovalResolveInput{}),
+		reflect.TypeOf(handlers.ApprovalResolveOutput{}))
 
 	// CreateWorkflowWithThread (not visible in builder, no metadata registration)
 	schema.RegisterActivityType("CreateWorkflowWithThread",
@@ -159,7 +166,8 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// APPROVAL ACTIVITIES
 	// ========================================================================
 
-	v2.RegisterActivity(registry, handlers.NewApprovalActivity(deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewApprovalCreateActivity(deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewApprovalResolveActivity(deps.Repo))
 
 	// ========================================================================
 	// RUN STEP ACTIVITIES

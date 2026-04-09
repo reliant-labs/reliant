@@ -497,7 +497,8 @@ function ChatMessageComponent({
       };
     });
 
-    return result;
+    // Filter out ask_user tool calls — they render via the QuestionPrompt UI, not as tool cards
+    return result.filter((exec) => exec.call.name !== "ask_user");
   }, [
     parsed.toolExecutions,
     chatId,

@@ -138,7 +138,7 @@ nodes:
             system_prompt: "{{inputs.system_prompt}}"
             permission: "{{inputs.permission}}"
             # Include regular tools, response tool, and spawn
-            tool_filter: "{{inputs.tools + [inputs.response_tool_name, spawn(workflow.name, inputs.spawn_presets)]}}"
+            tool_filter: "{{inputs.tools + [inputs.response_tool_name, spawn(workflow.name, inputs.spawn_presets), inputs.yield ? 'ask_user' : '']}}"
             response_tool:
               name: "{{inputs.response_tool_name}}"
               description: "{{inputs.response_tool_description}}"

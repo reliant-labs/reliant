@@ -18,6 +18,7 @@ import {
   usePendingApprovals,
   usePendingYield,
   useStreamingMessages,
+  useDiscussMode,
 } from "../../store/chatStoreHooks";
 import { useGlobalUpdatesStore } from "../../store/globalUpdatesStore";
 import { useIsChatRunning } from "../../store/activityStore";
@@ -87,6 +88,8 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
   const pendingApprovals = usePendingApprovals(chatId);
   const pendingYield = usePendingYield(chatId);
   const hasPendingYield = !!pendingYield;
+  const isDiscussMode = useDiscussMode(chatId);
+  const canDiscuss = currentChat?.canDiscuss ?? false;
   const currentActivity = useChatCurrentActivity(chatId);
 
   // Process messages: sort by ordinal and filter out agent messages
@@ -219,6 +222,12 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
     }
   }, [chatId]);
 
+  const handleToggleDiscuss = useCallback(() => {
+    if (!chatId) return;
+    const store = useChatStore.getState();
+    store.setDiscussMode(chatId, !store.discussMode[chatId]);
+  }, [chatId]);
+
   // Fetch workflow executions for sidebar
   const { data: workflowExecutionsData } = useWorkflowExecutions(chatId);
   const workflowExecution = useMemo(() => {
@@ -268,6 +277,9 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
       isRecentChangesOpen={showRecentChanges}
       onToggleRecentChanges={handleToggleRecentChanges}
       workflowExecution={workflowExecution}
+      isDiscussMode={isDiscussMode}
+      canDiscuss={canDiscuss}
+      onToggleDiscuss={handleToggleDiscuss}
     />
   );
 }

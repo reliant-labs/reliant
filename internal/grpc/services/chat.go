@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"connectrpc.com/connect"
@@ -23,13 +24,18 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
+	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/preset"
+	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/reliant-labs/reliant/internal/workflow/validation"
@@ -44,10 +50,12 @@ type ChatService struct {
 	pauseService *workflow.PauseService
 	threads      *threads.Service
 	taskQueue    string
+	streamingHub streaming.StreamingHub
+	discussLocks sync.Map // per-chat lock to prevent concurrent discuss calls
 }
 
 // NewChatService creates a new ChatService
-func NewChatService(database db.Repository, tempClient client.Client, pauseService *workflow.PauseService, taskQueue string) *ChatService {
+func NewChatService(database db.Repository, tempClient client.Client, pauseService *workflow.PauseService, taskQueue string, hub streaming.StreamingHub) *ChatService {
 	if strings.TrimSpace(taskQueue) == "" {
 		taskQueue = workflow.SharedTaskQueue
 	}
@@ -58,6 +66,7 @@ func NewChatService(database db.Repository, tempClient client.Client, pauseServi
 		pauseService: pauseService,
 		threads:      threads.NewService(database),
 		taskQueue:    taskQueue,
+		streamingHub: hub,
 	}
 }
 
@@ -147,6 +156,20 @@ func chatToProto(c *db.Chat) *reliantv1.Chat {
 	}
 	proto.Unread = c.Unread
 	return proto
+}
+
+// enrichChatProto populates workflow-derived fields on a proto Chat.
+// Currently sets CanDiscuss from the workflow definition's Discuss field.
+func (s *ChatService) enrichChatProto(ctx context.Context, proto *reliantv1.Chat, chat *db.Chat) {
+	if chat.WorkflowName == nil || *chat.WorkflowName == "" {
+		return
+	}
+	userID := chat.UserID
+	wf, err := s.loadCreateChatWorkflowForValidation(ctx, userID, *chat.WorkflowName, chat.ProjectID)
+	if err != nil {
+		return
+	}
+	proto.CanDiscuss = wf.GetDiscuss()
 }
 
 // displayStyleProtoToInt32Ptr converts a proto DisplayStyle pointer to an *int32 for the database.
@@ -793,8 +816,10 @@ func (s *ChatService) CreateChat(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to fetch created chat"))
 	}
 
+	createChatProto := chatToProto(createdChat)
+	s.enrichChatProto(ctx, createChatProto, createdChat)
 	response := &reliantv1.CreateChatResponse{
-		Chat:       chatToProto(createdChat),
+		Chat:       createChatProto,
 		WorkflowId: workflowID,
 		RunId:      runID,
 	}
@@ -837,6 +862,7 @@ func (s *ChatService) ListChats(
 	protoChats := make([]*reliantv1.Chat, len(chats))
 	for i, c := range chats {
 		protoChats[i] = chatToProto(c)
+		s.enrichChatProto(ctx, protoChats[i], c)
 	}
 
 	// Get latest user update sequence for stream sync —
@@ -904,6 +930,7 @@ func (s *ChatService) GetChat(
 
 	protoChat := chatToProto(chat)
 	protoChat.NeedsRecovery = needsRecovery
+	s.enrichChatProto(ctx, protoChat, chat)
 	return connect.NewResponse(&reliantv1.GetChatResponse{
 		Chat: protoChat,
 	}), nil
@@ -1045,8 +1072,10 @@ func (s *ChatService) UpdateChat(
 		}
 	}
 
+	updateChatProto := chatToProto(chat)
+	s.enrichChatProto(ctx, updateChatProto, chat)
 	return connect.NewResponse(&reliantv1.UpdateChatResponse{
-		Chat: chatToProto(chat),
+		Chat: updateChatProto,
 	}), nil
 }
 
@@ -1149,6 +1178,7 @@ func (s *ChatService) SearchChats(
 	protoChats := make([]*reliantv1.Chat, len(chats))
 	for i, c := range chats {
 		protoChats[i] = chatToProto(c)
+		s.enrichChatProto(ctx, protoChats[i], c)
 	}
 
 	return connect.NewResponse(&reliantv1.SearchChatsResponse{
@@ -1172,8 +1202,10 @@ func (s *ChatService) ListArchivedChats(
 
 	protoChats := make([]*reliantv1.ArchivedChat, len(archivedChats))
 	for i, ac := range archivedChats {
+		acProto := chatToProto(&ac.Chat)
+		s.enrichChatProto(ctx, acProto, &ac.Chat)
 		protoChats[i] = &reliantv1.ArchivedChat{
-			Chat: chatToProto(&ac.Chat),
+			Chat: acProto,
 		}
 		if ac.WorktreeName != nil {
 			protoChats[i].WorktreeName = ac.WorktreeName
@@ -1447,6 +1479,11 @@ func (s *ChatService) SendMessage(
 
 			switch existingWorkflow.Status {
 			case db.WorkflowStatusPaused:
+
+				// Discuss mode: lightweight LLM chat without resuming the workflow
+				if req.Msg.Discuss {
+					return s.handleDiscussMode(ctx, req, chat, existingWorkflow, workflowID, userID, userContent, hasUserContent, systemMessages)
+				}
 
 				// Update selected presets on chat if provided (before starting workflow)
 				if len(req.Msg.SelectedPresets) > 0 {
@@ -2859,8 +2896,10 @@ func (s *ChatService) BranchChat(
 		}
 	}
 
+	branchChatProto := chatToProto(branchChat)
+	s.enrichChatProto(ctx, branchChatProto, branchChat)
 	return connect.NewResponse(&reliantv1.BranchChatResponse{
-		Chat: chatToProto(branchChat),
+		Chat: branchChatProto,
 	}), nil
 }
 
@@ -4164,4 +4203,196 @@ func normalizeWorkflowSlug(name string) string {
 	slug = strings.ReplaceAll(slug, " ", "-")
 	slug = strings.ReplaceAll(slug, "_", "-")
 	return slug
+}
+
+// handleDiscussMode handles the discuss mode: a lightweight LLM call while the workflow stays paused.
+// It saves the user message, streams an LLM response, saves the assistant response, and returns
+// with the workflow status still Paused.
+func (s *ChatService) handleDiscussMode(
+	ctx context.Context,
+	req *connect.Request[reliantv1.SendMessageRequest],
+	chat *db.Chat,
+	existingWorkflow *db.Workflow,
+	workflowID string,
+	userID string,
+	userContent string,
+	hasUserContent bool,
+	systemMessages []*reliantv1.InputMessage,
+) (*connect.Response[reliantv1.SendMessageResponse], error) {
+	// Guard against concurrent discuss calls for the same chat
+	if _, loaded := s.discussLocks.LoadOrStore(req.Msg.ChatId, true); loaded {
+		return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("a discussion is already in progress for this chat"))
+	}
+	defer s.discussLocks.Delete(req.Msg.ChatId)
+
+	targetThread := existingWorkflow.Thread
+	if req.Msg.TargetThread != nil && *req.Msg.TargetThread != "" {
+		targetThread = *req.Msg.TargetThread
+	}
+
+	// 1. Save user message to the workflow's thread
+	var savedMessageID string
+	err := s.database.RunTx(ctx, func(txCtx context.Context) error {
+		for _, sysMsg := range systemMessages {
+			_, err := s.database.SaveMessageToThread(txCtx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), sysMsg.Content, &workflowID, nil, displayStyleProtoToInt32Ptr(sysMsg.DisplayStyle))
+			if err != nil {
+				return fmt.Errorf("failed to save system message: %w", err)
+			}
+		}
+		if hasUserContent || len(req.Msg.Attachments) > 0 {
+			savedMsg, err := s.database.SaveMessageToThread(txCtx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), userContent, &workflowID, req.Msg.Attachments, nil)
+			if err != nil {
+				return fmt.Errorf("failed to save user message: %w", err)
+			}
+			savedMessageID = savedMsg.ID
+		}
+		return nil
+	})
+	if err != nil {
+		logging.Error("Failed to save discuss mode messages", "error", err, "chatID", req.Msg.ChatId)
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	// 2. Load conversation history from the thread
+	history, err := handlers.LoadMessagesForLLM(ctx, s.database, req.Msg.ChatId, targetThread, nil)
+	if err != nil {
+		logging.Error("Failed to load conversation history for discuss mode", "error", err, "chatID", req.Msg.ChatId)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load conversation history: %w", err))
+	}
+
+	// 3. Resolve model and create LLM driver
+	driver, err := s.resolveDiscussDriver(ctx, userID, chat)
+	if err != nil {
+		logging.Error("Failed to resolve LLM driver for discuss mode", "error", err, "chatID", req.Msg.ChatId)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resolve LLM driver: %w", err))
+	}
+
+	// 4. Stream LLM response (no tools)
+	prompts := []string{
+		"You are a helpful assistant. The user has paused their workflow and wants to discuss something. " +
+			"Help them think through their question. You do not have access to any tools. " +
+			"Keep your responses concise and helpful.",
+	}
+
+	eventCh := driver.StreamResponse(ctx, prompts, history, []tools.Tool{})
+
+	var fullContent string
+	blockIndex := 0
+	blockStarted := false
+	var streamErr error
+
+	for event := range eventCh {
+		switch event.Type {
+		case llm.EventContentStart:
+			blockStarted = true
+			if s.streamingHub != nil {
+				s.streamingHub.Publish(ctx, req.Msg.ChatId, streaming.StreamingDelta{
+					DeltaType:  streaming.DeltaTypeContentBlockStart,
+					BlockIndex: blockIndex,
+					BlockType:  "text",
+					Thread:     targetThread,
+				})
+			}
+
+		case llm.EventContentDelta:
+			if !blockStarted {
+				blockStarted = true
+				if s.streamingHub != nil {
+					s.streamingHub.Publish(ctx, req.Msg.ChatId, streaming.StreamingDelta{
+						DeltaType:  streaming.DeltaTypeContentBlockStart,
+						BlockIndex: blockIndex,
+						BlockType:  "text",
+						Thread:     targetThread,
+					})
+				}
+			}
+			fullContent += event.Content
+			if s.streamingHub != nil {
+				s.streamingHub.Publish(ctx, req.Msg.ChatId, streaming.StreamingDelta{
+					DeltaType:  streaming.DeltaTypeContentBlockDelta,
+					BlockIndex: blockIndex,
+					Delta:      event.Content,
+					Thread:     targetThread,
+				})
+			}
+
+		case llm.EventContentStop:
+			blockIndex++
+			blockStarted = false
+
+		case llm.EventComplete:
+			if event.Response != nil && event.Response.Content != "" && fullContent == "" {
+				fullContent = event.Response.Content
+			}
+
+		case llm.EventError:
+			if event.Error != nil {
+				logging.Error("Discuss mode LLM error", "error", event.Error, "chatID", req.Msg.ChatId)
+				streamErr = event.Error
+			}
+		}
+	}
+
+	// Emit stream_cancelled delta on error so the frontend knows streaming ended
+	if streamErr != nil && s.streamingHub != nil {
+		s.streamingHub.Publish(ctx, req.Msg.ChatId, streaming.StreamingDelta{
+			DeltaType: streaming.DeltaTypeStreamCancelled,
+			Thread:    targetThread,
+		})
+	}
+
+	// 5. Save assistant response message
+	if fullContent != "" {
+		_, err := s.database.SaveMessageToThread(ctx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT), fullContent, &workflowID, nil, nil)
+		if err != nil {
+			logging.Error("Failed to save discuss mode assistant response", "error", err, "chatID", req.Msg.ChatId)
+			// Non-fatal: the user already saw the streamed response
+		}
+	}
+
+	// 6. Return with workflow_status still Paused
+	workflowStatus := fmt.Sprintf("%d", db.WorkflowStatusPaused)
+	return connect.NewResponse(&reliantv1.SendMessageResponse{
+		ChatId:         req.Msg.ChatId,
+		WorkflowId:     workflowID,
+		Status:         "discuss",
+		WorkflowStatus: &workflowStatus,
+		MessageId:      savedMessageID,
+	}), nil
+}
+
+// resolveDiscussDriver resolves an LLM driver for discuss mode by extracting the model
+// from the chat's selected presets, falling back to a sensible default.
+func (s *ChatService) resolveDiscussDriver(ctx context.Context, userID string, chat *db.Chat) (llm.Driver, error) {
+	var modelID string
+
+	// Try to get model from the chat's selected presets
+	for _, presetName := range chat.SelectedPresets {
+		if presetName == "" {
+			continue
+		}
+		p, err := s.loadPresetFromDB(ctx, userID, chat.ProjectID, presetName)
+		if err != nil {
+			continue
+		}
+		if modelRaw, ok := p.Params["model"]; ok {
+			if modelMap, ok := modelRaw.(map[string]interface{}); ok {
+				if id, ok := modelMap["id"].(string); ok && id != "" {
+					modelID = id
+					break
+				}
+			}
+		}
+	}
+
+	// Fall back to a sensible default model
+	if modelID == "" {
+		modelID = string(models.Claude45Sonnet)
+	}
+
+	preferences := models.Preferences{
+		{ModelID: models.ModelID(modelID)},
+	}
+
+	return drivers.GetDriver(ctx, userID, preferences)
 }

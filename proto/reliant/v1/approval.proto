@@ -38,13 +38,6 @@ service ApprovalService {
   rpc BatchDeny(BatchDenyRequest) returns (BatchDenyResponse) {}
 }
 
-// ApprovalAction represents a single action in an approval request
-message ApprovalAction {
-  string action = 1;              // The action type (e.g., "write", "execute")
-  string path = 2;                // File path or resource path
-  map<string, string> params = 3; // Additional parameters
-}
-
 // Approval represents a tool or workflow approval request
 message Approval {
   string id = 1;
@@ -55,8 +48,8 @@ message Approval {
   string title = 6;
   optional string description = 7;
   optional string denial_reason = 8;
-  reserved 9;  // was: actions (deprecated, use structured_actions)
-  reserved 10; // was: metadata (deprecated, use structured fields)
+  reserved 9;  // was: actions (deprecated)
+  reserved 10; // was: metadata (deprecated)
   string created_at = 11;
   optional string resolved_at = 12;
   
@@ -66,7 +59,7 @@ message Approval {
   optional string message_id = 15;     // Message ID from metadata
   optional string workflow_id = 16;    // Workflow ID from metadata
   optional string run_id = 17;         // Run ID from metadata
-  repeated ApprovalAction structured_actions = 18; // Structured actions list
+  reserved 18; // was: structured_actions (ApprovalAction, never populated)
   optional string action_taken = 19;   // Which action button was clicked (e.g., "Deploy Now")
 }
 

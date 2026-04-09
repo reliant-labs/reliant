@@ -95,12 +95,13 @@ func TestCallLLMActivity_ToolParametersReachMockDriver(t *testing.T) {
 	)
 
 	tests := []struct {
-		name                 string
-		toolFilter           []string
-		toolsEnabled         *bool
-		expectContainsTool   string
-		expectExactlyOneTool string
-		expectNoTools        bool
+		name                  string
+		toolFilter            []string
+		toolsEnabled          *bool
+		expectContainsTool    string
+		expectNotContainsTool string
+		expectExactlyOneTool  string
+		expectNoTools         bool
 	}{
 		{
 			name:               "default/preset tools available",
@@ -123,6 +124,17 @@ func TestCallLLMActivity_ToolParametersReachMockDriver(t *testing.T) {
 			toolFilter:    []string{"tag:default"},
 			toolsEnabled:  ptr.Of(false),
 			expectNoTools: true,
+		},
+		{
+			name:               "ask_user in tool_filter adds ask_user tool",
+			toolFilter:         []string{"tag:default", "ask_user"},
+			expectContainsTool: "ask_user",
+		},
+		{
+			name:                  "ask_user absent from tool_filter means no ask_user tool",
+			toolFilter:            []string{"tag:default"},
+			expectContainsTool:    "view",
+			expectNotContainsTool: "ask_user",
 		},
 	}
 
@@ -166,6 +178,9 @@ func TestCallLLMActivity_ToolParametersReachMockDriver(t *testing.T) {
 
 			require.NotEmpty(t, mockDriver.capturedTools)
 			assert.Contains(t, mockDriver.capturedTools, tc.expectContainsTool)
+			if tc.expectNotContainsTool != "" {
+				assert.NotContains(t, mockDriver.capturedTools, tc.expectNotContainsTool)
+			}
 		})
 	}
 }
@@ -246,6 +261,146 @@ func TestCallLLMActivity_CreateChatStylePayloadToolFilterCELEvaluation(t *testin
 	require.NotEmpty(t, mockDriver.capturedTools, "expected resolved runtime tools to be non-empty")
 	assert.Contains(t, mockDriver.capturedTools, "view")
 	assert.Contains(t, mockDriver.capturedTools, "spawn")
+}
+
+func TestCallLLMActivity_AskUserToolViaCELToolFilter(t *testing.T) {
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+
+	ctx := context.Background()
+	project := h.CreateTestProject(ctx, "project-ask-cel", "user-ask-cel")
+	chat := h.CreateTestChat(ctx, "chat-ask-cel", project.ID, project.UserID)
+	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
+
+	mockDriver := &toolCaptureMockDriver{}
+	driverResolver := func(ctx context.Context, userID string, prefs models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) {
+		return mockDriver, nil
+	}
+
+	activityInstance := NewCallLLMActivity(
+		h.Repo(),
+		nil,
+		tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}),
+		&staticConfigProvider{},
+		driverResolver,
+		nil,
+	)
+
+	// Mirrors the actual agent.yaml tool_filter expression
+	toolFilterExpression := "{{inputs.tools + [spawn(workflow.name, inputs.spawn_presets), inputs.yield ? 'ask_user' : '']}}"
+
+	t.Run("yield=true includes ask_user in resolved filter", func(t *testing.T) {
+		payloadInputs := map[string]interface{}{
+			"mode":          "auto",
+			"tools":         []string{"tag:default"},
+			"spawn_presets": []string{"general"},
+			"yield":         true,
+		}
+
+		evaluatedFilterRaw, err := wfcel.EvaluateTemplate(toolFilterExpression, &wfcel.NodeResolutionContext{
+			Inputs:   payloadInputs,
+			Workflow: &wfmodel.WorkflowContext{Name: "builtin://agent"},
+		})
+		require.NoError(t, err)
+
+		evaluatedFilter, ok := evaluatedFilterRaw.([]interface{})
+		require.True(t, ok)
+		resolvedToolFilter := interfaceSliceToStringSlice(evaluatedFilter)
+
+		assert.Contains(t, resolvedToolFilter, "ask_user")
+
+		// Now run through the full activity to verify the tool reaches the driver
+		input := ActivityInput{
+			Runtime: RuntimeContext{ChatID: chat.ID, Thread: chat.ID},
+			Node: &reliantv1.Node{
+				Type: "call_llm",
+				Args: &reliantv1.Node_CallLlm{CallLlm: &reliantv1.CallLLMArgs{
+					Model:      &reliantv1.CelModelSelector{Value: &reliantv1.CelModelSelector_Literal{Literal: &reliantv1.ModelSelector{Id: "mock-model"}}},
+					ToolFilter: celStringListLiteral(resolvedToolFilter),
+				}},
+			},
+		}
+
+		var output CallLLMOutput
+		err = h.ExecuteActivity(activityInstance.Execute, input, &output)
+		require.NoError(t, err)
+		assert.Contains(t, mockDriver.capturedTools, "ask_user")
+	})
+
+	t.Run("yield=false excludes ask_user from resolved filter", func(t *testing.T) {
+		payloadInputs := map[string]interface{}{
+			"mode":          "auto",
+			"tools":         []string{"tag:default"},
+			"spawn_presets": []string{"general"},
+			"yield":         false,
+		}
+
+		evaluatedFilterRaw, err := wfcel.EvaluateTemplate(toolFilterExpression, &wfcel.NodeResolutionContext{
+			Inputs:   payloadInputs,
+			Workflow: &wfmodel.WorkflowContext{Name: "builtin://agent"},
+		})
+		require.NoError(t, err)
+
+		evaluatedFilter, ok := evaluatedFilterRaw.([]interface{})
+		require.True(t, ok)
+		resolvedToolFilter := interfaceSliceToStringSlice(evaluatedFilter)
+
+		assert.NotContains(t, resolvedToolFilter, "ask_user")
+
+		input := ActivityInput{
+			Runtime: RuntimeContext{ChatID: chat.ID, Thread: chat.ID},
+			Node: &reliantv1.Node{
+				Type: "call_llm",
+				Args: &reliantv1.Node_CallLlm{CallLlm: &reliantv1.CallLLMArgs{
+					Model:      &reliantv1.CelModelSelector{Value: &reliantv1.CelModelSelector_Literal{Literal: &reliantv1.ModelSelector{Id: "mock-model"}}},
+					ToolFilter: celStringListLiteral(resolvedToolFilter),
+				}},
+			},
+		}
+
+		var output CallLLMOutput
+		err = h.ExecuteActivity(activityInstance.Execute, input, &output)
+		require.NoError(t, err)
+		assert.NotContains(t, mockDriver.capturedTools, "ask_user")
+	})
+
+	t.Run("yield=false but ask_user hardcoded in inputs.tools still works", func(t *testing.T) {
+		payloadInputs := map[string]interface{}{
+			"mode":          "auto",
+			"tools":         []string{"tag:default", "ask_user"},
+			"spawn_presets": []string{"general"},
+			"yield":         false,
+		}
+
+		evaluatedFilterRaw, err := wfcel.EvaluateTemplate(toolFilterExpression, &wfcel.NodeResolutionContext{
+			Inputs:   payloadInputs,
+			Workflow: &wfmodel.WorkflowContext{Name: "builtin://agent"},
+		})
+		require.NoError(t, err)
+
+		evaluatedFilter, ok := evaluatedFilterRaw.([]interface{})
+		require.True(t, ok)
+		resolvedToolFilter := interfaceSliceToStringSlice(evaluatedFilter)
+
+		// ask_user should be in the resolved filter (from inputs.tools)
+		assert.Contains(t, resolvedToolFilter, "ask_user")
+
+		input := ActivityInput{
+			Runtime: RuntimeContext{ChatID: chat.ID, Thread: chat.ID},
+			Node: &reliantv1.Node{
+				Type: "call_llm",
+				Args: &reliantv1.Node_CallLlm{CallLlm: &reliantv1.CallLLMArgs{
+					Model:      &reliantv1.CelModelSelector{Value: &reliantv1.CelModelSelector_Literal{Literal: &reliantv1.ModelSelector{Id: "mock-model"}}},
+					ToolFilter: celStringListLiteral(resolvedToolFilter),
+				}},
+			},
+		}
+
+		var output CallLLMOutput
+		err = h.ExecuteActivity(activityInstance.Execute, input, &output)
+		require.NoError(t, err)
+		assert.Contains(t, mockDriver.capturedTools, "ask_user")
+	})
 }
 
 func interfaceSliceToStringSlice(values []interface{}) []string {

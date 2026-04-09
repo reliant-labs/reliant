@@ -42,7 +42,6 @@ var configTypes = TypeCategory{
 		"ProjectConfig",
 		"ResponseTool",
 		"SubWorkflow",
-		"ApprovalAction",
 	},
 }
 

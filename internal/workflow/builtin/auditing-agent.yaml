@@ -129,7 +129,7 @@ nodes:
             temperature: "{{inputs.temperature}}"
             thinking_level: "{{inputs.thinking_level}}"
             permission: "{{inputs.permission}}"
-            tool_filter: "{{inputs.tools + [spawn(workflow.name, inputs.spawn_presets)]}}"
+            tool_filter: "{{inputs.tools + [spawn(workflow.name, inputs.spawn_presets), inputs.yield ? 'ask_user' : '']}}"
         - id: audit_check
           type: call_llm
           args:

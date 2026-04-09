@@ -14,12 +14,6 @@ import {
   BatchDenyRequestSchema,
 } from "../gen/reliant/v1/approval_pb";
 
-// Action button configuration from workflow approval step
-export interface ApprovalActionConfig {
-  type: string;  // "approve" | "deny" | "modify"
-  label: string; // Button label (e.g., "Deploy Now", "Cancel")
-}
-
 export interface ToolApprovalRequest {
   id: string;
   chat_id: string;
@@ -28,37 +22,16 @@ export interface ToolApprovalRequest {
   tool_call_id?: string;
   tool_name?: string;
   description?: string;
-  action?: string;
-  params?: Record<string, unknown>;
-  path?: string;
   status: ApprovalStatus;
   created_at: string;
   responded_at?: string;
   responded_by?: string;
   denial_reason?: string;
   action_taken?: string;  // Which action button was clicked
-  actions?: ApprovalActionConfig[];  // Configured action buttons
 }
 
 // Convert proto Approval to frontend ToolApprovalRequest
 function protoToFrontend(proto: ProtoApproval): ToolApprovalRequest {
-  // Use structured fields directly (no JSON parsing needed)
-  const firstAction = proto.structuredActions[0];
-  
-  // Convert params map to Record<string, unknown>
-  let params: Record<string, unknown> | undefined;
-  if (firstAction?.params) {
-    params = {};
-    for (const [key, value] of Object.entries(firstAction.params)) {
-      // Try to parse JSON values back to objects, otherwise use string
-      try {
-        params[key] = JSON.parse(value);
-      } catch {
-        params[key] = value;
-      }
-    }
-  }
-
   return {
     id: proto.id,
     chat_id: proto.chatId,
@@ -67,9 +40,6 @@ function protoToFrontend(proto: ProtoApproval): ToolApprovalRequest {
     tool_call_id: proto.toolCallId,
     tool_name: proto.toolName,
     description: proto.description,
-    action: firstAction?.action,
-    params: params,
-    path: firstAction?.path,
     status: proto.status,
     created_at: proto.createdAt,
     responded_at: proto.resolvedAt,

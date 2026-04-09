@@ -20,6 +20,7 @@ description: |
     Main thread: [user msg] → [preferences] → [research] → [plan] → [impl summary] → [verify] → [done]
     Each agent forks from main: isolated conversation, only summary saved back.
 
+discuss: true
 entry: [discuss]
 
 inputs:

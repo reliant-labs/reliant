@@ -98,6 +98,7 @@ type YieldUpdate struct {
 	WorkflowID string     `json:"workflow_id"`
 	StepID     string     `json:"step_id"`
 	Status     string     `json:"status"`
+	Metadata   string     `json:"metadata,omitempty"`
 }
 
 func (u YieldUpdate) Type() UpdateType { return UpdateTypeYield }

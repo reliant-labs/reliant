@@ -850,6 +850,16 @@ function handleChatActivityChanged(update: UserUpdate) {
       },
     }));
   }
+
+  // Clear discuss mode when workflow resumes (activity becomes RUNNING)
+  if (activity === ChatActivity.RUNNING) {
+    useChatStore.setState((state) => {
+      if (!state.discussMode[chat_id]) return state;
+      return {
+        discussMode: { ...state.discussMode, [chat_id]: false },
+      };
+    });
+  }
 }
 
 function handleProcessStarted(update: UserUpdate) {

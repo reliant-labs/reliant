@@ -62,13 +62,17 @@ func (s *YieldService) ResolveYield(
 		logging.Error("Failed to resolve yield", "error", err, "yieldID", req.Msg.YieldId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resolve yield"))
 	}
-	if err := s.database.EmitYieldUpdate(ctx, yield.ChatID, db.YieldUpdate{
+	yieldResolvedUpdate := db.YieldUpdate{
 		YieldID:    yield.ID,
 		ChatID:     yield.ChatID,
 		WorkflowID: yield.WorkflowID,
 		StepID:     yield.StepID,
 		Status:     "resolved",
-	}); err != nil {
+	}
+	if yield.Metadata != nil {
+		yieldResolvedUpdate.Metadata = *yield.Metadata
+	}
+	if err := s.database.EmitYieldUpdate(ctx, yield.ChatID, yieldResolvedUpdate); err != nil {
 		logging.Warn("Failed to emit yield resolved update", "error", err, "yieldID", yield.ID)
 	}
 
@@ -78,6 +82,9 @@ func (s *YieldService) ResolveYield(
 	// logical child ID that doesn't correspond to any Temporal execution.
 	if s.pauseService != nil {
 		signalData := map[string]interface{}{"action": req.Msg.Action}
+		if req.Msg.ResponseData != nil {
+			signalData["response_data"] = *req.Msg.ResponseData
+		}
 		signalName := "signal.yield." + yield.ID
 		signalTarget := yield.TemporalWorkflowID
 		if signalTarget == "" {
@@ -123,6 +130,7 @@ func (s *YieldService) GetPendingYield(
 			StepId:     yield.StepID,
 			Status:     yield.Status,
 			CreatedAt:  yield.CreatedAt.Format(time.RFC3339),
+			Metadata:   yield.Metadata,
 		}
 	}
 

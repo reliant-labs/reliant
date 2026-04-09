@@ -222,6 +222,7 @@ CREATE TABLE approvals (
     denial_reason TEXT,
     title TEXT NOT NULL,
     metadata TEXT,
+    temporal_workflow_id TEXT NOT NULL DEFAULT '',
     created_at TIMESTAMP NOT NULL,
     resolved_at TIMESTAMP,
     action_taken TEXT,
@@ -261,6 +262,7 @@ CREATE TABLE yields (
     loop_iteration BIGINT,
     status INTEGER NOT NULL DEFAULT 1,
     action_taken TEXT,
+    metadata TEXT,
     created_at TIMESTAMP NOT NULL,
     resolved_at TIMESTAMP
 );

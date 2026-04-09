@@ -196,7 +196,6 @@ type Repository interface {
 	ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*Approval, error)
 	ListApprovalsByChat(ctx context.Context, chatID string) ([]*Approval, error)
 	UpdateApprovalStatus(ctx context.Context, id string, status int32, denialReason *string, actionTaken *string, metadata *string) error
-	DeleteApproval(ctx context.Context, id string) error
 
 	// Daemon Registry + Config Snapshots
 	UpsertDaemon(ctx context.Context, daemon *Daemon) error

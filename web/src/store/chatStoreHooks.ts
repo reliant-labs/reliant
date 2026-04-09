@@ -283,6 +283,17 @@ export function useToolCallStates(chatId: string) {
 }
 
 // ============================================================================
+// DISCUSS MODE SELECTORS
+// ============================================================================
+
+/**
+ * Get discuss mode state for a chat
+ */
+export function useDiscussMode(chatId: string): boolean {
+  return useChatStore((state) => state.discussMode[chatId] ?? false);
+}
+
+// ============================================================================
 // PLANNING MODE & AUTO-APPROVE SELECTORS
 // Now using chatParamsStore for mode
 // ============================================================================

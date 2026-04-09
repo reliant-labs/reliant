@@ -1,7 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 // Type definitions for gRPC streaming updates
 
-import type { ApprovalActionConfig } from "../api/approval-grpc";
 import type { Message as ProtoMessage } from "../gen/reliant/v1/chat_pb";
 import type {
   NodeExecutionEventType,
@@ -32,7 +31,6 @@ export interface ToolApprovalUpdate {
   sequence_number: number;
   created_at: string;
   responded_at?: string;
-  actions?: ApprovalActionConfig[];
   action_taken?: string;
 }
 
@@ -196,6 +194,7 @@ export interface YieldUpdate {
   workflow_id: string;
   step_id: string;
   status: "pending" | "resolved";
+  metadata?: string;
 }
 
 // ============================================================================
