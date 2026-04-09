@@ -313,11 +313,11 @@ func workflowFromListRootWorkflowsRow(row sqlitedb.ListRootWorkflowsRow) *core.W
 	return workflowFromFields(row.ID, row.ParentID, row.ChatID, row.WorkflowName, row.Thread, row.Status, row.SpawnedByNodeID, row.LoopIteration, row.CreatedAt, row.CompletedAt)
 }
 
-func workflowFromListWorkflowsByStatusRow(row sqlitedb.ListWorkflowsByStatusRow) *core.Workflow {
+func workflowFromListWorkflowsByStatusRow(row sqlitedb.Workflow) *core.Workflow {
 	return workflowFromFields(row.ID, row.ParentID, row.ChatID, row.WorkflowName, row.Thread, row.Status, row.SpawnedByNodeID, row.LoopIteration, row.CreatedAt, row.CompletedAt)
 }
 
-func workflowFromListRootWorkflowsByStatusRow(row sqlitedb.ListRootWorkflowsByStatusRow) *core.Workflow {
+func workflowFromListRootWorkflowsByStatusRow(row sqlitedb.Workflow) *core.Workflow {
 	return workflowFromFields(row.ID, row.ParentID, row.ChatID, row.WorkflowName, row.Thread, row.Status, row.SpawnedByNodeID, row.LoopIteration, row.CreatedAt, row.CompletedAt)
 }
 
