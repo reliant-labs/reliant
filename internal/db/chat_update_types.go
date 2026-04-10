@@ -38,7 +38,6 @@ var (
 	UpdateTypeInfo              UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_INFO
 	UpdateTypeWarning           UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_WARNING
 	UpdateTypeRefetch           UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_REFETCH
-	UpdateTypeSkillInvocation   UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_SKILL_INVOCATION
 )
 
 // ============================================================================
@@ -104,43 +103,6 @@ type YieldUpdate struct {
 func (u YieldUpdate) Type() UpdateType { return UpdateTypeYield }
 
 // ============================================================================
-// SKILL INVOCATION UPDATES
-// ============================================================================
-
-// SkillInvocationTrigger describes how a skill activation was initiated.
-type SkillInvocationTrigger string
-
-const (
-	SkillInvocationTriggerExplicit SkillInvocationTrigger = "explicit"
-	SkillInvocationTriggerAuto     SkillInvocationTrigger = "auto"
-)
-
-// SkillInvocationStatus describes the lifecycle state of a skill invocation.
-type SkillInvocationStatus string
-
-const (
-	SkillInvocationStatusActivated SkillInvocationStatus = "activated"
-	SkillInvocationStatusFailed    SkillInvocationStatus = "failed"
-	SkillInvocationStatusSkipped   SkillInvocationStatus = "skipped"
-)
-
-// SkillInvocationUpdate represents a structured skill lifecycle update.
-type SkillInvocationUpdate struct {
-	UpdateType    UpdateType             `json:"update_type"`
-	ID            string                 `json:"id"`
-	ChatID        string                 `json:"chat_id"`
-	SkillName     string                 `json:"skill_name,omitempty"`
-	RequestedName string                 `json:"requested_name,omitempty"`
-	Trigger       SkillInvocationTrigger `json:"trigger"`
-	Status        SkillInvocationStatus  `json:"status"`
-	Message       string                 `json:"message,omitempty"`
-	Timestamp     string                 `json:"timestamp"`
-	Warnings      []string               `json:"warnings,omitempty"`
-}
-
-func (u SkillInvocationUpdate) Type() UpdateType { return UpdateTypeSkillInvocation }
-
-// ============================================================================
 // TYPED UPDATE INTERFACE
 // ============================================================================
 
@@ -180,11 +142,6 @@ func EntityIDForToolBackgrounded(toolCallID string) string {
 // EntityIDForYield generates entity ID for yield updates
 func EntityIDForYield(yieldID string) string {
 	return yieldID
-}
-
-// EntityIDForSkillInvocation generates entity ID for skill invocation updates
-func EntityIDForSkillInvocation(id string) string {
-	return id
 }
 
 // formatTimestamp returns a nanosecond timestamp for entity ID uniqueness

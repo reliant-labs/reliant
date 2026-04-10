@@ -58,6 +58,7 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 			"max_tokens":     {},
 			"messages":       {},
 			"model":          {},
+			"permission":     {},
 			"response_tool":  {},
 			"system_prompt":  {},
 			"temperature":    {},

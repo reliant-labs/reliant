@@ -59,13 +59,3 @@ func (r *Repo) EmitYieldUpdate(ctx context.Context, chatID string, update YieldU
 	}
 	return r.CreateChatUpdate(ctx, chatID, UpdateTypeYield, EntityIDForYield(update.YieldID), data)
 }
-
-// EmitSkillInvocationUpdate emits a skill invocation lifecycle update
-func (r *Repo) EmitSkillInvocationUpdate(ctx context.Context, chatID string, update SkillInvocationUpdate) error {
-	update.UpdateType = UpdateTypeSkillInvocation
-	data, err := MarshalUpdate(update)
-	if err != nil {
-		return fmt.Errorf("failed to marshal skill invocation update: %w", err)
-	}
-	return r.CreateChatUpdate(ctx, chatID, UpdateTypeSkillInvocation, EntityIDForSkillInvocation(update.ID), data)
-}

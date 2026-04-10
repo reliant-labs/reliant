@@ -21,6 +21,9 @@ func TestNoRawCoreYAMLKeyLiteralsInParserCodecFiles(t *testing.T) {
 			"Find the \"args\" oneof descriptor",
 			"The \"args\" key is NOT skipped",
 			"have an \"args\" field",
+			// Structural-arg promotion heuristic: "thread"/"project" are checked
+			// as arg field names, not as YAML top-level keys.
+			"hasInputArgsMapField",
 		},
 		"draft_parser.go": {
 			"node top level instead of under \"args\"",

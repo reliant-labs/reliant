@@ -92,6 +92,14 @@ func TestNoRawNodeTypeLiteralsInProductionFiles(t *testing.T) {
 		"runtime/activities/handlers/call_llm.go": {
 			"workflow": {},
 		},
+		// JSON map key for router_decision serialization, not a node type.
+		"runtime/activities/handlers/workflow_status.go": {
+			"workflow": {},
+		},
+		// Well-known input key for loop iteration context, not a node type.
+		"runtime/loop_executor_parallel.go": {
+			"loop": {},
+		},
 		"reconciliation/reconciler.go": {
 			"workflow": {},
 		},

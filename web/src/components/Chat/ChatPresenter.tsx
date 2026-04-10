@@ -23,7 +23,6 @@ import type {
   ErrorUpdate,
   InfoUpdate,
   RunOutputUpdate,
-  SkillInvocationUpdate,
   ConnectionStatus,
 } from "../../types/streaming";
 import { settingsSync, SETTINGS_KEYS } from "../../services/settingsSync";
@@ -36,7 +35,6 @@ interface ChatPresenterProps {
   approvals: ToolApprovalRequest[];
   errorEvents: ErrorUpdate[];
   infoEvents: InfoUpdate[];
-  skillInvocations: SkillInvocationUpdate[];
   runOutputs: RunOutputUpdate[];
 
   // Chat state
@@ -81,7 +79,6 @@ export const ChatPresenter = memo(function ChatPresenter({
   approvals,
   errorEvents,
   infoEvents,
-  skillInvocations,
   runOutputs,
   chatId,
   isChatBusy,
@@ -353,7 +350,6 @@ export const ChatPresenter = memo(function ChatPresenter({
         approvals={approvals}
         errorEvents={errorEvents}
         infoEvents={infoEvents}
-        skillInvocations={skillInvocations}
         runOutputs={runOutputs}
         chatId={chatId || ""}
         workflowExecution={workflowExecution}
@@ -462,8 +458,7 @@ export const ChatPresenter = memo(function ChatPresenter({
           {(messages.length > 0 ||
             runOutputs.length > 0 ||
             errorEvents.length > 0 ||
-            infoEvents.length > 0 ||
-            skillInvocations.length > 0) &&
+            infoEvents.length > 0) &&
             renderTimeline()}
         </ChatMessagesContainer>
         )}

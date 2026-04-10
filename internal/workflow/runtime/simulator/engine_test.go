@@ -993,7 +993,7 @@ entry: [route]
 nodes:
   - id: route
     type: router
-    prompt: "route this request"
+    system_prompt: "route this request"
     model:
       tags: [fast]
     workflows:
@@ -1017,7 +1017,9 @@ entry: [route]
 nodes:
   - id: route
     type: router
-    prompt: "route this"
+    system_prompt: "route this"
+    model:
+      tags: [fast]
     workflows:
       - ref: builtin://agent
         presets: [general, researcher]

@@ -4,7 +4,7 @@ package monolith
 import (
 	"context"
 	"fmt"
-	"strings"
+
 	"sync"
 	"time"
 
@@ -14,7 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/pat"
 	"github.com/reliant-labs/reliant/internal/patauth"
-	skillcatalog "github.com/reliant-labs/reliant/internal/skills/catalog"
+
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonruntime"
@@ -88,22 +88,6 @@ func (s *LazyDaemonStarter) EnsureStarted(userID string) (bool, error) {
 // startLocked does the actual daemon startup. Caller must hold s.mu.
 func (s *LazyDaemonStarter) startLocked(userID string) error {
 	logging.Info("Starting in-process daemon (lazy)", "userID", userID)
-
-	// Preload skills catalog for known projects
-	var projectPaths []string
-	projects, listErr := s.repo.ListProjects(context.Background(), db.ProjectFilters{UserID: userID, Limit: 100000, Offset: 0})
-	if listErr != nil {
-		logging.Warn("Failed listing projects for startup skills catalog preload", "error", listErr, "user_id", userID)
-	} else {
-		for _, project := range projects {
-			if project == nil || strings.TrimSpace(project.Path) == "" {
-				continue
-			}
-			projectPaths = append(projectPaths, project.Path)
-		}
-	}
-	skillcatalog.DefaultCatalogIndex().PreloadProjects(context.Background(), projectPaths)
-	logging.Info("Preloaded skills catalog snapshots", "project_count", len(projectPaths))
 
 	// Create ephemeral PAT for in-process daemon
 	patService := pat.NewService(s.repo)

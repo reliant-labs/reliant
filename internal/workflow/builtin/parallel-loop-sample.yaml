@@ -23,7 +23,7 @@ nodes:
     ref: builtin://agent
     args:
       mode: auto
-      prompt: "Run the assigned check and return a status."
+      system_prompt: "Run the assigned check and return a status."
 
   - id: passed
     type: save_message

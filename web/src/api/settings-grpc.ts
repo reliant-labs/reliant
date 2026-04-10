@@ -2,24 +2,16 @@
 
 import { grpcClient } from "./grpc-client";
 import { singleflight } from "../lib/singleflight";
-import { ConnectError, Code } from "@connectrpc/connect";
 import { create } from "@bufbuild/protobuf";
 import { ConfigScope } from "../gen/reliant/v1/common_pb";
 import {
   ConfigSeverity,
   HiddenItemType,
-  SkillScope as ProtoSkillScope,
-  SkillFormat as ProtoSkillFormat,
-  SkillConflictPolicy as ProtoSkillConflictPolicy,
 } from "../gen/reliant/v1/settings_pb";
 import type {
   Setting as ProtoSetting,
   UserPrompt as ProtoUserPrompt,
   ProviderStatus as ProtoProviderStatus,
-  InstalledSkill as ProtoInstalledSkill,
-  RecommendedSkill as ProtoRecommendedSkill,
-  SkillDiscoveryDiagnostic as ProtoSkillDiscoveryDiagnostic,
-  SkillInstallResult as ProtoSkillInstallResult,
 } from "../gen/reliant/v1/settings_pb";
 import {
   // Sub-phase 6a: Core Settings CRUD
@@ -47,12 +39,6 @@ import {
   GetPrivacySettingsRequestSchema,
   UpdatePrivacySettingsRequestSchema,
   TrackPageVisitedRequestSchema,
-  InstallSkillRequestSchema,
-  ListInstalledSkillsRequestSchema,
-  ListRecommendedSkillsRequestSchema,
-  GetInstalledSkillDefinitionRequestSchema,
-  SetSkillEnabledRequestSchema,
-  DeleteGlobalSkillRequestSchema,
   UserPromptSchema,
   // Sub-phase 6g: Configuration Health
   GetConfigHealthRequestSchema,
@@ -125,91 +111,6 @@ export interface ConfigHealth {
   warning_count: number;
 }
 
-export type SkillScope = "project_local" | "project" | "global" | "builtin";
-
-export type SkillConflictPolicy = "skip" | "overwrite" | "rename";
-
-export type SkillFormat = "claude_markdown";
-
-export interface InstallSkillRequest {
-  project_id: string;
-  source: string;
-  source_subpath?: string;
-  ref?: string;
-  name?: string;
-  scope?: SkillScope;
-  conflict_policy?: SkillConflictPolicy;
-  dry_run?: boolean;
-}
-
-export interface SkillInstallDetails {
-  source: string;
-  source_type: "local" | "git" | "unknown";
-  source_subpath?: string;
-  git_ref?: string;
-  resolved_source: string;
-  target_dir: string;
-  skill_name: string;
-  install_dir_name: string;
-  installed_files: string[];
-  skipped_files: string[];
-  dry_run: boolean;
-  scope: SkillScope;
-  conflict_policy: SkillConflictPolicy;
-}
-
-export interface InstallSkillResult {
-  success: boolean;
-  message: string;
-  result?: SkillInstallDetails;
-}
-
-export interface InstalledSkill {
-  skill_id: string;
-  name: string;
-  description: string;
-  scope: SkillScope;
-  format: SkillFormat | "unknown";
-  skill_dir: string;
-  definition_path: string;
-  active: boolean;
-  shadowed_by_definition_path?: string;
-}
-
-export interface SkillAsset {
-  path: string;
-  mime_type: string;
-  content: Uint8Array;
-}
-
-export interface SkillDiscoveryDiagnostic {
-  path: string;
-  scope: SkillScope | "unknown";
-  message: string;
-}
-
-export interface RecommendedSkill {
-  id: string;
-  name: string;
-  description: string;
-  source: string;
-  source_subpath?: string;
-  ref?: string;
-  bundled_by?: string;
-}
-
-export interface SetSkillEnabledResult {
-  success: boolean;
-  message: string;
-  skill_id: string;
-  enabled: boolean;
-}
-
-export interface DeleteGlobalSkillResult {
-  success: boolean;
-  message: string;
-}
-
 // ============================================
 // Conversion Functions
 // ============================================
@@ -257,153 +158,6 @@ function protoConfigErrorToFrontend(proto: ProtoConfigError): ConfigError {
     severity: proto.severity,
     details: proto.details,
   };
-}
-
-function protoScopeToFrontend(scope: ProtoSkillScope): SkillScope | "unknown" {
-  switch (scope) {
-    case ProtoSkillScope.PROJECT_LOCAL:
-      return "project_local";
-    case ProtoSkillScope.PROJECT:
-      return "project";
-    case ProtoSkillScope.GLOBAL:
-      return "global";
-    case ProtoSkillScope.BUILTIN:
-      return "builtin";
-    default:
-      return "unknown";
-  }
-}
-
-function scopeToProto(scope?: SkillScope): ProtoSkillScope {
-  switch (scope) {
-    case "project_local":
-      return ProtoSkillScope.PROJECT_LOCAL;
-    case "global":
-      return ProtoSkillScope.GLOBAL;
-    case "project":
-      return ProtoSkillScope.PROJECT;
-    default:
-      return ProtoSkillScope.UNSPECIFIED;
-  }
-}
-
-function conflictPolicyToProto(policy?: SkillConflictPolicy): ProtoSkillConflictPolicy {
-  switch (policy) {
-    case "skip":
-      return ProtoSkillConflictPolicy.SKIP;
-    case "overwrite":
-      return ProtoSkillConflictPolicy.OVERWRITE;
-    case "rename":
-      return ProtoSkillConflictPolicy.RENAME;
-    default:
-      return ProtoSkillConflictPolicy.UNSPECIFIED;
-  }
-}
-
-function protoConflictPolicyToFrontend(
-  policy: ProtoSkillConflictPolicy
-): SkillConflictPolicy {
-  switch (policy) {
-    case ProtoSkillConflictPolicy.OVERWRITE:
-      return "overwrite";
-    case ProtoSkillConflictPolicy.RENAME:
-      return "rename";
-    case ProtoSkillConflictPolicy.SKIP:
-    default:
-      return "skip";
-  }
-}
-
-function protoFormatToFrontend(format: ProtoSkillFormat): SkillFormat | "unknown" {
-  switch (format) {
-    case ProtoSkillFormat.CLAUDE_MARKDOWN:
-      return "claude_markdown";
-    default:
-      return "unknown";
-  }
-}
-
-function protoSkillInstallResultToFrontend(
-  proto: ProtoSkillInstallResult
-): SkillInstallDetails {
-  const source_type =
-    proto.sourceType === 2
-      ? "git"
-      : proto.sourceType === 1
-        ? "local"
-        : "unknown";
-  const scopeValue = protoScopeToFrontend(proto.scope);
-
-  return {
-    source: proto.source,
-    source_type,
-    source_subpath: proto.sourceSubpath || undefined,
-    git_ref: proto.gitRef || undefined,
-    resolved_source: proto.resolvedSource,
-    target_dir: proto.targetDir,
-    skill_name: proto.skillName,
-    install_dir_name: proto.installDirName,
-    installed_files: [...proto.installedFiles],
-    skipped_files: [...proto.skippedFiles],
-    dry_run: proto.dryRun,
-    scope: scopeValue === "unknown" ? "project" : scopeValue,
-    conflict_policy: protoConflictPolicyToFrontend(proto.conflictPolicy),
-  };
-}
-
-function installedSkillScope(proto: ProtoInstalledSkill): SkillScope {
-  const scopeValue = protoScopeToFrontend(proto.scope);
-  return scopeValue === "unknown" ? "project" : scopeValue;
-}
-
-function protoInstalledSkillToFrontend(
-  proto: ProtoInstalledSkill
-): InstalledSkill {
-  return {
-    skill_id: proto.skillId,
-    name: proto.name,
-    description: proto.description,
-    scope: installedSkillScope(proto),
-    format: protoFormatToFrontend(proto.format),
-    skill_dir: proto.skillDir,
-    definition_path: proto.definitionPath,
-    active: proto.active,
-    shadowed_by_definition_path: proto.shadowedByDefinitionPath || undefined,
-  };
-}
-
-function protoRecommendedSkillToFrontend(
-  proto: ProtoRecommendedSkill
-): RecommendedSkill {
-  return {
-    id: proto.id,
-    name: proto.name,
-    description: proto.description,
-    source: proto.source,
-    source_subpath: proto.sourceSubpath || undefined,
-    ref: proto.ref || undefined,
-    bundled_by: proto.bundledBy || undefined,
-  };
-}
-
-function protoSkillDiscoveryDiagnosticToFrontend(
-  proto: ProtoSkillDiscoveryDiagnostic
-): SkillDiscoveryDiagnostic {
-  return {
-    path: proto.path,
-    scope: protoScopeToFrontend(proto.scope),
-    message: proto.message,
-  };
-}
-
-function isSkillsDisabledError(error: unknown): boolean {
-  if (!(error instanceof ConnectError)) {
-    return false;
-  }
-  if (error.code !== Code.FailedPrecondition) {
-    return false;
-  }
-  return error.message.toLowerCase().includes("skills feature is disabled");
 }
 
 // ============================================
@@ -773,163 +527,6 @@ export const settingsGrpc = {
     const response = await client.trackPageVisited(request);
     return {
       success: response.success,
-    };
-  },
-
-  // ============================================
-  // Skills Management
-  // ============================================
-
-  async installSkill(input: InstallSkillRequest): Promise<InstallSkillResult> {
-    const client = grpcClient.settings();
-    const request = create(InstallSkillRequestSchema, {
-      projectId: input.project_id,
-      source: input.source,
-      sourceSubpath: input.source_subpath,
-      ref: input.ref,
-      name: input.name,
-      scope: scopeToProto(input.scope),
-      conflictPolicy: conflictPolicyToProto(input.conflict_policy),
-      dryRun: input.dry_run ?? false,
-    });
-    try {
-      const response = await client.installSkill(request);
-      return {
-        success: response.success,
-        message: response.message,
-        result: response.result ? protoSkillInstallResultToFrontend(response.result) : undefined,
-      };
-    } catch (error) {
-      if (isSkillsDisabledError(error)) {
-        return {
-          success: false,
-          message: "Skills feature is disabled",
-        };
-      }
-      throw error;
-    }
-  },
-
-  async listInstalledSkills(
-    projectId: string,
-    options?: { page_size?: number; page_token?: string }
-  ): Promise<{
-    skills: InstalledSkill[];
-    total: number;
-    diagnostics: SkillDiscoveryDiagnostic[];
-    next_page_token: string;
-  }> {
-    const client = grpcClient.settings();
-    const request = create(ListInstalledSkillsRequestSchema, {
-      projectId,
-      pageSize: options?.page_size ?? 0,
-      pageToken: options?.page_token ?? "",
-    });
-    try {
-      const response = await client.listInstalledSkills(request);
-      return {
-        skills: response.skills.map(protoInstalledSkillToFrontend),
-        total: response.total,
-        diagnostics: response.diagnostics.map(protoSkillDiscoveryDiagnosticToFrontend),
-        next_page_token: response.nextPageToken,
-      };
-    } catch (error) {
-      if (isSkillsDisabledError(error)) {
-        return {
-          skills: [],
-          total: 0,
-          diagnostics: [],
-          next_page_token: "",
-        };
-      }
-      throw error;
-    }
-  },
-
-  async getInstalledSkillDefinition(projectId: string, skillId: string): Promise<{
-    skill_id: string;
-    definition_path: string;
-    definition_content: string;
-    assets: SkillAsset[];
-  }> {
-    const client = grpcClient.settings();
-    const request = create(GetInstalledSkillDefinitionRequestSchema, {
-      projectId,
-      skillId,
-    });
-    const response = await client.getInstalledSkillDefinition(request);
-    return {
-      skill_id: response.skillId,
-      definition_path: response.definitionPath,
-      definition_content: response.definitionContent,
-      assets: response.assets.map((asset) => ({
-        path: asset.path,
-        mime_type: asset.mimeType,
-        content: asset.content,
-      })),
-    };
-  },
-
-  async setSkillEnabled(
-    projectId: string,
-    skillId: string,
-    enabled: boolean
-  ): Promise<SetSkillEnabledResult> {
-    const client = grpcClient.settings();
-    const request = create(SetSkillEnabledRequestSchema, {
-      projectId,
-      skillId,
-      enabled,
-    });
-    const response = await client.setSkillEnabled(request);
-    return {
-      success: response.success,
-      message: response.message,
-      skill_id: response.skillId,
-      enabled: response.enabled,
-    };
-  },
-
-  async listRecommendedSkills(
-    projectId: string,
-    options?: { page_size?: number; page_token?: string }
-  ): Promise<{
-    recommended: RecommendedSkill[];
-    total: number;
-    next_page_token: string;
-  }> {
-    const client = grpcClient.settings();
-    const request = create(ListRecommendedSkillsRequestSchema, {
-      projectId,
-      pageSize: options?.page_size ?? 0,
-      pageToken: options?.page_token ?? "",
-    });
-    try {
-      const response = await client.listRecommendedSkills(request);
-      return {
-        recommended: response.recommended.map(protoRecommendedSkillToFrontend),
-        total: response.total,
-        next_page_token: response.nextPageToken,
-      };
-    } catch (error) {
-      if (isSkillsDisabledError(error)) {
-        return {
-          recommended: [],
-          total: 0,
-          next_page_token: "",
-        };
-      }
-      throw error;
-    }
-  },
-
-  async deleteGlobalSkill(projectId: string, relativePath: string): Promise<DeleteGlobalSkillResult> {
-    const client = grpcClient.settings();
-    const request = create(DeleteGlobalSkillRequestSchema, { projectId, relativePath });
-    const response = await client.deleteGlobalSkill(request);
-    return {
-      success: response.success,
-      message: response.message,
     };
   },
 

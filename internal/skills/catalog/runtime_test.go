@@ -1,7 +1,6 @@
 package catalog
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -139,118 +138,6 @@ func TestValidateAgentSkillMarkdownFrontmatter_UsesNFKCForParentDirMatch(t *test
 	require.NoError(t, err)
 }
 
-func TestCatalogIndex_DiscoverReturnsImmutableClones(t *testing.T) {
-	project := t.TempDir()
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	skillPath := filepath.Join(project, ".reliant", "skills", "immutable-skill", "SKILL.md")
-	require.NoError(t, os.MkdirAll(filepath.Dir(skillPath), 0o755))
-	require.NoError(t, os.WriteFile(skillPath, []byte(`---
-name: immutable-skill
-description: Original description
-metadata:
-  team: core
-allowed-tools: Bash(git:*) Read
----
-Skill body`), 0o644))
-
-	idx := NewCatalogIndex()
-	first := idx.Discover(context.Background(), DiscoverInput{ProjectPath: project, LoadFullDefinitions: true})
-	require.Contains(t, first.ByName, "immutable-skill")
-
-	mutated := first.ByName["immutable-skill"]
-	mutated.Name = "mutated"
-	mutated.Description = "mutated description"
-	mutated.Metadata["team"] = "mutated"
-	mutated.AllowedTools[0] = "Write"
-	first.ByName["immutable-skill"] = mutated
-	first.Definitions[0].Name = "mutated-in-slice"
-	first.Definitions[0].Description = "mutated-in-slice"
-
-	second := idx.Discover(context.Background(), DiscoverInput{ProjectPath: project, LoadFullDefinitions: true})
-	require.Contains(t, second.ByName, "immutable-skill")
-	require.Equal(t, "immutable-skill", second.ByName["immutable-skill"].Name)
-	require.Equal(t, "Original description", second.ByName["immutable-skill"].Description)
-	require.Equal(t, "core", second.ByName["immutable-skill"].Metadata["team"])
-	require.Equal(t, []string{"Bash(git:*)", "Read"}, second.ByName["immutable-skill"].AllowedTools)
-	require.Equal(t, "immutable-skill", second.Definitions[0].Name)
-}
-
-func TestCatalogIndex_InvalidateProjectAndGlobal(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	projectOne := t.TempDir()
-	projectTwo := t.TempDir()
-
-	writeSkill := func(project, description string) {
-		skillPath := filepath.Join(project, ".reliant", "skills", "demo", "SKILL.md")
-		require.NoError(t, os.MkdirAll(filepath.Dir(skillPath), 0o755))
-		require.NoError(t, os.WriteFile(skillPath, []byte("---\nname: demo\ndescription: "+description+"\n---\nBody"), 0o644))
-	}
-
-	writeSkill(projectOne, "one-v1")
-	writeSkill(projectTwo, "two-v1")
-
-	idx := NewCatalogIndex()
-	resOne := idx.Discover(context.Background(), DiscoverInput{ProjectPath: projectOne})
-	resTwo := idx.Discover(context.Background(), DiscoverInput{ProjectPath: projectTwo})
-	require.Equal(t, "one-v1", resOne.ByName["demo"].Description)
-	require.Equal(t, "two-v1", resTwo.ByName["demo"].Description)
-
-	writeSkill(projectOne, "one-v2")
-	writeSkill(projectTwo, "two-v2")
-
-	cachedOne := idx.Discover(context.Background(), DiscoverInput{ProjectPath: projectOne})
-	cachedTwo := idx.Discover(context.Background(), DiscoverInput{ProjectPath: projectTwo})
-	require.Equal(t, "one-v1", cachedOne.ByName["demo"].Description)
-	require.Equal(t, "two-v1", cachedTwo.ByName["demo"].Description)
-
-	idx.Invalidate(projectOne)
-	afterProjectInvalidate := idx.Discover(context.Background(), DiscoverInput{ProjectPath: projectOne})
-	require.Equal(t, "one-v2", afterProjectInvalidate.ByName["demo"].Description)
-
-	stillCachedProjectTwo := idx.Discover(context.Background(), DiscoverInput{ProjectPath: projectTwo})
-	require.Equal(t, "two-v1", stillCachedProjectTwo.ByName["demo"].Description)
-
-	idx.Invalidate("")
-	afterGlobalInvalidate := idx.Discover(context.Background(), DiscoverInput{ProjectPath: projectTwo})
-	require.Equal(t, "two-v2", afterGlobalInvalidate.ByName["demo"].Description)
-}
-
-func TestCatalogIndex_PreloadProjects_DedupesAndNormalizesPaths(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	project := t.TempDir()
-	skillPath := filepath.Join(project, ".reliant", "skills", "demo", "SKILL.md")
-	require.NoError(t, os.MkdirAll(filepath.Dir(skillPath), 0o755))
-	require.NoError(t, os.WriteFile(skillPath, []byte("---\nname: demo\ndescription: preload\n---\nBody"), 0o644))
-
-	idx := NewCatalogIndex()
-	idx.PreloadProjects(context.Background(), []string{"", project, filepath.Clean(filepath.Join(project, ".")), project + string(filepath.Separator)})
-
-	require.Equal(t, 1, idx.SnapshotCount(), "duplicate/normalized project paths should only warm one snapshot")
-}
-
-func TestCatalogIndex_PreloadProject_RespectsCancelledContext(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-
-	project := t.TempDir()
-	skillPath := filepath.Join(project, ".reliant", "skills", "demo", "SKILL.md")
-	require.NoError(t, os.MkdirAll(filepath.Dir(skillPath), 0o755))
-	require.NoError(t, os.WriteFile(skillPath, []byte("---\nname: demo\ndescription: preload\n---\nBody"), 0o644))
-
-	idx := NewCatalogIndex()
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	idx.PreloadProject(ctx, project)
-
-	require.Zero(t, idx.SnapshotCount())
-}
-
 func TestBuiltinSkills_DiscoverIncludesSkillCreator(t *testing.T) {
 	snapshot := Discover(DiscoverInput{ProjectPath: t.TempDir(), LoadFullDefinitions: true})
 	definition, ok := snapshot.ByName["skill-creator"]
@@ -258,4 +145,124 @@ func TestBuiltinSkills_DiscoverIncludesSkillCreator(t *testing.T) {
 	require.Equal(t, skillscore.ScopeBuiltin, definition.Scope)
 	require.Equal(t, skillscore.SkillFormatClaudeMarkdown, definition.Format)
 	require.Contains(t, definition.Body, ".reliant.local/skills")
+}
+
+func TestDiscover_IncludesExternalProviderSkillRoots(t *testing.T) {
+	project := t.TempDir()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	writeSkill := func(dir, name, description string) {
+		skillPath := filepath.Join(dir, name, "SKILL.md")
+		require.NoError(t, os.MkdirAll(filepath.Dir(skillPath), 0o755))
+		require.NoError(t, os.WriteFile(skillPath, []byte("---\nname: "+name+"\ndescription: "+description+"\n---\nBody"), 0o644))
+	}
+
+	// Project-scoped Claude skill
+	writeSkill(filepath.Join(project, ".claude", "skills"), "claude-skill", "A Claude skill")
+	// Project-scoped Codex skill
+	writeSkill(filepath.Join(project, ".codex", "skills"), "codex-skill", "A Codex skill")
+	// Project-scoped Codex agents skill
+	writeSkill(filepath.Join(project, ".agents", "skills"), "agents-skill", "An agents skill")
+	// Global Claude skill
+	writeSkill(filepath.Join(home, ".claude", "skills"), "claude-global", "A global Claude skill")
+	// Global Codex skill
+	writeSkill(filepath.Join(home, ".codex", "skills"), "codex-global", "A global Codex skill")
+
+	snapshot := Discover(DiscoverInput{ProjectPath: project})
+
+	require.Contains(t, snapshot.ByName, "claude-skill")
+	require.Equal(t, skillscore.ScopeClaude, snapshot.ByName["claude-skill"].Scope)
+
+	require.Contains(t, snapshot.ByName, "codex-skill")
+	require.Equal(t, skillscore.ScopeCodexProject, snapshot.ByName["codex-skill"].Scope)
+
+	require.Contains(t, snapshot.ByName, "agents-skill")
+	require.Equal(t, skillscore.ScopeCodexAgents, snapshot.ByName["agents-skill"].Scope)
+
+	require.Contains(t, snapshot.ByName, "claude-global")
+	require.Equal(t, skillscore.ScopeClaudeGlobal, snapshot.ByName["claude-global"].Scope)
+
+	require.Contains(t, snapshot.ByName, "codex-global")
+	require.Equal(t, skillscore.ScopeCodexGlobal, snapshot.ByName["codex-global"].Scope)
+}
+
+func TestDiscover_ReliantShadowsExternalProviderSkills(t *testing.T) {
+	project := t.TempDir()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	writeSkill := func(dir, name, description string) {
+		skillPath := filepath.Join(dir, name, "SKILL.md")
+		require.NoError(t, os.MkdirAll(filepath.Dir(skillPath), 0o755))
+		require.NoError(t, os.WriteFile(skillPath, []byte("---\nname: "+name+"\ndescription: "+description+"\n---\nBody"), 0o644))
+	}
+
+	// Same skill name in both Reliant and Claude paths
+	writeSkill(filepath.Join(project, ".reliant", "skills"), "shared-skill", "Reliant version")
+	writeSkill(filepath.Join(project, ".claude", "skills"), "shared-skill", "Claude version")
+
+	snapshot := Discover(DiscoverInput{ProjectPath: project})
+
+	require.Contains(t, snapshot.ByName, "shared-skill")
+	require.Equal(t, skillscore.ScopeProject, snapshot.ByName["shared-skill"].Scope)
+	require.Equal(t, "Reliant version", snapshot.ByName["shared-skill"].Description)
+}
+
+func TestParseSkillMarkdown_ClaudeCompatibleFrontmatter(t *testing.T) {
+	t.Run("Claude fields parsed for external scope", func(t *testing.T) {
+		userInvocable := true
+		def, err := ParseSkillMarkdown("/tmp/my-skill/SKILL.md", skillscore.ScopeClaude, []byte(`---
+name: my-skill
+description: A Claude skill
+argument-hint: provide a file path
+disable-model-invocation: true
+user-invocable: true
+paths: src/**/*.ts
+---
+Do things.`))
+		require.NoError(t, err)
+		require.Equal(t, "my-skill", def.Name)
+		require.Equal(t, "provide a file path", def.ArgumentHint)
+		require.True(t, def.DisableModelInvocation)
+		require.NotNil(t, def.UserInvocable)
+		require.Equal(t, userInvocable, *def.UserInvocable)
+		require.Equal(t, "src/**/*.ts", def.Paths)
+	})
+
+	t.Run("unknown fields ignored for external scope", func(t *testing.T) {
+		def, err := ParseSkillMarkdown("/tmp/lenient-skill/SKILL.md", skillscore.ScopeClaudeGlobal, []byte(`---
+name: lenient-skill
+description: Has extra fields
+model: claude-sonnet
+hooks: some-hook
+shell: bash
+---
+Body content.`))
+		require.NoError(t, err)
+		require.Equal(t, "lenient-skill", def.Name)
+		require.Equal(t, "Has extra fields", def.Description)
+	})
+
+	t.Run("unknown fields still rejected for Reliant scope", func(t *testing.T) {
+		_, err := ParseSkillMarkdown("/tmp/strict-skill/SKILL.md", skillscore.ScopeProject, []byte(`---
+name: strict-skill
+description: Has extra fields
+model: claude-sonnet
+---
+Body content.`))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "unexpected fields")
+	})
+
+	t.Run("Claude allowed fields accepted for Reliant scope", func(t *testing.T) {
+		def, err := ParseSkillMarkdown("/tmp/with-hint/SKILL.md", skillscore.ScopeProject, []byte(`---
+name: with-hint
+description: Has argument hint
+argument-hint: some hint
+---
+Body.`))
+		require.NoError(t, err)
+		require.Equal(t, "some hint", def.ArgumentHint)
+	})
 }

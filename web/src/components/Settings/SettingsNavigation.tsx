@@ -1,6 +1,5 @@
 import { cn } from "../../lib/utils";
 import { Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, FolderOpen, Globe, FolderGit2, Bell, MessageSquare } from "lucide-react";
-import { LuBookMarked } from "react-icons/lu";
 import { McpIcon } from "../icons/McpIcon";
 
 export type SettingsSection =
@@ -14,7 +13,6 @@ export type SettingsSection =
   | "appearance"
   | "notifications"
   | "privacy"
-  | "skills"
   | "mcp"
   | "feedback"
   | "about"
@@ -24,7 +22,6 @@ interface SettingsNavigationProps {
   activeSection: SettingsSection;
   onSectionChange: (section: SettingsSection) => void;
   isCollapsed?: boolean;
-  skillsEnabled?: boolean;
 }
 
 const settingsSections = [
@@ -57,11 +54,6 @@ const settingsSections = [
     id: "mcp" as const,
     label: "MCP Servers",
     icon: McpIcon,
-  },
-  {
-    id: "skills" as const,
-    label: "Skills",
-    icon: LuBookMarked,
   },
   {
     id: "shortcuts" as const,
@@ -106,7 +98,7 @@ const settingsSections = [
 ] as const;
 
 /** Section IDs in sidebar display order; use for keyboard nav so it matches the visible list. */
-export function getVisibleSettingsSectionIds(skillsEnabled: boolean): SettingsSection[] {
+export function getVisibleSettingsSectionIds(): SettingsSection[] {
   const isElectron = window.RELIANT_CONFIG?.isElectron;
   const isDevelopment = isElectron ? window.RELIANT_CONFIG?.isDev : true;
 
@@ -114,9 +106,6 @@ export function getVisibleSettingsSectionIds(skillsEnabled: boolean): SettingsSe
     .filter((section) => {
       if (section.id === "developer") {
         return isDevelopment;
-      }
-      if (section.id === "skills") {
-        return skillsEnabled;
       }
       return true;
     })
@@ -127,9 +116,8 @@ export function SettingsNavigation({
   activeSection,
   onSectionChange,
   isCollapsed = false,
-  skillsEnabled = false,
 }: SettingsNavigationProps) {
-  const visibleIdSet = new Set(getVisibleSettingsSectionIds(skillsEnabled));
+  const visibleIdSet = new Set(getVisibleSettingsSectionIds());
   const visibleSections = settingsSections.filter((section) => visibleIdSet.has(section.id));
 
   return (

@@ -21,7 +21,6 @@ import { ChatMessage } from "../ChatMessage";
 import { CompactionMessage, isCompactionMessage } from "../CompactionMessage";
 import { WorkflowErrorMessage } from "../WorkflowErrorMessage";
 import { WorkflowInfoMessage } from "../WorkflowInfoMessage";
-import { SkillInvocationMessage } from "../SkillInvocationMessage";
 import { SystemNotificationMessage } from "../SystemNotificationMessage";
 import { RunStepExecution } from "../RunStepExecution";
 import type { Message, ToolApprovalRequest } from "../../../api/client";
@@ -29,7 +28,6 @@ import type {
   ErrorUpdate,
   InfoUpdate,
   RunOutputUpdate,
-  SkillInvocationUpdate,
 } from "../../../types/streaming";
 import type { WorkflowExecution, StepExecution } from "../ExecutionSidebar/types";
 import { cn } from "../../../lib/utils";
@@ -44,7 +42,6 @@ interface InterleavedTimelineProps {
   approvals?: ToolApprovalRequest[];
   errorEvents?: ErrorUpdate[];
   infoEvents?: InfoUpdate[];
-  skillInvocations?: SkillInvocationUpdate[];
   runOutputs?: RunOutputUpdate[];
   chatId: string;
   workflowExecution?: WorkflowExecution;
@@ -91,7 +88,6 @@ type TimelineItem =
   | { type: "activity"; step: StepExecution; workflow: WorkflowDisplay; workflowName: string }
   | { type: "error"; error: ErrorUpdate }
   | { type: "info"; info: InfoUpdate }
-  | { type: "skill_invocation"; invocation: SkillInvocationUpdate }
   | { type: "run_output"; runOutput: RunOutputUpdate };
 
 /**
@@ -247,7 +243,6 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   approvals = [],
   errorEvents = [],
   infoEvents = [],
-  skillInvocations = [],
   runOutputs = [],
   chatId,
   workflowExecution,
@@ -501,30 +496,6 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       });
     }
 
-    // Insert skill invocation events at correct positions based on timestamp
-    for (const invocation of skillInvocations) {
-      const invocationTime = new Date(invocation.timestamp).getTime();
-
-      // Find insertion point: after last item with timestamp <= invocation time
-      let insertIdx = items.length;
-      for (let i = items.length - 1; i >= 0; i--) {
-        const item = items[i];
-        if (item.type === "message") {
-          const msgTime = new Date(item.message.createdAt || "").getTime();
-          if (msgTime <= invocationTime) {
-            insertIdx = i + 1;
-            break;
-          }
-        }
-        if (i === 0) insertIdx = 0;
-      }
-
-      items.splice(insertIdx, 0, {
-        type: "skill_invocation",
-        invocation,
-      });
-    }
-
     // Insert run outputs at correct positions based on timestamp
     for (const runOutput of runOutputs) {
       const runOutputTime = new Date(runOutput.timestamp).getTime();
@@ -550,7 +521,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     }
 
     return items;
-  }, [messages, chatId, workflowExecution, selectedThreads, errorEvents, infoEvents, skillInvocations, runOutputs, activeThreads]);
+  }, [messages, chatId, workflowExecution, selectedThreads, errorEvents, infoEvents, runOutputs, activeThreads]);
 
   // Flatten timelineItems into a renderable list with stable keys for Virtuoso
   const flatItems = useMemo(() => {
@@ -574,9 +545,6 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
           break;
         case "info":
           key = `info-${item.info.id}`;
-          break;
-        case "skill_invocation":
-          key = `skill-invocation-${item.invocation.id}`;
           break;
         case "run_output":
           key = `run-${item.runOutput.id}`;
@@ -793,14 +761,6 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       return (
         <div className="message-content w-full px-2 mb-1">
           <WorkflowInfoMessage info={item.info} />
-        </div>
-      );
-    }
-
-    if (item.type === "skill_invocation") {
-      return (
-        <div className="message-content w-full px-2 mb-1">
-          <SkillInvocationMessage invocation={item.invocation} />
         </div>
       );
     }

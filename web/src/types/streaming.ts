@@ -124,20 +124,6 @@ export interface InfoUpdate {
   sequence_number?: number;
 }
 
-export interface SkillInvocationUpdate {
-  update_type: "skill_invocation";
-  id: string;
-  chat_id: string;
-  trigger: "explicit" | "auto";
-  status: "activated" | "failed" | "skipped";
-  timestamp: string;
-  skill_name?: string;
-  requested_name?: string;
-  message?: string;
-  warnings?: string[];
-  sequence_number?: number;
-}
-
 // ChatMetadataUpdate represents changes to chat configuration
 export interface ChatMetadataUpdate {
   update_type: "chat";
@@ -292,7 +278,6 @@ export type ChatUpdate =
   | ToolCallUpdate
   | ErrorUpdate
   | InfoUpdate
-  | SkillInvocationUpdate
   | ChatMetadataUpdate
   | StreamingDelta
   | RunOutputUpdate

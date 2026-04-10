@@ -29,6 +29,12 @@ inputs:
     max: 1
     description: Response randomness (0 = focused, 1 = creative)
 
+  permission:
+    type: string
+    default: "orchestrator"
+    description: "Permission level controlling which tools can be loaded via load_tool (readonly, mutating, orchestrator)"
+    ui: hidden
+
   tools:
     type: tools
     default: ["tag:default"]
@@ -130,6 +136,7 @@ nodes:
             temperature: "{{inputs.temperature}}"
             thinking_level: "{{inputs.thinking_level}}"
             system_prompt: "{{inputs.system_prompt}}"
+            permission: "{{inputs.permission}}"
             # Include regular tools, response tool, and spawn
             tool_filter: "{{inputs.tools + [inputs.response_tool_name, spawn(workflow.name, inputs.spawn_presets)]}}"
             response_tool:
