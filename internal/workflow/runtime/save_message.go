@@ -670,6 +670,15 @@ func buildSaveMessageNode(input *types.SaveMessageInput) *reliantv1.Node {
 		}
 	}
 
+	// Convert inject files
+	for _, f := range input.InjectFiles {
+		args.ResolvedInjectFiles = append(args.ResolvedInjectFiles, &reliantv1.InjectFileMsg{
+			Filename: f.Filename,
+			MimeType: f.MIMEType,
+			Data:     f.Data,
+		})
+	}
+
 	return &reliantv1.Node{
 		Type: model.NodeTypeSaveMessage,
 		Args: &reliantv1.Node_SaveMessageNode{SaveMessageNode: args},

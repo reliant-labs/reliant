@@ -89,6 +89,23 @@ func ContentBlockToPart(ctx context.Context, chatID string, block *db.MessageCon
 			}
 		}
 
+	case reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_DOCUMENT:
+		if block.Content != nil {
+			attachment, err := LoadAttachment(ctx, chatID, *block.Content, repo)
+			if err != nil {
+				logging.Error("Failed to load document attachment for LLM context",
+					"attachment_id", *block.Content,
+					"chat_id", chatID,
+					"error", err)
+				return nil
+			}
+			return message.BinaryContent{
+				Path:     attachment.FileName,
+				MIMEType: attachment.MimeType,
+				Data:     attachment.Content,
+			}
+		}
+
 	case reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_FILE_REFERENCE:
 		// File reference: read file content and return as text
 		if block.Content != nil {

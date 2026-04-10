@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/daemon"
+	"github.com/reliant-labs/reliant/internal/filepreview"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
@@ -163,15 +164,26 @@ func (v *viewTool) Execute(rctx *rctx.ToolContext, params ViewParams) (ToolRespo
 		params.Limit = DefaultReadLimit
 	}
 
+	// Convert to relative path for display (used in error messages below)
+	displayPath := filePath
+	if relPath, err := filepath.Rel(workingDir, filePath); err == nil {
+		displayPath = relPath
+	}
+
 	// Check if it's an image file
 	isImage, imageType := isImageFile(filePath)
 	if isImage {
-		// Convert to relative path for error message
-		displayPath := filePath
-		if relPath, err := filepath.Rel(workingDir, filePath); err == nil {
-			displayPath = relPath
-		}
 		return NewTextErrorResponse(fmt.Sprintf("Image file detected (%s): %s\nImage viewing not yet implemented.", imageType, displayPath)), nil
+	}
+
+	// Check if it's a PDF
+	if strings.ToLower(filepath.Ext(filePath)) == ".pdf" {
+		return NewTextErrorResponse(fmt.Sprintf("PDF file detected: %s\nTo read PDFs, attach the file as an attachment rather than using the View tool.", displayPath)), nil
+	}
+
+	// Check for other known binary extensions
+	if filepreview.IsBinaryExtension(filepath.Ext(filePath)) {
+		return NewTextErrorResponse(fmt.Sprintf("Binary file detected: %s\nThis file cannot be displayed as text.", displayPath)), nil
 	}
 
 	// Check for potentially problematic files (minified files, etc.)
@@ -187,6 +199,11 @@ func (v *viewTool) Execute(rctx *rctx.ToolContext, params ViewParams) (ToolRespo
 	})
 	if err != nil {
 		return ToolResponse{}, fmt.Errorf("error reading file: %w", err)
+	}
+
+	// Runtime binary content check for files without recognized binary extensions
+	if filepreview.HasBinaryContent([]byte(fc.Content)) {
+		return NewTextErrorResponse(fmt.Sprintf("Binary file detected: %s\nThis file cannot be displayed as text.", displayPath)), nil
 	}
 
 	// Truncate long lines in the returned content

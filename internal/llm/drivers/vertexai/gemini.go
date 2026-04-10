@@ -178,8 +178,11 @@ func (c *VertexAIClient) convertMessagesToGemini(messages []message.Message) []*
 		case message.User:
 			var parts []*genai.Part
 
-			if textContent := msg.Content().String(); textContent != "" {
-				parts = append(parts, &genai.Part{Text: textContent})
+			for _, textContent := range msg.TextContents() {
+				if textContent.Text == "" {
+					continue
+				}
+				parts = append(parts, &genai.Part{Text: textContent.Text})
 			}
 
 			// Add binary content (images, etc.)
@@ -237,16 +240,25 @@ func (c *VertexAIClient) convertMessagesToGemini(messages []message.Message) []*
 					response = map[string]any{"result": result.Content}
 				}
 
-				contents = append(contents, &genai.Content{
-					Role: string(genai.RoleUser),
-					Parts: []*genai.Part{
-						{
-							FunctionResponse: &genai.FunctionResponse{
-								Name:     result.ToolCallID,
-								Response: response,
-							},
+				resultParts := []*genai.Part{
+					{
+						FunctionResponse: &genai.FunctionResponse{
+							Name:     result.Name,
+							Response: response,
 						},
 					},
+				}
+				for _, bp := range result.BinaryParts {
+					resultParts = append(resultParts, &genai.Part{
+						InlineData: &genai.Blob{
+							MIMEType: bp.MIMEType,
+							Data:     bp.Data,
+						},
+					})
+				}
+				contents = append(contents, &genai.Content{
+					Role:  string(genai.RoleUser),
+					Parts: resultParts,
 				})
 			}
 		}

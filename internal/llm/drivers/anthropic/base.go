@@ -3,6 +3,7 @@ package anthropic
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -110,8 +111,15 @@ func (b *baseClient) convertMessages(messages []message.Message) (anthropicMessa
 			}
 
 			for _, binaryContent := range msg.BinaryContent() {
-				base64Image := binaryContent.String(Family)
-				contentBlocks = append(contentBlocks, anthropic.NewImageBlockBase64(binaryContent.MIMEType, base64Image))
+				if binaryContent.MIMEType == "application/pdf" {
+					base64Data := binaryContent.String(Family)
+					contentBlocks = append(contentBlocks, anthropic.NewDocumentBlock(anthropic.Base64PDFSourceParam{
+						Data: base64Data,
+					}))
+				} else {
+					base64Image := binaryContent.String(Family)
+					contentBlocks = append(contentBlocks, anthropic.NewImageBlockBase64(binaryContent.MIMEType, base64Image))
+				}
 			}
 
 			allMessages = append(allMessages, msgBlocks{
@@ -170,7 +178,41 @@ func (b *baseClient) convertMessages(messages []message.Message) (anthropicMessa
 		case message.Tool:
 			results := make([]anthropic.ContentBlockParamUnion, len(msg.ToolResults()))
 			for i, toolResult := range msg.ToolResults() {
-				results[i] = anthropic.NewToolResultBlock(toolResult.ToolCallID, toolResult.Content, toolResult.IsError)
+				if len(toolResult.BinaryParts) == 0 {
+					results[i] = anthropic.NewToolResultBlock(toolResult.ToolCallID, toolResult.Content, toolResult.IsError)
+				} else {
+					var blocks []anthropic.ToolResultBlockParamContentUnion
+					if toolResult.Content != "" {
+						var textBlock anthropic.TextBlockParam
+						textBlock.Text = toolResult.Content
+						blocks = append(blocks, anthropic.ToolResultBlockParamContentUnion{OfText: &textBlock})
+					}
+					for _, bp := range toolResult.BinaryParts {
+						base64Data := base64.StdEncoding.EncodeToString(bp.Data)
+						if bp.MIMEType == "application/pdf" {
+							var docBlock anthropic.DocumentBlockParam
+							docBlock.Source.OfBase64 = &anthropic.Base64PDFSourceParam{Data: base64Data}
+							blocks = append(blocks, anthropic.ToolResultBlockParamContentUnion{OfDocument: &docBlock})
+						} else {
+							imgBlock := anthropic.ImageBlockParam{
+								Source: anthropic.ImageBlockParamSourceUnion{
+									OfBase64: &anthropic.Base64ImageSourceParam{
+										Data:      base64Data,
+										MediaType: anthropic.Base64ImageSourceMediaType(bp.MIMEType),
+									},
+								},
+							}
+							blocks = append(blocks, anthropic.ToolResultBlockParamContentUnion{OfImage: &imgBlock})
+						}
+					}
+					results[i] = anthropic.ContentBlockParamUnion{
+						OfToolResult: &anthropic.ToolResultBlockParam{
+							ToolUseID: toolResult.ToolCallID,
+							IsError:   anthropic.Bool(toolResult.IsError),
+							Content:   blocks,
+						},
+					}
+				}
 			}
 
 			allMessages = append(allMessages, msgBlocks{

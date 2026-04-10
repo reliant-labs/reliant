@@ -159,3 +159,103 @@ func TestViewToolLimitEdgeCases(t *testing.T) {
 		assert.False(t, hasMoreMsg, "Should not show truncation message when reading to end of file. Output: %s", output)
 	})
 }
+
+func newViewTestCtx(t *testing.T, dir string) *rctx.ToolContext {
+	t.Helper()
+	worktree := &rctx.WorktreeInfo{ID: "test", Path: dir}
+	return rctx.NewToolContext(context.Background(), "test-chat", "0", nil, worktree).WithDaemon(daemon.NewLocalClient())
+}
+
+func TestViewBinaryAndPDFDetection(t *testing.T) {
+	tempDir := t.TempDir()
+	tool := &viewTool{}
+	ctx := newViewTestCtx(t, tempDir)
+
+	writeFile := func(name string, content []byte) string {
+		path := filepath.Join(tempDir, name)
+		require.NoError(t, os.WriteFile(path, content, 0644))
+		return path
+	}
+
+	dummyContent := []byte("dummy content")
+	binaryContent := append([]byte("prefix"), append([]byte{0x00}, []byte("suffix")...)...)
+
+	t.Run("PDF extension detected", func(t *testing.T) {
+		path := writeFile("foo.pdf", dummyContent)
+		resp, err := tool.Execute(ctx, ViewParams{FilePath: path})
+		require.NoError(t, err)
+		assert.True(t, resp.IsError, "expected IsError=true for PDF")
+		assert.Contains(t, resp.Content, "PDF file detected")
+		assert.Contains(t, resp.Content, "attachment", "should mention attachment suggestion")
+	})
+
+	t.Run("ZIP binary extension detected", func(t *testing.T) {
+		path := writeFile("archive.zip", dummyContent)
+		resp, err := tool.Execute(ctx, ViewParams{FilePath: path})
+		require.NoError(t, err)
+		assert.True(t, resp.IsError, "expected IsError=true for zip")
+		assert.Contains(t, resp.Content, "Binary file detected")
+		assert.Contains(t, resp.Content, "cannot be displayed as text")
+	})
+
+	t.Run("EXE binary extension detected", func(t *testing.T) {
+		path := writeFile("program.exe", dummyContent)
+		resp, err := tool.Execute(ctx, ViewParams{FilePath: path})
+		require.NoError(t, err)
+		assert.True(t, resp.IsError, "expected IsError=true for exe")
+		assert.Contains(t, resp.Content, "Binary file detected")
+		assert.Contains(t, resp.Content, "cannot be displayed as text")
+	})
+
+	t.Run("DB binary extension detected", func(t *testing.T) {
+		path := writeFile("data.db", dummyContent)
+		resp, err := tool.Execute(ctx, ViewParams{FilePath: path})
+		require.NoError(t, err)
+		assert.True(t, resp.IsError, "expected IsError=true for .db")
+		assert.Contains(t, resp.Content, "Binary file detected")
+		assert.Contains(t, resp.Content, "cannot be displayed as text")
+	})
+
+	t.Run("XLSX binary extension detected", func(t *testing.T) {
+		path := writeFile("spreadsheet.xlsx", dummyContent)
+		resp, err := tool.Execute(ctx, ViewParams{FilePath: path})
+		require.NoError(t, err)
+		assert.True(t, resp.IsError, "expected IsError=true for xlsx")
+		assert.Contains(t, resp.Content, "Binary file detected")
+		assert.Contains(t, resp.Content, "cannot be displayed as text")
+	})
+
+	t.Run("PNG image extension detected", func(t *testing.T) {
+		path := writeFile("image.png", dummyContent)
+		resp, err := tool.Execute(ctx, ViewParams{FilePath: path})
+		require.NoError(t, err)
+		assert.True(t, resp.IsError, "expected IsError=true for png")
+		assert.Contains(t, resp.Content, "Image file detected")
+	})
+
+	t.Run("TXT with binary content detected at runtime", func(t *testing.T) {
+		path := writeFile("notreally.txt", binaryContent)
+		resp, err := tool.Execute(ctx, ViewParams{FilePath: path})
+		require.NoError(t, err)
+		assert.True(t, resp.IsError, "expected IsError=true for binary .txt")
+		assert.Contains(t, resp.Content, "Binary file detected")
+		assert.Contains(t, resp.Content, "cannot be displayed as text")
+	})
+
+	t.Run("Normal TXT file reads successfully", func(t *testing.T) {
+		path := writeFile("readme.txt", []byte("hello\nworld\n"))
+		resp, err := tool.Execute(ctx, ViewParams{FilePath: path})
+		require.NoError(t, err)
+		assert.False(t, resp.IsError, "expected IsError=false for plain text")
+		assert.Contains(t, resp.Content, "hello")
+		assert.Contains(t, resp.Content, "world")
+	})
+
+	t.Run("Normal Go file reads successfully", func(t *testing.T) {
+		path := writeFile("main.go", []byte("package main\n\nfunc main() {}\n"))
+		resp, err := tool.Execute(ctx, ViewParams{FilePath: path})
+		require.NoError(t, err)
+		assert.False(t, resp.IsError, "expected IsError=false for .go file")
+		assert.Contains(t, resp.Content, "package main")
+	})
+}

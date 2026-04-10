@@ -1746,8 +1746,8 @@ func validateProtoNodeTemplatesWithCompilation(node *reliantv1.Node, basePath []
 			if model.CelStringIsSet(inject.GetContent()) {
 				validateCELTemplateStringWithCompilation(celString(inject.GetContent()), append(basePath, "thread", "inject", "content"), env, schemaTypeChecker, nodeIDs, typeCtx, result)
 			}
-			if model.CelStringIsSet(inject.GetAttachments()) {
-				validateCELTemplateStringWithCompilation(celString(inject.GetAttachments()), append(basePath, "thread", "inject", "attachments"), env, schemaTypeChecker, nodeIDs, typeCtx, result)
+			if model.CelStringIsSet(inject.GetLegacyAttachments()) {
+				validateCELTemplateStringWithCompilation(celString(inject.GetLegacyAttachments()), append(basePath, "thread", "inject", "attachments"), env, schemaTypeChecker, nodeIDs, typeCtx, result)
 			}
 		}
 	}

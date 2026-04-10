@@ -143,6 +143,25 @@ func (o *OpenaiClient) ConvertMessages(prompts []string, messages []message.Mess
 				openaiMessages = append(openaiMessages,
 					openai.ToolMessage(result.Content, result.ToolCallID),
 				)
+				if len(result.BinaryParts) > 0 {
+					// OpenAI doesn't support images in tool messages — inject as follow-up user message
+					var contentParts []openai.ChatCompletionContentPartUnionParam
+					contentParts = append(contentParts, openai.ChatCompletionContentPartUnionParam{
+						OfText: &openai.ChatCompletionContentPartTextParam{Text: "Tool result attachments:"},
+					})
+					for _, bp := range result.BinaryParts {
+						if isImageMimeType(bp.MIMEType) {
+							imageURL := openai.ChatCompletionContentPartImageImageURLParam{
+								URL: bp.String(Family),
+							}
+							contentParts = append(contentParts, openai.ChatCompletionContentPartUnionParam{
+								OfImageURL: &openai.ChatCompletionContentPartImageParam{ImageURL: imageURL},
+							})
+						}
+						// Skip PDFs — OpenAI doesn't support them in any message type
+					}
+					openaiMessages = append(openaiMessages, openai.UserMessage(contentParts))
+				}
 			}
 		}
 	}

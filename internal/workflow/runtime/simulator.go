@@ -1034,11 +1034,19 @@ func (s *WorkflowSimulator) executeLoopIteration(
 // executeNestedLoop handles a loop node found inside another loop.
 // The qualifiedPrefix is the dot-separated path to this nested loop (e.g., "outer_loop.inner_loop").
 func (s *WorkflowSimulator) executeNestedLoop(qualifiedPrefix string, protoNode *reliantv1.Node, mocker StepMocker) (map[string]interface{}, error) {
+	la := model.GetLoopArgs(protoNode)
+
+	// Parallel loops are always treated as black boxes in simulation.
+	// The mocker provides the complete output (including _iterations, _results, etc.).
+	if model.CelBoolValue(la.GetParallel()) {
+		mockOutput := mocker(qualifiedPrefix, s.assembleSubWorkflowInputs(qualifiedPrefix, protoNode))
+		return mockOutput, nil
+	}
+
 	if s.invocationMode(qualifiedPrefix, protoNode) != core.InvocationModeInline {
 		return s.executeNestedRefLoop(qualifiedPrefix, protoNode, mocker)
 	}
 
-	la := model.GetLoopArgs(protoNode)
 	inlineWf := la.GetInline()
 	if inlineWf == nil || len(inlineWf.GetNodes()) == 0 {
 		return s.executeNestedRefLoop(qualifiedPrefix, protoNode, mocker)

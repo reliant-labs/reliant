@@ -38,4 +38,16 @@ type SaveMessageInput struct {
 
 	// Extended thinking support - contains both content and signature
 	Thinking ThinkingOutput `json:"thinking,omitempty" reliant:"desc=Extended thinking content and signature (for multi-turn thinking preservation)"`
+
+	// InjectFiles carries binary file data for inject file attachments.
+	// These are loaded eagerly at inject construction time and stored as DB attachments
+	// at save time, then referenced as IMAGE or DOCUMENT content blocks.
+	InjectFiles []InjectFileData `json:"inject_files,omitempty" reliant:"-"`
+}
+
+// InjectFileData holds binary file data for injection.
+type InjectFileData struct {
+	Filename string `json:"filename"`
+	MIMEType string `json:"mime_type"`
+	Data     []byte `json:"data"`
 }
