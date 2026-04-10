@@ -207,6 +207,13 @@ function extractProviderReconnectSummary(lower: string): string | null {
     return 'Claude session expired. Please reconnect Claude. Workflow paused — send a message to retry.';
   }
   if (
+    lower.includes('missing_scope') ||
+    lower.includes('api.responses.write') ||
+    lower.includes('codex token missing api.responses.write')
+  ) {
+    return 'Codex login is missing required API access. Disconnect Codex in Settings, then use Login with Codex again. Workflow paused — send a message to retry.';
+  }
+  if (
     lower.includes('codex session expired') ||
     lower.includes('please reconnect codex') ||
     lower.includes('codex authentication required')
