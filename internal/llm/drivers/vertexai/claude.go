@@ -239,10 +239,14 @@ func (c *VertexAIClient) convertMessagesToClaude(messages []message.Message) []c
 				})
 			}
 
-			// Add binary content (images)
+			// Add binary content (images and documents)
 			for _, binaryContent := range msg.BinaryContent() {
+				blockType := "image"
+				if binaryContent.MIMEType == "application/pdf" {
+					blockType = "document"
+				}
 				content = append(content, claudeContentBlock{
-					Type: "image",
+					Type: blockType,
 					Source: &claudeImageSource{
 						Type:      "base64",
 						MediaType: binaryContent.MIMEType,

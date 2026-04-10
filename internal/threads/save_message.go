@@ -375,6 +375,8 @@ func (s *Service) createUserContentBlocks(ctx context.Context, messageID string,
 			blockType = reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE
 		case string(attachment.TypeFileReference):
 			blockType = reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_FILE_REFERENCE
+		case "document":
+			blockType = reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_DOCUMENT
 		default:
 			return fmt.Errorf("invalid attachment type %q for attachment %s", att.AttachmentType, attachmentID)
 		}

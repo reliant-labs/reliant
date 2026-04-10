@@ -63,6 +63,7 @@ enum ContentBlockType {
   CONTENT_BLOCK_TYPE_IMAGE = 4;
   CONTENT_BLOCK_TYPE_THINKING = 5;
   CONTENT_BLOCK_TYPE_FILE_REFERENCE = 6;
+  CONTENT_BLOCK_TYPE_DOCUMENT = 7;  // Binary document (PDF) - sent natively to supporting LLMs
 }
 
 // ChatActivity represents the computed activity state of a chat.

@@ -191,8 +191,17 @@ func (g *GeminiClient) convertMessages(messages []message.Message) []*genai.Cont
 				}
 
 				// Gemini requires tool results to use "user" role, not "function"
+				parts := []*genai.Part{part}
+				for _, bp := range result.BinaryParts {
+					parts = append(parts, &genai.Part{
+						InlineData: &genai.Blob{
+							MIMEType: bp.MIMEType,
+							Data:     bp.Data,
+						},
+					})
+				}
 				history = append(history, &genai.Content{
-					Parts: []*genai.Part{part},
+					Parts: parts,
 					Role:  "user",
 				})
 			}

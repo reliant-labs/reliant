@@ -141,8 +141,28 @@ message InjectConfig {
   CelString role = 1 [(reliant) = { description: "Message role for injected message" enum_values: "user|system|assistant" }];
   // Content is the message text. Required. Supports CEL expressions.
   CelString content = 2 [(reliant) = { description: "Message content to inject" }];
-  // Attachments is a CEL expression for attachment IDs to include.
-  CelString attachments = 3 [(reliant) = { description: "Attachment IDs to include" hidden: true }];
+  // Deprecated: use repeated attachments field (5) instead.
+  CelString legacy_attachments = 3 [deprecated = true, (reliant) = { hidden: true }];
+  reserved 4; // was: repeated CelString files (never shipped)
+  // Attachments to include in the injected message.
+  repeated InjectAttachment attachments = 5 [(reliant) = { description: "Attachments to include" }];
+}
+
+// InjectAttachment specifies a single attachment source for inject.
+// Exactly one of id, path, or data must be set.
+message InjectAttachment {
+  oneof source {
+    // id references an existing attachment in the database.
+    string id = 1;
+    // path is a file path to load from disk.
+    string path = 2;
+    // data is raw binary content (for programmatic use).
+    bytes data = 3;
+  }
+  // filename is the original filename (required for data, optional for path).
+  string filename = 4;
+  // mime_type overrides auto-detection from filename.
+  string mime_type = 5;
 }
 
 // ProjectConfig configures the working directory for a sub-workflow.
@@ -394,6 +414,14 @@ message SaveMessageNodeArgs {
   ThinkingOutput resolved_thinking = 25 [(reliant) = { hidden: true }];
   string resolved_display_style = 26 [(reliant) = { hidden: true }];
   int32 token_count = 27 [(reliant) = { hidden: true }];
+  repeated InjectFileMsg resolved_inject_files = 28 [(reliant) = { hidden: true }];
+}
+
+// InjectFileMsg carries binary file data for inject file attachments.
+message InjectFileMsg {
+  string filename = 1;
+  string mime_type = 2;
+  bytes data = 3;
 }
 
 // CreateWorktreeArgs configures a create_worktree node — creates a git worktree.
