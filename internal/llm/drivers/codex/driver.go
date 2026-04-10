@@ -471,7 +471,7 @@ func (c *CodexClient) SendMessages(ctx context.Context, prompts []string, messag
 	var rawResp *http.Response
 	resp, err := c.client.Responses.New(ctx, params, option.WithResponseInto(&rawResp))
 	if err != nil {
-		return nil, fmt.Errorf("codex API request failed: %w", err)
+		return nil, fmt.Errorf("codex API request failed: %w", AugmentAPIError(err))
 	}
 	if resp.Error.Message != "" {
 		return nil, fmt.Errorf("codex API error: %s", resp.Error.Message)
@@ -629,6 +629,7 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 		}
 
 		if err := stream.Err(); err != nil {
+			err = AugmentAPIError(err)
 			logging.Error("[Codex] Stream error", "error", err)
 			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: err}
 			return

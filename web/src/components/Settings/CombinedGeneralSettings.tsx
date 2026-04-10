@@ -171,6 +171,12 @@ const parseErrorMessage = (errorText: string, provider: string): string => {
     if (lowerError.includes("not authenticated")) {
       return "Codex is not connected. Please use Login with Codex.";
     }
+    if (
+      lowerError.includes("missing_scope") ||
+      lowerError.includes("api.responses.write")
+    ) {
+      return "Codex needs updated API permissions. Disconnect and use Login with Codex again.";
+    }
     if (lowerError.includes("expired")) {
       return "Codex session expired. Please reconnect with Login with Codex.";
     }
