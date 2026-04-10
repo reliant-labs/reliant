@@ -899,3 +899,265 @@ func TestSaveMessageTransactionAtomicity(t *testing.T) {
 		// If transaction failed, neither would exist
 	})
 }
+
+// ============================================================================
+// INJECT FILES INTEGRATION TESTS
+// ============================================================================
+
+// buildInjectFileInput constructs an ActivityInput with ResolvedInjectFiles.
+// The test helper SaveMessageInput doesn't support InjectFiles, so we build
+// the proto Node directly.
+func buildInjectFileInput(chatID, thread, role, content string, injectFiles []*reliantv1.InjectFileMsg, attachments []string) ActivityInput {
+	return ActivityInput{
+		Runtime: RuntimeContext{ChatID: chatID, Thread: thread},
+		Node: &reliantv1.Node{
+			Type: "save_message",
+			Args: &reliantv1.Node_SaveMessageNode{
+				SaveMessageNode: &reliantv1.SaveMessageNodeArgs{
+					ResolvedRole:        role,
+					ResolvedContent:     content,
+					ResolvedInjectFiles: injectFiles,
+					ResolvedAttachments: attachments,
+				},
+			},
+		},
+	}
+}
+
+func TestSaveMessageWithInjectImageFile(t *testing.T) {
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+
+	ctx := context.Background()
+
+	userID := uuid.New().String()
+	projectID := uuid.New().String()
+	chatID := uuid.New().String()
+
+	h.CreateTestProject(ctx, projectID, userID)
+	h.CreateTestChat(ctx, chatID, projectID, userID)
+
+	activity := NewSaveMessageActivity(h.Repo())
+
+	pngData := []byte("fake-png-binary-data")
+	input := buildInjectFileInput(chatID, "0", "user", "Check this image", []*reliantv1.InjectFileMsg{
+		{Filename: "screenshot.png", MimeType: "image/png", Data: pngData},
+	}, nil)
+
+	t.Run("Creates DB attachment with type image", func(t *testing.T) {
+		var output SaveMessageOutput
+		err := h.ExecuteActivity(activity.Execute, input, &output)
+		require.NoError(t, err)
+		assert.NotEmpty(t, output.MessageId)
+
+		// Verify content blocks: text at 0, image at 1
+		blocks, err := h.Repo().ListContentBlocks(ctx, output.MessageId)
+		require.NoError(t, err)
+		require.Len(t, blocks, 2, "Should have text block + image block")
+
+		textBlock := blocks[0]
+		assert.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TEXT, textBlock.BlockType)
+		assert.Equal(t, 0, textBlock.Position)
+		require.NotNil(t, textBlock.Content)
+		assert.Equal(t, "Check this image", *textBlock.Content)
+
+		imgBlock := blocks[1]
+		assert.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE, imgBlock.BlockType)
+		assert.Equal(t, 1, imgBlock.Position)
+
+		// The content of an image block is the attachment ID
+		require.NotNil(t, imgBlock.Content)
+		attachmentID := *imgBlock.Content
+		assert.NotEmpty(t, attachmentID)
+
+		// Verify the attachment in the DB
+		att, err := h.Repo().GetAttachment(ctx, attachmentID)
+		require.NoError(t, err)
+		assert.Equal(t, "screenshot.png", att.Filename)
+		assert.Equal(t, "image/png", att.MimeType)
+		assert.Equal(t, "image", att.AttachmentType)
+		assert.Equal(t, pngData, att.Content)
+		assert.Equal(t, int64(len(pngData)), att.Size)
+	})
+}
+
+func TestSaveMessageWithInjectDocumentFile(t *testing.T) {
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+
+	ctx := context.Background()
+
+	userID := uuid.New().String()
+	projectID := uuid.New().String()
+	chatID := uuid.New().String()
+
+	h.CreateTestProject(ctx, projectID, userID)
+	h.CreateTestChat(ctx, chatID, projectID, userID)
+
+	activity := NewSaveMessageActivity(h.Repo())
+
+	pdfData := []byte("%PDF-1.4 fake pdf content")
+	input := buildInjectFileInput(chatID, "0", "user", "Review this PDF", []*reliantv1.InjectFileMsg{
+		{Filename: "report.pdf", MimeType: "application/pdf", Data: pdfData},
+	}, nil)
+
+	t.Run("Creates DB attachment with type document", func(t *testing.T) {
+		var output SaveMessageOutput
+		err := h.ExecuteActivity(activity.Execute, input, &output)
+		require.NoError(t, err)
+		assert.NotEmpty(t, output.MessageId)
+
+		// Verify content blocks: text at 0, document at 1
+		blocks, err := h.Repo().ListContentBlocks(ctx, output.MessageId)
+		require.NoError(t, err)
+		require.Len(t, blocks, 2, "Should have text block + document block")
+
+		textBlock := blocks[0]
+		assert.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TEXT, textBlock.BlockType)
+		assert.Equal(t, 0, textBlock.Position)
+
+		docBlock := blocks[1]
+		assert.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_DOCUMENT, docBlock.BlockType)
+		assert.Equal(t, 1, docBlock.Position)
+
+		// The content of a document block is the attachment ID
+		require.NotNil(t, docBlock.Content)
+		attachmentID := *docBlock.Content
+		assert.NotEmpty(t, attachmentID)
+
+		// Verify the attachment in the DB
+		att, err := h.Repo().GetAttachment(ctx, attachmentID)
+		require.NoError(t, err)
+		assert.Equal(t, "report.pdf", att.Filename)
+		assert.Equal(t, "application/pdf", att.MimeType)
+		assert.Equal(t, "document", att.AttachmentType)
+		assert.Equal(t, pdfData, att.Content)
+		assert.Equal(t, int64(len(pdfData)), att.Size)
+	})
+}
+
+func TestSaveMessageWithInjectFilesAndText(t *testing.T) {
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+
+	ctx := context.Background()
+
+	userID := uuid.New().String()
+	projectID := uuid.New().String()
+	chatID := uuid.New().String()
+
+	h.CreateTestProject(ctx, projectID, userID)
+	h.CreateTestChat(ctx, chatID, projectID, userID)
+
+	activity := NewSaveMessageActivity(h.Repo())
+
+	input := buildInjectFileInput(chatID, "0", "user", "Here are two files", []*reliantv1.InjectFileMsg{
+		{Filename: "photo.jpg", MimeType: "image/jpeg", Data: []byte("jpeg-data")},
+		{Filename: "spec.pdf", MimeType: "application/pdf", Data: []byte("pdf-data")},
+	}, nil)
+
+	t.Run("Text block at position 0 then attachment blocks", func(t *testing.T) {
+		var output SaveMessageOutput
+		err := h.ExecuteActivity(activity.Execute, input, &output)
+		require.NoError(t, err)
+		assert.NotEmpty(t, output.MessageId)
+
+		blocks, err := h.Repo().ListContentBlocks(ctx, output.MessageId)
+		require.NoError(t, err)
+		require.Len(t, blocks, 3, "Should have 1 text + 2 attachment blocks")
+
+		// Position 0: text
+		assert.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TEXT, blocks[0].BlockType)
+		assert.Equal(t, 0, blocks[0].Position)
+		require.NotNil(t, blocks[0].Content)
+		assert.Equal(t, "Here are two files", *blocks[0].Content)
+
+		// Position 1: image (photo.jpg)
+		assert.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE, blocks[1].BlockType)
+		assert.Equal(t, 1, blocks[1].Position)
+		require.NotNil(t, blocks[1].Content)
+		att1, err := h.Repo().GetAttachment(ctx, *blocks[1].Content)
+		require.NoError(t, err)
+		assert.Equal(t, "photo.jpg", att1.Filename)
+		assert.Equal(t, "image", att1.AttachmentType)
+
+		// Position 2: document (spec.pdf)
+		assert.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_DOCUMENT, blocks[2].BlockType)
+		assert.Equal(t, 2, blocks[2].Position)
+		require.NotNil(t, blocks[2].Content)
+		att2, err := h.Repo().GetAttachment(ctx, *blocks[2].Content)
+		require.NoError(t, err)
+		assert.Equal(t, "spec.pdf", att2.Filename)
+		assert.Equal(t, "document", att2.AttachmentType)
+	})
+}
+
+func TestSaveMessageWithInjectFileMixed(t *testing.T) {
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+
+	ctx := context.Background()
+
+	userID := uuid.New().String()
+	projectID := uuid.New().String()
+	chatID := uuid.New().String()
+
+	h.CreateTestProject(ctx, projectID, userID)
+	h.CreateTestChat(ctx, chatID, projectID, userID)
+
+	activity := NewSaveMessageActivity(h.Repo())
+
+	// Pre-create a regular attachment (image) to use alongside inject files
+	regularAttID := uuid.New().String()
+	err := h.Repo().CreateAttachment(ctx, &db.Attachment{
+		ID:             regularAttID,
+		Filename:       "existing.png",
+		Size:           100,
+		MimeType:       "image/png",
+		AttachmentType: "image",
+		Content:        []byte("existing-image-data"),
+	})
+	require.NoError(t, err)
+
+	// Build input with text + regular attachment + inject file
+	input := buildInjectFileInput(chatID, "0", "user", "Mixed attachments", []*reliantv1.InjectFileMsg{
+		{Filename: "injected.png", MimeType: "image/png", Data: []byte("injected-png")},
+	}, []string{regularAttID})
+
+	t.Run("All content blocks created in correct order", func(t *testing.T) {
+		var output SaveMessageOutput
+		err := h.ExecuteActivity(activity.Execute, input, &output)
+		require.NoError(t, err)
+		assert.NotEmpty(t, output.MessageId)
+
+		blocks, err := h.Repo().ListContentBlocks(ctx, output.MessageId)
+		require.NoError(t, err)
+		require.Len(t, blocks, 3, "Should have 1 text + 1 regular attachment + 1 inject file")
+
+		// Position 0: text
+		assert.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TEXT, blocks[0].BlockType)
+		assert.Equal(t, 0, blocks[0].Position)
+		require.NotNil(t, blocks[0].Content)
+		assert.Equal(t, "Mixed attachments", *blocks[0].Content)
+
+		// Position 1: regular attachment (existing.png)
+		assert.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE, blocks[1].BlockType)
+		assert.Equal(t, 1, blocks[1].Position)
+		require.NotNil(t, blocks[1].Content)
+		assert.Equal(t, regularAttID, *blocks[1].Content, "Regular attachment should come first")
+
+		// Position 2: injected attachment (injected.png)
+		assert.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE, blocks[2].BlockType)
+		assert.Equal(t, 2, blocks[2].Position)
+		require.NotNil(t, blocks[2].Content)
+
+		// Verify the injected attachment was created in the DB
+		injectedAttID := *blocks[2].Content
+		assert.NotEqual(t, regularAttID, injectedAttID, "Injected file should get a new attachment ID")
+		att, err := h.Repo().GetAttachment(ctx, injectedAttID)
+		require.NoError(t, err)
+		assert.Equal(t, "injected.png", att.Filename)
+		assert.Equal(t, "image", att.AttachmentType)
+		assert.Equal(t, []byte("injected-png"), att.Content)
+	})
+}

@@ -927,10 +927,12 @@ func (e *InlineWorkflowExecutor) executeNestedWorkflow(
 		if model.NodeThreadMode(evalResult) != model.ThreadModeInherit {
 			var injectMsg *InjectMessageConfig
 			if ic := model.NodeInjectConfig(evalResult); ic != nil && model.CelStringValue(ic.GetContent()) != "" {
+				attIDs, attFiles := resolveInjectAttachments(ic, e.logger)
 				injectMsg = &InjectMessageConfig{
 					Role:        model.CelStringValue(ic.GetRole()),
 					Content:     model.CelStringValue(ic.GetContent()),
-					Attachments: model.ParseAttachments(model.CelStringValue(ic.GetAttachments())),
+					Attachments: attIDs,
+					Files:       attFiles,
 				}
 			}
 
@@ -976,12 +978,14 @@ func (e *InlineWorkflowExecutor) executeNestedWorkflow(
 					MaximumAttempts:    3,
 				},
 			})
+			attIDs, attFiles := resolveInjectAttachments(ic, e.logger)
 			flatInput := &types.SaveMessageInput{
 				ChatID:      e.chatID,
 				Thread:      childExecCtx.Thread,
 				Role:        model.CelStringValue(ic.GetRole()),
 				Content:     model.CelStringValue(ic.GetContent()),
-				Attachments: model.ParseAttachments(model.CelStringValue(ic.GetAttachments())),
+				Attachments: attIDs,
+				InjectFiles: injectFilesToData(attFiles),
 				WorkflowID:  e.workflowID,
 			}
 			rtx := types.RuntimeContext{

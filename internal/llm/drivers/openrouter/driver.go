@@ -226,12 +226,21 @@ func (c *Client) convertMessagesForGemini(prompts []string, messages []message.M
 					})
 				}
 				for _, binaryContent := range msg.BinaryContent() {
-					content = append(content, map[string]interface{}{
-						"type": "image_url",
-						"image_url": map[string]string{
-							"url": binaryContent.String("openrouter"),
-						},
-					})
+					if binaryContent.MIMEType == "application/pdf" {
+						content = append(content, map[string]interface{}{
+							"type": "image_url",
+							"image_url": map[string]string{
+								"url": binaryContent.String("openrouter"),
+							},
+						})
+					} else {
+						content = append(content, map[string]interface{}{
+							"type": "image_url",
+							"image_url": map[string]string{
+								"url": binaryContent.String("openrouter"),
+							},
+						})
+					}
 				}
 				userMsg["content"] = content
 			} else {
@@ -292,6 +301,24 @@ func (c *Client) convertMessagesForGemini(prompts []string, messages []message.M
 					"content":      toolResult.Content,
 				}
 				result = append(result, toolMsg)
+				if len(toolResult.BinaryParts) > 0 {
+					// OpenRouter Gemini uses OpenAI-format — inject binary parts as follow-up user message
+					content := []map[string]interface{}{
+						{"type": "text", "text": "Tool result attachments:"},
+					}
+					for _, bp := range toolResult.BinaryParts {
+						content = append(content, map[string]interface{}{
+							"type": "image_url",
+							"image_url": map[string]string{
+								"url": bp.String("openrouter"),
+							},
+						})
+					}
+					result = append(result, map[string]interface{}{
+						"role":    "user",
+						"content": content,
+					})
+				}
 			}
 		}
 	}
@@ -366,12 +393,21 @@ func (c *Client) convertMessagesWithCacheControl(prompts []string, messages []me
 					})
 				}
 				for _, binaryContent := range msg.BinaryContent() {
-					content = append(content, map[string]interface{}{
-						"type": "image_url",
-						"image_url": map[string]string{
-							"url": binaryContent.String("openrouter"),
-						},
-					})
+					if binaryContent.MIMEType == "application/pdf" {
+						content = append(content, map[string]interface{}{
+							"type": "image_url",
+							"image_url": map[string]string{
+								"url": binaryContent.String("openrouter"),
+							},
+						})
+					} else {
+						content = append(content, map[string]interface{}{
+							"type": "image_url",
+							"image_url": map[string]string{
+								"url": binaryContent.String("openrouter"),
+							},
+						})
+					}
 				}
 				userMsg["content"] = content
 			} else {
@@ -413,6 +449,24 @@ func (c *Client) convertMessagesWithCacheControl(prompts []string, messages []me
 					"content":      toolResult.Content,
 				}
 				result = append(result, toolMsg)
+				if len(toolResult.BinaryParts) > 0 {
+					// OpenAI-format tool messages don't support images — inject as follow-up user message
+					content := []map[string]interface{}{
+						{"type": "text", "text": "Tool result attachments:"},
+					}
+					for _, bp := range toolResult.BinaryParts {
+						content = append(content, map[string]interface{}{
+							"type": "image_url",
+							"image_url": map[string]string{
+								"url": bp.String("openrouter"),
+							},
+						})
+					}
+					result = append(result, map[string]interface{}{
+						"role":    "user",
+						"content": content,
+					})
+				}
 			}
 		}
 	}

@@ -232,9 +232,15 @@ func (c *CopilotClient) convertMessages(prompts []string, messages []message.Mes
 			content = append(content, openai.ChatCompletionContentPartUnionParam{OfText: &textBlock})
 
 			for _, binaryContent := range msg.BinaryContent() {
-				imageURL := openai.ChatCompletionContentPartImageImageURLParam{URL: binaryContent.String(Family)}
-				imageBlock := openai.ChatCompletionContentPartImageParam{ImageURL: imageURL}
-				content = append(content, openai.ChatCompletionContentPartUnionParam{OfImageURL: &imageBlock})
+				if isImageMimeType(binaryContent.MIMEType) {
+					imageURL := openai.ChatCompletionContentPartImageImageURLParam{URL: binaryContent.String(Family)}
+					imageBlock := openai.ChatCompletionContentPartImageParam{ImageURL: imageURL}
+					content = append(content, openai.ChatCompletionContentPartUnionParam{OfImageURL: &imageBlock})
+				} else {
+					description := fmt.Sprintf("[Attachment: %s (type: %s)]", filepath.Base(binaryContent.Path), binaryContent.MIMEType)
+					textBlock := openai.ChatCompletionContentPartTextParam{Text: description}
+					content = append(content, openai.ChatCompletionContentPartUnionParam{OfText: &textBlock})
+				}
 			}
 
 			copilotMessages = append(copilotMessages, openai.UserMessage(content))
@@ -659,4 +665,14 @@ func (c *CopilotClient) ValidateKey(ctx context.Context) error {
 
 	_, err := c.SendMessages(ctx, []string{}, testMessages, []toolsPkg.Tool{})
 	return err
+}
+
+// isImageMimeType checks if a MIME type represents an image
+func isImageMimeType(mimeType string) bool {
+	switch mimeType {
+	case "image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp", "image/svg+xml":
+		return true
+	default:
+		return false
+	}
 }

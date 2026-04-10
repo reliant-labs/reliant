@@ -3,8 +3,12 @@ package runtime
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/attachment"
+	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"go.temporal.io/sdk/log"
@@ -36,6 +40,14 @@ type InjectMessageConfig struct {
 	Role        string
 	Content     string
 	Attachments []string
+	Files       []InjectFile // Files loaded from disk to attach
+}
+
+// InjectFile holds binary file data loaded from disk for injection.
+type InjectFile struct {
+	Filename string // original filename for type detection
+	MIMEType string
+	Data     []byte
 }
 
 // initChildWorkflow creates the child workflow+thread and optionally saves an inject message.
@@ -110,6 +122,7 @@ func initChildWorkflow(opts ChildWorkflowInitOpts) error {
 			Role:        opts.InjectMessage.Role,
 			Content:     opts.InjectMessage.Content,
 			Attachments: opts.InjectMessage.Attachments,
+			InjectFiles: injectFilesToData(opts.InjectMessage.Files),
 			WorkflowID:  opts.ChildWorkflowID,
 		}
 		rtx := types.RuntimeContext{
@@ -136,4 +149,85 @@ func initChildWorkflow(opts ChildWorkflowInitOpts) error {
 	}
 
 	return nil
+}
+
+// resolveInjectAttachments processes an InjectConfig's attachments (and legacy_attachments)
+// into attachment IDs and loaded file data.
+//
+// Each InjectAttachment's oneof source is handled:
+//   - id: appended to the returned attachment ID list
+//   - path: file is read from disk, appended to the returned files list
+//   - data: raw bytes, appended to the returned files list (uses filename/mime_type from the message)
+//
+// The legacy_attachments field (deprecated field 3) is also parsed for backwards compatibility.
+func resolveInjectAttachments(ic *reliantv1.InjectConfig, logger log.Logger) (ids []string, files []InjectFile) {
+	// Handle legacy attachments field (deprecated CelString with comma-separated IDs)
+	if legacy := ic.GetLegacyAttachments(); legacy != nil {
+		ids = append(ids, model.ParseAttachments(model.CelStringValue(legacy))...)
+	}
+
+	for _, att := range ic.GetAttachments() {
+		switch s := att.GetSource().(type) {
+		case *reliantv1.InjectAttachment_Id:
+			if s.Id != "" {
+				ids = append(ids, s.Id)
+			}
+
+		case *reliantv1.InjectAttachment_Path:
+			filePath := s.Path
+			if filePath == "" {
+				continue
+			}
+			data, err := os.ReadFile(filePath)
+			if err != nil {
+				logger.Warn("Failed to read inject file", "path", filePath, "error", err)
+				continue
+			}
+			filename := att.GetFilename()
+			if filename == "" {
+				filename = filepath.Base(filePath)
+			}
+			mimeType := att.GetMimeType()
+			if mimeType == "" {
+				mimeType = attachment.GetMimeType(filepath.Ext(filename))
+			}
+			files = append(files, InjectFile{
+				Filename: filename,
+				MIMEType: mimeType,
+				Data:     data,
+			})
+
+		case *reliantv1.InjectAttachment_Data:
+			if len(s.Data) == 0 {
+				continue
+			}
+			filename := att.GetFilename()
+			mimeType := att.GetMimeType()
+			if mimeType == "" && filename != "" {
+				mimeType = attachment.GetMimeType(filepath.Ext(filename))
+			}
+			files = append(files, InjectFile{
+				Filename: filename,
+				MIMEType: mimeType,
+				Data:     s.Data,
+			})
+		}
+	}
+	return ids, files
+}
+
+// injectFilesToData converts InjectFile slice to types.InjectFileData slice.
+func injectFilesToData(files []InjectFile) []types.InjectFileData {
+	if len(files) == 0 {
+		return nil
+	}
+	result := make([]types.InjectFileData, len(files))
+	for i, f := range files {
+		result[i] = types.InjectFileData{
+			Filename: f.Filename,
+			MIMEType: f.MIMEType,
+			Data:     f.Data,
+		}
+	}
+	return result
 }

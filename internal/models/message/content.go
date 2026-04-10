@@ -123,11 +123,12 @@ func (ToolCall) isPart() {}
 //   - mcp.ToolResult: MCP wire format ([]ToolContent), converts to this
 //   - handlers.ToolResult: alias for this type
 type ToolResult struct {
-	ToolCallID string `json:"tool_call_id"`
-	Name       string `json:"name"`
-	Content    string `json:"content"`
-	Metadata   string `json:"metadata,omitempty"`
-	IsError    bool   `json:"is_error"`
+	ToolCallID  string          `json:"tool_call_id"`
+	Name        string          `json:"name"`
+	Content     string          `json:"content"`
+	Metadata    string          `json:"metadata,omitempty"`
+	IsError     bool            `json:"is_error"`
+	BinaryParts []BinaryContent `json:"binary_parts,omitempty"`
 }
 
 func (ToolResult) isPart() {}

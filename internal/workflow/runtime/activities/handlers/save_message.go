@@ -4,7 +4,11 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"time"
 
+	"github.com/google/uuid"
+	"github.com/reliant-labs/reliant/internal/attachment"
 	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -123,12 +127,23 @@ func (a *SaveMessageActivity) Execute(ctx context.Context, input ActivityInput) 
 		workflowID = &rtx.WorkflowID
 	}
 
+	// Create DB attachments for inject files and merge their IDs into the attachments list
+	attachments := protoArgs.GetResolvedAttachments()
+	for _, f := range protoArgs.GetResolvedInjectFiles() {
+		attID, err := a.createInjectFileAttachment(ctx, f)
+		if err != nil {
+			slog.Warn("Failed to create inject file attachment", "filename", f.GetFilename(), "error", err)
+			continue
+		}
+		attachments = append(attachments, attID)
+	}
+
 	result, err := a.threads.SaveMessage(ctx, threads.SaveMessageOpts{
 		ChatID:        rtx.ChatID,
 		Thread:        rtx.Thread,
 		Role:          parseMessageRole(protoArgs.GetResolvedRole()),
 		Content:       protoArgs.GetResolvedContent(),
-		Attachments:   protoArgs.GetResolvedAttachments(),
+		Attachments:   attachments,
 		ToolCalls:     convertToolCalls(resolvedToolCalls),
 		ToolResults:   convertToolResults(resolvedToolResults),
 		Thinking:      thinking,
@@ -178,4 +193,31 @@ func convertToolResults(results []message.ToolResult) []threads.ToolResult {
 		result[i] = threads.ToolResult(r)
 	}
 	return result
+}
+
+// createInjectFileAttachment creates a DB attachment from inject file data and returns the attachment ID.
+func (a *SaveMessageActivity) createInjectFileAttachment(ctx context.Context, f *reliantv1.InjectFileMsg) (string, error) {
+	attID := uuid.New().String()
+	now := time.Now()
+
+	attType := attachment.GetAttachmentType(f.GetFilename())
+	attTypeStr := string(attType)
+	if attType != attachment.TypeImage {
+		attTypeStr = "document"
+	}
+
+	att := &db.Attachment{
+		ID:             attID,
+		Filename:       f.GetFilename(),
+		Size:           int64(len(f.GetData())),
+		MimeType:       f.GetMimeType(),
+		AttachmentType: attTypeStr,
+		Content:        f.GetData(),
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+	if err := a.repo.CreateAttachment(ctx, att); err != nil {
+		return "", fmt.Errorf("failed to create attachment for %s: %w", f.GetFilename(), err)
+	}
+	return attID, nil
 }

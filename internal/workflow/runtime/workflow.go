@@ -994,10 +994,12 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				if model.NodeThreadMode(evalResult) != model.ThreadModeInherit {
 					var injectMsg *InjectMessageConfig
 					if ic := model.NodeInjectConfig(evalResult); ic != nil && model.CelStringValue(ic.GetContent()) != "" {
+						attIDs, attFiles := resolveInjectAttachments(ic, logger)
 						injectMsg = &InjectMessageConfig{
 							Role:        model.CelStringValue(ic.GetRole()),
 							Content:     model.CelStringValue(ic.GetContent()),
-							Attachments: model.ParseAttachments(model.CelStringValue(ic.GetAttachments())),
+							Attachments: attIDs,
+							Files:       attFiles,
 						}
 					}
 
@@ -1045,12 +1047,14 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 							MaximumAttempts:    3,
 						},
 					})
+					attIDs, attFiles := resolveInjectAttachments(ic, logger)
 					flatInput := &types.SaveMessageInput{
 						ChatID:      input.ChatID,
 						Thread:      childExecCtx.Thread,
 						Role:        model.CelStringValue(ic.GetRole()),
 						Content:     model.CelStringValue(ic.GetContent()),
-						Attachments: model.ParseAttachments(model.CelStringValue(ic.GetAttachments())),
+						Attachments: attIDs,
+						InjectFiles: injectFilesToData(attFiles),
 						WorkflowID:  workflowID,
 					}
 					rtx := types.RuntimeContext{
