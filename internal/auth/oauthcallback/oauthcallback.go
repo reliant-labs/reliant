@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net"
 	"net/http"
@@ -35,12 +36,14 @@ type CallbackConfig struct {
 	FixedPort    int // 0 = OS-assigned
 }
 
-// Result is the data returned from a successful OAuth callback.
+// Result is the data returned from an OAuth redirect to our callback.
 type Result struct {
-	Code        string `json:"code"`
-	State       string `json:"state"`
-	RedirectURI string `json:"redirect_uri"`
-	CallbackURL string `json:"callback_url"`
+	Code                  string `json:"code"`
+	State                 string `json:"state"`
+	RedirectURI           string `json:"redirect_uri"`
+	CallbackURL           string `json:"callback_url"`
+	OAuthError            string `json:"oauth_error,omitempty"`
+	OAuthErrorDescription string `json:"oauth_error_description,omitempty"`
 }
 
 type probeResponse struct {
@@ -131,7 +134,14 @@ func Run(ctx context.Context, authorizeURLTemplate string) (*Result, error) {
 		return nil, fmt.Errorf("failed to open browser: %w", err)
 	}
 
-	return waitForResult(ctx, server.resultCh)
+	result, err := waitForResult(ctx, server.resultCh)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateOAuthResult(result); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func newCallbackServer(authorizeURLTemplate string, cfg CallbackConfig) (*callbackServer, string, error) {
@@ -159,19 +169,42 @@ func (s *callbackServer) handler() http.Handler {
 }
 
 func (s *callbackServer) handleCallback(w http.ResponseWriter, r *http.Request) {
+	code := strings.TrimSpace(r.URL.Query().Get("code"))
+	oauthErr := strings.TrimSpace(r.URL.Query().Get("error"))
+	desc := strings.TrimSpace(r.URL.Query().Get("error_description"))
+
 	result := &Result{
-		Code:        r.URL.Query().Get("code"),
-		State:       r.URL.Query().Get("state"),
-		RedirectURI: s.redirectURI,
-		CallbackURL: r.URL.String(),
+		Code:                  code,
+		State:                 r.URL.Query().Get("state"),
+		RedirectURI:           s.redirectURI,
+		CallbackURL:           r.URL.String(),
+		OAuthError:            oauthErr,
+		OAuthErrorDescription: desc,
 	}
 	select {
 	case s.resultCh <- result:
 	default:
 	}
 
-	w.Header().Set("Content-Type", "text/html")
-	fmt.Fprint(w, `<!DOCTYPE html><html><body style="font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#1a1a2e;color:#e0e0e0"><div style="text-align:center"><h2>Authentication Successful</h2><p>You can close this tab and return to Reliant.</p></div></body></html>`)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if code != "" {
+		fmt.Fprint(w, `<!DOCTYPE html><html><body style="font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#1a1a2e;color:#e0e0e0"><div style="text-align:center"><h2>Authentication Successful</h2><p>You can close this tab and return to Reliant.</p></div></body></html>`)
+		return
+	}
+	const title = "Authentication failed"
+	var body string
+	switch {
+	case oauthErr != "" && desc != "":
+		body = html.EscapeString(oauthErr) + ": " + html.EscapeString(desc)
+	case oauthErr != "":
+		body = html.EscapeString(oauthErr)
+	case desc != "":
+		body = html.EscapeString(desc)
+	default:
+		body = html.EscapeString("No authorization code was returned. You can close this tab and try again.")
+	}
+	fmt.Fprintf(w, `<!DOCTYPE html><html><body style="font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#1a1a2e;color:#e0e0e0"><div style="text-align:center"><h2>%s</h2><p>%s</p></div></body></html>`,
+		html.EscapeString(title), body)
 }
 
 func (s *callbackServer) handleProbe(w http.ResponseWriter, _ *http.Request) {
@@ -207,6 +240,23 @@ func waitForResult(ctx context.Context, resultCh <-chan *Result) (*Result, error
 	case <-ctx.Done():
 		return nil, fmt.Errorf("OAuth callback cancelled: %w", ctx.Err())
 	}
+}
+
+func validateOAuthResult(res *Result) error {
+	if res == nil {
+		return fmt.Errorf("OAuth callback returned no result")
+	}
+	if strings.TrimSpace(res.Code) != "" {
+		return nil
+	}
+	if res.OAuthError != "" {
+		msg := res.OAuthError
+		if strings.TrimSpace(res.OAuthErrorDescription) != "" {
+			msg = msg + ": " + res.OAuthErrorDescription
+		}
+		return fmt.Errorf("OAuth authorization failed: %s", msg)
+	}
+	return fmt.Errorf("OAuth callback did not include an authorization code")
 }
 
 func tryReuseExistingListener(ctx context.Context, cfg CallbackConfig, redirectURI string, listenErr error) (*Result, error) {
@@ -255,6 +305,9 @@ func tryReuseExistingListener(ctx context.Context, cfg CallbackConfig, redirectU
 
 	var result Result
 	if err := json.NewDecoder(resultResp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	if err := validateOAuthResult(&result); err != nil {
 		return nil, err
 	}
 	return &result, nil

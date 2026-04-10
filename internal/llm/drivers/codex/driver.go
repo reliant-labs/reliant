@@ -29,12 +29,12 @@ const (
 	// CodexBaseURL is the base URL for the Codex API (SDK appends /responses)
 	CodexBaseURL = "https://chatgpt.com/backend-api/codex"
 
-	// CodexVersion is the version header to send
-	// Keep this aligned with minimum client versions required by Codex backend models.
-	CodexVersion = "0.100.0"
+	// CodexVersion is the version header to send.
+	// Keep aligned with a current @openai/codex (CLI) release; backend may gate on this.
+	CodexVersion = "0.118.0"
 
 	// CodexUserAgent is the user agent string
-	CodexUserAgent = "Codex Desktop/0.100.0 (Mac OS 26.2.0; arm64) unknown (Codex Desktop; 260205.0946)"
+	CodexUserAgent = "Codex Desktop/0.118.0 (Mac OS 26.2.0; arm64) unknown (Codex Desktop; 260409.0946)"
 )
 
 // CodexClient implements the LLM driver interface for the Codex API
