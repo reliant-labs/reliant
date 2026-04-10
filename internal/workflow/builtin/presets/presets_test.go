@@ -29,6 +29,7 @@ var ValidAgentParams = map[string]bool{
 	"model":                true,
 	"temperature":          true,
 	"thinking_level":       true,
+	"permission":           true,
 	"tools":                true,
 	"spawn_presets":        true,
 	"system_prompt":        true,

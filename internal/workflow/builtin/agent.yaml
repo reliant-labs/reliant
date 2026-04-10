@@ -32,6 +32,12 @@ inputs:
     default: medium
     description: Extended thinking level (support is model/provider dependent)
 
+  permission:
+    type: string
+    default: "orchestrator"
+    description: "Permission level controlling which tools can be loaded via load_tool (readonly, mutating, orchestrator)"
+    ui: hidden
+
   tools:
     type: tools
     default: ["tag:default"]
@@ -161,6 +167,7 @@ nodes:
             thinking_level: "{{inputs.thinking_level}}"
             system_prompt: >
               {{inputs.mode == 'plan' && inputs.planning_prompt != '' ? (inputs.system_prompt != '' ? inputs.system_prompt + "\n\n" : '') + inputs.planning_prompt : inputs.system_prompt}}
+            permission: "{{inputs.permission}}"
             # Plan mode gets plan-tagged tools only; spawn no-op when presets empty
             tool_filter: "{{inputs.mode == 'plan' ? ['tag:plan'] : inputs.tools + [spawn(workflow.name, inputs.spawn_presets)]}}"
 

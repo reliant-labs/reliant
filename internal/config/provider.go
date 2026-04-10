@@ -34,6 +34,7 @@ type StoredProjectConfigRecord struct {
 	ProjectWorkflowsJSON *string // JSON array of stored workflows
 	ProjectPresetsJSON   *string // JSON array of stored presets
 	ProjectScenariosJSON *string // JSON array of stored scenarios
+	ProjectSkillsJSON    *string // JSON array of stored skills (SKILL.md)
 }
 
 // StoredConfigStore reads stored project config records.
@@ -44,20 +45,6 @@ type StoredConfigStore interface {
 // StoredConfigProvider loads project config from persisted records.
 type StoredConfigProvider struct {
 	store StoredConfigStore
-}
-
-// skillsMergePresence tracks YAML field presence for cases where zero values are
-// semantically meaningful overrides across config layers.
-type skillsMergePresence struct {
-	Skills struct {
-		Retrieval struct {
-			ChunkOverlap *int `yaml:"chunkOverlap,omitempty"`
-		} `yaml:"retrieval,omitempty"`
-		AvailableSkills struct {
-			MaxCount       *int `yaml:"maxCount,omitempty"`
-			MaxPromptBytes *int `yaml:"maxPromptBytes,omitempty"`
-		} `yaml:"availableSkills,omitempty"`
-	} `yaml:"skills,omitempty"`
 }
 
 func NewStoredConfigProvider(store StoredConfigStore) *StoredConfigProvider {
@@ -117,23 +104,7 @@ func mergeStoredConfigRecord(record *StoredProjectConfigRecord) (*Config, error)
 			return nil, fmt.Errorf("failed to parse stored YAML config: %w", err)
 		}
 
-		presence := &skillsMergePresence{}
-		if err := yaml.Unmarshal([]byte(*blob), presence); err != nil {
-			return nil, fmt.Errorf("failed to parse stored YAML config presence: %w", err)
-		}
-
 		mergeConfigInto(cfg, partial)
-
-		// Presence-aware override: chunkOverlap=0 is valid and must override lower precedence.
-		if presence.Skills.Retrieval.ChunkOverlap != nil {
-			cfg.Skills.Retrieval.ChunkOverlap = *presence.Skills.Retrieval.ChunkOverlap
-		}
-		if presence.Skills.AvailableSkills.MaxCount != nil {
-			cfg.Skills.AvailableSkills.MaxCount = *presence.Skills.AvailableSkills.MaxCount
-		}
-		if presence.Skills.AvailableSkills.MaxPromptBytes != nil {
-			cfg.Skills.AvailableSkills.MaxPromptBytes = *presence.Skills.AvailableSkills.MaxPromptBytes
-		}
 	}
 
 	if record.GlobalMemoryMD != nil {
@@ -141,6 +112,12 @@ func mergeStoredConfigRecord(record *StoredProjectConfigRecord) (*Config, error)
 	}
 	if record.ProjectMemoryMD != nil {
 		cfg.ProjectMemoryMD = strings.TrimSpace(*record.ProjectMemoryMD)
+	}
+
+	if skills, err := ParseStoredSkills(record.ProjectSkillsJSON); err != nil {
+		return nil, err
+	} else {
+		cfg.Skills = skills
 	}
 
 	if record.MCPConfigs != nil && *record.MCPConfigs != "" {
@@ -190,40 +167,6 @@ func mergeConfigInto(dst *Config, src *Config) {
 	}
 	if src.Models != nil {
 		dst.Models = src.Models
-	}
-
-	if strings.TrimSpace(src.Skills.ActivationMode) != "" {
-		dst.Skills.ActivationMode = strings.TrimSpace(src.Skills.ActivationMode)
-	}
-	if strings.TrimSpace(src.Skills.IntegrationMode) != "" {
-		dst.Skills.IntegrationMode = strings.TrimSpace(src.Skills.IntegrationMode)
-	}
-	if src.Skills.SupportingFiles.MaxFiles > 0 {
-		dst.Skills.SupportingFiles.MaxFiles = src.Skills.SupportingFiles.MaxFiles
-	}
-	if src.Skills.SupportingFiles.MaxBytes > 0 {
-		dst.Skills.SupportingFiles.MaxBytes = src.Skills.SupportingFiles.MaxBytes
-	}
-	if src.Skills.Retrieval.MaxFiles > 0 {
-		dst.Skills.Retrieval.MaxFiles = src.Skills.Retrieval.MaxFiles
-	}
-	if src.Skills.Retrieval.MaxChunks > 0 {
-		dst.Skills.Retrieval.MaxChunks = src.Skills.Retrieval.MaxChunks
-	}
-	if src.Skills.Retrieval.ChunkBytes > 0 {
-		dst.Skills.Retrieval.ChunkBytes = src.Skills.Retrieval.ChunkBytes
-	}
-	if src.Skills.Retrieval.ChunkOverlap > 0 {
-		dst.Skills.Retrieval.ChunkOverlap = src.Skills.Retrieval.ChunkOverlap
-	}
-	if src.Skills.Retrieval.MaxPromptBytes > 0 {
-		dst.Skills.Retrieval.MaxPromptBytes = src.Skills.Retrieval.MaxPromptBytes
-	}
-	if src.Skills.AvailableSkills.MaxCount > 0 {
-		dst.Skills.AvailableSkills.MaxCount = src.Skills.AvailableSkills.MaxCount
-	}
-	if src.Skills.AvailableSkills.MaxPromptBytes > 0 {
-		dst.Skills.AvailableSkills.MaxPromptBytes = src.Skills.AvailableSkills.MaxPromptBytes
 	}
 
 	if len(src.MCPServers) > 0 {

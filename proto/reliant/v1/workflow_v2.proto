@@ -242,6 +242,9 @@ message CallLLMArgs {
   CelStringList tool_filter = 7 [(reliant) = { description: "Filter which tools are available. Use tool names, glob patterns (edit*), tags (tag:search), or !exclusions (!bash)." label: "Tool Filter" placeholder: "view, edit, tag:search" category: "Tools" }];
   // Field 8 removed (sub_agents — superseded by tool_filter + spawn() CEL).
   reserved 8;
+  // Permission level for the agent (readonly, mutating, orchestrator).
+  // Controls which tools can be loaded via load_tool.
+  CelString permission = 11 [(reliant) = { description: "Permission level controlling which tools can be loaded" hidden: true }];
   // ResponseTool defines a custom structured output tool.
   ResponseTool response_tool = 9;
   // Messages injects messages for ad-hoc LLM calls without a thread.

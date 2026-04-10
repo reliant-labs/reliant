@@ -26,6 +26,7 @@ import {
   GitBranch,
   Workflow,
   Activity,
+  BookMarked,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useChatStore } from "../../store/chatStore";
@@ -35,6 +36,7 @@ import { Tooltip } from "../ui/Tooltip";
 import { useThreads, ThreadTabs } from "./thread-views";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { isDev } from "../../lib/constants";
+import { useLoadedSkills } from "../../hooks/useLoadedSkills";
 import { openExternalLink } from "../../lib/open-link";
 import { BackgroundProcessStatus } from "../../gen/reliant/v1/common_pb";
 import { ContentBlockType, MessageRole } from "../../gen/reliant/v1/chat_pb";
@@ -520,6 +522,9 @@ export function ChatHeader({
                 </button>
               </Tooltip>
               
+              {/* Loaded skills indicator */}
+              <LoadedSkillsBadge chatId={chatId} />
+
               {/* Workflow status indicator - clickable button */}
               {workflowExecution && (
                 <Tooltip 
@@ -610,5 +615,23 @@ export function ChatHeader({
         </div>
       </div>
     </div>
+  );
+}
+
+/** Small badge showing loaded skills count with tooltip */
+function LoadedSkillsBadge({ chatId }: { chatId: string | null }) {
+  const skills = useLoadedSkills(chatId || undefined);
+  if (skills.length === 0) return null;
+
+  return (
+    <Tooltip
+      content={`Skills: ${skills.join(', ')}`}
+      placement="bottom"
+    >
+      <div className="inline-flex items-center gap-1.5 px-2 py-0.5 h-6 border border-border rounded hover:bg-accent hover:text-foreground transition-colors text-xs">
+        <BookMarked className="h-3.5 w-3.5 text-primary" />
+        <span className="tabular-nums">{skills.length}</span>
+      </div>
+    </Tooltip>
   );
 }

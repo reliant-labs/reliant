@@ -13,7 +13,6 @@ import { FeedbackSettings } from "./FeedbackSettings";
 import type { SettingsSection } from "./SettingsNavigation";
 import { useEffect, useState } from "react";
 import { PromptsSettings } from "./PromptsSettings";
-import { SkillsSettings } from "./SkillsSettings";
 import { useProjectStore } from "../../store/projectStore";
 import { api } from "../../api/client";
 import { ProjectPanel } from "../Projects/ProjectPanel";
@@ -80,10 +79,6 @@ export function SettingsContent({
           projectId={currentProject?.id}
         />
       );
-    }
-
-    if (activeSection === "skills") {
-      return <SkillsSettings />;
     }
 
     if (activeSection === "mcp") {

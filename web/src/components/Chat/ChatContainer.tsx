@@ -14,7 +14,6 @@ import {
   useChatApprovals,
   useErrorEvents,
   useInfoEvents,
-  useSkillInvocations,
   useRunOutputs,
   usePendingApprovals,
   usePendingYield,
@@ -81,7 +80,6 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
   const approvals = useChatApprovals(chatId);
   const errorEvents = useErrorEvents(chatId);
   const infoEvents = useInfoEvents(chatId);
-  const skillInvocations = useSkillInvocations(chatId);
   const runOutputs = useRunOutputs(chatId);
   const currentChat = useChat(chatId);
   const connectionStatus = useGlobalUpdatesStore((s) => s.connectionStatus);
@@ -253,7 +251,6 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
       approvals={approvals}
       errorEvents={errorEvents}
       infoEvents={infoEvents}
-      skillInvocations={skillInvocations}
       runOutputs={runOutputs}
       chatId={chatId}
       isChatBusy={isChatBusy}

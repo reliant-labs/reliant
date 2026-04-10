@@ -125,8 +125,7 @@ var knownViolations = []knownViolation{
 	{File: "internal/grpc/services/mcp.go", Reason: "TODO: route through daemon — reads/writes MCP config, stat checks"},
 	{File: "internal/grpc/services/system.go", Reason: "desktop-only DevAuth endpoints — guarded by localMode flag, unavailable in cloud mode"},
 	// skills
-	{File: "internal/skills/catalog/runtime.go", Reason: "TODO: route through daemon — reads skill files, walks directories"},
-	{File: "internal/skills/materialize/runtime.go", Reason: "TODO: route through daemon — walks skill dirs, reads files"},
+
 	// config
 	{File: "internal/config/project_meta.go", Reason: "daemon-side only — called exclusively from tools (metadata_writer.go) which execute on daemon"},
 }
@@ -146,8 +145,7 @@ var serverSidePackages = []string{
 	"internal/grpc/services",
 	"internal/workflow/runtime/activities",
 	"internal/workflow/runtime/activities/handlers",
-	"internal/skills/catalog",
-	"internal/skills/materialize",
+
 	"internal/config",
 }
 

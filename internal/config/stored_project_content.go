@@ -30,6 +30,25 @@ type StoredScenario struct {
 	ContentHash  string `json:"content_hash"`
 }
 
+// StoredSkill represents a skill (SKILL.md) synced from the daemon via project config.
+// It carries everything the server-side skill tool needs so no filesystem access
+// is required to list/load/search skills on the server.
+type StoredSkill struct {
+	SkillPath              string            `json:"skill_path"`
+	Name                   string            `json:"name"`
+	Description            string            `json:"description"`
+	Scope                  string            `json:"scope"`
+	Body                   string            `json:"body"`
+	AllowedTools           []string          `json:"allowed_tools,omitempty"`
+	Metadata               map[string]string `json:"metadata,omitempty"`
+	HasChildren            bool              `json:"has_children,omitempty"`
+	DisableModelInvocation bool              `json:"disable_model_invocation,omitempty"`
+	UserInvocable          *bool             `json:"user_invocable,omitempty"`
+	ArgumentHint           string            `json:"argument_hint,omitempty"`
+	Paths                  string            `json:"paths,omitempty"`
+	ContentHash            string            `json:"content_hash,omitempty"`
+}
+
 // ParseStoredWorkflows deserializes the project_workflows_json column.
 func ParseStoredWorkflows(jsonStr *string) ([]StoredWorkflow, error) {
 	if jsonStr == nil || *jsonStr == "" {
@@ -64,6 +83,28 @@ func ParseStoredScenarios(jsonStr *string) ([]StoredScenario, error) {
 		return nil, fmt.Errorf("failed to parse stored scenarios JSON: %w", err)
 	}
 	return items, nil
+}
+
+// ParseStoredSkills deserializes the project_skills_json column.
+func ParseStoredSkills(jsonStr *string) ([]StoredSkill, error) {
+	if jsonStr == nil || *jsonStr == "" {
+		return nil, nil
+	}
+	var items []StoredSkill
+	if err := json.Unmarshal([]byte(*jsonStr), &items); err != nil {
+		return nil, fmt.Errorf("failed to parse stored skills JSON: %w", err)
+	}
+	return items, nil
+}
+
+// FindStoredSkillByPath looks up a skill by its hierarchical path.
+func FindStoredSkillByPath(skills []StoredSkill, path string) *StoredSkill {
+	for i := range skills {
+		if skills[i].SkillPath == path {
+			return &skills[i]
+		}
+	}
+	return nil
 }
 
 // FindStoredWorkflowBySlug finds a workflow by slug in the stored list.

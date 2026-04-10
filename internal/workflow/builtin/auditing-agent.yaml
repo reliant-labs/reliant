@@ -34,6 +34,12 @@ inputs:
     enum: [low, medium, high, xhigh]
     default: medium
     description: Extended thinking level for main agent
+  permission:
+    type: string
+    default: "orchestrator"
+    description: "Permission level controlling which tools can be loaded via load_tool (readonly, mutating, orchestrator)"
+    ui: hidden
+
   tools:
     type: tools
     default:
@@ -122,6 +128,7 @@ nodes:
             system_prompt: "{{inputs.system_prompt}}"
             temperature: "{{inputs.temperature}}"
             thinking_level: "{{inputs.thinking_level}}"
+            permission: "{{inputs.permission}}"
             tool_filter: "{{inputs.tools + [spawn(workflow.name, inputs.spawn_presets)]}}"
         - id: audit_check
           type: call_llm

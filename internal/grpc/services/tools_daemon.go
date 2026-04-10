@@ -17,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/auth"
+	cfgpkg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/gen/reliant/v1/reliantv1connect"
@@ -732,6 +733,7 @@ func (s *ToolsDaemonService) persistProjectConfigSnapshot(ctx context.Context, c
 		ProjectWorkflowsJSON: flattenIndexedWorkflows(snapshot.Workflows),
 		ProjectPresetsJSON:   flattenIndexedPresets(snapshot.Presets),
 		ProjectScenariosJSON: flattenIndexedScenarios(snapshot.Scenarios),
+		ProjectSkillsJSON:    flattenIndexedSkills(snapshot.Skills),
 		PushedAt:             daemonTimestampToTime(snapshot.DaemonTimestampUnixMs),
 	}
 
@@ -929,6 +931,54 @@ func flattenIndexedScenarios(scenarios []*reliantv1.IndexedScenario) *string {
 			YAMLContent:  string(s.YamlContent),
 			ContentHash:  s.ContentHash,
 		})
+	}
+	encoded, err := json.Marshal(items)
+	if err != nil {
+		return nil
+	}
+	value := string(encoded)
+	return &value
+}
+
+// flattenIndexedSkills converts the proto skills snapshot into the JSON blob
+// stored in project_configs.project_skills_json. The JSON shape matches
+// config.StoredSkill so StoredConfigProvider can deserialize identically.
+func flattenIndexedSkills(skills []*reliantv1.IndexedSkill) *string {
+	if len(skills) == 0 {
+		return nil
+	}
+	items := make([]cfgpkg.StoredSkill, 0, len(skills))
+	for _, s := range skills {
+		if s == nil {
+			continue
+		}
+		var userInvocable *bool
+		switch s.UserInvocable {
+		case "true":
+			v := true
+			userInvocable = &v
+		case "false":
+			v := false
+			userInvocable = &v
+		}
+		items = append(items, cfgpkg.StoredSkill{
+			SkillPath:              s.SkillPath,
+			Name:                   s.Name,
+			Description:            s.Description,
+			Scope:                  s.Scope,
+			Body:                   s.Body,
+			AllowedTools:           s.AllowedTools,
+			Metadata:               s.Metadata,
+			HasChildren:            s.HasChildren,
+			DisableModelInvocation: s.DisableModelInvocation,
+			UserInvocable:          userInvocable,
+			ArgumentHint:           s.ArgumentHint,
+			Paths:                  s.Paths,
+			ContentHash:            s.ContentHash,
+		})
+	}
+	if len(items) == 0 {
+		return nil
 	}
 	encoded, err := json.Marshal(items)
 	if err != nil {

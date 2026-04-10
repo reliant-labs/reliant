@@ -16,6 +16,14 @@ type Definition struct {
 	Scope         skillscore.Scope
 	Format        skillscore.SkillFormat
 	SkillDir      string
+	SkillPath     string // Hierarchical path relative to discovery root, e.g. "go/error-handling"
+	HasChildren   bool   // True if this skill has sub-skills in subdirectories
+
+	// Claude-compatible fields
+	ArgumentHint           string
+	DisableModelInvocation bool
+	UserInvocable          *bool // nil = default true
+	Paths                  string
 }
 
 // Snapshot is the catalog/discovery output before activation/materialization.

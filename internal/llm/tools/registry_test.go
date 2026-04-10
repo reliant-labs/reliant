@@ -4,8 +4,6 @@ package tools
 import (
 	"sort"
 	"testing"
-
-	"github.com/reliant-labs/reliant/internal/features"
 )
 
 func TestExpandToolFilter(t *testing.T) {
@@ -332,32 +330,6 @@ func TestTagPlan(t *testing.T) {
 	}
 
 	t.Logf("Planning mode tools (%d): %v", len(result), result)
-}
-
-func TestGetToolRegistry_InstallSkillGatedByFeatureFlag(t *testing.T) {
-	t.Run("disabled by default", func(t *testing.T) {
-		t.Setenv(features.SkillsEnabledEnvVar, "")
-		registry := GetToolRegistry()
-
-		for _, def := range registry {
-			if def.Name == ToolInstallSkill {
-				t.Fatalf("expected %q to be omitted when feature is disabled", ToolInstallSkill)
-			}
-		}
-	})
-
-	t.Run("enabled via environment override", func(t *testing.T) {
-		t.Setenv(features.SkillsEnabledEnvVar, "true")
-		registry := GetToolRegistry()
-
-		for _, def := range registry {
-			if def.Name == ToolInstallSkill {
-				return
-			}
-		}
-
-		t.Fatalf("expected %q to be present when feature is enabled", ToolInstallSkill)
-	})
 }
 
 // ============================================================================

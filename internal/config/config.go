@@ -34,32 +34,6 @@ type Data struct {
 	Directory string `yaml:"directory,omitempty" json:"directory,omitempty"`
 }
 
-type SkillsSupportingFilesConfig struct {
-	MaxFiles int `yaml:"maxFiles,omitempty" json:"maxFiles,omitempty"`
-	MaxBytes int `yaml:"maxBytes,omitempty" json:"maxBytes,omitempty"`
-}
-
-type SkillsRetrievalConfig struct {
-	MaxFiles       int `yaml:"maxFiles,omitempty" json:"maxFiles,omitempty"`
-	MaxChunks      int `yaml:"maxChunks,omitempty" json:"maxChunks,omitempty"`
-	ChunkBytes     int `yaml:"chunkBytes,omitempty" json:"chunkBytes,omitempty"`
-	ChunkOverlap   int `yaml:"chunkOverlap,omitempty" json:"chunkOverlap,omitempty"`
-	MaxPromptBytes int `yaml:"maxPromptBytes,omitempty" json:"maxPromptBytes,omitempty"`
-}
-
-type SkillsAvailableSkillsConfig struct {
-	MaxCount       int `yaml:"maxCount,omitempty" json:"maxCount,omitempty"`
-	MaxPromptBytes int `yaml:"maxPromptBytes,omitempty" json:"maxPromptBytes,omitempty"`
-}
-
-type SkillsConfig struct {
-	ActivationMode  string                      `yaml:"activationMode,omitempty" json:"activationMode,omitempty"`
-	IntegrationMode string                      `yaml:"integrationMode,omitempty" json:"integrationMode,omitempty"`
-	SupportingFiles SkillsSupportingFilesConfig `yaml:"supportingFiles,omitempty" json:"supportingFiles,omitempty"`
-	Retrieval       SkillsRetrievalConfig       `yaml:"retrieval,omitempty" json:"retrieval,omitempty"`
-	AvailableSkills SkillsAvailableSkillsConfig `yaml:"availableSkills,omitempty" json:"availableSkills,omitempty"`
-}
-
 // Config is the main configuration structure for the application.
 type Config struct {
 	Data            Data                     `yaml:"data" json:"data"`
@@ -69,9 +43,12 @@ type Config struct {
 	Debug           bool                     `yaml:"debug,omitempty" json:"debug,omitempty"`
 	ContextPaths    []string                 `yaml:"contextPaths,omitempty" json:"contextPaths,omitempty"`
 	Models          *models.UserModelsConfig `yaml:"models,omitempty" json:"models,omitempty"`
-	Skills          SkillsConfig             `yaml:"skills,omitempty" json:"skills,omitempty"`
 	GlobalMemoryMD  string                   `yaml:"-" json:"-"`
 	ProjectMemoryMD string                   `yaml:"-" json:"-"`
+	// Skills is populated from the daemon's project config sync. It is the
+	// authoritative, in-memory snapshot of SKILL.md files available to this
+	// project and is what the skill tool / auto-suggestion use at runtime.
+	Skills []StoredSkill `yaml:"-" json:"-"`
 }
 
 // Application constants

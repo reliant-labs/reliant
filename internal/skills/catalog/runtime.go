@@ -1,7 +1,6 @@
 package catalog
 
 import (
-	"context"
 	"embed"
 	"fmt"
 	"io/fs"
@@ -9,8 +8,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
-	"time"
 	"unicode"
 
 	skillscore "github.com/reliant-labs/reliant/internal/skills/core"
@@ -41,6 +38,12 @@ type frontmatter struct {
 	Compatibility string                 `yaml:"compatibility,omitempty"`
 	Metadata      map[string]interface{} `yaml:"metadata,omitempty"`
 	AllowedTools  string                 `yaml:"allowed-tools,omitempty"`
+
+	// Claude-compatible fields
+	ArgumentHint           string `yaml:"argument-hint,omitempty"`
+	DisableModelInvocation bool   `yaml:"disable-model-invocation,omitempty"`
+	UserInvocable          *bool  `yaml:"user-invocable,omitempty"`
+	Paths                  string `yaml:"paths,omitempty"`
 }
 
 var allowedSkillFrontmatterFields = map[string]struct{}{
@@ -50,6 +53,12 @@ var allowedSkillFrontmatterFields = map[string]struct{}{
 	"compatibility": {},
 	"metadata":      {},
 	"allowed-tools": {},
+
+	// Claude-compatible fields
+	"argument-hint":            {},
+	"disable-model-invocation": {},
+	"user-invocable":           {},
+	"paths":                    {},
 }
 
 const builtinSkillCreatorPath = "skill-creator/SKILL.md"
@@ -65,6 +74,16 @@ func ParseSkillMarkdownFrontmatter(path string, scope skillscore.Scope, data []b
 	return parseSkillMarkdown(path, scope, data, false)
 }
 
+func isExternalProviderScope(scope skillscore.Scope) bool {
+	switch scope {
+	case skillscore.ScopeClaude, skillscore.ScopeClaudeGlobal,
+		skillscore.ScopeCodexProject, skillscore.ScopeCodexAgents, skillscore.ScopeCodexGlobal:
+		return true
+	default:
+		return false
+	}
+}
+
 func parseSkillMarkdown(path string, scope skillscore.Scope, data []byte, includeBody bool) (Definition, error) {
 	content := strings.TrimSpace(string(data))
 	if content == "" {
@@ -76,7 +95,9 @@ func parseSkillMarkdown(path string, scope skillscore.Scope, data []byte, includ
 		return Definition{}, err
 	}
 
-	fm, err := parseKnownFrontmatter([]byte(front))
+	lenient := isExternalProviderScope(scope)
+
+	fm, err := parseFrontmatter([]byte(front), lenient)
 	if err != nil {
 		return Definition{}, err
 	}
@@ -93,18 +114,22 @@ func parseSkillMarkdown(path string, scope skillscore.Scope, data []byte, includ
 
 	name := skillscore.NormalizeSkillName(fm.Name)
 	return Definition{
-		Name:          name,
-		NormalizedKey: name,
-		Description:   strings.TrimSpace(fm.Description),
-		License:       strings.TrimSpace(fm.License),
-		Compatibility: strings.TrimSpace(fm.Compatibility),
-		Metadata:      metadata,
-		AllowedTools:  parseAllowedToolsList(fm.AllowedTools),
-		Body:          skillBody,
-		Path:          path,
-		Scope:         scope,
-		Format:        skillscore.SkillFormatClaudeMarkdown,
-		SkillDir:      filepath.Dir(path),
+		Name:                   name,
+		NormalizedKey:          name,
+		Description:            strings.TrimSpace(fm.Description),
+		License:                strings.TrimSpace(fm.License),
+		Compatibility:          strings.TrimSpace(fm.Compatibility),
+		Metadata:               metadata,
+		AllowedTools:           parseAllowedToolsList(fm.AllowedTools),
+		Body:                   skillBody,
+		Path:                   path,
+		Scope:                  scope,
+		Format:                 skillscore.SkillFormatClaudeMarkdown,
+		SkillDir:               filepath.Dir(path),
+		ArgumentHint:           strings.TrimSpace(fm.ArgumentHint),
+		DisableModelInvocation: fm.DisableModelInvocation,
+		UserInvocable:          fm.UserInvocable,
+		Paths:                  strings.TrimSpace(fm.Paths),
 	}, nil
 }
 
@@ -127,13 +152,15 @@ func extractSkillFrontmatterAndBody(content string) (frontmatter string, body st
 	return frontmatter, body, nil
 }
 
-func parseKnownFrontmatter(frontBlob []byte) (frontmatter, error) {
-	if err := validateAllowedFrontmatterFields(frontBlob); err != nil {
-		return frontmatter{}, err
+func parseFrontmatter(frontBlob []byte, lenient bool) (frontmatter, error) {
+	if !lenient {
+		if err := validateAllowedFrontmatterFields(frontBlob); err != nil {
+			return frontmatter{}, err
+		}
 	}
 
 	dec := yaml.NewDecoder(strings.NewReader(string(frontBlob)))
-	dec.KnownFields(true)
+	dec.KnownFields(!lenient)
 	var fm frontmatter
 	if err := dec.Decode(&fm); err != nil {
 		return frontmatter{}, fmt.Errorf("invalid YAML frontmatter: %w", err)
@@ -332,7 +359,8 @@ func builtinSkills(loadFullDefinitions bool) []Definition {
 	return []Definition{definition}
 }
 
-func Discover(input DiscoverInput) Snapshot {
+// discoverAll discovers all skills (including nested) from all roots.
+func discoverAll(input DiscoverInput) Snapshot {
 	result := Snapshot{
 		ByName:       make(map[string]Definition),
 		ShadowedBy:   make(map[string]string),
@@ -368,6 +396,18 @@ func Discover(input DiscoverInput) Snapshot {
 				definition = fullDefinition
 			}
 
+			// Compute the hierarchical skill path relative to the discovery root.
+			// e.g. root=/project/.reliant/skills, skillDir=/project/.reliant/skills/go/error-handling
+			// => skillPath = "go/error-handling"
+			skillPath := computeSkillPath(r.Path, definition.SkillDir)
+			if skillPath != "" {
+				definition.SkillPath = skillPath
+				definition.NormalizedKey = skillPath
+			}
+
+			// Detect sub-skills.
+			definition.HasChildren = hasChildSkillDirs(definition.SkillDir)
+
 			mergeDefinition(&result, definition)
 		}
 	}
@@ -380,15 +420,7 @@ func Discover(input DiscoverInput) Snapshot {
 	for _, definition := range result.ByName {
 		result.Definitions = append(result.Definitions, definition)
 	}
-	sort.Slice(result.Definitions, func(i, j int) bool {
-		if result.Definitions[i].Scope.Priority() != result.Definitions[j].Scope.Priority() {
-			return result.Definitions[i].Scope.Priority() < result.Definitions[j].Scope.Priority()
-		}
-		if result.Definitions[i].Name != result.Definitions[j].Name {
-			return result.Definitions[i].Name < result.Definitions[j].Name
-		}
-		return result.Definitions[i].Path < result.Definitions[j].Path
-	})
+	sortDefinitions(result.Definitions)
 	sort.Slice(result.Diagnostics, func(i, j int) bool {
 		if result.Diagnostics[i].Scope.Priority() != result.Diagnostics[j].Scope.Priority() {
 			return result.Diagnostics[i].Scope.Priority() < result.Diagnostics[j].Scope.Priority()
@@ -397,6 +429,106 @@ func Discover(input DiscoverInput) Snapshot {
 	})
 
 	return result
+}
+
+// Discover discovers only top-level skills (depth 1). Nested skills are discovered on demand.
+func Discover(input DiscoverInput) Snapshot {
+	all := discoverAll(input)
+
+	// Filter to top-level skills only (no "/" in SkillPath, or builtin skills).
+	result := Snapshot{
+		ByName:       make(map[string]Definition, len(all.ByName)),
+		ShadowedBy:   all.ShadowedBy,
+		ShadowedFrom: all.ShadowedFrom,
+		Diagnostics:  all.Diagnostics,
+	}
+	for key, def := range all.ByName {
+		if isTopLevelSkill(def) {
+			result.ByName[key] = def
+		}
+	}
+	result.Definitions = make([]Definition, 0, len(result.ByName))
+	for _, def := range result.ByName {
+		result.Definitions = append(result.Definitions, def)
+	}
+	sortDefinitions(result.Definitions)
+
+	return result
+}
+
+// DiscoverAll discovers all skills including nested ones. Used for search.
+func DiscoverAll(input DiscoverInput) Snapshot {
+	return discoverAll(input)
+}
+
+// DiscoverChildren returns immediate child skills of the given parent skill path.
+// For example, DiscoverChildren(input, "go") returns skills like "go/error-handling", "go/defer".
+func DiscoverChildren(input DiscoverInput, parentPath string) []Definition {
+	all := discoverAll(input)
+	prefix := parentPath + "/"
+	var children []Definition
+	for _, def := range all.Definitions {
+		if !strings.HasPrefix(def.SkillPath, prefix) {
+			continue
+		}
+		// Only immediate children: no additional "/" after the prefix.
+		remainder := def.SkillPath[len(prefix):]
+		if !strings.Contains(remainder, "/") {
+			children = append(children, def)
+		}
+	}
+	sortDefinitions(children)
+	return children
+}
+
+// computeSkillPath computes the hierarchical path of a skill relative to its discovery root.
+// e.g. rootPath="/home/.reliant/skills", skillDir="/home/.reliant/skills/go/error-handling"
+// => "go/error-handling"
+func computeSkillPath(rootPath, skillDir string) string {
+	rel, err := filepath.Rel(rootPath, skillDir)
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+		return ""
+	}
+	// Always use forward slashes for skill paths.
+	return filepath.ToSlash(rel)
+}
+
+// hasChildSkillDirs checks if any immediate subdirectory contains a SKILL.md file.
+func hasChildSkillDirs(skillDir string) bool {
+	entries, err := os.ReadDir(skillDir)
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		childSkill := filepath.Join(skillDir, entry.Name(), "SKILL.md")
+		if _, err := os.Stat(childSkill); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// isTopLevelSkill returns true if the skill is at the top level (depth 1) or is a builtin.
+func isTopLevelSkill(def Definition) bool {
+	if def.Scope == skillscore.ScopeBuiltin {
+		return true
+	}
+	return !strings.Contains(def.SkillPath, "/")
+}
+
+func sortDefinitions(defs []Definition) {
+	sort.Slice(defs, func(i, j int) bool {
+		if defs[i].Scope.Priority() != defs[j].Scope.Priority() {
+			return defs[i].Scope.Priority() < defs[j].Scope.Priority()
+		}
+		if defs[i].SkillPath != defs[j].SkillPath {
+			return defs[i].SkillPath < defs[j].SkillPath
+		}
+		return defs[i].Path < defs[j].Path
+	})
 }
 
 func cloneDefinition(in Definition) Definition {
@@ -463,11 +595,21 @@ func mergeDefinition(result *Snapshot, definition Definition) {
 func discoveryRoots(projectPath string) []root {
 	homeDir, _ := os.UserHomeDir()
 	roots := []root{
+		// Reliant paths (highest priority)
 		{Path: filepath.Join(projectPath, ".reliant.local", "skills"), Scope: skillscore.ScopeProjectLocal},
 		{Path: filepath.Join(projectPath, ".reliant", "skills"), Scope: skillscore.ScopeProject},
+		// Claude paths
+		{Path: filepath.Join(projectPath, ".claude", "skills"), Scope: skillscore.ScopeClaude},
+		// Codex paths
+		{Path: filepath.Join(projectPath, ".codex", "skills"), Scope: skillscore.ScopeCodexProject},
+		{Path: filepath.Join(projectPath, ".agents", "skills"), Scope: skillscore.ScopeCodexAgents},
 	}
 	if homeDir != "" {
-		roots = append(roots, root{Path: filepath.Join(homeDir, ".reliant", "skills"), Scope: skillscore.ScopeGlobal})
+		roots = append(roots,
+			root{Path: filepath.Join(homeDir, ".reliant", "skills"), Scope: skillscore.ScopeGlobal},
+			root{Path: filepath.Join(homeDir, ".claude", "skills"), Scope: skillscore.ScopeClaudeGlobal},
+			root{Path: filepath.Join(homeDir, ".codex", "skills"), Scope: skillscore.ScopeCodexGlobal},
+		)
 	}
 	return roots
 }
@@ -499,123 +641,4 @@ func listSkillDefinitions(rootPath string) []skillDefinition {
 		return defs[i].Path < defs[j].Path
 	})
 	return defs
-}
-
-type CatalogIndex struct {
-	mu        sync.RWMutex
-	snapshots map[string]indexedSnapshot
-}
-
-type indexedSnapshot struct {
-	Result    Snapshot
-	ExpiresAt time.Time
-}
-
-var (
-	catalogIndexTTL     = 2 * time.Second
-	defaultCatalogIndex = NewCatalogIndex()
-)
-
-func NewCatalogIndex() *CatalogIndex {
-	return &CatalogIndex{snapshots: map[string]indexedSnapshot{}}
-}
-
-func DefaultCatalogIndex() *CatalogIndex {
-	return defaultCatalogIndex
-}
-
-func discoveryCacheKey(projectPath string, disabledDefinitionPath map[string]struct{}, loadFullDefinitions bool) string {
-	homeDir, _ := os.UserHomeDir()
-	base := filepath.Clean(projectPath) + "|" + filepath.Clean(homeDir)
-	if loadFullDefinitions {
-		base += "|full=1"
-	}
-	if len(disabledDefinitionPath) == 0 {
-		return base
-	}
-
-	paths := make([]string, 0, len(disabledDefinitionPath))
-	for definitionPath := range disabledDefinitionPath {
-		canonical := skillscore.CanonicalDefinitionPath(definitionPath)
-		if canonical != "" {
-			paths = append(paths, canonical)
-		}
-	}
-	if len(paths) == 0 {
-		return base
-	}
-
-	sort.Strings(paths)
-	return base + "|disabled=" + strings.Join(paths, ",")
-}
-
-func (c *CatalogIndex) Discover(_ context.Context, input DiscoverInput) Snapshot {
-	cacheKey := discoveryCacheKey(input.ProjectPath, input.DisabledDefinitionPathSet, input.LoadFullDefinitions)
-
-	now := time.Now()
-	c.mu.RLock()
-	cached, ok := c.snapshots[cacheKey]
-	c.mu.RUnlock()
-	if ok && now.Before(cached.ExpiresAt) {
-		return cloneSnapshot(cached.Result)
-	}
-
-	result := Discover(input)
-
-	c.mu.Lock()
-	c.snapshots[cacheKey] = indexedSnapshot{Result: cloneSnapshot(result), ExpiresAt: now.Add(catalogIndexTTL)}
-	c.mu.Unlock()
-
-	return result
-}
-
-func (c *CatalogIndex) PreloadProject(ctx context.Context, projectPath string) {
-	if strings.TrimSpace(projectPath) == "" {
-		return
-	}
-	select {
-	case <-ctx.Done():
-		return
-	default:
-	}
-	_ = c.Discover(ctx, DiscoverInput{ProjectPath: projectPath, LoadFullDefinitions: false})
-}
-
-func (c *CatalogIndex) PreloadProjects(ctx context.Context, projectPaths []string) {
-	seen := make(map[string]struct{}, len(projectPaths))
-	for _, projectPath := range projectPaths {
-		clean := strings.TrimSpace(projectPath)
-		if clean == "" {
-			continue
-		}
-		clean = filepath.Clean(clean)
-		if _, ok := seen[clean]; ok {
-			continue
-		}
-		seen[clean] = struct{}{}
-		c.PreloadProject(ctx, clean)
-	}
-}
-
-func (c *CatalogIndex) Invalidate(projectPath string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if strings.TrimSpace(projectPath) == "" {
-		c.snapshots = map[string]indexedSnapshot{}
-		return
-	}
-
-	base := filepath.Clean(projectPath) + "|"
-	for key := range c.snapshots {
-		if strings.HasPrefix(key, base) {
-			delete(c.snapshots, key)
-		}
-	}
-}
-
-func (c *CatalogIndex) SnapshotCount() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return len(c.snapshots)
 }

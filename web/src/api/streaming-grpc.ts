@@ -54,7 +54,6 @@ export type {
   ToolCallUpdate,
   ErrorUpdate,
   InfoUpdate,
-  SkillInvocationUpdate,
   ChatMetadataUpdate,
   StreamingDelta,
   RunOutputUpdate,
@@ -107,7 +106,6 @@ const CHAT_UPDATE_TYPE_MAP: Record<number, string> = {
   [ChatUpdateType.WARNING]: "warning",
   [ChatUpdateType.REFETCH]: "refetch",
   [ChatUpdateType.STREAMING_DELTA]: "streaming_delta",
-  [ChatUpdateType.SKILL_INVOCATION]: "skill_invocation",
 };
 
 // Valid update types that we expect from the backend
@@ -128,7 +126,6 @@ const VALID_UPDATE_TYPES = new Set([
   "workflow_execution",
   "yield",
   "refetch",
-  "skill_invocation",
 ]);
 
 /**
@@ -177,14 +174,6 @@ function isValidChatUpdate(
     case "info":
     case "warning":
       return typeof data.id === "string" && typeof data.message === "string";
-    case "skill_invocation":
-      return (
-        typeof data.id === "string" &&
-        typeof data.chat_id === "string" &&
-        typeof data.trigger === "string" &&
-        typeof data.status === "string" &&
-        typeof data.timestamp === "string"
-      );
     case "chat":
       return typeof data.id === "string" || typeof data.chat_id === "string";
     case "streaming_delta":

@@ -18,7 +18,6 @@ const (
 )
 
 const (
-	// DisabledDefinitionPathsSettingKey stores project-scoped disabled skill definition paths as JSON.
 	DisabledDefinitionPathsSettingKey = skillscore.DisabledDefinitionPathsSettingKey
 )
 
@@ -32,31 +31,7 @@ type SupportingFile = skillscore.SupportingFile
 
 type SupportingFilesLimits = skillscore.SupportingFilesLimits
 
-type Skill struct {
-	Name          string
-	NormalizedKey string
-	Description   string
-	License       string
-	Compatibility string
-	Metadata      map[string]string
-	AllowedTools  []string
-	Body          string
-	Path          string
-	Scope         Scope
-	Format        SkillFormat
-	SkillDir      string
-	Files         []SupportingFile
-}
-
 type Diagnostic = skillscore.Diagnostic
-
-type Result struct {
-	Skills       []Skill
-	ByName       map[string]Skill
-	Diagnostics  []Diagnostic
-	ShadowedBy   map[string]string
-	ShadowedFrom map[string]string
-}
 
 type NoticeLevel = skillscore.NoticeLevel
 
@@ -70,4 +45,9 @@ type Notice = skillscore.Notice
 // CanonicalDefinitionPath normalizes a skill definition path for equality checks.
 func CanonicalDefinitionPath(raw string) string {
 	return skillscore.CanonicalDefinitionPath(raw)
+}
+
+// NormalizeSkillName re-exports the core normalizer.
+func NormalizeSkillName(raw string) string {
+	return skillscore.NormalizeSkillName(raw)
 }

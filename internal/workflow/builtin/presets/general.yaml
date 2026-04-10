@@ -2,6 +2,7 @@ name: general
 description: Balanced general-purpose agent with full tool access including file modification, shell commands, and ability to spawn sub-agents
 tag: agent
 params:
+  permission: orchestrator
   model:
     tags: [flagship]
   system_prompt: |

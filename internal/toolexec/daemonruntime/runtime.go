@@ -30,6 +30,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/mcp"
+	"github.com/reliant-labs/reliant/internal/skills/catalog"
 	"github.com/reliant-labs/reliant/internal/terminal"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
@@ -794,6 +795,7 @@ func buildProjectSnapshot(projectPath string) (*reliantv1.ProjectConfigSnapshot,
 	workflows, workflowBytes := indexWorkflows(projectPath)
 	presets, presetBytes := indexPresets(projectPath)
 	scenarios, scenarioBytes := indexScenarios(projectPath)
+	skills, skillBytes := indexSkills(projectPath)
 
 	version := hashBytes(
 		userConfigYAML,
@@ -807,6 +809,7 @@ func buildProjectSnapshot(projectPath string) (*reliantv1.ProjectConfigSnapshot,
 		workflowBytes,
 		presetBytes,
 		scenarioBytes,
+		skillBytes,
 	)
 
 	return &reliantv1.ProjectConfigSnapshot{
@@ -824,9 +827,76 @@ func buildProjectSnapshot(projectPath string) (*reliantv1.ProjectConfigSnapshot,
 		Workflows:       workflows,
 		Presets:         presets,
 		Scenarios:       scenarios,
+		Skills:          skills,
 		GlobalMemoryMd:  globalMemory,
 		ProjectMemoryMd: projectMemory,
 	}, nil
+}
+
+// indexSkills discovers all SKILL.md files across the standard roots
+// (project-local, project, claude, codex, agents, global, claude/codex global, builtin)
+// and returns them as IndexedSkill protos. The body is included so the server-side
+// skill tool can render the full skill without additional round trips.
+func indexSkills(projectPath string) ([]*reliantv1.IndexedSkill, []byte) {
+	snapshot := catalog.DiscoverAll(catalog.DiscoverInput{
+		ProjectPath:         projectPath,
+		LoadFullDefinitions: true,
+	})
+
+	results := make([]*reliantv1.IndexedSkill, 0, len(snapshot.Definitions))
+	acc := strings.Builder{}
+
+	for _, def := range snapshot.Definitions {
+		// Compute relative path for project-scoped skills; global / builtin
+		// skills stay absolute.
+		var relPath string
+		if projectPath != "" {
+			if rel, err := filepath.Rel(projectPath, def.Path); err == nil && !strings.HasPrefix(rel, "..") {
+				relPath = filepath.ToSlash(rel)
+			}
+		}
+
+		var mtimeMs int64
+		if st, err := os.Stat(def.Path); err == nil {
+			mtimeMs = st.ModTime().UTC().UnixMilli()
+		}
+
+		h := hashBytes([]byte(def.Body), []byte(def.Description), []byte(def.SkillPath))
+
+		userInvocable := ""
+		if def.UserInvocable != nil {
+			if *def.UserInvocable {
+				userInvocable = "true"
+			} else {
+				userInvocable = "false"
+			}
+		}
+
+		results = append(results, &reliantv1.IndexedSkill{
+			SkillPath:              def.SkillPath,
+			Name:                   def.Name,
+			Description:            def.Description,
+			RelativePath:           relPath,
+			ContentHash:            h,
+			MtimeUnixMs:            mtimeMs,
+			Scope:                  string(def.Scope),
+			Body:                   def.Body,
+			AllowedTools:           def.AllowedTools,
+			Metadata:               def.Metadata,
+			HasChildren:            def.HasChildren,
+			DisableModelInvocation: def.DisableModelInvocation,
+			UserInvocable:          userInvocable,
+			ArgumentHint:           def.ArgumentHint,
+			Paths:                  def.Paths,
+		})
+
+		acc.WriteString(def.SkillPath)
+		acc.WriteString(":")
+		acc.WriteString(h)
+		acc.WriteString(";")
+	}
+
+	return results, []byte(acc.String())
 }
 
 func indexWorkflows(projectPath string) ([]*reliantv1.IndexedWorkflow, []byte) {

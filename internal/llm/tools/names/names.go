@@ -56,7 +56,9 @@ const (
 	ToolWorktree = "worktree"
 
 	// Skill tools
+	ToolSkill        = "skill"
 	ToolInstallSkill = "install_skill"
+	ToolLoadTool     = "load_tool"
 
 	// Note tools
 	ToolNotes = "notes"
@@ -126,7 +128,9 @@ var AllToolNames = []string{
 	ToolStateTransition,
 	ToolAgent,
 	ToolWorktree,
+	ToolSkill,
 	ToolInstallSkill,
+	ToolLoadTool,
 	ToolNotes,
 	ToolMoveCode,
 	ToolSaveRecommendations,

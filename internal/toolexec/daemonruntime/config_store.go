@@ -67,10 +67,12 @@ func (f *filesystemConfigStore) GetProjectConfigRecord(_ context.Context, projec
 	workflows, _ := indexWorkflows(projectPath)
 	presets, _ := indexPresets(projectPath)
 	scenarios, _ := indexScenarios(projectPath)
+	skills, _ := indexSkills(projectPath)
 
 	workflowsJSON := flattenWorkflows(workflows)
 	presetsJSON := flattenPresets(presets)
 	scenariosJSON := flattenScenarios(scenarios)
+	skillsJSON := flattenSkills(skills)
 
 	return &config.StoredProjectConfigRecord{
 		ProjectID:            projectPath,
@@ -83,6 +85,7 @@ func (f *filesystemConfigStore) GetProjectConfigRecord(_ context.Context, projec
 		ProjectWorkflowsJSON: workflowsJSON,
 		ProjectPresetsJSON:   presetsJSON,
 		ProjectScenariosJSON: scenariosJSON,
+		ProjectSkillsJSON:    skillsJSON,
 	}, nil
 }
 
@@ -172,6 +175,54 @@ func flattenScenarios(scenarios []*reliantv1.IndexedScenario) *string {
 			YAMLContent:  string(s.YamlContent),
 			ContentHash:  s.ContentHash,
 		})
+	}
+	encoded, err := json.Marshal(items)
+	if err != nil {
+		return nil
+	}
+	v := string(encoded)
+	return &v
+}
+
+// flattenSkills converts the proto skills snapshot into the JSON blob that
+// StoredConfigProvider parses into config.StoredSkill. The shape matches the
+// server-side flattenIndexedSkills in tools_daemon.go exactly.
+func flattenSkills(skills []*reliantv1.IndexedSkill) *string {
+	if len(skills) == 0 {
+		return nil
+	}
+	items := make([]config.StoredSkill, 0, len(skills))
+	for _, s := range skills {
+		if s == nil {
+			continue
+		}
+		var userInvocable *bool
+		switch s.UserInvocable {
+		case "true":
+			v := true
+			userInvocable = &v
+		case "false":
+			v := false
+			userInvocable = &v
+		}
+		items = append(items, config.StoredSkill{
+			SkillPath:              s.SkillPath,
+			Name:                   s.Name,
+			Description:            s.Description,
+			Scope:                  s.Scope,
+			Body:                   s.Body,
+			AllowedTools:           s.AllowedTools,
+			Metadata:               s.Metadata,
+			HasChildren:            s.HasChildren,
+			DisableModelInvocation: s.DisableModelInvocation,
+			UserInvocable:          userInvocable,
+			ArgumentHint:           s.ArgumentHint,
+			Paths:                  s.Paths,
+			ContentHash:            s.ContentHash,
+		})
+	}
+	if len(items) == 0 {
+		return nil
 	}
 	encoded, err := json.Marshal(items)
 	if err != nil {

@@ -41,6 +41,12 @@ inputs:
     ui: hidden
     description: Hidden compatibility input for agent-style presets
 
+  permission:
+    type: string
+    default: "orchestrator"
+    ui: hidden
+    description: "Permission level controlling which tools can be loaded via load_tool (readonly, mutating, orchestrator)"
+
   tools:
     type: tools
     default: ["tag:default"]

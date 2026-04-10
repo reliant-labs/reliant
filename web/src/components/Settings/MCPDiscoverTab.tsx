@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import { Download, RefreshCw } from "lucide-react";
 import { type RecommendedServer } from "../../api/mcp-grpc";
 import { Button } from "../ui/Button";
-import { Badge } from "../ui/Badge";
 import { getMcpIconUrl, MCPAvatar } from "./mcpAvatar";
 
 function ensureServerIconUrl(server: RecommendedServer): string | undefined {
@@ -29,19 +28,7 @@ const getActionLabel = (server: RecommendedServer) => {
   return "Install";
 };
 
-const getBundledSkillsSummary = (server: RecommendedServer): string | null => {
-  const marker = "Includes ";
-  const idx = server.description.indexOf(marker);
-  if (idx < 0) return null;
-  return server.description.slice(idx).trim();
-};
 
-const getPrimaryDescription = (server: RecommendedServer): string => {
-  const marker = "\n\nIncludes ";
-  const idx = server.description.indexOf(marker);
-  if (idx < 0) return server.description;
-  return server.description.slice(0, idx).trim();
-};
 
 export function MCPDiscoverTab({ recommendedServers, installingServers, onInstall }: MCPDiscoverTabProps) {
   const discoverServers = useMemo(
@@ -61,7 +48,6 @@ export function MCPDiscoverTab({ recommendedServers, installingServers, onInstal
             const isInstalling = installingServers.has(server.name);
             const actionLabel = getActionLabel(server);
             const iconSrc = ensureServerIconUrl(server);
-            const bundledSkillsSummary = getBundledSkillsSummary(server);
 
             return (
               <div
@@ -83,7 +69,7 @@ export function MCPDiscoverTab({ recommendedServers, installingServers, onInstal
                           <span className="min-w-0 truncate font-medium text-sm">{server.displayName}</span>
                         </div>
                         <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                          {getPrimaryDescription(server)}
+                          {server.description}
                         </p>
                       </div>
 
@@ -100,13 +86,6 @@ export function MCPDiscoverTab({ recommendedServers, installingServers, onInstal
                       </Button>
                     </div>
 
-                    {bundledSkillsSummary && (
-                      <div className="mt-2 flex items-center gap-2 overflow-hidden min-h-5">
-                        <Badge variant="outline" size="sm" className="max-w-full truncate">
-                          {bundledSkillsSummary}
-                        </Badge>
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>

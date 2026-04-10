@@ -176,6 +176,8 @@ message ProjectConfigSnapshot {
   // Memory files that must be available to cloud workers.
   bytes global_memory_md = 11;  // ~/.reliant/reliant.md
   bytes project_memory_md = 12; // {project_path}/reliant.md
+
+  repeated IndexedSkill skills = 13;
 }
 
 message ProjectConfigDelta {
@@ -217,6 +219,29 @@ message IndexedScenario {
   string content_hash = 4;
   int64 mtime_unix_ms = 5;
   bytes yaml_content = 6;
+}
+
+// IndexedSkill describes a SKILL.md discovered by the daemon during project
+// config sync. The frontmatter is parsed into structured fields; the full body
+// is shipped so the skill tool can render it without another round trip.
+message IndexedSkill {
+  string skill_path = 1;       // hierarchical path, e.g. "go/error-handling"
+  string name = 2;             // normalized skill name
+  string description = 3;      // from frontmatter
+  string relative_path = 4;    // SKILL.md path relative to project (or empty for global/builtin)
+  string content_hash = 5;
+  int64 mtime_unix_ms = 6;
+  string scope = 7;            // project-local | project | claude | codex | agents | global | claude-global | codex-global | builtin
+  string body = 8;             // full markdown body after frontmatter
+  repeated string allowed_tools = 9;
+  map<string, string> metadata = 10;
+  bool has_children = 11;
+  bool disable_model_invocation = 12;
+  // user_invocable is represented as a string so we can distinguish unset
+  // (empty), true, and false. nil in frontmatter means "default true".
+  string user_invocable = 13; // "", "true", "false"
+  string argument_hint = 14;
+  string paths = 15;
 }
 
 // ProjectDiscovery reports projects discovered by the daemon.

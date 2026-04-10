@@ -2,6 +2,7 @@ name: code_reviewer
 description: Code review orchestrator that spawns specialized reviewers for comprehensive analysis. Read-only access - produces unified review reports, does not modify code
 tag: agent
 params:
+  permission: readonly
   system_prompt: |
     You are the CODE REVIEW ORCHESTRATOR.
 

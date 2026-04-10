@@ -9,6 +9,8 @@ import { ShellToolRenderer } from './ShellToolRenderer';
 import { FileToolRenderer } from './FileToolRenderer';
 import { ReadToolRenderer } from './ReadToolRenderer';
 import { PlanToolRenderer } from './PlanToolRenderer';
+import { SkillToolRenderer } from './SkillToolRenderer';
+import { LoadToolRenderer } from './LoadToolRenderer';
 import { GenericToolRenderer } from './GenericToolRenderer';
 import {
   isViewOnlyTool,
@@ -16,6 +18,8 @@ import {
   isFileTool,
   isReadToolWithResults,
   isPlanTool,
+  isSkillTool,
+  isLoadToolTool,
 } from '../../../lib/toolFormatters';
 
 export type { ToolRenderContext, ToolResultData };
@@ -37,6 +41,14 @@ function ToolContentAreaComponent({ ctx }: ToolContentAreaProps) {
   }
 
   // Route to appropriate renderer
+  if (isSkillTool(toolName)) {
+    return <SkillToolRenderer ctx={ctx} />;
+  }
+
+  if (isLoadToolTool(toolName)) {
+    return <LoadToolRenderer ctx={ctx} />;
+  }
+
   if (isShellTool(toolName)) {
     return <ShellToolRenderer ctx={ctx} />;
   }
@@ -64,4 +76,6 @@ export { ShellToolRenderer } from './ShellToolRenderer';
 export { FileToolRenderer } from './FileToolRenderer';
 export { ReadToolRenderer } from './ReadToolRenderer';
 export { PlanToolRenderer } from './PlanToolRenderer';
+export { SkillToolRenderer } from './SkillToolRenderer';
+export { LoadToolRenderer } from './LoadToolRenderer';
 export { GenericToolRenderer } from './GenericToolRenderer';

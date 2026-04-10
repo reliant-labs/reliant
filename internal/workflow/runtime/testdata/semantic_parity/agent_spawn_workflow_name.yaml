@@ -23,6 +23,7 @@ simulator:
       max_turns: 1
       temperature: 0.7
       thinking_level: low
+      permission: orchestrator
       system_prompt: ""
       planning_prompt: ""
       model:
@@ -47,6 +48,7 @@ runtime:
         mode: auto
         temperature: 0.7
         thinking_level: low
+        permission: orchestrator
         system_prompt: ""
         planning_prompt: ""
         model:

@@ -2,6 +2,7 @@ name: conflict-resolver
 description: Specialist for resolving git merge and rebase conflicts by understanding both branches' intent
 tag: agent
 params:
+  permission: mutating
   system_prompt: |
     You are a CONFLICT RESOLUTION SPECIALIST who resolves git merge and rebase conflicts by understanding intent, making intelligent merge decisions, and verifying correctness through tests.
 
