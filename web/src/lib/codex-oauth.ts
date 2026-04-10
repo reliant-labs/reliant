@@ -5,11 +5,14 @@ import { startOAuthViaLocalServer } from '@/lib/oauth-local'
 
 const CODEX_OAUTH_AUTHORIZE_URL = 'https://auth.openai.com/oauth/authorize'
 const CODEX_OAUTH_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann'
-const CODEX_OAUTH_DEFAULT_SCOPE = 'openid profile email offline_access'
+// Must match OpenAI Codex CLI authorize URL (codex-rs/login `build_authorize_url`).
+// Other scope strings are rejected by auth.openai.com for this client_id (no ?code= redirect).
+const CODEX_OAUTH_DEFAULT_SCOPE =
+  'openid profile email offline_access api.connectors.read api.connectors.invoke'
 const CODEX_OAUTH_ADDITIONAL_AUTHORIZE_PARAMS: Record<string, string> = {
   id_token_add_organizations: 'true',
   codex_cli_simplified_flow: 'true',
-  originator: 'pi',
+  originator: 'codex_cli_rs',
 }
 export const CODEX_OAUTH_STATE_PREFIX = 'reliant:oauth:codex:'
 
@@ -118,9 +121,17 @@ export async function runCodexOAuthFlow(options: CodexOAuthOptions = {}): Promis
       return errorResult('state_mismatch', 'OAuth state mismatch')
     }
 
+    const authCode = (oauthResp.code ?? '').trim()
+    if (!authCode) {
+      return errorResult(
+        'daemon_error',
+        'OAuth finished without an authorization code. Check the browser tab for an error from OpenAI, then try again.',
+      )
+    }
+
     // Exchange code for tokens via the authenticated backend
     const result = await settingsGrpc.completeCodexOAuth(
-      oauthResp.code,
+      authCode,
       codeVerifier,
       oauthResp.redirectUri,
     )
