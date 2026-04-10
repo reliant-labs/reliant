@@ -62,11 +62,12 @@ const (
 	// Worktree tools
 	ToolWorktree = "worktree"
 
-	// Skill tools
-	ToolInstallSkill = "install_skill"
-
 	// Note tools
 	ToolNotes = "notes"
+
+	// Skill tools
+	ToolSkill    = "skill"
+	ToolLoadTool = "load_tool"
 
 	// Code manipulation tools
 	ToolMoveCode = "move_code"
@@ -458,7 +459,10 @@ func GetToolRegistry() []ToolDefinition {
 		{ToolWorktree, (*ToolsFactory).Worktree, []ToolTag{TagDefault}, ToolRunsAnywhere},
 
 		// Skill tools
-		// install_skill is conditionally registered below based on feature flag.
+		{ToolSkill, (*ToolsFactory).Skill, []ToolTag{TagDefault, TagReadOnly, TagPlan}, ToolRunsAnywhere},
+
+		// Load tool (dynamic tool loading)
+		{ToolLoadTool, (*ToolsFactory).LoadTool, []ToolTag{TagDefault, TagReadOnly, TagPlan}, ToolRunsAnywhere},
 
 		// Code manipulation tools
 		{ToolMoveCode, (*ToolsFactory).MoveCode, []ToolTag{TagFile, TagDefault}, ToolRunsAnywhere},
@@ -496,18 +500,5 @@ func GetToolRegistry() []ToolDefinition {
 		})
 	}
 
-	if skillsFeatureEnabled() {
-		tools = append(tools, ToolDefinition{
-			Name:    ToolInstallSkill,
-			Factory: (*ToolsFactory).SkillInstaller,
-			Tags:    []ToolTag{TagFile, TagDefault},
-			RunsOn:  ToolRunsAnywhere,
-		})
-	}
-
 	return tools
-}
-
-func skillsFeatureEnabled() bool {
-	return features.IsSkillsEnabledForContext(context.Background(), nil, "")
 }

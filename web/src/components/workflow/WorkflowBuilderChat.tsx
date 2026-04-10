@@ -22,7 +22,6 @@ import {
   useChatApprovals,
   useErrorEvents,
   useInfoEvents,
-  useSkillInvocations,
   useRunOutputs,
 } from "../../store/chatStoreHooks";
 import { useIsChatRunning, useActivityStore, ChatActivity } from "../../store/activityStore";
@@ -180,7 +179,6 @@ export function WorkflowBuilderChat({
   const approvals = useChatApprovals(chatId ?? "");
   const errorEvents = useErrorEvents(chatId ?? "");
   const infoEvents = useInfoEvents(chatId ?? "");
-  const skillInvocations = useSkillInvocations(chatId ?? "");
   const runOutputs = useRunOutputs(chatId ?? "");
 
   // Thinking level param (synced via chatParamsStore + updateWorkflowParams)
@@ -867,7 +865,6 @@ export function WorkflowBuilderChat({
             approvals={approvals}
             errorEvents={errorEvents}
             infoEvents={infoEvents}
-            skillInvocations={skillInvocations}
             runOutputs={runOutputs}
             chatId={chatId || ""}
             isStreaming={isLoading}

@@ -227,7 +227,6 @@ type Repository interface {
 	EmitToolCallCancelledUpdate(ctx context.Context, chatID string, update ToolCallUpdate) error
 	EmitToolCallBackgroundedUpdate(ctx context.Context, chatID string, update ToolCallUpdate) error
 	EmitYieldUpdate(ctx context.Context, chatID string, update YieldUpdate) error
-	EmitSkillInvocationUpdate(ctx context.Context, chatID string, update SkillInvocationUpdate) error
 
 	// Refetch Signals (tell frontend to re-fetch specific data)
 	EmitUserRefetch(ctx context.Context, userID string, refetchType RefetchType, opts RefetchOpts) error

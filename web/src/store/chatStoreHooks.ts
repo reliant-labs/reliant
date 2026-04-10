@@ -29,7 +29,6 @@ import type {
   InfoUpdate,
   RunOutputUpdate,
   NodeExecutionUpdate,
-  SkillInvocationUpdate,
 } from "../types/streaming";
 
 // Stable empty references to prevent unnecessary re-renders
@@ -222,17 +221,6 @@ export function useErrorEvents(chatId: string): ErrorUpdate[] {
 export function useInfoEvents(chatId: string): InfoUpdate[] {
   return useChatStore(
     (state) => state.infoEvents[chatId] || (EMPTY_ARRAY as InfoUpdate[])
-  );
-}
-
-/**
- * Get skill invocation events for a chat
- */
-export function useSkillInvocations(chatId: string): SkillInvocationUpdate[] {
-  return useChatStore(
-    (state) =>
-      state.skillInvocations[chatId] ||
-      (EMPTY_ARRAY as SkillInvocationUpdate[])
   );
 }
 

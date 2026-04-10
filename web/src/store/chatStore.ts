@@ -28,7 +28,6 @@ import type {
   ToolCallUpdate,
   ErrorUpdate,
   InfoUpdate,
-  SkillInvocationUpdate,
   WorkflowStatusUpdate,
   StreamingDelta,
   RunOutputUpdate,
@@ -341,7 +340,6 @@ function evictChatData(chatId: string, store: { get: () => ChatStoreState; set: 
   const newPendingYields = { ...state.pendingYields };
   const newErrorEvents = { ...state.errorEvents };
   const newInfoEvents = { ...state.infoEvents };
-  const newSkillInvocations = { ...state.skillInvocations };
   const newRunOutputs = { ...state.runOutputs };
   const newNodeExecutions = { ...state.nodeExecutions };
   const newToolCallStates = { ...state.toolCallStates };
@@ -357,7 +355,6 @@ function evictChatData(chatId: string, store: { get: () => ChatStoreState; set: 
   delete newPendingYields[chatId];
   delete newErrorEvents[chatId];
   delete newInfoEvents[chatId];
-  delete newSkillInvocations[chatId];
   delete newRunOutputs[chatId];
   delete newNodeExecutions[chatId];
   delete newToolCallStates[chatId];
@@ -374,7 +371,6 @@ function evictChatData(chatId: string, store: { get: () => ChatStoreState; set: 
     pendingYields: newPendingYields,
     errorEvents: newErrorEvents,
     infoEvents: newInfoEvents,
-    skillInvocations: newSkillInvocations,
     runOutputs: newRunOutputs,
     nodeExecutions: newNodeExecutions,
     toolCallStates: newToolCallStates,
@@ -514,7 +510,6 @@ interface ChatStoreState {
   pendingYields: Record<string, YieldInfo | null>;
   errorEvents: Record<string, ErrorUpdate[]>; // Error events from workflow/activity failures
   infoEvents: Record<string, InfoUpdate[]>; // Info notifications (shown to user, not saved to thread)
-  skillInvocations: Record<string, SkillInvocationUpdate[]>; // Skill lifecycle timeline events
   runOutputs: Record<string, RunOutputUpdate[]>; // Run step outputs from workflow execution
   nodeExecutions: Record<string, NodeExecutionUpdate[]>; // Node execution events from workflow activities
   // NOTE: chatActivity has been REMOVED - use activityStore instead
@@ -757,7 +752,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   pendingYields: {},
   errorEvents: {},
   infoEvents: {},
-  skillInvocations: {},
   runOutputs: {},
   nodeExecutions: {},
   toolCallStates: {},
@@ -1135,7 +1129,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         pendingYields: { ...state.pendingYields, [chatId]: null },
         toolCallStates: { ...state.toolCallStates, [chatId]: new Map() },
         processedMessages: { ...state.processedMessages, [chatId]: new Map() },
-        skillInvocations: { ...state.skillInvocations, [chatId]: [] },
       };
     });
 
@@ -1173,7 +1166,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     const newProcessedMessages = { ...state.processedMessages };
     const newErrorEvents = { ...state.errorEvents };
     const newInfoEvents = { ...state.infoEvents };
-    const newSkillInvocations = { ...state.skillInvocations };
     const newRunOutputs = { ...state.runOutputs };
     const newNodeExecutions = { ...state.nodeExecutions };
     const newStreamingMessages = { ...state.streamingMessages };
@@ -1189,7 +1181,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     delete newProcessedMessages[chatId];
     delete newErrorEvents[chatId];
     delete newInfoEvents[chatId];
-    delete newSkillInvocations[chatId];
     delete newRunOutputs[chatId];
     delete newNodeExecutions[chatId];
     delete newStreamingMessages[chatId];
@@ -1208,7 +1199,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       processedMessages: newProcessedMessages,
       errorEvents: newErrorEvents,
       infoEvents: newInfoEvents,
-      skillInvocations: newSkillInvocations,
       runOutputs: newRunOutputs,
       nodeExecutions: newNodeExecutions,
       streamingMessages: newStreamingMessages,
@@ -1968,9 +1958,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           (u): u is InfoUpdate =>
             u.update_type === "info" || u.update_type === "warning",
         );
-        const skillInvocationUpdates = updates.filter(
-          (u): u is SkillInvocationUpdate => u.update_type === "skill_invocation",
-        );
         const runOutputUpdates = updates.filter(
           (u): u is RunOutputUpdate => u.update_type === "run_output",
         );
@@ -2137,7 +2124,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           workflowStatusUpdates.length > 0 ||
           errorUpdates.length > 0 ||
           infoUpdates.length > 0 ||
-          skillInvocationUpdates.length > 0 ||
           runOutputUpdates.length > 0 ||
           nodeExecutionUpdates.length > 0 ||
           toolCallUpdates.length > 0 ||
@@ -2705,8 +2691,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             );
             if (existingIndex >= 0) {
               // Keep the original timestamp for stable timeline placement.
-              // Skill notices can be re-emitted across multiple LLM passes in a turn,
-              // and replacing timestamp would cause the same notice to "jump" downward.
               const existing = updatedInfoEvents[existingIndex];
               updatedInfoEvents[existingIndex] = {
                 ...infoUpdate,
@@ -2715,24 +2699,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             } else {
               // New info - add it to the list
               updatedInfoEvents.push(infoUpdate);
-            }
-          });
-
-          const updatedSkillInvocations = isSnapshot
-            ? []
-            : [...(freshState.skillInvocations[chatId] || [])];
-          skillInvocationUpdates.forEach((skillInvocationUpdate) => {
-            const existingIndex = updatedSkillInvocations.findIndex(
-              (e) => e.id === skillInvocationUpdate.id,
-            );
-            if (existingIndex >= 0) {
-              const existing = updatedSkillInvocations[existingIndex];
-              updatedSkillInvocations[existingIndex] = {
-                ...skillInvocationUpdate,
-                timestamp: existing.timestamp || skillInvocationUpdate.timestamp,
-              };
-            } else {
-              updatedSkillInvocations.push(skillInvocationUpdate);
             }
           });
 
@@ -2969,10 +2935,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
               : state.pendingYields,
             errorEvents: { ...state.errorEvents, [chatId]: updatedErrorEvents },
             infoEvents: { ...state.infoEvents, [chatId]: updatedInfoEvents },
-            skillInvocations: {
-              ...state.skillInvocations,
-              [chatId]: updatedSkillInvocations,
-            },
             runOutputs: { ...state.runOutputs, [chatId]: updatedRunOutputs },
             nodeExecutions: {
               ...state.nodeExecutions,
@@ -3918,7 +3880,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       pendingYields: {},
       errorEvents: {},
       infoEvents: {},
-      skillInvocations: {},
       runOutputs: {},
       nodeExecutions: {},
       streamingMessages: {},

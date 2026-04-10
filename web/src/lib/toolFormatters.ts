@@ -784,3 +784,27 @@ export const PLAN_TOOLS = ['create_plan', 'update_task', 'add_task'] as const;
 export function isPlanTool(toolName: string): boolean {
   return PLAN_TOOLS.includes(toolName.toLowerCase() as typeof PLAN_TOOLS[number]);
 }
+
+/**
+ * Skill tool (load/list/search skills)
+ */
+export const SKILL_TOOLS = ['skill'] as const;
+
+/**
+ * Check if a tool is the skill tool
+ */
+export function isSkillTool(toolName: string): boolean {
+  return SKILL_TOOLS.includes(toolName.toLowerCase() as typeof SKILL_TOOLS[number]);
+}
+
+/**
+ * Dynamic tool loading tool
+ */
+export const LOAD_TOOL_TOOLS = ['load_tool'] as const;
+
+/**
+ * Check if a tool is the load_tool tool
+ */
+export function isLoadToolTool(toolName: string): boolean {
+  return LOAD_TOOL_TOOLS.includes(toolName.toLowerCase() as typeof LOAD_TOOL_TOOLS[number]);
+}

@@ -53,6 +53,11 @@ inputs:
         min: 1
         max: 500
         description: Maximum agent loop iterations
+      permission:
+        type: string
+        default: "orchestrator"
+        ui: hidden
+        description: "Permission level controlling which tools can be loaded via load_tool"
       tools:
         type: tools
         default: ["tag:default"]
@@ -533,4 +538,3 @@ ui:
     workflow:
       x: 150
       y: 270
-

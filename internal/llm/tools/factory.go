@@ -2,6 +2,7 @@
 package tools
 
 import (
+	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
@@ -10,7 +11,9 @@ type ToolsOptions struct {
 	MCPProjectPath string // Optional MCP project scope path for MCP tool discovery/calls
 	// Repository
 	Repo db.Repository
-	// Additional options can be added here as needed
+	// Skills are injected from the config sync pipeline (daemon → DB → provider).
+	// The skill tool operates on this slice exclusively — no filesystem access.
+	Skills []config.StoredSkill
 }
 
 // ToolsFactory is a global factory for creating tool instances
@@ -73,6 +76,24 @@ func (f *ToolsFactory) WithMCPProjectPath(projectPath string) *ToolsFactory {
 	return NewToolsFactory(&ToolsOptions{
 		Repo:           f.opts.Repo,
 		MCPProjectPath: projectPath,
+		Skills:         f.opts.Skills,
+	})
+}
+
+// WithSkills returns a cloned factory carrying the provided skills. Callers in
+// the activity layer build this from a project config load so the skill tool
+// (and any future skill-aware tools) never touches the filesystem.
+func (f *ToolsFactory) WithSkills(skills []config.StoredSkill) *ToolsFactory {
+	if f == nil {
+		return nil
+	}
+	if f.opts == nil {
+		return NewToolsFactory(&ToolsOptions{Skills: skills})
+	}
+	return NewToolsFactory(&ToolsOptions{
+		Repo:           f.opts.Repo,
+		MCPProjectPath: f.opts.MCPProjectPath,
+		Skills:         skills,
 	})
 }
 
@@ -207,8 +228,13 @@ func (f *ToolsFactory) Worktree() Tool {
 }
 
 // Skill tools
-func (f *ToolsFactory) SkillInstaller() Tool {
-	return NewSkillInstallerTool()
+func (f *ToolsFactory) Skill() Tool {
+	return NewSkillTool(f.opts.Skills)
+}
+
+// Load tool (dynamic tool loading)
+func (f *ToolsFactory) LoadTool() Tool {
+	return NewLoadToolTool()
 }
 
 // Code manipulation tools

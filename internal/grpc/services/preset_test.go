@@ -295,6 +295,9 @@ inputs:
     type: enum
     enum: [low, medium, high, xhigh]
     default: high
+  permission:
+    type: string
+    default: "orchestrator"
   tools:
     type: tools
     default: ["tag:default", "tag:mcp"]

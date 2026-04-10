@@ -5,7 +5,6 @@ import {
   type SettingsSection,
 } from "./SettingsNavigation";
 import { settingsSync, SETTINGS_KEYS } from "../../services/settingsSync";
-import { api } from "../../api/client";
 
 const SettingsContent = lazy(() =>
   import("./SettingsContent").then((module) => ({
@@ -28,7 +27,6 @@ export function SettingsViewerTab({ initialSection }: SettingsViewerTabProps) {
     (initialSection as SettingsSection) || getPersistedSection()
   );
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [skillsEnabled, setSkillsEnabled] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Update active section when initialSection prop changes (e.g., from onboarding wizard)
@@ -38,38 +36,10 @@ export function SettingsViewerTab({ initialSection }: SettingsViewerTabProps) {
     }
   }, [initialSection]);
 
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadSkillsFeature = async () => {
-      try {
-        const setting = await api.settings.getSetting("features.skills_enabled");
-        const enabled = setting?.value?.toLowerCase() === "true";
-        if (isMounted) {
-          setSkillsEnabled(enabled);
-        }
-      } catch {
-        if (isMounted) {
-          setSkillsEnabled(false);
-        }
-      }
-    };
-
-    loadSkillsFeature();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
   // Listen for navigation events from other components
   useEffect(() => {
     const handleNavigate = (event: CustomEvent<{ section: string }>) => {
       const requestedSection = event.detail.section as SettingsSection;
-      if (requestedSection === "skills" && !skillsEnabled) {
-        setActiveSection("account");
-        return;
-      }
       setActiveSection(requestedSection);
     };
 
@@ -77,7 +47,7 @@ export function SettingsViewerTab({ initialSection }: SettingsViewerTabProps) {
     return () => {
       window.removeEventListener('navigate-to-settings-section', handleNavigate as EventListener);
     };
-  }, [skillsEnabled]);
+  }, []);
 
   // Persist active section when it changes
   useEffect(() => {
@@ -86,8 +56,8 @@ export function SettingsViewerTab({ initialSection }: SettingsViewerTabProps) {
 
   // Same order as SettingsNavigation sidebar (single source: settingsSections)
   const visibleSections = useMemo(
-    () => getVisibleSettingsSectionIds(skillsEnabled),
-    [skillsEnabled]
+    () => getVisibleSettingsSectionIds(),
+    []
   );
 
   useEffect(() => {
@@ -190,7 +160,6 @@ export function SettingsViewerTab({ initialSection }: SettingsViewerTabProps) {
           activeSection={activeSection}
           onSectionChange={setActiveSection}
           isCollapsed={isCollapsed}
-          skillsEnabled={skillsEnabled}
         />
       </div>
 
