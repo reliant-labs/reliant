@@ -49,9 +49,10 @@ const getGRPCBaseURL = (): string | null => {
   }
 
   // Fallback for development/browser - protocol based on VITE_DISABLE_TLS
-  const grpcPort = (import.meta as { env?: { VITE_GRPC_PORT?: string } }).env?.VITE_GRPC_PORT || "9090";
+  const grpcPort = import.meta.env.VITE_GRPC_PORT || "9090";
   const fallbackUrl =
-    (import.meta as { env?: { VITE_GRPC_URL?: string } }).env?.VITE_GRPC_URL ||
+    import.meta.env.VITE_GRPC_URL ||
+    import.meta.env.VITE_API_URL ||
     buildLocalhostUrl(grpcPort);
   return fallbackUrl;
 };
