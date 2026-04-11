@@ -32,7 +32,7 @@ const getAPIBaseURL = (): string | null => {
 
   // Fallback for development/browser - use relative URL through Vite proxy
   const fallbackUrl =
-    (import.meta as { env?: { VITE_API_URL?: string } }).env?.VITE_API_URL ||
+    import.meta.env.VITE_API_URL ||
     "/api";
   logger.info("[API Client] Using fallback URL:", fallbackUrl);
   return fallbackUrl;
