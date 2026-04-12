@@ -138,10 +138,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
     // Only reload data if we're not skipping clear (user initiated project switch)
     if (!options?.skipClear) {
-      // Load worktrees for this project
-      await useWorktreeStore.getState().loadWorktrees(project.id);
-      // Load chats for this project
-      await useChatStore.getState().loadChats();
+      // Load worktrees and chats in parallel (they're independent)
+      await Promise.all([
+        useWorktreeStore.getState().loadWorktrees(project.id),
+        useChatStore.getState().loadChats(),
+      ]);
       
       // Restore last worktree for this project
       useWorktreeStore.getState().restoreLastWorktree(project.id);

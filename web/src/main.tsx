@@ -66,20 +66,12 @@ if (!isConfigReady()) {
   logger.info('[Main] ✅ Backend configuration already available (dev mode or reload)');
 }
 
-// Pre-initialize Monaco BEFORE React renders (critical for performance)
-// This loads Monaco and workers synchronously to ensure they're cached before any components mount
-logger.info('[Main] 🚀 Pre-initializing Monaco Editor (BLOCKING)...');
-const monacoStart = performance.now();
-
-// CRITICAL: Wait for Monaco before rendering React
-// This ensures DiffEditor components can use cached Monaco immediately
-await monacoManager.getMonaco().catch((error) => {
+// Pre-initialize Monaco in the background (non-blocking)
+// Monaco will be ready by the time the user opens a code editor/diff view
+logger.info('[Main] 🚀 Pre-initializing Monaco Editor (background)...');
+monacoManager.getMonaco().catch((error) => {
   logger.error('[Main] ❌ Monaco pre-initialization FAILED:', error);
-  // Continue anyway - Monaco will load on first use
 });
-
-const monacoDuration = performance.now() - monacoStart;
-logger.info('[Main] ✅ Monaco pre-initialized in', monacoDuration.toFixed(2), 'ms');
 
 // NOTE: Static data prefetch moved to AuthGuard.tsx to run AFTER authentication is ready
 // This prevents 401 errors when prefetch runs before auth token is available
