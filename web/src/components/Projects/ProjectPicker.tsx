@@ -77,6 +77,7 @@ function useDaemonStatus() {
 
   useEffect(() => {
     let cancelled = false;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
 
     const check = async () => {
       try {
@@ -93,11 +94,36 @@ function useDaemonStatus() {
       }
     };
 
+    const startPolling = () => {
+      if (!intervalId) {
+        intervalId = setInterval(check, 5000);
+      }
+    };
+
+    const stopPolling = () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        check();
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    };
+
     check();
-    const interval = setInterval(check, 5000);
+    startPolling();
+    document.addEventListener("visibilitychange", handleVisibility);
+
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      stopPolling();
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, []);
 
