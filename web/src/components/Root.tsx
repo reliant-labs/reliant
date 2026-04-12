@@ -7,6 +7,7 @@ import { isConfigReady, waitForConfig } from "../lib/configReady";
 import { logger } from "../lib/logger";
 import { LoadingSpinner } from "./Layout/LoadingSpinner";
 import { useProjectStore } from "../store/projectStore";
+import { supabase } from "../lib/supabase";
 
 /**
  * Root component that initializes privacy settings before rendering the app.
@@ -39,6 +40,10 @@ export function Root() {
             // Continue anyway - will fail on gRPC calls but user sees the app
           }
         }
+
+        // Ensure Supabase has recovered the session from localStorage before
+        // any authenticated gRPC calls fire (the auth interceptor reads getSession()).
+        await supabase.auth.getSession();
 
         // Initialize privacy settings, settings sync, and load projects in parallel.
         // Loading projects here (instead of in ModernApp) eliminates a ~1s serial gap
