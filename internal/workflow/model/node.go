@@ -125,6 +125,13 @@ func GetRouterArgs(n *reliantv1.Node) *reliantv1.RouterArgs {
 	return n.GetRouter()
 }
 
+// IsNodeRouterMode returns true if the router node is in node routing mode
+// (routing to nodes within the workflow) vs workflow routing mode.
+func IsNodeRouterMode(n *reliantv1.Node) bool {
+	args := GetRouterArgs(n)
+	return args != nil && len(args.GetNodes()) > 0
+}
+
 // FindNode finds a node by ID in a workflow. Returns nil if not found.
 func FindNode(wf *reliantv1.Workflow, id string) *reliantv1.Node {
 	if wf == nil {

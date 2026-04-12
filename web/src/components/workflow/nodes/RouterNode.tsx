@@ -12,9 +12,16 @@ interface RouterWorkflowCandidate {
   description?: string
 }
 
+/** Shape of a candidate node from the proto RouterArgs.nodes repeated field */
+interface RouterNodeCandidate {
+  id?: string
+  description?: string
+}
+
 /** Raw router args shape from the proto oneof (args.case === 'router') */
 interface RouterArgsShape {
   workflows?: RouterWorkflowCandidate[]
+  nodes?: RouterNodeCandidate[]
   systemPrompt?: unknown
   model?: unknown
   thread?: unknown
@@ -32,6 +39,7 @@ interface RouterNodeProps {
     executionData?: {
       selectedWorkflow?: string
       selectedPreset?: string
+      selectedNode?: string
       reasoning?: string
     }
   }
@@ -63,7 +71,10 @@ function displayRef(ref: string): string {
 export const RouterNode = memo(({ id: _id, data, selected }: RouterNodeProps) => {
   const { step, label, executionStatus, executionData } = data
   const routerArgs = getRouterArgs(step)
-  const candidates = routerArgs?.workflows ?? []
+
+  const isNodeMode = (routerArgs?.nodes?.length ?? 0) > 0
+  const workflowCandidates = routerArgs?.workflows ?? []
+  const nodeCandidates = routerArgs?.nodes ?? []
 
   const targetConnections = useNodeConnections({ handleType: 'target' })
   const sourceConnections = useNodeConnections({ handleType: 'source' })
@@ -92,7 +103,9 @@ export const RouterNode = memo(({ id: _id, data, selected }: RouterNodeProps) =>
           <GitFork className="w-4 h-4 text-white" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-[10px] font-bold uppercase tracking-wide text-amber-600">ROUTER</div>
+          <div className="text-[10px] font-bold uppercase tracking-wide text-amber-600">
+            ROUTER{isNodeMode ? ' · NODES' : ''}
+          </div>
           <div className="font-semibold text-foreground text-sm leading-tight truncate">
             {label || 'Router'}
           </div>
@@ -101,40 +114,77 @@ export const RouterNode = memo(({ id: _id, data, selected }: RouterNodeProps) =>
 
       {/* Candidate sub-boxes */}
       <div className="p-2 space-y-1.5">
-        {candidates.length === 0 ? (
-          <div className="text-xs text-muted-foreground italic px-1">No candidates configured</div>
-        ) : (
-          candidates.map((candidate, index) => {
-            const ref = candidate.ref || ''
-            const presets = candidate.presets ?? []
-            const isSelected =
-              executionData?.selectedWorkflow === ref ||
-              executionData?.selectedWorkflow === displayRef(ref)
+        {isNodeMode ? (
+          // Node routing mode
+          nodeCandidates.length === 0 ? (
+            <div className="text-xs text-muted-foreground italic px-1">No candidates configured</div>
+          ) : (
+            nodeCandidates.map((candidate, index) => {
+              const nodeId = candidate.id || ''
+              const isSelected = executionData?.selectedNode === nodeId
 
-            return (
-              <div
-                key={`${ref}-${index}`}
-                className={`
-                  px-2.5 py-1.5 rounded-lg text-xs border
-                  ${isSelected
-                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20'
-                    : executionData?.selectedWorkflow
-                      ? 'border-muted bg-muted/50 opacity-50'
-                      : 'border-muted bg-muted'
-                  }
-                `}
-              >
-                <div className="font-medium text-foreground truncate" title={ref}>
-                  {truncate(displayRef(ref) || `candidate ${index + 1}`, 30)}
-                </div>
-                {presets.length > 0 && (
-                  <div className="text-muted-foreground truncate mt-0.5" title={presets.join(', ')}>
-                    {truncate(presets.join(', '), 35)}
+              return (
+                <div
+                  key={`${nodeId}-${index}`}
+                  className={`
+                    px-2.5 py-1.5 rounded-lg text-xs border
+                    ${isSelected
+                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20'
+                      : executionData?.selectedNode
+                        ? 'border-muted bg-muted/50 opacity-50'
+                        : 'border-muted bg-muted'
+                    }
+                  `}
+                >
+                  <div className="font-medium text-foreground truncate font-mono" title={nodeId}>
+                    {truncate(nodeId || `candidate ${index + 1}`, 30)}
                   </div>
-                )}
-              </div>
-            )
-          })
+                  {candidate.description && (
+                    <div className="text-muted-foreground truncate mt-0.5" title={candidate.description}>
+                      {truncate(candidate.description, 35)}
+                    </div>
+                  )}
+                </div>
+              )
+            })
+          )
+        ) : (
+          // Workflow routing mode
+          workflowCandidates.length === 0 ? (
+            <div className="text-xs text-muted-foreground italic px-1">No candidates configured</div>
+          ) : (
+            workflowCandidates.map((candidate, index) => {
+              const ref = candidate.ref || ''
+              const presets = candidate.presets ?? []
+              const isSelected =
+                executionData?.selectedWorkflow === ref ||
+                executionData?.selectedWorkflow === displayRef(ref)
+
+              return (
+                <div
+                  key={`${ref}-${index}`}
+                  className={`
+                    px-2.5 py-1.5 rounded-lg text-xs border
+                    ${isSelected
+                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20'
+                      : executionData?.selectedWorkflow
+                        ? 'border-muted bg-muted/50 opacity-50'
+                        : 'border-muted bg-muted'
+                    }
+                  `}
+                >
+                  <div className="font-medium text-foreground truncate" title={ref}>
+                    {truncate(displayRef(ref) || `candidate ${index + 1}`, 30)}
+                  </div>
+                  {presets.length > 0 && (
+                    <div className="text-muted-foreground truncate mt-0.5" title={presets.join(', ')}>
+                      {truncate(presets.join(', '), 35)}
+                    </div>
+                  )}
+                </div>
+              )
+            })
+          )
         )}
       </div>
 

@@ -837,6 +837,136 @@ nodes:
 	})
 }
 
+func TestNodeDispatch_RouterNodeMode(t *testing.T) {
+	t.Run("node routing parses correctly", func(t *testing.T) {
+		yaml := `
+name: test
+nodes:
+  - id: classify
+    type: router
+    model:
+      tags: [fast]
+    system_prompt: "Pick which phase..."
+    nodes:
+      - id: brainstorm
+        description: "Start from scratch"
+      - id: implement
+        description: "Skip to implementation"
+    fallback: brainstorm
+`
+		wf, err := ParseWorkflow([]byte(yaml))
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		args := wf.Nodes[0].GetRouter()
+		if args == nil {
+			t.Fatal("expected RouterArgs")
+		}
+
+		// nodes
+		if len(args.Nodes) != 2 {
+			t.Fatalf("nodes: got %d, want 2", len(args.Nodes))
+		}
+		n0 := args.Nodes[0]
+		if n0.Id != "brainstorm" {
+			t.Errorf("nodes[0].id: got %q, want %q", n0.Id, "brainstorm")
+		}
+		if n0.Description != "Start from scratch" {
+			t.Errorf("nodes[0].description: got %q, want %q", n0.Description, "Start from scratch")
+		}
+		n1 := args.Nodes[1]
+		if n1.Id != "implement" {
+			t.Errorf("nodes[1].id: got %q, want %q", n1.Id, "implement")
+		}
+		if n1.Description != "Skip to implementation" {
+			t.Errorf("nodes[1].description: got %q, want %q", n1.Description, "Skip to implementation")
+		}
+
+		// scalar fields
+		if args.SystemPrompt.GetLiteral() != "Pick which phase..." {
+			t.Errorf("system_prompt: got %q", args.SystemPrompt.GetLiteral())
+		}
+		if args.Model.GetLiteral() == nil {
+			t.Fatal("expected model")
+		}
+		if args.Fallback != "brainstorm" {
+			t.Errorf("fallback: got %q", args.Fallback)
+		}
+		if len(args.Workflows) != 0 {
+			t.Errorf("workflows: expected empty, got %d", len(args.Workflows))
+		}
+	})
+
+	t.Run("workflow routing still works", func(t *testing.T) {
+		yaml := `
+name: test
+nodes:
+  - id: route
+    type: router
+    workflows:
+      - ref: builtin://researcher
+        description: Research tasks
+      - ref: builtin://coder
+        description: Coding tasks
+`
+		wf, err := ParseWorkflow([]byte(yaml))
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		args := wf.Nodes[0].GetRouter()
+		if args == nil {
+			t.Fatal("expected RouterArgs")
+		}
+		if len(args.Workflows) != 2 {
+			t.Fatalf("workflows: got %d, want 2", len(args.Workflows))
+		}
+		if args.Workflows[0].Ref != "builtin://researcher" {
+			t.Errorf("workflows[0].ref: got %q", args.Workflows[0].Ref)
+		}
+		if len(args.Nodes) != 0 {
+			t.Errorf("nodes: expected empty, got %d", len(args.Nodes))
+		}
+	})
+
+	t.Run("both fields set parses", func(t *testing.T) {
+		yaml := `
+name: test
+nodes:
+  - id: route
+    type: router
+    workflows:
+      - ref: builtin://agent
+        description: Agent workflow
+    nodes:
+      - id: brainstorm
+        description: "Brainstorm phase"
+`
+		wf, err := ParseWorkflow([]byte(yaml))
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		args := wf.Nodes[0].GetRouter()
+		if args == nil {
+			t.Fatal("expected RouterArgs")
+		}
+		if len(args.Workflows) != 1 {
+			t.Fatalf("workflows: got %d, want 1", len(args.Workflows))
+		}
+		if args.Workflows[0].Ref != "builtin://agent" {
+			t.Errorf("workflows[0].ref: got %q", args.Workflows[0].Ref)
+		}
+		if len(args.Nodes) != 1 {
+			t.Fatalf("nodes: got %d, want 1", len(args.Nodes))
+		}
+		if args.Nodes[0].Id != "brainstorm" {
+			t.Errorf("nodes[0].id: got %q", args.Nodes[0].Id)
+		}
+		if args.Nodes[0].Description != "Brainstorm phase" {
+			t.Errorf("nodes[0].description: got %q", args.Nodes[0].Description)
+		}
+	})
+}
+
 // ---------------------------------------------------------------------------
 // V2Input dispatch tests
 // ---------------------------------------------------------------------------

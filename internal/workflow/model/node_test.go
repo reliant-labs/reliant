@@ -278,3 +278,35 @@ func TestGetArgsForWrongType(t *testing.T) {
 		t.Error("call_llm should return nil for GetCreateWorktreeArgs")
 	}
 }
+
+func TestIsNodeRouterMode(t *testing.T) {
+	// nil node
+	if IsNodeRouterMode(nil) {
+		t.Error("nil should return false")
+	}
+	// Non-router node
+	n := &reliantv1.Node{
+		Args: &reliantv1.Node_Run{Run: &reliantv1.RunArgs{}},
+	}
+	if IsNodeRouterMode(n) {
+		t.Error("non-router node should return false")
+	}
+	// Router with workflows (workflow routing mode)
+	n = &reliantv1.Node{
+		Args: &reliantv1.Node_Router{Router: &reliantv1.RouterArgs{
+			Workflows: []*reliantv1.RouterWorkflowCandidate{{Ref: "wf1"}},
+		}},
+	}
+	if IsNodeRouterMode(n) {
+		t.Error("workflow routing mode should return false")
+	}
+	// Router with nodes (node routing mode)
+	n = &reliantv1.Node{
+		Args: &reliantv1.Node_Router{Router: &reliantv1.RouterArgs{
+			Nodes: []*reliantv1.NodeRouterCandidate{{Id: "node1"}},
+		}},
+	}
+	if !IsNodeRouterMode(n) {
+		t.Error("node routing mode should return true")
+	}
+}
