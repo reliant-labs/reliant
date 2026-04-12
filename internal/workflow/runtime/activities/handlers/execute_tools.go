@@ -472,20 +472,20 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 ) message.ToolResult {
 	// Check for cancellation before starting work
 	if ctx.Err() != nil {
-		return a.buildToolResult(toolCallID, toolName, fmt.Sprintf("Cancelled: %v", ctx.Err()), "", true)
+		return a.buildToolResult(toolCallID, toolName, fmt.Sprintf("Cancelled: %v", ctx.Err()), "", true, nil)
 	}
 
 	// Validate tool input JSON
 	var inputMap map[string]interface{}
 	if err := json.Unmarshal([]byte(toolInput), &inputMap); err != nil {
-		return a.buildToolResult(toolCallID, toolName, fmt.Sprintf("Failed to parse tool inputs: %v", err), "", true)
+		return a.buildToolResult(toolCallID, toolName, fmt.Sprintf("Failed to parse tool inputs: %v", err), "", true, nil)
 	}
 
 	// Load execution context (chat -> project -> worktree)
 	// projectPath override allows sub-workflows to run tools in a different directory
 	tec, errMsg := a.loadToolExecutionContext(ctx, chatID, thread, toolName, toolInput, toolCallID, projectPath)
 	if errMsg != "" {
-		return a.buildToolResult(toolCallID, toolName, errMsg, "", true)
+		return a.buildToolResult(toolCallID, toolName, errMsg, "", true, nil)
 	}
 
 	// Execute tool with status tracking
@@ -523,19 +523,19 @@ func (a *ExecuteToolsActivity) handleToolExecutionResult(
 	// Check if cancelled during execution
 	if ctx.Err() != nil {
 		a.emitToolStatus(ctx, chatID, entityID, toolCallID, toolName, "cancelled")
-		return a.buildToolResult(toolCallID, toolName, fmt.Sprintf("Tool execution cancelled: %v", ctx.Err()), "", true)
+		return a.buildToolResult(toolCallID, toolName, fmt.Sprintf("Tool execution cancelled: %v", ctx.Err()), "", true, nil)
 	}
 
 	// Check for execution error
 	if execErr != nil {
 		a.emitToolStatus(ctx, chatID, entityID, toolCallID, toolName, "failed")
-		return a.buildToolResult(toolCallID, toolName, fmt.Sprintf("Tool execution failed: %v", execErr), "", true)
+		return a.buildToolResult(toolCallID, toolName, fmt.Sprintf("Tool execution failed: %v", execErr), "", true, nil)
 	}
 
 	// Check if tool was backgrounded
 	if execResult.Backgrounded {
 		a.emitToolStatus(ctx, chatID, entityID, toolCallID, toolName, "backgrounded")
-		return a.buildToolResult(toolCallID, toolName, execResult.Content, execResult.Metadata, false)
+		return a.buildToolResult(toolCallID, toolName, execResult.Content, execResult.Metadata, false, execResult.BinaryParts)
 	}
 
 	// Check if user cancelled right before completion
@@ -544,7 +544,7 @@ func (a *ExecuteToolsActivity) handleToolExecutionResult(
 			"toolCallID", toolCallID,
 			"toolName", toolName)
 		shell.GetCancelSignal().ClearCancelled(toolCallID)
-		return a.buildToolResult(toolCallID, toolName, "Tool execution cancelled by user", "", true)
+		return a.buildToolResult(toolCallID, toolName, "Tool execution cancelled by user", "", true, nil)
 	}
 
 	// Tool completed successfully
@@ -556,7 +556,7 @@ func (a *ExecuteToolsActivity) handleToolExecutionResult(
 	}
 
 	// Return result (may still be an error from the tool itself)
-	return a.buildToolResult(toolCallID, toolName, execResult.Content, execResult.Metadata, !execResult.Success || execResult.IsError)
+	return a.buildToolResult(toolCallID, toolName, execResult.Content, execResult.Metadata, !execResult.Success || execResult.IsError, execResult.BinaryParts)
 }
 
 // buildToolResult creates a message.ToolResult without saving to database
@@ -566,6 +566,7 @@ func (a *ExecuteToolsActivity) buildToolResult(
 	content string,
 	metadata string,
 	isError bool,
+	binaryParts []message.BinaryContent,
 ) message.ToolResult {
 	// Ensure content is never empty
 	if content == "" {
@@ -577,11 +578,12 @@ func (a *ExecuteToolsActivity) buildToolResult(
 	}
 
 	return message.ToolResult{
-		ToolCallID: toolCallID,
-		Name:       toolName,
-		Content:    content,
-		Metadata:   metadata,
-		IsError:    isError,
+		ToolCallID:  toolCallID,
+		Name:        toolName,
+		Content:     content,
+		Metadata:    metadata,
+		IsError:     isError,
+		BinaryParts: binaryParts,
 	}
 }
 

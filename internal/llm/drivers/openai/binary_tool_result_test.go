@@ -153,9 +153,10 @@ func TestBinaryToolResult_JPEGImage(t *testing.T) {
 	}
 }
 
-// TestBinaryToolResult_PDFSkipped verifies that a PDF binary part produces NO
-// follow-up user message (PDFs are unsupported and skipped).
-func TestBinaryToolResult_PDFSkipped(t *testing.T) {
+// TestBinaryToolResult_PDFIncluded verifies that a PDF binary part is included
+// as a file content part in the follow-up user message.
+func TestBinaryToolResult_PDFIncluded(t *testing.T) {
+	pdfData := []byte{0x25, 0x50, 0x44, 0x46}
 	client := newTestClient()
 	msgs := marshalMessages(t, client, []message.Message{
 		toolMsg(message.ToolResult{
@@ -163,32 +164,38 @@ func TestBinaryToolResult_PDFSkipped(t *testing.T) {
 			Name:       "read_doc",
 			Content:    "document content",
 			BinaryParts: []message.BinaryContent{
-				{MIMEType: "application/pdf", Data: []byte{0x25, 0x50, 0x44, 0x46}},
+				{MIMEType: "application/pdf", Data: pdfData, Path: "/tmp/report.pdf"},
 			},
 		}),
 	})
 
-	// The driver appends a user message even for PDF-only BinaryParts (it just has
-	// no image_url parts). Verify: either only 1 message (most correct), or if 2
-	// messages, the second must NOT contain any image_url content.
-	switch len(msgs) {
-	case 1:
-		// Ideal: no follow-up emitted when no image parts survive filtering.
-		if role := roleOf(t, msgs[0]); role != "tool" {
-			t.Fatalf("expected 'tool' role, got %q", role)
-		}
-	case 2:
-		// Acceptable only if second message contains zero image_url entries.
-		b, _ := json.Marshal(msgs[1])
-		jsonStr := string(b)
-		if strings.Contains(jsonStr, "image_url") {
-			t.Fatalf("PDF binary part should not produce image_url content, got: %s", jsonStr)
-		}
-		if strings.Contains(jsonStr, "data:application/pdf") {
-			t.Fatalf("PDF data URI should not appear in messages, got: %s", jsonStr)
-		}
-	default:
-		t.Fatalf("expected 1 or 2 messages for PDF-only binary part, got %d", len(msgs))
+	if len(msgs) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(msgs))
+	}
+
+	// First: tool message
+	if role := roleOf(t, msgs[0]); role != "tool" {
+		t.Fatalf("first message role = %q, want 'tool'", role)
+	}
+
+	// Second: user message with file content part
+	if role := roleOf(t, msgs[1]); role != "user" {
+		t.Fatalf("second message role = %q, want 'user'", role)
+	}
+
+	b, _ := json.Marshal(msgs[1])
+	jsonStr := string(b)
+
+	expectedBase64 := base64.StdEncoding.EncodeToString(pdfData)
+	expectedURI := "data:application/pdf;base64," + expectedBase64
+	if !strings.Contains(jsonStr, expectedURI) {
+		t.Fatalf("expected PDF data URI %q in follow-up user message, got: %s", expectedURI, jsonStr)
+	}
+	if !strings.Contains(jsonStr, "report.pdf") {
+		t.Fatalf("expected filename 'report.pdf' in follow-up user message, got: %s", jsonStr)
+	}
+	if strings.Contains(jsonStr, "image_url") {
+		t.Fatalf("PDF should not produce image_url content, got: %s", jsonStr)
 	}
 }
 

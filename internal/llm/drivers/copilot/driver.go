@@ -3,6 +3,7 @@ package copilot
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
+	"github.com/openai/openai-go/v3/packages/param"
 	"github.com/openai/openai-go/v3/shared"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -237,9 +239,16 @@ func (c *CopilotClient) convertMessages(prompts []string, messages []message.Mes
 					imageBlock := openai.ChatCompletionContentPartImageParam{ImageURL: imageURL}
 					content = append(content, openai.ChatCompletionContentPartUnionParam{OfImageURL: &imageBlock})
 				} else {
-					description := fmt.Sprintf("[Attachment: %s (type: %s)]", filepath.Base(binaryContent.Path), binaryContent.MIMEType)
-					textBlock := openai.ChatCompletionContentPartTextParam{Text: description}
-					content = append(content, openai.ChatCompletionContentPartUnionParam{OfText: &textBlock})
+					fileData := "data:" + binaryContent.MIMEType + ";base64," + base64.StdEncoding.EncodeToString(binaryContent.Data)
+					filename := filepath.Base(binaryContent.Path)
+					if filename == "" || filename == "." {
+						filename = "file"
+					}
+					filePart := openai.FileContentPart(openai.ChatCompletionContentPartFileFileParam{
+						FileData: param.NewOpt(fileData),
+						Filename: param.NewOpt(filename),
+					})
+					content = append(content, filePart)
 				}
 			}
 

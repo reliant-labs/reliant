@@ -338,7 +338,7 @@ Without the `outputs` section, the `while` condition receives raw inner node out
 
 **Iteration counting:** In the loop body, `iter.iteration` is 0-indexed (0, 1, 2...). In the `while` check, it reflects completed iterations (1 after first, 2 after second). Use `iter.iteration < N` to run exactly N iterations.
 
-**When to use:** Test-driven development, retry-while-failing, iterative refinement.
+**When to use:** Test-driven development, retry-while-failing, iterative refinement. For fan-out across a fixed list of items where iterations don't depend on each other, see [Parallel Loops](#parallel-loops) instead.
 
 ---
 
@@ -397,6 +397,111 @@ edges:
 The `join: all` node waits until all incoming edges complete. Use worktrees for isolated working directories.
 
 **When to use:** Competitive implementations, exploring multiple approaches, reducing wall-clock time.
+
+### Parallel Loops
+
+When you have a collection of items and want to run the same sub-workflow over each one concurrently, use a parallel loop instead of fanning out with hand-written nodes. Set `parallel: true` on a `loop` node and supply an `items` expression — Reliant launches one iteration per item, each in its own thread, all started simultaneously rather than one after another.
+
+Reach for parallel loops when:
+
+- You want to fan out the same analysis over many files, tickets, or rows.
+- Iterations are independent and don't share conversation state.
+- You already have a fixed list (or map) of items to process. Parallel loops require `items` and don't support a `while` condition — they always iterate over a known collection.
+
+**Minimal example:**
+
+```yaml
+- id: analyze_each_file
+  type: loop
+  ref: builtin://researcher
+  parallel: true
+  items: "{{inputs.files}}"
+  key: "{{iter.item.path}}"
+  args:
+    file: "{{iter.item}}"
+```
+
+What each field does:
+
+- `parallel: true` switches the loop from sequential to concurrent execution.
+- `items` is a CEL expression evaluating to a list or a map. It is required when `parallel` is true.
+- Inside the loop body, `iter.item` is the current element, `iter.index` is its position (0-indexed), and `iter.key` is the map key when iterating a map.
+- `key` is a CEL expression evaluated per iteration to produce the output map key. It defaults to `string(iter.index)`. Set it explicitly when you want stable, meaningful keys (and to disambiguate duplicate items).
+- Results are accumulated in `nodes.analyze_each_file._results`, a map keyed by the evaluated `key`. Counts are available as `nodes.analyze_each_file._completed`, `_failed`, and `_iterations`.
+
+#### Failure policies
+
+The `on_failure` field controls what happens when an iteration errors out:
+
+- `continue` (the default): the failed iteration is recorded in `_failed`, but the rest keep running. The loop completes with whatever partial results succeeded.
+- `fail_fast`: the first failure cancels in-flight iterations and the loop returns immediately with an error.
+- `fail_all`: all iterations are allowed to finish, and then the loop reports failure if any iteration failed.
+
+```yaml
+- id: batch_process
+  type: loop
+  ref: builtin://processor
+  parallel: true
+  items: "{{inputs.batch}}"
+  key: "{{iter.item.id}}"
+  on_failure: fail_fast
+```
+
+Use `continue` for best-effort batch jobs, `fail_fast` when one bad item invalidates the whole run, and `fail_all` when you want a complete picture of which items failed before reporting.
+
+#### Per-iteration threads
+
+Each parallel iteration runs in its own thread — that's what makes them independent. The default thread mode for parallel loops is `new`, which is the opposite of the usual node default of `inherit`. You can override this with an explicit `thread` block on the loop node, which applies to every iteration:
+
+```yaml
+- id: parallel_drafts
+  type: loop
+  ref: builtin://drafter
+  parallel: true
+  items: "{{inputs.topics}}"
+  key: "{{iter.item}}"
+  thread:
+    mode: fork
+    inject:
+      role: user
+      content: "Draft a paragraph about: {{iter.item}}"
+```
+
+`mode: fork` is useful when each iteration should start from a shared seed thread (for example, a thread that already contains background context) without each iteration writing back into that seed.
+
+#### Restrictions
+
+The validator rejects parallel loop configurations that don't make sense, so it's worth knowing the rules up front:
+
+- `items` is **required** when `parallel: true`. There's no `while`-style parallel loop.
+- `while` is **not allowed** alongside `parallel: true`. Parallel loops always iterate over a fixed collection.
+- `yield` is **not allowed** alongside `parallel: true`. You can't pause a parallel loop mid-iteration to ask the user for input.
+- `key` is only meaningful when `parallel: true`. On a sequential loop it has no effect.
+- `on_failure` must be one of `continue`, `fail_fast`, or `fail_all` — any other value is rejected.
+
+#### Performance: inject attachments
+
+If the loop's `thread.inject` block carries `attachments` with `path:` or `data:` sources, those attachments are resolved **per iteration**. With `path:`, that means N file reads for N iterations; with `data:`, the bytes are duplicated into N inject payloads. For large files this adds up quickly.
+
+If the same attachment is needed by every iteration, save it once and reference it by ID instead:
+
+```yaml
+thread:
+  mode: new
+  inject:
+    role: user
+    content: "Analyze the spec for {{iter.item}}"
+    attachments:
+      - id: "{{inputs.spec_attachment_id}}"
+```
+
+See [Attachments](/features/attachments) for how to pre-save an attachment and obtain its ID.
+
+#### When you don't need parallelism
+
+If you just want iteration without concurrency — for example, retrying until a check passes or threading the result of one iteration into the next — use a sequential loop instead. Omit `parallel`, supply a `while` condition, and (optionally) an `items` expression. See [Verification Loops](#verification-loops) for the sequential pattern, and the [Loop reference](/reference/nodes#loop) for every field in one place.
+
+**When to use:** Batch analysis over a list of files or records, parallel drafts of the same prompt, fan-out review of pull request changes — anything where iterations are independent and you want wall-clock speedup.
 
 ### Turn-Taking (Proposer/Critic)
 

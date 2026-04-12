@@ -46,7 +46,7 @@ NC := \033[0m # No Color
 MINTLIFY_DOCS_DIR := docs
 MINTLIFY_PORT ?= 3000
 
-.PHONY: all build build-all clean test test-race test-coverage test-ci deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-preset generate-changelog docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit verify-yaml-bindings build-api-server build-temporal-worker build-tools-daemon build-services docker-build
+.PHONY: all build build-all clean test test-race test-coverage test-ci deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-preset generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit verify-yaml-bindings build-api-server build-temporal-worker build-tools-daemon build-services docker-build
 
 # Default target
 all: deps fmt vet test build
@@ -318,7 +318,7 @@ WEB_SRC_DIR=web/src
 CHANGELOG_DIR=$(MINTLIFY_DOCS_DIR)/data/releases
 
 ## generate: Generate all docs and presets (run during build)
-generate: verify-yaml-bindings schema-generate sqlc generate-schema generate-scenario-schema generate-refcheck generate-cel-reference generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-models generate-presets generate-workflow-builder-preset generate-changelog
+generate: verify-yaml-bindings schema-generate sqlc generate-schema generate-scenario-schema generate-refcheck generate-cel-reference generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-models generate-presets generate-workflow-builder-preset generate-changelog generate-mintlify-reference
 	@echo "$(GREEN)✅ All generated files up to date$(NC)"
 
 ## generate-schema: Generate workflow schema reference from proto types
@@ -402,6 +402,12 @@ generate-workflow-builder-preset: generate-schema generate-scenario-schema
 	@echo "$(YELLOW)Generating workflow builder preset...$(NC)"
 	@$(GOCMD) run ./tools/docgen/assembler/... $(DOCS_DIR) $(PRESETS_DIR)/workflow_builder.yaml
 	@echo "$(GREEN)✅ Workflow builder preset generated$(NC)"
+
+## generate-mintlify-reference: Convert generated reference markdown into Mintlify .mdx pages
+generate-mintlify-reference:
+	@echo "$(YELLOW)Generating Mintlify reference pages...$(NC)"
+	@python3 scripts/generate-mintlify-reference.py
+	@echo "$(GREEN)✅ Mintlify reference pages generated$(NC)"
 
 ## clean: Clean build artifacts
 clean:

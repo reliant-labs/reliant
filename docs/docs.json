@@ -38,6 +38,7 @@
               "workflows/workflow-control",
               "workflows/spawn",
               "workflows/patterns",
+              "workflows/routing",
               "workflows/testing",
               "examples/workflow-snippets"
             ]
@@ -54,6 +55,7 @@
             "group": "Agent Features",
             "pages": [
               "features/threads",
+              "features/attachments",
               "features/skills",
               "features/processes"
             ]

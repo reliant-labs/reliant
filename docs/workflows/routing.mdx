@@ -1,0 +1,202 @@
+---
+title: "Router Nodes"
+description: "Use an LLM to pick between multiple candidate workflows and execute the best match"
+---
+
+A router node presents a list of candidate workflows to an LLM classifier, which picks the best match for the current conversation and executes it as a sub-workflow. Think of it as `switch` for workflows, where the case selector is an LLM reading your thread history. The router handles both the decision ("which workflow?") and the dispatch ("now run it") in one node.
+
+Routers are useful when the right workflow depends on the user's intent rather than on deterministic state. A triage router reading the first user message can decide between a researcher, an implementer, and a debugger far more naturally than a hand-written `condition` expression.
+
+## When to use a router
+
+Routers shine in a few specific situations:
+
+- **Triage.** Route an incoming chat to the right specialist workflow (coder, researcher, debugger, reviewer) based on what the user actually asked for.
+- **Intent detection.** Pick a workflow per user intent without hand-writing CEL conditions over message content — the LLM classifier handles the messy natural-language bit.
+- **Dynamic dispatch.** When the set of candidate workflows changes based on project, preset visibility, or available presets.
+
+A router is **not** the right tool when:
+
+- A plain `condition` on a [`workflow` node](/workflows/custom-workflows) would do — deterministic routing on exit codes, tool outputs, or input values is faster and cheaper than a CallLLM round trip.
+- The set of workflows is small and stable, and you'd prefer explicit branches in an `edges` block.
+- You need repeatable, auditable routing decisions. Routers depend on an LLM and may pick differently across runs.
+
+## Minimal example
+
+Here's a triage router with two candidates. It reads the conversation history, picks between a general agent and a code-review specialist, and runs whichever it selects:
+
+```yaml
+nodes:
+  - id: triage
+    type: router
+    system_prompt: |
+      Pick the best agent for this task. Prefer the general agent for
+      implementation and investigation. Pick the code-review specialist only
+      when the user is asking for a review, audit, or quality analysis.
+    model:
+      tags: [fast]
+    thread:
+      mode: new
+    workflows:
+      - ref: builtin://agent
+        presets:
+          - general
+          - researcher
+      - ref: builtin://agent
+        presets:
+          - code_reviewer
+        description: Code review specialist — use when the user wants code reviewed, audited, or analyzed for quality.
+```
+
+Notice a few things about this shape:
+
+- `workflows` is a list of `RouterWorkflowCandidate` entries, not a single value. The router requires **at least one** candidate and will fail validation with zero.
+- `model` configures the classifier LLM, not the selected child workflow. The child workflow runs with whatever model its own preset configures. A small, fast model is usually fine here — classification is a short call.
+- `thread.mode` controls the child workflow's thread, just like a regular `workflow` or `loop` node. Defaults to `new`.
+- Two candidates can share the same `ref` (here both are `builtin://agent`) and differ only in `presets` and `description`. This is how you expose multiple "personalities" of the same base workflow to the classifier.
+
+Router nodes are structural, so the fields above sit directly on the node. You can also wrap them under an explicit `args:` key if you prefer that style — both are parsed identically.
+
+## Candidate structure
+
+Each entry in `workflows` is a `RouterWorkflowCandidate` with three fields:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `ref` | Yes | Workflow reference string, like `builtin://agent` or `project://my-flow`. Empty refs fail validation. |
+| `presets` | No | List of preset slugs to restrict the candidate to. Empty means "all valid presets for this workflow." |
+| `description` | No | Override string shown to the classifier LLM. Falls back to the workflow's own `description:` when empty. |
+
+The candidate list must be non-empty — a router without candidates fails structural validation at load time with `router node requires at least one candidate workflow`.
+
+<Warning>
+The `description` field is what the LLM actually sees when deciding. Treat it as user-facing copy for an audience of one (the classifier). A vague description like "the agent" will produce vague routing. A sharp description like "Code review specialist — use when the user wants code reviewed, audited, or analyzed for quality" gives the classifier something to latch onto.
+</Warning>
+
+## Inputs
+
+A router node supports these fields (all optional except `workflows`):
+
+- **`workflows`** (required): The candidate list described above.
+- **`system_prompt`**: Custom system prompt for the classifier LLM. When set, it replaces the default routing system prompt and is prepended to the automatically generated workflow catalog. Use it to steer the classifier ("prefer the researcher when in doubt", "never pick the debugger unless the user mentions an error").
+- **`model`**: A model selector for the classifier. Defaults to whatever the platform considers a fast model. The classifier runs one short CallLLM, so you usually want speed over capability here.
+- **`thread`**: Thread config for the selected child workflow — same `ThreadConfig` shape used by `workflow` and `loop` nodes. Defaults to `mode: new`. When the child thread mode creates a new thread, the router automatically injects the rewritten prompt as a user message on that thread so the selected workflow has conversation context to work with.
+- **`fallback`**: A preset name to fall back to when the classifier picks a preset that is not allowed for the selected workflow. See [Fallback behavior](#fallback-behavior) below for the exact semantics — `fallback` does **not** cover every failure mode.
+- **`project`**: Working directory override for the selected sub-workflow, same shape as on a `workflow` node.
+- **`outputs`**: A map of output name to CEL expression. Lets you expose computed values as top-level node outputs. See [Custom outputs](#custom-outputs).
+
+For the full auto-generated input/output table, see the [Router entry in the node reference](/reference/nodes#router). Note that the reference's auto-generated input list currently omits `workflows` because the doc generator drops `message`-typed repeated fields — this narrative is the authoritative source for that field.
+
+## Outputs
+
+After the router runs, five fields are available on `nodes.<router_id>`:
+
+| Output | Type | Description |
+|--------|------|-------------|
+| `selected_workflow` | string | The workflow ref the classifier picked, e.g. `builtin://agent`. |
+| `selected_preset` | string | The preset name applied to the selected workflow. |
+| `prompt` | string | The rewritten prompt the classifier produced for the child. This is what got injected into the child thread when the thread mode created a new thread. |
+| `reasoning` | string | Short natural-language explanation from the classifier for why it picked this workflow and preset. Useful for logging, UI, and debugging misroutes. |
+| `outputs` | object | The selected child workflow's own declared outputs, nested under this key. |
+
+Because `outputs` holds whatever the child workflow exposed, its shape depends on which candidate ran. For the built-in agent workflow, that gives you access to things like `nodes.triage.outputs.response_text` and `nodes.triage.outputs.message`. The validator allows dynamic sub-field access on `outputs` and, when it can load the candidate workflows, unions their declared output keys for type hints.
+
+Downstream nodes can branch on the routing decision directly:
+
+```yaml
+edges:
+  - from: triage
+    cases:
+      - to: run_reviewer_followup
+        condition: nodes.triage.selected_preset == 'code_reviewer'
+    default: default_handoff
+```
+
+## Custom outputs
+
+The `outputs` field on `RouterArgs` lets you declare named outputs that get evaluated against the router's execution context and then exposed as top-level fields on `nodes.<router_id>`. Each value is a CEL expression — no `{{ }}` delimiters, because it's already a CEL context.
+
+The CEL context for each expression contains exactly the five fields listed above: `selected_workflow`, `selected_preset`, `prompt`, `reasoning`, and `outputs`. You can reach into `outputs` to surface specific child fields as first-class:
+
+```yaml
+- id: triage
+  type: router
+  workflows:
+    - ref: builtin://agent
+      presets: [general, researcher]
+    - ref: builtin://agent
+      presets: [code_reviewer]
+      description: Code review specialist
+  outputs:
+    chosen: "selected_workflow"
+    why: "reasoning"
+    final_answer: "outputs.response_text"
+```
+
+After this node runs, `nodes.triage.chosen`, `nodes.triage.why`, and `nodes.triage.final_answer` are all available to edges and downstream nodes as if they were native router outputs. This is handy when the rest of your workflow shouldn't need to know — or care — that a node happens to be a router.
+
+<Tip>
+Declared outputs are merged with the fixed ones, not replaced. `nodes.triage.selected_workflow` still resolves even when you declare `chosen: "selected_workflow"` — you're adding an alias, not renaming.
+</Tip>
+
+## Classification reliability
+
+The router's decision quality is dominated by two things: the descriptions you give it and the model you pick.
+
+**Descriptions are doing all the work.** The classifier prompt is built by concatenating each candidate's ref, description, input schema, available presets, and full workflow YAML. Of those, the description and preset descriptions are the pieces an LLM actually reads carefully. Vague descriptions ("the agent", "general purpose") leave the classifier guessing; concrete descriptions ("Code review specialist — use when the user wants code reviewed, audited, or analyzed for quality") produce consistent routing.
+
+**The fast-model default is a trade-off.** Routers default to a fast model because classification is a short, structured call and latency matters at the top of a conversation. Fast models handle obvious routing fine but can misclassify borderline prompts. If you find the router consistently picking the wrong workflow on ambiguous input, either tighten your descriptions or bump the classifier model:
+
+```yaml
+- id: triage
+  type: router
+  model:
+    tags: [smart]  # or a specific model ref
+  workflows: [...]
+```
+
+**Use `system_prompt` to steer.** When descriptions alone aren't enough, a short custom system prompt is usually faster than redesigning the candidate list:
+
+```yaml
+system_prompt: |
+  When the user's intent is ambiguous, prefer the researcher over the
+  implementer — exploration is cheaper than a wrong edit.
+```
+
+## Fallback behavior
+
+The `fallback` field is narrower than it might look. It's a preset name, and it's only consulted when the classifier picks a **valid workflow** but an **invalid preset** for that workflow — for example, if the LLM hallucinates a preset name or picks one that isn't in the candidate's allowed list. When that happens, the router retries the selection with the fallback preset on the same workflow the LLM picked.
+
+`fallback` does **not** rescue other failure modes:
+
+- If the CallLLM activity itself fails (network, rate limit, model error), the router errors out.
+- If the classifier picks a workflow that isn't in the candidate list, the router errors out.
+- If `fallback` itself isn't valid for the selected workflow, the router errors out.
+
+In short, `fallback` is a correctness guard against hallucinated presets, not a general-purpose error handler. If you need to recover from classification failures, wrap the router in an edge that catches the error and routes to a default workflow.
+
+## Interaction with threads
+
+Routers create a child execution just like [workflow](/workflows/custom-workflows) and [loop](/workflows/patterns#verification-loops) nodes, and the child gets its own thread controlled by the `thread` field. The default is `mode: new`, which is almost always what you want for triage — the selected workflow starts with a clean thread and receives the classifier's rewritten prompt as its first user message.
+
+When `thread.mode` produces a new or forked thread, the router saves the rewritten prompt (`decision.prompt`) to the child thread as a user message before the child workflow starts executing. This is how the selected workflow "sees" the routed request even when it has no dedicated input field for it. If you use `thread.mode: inherit`, the child shares the parent thread and no injection happens — the child reads the existing conversation history directly.
+
+For the full list of thread modes and inject semantics, see [Threads](/features/threads).
+
+## Routers vs workflow and loop nodes
+
+The three sub-workflow node types look similar but serve different jobs:
+
+- **`workflow` node**: Runs a single, statically chosen workflow. Use when you know at authoring time which workflow should run.
+- **`loop` node**: Repeats a workflow while a condition holds (or over an item list for parallel execution). Use for retry-until-passing, iterative refinement, and fan-out over inputs.
+- **`router` node**: Picks one workflow at runtime from a candidate list using an LLM. Use when the choice depends on user intent and would be painful to encode as deterministic conditions.
+
+A router is essentially a "workflow node whose ref is decided by an LLM right before it runs." If you ever find yourself writing a CallLLM node followed by a workflow node that reads the result, you probably want a router instead.
+
+## Related
+
+- [Node types reference — Router](/reference/nodes#router) — Auto-generated input/output table. Note that `workflows` is omitted from the generated table; see [Candidate structure](#candidate-structure) above for its shape.
+- [Creating Custom Workflows](/workflows/custom-workflows) — Sub-workflow basics for `workflow` and `loop` nodes.
+- [Multi-Agent Patterns](/workflows/patterns) — Broader patterns for composing and branching between workflows.
+- [Threads](/features/threads) — Thread modes (`new`, `inherit`, `fork`) and inject semantics shared across sub-workflow node types.
+- [Presets](/workflows/presets) — How presets configure the workflows a router dispatches to.

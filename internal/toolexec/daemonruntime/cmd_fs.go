@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -25,6 +26,7 @@ import (
 
 func init() {
 	RegisterCommand("fs.read_file", handleFSReadFile)
+	RegisterCommand("fs.read_binary_file", handleFSReadBinaryFile)
 	RegisterCommand("fs.write_file", handleFSWriteFile)
 	RegisterCommand("fs.patch_file", handleFSPatchFile)
 	RegisterCommand("fs.stat", handleFSStat)
@@ -98,6 +100,47 @@ func handleFSReadFile(_ context.Context, payload []byte) ([]byte, error) {
 		TotalLines: totalLines,
 		Truncated:  truncated,
 		Size:       info.Size(),
+	}
+	return json.Marshal(resp)
+}
+
+// =============================================================================
+// fs.read_binary_file
+// =============================================================================
+
+type fsReadBinaryFileRequest struct {
+	Path     string `json:"path"`
+	MaxBytes int64  `json:"max_bytes"`
+}
+
+type fsReadBinaryFileResponse struct {
+	Data string `json:"data"` // base64-encoded
+}
+
+func handleFSReadBinaryFile(_ context.Context, payload []byte) ([]byte, error) {
+	var req fsReadBinaryFileRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return nil, fmt.Errorf("invalid payload: %w", err)
+	}
+
+	info, err := os.Stat(req.Path)
+	if err != nil {
+		return nil, fmt.Errorf("stat %s: %w", req.Path, err)
+	}
+	if info.IsDir() {
+		return nil, fmt.Errorf("%s is a directory", req.Path)
+	}
+	if req.MaxBytes > 0 && info.Size() > req.MaxBytes {
+		return nil, fmt.Errorf("file %s is %d bytes, exceeds maximum of %d bytes", req.Path, info.Size(), req.MaxBytes)
+	}
+
+	data, err := os.ReadFile(req.Path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", req.Path, err)
+	}
+
+	resp := fsReadBinaryFileResponse{
+		Data: base64.StdEncoding.EncodeToString(data),
 	}
 	return json.Marshal(resp)
 }
