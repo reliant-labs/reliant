@@ -25,7 +25,7 @@ func init() {
 	FieldDescriptions["loop.parallel"] = "Execute all iterations concurrently"
 	FieldDescriptions["loop.while"] = "CEL condition: loop continues while true"
 	FieldDescriptions["loop.yield"] = "CEL expression to yield to user on loop exit"
-	FieldDescriptions["router.fallback"] = "Fallback preset if routing decision fails"
+	FieldDescriptions["router.fallback"] = "Fallback preset or node ID if routing decision fails"
 	FieldDescriptions["router.model"] = "Model for routing decision (defaults to fast model)"
 	FieldDescriptions["router.outputs"] = "Declared output mappings (name → CEL expression)"
 	FieldDescriptions["router.system_prompt"] = "Custom system prompt for the routing LLM"

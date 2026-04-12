@@ -13,6 +13,7 @@ import { TasksPanel } from "../Chat/TasksPanel";
 import { CommandsViewerTab } from "../PackageCommands/CommandsViewerTab";
 import { BrowserSidebarContent } from "../Browser/BrowserSidebarContent";
 import { useTasksStore } from "../../store/tasksStore";
+import { useActiveChatId } from "../../store/chatStoreHooks";
 import { useCurrentWorktreeState, useWorkspaceStateStore, type RightSidebarTab } from "../../store/workspaceStateStore";
 import { useFileClipboardStore } from "../../store/fileClipboardStore";
 import { useFileDeletionStore } from "../../store/fileDeletionStore";
@@ -85,6 +86,8 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
   const worktreeBrowserTabs = activeWorktreeId 
     ? browserTabs.filter(t => t.worktreeId === activeWorktreeId)
     : [];
+
+  const activeChatId = useActiveChatId();
 
   // Get task stats for the current chat - use activeChatId directly from chatStore for consistency
   // Subscribe to the entire tasksByChat object to ensure re-renders on any task updates

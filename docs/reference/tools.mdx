@@ -831,8 +831,9 @@ LIMITATIONS:
 - Maximum output size is 16KB (~4K tokens) - larger files are truncated with head+tail
 - Default reading limit is 300 lines
 - Lines longer than 500 characters are truncated
-- Cannot display binary files or images
-- Images can be identified but not displayed
+- Cannot display binary files (executables, archives, etc.)
+- Images up to 5MB are supported (JPEG, PNG, GIF, BMP, SVG, WebP)
+- PDFs up to 5MB are supported
 
 TIPS:
 - Use with Glob tool to first find files you want to view
