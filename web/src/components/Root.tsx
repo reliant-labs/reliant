@@ -45,7 +45,6 @@ export function Root() {
             // Continue anyway - will fail on gRPC calls but user sees the app
           }
         }
-
         // Ensure Supabase has recovered the session from localStorage before
         // any authenticated gRPC calls fire (the auth interceptor reads getSession()).
         await supabase.auth.getSession();
@@ -80,13 +79,11 @@ export function Root() {
 
         // CRITICAL: Apply appearance settings to DOM immediately after settingsSync initializes
         // This ensures settings are visible before the app renders, preventing the need to refresh
-        logger.info("[Root] Applying appearance settings to DOM...");
         settingsSync.applyAppearanceSettingsToDOM();
 
         // Initialize Sentry after privacy settings are loaded
         await initSentry();
         setIsPrivacyInitialized(true);
-        logger.info("[Root] ✅ App initialization complete");
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         logger.error("[Root] Failed to initialize:", errorMessage);
