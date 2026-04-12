@@ -62,7 +62,6 @@ import { useSidebarOverlay } from "./hooks/useSidebarOverlay";
 import { useGitInitialization } from "./hooks/useGitInitialization";
 import { useProjectRescan } from "./hooks/useProjectRescan";
 import { useCancelOnUnload } from "./hooks/useCancelOnUnload";
-import { useShortcutsStore } from "./store/shortcutsStore";
 import { useTerminalStore } from "./store/terminalStore";
 import { useWorktreeStore } from "./store/worktreeStore";
 import { useGlobalUpdatesStore } from "./store/globalUpdatesStore";
@@ -78,7 +77,6 @@ import { useApiKeySetupStore } from "./store/apiKeySetupStore";
 import { useGlobalDataStore } from "./store/globalDataStore";
 
 function App() {
-  const loadChats = useChatStore((state) => state.loadChats);
   const chats = useChatStore((state) => state.chats); // Map<string, Chat>
   const chatError = useChatStore((state) => state.error);
   const activeChatId = useChatStore((state) => state.activeChatId);
@@ -86,9 +84,7 @@ function App() {
   const currentProject = useProjectStore((state) => state.currentProject);
   const selectProject = useProjectStore((state) => state.selectProject);
   const loadProjects = useProjectStore((state) => state.loadProjects);
-  const initializeShortcuts = useShortcutsStore(
-    (state) => state.initializeShortcuts
-  );
+
   const isTerminalOpen = useTerminalStore((state) => state.isOpen);
   const toggleTerminal = useTerminalStore((state) => state.toggleTerminal);
   const createTerminalSession = useTerminalStore(
@@ -261,11 +257,6 @@ function App() {
 
   // Listen for CLI open-project events (reliant <path>)
   useOpenProjectListener();
-
-  // Initialize shortcuts store
-  useEffect(() => {
-    initializeShortcuts();
-  }, [initializeShortcuts]);
 
   // Fire best-effort cancel when closing the browser tab/window
   useCancelOnUnload();
@@ -900,7 +891,7 @@ function App() {
 
         if (!mounted) return;
 
-        // Backend is ready — workspace restore and project-change effects handle loadChats.
+        // Backend is ready — workspace restore / selectProject already loaded chats.
         setIsBackendReady(true);
       } catch (err) {
         logger.error("Failed to initialize app:", err);
@@ -917,25 +908,16 @@ function App() {
   }, [loadProjects]); // Run once on mount — workspace restore handles project selection
 
   // Connect global WebSocket for real-time updates after backend is ready.
-  // We await loadChats first so the lastUserUpdateSequence is stored before
-  // the stream connects — this prevents the stream from replaying events
-  // that were already loaded.
+  // Chats are already loaded by workspace restore / selectProject before
+  // isBackendReady is set, so the lastUserUpdateSequence is already stored.
   const projectId = currentProject?.id;
   useEffect(() => {
     if (!isBackendReady || !projectId) return;
 
-    let cancelled = false;
-
-    (async () => {
-      // Ensure chats are loaded first — loadChats stores the latest user update
-      // sequence which the stream uses as sinceSeq to avoid redundant replay.
-      await loadChats();
-
-      if (cancelled) return;
-
-      const globalUpdates = useGlobalUpdatesStore.getState();
-      globalUpdates.connect();
-    })();
+    // Chats are already loaded by workspace restore / selectProject,
+    // so we can connect the global updates stream directly.
+    const globalUpdates = useGlobalUpdatesStore.getState();
+    globalUpdates.connect();
 
     // Initialize notification store (loads settings from localStorage/DB)
     useNotificationStore.getState().initialize();
@@ -945,10 +927,9 @@ function App() {
 
     // Cleanup on unmount
     return () => {
-      cancelled = true;
       useGlobalUpdatesStore.getState().disconnect();
     };
-  }, [isBackendReady, projectId, loadChats]);
+  }, [isBackendReady, projectId]);
 
   // Fetch background processes on app mount to ensure we have current state
   // This is critical because processes survive server restarts and we need
@@ -1018,16 +999,7 @@ function App() {
     };
   }, []);
 
-  // Load chats when project changes (use stable ID to avoid re-fires from object reference changes)
-  useEffect(() => {
-    if (projectId && isBackendReady) {
-      logger.info(
-        "🔄 Project changed, loading chats for project:",
-        projectId
-      );
-      loadChats();
-    }
-  }, [projectId, isBackendReady, loadChats]);
+  // Chats are already loaded by workspace restore / selectProject — no need to reload here.
 
   // Periodic error clearing to prevent persistent error states
   useEffect(() => {

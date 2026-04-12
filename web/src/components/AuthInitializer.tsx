@@ -3,7 +3,6 @@ import { useAuthStore } from "@/store/authStore";
 import { useGlobalDataStore } from "@/store/globalDataStore";
 import { useApiKeySetupStore } from "@/store/apiKeySetupStore";
 import { logger } from "@/lib/logger";
-import { supabase } from "@/lib/supabase";
 
 // NOTE: OAuth callback handling is done in authStore.initialize() to avoid duplicate listeners
 
@@ -45,55 +44,37 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
         hasAccessToken: !!session?.access_token,
       });
 
-      // Add a delay to ensure session is fully propagated in Electron
-      // In Electron, session storage is async via IPC calls, so we need
-      // to wait for the session to be fully available before making API calls
-      const delay = window.electronAPI ? 500 : 0;
+      // Session is guaranteed available: this effect only fires when
+      // authStore has initialized=true, user!=null, session!=null.
+      // authStore.initialize() already awaited supabase.auth.getSession()
+      // and onAuthStateChange keeps it in sync (including Electron IPC).
 
-      setTimeout(async () => {
-        // Double-check session is available from Supabase before prefetch
-        const { data: { session: currentSession } } = await supabase.auth.getSession();
-        logger.info('[AuthInitializer] Session check before prefetch:', {
-          hasSession: !!currentSession,
-          hasAccessToken: !!currentSession?.access_token,
-          tokenLength: currentSession?.access_token?.length,
-          isElectron: !!window.electronAPI,
-        });
+      const start = performance.now();
 
-        if (!currentSession?.access_token && window.electronAPI) {
-          logger.warn('[AuthInitializer] No access token available yet, waiting longer...');
-          // Wait a bit more for Electron
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
-
-        const start = performance.now();
-
-        // Trigger prefetch - this loads global data needed for the app
-        try {
-          await prefetch();
+      // Trigger prefetch - this loads global data needed for the app
+      prefetch()
+        .then(() => {
           logger.info('[AuthInitializer] Global data prefetch completed in', (performance.now() - start).toFixed(2), 'ms');
-        } catch (error) {
+        })
+        .catch((error) => {
           logger.warn('[AuthInitializer] Global data prefetch failed:', error);
           // Reset prefetch flag if global data fails, as it's critical for app function
           hasPrefetched.current = false;
-        }
+        });
 
-        // Independently check API keys
-        // Wait for checklist to initialize first to avoid showing modal during welcome
-        const waitForChecklist = async () => {
-          const { useOnboardingChecklistStore } = await import("../store/onboardingChecklistStore");
-          let attempts = 0;
-          while (!useOnboardingChecklistStore.getState().isInitialized && attempts < 50) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-            attempts++;
-          }
-          // Now check API keys after checklist state is known
-          checkApiKeys().catch((error) => {
-            logger.warn('[AuthInitializer] API key check failed:', error);
-          });
-        };
-        waitForChecklist();
-      }, delay);
+      // Independently check API keys
+      // Wait for checklist to initialize first to avoid showing modal during welcome
+      (async () => {
+        const { useOnboardingChecklistStore } = await import("../store/onboardingChecklistStore");
+        let attempts = 0;
+        while (!useOnboardingChecklistStore.getState().isInitialized && attempts < 50) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          attempts++;
+        }
+        checkApiKeys().catch((error) => {
+          logger.warn('[AuthInitializer] API key check failed:', error);
+        });
+      })();
     }
   }, [initialized, loading, user, session, prefetch, checkApiKeys]);
 
