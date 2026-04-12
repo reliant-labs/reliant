@@ -215,8 +215,16 @@ func (c *CodexClient) convertMessages(messages []message.Message) responses.Resp
 					}
 					content = append(content, responses.ResponseInputContentUnionParam{OfInputImage: &image})
 				} else {
-					description := fmt.Sprintf("[Attachment: %s (type: %s)]", extractFilenameFromPath(binaryContent.Path), binaryContent.MIMEType)
-					content = append(content, responses.ResponseInputContentParamOfInputText(description))
+					fileData := "data:" + binaryContent.MIMEType + ";base64," + base64.StdEncoding.EncodeToString(binaryContent.Data)
+					filename := extractFilenameFromPath(binaryContent.Path)
+					if filename == "" {
+						filename = "file"
+					}
+					filePart := responses.ResponseInputFileParam{
+						FileData: param.NewOpt(fileData),
+						Filename: param.NewOpt(filename),
+					}
+					content = append(content, responses.ResponseInputContentUnionParam{OfInputFile: &filePart})
 				}
 			}
 

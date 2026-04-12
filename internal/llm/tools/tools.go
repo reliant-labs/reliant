@@ -19,12 +19,13 @@ const (
 )
 
 type ToolResponse struct {
-	Type         toolResponseType `json:"type"`
-	Content      string           `json:"content"`
-	AgentMessage string           `json:"agent_message,omitempty"` // Optional agent message to insert before tool result
-	Metadata     string           `json:"metadata,omitempty"`
-	IsError      bool             `json:"is_error"`
-	Backgrounded bool             `json:"backgrounded,omitempty"` // True if command was converted to background
+	Type         toolResponseType        `json:"type"`
+	Content      string                  `json:"content"`
+	AgentMessage string                  `json:"agent_message,omitempty"` // Optional agent message to insert before tool result
+	Metadata     string                  `json:"metadata,omitempty"`
+	IsError      bool                    `json:"is_error"`
+	Backgrounded bool                    `json:"backgrounded,omitempty"` // True if command was converted to background
+	BinaryParts  []message.BinaryContent `json:"binary_parts,omitempty"` // Binary content (images, PDFs) to include in tool result
 }
 
 func NewTextResponse(content string) ToolResponse {
@@ -50,6 +51,14 @@ func NewTextErrorResponse(content string) ToolResponse {
 		Type:    ToolResponseTypeText,
 		Content: content,
 		IsError: true,
+	}
+}
+
+func NewImageResponse(content string, parts []message.BinaryContent) ToolResponse {
+	return ToolResponse{
+		Type:        ToolResponseTypeImage,
+		Content:     content,
+		BinaryParts: parts,
 	}
 }
 

@@ -117,7 +117,7 @@ message SaveMessageConfig {
   // ToolResults saves tool execution results.
   CelString tool_results = 5;
   // Attachments saves file attachment IDs.
-  CelString attachments = 6 [(reliant) = { hidden: true }];
+  CelString attachments = 6 [(reliant) = { description: "Attachment IDs to attach to the saved message. CEL expression must return []string." }];
   // DisplayStyle sets the UI display style: "info", "warning", "success", "hidden".
   CelString display_style = 7 [(reliant) = { hidden: true }];
 }
@@ -404,7 +404,7 @@ message SaveMessageNodeArgs {
   // ToolResults is a CEL expression for tool results.
   CelString tool_results = 4 [(reliant) = { description: "Tool execution results" hidden: true }];
   // Attachments is a CEL expression for file attachments.
-  CelString attachments = 5 [(reliant) = { hidden: true }];
+  CelString attachments = 5 [(reliant) = { description: "Attachment IDs. CEL expression must return []string." }];
   // DisplayStyle is a CEL expression for UI display style.
   CelString display_style = 6 [(reliant) = { description: "UI display style hint" enum_values: "info|warning|success|hidden" }];
 

@@ -3,17 +3,20 @@ package openai
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
+	"github.com/openai/openai-go/v3/packages/param"
 	"github.com/openai/openai-go/v3/responses"
 	"github.com/openai/openai-go/v3/shared"
 	"github.com/reliant-labs/reliant/internal/llm"
@@ -93,10 +96,16 @@ func (o *OpenaiClient) ConvertMessages(prompts []string, messages []message.Mess
 					imageBlock := openai.ChatCompletionContentPartImageParam{ImageURL: imageURL}
 					content = append(content, openai.ChatCompletionContentPartUnionParam{OfImageURL: &imageBlock})
 				} else {
-					// For non-image files, add as text description
-					description := fmt.Sprintf("[Attachment: %s (type: %s)]", extractFilenameFromPath(binaryContent.Path), binaryContent.MIMEType)
-					textBlock := openai.ChatCompletionContentPartTextParam{Text: description}
-					content = append(content, openai.ChatCompletionContentPartUnionParam{OfText: &textBlock})
+					fileData := "data:" + binaryContent.MIMEType + ";base64," + base64.StdEncoding.EncodeToString(binaryContent.Data)
+					filename := filepath.Base(binaryContent.Path)
+					if filename == "" || filename == "." {
+						filename = "file"
+					}
+					filePart := openai.FileContentPart(openai.ChatCompletionContentPartFileFileParam{
+						FileData: param.NewOpt(fileData),
+						Filename: param.NewOpt(filename),
+					})
+					content = append(content, filePart)
 				}
 			}
 
@@ -157,8 +166,18 @@ func (o *OpenaiClient) ConvertMessages(prompts []string, messages []message.Mess
 							contentParts = append(contentParts, openai.ChatCompletionContentPartUnionParam{
 								OfImageURL: &openai.ChatCompletionContentPartImageParam{ImageURL: imageURL},
 							})
+						} else {
+							fileData := "data:" + bp.MIMEType + ";base64," + base64.StdEncoding.EncodeToString(bp.Data)
+							filename := filepath.Base(bp.Path)
+							if filename == "" || filename == "." {
+								filename = "file"
+							}
+							filePart := openai.FileContentPart(openai.ChatCompletionContentPartFileFileParam{
+								FileData: param.NewOpt(fileData),
+								Filename: param.NewOpt(filename),
+							})
+							contentParts = append(contentParts, filePart)
 						}
-						// Skip PDFs — OpenAI doesn't support them in any message type
 					}
 					openaiMessages = append(openaiMessages, openai.UserMessage(contentParts))
 				}

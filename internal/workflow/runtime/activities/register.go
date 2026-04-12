@@ -107,6 +107,9 @@ func registerNodeTypeActivities() {
 	visibleStructuralNodes := map[string]bool{
 		model.NodeTypeRun:      true,
 		model.NodeTypeWorkflow: true,
+		model.NodeTypeLoop:     true,
+		model.NodeTypeJoin:     true,
+		model.NodeTypeRouter:   true,
 	}
 
 	for nodeType, meta := range metas {

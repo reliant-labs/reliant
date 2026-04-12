@@ -51,4 +51,8 @@ type FileSystem interface {
 	// DeletePath removes a file or directory.
 	// For directories, removal is recursive. No error if the path does not exist.
 	DeletePath(ctx context.Context, path string) error
+
+	// ReadBinaryFile reads a file's raw bytes up to maxBytes.
+	// Returns the raw bytes, or error if the file exceeds maxBytes or doesn't exist.
+	ReadBinaryFile(ctx context.Context, path string, maxBytes int64) ([]byte, error)
 }

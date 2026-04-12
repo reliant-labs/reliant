@@ -34,7 +34,7 @@ Tools are organized by tags for filtering:
 
 ## Categories
 
-- [Planning & Task Management](#planning--task-management) (20 tools)
+- [Planning & Task Management](#planning--task-management) (23 tools)
 - [File Operations](#file-operations) (4 tools)
 - [Workflow Management](#workflow-management) (16 tools)
 - [System & Execution](#system--execution) (2 tools)
@@ -52,6 +52,7 @@ _Tools for creating plans, managing tasks, and tracking progress._
 | [`add_task`](#add_task) | planning, plan, default | Add a new task to the current plan. This is your primary tool for dynamic planning and sub-planning. |
 | [`bash_list`](#bash_list) | execution, readonly, plan, default | Lists background processes in the current workspace. |
 | [`bash_output`](#bash_output) | execution, readonly, plan, default | Retrieves output from a background process with pagination and regex filtering support. |
+| [`component_library`](#component_library) | default, readonly, plan | Component library with 36 production-ready React/TypeScript components for building UIs, dashboar... |
 | [`create_plan`](#create_plan) | planning, plan, default | Create a comprehensive plan with tasks for implementing a feature or solving a problem. |
 | [`create_subtask`](#create_subtask) | planning, plan | Create a subtask under an existing task. |
 | [`fetch`](#fetch) | web, readonly, plan, default | Fetches content from a URL and returns it in the specified format. |
@@ -61,8 +62,10 @@ _Tools for creating plans, managing tasks, and tracking progress._
 | [`layout_library`](#layout_library) | readonly, plan | Layout library tool that provides pre-built, accessible, and responsive HTML/CSS layout templates... |
 | [`list_ready_tasks`](#list_ready_tasks) | planning, readonly, plan, default | List tasks that are ready to work on — no unresolved blockers. |
 | [`list_tasks`](#list_tasks) | planning, readonly, plan, default | List all tasks for the current plan. |
+| [`load_tool`](#load_tool) | default, readonly, plan | Dynamically load a tool by name or search for available tools. |
 | [`project_analyzer`](#project_analyzer) | analysis, readonly, plan | Analyzes project structure, detects languages, build systems, and test frameworks |
 | [`remove_dependency`](#remove_dependency) | planning, plan, default | Remove a dependency between two tasks. |
+| [`skill`](#skill) | default, readonly, plan | Load skills — specialized knowledge and instructions for specific tasks. |
 | [`sourcegraph`](#sourcegraph) | analysis, readonly, plan | Search code across public repositories using Sourcegraph's GraphQL API. |
 | [`update_plan`](#update_plan) | planning, plan, default | Update an existing plan's details or status. |
 | [`update_task`](#update_task) | planning, plan, default | Update a task's status, details, or metadata. |
@@ -263,6 +266,33 @@ The response includes metadata:
 - filter_applied: true if regex was used
 - total_matches: number of matching lines (when filtered)
 - matches_in_response: number of matches in this chunk
+
+---
+
+### component_library
+
+**Tags:** `default`, `readonly`, `plan`
+
+Component library with 36 production-ready React/TypeScript components for building UIs, dashboards, landing pages, pitch decks, charts, and diagrams.
+
+WHEN TO USE:
+- Building any UI — search for relevant components first
+- Creating charts or diagrams — components handle all coordinate math
+- Building pitch deck slides — use deck components as templates
+- Need a layout pattern — search by use case (dashboard, landing, portal, crm)
+
+ACTIONS:
+- search: Find components by keyword, tag, or category
+  Examples: search(query="chart"), search(tag="deck"), search(category="charts")
+- get: Retrieve full source code for a specific component
+  Example: get(name="quadrant_chart")
+- list: Browse all components (optionally filtered by tag or category)
+
+CATEGORIES: layouts (10), charts (6), diagrams (5), deck (7), ui (8)
+
+TAGS: layout, chart, diagram, deck, ui, landing, marketing, dashboard, analytics, admin, portal, crm, comparison, pricing, hero, form, auth, slide, presentation, saas, funnel, competitive, market, pipeline, process, team, docs, technical
+
+CHARTS handle all coordinate math internally — pass data, get pixels. No spatial reasoning required.
 
 ---
 
@@ -562,6 +592,20 @@ RETURNS:
 
 ---
 
+### load_tool
+
+**Tags:** `default`, `readonly`, `plan`
+
+Dynamically load a tool by name or search for available tools.
+
+Use this when you need a tool that isn't currently loaded. You can:
+- Load a specific tool by name: `{"name": "sourcegraph"}`
+- Search for tools by keyword: `{"query": "workflow"}`
+
+Loaded tools become available immediately on the next turn.
+
+---
+
 ### project_analyzer
 
 **Tags:** `analysis`, `readonly`, `plan`
@@ -577,6 +621,19 @@ Analyzes project structure, detects languages, build systems, and test framework
 Remove a dependency between two tasks.
 
 Specify from_task, to_task, and type to identify which dependency to remove.
+
+---
+
+### skill
+
+**Tags:** `default`, `readonly`, `plan`
+
+Load skills — specialized knowledge and instructions for specific tasks.
+Skills provide detailed guidance on how to perform particular operations.
+Use 'list' to see available skills, 'load' to load a skill's instructions,
+or 'search' to find skills by keyword.
+When you load a skill, its instructions become available in the conversation.
+Skills may suggest tools to load — use the load_tool tool if suggested tools are needed.
 
 ---
 

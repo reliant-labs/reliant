@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 )
@@ -76,6 +77,27 @@ func (r *RemoteClient) ReadFile(ctx context.Context, path string, opts *ReadFile
 		return nil, err
 	}
 	return &resp, nil
+}
+
+type readBinaryFileRequest struct {
+	Path     string `json:"path"`
+	MaxBytes int64  `json:"max_bytes"`
+}
+
+type readBinaryFileResponse struct {
+	Data string `json:"data"` // base64-encoded
+}
+
+func (r *RemoteClient) ReadBinaryFile(ctx context.Context, path string, maxBytes int64) ([]byte, error) {
+	var resp readBinaryFileResponse
+	if err := r.send(ctx, "fs.read_binary_file", readBinaryFileRequest{Path: path, MaxBytes: maxBytes}, &resp, timeoutFSDefault); err != nil {
+		return nil, err
+	}
+	data, err := base64.StdEncoding.DecodeString(resp.Data)
+	if err != nil {
+		return nil, fmt.Errorf("remote fs.read_binary_file: decode base64: %w", err)
+	}
+	return data, nil
 }
 
 type writeFileRequest struct {
