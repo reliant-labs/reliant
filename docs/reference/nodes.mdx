@@ -234,7 +234,7 @@ Execute a sub-workflow in a loop with conditions
 
 ## Router
 
-Route to a workflow based on LLM classification
+Route to a workflow or node based on LLM classification
 
 ### Inputs
 
@@ -242,7 +242,7 @@ Route to a workflow based on LLM classification
 |-------|------|----------|---------|-------------|
 | `system_prompt` | string | No | - | Custom system prompt for the routing LLM |
 | `model` | model | No | - | Model for routing decision (defaults to fast model) |
-| `fallback` | string | No | - | Fallback preset if routing decision fails |
+| `fallback` | string | No | - | Fallback preset or node ID if routing decision fails |
 | `outputs` | map | No | - | Declared output mappings (name → CEL expression) |
 
 ### Outputs
@@ -253,6 +253,7 @@ Route to a workflow based on LLM classification
 | `selected_preset` | string | - |
 | `prompt` | string | - |
 | `reasoning` | string | - |
+| `selected_node` | string | - |
 
 ---
 
