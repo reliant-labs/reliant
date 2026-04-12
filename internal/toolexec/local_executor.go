@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
@@ -49,6 +50,7 @@ type ExecutionResult struct {
 	Metadata     string
 	ErrorMessage string
 	ErrorCode    string
+	BinaryParts  []message.BinaryContent // Binary content (images, PDFs)
 }
 
 // ExecuteToolWithDaemon executes a tool locally with an explicit daemon client,
@@ -212,6 +214,7 @@ func (e *LocalToolExecutor) executeTool(
 		Backgrounded: response.Backgrounded,
 		Content:      response.Content,
 		Metadata:     response.Metadata,
+		BinaryParts:  response.BinaryParts,
 		ErrorMessage: "",
 		ErrorCode:    "",
 	}

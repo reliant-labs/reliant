@@ -25,6 +25,7 @@ Message injection into a thread
 |-------|------|----------|-------------|
 | `role` | string | No | Message role for injected message |
 | `content` | string | No | Message content to inject |
+| `attachments` | message | No | Attachments to include |
 
 ---
 
@@ -61,6 +62,7 @@ Automatic message saving after node completion
 | `content` | string | No | - |
 | `tool_calls` | string | No | - |
 | `tool_results` | string | No | - |
+| `attachments` | string | No | Attachment IDs to attach to the saved message. CEL expression must return []string. |
 
 ---
 

@@ -199,6 +199,63 @@ Execute tool calls from an LLM response
 
 ---
 
+## Join
+
+Wait for parallel branches to complete before continuing
+
+---
+
+## Loop
+
+Execute a sub-workflow in a loop with conditions
+
+### Inputs
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `while` | boolean | No | - | CEL condition: loop continues while true |
+| `yield` | string | No | - | CEL expression to yield to user on loop exit |
+| `parallel` | boolean | No | - | Execute all iterations concurrently |
+| `items` | string | No | - | CEL expression evaluating to a list or map to iterate over |
+| `key` | string | No | - | CEL expression for output map key per iteration |
+| `on_failure` | string | No | - | Failure policy for parallel iterations (enum: continue\|fail_fast\|fail_all) |
+
+### Outputs
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `iterations` | integer | - |
+| `results` | map | - |
+| `completed` | integer | - |
+| `failed` | integer | - |
+| `parallel` | boolean | - |
+
+---
+
+## Router
+
+Route to a workflow based on LLM classification
+
+### Inputs
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `system_prompt` | string | No | - | Custom system prompt for the routing LLM |
+| `model` | model | No | - | Model for routing decision (defaults to fast model) |
+| `fallback` | string | No | - | Fallback preset if routing decision fails |
+| `outputs` | map | No | - | Declared output mappings (name → CEL expression) |
+
+### Outputs
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `selected_workflow` | string | - |
+| `selected_preset` | string | - |
+| `prompt` | string | - |
+| `reasoning` | string | - |
+
+---
+
 ## Run Command
 
 Execute a shell command
@@ -230,6 +287,7 @@ Save a message to the conversation thread
 | `role` | string | No | - | Message role (enum: user\|assistant\|system\|tool) |
 | `content` | string | No | - | Message content |
 | `tool_calls` | string | No | - | Tool calls from LLM response |
+| `attachments` | string | No | - | Attachment IDs. CEL expression must return []string. |
 | `display_style` | string | No | - | UI display style hint (enum: info\|warning\|success\|hidden) |
 
 ### Outputs

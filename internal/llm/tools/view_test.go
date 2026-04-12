@@ -180,13 +180,16 @@ func TestViewBinaryAndPDFDetection(t *testing.T) {
 	dummyContent := []byte("dummy content")
 	binaryContent := append([]byte("prefix"), append([]byte{0x00}, []byte("suffix")...)...)
 
-	t.Run("PDF extension detected", func(t *testing.T) {
+	t.Run("PDF returns document response", func(t *testing.T) {
 		path := writeFile("foo.pdf", dummyContent)
 		resp, err := tool.Execute(ctx, ViewParams{FilePath: path})
 		require.NoError(t, err)
-		assert.True(t, resp.IsError, "expected IsError=true for PDF")
-		assert.Contains(t, resp.Content, "PDF file detected")
-		assert.Contains(t, resp.Content, "attachment", "should mention attachment suggestion")
+		assert.False(t, resp.IsError, "expected IsError=false for PDF")
+		assert.Equal(t, ToolResponseTypeImage, resp.Type)
+		assert.Contains(t, resp.Content, "PDF file")
+		require.Len(t, resp.BinaryParts, 1)
+		assert.Equal(t, "application/pdf", resp.BinaryParts[0].MIMEType)
+		assert.Equal(t, []byte(dummyContent), resp.BinaryParts[0].Data)
 	})
 
 	t.Run("ZIP binary extension detected", func(t *testing.T) {
@@ -225,12 +228,16 @@ func TestViewBinaryAndPDFDetection(t *testing.T) {
 		assert.Contains(t, resp.Content, "cannot be displayed as text")
 	})
 
-	t.Run("PNG image extension detected", func(t *testing.T) {
+	t.Run("PNG image returns image response", func(t *testing.T) {
 		path := writeFile("image.png", dummyContent)
 		resp, err := tool.Execute(ctx, ViewParams{FilePath: path})
 		require.NoError(t, err)
-		assert.True(t, resp.IsError, "expected IsError=true for png")
-		assert.Contains(t, resp.Content, "Image file detected")
+		assert.False(t, resp.IsError, "expected IsError=false for png image")
+		assert.Equal(t, ToolResponseTypeImage, resp.Type)
+		assert.Contains(t, resp.Content, "Image file")
+		require.Len(t, resp.BinaryParts, 1)
+		assert.Equal(t, "image/png", resp.BinaryParts[0].MIMEType)
+		assert.Equal(t, []byte(dummyContent), resp.BinaryParts[0].Data)
 	})
 
 	t.Run("TXT with binary content detected at runtime", func(t *testing.T) {

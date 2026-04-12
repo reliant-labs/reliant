@@ -4,6 +4,8 @@ package toolexec
 import (
 	"context"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/models/message"
 )
 
 // ToolExecutor defines the interface for executing tools
@@ -61,6 +63,9 @@ type ToolResult struct {
 	EndTime      time.Time // Execution end time
 	ErrorMessage string    // Error message if success=false
 	ErrorCode    string    // Error code for categorization
+
+	// Binary content (images, PDFs) to pass to the LLM
+	BinaryParts []message.BinaryContent
 }
 
 // ExecutionMetrics provides telemetry for tool execution

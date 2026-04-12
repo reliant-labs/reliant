@@ -102,6 +102,25 @@ func (c *LocalClient) ReadFile(ctx context.Context, path string, opts *ReadFileO
 	}, nil
 }
 
+// ReadBinaryFile reads a file's raw bytes up to maxBytes.
+func (c *LocalClient) ReadBinaryFile(ctx context.Context, path string, maxBytes int64) ([]byte, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("stat %s: %w", path, err)
+	}
+	if info.IsDir() {
+		return nil, fmt.Errorf("%s is a directory", path)
+	}
+	if maxBytes > 0 && info.Size() > maxBytes {
+		return nil, fmt.Errorf("file %s is %d bytes, exceeds maximum of %d bytes", path, info.Size(), maxBytes)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	return data, nil
+}
+
 // WriteFile writes content to a file, creating parent directories as needed.
 func (c *LocalClient) WriteFile(ctx context.Context, path string, content string) (*WriteResult, error) {
 	var oldContent string

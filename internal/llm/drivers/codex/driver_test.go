@@ -255,11 +255,15 @@ func TestConvertMessages(t *testing.T) {
 				if !ok {
 					t.Fatalf("second content part type = %T, want map", content[1])
 				}
-				if second["type"] != "input_text" {
-					t.Errorf("second content type = %v, want 'input_text'", second["type"])
+				if second["type"] != "input_file" {
+					t.Errorf("second content type = %v, want 'input_file'", second["type"])
 				}
-				if second["text"] != "[Attachment: doc.pdf (type: application/pdf)]" {
-					t.Errorf("second content text = %v, want fallback descriptor", second["text"])
+				if second["filename"] != "doc.pdf" {
+					t.Errorf("second content filename = %v, want 'doc.pdf'", second["filename"])
+				}
+				expectedData := "data:application/pdf;base64," + base64.StdEncoding.EncodeToString([]byte("pdf-bytes"))
+				if second["file_data"] != expectedData {
+					t.Errorf("second content file_data = %v, want %v", second["file_data"], expectedData)
 				}
 			},
 		},

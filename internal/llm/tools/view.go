@@ -9,6 +9,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/filepreview"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
@@ -27,11 +28,12 @@ type ViewResponseMetadata struct {
 }
 
 const (
-	ViewToolName     = "view"
-	MaxReadSize      = 16 * 1024 // 16KB - matches MaxOutputSize to avoid reading more than we'll output
-	DefaultReadLimit = 300
-	MaxLineLength    = 500
-	viewDescription  = `File viewing tool that reads and displays the contents of files with line numbers, allowing you to examine code, logs, or text data.
+	ViewToolName      = "view"
+	MaxReadSize       = 16 * 1024       // 16KB - matches MaxOutputSize to avoid reading more than we'll output
+	MaxBinaryFileSize = 5 * 1024 * 1024 // 5MB max for binary files (images, PDFs)
+	DefaultReadLimit  = 300
+	MaxLineLength     = 500
+	viewDescription   = `File viewing tool that reads and displays the contents of files with line numbers, allowing you to examine code, logs, or text data.
 
 WHEN TO USE:
 - Reading contents of specific files (source code, configs, logs)
@@ -53,8 +55,9 @@ LIMITATIONS:
 - Maximum output size is 16KB (~4K tokens) - larger files are truncated with head+tail
 - Default reading limit is 300 lines
 - Lines longer than 500 characters are truncated
-- Cannot display binary files or images
-- Images can be identified but not displayed
+- Cannot display binary files (executables, archives, etc.)
+- Images up to 5MB are supported (JPEG, PNG, GIF, BMP, SVG, WebP)
+- PDFs up to 5MB are supported
 
 TIPS:
 - Use with Glob tool to first find files you want to view
@@ -170,15 +173,37 @@ func (v *viewTool) Execute(rctx *rctx.ToolContext, params ViewParams) (ToolRespo
 		displayPath = relPath
 	}
 
-	// Check if it's an image file
-	isImage, imageType := isImageFile(filePath)
+	// Check if it's an image file — read binary and return as image content
+	isImage, mimeType := isImageFile(filePath)
 	if isImage {
-		return NewTextErrorResponse(fmt.Sprintf("Image file detected (%s): %s\nImage viewing not yet implemented.", imageType, displayPath)), nil
+		data, err := rctx.Daemon.ReadBinaryFile(rctx.Context, filePath, MaxBinaryFileSize)
+		if err != nil {
+			return NewTextErrorResponse(fmt.Sprintf("Failed to read image file %s: %v", displayPath, err)), nil
+		}
+		return NewImageResponse(
+			fmt.Sprintf("Image file: %s (%s, %s)", displayPath, mimeType, formatFileSize(int64(len(data)))),
+			[]message.BinaryContent{{
+				Path:     filePath,
+				MIMEType: mimeType,
+				Data:     data,
+			}},
+		), nil
 	}
 
-	// Check if it's a PDF
+	// Check if it's a PDF — read binary and return as document content
 	if strings.ToLower(filepath.Ext(filePath)) == ".pdf" {
-		return NewTextErrorResponse(fmt.Sprintf("PDF file detected: %s\nTo read PDFs, attach the file as an attachment rather than using the View tool.", displayPath)), nil
+		data, err := rctx.Daemon.ReadBinaryFile(rctx.Context, filePath, MaxBinaryFileSize)
+		if err != nil {
+			return NewTextErrorResponse(fmt.Sprintf("Failed to read PDF file %s: %v", displayPath, err)), nil
+		}
+		return NewImageResponse(
+			fmt.Sprintf("PDF file: %s (%s)", displayPath, formatFileSize(int64(len(data)))),
+			[]message.BinaryContent{{
+				Path:     filePath,
+				MIMEType: "application/pdf",
+				Data:     data,
+			}},
+		), nil
 	}
 
 	// Check for other known binary extensions
@@ -314,17 +339,17 @@ func isImageFile(filePath string) (bool, string) {
 	ext := strings.ToLower(filepath.Ext(filePath))
 	switch ext {
 	case ".jpg", ".jpeg":
-		return true, "JPEG"
+		return true, "image/jpeg"
 	case ".png":
-		return true, "PNG"
+		return true, "image/png"
 	case ".gif":
-		return true, "GIF"
+		return true, "image/gif"
 	case ".bmp":
-		return true, "BMP"
+		return true, "image/bmp"
 	case ".svg":
-		return true, "SVG"
+		return true, "image/svg+xml"
 	case ".webp":
-		return true, "WebP"
+		return true, "image/webp"
 	default:
 		return false, ""
 	}
