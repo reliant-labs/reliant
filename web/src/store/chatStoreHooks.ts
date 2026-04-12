@@ -393,34 +393,7 @@ export function useSendMessage() {
  * this holds the worktree ID that would be used for that chat.
  * Returns null if on main workspace or no pending worktree selected.
  */
-export function usePendingNewChatWorktreeId(): string | null {
-  return useChatStore((state) => state.pendingNewChatWorktreeId);
-}
 
-/**
- * Get the effective worktree ID for the current context
- *
- * This handles the case where:
- * 1. An active chat exists -> use its worktree_id
- * 2. No active chat but pending worktree selected -> use pendingNewChatWorktreeId
- * 3. No context -> returns null (caller should handle main workspace fallback)
- *
- * This is useful for components that need to know the current workspace
- * even when no chat has been created yet (e.g., new chat page).
- */
-export function useEffectiveWorktreeId(): string | null {
-  return useChatStore((state) => {
-    // First check if there's an active chat with a worktree
-    if (state.activeChatId) {
-      const activeChat = state.chats.get(state.activeChatId);
-      if (activeChat?.worktreeId) {
-        return activeChat.worktreeId;
-      }
-    }
-    // Fall back to pending new chat worktree
-    return state.pendingNewChatWorktreeId;
-  });
-}
 
 // ============================================================================
 // WORKFLOW ACTIVITY SELECTORS (for WorkflowHub)

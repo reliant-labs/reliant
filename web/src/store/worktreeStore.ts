@@ -651,3 +651,18 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
     });
   },
 }));
+
+/**
+ * Get the active worktree ID for global workspace context (terminal, file browser, search, etc).
+ *
+ * This is the single source of truth for "which workspace are we working in".
+ * Falls back to the main worktree if no worktree is explicitly selected.
+ *
+ * NOTE: Do NOT use this for chat-specific context (e.g. rendering file links in messages).
+ * For that, use the chat's own worktreeId.
+ */
+export function useActiveWorktreeId(): string | undefined {
+  const currentWorktreeId = useWorktreeStore((state) => state.currentWorktree?.id);
+  const mainWorktreeId = useWorktreeStore((state) => state.worktrees.find((w) => w.is_main)?.id);
+  return currentWorktreeId || mainWorktreeId;
+}

@@ -547,9 +547,6 @@ interface ChatStoreState {
   // Track which chat is currently active (for UI purposes)
   activeChatId: string | null;
 
-  // Track worktree ID for new chat (when user clicks "new chat" in a specific workspace)
-  pendingNewChatWorktreeId: string | null;
-
   // Global loading/error states
   isLoading: boolean;
   hasLoaded: boolean;
@@ -760,7 +757,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   processedMessages: {}, // Pre-processed message data for fast rendering
   messagePagination: {}, // Pagination state for lazy loading messages
   activeChatId: null,
-  pendingNewChatWorktreeId: null,
   isLoading: false,
   hasLoaded: false,
   error: null,
@@ -1267,7 +1263,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
     set({
       activeChatId: chat.id,
-      pendingNewChatWorktreeId: null, // Clear pending worktree when selecting a chat
     });
 
     // Update LRU — must be after activeChatId is set so the active chat is protected
@@ -1452,10 +1447,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     if (activeChatId) {
       // Don't clean up the state, just deselect
       // State cleanup happens when chat is deleted or after timeout
-      set({
-        activeChatId: null,
-        pendingNewChatWorktreeId: worktreeId || null,
-      });
+      set({ activeChatId: null });
 
       // Stop polling per-chat events for the deselected chat
       getGlobalUpdatesStore()?.unsubscribeFromChatDetails();
@@ -1467,9 +1459,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           .getState()
           .setActiveChatId(projectId, targetWorktreeId, null);
       }
-    } else {
-      // Just set the pending worktree if there's no active chat
-      set({ pendingNewChatWorktreeId: worktreeId || null });
     }
   },
 
@@ -3888,7 +3877,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       messagePagination: {},
       toolCallStates: {},
       activeChatId: null,
-      pendingNewChatWorktreeId: null,
       isLoading: false,
       hasLoaded: false,
       error: null,

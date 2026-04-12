@@ -10,8 +10,7 @@ import { Terminal } from "./Terminal";
 import { useTerminalStore } from "../../store/terminalStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useSidebarStore } from "../../store/sidebarStore";
-import { useChatStore } from "../../store/chatStore";
-import { useWorktreeStore } from "../../store/worktreeStore";
+import { useWorktreeStore, useActiveWorktreeId } from "../../store/worktreeStore";
 import { Tooltip } from "../ui/Tooltip";
 import { logger } from "../../lib/logger";
 
@@ -49,17 +48,8 @@ export function TerminalPanel({ getWorkingDirectory }: TerminalPanelProps) {
   const isTerminalOpen = useTerminalStore((state) => state.isOpen);
   const currentProject = useProjectStore((state) => state.currentProject);
 
-  // Get the current worktree ID from active chat or pending new chat worktree
-  // When no active chat but pendingNewChatWorktreeId is set (new chat view), use that worktree
-  // This prevents terminal from resetting when clicking "New Chat" in the same workspace
-  const currentWorktreeId = useChatStore((state) => {
-    if (state.activeChatId) {
-      const chat = state.activeChatId ? state.chats.get(state.activeChatId) : undefined;
-      return chat?.worktreeId || undefined;
-    }
-    // Fall back to pending new chat worktree when no active chat
-    return state.pendingNewChatWorktreeId || undefined;
-  });
+  // Use the global active worktree (from worktreeStore) as the single source of truth
+  const currentWorktreeId = useActiveWorktreeId();
   
   const worktrees = useWorktreeStore((state) => state.worktrees);
 

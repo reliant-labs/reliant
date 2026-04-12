@@ -1,12 +1,10 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { useShallow } from "zustand/react/shallow";
 import { Files, GitBranch, ListTodo, Check, Terminal, Globe } from "lucide-react";
 import { FileTree, type FileTreeHandle } from "./FileTree";
 import { FileTreeToolbar } from "./FileTreeToolbar";
 import { useProjectStore } from "../../store/projectStore";
 import { useViewerStore } from "../../store/viewerStore";
-import { useChatStore } from "../../store/chatStore";
-import { useWorktreeStore } from "../../store/worktreeStore";
+import { useWorktreeStore, useActiveWorktreeId } from "../../store/worktreeStore";
 import { useUIStore } from "../../store/uiStore";
 import { useBrowserStore } from "../../store/browserStore";
 import { useUnifiedProcessCounts } from "../../hooks/useUnifiedProcesses";
@@ -76,19 +74,8 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
   const activeViewer = useViewerStore((state) => state.getActiveViewer());
   const activeFilePath = activeViewer?.type === "file" ? activeViewer.file.path : null;
 
-  // Get active chat's worktree, with fallback to pendingNewChatWorktreeId, then currentWorktree for new chat view
-  // Use useShallow to prevent infinite re-renders from object selector
-  const { activeChatId, pendingNewChatWorktreeId, chats } = useChatStore(useShallow((state) => ({
-    activeChatId: state.activeChatId,
-    pendingNewChatWorktreeId: state.pendingNewChatWorktreeId,
-    chats: state.chats,
-  })));
-  const worktrees = useWorktreeStore((state) => state.worktrees);
-  const mainWorktree = worktrees.find(w => w.is_main);
-  const activeChat = activeChatId ? chats.get(activeChatId) ?? null : null;
-  // Use chat's worktree if available, then pendingNewChatWorktreeId (for new chat in specific workspace),
-  // otherwise fall back to currentWorktree, then main worktree
-  const activeWorktreeId = activeChat?.worktreeId || pendingNewChatWorktreeId || currentWorktree?.id || mainWorktree?.id;
+  // Use the global active worktree (from worktreeStore) as the single source of truth
+  const activeWorktreeId = useActiveWorktreeId();
   
   // Unified running count from deduplicated process stores
   const { currentWorkspaceRunning: totalRunningCount } = useUnifiedProcessCounts(activeWorktreeId);
