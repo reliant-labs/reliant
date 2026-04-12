@@ -374,7 +374,7 @@ func TestTypeRegistry_RouterOutputType(t *testing.T) {
 		fieldMap[f.Name] = f
 	}
 
-	expectedFields := []string{"selected_workflow", "selected_preset", "prompt", "reasoning", "outputs"}
+	expectedFields := []string{"selected_workflow", "selected_preset", "prompt", "reasoning", "outputs", "selected_node"}
 	for _, name := range expectedFields {
 		if _, ok := fieldMap[name]; !ok {
 			t.Errorf("expected %q output field for router", name)

@@ -1137,3 +1137,221 @@ func TestEngine_RunScenario_RouterNode(t *testing.T) {
 		assert.NotContains(t, result.Execution.NodesReached, "success")
 	})
 }
+
+// --- Node routing router test workflows ---
+
+// workflowWithNodeRouter: router with node candidates, no edges from router.
+// Dynamic dispatch should route to selected_node.
+const workflowWithNodeRouter = `
+name: test-node-router
+apiVersion: "1.0"
+entry: [route]
+nodes:
+  - id: route
+    type: router
+    system_prompt: "route to a node"
+    model:
+      tags: [fast]
+    nodes:
+      - id: summarize
+        description: "Summarize content"
+      - id: translate
+        description: "Translate text"
+  - id: summarize
+    type: save_message
+    role: "assistant"
+    content: "Summary done"
+  - id: translate
+    type: save_message
+    role: "assistant"
+    content: "Translation done"
+  - id: done
+    type: save_message
+    role: "assistant"
+    content: "Routing complete"
+edges:
+  - from: summarize
+    default: done
+  - from: translate
+    default: done
+`
+
+// workflowWithNodeRouterEdge: router has an explicit default edge.
+// When edges exist, they should take priority over dynamic dispatch.
+const workflowWithNodeRouterEdge = `
+name: test-node-router-edge
+apiVersion: "1.0"
+entry: [route]
+nodes:
+  - id: route
+    type: router
+    model:
+      tags: [fast]
+    nodes:
+      - id: summarize
+        description: "Summarize content"
+      - id: translate
+        description: "Translate text"
+  - id: summarize
+    type: save_message
+    role: "assistant"
+    content: "Summary done"
+  - id: translate
+    type: save_message
+    role: "assistant"
+    content: "Translation done"
+  - id: post_route
+    type: save_message
+    role: "assistant"
+    content: "After routing"
+edges:
+  - from: route
+    default: post_route
+`
+
+// nodeRouterOutput builds the mock output map for a node routing router.
+func nodeRouterOutput(selectedNode, reasoning string) map[string]interface{} {
+	return map[string]interface{}{
+		"selected_node": selectedNode,
+		"reasoning":     reasoning,
+	}
+}
+
+func TestEngine_RunScenario_NodeRoutingRouter(t *testing.T) {
+	t.Run("dynamic dispatch to selected_node (summarize)", func(t *testing.T) {
+		engine, err := NewEngineFromYAML(workflowWithNodeRouter)
+		require.NoError(t, err)
+
+		scenario := &Scenario{
+			Name:        "node_router_summarize",
+			Description: "Node router selects summarize, dispatches dynamically",
+			Events: []SimulatedEvent{
+				{
+					Node:   "route",
+					Output: nodeRouterOutput("summarize", "User wants a summary"),
+				},
+			},
+			Expect: &Expectation{
+				Outcome:    OutcomeCompleted,
+				Reached:    []string{"route", "summarize", "done"},
+				NotReached: []string{"translate"},
+			},
+		}
+
+		result := engine.RunScenario(scenario)
+		t.Logf("NodesReached: %v", result.Execution.NodesReached)
+		t.Logf("Mismatches: %v", result.Mismatches)
+
+		assert.Equal(t, StatusPassed, result.Status, "mismatches: %v", result.Mismatches)
+	})
+
+	t.Run("dynamic dispatch to selected_node (translate)", func(t *testing.T) {
+		engine, err := NewEngineFromYAML(workflowWithNodeRouter)
+		require.NoError(t, err)
+
+		scenario := &Scenario{
+			Name:        "node_router_translate",
+			Description: "Node router selects translate, dispatches dynamically",
+			Events: []SimulatedEvent{
+				{
+					Node:   "route",
+					Output: nodeRouterOutput("translate", "User wants translation"),
+				},
+			},
+			Expect: &Expectation{
+				Outcome:    OutcomeCompleted,
+				Reached:    []string{"route", "translate", "done"},
+				NotReached: []string{"summarize"},
+			},
+		}
+
+		result := engine.RunScenario(scenario)
+		t.Logf("NodesReached: %v", result.Execution.NodesReached)
+		t.Logf("Mismatches: %v", result.Mismatches)
+
+		assert.Equal(t, StatusPassed, result.Status, "mismatches: %v", result.Mismatches)
+	})
+
+	t.Run("default output picks first candidate when no scenario event", func(t *testing.T) {
+		engine, err := NewEngineFromYAML(workflowWithNodeRouter)
+		require.NoError(t, err)
+
+		scenario := &Scenario{
+			Name:        "node_router_default",
+			Description: "No event for router - simulator picks first candidate",
+			Events:      []SimulatedEvent{},
+			Expect: &Expectation{
+				Outcome: OutcomeCompleted,
+				Reached: []string{"route", "summarize", "done"},
+			},
+		}
+
+		result := engine.RunScenario(scenario)
+		t.Logf("NodesReached: %v", result.Execution.NodesReached)
+		t.Logf("NodeOutputs: %v", result.Execution.NodeOutputs)
+		t.Logf("Mismatches: %v", result.Mismatches)
+
+		assert.Equal(t, StatusPassed, result.Status, "mismatches: %v", result.Mismatches)
+		// Verify the router produced a default selected_node
+		if routeOutput, ok := result.Execution.NodeOutputs["route"]; ok {
+			assert.Equal(t, "summarize", routeOutput["selected_node"])
+		}
+	})
+
+	t.Run("edges take priority over dynamic dispatch", func(t *testing.T) {
+		engine, err := NewEngineFromYAML(workflowWithNodeRouterEdge)
+		require.NoError(t, err)
+
+		scenario := &Scenario{
+			Name:        "node_router_edge_priority",
+			Description: "Router has edges - edges handle dispatch, not dynamic",
+			Events: []SimulatedEvent{
+				{
+					Node:   "route",
+					Output: nodeRouterOutput("summarize", "User wants summary"),
+				},
+			},
+			Expect: &Expectation{
+				Outcome:    OutcomeCompleted,
+				Reached:    []string{"route", "post_route"},
+				NotReached: []string{"summarize", "translate"},
+			},
+		}
+
+		result := engine.RunScenario(scenario)
+		t.Logf("NodesReached: %v", result.Execution.NodesReached)
+		t.Logf("Mismatches: %v", result.Mismatches)
+
+		assert.Equal(t, StatusPassed, result.Status, "mismatches: %v", result.Mismatches)
+	})
+
+	t.Run("output includes selected_node and reasoning", func(t *testing.T) {
+		engine, err := NewEngineFromYAML(workflowWithNodeRouter)
+		require.NoError(t, err)
+
+		scenario := &Scenario{
+			Name:        "node_router_output_fields",
+			Description: "Verify router output fields are accessible",
+			Events: []SimulatedEvent{
+				{
+					Node:   "route",
+					Output: nodeRouterOutput("translate", "needs translation"),
+				},
+			},
+			Expect: &Expectation{
+				Outcome: OutcomeCompleted,
+				NodeOutputs: map[string]map[string]interface{}{
+					"route": {
+						"selected_node": "translate",
+						"reasoning":     "needs translation",
+					},
+				},
+			},
+		}
+
+		result := engine.RunScenario(scenario)
+		t.Logf("Mismatches: %v", result.Mismatches)
+
+		assert.Equal(t, StatusPassed, result.Status, "mismatches: %v", result.Mismatches)
+	})
+}

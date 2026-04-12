@@ -13,7 +13,10 @@ import { canonicalizeBuiltinWorkflowRef } from "../workflowRef";
 import type {
   RouterArgs,
   RouterWorkflowCandidate,
+  NodeRouterCandidate,
 } from "../../../gen/reliant/v1/workflow_v2_pb";
+
+type RouterMode = "workflow" | "node";
 
 interface RouterStepConfigProps {
   step: RouterStep;
@@ -29,12 +32,19 @@ function getRouterArgs(step: RouterStep): Partial<RouterArgs> {
   return { workflows: [] };
 }
 
+/** Detect routing mode from args: nodes populated → node mode, else workflow mode */
+function detectMode(args: Partial<RouterArgs>): RouterMode {
+  const nodes = args.nodes as Partial<NodeRouterCandidate>[] | undefined;
+  if (nodes && nodes.length > 0) return "node";
+  return "workflow";
+}
+
 /** Strip protocol prefix from a workflow ref for display */
 function displayRef(ref: string): string {
   return ref.replace(/^(builtin|project|workflow):\/\//, "");
 }
 
-// ── Sub-component: one candidate card with its own preset loading ──
+// ── Sub-component: one workflow candidate card with its own preset loading ──
 
 interface RouterCandidateCardProps {
   candidate: Partial<RouterWorkflowCandidate>;
@@ -220,6 +230,116 @@ function RouterCandidateCard({
   );
 }
 
+// ── Sub-component: one node candidate card (simpler than workflow) ──
+
+interface NodeRouterCandidateCardProps {
+  candidate: Partial<NodeRouterCandidate>;
+  index: number;
+  onUpdate: (index: number, updates: Partial<NodeRouterCandidate>) => void;
+  onDelete: (index: number) => void;
+  isReadOnly: boolean;
+}
+
+function NodeRouterCandidateCard({
+  candidate,
+  index,
+  onUpdate,
+  onDelete,
+  isReadOnly,
+}: NodeRouterCandidateCardProps) {
+  return (
+    <div className="relative border border-input rounded-md p-3 space-y-2 bg-background">
+      {/* Header + Delete */}
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-muted-foreground">
+          Candidate {index + 1}
+        </span>
+        {!isReadOnly && (
+          <button
+            type="button"
+            onClick={() => onDelete(index)}
+            className="p-0.5 text-muted-foreground hover:text-destructive transition-colors"
+            title="Remove candidate"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+
+      {/* Node ID */}
+      <div>
+        <label className="block text-xs text-muted-foreground mb-0.5">
+          Node ID
+        </label>
+        <input
+          type="text"
+          value={candidate.id ?? ""}
+          onChange={(e) => onUpdate(index, { id: e.target.value })}
+          className="w-full px-2.5 py-1.5 text-sm border border-input rounded-md bg-background text-foreground font-mono focus:ring-2 focus:ring-ring focus:border-ring disabled:opacity-60 disabled:cursor-not-allowed"
+          placeholder="target_node_id"
+          disabled={isReadOnly}
+        />
+      </div>
+
+      {/* Description */}
+      <div>
+        <label className="block text-xs text-muted-foreground mb-0.5">
+          Description
+        </label>
+        <textarea
+          value={candidate.description ?? ""}
+          onChange={(e) => onUpdate(index, { description: e.target.value })}
+          className="w-full px-2.5 py-1.5 text-sm border border-input rounded-md bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-ring disabled:opacity-60 disabled:cursor-not-allowed"
+          rows={2}
+          placeholder="When should the router select this node?"
+          disabled={isReadOnly}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ── Mode toggle ──
+
+function ModeToggle({
+  mode,
+  onChange,
+  disabled,
+}: {
+  mode: RouterMode;
+  onChange: (mode: RouterMode) => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="inline-flex rounded-md border border-input bg-muted p-0.5">
+      <button
+        type="button"
+        onClick={() => onChange("workflow")}
+        disabled={disabled}
+        className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+          mode === "workflow"
+            ? "bg-background text-foreground shadow-sm"
+            : "text-muted-foreground hover:text-foreground"
+        } disabled:opacity-60 disabled:cursor-not-allowed`}
+      >
+        Workflow Routing
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange("node")}
+        disabled={disabled}
+        className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
+          mode === "node"
+            ? "bg-background text-foreground shadow-sm"
+            : "text-muted-foreground hover:text-foreground"
+        } disabled:opacity-60 disabled:cursor-not-allowed`}
+      >
+        Node Routing
+      </button>
+    </div>
+  );
+}
+
 // ── Main component ──
 
 export function RouterStepConfig({
@@ -231,7 +351,9 @@ export function RouterStepConfig({
   const projectId = currentProject?.id;
 
   const args = getRouterArgs(step);
+  const mode = detectMode(args);
   const workflows = (args.workflows ?? []) as Partial<RouterWorkflowCandidate>[];
+  const nodes = (args.nodes ?? []) as Partial<NodeRouterCandidate>[];
   const systemPromptValue = normalizeCelString(args.systemPrompt);
   const fallback = args.fallback ?? "";
   const modelId = args.model
@@ -242,7 +364,20 @@ export function RouterStepConfig({
       )
     : "";
 
-  // ── Workflow list loading (same pattern as WorkflowStepConfig) ──
+  // ── Mode switching ──
+
+  const handleModeChange = (newMode: RouterMode) => {
+    if (newMode === mode) return;
+    if (newMode === "node") {
+      // Switch to node routing: clear workflows, init nodes
+      onUpdate(withRouterArgs(step, { workflows: [], nodes: nodes.length > 0 ? nodes : [] }));
+    } else {
+      // Switch to workflow routing: clear nodes, init workflows
+      onUpdate(withRouterArgs(step, { nodes: [], workflows: workflows.length > 0 ? workflows : [] }));
+    }
+  };
+
+  // ── Workflow list loading (only needed for workflow mode) ──
 
   const [existingWorkflows, setExistingWorkflows] = useState<
     Array<{
@@ -279,7 +414,7 @@ export function RouterStepConfig({
     (wf) => wf.source !== "builtin",
   );
 
-  // ── Candidate helpers ──
+  // ── Workflow candidate helpers ──
 
   const updateCandidate = (
     index: number,
@@ -301,42 +436,102 @@ export function RouterStepConfig({
     onUpdate(withRouterArgs(step, { workflows: next }));
   };
 
+  // ── Node candidate helpers ──
+
+  const updateNodeCandidate = (
+    index: number,
+    updates: Partial<NodeRouterCandidate>,
+  ) => {
+    const next = nodes.map((c, i) =>
+      i === index ? { ...c, ...updates } : c,
+    );
+    onUpdate(withRouterArgs(step, { nodes: next }));
+  };
+
+  const addNodeCandidate = () => {
+    const next = [...nodes, { id: "", description: "" }];
+    onUpdate(withRouterArgs(step, { nodes: next }));
+  };
+
+  const deleteNodeCandidate = (index: number) => {
+    const next = nodes.filter((_, i) => i !== index);
+    onUpdate(withRouterArgs(step, { nodes: next }));
+  };
+
   return (
     <>
-      {/* Candidate Workflows */}
+      {/* Mode Toggle */}
       <div>
-        <label className="block text-xs uppercase tracking-wider text-muted-foreground font-medium mb-2">
-          Candidate Workflows
+        <label className="block text-xs uppercase tracking-wider text-muted-foreground font-medium mb-1">
+          Routing Mode
         </label>
-        <div className="space-y-2">
-          {workflows.map((candidate, index) => (
-            <RouterCandidateCard
-              key={index}
-              candidate={candidate}
-              index={index}
-              workflows={{ builtin: builtinWorkflows, user: userWorkflows }}
-              loadingWorkflows={loadingWorkflows}
-              onUpdate={updateCandidate}
-              onDelete={deleteCandidate}
-              isReadOnly={isReadOnly}
-            />
-          ))}
-
-          {/* Add Candidate button */}
-          {!isReadOnly && (
-            <button
-              type="button"
-              onClick={addCandidate}
-              className="flex items-center gap-1.5 text-sm text-primary hover:text-primary/80 transition-colors py-1"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Add Candidate
-            </button>
-          )}
-        </div>
+        <ModeToggle mode={mode} onChange={handleModeChange} disabled={isReadOnly} />
       </div>
 
-      {/* System Prompt (optional) */}
+      {/* Candidates */}
+      {mode === "workflow" ? (
+        <div>
+          <label className="block text-xs uppercase tracking-wider text-muted-foreground font-medium mb-2">
+            Candidate Workflows
+          </label>
+          <div className="space-y-2">
+            {workflows.map((candidate, index) => (
+              <RouterCandidateCard
+                key={index}
+                candidate={candidate}
+                index={index}
+                workflows={{ builtin: builtinWorkflows, user: userWorkflows }}
+                loadingWorkflows={loadingWorkflows}
+                onUpdate={updateCandidate}
+                onDelete={deleteCandidate}
+                isReadOnly={isReadOnly}
+              />
+            ))}
+
+            {!isReadOnly && (
+              <button
+                type="button"
+                onClick={addCandidate}
+                className="flex items-center gap-1.5 text-sm text-primary hover:text-primary/80 transition-colors py-1"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add Candidate
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div>
+          <label className="block text-xs uppercase tracking-wider text-muted-foreground font-medium mb-2">
+            Candidate Nodes
+          </label>
+          <div className="space-y-2">
+            {nodes.map((candidate, index) => (
+              <NodeRouterCandidateCard
+                key={index}
+                candidate={candidate}
+                index={index}
+                onUpdate={updateNodeCandidate}
+                onDelete={deleteNodeCandidate}
+                isReadOnly={isReadOnly}
+              />
+            ))}
+
+            {!isReadOnly && (
+              <button
+                type="button"
+                onClick={addNodeCandidate}
+                className="flex items-center gap-1.5 text-sm text-primary hover:text-primary/80 transition-colors py-1"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add Candidate
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* System Prompt (optional) — shared */}
       <div>
         <CELInput
           label="System Prompt"
@@ -353,7 +548,7 @@ export function RouterStepConfig({
         />
       </div>
 
-      {/* Model */}
+      {/* Model — shared */}
       <div>
         <label className="block text-xs uppercase tracking-wider text-muted-foreground font-medium mb-1">
           Model
@@ -372,10 +567,10 @@ export function RouterStepConfig({
         />
       </div>
 
-      {/* Fallback */}
+      {/* Fallback — label changes per mode */}
       <div>
         <label className="block text-xs uppercase tracking-wider text-muted-foreground font-medium mb-1">
-          Fallback Preset
+          {mode === "node" ? "Fallback Node" : "Fallback Preset"}
         </label>
         <input
           type="text"
@@ -384,17 +579,19 @@ export function RouterStepConfig({
             onUpdate(withRouterArgs(step, { fallback: e.target.value }))
           }
           className="w-full px-2.5 py-1.5 text-sm border border-input rounded-md bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-ring disabled:opacity-60 disabled:cursor-not-allowed"
-          placeholder="Preset name to use if routing fails"
+          placeholder={mode === "node" ? "Node ID to use if routing fails" : "Preset name to use if routing fails"}
           disabled={isReadOnly}
         />
       </div>
 
-      {/* Declared Outputs */}
-      <RouterOutputsEditor
-        outputs={args.outputs as Record<string, string> ?? {}}
-        onUpdate={(outputs) => onUpdate(withRouterArgs(step, { outputs }))}
-        isReadOnly={isReadOnly}
-      />
+      {/* Declared Outputs — only for workflow routing */}
+      {mode === "workflow" && (
+        <RouterOutputsEditor
+          outputs={args.outputs as Record<string, string> ?? {}}
+          onUpdate={(outputs) => onUpdate(withRouterArgs(step, { outputs }))}
+          isReadOnly={isReadOnly}
+        />
+      )}
     </>
   );
 }

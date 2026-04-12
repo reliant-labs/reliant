@@ -1,9 +1,9 @@
 ---
 title: "Router Nodes"
-description: "Use an LLM to pick between multiple candidate workflows and execute the best match"
+description: "Use an LLM to route between candidate workflows or nodes within the same workflow"
 ---
 
-A router node presents a list of candidate workflows to an LLM classifier, which picks the best match for the current conversation and executes it as a sub-workflow. Think of it as `switch` for workflows, where the case selector is an LLM reading your thread history. The router handles both the decision ("which workflow?") and the dispatch ("now run it") in one node.
+A router node presents a list of candidates to an LLM classifier, which picks the best match for the current conversation. In **workflow routing** mode the candidates are external workflows — the router picks one and executes it as a sub-workflow. In **node routing** mode the candidates are other nodes in the same workflow — the router picks one and the engine dispatches execution to it. Think of it as `switch` for workflows (or nodes), where the case selector is an LLM reading your thread history.
 
 Routers are useful when the right workflow depends on the user's intent rather than on deterministic state. A triage router reading the first user message can decide between a researcher, an implementer, and a debugger far more naturally than a hand-written `condition` expression.
 
@@ -14,6 +14,7 @@ Routers shine in a few specific situations:
 - **Triage.** Route an incoming chat to the right specialist workflow (coder, researcher, debugger, reviewer) based on what the user actually asked for.
 - **Intent detection.** Pick a workflow per user intent without hand-writing CEL conditions over message content — the LLM classifier handles the messy natural-language bit.
 - **Dynamic dispatch.** When the set of candidate workflows changes based on project, preset visibility, or available presets.
+- **Intra-workflow routing.** Pick which phase or step to jump to within a single workflow — brainstorm vs. implement vs. review — without splitting logic across separate workflow files.
 
 A router is **not** the right tool when:
 
@@ -75,9 +76,10 @@ The `description` field is what the LLM actually sees when deciding. Treat it as
 
 ## Inputs
 
-A router node supports these fields (all optional except `workflows`):
+A router node supports these fields. Exactly one of `workflows` or `nodes` is required — they are mutually exclusive.
 
-- **`workflows`** (required): The candidate list described above.
+- **`workflows`**: The candidate workflow list described above. Cannot be combined with `nodes`.
+- **`nodes`**: A list of `RouterNodeCandidate` entries for [node routing](#node-routing). Each entry references another node in the same workflow by `id`. Cannot be combined with `workflows`.
 - **`system_prompt`**: Custom system prompt for the classifier LLM. When set, it replaces the default routing system prompt and is prepended to the automatically generated workflow catalog. Use it to steer the classifier ("prefer the researcher when in doubt", "never pick the debugger unless the user mentions an error").
 - **`model`**: A model selector for the classifier. Defaults to whatever the platform considers a fast model. The classifier runs one short CallLLM, so you usually want speed over capability here.
 - **`thread`**: Thread config for the selected child workflow — same `ThreadConfig` shape used by `workflow` and `loop` nodes. Defaults to `mode: new`. When the child thread mode creates a new thread, the router automatically injects the rewritten prompt as a user message on that thread so the selected workflow has conversation context to work with.
@@ -89,7 +91,9 @@ For the full auto-generated input/output table, see the [Router entry in the nod
 
 ## Outputs
 
-After the router runs, five fields are available on `nodes.<router_id>`:
+After the router runs, the available fields on `nodes.<router_id>` depend on the routing mode.
+
+**Workflow routing** exposes five fields:
 
 | Output | Type | Description |
 |--------|------|-------------|
@@ -98,6 +102,13 @@ After the router runs, five fields are available on `nodes.<router_id>`:
 | `prompt` | string | The rewritten prompt the classifier produced for the child. This is what got injected into the child thread when the thread mode created a new thread. |
 | `reasoning` | string | Short natural-language explanation from the classifier for why it picked this workflow and preset. Useful for logging, UI, and debugging misroutes. |
 | `outputs` | object | The selected child workflow's own declared outputs, nested under this key. |
+
+**Node routing** exposes two fields:
+
+| Output | Type | Description |
+|--------|------|-------------|
+| `selected_node` | string | The `id` of the node the classifier picked. |
+| `reasoning` | string | Short natural-language explanation from the classifier for why it picked this node. |
 
 Because `outputs` holds whatever the child workflow exposed, its shape depends on which candidate ran. For the built-in agent workflow, that gives you access to things like `nodes.triage.outputs.response_text` and `nodes.triage.outputs.message`. The validator allows dynamic sub-field access on `outputs` and, when it can load the candidate workflows, unions their declared output keys for type hints.
 
@@ -137,6 +148,66 @@ After this node runs, `nodes.triage.chosen`, `nodes.triage.why`, and `nodes.tria
 
 <Tip>
 Declared outputs are merged with the fixed ones, not replaced. `nodes.triage.selected_workflow` still resolves even when you declare `chosen: "selected_workflow"` — you're adding an alias, not renaming.
+</Tip>
+
+## Node routing
+
+Node routing uses the same `type: router` but swaps `workflows` for `nodes`. Instead of dispatching to an external workflow, the router picks another node **in the same workflow** and the engine continues execution there. This is useful when a single workflow has distinct phases — brainstorming, implementation, review — and the right starting point depends on user intent.
+
+```yaml
+- id: classify
+  type: router
+  model:
+    tags: [fast]
+  system_prompt: |
+    Pick which phase to start based on the user's request.
+    Prefer brainstorm for open-ended tasks.
+  nodes:
+    - id: brainstorm
+      description: "New feature — start from problem understanding"
+    - id: implement
+      description: "Clear task — skip straight to implementation"
+    - id: review
+      description: "Code review request — jump to review phase"
+  fallback: brainstorm
+```
+
+### Node candidate structure
+
+Each entry in `nodes` is a `RouterNodeCandidate` with two fields:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | Yes | Must reference an existing node in the same workflow. Invalid ids fail validation. |
+| `description` | No | Text shown to the classifier LLM. As with workflow routing, sharp descriptions produce better routing — the classifier only sees `id` and `description`. |
+
+<Warning>
+The `thread`, `project`, and `outputs` fields on the router node don't apply to node routing — there is no child workflow to configure. If you set them alongside `nodes`, they are ignored.
+</Warning>
+
+### Node routing outputs
+
+After the router runs, `nodes.<router_id>.selected_node` contains the `id` of the chosen node and `nodes.<router_id>.reasoning` contains the classifier's explanation.
+
+### Dispatch behavior
+
+If the router has explicit `edges`, they work normally — you can use `nodes.<router_id>.selected_node` in edge conditions to branch however you like:
+
+```yaml
+edges:
+  - from: classify
+    cases:
+      - to: brainstorm
+        condition: nodes.classify.selected_node == 'brainstorm'
+      - to: implement
+        condition: nodes.classify.selected_node == 'implement'
+    default: review
+```
+
+If the router has **no outgoing edges**, the engine dispatches directly to the selected node — no extra wiring needed. This keeps simple routers compact: define the candidates and let the engine handle the jump.
+
+<Tip>
+Node routing is a lightweight alternative to workflow routing when all the logic already lives in one workflow. If you find yourself creating single-node wrapper workflows just to use a router, switch to node routing instead.
 </Tip>
 
 ## Classification reliability
@@ -189,9 +260,9 @@ The three sub-workflow node types look similar but serve different jobs:
 
 - **`workflow` node**: Runs a single, statically chosen workflow. Use when you know at authoring time which workflow should run.
 - **`loop` node**: Repeats a workflow while a condition holds (or over an item list for parallel execution). Use for retry-until-passing, iterative refinement, and fan-out over inputs.
-- **`router` node**: Picks one workflow at runtime from a candidate list using an LLM. Use when the choice depends on user intent and would be painful to encode as deterministic conditions.
+- **`router` node**: Picks one workflow (or node) at runtime from a candidate list using an LLM. Use when the choice depends on user intent and would be painful to encode as deterministic conditions. In **workflow routing** mode (`workflows`) it selects and executes an external workflow. In **node routing** mode (`nodes`) it selects another node in the same workflow and the engine jumps to it.
 
-A router is essentially a "workflow node whose ref is decided by an LLM right before it runs." If you ever find yourself writing a CallLLM node followed by a workflow node that reads the result, you probably want a router instead.
+A router is essentially a "workflow node whose ref is decided by an LLM right before it runs" — or, in node routing mode, a "goto whose target is decided by an LLM." If you ever find yourself writing a CallLLM node followed by a workflow node that reads the result, you probably want a router instead.
 
 ## Related
 

@@ -152,14 +152,15 @@ func (t *ChildWorkflowTracker) GetAllThreadInputs() map[string]map[string]interf
 // RunningInlineWorkflow tracks an in-flight inline workflow/agent execution.
 // This enables parallel execution of workflow/agent steps using workflow.Go().
 type RunningInlineWorkflow struct {
-	StepID       string
-	Node         *reliantv1.Node
-	Event        *core.WorkflowEvent    // Triggering event
-	DoneCh       workflow.Channel       // Completion signal channel
-	Output       map[string]interface{} // Populated when done
-	Error        error                  // Populated if execution failed
-	EvalResult   *reliantv1.Node        // Resolved config for save_message resolution
-	ChildExecCtx *ExecutionContext      // Child execution context
+	StepID        string
+	Node          *reliantv1.Node
+	Event         *core.WorkflowEvent    // Triggering event
+	DoneCh        workflow.Channel       // Completion signal channel
+	Output        map[string]interface{} // Populated when done
+	Error         error                  // Populated if execution failed
+	EvalResult    *reliantv1.Node        // Resolved config for save_message resolution
+	ChildExecCtx  *ExecutionContext      // Child execution context
+	IsNodeRouting bool                   // True for node-routing routers (no child thread/context)
 }
 
 // removeRunningInlineWorkflow removes an inline workflow from the slice using pointer comparison.
@@ -692,12 +693,74 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		// This updates join state and may generate join completion events
 		events = processJoinEvents(events, joinState, wf, workflowID, input.ChatID, input.WorkflowName, nodeOutputs, logger, joinSaveMessageFunc, workflow.Now(ctx))
 
+		// Collect node router completion events before they're consumed by FindTriggeredNodes.
+		// These need fallback dispatch if no edges match.
+		var nodeRouterCompletionStepIDs []string
+		for _, evt := range events {
+			if evt.StepID != "" {
+				if n := model.FindNode(wf, evt.StepID); n != nil && n.GetType() == model.NodeTypeRouter && model.IsNodeRouterMode(n) {
+					nodeRouterCompletionStepIDs = append(nodeRouterCompletionStepIDs, evt.StepID)
+				}
+			}
+		}
+
 		// Find triggered steps from pending events
 		triggeredSteps, err := stateMachine.FindTriggeredNodes(events, nodeOutputs, input.Inputs)
 		if err != nil {
 			return nil, fmt.Errorf("find triggered steps: %w", err)
 		}
 		events = nil // Clear processed events
+
+		// For node routing routers: if edges produced triggered nodes, great. Otherwise,
+		// dynamically dispatch to the selected_node from the router output.
+		for _, routerStepID := range nodeRouterCompletionStepIDs {
+			// Check if any triggered node came from an edge originating at this router
+			edgeTriggered := false
+			for _, step := range triggeredSteps {
+				if step.Event != nil && step.Event.StepID == routerStepID {
+					edgeTriggered = true
+					break
+				}
+			}
+			if edgeTriggered {
+				continue
+			}
+
+			// No edges matched — dynamically dispatch to selected_node
+			routerOutput, _ := nodeOutputs[routerStepID].(map[string]interface{})
+			selectedNodeID, _ := routerOutput["selected_node"].(string)
+			if selectedNodeID == "" {
+				logger.Error("[Workflow Runtime] Node router completed but selected_node is empty and no edges matched",
+					"routerStepID", routerStepID,
+				)
+				return nil, fmt.Errorf("node router %s completed with empty selected_node and no matching edges", routerStepID)
+			}
+
+			targetNode := model.FindNode(wf, selectedNodeID)
+			if targetNode == nil {
+				logger.Error("[Workflow Runtime] Node router selected_node not found in workflow",
+					"routerStepID", routerStepID,
+					"selectedNode", selectedNodeID,
+				)
+				return nil, fmt.Errorf("node router %s selected node %q not found in workflow", routerStepID, selectedNodeID)
+			}
+
+			logger.Info("[Workflow Runtime] Node router dynamic dispatch (no edges matched)",
+				"routerStepID", routerStepID,
+				"selectedNode", selectedNodeID,
+			)
+			triggeredSteps = append(triggeredSteps, &core.TriggeredNode{
+				Node: targetNode,
+				Event: &core.WorkflowEvent{
+					ID:           fmt.Sprintf("node-router-dispatch-%s-%d", routerStepID, workflow.Now(ctx).UnixNano()),
+					WorkflowID:   workflowID,
+					ChatID:       input.ChatID,
+					WorkflowName: input.WorkflowName,
+					StepID:       routerStepID,
+					Data:         routerOutput,
+				},
+			})
+		}
 
 		// Execute all triggered steps (activities or child workflows) in parallel
 		// Filter out join steps and loop steps - they need special handling
@@ -1128,7 +1191,83 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				continue
 			}
 
-			// Handle router steps - LLM-driven workflow selection and execution
+			// Handle node routing routers - LLM-driven node selection (no child thread/sub-workflow)
+			if step.Node.GetType() == model.NodeTypeRouter && model.IsNodeRouterMode(step.Node) {
+				logger.Info("[Workflow Runtime] ========== EXECUTING NODE ROUTER STEP ===========",
+					"stepID", step.Node.GetId(),
+				)
+
+				// Evaluate node config (resolve CEL expressions)
+				evalResult, err := EvaluateNodeConfig(
+					step.Node,
+					nodeOutputs,
+					workflowID,
+					input.WorkflowName,
+					input.Inputs,
+					nil, // Not in a loop
+					nil, // loopOutputs - not in a loop
+					execCtx,
+				)
+				if err != nil {
+					logger.Error("[Workflow Runtime] Failed to evaluate node router step config",
+						"stepID", step.Node.GetId(),
+						"error", err,
+					)
+					notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName,
+						"config_evaluation_error",
+						fmt.Sprintf("Node router step '%s' config evaluation failed: %s", step.Node.GetId(), err.Error()))
+					return nil, fmt.Errorf("node router step %s config evaluation failed: %w", step.Node.GetId(), err)
+				}
+
+				// Create router executor — node routing only needs CallLLM, no child thread/context
+				routerExec := NewRouterExecutor(
+					ctx,
+					workflowID,
+					input.ChatID,
+					input.WorkflowName,
+					input.Inputs,
+					nodeOutputs,
+					childTracker,
+					step.Node,
+					evalResult,
+				)
+
+				// Node routing needs a pause controller and workflow context for the CallLLM activity,
+				// but no child execution context, child threads, or thread tracker.
+				routerExec = routerExec.
+					WithPauseController(makeThreadPauseCtrl(execCtx.Thread))
+
+				// Launch in workflow.Go for proper Temporal activity context
+				doneCh := workflow.NewChannel(ctx)
+				running := &RunningInlineWorkflow{
+					StepID:        step.Node.GetId(),
+					Node:          step.Node,
+					Event:         step.Event,
+					DoneCh:        doneCh,
+					EvalResult:    evalResult,
+					IsNodeRouting: true,
+				}
+
+				routerCopy := routerExec
+				runningCopy := running
+
+				workflow.Go(ctx, func(gCtx workflow.Context) {
+					routerCopy = routerCopy.WithWorkflowContext(gCtx)
+					output, execErr := routerCopy.Execute()
+					runningCopy.Output = output
+					runningCopy.Error = execErr
+					runningCopy.DoneCh.Send(gCtx, true)
+				})
+
+				runningInlineWorkflows = append(runningInlineWorkflows, running)
+				logger.Info("[Workflow Runtime] Started node router in parallel",
+					"stepID", step.Node.GetId(),
+					"totalRunningInline", len(runningInlineWorkflows),
+				)
+				continue
+			}
+
+			// Handle workflow routing routers - LLM-driven workflow selection and execution
 			if step.Node.GetType() == model.NodeTypeRouter {
 				logger.Info("[Workflow Runtime] ========== EXECUTING ROUTER STEP ===========",
 					"stepID", step.Node.GetId(),
@@ -1401,18 +1540,44 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 						// Resumed - re-launch the inline workflow with fresh activity context
 						doneCh := workflow.NewChannel(ctx)
 						retryRunning := &RunningInlineWorkflow{
-							StepID:       running.StepID,
-							Node:         running.Node,
-							Event:        running.Event,
-							DoneCh:       doneCh,
-							EvalResult:   running.EvalResult,
-							ChildExecCtx: running.ChildExecCtx,
+							StepID:        running.StepID,
+							Node:          running.Node,
+							Event:         running.Event,
+							DoneCh:        doneCh,
+							EvalResult:    running.EvalResult,
+							ChildExecCtx:  running.ChildExecCtx,
+							IsNodeRouting: running.IsNodeRouting,
 						}
 
 						// Distinguish between router nodes and regular workflow nodes
 						nodeType := running.Node.GetType()
-						if nodeType == model.NodeTypeRouter {
-							// Re-create RouterExecutor for router nodes
+						if nodeType == model.NodeTypeRouter && running.IsNodeRouting {
+							// Re-create RouterExecutor for node routing routers (no child context)
+							routerExec := NewRouterExecutor(
+								ctx,
+								workflowID,
+								input.ChatID,
+								input.WorkflowName,
+								input.Inputs,
+								nodeOutputs,
+								childTracker,
+								running.Node,
+								running.EvalResult,
+							)
+							routerExec = routerExec.
+								WithPauseController(makeThreadPauseCtrl(execCtx.Thread))
+
+							routerCopy := routerExec
+							runningCopy := retryRunning
+							workflow.Go(ctx, func(gCtx workflow.Context) {
+								routerCopy = routerCopy.WithWorkflowContext(gCtx)
+								output, execErr := routerCopy.Execute()
+								runningCopy.Output = output
+								runningCopy.Error = execErr
+								runningCopy.DoneCh.Send(gCtx, true)
+							})
+						} else if nodeType == model.NodeTypeRouter {
+							// Re-create RouterExecutor for workflow routing routers
 							routerExec := NewRouterExecutor(
 								ctx,
 								workflowID,

@@ -602,24 +602,37 @@ message RouterWorkflowCandidate {
   string description = 3;
 }
 
-// RouterArgs configures a router node — uses an LLM to select and execute a workflow.
-// The router presents candidate workflows to an LLM, which picks the best match
-// for the given input, then executes the selected workflow as a sub-workflow.
+// NodeRouterCandidate describes a node within the same workflow that the router can route to.
+message NodeRouterCandidate {
+  // Id is the target node ID within the workflow.
+  string id = 1;
+  // Description tells the classifier LLM when to route to this node.
+  string description = 2;
+}
+
+// RouterArgs configures a router node — uses an LLM to select and execute a workflow,
+// or route to a node within the same workflow.
+//
+// Two mutually exclusive modes:
+//   - Workflow routing: set `workflows` to route to an external workflow + preset.
+//   - Node routing: set `nodes` to route to a node within the current workflow.
 //
 // Output fields accessible via nodes.<id>.*:
-//   selected_workflow, selected_preset, prompt, reasoning, outputs
+//   Workflow routing: selected_workflow, selected_preset, prompt, reasoning, outputs
+//   Node routing: selected_node, reasoning
 message RouterArgs {
   option (node_meta) = {
     node_type: "router"
     display_name: "Router"
-    description: "Route to a workflow based on LLM classification"
+    description: "Route to a workflow or node based on LLM classification"
     is_structural: true
     category: "flow"
     icon: "GitFork"
   };
 
-  // Workflows lists candidate workflows the router can select from. Required.
-  repeated RouterWorkflowCandidate workflows = 1 [(reliant) = { description: "Candidate workflows to route to" required: true }];
+  // Workflows lists candidate workflows the router can select from.
+  // Mutually exclusive with `nodes` — set exactly one.
+  repeated RouterWorkflowCandidate workflows = 1 [(reliant) = { description: "Candidate workflows to route to" }];
   reserved 2, 5;
   reserved "prompt", "include_history";
   // SystemPrompt overrides the default routing system prompt.
@@ -627,16 +640,21 @@ message RouterArgs {
   // Model selects which LLM to use for the routing decision.
   CelModelSelector model = 4 [(reliant) = { description: "Model for routing decision (defaults to fast model)" }];
   // Thread configures how the selected child workflow relates to conversation threads.
+  // Only applies to workflow routing mode.
   ThreadConfig thread = 6 [(reliant) = { description: "Thread mode for the selected workflow: inherit, new, or fork" }];
-  // Fallback is the preset name to use if routing fails. Empty = error on failure.
-  string fallback = 7 [(reliant) = { description: "Fallback preset if routing decision fails" }];
+  // Fallback is the preset/node to use if routing fails. Empty = error on failure.
+  // In workflow routing mode, this is a preset name. In node routing mode, this is a node ID.
+  string fallback = 7 [(reliant) = { description: "Fallback preset or node ID if routing decision fails" }];
   // Project configures the working directory for the selected sub-workflow.
+  // Only applies to workflow routing mode.
   ProjectConfig project = 8 [(reliant) = { description: "Working directory override for selected workflow" visibility_contexts: "advanced" }];
   // Outputs declares named outputs for the router node. Each entry maps an output name
-  // to a CEL expression evaluated against the router's execution context (selected_workflow,
-  // selected_preset, prompt, reasoning, outputs). This allows downstream nodes to access
-  // router results as top-level fields: nodes.<router_id>.<output_name>.
+  // to a CEL expression evaluated against the router's execution context.
+  // Only applies to workflow routing mode.
   map<string, string> outputs = 9 [(reliant) = { description: "Declared output mappings (name → CEL expression)" visibility_contexts: "advanced" }];
+  // Nodes lists candidate nodes within the current workflow to route to.
+  // Mutually exclusive with `workflows` — set exactly one.
+  repeated NodeRouterCandidate nodes = 10 [(reliant) = { description: "Candidate nodes within this workflow to route to" }];
 }
 
 // =============================================================================
@@ -968,12 +986,15 @@ message JoinOutput {
 // RouterOutput is the output from a router node.
 // Child workflow outputs are accessed via the `outputs` sub-field,
 // e.g. nodes.router.outputs.message.
+//
+// In node routing mode, only selected_node and reasoning are populated.
 message RouterOutput {
-  string selected_workflow = 1;      // The workflow ref that was selected
-  string selected_preset = 2;        // The preset that was selected
-  string prompt = 3;                 // The rewritten prompt for the selected workflow
-  string reasoning = 4;              // LLM's reasoning for the selection
-  google.protobuf.Struct outputs = 5; // Child workflow outputs (accessed via nodes.router.outputs.<field>)
+  string selected_workflow = 1;      // The workflow ref that was selected (workflow routing mode)
+  string selected_preset = 2;        // The preset that was selected (workflow routing mode)
+  string prompt = 3;                 // The rewritten prompt for the selected workflow (workflow routing mode)
+  string reasoning = 4;              // LLM's reasoning for the selection (both modes)
+  google.protobuf.Struct outputs = 5; // Child workflow outputs (workflow routing mode)
+  string selected_node = 6;          // The node ID that was selected (node routing mode)
 }
 
 // SkippedOutput is the output for nodes skipped due to conditions.

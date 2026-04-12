@@ -392,6 +392,50 @@ func (s *WorkflowSimulator) Run(mocker StepMocker) error {
 			return fmt.Errorf("find triggered steps in simulator: %w", err)
 		}
 
+		// Node routing routers: if a router completion event didn't produce
+		// edge-triggered nodes, dynamically dispatch to selected_node.
+		// This mirrors workflow.go's node router dynamic dispatch logic.
+		for _, evt := range s.events {
+			if evt.StepID == "" {
+				continue
+			}
+			routerNode := model.FindNode(s.protoWorkflow, evt.StepID)
+			if routerNode == nil || !model.IsNodeRouterMode(routerNode) {
+				continue
+			}
+			// Check if any triggered step came from this router's edge
+			edgeTriggered := false
+			for _, step := range triggeredSteps {
+				if step.Event != nil && step.Event.StepID == evt.StepID {
+					edgeTriggered = true
+					break
+				}
+			}
+			if edgeTriggered {
+				continue
+			}
+			// No edges matched — dispatch to selected_node
+			selectedNodeID, _ := evt.Data["selected_node"].(string)
+			if selectedNodeID == "" {
+				continue
+			}
+			targetNode := model.FindNode(s.protoWorkflow, selectedNodeID)
+			if targetNode == nil {
+				return fmt.Errorf("node router %s selected_node %q not found in workflow", evt.StepID, selectedNodeID)
+			}
+			triggeredSteps = append(triggeredSteps, &core.TriggeredNode{
+				Node: targetNode,
+				Event: &core.WorkflowEvent{
+					ID:           fmt.Sprintf("node-router-dispatch-%s-%d", evt.StepID, s.iteration),
+					WorkflowID:   "sim-workflow",
+					ChatID:       "sim-chat",
+					WorkflowName: s.rootWorkflowIdentity(),
+					StepID:       evt.StepID,
+					Data:         evt.Data,
+				},
+			})
+		}
+
 		// Clear events (they've been processed)
 		s.events = nil
 
@@ -555,6 +599,24 @@ func (s *WorkflowSimulator) Run(mocker StepMocker) error {
 
 			// Generate mock output
 			mockOutput := mocker(stepID, evaluatedInputs)
+
+			// For node-routing routers: if the mocker didn't provide selected_node,
+			// generate a default output picking the first candidate node.
+			if model.IsNodeRouterMode(triggered.Node) {
+				if _, hasSelectedNode := mockOutput["selected_node"]; !hasSelectedNode || mockOutput["selected_node"] == "" {
+					args := model.GetRouterArgs(triggered.Node)
+					if candidates := args.GetNodes(); len(candidates) > 0 {
+						if mockOutput == nil {
+							mockOutput = make(map[string]interface{})
+						}
+						mockOutput["selected_node"] = candidates[0].GetId()
+						if _, hasReasoning := mockOutput["reasoning"]; !hasReasoning {
+							mockOutput["reasoning"] = "simulator default: first candidate"
+						}
+					}
+				}
+			}
+
 			normalizedOutput := normalizeMockOutput(mockOutput, nodeActivityName(triggered.Node))
 
 			// Store step output

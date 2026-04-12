@@ -122,6 +122,7 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 		argFieldKeys: map[string]struct{}{
 			"fallback":      {},
 			"model":         {},
+			"nodes":         {},
 			"outputs":       {},
 			"project":       {},
 			"system_prompt": {},
