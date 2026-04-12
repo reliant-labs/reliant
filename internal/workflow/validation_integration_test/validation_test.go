@@ -187,7 +187,214 @@ func getAllTestCases() []validationTestCase {
 	cases = append(cases, getCELTestCases()...)
 	cases = append(cases, getCrossWorkflowTestCases()...)
 	cases = append(cases, getEdgeCaseTestCases()...)
+	cases = append(cases, getNodeRoutingTestCases()...)
 	return cases
+}
+
+// --- Node Routing Validation ---
+
+func getNodeRoutingTestCases() []validationTestCase {
+	return []validationTestCase{
+		{
+			name:     "node_routing/valid_basic",
+			category: "node_routing",
+			yaml: `
+name: test
+entry: [route, summarize, translate]
+nodes:
+  - id: route
+    type: router
+    model:
+      tags: [fast]
+    nodes:
+      - id: summarize
+        description: "Summarize content"
+      - id: translate
+        description: "Translate text"
+  - id: summarize
+    type: call_llm
+    args:
+      model: mock
+  - id: translate
+    type: call_llm
+    args:
+      model: mock
+`,
+			expectValid: true,
+		},
+		{
+			name:     "node_routing/valid_with_fallback",
+			category: "node_routing",
+			yaml: `
+name: test
+entry: [route, summarize, translate]
+nodes:
+  - id: route
+    type: router
+    model:
+      tags: [fast]
+    nodes:
+      - id: summarize
+        description: "Summarize content"
+      - id: translate
+        description: "Translate text"
+    fallback: summarize
+  - id: summarize
+    type: call_llm
+    args:
+      model: mock
+  - id: translate
+    type: call_llm
+    args:
+      model: mock
+`,
+			expectValid: true,
+		},
+		{
+			name:     "node_routing/valid_with_conditional_edges",
+			category: "node_routing",
+			yaml: `
+name: test
+entry: [route]
+nodes:
+  - id: route
+    type: router
+    model:
+      tags: [fast]
+    nodes:
+      - id: summarize
+      - id: translate
+  - id: summarize
+    type: call_llm
+    args:
+      model: mock
+  - id: translate
+    type: call_llm
+    args:
+      model: mock
+  - id: done
+    type: save_message
+    args:
+      role: "assistant"
+      content: "Done"
+edges:
+  - from: route
+    cases:
+      - to: summarize
+        condition: "nodes.route.selected_node == 'summarize'"
+    default: translate
+  - from: summarize
+    default: done
+  - from: translate
+    default: done
+`,
+			expectValid: true,
+		},
+		{
+			name:     "node_routing/both_workflows_and_nodes_rejected",
+			category: "node_routing",
+			yaml: `
+name: test
+entry: [route, target]
+nodes:
+  - id: route
+    type: router
+    model:
+      tags: [fast]
+    workflows:
+      - ref: builtin://agent
+        presets: [general]
+    nodes:
+      - id: target
+  - id: target
+    type: call_llm
+    args:
+      model: mock
+`,
+			expectValid: false,
+			errorMust:   []string{"cannot have both"},
+		},
+		{
+			name:     "node_routing/candidate_references_unknown_node",
+			category: "node_routing",
+			yaml: `
+name: test
+entry: [route]
+nodes:
+  - id: route
+    type: router
+    model:
+      tags: [fast]
+    nodes:
+      - id: nonexistent
+        description: "Does not exist"
+`,
+			expectValid: false,
+			errorMust:   []string{"unknown node"},
+		},
+		{
+			name:     "node_routing/candidate_with_empty_id",
+			category: "node_routing",
+			yaml: `
+name: test
+entry: [route]
+nodes:
+  - id: route
+    type: router
+    model:
+      tags: [fast]
+    nodes:
+      - id: ""
+        description: "No ID"
+`,
+			expectValid: false,
+			errorMust:   []string{"empty id"},
+		},
+		{
+			name:     "node_routing/candidate_references_itself",
+			category: "node_routing",
+			yaml: `
+name: test
+entry: [route]
+nodes:
+  - id: route
+    type: router
+    model:
+      tags: [fast]
+    nodes:
+      - id: route
+        description: "Self-reference"
+`,
+			expectValid: false,
+			errorMust:   []string{"itself"},
+		},
+		{
+			name:     "node_routing/fallback_not_in_candidates",
+			category: "node_routing",
+			yaml: `
+name: test
+entry: [route, target_a, other]
+nodes:
+  - id: route
+    type: router
+    model:
+      tags: [fast]
+    nodes:
+      - id: target_a
+    fallback: other
+  - id: target_a
+    type: call_llm
+    args:
+      model: mock
+  - id: other
+    type: call_llm
+    args:
+      model: mock
+`,
+			expectValid: false,
+			errorMust:   []string{"fallback"},
+		},
+	}
 }
 
 // --- Structural Validation ---

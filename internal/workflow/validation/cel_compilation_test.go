@@ -188,6 +188,7 @@ outputs:
 		// Valid: known router string fields
 		{"selected_workflow passes", "nodes.my_router.selected_workflow", false},
 		{"selected_preset passes", "nodes.my_router.selected_preset", false},
+		{"selected_node passes", "nodes.my_router.selected_node", false},
 		{"prompt passes", "nodes.my_router.prompt", false},
 		{"reasoning passes", "nodes.my_router.reasoning", false},
 		// Valid: outputs is dynamic, allows any sub-access
@@ -242,6 +243,7 @@ outputs:
 		typedCases := []testCase{
 			// Valid: router metadata
 			{"selected_workflow passes", "nodes.my_router.selected_workflow", false},
+			{"selected_node passes", "nodes.my_router.selected_node", false},
 			// Valid: explicit access via outputs
 			{"outputs.message passes", "nodes.my_router.outputs.message", false},
 			{"outputs.response_text passes", "nodes.my_router.outputs.response_text", false},
@@ -354,6 +356,7 @@ outputs:
 		cases := []testCase{
 			{"selected_workflow passes", "nodes.my_router.selected_workflow", false},
 			{"selected_preset passes", "nodes.my_router.selected_preset", false},
+			{"selected_node passes", "nodes.my_router.selected_node", false},
 			{"prompt passes", "nodes.my_router.prompt", false},
 			{"reasoning passes", "nodes.my_router.reasoning", false},
 		}
@@ -406,6 +409,7 @@ outputs:
 			{"summary fails with empty outputs", "nodes.my_router.summary", true},
 			// Proto fields still pass
 			{"selected_workflow passes", "nodes.my_router.selected_workflow", false},
+			{"selected_node passes", "nodes.my_router.selected_node", false},
 			// outputs sub-field still works
 			{"outputs.message passes", "nodes.my_router.outputs.message", false},
 		}

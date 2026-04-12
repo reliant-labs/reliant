@@ -171,6 +171,43 @@ func validateStructure(wf *reliantv1.Workflow, result *Result) {
 		validateInlineWorkflows(node, nodePath, result)
 	}
 
+	// === Router Node Routing References ===
+
+	for i, node := range nodes {
+		if node.GetType() != model.NodeTypeRouter {
+			continue
+		}
+		args := node.GetRouter()
+		if args == nil || len(args.GetNodes()) == 0 {
+			continue
+		}
+		nodeID := node.GetId()
+		nodePath := []string{name, "nodes", fmt.Sprintf("[%d](%s)", i, nodeID)}
+
+		candidateIDs := make(map[string]bool, len(args.GetNodes()))
+		for j, candidate := range args.GetNodes() {
+			cid := candidate.GetId()
+			if cid == "" {
+				continue // already reported in validateNodeArgs
+			}
+			candidateIDs[cid] = true
+			if cid == nodeID {
+				result.AddError(CategoryStructure, nodePath, "nodes",
+					fmt.Sprintf("router node candidate %d references itself ('%s')", j, cid))
+			} else if _, exists := seenNodeIDs[cid]; !exists {
+				result.AddError(CategoryStructure, nodePath, "nodes",
+					fmt.Sprintf("router node candidate %d references unknown node '%s'", j, cid))
+			}
+		}
+
+		if fb := args.GetFallback(); fb != "" {
+			if !candidateIDs[fb] {
+				result.AddError(CategoryStructure, nodePath, "fallback",
+					fmt.Sprintf("fallback '%s' must be one of the candidate node IDs", fb))
+			}
+		}
+	}
+
 	// === Entry References Valid Nodes ===
 
 	for _, entryID := range entry {
@@ -327,14 +364,32 @@ func validateNodeArgs(node *reliantv1.Node, nodePath []string, result *Result) {
 			result.AddError(CategoryStructure, nodePath, "args", "router node missing args")
 			return
 		}
-		if len(args.GetWorkflows()) == 0 {
+
+		hasWorkflows := len(args.GetWorkflows()) > 0
+		hasNodes := len(args.GetNodes()) > 0
+
+		// Mutually exclusive: exactly one of workflows or nodes must be set.
+		if hasWorkflows && hasNodes {
 			result.AddError(CategoryStructure, nodePath, "workflows",
-				"router node requires at least one candidate workflow")
+				"router node cannot have both 'workflows' and 'nodes' — use exactly one")
+		} else if !hasWorkflows && !hasNodes {
+			result.AddError(CategoryStructure, nodePath, "workflows",
+				"router node requires either 'workflows' or 'nodes' — at least one candidate must be specified")
 		}
+
+		// Workflow routing mode validation.
 		for i, candidate := range args.GetWorkflows() {
 			if candidate.GetRef() == "" {
 				result.AddError(CategoryStructure, nodePath, "workflows",
 					fmt.Sprintf("router candidate %d has empty ref", i))
+			}
+		}
+
+		// Node routing mode validation.
+		for i, candidate := range args.GetNodes() {
+			if candidate.GetId() == "" {
+				result.AddError(CategoryStructure, nodePath, "nodes",
+					fmt.Sprintf("router node candidate %d has empty id", i))
 			}
 		}
 	case model.NodeTypeJoin:

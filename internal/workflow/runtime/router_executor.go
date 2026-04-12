@@ -25,6 +25,12 @@ type routerDecision struct {
 	Reasoning string `json:"reasoning"`
 }
 
+// nodeRouterDecision is the parsed result from a node routing LLM call.
+type nodeRouterDecision struct {
+	SelectedNode string `json:"selected_node"`
+	Reasoning    string `json:"reasoning"`
+}
+
 // RouterExecutor handles the two-phase execution of a router node:
 // 1. Dispatch a CallLLM activity to make the routing decision
 // 2. Execute the selected workflow via InlineWorkflowExecutor
@@ -118,13 +124,18 @@ func (r *RouterExecutor) WithWorkflowContext(ctx workflow.Context) *RouterExecut
 	return r
 }
 
-// Execute runs the two-phase router execution:
-// Phase 1: Load candidate workflows and make routing decision via CallLLM
-// Phase 2: Execute the selected workflow
+// Execute runs the router execution.
+// If node candidates are configured, it runs node routing (simple LLM call + parse).
+// Otherwise, it runs the two-phase workflow routing (load candidates, decide, execute).
 func (r *RouterExecutor) Execute() (map[string]interface{}, error) {
 	args := model.GetRouterArgs(r.evalResult)
 	if args == nil {
 		return nil, fmt.Errorf("router node %s has no router args", r.node.GetId())
+	}
+
+	// Branch: node routing vs workflow routing
+	if len(args.GetNodes()) > 0 {
+		return r.executeNodeRouting(args)
 	}
 
 	// Phase 1: Load candidates and make routing decision
@@ -185,6 +196,161 @@ func (r *RouterExecutor) Execute() (map[string]interface{}, error) {
 	}
 
 	return output, nil
+}
+
+// executeNodeRouting runs the simplified node routing path:
+// 1. Build system prompt and response schema from node candidates
+// 2. Dispatch a CallLLM activity
+// 3. Parse and validate the response
+// 4. Return the selected node ID and reasoning
+func (r *RouterExecutor) executeNodeRouting(args *reliantv1.RouterArgs) (map[string]interface{}, error) {
+	nodeCandidates := args.GetNodes()
+
+	// Build routing context
+	customPrompt := model.CelStringValue(args.GetSystemPrompt())
+	systemPrompt := buildNodeRoutingSystemPrompt(nodeCandidates, customPrompt)
+	schema := buildNodeRoutingResponseSchema(nodeCandidates)
+	schemaStruct, err := structpb.NewStruct(schema)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build node routing response schema: %w", err)
+	}
+
+	// Build a synthetic CallLLM node for the routing decision
+	callLLMNode := &reliantv1.Node{
+		Id:   r.node.GetId() + "__node_routing_decision",
+		Type: model.NodeTypeCallLLM,
+		Args: &reliantv1.Node_CallLlm{
+			CallLlm: &reliantv1.CallLLMArgs{
+				SystemPrompt: &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: systemPrompt}},
+				Model:        args.GetModel(),
+				ResponseTool: &reliantv1.ResponseTool{
+					Name:        &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "node_routing_decision"}},
+					Description: &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "Select the node to route to"}},
+					Schema:      schemaStruct,
+				},
+				Messages: []*reliantv1.CallLLMMessageInput{
+					{
+						Role:    "user",
+						Content: "Route this request to the most appropriate node based on the conversation history.",
+					},
+				},
+			},
+		},
+	}
+
+	// Use the parent thread for loading conversation history (same pattern as workflow routing)
+	routerThread := ""
+	if r.execContext != nil {
+		if r.execContext.ParentThread != "" {
+			routerThread = r.execContext.ParentThread
+		} else {
+			routerThread = r.execContext.Thread
+		}
+	}
+
+	rtx := types.RuntimeContext{
+		ChatID:     r.chatID,
+		Thread:     routerThread,
+		WorkflowID: r.workflowID,
+		StepID:     callLLMNode.GetId(),
+	}
+
+	input := types.ActivityInput{
+		Runtime: rtx,
+		Node:    callLLMNode,
+	}
+
+	// Dispatch the CallLLM activity
+	baseCtx := r.pauseCtrl.GetActivityCtx(r.ctx)
+	activityCtx := workflow.WithActivityOptions(baseCtx, workflow.ActivityOptions{
+		StartToCloseTimeout: 5 * time.Minute,
+		HeartbeatTimeout:    30 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    time.Minute,
+			MaximumAttempts:    3,
+		},
+	})
+
+	var output reliantv1.CallLLMOutput
+	if err := workflow.ExecuteActivity(activityCtx, "CallLLM", input).Get(r.ctx, &output); err != nil {
+		return nil, fmt.Errorf("node routing CallLLM failed: %w", err)
+	}
+
+	// Parse the decision
+	decision, err := r.parseNodeRoutingDecision(&output)
+	if err != nil {
+		return nil, fmt.Errorf("node routing decision parse failed: %w", err)
+	}
+
+	// Validate selected node is in the candidate list
+	valid := false
+	for _, c := range nodeCandidates {
+		if c.GetId() == decision.SelectedNode {
+			valid = true
+			break
+		}
+	}
+	if !valid {
+		fallback := strings.TrimSpace(args.GetFallback())
+		if fallback == "" {
+			return nil, fmt.Errorf("node routing selected unknown node %q", decision.SelectedNode)
+		}
+		// Validate fallback is also in the candidate list
+		fallbackValid := false
+		for _, c := range nodeCandidates {
+			if c.GetId() == fallback {
+				fallbackValid = true
+				break
+			}
+		}
+		if !fallbackValid {
+			return nil, fmt.Errorf("node routing fallback %q is not a valid candidate node", fallback)
+		}
+		r.logger.Info("[Router] Invalid node selection, using fallback",
+			"selectedNode", decision.SelectedNode,
+			"fallback", fallback,
+		)
+		decision.SelectedNode = fallback
+	}
+
+	r.logger.Info("[Router] Node routing decision made",
+		"nodeID", r.node.GetId(),
+		"selectedNode", decision.SelectedNode,
+		"reasoning", decision.Reasoning,
+	)
+
+	return map[string]interface{}{
+		"selected_node": decision.SelectedNode,
+		"reasoning":     decision.Reasoning,
+	}, nil
+}
+
+// parseNodeRoutingDecision extracts the structured node routing decision from CallLLM output.
+func (r *RouterExecutor) parseNodeRoutingDecision(output *reliantv1.CallLLMOutput) (*nodeRouterDecision, error) {
+	var decision nodeRouterDecision
+	if rd := output.GetResponseData(); rd != nil {
+		rdJSON, err := rd.MarshalJSON()
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal response_data: %w", err)
+		}
+		if err := json.Unmarshal(rdJSON, &decision); err != nil {
+			return nil, fmt.Errorf("failed to parse node routing decision from response_data: %w", err)
+		}
+	} else if responseText := output.GetResponseText(); responseText != "" {
+		if err := json.Unmarshal([]byte(responseText), &decision); err != nil {
+			return nil, fmt.Errorf("failed to parse node routing decision JSON: %w (raw: %s)", err, responseText)
+		}
+	} else {
+		return nil, fmt.Errorf("node routing decision has no response_data or response_text")
+	}
+
+	if decision.SelectedNode == "" {
+		return nil, fmt.Errorf("node routing decision has empty selected_node")
+	}
+
+	return &decision, nil
 }
 
 // loadCandidates loads workflow metadata for all configured candidates.

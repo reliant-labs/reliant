@@ -176,7 +176,7 @@ func TestCompileSubWorkflowSemanticContracts(t *testing.T) {
 			},
 		},
 		{
-			name: "router node with no candidates falls back to placeholder ref",
+			name: "router node with no workflow candidates produces no sub-workflow contract",
 			workflow: &reliantv1.Workflow{
 				Name: "root",
 				Nodes: []*reliantv1.Node{
@@ -197,15 +197,77 @@ func TestCompileSubWorkflowSemanticContracts(t *testing.T) {
 				if err != nil {
 					t.Fatalf("compile returned error: %v", err)
 				}
-				contract, ok := program.Semantics.SubWorkflows["route"]
-				if !ok {
-					t.Fatalf("expected contract for node path route")
+				// Empty workflow candidates means no child workflow to load
+				if _, ok := program.Semantics.SubWorkflows["route"]; ok {
+					t.Fatalf("router with no workflow candidates should not produce a sub-workflow contract")
 				}
-				if contract.WorkflowRef != "router" {
-					t.Fatalf("workflow ref mismatch: got %q, want %q", contract.WorkflowRef, "router")
+			},
+		},
+		{
+			name: "node routing router produces no sub-workflow contract",
+			workflow: &reliantv1.Workflow{
+				Name: "root",
+				Nodes: []*reliantv1.Node{
+					{
+						Id:   "route",
+						Type: "router",
+						Args: &reliantv1.Node_Router{
+							Router: &reliantv1.RouterArgs{
+								Nodes: []*reliantv1.NodeRouterCandidate{
+									{Id: "summarize", Description: "Summarize content"},
+									{Id: "translate", Description: "Translate text"},
+								},
+							},
+						},
+					},
+					{Id: "summarize", Type: "call_llm"},
+					{Id: "translate", Type: "call_llm"},
+				},
+			},
+			options: CompileOptions{CanonicalWorkflowRef: "builtin://root"},
+			assert: func(t *testing.T, program *Program, err error) {
+				t.Helper()
+				if err != nil {
+					t.Fatalf("compile returned error: %v", err)
 				}
-				if contract.NodeType != "router" {
-					t.Fatalf("node type mismatch: got %q", contract.NodeType)
+				// Node routing routers dispatch to sibling nodes, not child workflows.
+				// They should NOT produce sub-workflow contracts.
+				if _, ok := program.Semantics.SubWorkflows["route"]; ok {
+					t.Fatalf("node routing router should not produce a sub-workflow contract")
+				}
+			},
+		},
+		{
+			name: "node routing router with fallback compiles without error",
+			workflow: &reliantv1.Workflow{
+				Name: "root",
+				Nodes: []*reliantv1.Node{
+					{
+						Id:   "route",
+						Type: "router",
+						Args: &reliantv1.Node_Router{
+							Router: &reliantv1.RouterArgs{
+								Nodes: []*reliantv1.NodeRouterCandidate{
+									{Id: "summarize"},
+									{Id: "translate"},
+								},
+								Fallback: "summarize",
+							},
+						},
+					},
+					{Id: "summarize", Type: "call_llm"},
+					{Id: "translate", Type: "call_llm"},
+				},
+			},
+			options: CompileOptions{CanonicalWorkflowRef: "builtin://root"},
+			assert: func(t *testing.T, program *Program, err error) {
+				t.Helper()
+				if err != nil {
+					t.Fatalf("compile returned error: %v", err)
+				}
+				// Should still compile fine; no sub-workflow contract expected
+				if _, ok := program.Semantics.SubWorkflows["route"]; ok {
+					t.Fatalf("node routing router should not produce a sub-workflow contract")
 				}
 			},
 		},

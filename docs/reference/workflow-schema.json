@@ -180,6 +180,36 @@
           "type": "object",
           "description": "Arguments to pass to the workflow/agent (CEL expressions)",
           "additionalProperties": true
+        },
+        "type": {
+          "type": "string",
+          "enum": ["router"],
+          "description": "Node type (currently only 'router' uses this field)"
+        },
+        "workflows": {
+          "type": "array",
+          "description": "Candidate workflows to route to (router node). Mutually exclusive with 'nodes'.",
+          "items": {
+            "$ref": "#/definitions/RouterWorkflowCandidate"
+          }
+        },
+        "nodes": {
+          "type": "array",
+          "description": "Candidate nodes within this workflow to route to (router node). Mutually exclusive with 'workflows'.",
+          "items": {
+            "$ref": "#/definitions/NodeRouterCandidate"
+          }
+        },
+        "model": {
+          "description": "Model for routing decision (defaults to fast model)"
+        },
+        "system_prompt": {
+          "type": "string",
+          "description": "Custom system prompt for the routing LLM (router node)"
+        },
+        "fallback": {
+          "type": "string",
+          "description": "Fallback if routing fails. In workflow routing mode, a preset name. In node routing mode, a node ID."
         }
       },
       "oneOf": [
@@ -188,7 +218,8 @@
         { "required": ["agent"] },
         { "required": ["workflow"] },
         { "required": ["loop"] },
-        { "required": ["join"] }
+        { "required": ["join"] },
+        { "required": ["type"] }
       ]
     },
     "ThreadConfig": {
@@ -358,6 +389,39 @@
         "attachments": {
           "type": "string",
           "description": "Attachment IDs (CEL expression)"
+        }
+      }
+    },
+    "RouterWorkflowCandidate": {
+      "type": "object",
+      "required": ["ref"],
+      "properties": {
+        "ref": {
+          "type": "string",
+          "description": "Workflow reference (e.g., 'builtin://agent', 'project://my-flow')"
+        },
+        "presets": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Limit which presets are available for this workflow. Empty = all valid presets."
+        },
+        "description": {
+          "type": "string",
+          "description": "Override the workflow's description for routing context"
+        }
+      }
+    },
+    "NodeRouterCandidate": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Target node ID within the workflow"
+        },
+        "description": {
+          "type": "string",
+          "description": "Tells the routing LLM when to route to this node"
         }
       }
     },

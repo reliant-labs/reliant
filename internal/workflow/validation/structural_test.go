@@ -393,8 +393,9 @@ func TestRouterNodeValidation(t *testing.T) {
 		wantErr     bool
 		errContains string
 	}{
+		// === Workflow routing mode (existing) ===
 		{
-			name: "valid router node",
+			name: "valid router node with workflows",
 			workflow: &reliantv1.Workflow{
 				Name:  "test",
 				Entry: []string{"route"},
@@ -415,7 +416,7 @@ func TestRouterNodeValidation(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "router with empty workflows list",
+			name: "router with neither workflows nor nodes",
 			workflow: &reliantv1.Workflow{
 				Name:  "test",
 				Entry: []string{"route"},
@@ -424,15 +425,39 @@ func TestRouterNodeValidation(t *testing.T) {
 						Id:   "route",
 						Type: "router",
 						Args: &reliantv1.Node_Router{
-							Router: &reliantv1.RouterArgs{
-								Workflows: []*reliantv1.RouterWorkflowCandidate{},
-							},
+							Router: &reliantv1.RouterArgs{},
 						},
 					},
 				},
 			},
 			wantErr:     true,
-			errContains: "workflow",
+			errContains: "workflows",
+		},
+		{
+			name: "router with both workflows and nodes",
+			workflow: &reliantv1.Workflow{
+				Name:  "test",
+				Entry: []string{"route", "target"},
+				Nodes: []*reliantv1.Node{
+					{
+						Id:   "route",
+						Type: "router",
+						Args: &reliantv1.Node_Router{
+							Router: &reliantv1.RouterArgs{
+								Workflows: []*reliantv1.RouterWorkflowCandidate{
+									{Ref: "builtin://agent"},
+								},
+								Nodes: []*reliantv1.NodeRouterCandidate{
+									{Id: "target"},
+								},
+							},
+						},
+					},
+					{Id: "target", Type: "call_llm", Args: &reliantv1.Node_CallLlm{CallLlm: &reliantv1.CallLLMArgs{Model: &reliantv1.CelModelSelector{Value: &reliantv1.CelModelSelector_Expr{Expr: "inputs.model"}}}}},
+				},
+			},
+			wantErr:     true,
+			errContains: "cannot have both",
 		},
 		{
 			name: "router candidate with empty ref",
@@ -456,6 +481,147 @@ func TestRouterNodeValidation(t *testing.T) {
 			wantErr:     true,
 			errContains: "ref",
 		},
+		// === Node routing mode (new) ===
+		{
+			name: "valid router node with nodes",
+			workflow: &reliantv1.Workflow{
+				Name:  "test",
+				Entry: []string{"route", "target_a", "target_b"},
+				Nodes: []*reliantv1.Node{
+					{
+						Id:   "route",
+						Type: "router",
+						Args: &reliantv1.Node_Router{
+							Router: &reliantv1.RouterArgs{
+								Nodes: []*reliantv1.NodeRouterCandidate{
+									{Id: "target_a", Description: "handle A"},
+									{Id: "target_b", Description: "handle B"},
+								},
+							},
+						},
+					},
+					{Id: "target_a", Type: "call_llm", Args: &reliantv1.Node_CallLlm{CallLlm: &reliantv1.CallLLMArgs{Model: &reliantv1.CelModelSelector{Value: &reliantv1.CelModelSelector_Expr{Expr: "inputs.model"}}}}},
+					{Id: "target_b", Type: "call_llm", Args: &reliantv1.Node_CallLlm{CallLlm: &reliantv1.CallLLMArgs{Model: &reliantv1.CelModelSelector{Value: &reliantv1.CelModelSelector_Expr{Expr: "inputs.model"}}}}},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "node routing candidate with empty id",
+			workflow: &reliantv1.Workflow{
+				Name:  "test",
+				Entry: []string{"route"},
+				Nodes: []*reliantv1.Node{
+					{
+						Id:   "route",
+						Type: "router",
+						Args: &reliantv1.Node_Router{
+							Router: &reliantv1.RouterArgs{
+								Nodes: []*reliantv1.NodeRouterCandidate{
+									{Id: "", Description: "no id"},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantErr:     true,
+			errContains: "empty id",
+		},
+		{
+			name: "node routing candidate references unknown node",
+			workflow: &reliantv1.Workflow{
+				Name:  "test",
+				Entry: []string{"route"},
+				Nodes: []*reliantv1.Node{
+					{
+						Id:   "route",
+						Type: "router",
+						Args: &reliantv1.Node_Router{
+							Router: &reliantv1.RouterArgs{
+								Nodes: []*reliantv1.NodeRouterCandidate{
+									{Id: "nonexistent"},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantErr:     true,
+			errContains: "unknown node",
+		},
+		{
+			name: "node routing candidate references itself",
+			workflow: &reliantv1.Workflow{
+				Name:  "test",
+				Entry: []string{"route"},
+				Nodes: []*reliantv1.Node{
+					{
+						Id:   "route",
+						Type: "router",
+						Args: &reliantv1.Node_Router{
+							Router: &reliantv1.RouterArgs{
+								Nodes: []*reliantv1.NodeRouterCandidate{
+									{Id: "route"},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantErr:     true,
+			errContains: "itself",
+		},
+		{
+			name: "node routing valid fallback",
+			workflow: &reliantv1.Workflow{
+				Name:  "test",
+				Entry: []string{"route", "target_a", "target_b"},
+				Nodes: []*reliantv1.Node{
+					{
+						Id:   "route",
+						Type: "router",
+						Args: &reliantv1.Node_Router{
+							Router: &reliantv1.RouterArgs{
+								Nodes: []*reliantv1.NodeRouterCandidate{
+									{Id: "target_a"},
+									{Id: "target_b"},
+								},
+								Fallback: "target_a",
+							},
+						},
+					},
+					{Id: "target_a", Type: "call_llm", Args: &reliantv1.Node_CallLlm{CallLlm: &reliantv1.CallLLMArgs{Model: &reliantv1.CelModelSelector{Value: &reliantv1.CelModelSelector_Expr{Expr: "inputs.model"}}}}},
+					{Id: "target_b", Type: "call_llm", Args: &reliantv1.Node_CallLlm{CallLlm: &reliantv1.CallLLMArgs{Model: &reliantv1.CelModelSelector{Value: &reliantv1.CelModelSelector_Expr{Expr: "inputs.model"}}}}},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "node routing fallback not in candidates",
+			workflow: &reliantv1.Workflow{
+				Name:  "test",
+				Entry: []string{"route", "target_a", "other"},
+				Nodes: []*reliantv1.Node{
+					{
+						Id:   "route",
+						Type: "router",
+						Args: &reliantv1.Node_Router{
+							Router: &reliantv1.RouterArgs{
+								Nodes: []*reliantv1.NodeRouterCandidate{
+									{Id: "target_a"},
+								},
+								Fallback: "other",
+							},
+						},
+					},
+					{Id: "target_a", Type: "call_llm", Args: &reliantv1.Node_CallLlm{CallLlm: &reliantv1.CallLLMArgs{Model: &reliantv1.CelModelSelector{Value: &reliantv1.CelModelSelector_Expr{Expr: "inputs.model"}}}}},
+					{Id: "other", Type: "call_llm", Args: &reliantv1.Node_CallLlm{CallLlm: &reliantv1.CallLLMArgs{Model: &reliantv1.CelModelSelector{Value: &reliantv1.CelModelSelector_Expr{Expr: "inputs.model"}}}}},
+				},
+			},
+			wantErr:     true,
+			errContains: "fallback",
+		},
 	}
 
 	for _, tt := range tests {
@@ -464,7 +630,7 @@ func TestRouterNodeValidation(t *testing.T) {
 
 			var routerErrors []string
 			for _, err := range result.Errors() {
-				if strings.Contains(strings.ToLower(err.Message), tt.errContains) {
+				if tt.errContains != "" && strings.Contains(strings.ToLower(err.Message), tt.errContains) {
 					routerErrors = append(routerErrors, err.Message)
 				}
 			}
