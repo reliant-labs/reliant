@@ -4,9 +4,8 @@ import { createPortal } from "react-dom";
 import { Search, FileText, Loader2 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useProjectStore } from "../../store/projectStore";
-import { useWorktreeStore } from "../../store/worktreeStore";
+import { useActiveWorktreeId } from "../../store/worktreeStore";
 import { useViewerStore } from "../../store/viewerStore";
-import { useChatStore } from "../../store/chatStore";
 import { getFileTree } from "../../api/fileSystem";
 import type { FileNode } from "../FileBrowser";
 import { focusChatInput } from "../../hooks/useFocusManager";
@@ -43,13 +42,9 @@ export const QuickFileOpen = forwardRef<QuickFileOpenRef, QuickFileOpenProps>(({
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const currentProject = useProjectStore((state) => state.currentProject);
-  const worktrees = useWorktreeStore((state) => state.worktrees);
   
-  // Get worktree from active chat, falling back to main worktree
-  const activeChatId = useChatStore((state) => state.activeChatId);
-  const activeChat = useChatStore((state) => activeChatId ? state.chats.get(activeChatId) : undefined);
-  const mainWorktree = worktrees.find((w) => w.is_main && w.project_id === currentProject?.id);
-  const effectiveWorktreeId = activeChat?.worktreeId || mainWorktree?.id;
+  // Use the global active worktree (from worktreeStore) as the single source of truth
+  const effectiveWorktreeId = useActiveWorktreeId();
 
   // Flatten file tree helper (stable - no deps)
   const flattenFileTree = useCallback((nodes: FileNode[], accumulator: FileNode[] = []): FileNode[] => {

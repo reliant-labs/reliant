@@ -1,13 +1,11 @@
 import { useState, useEffect } from "react";
 import { X } from "lucide-react";
-import { useShallow } from "zustand/react/shallow";
 import { cn } from "../../lib/utils";
 import { RightSidebar } from "../FileBrowser/RightSidebar";
 import { RecentChanges } from "../Chat/RecentChanges";
 import { useProjectStore } from "../../store/projectStore";
-import { useChatStore } from "../../store/chatStore";
 import { useSidebarStore } from "../../store/sidebarStore";
-import { useWorktreeStore } from "../../store/worktreeStore";
+import { useActiveWorktreeId } from "../../store/worktreeStore";
 
 export type RightContentView = "files" | "changes" | null;
 
@@ -24,21 +22,8 @@ export function RightContentPanel({
   const [isResizing, setIsResizing] = useState(false);
   const setIsResizingGlobal = useSidebarStore((state) => state.setIsResizing);
   const currentProject = useProjectStore((state) => state.currentProject);
-  const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
-  
-  // Get active chat's worktree, with fallback to pendingNewChatWorktreeId, then currentWorktree
-  // Use useShallow to prevent infinite re-renders from object selector
-  const { activeChatId, pendingNewChatWorktreeId, chats } = useChatStore(useShallow((state) => ({
-    activeChatId: state.activeChatId,
-    pendingNewChatWorktreeId: state.pendingNewChatWorktreeId,
-    chats: state.chats,
-  })));
-  const worktrees = useWorktreeStore((state) => state.worktrees);
-  const mainWorktree = worktrees.find(w => w.is_main);
-  const activeChat = activeChatId ? chats.get(activeChatId) ?? null : null;
-  
-  // Use same derivation logic as RightSidebar for consistency
-  const activeWorktreeId = activeChat?.worktreeId || pendingNewChatWorktreeId || currentWorktree?.id || mainWorktree?.id;
+  // Use the global active worktree (from worktreeStore) as the single source of truth
+  const activeWorktreeId = useActiveWorktreeId();
 
   useEffect(() => {
     if (!isResizing) return;

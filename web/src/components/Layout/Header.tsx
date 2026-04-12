@@ -11,25 +11,18 @@ import {
   Workflow,
   FolderOpen,
   FolderGit2,
-  ChevronDown,
-  Check,
-  Search,
 } from "lucide-react";
 import {
   useState,
   forwardRef,
   useImperativeHandle,
   useEffect,
-  useRef,
 } from "react";
-import { LuFolderPlus } from "react-icons/lu";
 import { Tooltip } from "../ui/Tooltip";
 
 import { useProjectStore, type Project } from "../../store/projectStore";
 import { useShortcutsStore } from "../../store/shortcutsStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
-import { CreateWorktreeModal } from "../Worktrees/CreateWorktreeModal";
-import { DiscoverWorktreesModal } from "../Worktrees/DiscoverWorktreesModal";
 import { ConfigHealthIndicator } from "./ConfigHealthIndicator";
 import { isDev } from "../../lib/constants";
 import { openExternalLink } from "../../lib/open-link";
@@ -84,11 +77,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
   ) => {
     const [isMaximized, setIsMaximized] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
-    const [showWorkspaceDropdown, setShowWorkspaceDropdown] = useState(false);
-    const [showCreateWorktreeModal, setShowCreateWorktreeModal] = useState(false);
-    const [showDiscoverWorktreeModal, setShowDiscoverWorktreeModal] =
-      useState(false);
-    const workspaceDropdownRef = useRef<HTMLDivElement>(null);
+
     const isMac = window.electronAPI?.platform === "darwin";
 
     // Track fullscreen state - use both resize listener AND Electron API
@@ -123,17 +112,11 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
     const currentProject = useProjectStore((state) => state.currentProject);
     const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
     const worktrees = useWorktreeStore((state) => state.worktrees);
-    const switchWorktreeContext = useWorktreeStore(
-      (state) => state.switchWorktreeContext
-    );
     const shortcuts = useShortcutsStore((state) => state.shortcuts);
 
     const activeWorktrees = worktrees.filter((worktree) => !worktree.deleted_at);
     const mainWorktree =
       activeWorktrees.find((worktree) => worktree.is_main) ?? null;
-    const selectableWorkspaces = activeWorktrees.filter(
-      (worktree) => !worktree.is_main
-    );
 
 
 
@@ -192,75 +175,6 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
 
     // Expose ref (legacy, search now handled by dedicated modals)
     useImperativeHandle(ref, () => ({}));
-
-    useEffect(() => {
-      const handleClickOutside = (event: MouseEvent) => {
-        if (
-          workspaceDropdownRef.current &&
-          !workspaceDropdownRef.current.contains(event.target as Node)
-        ) {
-          setShowWorkspaceDropdown(false);
-        }
-      };
-
-      if (showWorkspaceDropdown) {
-        document.addEventListener("mousedown", handleClickOutside);
-        return () =>
-          document.removeEventListener("mousedown", handleClickOutside);
-      }
-    }, [showWorkspaceDropdown]);
-
-    const handleWorkspaceSelect = async (worktreeId: string | null) => {
-      if (!currentProject) return;
-
-      const targetWorktree =
-        worktreeId === null
-          ? mainWorktree
-          : activeWorktrees.find((worktree) => worktree.id === worktreeId) ?? null;
-
-      await switchWorktreeContext(currentProject.id, targetWorktree, {
-        openFreshNewChat: true,
-      });
-      setShowWorkspaceDropdown(false);
-    };
-
-    const handleWorktreeCreated = async (worktreeId: string) => {
-      if (!currentProject) return;
-
-      const refreshedWorktrees = useWorktreeStore.getState().worktrees;
-      const createdWorktree =
-        refreshedWorktrees.find((worktree) => worktree.id === worktreeId) ?? null;
-
-      await switchWorktreeContext(currentProject.id, createdWorktree, {
-        openFreshNewChat: true,
-      });
-      setShowCreateWorktreeModal(false);
-      setShowWorkspaceDropdown(false);
-    };
-
-    const handleWorktreesImported = async (importedWorktreeIds?: string[]) => {
-      if (!currentProject) return;
-
-      await useWorktreeStore.getState().loadWorktrees(currentProject.id);
-      const refreshedWorktrees = useWorktreeStore.getState().worktrees;
-      const importedWorktree = importedWorktreeIds?.length
-        ? refreshedWorktrees.find(
-            (worktree) => worktree.id === importedWorktreeIds[0]
-          ) ?? null
-        : null;
-      const refreshedCurrentWorktree = useWorktreeStore.getState().currentWorktree;
-      const fallbackWorktree =
-        importedWorktree ??
-        refreshedCurrentWorktree ??
-        refreshedWorktrees.find((worktree) => worktree.is_main) ??
-        null;
-
-      await switchWorktreeContext(currentProject.id, fallbackWorktree, {
-        openFreshNewChat: true,
-      });
-      setShowDiscoverWorktreeModal(false);
-      setShowWorkspaceDropdown(false);
-    };
 
     const handleMinimize = async () => {
       if (window.electronAPI) {
@@ -372,90 +286,10 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
             {!projectPickerMode && currentProject && (
               <>
                 <span className="text-muted-foreground/50">/</span>
-                <div className="relative" ref={workspaceDropdownRef}>
-                  <button
-                    type="button"
-                    className="flex items-center gap-1.5 rounded px-2 py-0.5 text-muted-foreground transition-colors hover:bg-accent/60"
-                    onClick={() => setShowWorkspaceDropdown((open) => !open)}
-                    aria-haspopup="menu"
-                    aria-expanded={showWorkspaceDropdown}
-                  >
-                    <FolderGit2 className="w-3.5 h-3.5 translate-y-[1px]" />
-                    <span>{currentWorktree?.branch || currentWorktree?.name || mainWorktree?.branch || mainWorktree?.name || currentProject.default_branch || "main"}</span>
-                    <ChevronDown className="w-3.5 h-3.5 opacity-60" />
-                  </button>
-
-                  {showWorkspaceDropdown && (
-                    <div className="absolute left-0 top-full mt-2 min-w-64 overflow-hidden rounded-md border border-border/50 bg-background shadow-2xl z-[1000]">
-                      <div className="max-h-80 overflow-y-auto py-1">
-                        <button
-                          type="button"
-                          onClick={() => handleWorkspaceSelect(null)}
-                          className="flex w-full items-start justify-between gap-3 px-3 py-2 text-left text-xs transition-colors hover:bg-accent/50"
-                        >
-                          <div>
-                            <div className="font-semibold text-foreground">
-                              {mainWorktree?.branch || mainWorktree?.name || currentProject.default_branch || "main"}
-                            </div>
-                            <div className="text-muted-foreground">Main workspace</div>
-                          </div>
-                          {(currentWorktree?.id ?? mainWorktree?.id) === mainWorktree?.id && (
-                            <Check className="mt-0.5 h-3.5 w-3.5 text-primary" />
-                          )}
-                        </button>
-
-                        {selectableWorkspaces.length > 0 ? (
-                          selectableWorkspaces.map((worktree) => (
-                            <button
-                              key={worktree.id}
-                              type="button"
-                              onClick={() => handleWorkspaceSelect(worktree.id)}
-                              className="flex w-full items-start justify-between gap-3 px-3 py-2 text-left text-xs transition-colors hover:bg-accent/50"
-                            >
-                              <div>
-                                <div className="font-semibold text-foreground">
-                                  {worktree.branch || worktree.name}
-                                </div>
-                              </div>
-                              {currentWorktree?.id === worktree.id && (
-                                <Check className="mt-0.5 h-3.5 w-3.5 text-primary" />
-                              )}
-                            </button>
-                          ))
-                        ) : (
-                          <div className="px-3 py-2 text-xs text-muted-foreground">
-                            No additional workspaces
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="border-t border-border/50 bg-background">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowDiscoverWorktreeModal(true);
-                            setShowWorkspaceDropdown(false);
-                          }}
-                          className="flex w-full items-center justify-center gap-2 px-3 py-2 text-xs text-primary transition-colors hover:bg-accent/50"
-                        >
-                          <Search className="h-3.5 w-3.5" />
-                          <span className="font-medium">Discover workspace</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowCreateWorktreeModal(true);
-                            setShowWorkspaceDropdown(false);
-                          }}
-                          className="flex w-full items-center justify-center gap-2 border-t border-border/50 px-3 py-2 text-xs text-primary transition-colors hover:bg-accent/50"
-                        >
-                          <LuFolderPlus className="h-3.5 w-3.5" />
-                          <span className="font-medium">New workspace</span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <span className="flex items-center gap-1.5 px-2 py-0.5 text-muted-foreground">
+                  <FolderGit2 className="w-3.5 h-3.5 translate-y-[1px]" />
+                  <span>{currentWorktree?.branch || currentWorktree?.name || mainWorktree?.branch || mainWorktree?.name || currentProject.default_branch || "main"}</span>
+                </span>
               </>
             )}
           </div>
@@ -629,22 +463,6 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
             )}
           </div>
         </div>
-        {currentProject && (
-          <>
-            <CreateWorktreeModal
-              isOpen={showCreateWorktreeModal}
-              onClose={() => setShowCreateWorktreeModal(false)}
-              onWorktreeCreated={handleWorktreeCreated}
-              projectId={currentProject.id}
-            />
-            <DiscoverWorktreesModal
-              isOpen={showDiscoverWorktreeModal}
-              onClose={() => setShowDiscoverWorktreeModal(false)}
-              onWorktreesImported={handleWorktreesImported}
-              projectId={currentProject.id}
-            />
-          </>
-        )}
       </header>
     );
   }

@@ -30,7 +30,6 @@ import { safeGetSetting, upsertStringSetting } from "../../lib/settingsPersisten
 
 interface NewChatViewProps {
   tabId: string;
-  worktreeId?: string; // Optional: Override worktree ID (for command center)
   onNavigateToWorktrees?: () => void;
   isFocused?: boolean; // NEW: Whether this pane has focus
   onChatCreated?: (chatId: string) => void; // Optional: Callback when chat is created (for command center)
@@ -114,7 +113,6 @@ Focus on practical, low-risk improvements that improve maintainability and reada
 
 export function NewChatView({
   tabId: _tabId,
-  worktreeId: propsWorktreeId,
   isFocused = true, // Default to focused
   onChatCreated,
 }: NewChatViewProps) {
@@ -128,8 +126,6 @@ export function NewChatView({
   const [shouldShowMigrationPrompt, setShouldShowMigrationPrompt] = useState(false);
   const chatInputRef = useRef<HTMLDivElement>(null);
   const workspaceDropdownRef = useRef<HTMLDivElement>(null);
-  // Track the last propsWorktreeId we applied to avoid continuously overriding user selection
-  const lastAppliedPropsWorktreeIdRef = useRef<string | undefined>(undefined);
 
   const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
   const worktrees = useWorktreeStore((state) => state.worktrees);
@@ -198,7 +194,7 @@ export function NewChatView({
       try {
         const [completedSetting, files] = await Promise.all([
           safeGetSetting(MIGRATION_COMPLETED_SETTING_KEY),
-          getFileTree("/", true, selectedWorkspaceId || propsWorktreeId),
+          getFileTree("/", true, selectedWorkspaceId),
         ]);
 
         if (cancelled) return;
@@ -221,19 +217,10 @@ export function NewChatView({
     return () => {
       cancelled = true;
     };
-  }, [propsWorktreeId, selectedWorkspaceId, currentProject?.id]);
+  }, [selectedWorkspaceId, currentProject?.id]);
 
-  // Sync selected workspace with store state
+  // Sync selected workspace with currentWorktree from the store
   useEffect(() => {
-    if (propsWorktreeId !== undefined && propsWorktreeId !== null) {
-      if (lastAppliedPropsWorktreeIdRef.current !== propsWorktreeId) {
-        setSelectedWorkspaceId(propsWorktreeId);
-        lastAppliedPropsWorktreeIdRef.current = propsWorktreeId;
-      }
-      return;
-    }
-    lastAppliedPropsWorktreeIdRef.current = undefined;
-
     const activeWorktrees = worktrees.filter((w) => !w.deleted_at);
     const selectedStillValid =
       selectedWorkspaceId &&
@@ -254,20 +241,16 @@ export function NewChatView({
       return;
     }
 
+    // Sync with global currentWorktree when it changes
     const bestWorkspace =
       currentWorktree?.id || mainWorktree?.id || activeWorktrees[0]?.id;
 
-    if (!selectedWorkspaceId) {
+    if (!selectedWorkspaceId || (currentWorktree?.id && selectedWorkspaceId !== currentWorktree.id)) {
       if (bestWorkspace) {
-        logger.info("[NewChatView] Auto-selecting workspace", {
-          workspaceId: bestWorkspace,
-          reason: "no_selection",
-          worktreesCount: activeWorktrees.length,
-        });
         setSelectedWorkspaceId(bestWorkspace);
       }
     }
-  }, [currentWorktree?.id, mainWorktree?.id, worktrees, propsWorktreeId, selectedWorkspaceId]);
+  }, [currentWorktree?.id, mainWorktree?.id, worktrees, selectedWorkspaceId]);
 
   const handleCreateAndSend = async (
     content: string,
@@ -337,9 +320,6 @@ export function NewChatView({
   };
 
   const handleWorkspaceSelect = async (worktreeId: string | null) => {
-    useChatStore.setState({ pendingNewChatWorktreeId: null });
-    lastAppliedPropsWorktreeIdRef.current = undefined;
-
     if (worktreeId && currentProject) {
       const worktree = worktrees.find((w) => w.id === worktreeId);
       if (worktree) {

@@ -5,9 +5,8 @@ import { Search, X, Loader2, FileText, ChevronDown, ChevronRight, Settings2 } fr
 import { cn } from "../../lib/utils";
 import { searchFiles, type SearchResult, type SearchMatch } from "../../api/fileSystem";
 import { useProjectStore } from "../../store/projectStore";
-import { useWorktreeStore } from "../../store/worktreeStore";
+import { useActiveWorktreeId } from "../../store/worktreeStore";
 import { useViewerStore } from "../../store/viewerStore";
-import { useChatStore } from "../../store/chatStore";
 
 interface GlobalSearchProps {
   isOpen: boolean;
@@ -36,13 +35,9 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   const currentProject = useProjectStore((state) => state.currentProject);
-  const worktrees = useWorktreeStore((state) => state.worktrees);
   
-  // Get worktree from active chat, falling back to main worktree
-  const activeChatId = useChatStore((state) => state.activeChatId);
-  const activeChat = useChatStore((state) => activeChatId ? state.chats.get(activeChatId) : undefined);
-  const mainWorktree = worktrees.find((w) => w.is_main && w.project_id === currentProject?.id);
-  const effectiveWorktreeId = activeChat?.worktreeId || mainWorktree?.id;
+  // Use the global active worktree (from worktreeStore) as the single source of truth
+  const effectiveWorktreeId = useActiveWorktreeId();
   
   // Focus input when opened
   useEffect(() => {
