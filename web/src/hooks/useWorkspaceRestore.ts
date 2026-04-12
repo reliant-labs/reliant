@@ -102,33 +102,17 @@ export function useWorkspaceRestore(
     setState((prev) => ({ ...prev, isRestoring: true, error: null }));
 
     try {
-      // Wait for workspace state to be hydrated from localStorage
-      // This is critical - zustand persist rehydrates asynchronously (even for localStorage)
-      // We need to ensure the persisted state is loaded before attempting restoration
-      const waitForHydration = async (maxWaitMs = 1000): Promise<void> => {
-        const startTime = Date.now();
-        
-        while (!useWorkspaceStateStore.persist.hasHydrated()) {
-          if (Date.now() - startTime > maxWaitMs) {
-            logger.warn("[WorkspaceRestore] Hydration wait timeout - proceeding anyway");
-            break;
-          }
-          await new Promise(resolve => setTimeout(resolve, 10));
-        }
-        
-        // Additional check - verify lastProjectId is actually available
-        // This ensures the state is fully merged
-        const state = useWorkspaceStateStore.getState();
-        if (state.lastProjectId) {
-          logger.info("[WorkspaceRestore] Workspace state hydrated", { lastProjectId: state.lastProjectId });
-        }
-      };
-      
+      // Wait for workspace state to be hydrated from localStorage.
+      // Zustand persist hydrates synchronously for localStorage, so hasHydrated()
+      // is typically true by the time any component code runs. If not (e.g. hydration
+      // error), proceed with defaults after a short yield rather than deadlocking.
       if (!useWorkspaceStateStore.persist.hasHydrated()) {
         logger.info("[WorkspaceRestore] Waiting for workspace state hydration...");
-        await waitForHydration();
-      } else {
-        logger.info("[WorkspaceRestore] Workspace state already hydrated");
+        // Yield to microtask queue — gives synchronous hydration a chance to complete
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        if (!useWorkspaceStateStore.persist.hasHydrated()) {
+          logger.warn("[WorkspaceRestore] Hydration not complete after yield — proceeding with defaults");
+        }
       }
 
       const projectStore = useProjectStore.getState();
@@ -197,8 +181,9 @@ export function useWorkspaceRestore(
 
       // Step 2: Load worktrees if not loaded
       if (worktreeStore.worktrees.length === 0) {
-        logger.info("[WorkspaceRestore] Loading worktrees...");
         await worktreeStore.loadWorktrees(currentProject.id);
+      } else {
+        logger.debug(`[WorkspaceRestore] Worktrees already loaded (${worktreeStore.worktrees.length})`);
       }
 
       // Step 3: Restore last worktree
@@ -232,20 +217,17 @@ export function useWorkspaceRestore(
       chatNavStore.restoreFromWorkspaceState(currentProject.id, currentWorktreeId);
       logger.info("[WorkspaceRestore] Restored chat navigation state");
 
-      // Step 7: Restore active chat
-      if (worktreeState.activeChatId) {
-        // Load chats if not loaded
-        if (chatStore.chats.size === 0) {
-          logger.info("[WorkspaceRestore] Loading chats...");
-          await chatStore.loadChats();
-        }
+      // Step 7: Always load chats (needed for sidebar even without an active chat)
+      if (useChatStore.getState().chats.size === 0) {
+        await useChatStore.getState().loadChats();
+      }
 
+      // Restore active chat if one was saved
+      if (worktreeState.activeChatId) {
         // Get fresh chat state after loading
         const freshChatStore = useChatStore.getState();
         // Find and select the chat
-        const chatToRestore = worktreeState.activeChatId
-          ? freshChatStore.chats.get(worktreeState.activeChatId)
-          : undefined;
+        const chatToRestore = freshChatStore.chats.get(worktreeState.activeChatId);
 
         if (chatToRestore) {
           logger.info("[WorkspaceRestore] Restoring active chat", {
