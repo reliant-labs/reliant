@@ -80,7 +80,6 @@ function App() {
   const chats = useChatStore((state) => state.chats); // Map<string, Chat>
   const chatError = useChatStore((state) => state.error);
   const activeChatId = useChatStore((state) => state.activeChatId);
-  const pendingNewChatWorktreeId = useChatStore((state) => state.pendingNewChatWorktreeId);
   const currentProject = useProjectStore((state) => state.currentProject);
   const selectProject = useProjectStore((state) => state.selectProject);
   const loadProjects = useProjectStore((state) => state.loadProjects);
@@ -317,14 +316,10 @@ function App() {
     useProjectStore.setState({ currentProject: null });
   }, []);
 
-  // Get current worktreeId from active chat
+  // Get current worktreeId from the global worktree store (single source of truth)
   const getCurrentWorktreeId = useCallback(() => {
-    if (activeChatId) {
-      const chat = chats.get(activeChatId);
-      return chat?.worktreeId || undefined;
-    }
-    return undefined;
-  }, [activeChatId, chats]);
+    return useWorktreeStore.getState().currentWorktree?.id || undefined;
+  }, []);
 
   // Get terminal working directory based on current context
   const getTerminalWorkingDir = useCallback(() => {
@@ -1397,7 +1392,6 @@ function App() {
             ) : (
               <NewChatView
                 tabId="new-chat"
-                worktreeId={pendingNewChatWorktreeId || undefined}
                 onNavigateToWorktrees={noopNavigateWorktrees}
               />
             )}
