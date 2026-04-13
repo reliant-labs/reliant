@@ -89,7 +89,14 @@ func (s *workflowStore) GetRootWorkflowStatusForChats(ctx context.Context, chatI
 			}
 			return nil, err
 		}
-		result[row.ChatID] = core.WorkflowStatus(row.Status)
+		switch status := row.Status.(type) {
+		case int64:
+			result[row.ChatID] = core.WorkflowStatus(status)
+		case int32:
+			result[row.ChatID] = core.WorkflowStatus(status)
+		default:
+			return nil, fmt.Errorf("unexpected sqlite workflow status type %T for chat %s", row.Status, row.ChatID)
+		}
 	}
 	return result, nil
 }
