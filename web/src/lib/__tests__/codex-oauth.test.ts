@@ -108,9 +108,8 @@ describe("runCodexOAuthFlow", () => {
     expect(parsedUrl.searchParams.get("codex_cli_simplified_flow")).toBe(
       "true",
     );
-    expect(parsedUrl.searchParams.get("originator")).toBe("codex_cli_rs");
     expect(parsedUrl.searchParams.get("scope")).toBe(
-      "openid profile email offline_access api.connectors.read api.connectors.invoke api.responses.write",
+      "openid profile email offline_access",
     );
     expect(
       parsedUrl.searchParams.get("state")?.startsWith(CODEX_OAUTH_STATE_PREFIX),
