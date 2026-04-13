@@ -136,13 +136,15 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       logger.warn("[ProjectStore] Failed to load presets for project", { projectId: project.id, error: err });
     });
 
-    // Only reload data if we're not skipping clear (user initiated project switch)
+    // Always load chats — even with skipClear (e.g. Electron window-context path)
+    // loadChats uses singleflight so concurrent calls are deduplicated.
+    await useChatStore.getState().loadChats();
+
+    // Only reload worktrees and restore workspace state when not skipping clear
+    // (user-initiated project switch). The Electron/skipClear path handles
+    // worktree loading separately via useWindowContext.
     if (!options?.skipClear) {
-      // Load worktrees and chats in parallel (they're independent)
-      await Promise.all([
-        useWorktreeStore.getState().loadWorktrees(project.id),
-        useChatStore.getState().loadChats(),
-      ]);
+      await useWorktreeStore.getState().loadWorktrees(project.id);
       
       // Restore last worktree for this project
       useWorktreeStore.getState().restoreLastWorktree(project.id);
