@@ -210,6 +210,30 @@ If the router has **no outgoing edges**, the engine dispatches directly to the s
 Node routing is a lightweight alternative to workflow routing when all the logic already lives in one workflow. If you find yourself creating single-node wrapper workflows just to use a router, switch to node routing instead.
 </Tip>
 
+### Phase Skipping in Pipelines
+
+Node routers shine in multi-phase pipelines where users may want to start at different points. Several builtin workflows use this pattern:
+
+- **one-ring** — routes to discuss, planning, write_tests, or impl_loop
+- **bmad-lite** — routes to discuss, ideate, requirements, architecture, or implement
+
+Example:
+
+```yaml
+- id: classify
+  type: router
+  nodes:
+    - id: discuss
+      description: "Ambiguous request — clarify before starting"
+    - id: planning
+      description: "Complex task needing research and planning"
+    - id: implement
+      description: "Clear task — skip straight to implementation"
+  fallback: planning
+```
+
+With no outgoing edges, the engine dispatches directly to the selected node. This lets users say "just implement it" and skip research/planning phases entirely, or say something vague and land in a discussion phase first.
+
 ## Classification reliability
 
 The router's decision quality is dominated by two things: the descriptions you give it and the model you pick.

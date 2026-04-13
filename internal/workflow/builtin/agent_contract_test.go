@@ -19,8 +19,8 @@ import (
 // If someone changes the YAML expressions, these tests fail.
 
 const (
-	agentWhileExpr             = `(outputs.tool_calls != null && size(outputs.tool_calls) > 0) && iter.iteration < inputs.max_turns`
-	agentYieldExpr             = `{{inputs.yield || iter.iteration >= inputs.max_turns}}`
+	agentWhileExpr             = `outputs.tool_calls != null && size(outputs.tool_calls) > 0`
+	agentYieldExpr             = `{{inputs.yield || (inputs.max_turns > 0 && iter.iteration >= inputs.max_turns)}}`
 	edgeCallLLMToApproval      = `nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode == 'manual'`
 	edgeCallLLMToExecuteTools  = `nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode != 'manual'`
 	edgeApprovalToExecuteTools = `nodes.approval.status == 'approved'`

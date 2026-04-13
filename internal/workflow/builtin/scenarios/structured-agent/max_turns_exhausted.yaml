@@ -1,21 +1,23 @@
-# Max Turns Exhausted: Loop exits without response tool being called
+# Max Turns Exhausted: Loop yields when max_turns reached without response tool
 #
-# Tests the max_turns safety limit:
+# Tests the max_turns safety limit with yield-based behavior:
 # 1. max_turns is set low (3)
 # 2. LLM responds with text only on every iteration (never calls tools)
 # 3. remind_response fires each time
-# 4. After 3 iterations, loop exits because iter.iteration >= max_turns
+# 4. At iteration 3, yield fires (3 >= 3) but the while condition
+#    (outputs.completed != true) is still true, so the loop yields
 # 5. completed is NEVER set to true (response tool was never called)
 #
 # This verifies:
-# - The loop respects the max_turns limit
+# - The loop yields at max_turns instead of just stopping
 # - The workflow terminates gracefully even without a response tool call
 # - output.completed remains false when response tool is never invoked
 #
-# Loop condition: outputs.completed != true && iter.iteration < inputs.max_turns
+# Loop condition: outputs.completed != true
+# Yield: inputs.yield || (inputs.max_turns > 0 && iter.iteration >= inputs.max_turns)
 
 name: max_turns_exhausted
-description: Loop exits when max_turns is reached without the response tool being called
+description: Loop yields when max_turns is reached without the response tool being called
 
 inputs:
   mode: "auto"
@@ -23,24 +25,24 @@ inputs:
   response_tool_name: "submit_response"
 
 events:
-  # Iteration 1: LLM responds without tools
+  # Iteration 0: LLM responds without tools
   - node: agent_loop.call_llm
     type: llm_response
     text: "I'm thinking about how to approach this."
     # No tool_calls - remind_response fires
 
-  # Iteration 2: LLM still doesn't use tools
+  # Iteration 1: LLM still doesn't use tools
   - node: agent_loop.call_llm
     type: llm_response
     text: "Let me analyze the problem more."
     # No tool_calls - remind_response fires again
 
-  # Iteration 3 (last): LLM still doesn't call response tool
+  # Iteration 2: LLM still doesn't call response tool
   - node: agent_loop.call_llm
     type: llm_response
     text: "I need more time to think."
     # No tool_calls - remind_response fires
-    # Loop exits: iter.iteration (3) is NOT < max_turns (3)
+    # Yield fires at iteration 3 (3 >= 3), loop yields/exits
 
 expect:
   outcome: completed
