@@ -7,6 +7,7 @@ import { settingsSync, SETTINGS_KEYS } from "../../services/settingsSync";
 import { Toggle } from "../ui/Toggle";
 import { LanguageServerSettingsCompact } from "./LanguageServerSettings";
 import { ToolCallSettingsCompact } from "./ToolCallSettings";
+import { getSpawnDisplayMode, setSpawnDisplayMode as saveSpawnDisplayMode, type SpawnDisplayMode } from "./SpawnDisplaySettings";
 
 import "./settings-range.css";
 
@@ -126,6 +127,7 @@ export function AppearanceSettings() {
   const [editorFont, setEditorFont] = useState<string>("default");
   const [fontSize, setFontSize] = useState<FontSize>("md");
   const [workflowViewerDefaultMode, setWorkflowViewerDefaultMode] = useState<'inline' | 'side'>('side');
+  const [spawnDisplayMode, setSpawnDisplayMode] = useState<SpawnDisplayMode>("preview");
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Load settings from settingsSync on mount (wait for initialization)
@@ -149,6 +151,7 @@ export function AppearanceSettings() {
       setEditorFont(readPref(SETTINGS_KEYS.EDITOR_FONT, "default"));
       setFontSize(readPref(SETTINGS_KEYS.FONT_SIZE, "md"));
       setWorkflowViewerDefaultMode(readPref(SETTINGS_KEYS.WORKFLOW_VIEWER_DEFAULT_MODE, "side"));
+      setSpawnDisplayMode(getSpawnDisplayMode());
       setIsLoaded(true);
     };
     
@@ -243,6 +246,12 @@ export function AppearanceSettings() {
     // Dispatch event for components that need to react to this change
     window.dispatchEvent(new CustomEvent('appearance-updated'));
   }, [workflowViewerDefaultMode, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    saveSpawnDisplayMode(spawnDisplayMode).catch(console.error);
+    window.dispatchEvent(new CustomEvent('appearance-updated'));
+  }, [spawnDisplayMode, isLoaded]);
 
 
   // Don't render until settings are loaded
@@ -425,6 +434,55 @@ export function AppearanceSettings() {
 
       {/* Monaco Editor Settings */}
       <MonacoEditorSettings />
+
+      {/* Spawn Display Settings */}
+      <div className="border-t border-border/40 pt-6 space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold">Spawn Display</h3>
+          <p className="text-xs text-muted-foreground mt-1">
+            Configure how spawn thread content is displayed in the timeline
+          </p>
+        </div>
+        <div className="flex items-center gap-4 p-4 bg-card border-2 border-border rounded-lg">
+          <button
+            onClick={() => setSpawnDisplayMode('inline')}
+            className={cn(
+              "flex-1 px-4 py-3 rounded-md font-medium text-sm transition-all duration-200 border-2",
+              spawnDisplayMode === 'inline'
+                ? "border-primary text-foreground shadow-md"
+                : "border-border text-muted-foreground hover:bg-muted/80"
+            )}
+            style={spawnDisplayMode === 'inline' ? {
+              backgroundColor: 'hsl(var(--primary) / 0.1)',
+              borderColor: 'hsl(var(--primary))',
+              color: 'hsl(var(--foreground))'
+            } : undefined}
+          >
+            Full Inline
+          </button>
+          <button
+            onClick={() => setSpawnDisplayMode('preview')}
+            className={cn(
+              "flex-1 px-4 py-3 rounded-md font-medium text-sm transition-all duration-200 border-2",
+              spawnDisplayMode === 'preview'
+                ? "border-primary text-foreground shadow-md"
+                : "border-border text-muted-foreground hover:bg-muted/80"
+            )}
+            style={spawnDisplayMode === 'preview' ? {
+              backgroundColor: 'hsl(var(--primary) / 0.1)',
+              borderColor: 'hsl(var(--primary))',
+              color: 'hsl(var(--foreground))'
+            } : undefined}
+          >
+            Preview Window
+          </button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {spawnDisplayMode === 'inline'
+            ? 'Shows all spawn thread messages directly in the timeline.'
+            : 'Shows a compact preview of spawn results in the tool call.'}
+        </p>
+      </div>
 
       {/* Tool Call Display Settings */}
       <div className="border-t border-border/40 pt-6 space-y-4">

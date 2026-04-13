@@ -2631,6 +2631,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
                   // Preserve thread identity fields when completion updates omit them
                   thread_title: threadUpdate.thread_title || existing.thread_title,
                   spawned_by_node_id: threadUpdate.spawned_by_node_id || existing.spawned_by_node_id,
+                  spawned_by_tool_call_id: threadUpdate.spawned_by_tool_call_id || existing.spawned_by_tool_call_id,
                   router_decision: threadUpdate.router_decision || existing.router_decision,
                 };
               } else {

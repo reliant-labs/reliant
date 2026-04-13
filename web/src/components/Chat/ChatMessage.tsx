@@ -36,6 +36,7 @@ interface ChatMessageProps {
   isStreaming?: boolean;
   chatId?: string; // Chat ID for branching functionality
   onForceYield?: (toolCallId: string) => void;
+  onSelectThread?: (threadId: string | null) => void;
 }
 
 // Re-export for components that import from here
@@ -120,6 +121,7 @@ function ChatMessageComponent({
   isStreaming = false,
   chatId: propChatId,
   onForceYield,
+  onSelectThread,
 }: ChatMessageProps) {
   const isUser = message.role === MessageRole.USER;
   const activeChatId = useActiveChatId();
@@ -538,7 +540,7 @@ function ChatMessageComponent({
     <div
       className={cn(
         "group copy-toast message-container",
-        isUser ? "mb-3" : "mb-0.5",
+        isUser ? "mb-3" : "mb-1.5",
         copied && "copied",
         isOptimistic && "opacity-60"
       )}
@@ -634,7 +636,7 @@ function ChatMessageComponent({
               )}
 
               {/* Attachments */}
-              {message.attachments && message.attachments.length > 0 && (
+              {isExpanded && message.attachments && message.attachments.length > 0 && (
                 <MessageAttachments
                   attachments={message.attachments}
                   isUser={isUser}
@@ -742,6 +744,7 @@ function ChatMessageComponent({
                           messageId={message.id}
                           chatId={chatId || undefined}
                           showRichContent={true}
+                          onSelectThread={onSelectThread}
                         />
                       ) : (
                         readOnlyTools.map((exec, idx) => (
@@ -755,6 +758,7 @@ function ChatMessageComponent({
                             approval={exec.approval}
                             chatId={chatId || undefined}
                             showRichContent={true}
+                            onSelectThread={onSelectThread}
                           />
                         ))
                       )}
@@ -770,6 +774,7 @@ function ChatMessageComponent({
                             chatId={chatId || undefined}
                             showRichContent={true}
                             onForceYield={onForceYield}
+                            onSelectThread={onSelectThread}
                           />
                         ) : (
                           otherTools.map((exec, idx) => (
@@ -784,6 +789,7 @@ function ChatMessageComponent({
                               approval={exec.approval}
                               chatId={chatId || undefined}
                               showRichContent={true}
+                              onSelectThread={onSelectThread}
                             />
                           ))
                         )
@@ -791,55 +797,45 @@ function ChatMessageComponent({
                     </div>
                   );
                 })()}
+
             </div>
           )}
 
-          {/* Message Footer - action buttons for assistant messages only */}
+          {/* Message Footer - action buttons for assistant messages */}
           {!isUser && (
-            <div className="flex items-center justify-start text-xs text-muted-foreground mb-0 mt-1 pb-1">
-              <div
+            <div
+              className={cn(
+                "items-center gap-1 text-xs text-muted-foreground px-2 h-6",
+                isLatestMessage
+                  ? "flex"
+                  : "hidden group-hover:flex"
+              )}
+            >
+              <button
+                onClick={handleCopy}
+                title={copied ? "Copied!" : "Copy"}
                 className={cn(
-                  "flex items-center gap-1 transition-opacity duration-200",
-                  isLatestMessage
-                    ? "opacity-100"
-                    : "opacity-0 group-hover:opacity-100"
+                  "flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-muted/50 transition-colors duration-200 focus-ring",
+                  copied && "text-success"
                 )}
               >
+                {copied ? (
+                  <Check className="w-3 h-3" />
+                ) : (
+                  <Copy className="w-3 h-3" />
+                )}
+              </button>
+              {!isStreaming && (
                 <button
-                  onClick={handleCopy}
-                  title={copied ? "Copied!" : "Copy"}
-                  className={cn(
-                    "flex items-center gap-1 px-2 py-1 rounded-md hover:bg-muted/50 transition-colors duration-200 focus-ring",
-                    copied && "text-success"
-                  )}
+                  onClick={handleBranchClick}
+                  title="Branch"
+                  data-contextual-tip="branch-button"
+                  className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-muted/50 transition-colors duration-200 focus-ring"
                 >
-                  {copied ? (
-                    <Check className="w-3 h-3" />
-                  ) : (
-                    <Copy className="w-3 h-3" />
-                  )}
+                  <GitBranch className="w-3 h-3" />
                 </button>
-                {!isStreaming && (
-                  <button
-                    onClick={handleBranchClick}
-                    title="Branch"
-                    data-contextual-tip="branch-button"
-                    className="flex items-center gap-1 px-2 py-1 rounded-md hover:bg-muted/50 transition-colors duration-200 focus-ring"
-                  >
-                    <GitBranch className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
-
-              {/* Timestamp displayed on hover */}
-              <span
-                className={cn(
-                  "ml-3 text-xs transition-opacity duration-200",
-                  isLatestMessage
-                    ? "opacity-100"
-                    : "opacity-0 group-hover:opacity-100"
-                )}
-              >
+              )}
+              <span className="ml-1 text-[11px] text-muted-foreground/70">
                 {formatTimestamp(message.createdAt || "")}
               </span>
             </div>

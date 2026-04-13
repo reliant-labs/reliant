@@ -318,3 +318,5 @@ goroutines.txt
 .mcp.json
 .serena/
 console.logs
+
+web/data

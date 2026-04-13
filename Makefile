@@ -397,10 +397,10 @@ generate-changelog:
 	@$(GOCMD) run ./tools/docgen/changelog/... $(CHANGELOG_DIR) $(MINTLIFY_DOCS_DIR)/changelog.mdx
 	@echo "$(GREEN)✅ Mintlify changelog generated$(NC)"
 
-## generate-workflow-builder-preset: Generate workflow_builder.yaml with embedded docs
-generate-workflow-builder-preset: generate-schema generate-scenario-schema
+## generate-workflow-builder-preset: Generate workflow_builder.yaml
+generate-workflow-builder-preset:
 	@echo "$(YELLOW)Generating workflow builder preset...$(NC)"
-	@$(GOCMD) run ./tools/docgen/assembler/... $(DOCS_DIR) $(PRESETS_DIR)/workflow_builder.yaml
+	@$(GOCMD) run ./tools/docgen/assembler/... $(PRESETS_DIR)/workflow_builder.yaml
 	@echo "$(GREEN)✅ Workflow builder preset generated$(NC)"
 
 ## generate-mintlify-reference: Convert generated reference markdown into Mintlify .mdx pages

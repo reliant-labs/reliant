@@ -300,7 +300,7 @@ inputs:
     default: "orchestrator"
   tools:
     type: tools
-    default: ["tag:default", "tag:mcp"]
+    default: ["tag:default"]
   spawn_presets:
     type: preset
     tags: [agent]
@@ -401,7 +401,7 @@ func TestPresetService_CreatePreset(t *testing.T) {
 	})
 
 	t.Run("CreatePreset_PreservesToolParams", func(t *testing.T) {
-		toolParams, err := structpb.NewValue([]interface{}{"tag:default", "tag:mcp"})
+		toolParams, err := structpb.NewValue([]interface{}{"tag:default"})
 		if err != nil {
 			t.Fatalf("failed to build tools value: %v", err)
 		}
@@ -424,10 +424,10 @@ func TestPresetService_CreatePreset(t *testing.T) {
 		}
 
 		tools := resp.Msg.Preset.Params["tools"].GetListValue()
-		if tools == nil || len(tools.Values) != 2 {
-			t.Fatalf("expected tools list of len 2, got %v", resp.Msg.Preset.Params["tools"])
+		if tools == nil || len(tools.Values) != 1 {
+			t.Fatalf("expected tools list of len 1, got %v", resp.Msg.Preset.Params["tools"])
 		}
-		if tools.Values[0].GetStringValue() != "tag:default" || tools.Values[1].GetStringValue() != "tag:mcp" {
+		if tools.Values[0].GetStringValue() != "tag:default" {
 			t.Errorf("unexpected tools list: %v", tools.Values)
 		}
 	})

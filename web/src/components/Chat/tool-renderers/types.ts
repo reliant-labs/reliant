@@ -8,11 +8,13 @@ export interface ToolRenderContext {
   input: Record<string, unknown> | string;
   result?: ToolResultData;
   worktreeId?: string;
+  chatId?: string;
   isExpanded: boolean;
   isCompleted: boolean;
   isExecuting: boolean;
   isPreparing: boolean;
   hasFailed: boolean;
+  onSelectThread?: (threadId: string | null) => void;
 }
 
 export interface ToolResultData {

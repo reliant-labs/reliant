@@ -159,17 +159,37 @@ func (s *ProjectService) CreateProject(
 
 	// Create reliant.md with default instructions if it doesn't exist (via daemon)
 	var initFilesResp struct {
-		Created bool   `json:"created"`
-		Error   string `json:"error,omitempty"`
+		CreatedReliantMD  bool   `json:"created_reliant_md"`
+		CreatedReliantDir bool   `json:"created_reliant_dir"`
+		Error             string `json:"error,omitempty"`
 	}
 	initPayload := map[string]string{
-		"path":            req.Msg.Path,
-		"default_content": "spawning agents is not just good for parallel work, but also to conserve context which yields better results.\n",
+		"path": req.Msg.Path,
+		"default_content": `# Project Instructions
+
+<!-- These instructions are loaded into every agent conversation in this project. -->
+<!-- Edit this file to customize how agents work with your codebase. -->
+
+## Guidelines
+
+- 
+
+## Key Context
+
+- 
+
+## Available Skills
+
+Use ` + "`skill list`" + ` to see all available skills. Key skills:
+- ` + "`reliant-config`" + `: Configure Reliant (memory, skills, MCP, presets)
+- ` + "`workflow-builder`" + `: Build and test Reliant workflows
+- ` + "`skill-creator`" + `: Create new skills
+`,
 	}
 	if err := s.sendProjectDaemonCommand(ctx, userID, "project.init_files", initPayload, &initFilesResp); err != nil {
-		logging.Warn("Failed to create reliant.md via daemon", "error", err, "path", req.Msg.Path)
+		logging.Warn("Failed to initialize project files via daemon", "error", err, "path", req.Msg.Path)
 	} else if initFilesResp.Error != "" {
-		logging.Warn("Failed to create default reliant.md", "error", initFilesResp.Error, "path", req.Msg.Path)
+		logging.Warn("Failed to initialize project files", "error", initFilesResp.Error, "path", req.Msg.Path)
 	}
 
 	// Create main worktree for this project

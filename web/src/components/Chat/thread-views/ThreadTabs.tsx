@@ -135,10 +135,13 @@ export const ThreadTabs = memo(function ThreadTabs({
     return threads.some(t => t.isActive);
   }, [threads]);
   
-  // Don't show if only 1 thread
-  if (threads.length <= 1) return null;
+  // Filter out spawn threads - they render inline as tool call previews
+  const visibleThreads = threads.filter(t => !t.isSpawn);
+
+  // Don't show if only 1 visible thread
+  if (visibleThreads.length <= 1) return null;
   
-  const totalMessages = threads.reduce((sum, t) => sum + t.messageCount, 0);
+  const totalMessages = visibleThreads.reduce((sum, t) => sum + t.messageCount, 0);
   
   // Helper to get context usage for a thread
   const getContextUsage = (threadId: string, isMain: boolean): ContextUsageData | undefined => {
@@ -174,7 +177,7 @@ export const ThreadTabs = memo(function ThreadTabs({
       )}
 
       {/* Thread tabs */}
-      {threads.map((thread) => {
+      {visibleThreads.map((thread) => {
         const isSelected = selectedThreadId === thread.id;
         const isSpawnedThread = !thread.isMain;
 

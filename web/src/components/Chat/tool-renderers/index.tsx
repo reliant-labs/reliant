@@ -12,6 +12,7 @@ import { PlanToolRenderer } from './PlanToolRenderer';
 import { SkillToolRenderer } from './SkillToolRenderer';
 import { LoadToolRenderer } from './LoadToolRenderer';
 import { GenericToolRenderer } from './GenericToolRenderer';
+import { SpawnToolRenderer } from './SpawnToolRenderer';
 import {
   isViewOnlyTool,
   isShellTool,
@@ -20,6 +21,7 @@ import {
   isPlanTool,
   isSkillTool,
   isLoadToolTool,
+  isSpawnTool,
 } from '../../../lib/toolFormatters';
 
 export type { ToolRenderContext, ToolResultData };
@@ -65,6 +67,10 @@ function ToolContentAreaComponent({ ctx }: ToolContentAreaProps) {
     return <PlanToolRenderer ctx={ctx} />;
   }
 
+  if (isSpawnTool(toolName)) {
+    return <SpawnToolRenderer ctx={ctx} />;
+  }
+
   // Default to generic renderer
   return <GenericToolRenderer ctx={ctx} />;
 }
@@ -79,3 +85,4 @@ export { PlanToolRenderer } from './PlanToolRenderer';
 export { SkillToolRenderer } from './SkillToolRenderer';
 export { LoadToolRenderer } from './LoadToolRenderer';
 export { GenericToolRenderer } from './GenericToolRenderer';
+export { SpawnToolRenderer } from './SpawnToolRenderer';

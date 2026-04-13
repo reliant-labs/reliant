@@ -446,6 +446,9 @@ func (a *WorkflowStatusActivity) emitThreadStatusUpdate(ctx context.Context, inp
 	if input.SpawnedByNodeID != "" {
 		updateData["spawned_by_node_id"] = input.SpawnedByNodeID
 	}
+	if input.SpawnedByToolCallID != "" {
+		updateData["spawned_by_tool_call_id"] = input.SpawnedByToolCallID
+	}
 
 	updateDataJSON, err := json.Marshal(updateData)
 	if err != nil {

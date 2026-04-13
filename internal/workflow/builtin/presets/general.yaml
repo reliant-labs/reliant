@@ -55,4 +55,3 @@ params:
   - ux
   tools:
   - tag:default   # Comprehensive default toolset
-  - tag:mcp       # All MCP tools for extensibility

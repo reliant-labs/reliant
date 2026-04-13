@@ -402,12 +402,13 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 
 	// Get available tools (filtered by planning mode and tool_filter if provided)
 	var availableTools []tools.Tool
-	var spawnPresets []string // Track spawn presets for tool call validation
+	var spawnPresets []string            // Track spawn presets for tool call validation
+	var toolsResult toolsWithSpawnResult // Hoisted for deferred tools announcement
 	if !toolsEnabled {
 		activity.GetLogger(ctx).Info("[CallLLM] Tools disabled")
 		availableTools = []tools.Tool{}
 	} else {
-		toolsResult := a.getAvailableToolsWithSpawn(ctx, chat, workingDir, projectCfg, model.CelStringListValue(args.GetToolFilter()), thread)
+		toolsResult = a.getAvailableToolsWithSpawn(ctx, chat, workingDir, projectCfg, model.CelStringListValue(args.GetToolFilter()), thread)
 		availableTools = toolsResult.Tools
 
 		// Emit warning to chat if MCP servers failed to load
@@ -476,7 +477,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		for i, t := range availableTools {
 			currentToolNames[i] = t.Name()
 		}
-		announcement := tools.FormatDeferredToolsAnnouncement(chat.ID, permission, currentToolNames)
+		announcement := tools.FormatDeferredToolsAnnouncement(chat.ID, permission, currentToolNames, toolsResult.AllMCPToolNames)
 		if announcement != "" {
 			systemPrompts = append(systemPrompts, announcement)
 		}
@@ -763,6 +764,7 @@ type toolsWithSpawnResult struct {
 	Tools            []tools.Tool
 	SpawnConfigs     []tools.SpawnFilterConfig
 	FailedMCPServers []string // Names of MCP servers that failed to load
+	AllMCPToolNames  []string // All available MCP tool names (for deferred loading announcement)
 }
 
 func scopedToolsFactoryForProject(baseFactory *tools.ToolsFactory, scopePath string) *tools.ToolsFactory {
@@ -943,6 +945,7 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 		Tools:            toolsList,
 		SpawnConfigs:     filterResult.SpawnConfigs,
 		FailedMCPServers: failedMCPServers,
+		AllMCPToolNames:  mcpToolNames,
 	}
 }
 

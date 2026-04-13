@@ -70,6 +70,7 @@ interface ToolExecutionProps {
   approval?: ToolApprovalRequest;
   chatId?: string;
   showRichContent?: boolean;
+  onSelectThread?: (threadId: string | null) => void;
 }
 
 
@@ -85,6 +86,7 @@ function ToolExecutionComponent({
   approval,
   chatId,
   showRichContent = false,
+  onSelectThread,
 }: ToolExecutionProps) {
   const toolNameLower = (toolCall.name || '').toLowerCase();
   const isViewOnlyToolFlag = isViewOnlyTool(toolNameLower);
@@ -93,7 +95,10 @@ function ToolExecutionComponent({
 
   // Determine initial expanded state based on user settings
   // shouldToolBeCollapsed returns true if collapsed, so we invert it for isExpanded
+  // Spawn tools always start expanded so the preview is visible
+  const isSpawnToolFlag = toolNameLower.includes('spawn');
   const [isExpanded, setIsExpanded] = useState(() => {
+    if (isSpawnToolFlag) return true;
     return !shouldToolBeCollapsed(toolCall.name);
   });
   
@@ -368,11 +373,13 @@ function ToolExecutionComponent({
     input: toolCall.input,
     result: toolResult,
     worktreeId: chatWorktreeId,
+    chatId,
     isExpanded,
     isCompleted,
     isExecuting,
     isPreparing,
     hasFailed,
+    onSelectThread,
   };
 
   // Task tool special rendering

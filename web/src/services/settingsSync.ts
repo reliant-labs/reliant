@@ -38,6 +38,9 @@ export const SETTINGS_KEYS = {
   // Workflow viewer settings
   WORKFLOW_VIEWER_DEFAULT_MODE: "appearance.workflowViewerDefaultMode",
   
+  // Spawn display settings
+  SPAWN_DISPLAY_MODE: "appearance.spawnDisplayMode",
+  
   // Notification settings
   NOTIFICATIONS_ENABLED: "notifications.enabled",
   NOTIFICATIONS_SOUND_ENABLED: "notifications.soundEnabled",

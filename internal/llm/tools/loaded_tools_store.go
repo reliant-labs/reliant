@@ -97,10 +97,10 @@ func (s *LoadedToolsStore) GetPermission(chatID string) string {
 	return PermissionOrchestrator
 }
 
-// DeferredToolNames returns tool names from the registry that are NOT in the
-// initial set and NOT already loaded for a given chat. These are the tools
-// the LLM can request via load_tool.
-func DeferredToolNames(chatID string, permission string, initialToolNames []string) []string {
+// DeferredToolNames returns tool names from the registry (and available MCP tools)
+// that are NOT in the initial set and NOT already loaded for a given chat.
+// These are the tools the LLM can request via load_tool.
+func DeferredToolNames(chatID string, permission string, initialToolNames []string, mcpToolNames []string) []string {
 	registry := GetToolRegistry()
 	store := GetLoadedToolsStore()
 
@@ -123,6 +123,13 @@ func DeferredToolNames(chatID string, permission string, initialToolNames []stri
 			continue
 		}
 		deferred = append(deferred, def.Name)
+	}
+
+	// Include MCP tools that aren't already in the active tool set
+	for _, name := range mcpToolNames {
+		if !loaded[name] {
+			deferred = append(deferred, name)
+		}
 	}
 
 	sort.Strings(deferred)
