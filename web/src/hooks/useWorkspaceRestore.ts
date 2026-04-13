@@ -218,7 +218,9 @@ export function useWorkspaceRestore(
       logger.info("[WorkspaceRestore] Restored chat navigation state");
 
       // Step 7: Always load chats (needed for sidebar even without an active chat)
-      if (useChatStore.getState().chats.size === 0) {
+      // Use hasLoaded instead of chats.size — a project may genuinely have 0 chats,
+      // and an earlier loadChats failure could leave size=0 with hasLoaded=false.
+      if (!useChatStore.getState().hasLoaded) {
         await useChatStore.getState().loadChats();
       }
 

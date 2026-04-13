@@ -8,7 +8,8 @@
 # - execute_audit has inline save_message that saves guidance when provided (regardless of approval)
 # - When denied, workflow stops after execute_audit (no save_approved_response or execute_tools)
 # - execute_tools only runs when main_agent has tool_calls and audit is approved
-# - Loop continues while tool_calls is not empty and iteration < max_turns
+# - Loop continues while tool_calls is not empty
+# - Loop yields when max_turns > 0 and iter.iteration >= max_turns
 
 ---
 # Happy path: Agent responds with text only, no tool calls, loop exits after first iteration
@@ -521,13 +522,20 @@ expect:
     - audited_loop.execute_tools
 
 ---
-# Max turns limit scenario - loop exits when iteration limit reached
+# Max turns limit scenario - loop yields when max_turns is reached
+#
+# With the new yield-based max_turns behavior:
+# - The while condition only checks tool_calls (not max_turns)
+# - max_turns triggers yield instead of stopping the loop
+# - With max_turns=2, iterations 0 and 1 run with tool_calls
+# - A 3rd iteration starts, the LLM returns no tool_calls, loop exits
+# - The max_turns_notification edge fires because _iterations (3) >= max_turns (2)
 name: max_turns_limit_reached
-description: Loop exits when iter.iteration reaches inputs.max_turns
+description: Loop yields when iter.iteration reaches inputs.max_turns, runs one extra iteration
 inputs:
   max_turns: 2
 events:
-  # Iteration 1: main_agent makes a tool call
+  # Iteration 0: main_agent makes a tool call
   - node: audited_loop.main_agent
     output:
       message:
@@ -574,7 +582,7 @@ events:
         - tool_call_id: call_0
           content: '["main.go:10"]'
       thread_token_count: 600
-  # Iteration 2 (max_turns=2, so this is the last allowed iteration)
+  # Iteration 1: still wants tools
   - node: audited_loop.main_agent
     output:
       message:
@@ -620,7 +628,39 @@ events:
         - tool_call_id: call_2
           content: "package main"
       thread_token_count: 700
-  # Loop exits after iteration 2 because iter.iteration (2) is no longer < max_turns (2)
+  # Iteration 2: yield fires (iter >= max_turns), LLM returns no tool calls, loop exits
+  - node: audited_loop.main_agent
+    output:
+      message:
+        role: assistant
+        text: "The file contains a simple Go main package."
+      response_text: "The file contains a simple Go main package."
+      tool_calls: []
+  - node: audited_loop.audit_check
+    output:
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_4
+          name: audit
+          input:
+            approved: true
+            guidance: ""
+  - node: audited_loop.execute_audit
+    output:
+      message:
+        role: tool
+        text: ""
+      tool_results:
+        - tool_call_id: call_4
+          content: '{"approved": true}'
+      response_data:
+        audit:
+          approved: true
+          guidance: ""
+      thread_token_count: 500
 expect:
   outcome: completed
   reached:
@@ -629,7 +669,6 @@ expect:
     - audited_loop.audit_check
     - audited_loop.execute_audit
     - audited_loop.save_approved_response
-    - audited_loop.execute_tools
 
 ---
 # Compaction triggered when token count exceeds threshold

@@ -254,6 +254,7 @@ nodes:
       model: "{{inputs.model}}"
       temperature: "{{inputs.temperature}}"
       thinking_level: "{{inputs.thinking_level}}"
+      tools: [view, grep, glob, bash]
       response_tool_name: submit_review
       response_tool_description: "Submit your code review with a pass/fail verdict and detailed findings"
       response_schema:
