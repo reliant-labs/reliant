@@ -15,7 +15,7 @@
 import React, { useMemo, useCallback, useRef, useState, useEffect, memo } from "react";
 import { MessageRole } from "../../../gen/reliant/v1/chat_pb";
 import { Virtuoso, type VirtuosoHandle, type ListRange } from "react-virtuoso";
-import { GitBranch, ArrowRightLeft, Plus, ArrowUp, Route } from "lucide-react";
+import { GitBranch, ArrowRightLeft, Plus, ArrowUp, Route, ArrowLeft } from "lucide-react";
 import { Tooltip } from "../../ui/Tooltip";
 import { ChatMessage } from "../ChatMessage";
 import { CompactionMessage, isCompactionMessage } from "../CompactionMessage";
@@ -36,6 +36,7 @@ import { ActivityIndicator } from "./ActivityIndicator";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads, resolveRouterDecisionFromActiveThreads } from "./threadUtils";
 import { useChatStore } from "../../../store/chatStore";
 import { useActiveThreads } from "../../../store/threadActivityStore";
+import { getSpawnDisplayMode } from "../../Settings/SpawnDisplaySettings";
 
 interface InterleavedTimelineProps {
   messages: Message[];
@@ -57,6 +58,8 @@ interface InterleavedTimelineProps {
   onIsScrolling?: (isScrolling: boolean) => void;
   /** Footer element rendered at the bottom of the virtualized list (e.g. thinking indicator) */
   footer?: React.ReactNode;
+  /** Callback to select/navigate to a thread (e.g. from spawn preview "Open Thread" button) */
+  onSelectThread?: (threadId: string | null) => void;
 }
 
 /** Minimal info needed for rendering - derived from WorkflowExecution */
@@ -77,6 +80,8 @@ interface WorkflowDisplay {
   isMain: boolean;
   /** How this thread was created: fork (inherits context), new (fresh), or main */
   origin: ThreadOrigin;
+  /** Whether this thread was created by the spawn tool (not a workflow node) */
+  isSpawn: boolean;
   /** Routing decision metadata, set when thread was created by a router node */
   routerDecision?: RouterDecision;
 }
@@ -143,6 +148,7 @@ function buildWorkflowLookups(
       parentThread,
       isMain,
       origin,
+      isSpawn: wf.spawnedByNodeId === "spawn_tool",
     });
 
     for (const child of wf.children) {
@@ -252,25 +258,25 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   onAtBottomStateChange,
   onIsScrolling,
   footer,
+  onSelectThread,
 }: InterleavedTimelineProps) {
   const activeThreads = useActiveThreads(chatId);
   const timelineItems = useMemo(() => {
     // Build workflow lookups from execution tree
     const { byId, displays } = buildWorkflowLookups(workflowExecution, chatId);
 
-    // Augment displays with router decision data from streaming updates
+    // Augment displays with streaming data (router decisions, titles, spawn status)
     for (const at of activeThreads) {
-      if (at.router_decision) {
-        const existing = displays.get(at.thread);
-        if (existing && !existing.routerDecision) {
+      const existing = displays.get(at.thread);
+      if (existing) {
+        if (at.router_decision && !existing.routerDecision) {
           existing.routerDecision = at.router_decision;
         }
-      }
-      // Also augment thread title if display fell back to "Thread"
-      if (at.thread_title) {
-        const existing = displays.get(at.thread);
-        if (existing && existing.name === "Thread") {
+        if (at.thread_title && existing.name === "Thread") {
           existing.name = formatNodeId(at.thread_title);
+        }
+        if (at.spawned_by_node_id === "spawn_tool") {
+          existing.isSpawn = true;
         }
       }
     }
@@ -284,6 +290,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
         color: getThreadColor(chatId, true),
         isMain: true,
         origin: "main",
+        isSpawn: false,
       });
     }
 
@@ -318,8 +325,9 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       let display = displays.get(thread);
       if (!display) {
         // Thread exists but wasn't in workflow tree - create minimal display
-        // Resolve name from activeThreads streaming data (has thread_title/spawned_by_node_id)
+        // Resolve name and spawn status from activeThreads streaming data
         const isMain = thread === chatId || thread === "0";
+        const activeThread = activeThreads.find(at => at.thread === thread);
         const resolvedName = !isMain ? resolveThreadNameFromActiveThreads(thread, activeThreads) : undefined;
         const routerDec = !isMain ? resolveRouterDecisionFromActiveThreads(thread, activeThreads) : undefined;
         display = {
@@ -329,10 +337,15 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
           color: getThreadColor(thread, isMain),
           isMain,
           origin: isMain ? "main" : "new",
+          isSpawn: activeThread?.spawned_by_node_id === "spawn_tool",
           routerDecision: routerDec,
         };
         displays.set(thread, display);
       }
+
+      // In "preview" mode, spawn thread messages render inside the tool call instead
+      // Only skip when viewing all threads — if a spawn thread is explicitly selected, show its messages
+      if (display.isSpawn && getSpawnDisplayMode() === "preview" && showAll) continue;
 
       // Thread start: first time seeing a non-main thread
       let justStarted = false;
@@ -423,7 +436,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
         if (activity.step.createdAt < firstUserTime) continue;
 
         const display = displays.get(activity.thread);
-        if (!display) continue;
+        if (!display || (display.isSpawn && getSpawnDisplayMode() === "preview" && showAll)) continue;
 
         // Find insertion point: after last message with timestamp <= activity time
         let insertIdx = items.length;
@@ -678,13 +691,24 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   // --- Scroll-follow state ---
   // atBottomRef mirrors Virtuoso's atBottomStateChange — no debounce needed.
   // The Footer always renders bottom padding and atBottomThreshold is set to
-  // 80px, which together create a rubber-band zone that absorbs overscroll
+  // 150px, which together create a rubber-band zone that absorbs overscroll
   // bounces and footer re-layouts so atBottom doesn't flap.
   const atBottomRef = useRef(true);
+  const userScrolledUpRef = useRef(false);
   const handleAtBottomChange = useCallback((atBottom: boolean) => {
     atBottomRef.current = atBottom;
+    if (atBottom) {
+      userScrolledUpRef.current = false;
+    }
     onAtBottomStateChange?.(atBottom);
   }, [onAtBottomStateChange]);
+
+  const handleIsScrolling = useCallback((scrolling: boolean) => {
+    if (scrolling && !atBottomRef.current) {
+      userScrolledUpRef.current = true;
+    }
+    onIsScrolling?.(scrolling);
+  }, [onIsScrolling]);
 
   // On mount, atBottomRef starts true and followOutput would return "smooth"
   // — causing Virtuoso to slowly smooth-scroll through the entire conversation.
@@ -696,11 +720,17 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   }, []);
 
   const handleFollowOutput = useCallback(() => {
+    if (userScrolledUpRef.current) {
+      return false;
+    }
     if (atBottomRef.current) {
       return initialScrollDoneRef.current ? "smooth" : "auto";
     }
+    if (isStreaming) {
+      return "auto";
+    }
     return false;
-  }, []);
+  }, [isStreaming]);
 
   const computeItemKey = useCallback((_index: number, item: (typeof flatItems)[number]) => item.key, []);
 
@@ -786,6 +816,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
           chatId={chatId}
           isStreaming={false}
           onForceYield={handleForceYield}
+          onSelectThread={onSelectThread}
         />
       );
     }
@@ -815,11 +846,12 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
             chatId={chatId}
             isStreaming={isStreaming && isLastItem}
             onForceYield={handleForceYield}
+            onSelectThread={onSelectThread}
           />
         )}
       </div>
     );
-  }, [approvals, chatId, isStreaming, handleForceYield]);
+  }, [approvals, chatId, isStreaming, handleForceYield, onSelectThread]);
 
   // Wrap each Virtuoso item in the padding/max-width container
   const wrappedRenderItem = useCallback((index: number, item: (typeof flatItems)[number]) => {
@@ -838,15 +870,18 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   const footerContext = useMemo(() => ({ footer }), [footer]);
 
   const virtuosoComponents = useMemo(() => ({
+    Header: function VirtuosoHeader() {
+      return <div className="pt-2" />;
+    },
     Footer: function VirtuosoFooter({ context }: { context?: { footer?: React.ReactNode } }) {
       // Always render bottom padding — this acts as a rubber-band zone so
       // overscroll bounces stay within the atBottomThreshold and atBottom
       // doesn't flap between true/false.
       if (!context?.footer) {
-        return <div className="pb-4" />;
+        return <div className="pb-6" />;
       }
       return (
-        <div className="px-4 sm:px-6 lg:px-8 pb-4">
+        <div className="px-4 sm:px-6 lg:px-8 pb-6">
           <div className="max-w-[1200px] mx-auto">
             {context.footer}
           </div>
@@ -854,6 +889,29 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       );
     },
   }), []);
+
+  // Detect if viewing a spawn thread (for back-navigation bar)
+  const spawnThreadInfo = useMemo(() => {
+    if (!selectedThreads || selectedThreads.size === 0) return null;
+    const threadId = Array.from(selectedThreads)[0];
+    // Check workflow execution tree
+    const { displays } = buildWorkflowLookups(workflowExecution, chatId);
+    // Augment with streaming data
+    for (const at of activeThreads) {
+      const existing = displays.get(at.thread);
+      if (existing) {
+        if (at.thread_title && existing.name === "Thread") {
+          existing.name = formatNodeId(at.thread_title);
+        }
+        if (at.spawned_by_node_id === "spawn_tool") {
+          existing.isSpawn = true;
+        }
+      }
+    }
+    const display = displays.get(threadId);
+    if (!display?.isSpawn) return null;
+    return { title: display.name };
+  }, [selectedThreads, workflowExecution, chatId, activeThreads]);
 
   if (flatItems.length === 0) {
     return (
@@ -863,6 +921,20 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
 
   return (
     <div style={{ height: "100%", position: "relative" }}>
+      {/* Back to main chat bar when viewing a spawn thread */}
+      {spawnThreadInfo && (
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/30 border-b border-border/30 text-xs text-muted-foreground">
+          <button
+            onClick={() => onSelectThread?.(null)}
+            className="flex items-center gap-1 hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="w-3 h-3" />
+            Back to main chat
+          </button>
+          <span className="text-muted-foreground/50">&middot;</span>
+          <span className="truncate">{spawnThreadInfo.title}</span>
+        </div>
+      )}
       {/* Pinned user message overlay */}
       {pinnedUserMsg && (
         <div
@@ -896,6 +968,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
                 chatId={chatId}
                 isStreaming={false}
                 onForceYield={handleForceYield}
+                onSelectThread={onSelectThread}
               />
             </div>
           </div>
@@ -908,13 +981,13 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
         computeItemKey={computeItemKey}
         initialTopMostItemIndex={flatItems.length - 1}
         followOutput={handleFollowOutput}
-        atBottomThreshold={80}
+        atBottomThreshold={200}
         overscan={200}
         increaseViewportBy={200}
         itemContent={wrappedRenderItem}
         components={virtuosoComponents}
         atBottomStateChange={handleAtBottomChange}
-        isScrolling={onIsScrolling}
+        isScrolling={handleIsScrolling}
         rangeChanged={handleRangeChanged}
         style={{ height: "100%" }}
       />

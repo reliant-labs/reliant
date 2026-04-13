@@ -94,7 +94,7 @@ spawn:builtin://agent(preset1,preset2,preset3)
 For example, the agent workflow builds its tool filter using the `spawn()` CEL function:
 
 ```yaml
-tool_filter: "{{inputs.tools + ['tag:mcp'] + [spawn(workflow.name, inputs.spawn_presets)]}}"
+tool_filter: "{{inputs.tools + [spawn(workflow.name, inputs.spawn_presets)]}}"
 ```
 
 The `spawn()` function takes a workflow reference and a list of presets, returning the spawn filter spec string. If the presets list is empty, it returns an empty string, disabling spawn.
@@ -120,7 +120,6 @@ Or simply do not include any spawn filter:
 # Spawn disabled - no spawn filter at all
 tool_filter:
   - tag:default
-  - tag:mcp
 ```
 
 ## Spawn Tool Parameters

@@ -103,9 +103,11 @@ func extractFromRegistry() ([]ToolInfo, []TagInfo) {
 	// Build tag info from known tags
 	tagInfos := []TagInfo{
 		{Name: "readonly", Description: "Read-only tools (safe for planning mode)"},
+		{Name: "plan", Description: "Planning mode tools (read-only + planning tools)"},
 		{Name: "file", Description: "File operations"},
 		{Name: "search", Description: "Search operations"},
 		{Name: "execution", Description: "Command execution"},
+		{Name: "shell", Description: "Shell tools (bash on Unix, powershell on Windows)"},
 		{Name: "web", Description: "Web operations"},
 		{Name: "planning", Description: "Planning and task management tools"},
 		{Name: "analysis", Description: "Analysis tools"},

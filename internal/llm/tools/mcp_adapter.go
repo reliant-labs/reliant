@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"github.com/invopop/jsonschema"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/mcp"
+	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
@@ -275,6 +277,7 @@ func (a *MCPToolAdapter) convertResult(result *mcp.ToolResult) ToolResponse {
 	}
 
 	var contentParts []string
+	var binaryParts []message.BinaryContent
 	for _, content := range result.Content {
 		switch content.Type {
 		case "text":
@@ -283,7 +286,17 @@ func (a *MCPToolAdapter) convertResult(result *mcp.ToolResult) ToolResponse {
 			}
 		case "image":
 			if content.Data != "" && content.MimeType != "" {
-				contentParts = append(contentParts, fmt.Sprintf("[Image: %s]", content.MimeType))
+				data, err := base64.StdEncoding.DecodeString(content.Data)
+				if err != nil {
+					logging.Warn("Failed to decode MCP image data", "error", err)
+					contentParts = append(contentParts, fmt.Sprintf("[Image: %s (decode error)]", content.MimeType))
+					continue
+				}
+				binaryParts = append(binaryParts, message.BinaryContent{
+					MIMEType: content.MimeType,
+					Data:     data,
+				})
+				contentParts = append(contentParts, fmt.Sprintf("[Image: %s, %s]", content.MimeType, formatFileSize(int64(len(data)))))
 			}
 		case "resource":
 			if content.Text != "" {
@@ -299,6 +312,9 @@ func (a *MCPToolAdapter) convertResult(result *mcp.ToolResult) ToolResponse {
 	responseText := strings.Join(contentParts, "\n")
 	if result.IsError {
 		return NewTextErrorResponse(responseText)
+	}
+	if len(binaryParts) > 0 {
+		return NewImageResponse(responseText, binaryParts)
 	}
 	return NewTextResponse(responseText)
 }

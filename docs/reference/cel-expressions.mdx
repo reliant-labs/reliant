@@ -358,6 +358,20 @@ Safely accesses a map key with a fallback default value.
 name: "{{getOrDefault(inputs, 'name', 'unnamed')}}"
 ```
 
+#### `spawn(workflowRef, presets)`
+
+Generates a tool filter entry for spawning sub-agents. Used within `tool_filter` CEL expressions.
+
+```yaml
+# Enable spawn with specific presets
+tool_filter: "{{inputs.tools + [spawn(workflow.name, inputs.spawn_presets)]}}"
+
+# Disable spawn by passing empty presets
+tool_filter: "{{inputs.tools + [spawn(workflow.name, [])]}}"
+```
+
+Returns a filter string like `spawn:builtin://agent(general,researcher)`. If the presets list is empty, returns an empty string (effectively disabling spawn).
+
 ### Response Tool Data Access
 
 Response tool data is available directly on ExecuteTools output via the `response_data` field. This field contains parsed response data keyed by tool name.

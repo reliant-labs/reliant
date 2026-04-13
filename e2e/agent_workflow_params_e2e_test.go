@@ -28,7 +28,7 @@ func TestAgentWorkflowStartWithParams_RecordsToolsAndExecutesToolCall(t *testing
 		t,
 		"run echo hello",
 		WithWorkflow("builtin://agent"),
-		WithWorkflowParam("tools", []interface{}{"tag:default", "tag:mcp"}),
+		WithWorkflowParam("tools", []interface{}{"tag:default"}),
 		WithWorkflowParam("spawn_presets", []interface{}{"general", "researcher", "code_reviewer"}),
 	)
 

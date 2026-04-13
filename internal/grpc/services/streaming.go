@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -423,15 +424,48 @@ func (s *StreamingService) sendChatUpdateBatchesViaUserStream(ctx context.Contex
 // buildChatSnapshot builds the chat sync snapshot data.
 // This is the shared logic for initial sync that assembles messages, approvals, etc.
 func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string) (*reliantv1.ChatSyncSnapshot, int64, error) {
-	// Get latest sequence
-	latestSeq, err := s.database.GetLatestUpdateSequence(ctx, chatID)
-	if err != nil {
-		return nil, 0, err
-	}
+	// ── Phase 1: parallel queries with no interdependencies ──
+	var (
+		latestSeq     int64
+		chat          *db.Chat
+		childMessages []*db.Message
+		otherUpdates  []*reliantv1.ChatUpdateData
+	)
 
-	// Get chat to determine main thread path for context usage calculation
-	chat, err := s.database.GetChat(ctx, chatID)
-	if err != nil {
+	g1, gctx := errgroup.WithContext(ctx)
+
+	g1.Go(func() error {
+		var err error
+		latestSeq, err = s.database.GetLatestUpdateSequence(gctx, chatID)
+		return err
+	})
+
+	g1.Go(func() error {
+		var err error
+		chat, err = s.database.GetChat(gctx, chatID)
+		return err
+	})
+
+	g1.Go(func() error {
+		var err error
+		childMessages, err = s.database.ListMessages(gctx, chatID, db.MessageListOptions{
+			Limit: 10000,
+		})
+		return err
+	})
+
+	g1.Go(func() error {
+		var err error
+		otherUpdates, err = s.getNonMessageUpdates(gctx, chatID)
+		if err != nil {
+			logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to get non-message updates", "error", err, "chatID", chatID[:8])
+			otherUpdates = []*reliantv1.ChatUpdateData{}
+			return nil // non-fatal
+		}
+		return nil
+	})
+
+	if err := g1.Wait(); err != nil {
 		return nil, 0, err
 	}
 
@@ -441,29 +475,50 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 		mainThread = *chat.WorkflowID
 	}
 
-	// Get messages using context window chain resolution for inherited messages
-	threadsSvc := threads.NewService(s.database)
-	var mainThreadMessages []*db.Message
+	// ── Phase 2: queries that depend on mainThread (from GetChat) ──
+	var (
+		mainThreadMessages  []*db.Message
+		threadTokenCount    int64
+		compactionThreshold int64 = 185000
+	)
+
 	if mainThread != "" {
-		mainThreadMessages, err = threadsSvc.LoadCurrentMessages(ctx, mainThread)
-		if err != nil {
-			if err.Error() != "thread not found" {
-				logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to load main thread messages via CW chain",
-					"error", err, "chatID", chatID[:8], "threadID", mainThread[:8])
+		g2, gctx2 := errgroup.WithContext(ctx)
+
+		g2.Go(func() error {
+			threadsSvc := threads.NewService(s.database)
+			var err error
+			mainThreadMessages, err = threadsSvc.LoadCurrentMessages(gctx2, mainThread)
+			if err != nil {
+				if err.Error() != "thread not found" {
+					logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to load main thread messages via CW chain",
+						"error", err, "chatID", chatID[:8], "threadID", mainThread[:8])
+				}
+				mainThreadMessages = []*db.Message{}
+				return nil // non-fatal
 			}
-			mainThreadMessages = []*db.Message{}
+			return nil
+		})
+
+		g2.Go(func() error {
+			contextUsage, err := s.database.GetContextUsage(gctx2, chatID, mainThread)
+			if err != nil {
+				logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to get context usage", "error", err, "chatID", chatID[:8], "threadID", mainThread[:8])
+				return nil // non-fatal
+			}
+			if contextUsage != nil {
+				threadTokenCount = contextUsage.ThreadTokenCount
+				compactionThreshold = contextUsage.CompactionThreshold
+			}
+			return nil
+		})
+
+		if err := g2.Wait(); err != nil {
+			return nil, 0, err
 		}
-	} else {
-		mainThreadMessages = []*db.Message{}
 	}
 
-	// Also get child workflow thread messages
-	childMessages, err := s.database.ListMessages(ctx, chatID, db.MessageListOptions{
-		Limit: 10000,
-	})
-	if err != nil {
-		return nil, 0, err
-	}
+	// ── Phase 3: merge messages + fetch content blocks (sequential, data deps) ──
 
 	// Merge: main thread messages (with inherited) + child workflow messages (excluding main thread duplicates)
 	messageMap := make(map[string]*db.Message)
@@ -505,7 +560,7 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 		}
 	}
 
-	// Fetch attachments
+	// ── Phase 4: fetch attachments (sequential, depends on content blocks) ──
 	attachmentIDs := make([]string, 0, len(attachmentIDSet))
 	for id := range attachmentIDSet {
 		attachmentIDs = append(attachmentIDs, id)
@@ -566,26 +621,6 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 		assembledMessages = append(assembledMessages, messageToProto(msg, blocks, msgAttachments, &MessageToProtoOptions{
 			SequenceNumber: latestSeq,
 		}))
-	}
-
-	// Get non-message updates (approvals, threads, etc.)
-	otherUpdates, err := s.getNonMessageUpdates(ctx, chatID)
-	if err != nil {
-		logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to get non-message updates", "error", err, "chatID", chatID[:8])
-		otherUpdates = []*reliantv1.ChatUpdateData{}
-	}
-
-	// Get context usage for compaction indicator
-	var threadTokenCount int64 = 0
-	var compactionThreshold int64 = 185000
-	if mainThread != "" {
-		contextUsage, err := s.database.GetContextUsage(ctx, chatID, mainThread)
-		if err != nil {
-			logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to get context usage", "error", err, "chatID", chatID[:8], "threadID", mainThread[:8])
-		} else if contextUsage != nil {
-			threadTokenCount = contextUsage.ThreadTokenCount
-			compactionThreshold = contextUsage.CompactionThreshold
-		}
 	}
 
 	// Calculate pagination metadata

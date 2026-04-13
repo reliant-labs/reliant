@@ -28,6 +28,7 @@ interface ToolExecutionGroupProps {
   chatId?: string;
   showRichContent?: boolean;
   onForceYield?: (toolCallId: string) => void;
+  onSelectThread?: (threadId: string | null) => void;
 }
 
 function ToolExecutionGroupComponent({
@@ -38,6 +39,7 @@ function ToolExecutionGroupComponent({
   chatId,
   showRichContent = false,
   onForceYield,
+  onSelectThread,
 }: ToolExecutionGroupProps) {
   // Check if chat is no longer running - affects tool display state
   const chatActivity = useActivityStore((s) => s.activities.get(chatId || ""));
@@ -186,6 +188,7 @@ function ToolExecutionGroupComponent({
                 approval={approval}
                 chatId={chatId}
                 showRichContent={showRichContent}
+                onSelectThread={onSelectThread}
               />
             );
           })}

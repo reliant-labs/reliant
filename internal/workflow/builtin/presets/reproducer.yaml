@@ -373,7 +373,6 @@ params:
   - bash_list     # IMPORTANT: Discover Reliant-managed processes
   - bash_output   # Get output from background processes
   - fetch         # Make HTTP requests
-  - tag:mcp       # Chrome DevTools, Playwright, and other MCP tools for browser interaction
   model:
     tags: [flagship]
   thinking_level: high

@@ -68,8 +68,9 @@ type initFilesRequest struct {
 }
 
 type initFilesResponse struct {
-	Created bool   `json:"created"`
-	Error   string `json:"error,omitempty"`
+	CreatedReliantMD  bool   `json:"created_reliant_md"`
+	CreatedReliantDir bool   `json:"created_reliant_dir"`
+	Error             string `json:"error,omitempty"`
 }
 
 func handleInitFiles(_ context.Context, payload []byte) ([]byte, error) {
@@ -77,15 +78,29 @@ func handleInitFiles(_ context.Context, payload []byte) ([]byte, error) {
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
-	reliantMDPath := filepath.Join(req.Path, "reliant.md")
+
 	resp := initFilesResponse{}
+
+	// Create reliant.md with default content if it doesn't exist
+	reliantMDPath := filepath.Join(req.Path, "reliant.md")
 	if _, err := os.Stat(reliantMDPath); os.IsNotExist(err) {
 		if err := os.WriteFile(reliantMDPath, []byte(req.DefaultContent), 0644); err != nil {
 			resp.Error = err.Error()
-		} else {
-			resp.Created = true
+			return json.Marshal(resp)
 		}
+		resp.CreatedReliantMD = true
 	}
+
+	// Create .reliant/ directory if it doesn't exist
+	reliantDir := filepath.Join(req.Path, ".reliant")
+	if _, err := os.Stat(reliantDir); os.IsNotExist(err) {
+		if err := os.MkdirAll(reliantDir, 0755); err != nil {
+			resp.Error = err.Error()
+			return json.Marshal(resp)
+		}
+		resp.CreatedReliantDir = true
+	}
+
 	return json.Marshal(resp)
 }
 
