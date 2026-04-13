@@ -92,6 +92,12 @@ func TestErrorClassification_DNS(t *testing.T) {
 			isTerminal: false,
 			category:   ErrorCategoryNetwork,
 		},
+		{
+			name:       "local gcloud reauthentication required is terminal",
+			err:        errors.New(`litellm.APIConnectionError: Reauthentication is needed. Please run gcloud auth application-default login to reauthenticate.`),
+			isTerminal: true,
+			category:   ErrorCategoryTerminal,
+		},
 	}
 
 	for _, tt := range tests {

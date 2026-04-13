@@ -27,6 +27,8 @@ var knownErrorPatterns = []struct {
 	pattern string
 	summary string
 }{
+	{"reauthentication is needed", "Local Google Cloud auth expired. Run `gcloud auth application-default login` and retry"},
+	{"application-default login", "Local Google Cloud auth expired. Run `gcloud auth application-default login` and retry"},
 	{"overloaded", "The AI provider is currently overloaded"},
 	{"rate limit", "Rate limited by the AI provider"},
 	{"too many requests", "Rate limited by the AI provider"},

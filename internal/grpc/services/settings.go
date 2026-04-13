@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -141,18 +140,20 @@ func (s *SettingsService) validateAPIKey(ctx context.Context, provider models.Fa
 	}
 	testModel := providerDefs[0].ToModel()
 
+	resolvedAPIKey := apiKey
 	driverOpts := []llm.DriverOption{
-		llm.WithAPIKey(apiKey),
 		llm.WithMaxTokens(100),
 	}
-	// Reliant provider needs a base URL for the LiteLLM proxy
 	if provider == "reliant" {
-		baseURL := os.Getenv("RELIANT_API_BASE_URL")
-		if baseURL == "" {
-			baseURL = "https://api.reliant.dev/v1"
-		}
+		baseURL := drivers.ResolveReliantBaseURL(apiKey)
+		var extraHeaders map[string]string
+		resolvedAPIKey, extraHeaders = drivers.ResolveReliantAPIKey(apiKey, baseURL)
 		driverOpts = append(driverOpts, llm.WithBaseURL(baseURL))
+		if len(extraHeaders) > 0 {
+			driverOpts = append(driverOpts, llm.WithExtraHeaders(extraHeaders))
+		}
 	}
+	driverOpts = append(driverOpts, llm.WithAPIKey(resolvedAPIKey))
 	driver, err := drivers.GetDriverForModel(testModel, provider, driverOpts...)
 	if err != nil {
 		logging.Error("Failed to create driver for validation", "provider", provider, "error", err)

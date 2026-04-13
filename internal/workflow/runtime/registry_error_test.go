@@ -59,6 +59,12 @@ func TestClassifyError(t *testing.T) {
 			category:   "unknown",
 		},
 		{
+			name:       "local gcloud reauthentication required is terminal",
+			err:        errors.New("litellm.APIConnectionError: Reauthentication is needed. Please run gcloud auth application-default login to reauthenticate."),
+			isTerminal: true,
+			category:   "auth",
+		},
+		{
 			name:       "prompt is too long is terminal",
 			err:        errors.New("prompt is too long: 202216 tokens > 200000 maximum"),
 			isTerminal: true,

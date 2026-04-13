@@ -258,7 +258,11 @@ func (c *ReliantClient) SendMessages(ctx context.Context, prompts []string, mess
 				return nil, retryErr
 			}
 			if retry {
-				logging.Warn(fmt.Sprintf("Retrying due to rate limit... attempt %d of %d", attempts, models.MaxRetries))
+				logging.Warn("Retrying Reliant API request",
+					"attempt", attempts,
+					"max_retries", models.MaxRetries,
+					"after_ms", after,
+				)
 				select {
 				case <-ctx.Done():
 					return nil, ctx.Err()
@@ -347,7 +351,7 @@ func (c *ReliantClient) StreamResponse(ctx context.Context, prompts []string, me
 						toolCallResults = append(toolCallResults, c.toolCalls(acc.ChatCompletion)...)
 					}
 				} else if currentContent != "" {
-					logging.Warn("Stream ended without completion choices but has content (length: %d) - treating as interrupted stream", len(currentContent))
+					logging.Warn(fmt.Sprintf("Stream ended without completion choices but has content (length: %d) - treating as interrupted stream", len(currentContent)))
 					eventChan <- llm.DriverEvent{
 						Type:  llm.EventError,
 						Error: fmt.Errorf("stream interrupted: incomplete response from Reliant proxy"),
@@ -392,7 +396,11 @@ func (c *ReliantClient) StreamResponse(ctx context.Context, prompts []string, me
 				return
 			}
 			if retry {
-				logging.Warn(fmt.Sprintf("Retrying due to rate limit... attempt %d of %d", attempts, models.MaxRetries))
+				logging.Warn("Retrying Reliant API request",
+					"attempt", attempts,
+					"max_retries", models.MaxRetries,
+					"after_ms", after,
+				)
 				select {
 				case <-ctx.Done():
 					if ctx.Err() != nil {
@@ -419,26 +427,152 @@ func (c *ReliantClient) shouldRetry(attempts int, err error) (bool, int64, error
 		return false, 0, err
 	}
 
-	if apierr.StatusCode != 429 && apierr.StatusCode != 500 {
+	retry, reason := shouldRetryReliantAPIError(apierr)
+	c.logReliantAPIError(attempts, apierr, retry, reason)
+	if !retry {
 		return false, 0, err
 	}
 
 	if attempts > models.MaxRetries {
-		return false, 0, fmt.Errorf("maximum retry attempts reached for rate limit: %d retries", models.MaxRetries)
+		return false, 0, reliantRetryExhaustedError(apierr)
 	}
 
+	return true, retryDelayMs(attempts, apierr), nil
+}
+
+func shouldRetryReliantAPIError(apierr *openai.Error) (bool, string) {
+	if apierr == nil {
+		return false, "missing_api_error"
+	}
+
+	errText := strings.ToLower(strings.Join([]string{
+		apierr.Message,
+		apierr.Type,
+		apierr.Code,
+		apierr.RawJSON(),
+	}, " "))
+
+	if containsAny(errText,
+		"reauthentication is needed",
+		"application-default login",
+		"invalid api key",
+		"invalid authentication credentials",
+		"authentication failed",
+		"unauthorized",
+		"forbidden",
+		"permission denied",
+		"refresherror",
+	) {
+		return false, "terminal_auth_config_error"
+	}
+
+	switch apierr.StatusCode {
+	case 429:
+		return true, "http_429"
+	case 502, 503, 504:
+		return true, "transient_gateway_error"
+	case 500:
+		if containsAny(errText,
+			"internal server error",
+			"overloaded",
+			"service unavailable",
+			"gateway timeout",
+			"bad gateway",
+			"try again",
+			"temporary",
+			"timeout",
+		) {
+			return true, "transient_upstream_500"
+		}
+		return false, "non_retryable_500"
+	default:
+		return false, fmt.Sprintf("non_retryable_status_%d", apierr.StatusCode)
+	}
+}
+
+func retryDelayMs(attempts int, apierr *openai.Error) int64 {
 	retryMs := 0
-	retryAfterValues := apierr.Response.Header.Values("Retry-After")
+	if apierr != nil && apierr.Response != nil {
+		retryAfterValues := apierr.Response.Header.Values("Retry-After")
+		if len(retryAfterValues) > 0 {
+			if _, err := fmt.Sscanf(retryAfterValues[0], "%d", &retryMs); err == nil {
+				return int64(retryMs * 1000)
+			}
+		}
+	}
 
 	backoffMs := 2000 * (1 << (attempts - 1))
 	jitterMs := int(float64(backoffMs) * 0.2)
-	retryMs = backoffMs + jitterMs
-	if len(retryAfterValues) > 0 {
-		if _, err := fmt.Sscanf(retryAfterValues[0], "%d", &retryMs); err == nil {
-			retryMs = retryMs * 1000
+	return int64(backoffMs + jitterMs)
+}
+
+func reliantRetryExhaustedError(apierr *openai.Error) error {
+	if apierr != nil && apierr.StatusCode == 429 {
+		return fmt.Errorf("maximum retry attempts reached for rate limit: %d retries", models.MaxRetries)
+	}
+	statusCode := 0
+	if apierr != nil {
+		statusCode = apierr.StatusCode
+	}
+	return fmt.Errorf("maximum retry attempts reached for transient Reliant API error (status %d): %d retries", statusCode, models.MaxRetries)
+}
+
+func (c *ReliantClient) logReliantAPIError(attempts int, apierr *openai.Error, retry bool, reason string) {
+	if apierr == nil {
+		return
+	}
+
+	logFn := logging.Error
+	if retry {
+		logFn = logging.Warn
+	}
+
+	requestID, proxymanID := extractUpstreamCorrelationHeaders(apierr.Response)
+	litellmCallID := ""
+	litellmModelID := ""
+	if apierr.Response != nil {
+		litellmCallID = strings.TrimSpace(apierr.Response.Header.Get("x-litellm-call-id"))
+		litellmModelID = strings.TrimSpace(apierr.Response.Header.Get("x-litellm-model-id"))
+	}
+
+	logFn("Reliant API request failed",
+		"attempt", attempts,
+		"retryable", retry,
+		"decision_reason", reason,
+		"status_code", apierr.StatusCode,
+		"error_type", strings.TrimSpace(apierr.Type),
+		"error_code", strings.TrimSpace(apierr.Code),
+		"message", summarizeReliantAPIError(apierr),
+		"request_id", requestID,
+		"litellm_call_id", litellmCallID,
+		"litellm_model_id", litellmModelID,
+		"proxyman_id", proxymanID,
+	)
+}
+
+func summarizeReliantAPIError(apierr *openai.Error) string {
+	if apierr == nil {
+		return ""
+	}
+
+	text := strings.TrimSpace(apierr.Message)
+	if text == "" {
+		text = strings.TrimSpace(apierr.RawJSON())
+	}
+	text = strings.Join(strings.Fields(text), " ")
+	if len(text) > 320 {
+		return text[:320] + "…"
+	}
+	return text
+}
+
+func containsAny(haystack string, needles ...string) bool {
+	for _, needle := range needles {
+		if needle != "" && strings.Contains(haystack, needle) {
+			return true
 		}
 	}
-	return true, int64(retryMs), nil
+	return false
 }
 
 func (c *ReliantClient) toolCalls(completion openai.ChatCompletion) []message.ToolCall {

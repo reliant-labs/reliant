@@ -219,6 +219,9 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 		if driverConfig.BaseURL != "" {
 			driverOpts = append(driverOpts, llm.WithBaseURL(driverConfig.BaseURL))
 		}
+		if len(driverConfig.ExtraHeaders) > 0 {
+			driverOpts = append(driverOpts, llm.WithExtraHeaders(driverConfig.ExtraHeaders))
+		}
 
 		// Pass Claude OAuth account metadata and token refresh if available
 		if driverConfig.AccountUUID != "" {

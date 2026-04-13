@@ -120,6 +120,9 @@ func classifyError(err error) error {
 		"too many tokens",    // Alternative token limit error message
 		"maximum context",    // Context length exceeded
 		"context length",     // Context length error
+		"reauthentication is needed",
+		"application-default login",
+		"refresherror",
 		// User hasn't configured an API key for any matching provider
 		"no available provider",
 	}
@@ -186,6 +189,15 @@ func categorizeError(err error) string {
 
 	if strings.Contains(errStr, "rate limit") || strings.Contains(errStr, "too many requests") {
 		return "rate_limit"
+	}
+
+	if strings.Contains(errStr, "reauthentication is needed") ||
+		strings.Contains(errStr, "application-default login") ||
+		strings.Contains(errStr, "refresherror") ||
+		strings.Contains(errStr, "unauthorized") ||
+		strings.Contains(errStr, "forbidden") ||
+		strings.Contains(errStr, "permission denied") {
+		return "auth"
 	}
 
 	if strings.Contains(errStr, "timeout") || strings.Contains(errStr, "network") ||
