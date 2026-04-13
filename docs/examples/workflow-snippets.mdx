@@ -103,7 +103,7 @@ nodes:
     action: CallLLM
     inputs:
       # Filter tools based on mode
-      tool_filter: "{{inputs.mode == 'plan' ? ['tag:readonly', 'tag:mcp'] : ['tag:default', 'tag:mcp']}}"
+      tool_filter: "{{inputs.mode == 'plan' ? ['tag:plan'] : ['tag:default']}}"
       # Optionally add planning-specific system prompt
       system_prompt: "{{inputs.mode == 'plan' ? inputs.planning_prompt : inputs.system_prompt}}"
 ```
@@ -111,7 +111,7 @@ nodes:
 **Key points:**
 
 - Use `tool_filter` to restrict available tools
-- `tag:readonly` includes view, grep, glob, etc.
+- `tag:plan` includes read-only tools plus planning tools (create_plan, add_task, etc.)
 - Pair with a planning-specific system prompt
 
 ---

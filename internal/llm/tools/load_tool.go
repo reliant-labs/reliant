@@ -162,8 +162,10 @@ func (t *loadToolTool) searchTools(query string, permission string) ToolResponse
 
 // FormatDeferredToolsAnnouncement creates the system prompt section announcing
 // tools that can be loaded via load_tool.
-func FormatDeferredToolsAnnouncement(chatID string, permission string, currentToolNames []string) string {
-	deferred := DeferredToolNames(chatID, permission, currentToolNames)
+// mcpToolNames are all available MCP tools; any not in currentToolNames will be
+// included in the deferred list so the LLM can discover and load them.
+func FormatDeferredToolsAnnouncement(chatID string, permission string, currentToolNames []string, mcpToolNames []string) string {
+	deferred := DeferredToolNames(chatID, permission, currentToolNames, mcpToolNames)
 	if len(deferred) == 0 {
 		return ""
 	}

@@ -358,6 +358,7 @@ export const ChatPresenter = memo(function ChatPresenter({
         virtuosoRef={virtuosoRef}
         onAtBottomStateChange={handleAtBottomStateChange}
         footer={thinkingFooter}
+        onSelectThread={setSelectedThreadId}
       />
     );
   };

@@ -31,6 +31,7 @@ interface ToolExecutionCollapsibleGroupProps {
   chatId?: string;
   showRichContent?: boolean;
   onForceYield?: (toolCallId: string) => void;
+  onSelectThread?: (threadId: string | null) => void;
 }
 
 function ToolExecutionCollapsibleGroupComponent({
@@ -39,6 +40,7 @@ function ToolExecutionCollapsibleGroupComponent({
   chatId,
   showRichContent = false,
   onForceYield,
+  onSelectThread,
 }: ToolExecutionCollapsibleGroupProps) {
   // Determine initial expanded state based on first tool's settings
   // If any tool in the group should be expanded, expand the group
@@ -105,6 +107,7 @@ function ToolExecutionCollapsibleGroupComponent({
               approval={execution.approval}
               chatId={chatId}
               showRichContent={showRichContent}
+              onSelectThread={onSelectThread}
             />
           ))}
         </div>

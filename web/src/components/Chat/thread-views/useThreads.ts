@@ -23,6 +23,7 @@ export interface ThreadInfo {
   messageCount: number;
   isMain: boolean;
   isActive: boolean;  // Whether this thread's workflow is currently running
+  isSpawn: boolean;
   color: string;
   firstMessageAt?: string;
 }
@@ -122,6 +123,7 @@ export function useThreads(
         messageCount: messageCounts.get(wf.thread) || 0,
         isMain,
         isActive: threadIsActive,
+        isSpawn: wf.spawnedByNodeId === "spawn_tool",
         color: getThreadColor(wf.thread, isMain),
         firstMessageAt: firstTimestamps.get(wf.thread),
       });
@@ -143,6 +145,7 @@ export function useThreads(
         messageCount: messageCounts.get(chatId) || 0,
         isMain: true,
         isActive: isChatActive, // Main is active if any thread is active
+        isSpawn: false,
         color: getThreadColor(chatId, true),
         firstMessageAt: firstTimestamps.get(chatId),
       });
@@ -163,7 +166,8 @@ export function useThreads(
       // emit separate thread status updates
       const threadIsActive = isMain ? isChatActive : (activeThreadIds.has(threadId) || isChatActive);
       
-      // Resolve thread name from activeThreads streaming data (has thread_title/spawned_by_node_id)
+      // Resolve thread name and spawn status from activeThreads streaming data
+      const activeThread = activeThreads.find(at => at.thread === threadId);
       const resolvedName = !isMain ? resolveThreadNameFromActiveThreads(threadId, activeThreads) : undefined;
       threads.push({
         id: threadId,
@@ -171,6 +175,7 @@ export function useThreads(
         messageCount: count,
         isMain,
         isActive: threadIsActive,
+        isSpawn: activeThread?.spawned_by_node_id === "spawn_tool",
         color: getThreadColor(threadId, isMain),
         firstMessageAt: firstTimestamps.get(threadId),
       });
@@ -219,4 +224,3 @@ export function useMessagesByThread(
     return groups;
   }, [messages, chatId]);
 }
-

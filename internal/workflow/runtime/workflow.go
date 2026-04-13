@@ -2165,9 +2165,10 @@ func executeSpawnInline(
 	// Notify workflow status "started" for UI swim lane
 	// Thread and workflow already created by parent via initChildWorkflow/V2_CreateWorkflowWithThread
 	notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, targetWorkflow, "started", parentWorkflowID, config.childThread, &workflowStatusOpts{
-		Title:           config.presetName,
-		ThreadTitle:     threadTitle,
-		SpawnedByNodeID: "spawn_tool",
+		Title:               config.presetName,
+		ThreadTitle:         threadTitle,
+		SpawnedByNodeID:     "spawn_tool",
+		SpawnedByToolCallID: config.toolCallID,
 	})
 
 	// Retry loop for transient errors (worker restarts, heartbeat timeouts).
@@ -2200,7 +2201,9 @@ func executeSpawnInline(
 				"toolCallID", config.toolCallID,
 				"error", err,
 			)
-			notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, targetWorkflow, "failed", parentWorkflowID, config.childThread, nil)
+			notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, targetWorkflow, "failed", parentWorkflowID, config.childThread, &workflowStatusOpts{
+				SpawnedByToolCallID: config.toolCallID,
+			})
 			return &spawnInlineResult{
 				ToolCallID: config.toolCallID,
 				Content:    fmt.Sprintf("Failed to create spawn executor: %v", err),
@@ -2288,7 +2291,9 @@ func executeSpawnInline(
 			"childWorkflowID", config.childWorkflowID,
 			"error", execErr,
 		)
-		notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, targetWorkflow, "failed", parentWorkflowID, config.childThread, nil)
+		notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, targetWorkflow, "failed", parentWorkflowID, config.childThread, &workflowStatusOpts{
+			SpawnedByToolCallID: config.toolCallID,
+		})
 		return &spawnInlineResult{
 			ToolCallID: config.toolCallID,
 			Content:    fmt.Sprintf("Spawned workflow failed: %v", execErr),
@@ -2298,7 +2303,9 @@ func executeSpawnInline(
 	}
 
 	// Notify workflow status "completed"
-	notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, targetWorkflow, "completed", parentWorkflowID, config.childThread, nil)
+	notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, targetWorkflow, "completed", parentWorkflowID, config.childThread, &workflowStatusOpts{
+		SpawnedByToolCallID: config.toolCallID,
+	})
 
 	// Fetch the last message from the child's thread as the spawn result
 	result := fetchSpawnResult(ctx, chatID, config.childThread, config.toolCallID)

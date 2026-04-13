@@ -61,9 +61,13 @@ var allowedSkillFrontmatterFields = map[string]struct{}{
 	"paths":                    {},
 }
 
-const builtinSkillCreatorPath = "skill-creator/SKILL.md"
+var builtinSkillPaths = []string{
+	"skill-creator/SKILL.md",
+	"reliant-config/SKILL.md",
+	"workflow-builder/SKILL.md",
+}
 
-//go:embed builtin/skill-creator/SKILL.md
+//go:embed builtin/skill-creator/SKILL.md builtin/reliant-config/SKILL.md builtin/workflow-builder/SKILL.md
 var builtinSkillsFS embed.FS
 
 func ParseSkillMarkdown(path string, scope skillscore.Scope, data []byte) (Definition, error) {
@@ -331,32 +335,38 @@ func ValidateAgentSkillMarkdownFrontmatter(path, name, description, compatibilit
 
 func ReadBuiltinSkillDefinition(path string) ([]byte, error) {
 	normalized := filepath.ToSlash(filepath.Clean(path))
-	canonical := filepath.ToSlash(filepath.Clean(filepath.Join("builtin", builtinSkillCreatorPath)))
-	legacy := filepath.ToSlash(filepath.Clean(builtinSkillCreatorPath))
-	if normalized != canonical && normalized != legacy {
-		return nil, fs.ErrNotExist
+	for _, p := range builtinSkillPaths {
+		canonical := filepath.ToSlash(filepath.Clean(filepath.Join("builtin", p)))
+		legacy := filepath.ToSlash(filepath.Clean(p))
+		if normalized == canonical || normalized == legacy {
+			return builtinSkillsFS.ReadFile(filepath.ToSlash(filepath.Join("builtin", p)))
+		}
 	}
-	return builtinSkillsFS.ReadFile("builtin/skill-creator/SKILL.md")
+	return nil, fs.ErrNotExist
 }
 
 func builtinSkills(loadFullDefinitions bool) []Definition {
-	blob, err := ReadBuiltinSkillDefinition(filepath.Join("builtin", builtinSkillCreatorPath))
-	if err != nil {
-		return nil
-	}
+	var defs []Definition
+	for _, p := range builtinSkillPaths {
+		blob, err := ReadBuiltinSkillDefinition(filepath.Join("builtin", p))
+		if err != nil {
+			continue
+		}
 
-	var definition Definition
-	if loadFullDefinitions {
-		definition, err = ParseSkillMarkdown(builtinSkillCreatorPath, skillscore.ScopeBuiltin, blob)
-	} else {
-		definition, err = ParseSkillMarkdownFrontmatter(builtinSkillCreatorPath, skillscore.ScopeBuiltin, blob)
-	}
-	if err != nil {
-		return nil
-	}
+		var definition Definition
+		if loadFullDefinitions {
+			definition, err = ParseSkillMarkdown(p, skillscore.ScopeBuiltin, blob)
+		} else {
+			definition, err = ParseSkillMarkdownFrontmatter(p, skillscore.ScopeBuiltin, blob)
+		}
+		if err != nil {
+			continue
+		}
 
-	definition.SkillDir = filepath.Dir(filepath.Join("builtin", builtinSkillCreatorPath))
-	return []Definition{definition}
+		definition.SkillDir = filepath.Dir(filepath.Join("builtin", p))
+		defs = append(defs, definition)
+	}
+	return defs
 }
 
 // discoverAll discovers all skills (including nested) from all roots.

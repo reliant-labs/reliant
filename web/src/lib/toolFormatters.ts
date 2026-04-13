@@ -808,3 +808,10 @@ export const LOAD_TOOL_TOOLS = ['load_tool'] as const;
 export function isLoadToolTool(toolName: string): boolean {
   return LOAD_TOOL_TOOLS.includes(toolName.toLowerCase() as typeof LOAD_TOOL_TOOLS[number]);
 }
+
+/**
+ * Check if a tool is a spawn tool
+ */
+export function isSpawnTool(toolName: string): boolean {
+  return toolName.toLowerCase().includes('spawn');
+}

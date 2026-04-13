@@ -21,7 +21,7 @@ func TestRegression_CreateChatWorkflowParams_ToolFilterResolvesToNonEmptyAvailab
 		t,
 		prompt,
 		WithWorkflowParam("model", map[string]interface{}{"tags": []interface{}{"flagship"}}),
-		WithWorkflowParam("tools", []interface{}{"tag:default", "tag:mcp"}),
+		WithWorkflowParam("tools", []interface{}{"tag:default"}),
 		WithWorkflowParam("spawn_presets", []interface{}{"general", "researcher"}),
 	)
 
@@ -46,7 +46,7 @@ func TestRegression_ActiveSendMessageWorkflowParams_ToolFilterResolvesToNonEmpty
 		t,
 		startPrompt,
 		WithWorkflowParam("model", map[string]interface{}{"tags": []interface{}{"flagship"}}),
-		WithWorkflowParam("tools", []interface{}{"tag:default", "tag:mcp"}),
+		WithWorkflowParam("tools", []interface{}{"tag:default"}),
 		WithWorkflowParam("spawn_presets", []interface{}{"general", "researcher"}),
 	)
 	h.WaitForWorkflowComplete(t, chatID)
@@ -58,7 +58,7 @@ func TestRegression_ActiveSendMessageWorkflowParams_ToolFilterResolvesToNonEmpty
 		chatID,
 		followUpPrompt,
 		WithSendWorkflowParam("model", map[string]interface{}{"tags": []interface{}{"flagship"}}),
-		WithSendWorkflowParam("tools", []interface{}{"tag:default", "tag:mcp"}),
+		WithSendWorkflowParam("tools", []interface{}{"tag:default"}),
 		WithSendWorkflowParam("spawn_presets", []interface{}{"general", "researcher"}),
 	)
 

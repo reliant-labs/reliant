@@ -134,7 +134,7 @@ Control available tools based on mode using `tool_filter`:
 - id: call_llm
   action: CallLLM
   inputs:
-    tool_filter: "{{inputs.mode == 'plan' ? ['tag:readonly'] : inputs.tools}}"
+    tool_filter: "{{inputs.mode == 'plan' ? ['tag:plan'] : inputs.tools}}"
 ```
 
 Filter options: tags (`['tag:default']`), specific tools (`['view', 'grep']`), or exclusions.
