@@ -5,15 +5,13 @@ import { startOAuthViaLocalServer } from '@/lib/oauth-local'
 
 const CODEX_OAUTH_AUTHORIZE_URL = 'https://auth.openai.com/oauth/authorize'
 const CODEX_OAUTH_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann'
-// Align with Codex CLI authorize URL (codex-rs/login `build_authorize_url`) plus
-// api.responses.write, required for POST .../codex/responses (streaming).
-// If auth.openai.com rejects the scope list, OAuth will fail at authorize (no ?code= redirect).
-const CODEX_OAUTH_DEFAULT_SCOPE =
-  'openid profile email offline_access api.connectors.read api.connectors.invoke api.responses.write'
+// Align with Codex CLI authorize URL (codex-rs/login `build_authorize_url`).
+// Only request OIDC scopes — extended API scopes (e.g. api.responses.write) are
+// not registered on the OAuth client and cause an "invalid_scope" rejection.
+const CODEX_OAUTH_DEFAULT_SCOPE = 'openid profile email offline_access'
 const CODEX_OAUTH_ADDITIONAL_AUTHORIZE_PARAMS: Record<string, string> = {
   id_token_add_organizations: 'true',
   codex_cli_simplified_flow: 'true',
-  originator: 'codex_cli_rs',
 }
 export const CODEX_OAUTH_STATE_PREFIX = 'reliant:oauth:codex:'
 
