@@ -214,8 +214,8 @@ Node routing is a lightweight alternative to workflow routing when all the logic
 
 Node routers shine in multi-phase pipelines where users may want to start at different points. Several builtin workflows use this pattern:
 
-- **one-ring** — routes to discuss, planning, write_tests, or impl_loop
-- **bmad-lite** — routes to discuss, ideate, requirements, architecture, or implement
+- **one-ring** — routes to planning, write_tests, or impl_loop
+- **bmad-lite** — routes to ideate, requirements, architecture, or implement
 
 Example:
 
@@ -223,8 +223,6 @@ Example:
 - id: classify
   type: router
   nodes:
-    - id: discuss
-      description: "Ambiguous request — clarify before starting"
     - id: planning
       description: "Complex task needing research and planning"
     - id: implement
@@ -232,7 +230,7 @@ Example:
   fallback: planning
 ```
 
-With no outgoing edges, the engine dispatches directly to the selected node. This lets users say "just implement it" and skip research/planning phases entirely, or say something vague and land in a discussion phase first.
+With no outgoing edges, the engine dispatches directly to the selected node. This lets users say "just implement it" and skip research/planning phases entirely.
 
 ## Classification reliability
 

@@ -72,8 +72,6 @@ nodes:
       Classify the user's request to determine the best starting phase for this persona-driven workflow.
       Consider how much context and planning has already been done.
     nodes:
-      - id: discuss
-        description: "Vague idea or ambiguous request that needs discussion and clarification before the PM can work on it."
       - id: ideate
         description: "Greenfield project or new feature — start from the beginning with PM vision and ideation."
       - id: requirements
@@ -83,38 +81,6 @@ nodes:
       - id: implement
         description: "Design is done — clear task ready for implementation by the developer persona."
     fallback: ideate
-
-  # ── Discuss ─────────────────────────────────────────────────────────────────
-  #
-  # Quick discussion to clarify ambiguous requests before entering the pipeline.
-
-  - id: discuss
-    type: workflow
-    ref: builtin://agent
-    presets:
-      default: general
-    args:
-      model: "{{inputs.model}}"
-      mode: "{{inputs.mode}}"
-      yield: true
-      temperature: "{{inputs.temperature}}"
-      thinking_level: "{{inputs.thinking_level}}"
-    thread:
-      mode: fork
-      memo: false
-      inject:
-        role: user
-        content: |
-          ## BMAD — Quick Discussion
-
-          Before starting the persona-driven pipeline, let's clarify what we're building.
-          Identify ambiguities, ask about scope, target users, and any constraints.
-          Keep it brief and focused — the PM persona will handle deep ideation next.
-    save_message:
-      role: assistant
-      content: |
-        ## Discussion Summary
-        {{output.response_text}}
 
   # ── Phase 1: Ideate (PM Persona) ──────────────────────────────────────────
   #
@@ -346,8 +312,6 @@ nodes:
         The workflow has finished. A Product Manager defined the vision and requirements, an Architect designed the system, and a Developer implemented it. Review the conversation above for full details.
 
 edges:
-  - from: discuss
-    default: ideate
   - from: ideate
     default: requirements
   - from: requirements
@@ -362,9 +326,6 @@ ui:
     classify:
       x: 200
       y: 400
-    discuss:
-      x: 550
-      y: 260
     ideate:
       x: 550
       y: 400

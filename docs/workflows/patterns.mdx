@@ -579,32 +579,6 @@ nodes:
 
 ---
 
-## Discussion Phase Pattern
-
-Use `yield: true` on an agent node to create an interactive discussion phase that pauses for user input. This is useful at the start of pipelines to clarify ambiguous requests.
-
-```yaml
-- id: discuss
-  type: workflow
-  ref: builtin://agent
-  args:
-    yield: true
-  thread:
-    mode: fork
-    inject:
-      role: user
-      content: "Identify any ambiguities and ask clarifying questions."
-  save_message:
-    role: assistant
-    content: "## Discussion Summary\n{{output.response_text}}"
-```
-
-Used by: `gsd`, `one-ring`, `bmad-lite`
-
-**When to use:** Pipeline entry points where the request may be unclear. The agent asks clarifying questions, the user responds, and the summary is saved to the thread for downstream nodes.
-
----
-
 ## Combining Techniques
 
 These techniques compose naturally. A sophisticated workflow might combine: pipeline (improve prompt → implement → verify), parallel execution in isolated worktrees, retry loops while tests fail, escalation to senior agent on failure, and multi-model review.
