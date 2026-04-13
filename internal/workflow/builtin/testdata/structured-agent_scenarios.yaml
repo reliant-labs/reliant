@@ -2,7 +2,8 @@
 #
 # Structured Agent workflow structure:
 # - agent_loop (main loop) contains: call_llm -> remind_response -> approval -> execute_tools -> compact
-# - Loop continues while: response tool NOT called AND iteration < max_turns
+# - Loop continues while: response tool NOT called (outputs.completed != true)
+# - Loop yields when: inputs.max_turns > 0 && iter.iteration >= inputs.max_turns
 # - Requires LLM to call a response tool (default: submit_response) to complete
 #
 # Key behaviors:
@@ -10,6 +11,8 @@
 # - mode=auto: auto-approves tool execution (skips approval node)
 # - mode=manual: requires approval before tool execution
 # - Response tool output is captured as structured data via response_data
+# - max_turns=0 (default): unlimited iterations
+# - max_turns>0: loop yields (pauses for user input) at that iteration count
 
 ---
 # Happy path: LLM immediately calls the response tool
@@ -621,15 +624,22 @@ expect:
     - agent_loop.approval
 
 ---
-# Max turns without response - loop exits when max_turns reached without response tool being called
+# Max turns without response - loop yields when max_turns reached without response tool
+#
+# With the new yield-based max_turns behavior:
+# - The while condition only checks outputs.completed (not max_turns)
+# - max_turns triggers yield instead of stopping the loop
+# - With max_turns=3, the LLM never calls tools for 3 iterations
+# - At iteration 3, yield fires (3 >= 3), loop yields/exits
+# - completed is never set to true since response tool was never called
 name: max_turns_without_response
-description: Loop exits when max_turns reached and agent never called response tool
+description: Loop yields when max_turns reached and agent never called response tool
 inputs:
   mode: auto
   max_turns: 3
   response_tool_name: submit_response
 events:
-  # Iteration 1: LLM responds without tools, gets reminded
+  # Iteration 0: LLM responds without tools, gets reminded
   - node: agent_loop.call_llm
     output:
       message:
@@ -639,7 +649,7 @@ events:
       tool_calls: []
   # remind_response triggers because no tool calls
 
-  # Iteration 2: LLM still doesn't use tools
+  # Iteration 1: LLM still doesn't use tools
   - node: agent_loop.call_llm
     output:
       message:
@@ -649,7 +659,7 @@ events:
       tool_calls: []
   # remind_response triggers again
 
-  # Iteration 3 (max_turns=3, last iteration): LLM still doesn't use response tool
+  # Iteration 2: LLM still doesn't use response tool
   - node: agent_loop.call_llm
     output:
       message:
@@ -657,7 +667,8 @@ events:
         text: "I need more time to think."
       response_text: "I need more time to think."
       tool_calls: []
-  # Loop exits after iteration 3 because iter.iteration (3) is no longer < max_turns (3)
+  # remind_response triggers again
+  # Yield fires at iteration 3 (3 >= 3), loop yields/exits
   # Note: completed is never set to true since response tool was never called
 expect:
   outcome: completed

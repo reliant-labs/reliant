@@ -36,7 +36,7 @@ inputs:
 
   max_iterations:
     type: integer
-    default: 3
+    default: 10
     min: 1
     max: 10
     description: Maximum implement→review iterations

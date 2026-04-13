@@ -2,7 +2,7 @@
 #
 # Tests the yield behavior at max_turns:
 # The loop yield expression is:
-#   inputs.yield || iter.iteration >= inputs.max_turns
+#   inputs.yield || (inputs.max_turns > 0 && iter.iteration >= inputs.max_turns)
 #
 # When max_turns is reached, the loop yields (pauses for user input)
 # rather than just completing. This is important for the "send a message

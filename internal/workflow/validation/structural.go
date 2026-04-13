@@ -542,6 +542,22 @@ func validateNodeReachability(wf *reliantv1.Workflow, nodeMap map[string]*relian
 		}
 	}
 
+	// Router nodes with node-routing implicitly connect to their candidate node IDs.
+	for _, node := range nodes {
+		if node.GetType() != model.NodeTypeRouter {
+			continue
+		}
+		args := node.GetRouter()
+		if args == nil {
+			continue
+		}
+		for _, candidate := range args.GetNodes() {
+			if cid := candidate.GetId(); cid != "" {
+				edgeTargets[node.GetId()] = append(edgeTargets[node.GetId()], cid)
+			}
+		}
+	}
+
 	reachable := make(map[string]bool)
 	queue := append([]string{}, wf.GetEntry()...)
 
@@ -584,6 +600,20 @@ func validateNoCycles(wf *reliantv1.Workflow, result *Result) {
 		}
 		if len(edge.GetDefault()) > 0 {
 			edgeTargets[edge.GetFrom()] = append(edgeTargets[edge.GetFrom()], edge.GetDefault()...)
+		}
+	}
+
+	// Include router node candidates as implicit edges.
+	for _, node := range wf.GetNodes() {
+		if node.GetType() != model.NodeTypeRouter {
+			continue
+		}
+		if args := node.GetRouter(); args != nil {
+			for _, candidate := range args.GetNodes() {
+				if cid := candidate.GetId(); cid != "" {
+					edgeTargets[node.GetId()] = append(edgeTargets[node.GetId()], cid)
+				}
+			}
 		}
 	}
 

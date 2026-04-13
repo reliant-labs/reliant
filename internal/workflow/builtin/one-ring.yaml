@@ -24,7 +24,7 @@ description: |
     - "continue" — implementation is incomplete, go back to implement. Skip refactor.
     - "refactor" — approach is fundamentally wrong. Undo, then fresh attempt.
 
-entry: [planning]
+entry: [classify]
 
 inputs:
   mode:
@@ -66,9 +66,9 @@ inputs:
 
   max_retries:
     type: integer
-    default: 3
+    default: 10
     min: 1
-    max: 10
+    max: 50
     description: Maximum implementation loop iterations before giving up.
 
   temperature:
@@ -131,6 +131,27 @@ inputs:
 # - impl_loop delegates to get-it-right which manages its own thread architecture.
 
 nodes:
+  # ── Classification router ────────────────────────────────────────────────────
+  #
+  # Routes the user's request to the best starting phase based on complexity
+  # and clarity of the task.
+
+  - id: classify
+    type: router
+    model:
+      tags: [fast, smart]
+    system_prompt: |
+      Classify the user's request to determine the best starting phase.
+      Consider the complexity, clarity, and nature of the task.
+    nodes:
+      - id: planning
+        description: "Complex task that needs research, planning, and design before implementation. Use for multi-step features, architectural changes, or tasks requiring investigation."
+      - id: write_tests
+        description: "Clear task where TDD approach is appropriate. Use when requirements are well-defined and tests should be written first."
+      - id: impl_loop
+        description: "Simple, well-defined task that can go straight to implementation. Use for bug fixes, small changes, or tasks with clear specifications."
+    fallback: planning
+
   # ── Planning phase (sub-workflow, runs once) ────────────────────────────────
   #
   # Forks from main thread. Inner nodes each fork again (double fork).
@@ -411,18 +432,21 @@ ui:
     workflow:
       x: -120
       y: 830
-    planning:
+    classify:
       x: 200
       y: 820
+    planning:
+      x: 550
+      y: 820
     write_tests:
-      x: 600
+      x: 900
       y: 820
     impl_loop:
-      x: 950
+      x: 1250
       y: 820
     success:
-      x: 1300
+      x: 1600
       y: 760
     max_retries_reached:
-      x: 1300
+      x: 1600
       y: 920

@@ -18,7 +18,7 @@ description: |
     Main thread: [user msg] → [vision] → [requirements] → [architecture] → [implementation summary] → [complete]
     Each agent step forks so internal conversation stays isolated — only summaries are saved back.
 
-entry: [ideate]
+entry: [classify]
 
 inputs:
   model:
@@ -60,6 +60,28 @@ outputs:
   implementation: "{{nodes.implement.response_text}}"
 
 nodes:
+  # ── Router: Classify ────────────────────────────────────────────────────────
+  #
+  # Classifies the user's request to determine the best starting phase.
+
+  - id: classify
+    type: router
+    model:
+      tags: [fast, smart]
+    system_prompt: |
+      Classify the user's request to determine the best starting phase for this persona-driven workflow.
+      Consider how much context and planning has already been done.
+    nodes:
+      - id: ideate
+        description: "Greenfield project or new feature — start from the beginning with PM vision and ideation."
+      - id: requirements
+        description: "Vision is clear but needs detailed user stories, acceptance criteria, and requirements definition."
+      - id: architecture
+        description: "Requirements are defined — needs system design, component architecture, and technical planning."
+      - id: implement
+        description: "Design is done — clear task ready for implementation by the developer persona."
+    fallback: ideate
+
   # ── Phase 1: Ideate (PM Persona) ──────────────────────────────────────────
   #
   # The Product Manager brainstorms and defines the product vision.
@@ -298,3 +320,24 @@ edges:
     default: implement
   - from: implement
     default: complete
+
+ui:
+  positions:
+    classify:
+      x: 200
+      y: 400
+    ideate:
+      x: 550
+      y: 400
+    requirements:
+      x: 900
+      y: 400
+    architecture:
+      x: 1250
+      y: 400
+    implement:
+      x: 1600
+      y: 400
+    complete:
+      x: 1950
+      y: 400
