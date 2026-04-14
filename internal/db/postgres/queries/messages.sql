@@ -4,7 +4,7 @@ INSERT INTO messages (
     id, chat_id, ordinal, thread_id, context_window_id,
     node_id, node_path,
     role, display_style, model, agent,
-    token_count, cost,
+    token_count, cost_micros,
     workflow_id, run_id, activity_id, created_at, updated_at
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18);
 
@@ -19,7 +19,7 @@ ORDER BY ordinal ASC;
 -- name: UpdateMessage :exec
 UPDATE messages SET
     token_count = $1,
-    cost = $2,
+    cost_micros = $2,
     updated_at = NOW()
 WHERE id = $3;
 
@@ -34,7 +34,7 @@ INSERT INTO messages (
     id, chat_id, ordinal, thread_id, context_window_id,
     node_id, node_path,
     role, display_style, model, agent,
-    token_count, cost,
+    token_count, cost_micros,
     workflow_id, run_id, activity_id, created_at, updated_at
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 ON CONFLICT(id) DO NOTHING;

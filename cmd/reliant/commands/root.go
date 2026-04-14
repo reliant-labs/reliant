@@ -70,6 +70,7 @@ func envOrDefault(key, defaultVal string) string {
 // e.g. https://staging.reliantapi.com -> https://gateway-staging.reliantapi.com
 //
 //	https://reliantapi.com -> https://gateway.reliantapi.com
+//	https://localhost:3110 -> https://localhost:3110 (localhost is kept as-is)
 func resolveGatewayURL() string {
 	if gatewayURL != "" {
 		return gatewayURL
@@ -83,6 +84,14 @@ func resolveGatewayURL() string {
 
 	host := parsed.Hostname()
 	port := parsed.Port()
+
+	// For localhost/loopback addresses, don't transform the hostname.
+	// In local dev the gateway runs on a different port on the same host.
+	// Without RELIANT_GATEWAY_URL, fall back to the server URL itself
+	// (the API server also hosts the ConnectDaemon endpoint in dev).
+	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+		return serverURL
+	}
 
 	// Count dots to determine if there's a subdomain.
 	// "staging.reliantapi.com" has 2 dots -> has subdomain -> gateway-staging.reliantapi.com

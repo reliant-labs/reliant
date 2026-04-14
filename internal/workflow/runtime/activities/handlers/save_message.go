@@ -148,6 +148,7 @@ func (a *SaveMessageActivity) Execute(ctx context.Context, input ActivityInput) 
 		ToolResults:   convertToolResults(resolvedToolResults),
 		Thinking:      thinking,
 		TokenCount:    int(protoArgs.GetTokenCount()),
+		CostMicros:    protoArgs.GetCostMicros(),
 		DisplayStyle:  parseDisplayStyle(protoArgs.GetResolvedDisplayStyle()),
 		WorkflowID:    workflowID,
 		StepID:        rtx.StepID,
@@ -203,7 +204,7 @@ func (a *SaveMessageActivity) createInjectFileAttachment(ctx context.Context, f 
 	attType := attachment.GetAttachmentType(f.GetFilename())
 	attTypeStr := string(attType)
 	if attType != attachment.TypeImage {
-		attTypeStr = "document"
+		attTypeStr = string(attachment.TypeDocument)
 	}
 
 	att := &db.Attachment{

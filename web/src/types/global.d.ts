@@ -7,11 +7,10 @@ declare global {
     RELIANT_CONFIG?: {
       isElectron: boolean;
       isDev: boolean;
-      backendUrl?: string;
-      backendPort?: number;
       grpcPort?: number;
       grpcUrl?: string;
       useTLS?: boolean;
+      adminURL?: string;
     };
     electronAPI?: {
       getConfig: () => typeof window.RELIANT_CONFIG;

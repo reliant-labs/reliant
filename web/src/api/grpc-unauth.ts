@@ -37,9 +37,6 @@ const getGRPCBaseURL = (): string | null => {
     if (window.RELIANT_CONFIG?.grpcUrl) {
       return window.RELIANT_CONFIG.grpcUrl;
     }
-    if (window.RELIANT_CONFIG?.backendUrl) {
-      return window.RELIANT_CONFIG.backendUrl;
-    }
   }
 
   // If we're in a file:// protocol (Electron but config not loaded yet),

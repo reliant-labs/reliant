@@ -17,8 +17,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/reliant-labs/reliant/internal/analytics"
-	"github.com/reliant-labs/reliant/internal/api"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/bgprocess"
 	"github.com/reliant-labs/reliant/internal/certs"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -229,27 +229,10 @@ func runMonolith(_ *cobra.Command, _ []string, dataDir *string) error {
 	// Bind address: default 127.0.0.1 for local, 0.0.0.0 for containers
 	bindAddress := envutil.GetEnv("BIND_ADDRESS", "127.0.0.1")
 
-	// Start HTTP API server (with TLS if certs are available)
-	apiPort := envutil.GetEnvInt("API_PORT", 8080)
-	if tlsCertFile != "" {
-		logging.Info("Starting HTTPS API server with TLS", "port", apiPort)
-	} else {
-		logging.Info("Starting HTTP API server without TLS", "port", apiPort)
-	}
-	apiStartTime := time.Now()
-	apiServer := api.NewServer(&api.Config{
-		Port:                  apiPort,
-		BindAddress:           bindAddress,
-		JWTPublicKey:          jwtPublicKey,
-		CORSAllowedOrigins:    corsAllowedOrigins,
-		TLSCertFile:           tlsCertFile,
-		TLSKeyFile:            tlsKeyFile,
-		ManagesLocalProcesses: true,
-	}, server.Database(), server.DataDir())
-	if err := apiServer.Start(); err != nil {
-		return fmt.Errorf("failed to start API server: %w", err)
-	}
-	logging.Info("✓ API server started", "duration", time.Since(apiStartTime))
+	// Set up background process persistence, events, and recovery
+	bgprocess.SetupPersistence(server.Database())
+	bgprocess.SetupEvents(server.Database())
+	bgprocess.RecoverProcesses(server.Database())
 
 	// Start gRPC/Connect server
 	grpcPort := envutil.GetEnvInt("GRPC_PORT", 9090)
@@ -401,7 +384,6 @@ func runMonolith(_ *cobra.Command, _ []string, dataDir *string) error {
 	fmt.Println("✓ Reliant DB:      ", filepath.Join(*dataDir, "reliant.db"))
 	fmt.Println("✓ Temporal DB:     ", cfg.TemporalConfig.DatabasePath)
 	fmt.Println("✓ Temporal UI:      http://", server.TemporalFrontendHostPort())
-	fmt.Println("✓ HTTP API:         http://localhost:", apiPort)
 	fmt.Println("✓ gRPC/Connect:     http://localhost:", grpcPort)
 	fmt.Println("✓ Tools Daemon gRPC:http://localhost:", toolsDaemonPort)
 	fmt.Printf("✓ pprof:            http://localhost:%d/debug/pprof/\n", pprofPort)
@@ -469,13 +451,6 @@ func runMonolith(_ *cobra.Command, _ []string, dataDir *string) error {
 	}
 
 	daemonStarter.Shutdown(shutdownCtx)
-
-	logging.Info("Stopping API server")
-	if err := apiServer.Stop(shutdownCtx); err != nil {
-		logging.Error("Error stopping API server", "error", err)
-	} else {
-		logging.Info("API server stopped successfully")
-	}
 
 	// Stop integration server (this includes Temporal and workers)
 	logging.Info("Stopping integration server (Temporal + Workers)")

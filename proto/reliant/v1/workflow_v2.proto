@@ -418,6 +418,7 @@ message SaveMessageNodeArgs {
   string resolved_display_style = 26 [(reliant) = { hidden: true }];
   int32 token_count = 27 [(reliant) = { hidden: true }];
   repeated InjectFileMsg resolved_inject_files = 28 [(reliant) = { hidden: true }];
+  int64 cost_micros = 29 [(reliant) = { hidden: true }];
 }
 
 // InjectFileMsg carries binary file data for inject file attachments.
@@ -902,6 +903,7 @@ message CallLLMOutput {
   // call input JSON and stores it here. Consumers can read this directly instead
   // of parsing response_text or digging through tool_calls.
   google.protobuf.Struct response_data = 8;
+  int64 cost_micros = 9; // Request cost in micros of USD when returned by the provider response.
 }
 
 // ExecuteToolsOutput is the output from execute_tools nodes.

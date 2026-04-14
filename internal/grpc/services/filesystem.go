@@ -421,6 +421,68 @@ func (s *FileSystemService) GetFilePreviewInfo(
 	}), nil
 }
 
+// GetFilePreview returns raw binary file content for previewable files (images, PDFs, audio, video).
+func (s *FileSystemService) GetFilePreview(
+	ctx context.Context,
+	req *connect.Request[reliantv1.GetFilePreviewRequest],
+) (*connect.Response[reliantv1.GetFilePreviewResponse], error) {
+	projectID := req.Msg.ProjectId
+	if projectID == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, nil)
+	}
+
+	requestedPath := req.Msg.Path
+	if requestedPath == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, nil)
+	}
+
+	basePath, err := s.resolveBasePath(ctx, projectID, req.Msg.WorktreeId, req.Msg.ChatId)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, err)
+	}
+
+	absFullPath, err := s.validatePath(basePath, requestedPath)
+	if err != nil {
+		return nil, err
+	}
+
+	info, err := s.fs.Stat(absFullPath)
+	if err != nil {
+		if s.fs.IsNotExist(err) {
+			return nil, connect.NewError(connect.CodeNotFound, err)
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if info.IsDir() {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("path is a directory"))
+	}
+
+	sample, err := s.readPreviewSample(absFullPath)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	classification := filepreview.Classify(absFullPath, sample)
+
+	switch classification.ViewerKind {
+	case filepreview.ViewerKindImage, filepreview.ViewerKindPDF, filepreview.ViewerKindAudio, filepreview.ViewerKindVideo:
+		// previewable
+	default:
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("file type is not previewable"))
+	}
+
+	content, err := s.fs.ReadFile(absFullPath)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	return connect.NewResponse(&reliantv1.GetFilePreviewResponse{
+		Content:     content,
+		ContentType: classification.MIMEType,
+		Filename:    filepath.Base(absFullPath),
+		Size:        info.Size(),
+	}), nil
+}
+
 // CreateFileOrFolder creates a new file or folder
 func (s *FileSystemService) CreateFileOrFolder(
 	ctx context.Context,

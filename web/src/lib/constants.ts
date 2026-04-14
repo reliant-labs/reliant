@@ -44,6 +44,15 @@ export const getIsDev = (): boolean => {
  */
 export const isDev = getIsDev();
 
+export const getAdminURL = (): string | undefined => {
+  if (typeof window !== "undefined" && window.RELIANT_CONFIG?.adminURL) {
+    return window.RELIANT_CONFIG.adminURL;
+  }
+
+  const adminURL = import.meta.env.VITE_ADMIN_URL;
+  return typeof adminURL === "string" && adminURL.length > 0 ? adminURL : undefined;
+};
+
 // ============================================================================
 // Chat Store Constants
 // ============================================================================

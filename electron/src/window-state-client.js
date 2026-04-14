@@ -1,108 +1,38 @@
 /**
  * Window State Client
  * 
- * Fetches and saves window state via the backend API.
- * This ensures window state is stored locally per-worktree in ./data/window-state.json
+ * Reads and writes window state to a local JSON file at ~/.reliant/window-state.json
  */
 
-const http = require('http');
-const https = require('https');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
 const log = require('./logger');
+
+const STATE_PATH = path.join(os.homedir(), '.reliant', 'window-state.json');
 
 // Debounce timer for saving state
 let saveDebounceTimer = null;
 const SAVE_DEBOUNCE_MS = 500;
 
-/**
- * Makes an HTTP/HTTPS request to the backend
- * @param {string} method - HTTP method
- * @param {number} port - Backend port
- * @param {string} path - API path
- * @param {object} [data] - Request body for POST/PUT
- * @param {boolean} [useTLS=true] - Whether to use HTTPS
- * @returns {Promise<object>} Response data
- */
-function makeRequest(method, port, path, data = null, useTLS = true) {
-  return new Promise((resolve, reject) => {
-    const options = {
-      hostname: 'localhost',
-      port: port,
-      path: `/api/v2${path}`,
-      method: method,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      timeout: 5000,
-      rejectUnauthorized: false, // Accept self-signed certificates
-    };
-
-    const protocol = useTLS ? https : http;
-    const req = protocol.request(options, (res) => {
-      let body = '';
-      res.on('data', chunk => { body += chunk; });
-      res.on('end', () => {
-        try {
-          const parsed = JSON.parse(body);
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            resolve(parsed);
-          } else {
-            reject(new Error(parsed.message || `Request failed with status ${res.statusCode}`));
-          }
-        } catch (e) {
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            resolve({});
-          } else {
-            reject(new Error(`Request failed with status ${res.statusCode}`));
-          }
-        }
-      });
-    });
-
-    req.on('error', reject);
-    req.on('timeout', () => {
-      req.destroy();
-      reject(new Error('Request timeout'));
-    });
-
-    if (data) {
-      req.write(JSON.stringify(data));
-    }
-    req.end();
-  });
-}
-
-/**
- * Fetches window state from the backend
- * @param {number} port - Backend port
- * @param {boolean} [useTLS=true] - Whether to use HTTPS
- * @returns {Promise<object|null>} Window state or null if not found
- */
-async function getWindowState(port, useTLS = true) {
+function getWindowState() {
   try {
-    const response = await makeRequest('GET', port, '/window-state', null, useTLS);
-    return response.state || null;
+    const data = fs.readFileSync(STATE_PATH, 'utf-8');
+    return JSON.parse(data);
   } catch (error) {
-    log.debug('[WindowStateClient] Failed to get window state:', error.message);
+    if (error.code !== 'ENOENT') {
+      log.debug('[WindowStateClient] Failed to read window state:', error.message);
+    }
     return null;
   }
 }
 
-/**
- * Saves window state to the backend (debounced)
- * @param {number} port - Backend port
- * @param {object} state - Window state to save
- * @param {boolean} [useTLS=true] - Whether to use HTTPS
- */
-function saveWindowState(port, state, useTLS = true) {
-  // Clear any pending save
-  if (saveDebounceTimer) {
-    clearTimeout(saveDebounceTimer);
-  }
-
-  // Debounce the save
-  saveDebounceTimer = setTimeout(async () => {
+function saveWindowState(state) {
+  if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
+  saveDebounceTimer = setTimeout(() => {
     try {
-      await makeRequest('POST', port, '/window-state', state, useTLS);
+      fs.mkdirSync(path.dirname(STATE_PATH), { recursive: true });
+      fs.writeFileSync(STATE_PATH, JSON.stringify(state, null, 2));
       log.debug('[WindowStateClient] Window state saved');
     } catch (error) {
       log.warn('[WindowStateClient] Failed to save window state:', error.message);
@@ -110,40 +40,25 @@ function saveWindowState(port, state, useTLS = true) {
   }, SAVE_DEBOUNCE_MS);
 }
 
-/**
- * Saves window state immediately (bypasses debounce)
- * @param {number} port - Backend port
- * @param {object} state - Window state to save
- * @param {boolean} [useTLS=true] - Whether to use HTTPS
- * @returns {Promise<void>}
- */
-async function saveWindowStateImmediate(port, state, useTLS = true) {
-  // Clear any pending debounced save
-  if (saveDebounceTimer) {
-    clearTimeout(saveDebounceTimer);
-    saveDebounceTimer = null;
-  }
-
+function saveWindowStateImmediate(state) {
+  if (saveDebounceTimer) { clearTimeout(saveDebounceTimer); saveDebounceTimer = null; }
   try {
-    await makeRequest('POST', port, '/window-state', state, useTLS);
+    fs.mkdirSync(path.dirname(STATE_PATH), { recursive: true });
+    fs.writeFileSync(STATE_PATH, JSON.stringify(state, null, 2));
     log.debug('[WindowStateClient] Window state saved immediately');
   } catch (error) {
     log.warn('[WindowStateClient] Failed to save window state:', error.message);
   }
 }
 
-/**
- * Clears window state from the backend
- * @param {number} port - Backend port
- * @param {boolean} [useTLS=true] - Whether to use HTTPS
- * @returns {Promise<void>}
- */
-async function clearWindowState(port, useTLS = true) {
+function clearWindowState() {
   try {
-    await makeRequest('DELETE', port, '/window-state', null, useTLS);
+    fs.unlinkSync(STATE_PATH);
     log.debug('[WindowStateClient] Window state cleared');
   } catch (error) {
-    log.warn('[WindowStateClient] Failed to clear window state:', error.message);
+    if (error.code !== 'ENOENT') {
+      log.warn('[WindowStateClient] Failed to clear window state:', error.message);
+    }
   }
 }
 

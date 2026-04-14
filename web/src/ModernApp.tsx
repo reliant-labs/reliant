@@ -843,12 +843,12 @@ function App() {
           // Get config from electronAPI (exposed by preload via contextBridge)
           const config = window.electronAPI.getConfig();
 
-          if (config?.backendPort) {
+          if (config?.grpcPort) {
             // Config already available from preload
             window.RELIANT_CONFIG = config;
             logger.info(
               "[App] Config available from electronAPI:",
-              config.backendPort
+              config.grpcPort
             );
           } else {
             // Wait for postMessage from preload when config becomes ready
@@ -859,11 +859,11 @@ function App() {
                   event.data?.config
                 ) {
                   const config = event.data.config;
-                  if (config.backendPort) {
+                  if (config.grpcPort) {
                     window.RELIANT_CONFIG = config;
                     logger.info(
                       "[App] Config received via postMessage:",
-                      config.backendPort
+                      config.grpcPort
                     );
                     window.removeEventListener("message", handleMessage);
                     resolve();

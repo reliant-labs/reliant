@@ -37,7 +37,7 @@ SELECT
     m.model,
     m.agent,
     m.token_count,
-    m.cost,
+    m.cost_micros,
     m.workflow_id,
     m.run_id,
     m.created_at as msg_created_at,

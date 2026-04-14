@@ -10,11 +10,11 @@
 -- - For OpenAI: prompt_tokens (context size for this request)  
 -- - For Gemini: PromptTokenCount (cumulative context size)
 --
--- Also adds cost field for future billing (unused for now).
+-- Also adds cost_micros field for future billing (unused for now).
 
 -- Add new columns
 ALTER TABLE messages ADD COLUMN token_count INTEGER;
-ALTER TABLE messages ADD COLUMN cost REAL;
+ALTER TABLE messages ADD COLUMN cost_micros INTEGER;
 
 -- Migrate existing data: use input_tokens as the context size
 -- (This is correct for Anthropic/OpenAI where input_tokens represents context)
@@ -33,7 +33,7 @@ CREATE TABLE messages_new (
     model TEXT,
     agent TEXT,
     token_count INTEGER,
-    cost REAL,
+    cost_micros INTEGER,
     workflow_id TEXT,
     run_id TEXT,
     node_id TEXT,
@@ -44,8 +44,8 @@ CREATE TABLE messages_new (
 );
 
 -- Copy data
-INSERT INTO messages_new (id, chat_id, ordinal, thread_id, context_window_id, role, display_style, model, agent, token_count, cost, workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at)
-SELECT id, chat_id, ordinal, thread_id, context_window_id, role, display_style, model, agent, token_count, cost, workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at
+INSERT INTO messages_new (id, chat_id, ordinal, thread_id, context_window_id, role, display_style, model, agent, token_count, cost_micros, workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at)
+SELECT id, chat_id, ordinal, thread_id, context_window_id, role, display_style, model, agent, token_count, cost_micros, workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at
 FROM messages;
 
 -- Drop old and rename new
@@ -66,4 +66,4 @@ ALTER TABLE messages ADD COLUMN output_tokens INTEGER;
 ALTER TABLE messages ADD COLUMN cache_creation_tokens INTEGER;
 ALTER TABLE messages ADD COLUMN cache_read_tokens INTEGER;
 ALTER TABLE messages DROP COLUMN token_count;
-ALTER TABLE messages DROP COLUMN cost;
+ALTER TABLE messages DROP COLUMN cost_micros;

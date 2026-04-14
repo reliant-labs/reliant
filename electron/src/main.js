@@ -943,9 +943,9 @@ async function createWindow(options = {}) {
   let windowTitle = "Reliant";
   if (!app.isPackaged && process.cwd()) {
     const basename = path.basename(process.cwd());
-    const backendPort = process.env.BACKEND_PORT || "33742";
+    const grpcPort = process.env.GRPC_PORT || "9090";
     const frontendPort = process.env.FRONTEND_PORT || "5173";
-    windowTitle = `Reliant [${basename}] - Backend:${backendPort} Frontend:${frontendPort}`;
+    windowTitle = `Reliant [${basename}] - gRPC:${grpcPort} Frontend:${frontendPort}`;
   }
 
   mainWindow = new BrowserWindow({
@@ -2081,7 +2081,7 @@ ipcMain.handle("update-privacy-settings", async (event, settings) => {
   writePrivacySettings(settings);
 
   // TODO: Call backend API to update database and dynamically switch clients
-  // Example: POST http://localhost:${backendPort}/api/v2/settings/privacy
+  // Example: POST http://localhost:${grpcPort}/api/v2/settings/privacy
   // This will allow no-restart privacy changes
 
   // Update environment variable for backend (temporary until DB integration)
@@ -2999,14 +2999,10 @@ ipcMain.handle("install-update", async () => {
 
     // Save main window state BEFORE setting flags that skip gracefulShutdown
     try {
-      if (mainWindow && !mainWindow.isDestroyed() && backendManager && backendManager.port) {
+      if (mainWindow && !mainWindow.isDestroyed()) {
         const state = windowStateClient.getStateFromWindow(mainWindow);
         if (state) {
-          await windowStateClient.saveWindowStateImmediate(
-            backendManager.port,
-            state,
-            backendManager.useTLS
-          );
+          windowStateClient.saveWindowStateImmediate(state);
           log.info("[AutoUpdater] Saved main window state before update");
         }
       }
@@ -3546,14 +3542,10 @@ async function gracefulShutdown(exitCode = 0) {
 
   // Save main window state before closing (uses backend API for worktree-local storage)
   try {
-    if (mainWindow && !mainWindow.isDestroyed() && backendManager && backendManager.port) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
       const state = windowStateClient.getStateFromWindow(mainWindow);
       if (state) {
-        await windowStateClient.saveWindowStateImmediate(
-          backendManager.port,
-          state,
-          backendManager.useTLS
-        );
+        windowStateClient.saveWindowStateImmediate(state);
         log.debug("[WindowState] Saved main window state on shutdown");
       }
     }
@@ -3887,23 +3879,23 @@ app.whenReady().then(async () => {
     log.info(`[Backend] Backend already ready (no wait needed)`);
   }
 
-  // Now that backend is ready, try to restore window state from the local data directory
+  // Restore window state from local file
   try {
-    if (mainWindow && !mainWindow.isDestroyed() && backendManager && backendManager.port) {
-      const savedState = await windowStateClient.getWindowState(backendManager.port, backendManager.useTLS);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      const savedState = windowStateClient.getWindowState();
       if (savedState) {
         windowStateClient.applyStateToWindow(mainWindow, savedState);
-        log.info("[Window] Restored window state from backend");
+        log.info("[Window] Restored window state from file");
       } else {
         log.info("[Window] No saved window state found, using defaults");
       }
 
       // Set up window state tracking (save on resize/move)
       const saveCurrentState = () => {
-        if (mainWindow && !mainWindow.isDestroyed() && backendManager && backendManager.port) {
+        if (mainWindow && !mainWindow.isDestroyed()) {
           const state = windowStateClient.getStateFromWindow(mainWindow);
           if (state) {
-            windowStateClient.saveWindowState(backendManager.port, state, backendManager.useTLS);
+            windowStateClient.saveWindowState(state);
           }
         }
       };

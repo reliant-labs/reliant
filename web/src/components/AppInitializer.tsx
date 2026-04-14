@@ -21,19 +21,19 @@ export function AppInitializer({ onInitialized, children }: AppInitializerProps)
           // Get config from electronAPI (exposed by preload via contextBridge)
           const config = window.electronAPI.getConfig();
 
-          if (config?.backendPort) {
+          if (config?.grpcPort) {
             // Config already available from preload
             window.RELIANT_CONFIG = config;
-            logger.info("[AppInitializer] Config available from electronAPI:", config.backendPort);
+            logger.info("[AppInitializer] Config available from electronAPI:", config.grpcPort);
           } else {
             // Wait for postMessage from preload when config becomes ready
             await new Promise<void>((resolve) => {
               const handleMessage = (event: MessageEvent) => {
                 if (event.data?.type === 'reliant-config-ready' && event.data?.config) {
                   const config = event.data.config;
-                  if (config.backendPort) {
+                  if (config.grpcPort) {
                     window.RELIANT_CONFIG = config;
-                    logger.info("[AppInitializer] Config received via postMessage:", config.backendPort);
+                    logger.info("[AppInitializer] Config received via postMessage:", config.grpcPort);
                     window.removeEventListener("message", handleMessage);
                     resolve();
                   }

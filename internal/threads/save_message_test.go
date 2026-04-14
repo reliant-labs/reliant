@@ -690,6 +690,36 @@ func TestSaveMessage_FileReference(t *testing.T) {
 	})
 }
 
+func TestSaveMessage_PersistsCost(t *testing.T) {
+	h := newTestHelper(t)
+	defer h.Close()
+	ctx := context.Background()
+
+	thread, _ := h.createThread("thread-1", h.chatID)
+
+	result, err := h.svc.SaveMessage(ctx, SaveMessageOpts{
+		ChatID:     h.chatID,
+		Thread:     thread.ID,
+		Role:       int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT),
+		Content:    "costed message",
+		CostMicros: 78900,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	msg, err := h.repo.GetMessage(ctx, result.MessageID)
+	if err != nil {
+		t.Fatalf("failed to get saved message: %v", err)
+	}
+	if msg.CostMicros == nil {
+		t.Fatal("expected message cost micros to be persisted")
+	}
+	if *msg.CostMicros != 78900 {
+		t.Errorf("costMicros = %d, want %d", *msg.CostMicros, 78900)
+	}
+}
+
 func TestSaveMessage_MessageCount(t *testing.T) {
 	h := newTestHelper(t)
 	defer h.Close()

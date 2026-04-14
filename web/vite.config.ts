@@ -92,14 +92,15 @@ export default defineConfig({
     port: parseInt(process.env.FRONTEND_PORT || "5173"),
     strictPort: true,
     proxy: {
-      "/api": {
-        // Use HTTPS when TLS is enabled (default), HTTP when DISABLE_TLS=true
-        target: process.env.DISABLE_TLS === 'true' 
-          ? `http://127.0.0.1:${process.env.BACKEND_PORT || "8080"}`
-          : `https://127.0.0.1:${process.env.BACKEND_PORT || "8080"}`,
+      "/admin": {
+        target: `http://127.0.0.1:${parseInt(process.env.ADMIN_WEB_PORT || "3000")}`,
         changeOrigin: true,
         ws: true,
-        secure: false, // Accept self-signed certificates
+      },
+      "/admin/_next": {
+        target: `http://127.0.0.1:${parseInt(process.env.ADMIN_WEB_PORT || "3000")}`,
+        changeOrigin: true,
+        ws: true,
       },
     },
   },

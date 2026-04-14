@@ -122,6 +122,8 @@ const grpcStorage: SupportedStorage = {
         const result = await devAuthGrpc.load()
         grpcStorageAvailable = true
         if (result?.success && result?.sessionJson) {
+          // Mirror to localStorage so co-located apps (admin-web) can read the session
+          window.localStorage.setItem(key, result.sessionJson)
           return result.sessionJson
         }
         return null
@@ -142,20 +144,24 @@ const grpcStorage: SupportedStorage = {
     return grpcLoadPromise
   },
   setItem: async (key: string, value: string) => {
-    if (grpcStorageAvailable === false) { window.localStorage.setItem(key, value); return }
+    // Always mirror to localStorage so co-located apps (admin-web) can read the session
+    window.localStorage.setItem(key, value)
+    if (grpcStorageAvailable === false) { return }
     try {
       await devAuthGrpc.save(value)
     } catch (error) {
-      if (grpcStorageAvailable === null) { grpcStorageAvailable = false; window.localStorage.setItem(key, value); return }
+      if (grpcStorageAvailable === null) { grpcStorageAvailable = false; return }
       console.error('[GRPCStorage] Failed to save session:', error)
     }
   },
   removeItem: async (key: string) => {
-    if (grpcStorageAvailable === false) { window.localStorage.removeItem(key); return }
+    // Always mirror to localStorage so co-located apps (admin-web) see the clear
+    window.localStorage.removeItem(key)
+    if (grpcStorageAvailable === false) { return }
     try {
       await devAuthGrpc.clear()
     } catch (error) {
-      if (grpcStorageAvailable === null) { grpcStorageAvailable = false; window.localStorage.removeItem(key); return }
+      if (grpcStorageAvailable === null) { grpcStorageAvailable = false; return }
       console.error('[GRPCStorage] Failed to clear session:', error)
     }
   },

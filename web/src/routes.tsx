@@ -21,6 +21,9 @@ const rootRoute = createRootRoute({
 const authRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/auth',
+  validateSearch: (search: Record<string, unknown>) => ({
+    redirect: (search.redirect as string) || undefined,
+  }),
   component: () => (
     <AuthGuard requireAuth={false}>
       <AuthScreen />
