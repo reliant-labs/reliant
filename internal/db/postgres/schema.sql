@@ -146,7 +146,7 @@ CREATE TABLE messages (
     model TEXT,
     agent TEXT,
     token_count BIGINT,
-    cost_micros BIGINT,
+    cost REAL,
     workflow_id TEXT,
     run_id TEXT,
     node_id TEXT,

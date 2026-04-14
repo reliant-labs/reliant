@@ -33,3 +33,9 @@ sql:
             go_type:
               import: "database/sql"
               type: "sql.NullInt64"
+          - db_type: "REAL"
+            go_type: "float64"
+          - db_type: "REAL"
+            nullable: true
+            go_type:
+              type: "sql.NullFloat64"

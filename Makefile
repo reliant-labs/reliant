@@ -46,7 +46,7 @@ NC := \033[0m # No Color
 MINTLIFY_DOCS_DIR := docs
 MINTLIFY_PORT ?= 3000
 
-.PHONY: all build build-all clean test test-race test-coverage test-ci deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-preset generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit verify-yaml-bindings build-api-server build-temporal-worker build-tools-daemon build-services docker-build
+.PHONY: all build build-all clean test test-race test-coverage test-ci deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-preset generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit generate-yaml-bindings build-api-server build-temporal-worker build-tools-daemon build-services docker-build
 
 # Default target
 all: deps fmt vet test build
@@ -259,15 +259,14 @@ generate-all: proto-generate generate
 	@echo "$(GREEN)✅ All code generation complete$(NC)"
 
 ## generate-go: Run Go code generators only (protobuf Go + sqlc + Go reference files)
-generate-go: proto-generate-go schema-generate sqlc generate-schema generate-refcheck generate-cel-reference generate-nodes
+generate-go: proto-generate-go generate-yaml-bindings schema-generate sqlc generate-schema generate-refcheck generate-cel-reference generate-nodes
 	@echo "$(GREEN)✅ Go code generation complete$(NC)"
 
-## verify-yaml-bindings: Ensure descriptor-generated YAML bindings are up to date
-verify-yaml-bindings: proto-generate-go
-	@echo "$(YELLOW)Verifying YAML bindings are up to date...$(NC)"
+## generate-yaml-bindings: Generate YAML bindings from proto descriptors
+generate-yaml-bindings: proto-generate-go
+	@echo "$(YELLOW)Generating YAML bindings...$(NC)"
 	@$(GOCMD) generate ./internal/workflow/yaml
-	@git diff --exit-code -- internal/workflow/yaml/bindings_generated.go
-	@echo "$(GREEN)✅ YAML bindings verified$(NC)"
+	@echo "$(GREEN)✅ YAML bindings generated$(NC)"
 
 ## migration: Create a new migration file (Usage: make migration NAME=my_changes)
 migration:
@@ -318,7 +317,7 @@ WEB_SRC_DIR=web/src
 CHANGELOG_DIR=$(MINTLIFY_DOCS_DIR)/data/releases
 
 ## generate: Generate all docs and presets (run during build)
-generate: verify-yaml-bindings schema-generate sqlc generate-schema generate-scenario-schema generate-refcheck generate-cel-reference generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-models generate-presets generate-workflow-builder-preset generate-changelog generate-mintlify-reference
+generate: generate-yaml-bindings schema-generate sqlc generate-schema generate-scenario-schema generate-refcheck generate-cel-reference generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-models generate-presets generate-workflow-builder-preset generate-changelog generate-mintlify-reference
 	@echo "$(GREEN)✅ All generated files up to date$(NC)"
 
 ## generate-schema: Generate workflow schema reference from proto types

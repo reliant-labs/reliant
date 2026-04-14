@@ -42,3 +42,9 @@ sql:
           - column: "*.started_at"
             go_type:
               type: "sql.NullTime"
+          - db_type: "real"
+            go_type: "float64"
+          - db_type: "real"
+            nullable: true
+            go_type:
+              type: "sql.NullFloat64"

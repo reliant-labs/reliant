@@ -277,6 +277,9 @@ generated/
 internal/workflow/v3/reference/
 internal/workflow/v2/schema/field_descriptions.go
 
+# Generated YAML bindings (from proto descriptors)
+internal/workflow/yaml/bindings_generated.go
+
 # Generated sqlc code
 internal/db/sqlite/generated/
 

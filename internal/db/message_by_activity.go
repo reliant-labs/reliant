@@ -19,7 +19,7 @@ func (r *Repo) GetMessageByActivityID(ctx context.Context, chatID, activityID st
 	tx := r.DB.DB(ctx)
 	query := `
 		SELECT id, chat_id, ordinal, context_window_id, role,
-		       model, agent, token_count, cost_micros,
+		       model, agent, token_count, cost,
 		       workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at
 		FROM messages
 		WHERE chat_id = ? AND activity_id = ?
@@ -29,7 +29,7 @@ func (r *Repo) GetMessageByActivityID(ctx context.Context, chatID, activityID st
 	var msg Message
 	err := tx.QueryRowContext(ctx, query, chatID, activityID).Scan(
 		&msg.ID, &msg.ChatID, &msg.Ordinal, &msg.ContextWindowID, &msg.Role,
-		&msg.Model, &msg.Agent, &msg.TokenCount, &msg.CostMicros,
+		&msg.Model, &msg.Agent, &msg.TokenCount, &msg.Cost,
 		&msg.WorkflowID, &msg.RunID, &msg.NodeID, &msg.NodePath, &msg.ActivityID, &msg.CreatedAt, &msg.UpdatedAt,
 	)
 
@@ -60,7 +60,7 @@ func (r *Repo) GetMessageByWorkflowAndActivityID(ctx context.Context, chatID, wo
 	tx := r.DB.DB(ctx)
 	query := `
 		SELECT id, chat_id, ordinal, context_window_id, role,
-		       model, agent, token_count, cost_micros,
+		       model, agent, token_count, cost,
 		       workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at
 		FROM messages
 		WHERE chat_id = ? AND workflow_id = ? AND activity_id = ?
@@ -70,7 +70,7 @@ func (r *Repo) GetMessageByWorkflowAndActivityID(ctx context.Context, chatID, wo
 	var msg Message
 	err := tx.QueryRowContext(ctx, query, chatID, workflowID, activityID).Scan(
 		&msg.ID, &msg.ChatID, &msg.Ordinal, &msg.ContextWindowID, &msg.Role,
-		&msg.Model, &msg.Agent, &msg.TokenCount, &msg.CostMicros,
+		&msg.Model, &msg.Agent, &msg.TokenCount, &msg.Cost,
 		&msg.WorkflowID, &msg.RunID, &msg.NodeID, &msg.NodePath, &msg.ActivityID, &msg.CreatedAt, &msg.UpdatedAt,
 	)
 

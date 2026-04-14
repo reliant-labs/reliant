@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCalculateCostMicros(t *testing.T) {
+func TestCalculateCost(t *testing.T) {
 	client := &OpenaiClient{
 		Options: llm.DriverOptions{
 			Model: models.Model{
@@ -18,9 +18,9 @@ func TestCalculateCostMicros(t *testing.T) {
 		},
 	}
 
-	costMicros := client.calculateCostMicros(llm.TokenUsage{InputTokens: 2000, OutputTokens: 500})
-	// 2000 input @ $2/1M = $0.004 = 4000 micros
-	// 500 output @ $8/1M = $0.004 = 4000 micros
-	// Total = 8000 micros
-	assert.Equal(t, int64(8000), costMicros)
+	cost := client.calculateCost(llm.TokenUsage{InputTokens: 2000, OutputTokens: 500})
+	// 2000 input @ $2/1M = $0.004
+	// 500 output @ $8/1M = $0.004
+	// Total = $0.008
+	assert.Equal(t, 0.008, cost)
 }
