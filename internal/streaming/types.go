@@ -22,6 +22,7 @@ const (
 	DeltaTypeMessageStop       DeltaType = "message_stop"
 	DeltaTypeToolUse           DeltaType = "tool_use"
 	DeltaTypeToolCancelled     DeltaType = "tool_cancelled"
+	DeltaTypeStreamCancelled   DeltaType = "stream_cancelled"
 	DeltaTypeTokenCount        DeltaType = "token_count"
 )
 

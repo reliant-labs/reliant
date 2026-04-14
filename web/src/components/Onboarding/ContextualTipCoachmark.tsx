@@ -50,6 +50,8 @@ export function ContextualTipCoachmark({
   onConfirmShownRef.current = onConfirmShown;
   const onTargetMissingRef = useRef(onTargetMissing);
   onTargetMissingRef.current = onTargetMissing;
+  const onDismissRef = useRef(onDismiss);
+  onDismissRef.current = onDismiss;
 
   const updatePosition = useCallback(() => {
     const target = document.querySelector(targetSelector);
@@ -111,6 +113,18 @@ export function ContextualTipCoachmark({
     }
   }, [targetRect]);
 
+  // Escape key to dismiss
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        onDismissRef.current();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, []);
+
   const cutoutRect = useMemo(() => {
     if (!targetRect) return null;
     const padding = 8;
@@ -131,29 +145,36 @@ export function ContextualTipCoachmark({
 
   return createPortal(
     <div className="fixed inset-0 z-[110]">
-      <svg className="absolute inset-0 h-full w-full pointer-events-none">
-        <defs>
-          <mask id={maskIdRef.current}>
-            <rect x="0" y="0" width="100%" height="100%" fill="white" />
-            <rect
-              x={cutoutRect.x}
-              y={cutoutRect.y}
-              width={cutoutRect.width}
-              height={cutoutRect.height}
-              rx={cutoutRect.rx}
-              fill="black"
-            />
-          </mask>
-        </defs>
-        <rect
-          x="0"
-          y="0"
-          width="100%"
-          height="100%"
-          fill="rgba(0, 0, 0, 0.68)"
-          mask={`url(#${maskIdRef.current})`}
-        />
-      </svg>
+      {/* Overlay backdrop — click anywhere on the dark area to dismiss */}
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: Escape handler registered globally above */}
+      <div
+        className="absolute inset-0"
+        onClick={onDismiss}
+      >
+        <svg className="absolute inset-0 h-full w-full">
+          <defs>
+            <mask id={maskIdRef.current}>
+              <rect x="0" y="0" width="100%" height="100%" fill="white" />
+              <rect
+                x={cutoutRect.x}
+                y={cutoutRect.y}
+                width={cutoutRect.width}
+                height={cutoutRect.height}
+                rx={cutoutRect.rx}
+                fill="black"
+              />
+            </mask>
+          </defs>
+          <rect
+            x="0"
+            y="0"
+            width="100%"
+            height="100%"
+            fill="rgba(0, 0, 0, 0.68)"
+            mask={`url(#${maskIdRef.current})`}
+          />
+        </svg>
+      </div>
 
       <div
         className="absolute pointer-events-none"

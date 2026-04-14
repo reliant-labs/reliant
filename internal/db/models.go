@@ -142,6 +142,7 @@ type Yield struct {
 	LoopIteration      *int        `json:"loop_iteration,omitempty"`
 	Status             YieldStatus `json:"status"`
 	ActionTaken        *string     `json:"action_taken,omitempty"`
+	Metadata           *string     `json:"metadata,omitempty"`
 	CreatedAt          time.Time   `json:"created_at"`
 	ResolvedAt         *time.Time  `json:"resolved_at,omitempty"`
 }

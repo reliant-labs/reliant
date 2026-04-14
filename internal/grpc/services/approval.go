@@ -9,26 +9,26 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
-	"go.temporal.io/sdk/client"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/workflow"
 )
 
 // ApprovalService implements the ApprovalService RPC handlers
 type ApprovalService struct {
 	reliantv1connect.UnimplementedApprovalServiceHandler
-	database   db.Repository
-	tempClient client.Client
+	database     db.Repository
+	pauseService *workflow.PauseService
 }
 
 // NewApprovalService creates a new ApprovalService
-func NewApprovalService(database db.Repository, tempClient client.Client) *ApprovalService {
+func NewApprovalService(database db.Repository, pauseService *workflow.PauseService) *ApprovalService {
 	return &ApprovalService{
-		database:   database,
-		tempClient: tempClient,
+		database:     database,
+		pauseService: pauseService,
 	}
 }
 
@@ -170,7 +170,14 @@ func (s *ApprovalService) Approve(
 	}
 
 	// Signal the workflow
-	s.signalWorkflow(ctx, approval, "approved", "", actionTaken)
+	var actionTakenStr string
+	if actionTaken != nil {
+		actionTakenStr = *actionTaken
+	}
+	s.signalApproval(ctx, approval, map[string]interface{}{
+		"status":       "approved",
+		"action_taken": actionTakenStr,
+	})
 
 	return connect.NewResponse(&reliantv1.ApproveResponse{
 		Success: true,
@@ -259,10 +266,18 @@ func (s *ApprovalService) Deny(
 		// Don't fail the request, just log the error
 	}
 
-	// Cancel the workflow instead of signaling
-	s.cancelWorkflow(ctx, approval)
+	// Signal denial to the workflow — edge conditions handle routing
+	var actionTakenStr string
+	if actionTaken != nil {
+		actionTakenStr = *actionTaken
+	}
+	s.signalApproval(ctx, approval, map[string]interface{}{
+		"status":        "denied",
+		"denial_reason": denialReason,
+		"action_taken":  actionTakenStr,
+	})
 
-	logging.Info("Denied request and cancelled workflow", "requestID", req.Msg.RequestId, "reason", denialReason)
+	logging.Info("Denied request and signalled workflow", "requestID", req.Msg.RequestId, "reason", denialReason)
 
 	return connect.NewResponse(&reliantv1.DenyResponse{
 		Success: true,
@@ -346,7 +361,14 @@ func (s *ApprovalService) BatchApprove(
 		}
 
 		// Signal workflow
-		s.signalWorkflow(ctx, approval, "approved", "", actionTaken)
+		var actionTakenStr string
+		if actionTaken != nil {
+			actionTakenStr = *actionTaken
+		}
+		s.signalApproval(ctx, approval, map[string]interface{}{
+			"status":       "approved",
+			"action_taken": actionTakenStr,
+		})
 	}
 
 	return connect.NewResponse(&reliantv1.BatchApproveResponse{
@@ -440,8 +462,16 @@ func (s *ApprovalService) BatchDeny(
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to deny"))
 		}
 
-		// Cancel workflow (only once - they should all be same chat/workflow)
-		s.cancelWorkflow(ctx, approval)
+		// Signal denial to the workflow
+		var actionTakenStr string
+		if actionTaken != nil {
+			actionTakenStr = *actionTaken
+		}
+		s.signalApproval(ctx, approval, map[string]interface{}{
+			"status":        "denied",
+			"denial_reason": denialReason,
+			"action_taken":  actionTakenStr,
+		})
 	}
 
 	// Create denial message once for the chat (all approvals are same chat)
@@ -459,68 +489,19 @@ func (s *ApprovalService) BatchDeny(
 	}), nil
 }
 
-// signalWorkflow sends a signal to the workflow if metadata contains workflow_id and run_id
-func (s *ApprovalService) signalWorkflow(ctx context.Context, approval *db.Approval, status string, denialReason string, actionTaken *string) {
-	if approval.Metadata == nil {
+// signalApproval sends a signal to the workflow using PauseService.SignalWithRecovery
+func (s *ApprovalService) signalApproval(ctx context.Context, approval *db.Approval, signalData map[string]interface{}) {
+	if approval.TemporalWorkflowID == "" {
+		logging.Warn("[Approval] No temporal_workflow_id on approval, cannot signal", "approvalID", approval.ID)
 		return
 	}
-
-	var metadata map[string]interface{}
-	if err := json.Unmarshal([]byte(*approval.Metadata), &metadata); err != nil {
-		logging.Warn("[Approval] Failed to parse approval metadata", "approvalID", approval.ID, "error", err)
-		return
-	}
-
-	workflowID, hasWorkflowID := metadata["workflow_id"].(string)
-	runID, hasRunID := metadata["run_id"].(string)
-
-	if !hasWorkflowID || !hasRunID {
-		return
-	}
-
-	// Send signal using approval-specific signal name
-	signalName := "approval-" + approval.ID
-	signalData := map[string]interface{}{
-		"approval_id": approval.ID,
-		"status":      status,
-	}
-	if denialReason != "" {
-		signalData["denial_reason"] = denialReason
-	}
-	if actionTaken != nil {
-		signalData["action_taken"] = *actionTaken
-	}
-
-	err := s.tempClient.SignalWorkflow(ctx, workflowID, runID, signalName, signalData)
-	if err != nil {
-		logging.Error("[Approval] Failed to send signal to workflow", "error", err,
-			"workflowID", workflowID, "runID", runID, "signalName", signalName)
-	}
-}
-
-// cancelWorkflow cancels the workflow associated with the approval
-func (s *ApprovalService) cancelWorkflow(ctx context.Context, approval *db.Approval) {
-	if approval.Metadata == nil {
-		return
-	}
-
-	var metadata map[string]interface{}
-	if err := json.Unmarshal([]byte(*approval.Metadata), &metadata); err != nil {
-		logging.Warn("[Approval] Failed to parse approval metadata", "approvalID", approval.ID, "error", err)
-		return
-	}
-
-	workflowID, hasWorkflowID := metadata["workflow_id"].(string)
-	runID, hasRunID := metadata["run_id"].(string)
-
-	if !hasWorkflowID || !hasRunID {
-		return
-	}
-
-	err := s.tempClient.CancelWorkflow(ctx, workflowID, runID)
-	if err != nil {
-		logging.Error("[Approval] Failed to cancel workflow", "error", err,
-			"workflowID", workflowID, "runID", runID)
+	signalName := "signal.approval." + approval.ID
+	if err := s.pauseService.SignalWithRecovery(ctx, approval.TemporalWorkflowID, signalName, signalData); err != nil {
+		logging.Warn("[Approval] Failed to signal approval resolution",
+			"error", err,
+			"approvalID", approval.ID,
+			"temporalWorkflowID", approval.TemporalWorkflowID,
+		)
 	}
 }
 

@@ -338,6 +338,7 @@ function evictChatData(chatId: string, store: { get: () => ChatStoreState; set: 
   const newApprovals = { ...state.approvals };
   const newPendingApprovals = { ...state.pendingApprovals };
   const newPendingYields = { ...state.pendingYields };
+  const newDiscussMode = { ...state.discussMode };
   const newErrorEvents = { ...state.errorEvents };
   const newInfoEvents = { ...state.infoEvents };
   const newRunOutputs = { ...state.runOutputs };
@@ -353,6 +354,7 @@ function evictChatData(chatId: string, store: { get: () => ChatStoreState; set: 
   delete newApprovals[chatId];
   delete newPendingApprovals[chatId];
   delete newPendingYields[chatId];
+  delete newDiscussMode[chatId];
   delete newErrorEvents[chatId];
   delete newInfoEvents[chatId];
   delete newRunOutputs[chatId];
@@ -369,6 +371,7 @@ function evictChatData(chatId: string, store: { get: () => ChatStoreState; set: 
     approvals: newApprovals,
     pendingApprovals: newPendingApprovals,
     pendingYields: newPendingYields,
+    discussMode: newDiscussMode,
     errorEvents: newErrorEvents,
     infoEvents: newInfoEvents,
     runOutputs: newRunOutputs,
@@ -508,6 +511,7 @@ interface ChatStoreState {
   approvals: Record<string, ToolApprovalRequest[]>;
   pendingApprovals: Record<string, ToolApprovalRequest[]>;
   pendingYields: Record<string, YieldInfo | null>;
+  discussMode: Record<string, boolean>;
   errorEvents: Record<string, ErrorUpdate[]>; // Error events from workflow/activity failures
   infoEvents: Record<string, InfoUpdate[]>; // Info notifications (shown to user, not saved to thread)
   runOutputs: Record<string, RunOutputUpdate[]>; // Run step outputs from workflow execution
@@ -594,6 +598,7 @@ interface ChatStoreState {
       targetThread?: string | null;
       selectedPresets?: Record<string, string>;
       systemMessages?: Array<{ role: "system"; content: string }>; // System messages to prepend
+      discuss?: boolean; // If true, chat with LLM without resuming paused workflow
     },
   ) => Promise<void>;
   loadMessages: (chatId: string) => Promise<void>;
@@ -605,6 +610,7 @@ interface ChatStoreState {
   // Chat control methods
   cancelChat: (chatId: string) => Promise<void>;
   pauseChat: (chatId: string) => Promise<void>;
+  setDiscussMode: (chatId: string, enabled: boolean) => void;
   resumeChat: (chatId: string) => Promise<void>;
   forceYieldThread: (chatId: string, threadId: string) => Promise<void>;
   refreshChat: (chatId: string) => Promise<void>;
@@ -628,7 +634,7 @@ interface ChatStoreState {
     denialReason?: string,
     actionTaken?: string,
   ) => Promise<void>;
-  resolveYield: (chatId: string, yieldId: string, action: string) => Promise<void>;
+  resolveYield: (chatId: string, yieldId: string, action: string, responseData?: string) => Promise<void>;
   approveAllPending: (chatId: string, actionTaken?: string) => Promise<void>;
   denyAllPending: (
     chatId: string,
@@ -747,6 +753,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   approvals: {},
   pendingApprovals: {},
   pendingYields: {},
+  discussMode: {},
   errorEvents: {},
   infoEvents: {},
   runOutputs: {},
@@ -1158,6 +1165,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     const newApprovals = { ...state.approvals };
     const newPendingApprovals = { ...state.pendingApprovals };
     const newPendingYields = { ...state.pendingYields };
+    const newDiscussMode = { ...state.discussMode };
     const newToolCallStates = { ...state.toolCallStates };
     const newProcessedMessages = { ...state.processedMessages };
     const newErrorEvents = { ...state.errorEvents };
@@ -1173,6 +1181,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     delete newApprovals[chatId];
     delete newPendingApprovals[chatId];
     delete newPendingYields[chatId];
+    delete newDiscussMode[chatId];
     delete newToolCallStates[chatId];
     delete newProcessedMessages[chatId];
     delete newErrorEvents[chatId];
@@ -1191,6 +1200,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       approvals: newApprovals,
       pendingApprovals: newPendingApprovals,
       pendingYields: newPendingYields,
+      discussMode: newDiscussMode,
       toolCallStates: newToolCallStates,
       processedMessages: newProcessedMessages,
       errorEvents: newErrorEvents,
@@ -1473,6 +1483,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       targetThread?: string | null;
       selectedPresets?: Record<string, string>;
       systemMessages?: Array<{ role: "system"; content: string }>; // System messages to prepend
+      discuss?: boolean;
     },
   ) => {
     const state = get();
@@ -1533,6 +1544,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
       // If there's a pending yield, include its ID so the backend resolves it
       const pendingYield = get().pendingYields[chatId];
+      const isDiscuss = options?.discuss || get().discussMode[chatId];
 
       const sendOptions = {
         ...(options?.workflow !== undefined && { workflow: options.workflow }),
@@ -1548,7 +1560,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           options.systemMessages.length > 0 && {
             systemMessages: options.systemMessages,
           }),
-        ...(pendingYield && { yield_id: pendingYield.yield_id }),
+        ...(pendingYield && !isDiscuss && { yield_id: pendingYield.yield_id }),
+        ...(isDiscuss && { discuss: true }),
       };
 
       const response = await api.chatsV2.sendMessage(
@@ -2587,7 +2600,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
               denial_reason: approvalUpdate.denial_reason,
               created_at: approvalUpdate.created_at,
               responded_at: approvalUpdate.responded_at,
-              actions: approvalUpdate.actions, // Configured action buttons from workflow
               action_taken: approvalUpdate.action_taken, // Which action was clicked
             };
 
@@ -2902,6 +2914,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
                   step_id: yieldUpdate.step_id,
                   status: YieldStatus.PENDING,
                   created_at: new Date().toISOString(),
+                  metadata: yieldUpdate.metadata,
                 };
               } else if (yieldUpdate.status === "resolved") {
                 updatedPendingYield = null;
@@ -3101,6 +3114,12 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     }
   },
 
+  setDiscussMode: (chatId, enabled) => {
+    set((state) => ({
+      discussMode: { ...state.discussMode, [chatId]: enabled },
+    }));
+  },
+
   // Resume chat - resumes a paused or expired workflow
   // For paused: backend sends SignalResume to the running Temporal workflow
   // For expired: backend uses ResetWorkflowExecution to restore it
@@ -3112,13 +3131,16 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       return;
     }
 
-    // Optimistic update
+    // Optimistic update — also clear discuss mode since we're resuming
     set((state) => {
       const existing = state.chats.get(chatId);
       if (!existing) return state;
       const newChats = new Map(state.chats);
       newChats.set(chatId, { ...existing } as Chat);
-      return { chats: newChats };
+      return {
+        chats: newChats,
+        discussMode: { ...state.discussMode, [chatId]: false },
+      };
     });
 
     // Also update activityStore so sidebar dot reflects change immediately
@@ -3232,9 +3254,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   },
 
   // Resolve a pending yield (e.g., user clicks Continue)
-  resolveYield: async (chatId: string, yieldId: string, action: string) => {
+  resolveYield: async (chatId: string, yieldId: string, action: string, responseData?: string) => {
     try {
-      await yieldGrpc.resolveYield(yieldId, action);
+      await yieldGrpc.resolveYield(yieldId, action, responseData);
       // Optimistically clear pending yield (stream update will also clear it)
       const state = get();
       set({
@@ -3868,6 +3890,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       approvals: {},
       pendingApprovals: {},
       pendingYields: {},
+      discussMode: {},
       errorEvents: {},
       infoEvents: {},
       runOutputs: {},

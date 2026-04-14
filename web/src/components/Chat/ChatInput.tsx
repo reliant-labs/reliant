@@ -46,8 +46,11 @@ import { chatGrpc } from "../../api/chat-grpc";
 import { useProjectStore } from "../../store/projectStore";
 import { usePreferencesStore, DEFAULT_WORKFLOW } from "../../store/preferencesStore";
 import { useChatStore } from "../../store/chatStore";
-import { usePendingYield } from "../../store/chatStoreHooks";
+import { usePendingYield, useChat } from "../../store/chatStoreHooks";
+import { ChatWorkflowStatus } from "../../gen/reliant/v1/chat_pb";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
+import { QuestionPrompt } from "./QuestionPrompt";
+import { parseAskUserMetadata } from "./askUserUtils";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads } from "./thread-views/threadUtils";
 import { useActiveThreads } from "../../store/threadActivityStore";
 import { getInputDefault, getInputNestedInputs, getInputPresetConfig, getInputUI } from "../../lib/inputHelpers";
@@ -121,6 +124,10 @@ interface ChatInputProps {
   // Thread-specific params
   selectedThreadId?: string | null;  // Currently selected thread (null = main/all)
   workflowExecution?: WorkflowExecution;  // Root workflow execution tree
+  // Discuss mode
+  isDiscussMode?: boolean;
+  canDiscuss?: boolean;
+  onToggleDiscuss?: () => void;
 }
 
 const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
@@ -144,6 +151,9 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
       paneId,
       selectedThreadId,
       workflowExecution,
+      isDiscussMode,
+      canDiscuss,
+      onToggleDiscuss,
     },
     ref
   ) {
@@ -950,6 +960,16 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
     const pendingYield = usePendingYield(chatId || "");
     const hasPendingYield = !!pendingYield;
 
+    // Check if workflow is paused (for discuss mode button)
+    const chatForStatus = useChat(chatId || "");
+    const isPaused = chatForStatus?.workflowStatus === ChatWorkflowStatus.PAUSED;
+
+    // Parse ask_user question metadata from yield
+    const askUserQuestion = useMemo(
+      () => parseAskUserMetadata(pendingYield?.metadata),
+      [pendingYield?.metadata],
+    );
+
     // Thread color for border - non-main threads get their color
     const threadBorderColor = useMemo(() => {
       if (!selectedThreadId || !chatId || selectedThreadId === chatId) return undefined;
@@ -988,8 +1008,8 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
       }
     }, [hasPendingYield, chatId, pendingYield]);
 
-    // When a yield is pending, treat as not-streaming so the input stays enabled
-    const effectiveStreaming = hasPendingYield ? false : (forceStreaming || isStreaming);
+    // When a yield is pending or in discuss mode, treat as not-streaming so the input stays enabled
+    const effectiveStreaming = isDiscussMode ? false : (hasPendingYield ? false : (forceStreaming || isStreaming));
 
     // Allow messaging at all times - users can type while workflow is running
     const isMessagingAllowed = true;
@@ -1228,6 +1248,18 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
       await useChatStore.getState().resolveYield(chatId, pendingYield.yield_id, "continue");
     }, [chatId, pendingYield]);
 
+    // Handle ask_user question submission
+    const handleQuestionSubmit = useCallback(async (answer: { answers: Array<{ question: string; selected: string[]; freetext?: string }> }) => {
+      if (!chatId || !pendingYield) return;
+      logger.info("Question answered", { chatId, yieldId: pendingYield.yield_id, answer });
+      await useChatStore.getState().resolveYield(
+        chatId,
+        pendingYield.yield_id,
+        "reply",
+        JSON.stringify(answer)
+      );
+    }, [chatId, pendingYield]);
+
     // Handle compaction
     const [isCompacting, setIsCompacting] = useState(false);
     const canCompact =
@@ -1322,12 +1354,12 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
           <div className="max-w-[1200px] mx-auto">
             <div ref={containerRef} className="my-2">
               <div
-                className={`rounded-lg chat-input-container border-2 transition-all duration-200 cursor-text ${hasPendingYield ? "border-yellow-500/70" : threadBorderColor ? "" : "border-border/70"}`}
+                className={`rounded-lg chat-input-container border-2 transition-all duration-200 cursor-text ${isDiscussMode ? "border-blue-500/70" : hasPendingYield ? "border-yellow-500/70" : threadBorderColor ? "" : "border-border/70"}`}
                 data-onboarding="chat-input"
                 onClick={handleInputContainerClick}
                 style={{
                   padding: "4px 8px",
-                  ...(threadBorderColor && !hasPendingYield ? { borderColor: threadBorderColor } : {}),
+                  ...(threadBorderColor && !hasPendingYield && !isDiscussMode ? { borderColor: threadBorderColor } : {}),
                   backgroundColor: isDragging
                     ? "var(--chat-drag-bg, var(--transparent-button-hover))"
                     : effectiveStreaming
@@ -1378,13 +1410,33 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                     </div>
                   )}
 
-                  {/* Yield hint - shown when agent is waiting for user input */}
-                  {hasPendingYield && (
+                  {/* Discuss mode hint */}
+                  {isDiscussMode && (
                     <div className="px-3 py-1">
-                      <span className="text-[11px] text-yellow-600 dark:text-yellow-500">
-                        Reply to keep chatting, or click Continue to advance
+                      <span className="text-[11px] text-blue-600 dark:text-blue-400">
+                        Discussion mode — messages won't resume the workflow
                       </span>
                     </div>
+                  )}
+
+                  {/* Yield hint / Question prompt - shown when agent is waiting for user input */}
+                  {hasPendingYield && (
+                    askUserQuestion ? (
+                      <QuestionPrompt
+                        questions={askUserQuestion.questions.map((q: any) => ({
+                          question: q.question,
+                          options: q.options || [],
+                          allowMultiple: q.allow_multiple ?? false,
+                        }))}
+                        onSubmit={handleQuestionSubmit}
+                      />
+                    ) : (
+                      <div className="px-3 py-1">
+                        <span className="text-[11px] text-yellow-600 dark:text-yellow-500">
+                          Reply to keep chatting, or click Continue to advance
+                        </span>
+                      </div>
+                    )
                   )}
 
                   {/* Expanded Workflow Params Panel - toggled via expand button */}
@@ -1676,6 +1728,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                         disabled={disabled || !isMessagingAllowed}
                         hasPendingYield={hasPendingYield}
                         onContinueYield={handleContinueYield}
+                        isAskUser={!!askUserQuestion}
                         onAttach={handleAttachClick}
                         uploading={uploading}
                         onToggleRecentChanges={onToggleRecentChanges}
@@ -1697,6 +1750,10 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                             iconOnly={isCompact}
                           />
                         }
+                        isDiscussMode={isDiscussMode}
+                        canDiscuss={canDiscuss}
+                        onToggleDiscuss={onToggleDiscuss}
+                        isPaused={isPaused}
                         compact={isCompact}
                       />
                     </div>

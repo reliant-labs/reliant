@@ -89,6 +89,12 @@ func unmarshalWorkflow(node *yaml.Node) (*reliantv1.Workflow, error) {
 		case "ui":
 			wf.Ui, err = unmarshalWorkflowUI(val)
 
+		case "discuss":
+			var b bool
+			if err := val.Decode(&b); err == nil {
+				wf.Discuss = b
+			}
+
 		default:
 			return nil, fmt.Errorf("unknown workflow field: %q", key)
 		}
@@ -405,6 +411,11 @@ func marshalWorkflow(wf *reliantv1.Workflow) (*yaml.Node, error) {
 			edgesNode.Content = append(edgesNode.Content, en)
 		}
 		m.Content = append(m.Content, scalarNode("edges", ""), edgesNode)
+	}
+
+	// discuss
+	if wf.Discuss {
+		m.Content = append(m.Content, scalarNode("discuss", ""), &yaml.Node{Kind: yaml.ScalarNode, Value: "true", Tag: "!!bool"})
 	}
 
 	// ui

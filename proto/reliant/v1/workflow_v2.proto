@@ -1061,4 +1061,7 @@ message Workflow {
   repeated string entry = 9;
   // APIVersion specifies the schema version. Optional, for future compatibility.
   string api_version = 10;
+  // Discuss enables a lightweight discussion mode when the workflow is paused.
+  // When true, users can chat with the LLM without resuming workflow execution.
+  bool discuss = 11;
 }

@@ -169,7 +169,7 @@ nodes:
               {{inputs.mode == 'plan' && inputs.planning_prompt != '' ? (inputs.system_prompt != '' ? inputs.system_prompt + "\n\n" : '') + inputs.planning_prompt : inputs.system_prompt}}
             permission: "{{inputs.permission}}"
             # Plan mode gets plan-tagged tools only; spawn no-op when presets empty
-            tool_filter: "{{inputs.mode == 'plan' ? ['tag:plan'] : inputs.tools + [spawn(workflow.name, inputs.spawn_presets)]}}"
+            tool_filter: "{{inputs.mode == 'plan' ? ['tag:plan'] : inputs.tools + [spawn(workflow.name, inputs.spawn_presets), inputs.yield ? 'ask_user' : '']}}"
 
         - id: approval
           type: approval

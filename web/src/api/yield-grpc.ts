@@ -17,15 +17,17 @@ export interface YieldInfo {
   step_id: string;
   status: YieldStatus;
   created_at: string;
+  metadata?: string;
 }
 
 export const yieldGrpc = {
   async resolveYield(
     yieldId: string,
     action: string,
+    responseData?: string,
   ): Promise<{ success: boolean }> {
     const client = grpcClient.yield();
-    const request = create(ResolveYieldRequestSchema, { yieldId, action });
+    const request = create(ResolveYieldRequestSchema, { yieldId, action, responseData });
     const response = await client.resolveYield(request);
     return { success: response.success };
   },
@@ -42,6 +44,7 @@ export const yieldGrpc = {
       step_id: response.yield.stepId,
       status: response.yield.status,
       created_at: response.yield.createdAt,
+      metadata: response.yield.metadata ?? undefined,
     };
   },
 };

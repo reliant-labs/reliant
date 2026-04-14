@@ -72,6 +72,11 @@ interface ChatPresenterProps {
 
   // Workflow execution sidebar
   workflowExecution?: WorkflowExecution;
+
+  // Discuss mode
+  isDiscussMode?: boolean;
+  canDiscuss?: boolean;
+  onToggleDiscuss?: () => void;
 }
 
 export const ChatPresenter = memo(function ChatPresenter({
@@ -97,6 +102,9 @@ export const ChatPresenter = memo(function ChatPresenter({
   isRecentChangesOpen,
   onToggleRecentChanges,
   workflowExecution,
+  isDiscussMode,
+  canDiscuss,
+  onToggleDiscuss,
 }: ChatPresenterProps) {
   const chatInputRef = useRef<HTMLDivElement>(null);
 
@@ -516,6 +524,9 @@ export const ChatPresenter = memo(function ChatPresenter({
               paneId={paneId}
               selectedThreadId={selectedThreadId}
               workflowExecution={workflowExecution}
+              isDiscussMode={isDiscussMode}
+              canDiscuss={canDiscuss}
+              onToggleDiscuss={onToggleDiscuss}
             />
           </div>
         ) : !(isWorkflowViewerExpanded && workflowViewerMode === 'inline') ? (

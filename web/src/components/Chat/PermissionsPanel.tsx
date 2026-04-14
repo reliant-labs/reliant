@@ -33,16 +33,15 @@ export function PermissionsPanel({ chatId: propsChatId }: PermissionsPanelProps 
   );
   const pendingApprovals = useChatStore(pendingApprovalsSelector);
 
-  const handleApprove = useCallback((actionTaken?: string) => {
+  const handleApprove = useCallback(() => {
     if (chatId) {
-      approveAllPending(chatId, actionTaken);
+      approveAllPending(chatId);
     }
   }, [chatId, approveAllPending]);
 
-  const handleDeny = useCallback((actionTaken?: string) => {
+  const handleDeny = useCallback(() => {
     if (chatId) {
-      // No reason required - backend will use default message
-      denyAllPending(chatId, undefined, actionTaken);
+      denyAllPending(chatId);
     }
   }, [chatId, denyAllPending]);
 
@@ -63,7 +62,6 @@ export function PermissionsPanel({ chatId: propsChatId }: PermissionsPanelProps 
       </div>
 
       <ApprovalActions
-        pendingApprovals={pendingApprovals}
         onApprove={handleApprove}
         onDeny={handleDeny}
         shortcutKey={shortcutKey}

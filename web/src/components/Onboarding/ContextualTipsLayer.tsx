@@ -6,6 +6,7 @@ import { ContextualTipCoachmark } from "./ContextualTipCoachmark";
 
 export function ContextualTipsLayer() {
   const isInitialized = useContextualTipsStore((state) => state.isInitialized);
+  const loadFailed = useContextualTipsStore((state) => state.loadFailed);
   const activeTipId = useContextualTipsStore((state) => state.activeTipId);
   const loadState = useContextualTipsStore((state) => state.loadState);
   const reevaluate = useContextualTipsStore((state) => state.reevaluate);
@@ -39,7 +40,7 @@ export function ContextualTipsLayer() {
     return CONTEXTUAL_TIP_DEFINITIONS.find((tip) => tip.id === activeTipId) ?? null;
   }, [activeTipId]);
 
-  if (!onboardingReady || !onboardingComplete || isWizardActive || !activeTip) {
+  if (!onboardingReady || !onboardingComplete || isWizardActive || loadFailed || !activeTip) {
     return null;
   }
 

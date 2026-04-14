@@ -1958,19 +1958,23 @@ func buildWorkflowContext(
 	return context
 }
 
-// toolCallSplit holds the result of splitting tool calls into regular and spawn calls
+// toolCallSplit holds the result of splitting tool calls into regular, spawn, and ask_user calls
 type protoToolCallSplit struct {
 	regularToolCalls []*reliantv1.ToolCallMsg
 	spawnToolCalls   []*reliantv1.ToolCallMsg
+	askUserToolCalls []*reliantv1.ToolCallMsg
 }
 
-// splitProtoToolCalls separates proto tool calls into regular tools and spawn tools.
+// splitProtoToolCalls separates proto tool calls into regular tools, spawn tools, and ask_user tools.
 func splitProtoToolCalls(toolCalls []*reliantv1.ToolCallMsg) protoToolCallSplit {
 	var result protoToolCallSplit
 	for _, tc := range toolCalls {
-		if tc.GetName() == "spawn" {
+		switch tc.GetName() {
+		case "spawn":
 			result.spawnToolCalls = append(result.spawnToolCalls, tc)
-		} else {
+		case "ask_user":
+			result.askUserToolCalls = append(result.askUserToolCalls, tc)
+		default:
 			result.regularToolCalls = append(result.regularToolCalls, tc)
 		}
 	}
@@ -2598,7 +2602,7 @@ func executeToolsWithSpawnSupport(
 	}
 
 	// OPTIMIZATION: If only regular tools, return directly to avoid goroutine wrapper
-	if len(split.spawnToolCalls) == 0 && regularToolsFuture != nil {
+	if len(split.spawnToolCalls) == 0 && len(split.askUserToolCalls) == 0 && regularToolsFuture != nil {
 		return regularToolsFuture
 	}
 
@@ -2619,8 +2623,10 @@ func executeToolsWithSpawnSupport(
 		spawnConfigs = append(spawnConfigs, config)
 	}
 
-	// Create a future that runs all spawns inline (possibly in parallel) and combines results
+	// Create a future that runs all spawns + ask_user inline and combines results
 	resultFuture, resultSettable := workflow.NewFuture(ctx)
+
+	askUserCalls := split.askUserToolCalls // capture for closure
 
 	workflow.Go(ctx, func(gCtx workflow.Context) {
 		var combinedResults []interface{}
@@ -2664,6 +2670,12 @@ func executeToolsWithSpawnSupport(
 				resultCh.Receive(gCtx, &result)
 				combinedResults = append(combinedResults, result.toToolResult())
 			}
+		}
+
+		// Execute ask_user calls inline (sequentially — each one pauses for user input)
+		for _, askTC := range askUserCalls {
+			result := executeAskUserInline(gCtx, askTC, rtx.ChatID, rtx.WorkflowID, rtx.Thread, rtx.StepID, rtx.LoopNodeID, rtx.LoopIteration)
+			combinedResults = append(combinedResults, result)
 		}
 
 		// Return in ExecuteToolsOutput format
@@ -2723,6 +2735,209 @@ func buildFinalToolResult(combinedResults []interface{}, messageOutput map[strin
 	}
 
 	return finalResult
+}
+
+// executeAskUserInline handles an ask_user tool call by creating a yield with question metadata
+// and waiting for the user's response via a Temporal signal. Returns a tool result map.
+func executeAskUserInline(
+	ctx workflow.Context,
+	toolCall *reliantv1.ToolCallMsg,
+	chatID, workflowID, threadID, stepID, loopNodeID string,
+	loopIteration int,
+) interface{} {
+	logger := workflow.GetLogger(ctx)
+	toolCallID := toolCall.GetId()
+
+	logger.Info("[AskUser] Handling ask_user tool call",
+		"toolCallID", toolCallID,
+		"chatID", chatID,
+	)
+
+	// Build yield metadata with the question data + tool_call_id for tracking
+	rawInput := toolCall.GetInput()
+	if rawInput == "" {
+		return map[string]interface{}{
+			"tool_call_id": toolCallID,
+			"content":      "ask_user failed: no question data provided",
+			"is_error":     true,
+		}
+	}
+
+	// Unwrap metadata envelope if present (same as parseSpawnToolCall)
+	var envelope map[string]interface{}
+	if err := json.Unmarshal([]byte(rawInput), &envelope); err != nil {
+		return map[string]interface{}{
+			"tool_call_id": toolCallID,
+			"content":      fmt.Sprintf("ask_user failed: invalid JSON input: %v", err),
+			"is_error":     true,
+		}
+	}
+	if _, hasMeta := envelope["__reliant_tool_meta__"]; hasMeta {
+		if innerInput, ok := envelope["input"].(string); ok {
+			rawInput = innerInput
+		}
+	}
+
+	// Parse the actual input and add type marker so the frontend knows this yield is an ask_user question
+	var parsedInput map[string]interface{}
+	if err := json.Unmarshal([]byte(rawInput), &parsedInput); err != nil {
+		return map[string]interface{}{
+			"tool_call_id": toolCallID,
+			"content":      fmt.Sprintf("ask_user failed: invalid JSON input: %v", err),
+			"is_error":     true,
+		}
+	}
+	parsedInput["type"] = "ask_user"
+	parsedInput["tool_call_id"] = toolCallID
+	envelopeBytes, _ := json.Marshal(parsedInput)
+	metadataStr := string(envelopeBytes)
+
+	// Get the Temporal workflow execution ID for signal routing
+	temporalWorkflowID := workflow.GetInfo(ctx).WorkflowExecution.ID
+
+	// STEP 1: Create yield record via YieldCreate activity
+	createCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 30 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts: 3,
+		},
+	})
+
+	yieldInput := map[string]interface{}{
+		"chat_id":              chatID,
+		"workflow_id":          workflowID,
+		"temporal_workflow_id": temporalWorkflowID,
+		"thread_id":            threadID,
+		"step_id":              stepID,
+		"loop_node_id":         loopNodeID,
+		"loop_iteration":       loopIteration,
+		"metadata":             metadataStr,
+		"tool_call_id":         toolCallID,
+	}
+
+	var createOutput struct {
+		YieldID         string `json:"yield_id"`
+		AlreadyResolved bool   `json:"already_resolved"`
+		ActionTaken     string `json:"action_taken"`
+	}
+	if err := workflow.ExecuteActivity(createCtx, "YieldCreate", yieldInput).Get(ctx, &createOutput); err != nil {
+		logger.Error("[AskUser] YieldCreate failed", "error", err, "toolCallID", toolCallID)
+		return map[string]interface{}{
+			"tool_call_id": toolCallID,
+			"content":      fmt.Sprintf("ask_user failed: could not create yield: %v", err),
+			"is_error":     true,
+		}
+	}
+
+	// STEP 2: If already resolved (Temporal replay), return the cached answer
+	if createOutput.AlreadyResolved {
+		logger.Info("[AskUser] Yield already resolved (replay)", "yieldID", createOutput.YieldID)
+		return map[string]interface{}{
+			"tool_call_id": toolCallID,
+			"content":      formatAskUserResponse(createOutput.ActionTaken, ""),
+		}
+	}
+
+	// STEP 3: Wait for signal (user's answer) or timeout
+	const askUserTimeout = 24 * time.Hour
+	signalName := "signal.yield." + createOutput.YieldID
+	signalCh := workflow.GetSignalChannel(ctx, signalName)
+
+	timeoutCtx, cancelTimer := workflow.WithCancel(ctx)
+	timeoutFuture := workflow.NewTimer(timeoutCtx, askUserTimeout)
+
+	selector := workflow.NewSelector(ctx)
+
+	var action, responseData string
+
+	selector.AddReceive(signalCh, func(ch workflow.ReceiveChannel, more bool) {
+		var signalData map[string]interface{}
+		ch.Receive(ctx, &signalData)
+		if a, ok := signalData["action"].(string); ok {
+			action = a
+		}
+		if rd, ok := signalData["response_data"].(string); ok {
+			responseData = rd
+		}
+		cancelTimer()
+	})
+
+	selector.AddFuture(timeoutFuture, func(f workflow.Future) {
+		action = "timeout"
+	})
+
+	selector.Select(ctx)
+
+	// STEP 4: Handle timeout
+	if action == "timeout" {
+		resolveCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			StartToCloseTimeout: 30 * time.Second,
+			RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 3},
+		})
+		var resolveOutput map[string]interface{}
+		_ = workflow.ExecuteActivity(resolveCtx, "YieldResolve", map[string]interface{}{
+			"yield_id": createOutput.YieldID,
+			"action":   "timeout",
+		}).Get(ctx, &resolveOutput)
+
+		return map[string]interface{}{
+			"tool_call_id": toolCallID,
+			"content":      "The user did not respond to the question within the timeout period.",
+			"is_error":     true,
+		}
+	}
+
+	logger.Info("[AskUser] User responded",
+		"yieldID", createOutput.YieldID,
+		"action", action,
+		"hasResponseData", responseData != "",
+	)
+
+	return map[string]interface{}{
+		"tool_call_id": toolCallID,
+		"content":      formatAskUserResponse(action, responseData),
+	}
+}
+
+// formatAskUserResponse formats the user's answer into a readable tool result for the LLM.
+func formatAskUserResponse(action, responseData string) string {
+	if responseData != "" {
+		// Try multi-question format first
+		var answers struct {
+			Answers []struct {
+				Question string   `json:"question"`
+				Selected []string `json:"selected"`
+				Freetext string   `json:"freetext"`
+			} `json:"answers"`
+		}
+		if err := json.Unmarshal([]byte(responseData), &answers); err == nil && len(answers.Answers) > 0 {
+			var parts []string
+			for _, a := range answers.Answers {
+				var answerParts []string
+				if len(a.Selected) > 0 {
+					answerParts = append(answerParts, strings.Join(a.Selected, ", "))
+				}
+				if a.Freetext != "" {
+					answerParts = append(answerParts, fmt.Sprintf("(note: %s)", a.Freetext))
+				}
+				if len(answerParts) > 0 {
+					parts = append(parts, fmt.Sprintf("Q: %s\nA: %s", a.Question, strings.Join(answerParts, " ")))
+				}
+			}
+			if len(parts) > 0 {
+				return strings.Join(parts, "\n\n")
+			}
+		}
+		// Fallback: return raw response data
+		return responseData
+	}
+
+	// Fallback: the user typed a reply message (action="reply" without structured data)
+	if action == "reply" {
+		return "The user replied via chat message. Check the conversation for their response."
+	}
+
+	return "The user continued without providing a specific answer."
 }
 
 // waitForStepCompletions waits for at least one step to complete using Selector

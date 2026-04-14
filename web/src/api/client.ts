@@ -20,7 +20,7 @@ export type { Chat, Message, ContentBlock, Attachment } from "../types/chat";
 export { ChatState } from "../types/chat";
 
 // Re-export approval types from canonical source
-export type { ApprovalActionConfig, ToolApprovalRequest } from "./approval-grpc";
+export type { ToolApprovalRequest } from "./approval-grpc";
 
 export const api = {
   workflows: {
@@ -229,6 +229,7 @@ export const api = {
         selected_presets?: Record<string, string>;
         systemMessages?: Array<{ content: string }>; // Optional system messages to prepend
         yield_id?: string; // If set, resolves a pending yield
+        discuss?: boolean; // If true, chat with LLM without resuming paused workflow
       }
     ) => {
       // Build messages array: system messages first, then user message
@@ -252,6 +253,7 @@ export const api = {
         target_thread: options?.target_thread,
         selected_presets: options?.selected_presets,
         yield_id: options?.yield_id,
+        discuss: options?.discuss,
       });
       // Return workflow metadata for state updates
       return {

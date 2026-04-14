@@ -790,11 +790,6 @@ func (r *Repo) UpdateApprovalStatus(ctx context.Context, id string, status int32
 	return r.emitChatActivityIfChanged(ctx, approval.ChatID)
 }
 
-// DeleteApproval deletes an approval by ID
-func (r *Repo) DeleteApproval(ctx context.Context, id string) error {
-	return r.approvals.DeleteApproval(ctx, id)
-}
-
 // ==================== Stub implementations for remaining Repository methods ====================
 
 // These will be implemented as needed - returning clear errors for now
@@ -3546,14 +3541,14 @@ func (r *Repo) CreateYield(ctx context.Context, yield *Yield) error {
 		return fmt.Errorf("yield ID cannot be empty")
 	}
 
-	query := `INSERT INTO yields (id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, action_taken, created_at, resolved_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	query := `INSERT INTO yields (id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, action_taken, metadata, created_at, resolved_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	query = r.bindQuery(query)
 
 	_, err := r.DB.ExecContext(ctx, query,
 		yield.ID, yield.ChatID, yield.WorkflowID, yield.TemporalWorkflowID, yield.ThreadID, yield.StepID,
 		yield.LoopNodeID, yield.LoopIteration,
-		yield.Status, yield.ActionTaken,
+		yield.Status, yield.ActionTaken, yield.Metadata,
 		yield.CreatedAt, yield.ResolvedAt,
 	)
 	if err != nil {
@@ -3573,14 +3568,15 @@ func (r *Repo) GetYieldByID(ctx context.Context, id string) (*Yield, error) {
 	var loopNodeID sql.NullString
 	var loopIteration sql.NullInt64
 	var actionTaken sql.NullString
+	var metadata sql.NullString
 	var resolvedAt sql.NullTime
 
-	query := `SELECT id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, action_taken, created_at, resolved_at
+	query := `SELECT id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, action_taken, metadata, created_at, resolved_at
 		 FROM yields WHERE id = ?`
 	query = r.bindQuery(query)
 
 	err := r.DB.QueryRowContext(ctx, query, id).Scan(&y.ID, &y.ChatID, &y.WorkflowID, &y.TemporalWorkflowID, &y.ThreadID, &y.StepID,
-		&loopNodeID, &loopIteration, &y.Status, &actionTaken,
+		&loopNodeID, &loopIteration, &y.Status, &actionTaken, &metadata,
 		&y.CreatedAt, &resolvedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -3599,6 +3595,9 @@ func (r *Repo) GetYieldByID(ctx context.Context, id string) (*Yield, error) {
 	if actionTaken.Valid {
 		y.ActionTaken = &actionTaken.String
 	}
+	if metadata.Valid {
+		y.Metadata = &metadata.String
+	}
 	if resolvedAt.Valid {
 		y.ResolvedAt = &resolvedAt.Time
 	}
@@ -3616,15 +3615,16 @@ func (r *Repo) GetPendingYieldByChatID(ctx context.Context, chatID string) (*Yie
 	var loopNodeID sql.NullString
 	var loopIteration sql.NullInt64
 	var actionTaken sql.NullString
+	var metadata sql.NullString
 	var resolvedAt sql.NullTime
 
-	query := `SELECT id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, action_taken, created_at, resolved_at
+	query := `SELECT id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, action_taken, metadata, created_at, resolved_at
 		 FROM yields WHERE chat_id = ? AND status = ?
 		 ORDER BY created_at DESC LIMIT 1`
 	query = r.bindQuery(query)
 
 	err := r.DB.QueryRowContext(ctx, query, chatID, YieldStatusPending).Scan(&y.ID, &y.ChatID, &y.WorkflowID, &y.TemporalWorkflowID, &y.ThreadID, &y.StepID,
-		&loopNodeID, &loopIteration, &y.Status, &actionTaken,
+		&loopNodeID, &loopIteration, &y.Status, &actionTaken, &metadata,
 		&y.CreatedAt, &resolvedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -3643,6 +3643,9 @@ func (r *Repo) GetPendingYieldByChatID(ctx context.Context, chatID string) (*Yie
 	if actionTaken.Valid {
 		y.ActionTaken = &actionTaken.String
 	}
+	if metadata.Valid {
+		y.Metadata = &metadata.String
+	}
 	if resolvedAt.Valid {
 		y.ResolvedAt = &resolvedAt.Time
 	}
@@ -3656,7 +3659,7 @@ func (r *Repo) GetPendingYieldsByWorkflow(ctx context.Context, workflowID string
 		return nil, fmt.Errorf("workflow ID cannot be empty")
 	}
 
-	query := `SELECT id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, action_taken, created_at, resolved_at
+	query := `SELECT id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, action_taken, metadata, created_at, resolved_at
 		 FROM yields WHERE workflow_id = ? AND status = ?`
 	query = r.bindQuery(query)
 
@@ -3672,10 +3675,11 @@ func (r *Repo) GetPendingYieldsByWorkflow(ctx context.Context, workflowID string
 		var loopNodeID sql.NullString
 		var loopIteration sql.NullInt64
 		var actionTaken sql.NullString
+		var metadata sql.NullString
 		var resolvedAt sql.NullTime
 
 		if err := rows.Scan(&y.ID, &y.ChatID, &y.WorkflowID, &y.TemporalWorkflowID, &y.ThreadID, &y.StepID,
-			&loopNodeID, &loopIteration, &y.Status, &actionTaken,
+			&loopNodeID, &loopIteration, &y.Status, &actionTaken, &metadata,
 			&y.CreatedAt, &resolvedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan yield: %w", err)
 		}
@@ -3689,6 +3693,9 @@ func (r *Repo) GetPendingYieldsByWorkflow(ctx context.Context, workflowID string
 		}
 		if actionTaken.Valid {
 			y.ActionTaken = &actionTaken.String
+		}
+		if metadata.Valid {
+			y.Metadata = &metadata.String
 		}
 		if resolvedAt.Valid {
 			y.ResolvedAt = &resolvedAt.Time
@@ -3713,7 +3720,7 @@ func (r *Repo) GetYieldsByWorkflowStepIteration(ctx context.Context, workflowID,
 	}
 
 	rows, err := r.DB.QueryContext(ctx,
-		`SELECT id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, action_taken, created_at, resolved_at
+		`SELECT id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, action_taken, metadata, created_at, resolved_at
 		 FROM yields WHERE workflow_id = ? AND step_id = ? AND loop_iteration = ?
 		 ORDER BY created_at DESC`, workflowID, stepID, loopIteration)
 	if err != nil {
@@ -3727,10 +3734,11 @@ func (r *Repo) GetYieldsByWorkflowStepIteration(ctx context.Context, workflowID,
 		var loopNodeID sql.NullString
 		var loopIter sql.NullInt64
 		var actionTaken sql.NullString
+		var metadata sql.NullString
 		var resolvedAt sql.NullTime
 
 		if err := rows.Scan(&y.ID, &y.ChatID, &y.WorkflowID, &y.TemporalWorkflowID, &y.ThreadID, &y.StepID,
-			&loopNodeID, &loopIter, &y.Status, &actionTaken,
+			&loopNodeID, &loopIter, &y.Status, &actionTaken, &metadata,
 			&y.CreatedAt, &resolvedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan yield: %w", err)
 		}
@@ -3744,6 +3752,9 @@ func (r *Repo) GetYieldsByWorkflowStepIteration(ctx context.Context, workflowID,
 		}
 		if actionTaken.Valid {
 			y.ActionTaken = &actionTaken.String
+		}
+		if metadata.Valid {
+			y.Metadata = &metadata.String
 		}
 		if resolvedAt.Valid {
 			y.ResolvedAt = &resolvedAt.Time

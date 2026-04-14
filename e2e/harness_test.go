@@ -243,6 +243,7 @@ func NewTestHarness(t *testing.T) *TestHarness {
 		server.Client(),
 		server.PauseService(),
 		server.SharedTaskQueueName(),
+		nil, // no streaming hub in e2e tests
 	)
 
 	// Initialize YieldService with real production code
