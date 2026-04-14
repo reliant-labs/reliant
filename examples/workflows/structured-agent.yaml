@@ -78,10 +78,10 @@ inputs:
 
   max_turns:
     type: integer
-    default: 200
-    min: 1
+    default: 0
+    min: 0
     max: 500
-    description: Maximum agent loop iterations
+    description: Maximum agent loop iterations (0 = unlimited)
   compaction_threshold:
     type: integer
     default: 185000
@@ -103,9 +103,9 @@ outputs:
 nodes:
   - id: agent_loop
     type: loop
-    # Continue while response tool not called AND under max turns
-    while: outputs.completed != true && iter.iteration < inputs.max_turns
-    yield: "{{inputs.yield || iter.iteration >= inputs.max_turns}}"
+    # Continue while response tool not called. Max turns handled via yield condition.
+    while: outputs.completed != true
+    yield: "{{inputs.yield || (inputs.max_turns > 0 && iter.iteration >= inputs.max_turns)}}"
     inline:
       entry: [call_llm]
 
@@ -239,7 +239,7 @@ edges:
   - from: agent_loop
     cases:
       - to: max_turns_notification
-        condition: nodes.agent_loop._iterations >= inputs.max_turns
+        condition: inputs.max_turns > 0 && nodes.agent_loop._iterations >= inputs.max_turns
         label: "max_turns_reached"
 
 ui:
