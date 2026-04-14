@@ -38,3 +38,11 @@ func Int64IfPositive(i int64) *int64 {
 	}
 	return nil
 }
+
+// Float64IfPositive returns a pointer to f if f > 0, otherwise nil.
+func Float64IfPositive(f float64) *float64 {
+	if f > 0 {
+		return &f
+	}
+	return nil
+}

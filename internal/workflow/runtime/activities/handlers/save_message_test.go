@@ -607,11 +607,11 @@ func TestSaveAssistantMessageWithTokens(t *testing.T) {
 
 	t.Run("Stores provider cost for assistant message", func(t *testing.T) {
 		input := SaveMessageInput{
-			ChatID:     chatID,
-			Thread:     "0",
-			Role:       "assistant",
-			Content:    "Response with provider cost",
-			CostMicros: 34500,
+			ChatID:  chatID,
+			Thread:  "0",
+			Role:    "assistant",
+			Content: "Response with provider cost",
+			Cost:    0.0345,
 		}
 
 		var output SaveMessageOutput
@@ -621,8 +621,8 @@ func TestSaveAssistantMessageWithTokens(t *testing.T) {
 		msg, err := h.Repo().GetMessage(ctx, output.MessageId)
 		require.NoError(t, err)
 
-		require.NotNil(t, msg.CostMicros, "CostMicros should be set")
-		assert.Equal(t, int64(34500), *msg.CostMicros)
+		require.NotNil(t, msg.Cost, "Cost should be set")
+		assert.Equal(t, 0.0345, *msg.Cost)
 	})
 
 	t.Run("Stores token count for all message types", func(t *testing.T) {

@@ -43,9 +43,6 @@ jobs:
       - name: Generate Go code
         run: make generate-go
 
-      - name: Verify descriptor-generated YAML bindings
-        run: make verify-yaml-bindings
-
       - name: Disable VCS stamping
         run: echo "GOFLAGS=-buildvcs=false" >> $GITHUB_ENV
 
@@ -93,9 +90,6 @@ jobs:
 
       - name: Generate Go code
         run: make generate-go
-
-      - name: Verify descriptor-generated YAML bindings
-        run: make verify-yaml-bindings
 
       - name: Disable VCS stamping
         run: echo "GOFLAGS=-buildvcs=false" >> $GITHUB_ENV

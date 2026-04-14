@@ -92,14 +92,14 @@ func TestHandleComplete_ExtractsToolCalls(t *testing.T) {
 				Content: "Done.",
 				Usage: llm.TokenUsage{
 					TokenCount: 42,
-					CostMicros: 12300,
+					Cost:       0.0123,
 				},
 			},
 		}
 
 		err := activity.processStreamEvent(context.TODO(), "chat-1", "thread-0", event, state)
 		require.NoError(t, err)
-		assert.Equal(t, int64(12300), state.costMicros)
+		assert.Equal(t, 0.0123, state.cost)
 	})
 
 	t.Run("extracts multiple tool calls from response", func(t *testing.T) {
@@ -237,7 +237,7 @@ func TestCallLLMOutput_ToolCallsSurviveSerialization(t *testing.T) {
 		ResponseText: "Let me run those.",
 		ToolCalls:    toolCalls,
 		TokenCount:   250,
-		CostMicros:   45600,
+		Cost:         0.0456,
 		Message: &MessageOutput{
 			Role: "assistant",
 			Text: "Let me run those.",
@@ -285,7 +285,7 @@ func TestCallLLMOutput_ToolCallsSurviveSerialization(t *testing.T) {
 	assert.Equal(t, "Bash", typedOutput.ToolCalls[0].GetName())
 	assert.Equal(t, "toolu_def456", typedOutput.ToolCalls[1].GetId())
 	assert.Equal(t, "View", typedOutput.ToolCalls[1].GetName())
-	assert.Equal(t, int64(45600), typedOutput.CostMicros)
+	assert.Equal(t, 0.0456, typedOutput.Cost)
 }
 
 func TestCallLLMOutput_ToolCallsNotEmbeddedInText(t *testing.T) {
