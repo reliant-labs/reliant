@@ -69,11 +69,11 @@ export const useShortcutsStore = create<ShortcutsState>()((set, get) => ({
         // Wait for RELIANT_CONFIG to be available (max 5 seconds)
         const maxWaitTime = 5000;
         const startTime = Date.now();
-        while (!window.RELIANT_CONFIG?.backendUrl && (Date.now() - startTime) < maxWaitTime) {
+        while (!window.RELIANT_CONFIG?.grpcUrl && (Date.now() - startTime) < maxWaitTime) {
           await new Promise(resolve => setTimeout(resolve, 100));
         }
 
-        if (!window.RELIANT_CONFIG?.backendUrl) {
+        if (!window.RELIANT_CONFIG?.grpcUrl) {
           logger.warn('Backend config not available after waiting, using defaults');
           throw new Error('Backend config not ready');
         }

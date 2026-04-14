@@ -4,7 +4,7 @@ INSERT INTO messages (
     id, chat_id, ordinal, thread_id, context_window_id,
     node_id, node_path,
     role, display_style, model, agent,
-    token_count, cost,
+    token_count, cost_micros,
     workflow_id, run_id, activity_id, created_at, updated_at
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
@@ -19,7 +19,7 @@ ORDER BY ordinal ASC;
 -- name: UpdateMessage :exec
 UPDATE messages SET
     token_count = ?,
-    cost = ?,
+    cost_micros = ?,
     updated_at = datetime('now', 'utc')
 WHERE id = ?;
 
@@ -34,7 +34,7 @@ INSERT OR IGNORE INTO messages (
     id, chat_id, ordinal, thread_id, context_window_id,
     node_id, node_path,
     role, display_style, model, agent,
-    token_count, cost,
+    token_count, cost_micros,
     workflow_id, run_id, activity_id, created_at, updated_at
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 

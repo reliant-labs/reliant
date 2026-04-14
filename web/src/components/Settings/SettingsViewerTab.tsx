@@ -139,9 +139,9 @@ export function SettingsViewerTab({ initialSection }: SettingsViewerTabProps) {
     if (
       typeof window !== "undefined" &&
       window.RELIANT_CONFIG?.isElectron &&
-      window.RELIANT_CONFIG?.backendUrl
+      window.RELIANT_CONFIG?.grpcUrl
     ) {
-      return window.RELIANT_CONFIG.backendUrl;
+      return window.RELIANT_CONFIG.grpcUrl;
     }
     return "";
   };

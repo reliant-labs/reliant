@@ -302,7 +302,6 @@ async function main() {
     process.env.NODE_ENV = 'development';
     process.env.FRONTEND_PORT = FRONTEND_PORT;
     process.env.BACKEND_PORT = BACKEND_PORT;
-    process.env.API_PORT = BACKEND_PORT;
     process.env.GRPC_PORT = GRPC_PORT;
     process.env.TOOLS_DAEMON_PORT = TOOLS_DAEMON_PORT;
     process.env.TEMPORAL_FRONTEND_PORT = TEMPORAL_FRONTEND_PORT.toString();
@@ -310,7 +309,7 @@ async function main() {
     process.env.USE_DEV_SERVER = 'true';
 
     // Write ports to file
-    const portsContent = `export FRONTEND_PORT=${FRONTEND_PORT}\nexport BACKEND_PORT=${BACKEND_PORT}\nexport API_PORT=${BACKEND_PORT}\nexport GRPC_PORT=${GRPC_PORT}\nexport TOOLS_DAEMON_PORT=${TOOLS_DAEMON_PORT}\nexport TEMPORAL_FRONTEND_PORT=${TEMPORAL_FRONTEND_PORT}\nexport TEMPORAL_UI_PORT=${TEMPORAL_UI_PORT}\n`;
+    const portsContent = `export FRONTEND_PORT=${FRONTEND_PORT}\nexport BACKEND_PORT=${BACKEND_PORT}\nexport GRPC_PORT=${GRPC_PORT}\nexport TOOLS_DAEMON_PORT=${TOOLS_DAEMON_PORT}\nexport TEMPORAL_FRONTEND_PORT=${TEMPORAL_FRONTEND_PORT}\nexport TEMPORAL_UI_PORT=${TEMPORAL_UI_PORT}\n`;
     fs.writeFileSync(path.join(PROJECT_ROOT, '.env.ports'), portsContent);
 
     // Start Temporal UI if running V2 backend

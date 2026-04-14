@@ -14,6 +14,8 @@ const (
 	TypeImage AttachmentType = "image"
 	// TypeFileReference - text files stored as path, content read at send time
 	TypeFileReference AttachmentType = "file_reference"
+	// TypeDocument - binary document files (PDF, etc.) sent natively to LLMs
+	TypeDocument AttachmentType = "document"
 	// TypeUnsupported - files that cannot be attached
 	TypeUnsupported AttachmentType = "unsupported"
 )
@@ -262,6 +264,10 @@ func (t AttachmentType) IsImage() bool {
 // IsFileReference checks if the attachment type is a file reference
 func (t AttachmentType) IsFileReference() bool {
 	return t == TypeFileReference
+}
+
+func (t AttachmentType) IsDocument() bool {
+	return t == TypeDocument
 }
 
 // IsSupported checks if the attachment type is supported

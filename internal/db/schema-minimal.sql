@@ -193,7 +193,7 @@ CREATE TABLE attachments (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 , attachment_type TEXT NOT NULL DEFAULT 'image'
-    CHECK (attachment_type IN ('image', 'file_reference')), content BLOB);
+    CHECK (attachment_type IN ('image', 'file_reference', 'document')), content BLOB);
 CREATE INDEX idx_attachments_user_id ON attachments(user_id);
 CREATE INDEX idx_attachments_file_hash ON attachments(file_hash);
 CREATE TRIGGER update_attachments_timestamp 
@@ -570,7 +570,7 @@ CREATE TABLE IF NOT EXISTS "messages" (
     model TEXT,
     agent TEXT,
     token_count INTEGER,
-    cost REAL,
+    cost_micros INTEGER,
     workflow_id TEXT,
     run_id TEXT,
     node_id TEXT,

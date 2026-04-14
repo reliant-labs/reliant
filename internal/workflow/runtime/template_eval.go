@@ -521,7 +521,6 @@ func populateExecuteToolsResolved(args *reliantv1.ExecuteToolsArgs) {
 			ID               string   `json:"id"`
 			Name             string   `json:"name"`
 			Input            string   `json:"input"`
-			AvailableTools   []string `json:"available_tools"`
 			AvailablePresets []string `json:"available_presets"`
 		}
 		if err := json.Unmarshal(raw, &tc); err != nil {

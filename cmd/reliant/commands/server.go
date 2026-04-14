@@ -82,7 +82,6 @@ Designed to run as N replicas behind a load balancer.`,
 	}
 
 	// Ports
-	cmd.Flags().IntVar(&opts.APIPort, "api-port", serverEnvOrDefaultInt("API_PORT", 8080), "HTTP API listen port")
 	cmd.Flags().IntVar(&opts.GRPCPort, "grpc-port", serverEnvOrDefaultInt("GRPC_PORT", 9090), "gRPC/ConnectRPC listen port")
 	cmd.Flags().IntVar(&opts.PprofPort, "pprof-port", serverEnvOrDefaultInt("PPROF_PORT", 6060), "pprof debug server port")
 	cmd.Flags().StringVar(&opts.BindAddress, "bind-address", serverEnvOrDefault("BIND_ADDRESS", "0.0.0.0"), "Network address to bind to")

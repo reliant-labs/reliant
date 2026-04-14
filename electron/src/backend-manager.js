@@ -13,7 +13,6 @@ const { applyDaemonIdentityEnv } = require('./backend-auth');
 class BackendManager {
   constructor() {
     this.process = null;
-    this.port = null;
     this.grpcPort = null;
     this.toolsDaemonPort = null;
     this.temporalFrontendPort = null;
@@ -85,11 +84,6 @@ class BackendManager {
       process.env[key] = parsedPorts[key];
     });
 
-    // Keep API_PORT aligned to BACKEND_PORT in dev when only BACKEND_PORT exists.
-    if (parsedPorts.BACKEND_PORT && !parsedPorts.API_PORT) {
-      process.env.API_PORT = parsedPorts.BACKEND_PORT;
-    }
-
     const dbUrl = process.env.DATABASE_URL || '';
     let dbHost = '(unset)';
     let dbPort = '(unset)';
@@ -109,7 +103,6 @@ class BackendManager {
       databaseDriver: process.env.DATABASE_DRIVER || '(unset)',
       pgHost: process.env.PGHOST || dbHost,
       pgPort: process.env.PGPORT || dbPort,
-      backendPort: process.env.BACKEND_PORT || '(unset)',
       grpcPort: process.env.GRPC_PORT || '(unset)',
       toolsDaemonPort: process.env.TOOLS_DAEMON_PORT || '(unset)'
     });
@@ -611,24 +604,6 @@ class BackendManager {
     }
   }
 
-  async findAvailablePort() {
-    // If BACKEND_PORT environment variable is set, use it
-    if (process.env.BACKEND_PORT) {
-      const envPort = parseInt(process.env.BACKEND_PORT, 10);
-      log.info(`[BackendManager] Using BACKEND_PORT from environment: ${envPort}`);
-      return envPort;
-    }
-
-    try {
-      // Try to find a free port starting from 33742
-      const [freePort] = await findFreePort(33742, 33842);
-      return freePort;
-    } catch (error) {
-      log.warn('Could not find free port, using default: 33742');
-      return 33742;
-    }
-  }
-
   async findConsecutiveFreePorts(startPort, count) {
     // Check if a specific range of ports is free
     const checkPortRange = async (basePort) => {
@@ -697,7 +672,7 @@ class BackendManager {
     return new Promise((resolve, reject) => {
       const options = {
         hostname: 'localhost',
-        port: this.port,
+        port: this.grpcPort,
         path: '/api/v2/health',
         method: 'GET',
         timeout: 1000,
@@ -730,20 +705,17 @@ class BackendManager {
 
     // Check if external backend is already running (dev mode with Air)
     if (process.env.RELIANT_EXTERNAL_BACKEND) {
-      const externalPort = parseInt(process.env.BACKEND_PORT || process.env.API_PORT, 10);
       const externalGrpcPort = parseInt(process.env.GRPC_PORT, 10);
       const externalToolsDaemonPort = parseInt(process.env.TOOLS_DAEMON_PORT, 10);
       const externalTemporalPort = parseInt(process.env.TEMPORAL_FRONTEND_PORT, 10);
       const externalTemporalUIPort = parseInt(process.env.TEMPORAL_UI_PORT, 10);
       
       log.info('[BackendManager] Using external backend (Air/dev mode)');
-      log.info('[BackendManager] External backend port:', externalPort);
       log.info('[BackendManager] External gRPC port:', externalGrpcPort);
       log.info('[BackendManager] External tools daemon gRPC port:', externalToolsDaemonPort);
       log.info('[BackendManager] External Temporal port:', externalTemporalPort);
       log.info('[BackendManager] External Temporal UI port:', externalTemporalUIPort);
       
-      this.port = externalPort;
       this.grpcPort = externalGrpcPort;
       this.toolsDaemonPort = externalToolsDaemonPort;
       this.temporalFrontendPort = externalTemporalPort;
@@ -753,7 +725,7 @@ class BackendManager {
       // Wait for external backend to be ready
       await this.waitForReady();
       log.info('[BackendManager] ✓ External backend is ready');
-      return this.port;
+      return this.grpcPort;
     }
 
     // Load mock driver config if not already loaded
@@ -764,8 +736,8 @@ class BackendManager {
     log.info('[BackendManager] Mock driver config:', JSON.stringify(this.mockDriverConfig));
 
     if (this.isRunning) {
-      log.info('[BackendManager] Backend already running on port:', this.port);
-      return this.port;
+      log.info('[BackendManager] Backend already running on gRPC port:', this.grpcPort);
+      return this.grpcPort;
     }
 
     if (this.isShuttingDown) {
@@ -786,11 +758,6 @@ class BackendManager {
     }
 
     try {
-      // Find available port for API server
-      const portStart = Date.now();
-      this.port = await this.findAvailablePort();
-      log.info(`[BackendManager] ✓ API port found in ${Date.now() - portStart}ms:`, this.port);
-
       // Find available port for gRPC server (or use env var if set by dev script)
       const grpcPortStart = Date.now();
       if (process.env.GRPC_PORT) {
@@ -836,7 +803,6 @@ class BackendManager {
       const homeDir = require('os').homedir();
       let backendEnv = {
         ...process.env,
-        API_PORT: this.port.toString(),  // V2 uses API_PORT instead of PORT
         GRPC_PORT: this.grpcPort.toString(),  // Pass allocated gRPC port
         TOOLS_DAEMON_PORT: this.toolsDaemonPort.toString(),  // Dedicated tools-daemon gRPC listener
         TEMPORAL_FRONTEND_PORT: temporalFrontendPort.toString(),  // Pass allocated Temporal gRPC port
@@ -1070,7 +1036,7 @@ class BackendManager {
       this.isRunning = true;
 
       log.info(`[BackendManager] ✓✓✓ Total backend startup: ${Date.now() - startTime}ms`);
-      return this.port;
+      return this.grpcPort;
 
     } catch (error) {
       log.error('[BackendManager] Failed to start backend:', error);
@@ -1094,7 +1060,6 @@ class BackendManager {
     }
     this.process = null;
     this.isRunning = false;
-    this.port = null;
     this.grpcPort = null;
     this.toolsDaemonPort = null;
     this.temporalFrontendPort = null;
@@ -1152,7 +1117,6 @@ class BackendManager {
 
         this.process = null;
         this.isRunning = false;
-        this.port = null;
         this.grpcPort = null;
         this.toolsDaemonPort = null;
         this.temporalFrontendPort = null;
@@ -1194,7 +1158,7 @@ class BackendManager {
   }
 
   getPort() {
-    return this.port;
+    return this.grpcPort;
   }
 
   getTemporalFrontendPort() {
@@ -1208,7 +1172,6 @@ class BackendManager {
   getStatus() {
     return {
       isRunning: this.isRunning,
-      port: this.port,
       grpcPort: this.grpcPort,
       toolsDaemonPort: this.toolsDaemonPort,
       temporalFrontendPort: this.temporalFrontendPort,
@@ -1221,7 +1184,7 @@ class BackendManager {
   }
 
   async isReady() {
-    if (!this.isRunning || !this.port) {
+    if (!this.isRunning || !this.grpcPort) {
       return false;
     }
 

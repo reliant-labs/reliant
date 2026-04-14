@@ -34,6 +34,25 @@ func toInt(v interface{}) int {
 	return 0
 }
 
+// toInt64 converts various numeric types to int64 for usage cost extraction.
+func toInt64(v interface{}) int64 {
+	switch n := v.(type) {
+	case int:
+		return int64(n)
+	case int32:
+		return int64(n)
+	case int64:
+		return n
+	case float64:
+		return int64(n)
+	case json.Number:
+		if i, err := n.Int64(); err == nil {
+			return i
+		}
+	}
+	return 0
+}
+
 // evaluateSaveMessageConfig evaluates a SaveMessageConfig's CEL expressions against
 // the activity output and workflow context, returning a types.SaveMessageInput.
 //
@@ -223,11 +242,14 @@ func evaluateSaveMessageConfig(
 		return nil, fmt.Errorf("tool_results: %w", err)
 	}
 
-	// Auto-extract token count from activity output if present
-	// Token count is automatically persisted when the activity outputs it (e.g., call_llm)
+	// Auto-extract usage from activity output if present.
 	var tokenCount int
 	if v, ok := activityOutput["token_count"]; ok && v != nil {
 		tokenCount = toInt(v)
+	}
+	var costMicros int64
+	if v, ok := activityOutput["cost_micros"]; ok && v != nil {
+		costMicros = toInt64(v)
 	}
 
 	attachments, err := evalStringArray(model.CelStringRaw(config.GetAttachments()))
@@ -282,6 +304,7 @@ func evaluateSaveMessageConfig(
 		ToolResults:  toolResults,
 		ToolCalls:    toolCalls,
 		TokenCount:   tokenCount,
+		CostMicros:   costMicros,
 		WorkflowID:   workflowID,
 		Thinking:     thinkingOutput,
 	}, nil
@@ -641,6 +664,7 @@ func buildSaveMessageNode(input *types.SaveMessageInput) *reliantv1.Node {
 		ResolvedDisplayStyle: input.DisplayStyle,
 		ResolvedAttachments:  input.Attachments,
 		TokenCount:           int32(input.TokenCount),
+		CostMicros:           input.CostMicros,
 	}
 
 	// Convert tool calls

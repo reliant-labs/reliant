@@ -14,6 +14,7 @@ import {
   SaveFileContentRequestSchema,
   GetFileMetadataRequestSchema,
   GetFilePreviewInfoRequestSchema,
+  GetFilePreviewRequestSchema,
   CreateFileOrFolderRequestSchema,
   DeleteFileOrFolderRequestSchema,
   CopyFileRequestSchema,
@@ -340,6 +341,31 @@ export const filesystemGrpc = {
       throw new Error("File preview info not found");
     }
     return protoPreviewInfoToFrontend(response.info);
+  },
+
+  /**
+   * Get file preview content (binary)
+   */
+  async getFilePreview(
+    projectId: string,
+    path: string,
+    worktreeId?: string,
+    chatId?: string
+  ): Promise<{ content: Uint8Array; contentType: string; filename: string; size: bigint }> {
+    const client = await grpcClient.filesystem();
+    const request = create(GetFilePreviewRequestSchema, {
+      projectId,
+      path,
+      worktreeId,
+      chatId,
+    });
+    const response = await client.getFilePreview(request);
+    return {
+      content: response.content,
+      contentType: response.contentType,
+      filename: response.filename,
+      size: response.size,
+    };
   },
 
   /**

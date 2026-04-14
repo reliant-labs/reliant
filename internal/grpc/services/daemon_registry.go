@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -106,6 +107,59 @@ func (s *DaemonRegistryService) CreateDaemonToken(
 		TokenId: record.ID,
 		UserId:  userID,
 	}), nil
+}
+
+func (s *DaemonRegistryService) ListDaemonTokens(
+	ctx context.Context,
+	req *connect.Request[reliantv1.ListDaemonTokensRequest],
+) (*connect.Response[reliantv1.ListDaemonTokensResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+
+	pats, err := s.patService.ListPATs(ctx, userID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("listing tokens: %w", err))
+	}
+
+	tokens := make([]*reliantv1.DaemonTokenInfo, 0, len(pats))
+	for _, p := range pats {
+		info := &reliantv1.DaemonTokenInfo{
+			Id:          p.ID,
+			Name:        p.Name,
+			TokenPrefix: p.TokenPrefix,
+			Ephemeral:   p.Ephemeral,
+			CreatedAt:   p.CreatedAt.Format(time.RFC3339),
+			Revoked:     p.RevokedAt != nil,
+		}
+		if p.LastUsedAt != nil {
+			info.LastUsedAt = p.LastUsedAt.Format(time.RFC3339)
+		}
+		if p.ExpiresAt != nil {
+			info.ExpiresAt = p.ExpiresAt.Format(time.RFC3339)
+		}
+		tokens = append(tokens, info)
+	}
+
+	return connect.NewResponse(&reliantv1.ListDaemonTokensResponse{
+		Tokens: tokens,
+	}), nil
+}
+
+func (s *DaemonRegistryService) RevokeDaemonToken(
+	ctx context.Context,
+	req *connect.Request[reliantv1.RevokeDaemonTokenRequest],
+) (*connect.Response[reliantv1.RevokeDaemonTokenResponse], error) {
+	if req.Msg.TokenId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("token_id is required"))
+	}
+
+	// auth.MustGetUserID ensures the caller is authenticated
+	_ = auth.MustGetUserID(ctx)
+
+	if err := s.patService.RevokePAT(ctx, req.Msg.TokenId); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("revoking token: %w", err))
+	}
+
+	return connect.NewResponse(&reliantv1.RevokeDaemonTokenResponse{}), nil
 }
 
 func daemonToProto(d *db.Daemon) *reliantv1.DaemonInfo {

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -529,11 +530,24 @@ func (o *OpenaiClient) toolCalls(completion openai.ChatCompletion) []message.Too
 }
 
 func (o *OpenaiClient) usage(completion openai.ChatCompletion) llm.TokenUsage {
-	// TokenCount = prompt_tokens (context size the model saw for this request)
-	// This includes both cached and non-cached tokens
-	return llm.TokenUsage{
-		TokenCount: completion.Usage.PromptTokens,
+	usage := llm.TokenUsage{
+		TokenCount:   completion.Usage.PromptTokens,
+		InputTokens:  completion.Usage.PromptTokens,
+		OutputTokens: completion.Usage.CompletionTokens,
 	}
+	usage.CostMicros = o.calculateCostMicros(usage)
+	return usage
+}
+
+func (o *OpenaiClient) calculateCostMicros(usage llm.TokenUsage) int64 {
+	model := o.Options.Model
+	if model.CostPer1MIn <= 0 && model.CostPer1MOut <= 0 {
+		return 0
+	}
+
+	inputCostMicros := int64(math.Round(float64(usage.InputTokens) * model.CostPer1MIn / 1_000_000 * 1_000_000))
+	outputCostMicros := int64(math.Round(float64(usage.OutputTokens) * model.CostPer1MOut / 1_000_000 * 1_000_000))
+	return inputCostMicros + outputCostMicros
 }
 
 func (o *OpenaiClient) Model() models.Model {
@@ -809,6 +823,9 @@ func (o *OpenaiClient) sendResponses(ctx context.Context, prompts []string, mess
 	usage := llm.TokenUsage{}
 	if resp.Usage.TotalTokens > 0 {
 		usage.TokenCount = resp.Usage.TotalTokens
+		usage.InputTokens = resp.Usage.InputTokens
+		usage.OutputTokens = resp.Usage.OutputTokens
+		usage.CostMicros = o.calculateCostMicros(usage)
 	}
 
 	upstreamRequestID, upstreamProxymanID := extractUpstreamCorrelationHeaders(rawResp)
@@ -993,6 +1010,9 @@ func (o *OpenaiClient) streamResponses(ctx context.Context, prompts []string, me
 		usage := llm.TokenUsage{}
 		if finalResp != nil && finalResp.Usage.TotalTokens > 0 {
 			usage.TokenCount = finalResp.Usage.TotalTokens
+			usage.InputTokens = finalResp.Usage.InputTokens
+			usage.OutputTokens = finalResp.Usage.OutputTokens
+			usage.CostMicros = o.calculateCostMicros(usage)
 		}
 
 		upstreamRequestID, upstreamProxymanID := extractUpstreamCorrelationHeaders(streamResp)

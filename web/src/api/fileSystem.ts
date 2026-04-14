@@ -5,7 +5,6 @@ import { filesystemGrpc } from "./filesystem-grpc";
 import type { FileNode } from "../components/FileBrowser";
 import { useProjectStore } from "../store/projectStore";
 import { triggerGitStatusRefresh } from "../store/gitStatusStore";
-import { supabase } from "../lib/supabase";
 
 // Re-export search types
 export type { SearchResult, SearchMatch, SearchFilesResult, ReplaceResult, ReplaceInFilesResult, FilePreviewInfo, FileViewerKindValue } from "./filesystem-grpc";
@@ -33,21 +32,6 @@ export interface FileMetadata {
   permissions?: string;
 }
 
-function getFilePreviewBaseURL(): string | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  if (window.RELIANT_CONFIG?.backendUrl) {
-    return window.RELIANT_CONFIG.backendUrl;
-  }
-
-  if (window.location.protocol === "http:" || window.location.protocol === "https:") {
-    return window.location.origin;
-  }
-
-  return null;
-}
 
 /**
  * Fetches the file tree structure from the API
@@ -172,35 +156,9 @@ export async function getFilePreviewBlob(path: string, worktreeId?: string): Pro
     throw new Error("No current project selected");
   }
 
-  const baseUrl = getFilePreviewBaseURL();
-  if (!baseUrl) {
-    throw new Error("Backend URL not ready");
-  }
-
   const apiPath = await normalizeFilePathForAPI(path, worktreeId);
-  const previewInfo = await getFilePreviewInfo(path, worktreeId);
-  const { data: { session } } = await supabase.auth.getSession();
-  const headers: HeadersInit = {};
-  if (session?.access_token) {
-    headers["Authorization"] = `Bearer ${session.access_token}`;
-  }
-
-  const url = new URL("/api/v2/files/preview", baseUrl);
-  url.searchParams.set("project_id", currentProject.id);
-  url.searchParams.set("path", apiPath);
-  if (worktreeId) {
-    url.searchParams.set("worktree_id", worktreeId);
-  }
-
-  const response = await fetch(url.toString(), { headers });
-  if (!response.ok) {
-    throw new Error(`Failed to load file preview (${response.status})`);
-  }
-
-  return await response.blob().then(blob => {
-    if (blob.type) return blob;
-    return new Blob([blob], { type: previewInfo.mimeType || "application/octet-stream" });
-  });
+  const response = await filesystemGrpc.getFilePreview(currentProject.id, apiPath, worktreeId);
+  return new Blob([response.content], { type: response.contentType });
 }
 
 export function isBinaryFileError(error: unknown): boolean {

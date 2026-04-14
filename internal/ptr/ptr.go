@@ -30,3 +30,11 @@ func IntIfPositive(i int) *int {
 	}
 	return nil
 }
+
+// Int64IfPositive returns a pointer to i if i > 0, otherwise nil.
+func Int64IfPositive(i int64) *int64 {
+	if i > 0 {
+		return &i
+	}
+	return nil
+}

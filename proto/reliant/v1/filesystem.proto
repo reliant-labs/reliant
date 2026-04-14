@@ -39,6 +39,9 @@ service FileSystemService {
 
   // GetFilePreviewInfo returns preview metadata for a file
   rpc GetFilePreviewInfo(GetFilePreviewInfoRequest) returns (GetFilePreviewInfoResponse) {}
+
+  // GetFilePreview returns the raw binary content of a previewable file (image, PDF, audio, video).
+  rpc GetFilePreview(GetFilePreviewRequest) returns (GetFilePreviewResponse) {}
   
   // CreateFileOrFolder creates a new file or folder
   rpc CreateFileOrFolder(CreateFileOrFolderRequest) returns (CreateFileOrFolderResponse) {}
@@ -306,4 +309,22 @@ message DirectoryEntry {
   bool is_directory = 3;
   bool is_hidden = 4;
   bool is_symlink = 5;
+}
+
+// ============================================
+// GetFilePreview
+// ============================================
+
+message GetFilePreviewRequest {
+  string project_id = 1;
+  string path = 2;
+  optional string worktree_id = 3;
+  optional string chat_id = 4;
+}
+
+message GetFilePreviewResponse {
+  bytes content = 1;       // Raw binary file content
+  string content_type = 2; // MIME type (e.g. "image/png", "application/pdf")
+  string filename = 3;     // Base filename for Content-Disposition
+  int64 size = 4;          // File size in bytes
 }

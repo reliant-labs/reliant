@@ -129,15 +129,14 @@ export interface ElectronAPI {
 }
 
 export interface ReliantConfig {
-  backendPort: number;
-  backendUrl: string;
-  grpcPort?: number;
-  grpcUrl?: string;
+  grpcPort: number;
+  grpcUrl: string;
   isElectron: boolean;
   platform: string;
   isDev: boolean;
   useTLS: boolean;
   temporalUIPort?: number;
+  adminURL?: string;
 }
 
 declare global {

@@ -275,6 +275,7 @@ In the UI, expand a message to see:
 | Symptom | Likely Cause | Fix |
 |---------|--------------|-----|
 | "Tool not found" | Tool not in available list | Add tool to `tools` or `tool_filter` |
+| "requires ... permission" | Tool permission level too low | Set `permission` to `mutating` or `orchestrator` |
 | Truncated output | Hit max_tokens | Increase limit or use streaming |
 | Repeated responses | No stop condition | Add iteration limits to loops |
 | Slow responses | Large context | Enable compaction or filter results |

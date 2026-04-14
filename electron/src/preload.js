@@ -258,27 +258,25 @@ const injectReliantConfig = async () => {
 
   try {
     log('info', 'Getting backend port via IPC...');
-    const [backendPort, appInfo, backendStatus] = await Promise.all([
+    const [grpcPort, appInfo, backendStatus] = await Promise.all([
       ipcRenderer.invoke('get-backend-port'),
       ipcRenderer.invoke('get-app-info'),
       ipcRenderer.invoke('get-backend-status')
     ]);
 
-    log('info', 'Backend port received:', backendPort, 'type:', typeof backendPort);
+    log('info', 'gRPC port received:', grpcPort, 'type:', typeof grpcPort);
     log('info', 'App info received:', appInfo);
     log('info', 'Backend status received:', backendStatus);
 
     // Check if we have a valid port number
-    if (typeof backendPort === 'number' && backendPort > 0) {
+    if (typeof grpcPort === 'number' && grpcPort > 0) {
       // Determine protocol based on TLS status (default to https if not specified)
       const protocol = backendStatus?.useTLS === false ? 'http' : 'https';
       
       // Backend is ready, store config in preload context
       reliantConfig = {
-        backendPort: backendPort,
-        backendUrl: `${protocol}://localhost:${backendPort}`,
-        grpcPort: backendStatus?.grpcPort,
-        grpcUrl: backendStatus?.grpcPort ? `${protocol}://localhost:${backendStatus.grpcPort}` : undefined,
+        grpcPort: grpcPort,
+        grpcUrl: `${protocol}://localhost:${grpcPort}`,
         temporalUIPort: backendStatus?.temporalUIPort,
         useTLS: backendStatus?.useTLS !== false,
         isElectron: true,
@@ -293,14 +291,14 @@ const injectReliantConfig = async () => {
       // Listen for backend port changes
       ipcRenderer.on('backend-port', (event, newPort) => {
         const protocol = reliantConfig.useTLS ? 'https' : 'http';
-        reliantConfig.backendPort = newPort;
-        reliantConfig.backendUrl = `${protocol}://localhost:${newPort}`;
+        reliantConfig.grpcPort = newPort;
+        reliantConfig.grpcUrl = `${protocol}://localhost:${newPort}`;
 
         // Notify renderer of port change via postMessage
         window.postMessage({ type: 'backend-port-changed', port: newPort }, '*');
       });
     } else {
-      log('info', 'Backend not ready yet (port:', backendPort, '), waiting for backend-port event...');
+      log('info', 'Backend not ready yet (port:', grpcPort, '), waiting for backend-port event...');
       // Backend not ready, wait for it via event
       // Set up a listener for when the backend port becomes available
       ipcRenderer.once('backend-port', async (event, port) => {
@@ -317,10 +315,8 @@ const injectReliantConfig = async () => {
           const protocol = backendStatus?.useTLS === false ? 'http' : 'https';
           
           reliantConfig = {
-            backendPort: port,
-            backendUrl: `${protocol}://localhost:${port}`,
-            grpcPort: backendStatus?.grpcPort,
-            grpcUrl: backendStatus?.grpcPort ? `${protocol}://localhost:${backendStatus.grpcPort}` : undefined,
+            grpcPort: port,
+            grpcUrl: `${protocol}://localhost:${port}`,
             temporalUIPort: backendStatus?.temporalUIPort,
             useTLS: backendStatus?.useTLS !== false,
             isElectron: true,
@@ -339,9 +335,9 @@ const injectReliantConfig = async () => {
 
         // Set up ongoing listener for port changes
         ipcRenderer.on('backend-port', (event, newPort) => {
-          const protocol = window.RELIANT_CONFIG?.useTLS ? 'https' : 'http';
-          window.RELIANT_CONFIG.backendPort = newPort;
-          window.RELIANT_CONFIG.backendUrl = `${protocol}://localhost:${newPort}`;
+          const protocol = reliantConfig?.useTLS ? 'https' : 'http';
+          reliantConfig.grpcPort = newPort;
+          reliantConfig.grpcUrl = `${protocol}://localhost:${newPort}`;
 
           window.dispatchEvent(new CustomEvent('backend-port-changed', {
             detail: { port: newPort }
@@ -367,10 +363,8 @@ const injectReliantConfig = async () => {
       const protocol = backendStatus?.useTLS === false ? 'http' : 'https';
       
       reliantConfig = {
-        backendPort: port,
-        backendUrl: `${protocol}://localhost:${port}`,
-        grpcPort: backendStatus?.grpcPort,
-        grpcUrl: backendStatus?.grpcPort ? `${protocol}://localhost:${backendStatus.grpcPort}` : undefined,
+        grpcPort: port,
+        grpcUrl: `${protocol}://localhost:${port}`,
         temporalUIPort: backendStatus?.temporalUIPort,
         useTLS: backendStatus?.useTLS !== false,
         isElectron: true,

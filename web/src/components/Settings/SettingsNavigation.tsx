@@ -1,5 +1,5 @@
 import { cn } from "../../lib/utils";
-import { Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, FolderOpen, Globe, FolderGit2, Bell, MessageSquare } from "lucide-react";
+import { Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, FolderOpen, Globe, FolderGit2, Bell, MessageSquare, KeyRound } from "lucide-react";
 import { McpIcon } from "../icons/McpIcon";
 
 export type SettingsSection =
@@ -16,6 +16,7 @@ export type SettingsSection =
   | "mcp"
   | "feedback"
   | "about"
+  | "tokens"
   | "developer";
 
 interface SettingsNavigationProps {
@@ -79,6 +80,11 @@ const settingsSections = [
     id: "privacy" as const,
     label: "Privacy",
     icon: Shield,
+  },
+  {
+    id: "tokens" as const,
+    label: "Access Tokens",
+    icon: KeyRound,
   },
   {
     id: "feedback" as const,

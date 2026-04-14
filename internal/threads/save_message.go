@@ -46,6 +46,7 @@ type SaveMessageOpts struct {
 	// Token tracking (provided by caller from LLM response)
 	// TokenCount represents the context size (how many tokens the LLM saw)
 	TokenCount int
+	CostMicros int64
 
 	// Display and workflow context
 	DisplayStyle int32 // DisplayStyle proto enum value (0=unspecified, 1=info, 2=warning, 3=success, 4=hidden)
@@ -169,6 +170,7 @@ func (s *Service) SaveMessage(ctx context.Context, opts SaveMessageOpts) (*SaveM
 			NodeID:          ptr.StringIfNotEmpty(opts.StepID),
 			ActivityID:      opts.ActivityID,
 			TokenCount:      ptr.IntIfPositive(opts.TokenCount),
+			CostMicros:      ptr.Int64IfPositive(opts.CostMicros),
 			DisplayStyle:    displayStylePtrIfNonZero(opts.DisplayStyle),
 			CreatedAt:       timestamp,
 			UpdatedAt:       timestamp,

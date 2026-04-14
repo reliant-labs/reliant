@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuthStore } from '@/store/authStore'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import { OAuthButton } from './OAuthButton'
 import { ForgotPassword } from './ForgotPassword'
 import { EmailVerification } from './EmailVerification'
@@ -21,6 +21,7 @@ export function AuthScreen() {
 
   const { signIn, signUp, signInAnonymously, signInWithGithub, signInWithGoogle, signInWithApple } = useAuthStore()
   const navigate = useNavigate()
+  const { redirect: redirectParam } = useSearch({ from: '/auth' })
 
   // Track auth screen view for pre-auth funnel
   useEffect(() => {
@@ -58,8 +59,12 @@ export function AuthScreen() {
     try {
       if (mode === 'login') {
         await signIn(email, password)
-        // Only navigate on success
-        navigate({ to: '/' })
+        // Navigate to redirect target (e.g. /admin/dashboard) or home
+        if (redirectParam) {
+          window.location.href = redirectParam
+        } else {
+          navigate({ to: '/' })
+        }
       } else {
         const { session } = await signUp(email, password)
         
@@ -71,8 +76,11 @@ export function AuthScreen() {
           return
         }
 
-        // Only navigate on success
-        navigate({ to: '/' })
+        if (redirectParam) {
+          window.location.href = redirectParam
+        } else {
+          navigate({ to: '/' })
+        }
       }
     } catch (err: unknown) {
       // Extract the error message from Supabase error format

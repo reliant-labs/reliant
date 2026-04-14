@@ -605,6 +605,26 @@ func TestSaveAssistantMessageWithTokens(t *testing.T) {
 		assert.Nil(t, msg.TokenCount, "Zero TokenCount should not be stored")
 	})
 
+	t.Run("Stores provider cost for assistant message", func(t *testing.T) {
+		input := SaveMessageInput{
+			ChatID:     chatID,
+			Thread:     "0",
+			Role:       "assistant",
+			Content:    "Response with provider cost",
+			CostMicros: 34500,
+		}
+
+		var output SaveMessageOutput
+		err := h.ExecuteActivity(activity.Execute, &input, &output)
+		require.NoError(t, err)
+
+		msg, err := h.Repo().GetMessage(ctx, output.MessageId)
+		require.NoError(t, err)
+
+		require.NotNil(t, msg.CostMicros, "CostMicros should be set")
+		assert.Equal(t, int64(34500), *msg.CostMicros)
+	})
+
 	t.Run("Stores token count for all message types", func(t *testing.T) {
 		// Token count is now stored for all message types
 		// The caller is responsible for only providing tokens when appropriate
