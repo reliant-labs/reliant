@@ -721,7 +721,27 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 				continue
 			}
 
-			// Start regular step execution (action, run, approval)
+			// Handle approval nodes inline (signal-based, like yield)
+			if node.GetType() == model.NodeTypeApproval {
+				approvalOutput, err := e.executeApproval(triggered, subNodeOutputs, subInputs, uniqueActivityIDBase)
+				if err != nil {
+					return nil, fmt.Errorf("approval %s failed: %w", node.GetId(), err)
+				}
+				nid := node.GetId()
+				subNodeOutputs[nid] = approvalOutput
+				approvalEvent := &core.WorkflowEvent{
+					ID:           fmt.Sprintf("%s-approval-%s", uniqueActivityIDBase, nid),
+					WorkflowID:   e.workflowID,
+					ChatID:       e.chatID,
+					WorkflowName: e.subWorkflowName,
+					StepID:       nid,
+					Data:         approvalOutput,
+				}
+				events = append(events, approvalEvent)
+				continue
+			}
+
+			// Start regular step execution (action, run)
 			// StepID (node.ID) is used as the tracking key
 			running := executor.Start(triggered)
 			runningSteps = append(runningSteps, running)
@@ -857,6 +877,153 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 			}
 		}
 	}
+}
+
+// executeApproval handles approval nodes inline using a signal-based wait pattern
+// (matching the yield system). It creates an approval record via the ApprovalCreate
+// activity, then waits for a Temporal signal from the gRPC approval service.
+func (e *InlineWorkflowExecutor) executeApproval(
+	triggered *core.TriggeredNode,
+	nodeOutputs map[string]interface{},
+	workflowInputs map[string]interface{},
+	activityIDBase string,
+) (map[string]interface{}, error) {
+	node := triggered.Node
+	event := triggered.Event
+
+	const defaultApprovalTimeout = 1 * time.Hour
+
+	// Evaluate node config to resolve CEL expressions (title, timeout)
+	iterCtx := model.BuildIterContext(e.loopIteration)
+	evalResult, err := EvaluateNodeConfig(
+		node, nodeOutputs, e.workflowID, event.WorkflowName,
+		workflowInputs, iterCtx, nil, e.execContext,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to evaluate approval node config: %w", err)
+	}
+
+	// Extract approval args
+	args := model.GetApprovalArgs(evalResult)
+	if args == nil {
+		return nil, fmt.Errorf("expected approval node, got %s", model.NodeType(node))
+	}
+
+	title := model.CelStringValue(args.GetTitle())
+	timeoutStr := model.CelStringValue(args.GetTimeout())
+
+	timeout := defaultApprovalTimeout
+	if timeoutStr != "" {
+		if parsed, parseErr := time.ParseDuration(timeoutStr); parseErr == nil {
+			timeout = parsed
+		}
+	}
+
+	// Get the Temporal workflow execution ID for signal routing
+	temporalWorkflowID := workflow.GetInfo(e.ctx).WorkflowExecution.ID
+
+	// STEP 1: Call ApprovalCreate activity (fast DB write)
+	createCtx := workflow.WithActivityOptions(e.ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 30 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts: 3,
+		},
+	})
+
+	createInput := map[string]interface{}{
+		"chat_id":              e.chatID,
+		"workflow_id":          e.workflowID,
+		"temporal_workflow_id": temporalWorkflowID,
+		"step_id":              node.GetId(),
+		"title":                title,
+		"timeout":              timeoutStr,
+	}
+
+	var createOutput struct {
+		ApprovalID      string `json:"approval_id"`
+		AlreadyResolved bool   `json:"already_resolved"`
+		Status          string `json:"status"`
+		ActionTaken     string `json:"action_taken"`
+	}
+	if err := workflow.ExecuteActivity(createCtx, "ApprovalCreate", createInput).Get(e.ctx, &createOutput); err != nil {
+		return nil, fmt.Errorf("ApprovalCreate activity failed: %w", err)
+	}
+
+	// STEP 2: If already resolved (idempotency on replay), return immediately
+	if createOutput.AlreadyResolved {
+		return map[string]interface{}{
+			"approval_id":  createOutput.ApprovalID,
+			"status":       createOutput.Status,
+			"action_taken": createOutput.ActionTaken,
+		}, nil
+	}
+
+	// STEP 3: Wait for signal or timeout
+	signalName := "signal.approval." + createOutput.ApprovalID
+	signalCh := workflow.GetSignalChannel(e.ctx, signalName)
+
+	timeoutCtx, cancelTimer := workflow.WithCancel(e.ctx)
+	timeoutFuture := workflow.NewTimer(timeoutCtx, timeout)
+
+	selector := workflow.NewSelector(e.ctx)
+
+	var status, actionTaken, denialReason string
+
+	selector.AddReceive(signalCh, func(ch workflow.ReceiveChannel, more bool) {
+		var signalData map[string]interface{}
+		ch.Receive(e.ctx, &signalData)
+		if s, ok := signalData["status"].(string); ok {
+			status = s
+		} else {
+			status = "approved" // default if signal data is missing status
+		}
+		if at, ok := signalData["action_taken"].(string); ok {
+			actionTaken = at
+		}
+		if dr, ok := signalData["denial_reason"].(string); ok {
+			denialReason = dr
+		}
+		cancelTimer()
+	})
+
+	selector.AddFuture(timeoutFuture, func(f workflow.Future) {
+		status = "timeout"
+	})
+
+	selector.Select(e.ctx)
+
+	// STEP 4: On timeout, resolve the approval in DB
+	if status == "timeout" {
+		resolveCtx := workflow.WithActivityOptions(e.ctx, workflow.ActivityOptions{
+			StartToCloseTimeout: 30 * time.Second,
+			RetryPolicy: &temporal.RetryPolicy{
+				MaximumAttempts: 3,
+			},
+		})
+		resolveInput := map[string]interface{}{
+			"approval_id": createOutput.ApprovalID,
+			"status":      "timeout",
+		}
+		var resolveOutput map[string]interface{}
+		if err := workflow.ExecuteActivity(resolveCtx, "ApprovalResolve", resolveInput).Get(e.ctx, &resolveOutput); err != nil {
+			e.logger.Warn("[InlineWorkflow] Failed to resolve approval as timeout in DB",
+				"approvalID", createOutput.ApprovalID,
+				"error", err,
+			)
+		}
+	}
+
+	// Build output matching ApprovalOutput proto shape
+	output := map[string]interface{}{
+		"approval_id":  createOutput.ApprovalID,
+		"status":       status,
+		"action_taken": actionTaken,
+	}
+	if denialReason != "" {
+		output["denial_reason"] = denialReason
+	}
+
+	return output, nil
 }
 
 // executeNestedWorkflow handles workflow: or agent: nodes within the sub-workflow

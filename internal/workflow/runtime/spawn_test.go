@@ -89,6 +89,56 @@ func TestSplitProtoToolCalls_NoNameField(t *testing.T) {
 	assert.Len(t, result.spawnToolCalls, 0)
 }
 
+func TestSplitProtoToolCalls_AllAskUser(t *testing.T) {
+	toolCalls := []*reliantv1.ToolCallMsg{
+		{Name: "ask_user", Id: "tc1", Input: `{"question":"Which option?"}`},
+		{Name: "ask_user", Id: "tc2", Input: `{"question":"Are you sure?"}`},
+	}
+
+	result := splitProtoToolCalls(toolCalls)
+
+	assert.Len(t, result.regularToolCalls, 0)
+	assert.Len(t, result.spawnToolCalls, 0)
+	assert.Len(t, result.askUserToolCalls, 2)
+	assert.Equal(t, "tc1", result.askUserToolCalls[0].GetId())
+	assert.Equal(t, "tc2", result.askUserToolCalls[1].GetId())
+}
+
+func TestSplitProtoToolCalls_MixedWithAskUser(t *testing.T) {
+	toolCalls := []*reliantv1.ToolCallMsg{
+		{Name: "bash", Id: "tc1", Input: "ls"},
+		{Name: "spawn", Id: "tc2", Input: `{"preset":"researcher","prompt":"do it"}`},
+		{Name: "ask_user", Id: "tc3", Input: `{"question":"Which approach?"}`},
+		{Name: "read_file", Id: "tc4", Input: "foo.go"},
+		{Name: "spawn", Id: "tc5", Input: `{"preset":"tester","prompt":"test"}`},
+	}
+
+	result := splitProtoToolCalls(toolCalls)
+
+	assert.Len(t, result.regularToolCalls, 2)
+	assert.Len(t, result.spawnToolCalls, 2)
+	assert.Len(t, result.askUserToolCalls, 1)
+
+	// Verify regular tools preserved order
+	assert.Equal(t, "bash", result.regularToolCalls[0].GetName())
+	assert.Equal(t, "read_file", result.regularToolCalls[1].GetName())
+
+	// Verify spawn tools preserved order
+	assert.Equal(t, "tc2", result.spawnToolCalls[0].GetId())
+	assert.Equal(t, "tc5", result.spawnToolCalls[1].GetId())
+
+	// Verify ask_user
+	assert.Equal(t, "tc3", result.askUserToolCalls[0].GetId())
+}
+
+func TestSplitProtoToolCalls_EmptyHasNoAskUser(t *testing.T) {
+	result := splitProtoToolCalls([]*reliantv1.ToolCallMsg{})
+
+	assert.Len(t, result.regularToolCalls, 0)
+	assert.Len(t, result.spawnToolCalls, 0)
+	assert.Len(t, result.askUserToolCalls, 0)
+}
+
 func TestBuildSpawnChildInputs_NoParentInputs(t *testing.T) {
 	result := buildSpawnChildInputs(nil)
 

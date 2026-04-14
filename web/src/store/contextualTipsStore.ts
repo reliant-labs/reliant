@@ -26,6 +26,7 @@ function createDefaultContextualTipState(): Record<ContextualTipId, ContextualTi
 interface ContextualTipsStoreState {
   isInitialized: boolean;
   isLoading: boolean;
+  loadFailed: boolean;
   tipsDisabled: boolean;
   activeTipId: ContextualTipId | null;
   lastTipShownAt: string | null;
@@ -67,6 +68,7 @@ async function persistState(
 export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get) => ({
   isInitialized: false,
   isLoading: false,
+  loadFailed: false,
   tipsDisabled: false,
   activeTipId: null,
   lastTipShownAt: null,
@@ -82,10 +84,18 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
     if (get().isLoading || get().isInitialized) return;
     set({ isLoading: true });
 
-    const [remoteStateSetting, remoteDisabledSetting] = await Promise.all([
-      safeGetSetting(CONTEXTUAL_TIPS_SETTINGS_KEYS.STATE),
-      safeGetSetting(CONTEXTUAL_TIPS_SETTINGS_KEYS.DISABLED),
-    ]);
+    let remoteStateSetting: Awaited<ReturnType<typeof safeGetSetting>>;
+    let remoteDisabledSetting: Awaited<ReturnType<typeof safeGetSetting>>;
+    try {
+      [remoteStateSetting, remoteDisabledSetting] = await Promise.all([
+        safeGetSetting(CONTEXTUAL_TIPS_SETTINGS_KEYS.STATE),
+        safeGetSetting(CONTEXTUAL_TIPS_SETTINGS_KEYS.DISABLED),
+      ]);
+    } catch (error) {
+      logger.warn("[ContextualTipsStore] Failed to load tip state from backend", { error });
+      set({ isInitialized: true, isLoading: false, loadFailed: true, activeTipId: null });
+      return;
+    }
 
     let tipState = createDefaultContextualTipState();
     if (remoteStateSetting?.value) {
@@ -110,6 +120,7 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
     set({
       isInitialized: true,
       isLoading: false,
+      loadFailed: false,
       tipsDisabled,
       tipState,
       lastTipShownAt,
@@ -119,7 +130,7 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
   reevaluate: async () => {
     const onboardingState = useOnboardingChecklistStore.getState();
     const state = get();
-    if (!state.isInitialized || state.tipsDisabled) {
+    if (!state.isInitialized || state.loadFailed || state.tipsDisabled) {
       if (state.activeTipId !== null) {
         set({ activeTipId: null });
       }
@@ -315,6 +326,7 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
     set({
       isInitialized: false,
       isLoading: false,
+      loadFailed: false,
       tipsDisabled: false,
       activeTipId: null,
       lastTipShownAt: null,

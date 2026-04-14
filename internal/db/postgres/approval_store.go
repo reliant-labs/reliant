@@ -16,16 +16,17 @@ func NewApprovalStore(q pgdb.Querier) core.ApprovalStore { return &approvalStore
 
 func (s *approvalStore) CreateApproval(ctx context.Context, approval *core.Approval) error {
 	return s.q.CreateApproval(ctx, pgdb.CreateApprovalParams{
-		ID:           approval.ID,
-		ChatID:       approval.ChatID,
-		ApprovalType: approval.ApprovalType,
-		EntityID:     approval.EntityID,
-		Status:       approval.Status,
-		DenialReason: approvalPtrToNullString(approval.DenialReason),
-		Title:        approval.Title,
-		Metadata:     approvalPtrToNullString(approval.Metadata),
-		CreatedAt:    approval.CreatedAt,
-		ResolvedAt:   approvalPtrToNullTime(approval.ResolvedAt),
+		ID:                 approval.ID,
+		ChatID:             approval.ChatID,
+		ApprovalType:       approval.ApprovalType,
+		EntityID:           approval.EntityID,
+		Status:             approval.Status,
+		DenialReason:       approvalPtrToNullString(approval.DenialReason),
+		Title:              approval.Title,
+		Metadata:           approvalPtrToNullString(approval.Metadata),
+		TemporalWorkflowID: approval.TemporalWorkflowID,
+		CreatedAt:          approval.CreatedAt,
+		ResolvedAt:         approvalPtrToNullTime(approval.ResolvedAt),
 	})
 }
 
@@ -78,23 +79,20 @@ func (s *approvalStore) UpdateApprovalStatus(ctx context.Context, id string, sta
 	})
 }
 
-func (s *approvalStore) DeleteApproval(ctx context.Context, id string) error {
-	return s.q.DeleteApproval(ctx, id)
-}
-
 func approvalFromPG(row pgdb.Approval) *core.Approval {
 	return &core.Approval{
-		ID:           row.ID,
-		ChatID:       row.ChatID,
-		ApprovalType: row.ApprovalType,
-		EntityID:     row.EntityID,
-		Status:       row.Status,
-		DenialReason: approvalNullStringToPtr(row.DenialReason),
-		ActionTaken:  approvalNullStringToPtr(row.ActionTaken),
-		Title:        row.Title,
-		Metadata:     approvalNullStringToPtr(row.Metadata),
-		CreatedAt:    row.CreatedAt,
-		ResolvedAt:   approvalNullTimeToPtr(row.ResolvedAt),
+		ID:                 row.ID,
+		ChatID:             row.ChatID,
+		ApprovalType:       row.ApprovalType,
+		EntityID:           row.EntityID,
+		Status:             row.Status,
+		DenialReason:       approvalNullStringToPtr(row.DenialReason),
+		ActionTaken:        approvalNullStringToPtr(row.ActionTaken),
+		Title:              row.Title,
+		Metadata:           approvalNullStringToPtr(row.Metadata),
+		TemporalWorkflowID: row.TemporalWorkflowID,
+		CreatedAt:          row.CreatedAt,
+		ResolvedAt:         approvalNullTimeToPtr(row.ResolvedAt),
 	}
 }
 

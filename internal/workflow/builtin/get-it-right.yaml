@@ -24,6 +24,7 @@ description: |
     review forks — memo'd across iterations. Builds on its own prior analysis + check results via inject.
     refactor forks — gets review feedback via inject (node references).
 
+discuss: true
 entry: [attempt]
 
 inputs:

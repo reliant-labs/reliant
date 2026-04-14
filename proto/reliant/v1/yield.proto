@@ -25,6 +25,7 @@ service YieldService {
 message ResolveYieldRequest {
   string yield_id = 1;
   string action = 2;  // "continue"
+  optional string response_data = 3;
 }
 
 // ResolveYieldResponse confirms the yield resolution
@@ -50,4 +51,5 @@ message YieldInfo {
   string step_id = 4;
   YieldStatus status = 5;
   string created_at = 6;
+  optional string metadata = 7;
 }

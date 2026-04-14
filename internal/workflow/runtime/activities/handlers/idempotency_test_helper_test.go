@@ -4,7 +4,6 @@ package handlers
 import (
 	"context"
 	"database/sql"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -38,15 +37,8 @@ func NewIdempotencyTestHelper(t *testing.T) *IdempotencyTestHelper {
 	// SQLite handles internal locking, making this safe for concurrent access
 	sqlDB.SetMaxOpenConns(1)
 
-	// Load and apply schema
-	schemaBytes, err := os.ReadFile("../../../../../internal/db/schema.sql")
-	require.NoError(t, err)
-
-	// Filter out sqlite_sequence which is auto-created by SQLite
-	schemaStr := string(schemaBytes)
-	schemaStr = strings.ReplaceAll(schemaStr, "CREATE TABLE sqlite_sequence(name,seq);", "")
-
-	_, err = sqlDB.Exec(schemaStr)
+	// Run migrations to set up schema
+	err = db.RunMigrations(sqlDB)
 	require.NoError(t, err)
 
 	// Create repository

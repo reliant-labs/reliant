@@ -103,6 +103,9 @@ const (
 	ToolWriteScenario  = "write_scenario"
 	ToolDeleteScenario = "delete_scenario"
 	ToolRunScenario    = "run_scenario"
+
+	// Interaction tools
+	ToolAskUser = "ask_user"
 )
 
 // ToolLocation specifies where a tool executes.
@@ -159,8 +162,9 @@ type SpawnFilterConfig struct {
 
 // ToolFilterResult contains the expanded tool names and any spawn configurations.
 type ToolFilterResult struct {
-	ToolNames    []string            // Expanded tool names
-	SpawnConfigs []SpawnFilterConfig // Spawn configurations parsed from filter
+	ToolNames      []string            // Expanded tool names
+	SpawnConfigs   []SpawnFilterConfig // Spawn configurations parsed from filter
+	AskUserEnabled bool                // Whether ask_user was present in the filter
 }
 
 // ExpandToolFilterWithSpawn expands a tool filter and extracts spawn configurations.
@@ -186,13 +190,15 @@ func ExpandToolFilterWithSpawn(filter []string, mcpToolNames []string) ToolFilte
 		return result
 	}
 
-	// Separate spawn configs from regular filter items
+	// Separate spawn configs and special tools from regular filter items
 	var regularFilter []string
 	for _, spec := range filter {
 		if strings.HasPrefix(spec, "spawn:") {
 			if spawnConfig := parseSpawnFilter(spec); spawnConfig != nil {
 				result.SpawnConfigs = append(result.SpawnConfigs, *spawnConfig)
 			}
+		} else if spec == ToolAskUser {
+			result.AskUserEnabled = true
 		} else {
 			regularFilter = append(regularFilter, spec)
 		}

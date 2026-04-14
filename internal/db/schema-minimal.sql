@@ -124,6 +124,9 @@ CREATE TABLE IF NOT EXISTS "approvals" (
     -- Optional fields (JSON for flexibility)
     metadata TEXT, -- JSON object with type-specific metadata
 
+    -- Temporal workflow routing
+    temporal_workflow_id TEXT NOT NULL DEFAULT '',
+
     -- Timestamps
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     resolved_at DATETIME, action_taken TEXT,
@@ -631,6 +634,7 @@ CREATE TABLE yields (
     loop_iteration INTEGER,
     status INTEGER NOT NULL DEFAULT 1,
     action_taken TEXT,
+    metadata TEXT,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     resolved_at DATETIME
 );

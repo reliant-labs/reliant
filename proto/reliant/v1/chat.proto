@@ -194,6 +194,7 @@ message Chat {
   bool needs_recovery = 26;
   ChatActivity activity = 27; // Computed activity state (from chats_with_activity view)
   bool unread = 28; // Whether this chat has unseen content (decoupled from activity/state)
+  bool can_discuss = 29; // Whether this chat's workflow supports discuss mode when paused
 }
 
 // ArchivedChat includes worktree information for archived chats
@@ -388,6 +389,7 @@ message SendMessageRequest {
   map<string, string> selected_presets = 14; // Update preset selections (persisted with chat)
   repeated InputMessage messages = 15; // Messages to send (user and system). At least one user message required.
   optional string yield_id = 16;  // If set, resolves this pending yield instead of starting new workflow
+  bool discuss = 17;              // If true, chat with LLM without resuming paused workflow
 }
 
 // SendMessageResponse confirms message sent

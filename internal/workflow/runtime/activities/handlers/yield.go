@@ -3,6 +3,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -18,13 +19,15 @@ import (
 
 // YieldCreateInput is the input for the YieldCreate activity.
 type YieldCreateInput struct {
-	ChatID             string `json:"chat_id" reliant:"-"`
-	WorkflowID         string `json:"workflow_id" reliant:"-"`
-	TemporalWorkflowID string `json:"temporal_workflow_id" reliant:"-"` // The actual Temporal execution ID for signaling
-	ThreadID           string `json:"thread_id" reliant:"-"`
-	StepID             string `json:"step_id" reliant:"-"`
-	LoopNodeID         string `json:"loop_node_id,omitempty" reliant:"-"`
-	LoopIteration      int    `json:"loop_iteration" reliant:"-"`
+	ChatID             string  `json:"chat_id" reliant:"-"`
+	WorkflowID         string  `json:"workflow_id" reliant:"-"`
+	TemporalWorkflowID string  `json:"temporal_workflow_id" reliant:"-"` // The actual Temporal execution ID for signaling
+	ThreadID           string  `json:"thread_id" reliant:"-"`
+	StepID             string  `json:"step_id" reliant:"-"`
+	LoopNodeID         string  `json:"loop_node_id,omitempty" reliant:"-"`
+	LoopIteration      int     `json:"loop_iteration" reliant:"-"`
+	Metadata           *string `json:"metadata,omitempty" reliant:"-"`
+	ToolCallID         string  `json:"tool_call_id,omitempty" reliant:"-"` // Disambiguates multiple ask_user yields in the same iteration
 }
 
 // YieldCreateOutput is the output from the YieldCreate activity.
@@ -93,30 +96,46 @@ func (a *YieldCreateActivity) Execute(ctx context.Context, input YieldCreateInpu
 		"loopIteration", input.LoopIteration)
 
 	// IDEMPOTENCY: Check if we already created a yield for this workflow+step+iteration.
+	// When ToolCallID is set (ask_user), we also match on it to disambiguate multiple
+	// ask_user yields within the same loop iteration.
 	existingYields, err := a.repo.GetYieldsByWorkflowStepIteration(ctx, input.WorkflowID, input.StepID, input.LoopIteration)
 	if err == nil && len(existingYields) > 0 {
-		y := existingYields[0]
-		logger.Info("[YieldCreate] Found existing yield",
-			"yieldID", y.ID,
-			"status", y.Status)
-
-		if y.Status == db.YieldStatusResolved {
-			actionTaken := ""
-			if y.ActionTaken != nil {
-				actionTaken = *y.ActionTaken
+		// Find the matching yield — filter by tool_call_id if provided
+		var match *db.Yield
+		if input.ToolCallID != "" {
+			for _, y := range existingYields {
+				if y.Metadata != nil && containsToolCallID(*y.Metadata, input.ToolCallID) {
+					match = y
+					break
+				}
 			}
-			return YieldCreateOutput{
-				YieldID:         y.ID,
-				AlreadyResolved: true,
-				ActionTaken:     actionTaken,
-			}, nil
+		} else {
+			match = existingYields[0]
 		}
 
-		// Still pending — return yield ID so workflow waits on signal
-		return YieldCreateOutput{
-			YieldID:         y.ID,
-			AlreadyResolved: false,
-		}, nil
+		if match != nil {
+			logger.Info("[YieldCreate] Found existing yield",
+				"yieldID", match.ID,
+				"status", match.Status)
+
+			if match.Status == db.YieldStatusResolved {
+				actionTaken := ""
+				if match.ActionTaken != nil {
+					actionTaken = *match.ActionTaken
+				}
+				return YieldCreateOutput{
+					YieldID:         match.ID,
+					AlreadyResolved: true,
+					ActionTaken:     actionTaken,
+				}, nil
+			}
+
+			// Still pending — return yield ID so workflow waits on signal
+			return YieldCreateOutput{
+				YieldID:         match.ID,
+				AlreadyResolved: false,
+			}, nil
+		}
 	}
 
 	// Generate yield ID and create record
@@ -144,6 +163,7 @@ func (a *YieldCreateActivity) Execute(ctx context.Context, input YieldCreateInpu
 		LoopNodeID:         loopNodeID,
 		LoopIteration:      &loopIteration,
 		Status:             db.YieldStatusPending,
+		Metadata:           input.Metadata,
 		CreatedAt:          time.Now().UTC(),
 	}
 
@@ -161,13 +181,17 @@ func (a *YieldCreateActivity) Execute(ctx context.Context, input YieldCreateInpu
 		}
 
 		// Emit yield chat_update for frontend
-		if err := a.repo.EmitYieldUpdate(txCtx, input.ChatID, db.YieldUpdate{
+		yieldUpdate := db.YieldUpdate{
 			YieldID:    yieldID,
 			ChatID:     input.ChatID,
 			WorkflowID: input.WorkflowID,
 			StepID:     input.StepID,
 			Status:     "pending",
-		}); err != nil {
+		}
+		if input.Metadata != nil {
+			yieldUpdate.Metadata = *input.Metadata
+		}
+		if err := a.repo.EmitYieldUpdate(txCtx, input.ChatID, yieldUpdate); err != nil {
 			return fmt.Errorf("failed to emit yield update: %w", err)
 		}
 
@@ -234,4 +258,14 @@ func (a *YieldResolveActivity) Execute(ctx context.Context, input YieldResolveIn
 	}
 
 	return YieldResolveOutput{Success: true}, nil
+}
+
+// containsToolCallID checks if a yield's metadata JSON contains the given tool_call_id.
+func containsToolCallID(metadata, toolCallID string) bool {
+	var m map[string]interface{}
+	if err := json.Unmarshal([]byte(metadata), &m); err != nil {
+		return false
+	}
+	id, _ := m["tool_call_id"].(string)
+	return id == toolCallID
 }

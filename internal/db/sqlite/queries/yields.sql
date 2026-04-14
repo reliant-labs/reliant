@@ -2,8 +2,8 @@
 -- Create a new yield record
 INSERT INTO yields (
     id, chat_id, workflow_id, thread_id, step_id, loop_node_id, loop_iteration,
-    status, action_taken, created_at, resolved_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    status, action_taken, metadata, created_at, resolved_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetYieldByID :one
 -- Get a specific yield by ID

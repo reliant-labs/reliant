@@ -271,8 +271,14 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 		future, activityName = e.startRun(node, evalResult)
 
 	case model.NodeTypeApproval:
-		// Approval activity has special handling (long timeout, no retries)
-		future, activityName = e.startApproval(node, evalResult)
+		// NOTE: approval nodes are now handled inline by InlineWorkflowExecutor.
+		// This case should never be reached - if it is, it's a bug in the calling code.
+		e.logger.Error("[StepExecutor] approval nodes should be handled inline, not via StepExecutor",
+			"stepID", node.GetId(),
+			"stepType", stepType,
+		)
+		future = e.executeFailActivity(fmt.Sprintf("approval node %s should be handled inline", node.GetId()))
+		activityName = "InlineApprovalError"
 
 	default:
 		// All other types are activities (e.g., call_llm, save_message, execute_tools)
@@ -638,38 +644,6 @@ func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node
 
 	future := workflow.ExecuteActivity(e.activityOptions(node), "ExecuteRunStep", runInputs)
 	return future, "ExecuteRunStep"
-}
-
-// startApproval starts an approval activity.
-// Approvals need special handling:
-// - Very long timeout (users may step away for hours)
-// - No retries (approval state is managed in DB)
-// - Activity has its own internal polling/timeout mechanism
-func (e *StepExecutor) startApproval(node *reliantv1.Node, evalResult *reliantv1.Node) (workflow.Future, string) {
-	rtx := e.buildRuntimeContext(node)
-	input := types.ActivityInput{Runtime: rtx, Node: evalResult}
-
-	future := workflow.ExecuteActivity(e.approvalActivityOptions(node), "Approval", input)
-	return future, "Approval"
-}
-
-// approvalActivityOptions returns activity options for approval activities.
-// Approvals need special handling:
-// - Long timeout (24h) since users may step away - activity has its own timeout via polling
-// - No retries since approval state is already persisted in DB
-// - Heartbeat every 30s to detect cancellation
-func (e *StepExecutor) approvalActivityOptions(node *reliantv1.Node) workflow.Context {
-	// Note: node parameter is kept for future use (e.g., node-specific timeout overrides)
-	_ = node // silence unused warning
-
-	// Let Temporal auto-generate ActivityID for deterministic replay
-	return workflow.WithActivityOptions(e.getActivityCtx(), workflow.ActivityOptions{
-		StartToCloseTimeout: 30 * 24 * time.Hour, // 30 days - approvals can wait for vacations
-		HeartbeatTimeout:    30 * time.Second,
-		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts: 1, // No retries - approval state is persisted
-		},
-	})
 }
 
 // activityOptions returns standard activity options, with optional node timeout override.

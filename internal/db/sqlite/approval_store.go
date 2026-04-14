@@ -16,16 +16,17 @@ func NewApprovalStore(q sqlitedb.Querier) core.ApprovalStore { return &approvalS
 
 func (s *approvalStore) CreateApproval(ctx context.Context, approval *core.Approval) error {
 	return s.q.CreateApproval(ctx, sqlitedb.CreateApprovalParams{
-		ID:           approval.ID,
-		ChatID:       approval.ChatID,
-		ApprovalType: int64(approval.ApprovalType),
-		EntityID:     approval.EntityID,
-		Status:       int64(approval.Status),
-		DenialReason: approvalPtrToNullString(approval.DenialReason),
-		Title:        approval.Title,
-		Metadata:     approvalPtrToNullString(approval.Metadata),
-		CreatedAt:    approval.CreatedAt,
-		ResolvedAt:   approvalPtrToNullTime(approval.ResolvedAt),
+		ID:                 approval.ID,
+		ChatID:             approval.ChatID,
+		ApprovalType:       int64(approval.ApprovalType),
+		EntityID:           approval.EntityID,
+		Status:             int64(approval.Status),
+		DenialReason:       approvalPtrToNullString(approval.DenialReason),
+		Title:              approval.Title,
+		Metadata:           approvalPtrToNullString(approval.Metadata),
+		TemporalWorkflowID: approval.TemporalWorkflowID,
+		CreatedAt:          approval.CreatedAt,
+		ResolvedAt:         approvalPtrToNullTime(approval.ResolvedAt),
 	})
 }
 
@@ -78,23 +79,20 @@ func (s *approvalStore) UpdateApprovalStatus(ctx context.Context, id string, sta
 	})
 }
 
-func (s *approvalStore) DeleteApproval(ctx context.Context, id string) error {
-	return s.q.DeleteApproval(ctx, id)
-}
-
 func approvalFromSQLc(sa sqlitedb.Approval) *core.Approval {
 	return &core.Approval{
-		ID:           sa.ID,
-		ChatID:       sa.ChatID,
-		ApprovalType: int32(sa.ApprovalType),
-		EntityID:     sa.EntityID,
-		Status:       int32(sa.Status),
-		DenialReason: approvalNullStringToPtr(sa.DenialReason),
-		ActionTaken:  approvalNullStringToPtr(sa.ActionTaken),
-		Title:        sa.Title,
-		Metadata:     approvalNullStringToPtr(sa.Metadata),
-		CreatedAt:    sa.CreatedAt,
-		ResolvedAt:   approvalNullTimeToPtr(sa.ResolvedAt),
+		ID:                 sa.ID,
+		ChatID:             sa.ChatID,
+		ApprovalType:       int32(sa.ApprovalType),
+		EntityID:           sa.EntityID,
+		Status:             int32(sa.Status),
+		DenialReason:       approvalNullStringToPtr(sa.DenialReason),
+		ActionTaken:        approvalNullStringToPtr(sa.ActionTaken),
+		Title:              sa.Title,
+		Metadata:           approvalNullStringToPtr(sa.Metadata),
+		TemporalWorkflowID: sa.TemporalWorkflowID,
+		CreatedAt:          sa.CreatedAt,
+		ResolvedAt:         approvalNullTimeToPtr(sa.ResolvedAt),
 	}
 }
 
