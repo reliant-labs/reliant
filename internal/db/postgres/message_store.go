@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -242,7 +243,7 @@ func (s *messageStore) UpdateMessage(ctx context.Context, msg *core.Message) err
 	return s.q.UpdateMessage(ctx, pgdb.UpdateMessageParams{
 		ID:         msg.ID,
 		TokenCount: msgIntPtrToNullInt64(msg.TokenCount),
-		CostMicros: msgInt64PtrToNullInt64(msg.CostMicros),
+		Cost:       msgCostMicrosPtrToNullFloat64(msg.CostMicros),
 	})
 }
 
@@ -258,7 +259,7 @@ func messageFromPG(sm pgdb.Message) *core.Message {
 		Model:           msgNullStringToPtr(sm.Model),
 		Agent:           msgNullStringToPtr(sm.Agent),
 		TokenCount:      msgNullInt64ToIntPtr(sm.TokenCount),
-		CostMicros:      msgNullInt64ToPtr(sm.CostMicros),
+		CostMicros:      msgNullFloat64ToCostMicrosPtr(sm.Cost),
 		WorkflowID:      msgNullStringToPtr(sm.WorkflowID),
 		RunID:           msgNullStringToPtr(sm.RunID),
 		NodeID:          msgNullStringToPtr(sm.NodeID),
@@ -292,7 +293,7 @@ func messageToCreateParams(msg *core.Message) pgdb.CreateMessageParams {
 		Model:           msgPtrToNullString(msg.Model),
 		Agent:           msgPtrToNullString(msg.Agent),
 		TokenCount:      msgIntPtrToNullInt64(msg.TokenCount),
-		CostMicros:      msgInt64PtrToNullInt64(msg.CostMicros),
+		Cost:            msgCostMicrosPtrToNullFloat64(msg.CostMicros),
 		WorkflowID:      msgPtrToNullString(msg.WorkflowID),
 		RunID:           msgPtrToNullString(msg.RunID),
 		ActivityID:      msgPtrToNullString(msg.ActivityID),
@@ -315,7 +316,7 @@ func messageToCreateIfNotExistsParams(msg *core.Message) pgdb.CreateMessageIfNot
 		Model:           msgPtrToNullString(msg.Model),
 		Agent:           msgPtrToNullString(msg.Agent),
 		TokenCount:      msgIntPtrToNullInt64(msg.TokenCount),
-		CostMicros:      msgInt64PtrToNullInt64(msg.CostMicros),
+		Cost:            msgCostMicrosPtrToNullFloat64(msg.CostMicros),
 		WorkflowID:      msgPtrToNullString(msg.WorkflowID),
 		RunID:           msgPtrToNullString(msg.RunID),
 		ActivityID:      msgPtrToNullString(msg.ActivityID),
@@ -459,6 +460,21 @@ func msgInt64PtrToNullInt64(i *int64) sql.NullInt64 {
 func msgNullInt64ToPtr(ni sql.NullInt64) *int64 {
 	if ni.Valid {
 		return &ni.Int64
+	}
+	return nil
+}
+
+func msgCostMicrosPtrToNullFloat64(micros *int64) sql.NullFloat64 {
+	if micros != nil {
+		return sql.NullFloat64{Float64: float64(*micros) / 1_000_000, Valid: true}
+	}
+	return sql.NullFloat64{Valid: false}
+}
+
+func msgNullFloat64ToCostMicrosPtr(cost sql.NullFloat64) *int64 {
+	if cost.Valid {
+		micros := int64(math.Round(cost.Float64 * 1_000_000))
+		return &micros
 	}
 	return nil
 }

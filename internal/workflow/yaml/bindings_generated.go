@@ -145,6 +145,7 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 		argFieldKeys: map[string]struct{}{
 			"attachments":            {},
 			"content":                {},
+			"cost_micros":            {},
 			"display_style":          {},
 			"resolved_attachments":   {},
 			"resolved_content":       {},
