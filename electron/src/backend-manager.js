@@ -669,30 +669,65 @@ class BackendManager {
   }
 
   checkHealth() {
-    return new Promise((resolve, reject) => {
-      const options = {
-        hostname: 'localhost',
-        port: this.grpcPort,
-        path: '/api/v2/health',
-        method: 'GET',
-        timeout: 1000,
-        rejectUnauthorized: false, // Accept self-signed certificates
-      };
+    const protocol = this.useTLS ? https : http;
 
-      // Use https when TLS is enabled, http otherwise
-      const protocol = this.useTLS ? https : http;
-      const req = protocol.request(options, (res) => {
-        resolve(res.statusCode === 200);
+    const callConnectUnary = (path, body, validateResponse) =>
+      new Promise((resolve, reject) => {
+        const req = protocol.request({
+          hostname: 'localhost',
+          port: this.grpcPort,
+          path,
+          method: 'POST',
+          timeout: 1000,
+          rejectUnauthorized: false, // Accept self-signed certificates
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }, (res) => {
+          let responseBody = '';
+          res.setEncoding('utf8');
+          res.on('data', (chunk) => {
+            responseBody += chunk;
+          });
+          res.on('end', () => {
+            try {
+              if (validateResponse) {
+                resolve(validateResponse(res, responseBody));
+                return;
+              }
+              resolve(res.statusCode === 200);
+            } catch (error) {
+              reject(error);
+            }
+          });
+        });
+
+        req.on('error', reject);
+        req.on('timeout', () => {
+          req.destroy();
+          reject(new Error('Health check timeout'));
+        });
+
+        req.write(body);
+        req.end();
       });
 
-      req.on('error', reject);
-      req.on('timeout', () => {
-        req.destroy();
-        reject(new Error('Health check timeout'));
-      });
+    return callConnectUnary(
+      '/reliant.v1.SystemService/Ready',
+      '{}',
+      (res, responseBody) => {
+        if (res.statusCode !== 200) {
+          return false;
+        }
 
-      req.end();
-    });
+        try {
+          const parsed = JSON.parse(responseBody);
+          return parsed?.status === 'ready';
+        } catch {
+          return false;
+        }
+      }
+    );
   }
 
   async start() {
