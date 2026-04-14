@@ -105,6 +105,7 @@ service BillingService {
   rpc GetCurrentUserReliantState(GetCurrentUserReliantStateRequest) returns (GetCurrentUserReliantStateResponse) {}
   rpc RepairCurrentUserReliantAccess(RepairCurrentUserReliantAccessRequest) returns (RepairCurrentUserReliantAccessResponse) {}
   rpc RotateCurrentUserReliantAccess(RotateCurrentUserReliantAccessRequest) returns (RotateCurrentUserReliantAccessResponse) {}
+  rpc RecordManagedReliantUsage(RecordManagedReliantUsageRequest) returns (RecordManagedReliantUsageResponse) {}
 }
 
 message GetCurrentUserReliantStateRequest {}
@@ -132,6 +133,15 @@ message RotateCurrentUserReliantAccessResponse {
   bool rotated = 3;
   bool replaced = 4;
   string plaintext_key = 5;
+}
+
+message RecordManagedReliantUsageRequest {
+  string managed_key = 1;
+  double spend_usd = 2;
+}
+
+message RecordManagedReliantUsageResponse {
+  double total_spend_usd = 1;
 }
 
 service LLMGatewayService {

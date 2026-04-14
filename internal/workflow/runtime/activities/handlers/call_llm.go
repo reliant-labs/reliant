@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 
@@ -52,9 +53,10 @@ type streamProcessingState struct {
 	thinkingParts     []string // Extended thinking content parts
 	thinkingSignature string   // Thinking signature for multi-turn preservation
 	toolCalls         []message.ToolCall
-	tokenCount        int     // Total tokens (prompt + response + context)
-	cost              float64 // Request cost in USD returned by the provider response
-	workingDir        string  // Working directory for trimming bash commands
+	tokenCount        int            // Total tokens (prompt + response + context)
+	usage             llm.TokenUsage // Full token usage for analytics and managed spend tracking
+	cost              float64        // Request cost in USD returned by the provider response
+	workingDir        string         // Working directory for trimming bash commands
 
 	upstreamRequestID  string // Provider response header x-oai-request-id (if available)
 	upstreamProxymanID string // Provider response header x-proxyman-id (if available)
@@ -67,24 +69,26 @@ type streamProcessingState struct {
 // CallLLMActivity implements the call_llm activity.
 // This activity streams LLM response by content blocks and is separate from message saving
 type CallLLMActivity struct {
-	repo           db.Repository
-	hub            streaming.StreamingHub
-	toolsFactory   *tools.ToolsFactory
-	configProvider cfgpkg.ConfigProvider
-	driverResolver drivers.DriverResolver
-	mcpBinder      toolexec.MCPContextBinder
+	repo               db.Repository
+	hub                streaming.StreamingHub
+	toolsFactory       *tools.ToolsFactory
+	configProvider     cfgpkg.ConfigProvider
+	driverResolver     drivers.DriverResolver
+	mcpBinder          toolexec.MCPContextBinder
+	controlPlaneClient controlplane.Client
 }
 
 // NewCallLLMActivity creates a new CallLLMActivity.
 // The optional variadic arguments accept a cfgpkg.ConfigProvider and/or a drivers.DriverResolver.
 func NewCallLLMActivity(repo db.Repository, hub streaming.StreamingHub, toolsFactory *tools.ToolsFactory, cfgProvider cfgpkg.ConfigProvider, resolver drivers.DriverResolver, mcpBinder toolexec.MCPContextBinder) *CallLLMActivity {
 	return &CallLLMActivity{
-		repo:           repo,
-		hub:            hub,
-		toolsFactory:   toolsFactory,
-		configProvider: cfgProvider,
-		driverResolver: resolver,
-		mcpBinder:      mcpBinder,
+		repo:               repo,
+		hub:                hub,
+		toolsFactory:       toolsFactory,
+		configProvider:     cfgProvider,
+		driverResolver:     resolver,
+		mcpBinder:          mcpBinder,
+		controlPlaneClient: controlplane.NewClient(""),
 	}
 }
 
@@ -758,9 +762,9 @@ streamLoop:
 		}
 	}
 
-	// Track LLM call completion for analytics
+	// Track LLM call completion for analytics and managed spend sync.
 	llmLatencyMs := time.Since(llmCallStart).Milliseconds()
-	a.trackLLMCallCompleted(ctx, chat, driver, llmLatencyMs, streamState.tokenCount, streamErr)
+	a.trackLLMCallCompleted(ctx, chat, driver, llmLatencyMs, streamState.usage, streamErr)
 
 	if streamState.upstreamRequestID != "" || streamState.upstreamProxymanID != "" {
 		activity.GetLogger(ctx).Info("[CallLLM] Upstream correlation",
@@ -1452,23 +1456,26 @@ func (a *CallLLMActivity) handleToolUseStop(ctx context.Context, chatID string, 
 
 // handleComplete handles the completion event with token usage and final tool calls
 func (a *CallLLMActivity) handleComplete(ctx context.Context, event llm.DriverEvent, state *streamProcessingState) {
-	// Collect usage from the final response.
+	if event.Response == nil {
+		return
+	}
+
+	// Collect usage from the final response for analytics, spend tracking, and compaction decisions.
+	state.usage = event.Response.Usage
 	state.tokenCount = int(event.Response.Usage.TokenCount)
 	state.cost = event.Response.Usage.Cost
 
 	// Extract thinking signature from the response (for multi-turn thinking preservation)
-	if event.Response != nil && event.Response.ThinkingSignature != "" {
+	if event.Response.ThinkingSignature != "" {
 		state.thinkingSignature = event.Response.ThinkingSignature
 	}
 
-	if event.Response != nil {
-		state.upstreamRequestID = strings.TrimSpace(event.Response.UpstreamRequestID)
-		state.upstreamProxymanID = strings.TrimSpace(event.Response.UpstreamProxymanID)
-	}
+	state.upstreamRequestID = strings.TrimSpace(event.Response.UpstreamRequestID)
+	state.upstreamProxymanID = strings.TrimSpace(event.Response.UpstreamProxymanID)
 
 	// CRITICAL: Extract complete tool calls with full inputs from the final response
 	// This is done here instead of EventToolUseStart because Input is empty at that point
-	if event.Response != nil && len(event.Response.ToolCalls) > 0 {
+	if len(event.Response.ToolCalls) > 0 {
 		state.toolCalls = make([]message.ToolCall, len(event.Response.ToolCalls))
 		for i, tc := range event.Response.ToolCalls {
 			toolInput := tc.Input
@@ -1490,13 +1497,13 @@ func (a *CallLLMActivity) handleComplete(ctx context.Context, event llm.DriverEv
 	// During streaming, text is accumulated from EventContentDelta events which may contain
 	// raw embedded function call patterns (e.g., "to=functions.view {json}") that the driver
 	// strips in its authoritative done-event text. Override with the clean final content.
-	if event.Response != nil && event.Response.Content != "" {
+	if event.Response.Content != "" {
 		state.textParts = []string{event.Response.Content}
 	}
 }
 
 // trackLLMCallCompleted fires an analytics event after each LLM API call.
-func (a *CallLLMActivity) trackLLMCallCompleted(ctx context.Context, chat *db.Chat, driver llm.Driver, latencyMs int64, tokenCount int, streamErr error) {
+func (a *CallLLMActivity) trackLLMCallCompleted(ctx context.Context, chat *db.Chat, driver llm.Driver, latencyMs int64, usage llm.TokenUsage, streamErr error) {
 	model := driver.Model()
 	metrics := analytics.LLMCallMetrics{
 		Provider:    driver.Name(),
@@ -1509,15 +1516,75 @@ func (a *CallLLMActivity) trackLLMCallCompleted(ctx context.Context, chat *db.Ch
 	if streamErr != nil {
 		metrics.ErrorType = classifyLLMError(streamErr)
 	}
-	// TokenCount is the total from the driver; we report it as inputTokens since
-	// the driver aggregates input+output+cache into a single total.
-	metrics.InputTokens = tokenCount
+	metrics.InputTokens = int(usage.InputTokens)
+	metrics.OutputTokens = int(usage.OutputTokens)
+	if metrics.InputTokens == 0 && metrics.OutputTokens == 0 {
+		metrics.InputTokens = int(usage.TokenCount)
+	}
 	if chat.WorkflowID != nil {
 		metrics.WorkflowID = *chat.WorkflowID
 	}
 
 	analyticsClient := analytics.GetClientForUser(ctx, chat.UserID)
 	analyticsClient.TrackLLMCallCompleted(metrics)
+
+	a.recordManagedReliantUsage(ctx, chat, driver, usage, streamErr)
+}
+
+func (a *CallLLMActivity) recordManagedReliantUsage(ctx context.Context, chat *db.Chat, driver llm.Driver, usage llm.TokenUsage, streamErr error) {
+	if streamErr != nil || chat == nil || strings.TrimSpace(chat.UserID) == "" || driver == nil || driver.Name() != "reliant" {
+		return
+	}
+	if a.repo == nil || a.controlPlaneClient == nil {
+		return
+	}
+
+	managedKey, err := a.repo.GetProviderAPIKey(ctx, chat.UserID, "reliant")
+	if err != nil {
+		logging.Warn("Failed to load Reliant provider key for managed spend sync", "chat_id", chat.ID, "user_id", chat.UserID, "error", err)
+		return
+	}
+	managedKey = strings.TrimSpace(managedKey)
+	if !strings.HasPrefix(managedKey, "rlnt_") && !strings.HasPrefix(managedKey, "rly_") {
+		return
+	}
+
+	spendUSD := estimateManagedReliantSpendUSD(driver.Model(), usage)
+	if spendUSD <= 0 {
+		return
+	}
+
+	usageCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if _, err := a.controlPlaneClient.RecordManagedReliantUsage(usageCtx, managedKey, spendUSD); err != nil {
+		logging.Warn("Failed to record managed Reliant usage", "chat_id", chat.ID, "user_id", chat.UserID, "model", string(driver.Model().ID), "spend_usd", spendUSD, "error", err)
+		return
+	}
+	logging.Info("Recorded managed Reliant usage", "chat_id", chat.ID, "user_id", chat.UserID, "model", string(driver.Model().ID), "spend_usd", spendUSD)
+}
+
+func estimateManagedReliantSpendUSD(model models.Model, usage llm.TokenUsage) float64 {
+	if usage.Cost > 0 {
+		return usage.Cost
+	}
+
+	inputTokens := usage.InputTokens
+	outputTokens := usage.OutputTokens
+	cachedInputTokens := int64(0)
+	if inputTokens == 0 && outputTokens == 0 {
+		inputTokens = usage.TokenCount
+	}
+	if inputTokens <= 0 && outputTokens <= 0 && cachedInputTokens <= 0 {
+		return 0
+	}
+
+	spendUSD := (float64(inputTokens) * model.CostPer1MIn / 1_000_000) +
+		(float64(outputTokens) * model.CostPer1MOut / 1_000_000) +
+		(float64(cachedInputTokens) * model.CostPer1MInCached / 1_000_000)
+	if spendUSD < 0 {
+		return 0
+	}
+	return spendUSD
 }
 
 // classifyLLMError maps an LLM error to a category string for analytics.

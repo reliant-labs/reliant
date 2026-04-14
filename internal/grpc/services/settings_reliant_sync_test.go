@@ -65,6 +65,10 @@ func (f *fakeControlPlaneClient) RotateCurrentUserReliantAccess(_ context.Contex
 	return f.rotateCurrentUserReliantAccessResp, f.rotateCurrentUserReliantAccessErr
 }
 
+func (f *fakeControlPlaneClient) RecordManagedReliantUsage(_ context.Context, managedKey string, spendUSD float64) (*controlplanev1.RecordManagedReliantUsageResponse, error) {
+	return &controlplanev1.RecordManagedReliantUsageResponse{TotalSpendUsd: spendUSD}, nil
+}
+
 func newReliantSyncTestContext() context.Context {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 	ctx = context.WithValue(ctx, auth.UserEmailContextKey, "test.user@example.com")

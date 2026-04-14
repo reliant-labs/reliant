@@ -602,8 +602,23 @@ func (c *ReliantClient) toolCalls(completion openai.ChatCompletion) []message.To
 }
 
 func (c *ReliantClient) usage(completion openai.ChatCompletion) llm.TokenUsage {
+	cachedInputTokens := completion.Usage.PromptTokensDetails.CachedTokens
+	inputTokens := completion.Usage.PromptTokens - cachedInputTokens
+	if inputTokens < 0 {
+		inputTokens = completion.Usage.PromptTokens
+		cachedInputTokens = 0
+	}
+	cost := (float64(inputTokens) * c.Options.Model.CostPer1MIn / 1_000_000) +
+		(float64(completion.Usage.CompletionTokens) * c.Options.Model.CostPer1MOut / 1_000_000) +
+		(float64(cachedInputTokens) * c.Options.Model.CostPer1MInCached / 1_000_000)
+	if cost < 0 {
+		cost = 0
+	}
 	return llm.TokenUsage{
-		TokenCount: completion.Usage.PromptTokens,
+		TokenCount:   completion.Usage.TotalTokens,
+		InputTokens:  inputTokens,
+		OutputTokens: completion.Usage.CompletionTokens,
+		Cost:         cost,
 	}
 }
 

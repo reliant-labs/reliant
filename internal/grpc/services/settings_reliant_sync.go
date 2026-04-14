@@ -3,17 +3,13 @@ package services
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"os"
 	"strings"
-	"time"
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
-	controlplanev1 "github.com/reliant-labs/reliant/internal/gen/controlplane/v1"
-	"github.com/reliant-labs/reliant/internal/gen/controlplane/v1/controlplanev1connect"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -21,82 +17,13 @@ import (
 const (
 	reliantProviderID                = "reliant"
 	reliantSyncInitializedSettingKey = "providers.reliant.sync_initialized"
-	defaultControlPlaneBaseURL       = "http://localhost:8090"
 	reliantKeyRotationGracePeriod    = "24h"
 )
 
-type controlPlaneClient interface {
-	GetCurrentUserReliantState(ctx context.Context, authHeader string) (*controlplanev1.GetCurrentUserReliantStateResponse, error)
-	RepairCurrentUserReliantAccess(ctx context.Context, authHeader string) (*controlplanev1.RepairCurrentUserReliantAccessResponse, error)
-	RotateCurrentUserReliantAccess(ctx context.Context, authHeader, gracePeriod string) (*controlplanev1.RotateCurrentUserReliantAccessResponse, error)
-}
-
-type connectControlPlaneClient struct {
-	httpClient *http.Client
-	baseURL    string
-}
+type controlPlaneClient = controlplane.Client
 
 func newControlPlaneClient(baseURL string) controlPlaneClient {
-	trimmed := strings.TrimSpace(baseURL)
-	if trimmed == "" {
-		trimmed = getControlPlaneBaseURL()
-	}
-	return &connectControlPlaneClient{
-		httpClient: &http.Client{Timeout: 30 * time.Second},
-		baseURL:    strings.TrimRight(trimmed, "/"),
-	}
-}
-
-func getControlPlaneBaseURL() string {
-	for _, key := range []string{"RELIANT_CONTROL_PLANE_URL", "CONTROL_PLANE_API_URL", "CONTROL_PLANE_BASE_URL"} {
-		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
-			return value
-		}
-	}
-	return defaultControlPlaneBaseURL
-}
-
-func (c *connectControlPlaneClient) GetCurrentUserReliantState(ctx context.Context, authHeader string) (*controlplanev1.GetCurrentUserReliantStateResponse, error) {
-	client := controlplanev1connect.NewBillingServiceClient(c.httpClient, c.baseURL)
-	req := connect.NewRequest(&controlplanev1.GetCurrentUserReliantStateRequest{})
-	attachAuthorization(req, authHeader)
-	resp, err := client.GetCurrentUserReliantState(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	return resp.Msg, nil
-}
-
-func (c *connectControlPlaneClient) RepairCurrentUserReliantAccess(ctx context.Context, authHeader string) (*controlplanev1.RepairCurrentUserReliantAccessResponse, error) {
-	client := controlplanev1connect.NewBillingServiceClient(c.httpClient, c.baseURL)
-	req := connect.NewRequest(&controlplanev1.RepairCurrentUserReliantAccessRequest{})
-	attachAuthorization(req, authHeader)
-	resp, err := client.RepairCurrentUserReliantAccess(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	return resp.Msg, nil
-}
-
-func (c *connectControlPlaneClient) RotateCurrentUserReliantAccess(ctx context.Context, authHeader, gracePeriod string) (*controlplanev1.RotateCurrentUserReliantAccessResponse, error) {
-	client := controlplanev1connect.NewBillingServiceClient(c.httpClient, c.baseURL)
-	msg := &controlplanev1.RotateCurrentUserReliantAccessRequest{}
-	if trimmed := strings.TrimSpace(gracePeriod); trimmed != "" {
-		msg.GracePeriod = &trimmed
-	}
-	req := connect.NewRequest(msg)
-	attachAuthorization(req, authHeader)
-	resp, err := client.RotateCurrentUserReliantAccess(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	return resp.Msg, nil
-}
-
-func attachAuthorization[T any](req *connect.Request[T], authHeader string) {
-	if trimmed := strings.TrimSpace(authHeader); trimmed != "" {
-		req.Header().Set("Authorization", trimmed)
-	}
+	return controlplane.NewClient(baseURL)
 }
 
 func makeReliantProviderStatus(hasKey bool, maskedKey string) *reliantv1.ProviderStatus {
