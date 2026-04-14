@@ -52,10 +52,10 @@ inputs:
     description: Override the system prompt (empty = use default)
   max_turns:
     type: integer
-    default: 200
-    min: 1
+    default: 0
+    min: 0
     max: 500
-    description: Maximum agent loop iterations
+    description: Maximum agent loop iterations (0 = unlimited)
   compaction_threshold:
     type: integer
     default: 185000
@@ -137,9 +137,9 @@ entry: [agent_loop]
 nodes:
   - id: agent_loop
     type: loop
-    # Continues while: has tool calls AND under max turns. No tools = yield to user.
-    while: (outputs.tool_calls != null && size(outputs.tool_calls) > 0) && iter.iteration < inputs.max_turns
-    yield: "{{inputs.yield || iter.iteration >= inputs.max_turns}}"
+    # Continues while: has tool calls. No tools = yield to user. Max turns handled via yield condition.
+    while: outputs.tool_calls != null && size(outputs.tool_calls) > 0
+    yield: "{{inputs.yield || (inputs.max_turns > 0 && iter.iteration >= inputs.max_turns)}}"
     inline:
       outputs:
         tool_calls: "{{nodes.call_llm.tool_calls}}"
@@ -250,7 +250,7 @@ edges:
   - from: agent_loop
     cases:
       - to: max_turns_notification
-        condition: nodes.agent_loop._iterations >= inputs.max_turns
+        condition: inputs.max_turns > 0 && nodes.agent_loop._iterations >= inputs.max_turns
         label: "max_turns_reached"
 
 ui:

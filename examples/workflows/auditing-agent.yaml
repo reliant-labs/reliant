@@ -47,9 +47,9 @@ inputs:
     description: Presets available for main agent's spawn tool
   max_turns:
     type: integer
-    default: 200
-    description: Maximum agent loop iterations
-    min: 1
+    default: 0
+    description: Maximum agent loop iterations (0 = unlimited)
+    min: 0
     max: 500
   compaction_threshold:
     type: integer
@@ -105,8 +105,8 @@ entry: [audited_loop]
 nodes:
   - id: audited_loop
     type: loop
-    while: (outputs.tool_calls != null && size(outputs.tool_calls) > 0) && iter.iteration < inputs.max_turns
-    yield: "{{inputs.yield || iter.iteration >= inputs.max_turns}}"
+    while: outputs.tool_calls != null && size(outputs.tool_calls) > 0
+    yield: "{{inputs.yield || (inputs.max_turns > 0 && iter.iteration >= inputs.max_turns)}}"
     inline:
       name: audited_loop (Loop Body)
       description: Inline loop body for audited_loop
@@ -249,7 +249,7 @@ edges:
   - from: audited_loop
     cases:
       - to: max_turns_notification
-        condition: nodes.audited_loop._iterations >= inputs.max_turns
+        condition: inputs.max_turns > 0 && nodes.audited_loop._iterations >= inputs.max_turns
         label: "max_turns_reached"
 
 ui:
