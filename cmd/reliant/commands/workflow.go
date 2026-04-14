@@ -15,9 +15,12 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/reliant-labs/reliant/internal/auth"
+	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/simulator"
+	"github.com/reliant-labs/reliant/internal/workflow/validation"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 )
 
@@ -29,6 +32,7 @@ func newWorkflowCmd() *cobra.Command {
 	}
 
 	cmd.AddCommand(newWorkflowValidateCmd())
+	cmd.AddCommand(newWorkflowValidateTreeCmd())
 	cmd.AddCommand(newWorkflowListCmd())
 	cmd.AddCommand(newWorkflowRunCmd())
 	cmd.AddCommand(newWorkflowScenarioCmd())
@@ -67,6 +71,47 @@ Exit code 0 if all workflows are valid, 1 if any errors are found.`,
 	cmd.Flags().BoolVar(&failFast, "fail-fast", false, "Stop on first validation error")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format (for CI)")
 	cmd.Flags().BoolVar(&includeBuiltins, "include-builtins", false, "Also validate builtin workflows")
+
+	return cmd
+}
+
+func newWorkflowValidateTreeCmd() *cobra.Command {
+	var (
+		workflowDir     string
+		presetDir       string
+		includeBuiltins bool
+		inputs          []string
+		inputFile       string
+		verboseOutput   bool
+		jsonOutput      bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "validate-tree <path-or-builtin-ref>",
+		Short: "Validate a workflow tree with preset-aware cross-workflow checks",
+		Long: `Validates a workflow and all recursively reachable child workflows using
+the same static analysis that runs server-side at CreateChat time. Wires a
+PresetLoader alongside the WorkflowLoader so preset-param mismatches (for
+example a preset setting params that aren't declared inputs on the target
+workflow) are surfaced offline.
+
+The reference may be either a filesystem path to a workflow YAML file, or a
+builtin reference like "builtin://get-it-right".
+
+Exit code 0 if no errors, 1 if any errors are found.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runWorkflowValidateTree(cmd, args[0], workflowDir, presetDir, includeBuiltins, inputs, inputFile, verboseOutput, jsonOutput)
+		},
+	}
+
+	cmd.Flags().StringVar(&presetDir, "preset-dir", ".reliant/presets", "Directory containing project preset YAML files")
+	cmd.Flags().StringVar(&workflowDir, "dir", ".reliant/workflows", "Directory containing workflow YAML files")
+	cmd.Flags().BoolVar(&includeBuiltins, "include-builtins", true, "Also resolve and validate references into builtin workflows")
+	cmd.Flags().StringArrayVarP(&inputs, "input", "i", nil, "Input binding as key=value (repeatable)")
+	cmd.Flags().StringVar(&inputFile, "input-file", "", "JSON file containing workflow inputs")
+	cmd.Flags().BoolVarP(&verboseOutput, "verbose", "V", false, "Show detailed output")
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format (for CI)")
 
 	return cmd
 }
@@ -324,12 +369,14 @@ func runWorkflowValidate(_ *cobra.Command, args []string, dir string, verbose, f
 			return fmt.Errorf("cannot access %s: %w", path, err)
 		}
 		if info.IsDir() {
+			dir = path
 			f, err := collectYAMLFiles(path)
 			if err != nil {
 				return err
 			}
 			files = append(files, f...)
 		} else {
+			dir = filepath.Dir(path)
 			files = append(files, path)
 		}
 	} else {
@@ -376,7 +423,7 @@ func runWorkflowValidate(_ *cobra.Command, args []string, dir string, verbose, f
 	hasErrors := false
 
 	for _, file := range files {
-		result := validateWorkflowFile(file)
+		result := validateWorkflowFile(file, dir)
 		results = append(results, result)
 
 		if !jsonOut {
@@ -447,7 +494,32 @@ func findBuiltinDir() string {
 	return ""
 }
 
-func validateWorkflowFile(path string) validateResult {
+func buildCLIWorkflowLoader(dir string) runtime.WorkflowLoader {
+	return func(ref string) (*reliantv1.Workflow, error) {
+		name := ref
+		if strings.HasPrefix(name, "builtin://") {
+			name = strings.TrimPrefix(name, "builtin://")
+		}
+
+		// Try builtin embedded FS first
+		if data, err := builtin.BuiltinWorkflowsFS.ReadFile(name + ".yaml"); err == nil {
+			return wfyaml.ParseWorkflow(data)
+		}
+
+		// Fall back to local workflow directory
+		if dir != "" {
+			localPath := filepath.Join(dir, name+".yaml")
+			if data, err := os.ReadFile(localPath); err == nil {
+				return wfyaml.ParseWorkflow(data)
+			}
+		}
+
+		// Not found — allow validation to continue gracefully
+		return nil, nil
+	}
+}
+
+func validateWorkflowFile(path string, workflowDir string) validateResult {
 	result := validateResult{
 		File: filepath.Base(path),
 	}
@@ -469,8 +541,9 @@ func validateWorkflowFile(path string) validateResult {
 	result.Nodes = len(wf.GetNodes())
 	result.Edges = len(wf.GetEdges())
 
-	// Run full validation
-	valResult, valErr := runtime.ValidateYAMLResult(data, nil)
+	// Run full validation with cross-workflow loader
+	loader := buildCLIWorkflowLoader(workflowDir)
+	valResult, valErr := runtime.ValidateYAMLResult(data, loader)
 	if valErr != nil {
 		result.Errors = append(result.Errors, valErr.Error())
 	} else if valResult != nil {
@@ -536,6 +609,195 @@ func printVerboseValidateResult(r validateResult) {
 	}
 
 	fmt.Println()
+}
+
+// --- workflow validate-tree implementation ---
+
+func runWorkflowValidateTree(cmd *cobra.Command, ref, workflowDir, presetDir string, includeBuiltins bool, inputs []string, inputFile string, verbose, jsonOut bool) error {
+	// Resolve the workflow YAML: either a path or a builtin:// ref.
+	data, displayName, err := loadWorkflowTreeSource(ref)
+	if err != nil {
+		return err
+	}
+
+	wf, err := wfyaml.ParseWorkflow(data)
+	if err != nil {
+		return fmt.Errorf("parse workflow: %w", err)
+	}
+
+	// Build loaders.
+	var wfLoader validation.WorkflowLoader
+	baseLoader := buildCLIWorkflowLoader(workflowDir)
+	if includeBuiltins {
+		wfLoader = func(r string) (*reliantv1.Workflow, error) {
+			return baseLoader(r)
+		}
+	} else {
+		wfLoader = func(r string) (*reliantv1.Workflow, error) {
+			if strings.HasPrefix(r, "builtin://") {
+				return nil, nil
+			}
+			return baseLoader(r)
+		}
+	}
+
+	presetLoader := buildCLIPresetLoader(presetDir)
+
+	// Run static analysis with both loaders wired.
+	opts := &validation.ValidationOptions{
+		WorkflowLoader:       wfLoader,
+		PresetLoader:         presetLoader,
+		CanonicalWorkflowRef: canonicalWorkflowRef(ref),
+	}
+	staticResult := validation.StaticAnalysisWithOptions(wf, opts)
+
+	result := validateResult{
+		File:  displayName,
+		Name:  wf.GetName(),
+		Nodes: len(wf.GetNodes()),
+		Edges: len(wf.GetEdges()),
+	}
+	if staticResult != nil {
+		for _, e := range staticResult.Errors() {
+			result.Errors = append(result.Errors, e.Error())
+		}
+		for _, w := range staticResult.Warnings() {
+			result.Warnings = append(result.Warnings, w.Error())
+		}
+	}
+
+	// Optional input binding validation.
+	if len(inputs) > 0 || inputFile != "" {
+		inputMap, ierr := buildCLIInputMap(inputs, inputFile)
+		if ierr != nil {
+			return ierr
+		}
+		inputResult := validation.ValidateInputs(wf, inputMap)
+		if inputResult != nil {
+			for _, e := range inputResult.Errors() {
+				result.Errors = append(result.Errors, e.Error())
+			}
+			for _, w := range inputResult.Warnings() {
+				result.Warnings = append(result.Warnings, w.Error())
+			}
+		}
+	}
+
+	result.Valid = len(result.Errors) == 0
+
+	if jsonOut {
+		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(result); err != nil {
+			return fmt.Errorf("failed to encode JSON: %w", err)
+		}
+	} else {
+		if verbose {
+			printVerboseValidateResult(result)
+		} else {
+			printCompactValidateResult(result)
+		}
+		printValidateSummary([]validateResult{result})
+	}
+
+	if !result.Valid {
+		return fmt.Errorf("validation failed")
+	}
+	return nil
+}
+
+// loadWorkflowTreeSource reads the workflow YAML from either a file path or a
+// builtin:// reference and returns the data plus a display label.
+func loadWorkflowTreeSource(ref string) ([]byte, string, error) {
+	if strings.HasPrefix(ref, "builtin://") {
+		name := strings.TrimPrefix(ref, "builtin://")
+		data, err := builtin.BuiltinWorkflowsFS.ReadFile(name + ".yaml")
+		if err != nil {
+			return nil, "", fmt.Errorf("builtin workflow not found: %s", ref)
+		}
+		return data, ref, nil
+	}
+
+	data, err := os.ReadFile(ref)
+	if err != nil {
+		return nil, "", fmt.Errorf("cannot read %s: %w", ref, err)
+	}
+	return data, filepath.Base(ref), nil
+}
+
+// canonicalWorkflowRef returns a loadable ref suitable for
+// ValidationOptions.CanonicalWorkflowRef. For builtin:// refs we preserve the
+// ref; for filesystem paths we leave it empty so validation falls back to
+// wf.name.
+func canonicalWorkflowRef(ref string) string {
+	if strings.HasPrefix(ref, "builtin://") {
+		return ref
+	}
+	return ""
+}
+
+// buildCLIPresetLoader constructs a validation.PresetLoader backed by the
+// project preset directory (falls back to builtin presets via preset.Loader).
+func buildCLIPresetLoader(presetDir string) validation.PresetLoader {
+	loader := preset.NewLoader(presetDir)
+	return func(name string) (map[string]interface{}, error) {
+		p, err := loader.Load(name)
+		if err != nil {
+			return nil, err
+		}
+		return p.Params, nil
+	}
+}
+
+// buildCLIInputMap merges --input key=value pairs and --input-file JSON into a
+// single map, parsing values that look like JSON literals.
+func buildCLIInputMap(inputs []string, inputFile string) (map[string]interface{}, error) {
+	inputMap := make(map[string]interface{})
+
+	if inputFile != "" {
+		data, err := os.ReadFile(inputFile)
+		if err != nil {
+			return nil, fmt.Errorf("reading input file: %w", err)
+		}
+		if err := json.Unmarshal(data, &inputMap); err != nil {
+			return nil, fmt.Errorf("parsing input file: %w", err)
+		}
+	}
+
+	for _, kv := range inputs {
+		parts := strings.SplitN(kv, "=", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("invalid input format %q \u2014 expected key=value", kv)
+		}
+		inputMap[parts[0]] = parseCLIInputValue(parts[1])
+	}
+
+	return inputMap, nil
+}
+
+// parseCLIInputValue attempts to parse the raw value as JSON if it looks like a
+// JSON literal; otherwise returns the raw string.
+func parseCLIInputValue(raw string) interface{} {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return raw
+	}
+	first := trimmed[0]
+	looksJSON := first == '{' || first == '[' || first == '"' || first == '-' || (first >= '0' && first <= '9')
+	if !looksJSON {
+		switch trimmed {
+		case "true", "false", "null":
+			looksJSON = true
+		}
+	}
+	if !looksJSON {
+		return raw
+	}
+	var v interface{}
+	if err := json.Unmarshal([]byte(trimmed), &v); err != nil {
+		return raw
+	}
+	return v
 }
 
 func printValidateSummary(results []validateResult) {

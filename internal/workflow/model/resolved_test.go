@@ -354,9 +354,9 @@ func TestNodeArgsAsMap_CelStringExprUnwrap(t *testing.T) {
 // TestNodeArgsAsMap_CelBoolUnwrap verifies CelBool unwrapping.
 func TestNodeArgsAsMap_CelBoolUnwrap(t *testing.T) {
 	node := &reliantv1.Node{
-		Type: "call_llm",
-		Args: &reliantv1.Node_CallLlm{CallLlm: &reliantv1.CallLLMArgs{
-			Tools: &reliantv1.CelBool{Value: &reliantv1.CelBool_Literal{Literal: true}},
+		Type: "create_worktree",
+		Args: &reliantv1.Node_CreateWorktree{CreateWorktree: &reliantv1.CreateWorktreeArgs{
+			Force: &reliantv1.CelBool{Value: &reliantv1.CelBool_Literal{Literal: true}},
 		}},
 	}
 	mapped, err := NodeArgsAsMap(node)
@@ -364,16 +364,16 @@ func TestNodeArgsAsMap_CelBoolUnwrap(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	tools, ok := mapped["tools"]
+	force, ok := mapped["force"]
 	if !ok {
-		t.Fatal("map missing tools key")
+		t.Fatal("map missing force key")
 	}
-	toolsBool, isBool := tools.(bool)
+	forceBool, isBool := force.(bool)
 	if !isBool {
-		t.Fatalf("tools should be bool, got %T: %v", tools, tools)
+		t.Fatalf("force should be bool, got %T: %v", force, force)
 	}
-	if !toolsBool {
-		t.Error("tools should be true")
+	if !forceBool {
+		t.Error("force should be true")
 	}
 }
 
@@ -446,7 +446,6 @@ func TestNodeArgsAsMap_CallLLMAllCelTypes(t *testing.T) {
 			MaxTokens:     &reliantv1.CelInt{Value: &reliantv1.CelInt_Literal{Literal: 4096}},
 			ThinkingLevel: &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "medium"}},
 			SystemPrompt:  &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "You are helpful"}},
-			Tools:         &reliantv1.CelBool{Value: &reliantv1.CelBool_Literal{Literal: true}},
 		}},
 	}
 	mapped, err := NodeArgsAsMap(node)

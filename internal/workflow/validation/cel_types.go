@@ -88,6 +88,12 @@ type WorkflowTypeContext struct {
 	// that receive inputs dynamically via args from the parent, so input names
 	// cannot be validated statically.
 	LenientInputs bool
+
+	// IterItemFields holds typed field info for the iter.item namespace.
+	// When set, iter is declared as ObjectType("iter") so the custom type provider
+	// can validate field access on iter.item (e.g., iter.item.has_frontend).
+	// When nil, iter falls back to DynType for backward compatibility.
+	IterItemFields map[string]*FieldInfo
 }
 
 // =============================================================================

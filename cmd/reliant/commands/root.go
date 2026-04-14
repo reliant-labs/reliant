@@ -44,6 +44,7 @@ Reliant server components.`,
 	root.AddCommand(newOpenCmd())
 	root.AddCommand(newWorkflowCmd())
 	root.AddCommand(newVersionCmd())
+	root.AddCommand(newForgeCmd())
 
 	return root
 }

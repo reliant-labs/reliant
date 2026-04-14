@@ -36,7 +36,7 @@ Tools are organized by tags for filtering:
 
 ## Categories
 
-- [Planning & Task Management](#planning--task-management) (23 tools)
+- [Planning & Task Management](#planning--task-management) (22 tools)
 - [File Operations](#file-operations) (4 tools)
 - [Workflow Management](#workflow-management) (16 tools)
 - [System & Execution](#system--execution) (2 tools)
@@ -50,33 +50,32 @@ _Tools for creating plans, managing tasks, and tracking progress._
 
 | Tool | Tags | Description |
 |------|------|-------------|
-| [`add_dependency`](#add_dependency) | planning, plan, default | Create a dependency between two tasks in the current plan. |
+| [`add_dependency`](#add_dependency) | planning, plan | Create a dependency between two tasks in the current plan. |
 | [`add_task`](#add_task) | planning, plan, default | Add a new task to the current plan. This is your primary tool for dynamic planning and sub-planning. |
 | [`bash_list`](#bash_list) | execution, readonly, plan, default | Lists background processes in the current workspace. |
 | [`bash_output`](#bash_output) | execution, readonly, plan, default | Retrieves output from a background process with pagination and regex filtering support. |
-| [`component_library`](#component_library) | default, readonly, plan | Component library with 36 production-ready React/TypeScript components for building UIs, dashboar... |
+| [`component_library`](#component_library) | readonly, plan | Component library with 61 production-ready React/TypeScript components for building UIs, dashboar... |
 | [`create_plan`](#create_plan) | planning, plan, default | Create a comprehensive plan with tasks for implementing a feature or solving a problem. |
 | [`create_subtask`](#create_subtask) | planning, plan | Create a subtask under an existing task. |
 | [`fetch`](#fetch) | web, readonly, plan, default | Fetches content from a URL and returns it in the specified format. |
-| [`get_plan`](#get_plan) | planning, readonly, plan, default | Retrieve the current plan for this session. |
+| [`get_plan`](#get_plan) | planning, readonly, plan | Retrieve the current plan for this session. |
 | [`glob`](#glob) | search, readonly, plan, default | - Fast file pattern matching tool that works with any codebase size |
 | [`grep`](#grep) | search, readonly, plan, default | A powerful search tool built on ripgrep. |
-| [`layout_library`](#layout_library) | readonly, plan | Layout library tool that provides pre-built, accessible, and responsive HTML/CSS layout templates... |
-| [`list_ready_tasks`](#list_ready_tasks) | planning, readonly, plan, default | List tasks that are ready to work on — no unresolved blockers. |
+| [`list_ready_tasks`](#list_ready_tasks) | planning, readonly, plan | List tasks that are ready to work on — no unresolved blockers. |
 | [`list_tasks`](#list_tasks) | planning, readonly, plan, default | List all tasks for the current plan. |
 | [`load_tool`](#load_tool) | default, readonly, plan | Dynamically load a tool by name or search for available tools. |
 | [`project_analyzer`](#project_analyzer) | analysis, readonly, plan | Analyzes project structure, detects languages, build systems, and test frameworks |
-| [`remove_dependency`](#remove_dependency) | planning, plan, default | Remove a dependency between two tasks. |
+| [`remove_dependency`](#remove_dependency) | planning, plan | Remove a dependency between two tasks. |
 | [`skill`](#skill) | default, readonly, plan | Load skills — specialized knowledge and instructions for specific tasks. |
 | [`sourcegraph`](#sourcegraph) | analysis, readonly, plan | Search code across public repositories using Sourcegraph's GraphQL API. |
-| [`update_plan`](#update_plan) | planning, plan, default | Update an existing plan's details or status. |
+| [`update_plan`](#update_plan) | planning, plan | Update an existing plan's details or status. |
 | [`update_task`](#update_task) | planning, plan, default | Update a task's status, details, or metadata. |
 | [`view`](#view) | file, readonly, plan, default | File viewing tool that reads and displays the contents of files with line numbers, allowing you t... |
 | [`websearch`](#websearch) | web, readonly, plan, default | Search the web using DuckDuckGo's HTML search. |
 
 ### add_dependency
 
-**Tags:** `planning`, `plan`, `default`
+**Tags:** `planning`, `plan`
 
 Create a dependency between two tasks in the current plan.
 
@@ -273,26 +272,29 @@ The response includes metadata:
 
 ### component_library
 
-**Tags:** `default`, `readonly`, `plan`
+**Tags:** `readonly`, `plan`
 
-Component library with 36 production-ready React/TypeScript components for building UIs, dashboards, landing pages, pitch decks, charts, and diagrams.
+Component library with 61 production-ready React/TypeScript components for building UIs, dashboards, landing pages, pitch decks, charts, and diagrams.
 
 WHEN TO USE:
 - Building any UI — search for relevant components first
 - Creating charts or diagrams — components handle all coordinate math
 - Building pitch deck slides — use deck components as templates
 - Need a layout pattern — search by use case (dashboard, landing, portal, crm)
+- Building CRUD/admin interfaces — badge, modal, tabs, pagination, toast, etc.
 
 ACTIONS:
-- search: Find components by keyword, tag, or category
-  Examples: search(query="chart"), search(tag="deck"), search(category="charts")
+- search: Find components with unified keyword search
+  Examples: search(query="crud table admin"), search(query="chart dashboard"), search(tag="deck")
 - get: Retrieve full source code for a specific component
   Example: get(name="quadrant_chart")
+- install: Write a component file to disk at the given path
+  Example: install(name="sidebar_left", path="src/components/layouts/sidebar_left.tsx")
 - list: Browse all components (optionally filtered by tag or category)
 
-CATEGORIES: layouts (10), charts (6), diagrams (5), deck (7), ui (8)
+CATEGORIES: layouts (11), charts (6), diagrams (5), deck (7), ui (32)
 
-TAGS: layout, chart, diagram, deck, ui, landing, marketing, dashboard, analytics, admin, portal, crm, comparison, pricing, hero, form, auth, slide, presentation, saas, funnel, competitive, market, pipeline, process, team, docs, technical
+TAGS: layout, chart, diagram, deck, ui, landing, marketing, dashboard, analytics, admin, portal, crm, comparison, pricing, hero, form, auth, slide, presentation, saas, funnel, competitive, market, pipeline, process, team, docs, technical, crud, table, stats, detail, search, navigation, modal, dialog, filter, badge, status, tabs, pagination, toast, notification, avatar, dropdown, menu, skeleton, loading, toggle, switch, alert, banner, activity, feed, metric, breadcrumb
 
 CHARTS handle all coordinate math internally — pass data, get pixels. No spatial reasoning required.
 
@@ -437,7 +439,7 @@ RESPONSE METADATA:
 
 ### get_plan
 
-**Tags:** `planning`, `readonly`, `plan`, `default`
+**Tags:** `planning`, `readonly`, `plan`
 
 Retrieve the current plan for this session.
 WHEN TO USE:
@@ -535,33 +537,9 @@ EXAMPLES:
 
 ---
 
-### layout_library
-
-**Tags:** `readonly`, `plan`
-
-Layout library tool that provides pre-built, accessible, and responsive HTML/CSS layout templates for UX design.
-
-WHEN TO USE:
-- Creating new UI layouts quickly
-- Getting responsive, accessible layout templates
-- Prototyping user interfaces
-- Establishing consistent layout patterns
-
-HOW TO USE:
-- action: "list" - Get all available layouts with descriptions
-- action: "get" with layout name - Retrieve specific layout HTML/CSS
-
-FEATURES:
-- 10 pre-built responsive layouts
-- Accessibility-first design
-- Mobile-responsive
-- Semantic HTML structure
-
----
-
 ### list_ready_tasks
 
-**Tags:** `planning`, `readonly`, `plan`, `default`
+**Tags:** `planning`, `readonly`, `plan`
 
 List tasks that are ready to work on — no unresolved blockers.
 
@@ -618,7 +596,7 @@ Analyzes project structure, detects languages, build systems, and test framework
 
 ### remove_dependency
 
-**Tags:** `planning`, `plan`, `default`
+**Tags:** `planning`, `plan`
 
 Remove a dependency between two tasks.
 
@@ -742,7 +720,7 @@ TIPS:
 
 ### update_plan
 
-**Tags:** `planning`, `plan`, `default`
+**Tags:** `planning`, `plan`
 
 Update an existing plan's details or status.
 WHEN TO USE:
@@ -922,7 +900,7 @@ _Tools for reading, writing, and modifying files._
 |------|------|-------------|
 | [`edit`](#edit) | file, default | Make precise text replacements in files or create new files. All edit operations must be provided... |
 | [`find_replace`](#find_replace) | file, default | Performs find and replace operations across multiple files matching a glob pattern. |
-| [`move_code`](#move_code) | file, default | Move or copy a block of code from one location to another, within the same file or across files. |
+| [`move_code`](#move_code) | file | Move or copy a block of code from one location to another, within the same file or across files. |
 | [`write`](#write) | file, default | File writing tool that creates or updates files in the filesystem. |
 
 ### edit
@@ -1133,7 +1111,7 @@ Remember: Use preview=true first, then apply.
 
 ### move_code
 
-**Tags:** `file`, `default`
+**Tags:** `file`
 
 Move or copy a block of code from one location to another, within the same file or across files.
 
@@ -1689,7 +1667,7 @@ _Miscellaneous tools and utilities._
 | Tool | Tags | Description |
 |------|------|-------------|
 | [`metadata_writer`](#metadata_writer) | - | Writes and updates project metadata YAML file |
-| [`worktree`](#worktree) | default | Manage git worktrees for parallel development workflows. |
+| [`worktree`](#worktree) | - | Manage git worktrees for parallel development workflows. |
 
 ### metadata_writer
 
@@ -1698,8 +1676,6 @@ Writes and updates project metadata YAML file
 ---
 
 ### worktree
-
-**Tags:** `default`
 
 Manage git worktrees for parallel development workflows.
 

@@ -131,11 +131,12 @@ func (c *EdgeEvalContext) Namespaces() []CELNamespace {
 // =============================================================================
 
 // LoopEvalContext is used for while and yield condition evaluation inside loops.
-// Available namespaces: iter, outputs, inputs.
+// Available namespaces: iter, outputs, inputs, nodes (optional).
 type LoopEvalContext struct {
 	Iter    *model.IterContext     // typed — compile-time enforced
 	Outputs map[string]interface{} // dynamic — depends on workflow def
 	Inputs  map[string]interface{} // dynamic — depends on workflow def
+	Nodes   map[string]interface{} // optional — parent node outputs for while conditions that reference nodes.*
 }
 
 func (c *LoopEvalContext) Activation() map[string]interface{} {
@@ -149,11 +150,14 @@ func (c *LoopEvalContext) Activation() map[string]interface{} {
 	if c.Inputs != nil {
 		m[string(CELInputs)] = c.Inputs
 	}
+	if c.Nodes != nil {
+		m[string(CELNodes)] = c.Nodes
+	}
 	return EnsureNamespaceDefaults(m, c.Namespaces())
 }
 
 func (c *LoopEvalContext) Namespaces() []CELNamespace {
-	return []CELNamespace{CELIter, CELOutputs, CELInputs}
+	return []CELNamespace{CELIter, CELOutputs, CELInputs, CELNodes}
 }
 
 // =============================================================================

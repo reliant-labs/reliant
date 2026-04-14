@@ -66,13 +66,15 @@ func SaveMessageCELEnvConfig() CELEnvConfig {
 }
 
 // LoopWhileCELEnvConfig returns config for loop while expression evaluation.
-// Includes: outputs, iter, inputs (for iteration limits via inputs.max_turns etc.)
+// Includes: outputs, iter, inputs (for iteration limits via inputs.max_turns etc.),
+// and nodes (for while conditions that reference parent node outputs).
 func LoopWhileCELEnvConfig() CELEnvConfig {
 	return CELEnvConfig{
 		Namespaces: []CELNamespace{
 			CELOutputs,
 			CELIter,
 			CELInputs,
+			CELNodes,
 		},
 		IncludeStdLib:          true,
 		IncludeCustomFunctions: false,

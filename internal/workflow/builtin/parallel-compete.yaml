@@ -54,11 +54,6 @@ inputs:
         min: 1
         max: 500
         description: Maximum agent loop iterations
-      permission:
-        type: string
-        default: "orchestrator"
-        ui: hidden
-        description: "Permission level controlling which tools can be loaded via load_tool"
       tools:
         type: tools
         default: ["tag:default"]
@@ -94,7 +89,7 @@ nodes:
     type: call_llm
     args:
       model: "{{inputs.model}}"
-      tools: false
+      # No tools_config = no tools for this LLM call
       system_prompt: |
         You are a prompt engineer. Your job is to take the task description and improve it into a clear, detailed specification that multiple developers could implement independently.
 

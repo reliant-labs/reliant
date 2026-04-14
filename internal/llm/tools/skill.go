@@ -3,6 +3,7 @@ package tools
 
 import (
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 
@@ -12,7 +13,7 @@ import (
 
 type SkillParams struct {
 	Action string `json:"action" jsonschema:"required,description=Action to perform: load (load a skill by path)\\, list (list available skills)\\, search (search skills by keyword),enum=load,enum=list,enum=search"`
-	Path   string `json:"path,omitempty" jsonschema:"description=Skill path to load or list children of. Use skill name for top-level (e.g. 'go'\\, 'skill-creator')"`
+	Path   string `json:"path,omitempty" jsonschema:"description=Skill path to load or list children of. Use skill name for top-level (e.g. 'go'\\, 'reliant-config')"`
 	Query  string `json:"query,omitempty" jsonschema:"description=Search query for finding skills (used with action=search)"`
 }
 
@@ -48,6 +49,7 @@ func (t *skillTool) RequiresPermission(params SkillParams) (bool, error) {
 }
 
 func (t *skillTool) Execute(_ *rctx.ToolContext, params SkillParams) (ToolResponse, error) {
+	slog.Debug("[SkillTool] Execute", "action", params.Action, "path", params.Path, "query", params.Query, "availableSkills", len(t.skills))
 	switch params.Action {
 	case "list":
 		return t.listSkills(params.Path)

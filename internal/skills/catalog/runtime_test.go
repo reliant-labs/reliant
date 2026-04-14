@@ -138,9 +138,9 @@ func TestValidateAgentSkillMarkdownFrontmatter_UsesNFKCForParentDirMatch(t *test
 	require.NoError(t, err)
 }
 
-func TestBuiltinSkills_DiscoverIncludesSkillCreator(t *testing.T) {
+func TestBuiltinSkills_DiscoverIncludesReliantConfig(t *testing.T) {
 	snapshot := Discover(DiscoverInput{ProjectPath: t.TempDir(), LoadFullDefinitions: true})
-	definition, ok := snapshot.ByName["skill-creator"]
+	definition, ok := snapshot.ByName["reliant-config"]
 	require.True(t, ok)
 	require.Equal(t, skillscore.ScopeBuiltin, definition.Scope)
 	require.Equal(t, skillscore.SkillFormatClaudeMarkdown, definition.Format)

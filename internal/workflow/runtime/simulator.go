@@ -325,12 +325,14 @@ func evaluateLoopWhileStrict(
 	outputs map[string]interface{},
 	iteration int,
 	inputs map[string]interface{},
+	nodes map[string]interface{},
 	contextDescription string,
 ) (bool, error) {
 	loopContext := &wfcel.LoopEvalContext{
 		Outputs: outputs,
 		Iter:    &model.IterContext{Iteration: iteration},
 		Inputs:  inputs,
+		Nodes:   nodes,
 	}
 	shouldContinue, err := wfcel.EvaluateBool(whileExpr, loopContext)
 	if err != nil {
@@ -827,6 +829,7 @@ func (s *WorkflowSimulator) executeRefLoop(nodePath string, protoNode *reliantv1
 			mockOutput,
 			iterations,
 			iterationInputs,
+			s.nodeOutputs,
 			fmt.Sprintf("loop %s", nodePath),
 		)
 		if err != nil {
@@ -870,6 +873,7 @@ func (s *WorkflowSimulator) executeInlineLoop(nodePath string, protoNode *relian
 			iterOutputs,
 			iterations,
 			iterationInputs,
+			s.nodeOutputs,
 			fmt.Sprintf("inline loop %s", nodePath),
 		)
 		if err != nil {
@@ -1133,6 +1137,7 @@ func (s *WorkflowSimulator) executeNestedLoop(qualifiedPrefix string, protoNode 
 			iterOutputs,
 			iterations,
 			loopInputs,
+			s.nodeOutputs,
 			fmt.Sprintf("nested loop %s", qualifiedPrefix),
 		)
 		if err != nil {
@@ -1175,6 +1180,7 @@ func (s *WorkflowSimulator) executeNestedRefLoop(qualifiedPrefix string, protoNo
 			mockOutput,
 			iterations,
 			loopInputs,
+			s.nodeOutputs,
 			fmt.Sprintf("nested ref loop %s", qualifiedPrefix),
 		)
 		if err != nil {

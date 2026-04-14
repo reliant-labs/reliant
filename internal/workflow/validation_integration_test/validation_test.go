@@ -855,7 +855,7 @@ nodes:
 			expectValid: true,
 		},
 		{
-			name:     "edge_case/tool_filter_basic",
+			name:     "edge_case/tools_config_basic",
 			category: "edge_case",
 			yaml: `
 name: test
@@ -865,7 +865,8 @@ nodes:
     type: call_llm
     args:
       model: mock
-    tool_filter: [view, grep, bash]
+      tools_config:
+        filter: [view, grep, bash]
 `,
 			expectValid: true,
 		},

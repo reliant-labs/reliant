@@ -1,0 +1,737 @@
+name: forge-one-shot
+apiVersion: "0.0.5"
+description: |
+  Build a production Forge app from a conversation in five phases.
+
+  Phase 1a: SCOPE — Agent has a conversation with the user to understand what they want.
+            Asks focused questions, infers defaults, writes FORGE_PLAN.md.
+            Uses builtin://agent (not get-it-right) so the conversation isn't interrupted by checks.
+  Phase 1b: SCAFFOLD — Takes the scoped plan and scaffolds the project, writes protos,
+            runs forge generate + build. Uses get-it-right for lint/build verification.
+  Phase 2:  FRONTEND POLISH — Make the generated UI look like a real product.
+  Phase 3:  MVP BACKEND — Implement the minimal feature set to make the app functional.
+  Phase 4:  PRODUCTION POLISH — Remaining features, edge cases, error handling, tests.
+
+  Context flows via two mechanisms:
+  - FORGE_PLAN.md (project spec) — written by phase 1a, read by all phases. Defines WHAT to build.
+  - Per-phase plans (via plan tool) — each forked phase creates its own plan for task tracking.
+    Plans are thread-scoped, so each phase has its own compaction-resistant execution tracker.
+
+entry: [scope_conversation]
+
+inputs:
+  model:
+    type: model
+    description: Model for all phases
+    default:
+      tags: [flagship]
+
+  mode:
+    type: enum
+    ui: toolbar
+    default: auto
+    description: Execution mode for agent steps
+    enum: [manual, auto]
+
+  yield:
+    type: boolean
+    ui: toolbar
+    default: true
+    description: Pause for user review between phases
+
+  working_directory:
+    type: string
+    default: "."
+    description: Working directory for forge commands
+
+  temperature:
+    type: number
+    default: 1.0
+    min: 0
+    max: 1
+    description: Response randomness
+
+  thinking_level:
+    type: enum
+    enum: [low, medium, high, xhigh]
+    default: medium
+    description: Extended thinking level
+
+outputs:
+  project_root: "{{inputs.working_directory}}"
+
+nodes:
+  # ─── Phase 1a: Scope Conversation ──────────────────────────────────
+  #
+  # The agent has a natural conversation with the user to understand what
+  # they want to build. No lint/build checks — this is pure conversation.
+  # Writes FORGE_PLAN.md when scoping is done.
+
+  - id: scope_conversation
+    type: workflow
+    ref: builtin://agent
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+      temperature: "{{inputs.temperature}}"
+      thinking_level: "{{inputs.thinking_level}}"
+      tools: ["tag:default", "ask_user"]
+      yield: "{{inputs.yield}}"
+    thread:
+      mode: inherit
+      inject:
+        role: user
+        content: |
+          **IMPORTANT: This is a brand new project — no users, no legacy code. Do NOT add fallbacks or backwards compatibility. Fix root causes, delete unused code, use clean implementations.**
+
+          ## Scope a Forge App
+
+          You are a senior architect helping the user plan a production app built with Forge.
+          Forge scaffolds Go + Next.js monorepos with batteries included — Connect RPC, middleware,
+          ORM, migrations, frontend hooks, CRUD pages — all generated from proto files.
+
+          ## Your Job: Have a Conversation
+
+          Use the `ask_user` tool to ask 2-4 focused questions to understand what they
+          want to build. Call `ask_user` for each question and wait for the response:
+          - What entities/data models? (what fields, what relationships?)
+          - What operations beyond basic CRUD?
+          - What pages/UI flows matter most?
+          - Any integrations? (Stripe, email, auth providers, etc.)
+
+          You MUST use `ask_user` at least once before writing FORGE_PLAN.md. You can and should ask multiple questions in each turn.
+          Do NOT skip the conversation — ask your questions, read the answers, then write the plan.
+          Scale question count to complexity of the request, but cap it to 10 questions, over a max of 3 turns.
+          Infer reasonable defaults for things the user doesn't mention.
+
+          ## When You Have Enough Info
+
+          Write `FORGE_PLAN.md` in `{{inputs.working_directory}}` with:
+          - All features organized by priority (HIGH / MEDIUM / LOW)
+          - Which features are MVP (HIGH) vs later
+          - Key architectural decisions
+          - Entity list with fields and relationships
+
+          Example:
+          ```markdown
+          # Forge Plan
+
+          ## Entities
+          - **Patient** — id, org_id, name, species, breed, owner_name, owner_email, repeated string allergies
+          - **Appointment** — id, org_id, patient_id, veterinarian_id, scheduled_at, status, reason
+
+          ## Features
+          | # | Feature | Priority | Notes |
+          |---|---------|----------|-------|
+          | 1 | Patient CRUD | HIGH | Core entity |
+          | 2 | Appointment scheduling | HIGH | Custom RPC |
+          | 3 | Email notifications | MEDIUM | SendGrid integration |
+
+          ## Decisions
+          - Using org_id as tenant key for all entities
+          - Appointments link to patients via patient_id
+          ```
+
+          After writing FORGE_PLAN.md, tell the user the plan is ready and you'll scaffold next.
+
+          ## What Forge Gives You for Free (DO NOT ask about these)
+          HTTP server with Connect RPC, JWT auth, RBAC, CORS, logging, tracing,
+          PostgreSQL + ORM, OpenTelemetry, Docker, CI/CD, Next.js frontend with
+          TypeScript client + Tailwind, workers, webhooks, K8s manifests, code generation,
+          dependency injection, test harness, mocks.
+
+          Work in `{{inputs.working_directory}}`.
+
+  # ─── Phase 1b: Scaffold & Verify ──────────────────────────────────
+  #
+  # Takes the scoped plan from FORGE_PLAN.md and scaffolds the project.
+  # This phase uses get-it-right because it needs lint/build verification.
+
+  - id: scaffold_and_verify
+    type: workflow
+    ref: builtin://get-it-right
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+      temperature: "{{inputs.temperature}}"
+      thinking_level: "{{inputs.thinking_level}}"
+      implementer_preset: forge
+      reviewer_preset: forge
+      yield: "{{inputs.yield}}"
+      max_retries: 5
+      lint_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && cd $(ls -d */ | head -1) && reliant forge generate && reliant forge lint"
+      build_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && cd $(ls -d */ | head -1) && reliant forge build"
+      review_instructions: |
+        You are reviewing the initial scaffold of a Forge app.
+
+        **Pass if:**
+        - The project exists with forge.yaml, proto files, and generated code
+        - `forge generate` and `forge build` succeed
+        - Entity messages have proper fields and annotations
+        - At least one service and one frontend exist
+        - FORGE_PLAN.md exists in the project root
+
+        **Do NOT fail because:**
+        - Handlers are stubs (expected at this stage)
+        - Frontend is unstyled (that's a later phase)
+
+        **Only fail if:**
+        - Proto files break generation or build
+        - Required entities/services from FORGE_PLAN.md are missing
+        - The project structure is fundamentally broken
+    thread:
+      mode: inherit
+      inject:
+        role: user
+        content: |
+          **IMPORTANT: This is a brand new project — no users, no legacy code. Do NOT add fallbacks or backwards compatibility. Fix root causes, delete unused code, use clean implementations.**
+
+          ## Scaffold the Forge App
+
+          Read `FORGE_PLAN.md` in `{{inputs.working_directory}}` — it has the scoping decisions
+          from the conversation you just had with the user. Now scaffold the project.
+
+          **Step 1: Create the project.**
+          ```bash
+          export PATH="$HOME/go/bin:$PATH" && cd {{inputs.working_directory}}
+          reliant forge new <project-name> --mod github.com/user/<project-name> --service <service-name> --frontend dashboard
+          ```
+          Pick the project and service names based on what the user described.
+          This creates a `<project-name>/` subdirectory. `cd` into it for all subsequent commands.
+
+          **Step 2: Write proto files** at `proto/services/<service>/v1/<service>.proto`.
+          Entities become DB tables, CRUD handlers, pages, and hooks via `forge generate`.
+
+          Proto examples — follow these patterns exactly:
+
+          **Basic entity with all annotations:**
+          ```proto
+          import "forge/v1/forge.proto";
+          import "google/protobuf/timestamp.proto";
+          import "google/protobuf/wrappers.proto";
+
+          message Patient {
+            option (forge.v1.entity) = {
+              table: "patients"
+              soft_delete: true
+              timestamps: true
+            };
+
+            string id = 1 [(forge.v1.field) = { pk: true }];
+            string org_id = 2 [(forge.v1.field) = { tenant: true, ref: "organizations.id" }];
+            string name = 3;
+            string email = 4 [(forge.v1.field) = { unique: true }];
+            PatientStatus status = 5;
+            repeated string tags = 6;
+            google.protobuf.StringValue notes = 7;  // nullable
+            google.protobuf.Timestamp created_at = 10;
+            google.protobuf.Timestamp updated_at = 11;
+            google.protobuf.Timestamp deleted_at = 12;
+          }
+
+          enum PatientStatus {
+            PATIENT_STATUS_UNSPECIFIED = 0;
+            PATIENT_STATUS_ACTIVE = 1;
+            PATIENT_STATUS_INACTIVE = 2;
+            PATIENT_STATUS_DECEASED = 3;
+          }
+          ```
+
+          **Full CRUD RPCs (define ALL five):**
+          ```proto
+          service PatientsService {
+            rpc CreatePatient(CreatePatientRequest) returns (CreatePatientResponse) {
+              option (google.api.http) = { post: "/api/v1/patients" body: "*" };
+            }
+            rpc GetPatient(GetPatientRequest) returns (GetPatientResponse) {
+              option (google.api.http) = { get: "/api/v1/patients/{id}" };
+            }
+            rpc ListPatients(ListPatientsRequest) returns (ListPatientsResponse) {
+              option (google.api.http) = { get: "/api/v1/patients" };
+            }
+            rpc UpdatePatient(UpdatePatientRequest) returns (UpdatePatientResponse) {
+              option (google.api.http) = { patch: "/api/v1/patients/{id}" body: "*" };
+            }
+            rpc DeletePatient(DeletePatientRequest) returns (DeletePatientResponse) {
+              option (google.api.http) = { delete: "/api/v1/patients/{id}" };
+            }
+            // Custom non-CRUD RPC:
+            rpc TransferPatient(TransferPatientRequest) returns (TransferPatientResponse) {
+              option (google.api.http) = { post: "/api/v1/patients/{id}/transfer" body: "*" };
+            }
+          }
+          ```
+
+          **Common proto mistakes to avoid:**
+          - ALWAYS import `forge/v1/forge.proto` for entity annotations
+          - ALWAYS import `google/protobuf/timestamp.proto` for Timestamp fields
+          - ALWAYS import `google/protobuf/wrappers.proto` for nullable fields (StringValue, Int32Value, etc.)
+          - ALWAYS include `option go_package` at the top of the file
+          - Enum values MUST be prefixed with the enum name in SCREAMING_SNAKE_CASE
+          - Enum MUST have an UNSPECIFIED = 0 value
+          - Field numbers must be unique within a message — don't duplicate
+          - Name ALL five CRUD RPCs: Create, Get, List, Update, Delete
+
+          Entity annotations:
+          - `(forge.v1.entity)` on the message — sets table name, soft_delete, timestamps
+          - `(forge.v1.field)` on fields — pk, tenant, ref (foreign key), unique, index, immutable
+          - Entity detection: any message with an `id` field that isn't named *Request/*Response/*Filter
+          - Use `google.protobuf.StringValue` for nullable fields
+          - Use enums for status/type fields — they get badge rendering in the UI
+
+          **Step 3: Generate and verify.**
+          ```bash
+          cd <project-dir> && export PATH="$HOME/go/bin:$PATH"
+          reliant forge generate && reliant forge build
+          ```
+
+          ## Proto Field Types
+          Scalar: `string`, `int32`, `int64`, `uint32`, `uint64`, `bool`, `float`, `double`, `bytes`
+          Timestamp: `google.protobuf.Timestamp`
+          Arrays: `repeated string`, `repeated int32`, etc. (Postgres arrays)
+          Any valid proto3 type works.
+
+          ## Entity Rules
+          - Every entity MUST have `id` (string) and `org_id` (string, tenant_key)
+          - Prefer 1-2 services, 1 frontend
+          - Be ambitious — Forge handles the heavy lifting
+
+          ## Do NOT Edit
+          `gen/`, `*_gen.go`, `cmd/server.go`, `cmd/otel.go`, `pkg/app/bootstrap.go`
+          Custom wiring: `pkg/app/setup.go`
+
+          ## SCOPE BOUNDARY — READ THIS
+          Your job in this phase is ONLY:
+          1. Run `forge new` to create the project
+          2. Write proto files with entity definitions and CRUD RPCs
+          3. Run `forge generate && forge build` to verify
+
+          **STOP after `forge build` passes.** Do NOT:
+          - Write handler implementations (they are auto-generated stubs — later phases fill them in)
+          - Write frontend code (it is auto-generated — a later phase polishes it)
+          - Write tests, seeds, business logic, or anything beyond proto files
+          - Edit any generated files
+
+          The entire point of this phase is: proto files → generate → build passes. That's it.
+          Later phases handle everything else. If you write code beyond protos, you are wasting
+          tokens on work that will be overwritten.
+
+          Work in `{{inputs.working_directory}}`.
+
+  # ─── Phase 2: Frontend Polish ───────────────────────────────────────
+  #
+  # Make the generated UI look real. Integrate with backend via the
+  # generated Connect RPC hooks — they already work with the auto-generated
+  # CRUD handlers.
+
+  - id: frontend_polish
+    type: workflow
+    ref: builtin://get-it-right
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+      temperature: "{{inputs.temperature}}"
+      thinking_level: "{{inputs.thinking_level}}"
+      implementer_preset: forge
+      reviewer_preset: forge
+      yield: "{{inputs.yield}}"
+      max_retries: 3
+      start_app_command: "cd {{inputs.working_directory}} && reliant forge run"
+      app_port: 3000
+      lint_command: "cd {{inputs.working_directory}} && if [ ! -f forge.yaml ]; then cd $(ls -d */ | head -1); fi && for d in frontends/*/; do (cd \"$d\" && npm run build); done"
+      build_command: "cd {{inputs.working_directory}} && if [ ! -f forge.yaml ]; then cd $(ls -d */ | head -1); fi && for d in frontends/*/; do (cd \"$d\" && npm run build); done"
+      review_instructions: |
+        You are reviewing a frontend polish pass. The goal is visual quality and real data integration.
+
+        **Pass if:**
+        - The app looks like a real product, not raw scaffold
+        - Navigation works, pages are accessible
+        - CRUD pages display real data via the generated Connect RPC hooks
+        - Forms submit data through the generated hooks and it works end-to-end
+        - Layout is clean and consistent
+        - The frontend builds
+
+        **Do NOT fail because:**
+        - Custom backend logic isn't implemented (CRUD works via generated handlers)
+        - Tests don't exist
+        - Edge cases aren't handled
+
+        **Only fail if:**
+        - UI looks like raw boilerplate
+        - Navigation broken or pages crash
+        - Frontend doesn't build
+        - Generated hooks aren't being used (manual fetch calls instead)
+    thread:
+      mode: fork
+      inject:
+        role: user
+        content: |
+          **IMPORTANT: This is a brand new project — no users, no legacy code. Do NOT add fallbacks or backwards compatibility. Fix root causes, delete unused code, use clean implementations.**
+
+          ## Frontend Polish
+
+          The Forge app at `{{inputs.working_directory}}` has been scaffolded with generated CRUD pages,
+          Connect RPC hooks, and a component library. Your job is to make it look like a real product.
+
+          **Read the project spec** — read `FORGE_PLAN.md` in the project root to understand what
+          features the user wants. Then **create your own plan** (via the plan tool) with tasks
+          for your frontend work. Focus on supporting the features in the spec.
+
+          **IMPORTANT: The scaffolded UI is disposable.** The generated pages, layout, and components
+          in `frontends/*/src/` are just initial code generation — they are NOT a starting point to
+          build on top of. They have never been shipped or seen by a user. Feel free to:
+          - Completely rewrite any page, layout, or component
+          - Throw away the generated page structure and start fresh
+          - Change the navigation pattern entirely
+          - Ignore the installed components and write your own
+          - Restructure the app directory however you want
+          The only things you should keep are the generated hooks (they connect to the real backend)
+          and the generated proto stubs in `src/gen/`.
+
+          **What exists (use, modify, or replace — your call):**
+          - CRUD pages in `frontends/*/src/app/<entity>/` — list, detail, create, edit
+          - UI components in `frontends/*/src/components/ui/` — page_header, badge, modal,
+            skeleton_loader, pagination, search_input, alert_banner, toast_notification,
+            key_value_list, sidebar_layout
+          - React Query hooks in `frontends/*/src/hooks/` — these connect to the real backend
+            via Connect RPC. The auto-generated CRUD handlers are functional, so data flows
+            end-to-end already.
+          - Sidebar navigation in `frontends/*/src/components/nav.tsx`
+
+          **You have the `component_library` tool** — search it for production-ready React/Tailwind
+          components (61 available: tables, charts, layouts, forms, dashboards, etc.) before building
+          from scratch. Use `component_library(action="search", query="admin dashboard")` to find
+          relevant components, then `component_library(action="get", name="...")` to get the source.
+
+          **Your focus:**
+          1. Build a UI that matches what the user described in FORGE_PLAN.md
+          2. Make it feel like a real product — not a scaffold demo
+          3. Use the generated hooks for data — they already work end-to-end
+          4. Be opinionated about design — pick a direction and commit to it
+
+          **Integration:** The generated hooks already work. Use them as-is:
+          ```typescript
+          import { useListPatients, useCreatePatient } from "@/hooks/patients-hooks";
+          ```
+          These are React Query hooks connected to the backend via Connect RPC. CRUD is
+          already functional — you can create, read, update, delete entities right now.
+
+          **Visual Verification (REQUIRED before completing):**
+          You have Chrome DevTools tools available. Before declaring your work complete:
+          1. Start the app if not already running
+          2. Use `take_snapshot` AND `take_screenshot` on every key page
+          3. Check `list_console_messages` for errors on each page
+          4. Verify: layout looks correct, data renders, navigation works, no visual broken-ness
+          5. Both snapshot (accessibility tree) AND screenshot (visual rendering) must be checked —
+             snapshot alone cannot detect visual/CSS issues
+          Do NOT pass final verification without both snapshot and screenshot evidence.
+
+          **Rules:**
+          - Do NOT modify `*_gen.go`, proto files, or generated hooks
+          - Use the generated hooks for all data fetching — don't write manual fetch calls
+          - protobuf-es v2: `create(Schema, {...})` not `new Message()`
+
+          Work in `{{inputs.working_directory}}`.
+
+  - id: frontend_done
+    type: save_message
+    args:
+      role: assistant
+      content: |
+        ## Frontend Preview Ready
+
+        I've focused on the frontend first to make sure we're building the right thing.
+        The UI is connected to the backend via generated Connect RPC hooks — CRUD operations
+        work end-to-end with real data.
+
+        ### Try it out
+        ```bash
+        cd {{inputs.working_directory}} && reliant forge run
+        ```
+        - **Frontend:** http://localhost:3000
+        - **API:** http://localhost:8080
+
+        **Next:** I'll implement the core MVP features — real business logic, custom handlers,
+        and the key workflows that make this app useful beyond basic CRUD.
+
+        If the UI direction looks off, let me know before I continue.
+
+  # ─── Phase 3: MVP Backend ──────────────────────────────────────────
+  #
+  # Implement the minimal feature set for a functional app. The agent
+  # reads the plan to find high-priority features.
+
+  - id: mvp_backend
+    type: workflow
+    ref: builtin://get-it-right
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+      temperature: "{{inputs.temperature}}"
+      thinking_level: "{{inputs.thinking_level}}"
+      implementer_preset: forge
+      reviewer_preset: forge
+      yield: "{{inputs.yield}}"
+      max_retries: 5
+      lint_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && if [ ! -f forge.yaml ]; then cd $(ls -d */ | head -1); fi && reliant forge generate && reliant forge lint"
+      test_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && if [ ! -f forge.yaml ]; then cd $(ls -d */ | head -1); fi && reliant forge test"
+      build_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && if [ ! -f forge.yaml ]; then cd $(ls -d */ | head -1); fi && reliant forge build"
+      review_instructions: |
+        You are reviewing the MVP backend implementation.
+
+        **Pass if:**
+        - High-priority features from the plan are implemented
+        - Custom RPC handlers have real implementations (not stubs)
+        - CRUD handlers work with proper validation
+        - Core business logic is correct
+        - Build and tests pass
+
+        **Do NOT fail because:**
+        - Lower-priority features aren't done (that's phase 4)
+        - Test coverage isn't exhaustive
+        - Error messages aren't polished
+        - Edge cases aren't all handled
+
+        **Only fail if:**
+        - Core features are still stubs
+        - Build or tests fail
+        - Database operations are broken
+        - Business logic is fundamentally wrong
+
+        Proto changes are fine — new RPCs, new fields, new entities are encouraged
+        as long as `forge generate && forge build` pass.
+    thread:
+      mode: fork
+      inject:
+        role: user
+        content: |
+          **IMPORTANT: This is a brand new project — no users, no legacy code. Do NOT add fallbacks or backwards compatibility. Fix root causes, delete unused code, use clean implementations.**
+
+          ## MVP Backend
+
+          The Forge app at `{{inputs.working_directory}}` has a polished frontend with working CRUD.
+          Now implement the core features that make this app actually useful.
+
+          **Read the project spec** — read `FORGE_PLAN.md` in the project root to see the feature
+          list and priorities. Then **create your own plan** (via the plan tool) with tasks for
+          HIGH priority features. Focus on those only. Mark tasks completed as you finish them.
+
+          The FORGE_PLAN.md file is your source of truth for MVP scope. If something
+          isn't in the plan, it wasn't discussed — don't guess, focus on what's listed.
+
+          **What already works:**
+          - Generated CRUD handlers in `handlers/<service>/handlers_crud_gen.go` (real DB operations)
+          - ORM functions in `internal/db/<entity>_orm.go`
+          - Migrations in `db/migrations/`
+          - Test harness in `pkg/app/testing.go`
+          - Frontend is already polished and connected
+
+          **Your focus:**
+          1. Implement custom (non-CRUD) RPC handlers — the stubs in `handlers/<service>/handlers_gen.go`
+          2. Add validation and business rules to existing CRUD handlers (create new files, don't edit `*_gen.go`)
+          3. Write tests for critical business logic
+          4. Wire up any integrations needed for MVP (auth, email, etc.)
+
+          **Parallelize:** Spawn agents for independent handlers/services. Each agent should
+          work on a cohesive vertical (handler + test + any frontend updates).
+
+          **Proto files are yours to modify.** Need a new RPC? A new field? A new entity entirely?
+          Edit the protos in `proto/services/<service>/v1/`, then run `reliant forge generate && reliant forge build`.
+          There are no backwards compatibility concerns — this project has never shipped.
+          The only files you must NOT edit are generated outputs: `gen/`, `*_gen.go`, `cmd/server.go`, `cmd/otel.go`, `pkg/app/bootstrap.go`.
+
+          **Rules:**
+          - Do NOT edit `*_gen.go` files, `cmd/server.go`, `cmd/otel.go`, `pkg/app/bootstrap.go`
+          - Custom wiring in `pkg/app/setup.go`
+          - Track progress in your plan (mark tasks completed as you go)
+
+          Work in `{{inputs.working_directory}}`.
+
+  - id: mvp_done
+    type: save_message
+    args:
+      role: assistant
+      content: |
+        ## MVP Complete
+
+        The core features are implemented with real backend logic, tests, and working
+        end-to-end flows.
+
+        ### Try it out
+        ```bash
+        cd {{inputs.working_directory}} && reliant forge run
+        ```
+        - **Frontend:** http://localhost:3000
+        - **API:** http://localhost:8080
+
+        **Next:** I'll do a production polish pass — remaining features, edge cases,
+        error handling, thorough testing, and hardening.
+
+  # ─── Phase 4: Production Polish ─────────────────────────────────────
+  #
+  # Remaining features, edge cases, error handling, thorough testing,
+  # integrations. Higher retry count for thorough hardening.
+
+  - id: production_polish
+    type: workflow
+    ref: builtin://get-it-right
+    args:
+      model: "{{inputs.model}}"
+      mode: "{{inputs.mode}}"
+      temperature: "{{inputs.temperature}}"
+      thinking_level: "{{inputs.thinking_level}}"
+      implementer_preset: forge
+      reviewer_preset: forge
+      yield: "{{inputs.yield}}"
+      max_retries: 5
+      lint_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && if [ ! -f forge.yaml ]; then cd $(ls -d */ | head -1); fi && reliant forge generate && reliant forge lint"
+      test_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && if [ ! -f forge.yaml ]; then cd $(ls -d */ | head -1); fi && reliant forge test"
+      build_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && if [ ! -f forge.yaml ]; then cd $(ls -d */ | head -1); fi && reliant forge build"
+      review_instructions: |
+        You are reviewing a production-ready Forge app. Be thorough.
+
+        **Pass if:**
+        - All features from the plan are implemented (check remaining tasks)
+        - Error handling is proper — user-facing errors are clear, internal errors are logged
+        - Validation exists on all user inputs
+        - Tests cover critical paths and edge cases
+        - Build, lint, and all tests pass
+        - No obvious security issues (SQL injection, missing auth checks, etc.)
+
+        **Only fail if:**
+        - Features from the plan are still incomplete
+        - Tests fail or are missing for critical paths
+        - Build or lint fails
+        - There are security issues or broken error handling
+        - The app would embarrass someone in a demo
+
+        Proto changes are fine — new RPCs, new fields, new entities are encouraged
+        as long as `forge generate && forge build` pass.
+
+        This is the final gate. Be strict but practical.
+    thread:
+      mode: fork
+      inject:
+        role: user
+        content: |
+          **IMPORTANT: This is a brand new project — no users, no legacy code. Do NOT add fallbacks or backwards compatibility. Fix root causes, delete unused code, use clean implementations.**
+
+          ## Production Polish
+
+          The Forge app at `{{inputs.working_directory}}` has a polished frontend and working MVP
+          backend. Now harden it for production.
+
+          **Read the project spec** — read `FORGE_PLAN.md` in the project root to see all features.
+          Then **create your own plan** (via the plan tool) with tasks for remaining features
+          not yet implemented. Complete them. Mark tasks done as you go.
+
+          **Your focus (in priority order):**
+          1. Remaining features from the plan — implement anything still incomplete
+          2. Error handling — proper error responses, logging, graceful failures
+          3. Input validation — validate all user inputs at the handler level
+          4. Tests — unit tests for business logic, integration tests for handlers
+          5. Edge cases — empty states, concurrent access, boundary conditions
+          6. Security — auth checks on all protected endpoints, input sanitization
+          7. Frontend updates — if backend API shape changed, update affected pages
+
+          **Forge gives you production infrastructure for free:**
+          - Auth middleware (JWT/API key) is already wired
+          - RBAC authorizers are generated from proto annotations
+          - OpenTelemetry tracing/metrics are configured
+          - Health checks, graceful shutdown are built in
+          - Your job is the application logic, not infrastructure
+
+          **Parallelize aggressively:** Spawn agents for independent work streams —
+          tests, remaining features, error handling can all happen in parallel.
+
+          **Proto files are yours to modify.** Need a new RPC? A new field? A new entity entirely?
+          Edit the protos in `proto/services/<service>/v1/`, then run `reliant forge generate && reliant forge build`.
+          There are no backwards compatibility concerns — this project has never shipped.
+          The only files you must NOT edit are generated outputs: `gen/`, `*_gen.go`, `cmd/server.go`, `cmd/otel.go`, `pkg/app/bootstrap.go`.
+
+          **Rules:**
+          - Do NOT edit `*_gen.go` files, `cmd/server.go`, `cmd/otel.go`, `pkg/app/bootstrap.go`
+          - Custom wiring in `pkg/app/setup.go`
+          - Run the full verification: `reliant forge generate && reliant forge lint && reliant forge test && reliant forge build`
+          - Track progress in your plan (mark tasks completed as you go)
+
+          Work in `{{inputs.working_directory}}`.
+
+  # ─── Terminal Nodes ─────────────────────────────────────────────────
+
+  - id: success
+    type: save_message
+    args:
+      role: assistant
+      content: |
+        ## Forge One-Shot Complete
+
+        **Project:** `{{inputs.working_directory}}`
+
+        ### Run the project
+        ```bash
+        cd {{inputs.working_directory}} && reliant forge run
+        ```
+        - **Frontend:** http://localhost:3000
+        - **API:** http://localhost:8080
+
+  - id: scaffold_failed
+    type: save_message
+    args:
+      role: assistant
+      content: |
+        ## Scaffold Failed
+
+        The project could not be scaffolded after multiple attempts.
+        Review the output above for details.
+    display_style: error
+
+  - id: mvp_failed
+    type: save_message
+    args:
+      role: assistant
+      content: |
+        ## MVP Backend Not Passing
+
+        The frontend is polished but the MVP backend isn't passing verification.
+        Review the issues above. The project is at `{{inputs.working_directory}}`.
+    display_style: warning
+
+  - id: production_failed
+    type: save_message
+    args:
+      role: assistant
+      content: |
+        ## Production Polish Incomplete
+
+        The app has a working MVP but production polish didn't fully pass.
+        Review remaining issues above. The project is at `{{inputs.working_directory}}`.
+    display_style: warning
+
+edges:
+  - from: scope_conversation
+    default: scaffold_and_verify
+  - from: scaffold_and_verify
+    cases:
+      - to: scaffold_failed
+        condition: "has(nodes.scaffold_and_verify) && has(nodes.scaffold_and_verify.strategy) && nodes.scaffold_and_verify.strategy != 'pass'"
+        label: scaffold_failed
+    default: frontend_polish
+  - from: frontend_polish
+    default: frontend_done
+  - from: frontend_done
+    default: mvp_backend
+  - from: mvp_backend
+    cases:
+      - to: mvp_failed
+        condition: "has(nodes.mvp_backend) && has(nodes.mvp_backend.strategy) && nodes.mvp_backend.strategy != 'pass'"
+        label: mvp_failed
+    default: mvp_done
+  - from: mvp_done
+    default: production_polish
+  - from: production_polish
+    cases:
+      - to: production_failed
+        condition: "has(nodes.production_polish) && has(nodes.production_polish.strategy) && nodes.production_polish.strategy != 'pass'"
+        label: production_failed
+    default: success

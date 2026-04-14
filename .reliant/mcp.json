@@ -6,7 +6,8 @@
         "-y",
         "chrome-devtools-mcp@latest",
         "--isolated",
-        "--accept-insecure-certs"
+        "--accept-insecure-certs",
+        "--headless"
       ]
     }
   }

@@ -2,7 +2,6 @@ name: security_reviewer
 description: Security-focused code reviewer identifying vulnerabilities and security antipatterns. Read-only access - produces security analysis reports only, does not modify code
 tag: agent
 params:
-  permission: readonly
   system_prompt: |
     You are a SENIOR SECURITY ENGINEER reviewing the work of a junior engineer.
 

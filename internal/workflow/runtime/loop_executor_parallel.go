@@ -299,7 +299,7 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 	)
 
 	// Build iteration inputs
-	iterInputs, err := e.buildParallelIterationInputs(index, resolvedItem, key)
+	iterInputs, err := e.buildParallelIterationInputs(gCtx, index, resolvedItem, key)
 	if err != nil {
 		result.Error = fmt.Errorf("failed to build iteration inputs: %w", err)
 		return result
@@ -315,7 +315,7 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 	activityPrefix := fmt.Sprintf("%spar-%s-iter%d-", e.activityIDPrefix, e.loopID, index)
 
 	// Build execution context for this iteration
-	iterExecContext := e.buildParallelIterExecContext(gCtx, index, key)
+	iterExecContext := e.buildParallelIterExecContext(gCtx, index, resolvedItem, key)
 
 	// Create step executor
 	iterExecutor := NewStepExecutor(
@@ -638,6 +638,7 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 
 // buildParallelIterationInputs builds the inputs for a single parallel iteration.
 func (e *InlineLoopExecutor) buildParallelIterationInputs(
+	ctx workflow.Context,
 	index int,
 	item interface{},
 	key string,
@@ -670,7 +671,17 @@ func (e *InlineLoopExecutor) buildParallelIterationInputs(
 
 	iterInputs := make(map[string]interface{})
 	if len(model.GetLoopArgs(e.loopStep.Node).GetPresets()) > 0 {
-		if err := e.loadAndMergePresets(iterInputs); err != nil {
+		presetEvalCtx := &wfcel.EdgeEvalContext{
+			Nodes:  e.nodeOutputs,
+			Inputs: e.workflowInputs,
+			Iter: &model.IterContext{
+				Iteration: index,
+				Index:     index,
+				Item:      item,
+				Key:       key,
+			},
+		}
+		if err := e.loadAndMergePresets(ctx, iterInputs, presetEvalCtx); err != nil {
 			e.logger.Warn("[InlineLoop] Failed to load presets for parallel iteration",
 				"loopID", e.loopID,
 				"index", index,
@@ -697,6 +708,7 @@ func (e *InlineLoopExecutor) buildParallelIterationInputs(
 func (e *InlineLoopExecutor) buildParallelIterExecContext(
 	gCtx workflow.Context,
 	index int,
+	item interface{},
 	key string,
 ) *ExecutionContext {
 	if e.execContext == nil {
@@ -727,6 +739,44 @@ func (e *InlineLoopExecutor) buildParallelIterExecContext(
 	)
 	childExecCtx.ThreadTitle = fmt.Sprintf("%s [%s]", e.loopID, key)
 
+	// Evaluate inject message from the loop's thread config.
+	// The inject content may contain CEL templates (e.g. {{iter.item.name}})
+	// that need to be resolved with the iteration context.
+	var injectMsg *InjectMessageConfig
+	if tc := la.GetThread(); tc != nil {
+		if ic := tc.GetInject(); ic != nil {
+			iterCtx := model.BuildParallelIterContext(index, item, key)
+			evalResult, err := EvaluateNodeConfig(
+				e.loopStep.Node,
+				e.nodeOutputs,
+				e.workflowID,
+				e.workflowIdentity(),
+				e.workflowInputs,
+				iterCtx,
+				nil,
+				e.execContext,
+			)
+			if err != nil {
+				e.logger.Error("[InlineLoop] Failed to evaluate inject config for parallel iteration",
+					"loopID", e.loopID,
+					"index", index,
+					"error", err,
+				)
+			} else if evalIC := model.NodeInjectConfig(evalResult); evalIC != nil {
+				content := model.CelStringValue(evalIC.GetContent())
+				if content != "" {
+					attIDs, attFiles := resolveInjectAttachments(evalIC, e.logger)
+					injectMsg = &InjectMessageConfig{
+						Role:        model.CelStringValue(evalIC.GetRole()),
+						Content:     content,
+						Attachments: attIDs,
+						Files:       attFiles,
+					}
+				}
+			}
+		}
+	}
+
 	// Initialize the child thread
 	parentWorkflowID := ""
 	if e.execContext.Parent != nil {
@@ -747,6 +797,7 @@ func (e *InlineLoopExecutor) buildParallelIterExecContext(
 		ParentThread:     e.execContext.Thread,
 		SpawnedByNodeID:  e.loopID,
 		LoopIteration:    &loopIter,
+		InjectMessage:    injectMsg,
 		Logger:           e.logger,
 	}); initErr != nil {
 		e.logger.Error("[InlineLoop] Failed to initialize parallel iteration thread",

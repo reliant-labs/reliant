@@ -64,6 +64,97 @@ expect:
       review_grade: "pass"
 
 ---
+name: custom_review_instructions
+description: >
+  Verifies that custom review_instructions are accepted and the workflow
+  still functions correctly. Simulates the forge-one-shot scaffold use case
+  where the reviewer should bias toward pass for scaffold-only reviews.
+
+inputs:
+  review_instructions: |
+    You are reviewing a scaffold only. Bias strongly toward pass.
+    Only fail if the API surface is fundamentally wrong.
+
+events:
+  - node: attempt.implement
+    output:
+      response_text: "Scaffolded the project. All services and packages created. Build passes."
+
+  - node: attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Scaffold is correct. Services, packages, and frontends match the plan. Build is green."
+
+expect:
+  outcome: completed
+  reached:
+    - attempt
+    - attempt.implement
+    - attempt.join_checks
+    - attempt.review
+  not_reached:
+    - attempt.refactor
+  node_outputs:
+    attempt:
+      eval_strategy: "pass"
+      review_grade: "pass"
+
+---
+name: check_failures_skip_review
+description: >
+  Build fails on first attempt. The check_failures node is reached and review
+  is skipped. Second attempt passes all checks and review says pass.
+
+inputs:
+  build_command: "make build"
+  max_retries: 2
+
+events:
+  # Iteration 1: implement succeeds but build fails
+  - node: attempt.implement
+    output:
+      response_text: "Implemented the feature but introduced a compile error."
+
+  - node: attempt.build
+    output:
+      exit_code: 1
+
+  # Iteration 2: implement fixes the build
+  - node: attempt.implement
+    output:
+      response_text: "Fixed the compile error. Build passes now."
+
+  - node: attempt.build
+    output:
+      exit_code: 0
+
+  - node: attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Build passes. Implementation is correct."
+
+expect:
+  outcome: completed
+  reached:
+    - attempt
+    - attempt.implement
+    - attempt.join_checks
+    - attempt.build
+    - attempt.check_failures
+    - attempt.review
+  not_reached:
+    - attempt.refactor
+  node_outputs:
+    attempt:
+      eval_strategy: "pass"
+      review_grade: "pass"
+      build_exit: 0
+
+---
 name: one_retry_then_success
 description: >
   First attempt has issues (strategy="refactor"). Refactor agent undoes the problematic work.

@@ -97,6 +97,14 @@ inputs:
     default: "./data/get-it-right/build.log"
     description: File path for build output.
 
+  review_instructions:
+    type: string
+    default: ""
+    description: |
+      Custom instructions for the reviewer agent. When set, these replace the default
+      review guidance. Use this to scope what the reviewer evaluates — e.g. only check
+      API design, or only check build correctness, rather than full implementation completeness.
+
   start_app_command:
     type: string
     default: ""
@@ -106,6 +114,21 @@ inputs:
     type: integer
     default: 5173
     description: Port the application runs on (for UX reviewer).
+
+  implementer_preset:
+    type: string
+    default: general
+    description: |
+      Preset applied to the implementer agent. Swap for role-specific behavior
+      (e.g. "ux" for frontend work, "backend" for server work). Sets the
+      implementer's system_prompt, tools, and spawn_presets as one unit.
+
+  reviewer_preset:
+    type: string
+    default: general
+    description: |
+      Preset applied to the reviewer structured-agent. Usually "general" is
+      fine; override when the review rubric itself needs a specialist lens.
 
 nodes:
   - id: attempt
@@ -140,7 +163,7 @@ nodes:
           type: workflow
           ref: builtin://agent
           presets:
-            default: general
+            default: "{{inputs.implementer_preset}}"
           args:
             model: "{{inputs.model}}"
             mode: "{{inputs.mode}}"
@@ -172,17 +195,17 @@ nodes:
         - id: lint
           type: run
           condition: "inputs.lint_command != ''"
-          command: "{{inputs.lint_command}} > {{inputs.lint_log}} 2>&1"
+          command: "mkdir -p $(dirname '{{inputs.lint_log}}') && _log=\"$(cd $(dirname '{{inputs.lint_log}}') && pwd)/$(basename '{{inputs.lint_log}}')\" && {{inputs.lint_command}} > \"$_log\" 2>&1"
 
         - id: test
           type: run
           condition: "inputs.test_command != ''"
-          command: "{{inputs.test_command}} > {{inputs.test_log}} 2>&1"
+          command: "mkdir -p $(dirname '{{inputs.test_log}}') && _log=\"$(cd $(dirname '{{inputs.test_log}}') && pwd)/$(basename '{{inputs.test_log}}')\" && {{inputs.test_command}} > \"$_log\" 2>&1"
 
         - id: build
           type: run
           condition: "inputs.build_command != ''"
-          command: "{{inputs.build_command}} > {{inputs.build_log}} 2>&1"
+          command: "mkdir -p $(dirname '{{inputs.build_log}}') && _log=\"$(cd $(dirname '{{inputs.build_log}}') && pwd)/$(basename '{{inputs.build_log}}')\" && {{inputs.build_command}} > \"$_log\" 2>&1"
 
         - id: join_checks
           type: join
@@ -191,7 +214,7 @@ nodes:
           type: workflow
           ref: builtin://structured-agent
           presets:
-            default: general
+            default: "{{inputs.reviewer_preset}}"
           args:
             model: "{{inputs.model}}"
             mode: "{{inputs.mode}}"
@@ -245,37 +268,30 @@ nodes:
 
                 {{inputs.start_app_command != '' ? 'The application is running at: http://localhost:' + string(inputs.app_port) + ' — spawn the ux_reviewer to audit it via Chrome DevTools.' : ''}}
 
-                Analyze the implementation attempt. Your prior reviews (if any) are in this thread — use them to track progress across attempts.
-
-                Your job:
-                1. Is the implementation correct and complete? Grade it.
-                2. Decide the strategy: pass, continue, or refactor.
-                3. Write detailed feedback for the next attempt.
-
-                **Your feedback is the primary bridge to the next attempt.**
-                The next implement agent starts with a fresh fork but sees your accumulated review
-                feedback and implementation summaries on the parent thread.
-                Be thorough: describe what worked, what didn't, what patterns in the codebase
-                matter, and what approach should be taken. Reference your prior reviews when relevant.
-
-                **Strategy guidance:**
-                - **pass**: implementation is correct and complete. Break the loop.
-                - **continue**: incomplete but approach is sound. Loop back, skip refactor.
-                - **refactor**: fundamentally wrong. Refactor agent will UNDO the work, next attempt starts fresh with your feedback.
-
-                **Bias toward refactoring** for complex changes that fight the codebase's patterns.
-                For trivial changes (CSS, spacing, config): bias toward `pass`.
+                {{has(inputs.review_instructions) && inputs.review_instructions != '' ? inputs.review_instructions : 'Analyze the implementation attempt. Your prior reviews (if any) are in this thread — use them to track progress across attempts.\n\nYour job:\n1. Is the implementation correct and complete? Grade it.\n2. Decide the strategy: pass, continue, or refactor.\n3. Write detailed feedback for the next attempt.\n\n**Your feedback is the primary bridge to the next attempt.**\nThe next implement agent starts with a fresh fork but sees your accumulated review feedback and implementation summaries on the parent thread.\nBe thorough: describe what worked, what didn\'t, what patterns in the codebase matter, and what approach should be taken.\n\n**Strategy guidance:**\n- **pass**: implementation is correct and complete. Break the loop.\n- **continue**: incomplete but approach is sound. Loop back, skip refactor.\n- **refactor**: fundamentally wrong. Refactor agent will UNDO the work, next attempt starts fresh with your feedback.\n\n**Bias toward refactoring** for complex changes that fight the codebase\'s patterns.\nFor trivial changes (CSS, spacing, config): bias toward `pass`.'}}
           save_message:
             role: assistant
             content: |
               ## Review (Attempt {{iter.iteration + 1}}): {{has(output.response) && output.response != null ? output.response.strategy : 'N/A'}}
               {{has(output.response) && output.response != null ? output.response.feedback : ''}}
 
+        - id: check_failures
+          type: save_message
+          args:
+            role: assistant
+            content: |
+              ## Checks Failed (Attempt {{iter.iteration + 1}})
+              {{has(nodes.lint) && has(nodes.lint.exit_code) && nodes.lint.exit_code != 0 ? '- **Lint FAILED** (exit ' + string(nodes.lint.exit_code) + ') — read `' + inputs.lint_log + '` for full output' : ''}}
+              {{has(nodes.test) && has(nodes.test.exit_code) && nodes.test.exit_code != 0 ? '- **Test FAILED** (exit ' + string(nodes.test.exit_code) + ') — read `' + inputs.test_log + '` for full output' : ''}}
+              {{has(nodes.build) && has(nodes.build.exit_code) && nodes.build.exit_code != 0 ? '- **Build FAILED** (exit ' + string(nodes.build.exit_code) + ') — read `' + inputs.build_log + '` for full output' : ''}}
+
+              **IMPORTANT: Your FIRST action in the next attempt MUST be to `cat` each failed log file above.** The logs contain the actual error messages. Do NOT guess at the problem — read the logs first, then fix the root cause.
+
         - id: refactor
           type: workflow
           ref: builtin://agent
           presets:
-            default: general
+            default: "{{inputs.implementer_preset}}"
           args:
             model: "{{inputs.model}}"
             mode: "{{inputs.mode}}"
@@ -325,7 +341,7 @@ nodes:
                 (has(nodes.lint) && has(nodes.lint.exit_code) && nodes.lint.exit_code != 0) ||
                 (has(nodes.test) && has(nodes.test.exit_code) && nodes.test.exit_code != 0) ||
                 (has(nodes.build) && has(nodes.build.exit_code) && nodes.build.exit_code != 0)
-              to: []
+              to: [check_failures]
           default: [review]
         - from: review
           cases:

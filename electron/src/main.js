@@ -2112,33 +2112,48 @@ ipcMain.handle("get-privacy-settings", async () => {
 // Install CLI command
 ipcMain.handle("install-cli", async () => {
   const { exec } = require("child_process");
-  const cliScriptPath = app.isPackaged
-    ? path.join(process.resourcesPath, "cli", "reliant")
-    : path.join(__dirname, "..", "cli", "reliant");
+
+  // Locate the Go backend binary based on platform and architecture
+  function getGoBinaryPath() {
+    const platform = process.platform;
+    const arch = process.arch;
+    const ext = platform === "win32" ? ".exe" : "";
+    const binaryName = `reliant-backend${ext}`;
+
+    if (!app.isPackaged) {
+      // Dev mode: use the dev build output
+      return path.join(__dirname, "..", "..", "dist", `reliant${ext}`);
+    }
+
+    if (platform === "darwin") {
+      const macArch = arch === "x64" ? "x64" : "arm64";
+      return path.join(process.resourcesPath, "server", `mac-${macArch}`, binaryName);
+    } else if (platform === "win32") {
+      const winArch = arch === "arm64" ? "win32-arm64" : "win32-amd64";
+      return path.join(process.resourcesPath, "server", winArch, binaryName);
+    } else {
+      const linuxArch = arch === "arm64" ? "linux-arm64" : "linux-amd64";
+      return path.join(process.resourcesPath, "server", linuxArch, binaryName);
+    }
+  }
+
+  const goBinaryPath = getGoBinaryPath();
+
+  if (!fs.existsSync(goBinaryPath)) {
+    return { success: false, error: "Go binary not found at " + goBinaryPath };
+  }
 
   // Platform-specific installation
   if (process.platform === "win32") {
-    // Windows: Create a batch file in a user-writable location and add to PATH
     const userBinDir = path.join(process.env.LOCALAPPDATA || process.env.APPDATA, "Reliant", "bin");
-    const batchPath = path.join(userBinDir, "reliant.cmd");
-    const cliScriptPathWin = app.isPackaged
-      ? path.join(process.resourcesPath, "cli", "reliant.cmd")
-      : path.join(__dirname, "..", "cli", "reliant.cmd");
+    const targetPath = path.join(userBinDir, "reliant.exe");
 
     try {
-      // Create bin directory if it doesn't exist
       if (!fs.existsSync(userBinDir)) {
         fs.mkdirSync(userBinDir, { recursive: true });
       }
 
-      // Check if Windows CLI script exists, otherwise create a wrapper
-      if (fs.existsSync(cliScriptPathWin)) {
-        fs.copyFileSync(cliScriptPathWin, batchPath);
-      } else {
-        // Create a wrapper batch file that calls the bash script via WSL or Git Bash
-        const wrapperContent = `@echo off\r\nbash "${cliScriptPath.replace(/\\/g, "/")}" %*\r\n`;
-        fs.writeFileSync(batchPath, wrapperContent);
-      }
+      fs.copyFileSync(goBinaryPath, targetPath);
 
       // Add to user PATH via PowerShell
       return new Promise((resolve) => {
@@ -2148,7 +2163,7 @@ ipcMain.handle("install-cli", async () => {
             log.error("[IPC] Failed to update PATH:", error);
             resolve({
               success: true,
-              message: `CLI installed to ${batchPath}. You may need to restart your terminal or add "${userBinDir}" to your PATH.`,
+              message: `CLI installed to ${targetPath}. You may need to restart your terminal or add "${userBinDir}" to your PATH.`,
             });
           } else {
             resolve({
@@ -2167,17 +2182,12 @@ ipcMain.handle("install-cli", async () => {
   // Unix-like systems (macOS and Linux)
   const symlinkPath = "/usr/local/bin/reliant";
 
-  // Check if CLI script exists
-  if (!fs.existsSync(cliScriptPath)) {
-    return { success: false, error: "CLI script not found at " + cliScriptPath };
-  }
-
   // First try without sudo (in case user has write permissions)
   try {
     if (fs.existsSync(symlinkPath)) {
       fs.unlinkSync(symlinkPath);
     }
-    fs.symlinkSync(cliScriptPath, symlinkPath);
+    fs.symlinkSync(goBinaryPath, symlinkPath);
     return { success: true, message: "CLI command installed successfully" };
   } catch (error) {
     log.info("[IPC] Direct symlink failed, trying with admin privileges:", error.message);
@@ -2186,7 +2196,7 @@ ipcMain.handle("install-cli", async () => {
   // On macOS, use osascript to request admin privileges
   if (process.platform === "darwin") {
     return new Promise((resolve) => {
-      const script = `do shell script "ln -sf '${cliScriptPath}' '${symlinkPath}'" with administrator privileges`;
+      const script = `do shell script "ln -sf '${goBinaryPath}' '${symlinkPath}'" with administrator privileges`;
       exec(`osascript -e '${script}'`, (error) => {
         if (error) {
           log.error("[IPC] Failed to install CLI with admin privileges:", error);
@@ -2207,16 +2217,14 @@ ipcMain.handle("install-cli", async () => {
   // On Linux, try pkexec for GUI password prompt
   if (process.platform === "linux") {
     return new Promise((resolve) => {
-      // First check if pkexec is available
       exec("which pkexec", (whichError) => {
         if (!whichError) {
-          // pkexec is available, use it
-          exec(`pkexec ln -sf "${cliScriptPath}" "${symlinkPath}"`, (error) => {
+          exec(`pkexec ln -sf "${goBinaryPath}" "${symlinkPath}"`, (error) => {
             if (error) {
               log.error("[IPC] Failed to install CLI with pkexec:", error);
               resolve({
                 success: false,
-                error: `Installation cancelled or failed. You can manually run:\nsudo ln -sf "${cliScriptPath}" ${symlinkPath}`,
+                error: `Installation cancelled or failed. You can manually run:\nsudo ln -sf "${goBinaryPath}" ${symlinkPath}`,
               });
             } else {
               resolve({
@@ -2226,10 +2234,9 @@ ipcMain.handle("install-cli", async () => {
             }
           });
         } else {
-          // pkexec not available, provide manual instructions
           resolve({
             success: false,
-            error: `Please run this command in your terminal:\nsudo ln -sf "${cliScriptPath}" ${symlinkPath}`,
+            error: `Please run this command in your terminal:\nsudo ln -sf "${goBinaryPath}" ${symlinkPath}`,
           });
         }
       });
@@ -2239,7 +2246,7 @@ ipcMain.handle("install-cli", async () => {
   // Fallback
   return {
     success: false,
-    error: `Please run this command in your terminal:\nsudo ln -sf "${cliScriptPath}" ${symlinkPath}`,
+    error: `Please run this command in your terminal:\nsudo ln -sf "${goBinaryPath}" ${symlinkPath}`,
   };
 });
 

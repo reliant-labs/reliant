@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/reliant-labs/reliant/internal/config"
 )
 
 // LoadedToolsStore tracks which tools have been dynamically loaded per chat.
@@ -12,13 +14,15 @@ import (
 // the same server process. Thread-safe for concurrent access.
 type LoadedToolsStore struct {
 	mu          sync.RWMutex
-	tools       map[string]map[string]bool // chatID -> set of tool names
-	permissions map[string]string          // chatID -> permission level
+	tools       map[string]map[string]bool      // chatID -> set of tool names
+	permissions map[string]string               // chatID -> permission level
+	skills      map[string][]config.StoredSkill // chatID -> skills
 }
 
 var globalLoadedToolsStore = &LoadedToolsStore{
 	tools:       make(map[string]map[string]bool),
 	permissions: make(map[string]string),
+	skills:      make(map[string][]config.StoredSkill),
 }
 
 // GetLoadedToolsStore returns the global loaded tools store.
@@ -68,13 +72,30 @@ func (s *LoadedToolsStore) Has(chatID, toolName string) bool {
 	return s.tools[chatID][toolName]
 }
 
-// Clear removes all loaded tools and permission for a chat.
+// Clear removes all loaded tools, permission, and skills for a chat.
 func (s *LoadedToolsStore) Clear(chatID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	delete(s.tools, chatID)
 	delete(s.permissions, chatID)
+	delete(s.skills, chatID)
+}
+
+// SetSkills stores the project skills for a chat so the executor can access them.
+func (s *LoadedToolsStore) SetSkills(chatID string, skills []config.StoredSkill) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.skills[chatID] = skills
+}
+
+// GetSkills returns the stored skills for a chat, or nil if none.
+func (s *LoadedToolsStore) GetSkills(chatID string) []config.StoredSkill {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.skills[chatID]
 }
 
 // SetPermission sets the permission level for a chat.

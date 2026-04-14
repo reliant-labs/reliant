@@ -404,14 +404,19 @@ func runSpawnWorkflowNamePresetsRuntimeCheck(
 	if callLLMArgs == nil {
 		t.Fatalf("spawn runtime check target node %q is missing call_llm args", check.NodePath)
 	}
-	resolvedToolFilter := callLLMArgs.GetToolFilter()
-	toolFilterExpr := model.CelStringListExpr(resolvedToolFilter)
-	if toolFilterExpr == "" {
-		toolFilter := model.CelStringListValue(resolvedToolFilter)
-		if len(toolFilter) == 0 {
-			t.Fatalf("spawn runtime check target node %q is missing call_llm.tool_filter", check.NodePath)
+	tc := callLLMArgs.GetToolsConfig()
+	if tc == nil {
+		t.Fatalf("spawn runtime check target node %q is missing call_llm.tools_config", check.NodePath)
+	}
+	// Spawn entries are in tools_config.spawn (not filter)
+	resolvedSpawn := tc.GetSpawn()
+	spawnExpr := model.CelStringListExpr(resolvedSpawn)
+	if spawnExpr == "" {
+		spawnValues := model.CelStringListValue(resolvedSpawn)
+		if len(spawnValues) == 0 {
+			t.Fatalf("spawn runtime check target node %q is missing call_llm.tools_config.spawn", check.NodePath)
 		}
-		toolFilterExpr = toolFilter[0]
+		spawnExpr = spawnValues[0]
 	}
 
 	builder := NewCELContextBuilder().
@@ -419,19 +424,19 @@ func runSpawnWorkflowNamePresetsRuntimeCheck(
 		WithInputs(iterationInputs).
 		WithNodeOutputs(map[string]interface{}{})
 
-	evaluatedToolFilterRaw, err := builder.EvalString(toolFilterExpr)
+	evaluatedSpawnRaw, err := builder.EvalString(spawnExpr)
 	if err != nil {
-		t.Fatalf("EvalString failed for spawn tool filter: %v", err)
+		t.Fatalf("EvalString failed for spawn config: %v", err)
 	}
 
-	evaluatedToolFilter, ok := evaluatedToolFilterRaw.([]interface{})
+	evaluatedSpawn, ok := evaluatedSpawnRaw.([]interface{})
 	if !ok {
-		t.Fatalf("expected evaluated tool_filter array, got %#v", evaluatedToolFilterRaw)
+		t.Fatalf("expected evaluated tools_config.spawn array, got %#v", evaluatedSpawnRaw)
 	}
 
 	expectedSpawn := fmt.Sprintf("spawn:%s(%s)", check.ExpectedSpawnRef, strings.Join(check.ExpectedSpawnPresets, ","))
-	if !stringSliceContains(toStringSlice(evaluatedToolFilter), expectedSpawn) {
-		t.Fatalf("expected evaluated tool_filter to include %q, got %#v", expectedSpawn, evaluatedToolFilter)
+	if !stringSliceContains(toStringSlice(evaluatedSpawn), expectedSpawn) {
+		t.Fatalf("expected evaluated tools_config.spawn to include %q, got %#v", expectedSpawn, evaluatedSpawn)
 	}
 }
 

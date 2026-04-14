@@ -3,7 +3,9 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -74,6 +76,42 @@ func (s *YieldService) ResolveYield(
 	}
 	if err := s.database.EmitYieldUpdate(ctx, yield.ChatID, yieldResolvedUpdate); err != nil {
 		logging.Warn("Failed to emit yield resolved update", "error", err, "yieldID", yield.ID)
+	}
+
+	// Save a user message to the chat timeline for ask_user yields
+	if req.Msg.Action == "reply" && req.Msg.ResponseData != nil && *req.Msg.ResponseData != "" && yield.Metadata != nil {
+		var meta struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal([]byte(*yield.Metadata), &meta); err == nil && meta.Type == "ask_user" {
+			var respData struct {
+				Answers []struct {
+					Question string   `json:"question"`
+					Selected []string `json:"selected"`
+					Freetext string   `json:"freetext"`
+				} `json:"answers"`
+			}
+			if err := json.Unmarshal([]byte(*req.Msg.ResponseData), &respData); err == nil && len(respData.Answers) > 0 {
+				var parts []string
+				for _, a := range respData.Answers {
+					line := fmt.Sprintf("**Q: %s**\nA: %s", a.Question, strings.Join(a.Selected, ", "))
+					if a.Freetext != "" {
+						line += fmt.Sprintf(" (note: %s)", a.Freetext)
+					}
+					parts = append(parts, line)
+				}
+				formattedMessage := strings.Join(parts, "\n\n")
+
+				targetThread := yield.WorkflowID
+				if yield.ThreadID != "" {
+					targetThread = yield.ThreadID
+				}
+
+				if _, err := s.database.SaveMessageToThread(ctx, yield.ChatID, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), formattedMessage, &yield.WorkflowID, nil, nil); err != nil {
+					logging.Warn("Failed to save ask_user reply message", "error", err, "yieldID", yield.ID, "chatID", yield.ChatID)
+				}
+			}
+		}
 	}
 
 	// Signal the workflow to unblock from its yield wait.

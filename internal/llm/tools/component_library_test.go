@@ -2,35 +2,29 @@
 package tools
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/reliant-labs/forge/components"
+	"github.com/reliant-labs/reliant/internal/daemon"
+	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
-func TestComponentLibraryEmbedding(t *testing.T) {
-	// Verify all registered components can be read from the embedded FS
-	for _, entry := range componentRegistry {
-		content, err := componentsFS.ReadFile(entry.FilePath)
-		if err != nil {
-			t.Errorf("component %q (path %q): embed read failed: %v", entry.Name, entry.FilePath, err)
-			continue
-		}
-		if len(content) == 0 {
-			t.Errorf("component %q: embedded content is empty", entry.Name)
-		}
-	}
-}
-
 func TestComponentLibraryRegistry(t *testing.T) {
-	// Verify registry is populated
-	if len(componentRegistry) == 0 {
-		t.Fatal("componentRegistry is empty")
+	lib := components.NewLibrary()
+	reg := lib.Registry()
+
+	if len(reg) == 0 {
+		t.Fatal("registry is empty")
 	}
-	if len(componentsByName) == 0 {
-		t.Fatal("componentsByName is empty")
+	if len(lib.ByName()) == 0 {
+		t.Fatal("byName is empty")
 	}
 
-	// Verify every entry has required fields
-	for _, entry := range componentRegistry {
+	for _, entry := range reg {
 		if entry.Name == "" {
 			t.Error("component with empty name")
 		}
@@ -43,14 +37,11 @@ func TestComponentLibraryRegistry(t *testing.T) {
 		if len(entry.Tags) == 0 {
 			t.Errorf("component %q has no tags", entry.Name)
 		}
-		if entry.FilePath == "" {
-			t.Errorf("component %q has empty file path", entry.Name)
-		}
 	}
 
-	// Verify no duplicate names
+	// No duplicate names
 	seen := make(map[string]bool)
-	for _, entry := range componentRegistry {
+	for _, entry := range reg {
 		if seen[entry.Name] {
 			t.Errorf("duplicate component name: %q", entry.Name)
 		}
@@ -59,17 +50,18 @@ func TestComponentLibraryRegistry(t *testing.T) {
 }
 
 func TestComponentLibraryCategories(t *testing.T) {
-	counts := make(map[ComponentCategory]int)
-	for _, entry := range componentRegistry {
+	lib := components.NewLibrary()
+	counts := make(map[components.Category]int)
+	for _, entry := range lib.Registry() {
 		counts[entry.Category]++
 	}
 
-	expected := map[ComponentCategory]int{
-		CategoryLayouts:  10,
-		CategoryCharts:   6,
-		CategoryDiagrams: 5,
-		CategoryDeck:     7,
-		CategoryUI:       8,
+	expected := map[components.Category]int{
+		components.CategoryLayouts:  11,
+		components.CategoryCharts:   6,
+		components.CategoryDiagrams: 5,
+		components.CategoryDeck:     7,
+		components.CategoryUI:       32,
 	}
 
 	for cat, want := range expected {
@@ -111,7 +103,7 @@ func TestComponentLibraryGet(t *testing.T) {
 func TestComponentLibrarySearch(t *testing.T) {
 	tool := &componentLibraryTool{}
 
-	// Search by tag
+	// Search by tag keyword
 	resp, err := tool.search("", "deck", "")
 	if err != nil {
 		t.Fatalf("search tag=deck: %v", err)
@@ -120,7 +112,7 @@ func TestComponentLibrarySearch(t *testing.T) {
 		t.Error("search tag=deck should find slide_title")
 	}
 
-	// Search by category
+	// Search by category keyword
 	resp, err = tool.search("", "", "charts")
 	if err != nil {
 		t.Fatalf("search category=charts: %v", err)
@@ -129,7 +121,7 @@ func TestComponentLibrarySearch(t *testing.T) {
 		t.Error("search category=charts should find quadrant_chart")
 	}
 
-	// Search by query
+	// Search by query keyword
 	resp, err = tool.search("funnel", "", "")
 	if err != nil {
 		t.Fatalf("search query=funnel: %v", err)
@@ -138,7 +130,16 @@ func TestComponentLibrarySearch(t *testing.T) {
 		t.Error("search query=funnel should find funnel_chart")
 	}
 
-	// Search by tag + category
+	// Unified multi-word search
+	resp, err = tool.search("crud admin table", "", "")
+	if err != nil {
+		t.Fatalf("search 'crud admin table': %v", err)
+	}
+	if !strings.Contains(resp.Content, "data_table") {
+		t.Error("search 'crud admin table' should find data_table")
+	}
+
+	// tag + category builds unified string
 	resp, err = tool.search("", "competitive", "charts")
 	if err != nil {
 		t.Fatalf("search tag=competitive category=charts: %v", err)
@@ -165,8 +166,8 @@ func TestComponentLibraryList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list all: %v", err)
 	}
-	if !strings.Contains(resp.Content, "36 components") {
-		t.Errorf("list all should show 36 components, got: %s", resp.Content[:100])
+	if !strings.Contains(resp.Content, "61 components") {
+		t.Errorf("list all should show 61 components, got: %s", resp.Content[:100])
 	}
 
 	// List filtered by category
@@ -176,6 +177,124 @@ func TestComponentLibraryList(t *testing.T) {
 	}
 	if !strings.Contains(resp.Content, "7 components") {
 		t.Errorf("list category=deck should show 7 components")
+	}
+}
+
+func TestComponentLibraryInstall(t *testing.T) {
+	tool := &componentLibraryTool{}
+
+	t.Run("install writes file to disk", func(t *testing.T) {
+		tempDir := t.TempDir()
+		worktree := &rctx.WorktreeInfo{ID: "test", Path: tempDir}
+		ctx := rctx.NewToolContext(context.Background(), "test-chat", "0", nil, worktree).
+			WithDaemon(daemon.NewLocalClient())
+
+		destPath := filepath.Join("components", "layouts", "sidebar_left.tsx")
+		resp, err := tool.install(ctx, "sidebar_left", destPath)
+		if err != nil {
+			t.Fatalf("install sidebar_left: %v", err)
+		}
+		if resp.IsError {
+			t.Fatalf("install sidebar_left returned error: %s", resp.Content)
+		}
+		if !strings.Contains(resp.Content, "installed to") {
+			t.Errorf("expected success message, got: %s", resp.Content)
+		}
+
+		// Verify file was written
+		writtenPath := filepath.Join(tempDir, destPath)
+		data, err := os.ReadFile(writtenPath)
+		if err != nil {
+			t.Fatalf("failed to read written file: %v", err)
+		}
+		if len(data) == 0 {
+			t.Error("written file is empty")
+		}
+
+		// Verify content matches the library source
+		lib := components.NewLibrary()
+		expected, _ := lib.Get("sidebar_left")
+		if string(data) != expected {
+			t.Error("written file content does not match library source")
+		}
+	})
+
+	t.Run("install with missing name errors", func(t *testing.T) {
+		tempDir := t.TempDir()
+		worktree := &rctx.WorktreeInfo{ID: "test", Path: tempDir}
+		ctx := rctx.NewToolContext(context.Background(), "test-chat", "0", nil, worktree).
+			WithDaemon(daemon.NewLocalClient())
+
+		resp, err := tool.Execute(ctx, ComponentLibraryParams{Action: "install", Path: "out.tsx"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !resp.IsError {
+			t.Error("expected error for missing name")
+		}
+		if !strings.Contains(resp.Content, "'name' is required") {
+			t.Errorf("unexpected error message: %s", resp.Content)
+		}
+	})
+
+	t.Run("install with missing path errors", func(t *testing.T) {
+		tempDir := t.TempDir()
+		worktree := &rctx.WorktreeInfo{ID: "test", Path: tempDir}
+		ctx := rctx.NewToolContext(context.Background(), "test-chat", "0", nil, worktree).
+			WithDaemon(daemon.NewLocalClient())
+
+		resp, err := tool.Execute(ctx, ComponentLibraryParams{Action: "install", Name: "sidebar_left"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !resp.IsError {
+			t.Error("expected error for missing path")
+		}
+		if !strings.Contains(resp.Content, "'path' is required") {
+			t.Errorf("unexpected error message: %s", resp.Content)
+		}
+	})
+
+	t.Run("install with nonexistent component errors", func(t *testing.T) {
+		tempDir := t.TempDir()
+		worktree := &rctx.WorktreeInfo{ID: "test", Path: tempDir}
+		ctx := rctx.NewToolContext(context.Background(), "test-chat", "0", nil, worktree).
+			WithDaemon(daemon.NewLocalClient())
+
+		resp, err := tool.install(ctx, "nonexistent_component", "out.tsx")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !resp.IsError {
+			t.Error("expected error for nonexistent component")
+		}
+		if !strings.Contains(resp.Content, "not found") {
+			t.Errorf("unexpected error message: %s", resp.Content)
+		}
+	})
+}
+
+func TestComponentLibraryRequiresPermission(t *testing.T) {
+	tool := &componentLibraryTool{}
+
+	// Read-only actions don't require permission
+	for _, action := range []string{"search", "get", "list"} {
+		req, err := tool.RequiresPermission(ComponentLibraryParams{Action: action})
+		if err != nil {
+			t.Fatalf("RequiresPermission(%s): %v", action, err)
+		}
+		if req {
+			t.Errorf("action %q should not require permission", action)
+		}
+	}
+
+	// Install requires permission
+	req, err := tool.RequiresPermission(ComponentLibraryParams{Action: "install"})
+	if err != nil {
+		t.Fatalf("RequiresPermission(install): %v", err)
+	}
+	if !req {
+		t.Error("action 'install' should require permission")
 	}
 }
 

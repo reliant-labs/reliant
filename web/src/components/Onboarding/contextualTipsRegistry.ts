@@ -233,7 +233,7 @@ export const CONTEXTUAL_TIP_DEFINITIONS: ContextualTipDefinition[] = [
     id: "worktree-after-nth-chat" as ContextualTipId,
     title: "Try a workspace for isolated work",
     body: "You’ve started a few chats already. Workspaces let you branch off into isolated git contexts so feature work and experiments stay cleanly separated.",
-    targetSelector: "[data-onboarding='workspace-buttons'], [data-onboarding='workspace-indicator']",
+    targetSelector: "[data-onboarding='workspace-buttons']",
     priority: 80,
     cooldownMs: CONTEXTUAL_TIPS_COOLDOWN_MS,
     shouldShow: (context: ContextualTipTriggerContext, state: Record<ContextualTipId, ContextualTipStateRecord>) => {

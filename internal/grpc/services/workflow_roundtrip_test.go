@@ -44,8 +44,8 @@ nodes:
     system_prompt: |
       You are a test assistant.
       This is a multi-line prompt.
-    tools: true
-    tool_filter: "{{inputs.tools + ['spawn:builtin://agent']}}"
+    tools_config:
+      filter: "{{inputs.tools + ['spawn:builtin://agent']}}"
 `
 
 	protoWf, err := parseDraftDefinitionV2([]byte(yamlWorkflow))
@@ -57,8 +57,8 @@ nodes:
 	require.NotNil(t, callLLMArgs)
 	assert.Equal(t, "{{inputs.model}}", modelSelectorRaw(callLLMArgs.Model))
 	assert.Contains(t, model.CelStringRaw(callLLMArgs.SystemPrompt), "You are a test assistant")
-	assert.Equal(t, true, model.CelBoolValue(callLLMArgs.Tools))
-	assert.Equal(t, "{{inputs.tools + ['spawn:builtin://agent']}}", model.CelStringListExpr(callLLMArgs.ToolFilter))
+	require.NotNil(t, callLLMArgs.GetToolsConfig())
+	assert.Equal(t, "{{inputs.tools + ['spawn:builtin://agent']}}", model.CelStringListExpr(callLLMArgs.GetToolsConfig().GetFilter()))
 
 	yamlBytes, err := rpcWorkflowToYAML(protoWf)
 	require.NoError(t, err)
@@ -72,8 +72,8 @@ nodes:
 	require.NotNil(t, callLLMArgs2)
 	assert.Equal(t, "{{inputs.model}}", modelSelectorRaw(callLLMArgs2.Model))
 	assert.Contains(t, model.CelStringRaw(callLLMArgs2.SystemPrompt), "You are a test assistant")
-	assert.Equal(t, true, model.CelBoolValue(callLLMArgs2.Tools))
-	assert.Equal(t, "{{inputs.tools + ['spawn:builtin://agent']}}", model.CelStringListExpr(callLLMArgs2.ToolFilter))
+	require.NotNil(t, callLLMArgs2.GetToolsConfig())
+	assert.Equal(t, "{{inputs.tools + ['spawn:builtin://agent']}}", model.CelStringListExpr(callLLMArgs2.GetToolsConfig().GetFilter()))
 }
 
 func TestWorkflowRoundTrip_NestedLoopNode(t *testing.T) {
@@ -91,7 +91,6 @@ nodes:
           type: call_llm
           model: "claude-3-5-sonnet-20241022"
           system_prompt: "You are a helpful assistant."
-          tools: true
 `
 
 	protoWf, err := parseDraftDefinitionV2([]byte(yamlWorkflow))
@@ -119,7 +118,6 @@ nodes:
     type: call_llm
     model: "{{inputs.model}}"
     system_prompt: "legacy top-level"
-    tools: true
 `
 
 	protoWf, err := parseDraftDefinitionV2([]byte(yamlWorkflow))
@@ -130,7 +128,6 @@ nodes:
 	require.NotNil(t, callLLMArgs)
 	assert.Equal(t, "{{inputs.model}}", modelSelectorRaw(callLLMArgs.Model))
 	assert.Equal(t, "legacy top-level", model.CelStringRaw(callLLMArgs.SystemPrompt))
-	assert.True(t, model.CelBoolValue(callLLMArgs.Tools))
 }
 
 func TestParseDraftDefinitionV2_ExplicitArgsTakePrecedenceOverLegacyTopLevel(t *testing.T) {

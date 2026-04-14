@@ -181,9 +181,8 @@ func (s *ProjectService) CreateProject(
 ## Available Skills
 
 Use ` + "`skill list`" + ` to see all available skills. Key skills:
-- ` + "`reliant-config`" + `: Configure Reliant (memory, skills, MCP, presets)
+- ` + "`reliant-config`" + `: Configure Reliant (memory, skills, MCP, presets, creating skills)
 - ` + "`workflow-builder`" + `: Build and test Reliant workflows
-- ` + "`skill-creator`" + `: Create new skills
 `,
 	}
 	if err := s.sendProjectDaemonCommand(ctx, userID, "project.init_files", initPayload, &initFilesResp); err != nil {

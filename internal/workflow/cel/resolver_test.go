@@ -107,18 +107,18 @@ func TestResolveCELFields_CelStringExpr(t *testing.T) {
 func TestResolveCELFields_CelBoolExpr(t *testing.T) {
 	node := &reliantv1.Node{
 		Id:   "test-bool",
-		Type: "call_llm",
-		Args: &reliantv1.Node_CallLlm{
-			CallLlm: &reliantv1.CallLLMArgs{
-				Tools: &reliantv1.CelBool{
-					Value: &reliantv1.CelBool_Expr{Expr: "{{inputs.enable_tools}}"},
+		Type: "create_worktree",
+		Args: &reliantv1.Node_CreateWorktree{
+			CreateWorktree: &reliantv1.CreateWorktreeArgs{
+				Force: &reliantv1.CelBool{
+					Value: &reliantv1.CelBool_Expr{Expr: "{{inputs.force}}"},
 				},
 			},
 		},
 	}
 
 	eval := newMockEvaluator(map[string]interface{}{
-		"{{inputs.enable_tools}}": true,
+		"{{inputs.force}}": true,
 	})
 
 	result, err := ResolveCELFields(node, eval)
@@ -127,9 +127,9 @@ func TestResolveCELFields_CelBoolExpr(t *testing.T) {
 	}
 
 	resolved := result.(*reliantv1.Node)
-	args := resolved.GetCallLlm()
-	if args.Tools.GetLiteral() != true {
-		t.Errorf("expected tools literal = true, got %v", args.Tools.GetLiteral())
+	args := resolved.GetCreateWorktree()
+	if args.Force.GetLiteral() != true {
+		t.Errorf("expected force literal = true, got %v", args.Force.GetLiteral())
 	}
 }
 
@@ -422,10 +422,10 @@ func TestResolveCELFields_ErrorInEvaluation(t *testing.T) {
 func TestResolveCELFields_TypeConversionError(t *testing.T) {
 	node := &reliantv1.Node{
 		Id:   "test-type-error",
-		Type: "call_llm",
-		Args: &reliantv1.Node_CallLlm{
-			CallLlm: &reliantv1.CallLLMArgs{
-				Tools: &reliantv1.CelBool{
+		Type: "create_worktree",
+		Args: &reliantv1.Node_CreateWorktree{
+			CreateWorktree: &reliantv1.CreateWorktreeArgs{
+				Force: &reliantv1.CelBool{
 					Value: &reliantv1.CelBool_Expr{Expr: "{{inputs.not_a_bool}}"},
 				},
 			},
@@ -682,9 +682,6 @@ func TestResolveCELFields_MultipleFieldsResolved(t *testing.T) {
 				ThinkingLevel: &reliantv1.CelString{
 					Value: &reliantv1.CelString_Expr{Expr: "{{inputs.thinking}}"},
 				},
-				Tools: &reliantv1.CelBool{
-					Value: &reliantv1.CelBool_Expr{Expr: "{{inputs.tools}}"},
-				},
 				Temperature: &reliantv1.CelDouble{
 					Value: &reliantv1.CelDouble_Expr{Expr: "{{inputs.temp}}"},
 				},
@@ -698,7 +695,6 @@ func TestResolveCELFields_MultipleFieldsResolved(t *testing.T) {
 	eval := newMockEvaluator(map[string]interface{}{
 		"{{inputs.prompt}}":   "Be concise.",
 		"{{inputs.thinking}}": "high",
-		"{{inputs.tools}}":    false,
 		"{{inputs.temp}}":     0.3,
 		"{{inputs.tokens}}":   int64(2048),
 	})
@@ -716,9 +712,6 @@ func TestResolveCELFields_MultipleFieldsResolved(t *testing.T) {
 	}
 	if args.ThinkingLevel.GetLiteral() != "high" {
 		t.Errorf("thinking_level: expected %q, got %q", "high", args.ThinkingLevel.GetLiteral())
-	}
-	if args.Tools.GetLiteral() != false {
-		t.Errorf("tools: expected false, got %v", args.Tools.GetLiteral())
 	}
 	if args.Temperature.GetLiteral() != 0.3 {
 		t.Errorf("temperature: expected 0.3, got %v", args.Temperature.GetLiteral())
