@@ -20,8 +20,8 @@ type Message struct {
 	DisplayStyle    *reliantv1.DisplayStyle // DisplayStyle proto enum value, or nil for default
 	Model           *string
 	Agent           *string
-	TokenCount      *int     // Context size (tokens the LLM saw for this request)
-	Cost            *float64 // Cost in USD (for future billing)
+	TokenCount      *int   // Context size (tokens the LLM saw for this request)
+	CostMicros      *int64 // Cost in micros of USD
 	WorkflowID      *string
 	RunID           *string
 	NodeID          *string // Workflow node/step identifier

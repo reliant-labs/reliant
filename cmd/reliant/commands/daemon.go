@@ -4,6 +4,7 @@ package commands
 import (
 	"bufio"
 	"context"
+	crypto_tls "crypto/tls"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -71,17 +72,19 @@ func registerDaemon(cmd *cobra.Command, apiURL, gwURL string) error {
 	// Step 2: Call CreateDaemonToken RPC (via the API server, not the gateway)
 	hostname, _ := os.Hostname()
 
-	httpClient := &http.Client{
-		Transport: &bearerAuthTransport{token: accessToken},
-	}
+	logging.Info("Registering daemon via CreateDaemonToken", "api_url", apiURL, "hostname", hostname)
+
+	httpClient := newRegistrationHTTPClient(accessToken, apiURL)
 	client := reliantv1connect.NewDaemonRegistryServiceClient(httpClient, apiURL)
 
 	resp, err := client.CreateDaemonToken(cmd.Context(), connect.NewRequest(&reliantv1.CreateDaemonTokenRequest{
 		Name: hostname,
 	}))
 	if err != nil {
+		logging.Error("CreateDaemonToken failed", "error", err, "code", connect.CodeOf(err), "api_url", apiURL)
 		return fmt.Errorf("creating daemon token: %w", err)
 	}
+	logging.Info("Daemon token created successfully", "user_id", resp.Msg.GetUserId())
 
 	// Step 3: Write daemon credentials
 	creds := &auth.DaemonCredentials{
@@ -106,7 +109,7 @@ func registerDaemon(cmd *cobra.Command, apiURL, gwURL string) error {
 // ensureDaemonCredentials returns existing daemon credentials or creates new ones.
 // This is the shared credential resolution logic used by both `open` and `daemon start`.
 func ensureDaemonCredentials(cmd *cobra.Command, apiURL, gwURL string) (*auth.DaemonCredentials, error) {
-	creds, err := auth.ReadDaemonCredentials()
+	creds, err := auth.ReadDaemonCredentials(apiURL)
 	if err != nil {
 		return nil, fmt.Errorf("reading daemon credentials: %w", err)
 	}
@@ -126,22 +129,125 @@ func ensureDaemonCredentials(cmd *cobra.Command, apiURL, gwURL string) (*auth.Da
 	}
 
 	// Re-read the credentials we just wrote
-	creds, err = auth.ReadDaemonCredentials()
+	creds, err = auth.ReadDaemonCredentials(apiURL)
 	if err != nil || creds == nil {
 		return nil, fmt.Errorf("failed to read daemon credentials after registration")
 	}
 	return creds, nil
 }
 
+// credentialsFromToken reads a PAT from stdin and constructs daemon credentials.
+// Supports both interactive (prompt) and piped input.
+func credentialsFromToken(cmd *cobra.Command, apiURL, gwURL string) (*auth.DaemonCredentials, error) {
+	// Detect if stdin is a pipe or interactive
+	stat, _ := os.Stdin.Stat()
+	isPiped := (stat.Mode() & os.ModeCharDevice) == 0
+
+	var token string
+	scanner := bufio.NewScanner(os.Stdin)
+	if isPiped {
+		if scanner.Scan() {
+			token = strings.TrimSpace(scanner.Text())
+		}
+		if token == "" {
+			return nil, fmt.Errorf("no token provided via stdin")
+		}
+	} else {
+		fmt.Fprint(cmd.OutOrStdout(), "Paste your access token: ")
+		if scanner.Scan() {
+			token = strings.TrimSpace(scanner.Text())
+		}
+		if token == "" {
+			return nil, fmt.Errorf("no token provided")
+		}
+	}
+
+	if !auth.IsPATFormat(token) {
+		return nil, fmt.Errorf("invalid token format (expected rlnt_pat_...)")
+	}
+
+	// Validate the token by calling ListDaemons (requires auth).
+	// If the call succeeds, the token is valid. We also try to extract
+	// the caller's user ID from the returned daemon list.
+	httpClient := newRegistrationHTTPClient(token, apiURL)
+	client := reliantv1connect.NewDaemonRegistryServiceClient(httpClient, apiURL)
+	resp, err := client.ListDaemons(cmd.Context(), connect.NewRequest(&reliantv1.ListDaemonsRequest{}))
+	if err != nil {
+		return nil, fmt.Errorf("token validation failed: %w", err)
+	}
+
+	var userID string
+	for _, d := range resp.Msg.GetDaemons() {
+		if d.GetUserId() != "" {
+			userID = d.GetUserId()
+			break
+		}
+	}
+	if userID == "" {
+		return nil, fmt.Errorf("token is valid but no existing daemons found to resolve user ID; register via 'reliant daemon register' first")
+	}
+
+	creds := &auth.DaemonCredentials{
+		PAT:          token,
+		UserID:       userID,
+		ServerURL:    apiURL,
+		GatewayURL:   gwURL,
+		RegisteredAt: time.Now().UTC(),
+	}
+
+	if err := auth.WriteDaemonCredentials(creds); err != nil {
+		return nil, fmt.Errorf("saving daemon credentials: %w", err)
+	}
+
+	hostname, _ := os.Hostname()
+	fmt.Fprintf(cmd.OutOrStdout(), "\u2713 Token validated for user %s (host: %s)\n", userID, hostname)
+	return creds, nil
+}
+
 // bearerAuthTransport injects a Bearer token into HTTP requests.
 type bearerAuthTransport struct {
 	token string
+	base  http.RoundTripper
 }
 
 func (t *bearerAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req = req.Clone(req.Context())
 	req.Header.Set("Authorization", "Bearer "+t.token)
-	return http.DefaultTransport.RoundTrip(req)
+	rt := t.base
+	if rt == nil {
+		rt = http.DefaultTransport
+	}
+	return rt.RoundTrip(req)
+}
+
+// newRegistrationHTTPClient creates an HTTP client for daemon registration RPCs.
+// It injects the bearer token and, for localhost or when RELIANT_SKIP_TLS_VERIFY=1
+// is set, skips TLS certificate verification (self-signed dev certs).
+func newRegistrationHTTPClient(token, serverURL string) *http.Client {
+	var base http.RoundTripper
+	if shouldSkipTLSVerify(serverURL) {
+		base = &http.Transport{
+			TLSClientConfig: &crypto_tls.Config{InsecureSkipVerify: true}, //nolint:gosec // dev only
+		}
+	}
+	return &http.Client{
+		Transport: &bearerAuthTransport{token: token, base: base},
+	}
+}
+
+// shouldSkipTLSVerify returns true when TLS cert verification should be skipped
+// for the given server URL (localhost targets or explicit env override).
+func shouldSkipTLSVerify(serverURL string) bool {
+	if os.Getenv("RELIANT_SKIP_TLS_VERIFY") == "1" {
+		return true
+	}
+	// For localhost URLs, self-signed certs are common in dev
+	for _, prefix := range []string{"https://localhost", "https://127.0.0.1", "https://[::1]"} {
+		if strings.HasPrefix(serverURL, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func newDaemonRegisterCmd() *cobra.Command {
@@ -156,7 +262,7 @@ Creates a long-lived access token for the daemon and stores it locally.
 After registering, run 'reliant daemon start' to connect.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Check if already registered
-			creds, err := auth.ReadDaemonCredentials()
+			creds, err := auth.ReadDaemonCredentials(serverURL)
 			if err != nil {
 				return fmt.Errorf("reading daemon credentials: %w", err)
 			}
@@ -185,6 +291,7 @@ func newDaemonStartCmd() *cobra.Command {
 		tlsCert    string
 		tlsKey     string
 		tlsMode    string
+		useToken   bool
 	)
 
 	cmd := &cobra.Command{
@@ -207,10 +314,19 @@ Credential resolution order:
 
 			logging.Setup(slog.LevelInfo)
 
-			// Resolve credentials: existing creds > auto-register > login+register
-			creds, err := ensureDaemonCredentials(cmd, serverURL, resolveGatewayURL())
-			if err != nil {
-				return err
+			// Resolve credentials: --token > existing creds > auto-register > login+register
+			var creds *auth.DaemonCredentials
+			var err error
+			if useToken {
+				creds, err = credentialsFromToken(cmd, serverURL, resolveGatewayURL())
+				if err != nil {
+					return err
+				}
+			} else {
+				creds, err = ensureDaemonCredentials(cmd, serverURL, resolveGatewayURL())
+				if err != nil {
+					return err
+				}
 			}
 
 			// Gateway URL for the bidi stream: flag > credentials > derive from server
@@ -245,16 +361,46 @@ Credential resolution order:
 			defer shell.GetBackgroundManager().KillAllRunning()
 			defer shell.GetProcessMonitor().Stop()
 
-			err = daemonruntime.Start(ctx, daemonruntime.StartOptions{
-				BootstrapConfig: bootstrap.DaemonBootstrapConfig{
-					UserID:    creds.UserID,
-					AuthToken: creds.PAT,
-					GRPCURL:   daemonGRPCURL,
-					TLSMode:   parsedTLSMode,
-					DataDir:   dataDir,
-				},
-			})
+			startDaemon := func(c *auth.DaemonCredentials) error {
+				return daemonruntime.Start(ctx, daemonruntime.StartOptions{
+					BootstrapConfig: bootstrap.DaemonBootstrapConfig{
+						UserID:    c.UserID,
+						AuthToken: c.PAT,
+						GRPCURL:   daemonGRPCURL,
+						TLSMode:   parsedTLSMode,
+						DataDir:   dataDir,
+					},
+				})
+			}
+
+			logging.Info("Connecting daemon to gateway", "gateway_url", daemonGRPCURL, "user_id", creds.UserID)
+			err = startDaemon(creds)
 			if err != nil {
+				// On auth failure, delete stale credentials and re-register automatically
+				code := connect.CodeOf(err)
+				if code == connect.CodeUnauthenticated || code == connect.CodePermissionDenied {
+					logging.Warn("Daemon gateway authentication failed — deleting stale credentials and re-registering",
+						"error", err, "code", code.String(), "gateway_url", daemonGRPCURL)
+					_ = auth.DeleteDaemonCredentials(serverURL)
+
+					fmt.Fprintln(cmd.OutOrStdout(), "Credentials expired or revoked. Re-registering...")
+					if regErr := registerDaemon(cmd, serverURL, resolveGatewayURL()); regErr != nil {
+						return fmt.Errorf("re-registration failed: %w (original: %v)", regErr, err)
+					}
+
+					newCreds, readErr := auth.ReadDaemonCredentials(serverURL)
+					if readErr != nil || newCreds == nil {
+						return fmt.Errorf("failed to read credentials after re-registration")
+					}
+
+					logging.Info("Re-registered successfully, retrying connection...")
+					if retryErr := startDaemon(newCreds); retryErr != nil {
+						return fmt.Errorf("tools-daemon exited with error after re-registration: %w", retryErr)
+					}
+
+					logging.Info("tools-daemon shut down gracefully")
+					return nil
+				}
 				return fmt.Errorf("tools-daemon exited with error: %w", err)
 			}
 
@@ -271,6 +417,7 @@ Credential resolution order:
 	cmd.Flags().StringVar(&tlsCert, "tls-cert", envOrDefault("TLS_CERT_FILE", ""), "TLS certificate file path")
 	cmd.Flags().StringVar(&tlsKey, "tls-key", envOrDefault("TLS_KEY_FILE", ""), "TLS key file path")
 	cmd.Flags().StringVar(&tlsMode, "tls-mode", envOrDefault("DAEMON_TLS_MODE", ""), "TLS mode (tls, insecure_tls_skip_verify, or h2c)")
+	cmd.Flags().BoolVar(&useToken, "token", false, "Read a PAT from stdin instead of using browser auth")
 
 	return cmd
 }

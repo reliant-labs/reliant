@@ -102,10 +102,9 @@ type ToolCall struct {
 	BlockIndex       int    `json:"block_index,omitempty"`       // Position in message blocks (workflow activities)
 	ThoughtSignature string `json:"thought_signature,omitempty"` // For Gemini 3.x API requirement
 
-	// Validation context - what tools/presets were available when LLM made this call.
-	// Used by ExecuteTools to validate the LLM didn't hallucinate a tool/preset.
-	// Empty/nil means no validation (backwards compat, non-LLM sources like auditing_agent).
-	AvailableTools   []string `json:"available_tools,omitempty"`   // Tool names available to LLM
+	// AvailablePresets tracks which spawn presets were available when the LLM made this call.
+	// Used by ExecuteTools to validate the LLM didn't hallucinate a preset.
+	// Empty/nil means no validation (non-LLM sources like auditing_agent).
 	AvailablePresets []string `json:"available_presets,omitempty"` // Spawn presets available (for spawn tool only)
 
 	// SpawnWorkflow is the target workflow ref for spawn tool calls (e.g., "builtin://auditing-agent").
@@ -331,7 +330,6 @@ func (m *Message) FinishToolCall(toolCallID string) {
 					Finished:         true,
 					BlockIndex:       c.BlockIndex,
 					ThoughtSignature: c.ThoughtSignature,
-					AvailableTools:   c.AvailableTools,
 					AvailablePresets: c.AvailablePresets,
 				}
 				return
@@ -352,7 +350,6 @@ func (m *Message) AppendToolCallInput(toolCallID string, inputDelta string) {
 					Finished:         c.Finished,
 					BlockIndex:       c.BlockIndex,
 					ThoughtSignature: c.ThoughtSignature,
-					AvailableTools:   c.AvailableTools,
 					AvailablePresets: c.AvailablePresets,
 				}
 				return

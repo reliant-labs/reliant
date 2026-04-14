@@ -80,6 +80,28 @@ func TestHandleComplete_ExtractsToolCalls(t *testing.T) {
 		assert.Equal(t, "flow_123", state.upstreamProxymanID)
 	})
 
+	t.Run("captures provider cost from driver response", func(t *testing.T) {
+		state := &streamProcessingState{
+			blockStates: NewBlockStreamState(),
+			textParts:   []string{"Done."},
+		}
+
+		event := llm.DriverEvent{
+			Type: llm.EventComplete,
+			Response: &llm.DriverResponse{
+				Content: "Done.",
+				Usage: llm.TokenUsage{
+					TokenCount: 42,
+					CostMicros: 12300,
+				},
+			},
+		}
+
+		err := activity.processStreamEvent(context.TODO(), "chat-1", "thread-0", event, state)
+		require.NoError(t, err)
+		assert.Equal(t, int64(12300), state.costMicros)
+	})
+
 	t.Run("extracts multiple tool calls from response", func(t *testing.T) {
 		state := &streamProcessingState{
 			blockStates: NewBlockStreamState(),
@@ -215,6 +237,7 @@ func TestCallLLMOutput_ToolCallsSurviveSerialization(t *testing.T) {
 		ResponseText: "Let me run those.",
 		ToolCalls:    toolCalls,
 		TokenCount:   250,
+		CostMicros:   45600,
 		Message: &MessageOutput{
 			Role: "assistant",
 			Text: "Let me run those.",
@@ -262,6 +285,7 @@ func TestCallLLMOutput_ToolCallsSurviveSerialization(t *testing.T) {
 	assert.Equal(t, "Bash", typedOutput.ToolCalls[0].GetName())
 	assert.Equal(t, "toolu_def456", typedOutput.ToolCalls[1].GetId())
 	assert.Equal(t, "View", typedOutput.ToolCalls[1].GetName())
+	assert.Equal(t, int64(45600), typedOutput.CostMicros)
 }
 
 func TestCallLLMOutput_ToolCallsNotEmbeddedInText(t *testing.T) {

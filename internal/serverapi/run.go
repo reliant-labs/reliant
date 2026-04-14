@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/analytics"
-	"github.com/reliant-labs/reliant/internal/api"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/certs"
 	"github.com/reliant-labs/reliant/internal/daemon"
@@ -35,12 +34,12 @@ import (
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
+
 	"github.com/reliant-labs/reliant/internal/workflow/reconciliation"
 )
 
 // Options holds all configurable values for the API server.
 type Options struct {
-	APIPort     int
 	GRPCPort    int
 	PprofPort   int
 	BindAddress string
@@ -141,7 +140,6 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	logging.Info("Starting Reliant API server (stateless)",
-		"api_port", opts.APIPort,
 		"grpc_port", opts.GRPCPort,
 		"temporal", fmt.Sprintf("%s:%d", opts.TemporalHost, opts.TemporalPort),
 		"db_driver", opts.DatabaseDriver,
@@ -300,21 +298,6 @@ func Run(ctx context.Context, opts Options) error {
 	// 3. Start servers
 	// -----------------------------------------------------------------
 
-	// HTTP REST API server
-	apiServer := api.NewServer(&api.Config{
-		Port:               opts.APIPort,
-		BindAddress:        opts.BindAddress,
-		JWTPublicKey:       jwtPublicKey,
-		CORSAllowedOrigins: opts.CORSAllowedOrigins,
-		TLSCertFile:        tlsCertFile,
-		TLSKeyFile:         tlsKeyFile,
-		NATSChecker:        natsChecker,
-	}, repo, opts.DataDir)
-	if err := apiServer.Start(); err != nil {
-		return fmt.Errorf("failed to start API server: %w", err)
-	}
-	logging.Info("HTTP API server started", "port", opts.APIPort)
-
 	// Background process provider: always DB-backed
 	bgProvider := services.NewDBBackgroundProcessProvider(repo, daemonRouter)
 
@@ -426,7 +409,6 @@ func Run(ctx context.Context, opts Options) error {
 	// -----------------------------------------------------------------
 	logging.Info("Reliant API server ready",
 		"startup_duration", time.Since(startTime),
-		"api_port", opts.APIPort,
 		"grpc_port", opts.GRPCPort,
 		"pprof_port", opts.PprofPort,
 		"health_port", opts.HealthPort,
@@ -467,12 +449,6 @@ func Run(ctx context.Context, opts Options) error {
 	// Close ToolsDaemonService (stops stale-daemon monitor goroutine)
 	if tds := grpcSrv.ToolsDaemonService(); tds != nil {
 		tds.Close()
-	}
-
-	// Stop API server
-	logging.Info("Stopping API server")
-	if err := apiServer.Stop(shutdownCtx); err != nil {
-		logging.Error("Error stopping API server", "error", err)
 	}
 
 	// Stop reconciler

@@ -196,7 +196,7 @@ func (s *messageStore) UpdateMessage(ctx context.Context, msg *core.Message) err
 	return s.q.UpdateMessage(ctx, sqlitedb.UpdateMessageParams{
 		ID:         msg.ID,
 		TokenCount: msgIntPtrToNullInt64(msg.TokenCount),
-		Cost:       msgFloat64PtrToNullFloat64(msg.Cost),
+		CostMicros: msgInt64PtrToNullInt64(msg.CostMicros),
 	})
 }
 
@@ -212,7 +212,7 @@ func messageFromSQLc(sm sqlitedb.Message) *core.Message {
 		Model:           msgNullStringToPtr(sm.Model),
 		Agent:           msgNullStringToPtr(sm.Agent),
 		TokenCount:      msgNullInt64ToIntPtr(sm.TokenCount),
-		Cost:            msgNullFloat64ToPtr(sm.Cost),
+		CostMicros:      msgNullInt64ToPtr(sm.CostMicros),
 		WorkflowID:      msgNullStringToPtr(sm.WorkflowID),
 		RunID:           msgNullStringToPtr(sm.RunID),
 		NodeID:          msgNullStringToPtr(sm.NodeID),
@@ -246,7 +246,7 @@ func messageToCreateParams(msg *core.Message) sqlitedb.CreateMessageParams {
 		Model:           msgPtrToNullString(msg.Model),
 		Agent:           msgPtrToNullString(msg.Agent),
 		TokenCount:      msgIntPtrToNullInt64(msg.TokenCount),
-		Cost:            msgFloat64PtrToNullFloat64(msg.Cost),
+		CostMicros:      msgInt64PtrToNullInt64(msg.CostMicros),
 		WorkflowID:      msgPtrToNullString(msg.WorkflowID),
 		RunID:           msgPtrToNullString(msg.RunID),
 		ActivityID:      msgPtrToNullString(msg.ActivityID),
@@ -269,7 +269,7 @@ func messageToCreateIfNotExistsParams(msg *core.Message) sqlitedb.CreateMessageI
 		Model:           msgPtrToNullString(msg.Model),
 		Agent:           msgPtrToNullString(msg.Agent),
 		TokenCount:      msgIntPtrToNullInt64(msg.TokenCount),
-		Cost:            msgFloat64PtrToNullFloat64(msg.Cost),
+		CostMicros:      msgInt64PtrToNullInt64(msg.CostMicros),
 		WorkflowID:      msgPtrToNullString(msg.WorkflowID),
 		RunID:           msgPtrToNullString(msg.RunID),
 		ActivityID:      msgPtrToNullString(msg.ActivityID),
@@ -403,16 +403,16 @@ func msgNullInt64ToInt(ni sql.NullInt64) int {
 	return 0
 }
 
-func msgFloat64PtrToNullFloat64(f *float64) sql.NullFloat64 {
-	if f != nil {
-		return sql.NullFloat64{Float64: *f, Valid: true}
+func msgInt64PtrToNullInt64(i *int64) sql.NullInt64 {
+	if i != nil {
+		return sql.NullInt64{Int64: *i, Valid: true}
 	}
-	return sql.NullFloat64{Valid: false}
+	return sql.NullInt64{Valid: false}
 }
 
-func msgNullFloat64ToPtr(nf sql.NullFloat64) *float64 {
-	if nf.Valid {
-		return &nf.Float64
+func msgNullInt64ToPtr(ni sql.NullInt64) *int64 {
+	if ni.Valid {
+		return &ni.Int64
 	}
 	return nil
 }

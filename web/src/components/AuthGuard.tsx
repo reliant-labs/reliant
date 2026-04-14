@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useAuthStore } from '@/store/authStore'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 
 interface AuthGuardProps {
   children: React.ReactNode
@@ -15,6 +15,7 @@ export function AuthGuard({
 }: AuthGuardProps) {
   const { user, loading, initialized, initialize } = useAuthStore()
   const navigate = useNavigate()
+  const search = useSearch({ strict: false }) as { redirect?: string } | undefined
 
   useEffect(() => {
     if (!initialized) {
@@ -35,7 +36,12 @@ export function AuthGuard({
     }
     
     if (!requireAuth && user) {
-      navigate({ to: '/' })
+      // If there's a redirect param (e.g. from admin-web), go there instead of home
+      if (search?.redirect) {
+        window.location.href = search.redirect
+      } else {
+        navigate({ to: '/' })
+      }
       return
     }
 
@@ -44,7 +50,7 @@ export function AuthGuard({
       navigate({ to: '/verify-email' })
       return
     }
-  }, [user, loading, initialized, requireAuth, requireEmailVerification, navigate])
+  }, [user, loading, initialized, requireAuth, requireEmailVerification, navigate, search])
 
   if (!initialized || loading) {
     return null

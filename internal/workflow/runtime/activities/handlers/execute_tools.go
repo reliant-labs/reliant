@@ -11,6 +11,7 @@ import (
 	gojsonschema "github.com/google/jsonschema-go/jsonschema"
 	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -196,6 +197,10 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 	expectedResponseTools := protoArgs.GetExpectedResponseTools()
 	responseToolSchemas := protoStructMapToGoMap(protoArgs.GetResponseToolSchemas())
 
+	// Resolve the permission level for tool execution enforcement.
+	// This was set by call_llm when it resolved tools for the LLM request.
+	grantedPermission := tools.GetLoadedToolsStore().GetPermission(rtx.ChatID)
+
 	// Build set for O(1) response tool lookups in worker goroutines
 	responseToolSet := make(map[string]bool, len(expectedResponseTools))
 	for _, name := range expectedResponseTools {
@@ -286,28 +291,20 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 						return
 					}
 
-					// Validate tool is in available list (if list is provided).
-					// Empty/nil AvailableTools means no validation (non-LLM sources).
-					if len(toolCall.AvailableTools) > 0 {
-						toolAllowed := false
-						for _, available := range toolCall.AvailableTools {
-							if available == toolName {
-								toolAllowed = true
-								break
-							}
+					// Enforce permission-based tool access control.
+					// The granted permission was set by call_llm from the workflow's permission config.
+					requiredPermission := tools.MinimumPermissionForTool(toolName)
+					if !tools.PermissionAtLeast(grantedPermission, requiredPermission) {
+						resultsChan <- toolCallResult{
+							index: job.index,
+							result: message.ToolResult{
+								ToolCallID: toolCallID,
+								Name:       toolName,
+								Content:    fmt.Sprintf("Tool '%s' requires '%s' permission, but the current permission level is '%s'.", toolName, requiredPermission, grantedPermission),
+								IsError:    true,
+							},
 						}
-						if !toolAllowed {
-							resultsChan <- toolCallResult{
-								index: job.index,
-								result: message.ToolResult{
-									ToolCallID: toolCallID,
-									Name:       toolName,
-									Content:    fmt.Sprintf("Tool '%s' is not available. The LLM may have hallucinated this tool.", toolName),
-									IsError:    true,
-								},
-							}
-							return
-						}
+						return
 					}
 
 					// For spawn tool, validate preset is in available list (if list is provided).
@@ -729,7 +726,6 @@ func isFileMutatingTool(toolName string) bool {
 }
 
 type toolCallProtoMetadata struct {
-	AvailableTools   []string `json:"available_tools,omitempty"`
 	AvailablePresets []string `json:"available_presets,omitempty"`
 	SpawnWorkflow    string   `json:"spawn_workflow,omitempty"`
 }
@@ -741,11 +737,10 @@ type toolCallProtoEnvelope struct {
 
 func encodeToolCallInputForProto(toolCall message.ToolCall) string {
 	metadata := &toolCallProtoMetadata{
-		AvailableTools:   toolCall.AvailableTools,
 		AvailablePresets: toolCall.AvailablePresets,
 		SpawnWorkflow:    toolCall.SpawnWorkflow,
 	}
-	if len(metadata.AvailableTools) == 0 && len(metadata.AvailablePresets) == 0 && metadata.SpawnWorkflow == "" {
+	if len(metadata.AvailablePresets) == 0 && metadata.SpawnWorkflow == "" {
 		return toolCall.Input
 	}
 	envelope := toolCallProtoEnvelope{
@@ -784,7 +779,6 @@ func protoToolCallsToMessage(protoTCs []*reliantv1.ToolCallMsg) []message.ToolCa
 			Input: decodedInput,
 		}
 		if metadata != nil {
-			result[i].AvailableTools = metadata.AvailableTools
 			result[i].AvailablePresets = metadata.AvailablePresets
 			result[i].SpawnWorkflow = metadata.SpawnWorkflow
 		}

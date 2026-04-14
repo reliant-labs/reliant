@@ -101,7 +101,7 @@ Current limitations we're aware of. We're working on these—check back for upda
 
 **Approval denial restarts the workflow.** Denying an approval node will cancel the entire workflow. When you resume, it starts over from the beginning. We're investigating better mechanics here.
 
-**Switching tool chains may cause hallucinated tool calls.** Changing tool availability mid-conversation (like switching from auto → plan mode) can allow the LLM to hallucinate and attempt to execute tools it no longer has access to.
+**Tool access is enforced by permission level.** Tools are gated by permission levels (readonly, mutating, orchestrator) at execution time. If the LLM requests a tool that exceeds the granted permission, the call is denied with a clear error. This prevents unauthorized tool use regardless of what tools the LLM has seen in context.
 
 **`continue_as_new` uses newer workflow versions.** When a workflow continues as new, it may pick up a newer version of the workflow definition, causing inconsistent behavior.
 

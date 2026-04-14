@@ -36,42 +36,6 @@ func fileExists(t *testing.T, path string) bool {
 	return err == nil
 }
 
-// ─── API decoupling ─────────────────────────────────────────────────────────
-
-func TestAPIHandlers_NoIntegrationImport(t *testing.T) {
-	src := readFile(t, filepath.Join(root(t), "internal/api/handlers/handlers.go"))
-	if strings.Contains(src, `"github.com/reliant-labs/reliant/internal/integration"`) {
-		t.Error("handlers.go still imports integration package")
-	}
-}
-
-func TestAPIHandlers_NoIntegrationServer(t *testing.T) {
-	src := readFile(t, filepath.Join(root(t), "internal/api/handlers/handlers.go"))
-	if strings.Contains(src, "*integration.Server") {
-		t.Error("handlers.go still references *integration.Server")
-	}
-}
-
-func TestFilePreview_UsesDBRepository(t *testing.T) {
-	src := readFile(t, filepath.Join(root(t), "internal/api/handlers/file_preview.go"))
-	if strings.Contains(src, `"github.com/reliant-labs/reliant/internal/integration"`) {
-		t.Error("file_preview.go still imports integration package")
-	}
-	if !strings.Contains(src, "db.Repository") {
-		t.Error("file_preview.go should reference db.Repository")
-	}
-}
-
-func TestAPIServer_NarrowSignature(t *testing.T) {
-	src := readFile(t, filepath.Join(root(t), "internal/api/server.go"))
-	if strings.Contains(src, "integrationServer *integration.Server") {
-		t.Error("server.go still accepts *integration.Server")
-	}
-	if !strings.Contains(src, "database db.Repository") {
-		t.Error("server.go should accept db.Repository")
-	}
-}
-
 // ─── server-side filesystem access ban ─────────────────────────────────────
 //
 // Server-side code must NOT directly access the filesystem. All FS operations

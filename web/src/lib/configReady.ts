@@ -19,7 +19,7 @@ export const isConfigReady = (): boolean => {
   }
   
   // In Electron (file:// protocol), check for RELIANT_CONFIG
-  return !!(window.RELIANT_CONFIG?.backendUrl || window.RELIANT_CONFIG?.grpcUrl);
+  return !!window.RELIANT_CONFIG?.grpcUrl;
 };
 
 /**

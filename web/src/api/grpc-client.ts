@@ -49,13 +49,8 @@ const getGRPCBaseURL = (): string | null => {
     typeof window !== "undefined" &&
     window.RELIANT_CONFIG?.isElectron
   ) {
-    // Use grpcUrl if available (should be https for HTTP/2 support)
     if (window.RELIANT_CONFIG?.grpcUrl) {
       return window.RELIANT_CONFIG.grpcUrl;
-    }
-    if (window.RELIANT_CONFIG?.backendUrl) {
-      logger.warn("[gRPC Client] No grpcUrl in config, using backendUrl");
-      return window.RELIANT_CONFIG.backendUrl;
     }
   }
 

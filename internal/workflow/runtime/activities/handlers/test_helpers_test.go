@@ -88,6 +88,7 @@ type SaveMessageInput struct {
 	ToolResults     []message.ToolResult `json:"-"`
 	ToolCalls       []message.ToolCall   `json:"-"`
 	TokenCount      int                  `json:"-"`
+	CostMicros      int64                `json:"-"`
 	ContextWindowID string               `json:"-"`
 	WorkflowID      string               `json:"-"`
 	LoopNodeID      string               `json:"-"`
@@ -147,6 +148,7 @@ func (t *SaveMessageInput) V3() ActivityInput {
 					ResolvedAttachments:  t.Attachments,
 					ResolvedThinking:     thinking,
 					TokenCount:           int32(t.TokenCount),
+					CostMicros:           t.CostMicros,
 				},
 			},
 		},

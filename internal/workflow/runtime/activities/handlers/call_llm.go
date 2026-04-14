@@ -49,6 +49,7 @@ type streamProcessingState struct {
 	thinkingSignature string   // Thinking signature for multi-turn preservation
 	toolCalls         []message.ToolCall
 	tokenCount        int    // Total tokens (prompt + response + context)
+	costMicros        int64  // Request cost in micros of USD returned by the provider response
 	workingDir        string // Working directory for trimming bash commands
 
 	upstreamRequestID  string // Provider response header x-oai-request-id (if available)
@@ -699,20 +700,12 @@ streamLoop:
 
 	toolCalls := streamState.toolCalls
 
-	// Attach available tools/presets to each tool call for validation in ExecuteTools.
-	// This prevents the LLM from hallucinating tools/presets that weren't in its allowed set.
-	if len(availableTools) > 0 {
-		// Extract tool names from available tools
-		availableToolNames := make([]string, len(availableTools))
-		for i, t := range availableTools {
-			availableToolNames[i] = t.Name()
-		}
-
-		// Attach to each tool call
+	// Attach spawn presets to spawn tool calls for preset validation in ExecuteTools.
+	// Tool-level permission enforcement is handled by execute_tools using the permission
+	// level stored in LoadedToolsStore (set above), not by checking tool name lists.
+	if len(spawnPresets) > 0 {
 		for i := range toolCalls {
-			toolCalls[i].AvailableTools = availableToolNames
-			// Only attach spawn presets to spawn tool calls
-			if toolCalls[i].Name == "spawn" && len(spawnPresets) > 0 {
+			if toolCalls[i].Name == "spawn" {
 				toolCalls[i].AvailablePresets = spawnPresets
 			}
 		}
@@ -722,6 +715,7 @@ streamLoop:
 		ResponseText:       responseText,
 		ToolCalls:          messageToolCallsToProto(toolCalls),
 		TokenCount:         int32(streamState.tokenCount),
+		CostMicros:         streamState.costMicros,
 		UpstreamRequestId:  streamState.upstreamRequestID,
 		UpstreamProxymanId: streamState.upstreamProxymanID,
 		Thinking: &reliantv1.ThinkingOutput{
@@ -1348,8 +1342,9 @@ func (a *CallLLMActivity) handleToolUseStop(ctx context.Context, chatID string, 
 
 // handleComplete handles the completion event with token usage and final tool calls
 func (a *CallLLMActivity) handleComplete(ctx context.Context, event llm.DriverEvent, state *streamProcessingState) {
-	// Collect token usage (total tokens for compaction decisions)
+	// Collect usage from the final response.
 	state.tokenCount = int(event.Response.Usage.TokenCount)
+	state.costMicros = event.Response.Usage.CostMicros
 
 	// Extract thinking signature from the response (for multi-turn thinking preservation)
 	if event.Response != nil && event.Response.ThinkingSignature != "" {

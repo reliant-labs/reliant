@@ -10,6 +10,7 @@ import { MCPSettings } from "./MCPSettings";
 import { WorkspacesSection } from "./WorkspacesSection";
 import { BrowserSettings } from "./BrowserSettings";
 import { FeedbackSettings } from "./FeedbackSettings";
+import { TokenSettings } from "./TokenSettings";
 import type { SettingsSection } from "./SettingsNavigation";
 import { useEffect, useState } from "react";
 import { PromptsSettings } from "./PromptsSettings";
@@ -83,6 +84,9 @@ export function SettingsContent({
 
     if (activeSection === "mcp") {
       return <MCPSettings />;
+    }
+    if (activeSection === "tokens") {
+      return <TokenSettings />;
     }
     if (activeSection === "feedback") {
       return <FeedbackSettings />;

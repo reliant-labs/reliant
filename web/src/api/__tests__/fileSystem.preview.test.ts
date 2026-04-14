@@ -3,17 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   filesystemGrpc: {
     getFilePreviewInfo: vi.fn(),
+    getFilePreview: vi.fn(),
   },
   useProjectStore: {
     getState: vi.fn(),
   },
   useWorktreeStore: {
     getState: vi.fn(),
-  },
-  supabase: {
-    auth: {
-      getSession: vi.fn(),
-    },
   },
   triggerGitStatusRefresh: vi.fn(),
 }));
@@ -34,24 +30,11 @@ vi.mock("../../store/gitStatusStore", () => ({
   triggerGitStatusRefresh: mocks.triggerGitStatusRefresh,
 }));
 
-vi.mock("../../lib/supabase", () => ({
-  supabase: mocks.supabase,
-}));
-
 import { getFilePreviewBlob } from "../fileSystem";
 
 describe("fileSystem preview transport", () => {
-  const fetchSpy = vi.fn();
-
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubGlobal("fetch", fetchSpy);
-
-    window.RELIANT_CONFIG = {
-      isElectron: true,
-      backendUrl: "https://localhost:8132",
-      grpcUrl: "https://localhost:9142",
-    };
 
     mocks.useProjectStore.getState.mockReturnValue({
       currentProject: { id: "project-1" },
@@ -59,52 +42,50 @@ describe("fileSystem preview transport", () => {
     mocks.useWorktreeStore.getState.mockReturnValue({
       worktrees: [{ id: "wt-1", path: "/workspace", name: "main" }],
     });
-    mocks.filesystemGrpc.getFilePreviewInfo.mockResolvedValue({
-      name: "photo.png",
-      path: "photo.png",
-      size: 123,
-      modified: "2024-01-01T00:00:00Z",
-      viewerKind: "image",
-      mimeType: "image/png",
-      isBinary: true,
-      isEditable: false,
-    });
-    mocks.supabase.auth.getSession.mockResolvedValue({
-      data: { session: null },
-    });
-    fetchSpy.mockResolvedValue({
-      ok: true,
-      blob: vi.fn().mockResolvedValue(new Blob(["img"], { type: "image/png" })),
+    mocks.filesystemGrpc.getFilePreview.mockResolvedValue({
+      content: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+      contentType: "image/png",
+      filename: "photo.png",
+      size: BigInt(4),
     });
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    delete window.RELIANT_CONFIG;
   });
 
-  it("uses the backend API origin instead of the gRPC origin for preview blobs", async () => {
-    await getFilePreviewBlob("/workspace/photo.png", "wt-1");
+  it("calls filesystemGrpc.getFilePreview with normalized path and returns a Blob", async () => {
+    const blob = await getFilePreviewBlob("/workspace/photo.png", "wt-1");
 
-    expect(mocks.filesystemGrpc.getFilePreviewInfo).toHaveBeenCalledWith(
+    expect(mocks.filesystemGrpc.getFilePreview).toHaveBeenCalledWith(
       "project-1",
       "photo.png",
       "wt-1",
     );
-    expect(fetchSpy).toHaveBeenCalledWith(
-      "https://localhost:8132/api/v2/files/preview?project_id=project-1&path=photo.png&worktree_id=wt-1",
-      { headers: {} },
-    );
+    expect(blob).toBeInstanceOf(Blob);
+    expect(blob.type).toBe("image/png");
+    expect(blob.size).toBe(4);
   });
 
-  it("falls back to the browser origin when backend config is unavailable", async () => {
-    delete window.RELIANT_CONFIG;
+  it("works without a worktree ID", async () => {
+    const blob = await getFilePreviewBlob("photo.png");
 
-    await getFilePreviewBlob("/workspace/photo.png", "wt-1");
+    expect(mocks.filesystemGrpc.getFilePreview).toHaveBeenCalledWith(
+      "project-1",
+      "photo.png",
+      undefined,
+    );
+    expect(blob).toBeInstanceOf(Blob);
+    expect(blob.type).toBe("image/png");
+  });
 
-    expect(fetchSpy).toHaveBeenCalledWith(
-      `${window.location.origin}/api/v2/files/preview?project_id=project-1&path=photo.png&worktree_id=wt-1`,
-      { headers: {} },
+  it("throws when no project is selected", async () => {
+    mocks.useProjectStore.getState.mockReturnValue({
+      currentProject: null,
+    });
+
+    await expect(getFilePreviewBlob("photo.png")).rejects.toThrow(
+      "No current project selected",
     );
   });
 });

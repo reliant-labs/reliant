@@ -319,6 +319,12 @@ service DaemonRegistryService {
   // CreateDaemonToken creates a new Personal Access Token for daemon authentication.
   // Requires JWT auth (user must be logged in). Returns the raw token once.
   rpc CreateDaemonToken(CreateDaemonTokenRequest) returns (CreateDaemonTokenResponse) {}
+
+  // ListDaemonTokens returns all PATs for the authenticated user.
+  rpc ListDaemonTokens(ListDaemonTokensRequest) returns (ListDaemonTokensResponse) {}
+
+  // RevokeDaemonToken revokes a specific daemon PAT.
+  rpc RevokeDaemonToken(RevokeDaemonTokenRequest) returns (RevokeDaemonTokenResponse) {}
 }
 
 message ListDaemonsRequest {}
@@ -344,6 +350,37 @@ message CreateDaemonTokenResponse {
   string token_id = 2; // Unique ID for future revocation
   string user_id = 3;  // The authenticated user's ID
 }
+
+// ============================================
+// ListDaemonTokens
+// ============================================
+
+message ListDaemonTokensRequest {}
+
+message ListDaemonTokensResponse {
+  repeated DaemonTokenInfo tokens = 1;
+}
+
+message DaemonTokenInfo {
+  string id = 1;
+  string name = 2;
+  string token_prefix = 3;  // First chars for display (e.g. "rlnt_pat_AbCd...")
+  bool ephemeral = 4;
+  string created_at = 5;    // ISO 8601
+  string last_used_at = 6;  // ISO 8601, empty if never used
+  string expires_at = 7;    // ISO 8601, empty if no expiry
+  bool revoked = 8;         // Whether this token has been revoked
+}
+
+// ============================================
+// RevokeDaemonToken
+// ============================================
+
+message RevokeDaemonTokenRequest {
+  string token_id = 1;
+}
+
+message RevokeDaemonTokenResponse {}
 
 message DaemonInfo {
   string daemon_id = 1;
