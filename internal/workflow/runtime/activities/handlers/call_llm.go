@@ -48,9 +48,9 @@ type streamProcessingState struct {
 	thinkingParts     []string // Extended thinking content parts
 	thinkingSignature string   // Thinking signature for multi-turn preservation
 	toolCalls         []message.ToolCall
-	tokenCount        int    // Total tokens (prompt + response + context)
-	costMicros        int64  // Request cost in micros of USD returned by the provider response
-	workingDir        string // Working directory for trimming bash commands
+	tokenCount        int     // Total tokens (prompt + response + context)
+	cost              float64 // Request cost in USD returned by the provider response
+	workingDir        string  // Working directory for trimming bash commands
 
 	upstreamRequestID  string // Provider response header x-oai-request-id (if available)
 	upstreamProxymanID string // Provider response header x-proxyman-id (if available)
@@ -716,7 +716,7 @@ streamLoop:
 		ResponseText:       responseText,
 		ToolCalls:          messageToolCallsToProto(toolCalls),
 		TokenCount:         int32(streamState.tokenCount),
-		CostMicros:         streamState.costMicros,
+		Cost:               streamState.cost,
 		UpstreamRequestId:  streamState.upstreamRequestID,
 		UpstreamProxymanId: streamState.upstreamProxymanID,
 		Thinking: &reliantv1.ThinkingOutput{
@@ -1347,7 +1347,7 @@ func (a *CallLLMActivity) handleToolUseStop(ctx context.Context, chatID string, 
 func (a *CallLLMActivity) handleComplete(ctx context.Context, event llm.DriverEvent, state *streamProcessingState) {
 	// Collect usage from the final response.
 	state.tokenCount = int(event.Response.Usage.TokenCount)
-	state.costMicros = event.Response.Usage.CostMicros
+	state.cost = event.Response.Usage.Cost
 
 	// Extract thinking signature from the response (for multi-turn thinking preservation)
 	if event.Response != nil && event.Response.ThinkingSignature != "" {

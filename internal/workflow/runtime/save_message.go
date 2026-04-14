@@ -34,20 +34,20 @@ func toInt(v interface{}) int {
 	return 0
 }
 
-// toInt64 converts various numeric types to int64 for usage cost extraction.
-func toInt64(v interface{}) int64 {
+// toFloat64 converts various numeric types to float64 for usage cost extraction.
+func toFloat64(v interface{}) float64 {
 	switch n := v.(type) {
-	case int:
-		return int64(n)
-	case int32:
-		return int64(n)
-	case int64:
-		return n
 	case float64:
-		return int64(n)
+		return n
+	case float32:
+		return float64(n)
+	case int:
+		return float64(n)
+	case int64:
+		return float64(n)
 	case json.Number:
-		if i, err := n.Int64(); err == nil {
-			return i
+		if f, err := n.Float64(); err == nil {
+			return f
 		}
 	}
 	return 0
@@ -247,9 +247,9 @@ func evaluateSaveMessageConfig(
 	if v, ok := activityOutput["token_count"]; ok && v != nil {
 		tokenCount = toInt(v)
 	}
-	var costMicros int64
-	if v, ok := activityOutput["cost_micros"]; ok && v != nil {
-		costMicros = toInt64(v)
+	var cost float64
+	if v, ok := activityOutput["cost"]; ok && v != nil {
+		cost = toFloat64(v)
 	}
 
 	attachments, err := evalStringArray(model.CelStringRaw(config.GetAttachments()))
@@ -304,7 +304,7 @@ func evaluateSaveMessageConfig(
 		ToolResults:  toolResults,
 		ToolCalls:    toolCalls,
 		TokenCount:   tokenCount,
-		CostMicros:   costMicros,
+		Cost:         cost,
 		WorkflowID:   workflowID,
 		Thinking:     thinkingOutput,
 	}, nil
@@ -664,7 +664,7 @@ func buildSaveMessageNode(input *types.SaveMessageInput) *reliantv1.Node {
 		ResolvedDisplayStyle: input.DisplayStyle,
 		ResolvedAttachments:  input.Attachments,
 		TokenCount:           int32(input.TokenCount),
-		CostMicros:           input.CostMicros,
+		Cost:                 input.Cost,
 	}
 
 	// Convert tool calls

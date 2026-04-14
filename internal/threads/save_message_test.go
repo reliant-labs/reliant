@@ -698,11 +698,11 @@ func TestSaveMessage_PersistsCost(t *testing.T) {
 	thread, _ := h.createThread("thread-1", h.chatID)
 
 	result, err := h.svc.SaveMessage(ctx, SaveMessageOpts{
-		ChatID:     h.chatID,
-		Thread:     thread.ID,
-		Role:       int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT),
-		Content:    "costed message",
-		CostMicros: 78900,
+		ChatID:  h.chatID,
+		Thread:  thread.ID,
+		Role:    int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT),
+		Content: "costed message",
+		Cost:    0.0789,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -712,11 +712,11 @@ func TestSaveMessage_PersistsCost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to get saved message: %v", err)
 	}
-	if msg.CostMicros == nil {
-		t.Fatal("expected message cost micros to be persisted")
+	if msg.Cost == nil {
+		t.Fatal("expected message cost to be persisted")
 	}
-	if *msg.CostMicros != 78900 {
-		t.Errorf("costMicros = %d, want %d", *msg.CostMicros, 78900)
+	if *msg.Cost != 0.0789 {
+		t.Errorf("cost = %f, want %f", *msg.Cost, 0.0789)
 	}
 }
 

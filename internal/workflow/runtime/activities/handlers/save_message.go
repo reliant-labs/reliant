@@ -148,7 +148,7 @@ func (a *SaveMessageActivity) Execute(ctx context.Context, input ActivityInput) 
 		ToolResults:   convertToolResults(resolvedToolResults),
 		Thinking:      thinking,
 		TokenCount:    int(protoArgs.GetTokenCount()),
-		CostMicros:    protoArgs.GetCostMicros(),
+		Cost:          protoArgs.GetCost(),
 		DisplayStyle:  parseDisplayStyle(protoArgs.GetResolvedDisplayStyle()),
 		WorkflowID:    workflowID,
 		StepID:        rtx.StepID,

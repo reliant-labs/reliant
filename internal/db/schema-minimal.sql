@@ -570,7 +570,7 @@ CREATE TABLE IF NOT EXISTS "messages" (
     model TEXT,
     agent TEXT,
     token_count INTEGER,
-    cost_micros INTEGER,
+    cost REAL,
     workflow_id TEXT,
     run_id TEXT,
     node_id TEXT,
