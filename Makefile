@@ -275,10 +275,10 @@ migration:
 		exit 1; \
 	fi
 	@echo "$(YELLOW)Creating migration: $(NAME)$(NC)"
-	@TIMESTAMP=$$(date +%Y%m%d%H%M%S); \
+	@TIMESTAMP=$$(( $$(date +%s) * 1000000 )); \
 	LATEST=$$(ls -1 internal/db/migrations/sqlite/*.sql 2>/dev/null | xargs -I{} basename {} | grep -oE '^[0-9]+' | sort -rn | head -1 || echo "0"); \
 	if [ "$$TIMESTAMP" -le "$$LATEST" ]; then \
-		TIMESTAMP=$$((LATEST + 10000)); \
+		TIMESTAMP=$$((LATEST + 1)); \
 		echo "$(YELLOW)⚠️  Timestamp collision detected, bumped to $$TIMESTAMP$(NC)"; \
 	fi; \
 	FILE="internal/db/migrations/sqlite/$${TIMESTAMP}_$(NAME).sql"; \
