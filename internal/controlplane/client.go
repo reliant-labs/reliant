@@ -18,7 +18,7 @@ type Client interface {
 	GetCurrentUserReliantState(ctx context.Context, authHeader string) (*controlplanev1.GetCurrentUserReliantStateResponse, error)
 	RepairCurrentUserReliantAccess(ctx context.Context, authHeader string) (*controlplanev1.RepairCurrentUserReliantAccessResponse, error)
 	RotateCurrentUserReliantAccess(ctx context.Context, authHeader, gracePeriod string) (*controlplanev1.RotateCurrentUserReliantAccessResponse, error)
-	RecordManagedReliantUsage(ctx context.Context, managedKey string, spendUSD float64) (*controlplanev1.RecordManagedReliantUsageResponse, error)
+	RecordManagedReliantUsage(ctx context.Context, managedKey string, spendUSD float64, model string) (*controlplanev1.RecordManagedReliantUsageResponse, error)
 }
 
 type connectClient struct {
@@ -84,10 +84,11 @@ func (c *connectClient) RotateCurrentUserReliantAccess(ctx context.Context, auth
 	return resp.Msg, nil
 }
 
-func (c *connectClient) RecordManagedReliantUsage(ctx context.Context, managedKey string, spendUSD float64) (*controlplanev1.RecordManagedReliantUsageResponse, error) {
+func (c *connectClient) RecordManagedReliantUsage(ctx context.Context, managedKey string, spendUSD float64, model string) (*controlplanev1.RecordManagedReliantUsageResponse, error) {
 	req := connect.NewRequest(&controlplanev1.RecordManagedReliantUsageRequest{
 		ManagedKey: strings.TrimSpace(managedKey),
 		SpendUsd:   spendUSD,
+		Model:      strings.TrimSpace(model),
 	})
 	resp, err := c.billingClient().RecordManagedReliantUsage(ctx, req)
 	if err != nil {

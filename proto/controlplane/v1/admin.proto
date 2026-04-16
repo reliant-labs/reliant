@@ -138,6 +138,7 @@ message RotateCurrentUserReliantAccessResponse {
 message RecordManagedReliantUsageRequest {
   string managed_key = 1;
   double spend_usd = 2;
+  string model = 3;
 }
 
 message RecordManagedReliantUsageResponse {

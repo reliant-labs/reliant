@@ -65,7 +65,7 @@ func (f *fakeControlPlaneClient) RotateCurrentUserReliantAccess(_ context.Contex
 	return f.rotateCurrentUserReliantAccessResp, f.rotateCurrentUserReliantAccessErr
 }
 
-func (f *fakeControlPlaneClient) RecordManagedReliantUsage(_ context.Context, managedKey string, spendUSD float64) (*controlplanev1.RecordManagedReliantUsageResponse, error) {
+func (f *fakeControlPlaneClient) RecordManagedReliantUsage(_ context.Context, managedKey string, spendUSD float64, model string) (*controlplanev1.RecordManagedReliantUsageResponse, error) {
 	return &controlplanev1.RecordManagedReliantUsageResponse{TotalSpendUsd: spendUSD}, nil
 }
 

@@ -15,6 +15,7 @@ func TestClient_RecordManagedReliantUsage_DoesNotAttachAuthorization(t *testing.
 	var gotAuth string
 	var gotManagedKey string
 	var gotSpend float64
+	var gotModel string
 
 	handler := connect.NewUnaryHandler(
 		controlplanev1connect.BillingServiceRecordManagedReliantUsageProcedure,
@@ -22,6 +23,7 @@ func TestClient_RecordManagedReliantUsage_DoesNotAttachAuthorization(t *testing.
 			gotAuth = req.Header().Get("Authorization")
 			gotManagedKey = req.Msg.GetManagedKey()
 			gotSpend = req.Msg.GetSpendUsd()
+			gotModel = req.Msg.GetModel()
 			return connect.NewResponse(&controlplanev1.RecordManagedReliantUsageResponse{TotalSpendUsd: req.Msg.GetSpendUsd()}), nil
 		},
 	)
@@ -29,7 +31,7 @@ func TestClient_RecordManagedReliantUsage_DoesNotAttachAuthorization(t *testing.
 	defer server.Close()
 
 	client := NewClient(server.URL)
-	resp, err := client.RecordManagedReliantUsage(context.Background(), " rlnt_test_key ", 1.75)
+	resp, err := client.RecordManagedReliantUsage(context.Background(), " rlnt_test_key ", 1.75, " claude-sonnet-4-5 ")
 	if err != nil {
 		t.Fatalf("RecordManagedReliantUsage: %v", err)
 	}
@@ -41,6 +43,9 @@ func TestClient_RecordManagedReliantUsage_DoesNotAttachAuthorization(t *testing.
 	}
 	if gotSpend != 1.75 {
 		t.Fatalf("spend = %v, want 1.75", gotSpend)
+	}
+	if gotModel != "claude-sonnet-4-5" {
+		t.Fatalf("model = %q, want claude-sonnet-4-5", gotModel)
 	}
 	if resp.GetTotalSpendUsd() != 1.75 {
 		t.Fatalf("response total = %v, want 1.75", resp.GetTotalSpendUsd())
@@ -98,7 +103,7 @@ func TestClient_RecordManagedReliantUsage_PropagatesErrors(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL)
-	_, err := client.RecordManagedReliantUsage(context.Background(), "rlnt_test_key", 1.0)
+	_, err := client.RecordManagedReliantUsage(context.Background(), "rlnt_test_key", 1.0, "claude-sonnet-4-5")
 	if err == nil {
 		t.Fatal("expected error")
 	}

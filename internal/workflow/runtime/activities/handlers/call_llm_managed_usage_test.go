@@ -17,6 +17,7 @@ type fakeManagedUsageControlPlaneClient struct {
 	calls      int
 	managedKey string
 	spendUSD   float64
+	model      string
 	err        error
 }
 
@@ -32,10 +33,11 @@ func (f *fakeManagedUsageControlPlaneClient) RotateCurrentUserReliantAccess(cont
 	panic("unexpected call")
 }
 
-func (f *fakeManagedUsageControlPlaneClient) RecordManagedReliantUsage(_ context.Context, managedKey string, spendUSD float64) (*controlplanev1.RecordManagedReliantUsageResponse, error) {
+func (f *fakeManagedUsageControlPlaneClient) RecordManagedReliantUsage(_ context.Context, managedKey string, spendUSD float64, model string) (*controlplanev1.RecordManagedReliantUsageResponse, error) {
 	f.calls++
 	f.managedKey = managedKey
 	f.spendUSD = spendUSD
+	f.model = model
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -109,6 +111,9 @@ func TestRecordManagedReliantUsage_SendsManagedReliantSpend(t *testing.T) {
 	wantSpend := estimateManagedReliantSpendUSD(driver.model, usage)
 	if cp.spendUSD != wantSpend {
 		t.Fatalf("spend usd = %v, want %v", cp.spendUSD, wantSpend)
+	}
+	if cp.model != "claude-sonnet-4-5" {
+		t.Fatalf("model = %q, want claude-sonnet-4-5", cp.model)
 	}
 }
 
