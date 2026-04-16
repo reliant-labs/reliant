@@ -341,19 +341,14 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			effectiveThinkingLevel = resolvedDef.DefaultThinkingLevel
 		}
 
-		// Validate effective thinking level against model/driver capabilities
+		// Validate effective thinking level against model capabilities
 		if effectiveThinkingLevel != "" {
 			tl := ThinkingLevel(effectiveThinkingLevel)
 			if !tl.IsValid() {
 				return nil, fmt.Errorf("invalid thinking_level: %s (must be one of: low, medium, high, xhigh)", tl)
 			}
-			if !models.SupportsThinkingLevelForCaps(
-				resolved.Definition.Capabilities,
-				effectiveThinkingLevel,
-			) {
-				supported := models.SupportedThinkingLevels(
-					resolved.Definition.Capabilities,
-				)
+			if !models.SupportsThinkingLevelForCaps(resolved.Definition.Capabilities, effectiveThinkingLevel) {
+				supported := models.SupportedThinkingLevels(resolved.Definition.Capabilities)
 				return nil, fmt.Errorf(
 					"thinking_level '%s' is not supported for model '%s' on driver '%s' (supported: %s)",
 					effectiveThinkingLevel,
@@ -372,6 +367,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 
 		// Convert the resolved model definition to a legacy Model for the driver system
 		legacyModel = resolved.Definition.ToModel()
+		resolvedProviderDriver = resolved.Provider.Driver
 	}
 
 	// Build preferences for driver selection

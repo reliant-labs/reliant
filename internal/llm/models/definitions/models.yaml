@@ -32,6 +32,8 @@ models:
         api_model: claude-opus-4-6
       - driver: openrouter
         api_model: anthropic/claude-opus-4.6
+      - driver: reliant
+        api_model: claude-opus-4-6
     default_thinking_level: high
     default_temperature: 1.0
     default_compaction_threshold: 185000
@@ -59,6 +61,8 @@ models:
         api_model: claude-opus-4-5-20251101
       - driver: openrouter
         api_model: anthropic/claude-opus-4.5
+      - driver: reliant
+        api_model: claude-opus-4-5
     default_thinking_level: high
     default_temperature: 1.0
     default_compaction_threshold: 185000
@@ -376,6 +380,8 @@ models:
         api_model: claude-sonnet-4-6
       - driver: openrouter
         api_model: anthropic/claude-sonnet-4.6
+      - driver: reliant
+        api_model: claude-sonnet-4-6
     default_thinking_level: medium
     default_temperature: 1.0
     default_compaction_threshold: 185000
@@ -523,6 +529,8 @@ models:
         api_model: claude-haiku-4-5-20251001
       - driver: openrouter
         api_model: anthropic/claude-haiku-4.5
+      - driver: reliant
+        api_model: claude-haiku-4-5
     default_thinking_level: low
     default_temperature: 1.0
     default_compaction_threshold: 185000
@@ -603,8 +611,6 @@ models:
       output_per_1m: 1.5
     providers:
       - driver: gemini
-        api_model: gemini-3.1-flash-lite-preview
-      - driver: reliant
         api_model: gemini-3.1-flash-lite-preview
 
   - id: gemini-2.5-flash
