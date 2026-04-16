@@ -636,6 +636,39 @@ func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node
 		runInputs["loop_iteration"] = e.loopIteration
 	}
 
+	// Daemon selector: node-level override takes priority over workflow-level default
+	if node.GetDaemon() != nil {
+		if lit := node.GetDaemon().GetLiteral(); lit != nil {
+			runInputs["daemon_selector"] = map[string]interface{}{
+				"id":     lit.GetId(),
+				"name":   lit.GetName(),
+				"type":   lit.GetType(),
+				"labels": lit.GetLabels(),
+			}
+		} else if node.GetDaemon().GetExpr() != "" {
+			celCtx := buildWorkflowCELContext(e.workflowID, e.workflowName, e.workflowInputs, e.nodeOutputs)
+			ds, err := ResolveCelDaemonSelector(node.GetDaemon(), celCtx)
+			if err != nil {
+				logging.Warn("[StepExecutor] failed to resolve node-level daemon CEL expression", "stepID", node.GetId(), "error", err)
+			} else if ds != nil {
+				runInputs["daemon_selector"] = map[string]interface{}{
+					"id":     ds.ID,
+					"name":   ds.Name,
+					"type":   ds.Type,
+					"labels": ds.Labels,
+				}
+			}
+		}
+	} else if e.execContext != nil && e.execContext.DaemonSelector != nil {
+		ds := e.execContext.DaemonSelector
+		runInputs["daemon_selector"] = map[string]interface{}{
+			"id":     ds.ID,
+			"name":   ds.Name,
+			"type":   ds.Type,
+			"labels": ds.Labels,
+		}
+	}
+
 	logging.Info("[StepExecutor] startRun",
 		"stepID", node.GetId(),
 		"loopNodeID", e.loopNodeID,
@@ -732,6 +765,39 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 	// Project path
 	if e.execContext != nil && e.execContext.ProjectPath != "" {
 		rtx.ProjectPath = e.execContext.ProjectPath
+	}
+
+	// Daemon selector: node-level override takes priority over workflow-level default
+	if node.GetDaemon() != nil {
+		if lit := node.GetDaemon().GetLiteral(); lit != nil {
+			rtx.DaemonSelector = &types.DaemonSelector{
+				ID:     lit.GetId(),
+				Name:   lit.GetName(),
+				Type:   lit.GetType(),
+				Labels: lit.GetLabels(),
+			}
+		} else if node.GetDaemon().GetExpr() != "" {
+			celCtx := buildWorkflowCELContext(e.workflowID, e.workflowName, e.workflowInputs, e.nodeOutputs)
+			ds, err := ResolveCelDaemonSelector(node.GetDaemon(), celCtx)
+			if err != nil {
+				logging.Warn("[StepExecutor] failed to resolve node-level daemon CEL expression", "stepID", node.GetId(), "error", err)
+			} else if ds != nil {
+				rtx.DaemonSelector = &types.DaemonSelector{
+					ID:     ds.ID,
+					Name:   ds.Name,
+					Type:   ds.Type,
+					Labels: ds.Labels,
+				}
+			}
+		}
+	} else if e.execContext != nil && e.execContext.DaemonSelector != nil {
+		// Fall back to workflow-level daemon selector
+		rtx.DaemonSelector = &types.DaemonSelector{
+			ID:     e.execContext.DaemonSelector.ID,
+			Name:   e.execContext.DaemonSelector.Name,
+			Type:   e.execContext.DaemonSelector.Type,
+			Labels: e.execContext.DaemonSelector.Labels,
+		}
 	}
 
 	return rtx

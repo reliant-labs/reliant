@@ -35,6 +35,9 @@ func (r *worktreeTestDaemonRouter) SendToolRequest(_ context.Context, _ string, 
 func (r *worktreeTestDaemonRouter) SendToolRequestSync(_ context.Context, _ string, _ *toolexec.ToolExecutionRequest) (*toolexec.ToolExecutionResponse, error) {
 	return &toolexec.ToolExecutionResponse{Success: true}, nil
 }
+func (r *worktreeTestDaemonRouter) SendToolRequestSyncWithSelector(_ context.Context, _ string, _ *toolexec.ToolExecutionRequest, _ *toolexec.DaemonSelector) (*toolexec.ToolExecutionResponse, error) {
+	return &toolexec.ToolExecutionResponse{Success: true}, nil
+}
 func (r *worktreeTestDaemonRouter) SendToolExecutionCancel(_ context.Context, _, _, _ string) error {
 	return nil
 }

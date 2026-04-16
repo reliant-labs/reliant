@@ -7,6 +7,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/gen/reliant/v1/reliantv1connect"
 )
 
 // RouterDriver identifies which daemon router backend to use.
@@ -31,10 +32,11 @@ func ParseRouterDriver(raw string) (RouterDriver, error) {
 
 // RouterConfig holds configuration for the daemon router.
 type RouterConfig struct {
-	Driver   RouterDriver
-	NATSConn *nats.Conn              // Required when Driver == RouterDriverNATS
-	Local    DaemonConnectionManager // Required when Driver == RouterDriverLocal
-	DB       db.Repository           // Optional: enables fast DB-based daemon online check for NATS router
+	Driver             RouterDriver
+	NATSConn           *nats.Conn                                   // Required when Driver == RouterDriverNATS
+	Local              DaemonConnectionManager                      // Required when Driver == RouterDriverLocal
+	DB                 db.Repository                                // Optional: enables fast DB-based daemon online check for NATS router
+	ControlPlaneClient reliantv1connect.DaemonRegistryServiceClient // Optional: gRPC client for control plane daemon resolution
 }
 
 // NewDaemonRouter creates a DaemonRouter based on config.
@@ -52,6 +54,9 @@ func NewDaemonRouter(cfg RouterConfig) (DaemonRouter, error) {
 		var opts []NATSRouterOption
 		if cfg.DB != nil {
 			opts = append(opts, WithDatabase(cfg.DB))
+		}
+		if cfg.ControlPlaneClient != nil {
+			opts = append(opts, WithControlPlaneClient(cfg.ControlPlaneClient))
 		}
 		return NewNATSDaemonRouter(cfg.NATSConn, opts...), nil
 	default:

@@ -49,6 +49,7 @@ type Chat struct {
 	LastMessageAt        *time.Time        `json:"last_message_at,omitempty"`
 	Activity             *int              `json:"activity,omitempty"`
 	Unread               bool              `json:"unread"`
+	ActiveDaemonID       *string           `json:"active_daemon_id,omitempty"`
 }
 
 // ArchivedChatInfo represents an archived chat with worktree information.
@@ -98,6 +99,7 @@ type ChatStore interface {
 	SearchChats(ctx context.Context, filters ChatSearchFilters) ([]*Chat, error)
 	UpdateChat(ctx context.Context, chat *Chat) error
 	DeleteChat(ctx context.Context, id string) error
+	UpdateChatActiveDaemon(ctx context.Context, chatID string, daemonID *string) error
 	ListArchivedChats(ctx context.Context, userID string) ([]*ArchivedChatInfo, error)
 	CreateChatUpdate(ctx context.Context, update ChatUpdate) error
 }

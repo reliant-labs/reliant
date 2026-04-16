@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
@@ -31,6 +32,11 @@ var nodeTypeActivities = map[string]nodeTypeActivityDef{
 }
 
 func init() {
+	// Set up the PreflightConfig for RequiresDaemon static analysis.
+	// This bridges the tools package (which knows tool locations) with the
+	// runtime package (which can't import tools due to import cycles).
+	initPreflightConfig()
+
 	// Auto-register node-type activities from NodeMeta proto annotations.
 	// Proto descriptors and metadata (display_name, description, category) are
 	// discovered from annotations, replacing per-activity boilerplate.
@@ -187,6 +193,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// ========================================================================
 
 	v2.RegisterActivity(registry, handlers.NewLoadWorkflowActivity(deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewPreflightDaemonCheckActivity(deps.Repo, deps.ToolExecutor))
 	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowStatusActivity(deps.Repo))
 	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowErrorActivity(deps.Repo))
 	v2.RegisterLifecycleActivity(registry, handlers.NewCleanupActivity(deps.Repo))
@@ -209,4 +216,26 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 
 	v2.RegisterActivity(registry, handlers.NewYieldCreateActivity(deps.Repo))
 	v2.RegisterActivity(registry, handlers.NewYieldResolveActivity(deps.Repo))
+}
+
+// initPreflightConfig sets up the PreflightConfig for RequiresDaemon.
+// This bridges the tools and runtime packages which can't import each other.
+func initPreflightConfig() {
+	// Build daemon tool lookup from the tool registry.
+	registry := tools.GetToolRegistry()
+	daemonTools := make(map[string]bool, len(registry))
+	for _, def := range registry {
+		if def.RunsOn == tools.ToolRunsOnDaemon {
+			daemonTools[def.Name] = true
+		}
+	}
+
+	v2.SetPreflightConfig(&v2.PreflightConfig{
+		IsDaemonTool: func(name string) bool {
+			return daemonTools[name]
+		},
+		ExpandToolFilter: func(filter []string) []string {
+			return tools.ExpandToolFilter(filter, nil)
+		},
+	})
 }

@@ -97,6 +97,28 @@ message ModelSelector {
   repeated string providers = 3;
 }
 
+// DaemonSelectorProto specifies criteria for selecting which daemon executes tools.
+// Supports direct ID, name matching, type filtering, and label matching.
+// In YAML, a plain string like "local" is shorthand for {type: "local"}.
+message DaemonSelectorProto {
+  // Exact daemon ID (UUID).
+  string id = 1;
+  // Match by daemon name.
+  string name = 2;
+  // Daemon type: "local", "cloud", or "any".
+  string type = 3;
+  // Match by labels (all must match).
+  map<string, string> labels = 4;
+}
+
+// CelDaemonSelector wraps a DaemonSelectorProto that may be a literal or a CEL {{expr}} expression.
+message CelDaemonSelector {
+  oneof value {
+    DaemonSelectorProto literal = 1;
+    string expr = 2;
+  }
+}
+
 // =============================================================================
 // SHARED CONFIG TYPES
 // =============================================================================
@@ -209,6 +231,11 @@ message Node {
 
   // SaveMessage automatically saves a message to the thread after node completion.
   SaveMessageConfig save_message = 6;
+
+  // Daemon specifies which daemon should execute tools for this node.
+  // Overrides the workflow-level daemon setting.
+  // Supports: string shorthand ("local"), structured object ({type: "cloud"}), or CEL expression.
+  CelDaemonSelector daemon = 7;
 
   // Type-specific arguments. Exactly one must be set, matching the type field.
   oneof args {
@@ -1064,4 +1091,8 @@ message Workflow {
   // Discuss enables a lightweight discussion mode when the workflow is paused.
   // When true, users can chat with the LLM without resuming workflow execution.
   bool discuss = 11;
+  // Daemon specifies the default daemon for tool execution in this workflow.
+  // Can be overridden per-node. Supports string shorthand ("local"),
+  // structured object ({type: "cloud"}), or CEL expression ("{{ params.daemon }}").
+  CelDaemonSelector daemon = 12;
 }

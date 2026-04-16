@@ -46,6 +46,12 @@ UPDATE chats SET
     updated_at = NOW()
 WHERE id = $2;
 
+-- name: UpdateChatActiveDaemon :exec
+UPDATE chats SET
+    active_daemon_id = $1,
+    updated_at = NOW()
+WHERE id = $2;
+
 -- name: DeleteChat :exec
 DELETE FROM chats WHERE id = $1;
 

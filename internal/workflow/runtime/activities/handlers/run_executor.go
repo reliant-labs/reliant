@@ -28,13 +28,14 @@ type RunExecutor interface {
 // RunExecutorContext provides the IDs needed to build a ToolRequest for remote execution.
 // Set by the activity before calling ExecuteCommand.
 type RunExecutorContext struct {
-	UserID       string
-	ChatID       string
-	ProjectID    string
-	ProjectPath  string
-	ProjectName  string
-	WorktreeID   string
-	WorktreePath string
+	UserID         string
+	ChatID         string
+	ProjectID      string
+	ProjectPath    string
+	ProjectName    string
+	WorktreeID     string
+	WorktreePath   string
+	DaemonSelector *toolexec.DaemonSelector // Target daemon for execution (optional)
 }
 
 // RemoteRunExecutor routes shell commands through the daemon via ToolExecutor.
@@ -92,18 +93,19 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 
 	// Build tool request
 	req := &toolexec.ToolRequest{
-		ToolName:     "bash",
-		ToolInput:    string(inputJSON),
-		UserID:       e.execCtx.UserID,
-		ChatID:       e.execCtx.ChatID,
-		ProjectID:    e.execCtx.ProjectID,
-		WorktreeID:   e.execCtx.WorktreeID,
-		ProjectPath:  e.execCtx.ProjectPath,
-		ProjectName:  e.execCtx.ProjectName,
-		WorktreePath: e.execCtx.WorktreePath,
-		WorkingDir:   effectiveWorkingDir,
-		Timeout:      time.Duration(timeoutMs) * time.Millisecond,
-		Environment:  env,
+		ToolName:       "bash",
+		ToolInput:      string(inputJSON),
+		UserID:         e.execCtx.UserID,
+		ChatID:         e.execCtx.ChatID,
+		ProjectID:      e.execCtx.ProjectID,
+		WorktreeID:     e.execCtx.WorktreeID,
+		ProjectPath:    e.execCtx.ProjectPath,
+		ProjectName:    e.execCtx.ProjectName,
+		WorktreePath:   e.execCtx.WorktreePath,
+		WorkingDir:     effectiveWorkingDir,
+		Timeout:        time.Duration(timeoutMs) * time.Millisecond,
+		Environment:    env,
+		DaemonSelector: e.execCtx.DaemonSelector,
 	}
 
 	// Execute through the daemon

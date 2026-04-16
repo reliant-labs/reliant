@@ -54,6 +54,10 @@ type DaemonRouter interface {
 	// for the result. Used for tools with RunsOn == ToolRunsOnDaemon.
 	SendToolRequestSync(ctx context.Context, userID string, request *ToolExecutionRequest) (*ToolExecutionResponse, error)
 
+	// SendToolRequestSyncWithSelector routes a tool execution request to a specific daemon
+	// matching the given selector. Falls back to SendToolRequestSync behavior if selector is nil.
+	SendToolRequestSyncWithSelector(ctx context.Context, userID string, request *ToolExecutionRequest, selector *DaemonSelector) (*ToolExecutionResponse, error)
+
 	// SendToolExecutionCancel cancels a running tool execution.
 	SendToolExecutionCancel(ctx context.Context, userID, requestID, reason string) error
 
@@ -97,8 +101,13 @@ type DaemonConnectionListener interface {
 
 // DaemonConnectionManager is the subset of ToolsDaemonService needed by LocalDaemonRouter
 // and NATSToolBridge. This avoids importing the services package from toolexec.
+//
+// All methods that accept userID route to the user's default daemon (prefer
+// local, then most recently connected). For explicit daemon targeting, use
+// DaemonResolver to enumerate daemons first.
 type DaemonConnectionManager interface {
 	IsDaemonOnline(ctx context.Context, userID string) bool
+	ListConnectedDaemons(userID string) []DaemonInfo
 	SendToolRequest(ctx context.Context, userID string, request *ToolExecutionRequest) error
 	SendToolRequestSync(ctx context.Context, userID string, request *ToolExecutionRequest) (*ToolExecutionResponse, error)
 	SendToolExecutionCancel(ctx context.Context, userID, requestID, reason string) error

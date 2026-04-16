@@ -44,6 +44,10 @@ type ToolRequest struct {
 	WorkingDir  string            // Override working directory (optional)
 	Timeout     time.Duration     // Execution timeout
 	Environment map[string]string // Additional environment variables
+
+	// Daemon targeting - specifies which daemon should execute this request.
+	// nil means use default daemon resolution (local → cloud → wake).
+	DaemonSelector *DaemonSelector // Target daemon selector (optional)
 }
 
 // ToolResult represents the result of tool execution.

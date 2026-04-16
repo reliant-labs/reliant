@@ -15,6 +15,7 @@ const yamlKeyType = "type"
 const yamlKeyCondition = "condition"
 const yamlKeyTimeout = "timeout"
 const yamlKeySaveMessage = "save_message"
+const yamlKeyDaemon = "daemon"
 const yamlKeyArgs = "args"
 const yamlKeyFrom = "from"
 const yamlKeyCases = "cases"
@@ -24,6 +25,7 @@ const yamlKeyLabel = "label"
 
 var generatedNodeBaseFieldKeys = map[string]struct{}{
 	"condition":    {},
+	"daemon":       {},
 	"id":           {},
 	"save_message": {},
 	"timeout":      {},
