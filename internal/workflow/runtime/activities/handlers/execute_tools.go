@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"go.temporal.io/sdk/activity"
 	structpb "google.golang.org/protobuf/types/known/structpb"
@@ -49,6 +50,10 @@ type toolExecutionContext struct {
 	// projectPathOverride allows sub-workflows to specify a different working directory
 	// When set, this path is used instead of project.Path or worktree.Path
 	projectPathOverride string
+
+	// daemonSelector specifies which daemon should execute tools.
+	// Set from the workflow or node daemon field. nil means use default resolution.
+	daemonSelector *toolexec.DaemonSelector
 }
 
 // loadToolExecutionContext loads all required context for tool execution
@@ -132,6 +137,7 @@ func (tec *toolExecutionContext) buildToolRequest() *toolexec.ToolRequest {
 		ProjectName:    tec.project.Name,
 		WorktreePath:   effectiveWorktreePath, // Uses override if set
 		Timeout:        5 * time.Minute,
+		DaemonSelector: tec.daemonSelector,
 	}
 }
 
@@ -361,7 +367,8 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 						activityID,
 						workflowRunID,
 						attemptNumber,
-						rtx.ProjectPath, // Pass project path override for working directory
+						rtx.ProjectPath,    // Pass project path override for working directory
+						rtx.DaemonSelector, // Pass daemon selector for targeted routing
 					)
 
 					resultsChan <- toolCallResult{
@@ -466,6 +473,7 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 	workflowRunID string,
 	attemptNumber int,
 	projectPath string, // Override working directory for sub-workflows
+	daemonSel *types.DaemonSelector, // Target daemon selector (optional)
 ) message.ToolResult {
 	// Check for cancellation before starting work
 	if ctx.Err() != nil {
@@ -483,6 +491,16 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 	tec, errMsg := a.loadToolExecutionContext(ctx, chatID, thread, toolName, toolInput, toolCallID, projectPath)
 	if errMsg != "" {
 		return a.buildToolResult(toolCallID, toolName, errMsg, "", true, nil)
+	}
+
+	// Set daemon selector for targeted routing
+	if daemonSel != nil {
+		tec.daemonSelector = &toolexec.DaemonSelector{
+			ID:     daemonSel.ID,
+			Name:   daemonSel.Name,
+			Type:   daemonSel.Type,
+			Labels: daemonSel.Labels,
+		}
 	}
 
 	// Execute tool with status tracking

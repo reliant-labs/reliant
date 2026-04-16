@@ -385,6 +385,78 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		execCtx.ProjectPath = projectPath
 	}
 
+	// STEP 6.06: Evaluate workflow-level daemon selector
+	// This sets the default daemon for all tool execution in this workflow.
+	// Individual nodes can override with their own daemon field.
+	if wf.Daemon != nil {
+		celCtx := buildWorkflowCELContext(workflowID, input.WorkflowName, input.Inputs, nil)
+		ds, err := ResolveCelDaemonSelector(wf.Daemon, celCtx)
+		if err != nil {
+			notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, "daemon_resolution_error", err.Error())
+			return nil, fmt.Errorf("failed to resolve workflow daemon selector: %w", err)
+		}
+		if ds != nil {
+			execCtx.DaemonSelector = ds
+			logger.Info("[Workflow Runtime] Resolved daemon selector",
+				"type", ds.Type,
+				"name", ds.Name,
+				"id", ds.ID,
+			)
+		}
+	}
+
+	// STEP 6.065: Session-level daemon fallback
+	// If no workflow-level daemon was set, use the session's active daemon.
+	// Priority: workflow daemon > session daemon > default resolution.
+	if execCtx.DaemonSelector == nil {
+		if sessionDaemonID, ok := input.Inputs["session_daemon_id"].(string); ok && sessionDaemonID != "" {
+			execCtx.DaemonSelector = &DaemonSelectorValue{ID: sessionDaemonID}
+			logger.Info("[Workflow Runtime] Using session daemon",
+				"daemonID", sessionDaemonID,
+			)
+		}
+	}
+
+	// STEP 6.07: Preflight daemon check
+	// If the workflow requires a daemon (run nodes, daemon tools, explicit daemon field),
+	// verify that a daemon is available before starting execution. Fail fast with a
+	// clear error message rather than failing mid-execution.
+	preflightCfg := buildPreflightConfig()
+	if RequiresDaemon(wf, preflightCfg) {
+		preflightInput := map[string]interface{}{
+			"chat_id": input.ChatID,
+		}
+		// Pass daemon selector if one was resolved at workflow level
+		if execCtx.DaemonSelector != nil {
+			preflightInput["daemon_selector"] = map[string]interface{}{
+				"id":   execCtx.DaemonSelector.ID,
+				"name": execCtx.DaemonSelector.Name,
+				"type": execCtx.DaemonSelector.Type,
+			}
+		}
+		// Also check session daemon from inputs
+		if sessionDaemonID, ok := input.Inputs["session_daemon_id"].(string); ok && sessionDaemonID != "" {
+			if _, hasDaemonSelector := preflightInput["daemon_selector"]; !hasDaemonSelector {
+				preflightInput["daemon_selector"] = map[string]interface{}{
+					"id": sessionDaemonID,
+				}
+			}
+		}
+
+		preflightCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			StartToCloseTimeout: 30 * time.Second,
+			RetryPolicy: &temporal.RetryPolicy{
+				MaximumAttempts: 1, // Don't retry — fail fast
+			},
+		})
+		var preflightResult map[string]interface{}
+		if err := workflow.ExecuteActivity(preflightCtx, "PreflightDaemonCheck", preflightInput).Get(ctx, &preflightResult); err != nil {
+			notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, "daemon_unavailable", err.Error())
+			return nil, fmt.Errorf("preflight daemon check failed: %w", err)
+		}
+		logger.Info("[Workflow Runtime] Preflight daemon check passed")
+	}
+
 	// STEP 6.1: Initialize thread tracker for runtime thread tracking
 	threadTracker := NewThreadTracker()
 	threadTracker.Mapping.RecordThreadResolution(ThreadRoot, thread)

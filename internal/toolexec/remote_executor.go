@@ -185,6 +185,7 @@ func (e *RemoteExecutor) executeOnServer(ctx context.Context, req *ToolRequest, 
 
 // executeOnDaemon dispatches a tool request to the user's daemon and waits for the result.
 // Used for tools that must run in the user's environment (e.g., bash, shell commands).
+// When the request has a DaemonSelector, it targets a specific daemon instead of the default.
 func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, startTime time.Time) (*ToolResult, error) {
 	if e.router == nil {
 		return nil, fmt.Errorf("daemon router not configured: cannot execute tool %q on daemon", req.ToolName)
@@ -222,7 +223,14 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 		TimeoutMs:  timeoutMs,
 	}
 
-	resp, err := e.router.SendToolRequestSync(ctx, req.UserID, execReq)
+	// Use selector-aware routing if a daemon selector is provided
+	var resp *ToolExecutionResponse
+	var err error
+	if req.DaemonSelector != nil {
+		resp, err = e.router.SendToolRequestSyncWithSelector(ctx, req.UserID, execReq, req.DaemonSelector)
+	} else {
+		resp, err = e.router.SendToolRequestSync(ctx, req.UserID, execReq)
+	}
 	if err != nil {
 		return &ToolResult{
 			Success:      false,

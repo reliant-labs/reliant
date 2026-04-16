@@ -292,6 +292,7 @@ func newDaemonStartCmd() *cobra.Command {
 		tlsKey     string
 		tlsMode    string
 		useToken   bool
+		daemonName string
 	)
 
 	cmd := &cobra.Command{
@@ -369,6 +370,7 @@ Credential resolution order:
 						GRPCURL:   daemonGRPCURL,
 						TLSMode:   parsedTLSMode,
 						DataDir:   dataDir,
+						Name:      daemonName,
 					},
 				})
 			}
@@ -418,6 +420,7 @@ Credential resolution order:
 	cmd.Flags().StringVar(&tlsKey, "tls-key", envOrDefault("TLS_KEY_FILE", ""), "TLS key file path")
 	cmd.Flags().StringVar(&tlsMode, "tls-mode", envOrDefault("DAEMON_TLS_MODE", ""), "TLS mode (tls, insecure_tls_skip_verify, or h2c)")
 	cmd.Flags().BoolVar(&useToken, "token", false, "Read a PAT from stdin instead of using browser auth")
+	cmd.Flags().StringVar(&daemonName, "name", "", "Human-friendly daemon name (default: hostname)")
 
 	return cmd
 }

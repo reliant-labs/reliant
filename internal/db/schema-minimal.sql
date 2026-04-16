@@ -274,6 +274,7 @@ CREATE TABLE IF NOT EXISTS "chats" (
     workflow_name TEXT,
     selected_presets TEXT, archived_worktree_name TEXT,
     unread INTEGER NOT NULL DEFAULT 0,
+    active_daemon_id TEXT,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
 );
 CREATE INDEX idx_chats_project ON chats(project_id);

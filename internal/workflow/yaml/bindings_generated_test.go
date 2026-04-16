@@ -80,6 +80,9 @@ func TestGeneratedCoreKeysAreDescriptorDerived(t *testing.T) {
 	if yamlKeySaveMessage != string(nodeDescriptor.Fields().ByName("save_message").Name()) {
 		t.Fatalf("yamlKeySaveMessage drifted from proto descriptor")
 	}
+	if yamlKeyDaemon != string(nodeDescriptor.Fields().ByName("daemon").Name()) {
+		t.Fatalf("yamlKeyDaemon drifted from proto descriptor")
+	}
 	if yamlKeyArgs != string(nodeDescriptor.Oneofs().ByName("args").Name()) {
 		t.Fatalf("yamlKeyArgs drifted from proto descriptor")
 	}

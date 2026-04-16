@@ -95,6 +95,9 @@ func unmarshalWorkflow(node *yaml.Node) (*reliantv1.Workflow, error) {
 				wf.Discuss = b
 			}
 
+		case "daemon":
+			wf.Daemon, err = unmarshalCelDaemonSelector(val)
+
 		default:
 			return nil, fmt.Errorf("unknown workflow field: %q", key)
 		}
@@ -376,6 +379,17 @@ func marshalWorkflow(wf *reliantv1.Workflow) (*yaml.Node, error) {
 			outputsNode.Content = append(outputsNode.Content, scalarNode(k, ""), scalarNode(v, ""))
 		}
 		m.Content = append(m.Content, scalarNode("outputs", ""), outputsNode)
+	}
+
+	// daemon
+	if wf.Daemon != nil {
+		dn, err := marshalCelDaemonSelector(wf.Daemon)
+		if err != nil {
+			return nil, err
+		}
+		if dn != nil {
+			m.Content = append(m.Content, scalarNode("daemon", ""), dn)
+		}
 	}
 
 	// entry — always emit as array
