@@ -783,6 +783,9 @@ func (r *fakeMCPDaemonRouter) SendWatchProjectConfigs(_ context.Context, _ strin
 func (r *fakeMCPDaemonRouter) SendToolRequestSync(_ context.Context, _ string, _ *toolexec.ToolExecutionRequest) (*toolexec.ToolExecutionResponse, error) {
 	return &toolexec.ToolExecutionResponse{Success: true}, nil
 }
+func (r *fakeMCPDaemonRouter) SendToolRequestSyncWithSelector(_ context.Context, _ string, _ *toolexec.ToolExecutionRequest, _ *toolexec.DaemonSelector) (*toolexec.ToolExecutionResponse, error) {
+	return &toolexec.ToolExecutionResponse{Success: true}, nil
+}
 func (r *fakeMCPDaemonRouter) SendTerminalInput(_ context.Context, _, _ string, _ []byte) error {
 	return nil
 }

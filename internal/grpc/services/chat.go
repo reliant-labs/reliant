@@ -155,6 +155,9 @@ func chatToProto(c *db.Chat) *reliantv1.Chat {
 		proto.Activity = reliantv1.ChatActivity(*c.Activity)
 	}
 	proto.Unread = c.Unread
+	if c.ActiveDaemonID != nil {
+		proto.ActiveDaemonId = c.ActiveDaemonID
+	}
 	return proto
 }
 
@@ -403,6 +406,9 @@ func (s *ChatService) resurrectGhostWorkflow(
 	}
 
 	// Note: Message was already saved above before ghost recovery
+
+	// Inject session daemon if set on chat
+	injectSessionDaemonID(initialData, chat)
 
 	workflowInput := v2.WorkflowInput{
 		ChatID:       req.Msg.ChatId,
@@ -773,6 +779,9 @@ func (s *ChatService) CreateChat(
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save first message"))
 		}
 	}
+
+	// Inject session daemon if set on chat
+	injectSessionDaemonID(initialData, chat)
 
 	workflowInput := v2.WorkflowInput{
 		ChatID:       chatID,
@@ -1914,6 +1923,9 @@ func (s *ChatService) SendMessage(
 		}
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow input validation failed: %s", strings.Join(errMsgs, "; ")))
 	}
+
+	// Inject session daemon if set on chat
+	injectSessionDaemonID(initialData, chat)
 
 	workflowInput := v2.WorkflowInput{
 		ChatID:       req.Msg.ChatId,
@@ -4193,6 +4205,53 @@ func (s *ChatService) loadPresetFromDB(ctx context.Context, userID, projectID, n
 	}
 
 	return nil, fmt.Errorf("preset not found: %s", name)
+}
+
+// SetChatDaemon sets the active daemon for a chat session.
+func (s *ChatService) SetChatDaemon(
+	ctx context.Context,
+	req *connect.Request[reliantv1.SetChatDaemonRequest],
+) (*connect.Response[reliantv1.SetChatDaemonResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+
+	if req.Msg.ChatId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id is required"))
+	}
+
+	// Get chat and verify ownership
+	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+	}
+
+	// Set or clear the active daemon
+	var daemonID *string
+	if req.Msg.DaemonId != "" {
+		daemonID = &req.Msg.DaemonId
+	}
+
+	if err := s.database.UpdateChatActiveDaemon(ctx, chat.ID, daemonID); err != nil {
+		logging.Error("Failed to set chat daemon", "error", err, "chatID", chat.ID)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to set chat daemon"))
+	}
+
+	// Re-fetch chat with updated daemon
+	updatedChat, err := s.database.GetChat(ctx, chat.ID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to reload chat"))
+	}
+
+	return connect.NewResponse(&reliantv1.SetChatDaemonResponse{
+		Chat: chatToProto(updatedChat),
+	}), nil
+}
+
+// injectSessionDaemonID adds the session's active daemon to workflow inputs.
+// This is a runtime-injected input that flows through to daemon resolution.
+func injectSessionDaemonID(inputs map[string]interface{}, chat *db.Chat) {
+	if chat != nil && chat.ActiveDaemonID != nil && *chat.ActiveDaemonID != "" {
+		inputs["session_daemon_id"] = *chat.ActiveDaemonID
+	}
 }
 
 // normalizeWorkflowSlug produces a URL-safe slug from a workflow name.

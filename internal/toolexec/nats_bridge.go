@@ -81,8 +81,8 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 	// Fire-and-forget subjects (plain Subscribe — only this pod has the connection)
 	// -----------------------------------------------------------------------
 
-	// 1. tools.request.{userID}
-	addSub(b.nc.Subscribe(toolRequestSubject+"."+userID, func(msg *nats.Msg) {
+	// 1. tools.request.{userID}.{daemonID}
+	addSub(b.nc.Subscribe(daemonSubject(toolRequestSubject, userID, daemonID), func(msg *nats.Msg) {
 		ctx, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.tools.request")
 		defer span.End()
 		observability.NATSReceiveTotal.WithLabelValues("tools.request").Inc()
@@ -99,8 +99,8 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 		}
 	}))
 
-	// 2. tools.cancel.{userID}
-	addSub(b.nc.Subscribe(toolCancelSubject+"."+userID, func(msg *nats.Msg) {
+	// 2. tools.cancel.{userID}.{daemonID}
+	addSub(b.nc.Subscribe(daemonSubject(toolCancelSubject, userID, daemonID), func(msg *nats.Msg) {
 		ctx, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.tools.cancel")
 		defer span.End()
 		observability.NATSReceiveTotal.WithLabelValues("tools.cancel").Inc()
@@ -120,8 +120,8 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 		}
 	}))
 
-	// 3. daemon.config.load.{userID}
-	addSub(b.nc.Subscribe(configLoadSubject+"."+userID, func(msg *nats.Msg) {
+	// 3. daemon.config.load.{userID}.{daemonID}
+	addSub(b.nc.Subscribe(daemonSubject(configLoadSubject, userID, daemonID), func(msg *nats.Msg) {
 		ctx, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.daemon.config.load")
 		defer span.End()
 		observability.NATSReceiveTotal.WithLabelValues("daemon.config.load").Inc()
@@ -141,8 +141,8 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 		}
 	}))
 
-	// 4. daemon.config.watch.{userID}
-	addSub(b.nc.Subscribe(configWatchSubject+"."+userID, func(msg *nats.Msg) {
+	// 4. daemon.config.watch.{userID}.{daemonID}
+	addSub(b.nc.Subscribe(daemonSubject(configWatchSubject, userID, daemonID), func(msg *nats.Msg) {
 		ctx, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.daemon.config.watch")
 		defer span.End()
 		observability.NATSReceiveTotal.WithLabelValues("daemon.config.watch").Inc()
@@ -162,19 +162,19 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 		}
 	}))
 
-	// 5. daemon.terminal.input.{userID}.> (wildcard on sessionID)
-	addSub(b.nc.Subscribe(terminalInputSubject+"."+userID+".>", func(msg *nats.Msg) {
+	// 5. daemon.terminal.input.{userID}.{daemonID}.> (wildcard on sessionID)
+	addSub(b.nc.Subscribe(daemonSubject(terminalInputSubject, userID, daemonID)+".>", func(msg *nats.Msg) {
 		_, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.daemon.terminal.input")
 		defer span.End()
 		observability.NATSReceiveTotal.WithLabelValues("daemon.terminal.input").Inc()
 
-		// Subject: daemon.terminal.input.{userID}.{sessionID}
-		parts := strings.SplitN(msg.Subject, ".", 5)
-		if len(parts) < 5 {
+		// Subject: daemon.terminal.input.{userID}.{daemonID}.{sessionID}
+		parts := strings.SplitN(msg.Subject, ".", 6)
+		if len(parts) < 6 {
 			logging.Warn("[NATSToolBridge] Invalid terminal input subject", "subject", msg.Subject)
 			return
 		}
-		sessionID := parts[4]
+		sessionID := parts[5]
 
 		var req struct {
 			Data []byte `json:"data"`
@@ -189,19 +189,19 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 		}
 	}))
 
-	// 6. daemon.terminal.resize.{userID}.> (wildcard on sessionID)
-	addSub(b.nc.Subscribe(terminalResizeSubject+"."+userID+".>", func(msg *nats.Msg) {
+	// 6. daemon.terminal.resize.{userID}.{daemonID}.> (wildcard on sessionID)
+	addSub(b.nc.Subscribe(daemonSubject(terminalResizeSubject, userID, daemonID)+".>", func(msg *nats.Msg) {
 		_, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.daemon.terminal.resize")
 		defer span.End()
 		observability.NATSReceiveTotal.WithLabelValues("daemon.terminal.resize").Inc()
 
-		// Subject: daemon.terminal.resize.{userID}.{sessionID}
-		parts := strings.SplitN(msg.Subject, ".", 5)
-		if len(parts) < 5 {
+		// Subject: daemon.terminal.resize.{userID}.{daemonID}.{sessionID}
+		parts := strings.SplitN(msg.Subject, ".", 6)
+		if len(parts) < 6 {
 			logging.Warn("[NATSToolBridge] Invalid terminal resize subject", "subject", msg.Subject)
 			return
 		}
-		sessionID := parts[4]
+		sessionID := parts[5]
 
 		var req struct {
 			Cols uint32 `json:"cols"`
@@ -217,8 +217,8 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 		}
 	}))
 
-	// 7. daemon.process.subscribe.{userID}
-	addSub(b.nc.Subscribe(processOutputSubscribeSubject+"."+userID, func(msg *nats.Msg) {
+	// 7. daemon.process.subscribe.{userID}.{daemonID}
+	addSub(b.nc.Subscribe(daemonSubject(processOutputSubscribeSubject, userID, daemonID), func(msg *nats.Msg) {
 		_, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.daemon.process.subscribe")
 		defer span.End()
 		observability.NATSReceiveTotal.WithLabelValues("daemon.process.subscribe").Inc()
@@ -239,8 +239,8 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 	// Request-reply subjects (plain Subscribe — only this pod responds)
 	// -----------------------------------------------------------------------
 
-	// 8. tools.online.{userID}
-	addSub(b.nc.Subscribe(toolOnlineSubject+"."+userID, func(msg *nats.Msg) {
+	// 8. tools.online.{userID}.{daemonID}
+	addSub(b.nc.Subscribe(daemonSubject(toolOnlineSubject, userID, daemonID), func(msg *nats.Msg) {
 		_, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.tools.online")
 		defer span.End()
 		observability.NATSReceiveTotal.WithLabelValues("tools.online").Inc()
@@ -248,8 +248,8 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 		_ = msg.Respond([]byte("true"))
 	}))
 
-	// 9. daemon.process.kill.{userID}
-	addSub(b.nc.Subscribe(daemonKillSubject+"."+userID, func(msg *nats.Msg) {
+	// 9. daemon.process.kill.{userID}.{daemonID}
+	addSub(b.nc.Subscribe(daemonSubject(daemonKillSubject, userID, daemonID), func(msg *nats.Msg) {
 		_, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.daemon.process.kill")
 		defer span.End()
 		observability.NATSReceiveTotal.WithLabelValues("daemon.process.kill").Inc()
@@ -270,8 +270,8 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 		_ = msg.Respond([]byte(`{"ok":true}`))
 	}))
 
-	// 10. daemon.command.{userID}
-	addSub(b.nc.Subscribe(daemonCommandSubject+"."+userID, func(msg *nats.Msg) {
+	// 10. daemon.command.{userID}.{daemonID}
+	addSub(b.nc.Subscribe(daemonSubject(daemonCommandSubject, userID, daemonID), func(msg *nats.Msg) {
 		ctx, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.daemon.command")
 		defer span.End()
 		observability.NATSReceiveTotal.WithLabelValues("daemon.command").Inc()
@@ -315,12 +315,12 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 		// forwarding terminal output from the local daemon to NATS so
 		// remote subscribers (NATSDaemonRouter) receive it.
 		if req.CommandType == "terminal.create" && resp.Success {
-			b.startTerminalOutputForwarder(daemonCtx, userID, resp.Payload)
+			b.startTerminalOutputForwarder(daemonCtx, userID, daemonID, resp.Payload)
 		}
 	}))
 
-	// 11. tools.request.sync.{userID}
-	addSub(b.nc.Subscribe(toolRequestSyncSubject+"."+userID, func(msg *nats.Msg) {
+	// 11. tools.request.sync.{userID}.{daemonID}
+	addSub(b.nc.Subscribe(daemonSubject(toolRequestSyncSubject, userID, daemonID), func(msg *nats.Msg) {
 		ctx, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.tools.request.sync")
 		defer span.End()
 		observability.NATSReceiveTotal.WithLabelValues("tools.request.sync").Inc()
@@ -384,8 +384,8 @@ func (b *NATSToolBridge) OnDaemonDisconnected(userID, daemonID string) {
 
 // startTerminalOutputForwarder extracts the sessionID from a terminal.create
 // response payload, subscribes to local terminal output, and publishes events
-// to NATS on daemon.terminal.output.{userID}.{sessionID}.
-func (b *NATSToolBridge) startTerminalOutputForwarder(userCtx context.Context, userID string, payload []byte) {
+// to NATS on daemon.terminal.output.{userID}.{daemonID}.{sessionID}.
+func (b *NATSToolBridge) startTerminalOutputForwarder(userCtx context.Context, userID, daemonID string, payload []byte) {
 	var createResp struct {
 		SessionID string `json:"session_id"`
 	}
@@ -403,7 +403,7 @@ func (b *NATSToolBridge) startTerminalOutputForwarder(userCtx context.Context, u
 		return
 	}
 
-	subject := terminalOutputSubject + "." + userID + "." + sessionID
+	subject := daemonSubject(terminalOutputSubject, userID, daemonID) + "." + sessionID
 	logging.Info("[NATSToolBridge] Starting terminal output forwarder",
 		"userID", userID, "sessionID", sessionID, "subject", subject)
 
@@ -438,6 +438,7 @@ func (b *NATSToolBridge) startTerminalOutputForwarder(userCtx context.Context, u
 
 // startProcessOutputForwarder subscribes to local process output and publishes
 // events to NATS on daemon.process.output.{userID}.{processID}.
+// Note: process output subjects are NOT per-daemon — a processID is already unique.
 func (b *NATSToolBridge) startProcessOutputForwarder(userCtx context.Context, userID, processID string, newOnly bool) {
 	outputCh, unsub, err := b.mgr.SubscribeProcessOutput(userID, processID, newOnly)
 	if err != nil {

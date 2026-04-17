@@ -92,6 +92,10 @@ func TestNoRawNodeTypeLiteralsInProductionFiles(t *testing.T) {
 		"runtime/activities/handlers/call_llm.go": {
 			"workflow": {},
 		},
+		// CEL context key for workflow metadata, not a node type.
+		"runtime/context.go": {
+			"workflow": {},
+		},
 		// JSON map key for router_decision serialization, not a node type.
 		"runtime/activities/handlers/workflow_status.go": {
 			"workflow": {},

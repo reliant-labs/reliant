@@ -105,6 +105,13 @@ func (s *chatStore) UpdateChat(ctx context.Context, chat *core.Chat) error {
 	return s.q.UpdateChat(ctx, chatToUpdateParams(chat))
 }
 
+func (s *chatStore) UpdateChatActiveDaemon(ctx context.Context, chatID string, daemonID *string) error {
+	return s.q.UpdateChatActiveDaemon(ctx, pgdb.UpdateChatActiveDaemonParams{
+		ActiveDaemonID: chatPtrToNullString(daemonID),
+		ID:             chatID,
+	})
+}
+
 func (s *chatStore) DeleteChat(ctx context.Context, id string) error {
 	return s.q.DeleteChat(ctx, id)
 }
@@ -162,6 +169,7 @@ func chatFromRow(row pgdb.ChatsWithActivity) *core.Chat {
 		LastMessageAt:   chatInterfaceToTimePtr(row.LastMessageAt),
 		Activity:        &activity,
 		Unread:          row.Unread != 0,
+		ActiveDaemonID:  chatNullStringToPtr(row.ActiveDaemonID),
 	}
 }
 

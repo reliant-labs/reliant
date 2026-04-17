@@ -22,6 +22,7 @@ type DaemonBootstrapConfig struct {
 	GRPCURL   string
 	TLSMode   TLSMode
 	DataDir   string
+	Name      string // Human-friendly daemon name (default: hostname)
 }
 
 func (c DaemonBootstrapConfig) Validate() error {

@@ -1334,6 +1334,12 @@ func (r *Repo) UpdateChatState(ctx context.Context, chatID string, state ChatSta
 	return nil
 }
 
+// UpdateChatActiveDaemon sets the active daemon for a chat session.
+// When daemonID is nil, the active daemon is cleared (revert to default resolution).
+func (r *Repo) UpdateChatActiveDaemon(ctx context.Context, chatID string, daemonID *string) error {
+	return r.chats.UpdateChatActiveDaemon(ctx, chatID, daemonID)
+}
+
 // UpdateChatUnread sets the unread flag on a chat and emits a user update.
 func (r *Repo) UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error {
 	chat, err := r.GetChat(ctx, chatID)

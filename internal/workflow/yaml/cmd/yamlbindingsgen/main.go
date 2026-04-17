@@ -67,6 +67,7 @@ func generate() ([]byte, error) {
 	fmt.Fprintf(&buf, "const yamlKeyCondition = %q\n", nodeFields.ByName("condition").Name())
 	fmt.Fprintf(&buf, "const yamlKeyTimeout = %q\n", nodeFields.ByName("timeout").Name())
 	fmt.Fprintf(&buf, "const yamlKeySaveMessage = %q\n", nodeFields.ByName("save_message").Name())
+	fmt.Fprintf(&buf, "const yamlKeyDaemon = %q\n", nodeFields.ByName("daemon").Name())
 	fmt.Fprintf(&buf, "const yamlKeyArgs = %q\n", argsOneof.Name())
 	fmt.Fprintf(&buf, "const yamlKeyFrom = %q\n", edgeFields.ByName("from").Name())
 	fmt.Fprintf(&buf, "const yamlKeyCases = %q\n", edgeFields.ByName("cases").Name())
@@ -76,7 +77,7 @@ func generate() ([]byte, error) {
 	buf.WriteString("\n")
 
 	buf.WriteString("var generatedNodeBaseFieldKeys = map[string]struct{}{\n")
-	baseKeys := []string{string(nodeFields.ByName("id").Name()), string(nodeFields.ByName("type").Name()), string(nodeFields.ByName("condition").Name()), string(nodeFields.ByName("timeout").Name()), string(nodeFields.ByName("save_message").Name())}
+	baseKeys := []string{string(nodeFields.ByName("id").Name()), string(nodeFields.ByName("type").Name()), string(nodeFields.ByName("condition").Name()), string(nodeFields.ByName("timeout").Name()), string(nodeFields.ByName("save_message").Name()), string(nodeFields.ByName("daemon").Name())}
 	sort.Strings(baseKeys)
 	for _, key := range baseKeys {
 		fmt.Fprintf(&buf, "\t%q: {},\n", key)

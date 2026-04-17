@@ -45,6 +45,9 @@ func (f *fakeDaemonRouter) SendDaemonCommand(ctx context.Context, userID string,
 func (f *fakeDaemonRouter) SendToolRequestSync(_ context.Context, _ string, _ *toolexec.ToolExecutionRequest) (*toolexec.ToolExecutionResponse, error) {
 	return &toolexec.ToolExecutionResponse{Success: true}, nil
 }
+func (f *fakeDaemonRouter) SendToolRequestSyncWithSelector(_ context.Context, _ string, _ *toolexec.ToolExecutionRequest, _ *toolexec.DaemonSelector) (*toolexec.ToolExecutionResponse, error) {
+	return &toolexec.ToolExecutionResponse{Success: true}, nil
+}
 func (f *fakeDaemonRouter) SendLoadProjectConfigs(_ context.Context, _, _ string, _ string) error {
 	return nil
 }

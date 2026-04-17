@@ -24,13 +24,14 @@ type CELEvaluator interface {
 
 // celWrapperNames is the set of known CelX wrapper message full names.
 var celWrapperNames = map[protoreflect.FullName]bool{
-	"reliant.v1.CelString":        true,
-	"reliant.v1.CelBool":          true,
-	"reliant.v1.CelDouble":        true,
-	"reliant.v1.CelInt":           true,
-	"reliant.v1.CelStringList":    true,
-	"reliant.v1.CelModelSelector": true,
-	"reliant.v1.DirectCelBool":    true,
+	"reliant.v1.CelString":         true,
+	"reliant.v1.CelBool":           true,
+	"reliant.v1.CelDouble":         true,
+	"reliant.v1.CelInt":            true,
+	"reliant.v1.CelStringList":     true,
+	"reliant.v1.CelModelSelector":  true,
+	"reliant.v1.CelDaemonSelector": true,
+	"reliant.v1.DirectCelBool":     true,
 }
 
 // isCelWrapper reports whether the given message descriptor is a CelX wrapper type.
@@ -241,6 +242,13 @@ func setCelLiteral(
 			return err
 		}
 		celMsg.Set(literalFD, protoreflect.ValueOfMessage(ms.ProtoReflect()))
+
+	case "reliant.v1.CelDaemonSelector":
+		ds, err := toDaemonSelector(result, path)
+		if err != nil {
+			return err
+		}
+		celMsg.Set(literalFD, protoreflect.ValueOfMessage(ds.ProtoReflect()))
 
 	default:
 		return fmt.Errorf("%s: unknown CelX type %s", path, fullName)
@@ -520,6 +528,46 @@ func toModelSelector(v interface{}, path string) (*reliantv1.ModelSelector, erro
 		return nil, fmt.Errorf("%s: model selector must be an object (e.g. {id: \"model-name\"}), got string %q — strings are not accepted; convert to {id: string} at the system boundary", path, val)
 	default:
 		return nil, fmt.Errorf("%s: unsupported model selector type %T — expected map[string]interface{} or *ModelSelector", path, v)
+	}
+}
+
+// toDaemonSelector converts a CEL evaluation result to a DaemonSelectorProto.
+func toDaemonSelector(v interface{}, path string) (*reliantv1.DaemonSelectorProto, error) {
+	switch val := v.(type) {
+	case *reliantv1.DaemonSelectorProto:
+		return val, nil
+	case map[string]interface{}:
+		ds := &reliantv1.DaemonSelectorProto{}
+		if id, ok := val["id"].(string); ok {
+			ds.Id = id
+		}
+		if name, ok := val["name"].(string); ok {
+			ds.Name = name
+		}
+		if typ, ok := val["type"].(string); ok {
+			ds.Type = typ
+		}
+		if labels, ok := val["labels"].(map[string]interface{}); ok {
+			ds.Labels = make(map[string]string)
+			for k, lv := range labels {
+				if s, ok := lv.(string); ok {
+					ds.Labels[k] = s
+				}
+			}
+		}
+		return ds, nil
+	case string:
+		// String shorthand: known types map to type field, others to name
+		ds := &reliantv1.DaemonSelectorProto{}
+		switch val {
+		case "local", "cloud", "any":
+			ds.Type = val
+		default:
+			ds.Name = val
+		}
+		return ds, nil
+	default:
+		return nil, fmt.Errorf("%s: unsupported daemon selector type %T — expected string, map, or *DaemonSelectorProto", path, v)
 	}
 }
 

@@ -309,6 +309,120 @@ func marshalModelSelector(ms *reliantv1.ModelSelector) (*yaml.Node, error) {
 }
 
 // ---------------------------------------------------------------------------
+// CelDaemonSelector
+// ---------------------------------------------------------------------------
+
+func unmarshalCelDaemonSelector(node *yaml.Node) (*reliantv1.CelDaemonSelector, error) {
+	if node.Tag == "!!null" || (node.Kind == yaml.ScalarNode && node.Value == "") {
+		return nil, nil
+	}
+	cds := &reliantv1.CelDaemonSelector{}
+	// Scalar string: either CEL expression or shorthand ("local", "cloud", name, or UUID)
+	if node.Kind == yaml.ScalarNode {
+		if isInterpolatedCEL(node.Value) {
+			cds.Value = &reliantv1.CelDaemonSelector_Expr{Expr: node.Value}
+			return cds, nil
+		}
+		// String shorthand: treat as daemon type for known types, otherwise as name
+		ds := &reliantv1.DaemonSelectorProto{}
+		switch node.Value {
+		case "local", "cloud", "any":
+			ds.Type = node.Value
+		default:
+			// Could be a UUID (id) or a name — use name for user-friendliness
+			ds.Name = node.Value
+		}
+		cds.Value = &reliantv1.CelDaemonSelector_Literal{Literal: ds}
+		return cds, nil
+	}
+	// Mapping node: decode as DaemonSelectorProto
+	if node.Kind == yaml.MappingNode {
+		ds := &reliantv1.DaemonSelectorProto{}
+		if err := unmarshalDaemonSelector(node, ds); err != nil {
+			return nil, fmt.Errorf("CelDaemonSelector: %w", err)
+		}
+		cds.Value = &reliantv1.CelDaemonSelector_Literal{Literal: ds}
+		return cds, nil
+	}
+	return nil, fmt.Errorf("CelDaemonSelector: unexpected node kind %v", node.Kind)
+}
+
+func unmarshalDaemonSelector(node *yaml.Node, ds *reliantv1.DaemonSelectorProto) error {
+	if node.Kind != yaml.MappingNode {
+		return fmt.Errorf("expected mapping for DaemonSelector, got kind %v", node.Kind)
+	}
+	for i := 0; i < len(node.Content); i += 2 {
+		key := node.Content[i].Value
+		val := node.Content[i+1]
+		switch key {
+		case "id":
+			ds.Id = val.Value
+		case "name":
+			ds.Name = val.Value
+		case "type":
+			ds.Type = val.Value
+		case "labels":
+			if val.Kind == yaml.MappingNode {
+				ds.Labels = make(map[string]string)
+				for j := 0; j < len(val.Content); j += 2 {
+					ds.Labels[val.Content[j].Value] = val.Content[j+1].Value
+				}
+			}
+		default:
+			return fmt.Errorf("unknown daemon selector field: %q", key)
+		}
+	}
+	return nil
+}
+
+func marshalCelDaemonSelector(cds *reliantv1.CelDaemonSelector) (*yaml.Node, error) {
+	if cds == nil {
+		return nil, nil
+	}
+	switch v := cds.Value.(type) {
+	case *reliantv1.CelDaemonSelector_Expr:
+		return scalarNode(v.Expr, ""), nil
+	case *reliantv1.CelDaemonSelector_Literal:
+		if v.Literal == nil {
+			return nil, nil
+		}
+		return marshalDaemonSelector(v.Literal)
+	default:
+		return nil, nil
+	}
+}
+
+func marshalDaemonSelector(ds *reliantv1.DaemonSelectorProto) (*yaml.Node, error) {
+	// If only type is set, use the compact string form
+	if ds.Id == "" && ds.Name == "" && len(ds.Labels) == 0 && ds.Type != "" {
+		return scalarNode(ds.Type, ""), nil
+	}
+	// If only name is set, use compact string form
+	if ds.Id == "" && ds.Type == "" && len(ds.Labels) == 0 && ds.Name != "" {
+		return scalarNode(ds.Name, ""), nil
+	}
+	// Full object form
+	m := &yaml.Node{Kind: yaml.MappingNode}
+	if ds.Id != "" {
+		m.Content = append(m.Content, scalarNode("id", ""), scalarNode(ds.Id, ""))
+	}
+	if ds.Name != "" {
+		m.Content = append(m.Content, scalarNode("name", ""), scalarNode(ds.Name, ""))
+	}
+	if ds.Type != "" {
+		m.Content = append(m.Content, scalarNode("type", ""), scalarNode(ds.Type, ""))
+	}
+	if len(ds.Labels) > 0 {
+		labelsNode := &yaml.Node{Kind: yaml.MappingNode}
+		for k, v := range ds.Labels {
+			labelsNode.Content = append(labelsNode.Content, scalarNode(k, ""), scalarNode(v, ""))
+		}
+		m.Content = append(m.Content, scalarNode("labels", ""), labelsNode)
+	}
+	return m, nil
+}
+
+// ---------------------------------------------------------------------------
 // DirectCelBool
 // ---------------------------------------------------------------------------
 

@@ -22,6 +22,7 @@ import (
 	"github.com/google/uuid"
 	"gopkg.in/yaml.v3"
 
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
@@ -43,12 +44,13 @@ const (
 )
 
 type daemonClient struct {
-	daemonID string
-	userID   string
-	hostname string
-	platform string
-	cwd      string
-	bootCfg  bootstrap.DaemonBootstrapConfig
+	daemonID   string
+	daemonName string
+	userID     string
+	hostname   string
+	platform   string
+	cwd        string
+	bootCfg    bootstrap.DaemonBootstrapConfig
 
 	mcpManager    *mcp.Manager
 	localExecutor *toolexec.LocalToolExecutor
@@ -136,8 +138,19 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 	SetTerminalManager(terminal.NewManager())
 	SetMCPManager(mcpManager)
 
+	// Resolve stable daemon identity: persisted UUID + optional name override.
+	daemonName := bootCfg.Name
+	if daemonName == "" {
+		daemonName = hostname
+	}
+	identity, err := auth.EnsureDaemonIdentity(daemonName)
+	if err != nil {
+		return nil, fmt.Errorf("resolving daemon identity: %w", err)
+	}
+
 	return &daemonClient{
-		daemonID:          uuid.New().String(),
+		daemonID:          identity.DaemonID,
+		daemonName:        identity.Name,
 		userID:            bootCfg.UserID,
 		hostname:          hostname,
 		platform:          runtime.GOOS,
@@ -240,6 +253,8 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 			Platform:     d.platform,
 			WorkingDir:   d.cwd,
 			Capabilities: d.capabilities,
+			Name:         d.daemonName,
+			DaemonType:   "local",
 		}},
 	}
 	if err = stream.Send(register); err != nil {
