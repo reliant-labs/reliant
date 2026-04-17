@@ -4,6 +4,7 @@ package runtime
 import (
 	"fmt"
 
+	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
@@ -40,6 +41,11 @@ type ExecutionContext struct {
 	// Empty string means "use default" (typically the repository root).
 	ProjectPath string
 
+	// DaemonSelector specifies which daemon should execute tools for this workflow.
+	// Set from the workflow-level daemon field. Can be overridden per-node.
+	// nil means use default daemon resolution (local → cloud → wake).
+	DaemonSelector *DaemonSelectorValue
+
 	// Loop context - set when executing inside a loop
 	// nil if not in a loop
 	Loop *ExecLoopContext
@@ -47,6 +53,14 @@ type ExecutionContext struct {
 	// Parent context - set for child workflows
 	// nil if this is a root workflow
 	Parent *ParentContext
+}
+
+// DaemonSelectorValue holds a resolved daemon selector for runtime routing.
+type DaemonSelectorValue struct {
+	ID     string            `json:"id,omitempty"`
+	Name   string            `json:"name,omitempty"`
+	Type   string            `json:"type,omitempty"` // "local", "cloud", "any"
+	Labels map[string]string `json:"labels,omitempty"`
 }
 
 // RouterDecisionMeta holds routing decision metadata for display in the UI.
@@ -116,19 +130,125 @@ func (ctx *ExecutionContext) WithProjectPath(projectPath string) *ExecutionConte
 	return ctx
 }
 
+// WithDaemonSelector sets the daemon selector for this execution context.
+// When set, tool execution routes to the specified daemon.
+func (ctx *ExecutionContext) WithDaemonSelector(ds *DaemonSelectorValue) *ExecutionContext {
+	ctx.DaemonSelector = ds
+	return ctx
+}
+
+// HasDaemonSelector returns true if this context has a daemon selector set.
+func (ctx *ExecutionContext) HasDaemonSelector() bool {
+	return ctx.DaemonSelector != nil
+}
+
+// ResolveDaemonSelectorProto converts a proto DaemonSelectorProto to a runtime DaemonSelectorValue.
+func ResolveDaemonSelectorProto(ds *reliantv1.DaemonSelectorProto) *DaemonSelectorValue {
+	if ds == nil {
+		return nil
+	}
+	return &DaemonSelectorValue{
+		ID:     ds.GetId(),
+		Name:   ds.GetName(),
+		Type:   ds.GetType(),
+		Labels: ds.GetLabels(),
+	}
+}
+
+// ResolveCelDaemonSelector evaluates a CelDaemonSelector and returns a DaemonSelectorValue.
+// For literal values, returns directly. For CEL expressions, evaluates against the given context.
+func ResolveCelDaemonSelector(cds *reliantv1.CelDaemonSelector, celContext map[string]interface{}) (*DaemonSelectorValue, error) {
+	if cds == nil {
+		return nil, nil
+	}
+	switch v := cds.Value.(type) {
+	case *reliantv1.CelDaemonSelector_Literal:
+		return ResolveDaemonSelectorProto(v.Literal), nil
+	case *reliantv1.CelDaemonSelector_Expr:
+		result, err := evaluateCELTemplate(v.Expr, celContext)
+		if err != nil {
+			return nil, fmt.Errorf("evaluating daemon selector expression: %w", err)
+		}
+		return daemonSelectorFromCELResult(result)
+	default:
+		return nil, nil
+	}
+}
+
+// buildWorkflowCELContext creates a minimal CEL context for evaluating workflow-level fields.
+// Used for daemon selector evaluation before the main execution loop starts.
+func buildWorkflowCELContext(workflowID, workflowName string, inputs map[string]interface{}, nodeOutputs map[string]interface{}) map[string]interface{} {
+	if nodeOutputs == nil {
+		nodeOutputs = make(map[string]interface{})
+	}
+	ctx := make(map[string]interface{})
+	ctx["inputs"] = inputs
+	ctx["workflow"] = map[string]interface{}{
+		"id":   workflowID,
+		"name": workflowName,
+	}
+	ctx["nodes"] = nodeOutputs
+	ctx["iter"] = map[string]interface{}{"iteration": 0, "index": 0}
+	return ctx
+}
+
+// daemonSelectorFromCELResult converts a CEL evaluation result to a DaemonSelectorValue.
+// Supports string results (shorthand) and map results (structured).
+func daemonSelectorFromCELResult(result interface{}) (*DaemonSelectorValue, error) {
+	if result == nil {
+		return nil, nil
+	}
+	switch v := result.(type) {
+	case string:
+		if v == "" {
+			return nil, nil
+		}
+		// String shorthand: known types map to type field, others to name
+		switch v {
+		case "local", "cloud", "any":
+			return &DaemonSelectorValue{Type: v}, nil
+		default:
+			return &DaemonSelectorValue{Name: v}, nil
+		}
+	case map[string]interface{}:
+		ds := &DaemonSelectorValue{}
+		if id, ok := v["id"].(string); ok {
+			ds.ID = id
+		}
+		if name, ok := v["name"].(string); ok {
+			ds.Name = name
+		}
+		if typ, ok := v["type"].(string); ok {
+			ds.Type = typ
+		}
+		if labels, ok := v["labels"].(map[string]interface{}); ok {
+			ds.Labels = make(map[string]string)
+			for k, lv := range labels {
+				if s, ok := lv.(string); ok {
+					ds.Labels[k] = s
+				}
+			}
+		}
+		return ds, nil
+	default:
+		return nil, fmt.Errorf("daemon selector CEL expression must return string or map, got %T", result)
+	}
+}
+
 // ForIteration creates a derived context for a loop iteration.
 // When reuseThread is true, all iterations share the parent's thread.
 // When reuseThread is false, each iteration gets a unique deterministic thread.
 func (ctx *ExecutionContext) ForIteration(iteration int, reuseThread bool) *ExecutionContext {
 	child := &ExecutionContext{
-		WorkflowID:   ctx.WorkflowID,
-		ChatID:       ctx.ChatID,
-		WorkflowName: ctx.WorkflowName,
-		ThreadMode:   ctx.ThreadMode,
-		ForkedFrom:   ctx.ForkedFrom,
-		ParentThread: ctx.ParentThread, // Preserve parent thread chain
-		ProjectPath:  ctx.ProjectPath,  // Inherit project path (can be overridden by loop's project config)
-		Parent:       ctx.Parent,
+		WorkflowID:     ctx.WorkflowID,
+		ChatID:         ctx.ChatID,
+		WorkflowName:   ctx.WorkflowName,
+		ThreadMode:     ctx.ThreadMode,
+		ForkedFrom:     ctx.ForkedFrom,
+		ParentThread:   ctx.ParentThread,   // Preserve parent thread chain
+		ProjectPath:    ctx.ProjectPath,    // Inherit project path (can be overridden by loop's project config)
+		DaemonSelector: ctx.DaemonSelector, // Inherit daemon selector
+		Parent:         ctx.Parent,
 	}
 
 	if reuseThread {
@@ -155,13 +275,14 @@ func (ctx *ExecutionContext) ForIteration(iteration int, reuseThread bool) *Exec
 // - mode: fork → new deterministic thread (caller should copy context from ForkedFrom)
 func (ctx *ExecutionContext) ForChild(stepID string, mode string, workflowName string, memo bool) *ExecutionContext {
 	child := &ExecutionContext{
-		WorkflowID:   ctx.WorkflowID, // Same workflow ID for inline execution
-		ChatID:       ctx.ChatID,
-		WorkflowName: workflowName,
-		ThreadMode:   mode,
-		ParentThread: ctx.Thread,      // Always track parent's thread for save_message
-		ProjectPath:  ctx.ProjectPath, // Inherit project path (can be overridden by node's project config)
-		Loop:         ctx.Loop,        // Inherit loop context
+		WorkflowID:     ctx.WorkflowID, // Same workflow ID for inline execution
+		ChatID:         ctx.ChatID,
+		WorkflowName:   workflowName,
+		ThreadMode:     mode,
+		ParentThread:   ctx.Thread,         // Always track parent's thread for save_message
+		ProjectPath:    ctx.ProjectPath,    // Inherit project path (can be overridden by node's project config)
+		DaemonSelector: ctx.DaemonSelector, // Inherit daemon selector (can be overridden by node's daemon field)
+		Loop:           ctx.Loop,           // Inherit loop context
 		Parent: &ParentContext{
 			WorkflowID: ctx.WorkflowID,
 			StepPath:   stepID,
@@ -222,15 +343,16 @@ func (ctx *ExecutionContext) HasProjectPath() bool {
 // Clone creates a deep copy of the execution context.
 func (ctx *ExecutionContext) Clone() *ExecutionContext {
 	clone := &ExecutionContext{
-		WorkflowID:   ctx.WorkflowID,
-		ChatID:       ctx.ChatID,
-		WorkflowName: ctx.WorkflowName,
-		Thread:       ctx.Thread,
-		ThreadMode:   ctx.ThreadMode,
-		ThreadTitle:  ctx.ThreadTitle,
-		ForkedFrom:   ctx.ForkedFrom,
-		ParentThread: ctx.ParentThread,
-		ProjectPath:  ctx.ProjectPath,
+		WorkflowID:     ctx.WorkflowID,
+		ChatID:         ctx.ChatID,
+		WorkflowName:   ctx.WorkflowName,
+		Thread:         ctx.Thread,
+		ThreadMode:     ctx.ThreadMode,
+		ThreadTitle:    ctx.ThreadTitle,
+		ForkedFrom:     ctx.ForkedFrom,
+		ParentThread:   ctx.ParentThread,
+		ProjectPath:    ctx.ProjectPath,
+		DaemonSelector: ctx.DaemonSelector,
 	}
 
 	if ctx.Loop != nil {

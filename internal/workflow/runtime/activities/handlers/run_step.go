@@ -21,13 +21,14 @@ import (
 
 // ExecuteRunStepInput is the input for ExecuteRunStep activity
 type ExecuteRunStepInput struct {
-	WorkflowID    string `json:"workflow_id"`
-	ChatID        string `json:"chat_id" reliant:"-"`
-	StepID        string `json:"step_id"`
-	Command       string `json:"command"`
-	Timeout       int    `json:"timeout"`                // in milliseconds, default 5 minutes
-	LoopNodeID    string `json:"loop_node_id,omitempty"` // Loop context: which loop node spawned this
-	LoopIteration int    `json:"loop_iteration"`         // Loop context: iteration index (0-indexed)
+	WorkflowID     string                   `json:"workflow_id"`
+	ChatID         string                   `json:"chat_id" reliant:"-"`
+	StepID         string                   `json:"step_id"`
+	Command        string                   `json:"command"`
+	Timeout        int                      `json:"timeout"`                   // in milliseconds, default 5 minutes
+	LoopNodeID     string                   `json:"loop_node_id,omitempty"`    // Loop context: which loop node spawned this
+	LoopIteration  int                      `json:"loop_iteration"`            // Loop context: iteration index (0-indexed)
+	DaemonSelector *toolexec.DaemonSelector `json:"daemon_selector,omitempty"` // Target daemon for execution
 }
 
 // ExecuteRunStepOutput is the output from ExecuteRunStep activity
@@ -125,6 +126,9 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 	if err != nil {
 		return ExecuteRunStepOutput{}, fmt.Errorf("failed to resolve working directory: %w", err)
 	}
+
+	// Propagate daemon selector from workflow input
+	execCtx.DaemonSelector = input.DaemonSelector
 
 	// Determine working directory
 	workingDir := execCtx.ProjectPath

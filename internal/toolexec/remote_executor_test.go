@@ -26,6 +26,9 @@ func (r *routerStub) SendDaemonCommand(ctx context.Context, userID string, comma
 func (r *routerStub) SendToolRequestSync(ctx context.Context, userID string, request *ToolExecutionRequest) (*ToolExecutionResponse, error) {
 	return &ToolExecutionResponse{Success: true}, nil
 }
+func (r *routerStub) SendToolRequestSyncWithSelector(_ context.Context, _ string, _ *ToolExecutionRequest, _ *DaemonSelector) (*ToolExecutionResponse, error) {
+	return &ToolExecutionResponse{Success: true}, nil
+}
 func (r *routerStub) SendLoadProjectConfigs(_ context.Context, userID string, projectPath string, requestID string) error {
 	return nil
 }

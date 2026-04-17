@@ -55,6 +55,12 @@ func unmarshalNode(node *yaml.Node) (*reliantv1.Node, error) {
 				return nil, fmt.Errorf("node %s: %s: %w", v2node.Id, yamlKeySaveMessage, err)
 			}
 			v2node.SaveMessage = sm
+		case yamlKeyDaemon:
+			d, err := unmarshalCelDaemonSelector(val)
+			if err != nil {
+				return nil, fmt.Errorf("node %s: %s: %w", v2node.Id, yamlKeyDaemon, err)
+			}
+			v2node.Daemon = d
 		}
 	}
 
@@ -286,6 +292,7 @@ func validateActivityNodeTopLevelKeys(node *yaml.Node, binding generatedNodeBind
 		yamlKeyCondition:   {},
 		yamlKeyTimeout:     {},
 		yamlKeySaveMessage: {},
+		yamlKeyDaemon:      {},
 		yamlKeyArgs:        {},
 	}
 	for key := range binding.argFieldKeys {
@@ -844,6 +851,14 @@ func marshalNode(v2node *reliantv1.Node) (*yaml.Node, error) {
 		}
 		if smn != nil {
 			m.Content = append(m.Content, scalarNode(yamlKeySaveMessage, ""), smn)
+		}
+	}
+
+	// daemon (node base level)
+	if v2node.Daemon != nil {
+		dn, _ := marshalCelDaemonSelector(v2node.Daemon)
+		if dn != nil {
+			m.Content = append(m.Content, scalarNode(yamlKeyDaemon, ""), dn)
 		}
 	}
 

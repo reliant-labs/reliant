@@ -238,6 +238,7 @@ type Repository interface {
 	// Chat State Management
 	UpdateChatState(ctx context.Context, chatID string, state ChatState, reason string) error
 	UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error
+	UpdateChatActiveDaemon(ctx context.Context, chatID string, daemonID *string) error
 
 	// Background Processes
 	CreateBackgroundProcess(ctx context.Context, process *BackgroundProcess) error

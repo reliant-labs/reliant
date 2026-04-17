@@ -18,7 +18,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/nats-io/nats.go/jetstream"
+
 	"github.com/reliant-labs/reliant/internal/certs"
+	"github.com/reliant-labs/reliant/internal/daemonevents"
 	"github.com/reliant-labs/reliant/internal/db"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
@@ -178,6 +181,29 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	defer func() { _ = toolBridge.Close() }()
 	logging.Info("NATS tool bridge started — per-daemon subscriptions on connect/disconnect")
+
+	// Daemon lifecycle event publisher: forwards connect/disconnect to the
+	// control-plane admin-server via the DAEMON_EVENTS JetStream stream so
+	// `controlplane.daemons.status` stays in sync with reality.
+	js, err := jetstream.New(nc)
+	if err != nil {
+		return fmt.Errorf("failed to create JetStream context for daemon events: %w", err)
+	}
+	eventStreamCtx, eventStreamCancel := context.WithTimeout(ctx, 10*time.Second)
+	if err := daemonevents.EnsureStream(eventStreamCtx, js); err != nil {
+		eventStreamCancel()
+		return fmt.Errorf("failed to ensure %s stream: %w", daemonevents.StreamDaemonEvents, err)
+	}
+	eventStreamCancel()
+	eventPublisher, err := daemonevents.NewPublisher(nc)
+	if err != nil {
+		return fmt.Errorf("failed to build daemon event publisher: %w", err)
+	}
+	toolsDaemonService.AddConnectionListener(eventPublisher)
+	logging.Info("Daemon lifecycle event publisher started",
+		"stream", daemonevents.StreamDaemonEvents,
+		"subjects", daemonevents.SubjectDaemonEventsAll,
+	)
 
 	// Daemon gRPC server (bidi streaming endpoint for tools-daemon connections)
 	daemonSrv := grpcserver.NewDaemonServer(&grpcserver.DaemonConfig{

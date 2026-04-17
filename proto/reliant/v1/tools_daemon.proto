@@ -60,13 +60,16 @@ message DaemonMessage {
 
 // DaemonRegister is sent when daemon first connects
 message DaemonRegister {
-  string daemon_id = 1; // Unique daemon instance ID
+  string daemon_id = 1; // Unique daemon instance ID (stable, persisted per-host)
   string user_id = 2; // User this daemon belongs to
   string hostname = 3; // Machine hostname
   string platform = 4; // OS platform (darwin, linux, windows)
   string working_dir = 5; // Current working directory
   repeated string capabilities = 6; // Supported tools/features
   reserved 7;
+  string name = 8; // Human-friendly daemon name (default: hostname)
+  map<string, string> labels = 9; // User-defined labels for daemon selection
+  string daemon_type = 10; // Daemon type: "local" or "cloud"
 }
 
 // ToolResponse contains the result of tool execution
@@ -325,6 +328,16 @@ service DaemonRegistryService {
 
   // RevokeDaemonToken revokes a specific daemon PAT.
   rpc RevokeDaemonToken(RevokeDaemonTokenRequest) returns (RevokeDaemonTokenResponse) {}
+
+  // ResolveDaemon resolves a daemon for a user given optional selection criteria.
+  // Used by distributed OSS routers to find the right daemon to route requests to.
+  // Returns the best matching daemon's info including its current status.
+  rpc ResolveDaemon(ResolveDaemonRequest) returns (ResolveDaemonResponse) {}
+
+  // ResumeDaemon wakes up a suspended or idle daemon.
+  // Used by distributed OSS routers when the resolved daemon is not currently active.
+  // Returns once the daemon is active or an error if wake-up fails.
+  rpc ResumeDaemon(ResumeDaemonRequest) returns (ResumeDaemonResponse) {}
 }
 
 message ListDaemonsRequest {}
@@ -381,6 +394,36 @@ message RevokeDaemonTokenRequest {
 }
 
 message RevokeDaemonTokenResponse {}
+
+// ============================================
+// ResolveDaemon
+// ============================================
+
+message ResolveDaemonRequest {
+  // Optional selector criteria. If empty, returns the default daemon.
+  string daemon_id = 1;       // Exact daemon ID (highest priority)
+  string daemon_name = 2;     // Match by name
+  string daemon_type = 3;     // "local", "cloud", or "any"
+  map<string, string> labels = 4; // Match by labels
+}
+
+message ResolveDaemonResponse {
+  DaemonInfo daemon = 1;
+  bool found = 2;
+}
+
+// ============================================
+// ResumeDaemon
+// ============================================
+
+message ResumeDaemonRequest {
+  string daemon_id = 1;
+}
+
+message ResumeDaemonResponse {
+  bool resumed = 1;
+  string error_message = 2; // Non-empty on failure
+}
 
 message DaemonInfo {
   string daemon_id = 1;

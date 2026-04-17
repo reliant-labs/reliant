@@ -41,9 +41,10 @@ type ToolsDaemonService struct {
 	reliantv1connect.UnimplementedToolsDaemonServiceHandler
 	database db.Repository
 
-	// Active daemon connections
-	// map[userID]*daemonConnection
+	// Active daemon connections, keyed by daemonID.
 	connections map[string]*daemonConnection
+	// Secondary index: userID → list of connected daemonIDs.
+	userDaemons map[string][]string
 	mu          sync.RWMutex
 
 	// listeners are notified (outside the mutex) when daemons connect/disconnect.
@@ -60,12 +61,17 @@ type ToolsDaemonService struct {
 
 // daemonConnection represents an active daemon connection
 type daemonConnection struct {
-	userID   string
-	daemonID string
-	stream   *connect.BidiStream[reliantv1.DaemonMessage, reliantv1.ServerMessage]
-	sendCh   chan *reliantv1.ServerMessage
-	done     chan struct{}
-	doneOnce sync.Once
+	userID       string
+	daemonID     string
+	name         string
+	labels       map[string]string
+	daemonType   string // "local" or "cloud"
+	connectedAt  time.Time
+	lastActivity time.Time
+	stream       *connect.BidiStream[reliantv1.DaemonMessage, reliantv1.ServerMessage]
+	sendCh       chan *reliantv1.ServerMessage
+	done         chan struct{}
+	doneOnce     sync.Once
 
 	// pendingCommands tracks in-flight DaemonCommandRequests awaiting responses.
 	// Key is request_id, value is a channel that receives the response.
@@ -95,6 +101,7 @@ func NewToolsDaemonService(database db.Repository) *ToolsDaemonService {
 	service := &ToolsDaemonService{
 		database:      database,
 		connections:   make(map[string]*daemonConnection),
+		userDaemons:   make(map[string][]string),
 		monitorCancel: monitorCancel,
 		monitorDone:   make(chan struct{}),
 	}
@@ -114,6 +121,7 @@ func NewToolsDaemonServiceWithoutMonitor(database db.Repository) *ToolsDaemonSer
 	return &ToolsDaemonService{
 		database:    database,
 		connections: make(map[string]*daemonConnection),
+		userDaemons: make(map[string][]string),
 		monitorDone: done,
 	}
 }
@@ -246,16 +254,27 @@ func (s *ToolsDaemonService) sweepStaleDaemons(ctx context.Context, now time.Tim
 	type removedConn struct{ userID, daemonID string }
 	var removed []removedConn
 	s.mu.Lock()
-	for userID, conn := range s.connections {
+	for dID, conn := range s.connections {
 		if conn == nil {
 			continue
 		}
-		if _, ok := daemonIDSet[conn.daemonID]; !ok {
+		if _, ok := daemonIDSet[dID]; !ok {
 			continue
 		}
-		delete(s.connections, userID)
+		delete(s.connections, dID)
+		// Remove from userDaemons secondary index.
+		uIDs := s.userDaemons[conn.userID]
+		for i, id := range uIDs {
+			if id == dID {
+				s.userDaemons[conn.userID] = append(uIDs[:i], uIDs[i+1:]...)
+				break
+			}
+		}
+		if len(s.userDaemons[conn.userID]) == 0 {
+			delete(s.userDaemons, conn.userID)
+		}
 		conn.closeDone()
-		removed = append(removed, removedConn{userID, conn.daemonID})
+		removed = append(removed, removedConn{conn.userID, dID})
 	}
 	s.mu.Unlock()
 
@@ -352,9 +371,15 @@ func (s *ToolsDaemonService) ConnectDaemon(
 		"platform", reg.Platform)
 
 	// Create daemon connection
+	now2 := time.Now().UTC()
 	conn := &daemonConnection{
 		userID:              userID,
 		daemonID:            daemonID,
+		name:                reg.GetName(),
+		labels:              reg.GetLabels(),
+		daemonType:          reg.GetDaemonType(),
+		connectedAt:         now2,
+		lastActivity:        now2,
 		stream:              stream,
 		sendCh:              make(chan *reliantv1.ServerMessage, 256),
 		done:                make(chan struct{}),
@@ -364,16 +389,20 @@ func (s *ToolsDaemonService) ConnectDaemon(
 		processOutputSubs:   make(map[string][]chan *toolexec.ProcessOutputEvent),
 	}
 
-	// Register connection
+	// Register connection: keyed by daemonID, with secondary index by userID.
 	s.mu.Lock()
-	oldConn := s.connections[userID]
-	s.connections[userID] = conn
+	oldConn := s.connections[daemonID]
+	s.connections[daemonID] = conn
+	if oldConn == nil {
+		// New daemon — add to user's daemon list.
+		s.userDaemons[userID] = append(s.userDaemons[userID], daemonID)
+	}
 	s.mu.Unlock()
 
-	// Close old connection if exists
+	// Close old connection if this daemon was already connected (reconnect).
 	if oldConn != nil {
 		oldConn.closeDone()
-		logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Replaced old daemon connection", "userID", userID)
+		logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Replaced old daemon connection", "userID", userID, "daemonID", daemonID)
 	}
 
 	// Notify listeners outside the mutex.
@@ -416,11 +445,22 @@ func (s *ToolsDaemonService) ConnectDaemon(
 	// Handle incoming messages (blocking)
 	err = s.handleIncoming(ctx, conn)
 
-	// Cleanup on disconnect
+	// Cleanup on disconnect: remove from primary map and user's daemon list.
 	var wasConnected bool
 	s.mu.Lock()
-	if s.connections[userID] == conn {
-		delete(s.connections, userID)
+	if s.connections[daemonID] == conn {
+		delete(s.connections, daemonID)
+		// Remove from userDaemons secondary index.
+		ids := s.userDaemons[userID]
+		for i, id := range ids {
+			if id == daemonID {
+				s.userDaemons[userID] = append(ids[:i], ids[i+1:]...)
+				break
+			}
+		}
+		if len(s.userDaemons[userID]) == 0 {
+			delete(s.userDaemons, userID)
+		}
 		wasConnected = true
 	}
 	s.mu.Unlock()
@@ -998,14 +1038,60 @@ func (s *ToolsDaemonService) sendLoadAndWatchProjectConfig(ctx context.Context, 
 	return s.SendWatchProjectConfigs(ctx, conn.userID, projectPath, includeInitial)
 }
 
-func (s *ToolsDaemonService) sendToUserDaemon(userID string, msg *reliantv1.ServerMessage) error {
+// defaultDaemonForUser returns the "best" connected daemon for a user.
+// It prefers local daemons over cloud daemons, then most recently connected.
+// Returns nil if no daemon is connected.
+func (s *ToolsDaemonService) defaultDaemonForUser(userID string) *daemonConnection {
+	// Must be called with s.mu held (at least RLock).
+	daemonIDs := s.userDaemons[userID]
+	if len(daemonIDs) == 0 {
+		return nil
+	}
+	// Single daemon: fast path.
+	if len(daemonIDs) == 1 {
+		return s.connections[daemonIDs[0]]
+	}
+	// Prefer local daemons, then most recently connected.
+	var best *daemonConnection
+	for _, dID := range daemonIDs {
+		c := s.connections[dID]
+		if c == nil {
+			continue
+		}
+		if best == nil {
+			best = c
+			continue
+		}
+		// Prefer local over cloud. Empty daemonType is treated as "local" for backward compat.
+		cIsLocal := c.daemonType == "local" || c.daemonType == ""
+		bestIsLocal := best.daemonType == "local" || best.daemonType == ""
+		if cIsLocal && !bestIsLocal {
+			best = c
+			continue
+		}
+		// Same type: prefer most recently connected.
+		if cIsLocal == bestIsLocal && c.connectedAt.After(best.connectedAt) {
+			best = c
+		}
+	}
+	return best
+}
+
+// daemonForUser returns the connection for a specific daemonID, or the default daemon for the user.
+func (s *ToolsDaemonService) daemonForUser(userID string) *daemonConnection {
 	s.mu.RLock()
-	conn, ok := s.connections[userID]
-	s.mu.RUnlock()
+	defer s.mu.RUnlock()
+	return s.defaultDaemonForUser(userID)
+}
+
+func (s *ToolsDaemonService) sendToUserDaemon(userID string, msg *reliantv1.ServerMessage) error {
 	if msg == nil {
 		return nil
 	}
-	if !ok || conn == nil {
+	s.mu.RLock()
+	conn := s.defaultDaemonForUser(userID)
+	s.mu.RUnlock()
+	if conn == nil {
 		return fmt.Errorf("daemon not connected for user %s", userID)
 	}
 
@@ -1068,22 +1154,46 @@ func (s *ToolsDaemonService) runHeartbeat(conn *daemonConnection) {
 // DaemonConnectionManager interface implementation
 // ============================================
 
+// ListConnectedDaemons returns info about all daemons connected for a user.
+// Implements toolexec.ConnectedDaemonLister.
+func (s *ToolsDaemonService) ListConnectedDaemons(userID string) []toolexec.DaemonInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	daemonIDs := s.userDaemons[userID]
+	result := make([]toolexec.DaemonInfo, 0, len(daemonIDs))
+	for _, dID := range daemonIDs {
+		c := s.connections[dID]
+		if c == nil {
+			continue
+		}
+		result = append(result, toolexec.DaemonInfo{
+			DaemonID:   c.daemonID,
+			Name:       c.name,
+			Labels:     c.labels,
+			Type:       c.daemonType,
+			Status:     "connected",
+			LastActive: c.lastActivity,
+		})
+	}
+	return result
+}
+
 // IsDaemonOnline checks if a daemon is currently connected for the user
 func (s *ToolsDaemonService) IsDaemonOnline(_ context.Context, userID string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	_, online := s.connections[userID]
-	return online
+	return len(s.userDaemons[userID]) > 0
 }
 
 // SendToolRequest pushes a tool request to the daemon
 // Context is accepted for interface compliance but not used - daemon connections have their own lifecycle
 func (s *ToolsDaemonService) SendToolRequest(ctx context.Context, userID string, request *toolexec.ToolExecutionRequest) error {
 	s.mu.RLock()
-	conn, ok := s.connections[userID]
+	conn := s.defaultDaemonForUser(userID)
 	s.mu.RUnlock()
 
-	if !ok {
+	if conn == nil {
 		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Cannot send request - daemon offline",
 			"userID", userID,
 			"requestID", request.RequestID)
@@ -1140,8 +1250,8 @@ func (s *ToolsDaemonService) GetConnectedUsers() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	users := make([]string, 0, len(s.connections))
-	for userID := range s.connections {
+	users := make([]string, 0, len(s.userDaemons))
+	for userID := range s.userDaemons {
 		users = append(users, userID)
 	}
 	return users
@@ -1217,9 +1327,9 @@ func (s *ToolsDaemonService) SendKillProcess(userID, processID string) error {
 // SendDaemonCommand sends a generic command to the daemon and waits for a correlated response.
 func (s *ToolsDaemonService) SendDaemonCommand(ctx context.Context, userID string, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error) {
 	s.mu.RLock()
-	conn, ok := s.connections[userID]
+	conn := s.defaultDaemonForUser(userID)
 	s.mu.RUnlock()
-	if !ok || conn == nil {
+	if conn == nil {
 		return nil, fmt.Errorf("no daemon connected for user %s", userID)
 	}
 
@@ -1269,9 +1379,9 @@ func (s *ToolsDaemonService) SendDaemonCommand(ctx context.Context, userID strin
 // SendToolRequestSync sends a tool execution request to the daemon and waits for the correlated response.
 func (s *ToolsDaemonService) SendToolRequestSync(ctx context.Context, userID string, request *toolexec.ToolExecutionRequest) (*toolexec.ToolExecutionResponse, error) {
 	s.mu.RLock()
-	conn, ok := s.connections[userID]
+	conn := s.defaultDaemonForUser(userID)
 	s.mu.RUnlock()
-	if !ok || conn == nil {
+	if conn == nil {
 		return nil, fmt.Errorf("no daemon connected for user %s", userID)
 	}
 
@@ -1350,9 +1460,9 @@ func (s *ToolsDaemonService) SendToolExecutionCancel(_ context.Context, userID, 
 	}
 
 	s.mu.RLock()
-	conn, ok := s.connections[userID]
+	conn := s.defaultDaemonForUser(userID)
 	s.mu.RUnlock()
-	if !ok {
+	if conn == nil {
 		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Cannot cancel - daemon offline", "userID", userID, "requestID", requestID)
 		return fmt.Errorf("daemon offline for user %s, cannot deliver cancel for %s", userID, requestID)
 	}
@@ -1462,9 +1572,9 @@ func (s *ToolsDaemonService) SendTerminalResize(userID string, sessionID string,
 // Returns a channel that receives events, an unsubscribe function, and an error.
 func (s *ToolsDaemonService) SubscribeTerminalOutput(userID string, sessionID string) (<-chan *toolexec.TerminalOutputEvent, func(), error) {
 	s.mu.RLock()
-	conn, ok := s.connections[userID]
+	conn := s.defaultDaemonForUser(userID)
 	s.mu.RUnlock()
-	if !ok || conn == nil {
+	if conn == nil {
 		return nil, nil, fmt.Errorf("no daemon connected for user %s", userID)
 	}
 
@@ -1498,9 +1608,9 @@ func (s *ToolsDaemonService) SubscribeTerminalOutput(userID string, sessionID st
 // and removes the subscriber.
 func (s *ToolsDaemonService) SubscribeProcessOutput(userID string, processID string, newOnly bool) (<-chan *toolexec.ProcessOutputEvent, func(), error) {
 	s.mu.RLock()
-	conn, ok := s.connections[userID]
+	conn := s.defaultDaemonForUser(userID)
 	s.mu.RUnlock()
-	if !ok || conn == nil {
+	if conn == nil {
 		return nil, nil, fmt.Errorf("no daemon connected for user %s", userID)
 	}
 

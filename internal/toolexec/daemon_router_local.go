@@ -114,6 +114,12 @@ func (r *LocalDaemonRouter) SendToolRequestSync(ctx context.Context, userID stri
 	return r.mgr.SendToolRequestSync(ctx, userID, request)
 }
 
+func (r *LocalDaemonRouter) SendToolRequestSyncWithSelector(ctx context.Context, userID string, request *ToolExecutionRequest, selector *DaemonSelector) (*ToolExecutionResponse, error) {
+	// LocalDaemonRouter only has one daemon per user — selector is ignored.
+	// The in-process daemon is always the right target.
+	return r.SendToolRequestSync(ctx, userID, request)
+}
+
 func (r *LocalDaemonRouter) SendLoadProjectConfigs(ctx context.Context, userID string, projectPath string, requestID string) error {
 	r.ensureDaemon(ctx, userID)
 	return r.mgr.SendLoadProjectConfigs(ctx, userID, projectPath, requestID)

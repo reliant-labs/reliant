@@ -48,8 +48,8 @@ func TestSweepStaleDaemonsMarksDisconnectedAndClosesConnection(t *testing.T) {
 	freshConn := &daemonConnection{userID: "fresh-user", daemonID: freshDaemonID, done: make(chan struct{})}
 
 	svc.mu.Lock()
-	svc.connections[staleConn.userID] = staleConn
-	svc.connections[freshConn.userID] = freshConn
+	registerTestConn(svc, staleConn)
+	registerTestConn(svc, freshConn)
 	svc.mu.Unlock()
 
 	require.NoError(t, svc.sweepStaleDaemons(context.Background(), now))
@@ -64,8 +64,8 @@ func TestSweepStaleDaemonsMarksDisconnectedAndClosesConnection(t *testing.T) {
 	require.Equal(t, db.DaemonStatusActive, freshReloaded.Status)
 
 	svc.mu.RLock()
-	_, staleStillPresent := svc.connections[staleConn.userID]
-	_, freshStillPresent := svc.connections[freshConn.userID]
+	_, staleStillPresent := svc.connections[staleConn.daemonID]
+	_, freshStillPresent := svc.connections[freshConn.daemonID]
 	svc.mu.RUnlock()
 	require.False(t, staleStillPresent)
 	require.True(t, freshStillPresent)
@@ -108,7 +108,7 @@ func TestSendDaemonCommandCancelsInFlightCommandWhenCallerContextEnds(t *testing
 		pendingCommands: make(map[string]chan *reliantv1.DaemonCommandResponse),
 	}
 	svc.mu.Lock()
-	svc.connections[conn.userID] = conn
+	registerTestConn(svc, conn)
 	svc.mu.Unlock()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -198,7 +198,7 @@ func TestHandleProjectDiscoveryCreatesProjectAndRequestsConfig(t *testing.T) {
 		done:     make(chan struct{}),
 	}
 	svc.mu.Lock()
-	svc.connections[conn.userID] = conn
+	registerTestConn(svc, conn)
 	svc.mu.Unlock()
 
 	discovery := &reliantv1.ProjectDiscovery{Projects: []*reliantv1.DiscoveredProject{
@@ -353,7 +353,7 @@ func TestHandleProjectConfigDeltaStaleGuardAndReloadRequest(t *testing.T) {
 		done:     make(chan struct{}),
 	}
 	svc.mu.Lock()
-	svc.connections[conn.userID] = conn
+	registerTestConn(svc, conn)
 	svc.mu.Unlock()
 
 	older := &reliantv1.ProjectConfigDelta{
@@ -436,7 +436,7 @@ func TestPR5Smoke_ConfigSyncCancelDisconnectReconnect(t *testing.T) {
 		done:     make(chan struct{}),
 	}
 	svc.mu.Lock()
-	svc.connections[userID] = conn1
+	registerTestConn(svc, conn1)
 	svc.mu.Unlock()
 
 	// 1) Discovery/config sync: discovery triggers load+watch and config snapshot persists.
@@ -491,4 +491,11 @@ func TestPR5Smoke_ConfigSyncCancelDisconnectReconnect(t *testing.T) {
 
 func testStringPtr(v string) *string {
 	return &v
+}
+
+// registerTestConn adds a daemon connection to the service's maps
+// using the new multi-daemon layout (keyed by daemonID + userDaemons index).
+func registerTestConn(svc *ToolsDaemonService, conn *daemonConnection) {
+	svc.connections[conn.daemonID] = conn
+	svc.userDaemons[conn.userID] = append(svc.userDaemons[conn.userID], conn.daemonID)
 }

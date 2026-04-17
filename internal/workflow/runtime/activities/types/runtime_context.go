@@ -26,6 +26,18 @@ type RuntimeContext struct {
 
 	// Project context
 	ProjectPath string `json:"project_path,omitempty"`
+
+	// Daemon targeting - specifies which daemon should execute tools.
+	// Set from workflow-level or node-level daemon field. nil means use default resolution.
+	DaemonSelector *DaemonSelector `json:"daemon_selector,omitempty"`
+}
+
+// DaemonSelector specifies criteria for selecting which daemon executes tools.
+type DaemonSelector struct {
+	ID     string            `json:"id,omitempty"`
+	Name   string            `json:"name,omitempty"`
+	Type   string            `json:"type,omitempty"` // "local", "cloud", "any"
+	Labels map[string]string `json:"labels,omitempty"`
 }
 
 // SpawnConfig holds the configuration for spawning child workflows.

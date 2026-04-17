@@ -10,39 +10,49 @@ import (
 	"connectrpc.com/connect"
 	"github.com/nats-io/nats.go"
 	"github.com/reliant-labs/reliant/internal/db"
+	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/observability"
 )
 
 // NATS subject patterns for tool execution and daemon routing.
+// Subjects now include {userID}.{daemonID} for multi-daemon routing.
 const (
-	toolRequestSubject = "tools.request" // tool request notifications
-	toolCancelSubject  = "tools.cancel"  // tool cancellation notifications
-	toolOnlineSubject  = "tools.online"  // request-reply for online check
+	toolRequestSubject = "tools.request" // tools.request.{userID}.{daemonID}
+	toolCancelSubject  = "tools.cancel"  // tools.cancel.{userID}.{daemonID}
+	toolOnlineSubject  = "tools.online"  // tools.online.{userID}.{daemonID}
 
-	daemonKillSubject      = "daemon.process.kill" // request-reply for kill process
-	daemonCommandSubject   = "daemon.command"      // request-reply for generic daemon commands
-	toolRequestSyncSubject = "tools.request.sync"  // request-reply for synchronous tool execution
+	daemonKillSubject      = "daemon.process.kill" // daemon.process.kill.{userID}.{daemonID}
+	daemonCommandSubject   = "daemon.command"      // daemon.command.{userID}.{daemonID}
+	toolRequestSyncSubject = "tools.request.sync"  // tools.request.sync.{userID}.{daemonID}
 
-	configLoadSubject  = "daemon.config.load"  // fire-and-forget
-	configWatchSubject = "daemon.config.watch" // fire-and-forget
+	configLoadSubject  = "daemon.config.load"  // daemon.config.load.{userID}.{daemonID}
+	configWatchSubject = "daemon.config.watch" // daemon.config.watch.{userID}.{daemonID}
 
 	// Terminal streaming subjects
-	terminalInputSubject  = "daemon.terminal.input"  // fire-and-forget: publish input bytes
-	terminalResizeSubject = "daemon.terminal.resize" // fire-and-forget: publish resize
-	terminalOutputSubject = "daemon.terminal.output" // subscribe for output events
+	terminalInputSubject  = "daemon.terminal.input"  // daemon.terminal.input.{userID}.{daemonID}.{sessionID}
+	terminalResizeSubject = "daemon.terminal.resize" // daemon.terminal.resize.{userID}.{daemonID}.{sessionID}
+	terminalOutputSubject = "daemon.terminal.output" // daemon.terminal.output.{userID}.{daemonID}.{sessionID}
 
 	// Process output streaming subjects
-	processOutputSubscribeSubject = "daemon.process.subscribe" // fire-and-forget: subscribe request
-	processOutputSubject          = "daemon.process.output"    // subscribe for output chunks
+	processOutputSubscribeSubject = "daemon.process.subscribe" // daemon.process.subscribe.{userID}.{daemonID}
+	processOutputSubject          = "daemon.process.output"    // daemon.process.output.{userID}.{processID}
 )
+
+// daemonSubject builds a NATS subject with the pattern base.{userID}.{daemonID}.
+func daemonSubject(base, userID, daemonID string) string {
+	return base + "." + userID + "." + daemonID
+}
 
 // NATSDaemonRouter implements DaemonRouter using NATS pub/sub.
 // Used by workers and api-server replicas in distributed mode to route
 // daemon operations to the api-server that holds the daemon's gRPC connection.
 type NATSDaemonRouter struct {
-	nc *nats.Conn
-	db db.Repository
+	nc                 *nats.Conn
+	db                 db.Repository
+	resolver           DaemonResolver                               // optional: used to resolve daemonID for a user
+	controlPlaneClient reliantv1connect.DaemonRegistryServiceClient // optional: gRPC client for control plane resolution
 }
 
 // NewNATSDaemonRouter creates a new NATS-based daemon router.
@@ -62,6 +72,127 @@ func WithDatabase(repo db.Repository) NATSRouterOption {
 	return func(r *NATSDaemonRouter) {
 		r.db = repo
 	}
+}
+
+// WithResolver sets the DaemonResolver for multi-daemon routing.
+func WithResolver(resolver DaemonResolver) NATSRouterOption {
+	return func(r *NATSDaemonRouter) {
+		r.resolver = resolver
+	}
+}
+
+// WithControlPlaneClient sets the gRPC client for control plane daemon resolution.
+// When set, the router calls ResolveDaemon/ResumeDaemon RPCs on the control plane
+// when local/connected-only resolution fails. When nil, the router operates in
+// OSS-only mode (connected daemons only).
+func WithControlPlaneClient(client reliantv1connect.DaemonRegistryServiceClient) NATSRouterOption {
+	return func(r *NATSDaemonRouter) {
+		r.controlPlaneClient = client
+	}
+}
+
+// resolveDefaultDaemonID resolves the default daemon ID for a user.
+// Falls back to the first active daemon in the DB if no resolver is set.
+func (r *NATSDaemonRouter) resolveDefaultDaemonID(ctx context.Context, userID string) (string, error) {
+	return r.resolveDaemonID(ctx, userID, nil)
+}
+
+// resolveDaemonID resolves a daemon ID for a user, optionally using a selector.
+// Resolution order:
+//  1. Local resolver (connected daemons on this gateway)
+//  2. Control plane gRPC (ResolveDaemon RPC) if controlPlaneClient is set
+//  3. DB fallback
+//
+// If the resolved daemon is suspended and controlPlaneClient is set,
+// ResumeDaemon is called to wake it up.
+func (r *NATSDaemonRouter) resolveDaemonID(ctx context.Context, userID string, selector *DaemonSelector) (string, error) {
+	// Step 1: Try local resolver (connected daemons).
+	if r.resolver != nil {
+		daemons, err := r.resolver.ResolveDaemons(ctx, userID, selector)
+		if err != nil {
+			return "", err
+		}
+		if len(daemons) > 0 {
+			// When no selector, prefer local daemons.
+			if selector == nil {
+				for _, d := range daemons {
+					if d.Type == "local" {
+						return d.DaemonID, nil
+					}
+				}
+			}
+			return daemons[0].DaemonID, nil
+		}
+		// No connected daemons matched — fall through to control plane.
+	}
+
+	// Step 2: Try control plane gRPC resolution.
+	if r.controlPlaneClient != nil {
+		daemonID, err := r.resolveViaControlPlane(ctx, selector)
+		if err == nil {
+			return daemonID, nil
+		}
+		// If control plane doesn't find a daemon, fall through to DB.
+	}
+
+	// Step 3: Fallback — look up from DB.
+	if r.db != nil {
+		daemons, err := r.db.ListDaemonsByUserID(ctx, userID)
+		if err != nil {
+			return "", fmt.Errorf("resolving daemon ID from DB: %w", err)
+		}
+		for _, d := range daemons {
+			if d.Status == db.DaemonStatusActive {
+				if selector != nil && selector.Type != "" && selector.Type != "any" {
+					continue
+				}
+				return d.ID, nil
+			}
+		}
+	}
+
+	if selector != nil {
+		return "", fmt.Errorf("no daemon matching selector (type=%q, name=%q, id=%q) for user %s", selector.Type, selector.Name, selector.ID, userID)
+	}
+	return "", fmt.Errorf("no daemon available for user %s", userID)
+}
+
+// resolveViaControlPlane calls the control plane's ResolveDaemon RPC.
+// If the resolved daemon is suspended, it calls ResumeDaemon to wake it.
+func (r *NATSDaemonRouter) resolveViaControlPlane(ctx context.Context, selector *DaemonSelector) (string, error) {
+	req := &reliantv1.ResolveDaemonRequest{}
+	if selector != nil {
+		req.DaemonId = selector.ID
+		req.DaemonName = selector.Name
+		req.DaemonType = selector.Type
+		req.Labels = selector.Labels
+	}
+
+	resp, err := r.controlPlaneClient.ResolveDaemon(ctx, connect.NewRequest(req))
+	if err != nil {
+		return "", fmt.Errorf("control plane ResolveDaemon: %w", err)
+	}
+	if !resp.Msg.Found || resp.Msg.Daemon == nil {
+		return "", fmt.Errorf("control plane found no matching daemon")
+	}
+
+	daemon := resp.Msg.Daemon
+
+	// If daemon is suspended or idle, try to wake it up.
+	if daemon.Status == reliantv1.DaemonStatus_DAEMON_STATUS_IDLE ||
+		daemon.Status == reliantv1.DaemonStatus_DAEMON_STATUS_DISCONNECTED {
+		resumeResp, err := r.controlPlaneClient.ResumeDaemon(ctx, connect.NewRequest(&reliantv1.ResumeDaemonRequest{
+			DaemonId: daemon.DaemonId,
+		}))
+		if err != nil {
+			return "", fmt.Errorf("control plane ResumeDaemon(%s): %w", daemon.DaemonId, err)
+		}
+		if !resumeResp.Msg.Resumed {
+			return "", fmt.Errorf("daemon %s could not be resumed: %s", daemon.DaemonId, resumeResp.Msg.ErrorMessage)
+		}
+	}
+
+	return daemon.DaemonId, nil
 }
 
 // daemonStaleThreshold is 2× the daemon heartbeat interval. If the frontend
@@ -97,7 +228,12 @@ func (r *NATSDaemonRouter) IsDaemonOnline(ctx context.Context, userID string) (b
 // isDaemonOnlineViaNATS is the legacy NATS request-reply check, used as fallback
 // when no DB is configured.
 func (r *NATSDaemonRouter) isDaemonOnlineViaNATS(ctx context.Context, userID string) (bool, error) {
-	subject := toolOnlineSubject + "." + userID
+	// Try resolving a specific daemon first; fall back to wildcard.
+	daemonID, err := r.resolveDefaultDaemonID(ctx, userID)
+	if err != nil {
+		return false, nil // No daemon found → offline.
+	}
+	subject := daemonSubject(toolOnlineSubject, userID, daemonID)
 	reqMsg := observability.NATSPublishMsg(ctx, subject, nil)
 	start := time.Now()
 	msg, err := r.nc.RequestMsg(reqMsg, 2*time.Second)
@@ -117,11 +253,15 @@ func (r *NATSDaemonRouter) isDaemonOnlineViaNATS(ctx context.Context, userID str
 }
 
 func (r *NATSDaemonRouter) SendToolRequest(ctx context.Context, userID string, request *ToolExecutionRequest) error {
+	daemonID, err := r.resolveDefaultDaemonID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("resolving daemon for tool request: %w", err)
+	}
 	payload, err := json.Marshal(request)
 	if err != nil {
 		return err
 	}
-	subject := toolRequestSubject + "." + userID
+	subject := daemonSubject(toolRequestSubject, userID, daemonID)
 	msg := observability.NATSPublishMsg(ctx, subject, payload)
 	if err := r.nc.PublishMsg(msg); err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("tools.request", "publish").Inc()
@@ -132,6 +272,10 @@ func (r *NATSDaemonRouter) SendToolRequest(ctx context.Context, userID string, r
 }
 
 func (r *NATSDaemonRouter) SendToolExecutionCancel(ctx context.Context, userID, requestID, reason string) error {
+	daemonID, err := r.resolveDefaultDaemonID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("resolving daemon for cancel: %w", err)
+	}
 	payload, err := json.Marshal(map[string]string{
 		"request_id": requestID,
 		"reason":     reason,
@@ -139,7 +283,7 @@ func (r *NATSDaemonRouter) SendToolExecutionCancel(ctx context.Context, userID, 
 	if err != nil {
 		return err
 	}
-	subject := toolCancelSubject + "." + userID
+	subject := daemonSubject(toolCancelSubject, userID, daemonID)
 	msg := observability.NATSPublishMsg(ctx, subject, payload)
 	if err := r.nc.PublishMsg(msg); err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("tools.cancel", "publish").Inc()
@@ -163,7 +307,11 @@ func (r *NATSDaemonRouter) SendKillProcess(ctx context.Context, userID, processI
 		return err
 	}
 
-	subject := daemonKillSubject + "." + userID
+	daemonID, err := r.resolveDefaultDaemonID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("resolving daemon for kill: %w", err)
+	}
+	subject := daemonSubject(daemonKillSubject, userID, daemonID)
 	reqMsg := observability.NATSPublishMsg(ctx, subject, payload)
 	start := time.Now()
 	msg, err := r.nc.RequestMsg(reqMsg, 10*time.Second)
@@ -224,7 +372,11 @@ func (r *NATSDaemonRouter) SendDaemonCommand(ctx context.Context, userID string,
 		msg *nats.Msg
 		err error
 	}
-	subject := daemonCommandSubject + "." + userID
+	daemonID, err := r.resolveDefaultDaemonID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("resolving daemon for command: %w", err)
+	}
+	subject := daemonSubject(daemonCommandSubject, userID, daemonID)
 	reqMsg := observability.NATSPublishMsg(ctx, subject, data)
 	resultCh := make(chan natsResult, 1)
 	start := time.Now()
@@ -289,7 +441,11 @@ func (r *NATSDaemonRouter) SendToolRequestSync(ctx context.Context, userID strin
 		msg *nats.Msg
 		err error
 	}
-	subject := toolRequestSyncSubject + "." + userID
+	resolvedDaemonID, err := r.resolveDefaultDaemonID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("resolving daemon for sync request: %w", err)
+	}
+	subject := daemonSubject(toolRequestSyncSubject, userID, resolvedDaemonID)
 	reqMsg := observability.NATSPublishMsg(ctx, subject, payload)
 	resultCh := make(chan natsResult, 1)
 	start := time.Now()
@@ -319,6 +475,65 @@ func (r *NATSDaemonRouter) SendToolRequestSync(ctx context.Context, userID strin
 	return &resp, nil
 }
 
+func (r *NATSDaemonRouter) SendToolRequestSyncWithSelector(ctx context.Context, userID string, request *ToolExecutionRequest, selector *DaemonSelector) (*ToolExecutionResponse, error) {
+	if selector == nil {
+		return r.SendToolRequestSync(ctx, userID, request)
+	}
+
+	payload, err := json.Marshal(request)
+	if err != nil {
+		return nil, fmt.Errorf("marshal tool request: %w", err)
+	}
+
+	timeout := 10 * time.Minute
+	if request.TimeoutMs > 0 {
+		timeout = time.Duration(request.TimeoutMs)*time.Millisecond + 30*time.Second
+	}
+	if deadline, ok := ctx.Deadline(); ok {
+		if remaining := time.Until(deadline); remaining < timeout {
+			timeout = remaining
+		}
+	}
+
+	resolvedDaemonID, err := r.resolveDaemonID(ctx, userID, selector)
+	if err != nil {
+		return nil, fmt.Errorf("resolving daemon for selector: %w", err)
+	}
+
+	type natsResult struct {
+		msg *nats.Msg
+		err error
+	}
+	subject := daemonSubject(toolRequestSyncSubject, userID, resolvedDaemonID)
+	reqMsg := observability.NATSPublishMsg(ctx, subject, payload)
+	resultCh := make(chan natsResult, 1)
+	start := time.Now()
+	go func() {
+		msg, err := r.nc.RequestMsg(reqMsg, timeout)
+		resultCh <- natsResult{msg, err}
+	}()
+
+	var msg *nats.Msg
+	select {
+	case res := <-resultCh:
+		observability.NATSRequestDuration.WithLabelValues("tools.request.sync.selector").Observe(time.Since(start).Seconds())
+		if res.err != nil {
+			observability.NATSErrorsTotal.WithLabelValues("tools.request.sync.selector", "request").Inc()
+			return nil, fmt.Errorf("tool request via NATS failed: %w", res.err)
+		}
+		msg = res.msg
+	case <-ctx.Done():
+		observability.NATSErrorsTotal.WithLabelValues("tools.request.sync.selector", "timeout").Inc()
+		return nil, fmt.Errorf("tool request via NATS failed: %w", ctx.Err())
+	}
+
+	var resp ToolExecutionResponse
+	if err := json.Unmarshal(msg.Data, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal tool response: %w", err)
+	}
+	return &resp, nil
+}
+
 func (r *NATSDaemonRouter) SendLoadProjectConfigs(ctx context.Context, userID string, projectPath string, requestID string) error {
 	payload, err := json.Marshal(map[string]string{
 		"project_path": projectPath,
@@ -327,7 +542,11 @@ func (r *NATSDaemonRouter) SendLoadProjectConfigs(ctx context.Context, userID st
 	if err != nil {
 		return err
 	}
-	subject := configLoadSubject + "." + userID
+	resolvedDaemonID, err := r.resolveDefaultDaemonID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("resolving daemon for config load: %w", err)
+	}
+	subject := daemonSubject(configLoadSubject, userID, resolvedDaemonID)
 	msg := observability.NATSPublishMsg(ctx, subject, payload)
 	if err := r.nc.PublishMsg(msg); err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("daemon.config.load", "publish").Inc()
@@ -345,7 +564,11 @@ func (r *NATSDaemonRouter) SendWatchProjectConfigs(ctx context.Context, userID s
 	if err != nil {
 		return err
 	}
-	subject := configWatchSubject + "." + userID
+	resolvedDaemonID, err := r.resolveDefaultDaemonID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("resolving daemon for config watch: %w", err)
+	}
+	subject := daemonSubject(configWatchSubject, userID, resolvedDaemonID)
 	msg := observability.NATSPublishMsg(ctx, subject, payload)
 	if err := r.nc.PublishMsg(msg); err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("daemon.config.watch", "publish").Inc()
@@ -363,7 +586,11 @@ func (r *NATSDaemonRouter) SendTerminalInput(ctx context.Context, userID string,
 	if err != nil {
 		return err
 	}
-	subject := terminalInputSubject + "." + userID + "." + sessionID
+	resolvedDaemonID, err := r.resolveDefaultDaemonID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("resolving daemon for terminal input: %w", err)
+	}
+	subject := daemonSubject(terminalInputSubject, userID, resolvedDaemonID) + "." + sessionID
 	msg := observability.NATSPublishMsg(ctx, subject, payload)
 	if err := r.nc.PublishMsg(msg); err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("daemon.terminal.input", "publish").Inc()
@@ -382,7 +609,11 @@ func (r *NATSDaemonRouter) SendTerminalResize(ctx context.Context, userID string
 	if err != nil {
 		return err
 	}
-	subject := terminalResizeSubject + "." + userID + "." + sessionID
+	resolvedDaemonID, err := r.resolveDefaultDaemonID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("resolving daemon for terminal resize: %w", err)
+	}
+	subject := daemonSubject(terminalResizeSubject, userID, resolvedDaemonID) + "." + sessionID
 	msg := observability.NATSPublishMsg(ctx, subject, payload)
 	if err := r.nc.PublishMsg(msg); err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("daemon.terminal.resize", "publish").Inc()
@@ -393,8 +624,12 @@ func (r *NATSDaemonRouter) SendTerminalResize(ctx context.Context, userID string
 }
 
 func (r *NATSDaemonRouter) SubscribeTerminalOutput(ctx context.Context, userID string, sessionID string) (<-chan *TerminalOutputEvent, func(), error) {
+	resolvedDaemonID, err := r.resolveDefaultDaemonID(ctx, userID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("resolving daemon for terminal output: %w", err)
+	}
 	ch := make(chan *TerminalOutputEvent, 64)
-	subject := terminalOutputSubject + "." + userID + "." + sessionID
+	subject := daemonSubject(terminalOutputSubject, userID, resolvedDaemonID) + "." + sessionID
 
 	sub, err := r.nc.Subscribe(subject, func(msg *nats.Msg) {
 		var evt TerminalOutputEvent
@@ -425,7 +660,11 @@ func (r *NATSDaemonRouter) SubscribeProcessOutput(ctx context.Context, userID st
 	if err != nil {
 		return nil, nil, err
 	}
-	subject := processOutputSubscribeSubject + "." + userID
+	resolvedDaemonID, err := r.resolveDefaultDaemonID(ctx, userID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("resolving daemon for process subscribe: %w", err)
+	}
+	subject := daemonSubject(processOutputSubscribeSubject, userID, resolvedDaemonID)
 	subMsg := observability.NATSPublishMsg(ctx, subject, reqPayload)
 	if err := r.nc.PublishMsg(subMsg); err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("daemon.process.subscribe", "publish").Inc()

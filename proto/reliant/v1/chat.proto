@@ -159,6 +159,11 @@ service ChatService {
   
   // GetThreadWorkflowInputs returns the workflow inputs for a specific thread
   rpc GetThreadWorkflowInputs(GetThreadWorkflowInputsRequest) returns (GetThreadWorkflowInputsResponse) {}
+
+  // SetChatDaemon sets the active daemon for a chat session.
+  // The selected daemon is used as the default for tool execution in this chat.
+  // Set daemon_id to empty string to clear and revert to default resolution.
+  rpc SetChatDaemon(SetChatDaemonRequest) returns (SetChatDaemonResponse) {}
 }
 
 // Chat represents a conversation
@@ -195,6 +200,7 @@ message Chat {
   ChatActivity activity = 27; // Computed activity state (from chats_with_activity view)
   bool unread = 28; // Whether this chat has unseen content (decoupled from activity/state)
   bool can_discuss = 29; // Whether this chat's workflow supports discuss mode when paused
+  optional string active_daemon_id = 30; // Active daemon for this session (UI-selectable)
 }
 
 // ArchivedChat includes worktree information for archived chats
@@ -711,4 +717,16 @@ message GetWorkflowExecutionsResponse {
   optional WorkflowExecution root_workflow = 1;
   // All root workflows for this chat, sorted by created_at descending (newest first)
   repeated WorkflowExecution all_root_workflows = 2;
+}
+
+// SetChatDaemonRequest sets the active daemon for a chat session.
+message SetChatDaemonRequest {
+  string chat_id = 1;
+  // Daemon ID to set. Empty string clears the active daemon.
+  string daemon_id = 2;
+}
+
+// SetChatDaemonResponse confirms the daemon was set.
+message SetChatDaemonResponse {
+  Chat chat = 1;
 }
