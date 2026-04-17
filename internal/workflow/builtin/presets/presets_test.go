@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 
+	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 )
 
@@ -290,6 +291,42 @@ func TestPresetModelsAreValid(t *testing.T) {
 
 			// Must have either id or tags
 			assert.True(t, hasID || hasTags, "model selector must have either 'id' or 'tags'")
+		})
+	}
+}
+
+func TestAffectedPresetsResolveForCodex(t *testing.T) {
+	presets := loadAllPresets(t)
+	registry := models.MustGetRegistry()
+
+	affectedPresets := []string{
+		"conflict-resolver.yaml",
+		"documentation.yaml",
+		"performance_reviewer.yaml",
+		"code_hygiene_reviewer.yaml",
+		"refactor.yaml",
+		"tester.yaml",
+	}
+
+	for _, presetName := range affectedPresets {
+		preset, ok := presets[presetName]
+		require.True(t, ok, "expected preset %q to exist", presetName)
+
+		t.Run(presetName, func(t *testing.T) {
+			model, ok := preset.Params["model"].(map[string]interface{})
+			require.True(t, ok, "preset %q should define a model selector", presetName)
+
+			tagsRaw, ok := model["tags"].([]interface{})
+			require.True(t, ok, "preset %q should define model tags", presetName)
+			require.Len(t, tagsRaw, 1, "preset %q should define exactly one model tag", presetName)
+
+			tag, ok := tagsRaw[0].(string)
+			require.True(t, ok, "preset %q has non-string tag %T", presetName, tagsRaw[0])
+			assert.Equal(t, models.TagModerate, tag, "preset %q should preserve its moderate model intent", presetName)
+
+			resolved, err := registry.Resolve(models.ModelSelector{Tags: []string{tag}}, []string{"codex"})
+			require.NoError(t, err, "preset %q should resolve for Codex", presetName)
+			assert.NotEmpty(t, resolved.Definition.ID, "preset %q should resolve to a concrete model for Codex", presetName)
 		})
 	}
 }

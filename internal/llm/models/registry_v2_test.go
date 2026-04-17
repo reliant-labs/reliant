@@ -6,6 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Test YAML fixtures for consistent testing
@@ -568,6 +571,25 @@ func TestResolve_BySingleTag(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestResolve_CodexModerateUsesGPT54(t *testing.T) {
+	reg := MustGetRegistry()
+
+	definition, ok := reg.GetDefinition("gpt-5.4")
+	require.True(t, ok, "expected gpt-5.4 to exist in registry")
+	assert.Contains(t, definition.Tags, TagFlagship)
+	assert.Contains(t, definition.Tags, TagModerate)
+
+	moderate, err := reg.Resolve(ModelSelector{Tags: []string{TagModerate}}, []string{"codex"})
+	require.NoError(t, err)
+
+	flagship, err := reg.Resolve(ModelSelector{Tags: []string{TagFlagship}}, []string{"codex"})
+	require.NoError(t, err)
+
+	assert.Equal(t, "gpt-5.4", moderate.Definition.ID)
+	assert.Equal(t, flagship.Definition.ID, moderate.Definition.ID)
+	assert.Equal(t, flagship.Provider.Driver, moderate.Provider.Driver)
 }
 
 func TestResolve_WithDriverSuffix(t *testing.T) {
