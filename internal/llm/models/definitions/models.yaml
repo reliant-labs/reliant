@@ -55,7 +55,7 @@ models:
 
   - id: gpt-5.4
     name: GPT-5.4
-    tags: [flagship, reasoning]
+    tags: [flagship, moderate, reasoning]
     visibility: user
     capabilities:
       can_reason: true
