@@ -18,7 +18,17 @@ type Client interface {
 	GetCurrentUserReliantState(ctx context.Context, authHeader string) (*controlplanev1.GetCurrentUserReliantStateResponse, error)
 	RepairCurrentUserReliantAccess(ctx context.Context, authHeader string) (*controlplanev1.RepairCurrentUserReliantAccessResponse, error)
 	RotateCurrentUserReliantAccess(ctx context.Context, authHeader, gracePeriod string) (*controlplanev1.RotateCurrentUserReliantAccessResponse, error)
-	RecordManagedReliantUsage(ctx context.Context, managedKey string, spendUSD float64, model string) (*controlplanev1.RecordManagedReliantUsageResponse, error)
+	RecordManagedReliantUsage(ctx context.Context, managedKey string, usage ManagedReliantUsage) (*controlplanev1.RecordManagedReliantUsageResponse, error)
+}
+
+type ManagedReliantUsage struct {
+	LegacySpendUSD    float64
+	LegacyModel       string
+	CanonicalModelID  string
+	InputTokens       int64
+	OutputTokens      int64
+	CachedInputTokens int64
+	ObservedCostUSD   *float64
 }
 
 type connectClient struct {
@@ -84,13 +94,20 @@ func (c *connectClient) RotateCurrentUserReliantAccess(ctx context.Context, auth
 	return resp.Msg, nil
 }
 
-func (c *connectClient) RecordManagedReliantUsage(ctx context.Context, managedKey string, spendUSD float64, model string) (*controlplanev1.RecordManagedReliantUsageResponse, error) {
-	req := connect.NewRequest(&controlplanev1.RecordManagedReliantUsageRequest{
-		ManagedKey: strings.TrimSpace(managedKey),
-		SpendUsd:   spendUSD,
-		Model:      strings.TrimSpace(model),
-	})
-	resp, err := c.billingClient().RecordManagedReliantUsage(ctx, req)
+func (c *connectClient) RecordManagedReliantUsage(ctx context.Context, managedKey string, usage ManagedReliantUsage) (*controlplanev1.RecordManagedReliantUsageResponse, error) {
+	msg := &controlplanev1.RecordManagedReliantUsageRequest{
+		ManagedKey:        strings.TrimSpace(managedKey),
+		SpendUsd:          usage.LegacySpendUSD,
+		Model:             strings.TrimSpace(usage.LegacyModel),
+		CanonicalModelId:  strings.TrimSpace(usage.CanonicalModelID),
+		InputTokens:       usage.InputTokens,
+		OutputTokens:      usage.OutputTokens,
+		CachedInputTokens: usage.CachedInputTokens,
+	}
+	if usage.ObservedCostUSD != nil {
+		msg.ObservedCostUsd = usage.ObservedCostUSD
+	}
+	resp, err := c.billingClient().RecordManagedReliantUsage(ctx, connect.NewRequest(msg))
 	if err != nil {
 		return nil, err
 	}

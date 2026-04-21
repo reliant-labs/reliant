@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	controlplanev1 "github.com/reliant-labs/reliant/internal/gen/controlplane/v1"
 	"github.com/reliant-labs/reliant/internal/llm"
@@ -16,8 +17,7 @@ import (
 type fakeManagedUsageControlPlaneClient struct {
 	calls      int
 	managedKey string
-	spendUSD   float64
-	model      string
+	usage      controlplane.ManagedReliantUsage
 	err        error
 }
 
@@ -33,15 +33,14 @@ func (f *fakeManagedUsageControlPlaneClient) RotateCurrentUserReliantAccess(cont
 	panic("unexpected call")
 }
 
-func (f *fakeManagedUsageControlPlaneClient) RecordManagedReliantUsage(_ context.Context, managedKey string, spendUSD float64, model string) (*controlplanev1.RecordManagedReliantUsageResponse, error) {
+func (f *fakeManagedUsageControlPlaneClient) RecordManagedReliantUsage(_ context.Context, managedKey string, usage controlplane.ManagedReliantUsage) (*controlplanev1.RecordManagedReliantUsageResponse, error) {
 	f.calls++
 	f.managedKey = managedKey
-	f.spendUSD = spendUSD
-	f.model = model
+	f.usage = usage
 	if f.err != nil {
 		return nil, f.err
 	}
-	return &controlplanev1.RecordManagedReliantUsageResponse{TotalSpendUsd: spendUSD}, nil
+	return &controlplanev1.RecordManagedReliantUsageResponse{TotalSpendUsd: usage.LegacySpendUSD}, nil
 }
 
 type fakeManagedUsageDriver struct {
@@ -98,7 +97,7 @@ func TestRecordManagedReliantUsage_SendsManagedReliantSpend(t *testing.T) {
 		name:  "reliant",
 		model: models.Model{ID: models.ModelID("claude-sonnet-4-5"), CostPer1MIn: 2, CostPer1MOut: 8},
 	}
-	usage := llm.TokenUsage{InputTokens: 1000, OutputTokens: 2000}
+	usage := llm.TokenUsage{InputTokens: 1000, OutputTokens: 2000, CachedInputTokens: 150}
 
 	activity.recordManagedReliantUsage(ctx, &db.Chat{ID: "chat-1", UserID: "user-1"}, driver, usage, nil)
 
@@ -109,11 +108,20 @@ func TestRecordManagedReliantUsage_SendsManagedReliantSpend(t *testing.T) {
 		t.Fatalf("managed key = %q, want rlnt_managed_key", cp.managedKey)
 	}
 	wantSpend := estimateManagedReliantSpendUSD(driver.model, usage)
-	if cp.spendUSD != wantSpend {
-		t.Fatalf("spend usd = %v, want %v", cp.spendUSD, wantSpend)
+	if cp.usage.LegacySpendUSD != wantSpend {
+		t.Fatalf("spend usd = %v, want %v", cp.usage.LegacySpendUSD, wantSpend)
 	}
-	if cp.model != "claude-sonnet-4-5" {
-		t.Fatalf("model = %q, want claude-sonnet-4-5", cp.model)
+	if cp.usage.LegacyModel != "claude-sonnet-4-5" {
+		t.Fatalf("legacy model = %q, want claude-sonnet-4-5", cp.usage.LegacyModel)
+	}
+	if cp.usage.CanonicalModelID != "claude-sonnet-4-5" {
+		t.Fatalf("canonical model = %q, want claude-sonnet-4-5", cp.usage.CanonicalModelID)
+	}
+	if cp.usage.InputTokens != 1000 || cp.usage.OutputTokens != 2000 || cp.usage.CachedInputTokens != 150 {
+		t.Fatalf("unexpected token usage payload: %+v", cp.usage)
+	}
+	if cp.usage.ObservedCostUSD == nil || *cp.usage.ObservedCostUSD != wantSpend {
+		t.Fatalf("observed cost = %v, want %v", cp.usage.ObservedCostUSD, wantSpend)
 	}
 }
 

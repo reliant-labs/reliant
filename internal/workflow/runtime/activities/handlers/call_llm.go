@@ -1553,11 +1553,20 @@ func (a *CallLLMActivity) recordManagedReliantUsage(ctx context.Context, chat *d
 	usageCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	modelID := string(driver.Model().ID)
-	if _, err := a.controlPlaneClient.RecordManagedReliantUsage(usageCtx, managedKey, spendUSD, modelID); err != nil {
-		logging.Warn("Failed to record managed Reliant usage", "chat_id", chat.ID, "user_id", chat.UserID, "model", modelID, "spend_usd", spendUSD, "error", err)
+	managedUsage := controlplane.ManagedReliantUsage{
+		LegacySpendUSD:    spendUSD,
+		LegacyModel:       modelID,
+		CanonicalModelID:  modelID,
+		InputTokens:       usage.InputTokens,
+		OutputTokens:      usage.OutputTokens,
+		CachedInputTokens: usage.CachedInputTokens,
+		ObservedCostUSD:   &spendUSD,
+	}
+	if _, err := a.controlPlaneClient.RecordManagedReliantUsage(usageCtx, managedKey, managedUsage); err != nil {
+		logging.Warn("Failed to record managed Reliant usage", "chat_id", chat.ID, "user_id", chat.UserID, "model", modelID, "spend_usd", spendUSD, "input_tokens", usage.InputTokens, "output_tokens", usage.OutputTokens, "cached_input_tokens", usage.CachedInputTokens, "error", err)
 		return
 	}
-	logging.Info("Recorded managed Reliant usage", "chat_id", chat.ID, "user_id", chat.UserID, "model", modelID, "spend_usd", spendUSD)
+	logging.Info("Recorded managed Reliant usage", "chat_id", chat.ID, "user_id", chat.UserID, "model", modelID, "spend_usd", spendUSD, "input_tokens", usage.InputTokens, "output_tokens", usage.OutputTokens, "cached_input_tokens", usage.CachedInputTokens)
 }
 
 func estimateManagedReliantSpendUSD(model models.Model, usage llm.TokenUsage) float64 {

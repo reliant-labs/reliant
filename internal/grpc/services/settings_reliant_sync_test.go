@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	controlplanev1 "github.com/reliant-labs/reliant/internal/gen/controlplane/v1"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
@@ -65,8 +66,8 @@ func (f *fakeControlPlaneClient) RotateCurrentUserReliantAccess(_ context.Contex
 	return f.rotateCurrentUserReliantAccessResp, f.rotateCurrentUserReliantAccessErr
 }
 
-func (f *fakeControlPlaneClient) RecordManagedReliantUsage(_ context.Context, managedKey string, spendUSD float64, model string) (*controlplanev1.RecordManagedReliantUsageResponse, error) {
-	return &controlplanev1.RecordManagedReliantUsageResponse{TotalSpendUsd: spendUSD}, nil
+func (f *fakeControlPlaneClient) RecordManagedReliantUsage(_ context.Context, managedKey string, usage controlplane.ManagedReliantUsage) (*controlplanev1.RecordManagedReliantUsageResponse, error) {
+	return &controlplanev1.RecordManagedReliantUsageResponse{TotalSpendUsd: usage.LegacySpendUSD}, nil
 }
 
 func newReliantSyncTestContext() context.Context {

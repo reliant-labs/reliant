@@ -16,6 +16,11 @@ func TestClient_RecordManagedReliantUsage_DoesNotAttachAuthorization(t *testing.
 	var gotManagedKey string
 	var gotSpend float64
 	var gotModel string
+	var gotCanonicalModel string
+	var gotInputTokens int64
+	var gotOutputTokens int64
+	var gotCachedInputTokens int64
+	var gotObservedCostUSD *float64
 
 	handler := connect.NewUnaryHandler(
 		controlplanev1connect.BillingServiceRecordManagedReliantUsageProcedure,
@@ -24,6 +29,11 @@ func TestClient_RecordManagedReliantUsage_DoesNotAttachAuthorization(t *testing.
 			gotManagedKey = req.Msg.GetManagedKey()
 			gotSpend = req.Msg.GetSpendUsd()
 			gotModel = req.Msg.GetModel()
+			gotCanonicalModel = req.Msg.GetCanonicalModelId()
+			gotInputTokens = req.Msg.GetInputTokens()
+			gotOutputTokens = req.Msg.GetOutputTokens()
+			gotCachedInputTokens = req.Msg.GetCachedInputTokens()
+			gotObservedCostUSD = req.Msg.ObservedCostUsd
 			return connect.NewResponse(&controlplanev1.RecordManagedReliantUsageResponse{TotalSpendUsd: req.Msg.GetSpendUsd()}), nil
 		},
 	)
@@ -31,7 +41,16 @@ func TestClient_RecordManagedReliantUsage_DoesNotAttachAuthorization(t *testing.
 	defer server.Close()
 
 	client := NewClient(server.URL)
-	resp, err := client.RecordManagedReliantUsage(context.Background(), " rlnt_test_key ", 1.75, " claude-sonnet-4-5 ")
+	observedCostUSD := 1.8
+	resp, err := client.RecordManagedReliantUsage(context.Background(), " rlnt_test_key ", ManagedReliantUsage{
+		LegacySpendUSD:    1.75,
+		LegacyModel:       " claude-sonnet-4-5 ",
+		CanonicalModelID:  " claude-4.5-sonnet ",
+		InputTokens:       1200,
+		OutputTokens:      300,
+		CachedInputTokens: 50,
+		ObservedCostUSD:   &observedCostUSD,
+	})
 	if err != nil {
 		t.Fatalf("RecordManagedReliantUsage: %v", err)
 	}
@@ -46,6 +65,15 @@ func TestClient_RecordManagedReliantUsage_DoesNotAttachAuthorization(t *testing.
 	}
 	if gotModel != "claude-sonnet-4-5" {
 		t.Fatalf("model = %q, want claude-sonnet-4-5", gotModel)
+	}
+	if gotCanonicalModel != "claude-4.5-sonnet" {
+		t.Fatalf("canonical model = %q, want claude-4.5-sonnet", gotCanonicalModel)
+	}
+	if gotInputTokens != 1200 || gotOutputTokens != 300 || gotCachedInputTokens != 50 {
+		t.Fatalf("unexpected token payload = %d/%d/%d, want 1200/300/50", gotInputTokens, gotOutputTokens, gotCachedInputTokens)
+	}
+	if gotObservedCostUSD == nil || *gotObservedCostUSD != observedCostUSD {
+		t.Fatalf("observed cost = %v, want %v", gotObservedCostUSD, observedCostUSD)
 	}
 	if resp.GetTotalSpendUsd() != 1.75 {
 		t.Fatalf("response total = %v, want 1.75", resp.GetTotalSpendUsd())
@@ -103,7 +131,7 @@ func TestClient_RecordManagedReliantUsage_PropagatesErrors(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL)
-	_, err := client.RecordManagedReliantUsage(context.Background(), "rlnt_test_key", 1.0, "claude-sonnet-4-5")
+	_, err := client.RecordManagedReliantUsage(context.Background(), "rlnt_test_key", ManagedReliantUsage{LegacySpendUSD: 1.0, LegacyModel: "claude-sonnet-4-5"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
