@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/llm"
-	llmtools "github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	llmtools "github.com/reliant-labs/reliant/internal/llm/tools"
 )
 
 func TestGeminiCompatibleToolParameters_FallsBackForBooleanItemsUnderAnyOf(t *testing.T) {

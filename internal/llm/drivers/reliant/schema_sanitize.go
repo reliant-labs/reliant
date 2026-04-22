@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/reliant-labs/reliant/internal/logging"
 	llmtools "github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/logging"
 )
 
 type schemaMapProvider interface {

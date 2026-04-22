@@ -16,11 +16,11 @@ import (
 )
 
 type fakeManagedUsageControlPlaneClient struct {
-	calls         int
-	managedKey    string
-	usage         controlplane.ManagedReliantUsage
-	ctxUserID     string
-	err           error
+	calls      int
+	managedKey string
+	usage      controlplane.ManagedReliantUsage
+	ctxUserID  string
+	err        error
 }
 
 func (f *fakeManagedUsageControlPlaneClient) GetCurrentUserReliantState(context.Context, string) (*controlplanev1.GetCurrentUserReliantStateResponse, error) {
