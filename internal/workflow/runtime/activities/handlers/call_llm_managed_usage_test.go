@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	controlplanev1 "github.com/reliant-labs/reliant/internal/gen/controlplane/v1"
@@ -15,10 +16,11 @@ import (
 )
 
 type fakeManagedUsageControlPlaneClient struct {
-	calls      int
-	managedKey string
-	usage      controlplane.ManagedReliantUsage
-	err        error
+	calls         int
+	managedKey    string
+	usage         controlplane.ManagedReliantUsage
+	ctxUserID     string
+	err           error
 }
 
 func (f *fakeManagedUsageControlPlaneClient) GetCurrentUserReliantState(context.Context, string) (*controlplanev1.GetCurrentUserReliantStateResponse, error) {
@@ -33,10 +35,13 @@ func (f *fakeManagedUsageControlPlaneClient) RotateCurrentUserReliantAccess(cont
 	panic("unexpected call")
 }
 
-func (f *fakeManagedUsageControlPlaneClient) RecordManagedReliantUsage(_ context.Context, managedKey string, usage controlplane.ManagedReliantUsage) (*controlplanev1.RecordManagedReliantUsageResponse, error) {
+func (f *fakeManagedUsageControlPlaneClient) RecordManagedReliantUsage(ctx context.Context, managedKey string, usage controlplane.ManagedReliantUsage) (*controlplanev1.RecordManagedReliantUsageResponse, error) {
 	f.calls++
 	f.managedKey = managedKey
 	f.usage = usage
+	if userID, ok := ctx.Value(auth.UserIDContextKey).(string); ok {
+		f.ctxUserID = userID
+	}
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -88,7 +93,7 @@ func TestRecordManagedReliantUsage_SendsManagedReliantSpend(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
-	ctx := context.Background()
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "user-1")
 	requireNoError(t, repo.SetProviderAPIKey(ctx, "user-1", "reliant", "rlnt_managed_key"))
 
 	cp := &fakeManagedUsageControlPlaneClient{}
@@ -106,6 +111,9 @@ func TestRecordManagedReliantUsage_SendsManagedReliantSpend(t *testing.T) {
 	}
 	if cp.managedKey != "rlnt_managed_key" {
 		t.Fatalf("managed key = %q, want rlnt_managed_key", cp.managedKey)
+	}
+	if cp.ctxUserID != "user-1" {
+		t.Fatalf("ctx user ID = %q, want user-1", cp.ctxUserID)
 	}
 	wantSpend := estimateManagedReliantSpendUSD(driver.model, usage)
 	if cp.usage.LegacySpendUSD != wantSpend {

@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	controlplanev1 "github.com/reliant-labs/reliant/internal/gen/controlplane/v1"
@@ -218,7 +219,40 @@ func TestSettingsService_SyncReliantProviderFailsWhenRotateReturnsNoPlaintext(t 
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 }
 
-func TestSettingsService_SyncReliantProviderRequiresAuthorizationHeader(t *testing.T) {
+func TestSettingsService_SyncReliantProviderAllowsMissingAuthorizationHeaderInDev(t *testing.T) {
+	t.Setenv("RELIANT_ENV", string(config.EnvironmentDev))
+
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+
+	cp := &fakeControlPlaneClient{
+		getCurrentUserReliantStateResp: &controlplanev1.GetCurrentUserReliantStateResponse{
+			ManagedAccess: &controlplanev1.ManagedReliantAccess{
+				InternalOrgId:  "org-1",
+				ActiveLlmKeyId: "key-1",
+			},
+		},
+		rotateCurrentUserReliantAccessResp: &controlplanev1.RotateCurrentUserReliantAccessResponse{
+			Rotated:      true,
+			PlaintextKey: "rlnt_dev_key",
+		},
+	}
+	svc := NewSettingsService(repo, nil)
+	svc.controlPlaneClient = cp
+
+	resp, err := svc.SyncReliantProvider(newReliantSyncTestContext(), connect.NewRequest(&reliantv1.SyncReliantProviderRequest{}))
+	require.NoError(t, err)
+	assert.True(t, resp.Msg.Success)
+	assert.Equal(t, "", cp.lastAuthHeader)
+
+	stored, err := repo.GetProviderAPIKey(newReliantSyncTestContext(), "test-user", "reliant")
+	require.NoError(t, err)
+	assert.Equal(t, "rlnt_dev_key", stored)
+}
+
+func TestSettingsService_SyncReliantProviderRequiresAuthorizationHeaderOutsideDev(t *testing.T) {
+	t.Setenv("RELIANT_ENV", string(config.EnvironmentProd))
+
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 

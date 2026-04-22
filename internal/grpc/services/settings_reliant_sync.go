@@ -8,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
@@ -68,7 +69,7 @@ func (s *SettingsService) markReliantSyncInitialized(ctx context.Context, userID
 func (s *SettingsService) SyncReliantProvider(ctx context.Context, req *connect.Request[reliantv1.SyncReliantProviderRequest]) (*connect.Response[reliantv1.SyncReliantProviderResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 	authHeader := strings.TrimSpace(req.Header().Get("Authorization"))
-	if authHeader == "" {
+	if authHeader == "" && !config.IsDevelopmentEnvironment() {
 		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("missing authorization header"))
 	}
 

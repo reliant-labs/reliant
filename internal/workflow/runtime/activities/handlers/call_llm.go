@@ -1550,7 +1550,7 @@ func (a *CallLLMActivity) recordManagedReliantUsage(ctx context.Context, chat *d
 		return
 	}
 
-	usageCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	usageCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	modelID := string(driver.Model().ID)
 	managedUsage := controlplane.ManagedReliantUsage{
