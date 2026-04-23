@@ -105,6 +105,10 @@ service BillingService {
   rpc GetCurrentUserReliantState(GetCurrentUserReliantStateRequest) returns (GetCurrentUserReliantStateResponse) {}
   rpc RepairCurrentUserReliantAccess(RepairCurrentUserReliantAccessRequest) returns (RepairCurrentUserReliantAccessResponse) {}
   rpc RotateCurrentUserReliantAccess(RotateCurrentUserReliantAccessRequest) returns (RotateCurrentUserReliantAccessResponse) {}
+  rpc CheckManagedReliantAffordability(CheckManagedReliantAffordabilityRequest) returns (CheckManagedReliantAffordabilityResponse) {}
+  rpc ReserveManagedReliantUsage(ReserveManagedReliantUsageRequest) returns (ReserveManagedReliantUsageResponse) {}
+  rpc FinalizeManagedReliantUsage(FinalizeManagedReliantUsageRequest) returns (FinalizeManagedReliantUsageResponse) {}
+  rpc ReleaseManagedReliantUsageReservation(ReleaseManagedReliantUsageReservationRequest) returns (ReleaseManagedReliantUsageReservationResponse) {}
   rpc RecordManagedReliantUsage(RecordManagedReliantUsageRequest) returns (RecordManagedReliantUsageResponse) {}
 }
 
@@ -134,6 +138,58 @@ message RotateCurrentUserReliantAccessResponse {
   bool replaced = 4;
   string plaintext_key = 5;
 }
+
+message CheckManagedReliantAffordabilityRequest {
+  string managed_key = 1;
+  double estimated_spend_usd = 2;
+  string model = 3;
+  string canonical_model_id = 4;
+  int64 estimated_input_tokens = 5;
+  int64 estimated_output_tokens = 6;
+}
+
+message CheckManagedReliantAffordabilityResponse {
+  int64 wallet_balance_usd_nanos = 1;
+  int64 required_spend_usd_nanos = 2;
+}
+
+message ReserveManagedReliantUsageRequest {
+  string managed_key = 1;
+  string reservation_id = 2;
+  double estimated_spend_usd = 3;
+  string model = 4;
+  string canonical_model_id = 5;
+  int64 estimated_input_tokens = 6;
+  int64 estimated_output_tokens = 7;
+}
+
+message ReserveManagedReliantUsageResponse {
+  int64 reserved_spend_usd_nanos = 1;
+  int64 wallet_balance_after_reservation_usd_nanos = 2;
+}
+
+message FinalizeManagedReliantUsageRequest {
+  string managed_key = 1;
+  string reservation_id = 2;
+  double spend_usd = 3;
+  string model = 4;
+  string canonical_model_id = 5;
+  int64 input_tokens = 6;
+  int64 output_tokens = 7;
+  int64 cached_input_tokens = 8;
+  optional double observed_cost_usd = 9;
+}
+
+message FinalizeManagedReliantUsageResponse {
+  double total_spend_usd = 1;
+}
+
+message ReleaseManagedReliantUsageReservationRequest {
+  string managed_key = 1;
+  string reservation_id = 2;
+}
+
+message ReleaseManagedReliantUsageReservationResponse {}
 
 message RecordManagedReliantUsageRequest {
   string managed_key = 1;

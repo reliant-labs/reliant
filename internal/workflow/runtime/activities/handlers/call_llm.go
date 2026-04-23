@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
@@ -35,6 +36,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/tokens"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
@@ -60,6 +62,12 @@ type streamProcessingState struct {
 
 	upstreamRequestID  string // Provider response header x-oai-request-id (if available)
 	upstreamProxymanID string // Provider response header x-proxyman-id (if available)
+}
+
+type ManagedReliantReservation struct {
+	ManagedKey    string
+	ReservationID string
+	ModelID       string
 }
 
 // ============================================================================
@@ -691,6 +699,11 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		}
 	}
 
+	reservation, err := a.reserveManagedReliantUsage(ctx, chat, driver, history, systemPrompts)
+	if err != nil {
+		return nil, err
+	}
+
 	// Stream response with cancellation support
 	llmCallStart := time.Now()
 	eventChan := driver.StreamResponse(streamCtx, systemPrompts, history, availableTools)
@@ -758,9 +771,13 @@ streamLoop:
 		}
 	}
 
-	// Track LLM call completion for analytics and managed spend sync.
+	// Track LLM call completion for analytics.
 	llmLatencyMs := time.Since(llmCallStart).Milliseconds()
 	a.trackLLMCallCompleted(ctx, chat, driver, llmLatencyMs, streamState.usage, streamErr)
+
+	if reservation != nil {
+		a.completeManagedReliantReservation(ctx, chat, driver, streamState.usage, streamErr, reservation)
+	}
 
 	if streamState.upstreamRequestID != "" || streamState.upstreamProxymanID != "" {
 		activity.GetLogger(ctx).Info("[CallLLM] Upstream correlation",
@@ -1523,50 +1540,150 @@ func (a *CallLLMActivity) trackLLMCallCompleted(ctx context.Context, chat *db.Ch
 
 	analyticsClient := analytics.GetClientForUser(ctx, chat.UserID)
 	analyticsClient.TrackLLMCallCompleted(metrics)
-
-	a.recordManagedReliantUsage(ctx, chat, driver, usage, streamErr)
 }
 
-func (a *CallLLMActivity) recordManagedReliantUsage(ctx context.Context, chat *db.Chat, driver llm.Driver, usage llm.TokenUsage, streamErr error) {
-	if streamErr != nil || chat == nil || strings.TrimSpace(chat.UserID) == "" || driver == nil || driver.Name() != "reliant" {
-		return
+func (a *CallLLMActivity) ReserveManagedReliantUsageForChat(ctx context.Context, chat *db.Chat, driver llm.Driver, history []message.Message, systemPrompts []string, controlPlaneClient controlplane.Client) (*ManagedReliantReservation, error) {
+	clone := *a
+	if controlPlaneClient != nil {
+		clone.controlPlaneClient = controlPlaneClient
 	}
-	if a.repo == nil || a.controlPlaneClient == nil {
+	return clone.reserveManagedReliantUsage(ctx, chat, driver, history, systemPrompts)
+}
+
+func (a *CallLLMActivity) CompleteManagedReliantReservationForChat(ctx context.Context, chat *db.Chat, driver llm.Driver, usage llm.TokenUsage, streamErr error, reservation *ManagedReliantReservation, controlPlaneClient controlplane.Client) {
+	clone := *a
+	if controlPlaneClient != nil {
+		clone.controlPlaneClient = controlPlaneClient
+	}
+	clone.completeManagedReliantReservation(ctx, chat, driver, usage, streamErr, reservation)
+}
+
+func (a *CallLLMActivity) reserveManagedReliantUsage(ctx context.Context, chat *db.Chat, driver llm.Driver, history []message.Message, systemPrompts []string) (*ManagedReliantReservation, error) {
+	managedKey, modelID, ok := a.managedReliantKey(ctx, chat, driver, "managed reservation")
+	if !ok {
+		return nil, nil
+	}
+
+	estimatedInputTokens, estimatedOutputTokens := estimateManagedReliantRequestTokens(driver.Model(), history, systemPrompts)
+	estimatedSpendUSD := estimateManagedReliantSpendUSD(driver.Model(), llm.TokenUsage{InputTokens: estimatedInputTokens, OutputTokens: estimatedOutputTokens})
+	if estimatedSpendUSD <= 0 {
+		return nil, nil
+	}
+
+	reservation := &ManagedReliantReservation{
+		ManagedKey:    managedKey,
+		ReservationID: uuid.NewString(),
+		ModelID:       modelID,
+	}
+	reserveCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	_, err := a.controlPlaneClient.ReserveManagedReliantUsage(reserveCtx, managedKey, controlplane.ManagedReliantReservationRequest{
+		ReservationID:         reservation.ReservationID,
+		EstimatedSpendUSD:     estimatedSpendUSD,
+		Model:                 modelID,
+		CanonicalModelID:      modelID,
+		EstimatedInputTokens:  estimatedInputTokens,
+		EstimatedOutputTokens: estimatedOutputTokens,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return reservation, nil
+}
+
+func (a *CallLLMActivity) completeManagedReliantReservation(ctx context.Context, chat *db.Chat, driver llm.Driver, usage llm.TokenUsage, streamErr error, reservation *ManagedReliantReservation) {
+	if reservation == nil || a.controlPlaneClient == nil {
 		return
 	}
 
-	managedKey, err := a.repo.GetProviderAPIKey(ctx, chat.UserID, "reliant")
-	if err != nil {
-		logging.Warn("Failed to load Reliant provider key for managed spend sync", "chat_id", chat.ID, "user_id", chat.UserID, "error", err)
-		return
-	}
-	managedKey = strings.TrimSpace(managedKey)
-	if !strings.HasPrefix(managedKey, "rlnt_") && !strings.HasPrefix(managedKey, "rly_") {
+	settleCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	if streamErr != nil {
+		if _, err := a.controlPlaneClient.ReleaseManagedReliantUsageReservation(settleCtx, reservation.ManagedKey, reservation.ReservationID); err != nil {
+			logging.Warn("Failed to release managed Reliant reservation", "chat_id", chatID(chat), "user_id", chatUserID(chat), "reservation_id", reservation.ReservationID, "error", err)
+		}
 		return
 	}
 
 	spendUSD := estimateManagedReliantSpendUSD(driver.Model(), usage)
 	if spendUSD <= 0 {
+		if _, err := a.controlPlaneClient.ReleaseManagedReliantUsageReservation(settleCtx, reservation.ManagedKey, reservation.ReservationID); err != nil {
+			logging.Warn("Failed to release zero-cost managed Reliant reservation", "chat_id", chatID(chat), "user_id", chatUserID(chat), "reservation_id", reservation.ReservationID, "error", err)
+		}
 		return
 	}
 
-	usageCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-	modelID := string(driver.Model().ID)
-	managedUsage := controlplane.ManagedReliantUsage{
-		LegacySpendUSD:    spendUSD,
-		LegacyModel:       modelID,
-		CanonicalModelID:  modelID,
+	_, err := a.controlPlaneClient.FinalizeManagedReliantUsage(settleCtx, reservation.ManagedKey, controlplane.ManagedReliantFinalizeRequest{
+		ReservationID:     reservation.ReservationID,
+		SpendUSD:          spendUSD,
+		Model:             reservation.ModelID,
+		CanonicalModelID:  reservation.ModelID,
 		InputTokens:       usage.InputTokens,
 		OutputTokens:      usage.OutputTokens,
 		CachedInputTokens: usage.CachedInputTokens,
 		ObservedCostUSD:   &spendUSD,
-	}
-	if _, err := a.controlPlaneClient.RecordManagedReliantUsage(usageCtx, managedKey, managedUsage); err != nil {
-		logging.Warn("Failed to record managed Reliant usage", "chat_id", chat.ID, "user_id", chat.UserID, "model", modelID, "spend_usd", spendUSD, "input_tokens", usage.InputTokens, "output_tokens", usage.OutputTokens, "cached_input_tokens", usage.CachedInputTokens, "error", err)
+	})
+	if err != nil {
+		logging.Warn("Failed to finalize managed Reliant reservation", "chat_id", chatID(chat), "user_id", chatUserID(chat), "reservation_id", reservation.ReservationID, "model", reservation.ModelID, "spend_usd", spendUSD, "input_tokens", usage.InputTokens, "output_tokens", usage.OutputTokens, "cached_input_tokens", usage.CachedInputTokens, "error", err)
 		return
 	}
-	logging.Info("Recorded managed Reliant usage", "chat_id", chat.ID, "user_id", chat.UserID, "model", modelID, "spend_usd", spendUSD, "input_tokens", usage.InputTokens, "output_tokens", usage.OutputTokens, "cached_input_tokens", usage.CachedInputTokens)
+	logging.Info("Finalized managed Reliant reservation", "chat_id", chatID(chat), "user_id", chatUserID(chat), "reservation_id", reservation.ReservationID, "model", reservation.ModelID, "spend_usd", spendUSD, "input_tokens", usage.InputTokens, "output_tokens", usage.OutputTokens, "cached_input_tokens", usage.CachedInputTokens)
+}
+
+func (a *CallLLMActivity) managedReliantKey(ctx context.Context, chat *db.Chat, driver llm.Driver, operation string) (string, string, bool) {
+	if chat == nil || strings.TrimSpace(chat.UserID) == "" || driver == nil || driver.Name() != "reliant" {
+		return "", "", false
+	}
+	if a.repo == nil || a.controlPlaneClient == nil {
+		return "", "", false
+	}
+
+	managedKey, err := a.repo.GetProviderAPIKey(ctx, chat.UserID, "reliant")
+	if err != nil {
+		logging.Warn("Failed to load Reliant provider key for managed wallet operation", "operation", operation, "chat_id", chat.ID, "user_id", chat.UserID, "error", err)
+		return "", "", false
+	}
+	managedKey = strings.TrimSpace(managedKey)
+	if !strings.HasPrefix(managedKey, "rlnt_") && !strings.HasPrefix(managedKey, "rly_") {
+		return "", "", false
+	}
+	return managedKey, string(driver.Model().ID), true
+}
+
+func chatID(chat *db.Chat) string {
+	if chat == nil {
+		return ""
+	}
+	return chat.ID
+}
+
+func chatUserID(chat *db.Chat) string {
+	if chat == nil {
+		return ""
+	}
+	return chat.UserID
+}
+
+func estimateManagedReliantRequestTokens(model models.Model, history []message.Message, systemPrompts []string) (int64, int64) {
+	estimatedInputTokens := int64(0)
+	for _, msg := range history {
+		if msg.TokenCount > 0 {
+			estimatedInputTokens += msg.TokenCount
+			continue
+		}
+		for _, textPart := range msg.TextContents() {
+			estimatedInputTokens += int64(tokens.EstimateTokens(textPart.Text))
+		}
+	}
+	for _, prompt := range systemPrompts {
+		estimatedInputTokens += int64(tokens.EstimateTokens(prompt))
+	}
+	estimatedOutputTokens := model.DefaultMaxTokens
+	if estimatedOutputTokens <= 0 {
+		estimatedOutputTokens = 4096
+	}
+	return estimatedInputTokens, estimatedOutputTokens
 }
 
 func estimateManagedReliantSpendUSD(model models.Model, usage llm.TokenUsage) float64 {
@@ -1576,7 +1693,7 @@ func estimateManagedReliantSpendUSD(model models.Model, usage llm.TokenUsage) fl
 
 	inputTokens := usage.InputTokens
 	outputTokens := usage.OutputTokens
-	cachedInputTokens := int64(0)
+	cachedInputTokens := usage.CachedInputTokens
 	if inputTokens == 0 && outputTokens == 0 {
 		inputTokens = usage.TokenCount
 	}

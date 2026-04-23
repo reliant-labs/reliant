@@ -16,11 +16,15 @@ import (
 )
 
 type fakeManagedUsageControlPlaneClient struct {
-	calls      int
-	managedKey string
-	usage      controlplane.ManagedReliantUsage
-	ctxUserID  string
-	err        error
+	reserveCalls  int
+	finalizeCalls int
+	releaseCalls  int
+	managedKey    string
+	reservationID string
+	reservation   controlplane.ManagedReliantReservationRequest
+	finalize      controlplane.ManagedReliantFinalizeRequest
+	ctxUserID     string
+	err           error
 }
 
 func (f *fakeManagedUsageControlPlaneClient) GetCurrentUserReliantState(context.Context, string) (*controlplanev1.GetCurrentUserReliantStateResponse, error) {
@@ -35,17 +39,53 @@ func (f *fakeManagedUsageControlPlaneClient) RotateCurrentUserReliantAccess(cont
 	panic("unexpected call")
 }
 
-func (f *fakeManagedUsageControlPlaneClient) RecordManagedReliantUsage(ctx context.Context, managedKey string, usage controlplane.ManagedReliantUsage) (*controlplanev1.RecordManagedReliantUsageResponse, error) {
-	f.calls++
+func (f *fakeManagedUsageControlPlaneClient) CheckManagedReliantAffordability(context.Context, string, controlplane.ManagedReliantAffordabilityRequest) (*controlplanev1.CheckManagedReliantAffordabilityResponse, error) {
+	panic("unexpected call")
+}
+
+func (f *fakeManagedUsageControlPlaneClient) ReserveManagedReliantUsage(ctx context.Context, managedKey string, request controlplane.ManagedReliantReservationRequest) (*controlplanev1.ReserveManagedReliantUsageResponse, error) {
+	f.reserveCalls++
 	f.managedKey = managedKey
-	f.usage = usage
+	f.reservationID = request.ReservationID
+	f.reservation = request
 	if userID, ok := ctx.Value(auth.UserIDContextKey).(string); ok {
 		f.ctxUserID = userID
 	}
 	if f.err != nil {
 		return nil, f.err
 	}
-	return &controlplanev1.RecordManagedReliantUsageResponse{TotalSpendUsd: usage.LegacySpendUSD}, nil
+	return &controlplanev1.ReserveManagedReliantUsageResponse{ReservedSpendUsdNanos: 250_000_000, WalletBalanceAfterReservationUsdNanos: 750_000_000}, nil
+}
+
+func (f *fakeManagedUsageControlPlaneClient) FinalizeManagedReliantUsage(ctx context.Context, managedKey string, request controlplane.ManagedReliantFinalizeRequest) (*controlplanev1.FinalizeManagedReliantUsageResponse, error) {
+	f.finalizeCalls++
+	f.managedKey = managedKey
+	f.reservationID = request.ReservationID
+	f.finalize = request
+	if userID, ok := ctx.Value(auth.UserIDContextKey).(string); ok {
+		f.ctxUserID = userID
+	}
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &controlplanev1.FinalizeManagedReliantUsageResponse{TotalSpendUsd: request.SpendUSD}, nil
+}
+
+func (f *fakeManagedUsageControlPlaneClient) ReleaseManagedReliantUsageReservation(ctx context.Context, managedKey, reservationID string) (*controlplanev1.ReleaseManagedReliantUsageReservationResponse, error) {
+	f.releaseCalls++
+	f.managedKey = managedKey
+	f.reservationID = reservationID
+	if userID, ok := ctx.Value(auth.UserIDContextKey).(string); ok {
+		f.ctxUserID = userID
+	}
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &controlplanev1.ReleaseManagedReliantUsageReservationResponse{}, nil
+}
+
+func (f *fakeManagedUsageControlPlaneClient) RecordManagedReliantUsage(context.Context, string, controlplane.ManagedReliantUsage) (*controlplanev1.RecordManagedReliantUsageResponse, error) {
+	panic("unexpected call")
 }
 
 type fakeManagedUsageDriver struct {
@@ -89,7 +129,67 @@ func TestEstimateManagedReliantSpendUSD_FallsBackToTokenCount(t *testing.T) {
 	}
 }
 
-func TestRecordManagedReliantUsage_SendsManagedReliantSpend(t *testing.T) {
+func TestReserveManagedReliantUsage_SendsManagedReliantEstimate(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "user-1")
+	requireNoError(t, repo.SetProviderAPIKey(ctx, "user-1", "reliant", "rlnt_managed_key"))
+
+	cp := &fakeManagedUsageControlPlaneClient{}
+	activity := &CallLLMActivity{repo: repo, controlPlaneClient: cp}
+	driver := fakeManagedUsageDriver{
+		name:  "reliant",
+		model: models.Model{ID: models.ModelID("claude-sonnet-4-5"), CostPer1MIn: 2, CostPer1MOut: 8, DefaultMaxTokens: 4096},
+	}
+	history := []message.Message{{TokenCount: 1000, Parts: []message.ContentPart{message.TextContent{Text: "hello"}}}}
+	prompts := []string{"You are helpful."}
+
+	reservation, err := activity.reserveManagedReliantUsage(ctx, &db.Chat{ID: "chat-1", UserID: "user-1"}, driver, history, prompts)
+	if err != nil {
+		t.Fatalf("reserveManagedReliantUsage: %v", err)
+	}
+	if reservation == nil {
+		t.Fatal("expected reservation")
+	}
+	if cp.reserveCalls != 1 {
+		t.Fatalf("reserve calls = %d, want 1", cp.reserveCalls)
+	}
+	if cp.managedKey != "rlnt_managed_key" {
+		t.Fatalf("managed key = %q, want rlnt_managed_key", cp.managedKey)
+	}
+	if cp.ctxUserID != "user-1" {
+		t.Fatalf("ctx user ID = %q, want user-1", cp.ctxUserID)
+	}
+	if cp.reservation.ReservationID == "" {
+		t.Fatal("expected reservation id")
+	}
+	if cp.reservation.EstimatedInputTokens <= 1000 {
+		t.Fatalf("estimated input tokens = %d, want > 1000", cp.reservation.EstimatedInputTokens)
+	}
+	if cp.reservation.EstimatedOutputTokens != 4096 {
+		t.Fatalf("estimated output tokens = %d, want 4096", cp.reservation.EstimatedOutputTokens)
+	}
+	if cp.reservation.EstimatedSpendUSD <= 0 {
+		t.Fatalf("estimated spend usd = %v, want > 0", cp.reservation.EstimatedSpendUSD)
+	}
+}
+
+func TestReserveManagedReliantUsage_PropagatesErrors(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "user-1")
+	requireNoError(t, repo.SetProviderAPIKey(ctx, "user-1", "reliant", "rlnt_managed_key"))
+	cp := &fakeManagedUsageControlPlaneClient{err: errors.New("boom")}
+	activity := &CallLLMActivity{repo: repo, controlPlaneClient: cp}
+	driver := fakeManagedUsageDriver{name: "reliant", model: models.Model{ID: models.ModelID("claude-sonnet-4-5"), CostPer1MIn: 2, CostPer1MOut: 8, DefaultMaxTokens: 4096}}
+	_, err := activity.reserveManagedReliantUsage(ctx, &db.Chat{ID: "chat-1", UserID: "user-1"}, driver, []message.Message{{TokenCount: 1000}}, []string{"You are helpful."})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestCompleteManagedReliantReservation_FinalizesManagedSpend(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
@@ -103,72 +203,113 @@ func TestRecordManagedReliantUsage_SendsManagedReliantSpend(t *testing.T) {
 		model: models.Model{ID: models.ModelID("claude-sonnet-4-5"), CostPer1MIn: 2, CostPer1MOut: 8},
 	}
 	usage := llm.TokenUsage{InputTokens: 1000, OutputTokens: 2000, CachedInputTokens: 150}
+	reservation := &ManagedReliantReservation{ManagedKey: "rlnt_managed_key", ReservationID: "res-123", ModelID: "claude-sonnet-4-5"}
 
-	activity.recordManagedReliantUsage(ctx, &db.Chat{ID: "chat-1", UserID: "user-1"}, driver, usage, nil)
+	activity.completeManagedReliantReservation(ctx, &db.Chat{ID: "chat-1", UserID: "user-1"}, driver, usage, nil, reservation)
 
-	if cp.calls != 1 {
-		t.Fatalf("record calls = %d, want 1", cp.calls)
+	if cp.finalizeCalls != 1 {
+		t.Fatalf("finalize calls = %d, want 1", cp.finalizeCalls)
 	}
-	if cp.managedKey != "rlnt_managed_key" {
-		t.Fatalf("managed key = %q, want rlnt_managed_key", cp.managedKey)
-	}
-	if cp.ctxUserID != "user-1" {
-		t.Fatalf("ctx user ID = %q, want user-1", cp.ctxUserID)
+	if cp.releaseCalls != 0 {
+		t.Fatalf("release calls = %d, want 0", cp.releaseCalls)
 	}
 	wantSpend := estimateManagedReliantSpendUSD(driver.model, usage)
-	if cp.usage.LegacySpendUSD != wantSpend {
-		t.Fatalf("spend usd = %v, want %v", cp.usage.LegacySpendUSD, wantSpend)
+	if cp.finalize.SpendUSD != wantSpend {
+		t.Fatalf("spend usd = %v, want %v", cp.finalize.SpendUSD, wantSpend)
 	}
-	if cp.usage.LegacyModel != "claude-sonnet-4-5" {
-		t.Fatalf("legacy model = %q, want claude-sonnet-4-5", cp.usage.LegacyModel)
+	if cp.finalize.ObservedCostUSD == nil || *cp.finalize.ObservedCostUSD != wantSpend {
+		t.Fatalf("observed cost = %v, want %v", cp.finalize.ObservedCostUSD, wantSpend)
 	}
-	if cp.usage.CanonicalModelID != "claude-sonnet-4-5" {
-		t.Fatalf("canonical model = %q, want claude-sonnet-4-5", cp.usage.CanonicalModelID)
-	}
-	if cp.usage.InputTokens != 1000 || cp.usage.OutputTokens != 2000 || cp.usage.CachedInputTokens != 150 {
-		t.Fatalf("unexpected token usage payload: %+v", cp.usage)
-	}
-	if cp.usage.ObservedCostUSD == nil || *cp.usage.ObservedCostUSD != wantSpend {
-		t.Fatalf("observed cost = %v, want %v", cp.usage.ObservedCostUSD, wantSpend)
+	if cp.finalize.InputTokens != 1000 || cp.finalize.OutputTokens != 2000 || cp.finalize.CachedInputTokens != 150 {
+		t.Fatalf("unexpected token usage payload: %+v", cp.finalize)
 	}
 }
 
-func TestRecordManagedReliantUsage_SkipsNonManagedOrFailedCalls(t *testing.T) {
-	t.Run("skips non reliant driver", func(t *testing.T) {
+func TestCompleteManagedReliantReservation_ReleasesOnFailure(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+	requireNoError(t, repo.SetProviderAPIKey(context.Background(), "user-1", "reliant", "rlnt_managed_key"))
+	cp := &fakeManagedUsageControlPlaneClient{}
+	activity := &CallLLMActivity{repo: repo, controlPlaneClient: cp}
+	reservation := &ManagedReliantReservation{ManagedKey: "rlnt_managed_key", ReservationID: "res-err", ModelID: "claude-sonnet-4-5"}
+	activity.completeManagedReliantReservation(context.Background(), &db.Chat{ID: "chat-1", UserID: "user-1"}, fakeManagedUsageDriver{name: "reliant", model: models.Model{ID: models.ModelID("claude-sonnet-4-5")}}, llm.TokenUsage{Cost: 1}, errors.New("boom"), reservation)
+	if cp.releaseCalls != 1 {
+		t.Fatalf("release calls = %d, want 1", cp.releaseCalls)
+	}
+	if cp.finalizeCalls != 0 {
+		t.Fatalf("finalize calls = %d, want 0", cp.finalizeCalls)
+	}
+}
+
+func TestCompleteManagedReliantReservation_ReleasesZeroSpend(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+	requireNoError(t, repo.SetProviderAPIKey(context.Background(), "user-1", "reliant", "rlnt_managed_key"))
+	cp := &fakeManagedUsageControlPlaneClient{}
+	activity := &CallLLMActivity{repo: repo, controlPlaneClient: cp}
+	reservation := &ManagedReliantReservation{ManagedKey: "rlnt_managed_key", ReservationID: "res-zero", ModelID: "claude-sonnet-4-5"}
+	activity.completeManagedReliantReservation(context.Background(), &db.Chat{ID: "chat-1", UserID: "user-1"}, fakeManagedUsageDriver{name: "reliant", model: models.Model{ID: models.ModelID("claude-sonnet-4-5")}}, llm.TokenUsage{}, nil, reservation)
+	if cp.releaseCalls != 1 {
+		t.Fatalf("release calls = %d, want 1", cp.releaseCalls)
+	}
+}
+
+func TestReserveManagedReliantUsage_SkipsNonManagedInputs(t *testing.T) {
+	t.Run("non reliant driver", func(t *testing.T) {
 		repo, cleanup := db.SetupTestDB(t)
 		defer cleanup()
 		requireNoError(t, repo.SetProviderAPIKey(context.Background(), "user-1", "reliant", "rlnt_managed_key"))
 		cp := &fakeManagedUsageControlPlaneClient{}
 		activity := &CallLLMActivity{repo: repo, controlPlaneClient: cp}
-		activity.recordManagedReliantUsage(context.Background(), &db.Chat{ID: "chat-1", UserID: "user-1"}, fakeManagedUsageDriver{name: "openai"}, llm.TokenUsage{Cost: 1}, nil)
-		if cp.calls != 0 {
-			t.Fatalf("record calls = %d, want 0", cp.calls)
+		reservation, err := activity.reserveManagedReliantUsage(context.Background(), &db.Chat{ID: "chat-1", UserID: "user-1"}, fakeManagedUsageDriver{name: "openai"}, nil, nil)
+		if err != nil || reservation != nil {
+			t.Fatalf("expected nil reservation, got %#v err=%v", reservation, err)
+		}
+		if cp.reserveCalls != 0 {
+			t.Fatalf("reserve calls = %d, want 0", cp.reserveCalls)
 		}
 	})
 
-	t.Run("skips non managed key", func(t *testing.T) {
+	t.Run("non managed key", func(t *testing.T) {
 		repo, cleanup := db.SetupTestDB(t)
 		defer cleanup()
 		requireNoError(t, repo.SetProviderAPIKey(context.Background(), "user-1", "reliant", "sk-test"))
 		cp := &fakeManagedUsageControlPlaneClient{}
 		activity := &CallLLMActivity{repo: repo, controlPlaneClient: cp}
-		activity.recordManagedReliantUsage(context.Background(), &db.Chat{ID: "chat-1", UserID: "user-1"}, fakeManagedUsageDriver{name: "reliant"}, llm.TokenUsage{Cost: 1}, nil)
-		if cp.calls != 0 {
-			t.Fatalf("record calls = %d, want 0", cp.calls)
+		reservation, err := activity.reserveManagedReliantUsage(context.Background(), &db.Chat{ID: "chat-1", UserID: "user-1"}, fakeManagedUsageDriver{name: "reliant", model: models.Model{ID: models.ModelID("claude-sonnet-4-5")}}, nil, nil)
+		if err != nil || reservation != nil {
+			t.Fatalf("expected nil reservation, got %#v err=%v", reservation, err)
+		}
+		if cp.reserveCalls != 0 {
+			t.Fatalf("reserve calls = %d, want 0", cp.reserveCalls)
 		}
 	})
+}
 
-	t.Run("skips errored stream", func(t *testing.T) {
-		repo, cleanup := db.SetupTestDB(t)
-		defer cleanup()
-		requireNoError(t, repo.SetProviderAPIKey(context.Background(), "user-1", "reliant", "rlnt_managed_key"))
-		cp := &fakeManagedUsageControlPlaneClient{}
-		activity := &CallLLMActivity{repo: repo, controlPlaneClient: cp}
-		activity.recordManagedReliantUsage(context.Background(), &db.Chat{ID: "chat-1", UserID: "user-1"}, fakeManagedUsageDriver{name: "reliant"}, llm.TokenUsage{Cost: 1}, errors.New("boom"))
-		if cp.calls != 0 {
-			t.Fatalf("record calls = %d, want 0", cp.calls)
-		}
-	})
+func TestReserveManagedReliantUsageForChat_UsesOverrideClient(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "user-1")
+	requireNoError(t, repo.SetProviderAPIKey(ctx, "user-1", "reliant", "rlnt_managed_key"))
+	activity := &CallLLMActivity{repo: repo}
+	cp := &fakeManagedUsageControlPlaneClient{}
+	driver := fakeManagedUsageDriver{name: "reliant", model: models.Model{ID: models.ModelID("claude-sonnet-4-5"), CostPer1MIn: 2, CostPer1MOut: 8, DefaultMaxTokens: 4096}}
+	reservation, err := activity.ReserveManagedReliantUsageForChat(ctx, &db.Chat{ID: "chat-1", UserID: "user-1"}, driver, []message.Message{{TokenCount: 1000}}, []string{"You are helpful."}, cp)
+	if err != nil || reservation == nil {
+		t.Fatalf("reservation=%#v err=%v", reservation, err)
+	}
+	if cp.reserveCalls != 1 {
+		t.Fatalf("reserve calls = %d, want 1", cp.reserveCalls)
+	}
+}
+
+func TestCompleteManagedReliantReservationForChat_UsesOverrideClient(t *testing.T) {
+	cp := &fakeManagedUsageControlPlaneClient{}
+	activity := &CallLLMActivity{}
+	activity.CompleteManagedReliantReservationForChat(context.Background(), &db.Chat{ID: "chat-1", UserID: "user-1"}, fakeManagedUsageDriver{name: "reliant", model: models.Model{ID: models.ModelID("claude-sonnet-4-5"), CostPer1MIn: 2, CostPer1MOut: 8}}, llm.TokenUsage{InputTokens: 1000, OutputTokens: 2000}, nil, &ManagedReliantReservation{ManagedKey: "rlnt_managed_key", ReservationID: "res-123", ModelID: "claude-sonnet-4-5"}, cp)
+	if cp.finalizeCalls != 1 {
+		t.Fatalf("finalize calls = %d, want 1", cp.finalizeCalls)
+	}
 }
 
 func requireNoError(t *testing.T, err error) {

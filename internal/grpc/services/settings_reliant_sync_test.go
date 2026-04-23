@@ -67,6 +67,22 @@ func (f *fakeControlPlaneClient) RotateCurrentUserReliantAccess(_ context.Contex
 	return f.rotateCurrentUserReliantAccessResp, f.rotateCurrentUserReliantAccessErr
 }
 
+func (f *fakeControlPlaneClient) CheckManagedReliantAffordability(_ context.Context, managedKey string, request controlplane.ManagedReliantAffordabilityRequest) (*controlplanev1.CheckManagedReliantAffordabilityResponse, error) {
+	return &controlplanev1.CheckManagedReliantAffordabilityResponse{}, nil
+}
+
+func (f *fakeControlPlaneClient) ReserveManagedReliantUsage(_ context.Context, managedKey string, request controlplane.ManagedReliantReservationRequest) (*controlplanev1.ReserveManagedReliantUsageResponse, error) {
+	return &controlplanev1.ReserveManagedReliantUsageResponse{}, nil
+}
+
+func (f *fakeControlPlaneClient) FinalizeManagedReliantUsage(_ context.Context, managedKey string, request controlplane.ManagedReliantFinalizeRequest) (*controlplanev1.FinalizeManagedReliantUsageResponse, error) {
+	return &controlplanev1.FinalizeManagedReliantUsageResponse{TotalSpendUsd: request.SpendUSD}, nil
+}
+
+func (f *fakeControlPlaneClient) ReleaseManagedReliantUsageReservation(_ context.Context, managedKey, reservationID string) (*controlplanev1.ReleaseManagedReliantUsageReservationResponse, error) {
+	return &controlplanev1.ReleaseManagedReliantUsageReservationResponse{}, nil
+}
+
 func (f *fakeControlPlaneClient) RecordManagedReliantUsage(_ context.Context, managedKey string, usage controlplane.ManagedReliantUsage) (*controlplanev1.RecordManagedReliantUsageResponse, error) {
 	return &controlplanev1.RecordManagedReliantUsageResponse{TotalSpendUsd: usage.LegacySpendUSD}, nil
 }

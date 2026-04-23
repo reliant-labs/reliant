@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfg "github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/gen/reliant/v1/reliantv1connect"
@@ -44,13 +45,14 @@ import (
 // ChatService implements the ChatService RPC handlers
 type ChatService struct {
 	reliantv1connect.UnimplementedChatServiceHandler
-	database     db.Repository
-	tempClient   client.Client
-	pauseService *workflow.PauseService
-	threads      *threads.Service
-	taskQueue    string
-	streamingHub streaming.StreamingHub
-	discussLocks sync.Map // per-chat lock to prevent concurrent discuss calls
+	database           db.Repository
+	tempClient         client.Client
+	pauseService       *workflow.PauseService
+	threads            *threads.Service
+	taskQueue          string
+	streamingHub       streaming.StreamingHub
+	controlPlaneClient controlplane.Client
+	discussLocks       sync.Map // per-chat lock to prevent concurrent discuss calls
 }
 
 // NewChatService creates a new ChatService
@@ -60,12 +62,13 @@ func NewChatService(database db.Repository, tempClient client.Client, pauseServi
 	}
 
 	return &ChatService{
-		database:     database,
-		tempClient:   tempClient,
-		pauseService: pauseService,
-		threads:      threads.NewService(database),
-		taskQueue:    taskQueue,
-		streamingHub: hub,
+		database:           database,
+		tempClient:         tempClient,
+		pauseService:       pauseService,
+		threads:            threads.NewService(database),
+		taskQueue:          taskQueue,
+		streamingHub:       hub,
+		controlPlaneClient: controlplane.NewClient(""),
 	}
 }
 
@@ -4207,12 +4210,19 @@ func (s *ChatService) handleDiscussMode(
 			"Keep your responses concise and helpful.",
 	}
 
+	activity := handlers.NewCallLLMActivity(s.database, s.streamingHub, nil, nil, nil, nil)
+	reservation, err := activity.ReserveManagedReliantUsageForChat(ctx, chat, driver, history, prompts, s.controlPlaneClient)
+	if err != nil {
+		return nil, err
+	}
+
 	eventCh := driver.StreamResponse(ctx, prompts, history, []tools.Tool{})
 
 	var fullContent string
 	blockIndex := 0
 	blockStarted := false
 	var streamErr error
+	var usage llm.TokenUsage
 
 	for event := range eventCh {
 		switch event.Type {
@@ -4254,8 +4264,11 @@ func (s *ChatService) handleDiscussMode(
 			blockStarted = false
 
 		case llm.EventComplete:
-			if event.Response != nil && event.Response.Content != "" && fullContent == "" {
-				fullContent = event.Response.Content
+			if event.Response != nil {
+				usage = event.Response.Usage
+				if event.Response.Content != "" && fullContent == "" {
+					fullContent = event.Response.Content
+				}
 			}
 
 		case llm.EventError:
@@ -4265,6 +4278,8 @@ func (s *ChatService) handleDiscussMode(
 			}
 		}
 	}
+
+	activity.CompleteManagedReliantReservationForChat(ctx, chat, driver, usage, streamErr, reservation, s.controlPlaneClient)
 
 	// Emit stream_cancelled delta on error so the frontend knows streaming ended
 	if streamErr != nil && s.streamingHub != nil {
