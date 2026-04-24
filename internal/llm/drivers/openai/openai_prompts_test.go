@@ -17,6 +17,11 @@ func TestSupportsOpenAIFamilyGuidance(t *testing.T) {
 		want  bool
 	}{
 		{
+			name:  "gpt-5.5 enabled",
+			model: models.Model{ID: models.GPT55, APIModel: "gpt-5.5"},
+			want:  true,
+		},
+		{
 			name:  "gpt-5.4 enabled",
 			model: models.Model{ID: models.GPT54, APIModel: "gpt-5.4"},
 			want:  true,

@@ -31,10 +31,10 @@ const (
 
 	// CodexVersion is the version header to send.
 	// Keep aligned with a current @openai/codex (CLI) release; backend may gate on this.
-	CodexVersion = "0.118.0"
+	CodexVersion = "0.124.0"
 
 	// CodexUserAgent is the user agent string
-	CodexUserAgent = "Codex Desktop/0.118.0 (Mac OS 26.2.0; arm64) unknown (Codex Desktop; 260409.0946)"
+	CodexUserAgent = "Codex Desktop/0.124.0"
 )
 
 // CodexClient implements the LLM driver interface for the Codex API

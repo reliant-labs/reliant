@@ -12,6 +12,7 @@ const Family models.Family = "codex"
 
 // SupportedModels lists the models that the Codex driver supports
 var SupportedModels = []models.ModelID{
+	models.GPT55,
 	models.GPT54,
 	models.GPT54Mini,
 	models.GPT52Codex,

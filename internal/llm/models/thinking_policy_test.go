@@ -12,6 +12,7 @@ func TestResolveThinkingCapability(t *testing.T) {
 		wantDef   string
 	}{
 		{name: "non reasoning model", canReason: false, modelID: "claude-4.5-haiku", driver: "anthropic", want: []string{}, wantDef: ""},
+		{name: "gpt-5.5 codex xhigh", canReason: true, modelID: "gpt-5.5", driver: "codex", want: []string{"low", "medium", "high", "xhigh"}, wantDef: "medium"},
 		{name: "gpt-5.4 codex xhigh", canReason: true, modelID: "gpt-5.4", driver: "codex", want: []string{"low", "medium", "high", "xhigh"}, wantDef: "medium"},
 		{name: "gpt-5.4-pro openai medium/high/xhigh", canReason: true, modelID: "gpt-5.4-pro", driver: "openai", want: []string{"medium", "high", "xhigh"}, wantDef: "medium"},
 		{name: "gpt-5.4-mini codex xhigh", canReason: true, modelID: "gpt-5.4-mini", driver: "codex", want: []string{"low", "medium", "high", "xhigh"}, wantDef: "medium"},
