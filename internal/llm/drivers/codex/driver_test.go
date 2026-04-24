@@ -563,12 +563,12 @@ func TestBuildParams_SparkOmitsReasoningSummaryAndInclude(t *testing.T) {
 	}
 }
 
-func TestBuildParams_GPT54IncludesReasoningSummaryAndInclude(t *testing.T) {
+func TestBuildParams_GPT55IncludesReasoningSummaryAndInclude(t *testing.T) {
 	client := &CodexClient{
 		options: llm.DriverOptions{
 			Model: models.Model{
-				ID:                   models.GPT54,
-				APIModel:             "gpt-5.4",
+				ID:                   models.GPT55,
+				APIModel:             "gpt-5.5",
 				CanReason:            true,
 				ReasoningSummaryMode: models.ReasoningSummaryAny,
 			},
@@ -587,7 +587,7 @@ func TestBuildParams_GPT54IncludesReasoningSummaryAndInclude(t *testing.T) {
 
 	params, err := client.buildParams([]string{"system prompt"}, messages, nil)
 	if err != nil {
-		t.Fatalf("expected buildParams to succeed for gpt-5.4, got error: %v", err)
+		t.Fatalf("expected buildParams to succeed for gpt-5.5, got error: %v", err)
 	}
 
 	b, err := json.Marshal(params)
@@ -597,13 +597,13 @@ func TestBuildParams_GPT54IncludesReasoningSummaryAndInclude(t *testing.T) {
 	jsonStr := string(b)
 
 	if !strings.Contains(jsonStr, "\"summary\":\"concise\"") {
-		t.Fatalf("expected gpt-5.4 params to include concise reasoning summary, got: %s", jsonStr)
+		t.Fatalf("expected gpt-5.5 params to include concise reasoning summary, got: %s", jsonStr)
 	}
 	if !strings.Contains(jsonStr, "\"include\"") {
-		t.Fatalf("expected gpt-5.4 params to include include list, got: %s", jsonStr)
+		t.Fatalf("expected gpt-5.5 params to include include list, got: %s", jsonStr)
 	}
-	if !strings.Contains(jsonStr, "\"model\":\"gpt-5.4\"") {
-		t.Fatalf("expected gpt-5.4 model in params, got: %s", jsonStr)
+	if !strings.Contains(jsonStr, "\"model\":\"gpt-5.5\"") {
+		t.Fatalf("expected gpt-5.5 model in params, got: %s", jsonStr)
 	}
 }
 

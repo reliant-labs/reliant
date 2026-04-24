@@ -11,7 +11,8 @@ const Family models.Family = "openai"
 
 // SupportedModels lists the models that the OpenAI driver supports
 var SupportedModels = []models.ModelID{
-	// GPT-5.2 / GPT-5.3 / GPT-5.4 family
+	// GPT-5.2 / GPT-5.3 / GPT-5.4 / GPT-5.5 family
+	models.GPT55,
 	models.GPT54,
 	models.GPT54Mini,
 	models.GPT54Pro,

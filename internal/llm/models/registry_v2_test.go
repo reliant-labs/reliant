@@ -573,11 +573,11 @@ func TestResolve_BySingleTag(t *testing.T) {
 	}
 }
 
-func TestResolve_CodexModerateUsesGPT54(t *testing.T) {
+func TestResolve_CodexModerateUsesGPT55(t *testing.T) {
 	reg := MustGetRegistry()
 
-	definition, ok := reg.GetDefinition("gpt-5.4")
-	require.True(t, ok, "expected gpt-5.4 to exist in registry")
+	definition, ok := reg.GetDefinition("gpt-5.5")
+	require.True(t, ok, "expected gpt-5.5 to exist in registry")
 	assert.Contains(t, definition.Tags, TagFlagship)
 	assert.Contains(t, definition.Tags, TagModerate)
 
@@ -587,7 +587,7 @@ func TestResolve_CodexModerateUsesGPT54(t *testing.T) {
 	flagship, err := reg.Resolve(ModelSelector{Tags: []string{TagFlagship}}, []string{"codex"})
 	require.NoError(t, err)
 
-	assert.Equal(t, "gpt-5.4", moderate.Definition.ID)
+	assert.Equal(t, "gpt-5.5", moderate.Definition.ID)
 	assert.Equal(t, flagship.Definition.ID, moderate.Definition.ID)
 	assert.Equal(t, flagship.Provider.Driver, moderate.Provider.Driver)
 }
