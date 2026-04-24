@@ -18,7 +18,7 @@ var openAIFamilyAgentGuidance string
 // shared GPT-5.x/Codex-style prompt contract.
 func SupportsOpenAIFamilyGuidance(model models.Model) bool {
 	switch model.ID {
-	case models.GPT54, models.GPT54Mini, models.GPT54Pro, models.GPT53Codex, models.GPT53CodexSpark, models.GPT52Codex, models.GPT52, models.GPT52Pro:
+	case models.GPT55, models.GPT54, models.GPT54Mini, models.GPT54Pro, models.GPT53Codex, models.GPT53CodexSpark, models.GPT52Codex, models.GPT52, models.GPT52Pro:
 		return true
 	}
 

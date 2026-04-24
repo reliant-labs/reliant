@@ -5,6 +5,18 @@ import "testing"
 func TestBuildThinkingCapabilityMatrix(t *testing.T) {
 	defs := []ModelDefinition{
 		{
+			ID:         "gpt-5.5",
+			Name:       "GPT-5.5",
+			Visibility: VisibilityUser,
+			Capabilities: ModelCapabilities{
+				CanReason: true,
+			},
+			Providers: []ProviderMapping{
+				{Driver: "codex", APIModel: "gpt-5.5"},
+				{Driver: "openai", APIModel: "gpt-5.5"},
+			},
+		},
+		{
 			ID:         "gpt-5.4",
 			Name:       "GPT-5.4",
 			Visibility: VisibilityUser,
@@ -73,10 +85,12 @@ func TestBuildThinkingCapabilityMatrix(t *testing.T) {
 	}
 
 	matrix := BuildThinkingCapabilityMatrix(defs)
-	if len(matrix) != 10 {
-		t.Fatalf("expected 10 matrix rows, got %d", len(matrix))
+	if len(matrix) != 12 {
+		t.Fatalf("expected 12 matrix rows, got %d", len(matrix))
 	}
 
+	var gpt55CodexRow *ThinkingCapabilityMatrixEntry
+	var gpt55OpenAIRow *ThinkingCapabilityMatrixEntry
 	var gpt54CodexRow *ThinkingCapabilityMatrixEntry
 	var gpt54OpenAIRow *ThinkingCapabilityMatrixEntry
 	var gpt54ProOpenAIRow *ThinkingCapabilityMatrixEntry
@@ -89,6 +103,10 @@ func TestBuildThinkingCapabilityMatrix(t *testing.T) {
 	for i := range matrix {
 		row := &matrix[i]
 		switch row.ModelID + "@" + row.DriverID {
+		case "gpt-5.5@codex":
+			gpt55CodexRow = row
+		case "gpt-5.5@openai":
+			gpt55OpenAIRow = row
 		case "gpt-5.4@codex":
 			gpt54CodexRow = row
 		case "gpt-5.4@openai":
@@ -108,6 +126,19 @@ func TestBuildThinkingCapabilityMatrix(t *testing.T) {
 		case "claude-4.5-haiku@anthropic":
 			noReasonRow = row
 		}
+	}
+
+	if gpt55CodexRow == nil {
+		t.Fatal("missing gpt-5.5 codex row")
+	}
+	if len(gpt55CodexRow.Levels) != 4 || gpt55CodexRow.Levels[3] != "xhigh" {
+		t.Fatalf("expected gpt-5.5 codex row to include xhigh, got %v", gpt55CodexRow.Levels)
+	}
+	if gpt55OpenAIRow == nil {
+		t.Fatal("missing gpt-5.5 openai row")
+	}
+	if len(gpt55OpenAIRow.Levels) != 4 || gpt55OpenAIRow.Levels[3] != "xhigh" {
+		t.Fatalf("expected gpt-5.5 openai row to include xhigh, got %v", gpt55OpenAIRow.Levels)
 	}
 
 	if gpt54CodexRow == nil {

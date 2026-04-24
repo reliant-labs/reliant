@@ -26,6 +26,8 @@ var (
 	// thinkingLevelOverrides is an explicit model+driver capability matrix.
 	// Key format: "<model_id>@<driver_id>"
 	thinkingLevelOverrides = map[string][]string{
+		"gpt-5.5@codex":                             xhighThinkingLevels,
+		"gpt-5.5@openai":                            xhighThinkingLevels,
 		"gpt-5.4@codex":                             xhighThinkingLevels,
 		"gpt-5.4@openai":                            xhighThinkingLevels,
 		"gpt-5.4-pro@openai":                        []string{"medium", "high", "xhigh"},

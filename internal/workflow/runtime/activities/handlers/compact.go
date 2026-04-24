@@ -281,7 +281,7 @@ func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *d
 	}
 
 	// Select the best available model for compaction based on user's API keys
-	// Priority order: Claude (best reasoning) > GPT-5.4 Pro > GPT-5.2 Pro > Codex models > Gemini 2.5 Pro
+	// Priority order: Claude (best reasoning) > GPT-5.4 Pro > GPT-5.2 Pro > GPT-5.5/Codex models > Gemini 2.5 Pro
 	// Compaction uses a fixed tier of good summarization models
 	// No chat fallback - model is not stored on chat anymore
 	compactionTier := []models.ModelID{
@@ -289,6 +289,7 @@ func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *d
 		models.Claude45Sonnet, // Fallback: previous Sonnet generation
 		models.GPT54Pro,       // Very good: Strongest OpenAI reasoning model
 		models.GPT52Pro,       // Very good: Strong general capabilities
+		models.GPT55,          // Very good: Latest GPT-5 generation on OpenAI/Codex
 		models.GPT53Codex,     // Very good: Codex flagship with reasoning
 		models.GPT52Codex,     // Very good: Codex flagship with reasoning
 		models.Gemini25Pro,    // Good: Strong multimodal and reasoning

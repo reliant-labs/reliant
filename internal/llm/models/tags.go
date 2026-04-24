@@ -78,7 +78,8 @@ var TagModelMapping = map[ModelTag][]ModelID{
 		// Balanced capability/cost models
 		Claude46Sonnet,      // Anthropic
 		Claude45Sonnet,      // Anthropic (fallback)
-		GPT54,               // OpenAI
+		GPT55,               // OpenAI
+		GPT54,               // OpenAI (fallback)
 		GPT52,               // OpenAI (fallback)
 		Gemini3FlashPreview, // Google
 		Gemini25Flash,       // Google (fallback)

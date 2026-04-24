@@ -26,7 +26,7 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.2.0
 	github.com/nats-io/nats.go v1.49.0
 	github.com/ncruces/go-sqlite3 v0.25.0
-	github.com/openai/openai-go/v3 v3.31.0
+	github.com/openai/openai-go/v3 v3.32.0
 	github.com/pressly/goose/v3 v3.24.2
 	github.com/prometheus/client_golang v1.23.2
 	github.com/spf13/cobra v1.10.2

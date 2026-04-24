@@ -11,6 +11,8 @@ func TestSupportedThinkingLevelsForModelDriver(t *testing.T) {
 		want      []string
 	}{
 		{name: "non-reasoning model", canReason: false, modelID: "claude-4.5-haiku", driver: "anthropic", want: []string{}},
+		{name: "gpt-5.5 codex supports xhigh", canReason: true, modelID: "gpt-5.5", driver: "codex", want: []string{"low", "medium", "high", "xhigh"}},
+		{name: "gpt-5.5 openai supports xhigh", canReason: true, modelID: "gpt-5.5", driver: "openai", want: []string{"low", "medium", "high", "xhigh"}},
 		{name: "gpt-5.4 codex supports xhigh", canReason: true, modelID: "gpt-5.4", driver: "codex", want: []string{"low", "medium", "high", "xhigh"}},
 		{name: "gpt-5.4 openai supports xhigh", canReason: true, modelID: "gpt-5.4", driver: "openai", want: []string{"low", "medium", "high", "xhigh"}},
 		{name: "gpt-5.4-mini codex supports xhigh", canReason: true, modelID: "gpt-5.4-mini", driver: "codex", want: []string{"low", "medium", "high", "xhigh"}},
@@ -40,6 +42,12 @@ func TestSupportedThinkingLevelsForModelDriver(t *testing.T) {
 }
 
 func TestSupportsThinkingLevelForModelDriver(t *testing.T) {
+	if !SupportsThinkingLevelForModelDriver(true, "gpt-5.5", "codex", "xhigh") {
+		t.Fatal("expected gpt-5.5 on codex to support xhigh")
+	}
+	if !SupportsThinkingLevelForModelDriver(true, "gpt-5.5", "openai", "xhigh") {
+		t.Fatal("expected gpt-5.5 on openai to support xhigh")
+	}
 	if SupportsThinkingLevelForModelDriver(true, "gpt-5.2-codex", "openai", "xhigh") {
 		t.Fatal("expected gpt-5.2-codex on openai to reject xhigh")
 	}
