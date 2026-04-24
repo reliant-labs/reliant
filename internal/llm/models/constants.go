@@ -18,6 +18,7 @@ const (
 	GPT52Pro        ModelID = "gpt-5.2-pro"
 	GPT54           ModelID = "gpt-5.4"
 	GPT54Pro        ModelID = "gpt-5.4-pro"
+	GPT55           ModelID = "gpt-5.5"
 	GPT52Codex      ModelID = "gpt-5.2-codex"
 	GPT53Codex      ModelID = "gpt-5.3-codex"
 	GPT53CodexSpark ModelID = "gpt-5.3-codex-spark"

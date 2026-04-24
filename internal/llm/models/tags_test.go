@@ -109,6 +109,7 @@ func TestResolveTag(t *testing.T) {
 		Claude46Sonnet: {ID: Claude46Sonnet, Name: "Claude 4.6 Sonnet"},
 		Claude45Sonnet: {ID: Claude45Sonnet, Name: "Claude 4.5 Sonnet"},
 		Claude46Opus:   {ID: Claude46Opus, Name: "Claude 4.6 Opus"},
+		GPT55:          {ID: GPT55, Name: "GPT-5.5"},
 		GPT54:          {ID: GPT54, Name: "GPT-5.4"},
 		GPT54Mini:      {ID: GPT54Mini, Name: "GPT-5.4 Mini"},
 		GPT54Pro:       {ID: GPT54Pro, Name: "GPT-5.4 Pro"},
@@ -133,6 +134,19 @@ func TestResolveTag(t *testing.T) {
 				t.Errorf("ResolveTag(%q) = %v, want %v", tt.tag, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestResolveTag_PrefersGPT55WhenAnthropicDefaultsUnavailable(t *testing.T) {
+	availableModels := map[ModelID]Model{
+		GPT55: {ID: GPT55, Name: "GPT-5.5"},
+		GPT54: {ID: GPT54, Name: "GPT-5.4"},
+		GPT52: {ID: GPT52, Name: "GPT-5.2"},
+	}
+
+	got := ResolveTag("@default", availableModels)
+	if got != GPT55 {
+		t.Fatalf("ResolveTag(@default) = %v, want %v", got, GPT55)
 	}
 }
 
