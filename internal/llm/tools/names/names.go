@@ -72,8 +72,7 @@ const (
 	// Metadata tools
 	ToolMetadataWriter = "metadata_writer"
 
-	// Layout & component tools
-	ToolLayoutLibrary    = "layout_library"
+	// Component tools
 	ToolComponentLibrary = "component_library"
 
 	// Workflow editing tools
@@ -135,7 +134,6 @@ var AllToolNames = []string{
 	ToolMoveCode,
 	ToolSaveRecommendations,
 	ToolMetadataWriter,
-	ToolLayoutLibrary,
 	ToolComponentLibrary,
 	// Workflow editing
 	ToolCreateWorkflow, ToolEditWorkflow, ToolWriteWorkflow,

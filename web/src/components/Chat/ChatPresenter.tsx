@@ -11,6 +11,7 @@ import { GripHorizontal, GripVertical } from "lucide-react";
 import { ChatInputWrapper } from "./ChatInputWrapper";
 import { ChatThinkingIndicator } from "./ChatThinkingIndicator";
 import { ChatMessagesContainer } from "./ChatMessagesContainer";
+import { ScrollToBottomButton } from "./ScrollToBottomButton";
 import { PermissionsPanelWrapper } from "./PermissionsPanelWrapper";
 import { PermissionsPanel } from "./PermissionsPanel";
 import { ChatHeader } from "./ChatHeader";
@@ -311,10 +312,16 @@ export const ChatPresenter = memo(function ChatPresenter({
   const [virtuosoAtBottom, setVirtuosoAtBottom] = useState(true);
   // Keep a ref in sync for use in effects that need the latest value without re-triggering
   const virtuosoAtBottomRef = useRef(true);
+  // Resume-follow callback registered by InterleavedTimeline — resets userScrolledUpRef
+  const resumeFollowRef = useRef<(() => void) | null>(null);
 
   const handleAtBottomStateChange = useCallback((atBottom: boolean) => {
     virtuosoAtBottomRef.current = atBottom;
     setVirtuosoAtBottom(atBottom);
+  }, []);
+
+  const handleResumeFollow = useCallback((cb: () => void) => {
+    resumeFollowRef.current = cb;
   }, []);
 
   // Scroll state from ChatMessagesContainer
@@ -338,9 +345,14 @@ export const ChatPresenter = memo(function ChatPresenter({
   const prevHasThinkingFooterRef = useRef(false);
   useEffect(() => {
     if (hasThinkingFooter && !prevHasThinkingFooterRef.current && virtuosoAtBottomRef.current) {
-      // Footer just appeared and user was at the bottom — scroll to show it
+      // Footer just appeared and user was at the bottom — use resumeFollow
+      // to avoid the programmatic scroll being mistaken for user scroll-up
       requestAnimationFrame(() => {
-        virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end", behavior: "auto" });
+        if (resumeFollowRef.current) {
+          resumeFollowRef.current();
+        } else {
+          virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end", behavior: "auto" });
+        }
       });
     }
     prevHasThinkingFooterRef.current = hasThinkingFooter;
@@ -365,6 +377,7 @@ export const ChatPresenter = memo(function ChatPresenter({
         isStreaming={isChatBusy}
         virtuosoRef={virtuosoRef}
         onAtBottomStateChange={handleAtBottomStateChange}
+        onResumeFollow={handleResumeFollow}
         footer={thinkingFooter}
         onSelectThread={setSelectedThreadId}
       />
@@ -375,7 +388,7 @@ export const ChatPresenter = memo(function ChatPresenter({
     <div className="flex h-full layout-stable relative flex-1 min-w-0 min-h-0">
       {/* Main chat area */}
       <div
-        className={isWorkflowViewerExpanded && workflowViewerMode === 'side' ? "hidden" : "flex flex-col flex-1 min-w-0 min-h-0"}
+        className={isWorkflowViewerExpanded && workflowViewerMode === 'side' ? "hidden" : "flex flex-col flex-1 min-w-0 min-h-0 relative"}
         data-testid="chat-interface"
       >
         {/* Chat Header */}
@@ -463,6 +476,7 @@ export const ChatPresenter = memo(function ChatPresenter({
           onScrollStateChange={setScrollState}
           virtuosoRef={virtuosoRef}
           virtuosoAtBottom={virtuosoAtBottom}
+          resumeFollowRef={resumeFollowRef}
         >
           {(messages.length > 0 ||
             runOutputs.length > 0 ||
@@ -499,6 +513,12 @@ export const ChatPresenter = memo(function ChatPresenter({
           </div>
         )}
 
+
+        {/* Floating scroll-to-bottom button */}
+        <ScrollToBottomButton
+          visible={!!(scrollState?.hasScrolledUp)}
+          onClick={() => scrollState?.scrollToBottom()}
+        />
 
         {/* Input Area - Collapsible when not focused, hidden when workflow viewer is expanded in inline mode */}
         {!(isWorkflowViewerExpanded && workflowViewerMode === 'inline') && isFocused ? (

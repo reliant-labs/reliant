@@ -9,6 +9,7 @@ import (
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
+	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/core"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -177,6 +178,9 @@ func (e *InlineWorkflowExecutor) GetThread() string {
 // loadAndMergePresets loads presets specified on the node and merges their params into subInputs.
 // Presets are merged as a base layer - explicit args will override these values later.
 //
+// Preset names may contain CEL {{...}} template expressions which are evaluated
+// against the current workflow inputs + node outputs before loading.
+//
 // The presets map can target:
 // - "default": params are applied directly to top-level inputs
 // - "GroupName": params are applied as "GroupName.param" keys
@@ -196,6 +200,27 @@ func (e *InlineWorkflowExecutor) loadAndMergePresets(subInputs map[string]interf
 		"presets", presets,
 	)
 
+	evalCtx := &wfcel.EdgeEvalContext{
+		Nodes:  e.nodeOutputs,
+		Inputs: e.workflowInputs,
+	}
+	return applyPresets(presets, subInputs, evalCtx, e.loadPresetParams, e.logger, e.nodeID)
+}
+
+// presetLoaderFunc loads a preset's params by name. Extracted for testability.
+type presetLoaderFunc func(presetName string) (map[string]interface{}, error)
+
+// applyPresets resolves CEL templates in preset names, loads each preset via the
+// given loader, and merges the resulting params into subInputs. This is a pure
+// helper (no Temporal dependency) so it can be unit-tested with a fake loader.
+func applyPresets(
+	presets map[string]string,
+	subInputs map[string]interface{},
+	evalCtx *wfcel.EdgeEvalContext,
+	loader presetLoaderFunc,
+	logger log.Logger,
+	nodeID string,
+) error {
 	// Sort preset group names for deterministic activity scheduling order.
 	// Map iteration order is non-deterministic, which would cause different
 	// activity scheduling order on replay, triggering non-determinism errors.
@@ -205,49 +230,84 @@ func (e *InlineWorkflowExecutor) loadAndMergePresets(subInputs map[string]interf
 	}
 	sort.Strings(groupNames)
 
-	// Load each preset via activity and merge params
 	for _, groupName := range groupNames {
-		presetName := presets[groupName]
-		if presetName == "" {
+		rawPresetName := presets[groupName]
+		if rawPresetName == "" {
 			continue
 		}
 
-		params, err := e.loadPresetParams(presetName)
+		resolvedPresetName, err := ResolvePresetName(rawPresetName, evalCtx)
 		if err != nil {
-			e.logger.Warn("[InlineWorkflow] Failed to load preset",
-				"nodeID", e.nodeID,
-				"preset", presetName,
+			// Match existing "failed to load preset → skip" pattern.
+			logger.Warn("[InlineWorkflow] Failed to resolve preset template",
+				"nodeID", nodeID,
+				"group", groupName,
+				"template", rawPresetName,
+				"error", err,
+			)
+			continue
+		}
+
+		if resolvedPresetName != rawPresetName {
+			logger.Info("[InlineWorkflow] Resolved preset template",
+				"nodeID", nodeID,
+				"group", groupName,
+				"template", rawPresetName,
+				"resolved", resolvedPresetName,
+			)
+		}
+
+		if resolvedPresetName == "" {
+			logger.Info("[InlineWorkflow] Skipping empty preset name after template evaluation",
+				"nodeID", nodeID,
+				"group", groupName,
+				"template", rawPresetName,
+			)
+			continue
+		}
+
+		params, err := loader(resolvedPresetName)
+		if err != nil {
+			logger.Warn("[InlineWorkflow] Failed to load preset",
+				"nodeID", nodeID,
+				"preset", resolvedPresetName,
 				"group", groupName,
 				"error", err,
 			)
 			continue // Skip failed presets, don't fail the whole workflow
 		}
 
-		// Merge params into subInputs (nested: group params under subInputs[groupName])
-		if groupName == DefaultPresetGroup {
-			for paramName, paramValue := range params {
-				subInputs[paramName] = paramValue
-			}
-		} else {
-			groupMap, _ := subInputs[groupName].(map[string]interface{})
-			if groupMap == nil {
-				groupMap = make(map[string]interface{})
-				subInputs[groupName] = groupMap
-			}
-			for paramName, paramValue := range params {
-				groupMap[paramName] = paramValue
-			}
-		}
+		mergePresetParams(subInputs, groupName, params)
 
-		e.logger.Info("[InlineWorkflow] Applied preset params",
-			"nodeID", e.nodeID,
-			"preset", presetName,
+		logger.Info("[InlineWorkflow] Applied preset params",
+			"nodeID", nodeID,
+			"preset", resolvedPresetName,
 			"group", groupName,
 			"paramCount", len(params),
 		)
 	}
 
 	return nil
+}
+
+// mergePresetParams merges a single preset's params into subInputs under the
+// given group. The default group is flattened onto the top-level; named groups
+// are nested under subInputs[groupName].
+func mergePresetParams(subInputs map[string]interface{}, groupName string, params map[string]interface{}) {
+	if groupName == DefaultPresetGroup {
+		for paramName, paramValue := range params {
+			subInputs[paramName] = paramValue
+		}
+		return
+	}
+	groupMap, _ := subInputs[groupName].(map[string]interface{})
+	if groupMap == nil {
+		groupMap = make(map[string]interface{})
+		subInputs[groupName] = groupMap
+	}
+	for paramName, paramValue := range params {
+		groupMap[paramName] = paramValue
+	}
 }
 
 // loadPresetParams loads a preset by name and returns its params.

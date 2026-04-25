@@ -46,8 +46,7 @@ const config = {
 
   files: [
     "src/**/*",
-    "build/**/*",
-    "cli/**/*"
+    "build/**/*"
   ],
 
   extraResources: [
@@ -59,11 +58,6 @@ const config = {
     {
       from: "../web/dist",
       to: "web",
-      filter: ["**/*"]
-    },
-    {
-      from: "cli",
-      to: "cli",
       filter: ["**/*"]
     },
     {

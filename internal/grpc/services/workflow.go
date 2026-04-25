@@ -26,6 +26,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
+	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 )
 
 // WorkflowService implements the WorkflowService RPC handlers
@@ -479,7 +480,7 @@ func (s *WorkflowService) SaveWorkflow(
 	}
 
 	// Validate workflow using YAML-based validation
-	validationResult, valErr := v2.ValidateYAMLResult(definitionYAML, nil)
+	validationResult, valErr := v2.ValidateYAMLResult(definitionYAML, s.createValidationWorkflowLoader(ctx, userID))
 	if valErr != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to validate workflow: %w", valErr))
 	}
@@ -1104,7 +1105,7 @@ func (s *WorkflowService) ImportWorkflow(
 	}
 
 	// Validate using YAML-based validation
-	validationResult, valErr := v2.ValidateYAMLResult(req.Msg.YamlContent, nil)
+	validationResult, valErr := v2.ValidateYAMLResult(req.Msg.YamlContent, s.createValidationWorkflowLoader(ctx, userID))
 	if valErr != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to validate workflow: %w", valErr))
 	}
@@ -1313,6 +1314,8 @@ func (s *WorkflowService) ValidateWorkflow(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow is required"))
 	}
 
+	userID := auth.MustGetUserID(ctx)
+
 	// For builtin workflows, load the YAML directly from the embedded filesystem
 	// This preserves all fields including inline workflow outputs
 	var yamlBytes []byte
@@ -1327,7 +1330,6 @@ func (s *WorkflowService) ValidateWorkflow(
 	} else {
 		// Look up the stored draft from database - this has the complete YAML definition
 		// The proto sent from frontend loses node-specific fields like inline workflow outputs
-		userID := auth.MustGetUserID(ctx)
 		slug := generateSlug(protoWf.Name)
 		draft, err := s.database.GetWorkflowDraftBySlug(ctx, userID, slug)
 		if err != nil {
@@ -1348,7 +1350,7 @@ func (s *WorkflowService) ValidateWorkflow(
 	}
 
 	// Validate using YAML-based validation
-	result, valErr := v2.ValidateYAMLResult(yamlBytes, nil)
+	result, valErr := v2.ValidateYAMLResult(yamlBytes, s.createValidationWorkflowLoader(ctx, userID))
 	if valErr != nil {
 		// Parse/conversion error - return as validation error
 		return connect.NewResponse(&reliantv1.ValidateWorkflowResponse{
@@ -1381,4 +1383,31 @@ func (s *WorkflowService) ValidateWorkflow(
 		Valid:  false,
 		Errors: protoErrors,
 	}), nil
+}
+
+// createValidationWorkflowLoader creates a WorkflowLoader for validation.
+// It resolves builtin:// refs from the embedded FS and user workflows from the database.
+func (s *WorkflowService) createValidationWorkflowLoader(ctx context.Context, userID string) v2.WorkflowLoader {
+	return func(ref string) (*reliantv1.Workflow, error) {
+		// Handle builtin:// protocol
+		if strings.HasPrefix(ref, "builtin://") {
+			name := strings.TrimPrefix(ref, "builtin://")
+			data, err := builtin.BuiltinWorkflowsFS.ReadFile(name + ".yaml")
+			if err != nil {
+				return nil, nil // not found — let validation continue
+			}
+			return wfyaml.ParseWorkflow(data)
+		}
+
+		// Try loading user workflow draft from DB
+		slug := generateSlug(ref)
+		if slug == "" {
+			return nil, nil
+		}
+		draft, err := s.database.GetWorkflowDraftBySlug(ctx, userID, slug)
+		if err != nil || draft == nil || draft.Definition == "" {
+			return nil, nil // not found — let validation continue
+		}
+		return wfyaml.ParseWorkflow([]byte(draft.Definition))
+	}
 }

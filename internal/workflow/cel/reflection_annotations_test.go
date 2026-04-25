@@ -83,22 +83,6 @@ func TestExtractFieldInfo_CallLLMArgs_Annotations(t *testing.T) {
 		}
 	})
 
-	t.Run("tools", func(t *testing.T) {
-		f, ok := byName["tools"]
-		if !ok {
-			t.Fatal("Expected 'tools' field")
-		}
-		if f.DefaultValue != "true" {
-			t.Errorf("default_value: want %q, got %q", "true", f.DefaultValue)
-		}
-		if f.Type != "bool" {
-			t.Errorf("type: want %q, got %q", "bool", f.Type)
-		}
-		if !f.Hidden {
-			t.Error("expected tools.Hidden = true (redundant with tool_filter)")
-		}
-	})
-
 	t.Run("system_prompt", func(t *testing.T) {
 		f, ok := byName["system_prompt"]
 		if !ok {

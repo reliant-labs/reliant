@@ -2,19 +2,24 @@
 
 # Reliant CLI Installation Script
 # This script installs the 'reliant' command to /usr/local/bin
+# by symlinking the bundled Go backend binary.
 
 set -e
 
 echo "Installing Reliant CLI command..."
 
-# Detect the operating system
+# Detect the operating system and architecture
 OS="$(uname -s)"
+ARCH="$(uname -m)"
 
 case "$OS" in
     Darwin)
-        # macOS
         APP_PATH="/Applications/Reliant.app"
-        CLI_SOURCE="$APP_PATH/Contents/Resources/cli/reliant"
+        if [ "$ARCH" = "arm64" ]; then
+            CLI_SOURCE="$APP_PATH/Contents/Resources/server/mac-arm64/reliant-backend"
+        else
+            CLI_SOURCE="$APP_PATH/Contents/Resources/server/mac-x64/reliant-backend"
+        fi
         
         if [ ! -d "$APP_PATH" ]; then
             echo "Error: Reliant.app not found in /Applications"
@@ -23,17 +28,22 @@ case "$OS" in
         fi
         
         if [ ! -f "$CLI_SOURCE" ]; then
-            echo "Error: CLI script not found in Reliant.app"
+            echo "Error: Go binary not found at $CLI_SOURCE"
             exit 1
         fi
         ;;
         
     Linux)
-        # Linux - try to find the installation
-        if [ -f "/opt/Reliant/resources/cli/reliant" ]; then
-            CLI_SOURCE="/opt/Reliant/resources/cli/reliant"
-        elif [ -f "/usr/lib/reliant/resources/cli/reliant" ]; then
-            CLI_SOURCE="/usr/lib/reliant/resources/cli/reliant"
+        if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+            PLATFORM_DIR="linux-arm64"
+        else
+            PLATFORM_DIR="linux-amd64"
+        fi
+
+        if [ -f "/opt/Reliant/resources/server/$PLATFORM_DIR/reliant-backend" ]; then
+            CLI_SOURCE="/opt/Reliant/resources/server/$PLATFORM_DIR/reliant-backend"
+        elif [ -f "/usr/lib/reliant/resources/server/$PLATFORM_DIR/reliant-backend" ]; then
+            CLI_SOURCE="/usr/lib/reliant/resources/server/$PLATFORM_DIR/reliant-backend"
         else
             echo "Error: Could not find Reliant installation"
             echo "Please install Reliant first"
@@ -73,9 +83,7 @@ sudo chmod +x "$CLI_TARGET"
 if command -v reliant &> /dev/null; then
     echo "✓ Successfully installed 'reliant' command"
     echo ""
-    echo "You can now use the following commands:"
-    echo "  reliant              # Open Reliant in current directory"
-    echo "  reliant /path/to/dir # Open Reliant in specified directory"
+    echo "Usage: reliant --help"
 else
     echo "⚠ Installation completed but 'reliant' command not found in PATH"
     echo "You may need to add /usr/local/bin to your PATH or restart your terminal"

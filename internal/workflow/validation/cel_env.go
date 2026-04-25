@@ -53,11 +53,20 @@ func newValidationCELEnv(namespaces []wfcel.CELNamespace, typeCtx *WorkflowTypeC
 	opts = append(opts, cel.CrossTypeNumericComparisons(true))
 
 	// Register context types with CEL for native field validation.
-	opts = append(opts, ext.NativeTypes(
-		ext.ParseStructTag("json"),
-		reflect.TypeOf(&model.WorkflowContext{}),
-		reflect.TypeOf(&model.IterContext{}),
-	))
+	// When we have typed iter item fields, skip registering IterContext as a native
+	// type so our custom type provider can control field resolution on iter.item.
+	if typeCtx != nil && typeCtx.IterItemFields != nil {
+		opts = append(opts, ext.NativeTypes(
+			ext.ParseStructTag("json"),
+			reflect.TypeOf(&model.WorkflowContext{}),
+		))
+	} else {
+		opts = append(opts, ext.NativeTypes(
+			ext.ParseStructTag("json"),
+			reflect.TypeOf(&model.WorkflowContext{}),
+			reflect.TypeOf(&model.IterContext{}),
+		))
+	}
 
 	// Add namespace variable declarations
 	for _, ns := range namespaces {
@@ -154,9 +163,12 @@ func getNamespaceDecl(ns wfcel.CELNamespace, typeCtx *WorkflowTypeContext) cel.E
 	case wfcel.CELWorkflow:
 		return cel.Variable(string(ns), cel.ObjectType("model.WorkflowContext"))
 	case wfcel.CELIter:
-		// Parallel loops expose dynamic fields like iter.item and iter.key in addition
-		// to the standard iteration/index counters, so validation must allow dynamic
-		// field access here.
+		// When we have inferred type info for iter.item (from loop items expression),
+		// use ObjectType so the custom type provider can validate field access.
+		// Otherwise fall back to DynType for backward compatibility.
+		if typeCtx != nil && typeCtx.IterItemFields != nil {
+			return cel.Variable(string(ns), cel.ObjectType("iter"))
+		}
 		return cel.Variable(string(ns), cel.DynType)
 	case wfcel.CELNodes:
 		if typeCtx != nil {

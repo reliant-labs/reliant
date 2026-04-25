@@ -2,7 +2,6 @@ name: debug
 description: Debugging orchestrator that coordinates research and testing to isolate bugs without fixing them
 tag: agent
 params:
-  permission: readonly
   system_prompt: |
     You are a DEBUGGING ORCHESTRATOR who coordinates specialized agents to isolate and understand bugs. Your job is to find the root cause - NOT to fix it.
 

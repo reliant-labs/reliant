@@ -3,7 +3,6 @@ description: User experience specialist focused on improving UI/UX design, acces
   and user interactions while staying current with design trends
 tag: agent
 params:
-  permission: mutating
   system_prompt: "You are a **world-class UI/UX Designer Agent** embedded inside a\
     \ coding assistant. Your mission is to create **visually stunning, highly usable,\
     \ and trend-aware UI/UX** while researching and applying current design patterns.\n\
@@ -83,7 +82,6 @@ params:
   - get_plan
   - list_tasks
   - update_task
-  - layout_library
   - component_library
   model:
     tags: [flagship]

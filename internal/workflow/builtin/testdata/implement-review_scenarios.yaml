@@ -1,0 +1,141 @@
+# Happy Path: First attempt succeeds immediately
+#
+# Tests the simplest successful path:
+# 1. implement runs, review says verdict="pass"
+# 2. Loop condition: verdict == "pass" → loop exits after 1 iteration
+#
+# Flow: implement → review → complete
+
+name: happy_path
+description: First attempt succeeds, review passes immediately
+
+events:
+  - node: attempt.implement
+    output:
+      response_text: "Implemented the feature. All changes look correct and tests pass."
+
+  - node: attempt.review
+    output:
+      response:
+        verdict: "pass"
+        issues: []
+        summary: "Implementation is correct and complete. Code follows existing patterns."
+
+expect:
+  outcome: completed
+  reached:
+    - attempt
+    - attempt.implement
+    - attempt.review
+    - complete
+  node_outputs:
+    attempt:
+      review_verdict: "pass"
+      review_summary: "Implementation is correct and complete. Code follows existing patterns."
+
+---
+# Review Fail Then Pass: First review fails, second attempt succeeds
+#
+# Tests the retry path:
+# 1. Iteration 0: implement runs, review says verdict="fail" with issues
+# 2. Loop condition: verdict != "pass" → re-iterate
+# 3. Iteration 1: implement runs with feedback, review says verdict="pass"
+# 4. Loop exits
+#
+# Flow: implement → review → implement → review → complete
+
+name: review_fail_then_pass
+description: First review fails with issues, second attempt fixes them and passes
+
+events:
+  # Iteration 0: implement has issues
+  - node: attempt.implement
+    output:
+      response_text: "Made the changes but missed error handling for the edge case."
+
+  - node: attempt.review
+    output:
+      response:
+        verdict: "fail"
+        issues:
+          - "Missing error handling for null input in processData()"
+          - "No test coverage for the new helper function"
+        summary: "Core logic is correct but error handling and test coverage are missing."
+
+  # Iteration 1: implement fixes the issues
+  - node: attempt.implement
+    output:
+      response_text: "Added error handling for null input and wrote tests for the helper function."
+
+  - node: attempt.review
+    output:
+      response:
+        verdict: "pass"
+        issues: []
+        summary: "All issues from previous review are addressed. Error handling and tests look good."
+
+expect:
+  outcome: completed
+  reached:
+    - attempt
+    - attempt.implement
+    - attempt.review
+    - complete
+  node_outputs:
+    attempt:
+      review_verdict: "pass"
+      review_summary: "All issues from previous review are addressed. Error handling and tests look good."
+
+---
+# Max Iterations Reached: Review keeps failing until limit hit
+#
+# Tests the max_iterations boundary:
+# 1. Each iteration: implement runs, review says verdict="fail"
+# 2. After max_iterations, loop exits with verdict still "fail"
+#
+# Uses state to set max_iterations=2 for a quick test.
+
+name: max_iterations_reached
+description: Review keeps failing until max iterations exhausted
+
+inputs:
+  max_iterations: 2
+
+events:
+  # Iteration 0
+  - node: attempt.implement
+    output:
+      response_text: "First attempt at implementation."
+
+  - node: attempt.review
+    output:
+      response:
+        verdict: "fail"
+        issues:
+          - "Fundamental approach is wrong — needs a different strategy"
+        summary: "The approach doesn't work for this use case."
+
+  # Iteration 1
+  - node: attempt.implement
+    output:
+      response_text: "Second attempt with different approach."
+
+  - node: attempt.review
+    output:
+      response:
+        verdict: "fail"
+        issues:
+          - "Still not matching the expected behavior"
+        summary: "Closer but still has issues."
+
+expect:
+  outcome: completed
+  reached:
+    - attempt
+    - attempt.implement
+    - attempt.review
+    - complete
+  node_outputs:
+    attempt:
+      review_verdict: "fail"
+      review_summary: "Closer but still has issues."

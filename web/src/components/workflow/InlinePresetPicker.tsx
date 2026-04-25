@@ -1,10 +1,11 @@
 // Copyright (c) 2025 Reliant Labs
 
 import { useState, useRef, useEffect } from "react";
-import { ChevronDown, Check, Layers } from "lucide-react";
+import { ChevronDown, Check, Layers, Code2 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { Tooltip } from "../ui/Tooltip";
 import type { Preset } from "../../store/globalDataStore";
+import { isCelTemplate } from "../../lib/celTemplate";
 
 interface InlinePresetPickerProps {
   // Available presets (filtered for the current workflow)
@@ -48,7 +49,10 @@ export function InlinePresetPicker({
   className = "",
 }: InlinePresetPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [showReplaceConfirm, setShowReplaceConfirm] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const valueIsTemplate = isCelTemplate(value);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -79,38 +83,60 @@ export function InlinePresetPicker({
 
   const canInteract = !disabled && !isLoading && !isStreaming;
 
+  const handleTriggerClick = () => {
+    if (!canInteract) return;
+    if (valueIsTemplate) {
+      setShowReplaceConfirm(true);
+      return;
+    }
+    setIsOpen(!isOpen);
+  };
+
   return (
     <div ref={dropdownRef} className={cn("relative", className)}>
-      <Tooltip 
-        content={selectedPreset 
-          ? `${groupLabel ? groupLabel + ": " : ""}${selectedPreset.name}` 
-          : `Select ${groupLabel ? groupLabel + " preset" : "a preset"}`
-        } 
+      <Tooltip
+        content={
+          valueIsTemplate
+            ? `Set by expression: ${value}`
+            : selectedPreset
+              ? `${groupLabel ? groupLabel + ": " : ""}${selectedPreset.name}`
+              : `Select ${groupLabel ? groupLabel + " preset" : "a preset"}`
+        }
         placement="top"
       >
         <button
-          onClick={() => canInteract && setIsOpen(!isOpen)}
+          onClick={handleTriggerClick}
           disabled={!canInteract}
           className={cn(
             "flex items-center gap-1 rounded transition-colors text-[10px] font-medium h-6 px-2",
             canInteract
               ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
               : "cursor-default opacity-60",
-            isOpen
-              ? "bg-primary/20 text-primary"
-              : isStreaming
-              ? "bg-[var(--chat-button-bg-streaming)] text-[var(--chat-button-text-streaming)]"
-              : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]"
+            valueIsTemplate
+              ? "bg-violet-500/15 text-violet-700 dark:text-violet-300 border border-violet-500/30"
+              : isOpen
+                ? "bg-primary/20 text-primary"
+                : isStreaming
+                  ? "bg-[var(--chat-button-bg-streaming)] text-[var(--chat-button-text-streaming)]"
+                  : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]"
           )}
         >
           {isLoading ? (
             <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current" />
+          ) : valueIsTemplate ? (
+            <>
+              <Code2 className="w-3 h-3 flex-shrink-0" />
+              <span className="inline-flex items-center rounded px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide bg-violet-500/20 border border-violet-500/30 flex-shrink-0">
+                Expr
+              </span>
+              <span className="truncate max-w-28 font-mono">{value}</span>
+            </>
           ) : (
             <>
               <Layers className="w-3 h-3 flex-shrink-0" />
               <span className="truncate max-w-24">
-                {selectedPreset 
-                  ? selectedPreset.name 
+                {selectedPreset
+                  ? selectedPreset.name
                   : groupLabel || "Preset"
                 }
               </span>
@@ -119,6 +145,43 @@ export function InlinePresetPicker({
           )}
         </button>
       </Tooltip>
+
+      {/* Replace confirmation for expression values */}
+      {showReplaceConfirm && (
+        <div
+          className="absolute bottom-full left-0 mb-1 z-[1001] rounded-md border border-border bg-[var(--chat-dropdown-bg)] shadow-lg p-3 w-64"
+        >
+          <div className="text-xs font-medium text-foreground mb-1">
+            Replace expression?
+          </div>
+          <div className="text-[11px] text-muted-foreground mb-2">
+            This preset is set by an expression:
+            <div className="mt-1 font-mono text-[10px] break-all bg-muted/50 rounded px-1.5 py-1 text-foreground">
+              {value}
+            </div>
+            Replacing overwrites it with a fixed preset.
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setShowReplaceConfirm(false)}
+              className="px-2 py-1 text-[10px] rounded border border-border hover:bg-accent"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowReplaceConfirm(false);
+                setIsOpen(true);
+              }}
+              className="px-2 py-1 text-[10px] rounded bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              Replace
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Dropdown */}
       {isOpen && canInteract && (

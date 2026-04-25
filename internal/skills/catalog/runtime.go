@@ -4,6 +4,7 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -62,12 +63,12 @@ var allowedSkillFrontmatterFields = map[string]struct{}{
 }
 
 var builtinSkillPaths = []string{
-	"skill-creator/SKILL.md",
 	"reliant-config/SKILL.md",
 	"workflow-builder/SKILL.md",
+	"conflict-resolver/SKILL.md",
 }
 
-//go:embed builtin/skill-creator/SKILL.md builtin/reliant-config/SKILL.md builtin/workflow-builder/SKILL.md
+//go:embed builtin/reliant-config/SKILL.md builtin/workflow-builder/SKILL.md builtin/conflict-resolver/SKILL.md
 var builtinSkillsFS embed.FS
 
 func ParseSkillMarkdown(path string, scope skillscore.Scope, data []byte) (Definition, error) {
@@ -614,12 +615,16 @@ func discoveryRoots(projectPath string) []root {
 		{Path: filepath.Join(projectPath, ".codex", "skills"), Scope: skillscore.ScopeCodexProject},
 		{Path: filepath.Join(projectPath, ".agents", "skills"), Scope: skillscore.ScopeCodexAgents},
 	}
+
 	if homeDir != "" {
 		roots = append(roots,
 			root{Path: filepath.Join(homeDir, ".reliant", "skills"), Scope: skillscore.ScopeGlobal},
 			root{Path: filepath.Join(homeDir, ".claude", "skills"), Scope: skillscore.ScopeClaudeGlobal},
 			root{Path: filepath.Join(homeDir, ".codex", "skills"), Scope: skillscore.ScopeCodexGlobal},
 		)
+	}
+	for _, r := range roots {
+		slog.Debug("[Skills] discoveryRoot", "path", r.Path, "scope", r.Scope, "projectPath", projectPath)
 	}
 	return roots
 }

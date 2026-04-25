@@ -1,0 +1,78 @@
+# Routes to Agent: Simple question dispatched to builtin://agent
+#
+# Tests that straightforward tasks get routed to the agent workflow.
+# The router selects builtin://agent with the general preset.
+
+name: routes_to_agent
+description: Simple question routed to builtin://agent with general preset
+
+events:
+  - node: route
+    output:
+      selected_workflow: "builtin://agent"
+      selected_preset: "general"
+      prompt: "What does the processData function do?"
+      reasoning: "Simple question about existing code — agent is the right fit."
+      outputs:
+        response_text: "The processData function parses input and validates it against the schema."
+
+expect:
+  outcome: completed
+  reached:
+    - route
+  node_outputs:
+    route:
+      selected_workflow: "builtin://agent"
+      selected_preset: "general"
+
+---
+# Routes to One Ring: Complex feature dispatched to builtin://one-ring
+#
+# Tests that complex multi-phase tasks get routed to the one-ring pipeline.
+
+name: routes_to_one_ring
+description: Complex feature request routed to builtin://one-ring
+
+events:
+  - node: route
+    output:
+      selected_workflow: "builtin://one-ring"
+      selected_preset: ""
+      prompt: "Add OAuth2 support with Google and GitHub providers, including token refresh and session management"
+      reasoning: "Complex multi-file feature requiring research, planning, and iterative implementation."
+      outputs:
+        response_text: "OAuth2 implementation complete with Google and GitHub providers."
+
+expect:
+  outcome: completed
+  reached:
+    - route
+  node_outputs:
+    route:
+      selected_workflow: "builtin://one-ring"
+
+---
+# Routes to Implement-Review: Iterative task dispatched to builtin://implement-review
+#
+# Tests that tasks needing review cycles get routed to the implement-review loop.
+
+name: routes_to_implement_review
+description: Quality-sensitive task routed to builtin://implement-review
+
+events:
+  - node: route
+    output:
+      selected_workflow: "builtin://implement-review"
+      selected_preset: ""
+      prompt: "Refactor the payment processing module and make sure it handles all edge cases correctly"
+      reasoning: "Task benefits from iterative implementation with structured review to catch edge cases."
+      outputs:
+        response_text: "Payment processing refactored and reviewed. All edge cases handled."
+
+expect:
+  outcome: completed
+  reached:
+    - route
+  node_outputs:
+    route:
+      selected_workflow: "builtin://implement-review"

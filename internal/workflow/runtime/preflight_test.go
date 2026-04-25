@@ -110,10 +110,12 @@ func TestRequiresDaemon_ServerOnlyWorkflow(t *testing.T) {
 				Type: "call_llm",
 				Args: &reliantv1.Node_CallLlm{
 					CallLlm: &reliantv1.CallLLMArgs{
-						ToolFilter: &reliantv1.CelStringList{
-							Value: &reliantv1.CelStringList_Literal{
-								Literal: &reliantv1.StringList{
-									Values: []string{"tag:planning"},
+						ToolsConfig: &reliantv1.ToolsConfig{
+							Filter: &reliantv1.CelStringList{
+								Value: &reliantv1.CelStringList_Literal{
+									Literal: &reliantv1.StringList{
+										Values: []string{"tag:planning"},
+									},
 								},
 							},
 						},
@@ -136,10 +138,12 @@ func TestRequiresDaemon_CallLLMWithDefaultTools(t *testing.T) {
 				Type: "call_llm",
 				Args: &reliantv1.Node_CallLlm{
 					CallLlm: &reliantv1.CallLLMArgs{
-						ToolFilter: &reliantv1.CelStringList{
-							Value: &reliantv1.CelStringList_Literal{
-								Literal: &reliantv1.StringList{
-									Values: []string{"tag:default"},
+						ToolsConfig: &reliantv1.ToolsConfig{
+							Filter: &reliantv1.CelStringList{
+								Value: &reliantv1.CelStringList_Literal{
+									Literal: &reliantv1.StringList{
+										Values: []string{"tag:default"},
+									},
 								},
 							},
 						},
@@ -162,9 +166,11 @@ func TestRequiresDaemon_CELToolFilter(t *testing.T) {
 				Type: "call_llm",
 				Args: &reliantv1.Node_CallLlm{
 					CallLlm: &reliantv1.CallLLMArgs{
-						ToolFilter: &reliantv1.CelStringList{
-							Value: &reliantv1.CelStringList_Expr{
-								Expr: "inputs.tools",
+						ToolsConfig: &reliantv1.ToolsConfig{
+							Filter: &reliantv1.CelStringList{
+								Value: &reliantv1.CelStringList_Expr{
+									Expr: "inputs.tools",
+								},
 							},
 						},
 					},
@@ -250,10 +256,12 @@ func TestRequiresDaemon_NilConfig(t *testing.T) {
 				Type: "call_llm",
 				Args: &reliantv1.Node_CallLlm{
 					CallLlm: &reliantv1.CallLLMArgs{
-						ToolFilter: &reliantv1.CelStringList{
-							Value: &reliantv1.CelStringList_Literal{
-								Literal: &reliantv1.StringList{
-									Values: []string{"bash"},
+						ToolsConfig: &reliantv1.ToolsConfig{
+							Filter: &reliantv1.CelStringList{
+								Value: &reliantv1.CelStringList_Literal{
+									Literal: &reliantv1.StringList{
+										Values: []string{"bash"},
+									},
 								},
 							},
 						},
@@ -275,10 +283,12 @@ func TestRequiresDaemon_ReadOnlyToolsOnly(t *testing.T) {
 				Type: "call_llm",
 				Args: &reliantv1.Node_CallLlm{
 					CallLlm: &reliantv1.CallLLMArgs{
-						ToolFilter: &reliantv1.CelStringList{
-							Value: &reliantv1.CelStringList_Literal{
-								Literal: &reliantv1.StringList{
-									Values: []string{"tag:readonly"},
+						ToolsConfig: &reliantv1.ToolsConfig{
+							Filter: &reliantv1.CelStringList{
+								Value: &reliantv1.CelStringList_Literal{
+									Literal: &reliantv1.StringList{
+										Values: []string{"tag:readonly"},
+									},
 								},
 							},
 						},

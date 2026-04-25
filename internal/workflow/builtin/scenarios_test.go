@@ -3,14 +3,17 @@ package builtin_test
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"io/fs"
 	"strings"
 	"testing"
 
+	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/simulator"
+	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -44,7 +47,7 @@ func TestBuiltinWorkflowScenarios(t *testing.T) {
 		workflowData, err := builtin.BuiltinWorkflowsFS.ReadFile(workflowFile)
 		require.NoError(t, err, "Failed to read workflow %s", workflowFile)
 
-		wf, err := v2.ParseWorkflowProtoBytes(workflowData)
+		wf, err := v2.ParseWorkflowProtoBytesWithLoader(workflowData, builtinLoader)
 		require.NoError(t, err, "Failed to parse workflow %s", workflowFile)
 
 		// Find scenarios for this workflow
@@ -205,4 +208,16 @@ func TestAllWorkflowsHaveScenarios(t *testing.T) {
 
 	t.Logf("Workflows with scenarios (%d): %v", len(covered), covered)
 	t.Logf("Workflows without scenarios (%d): %v", len(missing), missing)
+}
+
+// builtinLoader resolves builtin:// workflow references for cross-workflow validation.
+func builtinLoader(name string) (*reliantv1.Workflow, error) {
+	// Strip builtin:// prefix if present
+	name = strings.TrimPrefix(name, "builtin://")
+	filename := name + ".yaml"
+	data, err := builtin.BuiltinWorkflowsFS.ReadFile(filename)
+	if err != nil {
+		return nil, fmt.Errorf("builtin workflow not found: %s", name)
+	}
+	return wfyaml.ParseWorkflow(data)
 }

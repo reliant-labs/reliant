@@ -486,68 +486,74 @@ func isSpawnWorkflowNameIdentityExpression(expr string) bool {
 	return strings.Contains(normalized, "spawn(workflow.name,")
 }
 
-// validateSpawnRefsLoadable checks that literal spawn refs in call_llm tool_filter
+// validateSpawnRefsLoadable checks that literal spawn refs in call_llm tools_config.spawn
 // are loadable workflows. Recurses into inline workflows and validates core workflow identity contract.
 func validateSpawnRefsLoadable(node *reliantv1.Node, loader WorkflowLoader, path []string, workflowIdentity string, result *Result) {
 	nodePath := append(path, "nodes", node.GetId())
 
 	// Check call_llm nodes
 	if args := model.GetCallLLMArgs(node); args != nil {
-		toolFilter := args.GetToolFilter()
-		filters := model.CelStringListValue(toolFilter)
-		if model.CelStringListIsExpr(toolFilter) {
-			filters = []string{model.CelStringListExpr(toolFilter)}
-		}
+		tc := args.GetToolsConfig()
+		if tc == nil {
+			// No tools_config — nothing to validate
+		} else {
+			// Validate spawn refs from tools_config.spawn
+			spawnList := tc.GetSpawn()
+			spawnEntries := model.CelStringListValue(spawnList)
+			if model.CelStringListIsExpr(spawnList) {
+				spawnEntries = []string{model.CelStringListExpr(spawnList)}
+			}
 
-		for _, filter := range filters {
-			if containsTemplate(filter) {
-				expression := extractCELExpression(filter)
-				if expression != "" && hasSpawnWorkflowNameExpression(expression) {
-					if !isSpawnWorkflowNameIdentityExpression(expression) {
-						result.AddErrorWithSuggestion(CategoryCrossWorkflow, append(nodePath, "args", "tool_filter"), "spawn",
-							fmt.Sprintf("spawn(workflow.name, ...) expression must use workflow.name as the direct first argument, got %q", expression),
-							"use spawn(workflow.name, <presets>) directly, not computed or transformed variants")
-						continue
+			for _, entry := range spawnEntries {
+				if containsTemplate(entry) {
+					expression := extractCELExpression(entry)
+					if expression != "" && hasSpawnWorkflowNameExpression(expression) {
+						if !isSpawnWorkflowNameIdentityExpression(expression) {
+							result.AddErrorWithSuggestion(CategoryCrossWorkflow, append(nodePath, "args", "tools_config", "spawn"), "spawn",
+								fmt.Sprintf("spawn(workflow.name, ...) expression must use workflow.name as the direct first argument, got %q", expression),
+								"use spawn(workflow.name, <presets>) directly, not computed or transformed variants")
+							continue
+						}
+						if workflowIdentity == "" {
+							continue
+						}
+						if _, err := loader(workflowIdentity); err != nil {
+							result.AddError(CategoryCrossWorkflow, append(nodePath, "args", "tools_config", "spawn"), "spawn",
+								fmt.Sprintf("spawn(workflow.name, ...) resolved to '%s' which is not a loadable workflow: %v", workflowIdentity, err))
+						}
 					}
-					if workflowIdentity == "" {
-						continue
-					}
-					if _, err := loader(workflowIdentity); err != nil {
-						result.AddError(CategoryCrossWorkflow, append(nodePath, "args", "tool_filter"), "spawn",
-							fmt.Sprintf("spawn(workflow.name, ...) resolved to '%s' which is not a loadable workflow: %v", workflowIdentity, err))
-					}
+					continue
 				}
-				continue
-			}
-			if !strings.HasPrefix(filter, "spawn:") {
-				continue
-			}
+				if !strings.HasPrefix(entry, "spawn:") {
+					continue
+				}
 
-			// Extract workflow ref from spawn:WORKFLOW(presets)
-			rest := strings.TrimPrefix(filter, "spawn:")
-			parenIdx := strings.Index(rest, "(")
-			workflowRef := rest
-			if parenIdx >= 0 {
-				workflowRef = rest[:parenIdx]
-			}
-			workflowRef = strings.TrimSpace(workflowRef)
+				// Extract workflow ref from spawn:WORKFLOW(presets)
+				rest := strings.TrimPrefix(entry, "spawn:")
+				parenIdx := strings.Index(rest, "(")
+				workflowRef := rest
+				if parenIdx >= 0 {
+					workflowRef = rest[:parenIdx]
+				}
+				workflowRef = strings.TrimSpace(workflowRef)
 
-			if workflowRef == "" {
-				continue
-			}
+				if workflowRef == "" {
+					continue
+				}
 
-			if strings.Contains(workflowRef, "::") {
-				result.AddErrorWithSuggestion(CategoryCrossWorkflow, append(nodePath, "args", "tool_filter"), "spawn",
-					fmt.Sprintf("spawn ref '%s' contains '::' which indicates a synthetic inline workflow name — this is not a loadable workflow ref", workflowRef),
-					"use the canonical workflow identity (workflow.name) or a loadable workflow ref")
-				continue
-			}
+				if strings.Contains(workflowRef, "::") {
+					result.AddErrorWithSuggestion(CategoryCrossWorkflow, append(nodePath, "args", "tools_config", "spawn"), "spawn",
+						fmt.Sprintf("spawn ref '%s' contains '::' which indicates a synthetic inline workflow name — this is not a loadable workflow ref", workflowRef),
+						"use the canonical workflow identity (workflow.name) or a loadable workflow ref")
+					continue
+				}
 
-			// Try loading the workflow
-			_, err := loader(workflowRef)
-			if err != nil {
-				result.AddError(CategoryCrossWorkflow, append(nodePath, "args", "tool_filter"), "spawn",
-					fmt.Sprintf("spawn ref '%s' is not a loadable workflow: %v", workflowRef, err))
+				// Try loading the workflow
+				_, err := loader(workflowRef)
+				if err != nil {
+					result.AddError(CategoryCrossWorkflow, append(nodePath, "args", "tools_config", "spawn"), "spawn",
+						fmt.Sprintf("spawn ref '%s' is not a loadable workflow: %v", workflowRef, err))
+				}
 			}
 		}
 	}

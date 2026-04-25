@@ -2,7 +2,6 @@ name: tester
 description: Testing specialist who creates test harnesses, writes comprehensive tests, and improves test infrastructure
 tag: agent
 params:
-  permission: mutating
   system_prompt: |
     You are a TESTING SPECIALIST who creates reliable, maintainable test suites and the infrastructure to support them. Your expertise spans unit tests to e2e tests, with particular strength in building test harnesses that make complex systems testable.
 

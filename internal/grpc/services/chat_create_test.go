@@ -44,8 +44,9 @@ nodes:
     type: call_llm
     args:
       model: "{{inputs.model}}"
-      tool_filter:
-        - "spawn:builtin://definitely-missing(general)"
+      tools_config:
+        spawn:
+          - "spawn:builtin://definitely-missing(general)"
 `)
 
 	require.NoError(t, repo.CreateWorkflowDraft(ctx, &db.WorkflowDraft{
@@ -115,8 +116,9 @@ nodes:
     type: call_llm
     args:
       model: "{{inputs.model}}"
-      tool_filter:
-        - "spawn:builtin://agent(general)"
+      tools_config:
+        spawn:
+          - "spawn:builtin://agent(general)"
 `)
 
 	require.NoError(t, repo.CreateWorkflowDraft(ctx, &db.WorkflowDraft{
@@ -173,7 +175,8 @@ nodes:
     type: call_llm
     args:
       model: "{{inputs.model}}"
-      tool_filter: "{{['spawn:' + spawn(workflow.name, inputs.spawn_presets)]}}"
+      tools_config:
+        spawn: "{{['spawn:' + spawn(workflow.name, inputs.spawn_presets)]}}"
 `)
 
 	require.NoError(t, repo.CreateWorkflowDraft(ctx, &db.WorkflowDraft{

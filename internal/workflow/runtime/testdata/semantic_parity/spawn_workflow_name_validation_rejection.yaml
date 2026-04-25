@@ -22,7 +22,9 @@ workflow_yaml: |
       type: call_llm
       args:
         model: "{{inputs.model}}"
-        tool_filter: "{{inputs.tools + [spawn(workflow.name, inputs.spawn_presets)]}}"
+        tools_config:
+          filter: "{{inputs.tools}}"
+          spawn: "{{[spawn(workflow.name, inputs.spawn_presets)]}}"
 
 core:
   use_workflow_loader: false

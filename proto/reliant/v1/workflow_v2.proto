@@ -257,6 +257,20 @@ message Node {
 // ACTIVITY NODE ARGS
 // =============================================================================
 
+// ToolsConfig configures tool availability for a call_llm node.
+// Unifies filter, spawn, and permission into a single object.
+message ToolsConfig {
+  // Filter specifies which tools are available (names, tags like "tag:search", globs, !exclusions).
+  CelStringList filter = 1;
+  // Spawn configs for child workflow delegation.
+  // Each entry is a spawn:workflow(presets) specification.
+  CelStringList spawn = 2;
+  // Permission level (readonly, mutating).
+  // Supersedes filter — tools exceeding this permission level are excluded
+  // even if they match the filter.
+  CelString permission = 3;
+}
+
 // CallLLMArgs configures a call_llm node — calls a Large Language Model.
 // This is the primary node type for AI interactions.
 //
@@ -282,16 +296,10 @@ message CallLLMArgs {
   CelString thinking_level = 4 [(reliant) = { description: "Extended thinking level for complex reasoning" enum_values: "none|low|medium|high|xhigh" default_value: "none" label: "Thinking level" visibility_contexts: "advanced" category: "Model" }];
   // SystemPrompt sets the system message for this LLM call.
   CelString system_prompt = 5 [(reliant) = { description: "System message for this LLM call" ui_hint: "textarea" label: "System prompt" placeholder: "Optional instructions for model behavior" visibility_contexts: "advanced" cleanup_semantics: "trim" category: "Prompt" }];
-  // Tools enables/disables tool use for this call.
-  CelBool tools = 6 [(reliant) = { description: "Enable tool use for this call" default_value: "true" category: "Tools" hidden: true }];
-  // ToolFilter specifies which tools are available (names or tags like "tag:search").
-  // Supports either a literal list or CEL expression returning []string.
-  CelStringList tool_filter = 7 [(reliant) = { description: "Filter which tools are available. Use tool names, glob patterns (edit*), tags (tag:search), or !exclusions (!bash)." label: "Tool Filter" placeholder: "view, edit, tag:search" category: "Tools" }];
-  // Field 8 removed (sub_agents — superseded by tool_filter + spawn() CEL).
-  reserved 8;
-  // Permission level for the agent (readonly, mutating, orchestrator).
-  // Controls which tools can be loaded via load_tool.
-  CelString permission = 11 [(reliant) = { description: "Permission level controlling which tools can be loaded" hidden: true }];
+  // ToolsConfig configures tool availability, spawn, and permission for this call.
+  ToolsConfig tools_config = 12 [(reliant) = { description: "Tool configuration: filter, spawn, and permission" category: "Tools" }];
+  // Fields 6, 7, 8, 11 removed — replaced by tools_config.
+  reserved 6, 7, 8, 11;
   // ResponseTool defines a custom structured output tool.
   ResponseTool response_tool = 9;
   // Messages injects messages for ad-hoc LLM calls without a thread.

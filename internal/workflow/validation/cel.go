@@ -73,7 +73,7 @@ func validateInlineWorkflowCELWithCompilation(wf *reliantv1.Workflow, basePath [
 	// Validate all CEL templates in node fields
 	for i, node := range nodes {
 		nodePath := append(basePath, "nodes", fmt.Sprintf("[%d](%s)", i, node.GetId()))
-		validateProtoNodeTemplatesWithCompilation(node, nodePath, env, schemaTypeChecker, nodeIDs, typeCtx, result)
+		validateProtoNodeTemplatesWithCompilation(node, nodePath, env, schemaTypeChecker, nodeIDs, typeCtx, wf, result)
 	}
 
 	// Validate node condition expressions
@@ -717,7 +717,7 @@ func getProtoNodeOutputFields(node *reliantv1.Node, loader WorkflowLoader) []str
 		}
 		return nil
 	case model.NodeTypeLoop:
-		fields := []string{"_iterations"}
+		fields := []string{"_iterations", "_completed", "_failed"}
 		if loopArgs := node.GetLoop(); loopArgs != nil && loopArgs.GetInline() != nil {
 			for key := range loopArgs.GetInline().GetOutputs() {
 				fields = append(fields, key)
@@ -1595,7 +1595,7 @@ func ValidateCELWithCompilation(wf *reliantv1.Workflow, result *Result, loader W
 	// Validate all CEL templates in node fields
 	for i, node := range nodes {
 		nodePath := []string{wf.GetName(), "nodes", fmt.Sprintf("[%d](%s)", i, node.GetId())}
-		validateProtoNodeTemplatesWithCompilation(node, nodePath, env, schemaTypeChecker, nodeIDs, typeCtx, result)
+		validateProtoNodeTemplatesWithCompilation(node, nodePath, env, schemaTypeChecker, nodeIDs, typeCtx, wf, result)
 	}
 
 	// Validate node condition expressions
@@ -1719,7 +1719,7 @@ func ValidateCELWithCompilation(wf *reliantv1.Workflow, result *Result, loader W
 
 // validateProtoNodeTemplatesWithCompilation validates all CEL templates in a proto node's fields.
 // This includes message templates, args, save_message, thread inject, etc.
-func validateProtoNodeTemplatesWithCompilation(node *reliantv1.Node, basePath []string, env *cel.Env, schemaTypeChecker *SchemaTypeChecker, nodeIDs []string, typeCtx *WorkflowTypeContext, result *Result) {
+func validateProtoNodeTemplatesWithCompilation(node *reliantv1.Node, basePath []string, env *cel.Env, schemaTypeChecker *SchemaTypeChecker, nodeIDs []string, typeCtx *WorkflowTypeContext, wf *reliantv1.Workflow, result *Result) {
 	if node == nil {
 		return
 	}
@@ -1753,7 +1753,7 @@ func validateProtoNodeTemplatesWithCompilation(node *reliantv1.Node, basePath []
 	}
 
 	// Validate node-specific templates by walking proto fields explicitly
-	validateProtoNodeFieldTemplatesWithCompilation(node, basePath, env, schemaTypeChecker, nodeIDs, typeCtx, result)
+	validateProtoNodeFieldTemplatesWithCompilation(node, basePath, env, schemaTypeChecker, nodeIDs, typeCtx, wf, result)
 }
 
 // validateProtoSaveMessageTemplatesWithCompilation validates save_message templates from proto.
@@ -2003,7 +2003,7 @@ func getSaveMessageTypeSuggestion(fieldName, actualType string) string {
 
 // validateProtoNodeFieldTemplatesWithCompilation walks a proto node's fields to find
 // and validate CEL templates with compilation. Replaces the old reflection-based approach.
-func validateProtoNodeFieldTemplatesWithCompilation(node *reliantv1.Node, basePath []string, env *cel.Env, schemaTypeChecker *SchemaTypeChecker, nodeIDs []string, typeCtx *WorkflowTypeContext, result *Result) {
+func validateProtoNodeFieldTemplatesWithCompilation(node *reliantv1.Node, basePath []string, env *cel.Env, schemaTypeChecker *SchemaTypeChecker, nodeIDs []string, typeCtx *WorkflowTypeContext, wf *reliantv1.Workflow, result *Result) {
 	if node == nil {
 		return
 	}
@@ -2060,10 +2060,42 @@ func validateProtoNodeFieldTemplatesWithCompilation(node *reliantv1.Node, basePa
 	case node.GetLoop() != nil:
 		args := node.GetLoop()
 		validateCS(args.GetRef(), append(basePath, "ref"))
+
+		// Try to infer iter.item type from the items expression for loop args validation.
+		// This enables compile-time validation of iter.item.<field> access.
+		loopEnv := env
+		loopTypeCtx := typeCtx
+		if itemFields := inferLoopItemFields(args, wf, typeCtx); itemFields != nil {
+			// Create a loop-specific type context with iter.item type info.
+			loopTypeCtx = &WorkflowTypeContext{
+				InputFields:              typeCtx.InputFields,
+				InputGroups:              typeCtx.InputGroups,
+				NodeOutputs:              typeCtx.NodeOutputs,
+				OutputFields:             typeCtx.OutputFields,
+				NodeTypes:                typeCtx.NodeTypes,
+				Registry:                 typeCtx.Registry,
+				ConditionalNodes:         typeCtx.ConditionalNodes,
+				ResponseTools:            typeCtx.ResponseTools,
+				NodesWithExtendedOutputs: typeCtx.NodesWithExtendedOutputs,
+				LenientInputs:            typeCtx.LenientInputs,
+				IterItemFields:           itemFields,
+			}
+			if typedEnv, err := newValidationCELEnv([]wfcel.CELNamespace{
+				wfcel.CELInputs,
+				wfcel.CELWorkflow,
+				wfcel.CELNodes,
+				wfcel.CELIter,
+				wfcel.CELOutputs,
+				wfcel.CELOutput,
+			}, loopTypeCtx); err == nil {
+				loopEnv = typedEnv
+			}
+		}
+
 		for key, val := range args.GetArgs() {
 			if val != nil {
 				if s := val.GetStringValue(); s != "" && containsTemplate(s) {
-					validateCELTemplateStringWithCompilation(s, append(basePath, "args", key), env, schemaTypeChecker, nodeIDs, typeCtx, result)
+					validateCELTemplateStringWithCompilation(s, append(basePath, "args", key), loopEnv, schemaTypeChecker, nodeIDs, loopTypeCtx, result)
 				}
 			}
 		}
@@ -2392,6 +2424,215 @@ func validateResponseDataAccessWithContext(nodeID, fieldPath string, responseToo
 	}
 
 	return nil
+}
+
+// =============================================================================
+// LOOP iter.item TYPE INFERENCE
+// =============================================================================
+
+// inferLoopItemFields attempts to infer typed field info for iter.item by tracing
+// the loop's items expression back to its source schema.
+//
+// Supported patterns:
+//   - items references a node output that is a typed array with known item properties
+//   - items references a workflow node output (e.g., nodes.X.response.Y) where the
+//     workflow node has a response_schema arg containing the array's JSON Schema
+func inferLoopItemFields(loopArgs *reliantv1.LoopArgs, wf *reliantv1.Workflow, typeCtx *WorkflowTypeContext) map[string]*FieldInfo {
+	if loopArgs == nil || !model.CelStringIsSet(loopArgs.GetItems()) {
+		return nil
+	}
+
+	itemsExpr := model.CelStringRaw(loopArgs.GetItems())
+	if itemsExpr == "" {
+		return nil
+	}
+
+	// Parse the items expression to extract the source node and field path.
+	// Expected patterns: "nodes.<nodeID>.<field1>.<field2>..." or similar.
+	parts := parseNodeFieldPath(itemsExpr)
+	if parts == nil {
+		return nil
+	}
+	nodeID := parts.nodeID
+	fieldPath := parts.fieldPath
+
+	// Try to resolve through the node's output type info first.
+	if typeCtx != nil {
+		if fields := resolveArrayItemFieldsFromNodeOutputs(nodeID, fieldPath, typeCtx); fields != nil {
+			return fields
+		}
+	}
+
+	// For workflow/loop nodes, try to infer from the response_schema arg.
+	if wf != nil {
+		if fields := resolveArrayItemFieldsFromResponseSchema(nodeID, fieldPath, wf); fields != nil {
+			return fields
+		}
+	}
+
+	return nil
+}
+
+// nodeFieldPath represents a parsed "nodes.<nodeID>.<field1>.<field2>..." expression.
+type nodeFieldPath struct {
+	nodeID    string
+	fieldPath []string // e.g., ["response", "waves"]
+}
+
+// nodeFieldPathPattern matches nodes.<nodeID>.<fieldPath...> CEL expressions.
+var nodeFieldPathPattern = regexp.MustCompile(`^nodes\.([a-zA-Z_][a-zA-Z0-9_-]*)(\.([a-zA-Z_][a-zA-Z0-9_.]*))$`)
+
+// parseNodeFieldPath extracts the node ID and field path from a "nodes.X.Y.Z" expression.
+func parseNodeFieldPath(expr string) *nodeFieldPath {
+	matches := nodeFieldPathPattern.FindStringSubmatch(expr)
+	if matches == nil {
+		return nil
+	}
+	nodeID := matches[1]
+	fieldStr := matches[3] // e.g., "response.waves"
+	if fieldStr == "" {
+		return nil
+	}
+	return &nodeFieldPath{
+		nodeID:    nodeID,
+		fieldPath: strings.Split(fieldStr, "."),
+	}
+}
+
+// resolveArrayItemFieldsFromNodeOutputs tries to resolve array item fields
+// from the node's statically known output type info.
+func resolveArrayItemFieldsFromNodeOutputs(nodeID string, fieldPath []string, typeCtx *WorkflowTypeContext) map[string]*FieldInfo {
+	nodeOutputs, ok := typeCtx.NodeOutputs[nodeID]
+	if !ok || len(fieldPath) == 0 {
+		return nil
+	}
+
+	// Walk the field path to find the target field.
+	var current *FieldInfo
+	for i, part := range fieldPath {
+		if i == 0 {
+			current, ok = nodeOutputs[part]
+			if !ok || current == nil {
+				return nil
+			}
+		} else {
+			if current.Properties == nil {
+				return nil
+			}
+			current, ok = current.Properties[part]
+			if !ok || current == nil {
+				return nil
+			}
+		}
+	}
+
+	// The target field should be an array/slice type with known item properties.
+	if !current.IsSlice {
+		return nil
+	}
+	if len(current.Properties) > 0 {
+		return current.Properties
+	}
+	return nil
+}
+
+// resolveArrayItemFieldsFromResponseSchema tries to infer array item fields from
+// a workflow/loop node's response_schema arg. This handles the common pattern where
+// a structured-agent sub-workflow receives a response_schema input that defines the
+// schema of its response output, and the loop iterates over an array field in that response.
+func resolveArrayItemFieldsFromResponseSchema(nodeID string, fieldPath []string, wf *reliantv1.Workflow) map[string]*FieldInfo {
+	if len(fieldPath) < 2 {
+		return nil
+	}
+
+	// Find the source node in the workflow.
+	var sourceNode *reliantv1.Node
+	for _, n := range wf.GetNodes() {
+		if n.GetId() == nodeID {
+			sourceNode = n
+			break
+		}
+	}
+	if sourceNode == nil {
+		return nil
+	}
+
+	// Get the args map from the workflow or loop node.
+	var argsMap map[string]*structpb.Value
+	if wfArgs := sourceNode.GetWorkflow(); wfArgs != nil {
+		argsMap = wfArgs.GetArgs()
+	} else if loopArgs := sourceNode.GetLoop(); loopArgs != nil {
+		argsMap = loopArgs.GetArgs()
+	}
+	if argsMap == nil {
+		return nil
+	}
+
+	// Look for a response_schema arg.
+	schemaVal, ok := argsMap["response_schema"]
+	if !ok || schemaVal == nil {
+		return nil
+	}
+
+	// The response_schema is stored as a Value with a StructValue (JSON object).
+	schemaStruct := schemaVal.GetStructValue()
+	if schemaStruct == nil {
+		return nil
+	}
+	schemaMap := schemaStruct.AsMap()
+
+	// The first element of fieldPath is typically "response" (the output name),
+	// which maps to the response_schema itself. The remaining parts navigate
+	// into the schema's properties to find the array field.
+	// e.g., fieldPath = ["response", "waves"] → look for waves in schema properties.
+	arrayFieldPath := fieldPath[1:] // skip "response" (or the output name)
+
+	// Navigate into the schema to find the target array field.
+	currentSchema := schemaMap
+	for _, part := range arrayFieldPath {
+		props, ok := currentSchema["properties"].(map[string]interface{})
+		if !ok {
+			return nil
+		}
+		fieldSchema, ok := props[part].(map[string]interface{})
+		if !ok {
+			return nil
+		}
+		currentSchema = fieldSchema
+	}
+
+	// The current schema should be an array type.
+	if typeName, _ := currentSchema["type"].(string); typeName != "array" {
+		return nil
+	}
+
+	// Extract the items schema.
+	itemsSchema, ok := currentSchema["items"].(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	// The items schema should be an object with properties.
+	if typeName, _ := itemsSchema["type"].(string); typeName != "object" {
+		return nil
+	}
+
+	props, ok := itemsSchema["properties"].(map[string]interface{})
+	if !ok || len(props) == 0 {
+		return nil
+	}
+
+	// Convert each property to FieldInfo.
+	result := make(map[string]*FieldInfo, len(props))
+	for propName, propSchemaRaw := range props {
+		propSchema, ok := propSchemaRaw.(map[string]interface{})
+		if !ok {
+			result[propName] = &FieldInfo{Name: propName, Kind: reflect.Interface, IsDynamic: true}
+			continue
+		}
+		result[propName] = jsonSchemaMapToFieldInfo(propName, propSchema)
+	}
+	return result
 }
 
 // =============================================================================

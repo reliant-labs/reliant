@@ -2,6 +2,8 @@
 package tools
 
 import (
+	"log/slog"
+
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 )
@@ -217,11 +219,6 @@ func (f *ToolsFactory) MetadataWriter() Tool {
 	return NewMetadataWriterTool()
 }
 
-// Layout tools
-func (f *ToolsFactory) LayoutLibrary() Tool {
-	return NewLayoutLibraryTool()
-}
-
 // Component library
 func (f *ToolsFactory) ComponentLibrary() Tool {
 	return NewComponentLibraryTool()
@@ -234,6 +231,7 @@ func (f *ToolsFactory) Worktree() Tool {
 
 // Skill tools
 func (f *ToolsFactory) Skill() Tool {
+	slog.Debug("[ToolsFactory] Creating skill tool", "skillCount", len(f.opts.Skills))
 	return NewSkillTool(f.opts.Skills)
 }
 

@@ -10,7 +10,7 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import { ArrowDown, Settings2, RefreshCw, CircleStop, X } from "lucide-react";
+import { Settings2, RefreshCw, CircleStop, X } from "lucide-react";
 import "./placeholder-fix.css";
 import { useAttachmentStore } from "../../store/attachmentStore";
 import { useChatParamsStore } from "../../store/chatParamsStore";
@@ -115,10 +115,6 @@ interface ChatInputProps {
   isRecentChangesOpen?: boolean;
   currentActivity?: string;
   messageCount?: number;
-  // Scroll button props
-  showScrollButton?: boolean;
-  onScrollToBottom?: () => void;
-  unreadMessageCount?: number;
   // Command center mode
   paneId?: string;
   // Thread-specific params
@@ -144,9 +140,6 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
       isRecentChangesOpen = false,
       currentActivity,
       messageCount = 0,
-      showScrollButton = false,
-      onScrollToBottom,
-      unreadMessageCount = 0,
       isChatBusy = false,
       paneId,
       selectedThreadId,
@@ -1683,38 +1676,6 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                           </button>
                         </Tooltip>
                       )}
-                      {/* Scroll to Bottom Button */}
-                      {showScrollButton && onScrollToBottom && (
-                        <Tooltip
-                          content={
-                            unreadMessageCount > 0
-                              ? `${unreadMessageCount} new messages`
-                              : "Scroll to bottom"
-                          }
-                          placement="top"
-                        >
-                          <button
-                            onClick={onScrollToBottom}
-                            className={cn(
-                              "relative flex items-center justify-center",
-                              "w-6 h-6 rounded-full",
-                              "bg-primary/90 text-primary-foreground",
-                              "hover:bg-primary transition-all duration-200",
-                              "border border-primary-foreground/20 shadow-sm"
-                            )}
-                          >
-                            <ArrowDown className="w-3 h-3" />
-                            {unreadMessageCount > 0 && (
-                              <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[14px] h-[14px] px-0.5 text-[8px] font-bold bg-primary text-primary-foreground rounded-full border border-background">
-                                {unreadMessageCount > 99
-                                  ? "99+"
-                                  : unreadMessageCount}
-                              </span>
-                            )}
-                          </button>
-                        </Tooltip>
-                      )}
-
                       {/* Action buttons */}
                       <ChatActionButtons
                         onSend={handleSend}

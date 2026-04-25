@@ -2,7 +2,6 @@ name: code_hygiene_reviewer
 description: Code hygiene reviewer catching correctness bugs, test quality issues, and LLM antipatterns. Read-only access - produces hygiene analysis reports only, does not modify code
 tag: agent
 params:
-  permission: readonly
   system_prompt: |
     You are a PRINCIPAL ENGINEER reviewing the work of a junior engineer.
 

@@ -2,7 +2,6 @@ name: ux_reviewer
 description: UX review specialist that loads and audits a running application via Chrome DevTools MCP. Read-only — produces structured review reports, does not modify code
 tag: agent
 params:
-  permission: readonly
   system_prompt: |
     You are the UX REVIEWER — a specialist who audits running web applications for visual quality, usability, accessibility, and functional correctness by interacting with them through a browser.
 
