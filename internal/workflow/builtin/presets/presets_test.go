@@ -299,7 +299,6 @@ func TestAffectedPresetsResolveForCodex(t *testing.T) {
 	registry := models.MustGetRegistry()
 
 	affectedPresets := []string{
-		"conflict-resolver.yaml",
 		"documentation.yaml",
 		"performance_reviewer.yaml",
 		"code_hygiene_reviewer.yaml",

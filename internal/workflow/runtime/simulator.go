@@ -26,6 +26,16 @@ const (
 	NodeStateError NodeState = "error"
 )
 
+// skippedOutputForNode returns the appropriate skipped output map for a node.
+// Run nodes get zero-value defaults (exit_code: 0, etc.) so downstream
+// CEL expressions don't need has() guards.
+func skippedOutputForNode(node *reliantv1.Node) map[string]interface{} {
+	if node.GetType() == model.NodeTypeRun {
+		return model.SkippedRunOutputMap()
+	}
+	return model.SkippedOutputMap()
+}
+
 // WorkflowSimulator simulates workflow execution WITHOUT Temporal
 // It's a lightweight event-driven engine for testing workflow logic
 type WorkflowSimulator struct {
@@ -341,9 +351,21 @@ func evaluateLoopWhileStrict(
 	return shouldContinue, nil
 }
 
+// nodeTypeToActivityNameOverrides maps structural node types to their actual Temporal
+// activity names. Run nodes are structural (not activity nodes) but still need output
+// normalization for the simulator to produce correct default fields like exit_code.
+var nodeTypeToActivityNameOverrides = map[string]string{
+	model.NodeTypeRun: "ExecuteRunStep",
+}
+
 func nodeActivityName(node *reliantv1.Node) string {
 	if node == nil {
 		return ""
+	}
+	// Check overrides first — handles structural nodes like "run" that have
+	// registered activity types with output schemas.
+	if override, ok := nodeTypeToActivityNameOverrides[node.GetType()]; ok {
+		return override
 	}
 	if !isActivityType(node.GetType()) {
 		return ""
@@ -533,7 +555,7 @@ func (s *WorkflowSimulator) Run(mocker StepMocker) error {
 					s.nodeStates[stepID] = NodeStateSkipped
 
 					// Create skip output - skipped: true tells joins this source is done
-					skippedOutput := model.SkippedOutputMap()
+					skippedOutput := skippedOutputForNode(triggered.Node)
 
 					// Store in outputs
 					s.nodeOutputs[stepID] = skippedOutput
@@ -1019,7 +1041,7 @@ func (s *WorkflowSimulator) executeLoopIteration(
 					s.nodeStates[qualifiedID] = NodeStateSkipped
 
 					// Create skip output - skipped: true tells joins this source is done
-					skippedOutput := model.SkippedOutputMap()
+					skippedOutput := skippedOutputForNode(triggered.Node)
 
 					// Store in outputs
 					innerOutputs[innerNodeID] = skippedOutput
@@ -1244,7 +1266,6 @@ func (s *WorkflowSimulator) executeNestedLoopIteration(
 
 		for _, triggered := range triggeredSteps {
 			innerNodeID := triggered.Node.GetId()
-
 			// Skip if already processed this iteration (dedup)
 			if processedThisIteration[innerNodeID] {
 				continue
@@ -1308,7 +1329,7 @@ func (s *WorkflowSimulator) executeNestedLoopIteration(
 					s.nodeStates[qualifiedID] = NodeStateSkipped
 
 					// Create skip output - skipped: true tells joins this source is done
-					skippedOutput := model.SkippedOutputMap()
+					skippedOutput := skippedOutputForNode(triggered.Node)
 
 					// Store in outputs
 					innerOutputs[innerNodeID] = skippedOutput
@@ -1551,7 +1572,7 @@ func (s *WorkflowSimulator) executeWorkflowNode(nodePath string, protoNode *reli
 				if !shouldExecute {
 					s.nodeStates[qualifiedID] = NodeStateSkipped
 
-					skippedOutput := model.SkippedOutputMap()
+					skippedOutput := skippedOutputForNode(triggered.Node)
 					innerOutputs[innerNodeID] = skippedOutput
 					s.nodeOutputs[qualifiedID] = skippedOutput
 

@@ -114,6 +114,15 @@ func validateWorkflowTree(
 				result,
 			)
 
+			validatePassthrough(
+				nodePath,
+				contract.Passthrough,
+				contract.Args,
+				parentWorkflow,
+				childWorkflow.GetInputs(),
+				result,
+			)
+
 			validateWorkflowTree(
 				childWorkflow,
 				childWorkflow,
@@ -571,6 +580,46 @@ func validateSpawnRefsLoadable(node *reliantv1.Node, loader WorkflowLoader, path
 			for _, child := range inline.GetNodes() {
 				validateSpawnRefsLoadable(child, loader, append(nodePath, "inline"), workflowIdentity, result)
 			}
+		}
+	}
+}
+
+// validatePassthrough checks passthrough names against parent inputs, child schema, and explicit args.
+func validatePassthrough(
+	path []string,
+	passthrough []string,
+	explicitArgs map[string]interface{},
+	parentWorkflow *reliantv1.Workflow,
+	childSchema map[string]*reliantv1.Input,
+	result *Result,
+) {
+	if len(passthrough) == 0 {
+		return
+	}
+
+	parentInputs := parentWorkflow.GetInputs()
+
+	for _, name := range passthrough {
+		// Warn if passthrough name is not a declared parent input.
+		if len(parentInputs) > 0 {
+			if _, ok := parentInputs[name]; !ok {
+				result.AddWarning(CategoryCrossWorkflow, path, "passthrough",
+					fmt.Sprintf("passthrough name %q is not a declared input in the parent workflow", name))
+			}
+		}
+
+		// Warn if passthrough name is not accepted by the child schema.
+		if len(childSchema) > 0 {
+			if _, ok := childSchema[name]; !ok {
+				result.AddWarning(CategoryCrossWorkflow, path, "passthrough",
+					fmt.Sprintf("passthrough name %q is not a declared input in the child workflow", name))
+			}
+		}
+
+		// Warn if passthrough name duplicates an explicit arg (redundant).
+		if _, ok := explicitArgs[name]; ok {
+			result.AddWarning(CategoryCrossWorkflow, path, "passthrough",
+				fmt.Sprintf("passthrough name %q is also set in explicit args (args will take precedence)", name))
 		}
 	}
 }

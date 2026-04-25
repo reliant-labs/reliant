@@ -43,6 +43,28 @@ func TestSkippedOutputMap(t *testing.T) {
 	}
 }
 
+func TestSkippedRunOutputMap(t *testing.T) {
+	m := SkippedRunOutputMap()
+	if m["skipped"] != true {
+		t.Errorf("skipped = %v, want true", m["skipped"])
+	}
+	if m["exit_code"] != 0 {
+		t.Errorf("exit_code = %v, want 0", m["exit_code"])
+	}
+	if m["stdout"] != "" {
+		t.Errorf("stdout = %v, want empty", m["stdout"])
+	}
+	if m["stderr"] != "" {
+		t.Errorf("stderr = %v, want empty", m["stderr"])
+	}
+	if m["log_file"] != "" {
+		t.Errorf("log_file = %v, want empty", m["log_file"])
+	}
+	if !IsSkippedOutput(m) {
+		t.Error("SkippedRunOutputMap() should be detected as skipped")
+	}
+}
+
 func TestLoopOutputToMap(t *testing.T) {
 	outputs := map[string]interface{}{
 		"exit_code": 0,

@@ -144,17 +144,14 @@ nodes:
       entry: [implement]
 
       outputs:
-        lint_exit: "{{has(nodes.lint) && has(nodes.lint.exit_code) ? nodes.lint.exit_code : 0}}"
-        test_exit: "{{has(nodes.test) && has(nodes.test.exit_code) ? nodes.test.exit_code : 0}}"
-        build_exit: "{{has(nodes.build) && has(nodes.build.exit_code) ? nodes.build.exit_code : 0}}"
+        lint_exit: "{{nodes.lint.exit_code}}"
+        test_exit: "{{nodes.test.exit_code}}"
+        build_exit: "{{nodes.build.exit_code}}"
         eval_strategy: >
           {{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null
             ? nodes.review.response.strategy
-            : (
-                (has(nodes.lint) && has(nodes.lint.exit_code) && nodes.lint.exit_code != 0) ||
-                (has(nodes.test) && has(nodes.test.exit_code) && nodes.test.exit_code != 0) ||
-                (has(nodes.build) && has(nodes.build.exit_code) && nodes.build.exit_code != 0)
-              ) ? 'continue' : 'pass'}}
+            : (nodes.lint.exit_code != 0 || nodes.test.exit_code != 0 || nodes.build.exit_code != 0)
+              ? 'continue' : 'pass'}}
         review_grade: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null && has(nodes.review.response.grade) ? nodes.review.response.grade : 'pass'}}"
         review_feedback: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null ? nodes.review.response.feedback : ''}}"
 
@@ -180,6 +177,8 @@ nodes:
                 Implement the requested changes. Start by investigating the relevant code, then make your changes and run tests to verify them.
 
                 The review feedback and implementation summaries from previous attempts (if any) are in the conversation above. Use them to guide your implementation.
+                If previous checks failed, the error details and log file paths are in the messages above.
+                Read the log files FIRST before making changes — they contain the actual error output as JSON with working_dir, stdout, and stderr.
 
                 After finishing, summarize:
                 1. What you changed and why
@@ -195,17 +194,47 @@ nodes:
         - id: lint
           type: run
           condition: "inputs.lint_command != ''"
-          command: "mkdir -p $(dirname '{{inputs.lint_log}}') && _log=\"$(cd $(dirname '{{inputs.lint_log}}') && pwd)/$(basename '{{inputs.lint_log}}')\" && {{inputs.lint_command}} > \"$_log\" 2>&1"
+          command: "{{inputs.lint_command}}"
+          log_file: "{{inputs.lint_log}}"
+          save_message:
+            condition: "output.exit_code != 0"
+            role: assistant
+            display_style: warning
+            content: |
+              **Lint FAILED** (exit {{output.exit_code}}) — output saved to `{{output.log_file}}`
+              Working directory was: `{{output.working_dir}}`
+
+              **IMPORTANT:** Read `{{output.log_file}}` to see the actual errors. The log is JSON with `exit_code`, `working_dir`, `command`, `stdout`, and `stderr` fields. Check `working_dir` to confirm you're in the right directory, then read `stdout`/`stderr` for the actual errors.
 
         - id: test
           type: run
           condition: "inputs.test_command != ''"
-          command: "mkdir -p $(dirname '{{inputs.test_log}}') && _log=\"$(cd $(dirname '{{inputs.test_log}}') && pwd)/$(basename '{{inputs.test_log}}')\" && {{inputs.test_command}} > \"$_log\" 2>&1"
+          command: "{{inputs.test_command}}"
+          log_file: "{{inputs.test_log}}"
+          save_message:
+            condition: "output.exit_code != 0"
+            role: assistant
+            display_style: warning
+            content: |
+              **Test FAILED** (exit {{output.exit_code}}) — output saved to `{{output.log_file}}`
+              Working directory was: `{{output.working_dir}}`
+
+              **IMPORTANT:** Read `{{output.log_file}}` to see the actual errors. The log is JSON with `exit_code`, `working_dir`, `command`, `stdout`, and `stderr` fields. Check `working_dir` to confirm you're in the right directory, then read `stdout`/`stderr` for the actual errors.
 
         - id: build
           type: run
           condition: "inputs.build_command != ''"
-          command: "mkdir -p $(dirname '{{inputs.build_log}}') && _log=\"$(cd $(dirname '{{inputs.build_log}}') && pwd)/$(basename '{{inputs.build_log}}')\" && {{inputs.build_command}} > \"$_log\" 2>&1"
+          command: "{{inputs.build_command}}"
+          log_file: "{{inputs.build_log}}"
+          save_message:
+            condition: "output.exit_code != 0"
+            role: assistant
+            display_style: warning
+            content: |
+              **Build FAILED** (exit {{output.exit_code}}) — output saved to `{{output.log_file}}`
+              Working directory was: `{{output.working_dir}}`
+
+              **IMPORTANT:** Read `{{output.log_file}}` to see the actual errors. The log is JSON with `exit_code`, `working_dir`, `command`, `stdout`, and `stderr` fields. Check `working_dir` to confirm you're in the right directory, then read `stdout`/`stderr` for the actual errors.
 
         - id: join_checks
           type: join
@@ -262,9 +291,9 @@ nodes:
                 ## Get It Right — Review Attempt {{iter.iteration + 1}}
 
                 **Check results:**
-                - Lint: {{has(nodes.lint) && has(nodes.lint.exit_code) ? (nodes.lint.exit_code == 0 ? 'passed' : 'FAILED') : 'skipped'}}
-                - Test: {{has(nodes.test) && has(nodes.test.exit_code) ? (nodes.test.exit_code == 0 ? 'passed' : 'FAILED') : 'skipped'}}
-                - Build: {{has(nodes.build) && has(nodes.build.exit_code) ? (nodes.build.exit_code == 0 ? 'passed' : 'FAILED') : 'skipped'}}
+                - Lint: {{inputs.lint_command == '' ? 'skipped' : (nodes.lint.exit_code == 0 ? 'passed' : 'FAILED')}}
+                - Test: {{inputs.test_command == '' ? 'skipped' : (nodes.test.exit_code == 0 ? 'passed' : 'FAILED')}}
+                - Build: {{inputs.build_command == '' ? 'skipped' : (nodes.build.exit_code == 0 ? 'passed' : 'FAILED')}}
 
                 {{inputs.start_app_command != '' ? 'The application is running at: http://localhost:' + string(inputs.app_port) + ' — spawn the ux_reviewer to audit it via Chrome DevTools.' : ''}}
 
@@ -274,18 +303,6 @@ nodes:
             content: |
               ## Review (Attempt {{iter.iteration + 1}}): {{has(output.response) && output.response != null ? output.response.strategy : 'N/A'}}
               {{has(output.response) && output.response != null ? output.response.feedback : ''}}
-
-        - id: check_failures
-          type: save_message
-          args:
-            role: assistant
-            content: |
-              ## Checks Failed (Attempt {{iter.iteration + 1}})
-              {{has(nodes.lint) && has(nodes.lint.exit_code) && nodes.lint.exit_code != 0 ? '- **Lint FAILED** (exit ' + string(nodes.lint.exit_code) + ') — read `' + inputs.lint_log + '` for full output' : ''}}
-              {{has(nodes.test) && has(nodes.test.exit_code) && nodes.test.exit_code != 0 ? '- **Test FAILED** (exit ' + string(nodes.test.exit_code) + ') — read `' + inputs.test_log + '` for full output' : ''}}
-              {{has(nodes.build) && has(nodes.build.exit_code) && nodes.build.exit_code != 0 ? '- **Build FAILED** (exit ' + string(nodes.build.exit_code) + ') — read `' + inputs.build_log + '` for full output' : ''}}
-
-              **IMPORTANT: Your FIRST action in the next attempt MUST be to `cat` each failed log file above.** The logs contain the actual error messages. Do NOT guess at the problem — read the logs first, then fix the root cause.
 
         - id: refactor
           type: workflow
@@ -338,10 +355,8 @@ nodes:
         - from: join_checks
           cases:
             - condition: >
-                (has(nodes.lint) && has(nodes.lint.exit_code) && nodes.lint.exit_code != 0) ||
-                (has(nodes.test) && has(nodes.test.exit_code) && nodes.test.exit_code != 0) ||
-                (has(nodes.build) && has(nodes.build.exit_code) && nodes.build.exit_code != 0)
-              to: [check_failures]
+                nodes.lint.exit_code != 0 || nodes.test.exit_code != 0 || nodes.build.exit_code != 0
+              to: []
           default: [review]
         - from: review
           cases:

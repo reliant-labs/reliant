@@ -28,7 +28,7 @@ require (
 	github.com/openai/openai-go/v3 v3.32.0
 	github.com/pressly/goose/v3 v3.24.2
 	github.com/prometheus/client_golang v1.23.2
-	github.com/reliant-labs/forge v0.0.0-20260425163622-5e2a1213203e
+	github.com/reliant-labs/forge v0.0.0-20260425235012-7f5248c1329f
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1
