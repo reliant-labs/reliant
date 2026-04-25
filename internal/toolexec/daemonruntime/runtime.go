@@ -202,7 +202,7 @@ func (d *daemonClient) run(ctx context.Context) error {
 				d.stopAllStreams()
 				return fmt.Errorf("daemon connection failed (not retrying): %w", err)
 			}
-			logging.Warn(logPrefix+" Session ended; reconnecting",
+			logging.Error(logPrefix+" Session ended; reconnecting",
 				"error", err,
 				"code", connect.CodeOf(err).String(),
 				"delay", delay,
