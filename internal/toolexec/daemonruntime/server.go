@@ -1,0 +1,159 @@
+// Copyright (c) 2025 Reliant Labs
+package daemonruntime
+
+import (
+	"context"
+	"fmt"
+	"net"
+	"net/http"
+
+	"connectrpc.com/connect"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
+
+	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/toolexec/transport"
+)
+
+const serverLogPrefix = "[🔧 DaemonServer]"
+
+// daemonServer implements the ConnectGateway handler so the daemon can accept
+// incoming connections from the gateway instead of dialing out.
+type daemonServer struct {
+	reliantv1connect.UnimplementedToolsDaemonServiceHandler
+	client *daemonClient
+}
+
+// ConnectGateway handles an incoming bidi stream from the gateway.
+// The stream carries ServerMessages (from gateway) and DaemonMessages (from daemon)
+// — the same message types as ConnectDaemon, just with the connection direction reversed.
+func (s *daemonServer) ConnectGateway(
+	ctx context.Context,
+	stream *connect.BidiStream[reliantv1.ServerMessage, reliantv1.DaemonMessage],
+) error {
+	logging.Info(serverLogPrefix + " Gateway connected")
+
+	d := s.client
+
+	// Send registration as the first message.
+	register := &reliantv1.DaemonMessage{
+		Message: &reliantv1.DaemonMessage_Register{Register: &reliantv1.DaemonRegister{
+			DaemonId:     d.daemonID,
+			UserId:       d.userID,
+			Hostname:     d.hostname,
+			Platform:     d.platform,
+			WorkingDir:   d.cwd,
+			Capabilities: d.capabilities,
+			Name:         d.daemonName,
+			DaemonType:   "local",
+		}},
+	}
+	if err := stream.Send(register); err != nil {
+		return fmt.Errorf("sending registration: %w", err)
+	}
+
+	// Set up the send channel and sender goroutine (same pattern as client mode).
+	d.sendCh = make(chan *reliantv1.DaemonMessage, 256)
+	d.sendDone = make(chan struct{})
+	d.sessionDone = make(chan struct{})
+	go d.runServerSender(stream)
+	defer func() {
+		close(d.sessionDone) // signal send() and runServerSender to stop
+		<-d.sendDone
+		d.stopAllStreams()
+	}()
+
+	if err := d.sendProjectDiscovery(); err != nil {
+		logging.Warn(serverLogPrefix+" Failed to send project discovery", "error", err)
+	}
+
+	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
+	defer cancelHeartbeat()
+	go d.runHeartbeats(heartbeatCtx)
+
+	// Receive loop — same as runSession but reading from the server-side stream.
+	for {
+		msg, err := stream.Receive()
+		if err != nil {
+			logging.Info(serverLogPrefix+" Gateway stream ended", "error", err)
+			return nil
+		}
+		if msg == nil {
+			continue
+		}
+		if err := d.handleServerMessage(ctx, msg); err != nil {
+			logging.Warn(serverLogPrefix+" Failed handling server message", "error", err)
+		}
+	}
+}
+
+// runServerSender drains sendCh and writes to the server-side bidi stream.
+func (d *daemonClient) runServerSender(stream *connect.BidiStream[reliantv1.ServerMessage, reliantv1.DaemonMessage]) {
+	defer close(d.sendDone)
+	for {
+		select {
+		case msg := <-d.sendCh:
+			if msg == nil {
+				return
+			}
+			if err := stream.Send(msg); err != nil {
+				logging.Warn(serverLogPrefix+" runServerSender: stream.Send failed", "error", err)
+				return
+			}
+		case <-d.sessionDone:
+			return
+		}
+	}
+}
+
+// runServerMode starts a gRPC/Connect server on the configured port and blocks
+// until ctx is cancelled. The gateway dials in via the ConnectGateway RPC.
+func (d *daemonClient) runServerMode(ctx context.Context) error {
+	port := d.bootCfg.ListenPort
+	if port == 0 {
+		port = 9190
+	}
+
+	svc := &daemonServer{client: d}
+	path, handler := reliantv1connect.NewToolsDaemonServiceHandler(svc)
+
+	mux := http.NewServeMux()
+	mux.Handle(path, handler)
+
+	addr := fmt.Sprintf(":%d", port)
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("listen on %s: %w", addr, err)
+	}
+
+	srv := &http.Server{
+		Handler:           h2c.NewHandler(mux, &http2.Server{}),
+		ReadHeaderTimeout: transport.ServerReadHeaderTimeout,
+		IdleTimeout:       transport.ServerIdleTimeout,
+	}
+
+	logging.Info(serverLogPrefix+" Listening for gateway connections",
+		"addr", addr,
+		"daemonID", d.daemonID,
+		"userID", d.userID,
+	)
+
+	errCh := make(chan error, 1)
+	go func() {
+		if serveErr := srv.Serve(listener); serveErr != nil && serveErr != http.ErrServerClosed {
+			errCh <- serveErr
+		}
+		close(errCh)
+	}()
+
+	select {
+	case <-ctx.Done():
+		logging.Info(serverLogPrefix + " Shutting down server")
+		srv.Close()
+		return ctx.Err()
+	case err := <-errCh:
+		return fmt.Errorf("server exited: %w", err)
+	}
+}

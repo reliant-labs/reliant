@@ -4251,9 +4251,10 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\x19DAEMON_STATUS_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14DAEMON_STATUS_ACTIVE\x10\x01\x12\x16\n" +
 	"\x12DAEMON_STATUS_IDLE\x10\x02\x12\x1e\n" +
-	"\x1aDAEMON_STATUS_DISCONNECTED\x10\x032\xc2\x01\n" +
+	"\x1aDAEMON_STATUS_DISCONNECTED\x10\x032\x90\x02\n" +
 	"\x12ToolsDaemonService\x12K\n" +
-	"\rConnectDaemon\x12\x19.reliant.v1.DaemonMessage\x1a\x19.reliant.v1.ServerMessage\"\x00(\x010\x01\x12_\n" +
+	"\rConnectDaemon\x12\x19.reliant.v1.DaemonMessage\x1a\x19.reliant.v1.ServerMessage\"\x00(\x010\x01\x12L\n" +
+	"\x0eConnectGateway\x12\x19.reliant.v1.ServerMessage\x1a\x19.reliant.v1.DaemonMessage\"\x00(\x010\x01\x12_\n" +
 	"\x10ReportToolResult\x12#.reliant.v1.ReportToolResultRequest\x1a$.reliant.v1.ReportToolResultResponse\"\x002\x8b\x05\n" +
 	"\x15DaemonRegistryService\x12P\n" +
 	"\vListDaemons\x12\x1e.reliant.v1.ListDaemonsRequest\x1a\x1f.reliant.v1.ListDaemonsResponse\"\x00\x12J\n" +
@@ -4389,25 +4390,27 @@ var file_reliant_v1_tools_daemon_proto_depIdxs = []int32{
 	59, // 45: reliant.v1.DaemonInfo.last_heartbeat:type_name -> google.protobuf.Timestamp
 	2,  // 46: reliant.v1.TerminalSessionEvent.event_type:type_name -> reliant.v1.TerminalSessionEvent.EventType
 	3,  // 47: reliant.v1.ToolsDaemonService.ConnectDaemon:input_type -> reliant.v1.DaemonMessage
-	26, // 48: reliant.v1.ToolsDaemonService.ReportToolResult:input_type -> reliant.v1.ReportToolResultRequest
-	32, // 49: reliant.v1.DaemonRegistryService.ListDaemons:input_type -> reliant.v1.ListDaemonsRequest
-	34, // 50: reliant.v1.DaemonRegistryService.GetDaemon:input_type -> reliant.v1.GetDaemonRequest
-	36, // 51: reliant.v1.DaemonRegistryService.CreateDaemonToken:input_type -> reliant.v1.CreateDaemonTokenRequest
-	38, // 52: reliant.v1.DaemonRegistryService.ListDaemonTokens:input_type -> reliant.v1.ListDaemonTokensRequest
-	41, // 53: reliant.v1.DaemonRegistryService.RevokeDaemonToken:input_type -> reliant.v1.RevokeDaemonTokenRequest
-	43, // 54: reliant.v1.DaemonRegistryService.ResolveDaemon:input_type -> reliant.v1.ResolveDaemonRequest
-	45, // 55: reliant.v1.DaemonRegistryService.ResumeDaemon:input_type -> reliant.v1.ResumeDaemonRequest
-	7,  // 56: reliant.v1.ToolsDaemonService.ConnectDaemon:output_type -> reliant.v1.ServerMessage
-	27, // 57: reliant.v1.ToolsDaemonService.ReportToolResult:output_type -> reliant.v1.ReportToolResultResponse
-	33, // 58: reliant.v1.DaemonRegistryService.ListDaemons:output_type -> reliant.v1.ListDaemonsResponse
-	35, // 59: reliant.v1.DaemonRegistryService.GetDaemon:output_type -> reliant.v1.GetDaemonResponse
-	37, // 60: reliant.v1.DaemonRegistryService.CreateDaemonToken:output_type -> reliant.v1.CreateDaemonTokenResponse
-	39, // 61: reliant.v1.DaemonRegistryService.ListDaemonTokens:output_type -> reliant.v1.ListDaemonTokensResponse
-	42, // 62: reliant.v1.DaemonRegistryService.RevokeDaemonToken:output_type -> reliant.v1.RevokeDaemonTokenResponse
-	44, // 63: reliant.v1.DaemonRegistryService.ResolveDaemon:output_type -> reliant.v1.ResolveDaemonResponse
-	46, // 64: reliant.v1.DaemonRegistryService.ResumeDaemon:output_type -> reliant.v1.ResumeDaemonResponse
-	56, // [56:65] is the sub-list for method output_type
-	47, // [47:56] is the sub-list for method input_type
+	7,  // 48: reliant.v1.ToolsDaemonService.ConnectGateway:input_type -> reliant.v1.ServerMessage
+	26, // 49: reliant.v1.ToolsDaemonService.ReportToolResult:input_type -> reliant.v1.ReportToolResultRequest
+	32, // 50: reliant.v1.DaemonRegistryService.ListDaemons:input_type -> reliant.v1.ListDaemonsRequest
+	34, // 51: reliant.v1.DaemonRegistryService.GetDaemon:input_type -> reliant.v1.GetDaemonRequest
+	36, // 52: reliant.v1.DaemonRegistryService.CreateDaemonToken:input_type -> reliant.v1.CreateDaemonTokenRequest
+	38, // 53: reliant.v1.DaemonRegistryService.ListDaemonTokens:input_type -> reliant.v1.ListDaemonTokensRequest
+	41, // 54: reliant.v1.DaemonRegistryService.RevokeDaemonToken:input_type -> reliant.v1.RevokeDaemonTokenRequest
+	43, // 55: reliant.v1.DaemonRegistryService.ResolveDaemon:input_type -> reliant.v1.ResolveDaemonRequest
+	45, // 56: reliant.v1.DaemonRegistryService.ResumeDaemon:input_type -> reliant.v1.ResumeDaemonRequest
+	7,  // 57: reliant.v1.ToolsDaemonService.ConnectDaemon:output_type -> reliant.v1.ServerMessage
+	3,  // 58: reliant.v1.ToolsDaemonService.ConnectGateway:output_type -> reliant.v1.DaemonMessage
+	27, // 59: reliant.v1.ToolsDaemonService.ReportToolResult:output_type -> reliant.v1.ReportToolResultResponse
+	33, // 60: reliant.v1.DaemonRegistryService.ListDaemons:output_type -> reliant.v1.ListDaemonsResponse
+	35, // 61: reliant.v1.DaemonRegistryService.GetDaemon:output_type -> reliant.v1.GetDaemonResponse
+	37, // 62: reliant.v1.DaemonRegistryService.CreateDaemonToken:output_type -> reliant.v1.CreateDaemonTokenResponse
+	39, // 63: reliant.v1.DaemonRegistryService.ListDaemonTokens:output_type -> reliant.v1.ListDaemonTokensResponse
+	42, // 64: reliant.v1.DaemonRegistryService.RevokeDaemonToken:output_type -> reliant.v1.RevokeDaemonTokenResponse
+	44, // 65: reliant.v1.DaemonRegistryService.ResolveDaemon:output_type -> reliant.v1.ResolveDaemonResponse
+	46, // 66: reliant.v1.DaemonRegistryService.ResumeDaemon:output_type -> reliant.v1.ResumeDaemonResponse
+	57, // [57:67] is the sub-list for method output_type
+	47, // [47:57] is the sub-list for method input_type
 	47, // [47:47] is the sub-list for extension type_name
 	47, // [47:47] is the sub-list for extension extendee
 	0,  // [0:47] is the sub-list for field type_name

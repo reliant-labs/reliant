@@ -293,6 +293,8 @@ func newDaemonStartCmd() *cobra.Command {
 		tlsMode    string
 		useToken   bool
 		daemonName string
+		serverMode bool
+		listenPort int
 	)
 
 	cmd := &cobra.Command{
@@ -356,7 +358,11 @@ Credential resolution order:
 			ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 			defer cancel()
 
-			logging.Info("Starting tools-daemon", "port", port, "tls_mode", string(parsedTLSMode), "gateway_url", daemonGRPCURL, "data_dir", dataDir)
+			if serverMode {
+				logging.Info("Starting tools-daemon in server mode", "listen_port", listenPort, "data_dir", dataDir)
+			} else {
+				logging.Info("Starting tools-daemon", "port", port, "tls_mode", string(parsedTLSMode), "gateway_url", daemonGRPCURL, "data_dir", dataDir)
+			}
 
 			// Clean up background processes on shutdown.
 			defer shell.GetBackgroundManager().KillAllRunning()
@@ -365,17 +371,23 @@ Credential resolution order:
 			startDaemon := func(c *auth.DaemonCredentials) error {
 				return daemonruntime.Start(ctx, daemonruntime.StartOptions{
 					BootstrapConfig: bootstrap.DaemonBootstrapConfig{
-						UserID:    c.UserID,
-						AuthToken: c.PAT,
-						GRPCURL:   daemonGRPCURL,
-						TLSMode:   parsedTLSMode,
-						DataDir:   dataDir,
-						Name:      daemonName,
+						UserID:     c.UserID,
+						AuthToken:  c.PAT,
+						GRPCURL:    daemonGRPCURL,
+						TLSMode:    parsedTLSMode,
+						DataDir:    dataDir,
+						Name:       daemonName,
+						ServerMode: serverMode,
+						ListenPort: listenPort,
 					},
 				})
 			}
 
-			logging.Info("Connecting daemon to gateway", "gateway_url", daemonGRPCURL, "user_id", creds.UserID)
+			if serverMode {
+				logging.Info("Daemon listening for gateway connections", "listen_port", listenPort, "user_id", creds.UserID)
+			} else {
+				logging.Info("Connecting daemon to gateway", "gateway_url", daemonGRPCURL, "user_id", creds.UserID)
+			}
 			err = startDaemon(creds)
 			if err != nil {
 				// On auth failure, delete stale credentials and re-register automatically
@@ -421,6 +433,8 @@ Credential resolution order:
 	cmd.Flags().StringVar(&tlsMode, "tls-mode", envOrDefault("DAEMON_TLS_MODE", ""), "TLS mode (tls, insecure_tls_skip_verify, or h2c)")
 	cmd.Flags().BoolVar(&useToken, "token", false, "Read a PAT from stdin instead of using browser auth")
 	cmd.Flags().StringVar(&daemonName, "name", "", "Human-friendly daemon name (default: hostname)")
+	cmd.Flags().BoolVar(&serverMode, "server-mode", envOrDefault("DAEMON_SERVER_MODE", "") == "true", "Listen for incoming gateway connections instead of dialing out")
+	cmd.Flags().IntVar(&listenPort, "listen-port", envOrDefaultInt("DAEMON_LISTEN_PORT", 9190), "Port to listen on in server mode")
 
 	return cmd
 }

@@ -220,6 +220,16 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	logging.Info("Daemon gRPC server started", "port", opts.ToolsDaemonPort)
 
+	// Outbound daemon connector: subscribes to DAEMON_COMMANDS JetStream and
+	// initiates ConnectGateway streams to daemon pods on connect commands.
+	connector := NewDaemonConnector(js, toolsDaemonService)
+	go func() {
+		if err := connector.Start(ctx); err != nil && ctx.Err() == nil {
+			logging.Error("DaemonConnector failed", "error", err)
+		}
+	}()
+	logging.Info("Outbound daemon connector started")
+
 	// -------------------------------------------------------------------------
 	// 4. Health endpoint
 	// -------------------------------------------------------------------------

@@ -23,6 +23,11 @@ type DaemonBootstrapConfig struct {
 	TLSMode   TLSMode
 	DataDir   string
 	Name      string // Human-friendly daemon name (default: hostname)
+
+	// ServerMode, when true, makes the daemon listen on ListenPort for
+	// incoming gateway connections instead of dialing out.
+	ServerMode bool
+	ListenPort int // default 9190
 }
 
 func (c DaemonBootstrapConfig) Validate() error {
@@ -32,15 +37,22 @@ func (c DaemonBootstrapConfig) Validate() error {
 	if strings.TrimSpace(c.AuthToken) == "" {
 		return fmt.Errorf("missing required daemon PAT (run 'reliant daemon register' to set up credentials)")
 	}
-	if strings.TrimSpace(c.GRPCURL) == "" {
-		return fmt.Errorf("missing required RELIANT_DAEMON_GRPC_URL")
-	}
-	if _, err := url.Parse(c.GRPCURL); err != nil {
-		return fmt.Errorf("invalid RELIANT_DAEMON_GRPC_URL: %w", err)
+	if !c.ServerMode {
+		if strings.TrimSpace(c.GRPCURL) == "" {
+			return fmt.Errorf("missing required RELIANT_DAEMON_GRPC_URL")
+		}
+		if _, err := url.Parse(c.GRPCURL); err != nil {
+			return fmt.Errorf("invalid RELIANT_DAEMON_GRPC_URL: %w", err)
+		}
 	}
 	switch c.TLSMode {
 	case TLSModeTLS, TLSModeInsecureTLSSkipVerify, TLSModeH2C:
 		return nil
+	case "":
+		if c.ServerMode {
+			return nil // TLS mode is optional in server mode
+		}
+		return fmt.Errorf("invalid RELIANT_DAEMON_TLS_MODE %q", c.TLSMode)
 	default:
 		return fmt.Errorf("invalid RELIANT_DAEMON_TLS_MODE %q", c.TLSMode)
 	}

@@ -60,8 +60,9 @@ type daemonClient struct {
 	// All goroutines push messages here; a single runSender goroutine
 	// drains the channel and calls stream.Send(). This prevents work
 	// goroutines from blocking on the stream write mutex/I/O.
-	sendCh   chan *reliantv1.DaemonMessage
-	sendDone chan struct{} // closed when runSender exits
+	sendCh      chan *reliantv1.DaemonMessage
+	sendDone    chan struct{} // closed when runSender exits
+	sessionDone chan struct{} // closed when session is ending, before sendCh is closed
 
 	cancelMu       sync.Mutex
 	cancelByReq    map[string]context.CancelFunc
@@ -86,6 +87,19 @@ func Start(ctx context.Context, opts StartOptions) error {
 	client, err := newDaemonClient(opts.BootstrapConfig)
 	if err != nil {
 		return err
+	}
+
+	if opts.BootstrapConfig.ServerMode {
+		logging.Info(logPrefix+" Starting in server mode (listening for gateway)",
+			"daemonID", client.daemonID,
+			"userID", client.userID,
+			"cwd", client.cwd,
+			"listenPort", opts.BootstrapConfig.ListenPort,
+		)
+		if err := client.runServerMode(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			return fmt.Errorf("tools daemon server stopped: %w", err)
+		}
+		return nil
 	}
 
 	logging.Info(logPrefix+" Starting in-process tools daemon runtime",
@@ -267,10 +281,11 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 	// --- Start the send channel + single writer goroutine ---
 	d.sendCh = make(chan *reliantv1.DaemonMessage, 256)
 	d.sendDone = make(chan struct{})
+	d.sessionDone = make(chan struct{})
 	go d.runSender(stream)
 	defer func() {
-		close(d.sendCh) // signal runSender to exit
-		<-d.sendDone    // wait for it to drain
+		close(d.sessionDone) // signal send() and runSender to stop
+		<-d.sendDone         // wait for runSender to exit
 	}()
 
 	if err := d.sendProjectDiscovery(); err != nil {
@@ -577,13 +592,13 @@ func (d *daemonClient) executeTool(req *reliantv1.ToolRequest) {
 }
 
 // send enqueues a message for the single runSender goroutine to write.
-// It returns an error only if the stream is shutting down.
+// It returns an error only if the session is shutting down.
 func (d *daemonClient) send(msg *reliantv1.DaemonMessage) error {
 	select {
 	case d.sendCh <- msg:
 		return nil
-	case <-d.sendDone:
-		return fmt.Errorf("daemon send channel closed")
+	case <-d.sessionDone:
+		return fmt.Errorf("daemon session ended")
 	}
 }
 
@@ -592,9 +607,17 @@ func (d *daemonClient) send(msg *reliantv1.DaemonMessage) error {
 // thread-safe) without blocking producers on I/O.
 func (d *daemonClient) runSender(stream *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage]) {
 	defer close(d.sendDone)
-	for msg := range d.sendCh {
-		if err := stream.Send(msg); err != nil {
-			logging.Warn(logPrefix+" runSender: stream.Send failed", "error", err)
+	for {
+		select {
+		case msg := <-d.sendCh:
+			if msg == nil {
+				return
+			}
+			if err := stream.Send(msg); err != nil {
+				logging.Warn(logPrefix+" runSender: stream.Send failed", "error", err)
+				return
+			}
+		case <-d.sessionDone:
 			return
 		}
 	}

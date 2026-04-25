@@ -17,6 +17,12 @@ service ToolsDaemonService {
   // - On connect, server streams any pending requests from the database
   rpc ConnectDaemon(stream DaemonMessage) returns (stream ServerMessage) {}
 
+  // ConnectGateway is the reverse of ConnectDaemon: the daemon listens as a
+  // gRPC server and the gateway dials in. The gateway sends ServerMessages and
+  // receives DaemonMessages — same message types, but the connection direction
+  // is flipped.
+  rpc ConnectGateway(stream ServerMessage) returns (stream DaemonMessage) {}
+
   // ReportToolResult is a unary fallback for reporting tool execution results
   // when the bidirectional stream is unavailable. The daemon calls this when
   // a tool completes but the bidi stream send fails (e.g. temporary disconnect).
