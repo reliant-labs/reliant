@@ -842,3 +842,193 @@ outputs:
 	assert.True(t, hasResult, "should have 'result' output from ref workflow")
 	assert.True(t, hasIterations, "should have '_iterations' system output")
 }
+
+// TestValidation_CatchesPreFixBugs proves that our validation infrastructure
+// catches the exact bugs that the log_file, working_dir, and skipped-node-defaults
+// features were designed to fix. Without those features, these workflow patterns
+// would fail at CEL compilation time (load-time validation), not at runtime.
+func TestValidation_CatchesPreFixBugs(t *testing.T) {
+
+	// Bug 1: Referencing output.log_file in a run node's save_message
+	// Our fix: added log_file and working_dir to RunOutput proto so CEL knows about them.
+	// Without the fix: CEL compilation fails with "undefined field 'log_file'"
+	t.Run("run node output.log_file is a known field", func(t *testing.T) {
+		workflowYAML := `
+name: test-log-file-access
+entry: [my_run]
+nodes:
+  - id: my_run
+    type: run
+    command: "echo hello"
+    log_file: "./data/test.log"
+    save_message:
+      condition: "output.exit_code != 0"
+      role: assistant
+      content: "Failed — log at {{output.log_file}}, dir was {{output.working_dir}}"
+outputs:
+  log: "{{nodes.my_run.log_file}}"
+  dir: "{{nodes.my_run.working_dir}}"
+`
+		wf, err := wfyaml.ParseWorkflow([]byte(workflowYAML))
+		require.NoError(t, err)
+
+		result := &Result{}
+		ValidateCELWithCompilation(wf, result, nil)
+
+		errors := result.Errors()
+		for _, e := range errors {
+			t.Logf("Unexpected error: %s - %s", pathToString(e.Path), e.Message)
+		}
+		assert.Empty(t, errors, "log_file and working_dir should be valid RunOutput fields")
+	})
+
+	// Bug 2: Referencing a bogus field on run output — proves validation DOES catch unknown fields.
+	t.Run("run node output.bogus_field is caught", func(t *testing.T) {
+		workflowYAML := `
+name: test-bogus-run-field
+entry: [my_run]
+nodes:
+  - id: my_run
+    type: run
+    command: "echo hello"
+outputs:
+  bad: "{{nodes.my_run.bogus_field}}"
+`
+		wf, err := wfyaml.ParseWorkflow([]byte(workflowYAML))
+		require.NoError(t, err)
+
+		result := &Result{}
+		ValidateCELWithCompilation(wf, result, nil)
+
+		errors := result.Errors()
+		require.NotEmpty(t, errors, "bogus_field should fail validation")
+		found := false
+		for _, e := range errors {
+			t.Logf("Expected error: %s - %s", pathToString(e.Path), e.Message)
+			if strings.Contains(e.Message, "bogus_field") {
+				found = true
+			}
+		}
+		assert.True(t, found, "error message should mention 'bogus_field'")
+	})
+
+	// Bug 3: Skipped conditional run node accessed by downstream CEL.
+	// The real get-it-right workflow has: condition: "inputs.lint_command != ''"
+	// followed by edges that reference: nodes.lint.exit_code != 0
+	// Without skipped-run-node defaults, if lint is skipped, nodes.lint wouldn't
+	// have exit_code and the CEL expression would fail at runtime.
+	// Our fix: SkippedRunOutputMap() populates exit_code=0, stdout="", etc.
+	// This test proves the CEL type system accepts these references because
+	// run node output types include exit_code, stdout, stderr, log_file, working_dir.
+	t.Run("conditional run node fields accessible in downstream CEL", func(t *testing.T) {
+		workflowYAML := `
+name: test-conditional-run-downstream
+entry: [lint]
+nodes:
+  - id: lint
+    type: run
+    condition: "inputs.lint_command != ''"
+    command: "{{inputs.lint_command}}"
+  - id: review
+    type: call_llm
+    model:
+      tags: [flagship]
+inputs:
+  lint_command:
+    type: string
+    default: ""
+edges:
+  - from: lint
+    cases:
+      - condition: "nodes.lint.exit_code != 0"
+        to: []
+    default: [review]
+outputs:
+  lint_exit: "{{nodes.lint.exit_code}}"
+  lint_out: "{{nodes.lint.stdout}}"
+`
+		wf, err := wfyaml.ParseWorkflow([]byte(workflowYAML))
+		require.NoError(t, err)
+
+		result := &Result{}
+		ValidateCELWithCompilation(wf, result, nil)
+
+		errors := result.Errors()
+		for _, e := range errors {
+			t.Logf("Unexpected error: %s - %s", pathToString(e.Path), e.Message)
+		}
+		assert.Empty(t, errors, "run node outputs (exit_code, stdout) should be valid even when node is conditional")
+	})
+
+	// Bug 4: The ACTUAL get-it-right pattern — inline loop with conditional run nodes
+	// and downstream edge conditions referencing their outputs.
+	// This is the exact pattern that was broken before the RunOutput proto fix.
+	t.Run("get-it-right pattern: loop with conditional runs and downstream checks", func(t *testing.T) {
+		workflowYAML := `
+name: test-get-it-right-pattern
+entry: [attempt]
+inputs:
+  lint_command:
+    type: string
+    default: ""
+  lint_log:
+    type: string
+    default: "./lint.log"
+  max_retries:
+    type: integer
+    default: 3
+nodes:
+  - id: attempt
+    type: loop
+    while: >
+      (has(outputs.lint_exit) && outputs.lint_exit != 0)
+      && iter.iteration < inputs.max_retries
+    inline:
+      entry: [impl]
+      outputs:
+        lint_exit: "{{nodes.lint.exit_code}}"
+      nodes:
+        - id: impl
+          type: call_llm
+          model:
+            tags: [flagship]
+        - id: lint
+          type: run
+          condition: "inputs.lint_command != ''"
+          command: "{{inputs.lint_command}}"
+          log_file: "{{inputs.lint_log}}"
+          save_message:
+            condition: "output.exit_code != 0"
+            role: assistant
+            content: "Lint FAILED — log at {{output.log_file}}, dir: {{output.working_dir}}"
+        - id: join
+          type: join
+      edges:
+        - from: impl
+          default: [lint]
+        - from: impl
+          default: [join]
+        - from: lint
+          default: [join]
+        - from: join
+          cases:
+            - condition: "nodes.lint.exit_code != 0"
+              to: []
+          default: []
+outputs:
+  lint_exit: "{{nodes.attempt.lint_exit}}"
+`
+		wf, err := wfyaml.ParseWorkflow([]byte(workflowYAML))
+		require.NoError(t, err)
+
+		result := &Result{}
+		ValidateCELWithCompilation(wf, result, nil)
+
+		errors := result.Errors()
+		for _, e := range errors {
+			t.Logf("Unexpected error: %s - %s", pathToString(e.Path), e.Message)
+		}
+		assert.Empty(t, errors,
+			"get-it-right pattern should pass validation: run node output fields (exit_code, log_file, working_dir) must be known to CEL")
+	})
+}

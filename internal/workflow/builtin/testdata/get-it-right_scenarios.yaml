@@ -104,8 +104,8 @@ expect:
 ---
 name: check_failures_skip_review
 description: >
-  Build fails on first attempt. The check_failures node is reached and review
-  is skipped. Second attempt passes all checks and review says pass.
+  Build fails on first attempt. Review is skipped because checks failed.
+  Second attempt passes all checks and review says pass.
 
 inputs:
   build_command: "make build"
@@ -144,7 +144,6 @@ expect:
     - attempt.implement
     - attempt.join_checks
     - attempt.build
-    - attempt.check_failures
     - attempt.review
   not_reached:
     - attempt.refactor

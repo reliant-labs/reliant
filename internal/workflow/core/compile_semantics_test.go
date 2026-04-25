@@ -104,10 +104,11 @@ func TestCompileSubWorkflowSemanticContracts(t *testing.T) {
 				if contract.LoadStrategy != LoadStrategyLoadByWorkflowRef {
 					t.Fatalf("load strategy mismatch: got %q", contract.LoadStrategy)
 				}
-				if len(contract.InputAssembly) != 3 ||
+				if len(contract.InputAssembly) != 4 ||
 					contract.InputAssembly[0] != InputAssemblyStagePresets ||
-					contract.InputAssembly[1] != InputAssemblyStageArgs ||
-					contract.InputAssembly[2] != InputAssemblyStageDefaults {
+					contract.InputAssembly[1] != InputAssemblyStagePassthrough ||
+					contract.InputAssembly[2] != InputAssemblyStageArgs ||
+					contract.InputAssembly[3] != InputAssemblyStageDefaults {
 					t.Fatalf("unexpected input assembly: %#v", contract.InputAssembly)
 				}
 				if contract.Presets["default"] != "baseline" || contract.Presets["reviewer"] != "strict" {

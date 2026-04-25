@@ -40,6 +40,7 @@ type InputAssemblyStage string
 const (
 	InputAssemblyStageInheritParentInputs InputAssemblyStage = "inherit_parent_inputs"
 	InputAssemblyStagePresets             InputAssemblyStage = "presets"
+	InputAssemblyStagePassthrough         InputAssemblyStage = "passthrough"
 	InputAssemblyStageArgs                InputAssemblyStage = "args"
 	InputAssemblyStageDefaults            InputAssemblyStage = "defaults"
 )
@@ -58,6 +59,7 @@ type SubWorkflowContract struct {
 	InputAssembly     []InputAssemblyStage
 	Presets           map[string]string
 	Args              map[string]any
+	Passthrough       []string
 	DefaultInputs     map[string]any
 }
 
@@ -181,11 +183,13 @@ func buildSubWorkflowContract(
 	contract.LoadStrategy = LoadStrategyLoadByWorkflowRef
 	contract.InputAssembly = []InputAssemblyStage{
 		InputAssemblyStagePresets,
+		InputAssemblyStagePassthrough,
 		InputAssemblyStageArgs,
 		InputAssemblyStageDefaults,
 	}
 	contract.Presets = copyStringMap(subWorkflow.Presets)
 	contract.Args = convertStructpbArgs(subWorkflow.Args)
+	contract.Passthrough = subWorkflow.Passthrough
 
 	if options.WorkflowLoader != nil && !isTemplateWorkflowRef(ref) {
 		childWorkflow, err := options.WorkflowLoader(ref)
@@ -200,10 +204,11 @@ func buildSubWorkflowContract(
 }
 
 type subWorkflowArgs struct {
-	Ref     string
-	Inline  *reliantv1.Workflow
-	Args    map[string]*structpb.Value
-	Presets map[string]string
+	Ref         string
+	Inline      *reliantv1.Workflow
+	Args        map[string]*structpb.Value
+	Presets     map[string]string
+	Passthrough []string
 }
 
 func subWorkflowFromNode(node *reliantv1.Node) (subWorkflowArgs, InvocationMode, bool) {
@@ -213,9 +218,10 @@ func subWorkflowFromNode(node *reliantv1.Node) (subWorkflowArgs, InvocationMode,
 			return subWorkflowArgs{Inline: args.GetInline()}, InvocationModeInline, true
 		}
 		return subWorkflowArgs{
-			Ref:     model.CelStringRaw(args.GetRef()),
-			Args:    args.GetArgs(),
-			Presets: args.GetPresets(),
+			Ref:         model.CelStringRaw(args.GetRef()),
+			Args:        args.GetArgs(),
+			Presets:     args.GetPresets(),
+			Passthrough: args.GetPassthrough(),
 		}, InvocationModeRef, true
 	}
 
@@ -225,9 +231,10 @@ func subWorkflowFromNode(node *reliantv1.Node) (subWorkflowArgs, InvocationMode,
 			return subWorkflowArgs{Inline: args.GetInline()}, InvocationModeInline, true
 		}
 		return subWorkflowArgs{
-			Ref:     model.CelStringRaw(args.GetRef()),
-			Args:    args.GetArgs(),
-			Presets: args.GetPresets(),
+			Ref:         model.CelStringRaw(args.GetRef()),
+			Args:        args.GetArgs(),
+			Presets:     args.GetPresets(),
+			Passthrough: args.GetPassthrough(),
 		}, InvocationModeRef, true
 	}
 

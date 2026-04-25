@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -29,6 +30,7 @@ type ExecuteRunStepInput struct {
 	LoopNodeID     string                   `json:"loop_node_id,omitempty"`    // Loop context: which loop node spawned this
 	LoopIteration  int                      `json:"loop_iteration"`            // Loop context: iteration index (0-indexed)
 	DaemonSelector *toolexec.DaemonSelector `json:"daemon_selector,omitempty"` // Target daemon for execution
+	LogFile        string                   `json:"log_file,omitempty"`        // Redirect stdout+stderr to this file (daemon-side)
 }
 
 // ExecuteRunStepOutput is the output from ExecuteRunStep activity
@@ -38,10 +40,11 @@ type ExecuteRunStepOutput struct {
 	Output       string `json:"output"` // combined stdout + stderr
 	ExitCode     int    `json:"exit_code"`
 	Interrupted  bool   `json:"interrupted"`
-	Duration     int64  `json:"duration"`      // in milliseconds
-	WorkingDir   string `json:"working_dir"`   // the directory where command was executed
-	WorktreeID   string `json:"worktree_id"`   // worktree ID if used
-	WorktreePath string `json:"worktree_path"` // worktree path if used
+	Duration     int64  `json:"duration"`           // in milliseconds
+	WorkingDir   string `json:"working_dir"`        // the directory where command was executed
+	WorktreeID   string `json:"worktree_id"`        // worktree ID if used
+	WorktreePath string `json:"worktree_path"`      // worktree path if used
+	LogFile      string `json:"log_file,omitempty"` // absolute path to log file if written
 }
 
 // ============================================================================
@@ -173,6 +176,49 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 	duration := time.Since(startTime).Milliseconds()
 	combinedOutput := outputBuilder.String()
 
+	// Write log file if configured (daemon-side via executor)
+	var logFilePath string
+	if input.LogFile != "" {
+		logFilePath = input.LogFile
+		if !filepath.IsAbs(logFilePath) {
+			logFilePath = filepath.Join(workingDir, logFilePath)
+		}
+		logFilePath = filepath.Clean(logFilePath)
+
+		// Write structured JSON log with separated stdout/stderr and metadata.
+		// This lets agents parse exit code, working directory, and output streams.
+		logData := map[string]interface{}{
+			"exit_code":   exitCode,
+			"working_dir": workingDir,
+			"command":     input.Command,
+			"duration_ms": time.Since(startTime).Milliseconds(),
+			"stdout":      stdout,
+			"stderr":      stderr,
+		}
+		logJSON, jsonErr := json.Marshal(logData)
+		if jsonErr != nil {
+			// Fallback to combined plain text if JSON fails
+			logJSON = []byte(combinedOutput)
+		}
+
+		writeCmd := fmt.Sprintf(
+			"mkdir -p %s && cat > %s <<'__RELIANT_LOG_EOF__'\n%s\n__RELIANT_LOG_EOF__",
+			shellQuote(filepath.Dir(logFilePath)),
+			shellQuote(logFilePath),
+			string(logJSON),
+		)
+		_, _, _, _, writeErr := executor.ExecuteCommand(ctx, writeCmd, workingDir, 30000, nil)
+		if writeErr != nil {
+			logger := activity.GetLogger(ctx)
+			logger.Warn("[RunStep] Failed to write log file (non-fatal)",
+				"log_file", logFilePath,
+				"error", writeErr,
+			)
+			// Graceful degradation: don't fail the step
+			logFilePath = ""
+		}
+	}
+
 	// Build the output struct
 	output := ExecuteRunStepOutput{
 		Stdout:       stdout,
@@ -184,6 +230,7 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 		WorkingDir:   workingDir,
 		WorktreeID:   worktreeID,
 		WorktreePath: worktreePath,
+		LogFile:      logFilePath,
 	}
 
 	// Write run_output to chat_updates for UI display
@@ -224,6 +271,9 @@ func (a *ExecuteRunStepActivity) writeRunOutput(ctx context.Context, input Execu
 		"unique_activity_id": activityInfo.ActivityID, // For deduplication with save_message
 		"timestamp":          time.Now().UTC().Format(time.RFC3339),
 	}
+	if output.LogFile != "" {
+		updateData["log_file"] = output.LogFile
+	}
 
 	// Marshal to JSON
 	updateDataJSON, err := json.Marshal(updateData)
@@ -249,4 +299,9 @@ func (a *ExecuteRunStepActivity) writeRunOutput(ctx context.Context, input Execu
 			"exit_code", output.ExitCode,
 			"duration_ms", output.Duration)
 	}
+}
+
+// shellQuote wraps a string in single quotes, escaping any embedded single quotes.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
 }

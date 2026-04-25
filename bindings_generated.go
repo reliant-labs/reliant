@@ -15,6 +15,7 @@ const yamlKeyType = "type"
 const yamlKeyCondition = "condition"
 const yamlKeyTimeout = "timeout"
 const yamlKeySaveMessage = "save_message"
+const yamlKeyDaemon = "daemon"
 const yamlKeyArgs = "args"
 const yamlKeyFrom = "from"
 const yamlKeyCases = "cases"
@@ -24,6 +25,7 @@ const yamlKeyLabel = "label"
 
 var generatedNodeBaseFieldKeys = map[string]struct{}{
 	"condition":    {},
+	"daemon":       {},
 	"id":           {},
 	"save_message": {},
 	"timeout":      {},
@@ -100,18 +102,19 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 		oneofFieldName: "loop",
 		isStructural:   true,
 		argFieldKeys: map[string]struct{}{
-			"args":       {},
-			"inline":     {},
-			"items":      {},
-			"key":        {},
-			"on_failure": {},
-			"parallel":   {},
-			"presets":    {},
-			"project":    {},
-			"ref":        {},
-			"thread":     {},
-			"while":      {},
-			"yield":      {},
+			"args":        {},
+			"inline":      {},
+			"items":       {},
+			"key":         {},
+			"on_failure":  {},
+			"parallel":    {},
+			"passthrough": {},
+			"presets":     {},
+			"project":     {},
+			"ref":         {},
+			"thread":      {},
+			"while":       {},
+			"yield":       {},
 		},
 	},
 	"router": {
@@ -134,6 +137,7 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 		argFieldKeys: map[string]struct{}{
 			"command":  {},
 			"env":      {},
+			"log_file": {},
 			"work_dir": {},
 		},
 	},
@@ -143,6 +147,7 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 		argFieldKeys: map[string]struct{}{
 			"attachments":            {},
 			"content":                {},
+			"cost":                   {},
 			"display_style":          {},
 			"resolved_attachments":   {},
 			"resolved_content":       {},
@@ -162,12 +167,13 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 		oneofFieldName: "workflow",
 		isStructural:   true,
 		argFieldKeys: map[string]struct{}{
-			"args":    {},
-			"inline":  {},
-			"presets": {},
-			"project": {},
-			"ref":     {},
-			"thread":  {},
+			"args":        {},
+			"inline":      {},
+			"passthrough": {},
+			"presets":     {},
+			"project":     {},
+			"ref":         {},
+			"thread":      {},
 		},
 	},
 }

@@ -412,6 +412,17 @@ func (e *InlineWorkflowExecutor) buildSubWorkflowInputs() map[string]interface{}
 		}
 	}
 
+	// Passthrough: forward specified parent inputs to the child workflow.
+	// Applied after presets so passthrough values override preset defaults,
+	// but before explicit args so args always win.
+	if passthrough := model.NodePassthrough(e.evalResult); len(passthrough) > 0 {
+		for _, name := range passthrough {
+			if val, ok := e.workflowInputs[name]; ok {
+				subInputs[name] = val
+			}
+		}
+	}
+
 	for key, value := range e.subWorkflowInputs {
 		subInputs[key] = value
 	}
