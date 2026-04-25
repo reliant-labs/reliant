@@ -164,6 +164,128 @@ func TestEvaluateNodeCondition(t *testing.T) {
 	})
 }
 
+// TestSkippedRunNodeOutputs tests that skipped run nodes have type-aware outputs
+func TestSkippedRunNodeOutputs(t *testing.T) {
+	t.Run("skipped run node has exit_code accessible in downstream CEL", func(t *testing.T) {
+		nodeOutputs := map[string]interface{}{
+			"lint": model.SkippedRunOutputMap(),
+		}
+
+		// Downstream node checks lint.exit_code — should work without has() guards
+		downstream := &reliantv1.Node{Id: "deploy", Type: "run", Condition: &reliantv1.DirectCelBool{Expr: "nodes.lint.exit_code == 0"}}
+		result, err := evaluateNodeCondition(downstream, nodeOutputs, nil, nil)
+		require.NoError(t, err)
+		assert.True(t, result, "skipped run node exit_code should be 0")
+	})
+
+	t.Run("skipped run node is still detected as skipped", func(t *testing.T) {
+		nodeOutputs := map[string]interface{}{
+			"lint": model.SkippedRunOutputMap(),
+		}
+
+		downstream := &reliantv1.Node{Id: "deploy", Type: "run", Condition: &reliantv1.DirectCelBool{Expr: "nodes.lint.skipped"}}
+		result, err := evaluateNodeCondition(downstream, nodeOutputs, nil, nil)
+		require.NoError(t, err)
+		assert.True(t, result, "skipped field should still be true")
+	})
+
+	t.Run("skipped non-run node does not have exit_code", func(t *testing.T) {
+		nodeOutputs := map[string]interface{}{
+			"llm_step": model.SkippedOutputMap(),
+		}
+
+		// Accessing exit_code on a skipped non-run node should fail
+		downstream := &reliantv1.Node{Id: "next", Type: "run", Condition: &reliantv1.DirectCelBool{Expr: "has(nodes.llm_step.exit_code)"}}
+		result, err := evaluateNodeCondition(downstream, nodeOutputs, nil, nil)
+		require.NoError(t, err)
+		assert.False(t, result, "non-run skipped node should not have exit_code")
+	})
+
+	t.Run("skipped run node stdout is empty string", func(t *testing.T) {
+		nodeOutputs := map[string]interface{}{
+			"build": model.SkippedRunOutputMap(),
+		}
+
+		downstream := &reliantv1.Node{Id: "check", Type: "run", Condition: &reliantv1.DirectCelBool{Expr: "nodes.build.stdout == ''"}}
+		result, err := evaluateNodeCondition(downstream, nodeOutputs, nil, nil)
+		require.NoError(t, err)
+		assert.True(t, result, "skipped run node stdout should be empty")
+	})
+}
+
+func TestSkippedNodeNegativeEdgeCases(t *testing.T) {
+	t.Run("skipped non-run node does NOT have exit_code field", func(t *testing.T) {
+		// SkippedOutputMap() only has {"skipped": true}.
+		// Accessing exit_code should fail or return false with has().
+		nodeOutputs := map[string]interface{}{
+			"msg_node": model.SkippedOutputMap(),
+		}
+
+		// has(nodes.msg_node.exit_code) should be false
+		downstream := &reliantv1.Node{Id: "next", Type: "run", Condition: &reliantv1.DirectCelBool{Expr: "has(nodes.msg_node.exit_code)"}}
+		result, err := evaluateNodeCondition(downstream, nodeOutputs, nil, nil)
+		require.NoError(t, err)
+		assert.False(t, result, "skipped non-run node should NOT have exit_code")
+	})
+
+	t.Run("skipped run node has both exit_code 0 and skipped true", func(t *testing.T) {
+		// SkippedRunOutputMap() has {"skipped": true, "exit_code": 0, ...}.
+		// Both fields should be accessible in CEL.
+		nodeOutputs := map[string]interface{}{
+			"lint": model.SkippedRunOutputMap(),
+		}
+
+		// Check exit_code == 0
+		downstream := &reliantv1.Node{Id: "check1", Type: "run", Condition: &reliantv1.DirectCelBool{Expr: "nodes.lint.exit_code == 0"}}
+		result, err := evaluateNodeCondition(downstream, nodeOutputs, nil, nil)
+		require.NoError(t, err)
+		assert.True(t, result, "skipped run node exit_code should be 0")
+
+		// Check skipped == true
+		downstream2 := &reliantv1.Node{Id: "check2", Type: "run", Condition: &reliantv1.DirectCelBool{Expr: "nodes.lint.skipped"}}
+		result2, err := evaluateNodeCondition(downstream2, nodeOutputs, nil, nil)
+		require.NoError(t, err)
+		assert.True(t, result2, "skipped run node should have skipped == true")
+
+		// Check both coexist: exit_code == 0 && skipped == true
+		downstream3 := &reliantv1.Node{Id: "check3", Type: "run", Condition: &reliantv1.DirectCelBool{Expr: "nodes.lint.exit_code == 0 && nodes.lint.skipped"}}
+		result3, err := evaluateNodeCondition(downstream3, nodeOutputs, nil, nil)
+		require.NoError(t, err)
+		assert.True(t, result3, "both exit_code == 0 and skipped should coexist")
+	})
+
+	t.Run("non-skipped run node does NOT have skipped == true", func(t *testing.T) {
+		// A run node that actually executed should NOT have skipped == true.
+		nodeOutputs := map[string]interface{}{
+			"build": map[string]interface{}{
+				"exit_code": 0,
+				"stdout":    "build succeeded",
+				"stderr":    "",
+			},
+		}
+
+		// has(nodes.build.skipped) should be false for a real (non-skipped) node
+		downstream := &reliantv1.Node{Id: "next", Type: "run", Condition: &reliantv1.DirectCelBool{Expr: "!has(nodes.build.skipped) || !nodes.build.skipped"}}
+		result, err := evaluateNodeCondition(downstream, nodeOutputs, nil, nil)
+		require.NoError(t, err)
+		assert.True(t, result, "non-skipped run node should not have skipped == true")
+	})
+
+	t.Run("skipped run node exit_code != 0 is false confirming skipped = did not fail", func(t *testing.T) {
+		// Skipped run nodes have exit_code = 0.
+		// The expression `nodes.lint.exit_code != 0` should be false,
+		// confirming the "skipped = didn't fail" semantics.
+		nodeOutputs := map[string]interface{}{
+			"lint": model.SkippedRunOutputMap(),
+		}
+
+		downstream := &reliantv1.Node{Id: "fix", Type: "run", Condition: &reliantv1.DirectCelBool{Expr: "nodes.lint.exit_code != 0"}}
+		result, err := evaluateNodeCondition(downstream, nodeOutputs, nil, nil)
+		require.NoError(t, err)
+		assert.False(t, result, "skipped run node exit_code != 0 should be false (0 != 0 is false)")
+	})
+}
+
 // TestNodeConditionInWorkflow tests that conditions are correctly parsed from workflow YAML
 func TestNodeConditionInWorkflow(t *testing.T) {
 	t.Run("parse workflow with condition", func(t *testing.T) {

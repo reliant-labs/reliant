@@ -669,6 +669,16 @@ func (e *InlineLoopExecutor) buildIterationInputs() (map[string]interface{}, err
 			)
 		}
 	}
+
+	// Passthrough: forward specified parent inputs to the loop body.
+	if passthrough := model.NodePassthrough(evalResult); len(passthrough) > 0 {
+		for _, name := range passthrough {
+			if val, ok := e.workflowInputs[name]; ok {
+				iterInputs[name] = val
+			}
+		}
+	}
+
 	for key, value := range model.NodeMergedSubWorkflowInputs(evalResult) {
 		if key == "loop" {
 			continue

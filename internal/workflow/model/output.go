@@ -60,6 +60,19 @@ func SkippedOutputMap() map[string]interface{} {
 	}
 }
 
+// SkippedRunOutputMap returns the skipped output map for run nodes.
+// Includes zero-value defaults for all run output fields so downstream
+// CEL expressions can access fields like exit_code without has() guards.
+func SkippedRunOutputMap() map[string]interface{} {
+	return map[string]interface{}{
+		SkippedOutputField: true,
+		"exit_code":        0,
+		"stdout":           "",
+		"stderr":           "",
+		"log_file":         "",
+	}
+}
+
 // LoopOutputToMap converts loop output to map for CEL context.
 // Flattens user-defined outputs to top level, adds _iterations system field.
 func LoopOutputToMap(iterations int, outputs map[string]interface{}) map[string]interface{} {

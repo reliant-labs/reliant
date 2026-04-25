@@ -52,7 +52,6 @@ params:
   spawn_presets:
   - general
   - forge
-  - workflow_builder
   - researcher
   - planner
   - code_reviewer

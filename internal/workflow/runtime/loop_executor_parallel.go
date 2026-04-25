@@ -689,6 +689,16 @@ func (e *InlineLoopExecutor) buildParallelIterationInputs(
 			)
 		}
 	}
+
+	// Passthrough: forward specified parent inputs to the parallel loop body.
+	if passthrough := model.NodePassthrough(evalResult); len(passthrough) > 0 {
+		for _, name := range passthrough {
+			if val, ok := e.workflowInputs[name]; ok {
+				iterInputs[name] = val
+			}
+		}
+	}
+
 	for k, v := range model.NodeMergedSubWorkflowInputs(evalResult) {
 		if k == "loop" {
 			continue

@@ -439,7 +439,7 @@ message SaveMessageNodeArgs {
   // ToolResults is a CEL expression for tool results.
   CelString tool_results = 4 [(reliant) = { description: "Tool execution results" hidden: true }];
   // Attachments is a CEL expression for file attachments.
-  CelString attachments = 5 [(reliant) = { description: "Attachment IDs. CEL expression must return []string." }];
+  CelString attachments = 5 [(reliant) = { description: "Attachment IDs. CEL expression must return []string." hidden: true }];
   // DisplayStyle is a CEL expression for UI display style.
   CelString display_style = 6 [(reliant) = { description: "UI display style hint" enum_values: "info|warning|success|hidden" }];
 
@@ -513,6 +513,8 @@ message RunArgs {
   map<string, string> env = 2 [(reliant) = { description: "Environment variables" hidden: true }];
   // WorkDir sets the working directory. Defaults to project root.
   CelString work_dir = 3 [(reliant) = { description: "Working directory for command execution" hidden: true }];
+  // LogFile redirects stdout+stderr to this file. Engine creates parent dirs. Overwrites.
+  CelString log_file = 4 [(reliant) = { description: "Redirect stdout+stderr to this file" hidden: true }];
 }
 
 // SubWorkflowArgs configures a workflow node — invokes a sub-workflow.
@@ -543,6 +545,10 @@ message SubWorkflowArgs {
   ProjectConfig project = 5 [(reliant) = { description: "Working directory override for sub-workflow" visibility_contexts: "advanced" }];
   // Thread configures how this workflow node relates to conversation threads.
   ThreadConfig thread = 6 [(reliant) = { description: "Thread mode: inherit (default), new, or fork" }];
+  // Passthrough forwards specified input names from the parent workflow to the child.
+  // For each name, if inputs.X exists in the parent, it is passed as an arg to the child.
+  // Explicit args override passthrough values.
+  repeated string passthrough = 7 [(reliant) = { description: "Input names to forward from parent to child workflow" }];
 }
 
 // LoopArgs configures a loop node — repeats a sub-workflow while a condition is true.
@@ -606,6 +612,10 @@ message LoopArgs {
   // Each parallel iteration creates its own thread. Defaults to mode: new.
   // Only used when parallel is true.
   ThreadConfig thread = 12 [(reliant) = { description: "Thread mode for parallel iterations" }];
+  // Passthrough forwards specified input names from the parent workflow to the loop body.
+  // For each name, if inputs.X exists in the parent, it is passed as an arg to the child.
+  // Explicit args override passthrough values.
+  repeated string passthrough = 13 [(reliant) = { description: "Input names to forward from parent to child workflow" }];
 }
 
 // JoinArgs configures a join node — synchronizes parallel branches.
@@ -995,6 +1005,8 @@ message RunOutput {
   int32 exit_code = 1;
   string stdout = 2;
   string stderr = 3;
+  string working_dir = 4;
+  string log_file = 5;
 }
 
 // WorkflowOutput is the output from a workflow node (non-loop sub-workflow).

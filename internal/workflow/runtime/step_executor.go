@@ -626,6 +626,9 @@ func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node
 	runArgs, _ := model.NodeArgsAsMap(evalResult)
 	runInputs := copyMap(runArgs)
 	runInputs["command"] = model.NodeCommand(evalResult)
+	if logFile := model.NodeLogFile(evalResult); logFile != "" {
+		runInputs["log_file"] = logFile
+	}
 
 	// V2_ExecuteRunStep expects a flat map with runtime fields
 	runInputs["workflow_id"] = e.workflowID
