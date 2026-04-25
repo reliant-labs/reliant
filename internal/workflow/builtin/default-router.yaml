@@ -1,0 +1,71 @@
+name: default-router
+apiVersion: "0.0.5"
+description: |
+  Default workflow router — classifies the user's request and dispatches to the best
+  strategy from a curated set of workflows.
+
+  Uses LLM-based classification to select from:
+  - Agent: single-shot agent with specialist presets for straightforward tasks
+  - One Ring: multi-phase pipeline with planning, TDD, and implementation review loop
+  - Implement-Review: iterative implement → review loop with specialist spawning
+
+inputs:
+  mode:
+    type: enum
+    default: auto
+    enum: [manual, auto, plan]
+    description: "Execution mode for the routed workflow"
+    ui: hidden
+
+  model:
+    type: model
+    default:
+      tags: [flagship]
+    description: "Model for the routed workflow (routing uses a fast model)"
+    ui: toolbar
+
+  yield:
+    type: boolean
+    ui: toolbar
+    default: true
+    description: Pause for user review between phases.
+
+  user_message:
+    type: message
+    description: "The user's request to route"
+
+entry: [route]
+
+nodes:
+  - id: route
+    type: router
+    model:
+      tags: [fast, smart]
+    thread:
+      mode: new
+    workflows:
+      - ref: builtin://agent
+        presets:
+          - general
+          - researcher
+          - planner
+          - debug
+          - tester
+          - refactor
+          - documentation
+          - git
+          - ux
+          - code_reviewer
+        description: "Single-shot agent for straightforward tasks. Handles questions, explanations, small-to-medium edits, bug fixes, debugging, refactors, exploration, and code review. Best when the task can be completed in one pass without iterative review."
+
+      - ref: builtin://one-ring
+        description: "Multi-phase development pipeline with planning, optional TDD, and an implementation loop with automated review. Best for complex features, architectural changes, multi-file refactors, or tasks that need upfront research and design. Has internal routing to skip phases for simpler tasks."
+
+      - ref: builtin://implement-review
+        description: "Iterative implement → review loop. Best for tasks that benefit from structured review cycles — the implementer makes changes, then a reviewer evaluates and provides actionable feedback until the implementation passes. Good for quality-sensitive work, UX changes with visual review, or any task where iterative refinement is valuable."
+
+outputs:
+  selected_workflow: "{{nodes.route.selected_workflow}}"
+  selected_preset: "{{nodes.route.selected_preset}}"
+  reasoning: "{{nodes.route.reasoning}}"
+  response_text: "{{nodes.route.outputs.response_text}}"

@@ -34,12 +34,6 @@ inputs:
     enum: [low, medium, high, xhigh]
     default: medium
     description: Extended thinking level for main agent
-  permission:
-    type: string
-    default: "orchestrator"
-    description: "Permission level controlling which tools can be loaded via load_tool (readonly, mutating, orchestrator)"
-    ui: hidden
-
   tools:
     type: tools
     default:
@@ -128,8 +122,10 @@ nodes:
             system_prompt: "{{inputs.system_prompt}}"
             temperature: "{{inputs.temperature}}"
             thinking_level: "{{inputs.thinking_level}}"
-            permission: "{{inputs.permission}}"
-            tool_filter: "{{inputs.tools + [spawn(workflow.name, inputs.spawn_presets), inputs.yield ? 'ask_user' : '']}}"
+            tools_config:
+              filter: "{{inputs.tools}}"
+              spawn: "{{[spawn(workflow.name, inputs.spawn_presets)]}}"
+              permission: mutating
         - id: audit_check
           type: call_llm
           args:
@@ -160,8 +156,9 @@ nodes:
                     description: Explanation or guidance for your choice. Never provide guidance that just comments that the choice is good. You want to avoid polluting the context window. In those cases just omit guidance completely. Only provide guidance if it is intended to influence/change direction.
                 required:
                   - approved
-            tool_filter:
-              - audit
+            tools_config:
+              filter:
+                - audit
         # Only save non-empty guidance (empty on approval pollutes context)
         - id: execute_audit
           type: execute_tools

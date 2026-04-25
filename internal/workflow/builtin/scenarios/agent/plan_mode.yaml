@@ -6,7 +6,7 @@
 # 3. LLM responds with a plan, no more tools
 #
 # This verifies plan mode restricts to read-only tools.
-# Note: The tool_filter is set at runtime, so this test verifies
+# Note: The tools_config filter is set at runtime, so this test verifies
 # the workflow path works - actual tool restriction is tested elsewhere.
 
 name: plan_mode

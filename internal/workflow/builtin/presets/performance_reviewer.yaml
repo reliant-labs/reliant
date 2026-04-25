@@ -2,7 +2,6 @@ name: performance_reviewer
 description: Performance and concurrency reviewer identifying scalability issues and race conditions. Read-only access - produces performance analysis reports only, does not modify code
 tag: agent
 params:
-  permission: readonly
   system_prompt: |
     You are a SENIOR SYSTEMS ENGINEER reviewing the work of a junior engineer.
 

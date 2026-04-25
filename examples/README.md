@@ -52,7 +52,6 @@ examples/
 | `migrate.yaml` | Migration assistant |
 | `ux.yaml` | User experience improvements |
 | `ux_reviewer.yaml` | UX-focused code review |
-| `conflict-resolver.yaml` | Git merge conflict resolution |
 | `workflow_builder.yaml` | Workflow creation and modification |
 
 ## Scenarios

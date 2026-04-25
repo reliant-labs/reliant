@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pmezard/go-difflib/difflib"
 	"github.com/reliant-labs/reliant/internal/cmdutil"
 	"github.com/reliant-labs/reliant/internal/fileutil"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
@@ -643,6 +644,17 @@ func (c *LocalClient) FindReplace(ctx context.Context, pattern string, replaceme
 			"**/*.json", "**/*.yaml", "**/*.yml", "**/*.toml",
 			"**/*.xml", "**/*.html", "**/*.css", "**/*.scss",
 			"**/*.md", "**/*.txt", "**/*.sql", "**/*.sh",
+			"**/*.proto",
+			"**/*.env", "**/.env*",
+			"**/*.dockerfile", "**/Dockerfile", "**/Dockerfile.*",
+			"**/Makefile", "**/*.mk",
+			"**/*.graphql", "**/*.gql",
+			"**/*.tf", "**/*.hcl",
+			"**/*.conf", "**/*.cfg", "**/*.ini",
+			"**/*.gitignore", "**/*.dockerignore", "**/*.editorconfig",
+			"**/*.mod", "**/*.sum",
+			"**/*.lock",
+			"**/*.k",
 		}
 		seen := make(map[string]bool)
 		for _, p := range patterns {
@@ -689,9 +701,15 @@ func (c *LocalClient) FindReplace(ctx context.Context, pattern string, replaceme
 			}
 		}
 
+		var diff string
+		if preview && len(matchIndices) <= 50 {
+			diff = generateUnifiedDiff(filePath, oldContent, newContent)
+		}
+
 		changes = append(changes, FindReplaceChange{
 			File:         filePath,
 			Replacements: len(matchIndices),
+			Diff:         diff,
 		})
 	}
 
@@ -699,6 +717,22 @@ func (c *LocalClient) FindReplace(ctx context.Context, pattern string, replaceme
 		FilesChanged: len(changes),
 		Changes:      changes,
 	}, nil
+}
+
+// generateUnifiedDiff produces a unified diff between old and new content.
+func generateUnifiedDiff(filename, oldContent, newContent string) string {
+	diff := difflib.UnifiedDiff{
+		A:        difflib.SplitLines(oldContent),
+		B:        difflib.SplitLines(newContent),
+		FromFile: "a/" + filepath.Base(filename),
+		ToFile:   "b/" + filepath.Base(filename),
+		Context:  3,
+	}
+	text, err := difflib.GetUnifiedDiffString(diff)
+	if err != nil {
+		return ""
+	}
+	return text
 }
 
 // CreateDirectory creates a directory and all parent directories.

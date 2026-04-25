@@ -580,6 +580,19 @@ func TestValidateCELWithCompilation_AllBuiltinWorkflows(t *testing.T) {
 
 	t.Logf("Found %d builtin workflow files", len(files))
 
+	// Loader for resolving builtin:// refs in loop/spawn nodes
+	builtinLoader := func(name string) (*reliantv1.Workflow, error) {
+		name = strings.TrimPrefix(name, "builtin://")
+		if !strings.HasSuffix(name, ".yaml") {
+			name += ".yaml"
+		}
+		data, err := os.ReadFile(filepath.Join(builtinDir, name))
+		if err != nil {
+			return nil, fmt.Errorf("builtin workflow not found: %s", name)
+		}
+		return wfyaml.ParseWorkflow(data)
+	}
+
 	var allErrors []string
 
 	for _, file := range files {
@@ -593,7 +606,7 @@ func TestValidateCELWithCompilation_AllBuiltinWorkflows(t *testing.T) {
 
 			// Validate with CEL compilation
 			result := &Result{}
-			ValidateCELWithCompilation(wf, result, nil)
+			ValidateCELWithCompilation(wf, result, builtinLoader)
 
 			// Report errors
 			errors := result.Errors()

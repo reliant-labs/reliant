@@ -231,12 +231,6 @@ func (a *LoadWorkflowActivity) loadDBWorkflowWithRaw(ctx context.Context, workfl
 		return nil, nil, fmt.Errorf("failed to parse stored workflow %s: %w", workflowName, err)
 	}
 
-	// Validate
-	result := validation.StaticAnalysisWithOptions(wf, nil)
-	if result.AsError() != nil {
-		return nil, nil, fmt.Errorf("validation failed for workflow %s: %w", workflowName, result.AsError())
-	}
-
 	// Re-marshal to YAML for template resolution
 	yamlData, err := wfyaml.MarshalWorkflow(wf)
 	if err != nil {
@@ -283,11 +277,6 @@ func (a *LoadWorkflowActivity) loadStoredProjectWorkflowWithRaw(ctx context.Cont
 		return nil, nil, fmt.Errorf("failed to parse project workflow %s: %w", workflowName, err)
 	}
 
-	result := validation.StaticAnalysisWithOptions(wf, nil)
-	if result.AsError() != nil {
-		return nil, nil, fmt.Errorf("validation failed for project workflow %s: %w", workflowName, result.AsError())
-	}
-
 	yamlData, err := wfyaml.MarshalWorkflow(wf)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to marshal workflow to YAML: %w", err)
@@ -309,11 +298,6 @@ func loadBuiltinWorkflowWithRaw(workflowName string) ([]byte, *loadedWorkflow, e
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to parse internal workflow %s: %w", workflowName, err)
 		}
-
-		result := validation.StaticAnalysisWithOptions(protoWf, nil)
-		if result.AsError() != nil {
-			return nil, nil, fmt.Errorf("validation failed for internal workflow %s: %w", workflowName, result.AsError())
-		}
 		return yamlData, &loadedWorkflow{Workflow: protoWf}, nil
 	}
 
@@ -330,11 +314,6 @@ func loadBuiltinWorkflowWithRaw(workflowName string) ([]byte, *loadedWorkflow, e
 	wf, err := wfyaml.ParseWorkflow(data)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to parse builtin workflow %s: %w", workflowName, err)
-	}
-
-	result := validation.StaticAnalysisWithOptions(wf, nil)
-	if result.AsError() != nil {
-		return nil, nil, fmt.Errorf("validation failed for builtin workflow %s: %w", workflowName, result.AsError())
 	}
 
 	return data, &loadedWorkflow{

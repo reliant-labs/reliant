@@ -11,6 +11,7 @@ import type { InputGroupDef } from "./WorkflowInputGroup";
 import type { InputDef } from "../../lib/inputHelpers";
 import { isConfigurableInput, getInputNestedInputs, getInputPresetConfig, getInputUI, getInputDefault } from "../../lib/inputHelpers";
 import { canonicalizeBuiltinWorkflowRef } from "./workflowRef";
+import { isCelTemplate } from "../../lib/celTemplate";
 
 // ============================================
 // Types
@@ -238,7 +239,7 @@ export function useWorkflowInputs({
 
   useEffect(() => {
     if (!workflowDef || !enabled) return;
-    if (presetsLoading || presets.length === 0) return;
+    if (presetsLoading) return;
     if (storedPresetsApplied) return;
 
     const stored = storedPresetsRef.current;
@@ -248,8 +249,10 @@ export function useWorkflowInputs({
     let applied = false;
 
     for (const [groupName, presetName] of Object.entries(stored)) {
-      const preset = presets.find((p) => p.name === presetName);
-      if (!preset) continue;
+      // CEL templates are opaque at author time — surface them so the picker can
+      // display the expression instead of silently clearing it.
+      const isTemplate = isCelTemplate(presetName);
+      if (!isTemplate && !presets.find((p) => p.name === presetName)) continue;
       const normalizedGroup = isTopLevelGroup(groupName) ? "" : groupName;
       newSelectedPresets[normalizedGroup] = presetName;
       applied = true;

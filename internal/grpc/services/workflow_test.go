@@ -33,7 +33,6 @@ nodes:
   - id: llm
     type: call_llm
     model: "{{inputs.model}}"
-    tools: true
 `
 
 	workflow, err := parseWorkflowYAML([]byte(yamlContent))

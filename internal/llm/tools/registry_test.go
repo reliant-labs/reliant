@@ -210,18 +210,17 @@ func TestTagDefault(t *testing.T) {
 	// Sort for consistent comparison
 	sort.Strings(result)
 
-	// Default tools should include the comprehensive set from general preset
+	// Default tools should include the focused set for general-purpose work
 	expectedDefaults := []string{
-		"view", "write", "edit", "find_replace", "move_code", // file
+		"view", "write", "edit", "find_replace", // file
 		"grep", "glob", // search
 		ShellToolName,        // execution (platform-specific: bash on Unix, powershell on Windows)
 		"fetch", "websearch", // web
-		"create_plan", "update_plan", "get_plan", // planning
-		"list_tasks", "add_task", "update_task", // tasks
-		"add_dependency", "remove_dependency", "list_ready_tasks", // dependency management
-		"worktree",                              // worktree
+		"create_plan",                           // planning (update_plan, get_plan deferred)
+		"list_tasks", "add_task", "update_task", // tasks (dependency tools deferred)
 		"bash_list", "bash_output", "bash_kill", // background process management
-		"install_skill", // skills (when feature-enabled)
+		"skill",     // skill loading
+		"load_tool", // dynamic tool loading
 	}
 
 	resultMap := make(map[string]bool)
@@ -230,8 +229,20 @@ func TestTagDefault(t *testing.T) {
 	}
 
 	for _, expected := range expectedDefaults {
-		if !resultMap[expected] && expected != "install_skill" {
+		if !resultMap[expected] {
 			t.Errorf("Expected default tool %q to be included", expected)
+		}
+	}
+
+	// Verify deferred tools are NOT in defaults
+	deferredTools := []string{
+		"component_library", "worktree", "move_code",
+		"update_plan", "get_plan",
+		"add_dependency", "remove_dependency", "list_ready_tasks",
+	}
+	for _, deferred := range deferredTools {
+		if resultMap[deferred] {
+			t.Errorf("Deferred tool %q should NOT be in tag:default", deferred)
 		}
 	}
 
@@ -256,7 +267,6 @@ func TestTagReadOnly(t *testing.T) {
 		"get_plan", "list_tasks", // planning reading (not create/update)
 		"list_ready_tasks",  // dependency reading
 		"sourcegraph",       // analysis
-		"layout_library",    // layout reading
 		"component_library", // component library reading
 	}
 
@@ -305,7 +315,6 @@ func TestTagPlan(t *testing.T) {
 		"list_tasks", "add_task", "update_task", "create_subtask", // task tools
 		"add_dependency", "remove_dependency", "list_ready_tasks", // dependency tools
 		"sourcegraph",       // analysis
-		"layout_library",    // layout reading
 		"component_library", // component library reading
 	}
 

@@ -11,7 +11,6 @@ func init() {
 	FieldDescriptions["call_llm.system_prompt"] = "System message for this LLM call"
 	FieldDescriptions["call_llm.temperature"] = "Temperature (0-1) controls randomness"
 	FieldDescriptions["call_llm.thinking_level"] = "Extended thinking level for complex reasoning"
-	FieldDescriptions["call_llm.tool_filter"] = "Filter which tools are available. Use tool names, glob patterns (edit*), tags (tag:search), or !exclusions (!bash)."
 	FieldDescriptions["create_worktree.base_branch"] = "Base branch to branch from"
 	FieldDescriptions["create_worktree.copy_files"] = "Files to copy from source repo (e.g. .env)"
 	FieldDescriptions["create_worktree.force"] = "Force creation by deleting existing worktree"

@@ -89,10 +89,9 @@ Reliant includes a suite of built-in presets for common development roles. These
 | reproducer | claude-4.5-sonnet | view, edit, tag:search, tag:shell, bash_list, bash_output, fetch | Runtime bug reproduction. Discovers entry points, adds logging, captures evidence. |
 | debug | claude-4.5-sonnet | view, tag:search, tag:shell | Debugging orchestrator. Spawns researchers, testers, reproducers to find root causes. |
 | refactor | claude-4.6-opus | view, edit, write, find_replace, move_code, grep, glob, tag:shell | Systematic code improvement. Strict methodology: assess, verify tests, transform incrementally. |
-| git | claude-4.5-sonnet | tag:shell, view, tag:search | Version control operations. Conventional commits, atomic changes. |
-| conflict-resolver | claude-4.5-sonnet | tag:shell, view, tag:search, edit | Git conflict resolution. Classifies conflicts, preserves intent from both branches. |
+| git | claude-4.5-sonnet | tag:shell, view, tag:search | Version control operations. Conventional commits, atomic changes. Loads the `conflict-resolver` skill for complex merge conflicts. |
 | documentation | claude-4.5-sonnet | view, write, edit, grep, glob, tag:shell, fetch | Technical writing. Narrative-driven docs that teach through explanation and example. |
-| ux | claude-4.5-sonnet | fetch, glob, grep, view, write, edit, tag:shell, get_plan, list_tasks, update_task, layout_library, component_library | UI design and implementation. WCAG 2.1 AA compliant, various style modes. |
+| ux | claude-4.5-sonnet | fetch, glob, grep, view, write, edit, tag:shell, get_plan, list_tasks, update_task, component_library | UI design and implementation. WCAG 2.1 AA compliant, various style modes. |
 
 ### Detailed Examples
 

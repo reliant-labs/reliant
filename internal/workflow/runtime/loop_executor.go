@@ -49,6 +49,11 @@ type InlineLoopExecutor struct {
 	// made available as outputs.* in CEL expressions for inner nodes.
 	prevIterOutputs map[string]interface{}
 
+	// resolvedItems holds the pre-evaluated items list for sequential loops
+	// that specify an items expression. When set, iter.item is populated per iteration.
+	resolvedItems []interface{}
+	resolvedKeys  []string
+
 	// threadTracker tracks threads for runtime thread mapping
 	threadTracker *ThreadTracker
 
@@ -203,7 +208,11 @@ func (e *InlineLoopExecutor) workflowIdentity() string {
 // The presets map can target:
 // - "default": params are applied directly to top-level inputs
 // - "GroupName": params are applied as "GroupName.param" keys
-func (e *InlineLoopExecutor) loadAndMergePresets(iterInputs map[string]interface{}) error {
+//
+// Preset names may be CEL templates (e.g. `{{inputs.preset_name}}`). The
+// provided evalCtx is used to resolve them per-iteration. If evalCtx is nil,
+// preset names are treated as literals.
+func (e *InlineLoopExecutor) loadAndMergePresets(ctx workflow.Context, iterInputs map[string]interface{}, evalCtx wfcel.CELEvalContext) error {
 	if e.projectPath == "" {
 		return fmt.Errorf("project path not set, cannot load presets")
 	}
@@ -228,12 +237,36 @@ func (e *InlineLoopExecutor) loadAndMergePresets(iterInputs map[string]interface
 
 	// Load each preset via activity and merge params
 	for _, groupName := range groupNames {
-		presetName := presets[groupName]
+		rawName := presets[groupName]
+		if rawName == "" {
+			continue
+		}
+
+		presetName, err := ResolvePresetName(rawName, evalCtx)
+		if err != nil {
+			e.logger.Warn("[InlineLoop] Failed to resolve preset template, skipping",
+				"loopID", e.loopID,
+				"iteration", e.iteration,
+				"group", groupName,
+				"template", rawName,
+				"error", err,
+			)
+			continue
+		}
+		if presetName != rawName {
+			e.logger.Info("[InlineLoop] Resolved preset template",
+				"loopID", e.loopID,
+				"iteration", e.iteration,
+				"group", groupName,
+				"template", rawName,
+				"resolved", presetName,
+			)
+		}
 		if presetName == "" {
 			continue
 		}
 
-		params, err := e.loadPresetParams(presetName)
+		params, err := e.loadPresetParams(ctx, presetName)
 		if err != nil {
 			e.logger.Warn("[InlineLoop] Failed to load preset",
 				"loopID", e.loopID,
@@ -273,8 +306,8 @@ func (e *InlineLoopExecutor) loadAndMergePresets(iterInputs map[string]interface
 
 // loadPresetParams loads a preset by name and returns its params.
 // Uses the V2_LoadPresetParams activity to avoid import cycles.
-func (e *InlineLoopExecutor) loadPresetParams(presetName string) (map[string]interface{}, error) {
-	activityCtx := workflow.WithActivityOptions(e.ctx, workflow.ActivityOptions{
+func (e *InlineLoopExecutor) loadPresetParams(ctx workflow.Context, presetName string) (map[string]interface{}, error) {
+	activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    time.Second,
@@ -288,7 +321,7 @@ func (e *InlineLoopExecutor) loadPresetParams(presetName string) (map[string]int
 	err := workflow.ExecuteActivity(activityCtx, "LoadPresetParams", map[string]interface{}{
 		"project_path": e.projectPath,
 		"preset_name":  presetName,
-	}).Get(e.ctx, &params)
+	}).Get(ctx, &params)
 
 	if err != nil {
 		return nil, err
@@ -327,6 +360,26 @@ func (e *InlineLoopExecutor) Execute() (*reliantv1.LoopOutput, error) {
 		return nil, fmt.Errorf("failed to load loop sub-workflow: %w", err)
 	}
 
+	// If the sequential loop has an items expression, resolve it upfront
+	// so iter.item is available on each iteration.
+	if model.CelStringIsSet(la.GetItems()) {
+		items, err := e.evaluateItems()
+		if err != nil {
+			return nil, fmt.Errorf("failed to evaluate loop items: %w", err)
+		}
+		keyExpr := la.GetKey()
+		keys, err := e.resolveIterationKeys(items, keyExpr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve loop iteration keys: %w", err)
+		}
+		e.resolvedItems = items
+		e.resolvedKeys = keys
+		e.logger.Info("[InlineLoop] Resolved items for sequential loop",
+			"loopID", e.loopID,
+			"itemCount", len(items),
+		)
+	}
+
 	// Track outputs from the last iteration
 	var lastIterationOutputs map[string]interface{}
 
@@ -354,6 +407,16 @@ func (e *InlineLoopExecutor) Execute() (*reliantv1.LoopOutput, error) {
 
 		// Check for pause signal at iteration boundary
 		e.pauseCtrl.DoCheckPause(e.ctx)
+
+		// Auto-stop when items-based sequential loop exhausts its items
+		if e.resolvedItems != nil && e.iteration >= len(e.resolvedItems) {
+			e.logger.Info("[InlineLoop] All items processed, exiting loop",
+				"loopID", e.loopID,
+				"iteration", e.iteration,
+				"itemCount", len(e.resolvedItems),
+			)
+			break
+		}
 
 		e.logger.Info("[InlineLoop] Starting iteration",
 			"loopID", e.loopID,
@@ -545,6 +608,27 @@ func (e *InlineLoopExecutor) compileSubWorkflowSemantics() error {
 	return nil
 }
 
+// buildIterCtx returns the iter context map for the current iteration.
+// When the loop has resolved items, includes item and key; otherwise just iteration/index.
+func (e *InlineLoopExecutor) buildIterCtx() map[string]interface{} {
+	if e.resolvedItems != nil && e.iteration < len(e.resolvedItems) {
+		item := e.resolveIterItem(e.resolvedItems[e.iteration])
+		key := e.resolvedKeys[e.iteration]
+		return model.BuildParallelIterContext(e.iteration, item, key)
+	}
+	return model.BuildIterContext(e.iteration)
+}
+
+// buildIterContextModel returns the IterContext struct for CEL eval contexts.
+func (e *InlineLoopExecutor) buildIterContextModel() *model.IterContext {
+	ic := &model.IterContext{Iteration: e.iteration, Index: e.iteration}
+	if e.resolvedItems != nil && e.iteration < len(e.resolvedItems) {
+		ic.Item = e.resolveIterItem(e.resolvedItems[e.iteration])
+		ic.Key = e.resolvedKeys[e.iteration]
+	}
+	return ic
+}
+
 func (e *InlineLoopExecutor) buildIterationInputs() (map[string]interface{}, error) {
 	if e.inputPolicy() == core.InputPolicyInlineInheritParentInputs {
 		iterInputs := make(map[string]interface{}, len(e.workflowInputs)+2)
@@ -552,11 +636,11 @@ func (e *InlineLoopExecutor) buildIterationInputs() (map[string]interface{}, err
 			iterInputs[key] = value
 		}
 		iterInputs["loop"] = map[string]interface{}{"iteration": e.iteration}
-		iterInputs["iter"] = model.BuildIterContext(e.iteration)
+		iterInputs["iter"] = e.buildIterCtx()
 		return iterInputs, nil
 	}
 
-	iterCtx := model.BuildIterContext(e.iteration)
+	iterCtx := e.buildIterCtx()
 	evalResult, err := EvaluateNodeConfig(
 		e.loopStep.Node,
 		e.nodeOutputs,
@@ -573,7 +657,12 @@ func (e *InlineLoopExecutor) buildIterationInputs() (map[string]interface{}, err
 
 	iterInputs := make(map[string]interface{})
 	if len(model.GetLoopArgs(e.loopStep.Node).GetPresets()) > 0 {
-		if err := e.loadAndMergePresets(iterInputs); err != nil {
+		presetEvalCtx := &wfcel.EdgeEvalContext{
+			Nodes:  e.nodeOutputs,
+			Inputs: e.workflowInputs,
+			Iter:   e.buildIterContextModel(),
+		}
+		if err := e.loadAndMergePresets(e.ctx, iterInputs, presetEvalCtx); err != nil {
 			e.logger.Warn("[InlineLoop] Failed to load presets, continuing without them",
 				"loopID", e.loopID,
 				"error", err,
@@ -590,7 +679,7 @@ func (e *InlineLoopExecutor) buildIterationInputs() (map[string]interface{}, err
 		iterInputs = ApplyDefaults(iterInputs, e.subWorkflow.GetInputs())
 	}
 	iterInputs["loop"] = map[string]interface{}{"iteration": e.iteration}
-	iterInputs["iter"] = model.BuildIterContext(e.iteration)
+	iterInputs["iter"] = e.buildIterCtx()
 	return iterInputs, nil
 }
 
@@ -811,7 +900,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 				)
 
 				// Use helpers for consistent context building
-				nestedIterCtx := model.BuildIterContext(e.iteration)
+				nestedIterCtx := e.buildIterCtx()
 
 				// DEBUG: Log node outputs before evaluating config (for inject debugging)
 				if model.NodeInjectConfig(step.Node) != nil {
@@ -1265,7 +1354,7 @@ func (e *InlineLoopExecutor) evaluateWhileCondition(outputs map[string]interface
 	)
 
 	ctx := &wfcel.LoopEvalContext{
-		Iter:    &model.IterContext{Iteration: e.iteration},
+		Iter:    e.buildIterContextModel(),
 		Outputs: outputs,
 		Inputs:  e.workflowInputs,
 	}

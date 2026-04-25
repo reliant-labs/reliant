@@ -194,94 +194,35 @@ func TestLoadTool_DeniedLoadNotStored(t *testing.T) {
 		"store should have no loaded tools after a denied load")
 }
 
-// ----- FormatDeferredToolsAnnouncement -----
+// ----- SetDeferredTools / Description -----
 
-func TestFormatDeferredToolsAnnouncement_ExcludesLoadedTools(t *testing.T) {
-	chatID := "announce-test-loaded-" + t.Name()
-	store := GetLoadedToolsStore()
-	store.Clear(chatID)
-	t.Cleanup(func() { store.Clear(chatID) })
+func TestLoadTool_DescriptionIncludesDeferredTools(t *testing.T) {
+	tool := &loadToolTool{}
 
-	// Initial tools are whatever readonly starts with; load sourcegraph on top.
-	initial := InitialToolsForPermission(PermissionOrchestrator)
-	store.Add(chatID, ToolSourcegraph)
+	// Without deferred tools, description is the base text.
+	assert.Equal(t, loadToolDescription, tool.Description())
 
-	announcement := FormatDeferredToolsAnnouncement(chatID, PermissionOrchestrator, initial, nil)
-	require.NotEmpty(t, announcement, "expected a non-empty announcement when deferred tools exist")
-
-	// The already-loaded tool must not appear in the deferred list section.
-	// (It may still appear in surrounding prose; assert against the JSON-ish list.)
-	assert.NotContains(t, announcement, `"`+ToolSourcegraph+`"`,
-		"already-loaded tool must be excluded from the deferred announcement")
+	// Set deferred tools and verify they appear in the description.
+	tool.SetDeferredTools([]string{"sourcegraph", "mcp__server__tool1"})
+	desc := tool.Description()
+	assert.Contains(t, desc, `"sourcegraph"`)
+	assert.Contains(t, desc, `"mcp__server__tool1"`)
+	assert.Contains(t, desc, "Additional tools available")
 }
 
-func TestFormatDeferredToolsAnnouncement_ExcludesInitialTools(t *testing.T) {
-	chatID := "announce-test-initial-" + t.Name()
-	store := GetLoadedToolsStore()
-	store.Clear(chatID)
-	t.Cleanup(func() { store.Clear(chatID) })
+func TestLoadTool_DescriptionNoDeferredTools(t *testing.T) {
+	tool := &loadToolTool{}
+	tool.SetDeferredTools(nil)
+	assert.Equal(t, loadToolDescription, tool.Description())
 
-	initial := InitialToolsForPermission(PermissionOrchestrator)
-	announcement := FormatDeferredToolsAnnouncement(chatID, PermissionOrchestrator, initial, nil)
-
-	// Tools that are part of the initial set must NOT be announced as deferred.
-	for _, name := range initial {
-		assert.NotContains(t, announcement, `"`+name+`"`,
-			"initial tool %q should not appear in the deferred announcement", name)
-	}
+	tool.SetDeferredTools([]string{})
+	assert.Equal(t, loadToolDescription, tool.Description())
 }
 
-func TestFormatDeferredToolsAnnouncement_EmptyWhenAllLoaded(t *testing.T) {
-	chatID := "announce-test-empty-" + t.Name()
-	store := GetLoadedToolsStore()
-	store.Clear(chatID)
-	t.Cleanup(func() { store.Clear(chatID) })
-
-	registry := GetToolRegistry()
-	allNames := make([]string, 0, len(registry))
-	for _, def := range registry {
-		allNames = append(allNames, def.Name)
-	}
-
-	// Even with MCP tools, if they're all in the active set, announcement should be empty
-	mcpTools := []string{"mcp__test__tool"}
-	allNames = append(allNames, mcpTools...)
-	announcement := FormatDeferredToolsAnnouncement(chatID, PermissionOrchestrator, allNames, mcpTools)
-	assert.Empty(t, announcement,
-		"announcement should be empty when every registry tool and MCP tool is already accounted for")
-}
-
-func TestFormatDeferredToolsAnnouncement_IncludesMCPTools(t *testing.T) {
-	chatID := "announce-test-mcp-" + t.Name()
-	store := GetLoadedToolsStore()
-	store.Clear(chatID)
-	t.Cleanup(func() { store.Clear(chatID) })
-
-	initial := InitialToolsForPermission(PermissionOrchestrator)
-	mcpTools := []string{"mcp__server__tool1", "mcp__server__tool2"}
-
-	announcement := FormatDeferredToolsAnnouncement(chatID, PermissionOrchestrator, initial, mcpTools)
-	require.NotEmpty(t, announcement)
-
-	// MCP tools should appear in the deferred list
-	assert.Contains(t, announcement, `"mcp__server__tool1"`)
-	assert.Contains(t, announcement, `"mcp__server__tool2"`)
-}
-
-func TestFormatDeferredToolsAnnouncement_ExcludesMCPToolsAlreadyActive(t *testing.T) {
-	chatID := "announce-test-mcp-active-" + t.Name()
-	store := GetLoadedToolsStore()
-	store.Clear(chatID)
-	t.Cleanup(func() { store.Clear(chatID) })
-
-	// Put one MCP tool in the active set
-	initial := append(InitialToolsForPermission(PermissionOrchestrator), "mcp__server__tool1")
-	mcpTools := []string{"mcp__server__tool1", "mcp__server__tool2"}
-
-	announcement := FormatDeferredToolsAnnouncement(chatID, PermissionOrchestrator, initial, mcpTools)
-	require.NotEmpty(t, announcement)
-
-	// Active MCP tool should NOT appear, other should
-	assert.NotContains(t, announcement, `"mcp__server__tool1"`)
-	assert.Contains(t, announcement, `"mcp__server__tool2"`)
+func TestLoadTool_ImplementsDeferredToolsAware(t *testing.T) {
+	tool := NewLoadToolTool()
+	u, ok := tool.(interface{ Unwrap() any })
+	require.True(t, ok, "load_tool wrapper must implement Unwrap")
+	_, ok = u.Unwrap().(DeferredToolsAware)
+	assert.True(t, ok, "inner load_tool must implement DeferredToolsAware")
 }

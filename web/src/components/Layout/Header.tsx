@@ -275,7 +275,6 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
           <div
             className="flex items-center gap-2 text-sm font-medium text-foreground/80 px-2 py-1 rounded-md bg-accent/20"
             style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-            data-onboarding="workspace-indicator"
           >
             <button
               type="button"

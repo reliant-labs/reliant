@@ -322,8 +322,10 @@ func TestStaticAnalysisWithOptions_SpawnWorkflowNameIdentityTemplateContract(t *
 			Type: "call_llm",
 			Args: &reliantv1.Node_CallLlm{CallLlm: &reliantv1.CallLLMArgs{
 				Model: &reliantv1.CelModelSelector{Value: &reliantv1.CelModelSelector_Expr{Expr: "inputs.model"}},
-				ToolFilter: &reliantv1.CelStringList{
-					Value: &reliantv1.CelStringList_Literal{Literal: &reliantv1.StringList{Values: []string{"{{inputs.tools + [spawn(workflow.name, inputs.spawn_presets)]}}"}}},
+				ToolsConfig: &reliantv1.ToolsConfig{
+					Spawn: &reliantv1.CelStringList{
+						Value: &reliantv1.CelStringList_Literal{Literal: &reliantv1.StringList{Values: []string{"{{inputs.tools + [spawn(workflow.name, inputs.spawn_presets)]}}"}}},
+					},
 				},
 			}},
 		}},
@@ -365,8 +367,10 @@ func TestStaticAnalysisWithOptions_SpawnWorkflowNameUsesCanonicalWorkflowRefOver
 			Type: "call_llm",
 			Args: &reliantv1.Node_CallLlm{CallLlm: &reliantv1.CallLLMArgs{
 				Model: &reliantv1.CelModelSelector{Value: &reliantv1.CelModelSelector_Expr{Expr: "inputs.model"}},
-				ToolFilter: &reliantv1.CelStringList{
-					Value: &reliantv1.CelStringList_Literal{Literal: &reliantv1.StringList{Values: []string{"{{inputs.tools + [spawn(workflow.name, inputs.spawn_presets)]}}"}}},
+				ToolsConfig: &reliantv1.ToolsConfig{
+					Spawn: &reliantv1.CelStringList{
+						Value: &reliantv1.CelStringList_Literal{Literal: &reliantv1.StringList{Values: []string{"{{inputs.tools + [spawn(workflow.name, inputs.spawn_presets)]}}"}}},
+					},
 				},
 			}},
 		}},

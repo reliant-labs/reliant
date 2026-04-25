@@ -171,6 +171,11 @@ func NewToolWrapper[P any, O any](t genericTool[P, O]) *ToolWrapper[P, O] {
 	}
 }
 
+// Unwrap returns the inner tool implementation for interface type assertions.
+func (t *ToolWrapper[P, O]) Unwrap() any {
+	return t.tool
+}
+
 // Name returns the tool name
 func (t *ToolWrapper[P, O]) Name() string {
 	return t.tool.Name()

@@ -45,6 +45,16 @@ func (p *workflowTypeProvider) FindStructType(structType string) (*types.Type, b
 			return types.NewTypeTypeWithParam(p.typeCtx.CurrentNodeOutputType), true
 		}
 		return nil, false
+	case "iter":
+		if p.typeCtx != nil && p.typeCtx.IterItemFields != nil {
+			return types.NewTypeTypeWithParam(types.NewObjectType("iter")), true
+		}
+		return nil, false
+	case "__iter_item":
+		if p.typeCtx != nil && p.typeCtx.IterItemFields != nil {
+			return types.NewTypeTypeWithParam(types.NewObjectType("__iter_item")), true
+		}
+		return nil, false
 	}
 
 	// Synthetic node output types (node_output.call_llm, etc.)
@@ -56,6 +66,19 @@ func (p *workflowTypeProvider) FindStructType(structType string) (*types.Type, b
 		if p.isSyntheticInputType(structType) {
 			return types.NewObjectType(structType), true
 		}
+	}
+
+	// Nested iter.item field types (e.g., iter.item.entity which is an object with sub-fields).
+	// Only return true for fields that are object types with properties — scalar fields
+	// should not be registered as types.
+	if p.typeCtx != nil && p.typeCtx.IterItemFields != nil && strings.HasPrefix(structType, "__iter_item.") {
+		fieldName := strings.TrimPrefix(structType, "__iter_item.")
+		if fi, ok := p.typeCtx.IterItemFields[fieldName]; ok && len(fi.Properties) > 0 {
+			return types.NewObjectType(structType), true
+		}
+		// Field doesn't exist or is scalar — don't register as type.
+		// This forces CEL to resolve through FindStructFieldType instead.
+		return nil, false
 	}
 
 	return p.base.FindStructType(structType)
@@ -97,11 +120,38 @@ func (p *workflowTypeProvider) FindStructFieldNames(structType string) ([]string
 		}
 	case "output":
 		return p.findCurrentOutputFieldNames()
+
+	case "iter":
+		if p.typeCtx.IterItemFields != nil {
+			return []string{"iteration", "index", "item", "key"}, true
+		}
+	case "__iter_item":
+		if p.typeCtx.IterItemFields != nil {
+			names := make([]string, 0, len(p.typeCtx.IterItemFields))
+			for name := range p.typeCtx.IterItemFields {
+				names = append(names, name)
+			}
+			sort.Strings(names)
+			return names, true
+		}
 	}
 
 	if strings.HasPrefix(structType, "inputs.") {
 		if fieldNames := p.getNestedInputFieldNames(structType); fieldNames != nil {
 			return fieldNames, true
+		}
+	}
+
+	// Resolve nested iter.item types: "iter.item.{fieldName}"
+	if strings.HasPrefix(structType, "__iter_item.") && p.typeCtx != nil && p.typeCtx.IterItemFields != nil {
+		path := strings.TrimPrefix(structType, "__iter_item.")
+		if fi, ok := p.typeCtx.IterItemFields[path]; ok && len(fi.Properties) > 0 {
+			names := make([]string, 0, len(fi.Properties))
+			for name := range fi.Properties {
+				names = append(names, name)
+			}
+			sort.Strings(names)
+			return names, true
 		}
 	}
 
@@ -154,6 +204,10 @@ func (p *workflowTypeProvider) FindStructFieldType(structType, fieldName string)
 		return p.findOutputFieldType(fieldName)
 	case "output":
 		return p.findCurrentOutputFieldType(fieldName)
+	case "iter":
+		return p.findIterFieldType(fieldName)
+	case "__iter_item":
+		return p.findIterItemFieldType(fieldName)
 	}
 
 	if strings.HasPrefix(structType, "inputs.") {
@@ -162,6 +216,24 @@ func (p *workflowTypeProvider) FindStructFieldType(structType, fieldName string)
 		}
 		if p.isAdditionalPropertiesAllowed(structType) {
 			return &types.FieldType{Type: types.DynType}, true
+		}
+		return nil, false
+	}
+
+	// Resolve nested iter.item types: "iter.item.{fieldName}"
+	if strings.HasPrefix(structType, "__iter_item.") && p.typeCtx != nil && p.typeCtx.IterItemFields != nil {
+		path := strings.TrimPrefix(structType, "__iter_item.")
+		if fi, ok := p.typeCtx.IterItemFields[path]; ok {
+			if len(fi.Properties) > 0 {
+				if subField, ok := fi.Properties[fieldName]; ok {
+					celType := fieldInfoToCELType(subField)
+					return &types.FieldType{Type: celType}, true
+				}
+				return nil, false
+			}
+			if fi.IsDynamic {
+				return &types.FieldType{Type: types.DynType}, true
+			}
 		}
 		return nil, false
 	}
@@ -308,6 +380,39 @@ func (p *workflowTypeProvider) findCurrentOutputFieldNames() ([]string, bool) {
 	}
 
 	return nil, false
+}
+
+func (p *workflowTypeProvider) findIterFieldType(fieldName string) (*types.FieldType, bool) {
+	if p.typeCtx == nil || p.typeCtx.IterItemFields == nil {
+		return nil, false
+	}
+	switch fieldName {
+	case "iteration", "index":
+		return &types.FieldType{Type: types.IntType}, true
+	case "key":
+		return &types.FieldType{Type: types.StringType}, true
+	case "item":
+		// iter.item is an object with known fields from the inferred schema.
+		return &types.FieldType{Type: types.NewObjectType("__iter_item")}, true
+	default:
+		return nil, false
+	}
+}
+
+func (p *workflowTypeProvider) findIterItemFieldType(fieldName string) (*types.FieldType, bool) {
+	if p.typeCtx == nil || p.typeCtx.IterItemFields == nil {
+		return nil, false
+	}
+	fieldInfo, ok := p.typeCtx.IterItemFields[fieldName]
+	if !ok {
+		// Unknown field on iter.item — this is the error we want to surface.
+		return nil, false
+	}
+	if len(fieldInfo.Properties) > 0 {
+		return &types.FieldType{Type: types.NewObjectType("__iter_item." + fieldName)}, true
+	}
+	celType := fieldInfoToCELType(fieldInfo)
+	return &types.FieldType{Type: celType}, true
 }
 
 func (p *workflowTypeProvider) EnumValue(enumName string) ref.Val {
