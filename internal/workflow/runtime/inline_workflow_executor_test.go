@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -194,5 +195,150 @@ func TestMergePresetParams(t *testing.T) {
 		nested := subInputs["Grp"].(map[string]interface{})
 		assert.Equal(t, "x", nested["existing"])
 		assert.Equal(t, "y", nested["added"])
+	})
+}
+
+func TestBuildSubWorkflowInputs_PassthroughNegative(t *testing.T) {
+	makeExecutor := func(parentInputs, subInputs map[string]interface{}, passthrough []string) *InlineWorkflowExecutor {
+		evalResult := &reliantv1.Node{
+			Id:   "child",
+			Type: "workflow",
+			Args: &reliantv1.Node_Workflow{Workflow: &reliantv1.SubWorkflowArgs{
+				Ref:         &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "builtin://agent"}},
+				Passthrough: passthrough,
+			}},
+		}
+		return &InlineWorkflowExecutor{
+			nodeID:            "child",
+			node:              evalResult,
+			evalResult:        evalResult,
+			workflowInputs:    parentInputs,
+			subWorkflowInputs: subInputs,
+			subWorkflow:       &reliantv1.Workflow{Name: "agent"},
+			logger:            &presetTestLogger{},
+		}
+	}
+
+	t.Run("passthrough value overridden by explicit arg wins at runtime", func(t *testing.T) {
+		// Both passthrough and args specify "model". Args must win.
+		exec := makeExecutor(
+			map[string]interface{}{"model": "from-parent", "temperature": 0.5},
+			map[string]interface{}{"model": "from-explicit-args"},
+			[]string{"model", "temperature"},
+		)
+		result := exec.buildSubWorkflowInputs()
+		assert.Equal(t, "from-explicit-args", result["model"],
+			"explicit args must override passthrough at runtime")
+		assert.Equal(t, 0.5, result["temperature"],
+			"non-overridden passthrough value should be forwarded")
+	})
+
+	t.Run("passthrough with no matching parent input does not crash", func(t *testing.T) {
+		// Parent has no inputs at all. Passthrough should silently skip.
+		exec := makeExecutor(
+			map[string]interface{}{},
+			map[string]interface{}{"existing": "value"},
+			[]string{"missing_input_1", "missing_input_2"},
+		)
+		result := exec.buildSubWorkflowInputs()
+		_, has1 := result["missing_input_1"]
+		_, has2 := result["missing_input_2"]
+		assert.False(t, has1, "missing passthrough should not appear in result")
+		assert.False(t, has2, "missing passthrough should not appear in result")
+		assert.Equal(t, "value", result["existing"], "existing args should be preserved")
+	})
+
+	t.Run("passthrough with nil parent inputs does not crash", func(t *testing.T) {
+		exec := makeExecutor(
+			nil, // nil parent inputs
+			map[string]interface{}{},
+			[]string{"model"},
+		)
+		// Should not panic
+		result := exec.buildSubWorkflowInputs()
+		_, hasModel := result["model"]
+		assert.False(t, hasModel, "nil parent inputs should result in no forwarding")
+	})
+
+	t.Run("passthrough empty list is no-op", func(t *testing.T) {
+		exec := makeExecutor(
+			map[string]interface{}{"model": "claude-4", "temp": 0.7},
+			map[string]interface{}{},
+			[]string{}, // explicit empty list
+		)
+		result := exec.buildSubWorkflowInputs()
+		_, hasModel := result["model"]
+		_, hasTemp := result["temp"]
+		assert.False(t, hasModel, "empty passthrough should not forward any inputs")
+		assert.False(t, hasTemp, "empty passthrough should not forward any inputs")
+	})
+}
+
+func TestBuildSubWorkflowInputs_Passthrough(t *testing.T) {
+	// Helper to create an executor with minimal state for buildSubWorkflowInputs testing.
+	makeExecutor := func(parentInputs, subInputs map[string]interface{}, passthrough []string) *InlineWorkflowExecutor {
+		evalResult := &reliantv1.Node{
+			Id:   "child",
+			Type: "workflow",
+			Args: &reliantv1.Node_Workflow{Workflow: &reliantv1.SubWorkflowArgs{
+				Ref:         &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "builtin://agent"}},
+				Passthrough: passthrough,
+			}},
+		}
+		return &InlineWorkflowExecutor{
+			nodeID:            "child",
+			node:              evalResult,
+			evalResult:        evalResult,
+			workflowInputs:    parentInputs,
+			subWorkflowInputs: subInputs,
+			subWorkflow:       &reliantv1.Workflow{Name: "agent"},
+			logger:            &presetTestLogger{},
+		}
+	}
+
+	t.Run("passthrough forwards parent inputs to child", func(t *testing.T) {
+		exec := makeExecutor(
+			map[string]interface{}{"model": "claude-4", "temperature": 0.7, "other": "ignored"},
+			map[string]interface{}{},
+			[]string{"model", "temperature"},
+		)
+		result := exec.buildSubWorkflowInputs()
+		assert.Equal(t, "claude-4", result["model"])
+		assert.Equal(t, 0.7, result["temperature"])
+		_, hasOther := result["other"]
+		assert.False(t, hasOther, "non-passthrough input should not be forwarded")
+	})
+
+	t.Run("explicit args override passthrough", func(t *testing.T) {
+		exec := makeExecutor(
+			map[string]interface{}{"model": "claude-4"},
+			map[string]interface{}{"model": "gpt-5"},
+			[]string{"model"},
+		)
+		result := exec.buildSubWorkflowInputs()
+		assert.Equal(t, "gpt-5", result["model"], "explicit args should override passthrough")
+	})
+
+	t.Run("passthrough name not in parent inputs is skipped", func(t *testing.T) {
+		exec := makeExecutor(
+			map[string]interface{}{"model": "claude-4"},
+			map[string]interface{}{},
+			[]string{"model", "nonexistent"},
+		)
+		result := exec.buildSubWorkflowInputs()
+		assert.Equal(t, "claude-4", result["model"])
+		_, hasNonexistent := result["nonexistent"]
+		assert.False(t, hasNonexistent, "nonexistent passthrough name should be silently skipped")
+	})
+
+	t.Run("empty passthrough means no forwarding", func(t *testing.T) {
+		exec := makeExecutor(
+			map[string]interface{}{"model": "claude-4"},
+			map[string]interface{}{},
+			nil,
+		)
+		result := exec.buildSubWorkflowInputs()
+		_, hasModel := result["model"]
+		assert.False(t, hasModel, "no passthrough means no parent input forwarding")
 	})
 }

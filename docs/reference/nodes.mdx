@@ -81,6 +81,7 @@ Invoke an agent or sub-workflow
 | `ref` | string | No | - | Workflow reference (builtin://name or project://name) |
 | `args` | map | No | - | Input values for the sub-workflow |
 | `presets` | map | No | - | Preset configurations for sub-workflow inputs |
+| `passthrough` | string | No | - | Input names to forward from parent to child workflow |
 
 ---
 
@@ -199,6 +200,7 @@ Execute a sub-workflow in a loop with conditions
 | `items` | string | No | - | CEL expression evaluating to a list or map to iterate over |
 | `key` | string | No | - | CEL expression for output map key per iteration |
 | `on_failure` | string | No | - | Failure policy for parallel iterations (enum: continue\|fail_fast\|fail_all) |
+| `passthrough` | string | No | - | Input names to forward from parent to child workflow |
 
 ### Outputs
 
@@ -254,6 +256,8 @@ Execute a shell command
 | `exit_code` | integer | - |
 | `stdout` | string | - |
 | `stderr` | string | - |
+| `working_dir` | string | - |
+| `log_file` | string | - |
 
 ---
 
@@ -268,7 +272,6 @@ Save a message to the conversation thread
 | `role` | string | No | - | Message role (enum: user\|assistant\|system\|tool) |
 | `content` | string | No | - | Message content |
 | `tool_calls` | string | No | - | Tool calls from LLM response |
-| `attachments` | string | No | - | Attachment IDs. CEL expression must return []string. |
 | `display_style` | string | No | - | UI display style hint (enum: info\|warning\|success\|hidden) |
 
 ### Outputs

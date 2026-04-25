@@ -64,7 +64,9 @@ func projectWorkflowsDir() string {
 func loadProjectWorkflow(t *testing.T, name string) (*reliantv1.Workflow, []byte) {
 	t.Helper()
 	dir := projectWorkflowsDir()
-	require.NotEmpty(t, dir, "project workflows directory not found")
+	if dir == "" {
+		t.Skip("project workflows directory not found")
+	}
 
 	path := filepath.Join(dir, name+".yaml")
 	data, err := os.ReadFile(path)

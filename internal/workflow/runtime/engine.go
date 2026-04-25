@@ -199,7 +199,12 @@ func skipNodeIfConditionFalse(
 		"condition":   condExpr,
 	}).Get(ctx, &skipResult)
 
-	skippedOutput := model.SkippedOutputMap()
+	var skippedOutput map[string]interface{}
+	if node.GetType() == model.NodeTypeRun {
+		skippedOutput = model.SkippedRunOutputMap()
+	} else {
+		skippedOutput = model.SkippedOutputMap()
+	}
 	nodeOutputs[node.GetId()] = skippedOutput
 
 	evt := &core.WorkflowEvent{

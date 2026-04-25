@@ -8,6 +8,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -479,6 +480,288 @@ func TestStaticAnalysisWithOptions_PresetValidation(t *testing.T) {
 		}
 		if !containsString(result.Error(), "failed to load preset") {
 			t.Errorf("expected 'failed to load preset' error, got: %s", result.Error())
+		}
+	})
+}
+
+func TestPassthroughOnInlineWorkflowIsIgnored(t *testing.T) {
+	// passthrough is only meaningful for ref-based workflows.
+	// Inline workflows inherit all parent inputs by definition.
+	// If someone puts passthrough on an inline workflow node, the compile_semantics
+	// layer drops it (inline mode never populates the Passthrough field).
+	// Validation should not error — it should just silently ignore it.
+	workflow := &reliantv1.Workflow{
+		Name: "builtin://parent",
+		Inputs: map[string]*reliantv1.Input{
+			"model": stringInput(nil),
+		},
+		Entry: []string{"run_inline"},
+		Nodes: []*reliantv1.Node{
+			{
+				Id:   "run_inline",
+				Type: "workflow",
+				Args: &reliantv1.Node_Workflow{Workflow: &reliantv1.SubWorkflowArgs{
+					Inline: &reliantv1.Workflow{
+						Name:  "inline-child",
+						Entry: []string{"step"},
+						Nodes: []*reliantv1.Node{{
+							Id:   "step",
+							Type: "call_llm",
+							Args: &reliantv1.Node_CallLlm{CallLlm: &reliantv1.CallLLMArgs{Model: &reliantv1.CelModelSelector{Value: &reliantv1.CelModelSelector_Expr{Expr: "inputs.model"}}}},
+						}},
+					},
+					Passthrough: []string{"model"}, // passthrough on inline — should be ignored
+				}},
+			},
+		},
+	}
+
+	result := StaticAnalysisWithOptions(workflow, &ValidationOptions{})
+	if result.HasErrors() {
+		t.Fatalf("passthrough on inline workflow should not cause errors, got: %s", result.Error())
+	}
+}
+
+func TestPassthroughOnNonWorkflowNodeIsRejectedByYAML(t *testing.T) {
+	// passthrough is only a valid field on workflow and loop nodes.
+	// If someone puts passthrough on a run node in YAML, the parser should
+	// reject it as an unknown field.
+	yamlData := []byte(`
+name: test-passthrough-run
+apiVersion: "0.0.5"
+entry: [step1]
+nodes:
+  - id: step1
+    type: run
+    command: "echo hello"
+    passthrough:
+      - model
+edges: []
+`)
+
+	_, err := wfyaml.ParseWorkflow(yamlData)
+	if err == nil {
+		t.Fatal("expected YAML parse error for passthrough on a run node, but got nil")
+	}
+	if !strings.Contains(err.Error(), "passthrough") && !strings.Contains(err.Error(), "unknown") {
+		t.Fatalf("expected error mentioning passthrough or unknown field, got: %v", err)
+	}
+}
+
+func TestPassthroughEmptyListProducesNoWarnings(t *testing.T) {
+	// passthrough: [] should be a valid no-op.
+	result := NewResult()
+	parentWf := &reliantv1.Workflow{
+		Name: "parent",
+		Inputs: map[string]*reliantv1.Input{
+			"model": stringInput(nil),
+		},
+	}
+	childSchema := map[string]*reliantv1.Input{
+		"model": stringInput(nil),
+	}
+
+	validatePassthrough(
+		[]string{"test", "node"},
+		[]string{}, // explicit empty slice (not nil)
+		nil,
+		parentWf,
+		childSchema,
+		result,
+	)
+	if result.HasWarnings() {
+		t.Errorf("expected no warnings for empty passthrough list, got: %v", result.Warnings())
+	}
+	if result.HasErrors() {
+		t.Errorf("expected no errors for empty passthrough list, got: %s", result.Error())
+	}
+}
+
+func TestPassthroughNameNotInChildSchema(t *testing.T) {
+	// Passthrough name exists in parent but not in child — should warn.
+	result := NewResult()
+	parentWf := &reliantv1.Workflow{
+		Name: "parent",
+		Inputs: map[string]*reliantv1.Input{
+			"model":       stringInput(nil),
+			"temperature": stringInput(nil),
+		},
+	}
+	childSchema := map[string]*reliantv1.Input{
+		"model": stringInput(nil),
+		// no "temperature" — child doesn't accept it
+	}
+
+	validatePassthrough(
+		[]string{"test", "node"},
+		[]string{"temperature"},
+		nil,
+		parentWf,
+		childSchema,
+		result,
+	)
+	if !result.HasWarnings() {
+		t.Fatal("expected warning for passthrough name not in child schema")
+	}
+	found := false
+	for _, w := range result.Warnings() {
+		if strings.Contains(w.Message, "not a declared input in the child") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected child schema warning, got: %v", result.Warnings())
+	}
+}
+
+func TestPassthroughNameNotInParentInputs(t *testing.T) {
+	// Passthrough references an input that doesn't exist in parent — should warn.
+	result := NewResult()
+	parentWf := &reliantv1.Workflow{
+		Name: "parent",
+		Inputs: map[string]*reliantv1.Input{
+			"model": stringInput(nil),
+		},
+	}
+	childSchema := map[string]*reliantv1.Input{
+		"model":     stringInput(nil),
+		"something": stringInput(nil),
+	}
+
+	validatePassthrough(
+		[]string{"test", "node"},
+		[]string{"nonexistent_input"},
+		nil,
+		parentWf,
+		childSchema,
+		result,
+	)
+	if !result.HasWarnings() {
+		t.Fatal("expected warning for passthrough name not in parent inputs")
+	}
+	found := false
+	for _, w := range result.Warnings() {
+		if strings.Contains(w.Message, "not a declared input in the parent") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected parent input warning, got: %v", result.Warnings())
+	}
+}
+
+func TestValidatePassthrough(t *testing.T) {
+	parentWf := &reliantv1.Workflow{
+		Name: "parent",
+		Inputs: map[string]*reliantv1.Input{
+			"model":       stringInput(nil),
+			"temperature": stringInput(nil),
+		},
+	}
+	childSchema := map[string]*reliantv1.Input{
+		"model": stringInput(nil),
+		"mode":  stringInput(nil),
+	}
+
+	t.Run("no warnings for valid passthrough", func(t *testing.T) {
+		result := NewResult()
+		validatePassthrough(
+			[]string{"test", "node"},
+			[]string{"model"},
+			nil,
+			parentWf,
+			childSchema,
+			result,
+		)
+		if result.HasWarnings() {
+			t.Errorf("expected no warnings, got: %v", result.Warnings())
+		}
+	})
+
+	t.Run("warns when passthrough name not in parent inputs", func(t *testing.T) {
+		result := NewResult()
+		validatePassthrough(
+			[]string{"test", "node"},
+			[]string{"nonexistent"},
+			nil,
+			parentWf,
+			childSchema,
+			result,
+		)
+		if !result.HasWarnings() {
+			t.Fatal("expected warning for passthrough name not in parent")
+		}
+		found := false
+		for _, w := range result.Warnings() {
+			if strings.Contains(w.Message, "not a declared input in the parent") {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected parent input warning, got: %v", result.Warnings())
+		}
+	})
+
+	t.Run("warns when passthrough name not in child schema", func(t *testing.T) {
+		result := NewResult()
+		validatePassthrough(
+			[]string{"test", "node"},
+			[]string{"temperature"},
+			nil,
+			parentWf,
+			childSchema,
+			result,
+		)
+		if !result.HasWarnings() {
+			t.Fatal("expected warning for passthrough name not in child")
+		}
+		found := false
+		for _, w := range result.Warnings() {
+			if strings.Contains(w.Message, "not a declared input in the child") {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected child input warning, got: %v", result.Warnings())
+		}
+	})
+
+	t.Run("warns when passthrough duplicates explicit arg", func(t *testing.T) {
+		result := NewResult()
+		validatePassthrough(
+			[]string{"test", "node"},
+			[]string{"model"},
+			map[string]interface{}{"model": "gpt-5"},
+			parentWf,
+			childSchema,
+			result,
+		)
+		if !result.HasWarnings() {
+			t.Fatal("expected warning for redundant passthrough")
+		}
+		found := false
+		for _, w := range result.Warnings() {
+			if strings.Contains(w.Message, "also set in explicit args") {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected redundant arg warning, got: %v", result.Warnings())
+		}
+	})
+
+	t.Run("empty passthrough produces no warnings", func(t *testing.T) {
+		result := NewResult()
+		validatePassthrough(
+			[]string{"test", "node"},
+			nil,
+			nil,
+			parentWf,
+			childSchema,
+			result,
+		)
+		if result.HasWarnings() {
+			t.Errorf("expected no warnings for empty passthrough")
 		}
 	})
 }

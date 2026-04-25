@@ -128,6 +128,38 @@ func TestNodeCommand(t *testing.T) {
 	}
 }
 
+func TestNodeLogFile(t *testing.T) {
+	if NodeLogFile(nil) != "" {
+		t.Error("nil should return empty")
+	}
+
+	nonRunNode := &reliantv1.Node{Args: &reliantv1.Node_CallLlm{CallLlm: &reliantv1.CallLLMArgs{}}}
+	if NodeLogFile(nonRunNode) != "" {
+		t.Error("non-run should return empty")
+	}
+
+	// Run node without log_file
+	noLogFile := &reliantv1.Node{
+		Args: &reliantv1.Node_Run{Run: &reliantv1.RunArgs{
+			Command: &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "echo hi"}},
+		}},
+	}
+	if NodeLogFile(noLogFile) != "" {
+		t.Error("run without log_file should return empty")
+	}
+
+	// Run node with log_file
+	withLogFile := &reliantv1.Node{
+		Args: &reliantv1.Node_Run{Run: &reliantv1.RunArgs{
+			Command: &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "echo hi"}},
+			LogFile: &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "/tmp/output.log"}},
+		}},
+	}
+	if NodeLogFile(withLogFile) != "/tmp/output.log" {
+		t.Errorf("got %q", NodeLogFile(withLogFile))
+	}
+}
+
 func TestNodeRef(t *testing.T) {
 	if NodeRef(nil) != "" {
 		t.Error("nil should return empty")

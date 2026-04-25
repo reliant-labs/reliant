@@ -68,6 +68,19 @@ func NodeCommand(node *reliantv1.Node) string {
 	return CelStringValue(runArgs.GetCommand())
 }
 
+// NodeLogFile returns the resolved log_file path for run nodes.
+// Returns "" if not a run node or log_file is not set.
+func NodeLogFile(node *reliantv1.Node) string {
+	if node == nil {
+		return ""
+	}
+	runArgs := node.GetRun()
+	if runArgs == nil {
+		return ""
+	}
+	return CelStringValue(runArgs.GetLogFile())
+}
+
 // NodeRef returns the resolved workflow reference string.
 // Works for both workflow and loop nodes.
 func NodeRef(node *reliantv1.Node) string {
@@ -260,6 +273,20 @@ func isCelWrapper(m map[string]interface{}) bool {
 		}
 	}
 	return true
+}
+
+// NodePassthrough returns the passthrough list for sub-workflow or loop nodes.
+func NodePassthrough(node *reliantv1.Node) []string {
+	if node == nil {
+		return nil
+	}
+	if workflowArgs := node.GetWorkflow(); workflowArgs != nil {
+		return workflowArgs.GetPassthrough()
+	}
+	if loopArgs := node.GetLoop(); loopArgs != nil {
+		return loopArgs.GetPassthrough()
+	}
+	return nil
 }
 
 // NodeMergedSubWorkflowInputs returns the args map for child workflow invocation.
