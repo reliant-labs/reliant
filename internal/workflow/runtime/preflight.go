@@ -94,7 +94,7 @@ func requiresDaemonNode(node *reliantv1.Node, cfg *PreflightConfig) bool {
 	// Check call_llm nodes for daemon-bound tools in tool_filter.
 	if nodeType == model.NodeTypeCallLLM {
 		if args := node.GetCallLlm(); args != nil {
-			if toolFilterHasDaemonTools(args.GetToolFilter(), cfg) {
+			if toolFilterHasDaemonTools(args.GetToolsConfig().GetFilter(), cfg) {
 				return true
 			}
 		}

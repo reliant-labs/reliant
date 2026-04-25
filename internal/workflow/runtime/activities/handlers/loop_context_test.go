@@ -245,7 +245,7 @@ func TestCallLLMActivityInput_LoopContextFields(t *testing.T) {
 				"call_llm": {
 					"model": {"literal": {"id": "gpt-4.1"}},
 					"temperature": {"literal": 0.4},
-					"tool_filter": {"literal": {"values": ["view", "edit"]}}
+					"tools_config": {"filter": {"literal": {"values": ["view", "edit"]}}}
 				}
 			}
 		}`
@@ -259,7 +259,7 @@ func TestCallLLMActivityInput_LoopContextFields(t *testing.T) {
 		require.NotNil(t, input.Node.GetCallLlm().GetModel().GetLiteral())
 		require.Equal(t, "gpt-4.1", input.Node.GetCallLlm().GetModel().GetLiteral().GetId())
 		require.InDelta(t, 0.4, input.Node.GetCallLlm().GetTemperature().GetLiteral(), 0.0001)
-		require.Equal(t, []string{"view", "edit"}, input.Node.GetCallLlm().GetToolFilter().GetLiteral().GetValues())
+		require.Equal(t, []string{"view", "edit"}, input.Node.GetCallLlm().GetToolsConfig().GetFilter().GetLiteral().GetValues())
 	})
 }
 

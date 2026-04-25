@@ -1,0 +1,104 @@
+name: happy_path
+description: |
+  Happy path for the narrowed workflow: planner submits a practical plan,
+  packages/services/frontends are scaffolded, baseline build passes,
+  feature implementation succeeds, placeholder guard passes, and initial integration verification passes.
+
+inputs:
+  working_directory: "./dev"
+  max_feature_retries: 3
+  max_integration_retries: 3
+  deploy_dry_run: false
+
+events:
+  - node: scope_loop.call_scope
+    output:
+      message:
+        role: assistant
+        text: "Here's the structured plan for your app."
+      response_text: "Here's the structured plan for your app."
+      tool_calls:
+        - id: "tc-plan"
+          name: "project_plan"
+          input: '{"project_name":"invoice-saas","go_module":"github.com/acme/invoice-saas"}'
+
+  - node: scope_loop.execute_scope
+    output:
+      tool_results: []
+      response_data:
+        project_plan:
+          project_name: "invoice-saas"
+          go_module: "github.com/acme/invoice-saas"
+          services:
+            - name: "invoices"
+              description: "Invoice management"
+              rpcs: ["CreateInvoice", "GetInvoice"]
+          packages:
+            - name: "billing"
+              description: "Billing logic"
+              interface_methods: ["CalculateTotal"]
+          frontends:
+            - name: "web"
+              pages: ["dashboard", "invoices"]
+          features:
+            - name: "invoice-crud"
+              description: "Core invoice CRUD slice"
+              touches_services: ["invoices"]
+              touches_packages: ["billing"]
+          entities:
+            - name: "Invoice"
+              fields: ["id", "amount", "status"]
+              relationships: ["belongs_to User"]
+
+  - node: scaffold_project
+    output: {exit_code: 0, stdout: "Project created", stderr: ""}
+  - node: add_services
+    output: {exit_code: 0, stdout: "Service added", stderr: ""}
+  - node: add_packages
+    output: {exit_code: 0, stdout: "Package added", stderr: ""}
+  - node: add_frontends
+    output: {exit_code: 0, stdout: "Frontend added", stderr: ""}
+  - node: architect
+    output: {response_text: "All proto files and contract.go interfaces defined for the core slice."}
+  - node: generate_code
+    output: {exit_code: 0, stdout: "Generated", stderr: ""}
+  - node: validate_contracts
+    output: {exit_code: 0, stdout: "Valid", stderr: ""}
+  - node: baseline_build
+    output: {exit_code: 0, stdout: "Build ok", stderr: ""}
+  - node: implement_features
+    output:
+      _iterations: 1
+      _completed: 1
+      _failed: 0
+  - node: placeholder_guard
+    output: {exit_code: 0, stdout: "", stderr: ""}
+  - node: integration_verify_initial
+    output: {exit_code: 0, stdout: "All tests pass, build ok", stderr: ""}
+
+expect:
+  outcome: completed
+  reached:
+    - scope_loop
+    - scope_loop.call_scope
+    - scope_loop.execute_scope
+    - plan_summary
+    - scaffold_project
+    - add_services
+    - add_packages
+    - add_frontends
+    - join_scaffold
+    - architect
+    - generate_code
+    - validate_contracts
+    - baseline_build
+    - implement_features
+    - impl_report
+    - placeholder_guard
+    - integration_verify_initial
+    - success
+  not_reached:
+    - integration_fix_loop
+    - integration_failed
+    - deploy_verify
+    - scope_loop.remind_scope

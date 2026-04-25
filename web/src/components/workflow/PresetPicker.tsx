@@ -2,12 +2,13 @@
 
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Layers, ChevronDown, Check, MoreVertical, Star, Edit, Trash2, Save } from "lucide-react";
+import { Layers, ChevronDown, Check, MoreVertical, Star, Edit, Trash2, Save, Code2 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { Tooltip } from "../ui/Tooltip";
 import type { Preset } from "../../store/globalDataStore";
 import { presetGrpc } from "../../api/preset-grpc";
 import { useGlobalDataStore } from "../../store/globalDataStore";
+import { isCelTemplate } from "../../lib/celTemplate";
 
 interface PresetPickerProps {
   // Available presets (filtered for the current workflow)
@@ -59,10 +60,13 @@ export function PresetPicker({
 }: PresetPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [defaultPresetName, setDefaultPresetName] = useState<string | null>(null);
+  const [showReplaceConfirm, setShowReplaceConfirm] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number; width: number } | null>(null);
   const { refetchPresets } = useGlobalDataStore();
+
+  const valueIsTemplate = isCelTemplate(value);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -300,13 +304,31 @@ export function PresetPicker({
     </div>
   );
 
+  const handleTriggerClick = () => {
+    if (!canInteract) return;
+    if (valueIsTemplate) {
+      setShowReplaceConfirm(true);
+      return;
+    }
+    setIsOpen(!isOpen);
+  };
+
   return (
     <div className={cn("relative flex items-center gap-2", className)}>
       {/* Selector Button */}
-      <Tooltip content={selectedPreset ? `Preset: ${selectedPreset.name}` : "Select a preset"} placement="top">
+      <Tooltip
+        content={
+          valueIsTemplate
+            ? `Set by expression: ${value}`
+            : selectedPreset
+              ? `Preset: ${selectedPreset.name}`
+              : "Select a preset"
+        }
+        placement="top"
+      >
         <button
           ref={buttonRef}
-          onClick={() => canInteract && setIsOpen(!isOpen)}
+          onClick={handleTriggerClick}
           disabled={!canInteract}
           className={cn(
             "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium flex-1",
@@ -314,15 +336,29 @@ export function PresetPicker({
             canInteract
               ? "cursor-pointer hover:bg-accent hover:border-border"
               : "cursor-default opacity-60",
-            selectedPreset
-              ? "bg-accent/50 text-foreground"
-              : "bg-background text-muted-foreground"
+            valueIsTemplate
+              ? "bg-violet-500/10 text-foreground border-violet-500/30"
+              : selectedPreset
+                ? "bg-accent/50 text-foreground"
+                : "bg-background text-muted-foreground"
           )}
         >
           {isLoading ? (
             <>
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
               <span className="flex-1 text-left truncate">Loading presets...</span>
+            </>
+          ) : valueIsTemplate ? (
+            <>
+              <Code2 className="w-4 h-4 flex-shrink-0 text-violet-500" />
+              <span className="flex items-center gap-2 flex-1 min-w-0">
+                <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-500/30 flex-shrink-0">
+                  Expression
+                </span>
+                <span className="truncate font-mono text-xs text-muted-foreground">
+                  {value}
+                </span>
+              </span>
             </>
           ) : (
             <>
@@ -335,6 +371,54 @@ export function PresetPicker({
           )}
         </button>
       </Tooltip>
+
+      {/* Replace confirmation for expression values */}
+      {showReplaceConfirm && (
+        <div
+          className="fixed inset-0 z-[9998]"
+          onClick={() => setShowReplaceConfirm(false)}
+          role="presentation"
+        >
+          <div
+            className="fixed z-[9999] rounded-md border border-border bg-card shadow-lg p-3 w-72"
+            style={{
+              top: (buttonRef.current?.getBoundingClientRect().bottom ?? 0) + 4,
+              left: buttonRef.current?.getBoundingClientRect().left ?? 0,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-sm font-medium text-foreground mb-1">
+              Replace expression?
+            </div>
+            <div className="text-xs text-muted-foreground mb-3">
+              This preset is set by an expression:
+              <div className="mt-1 font-mono text-[11px] break-all bg-muted/50 rounded px-2 py-1 text-foreground">
+                {value}
+              </div>
+              Replacing it will overwrite the expression with a fixed preset.
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowReplaceConfirm(false)}
+                className="px-2.5 py-1 text-xs rounded border border-border hover:bg-accent"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowReplaceConfirm(false);
+                  setIsOpen(true);
+                }}
+                className="px-2.5 py-1 text-xs rounded bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                Replace
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Save Button */}
       {onSave && (

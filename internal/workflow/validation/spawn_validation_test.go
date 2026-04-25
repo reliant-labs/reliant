@@ -15,13 +15,15 @@ import (
 // Cross-Workflow Spawn Ref Validation Tests
 // =============================================================================
 
-func makeCallLLMNode(id string, toolFilter []string) *reliantv1.Node {
+func makeCallLLMNode(id string, spawnEntries []string) *reliantv1.Node {
 	return &reliantv1.Node{
 		Id:   id,
 		Type: "call_llm",
 		Args: &reliantv1.Node_CallLlm{CallLlm: &reliantv1.CallLLMArgs{
-			ToolFilter: &reliantv1.CelStringList{
-				Value: &reliantv1.CelStringList_Literal{Literal: &reliantv1.StringList{Values: toolFilter}},
+			ToolsConfig: &reliantv1.ToolsConfig{
+				Spawn: &reliantv1.CelStringList{
+					Value: &reliantv1.CelStringList_Literal{Literal: &reliantv1.StringList{Values: spawnEntries}},
+				},
 			},
 		}},
 	}

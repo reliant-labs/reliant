@@ -1,0 +1,209 @@
+name: implement-review
+apiVersion: "0.0.5"
+description: |
+  Generic implement → review loop. Implements changes then reviews them in a structured
+  cycle until the reviewer approves or max iterations are reached.
+
+  Loop: implement → review → done?
+    1. implement — Make the requested changes. Spawns specialists as needed.
+    2. review — Evaluate the implementation. Spawns appropriate reviewers (code, UX,
+       security, etc.) based on the nature of the changes. Returns structured verdict.
+
+  Context management:
+    Both the implementer and reviewer fork with memo, accumulating context across
+    attempts. Review feedback is injected so the implementer knows what to fix.
+    The reviewer builds on its own prior analysis across iterations.
+
+  Thread architecture:
+    attempt loop inherits main thread.
+    implement forks with memo — accumulates context, sees review feedback via inject.
+    review forks with memo — builds on prior analysis, gets fresh review instructions via inject.
+
+entry: [attempt]
+
+inputs:
+  model:
+    type: model
+    description: LLM model to use for all phases
+    default:
+      tags: [flagship]
+
+  max_iterations:
+    type: integer
+    default: 10
+    min: 1
+    max: 50
+    description: Maximum implement→review cycles
+
+  mode:
+    type: enum
+    ui: toolbar
+    default: auto
+    description: Execution mode for agent steps.
+    enum: [manual, auto]
+
+  yield:
+    type: boolean
+    ui: toolbar
+    default: true
+    description: Pause for user review after each iteration.
+
+  temperature:
+    type: number
+    default: 1.0
+    min: 0
+    max: 1
+    description: Response randomness
+
+  thinking_level:
+    type: enum
+    enum: [low, medium, high, xhigh]
+    default: medium
+    description: Extended thinking level
+
+nodes:
+  - id: attempt
+    type: loop
+    while: >
+      (has(outputs.review_verdict) && outputs.review_verdict != "pass")
+      && iter.iteration < inputs.max_iterations
+    yield: "inputs.yield"
+    inline:
+      entry: [implement]
+
+      outputs:
+        review_verdict: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null ? nodes.review.response.verdict : 'pass'}}"
+        review_issues: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null ? nodes.review.response.issues : []}}"
+        review_summary: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null ? nodes.review.response.summary : ''}}"
+
+      nodes:
+        - id: implement
+          type: workflow
+          ref: builtin://agent
+          presets:
+            default: general
+          args:
+            model: "{{inputs.model}}"
+            mode: "{{inputs.mode}}"
+            temperature: "{{inputs.temperature}}"
+            thinking_level: "{{inputs.thinking_level}}"
+          thread:
+            mode: fork
+            memo: true
+            inject:
+              role: user
+              content: |
+                ## Implement — Attempt {{iter.iteration + 1}} of {{inputs.max_iterations}}
+
+                Implement the requested changes. The original request and any prior context are in the conversation above.
+
+                {{has(outputs.review_verdict) && outputs.review_verdict == 'fail' ? '### Review Feedback from Previous Attempt\n\n**Verdict:** FAIL\n\n**Summary:** ' + outputs.review_summary + '\n\n**Issues to fix:**\n' + outputs.review_issues.map(i, '- ' + i).join('\n') : ''}}
+
+                Spawn specialists as needed for the task at hand. After finishing, summarize:
+                1. What you changed and why
+                2. How the changes address any prior review feedback
+                3. What you're uncertain about
+          save_message:
+            role: assistant
+            content: |
+              ## Implementation Notes (Attempt {{iter.iteration + 1}})
+              {{output.response_text}}
+
+        - id: review
+          type: workflow
+          ref: builtin://structured-agent
+          presets:
+            default: general
+          args:
+            model: "{{inputs.model}}"
+            mode: "{{inputs.mode}}"
+            temperature: "{{inputs.temperature}}"
+            thinking_level: "{{inputs.thinking_level}}"
+            response_tool_name: submit_review
+            response_tool_description: "Submit your review verdict — pass if the implementation meets requirements, fail if issues remain"
+            response_schema:
+              type: object
+              required:
+                - verdict
+                - issues
+                - summary
+              properties:
+                verdict:
+                  type: string
+                  enum: ["pass", "fail"]
+                  description: |
+                    "pass" — the implementation is correct and complete. Break the loop.
+                    "fail" — there are issues that need to be fixed. Loop back to implement.
+                issues:
+                  type: array
+                  items:
+                    type: string
+                  description: |
+                    List of specific issues found. Each issue should be actionable and describe
+                    what's wrong and what the fix should look like. Empty array when verdict is "pass".
+                summary:
+                  type: string
+                  description: |
+                    Overall assessment. When passing, summarize what works well.
+                    When failing, summarize the most critical problems.
+          thread:
+            mode: fork
+            memo: true
+            inject:
+              role: user
+              content: |
+                ## Review — Attempt {{iter.iteration + 1}}
+
+                Review the implementation. Your prior reviews (if any) are in this thread — use them to track progress across attempts.
+
+                Spawn appropriate reviewers based on the nature of the changes:
+                - **code_reviewer** / **code_hygiene_reviewer** for code quality, correctness, patterns
+                - **security_reviewer** for auth, input validation, secrets, injection risks
+                - **performance_reviewer** for scalability, resource usage, concurrency
+                - **architect** for design, API contracts, structural concerns
+                - **ux_reviewer** if the task involves UI and a running application is available
+
+                Your job:
+                1. Assess correctness and completeness against the original request
+                2. Decide: **pass** (done) or **fail** (needs fixes)
+                3. Write specific, actionable issues for the next attempt if failing
+
+                **Your issues list is the primary bridge to the next attempt.**
+                Be specific — the implementer will see your issues and summary.
+
+                **Verdict guidance:**
+                - **pass**: Implementation meets requirements, no blocking issues.
+                  Minor suggestions can be noted in the summary but should not block passing.
+                - **fail**: Functional problems, correctness bugs, missing requirements, or
+                  the implementation doesn't match what was requested.
+          save_message:
+            role: assistant
+            content: |
+              ## Review (Attempt {{iter.iteration + 1}}): {{has(output.response) && output.response != null ? output.response.verdict : 'N/A'}}
+              {{has(output.response) && output.response != null ? output.response.summary : ''}}
+
+      edges:
+        - from: implement
+          default: [review]
+
+  - id: complete
+    type: save_message
+    args:
+      role: assistant
+      content: |
+        ## Implement-Review Complete
+
+        **Iterations:** {{nodes.attempt._iterations}}
+        **Final verdict:** {{nodes.attempt.review_verdict}}
+
+        {{nodes.attempt.review_summary}}
+
+outputs:
+  verdict: "{{nodes.attempt.review_verdict}}"
+  issues: "{{nodes.attempt.review_issues}}"
+  summary: "{{nodes.attempt.review_summary}}"
+  iterations: "{{nodes.attempt._iterations}}"
+
+edges:
+  - from: attempt
+    default: [complete]

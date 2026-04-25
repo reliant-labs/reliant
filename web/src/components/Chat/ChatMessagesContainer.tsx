@@ -12,6 +12,8 @@ interface ChatMessagesContainerProps {
   virtuosoRef?: RefObject<VirtuosoHandle | null>;
   /** Whether Virtuoso reports being at the bottom */
   virtuosoAtBottom?: boolean;
+  /** Callback that resets follow mode in InterleavedTimeline and scrolls to bottom */
+  resumeFollowRef?: RefObject<(() => void) | null>;
 }
 
 interface ScrollContextValue {
@@ -64,7 +66,7 @@ export const useScrollToBottomAction = (): ScrollActionFn | null => {
  * Virtuoso handles its own scrolling; this component bridges scroll state
  * to ScrollContext for components like ScrollToBottomButton.
  */
-export const ChatMessagesContainer = ({ children, className, chatId, onScrollStateChange, virtuosoRef, virtuosoAtBottom }: ChatMessagesContainerProps) => {
+export const ChatMessagesContainer = ({ children, className, chatId, onScrollStateChange, virtuosoRef, virtuosoAtBottom, resumeFollowRef }: ChatMessagesContainerProps) => {
   const isActiveChat = useIsChatActive(chatId || "");
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -72,13 +74,20 @@ export const ChatMessagesContainer = ({ children, className, chatId, onScrollSta
   const isAtBottom = virtuosoAtBottom ?? true;
   const hasScrolledUp = !isAtBottom;
 
+  // scrollToBottom uses resumeFollowRef when available — this resets
+  // userScrolledUpRef inside InterleavedTimeline so followOutput resumes.
+  // Falls back to a direct Virtuoso scrollToIndex if no callback is registered.
   const scrollToBottom = useCallback(async () => {
-    virtuosoRef?.current?.scrollToIndex({
-      index: "LAST",
-      align: "end",
-      behavior: "auto",
-    });
-  }, [virtuosoRef]);
+    if (resumeFollowRef?.current) {
+      resumeFollowRef.current();
+    } else {
+      virtuosoRef?.current?.scrollToIndex({
+        index: "LAST",
+        align: "end",
+        behavior: "auto",
+      });
+    }
+  }, [virtuosoRef, resumeFollowRef]);
 
   const stopAutoScroll = useCallback(() => {}, []);
   const resumeAutoScroll = useCallback(() => {

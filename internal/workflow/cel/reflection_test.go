@@ -97,31 +97,16 @@ func TestExtractFieldInfo_CallLLMArgs(t *testing.T) {
 		t.Errorf("expected system_prompt.Type = %q, got %q", "string", sp.Type)
 	}
 
-	// tools is a CelBool
-	tools, ok := fieldMap["tools"]
+	// tools_config is a message (ToolsConfig)
+	tc, ok := fieldMap["tools_config"]
 	if !ok {
-		t.Fatal("expected 'tools' field")
+		t.Fatal("expected 'tools_config' field")
 	}
-	if !tools.IsCEL {
-		t.Error("expected tools.IsCEL = true")
+	if tc.IsCEL {
+		t.Error("expected tools_config.IsCEL = false")
 	}
-	if tools.Type != "bool" {
-		t.Errorf("expected tools.Type = %q, got %q", "bool", tools.Type)
-	}
-
-	// tool_filter is a CelStringList (CelX wrapper, not a repeated string)
-	tf, ok := fieldMap["tool_filter"]
-	if !ok {
-		t.Fatal("expected 'tool_filter' field")
-	}
-	if !tf.IsCEL {
-		t.Error("expected tool_filter.IsCEL = true")
-	}
-	if tf.IsRepeated {
-		t.Error("expected tool_filter.IsRepeated = false")
-	}
-	if tf.Type != "string_list" {
-		t.Errorf("expected tool_filter.Type = %q, got %q", "string_list", tf.Type)
+	if tc.Type != "message" {
+		t.Errorf("expected tools_config.Type = %q, got %q", "message", tc.Type)
 	}
 
 	// response_tool is a message (not CelX)

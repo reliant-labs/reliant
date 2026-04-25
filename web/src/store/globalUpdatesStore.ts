@@ -146,8 +146,15 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
 
   subscribeToChatDetails: (chatId: string) => {
     const state = get();
-    if (state.subscribedChatId === chatId) {
+    if (state.subscribedChatId === chatId && state.wsService?.isConnected()) {
       logger.debug(`${LOG_PREFIX} Already subscribed to chat`, { chatId: chatId.slice(0, 8) });
+      return;
+    }
+
+    // If subscribed but stream is dead, force reconnect
+    if (state.subscribedChatId === chatId && state.wsService && !state.wsService.isConnected()) {
+      logger.info(`${LOG_PREFIX} Stream disconnected, forcing reconnect for chat`, { chatId: chatId.slice(0, 8) });
+      state.wsService.subscribeToChatDetails(chatId);
       return;
     }
 

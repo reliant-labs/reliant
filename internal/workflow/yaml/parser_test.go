@@ -71,19 +71,18 @@ func TestCelBool_Literal(t *testing.T) {
 name: test
 nodes:
   - id: n1
-    type: call_llm
+    type: create_worktree
     args:
-      model:
-        tags: [flagship]
-      tools: true
+      name: test-wt
+      force: true
 `
 	wf, err := ParseWorkflow([]byte(yaml))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	args := wf.Nodes[0].GetCallLlm()
-	if args.Tools.GetLiteral() != true {
-		t.Errorf("tools: got %v, want true", args.Tools.GetLiteral())
+	args := wf.Nodes[0].GetCreateWorktree()
+	if args.Force.GetLiteral() != true {
+		t.Errorf("force: got %v, want true", args.Force.GetLiteral())
 	}
 }
 
@@ -92,19 +91,18 @@ func TestCelBool_Expr(t *testing.T) {
 name: test
 nodes:
   - id: n1
-    type: call_llm
+    type: create_worktree
     args:
-      model:
-        tags: [flagship]
-      tools: "{{inputs.use_tools}}"
+      name: test-wt
+      force: "{{inputs.force}}"
 `
 	wf, err := ParseWorkflow([]byte(yaml))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	args := wf.Nodes[0].GetCallLlm()
-	if args.Tools.GetExpr() != "{{inputs.use_tools}}" {
-		t.Errorf("tools expr: got %q", args.Tools.GetExpr())
+	args := wf.Nodes[0].GetCreateWorktree()
+	if args.Force.GetExpr() != "{{inputs.force}}" {
+		t.Errorf("force expr: got %q", args.Force.GetExpr())
 	}
 }
 
@@ -324,22 +322,21 @@ func TestCelBool_Null_NoPanic(t *testing.T) {
 name: test
 nodes:
   - id: n1
-    type: call_llm
+    type: create_worktree
     args:
-      model:
-        tags: [flagship]
-      tools:
+      name: test-wt
+      force:
 `
 	wf, err := ParseWorkflow([]byte(yaml))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	args := wf.Nodes[0].GetCallLlm()
+	args := wf.Nodes[0].GetCreateWorktree()
 	if args == nil {
-		t.Fatal("expected CallLLMArgs")
+		t.Fatal("expected CreateWorktreeArgs")
 	}
-	if args.Tools != nil {
-		t.Errorf("tools: expected nil, got %v", args.Tools)
+	if args.Force != nil {
+		t.Errorf("force: expected nil, got %v", args.Force)
 	}
 }
 
@@ -405,8 +402,9 @@ nodes:
       model:
         tags: [flagship]
       system_prompt: You are helpful
-      tools: true
-      tool_filter: [view, edit]
+      tools_config:
+        filter: [view, edit]
+        permission: readonly
 `
 	wf, err := ParseWorkflow([]byte(yaml))
 	if err != nil {
@@ -423,9 +421,16 @@ nodes:
 	if args.SystemPrompt.GetLiteral() != "You are helpful" {
 		t.Errorf("system_prompt: got %q", args.SystemPrompt.GetLiteral())
 	}
-	toolFilter := model.CelStringListValue(args.ToolFilter)
-	if len(toolFilter) != 2 {
-		t.Errorf("tool_filter: got %v", toolFilter)
+	tc := args.GetToolsConfig()
+	if tc == nil {
+		t.Fatal("expected ToolsConfig")
+	}
+	toolFilter := model.CelStringListValue(tc.GetFilter())
+	if len(toolFilter) != 2 || toolFilter[0] != "view" || toolFilter[1] != "edit" {
+		t.Errorf("tools_config.filter: got %v", toolFilter)
+	}
+	if tc.GetPermission().GetLiteral() != "readonly" {
+		t.Errorf("tools_config.permission: got %q", tc.GetPermission().GetLiteral())
 	}
 }
 
@@ -438,7 +443,6 @@ nodes:
     model:
       id: claude-4-sonnet
     system_prompt: You are helpful
-    tools: true
 `
 	wf, err := ParseDraftWorkflow([]byte(yaml))
 	if err != nil {
@@ -453,9 +457,6 @@ nodes:
 	}
 	if got := args.SystemPrompt.GetLiteral(); got != "You are helpful" {
 		t.Fatalf("system_prompt: got %q", got)
-	}
-	if !args.Tools.GetLiteral() {
-		t.Fatal("expected tools=true")
 	}
 }
 
@@ -1393,7 +1394,8 @@ nodes:
       model:
         tags: [flagship]
       temperature: 0.7
-      tools: true
+      tools_config:
+        filter: ["tag:default"]
 edges:
   - from: llm
     default: done

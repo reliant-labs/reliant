@@ -1,0 +1,74 @@
+name: integration_retry_then_pass
+description: |
+  Initial integration verification fails, the repair loop runs once,
+  and the retry verification passes.
+
+events:
+  - node: scope_loop.call_scope
+    output:
+      message: {role: assistant, text: "Plan ready."}
+      response_text: "Plan ready."
+      tool_calls:
+        - id: "tc-plan"
+          name: "project_plan"
+          input: '{"project_name":"retry-app"}'
+
+  - node: scope_loop.execute_scope
+    output:
+      tool_results: []
+      response_data:
+        project_plan:
+          project_name: "retry-app"
+          go_module: "github.com/test/retry-app"
+          services: [{name: "api", description: "API", rpcs: ["Get"]}]
+          packages: [{name: "store", description: "Storage", interface_methods: ["Get"]}]
+          frontends: [{name: "web", pages: ["home"]}]
+          features: [{name: "feat1", description: "Core feature", touches_services: ["api"], touches_packages: ["store"]}]
+          entities: []
+
+  - node: scaffold_project
+    output: {exit_code: 0, stdout: "ok", stderr: ""}
+  - node: add_services
+    output: {exit_code: 0, stdout: "ok", stderr: ""}
+  - node: add_packages
+    output: {exit_code: 0, stdout: "ok", stderr: ""}
+  - node: add_frontends
+    output: {exit_code: 0, stdout: "ok", stderr: ""}
+  - node: architect
+    output: {response_text: "Contracts done."}
+  - node: generate_code
+    output: {exit_code: 0, stdout: "ok", stderr: ""}
+  - node: validate_contracts
+    output: {exit_code: 0, stdout: "ok", stderr: ""}
+  - node: baseline_build
+    output: {exit_code: 0, stdout: "ok", stderr: ""}
+  - node: implement_features
+    output:
+      _iterations: 1
+      _completed: 1
+      _failed: 0
+  - node: placeholder_guard
+    output: {exit_code: 0, stdout: "", stderr: ""}
+  - node: integration_verify_initial
+    output: {exit_code: 1, stdout: "", stderr: "test failures"}
+  - node: integration_fix_loop.fix_agent
+    output: {response_text: "Fixed the integration issues."}
+  - node: integration_fix_loop.verify_retry
+    output: {exit_code: 0, stdout: "All tests pass", stderr: ""}
+
+expect:
+  outcome: completed
+  reached:
+    - scope_loop
+    - plan_summary
+    - baseline_build
+    - implement_features
+    - placeholder_guard
+    - integration_verify_initial
+    - integration_fix_loop
+    - integration_fix_loop.fix_agent
+    - integration_fix_loop.verify_retry
+    - success
+  not_reached:
+    - integration_failed
+    - deploy_verify

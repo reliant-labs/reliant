@@ -37,6 +37,7 @@ import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads, resol
 import { useChatStore } from "../../../store/chatStore";
 import { useActiveThreads } from "../../../store/threadActivityStore";
 import { getSpawnDisplayMode } from "../../Settings/SpawnDisplaySettings";
+import { RubberBandScroller } from "./RubberBandScroller";
 
 interface InterleavedTimelineProps {
   messages: Message[];
@@ -60,6 +61,8 @@ interface InterleavedTimelineProps {
   footer?: React.ReactNode;
   /** Callback to select/navigate to a thread (e.g. from spawn preview "Open Thread" button) */
   onSelectThread?: (threadId: string | null) => void;
+  /** Callback exposed so external "scroll to bottom" buttons can resume follow mode */
+  onResumeFollow?: (cb: () => void) => void;
 }
 
 /** Minimal info needed for rendering - derived from WorkflowExecution */
@@ -259,6 +262,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   onIsScrolling,
   footer,
   onSelectThread,
+  onResumeFollow,
 }: InterleavedTimelineProps) {
   const activeThreads = useActiveThreads(chatId);
   const timelineItems = useMemo(() => {
@@ -397,16 +401,26 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
         seenAssistantOnThread.add(thread);
       }
 
-      // Skip assistant messages with no content — they render as null in ChatMessage
-      // and cause Virtuoso's "Zero-sized element" warning. Compaction and display_style
-      // messages have their own renderers and are always visible.
+      // Skip assistant messages with no visible content — they render as zero-height
+      // elements and cause Virtuoso's "Zero-sized element" warning + layout thrashing.
+      // Compaction and display_style messages have their own renderers and are always visible.
       if (
         msg.role === MessageRole.ASSISTANT &&
-        !msg.contentBlocks?.length &&
         !msg.displayStyle &&
         (!msg.attachments || msg.attachments.length === 0)
       ) {
-        continue;
+        if (!msg.contentBlocks?.length) continue;
+        // Check if any block has actual visible content.
+        // ask_user tool calls are filtered out by ChatMessage (they render
+        // via QuestionPrompt instead), so they don't count as visible.
+        const hasVisibleContent = msg.contentBlocks.some(
+          (b) => {
+            if (!b.content && !b.toolName && !b.toolCallId && !b.input) return false;
+            if (b.toolName === "ask_user") return false;
+            return true;
+          }
+        );
+        if (!hasVisibleContent) continue;
       }
 
       // Add message
@@ -632,11 +646,15 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     if (prevThreadKey.current === threadKey) return;
     prevThreadKey.current = threadKey;
 
+    // Reset follow state for the new thread
+    userScrolledUpRef.current = false;
+
     // Use requestAnimationFrame to let Virtuoso re-render with new data first
     const rafId = requestAnimationFrame(() => {
       const saved = scrollPositions.current.get(threadKey);
       if (saved && !saved.atBottom) {
         // Restore their previous position in this thread
+        userScrolledUpRef.current = true;
         virtuosoRef?.current?.scrollToIndex({
           index: saved.startIndex,
           behavior: "auto",
@@ -689,26 +707,69 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   const pinnedUserMsg = pinnedMessage?.type === "message" ? pinnedMessage.message : null;
 
   // --- Scroll-follow state ---
-  // atBottomRef mirrors Virtuoso's atBottomStateChange — no debounce needed.
-  // The Footer always renders bottom padding and atBottomThreshold is set to
-  // 150px, which together create a rubber-band zone that absorbs overscroll
-  // bounces and footer re-layouts so atBottom doesn't flap.
+  // atBottomRef mirrors Virtuoso's atBottomStateChange.
+  // userScrolledUpRef tracks intentional user scroll-up to disable follow mode.
+  // programmaticScrollRef guards against Virtuoso's own scrolls being mistaken
+  // for user scrolls in the isScrolling callback.
   const atBottomRef = useRef(true);
   const userScrolledUpRef = useRef(false);
+  const programmaticScrollRef = useRef(false);
+
   const handleAtBottomChange = useCallback((atBottom: boolean) => {
     atBottomRef.current = atBottom;
     if (atBottom) {
       userScrolledUpRef.current = false;
+      programmaticScrollRef.current = false;
     }
     onAtBottomStateChange?.(atBottom);
   }, [onAtBottomStateChange]);
 
+  // Only mark userScrolledUp when the scroll is user-initiated (not programmatic)
   const handleIsScrolling = useCallback((scrolling: boolean) => {
-    if (scrolling && !atBottomRef.current) {
+    if (scrolling && !atBottomRef.current && !programmaticScrollRef.current) {
       userScrolledUpRef.current = true;
+    }
+    if (!scrolling) {
+      programmaticScrollRef.current = false;
     }
     onIsScrolling?.(scrolling);
   }, [onIsScrolling]);
+
+  // Expose a "resume follow" callback so external scroll-to-bottom buttons
+  // can reset userScrolledUpRef and trigger a programmatic scroll.
+  const resumeFollow = useCallback(() => {
+    userScrolledUpRef.current = false;
+    programmaticScrollRef.current = true;
+    virtuosoRef?.current?.scrollToIndex({
+      index: "LAST",
+      align: "end",
+      behavior: "auto",
+    });
+  }, [virtuosoRef]);
+
+  // Register the resumeFollow callback with the parent
+  useEffect(() => {
+    onResumeFollow?.(resumeFollow);
+  }, [onResumeFollow, resumeFollow]);
+
+  // Detect user-initiated scroll-up via wheel events during streaming.
+  // Uses a threshold to ignore trackpad micro-jitter.
+  const isStreamingRef = useRef(isStreaming);
+  isStreamingRef.current = isStreaming;
+  const timelineContainerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = timelineContainerRef.current;
+    if (!el) return;
+    const WHEEL_THRESHOLD = 5; // Ignore sub-5px jitter
+    const onWheel = (e: WheelEvent) => {
+      if (!isStreamingRef.current) return;
+      if (e.deltaY < -WHEEL_THRESHOLD) {
+        userScrolledUpRef.current = true;
+      }
+    };
+    el.addEventListener('wheel', onWheel, { passive: true });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
 
   // On mount, atBottomRef starts true and followOutput would return "smooth"
   // — causing Virtuoso to slowly smooth-scroll through the entire conversation.
@@ -724,10 +785,12 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       return false;
     }
     if (atBottomRef.current) {
-      return initialScrollDoneRef.current ? "smooth" : "auto";
-    }
-    if (isStreaming) {
-      return "auto";
+      // During streaming, always use "auto" (instant jump). "smooth" causes
+      // visible jitter because each new content update fires a new
+      // scrollTo({behavior:"smooth"}) that competes with Virtuoso's internal
+      // SIZE_INCREASED auto-scroll (which uses "auto"), creating
+      // discontinuities as smooth animations are interrupted mid-flight.
+      return initialScrollDoneRef.current && !isStreaming ? "smooth" : "auto";
     }
     return false;
   }, [isStreaming]);
@@ -856,7 +919,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   // Wrap each Virtuoso item in the padding/max-width container
   const wrappedRenderItem = useCallback((index: number, item: (typeof flatItems)[number]) => {
     return (
-      <div className="px-4 sm:px-6 lg:px-8">
+      <div className="px-4 sm:px-6 lg:px-8 overflow-hidden">
         <div className="max-w-[1200px] mx-auto">
           {renderItem(index, item)}
         </div>
@@ -867,21 +930,21 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   // Use Virtuoso's context prop to pass footer content to the Footer component.
   // This keeps the Footer component identity stable (preventing Virtuoso re-mounts
   // that cause layout recalculations) while still re-rendering when footer changes.
-  const footerContext = useMemo(() => ({ footer }), [footer]);
+  const footerContext = useMemo(() => ({ footer, isStreaming }), [footer, isStreaming]);
 
   const virtuosoComponents = useMemo(() => ({
+    Scroller: RubberBandScroller,
     Header: function VirtuosoHeader() {
       return <div className="pt-2" />;
     },
     Footer: function VirtuosoFooter({ context }: { context?: { footer?: React.ReactNode } }) {
-      // Always render bottom padding — this acts as a rubber-band zone so
-      // overscroll bounces stay within the atBottomThreshold and atBottom
-      // doesn't flap between true/false.
+      // Always render bottom padding that stays within atBottomThreshold (80px)
+      // so overscroll bounces don't cause atBottom to flap.
       if (!context?.footer) {
-        return <div className="pb-6" />;
+        return <div className="pb-10" />;
       }
       return (
-        <div className="px-4 sm:px-6 lg:px-8 pb-6">
+        <div className="px-4 sm:px-6 lg:px-8 pb-10">
           <div className="max-w-[1200px] mx-auto">
             {context.footer}
           </div>
@@ -920,7 +983,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   }
 
   return (
-    <div style={{ height: "100%", position: "relative" }}>
+    <div ref={timelineContainerRef} style={{ height: "100%", position: "relative" }}>
       {/* Back to main chat bar when viewing a spawn thread */}
       {spawnThreadInfo && (
         <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/30 border-b border-border/30 text-xs text-muted-foreground">
@@ -981,7 +1044,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
         computeItemKey={computeItemKey}
         initialTopMostItemIndex={flatItems.length - 1}
         followOutput={handleFollowOutput}
-        atBottomThreshold={200}
+        atBottomThreshold={80}
         overscan={200}
         increaseViewportBy={200}
         itemContent={wrappedRenderItem}

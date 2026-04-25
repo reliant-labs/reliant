@@ -78,8 +78,7 @@ const (
 	// Metadata tools
 	ToolMetadataWriter = "metadata_writer"
 
-	// Layout tools
-	ToolLayoutLibrary    = "layout_library"
+	// Component tools
 	ToolComponentLibrary = "component_library"
 
 	// Workflow editing tools
@@ -207,6 +206,14 @@ func ExpandToolFilterWithSpawn(filter []string, mcpToolNames []string) ToolFilte
 	// Expand regular filter items
 	result.ToolNames = ExpandToolFilter(regularFilter, mcpToolNames)
 	return result
+}
+
+// ParseSpawnEntry parses a spawn entry specification.
+// Format: spawn:workflow(preset1,preset2)
+// Returns nil if the format is invalid or presets are empty (spawn disabled).
+// Exported for use by the call_llm handler when reading from tools_config.spawn.
+func ParseSpawnEntry(spec string) *SpawnFilterConfig {
+	return parseSpawnFilter(spec)
 }
 
 // parseSpawnFilter parses a spawn filter specification.
@@ -438,17 +445,17 @@ func GetToolRegistry() []ToolDefinition {
 
 		// Planning tools
 		{ToolCreatePlan, (*ToolsFactory).CreatePlan, []ToolTag{TagPlanning, TagPlan, TagDefault}, ToolRunsOnServer},
-		{ToolUpdatePlan, (*ToolsFactory).UpdatePlan, []ToolTag{TagPlanning, TagPlan, TagDefault}, ToolRunsOnServer},
-		{ToolGetPlan, (*ToolsFactory).GetPlan, []ToolTag{TagPlanning, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnServer},
+		{ToolUpdatePlan, (*ToolsFactory).UpdatePlan, []ToolTag{TagPlanning, TagPlan}, ToolRunsOnServer},
+		{ToolGetPlan, (*ToolsFactory).GetPlan, []ToolTag{TagPlanning, TagReadOnly, TagPlan}, ToolRunsOnServer},
 
 		// Task tools
 		{ToolListTasks, (*ToolsFactory).ListTasks, []ToolTag{TagPlanning, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnServer},
 		{ToolAddTask, (*ToolsFactory).AddTask, []ToolTag{TagPlanning, TagPlan, TagDefault}, ToolRunsOnServer},
 		{ToolUpdateTask, (*ToolsFactory).UpdateTask, []ToolTag{TagPlanning, TagPlan, TagDefault}, ToolRunsOnServer},
 		{ToolCreateSubtask, (*ToolsFactory).CreateSubtask, []ToolTag{TagPlanning, TagPlan}, ToolRunsOnServer},
-		{ToolAddDependency, (*ToolsFactory).AddDependency, []ToolTag{TagPlanning, TagPlan, TagDefault}, ToolRunsOnServer},
-		{ToolRemoveDependency, (*ToolsFactory).RemoveDependency, []ToolTag{TagPlanning, TagPlan, TagDefault}, ToolRunsOnServer},
-		{ToolListReadyTasks, (*ToolsFactory).ListReadyTasks, []ToolTag{TagPlanning, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnServer},
+		{ToolAddDependency, (*ToolsFactory).AddDependency, []ToolTag{TagPlanning, TagPlan}, ToolRunsOnServer},
+		{ToolRemoveDependency, (*ToolsFactory).RemoveDependency, []ToolTag{TagPlanning, TagPlan}, ToolRunsOnServer},
+		{ToolListReadyTasks, (*ToolsFactory).ListReadyTasks, []ToolTag{TagPlanning, TagReadOnly, TagPlan}, ToolRunsOnServer},
 
 		// Analysis tools - conditionally add project analyzer
 		{ToolSourcegraph, (*ToolsFactory).Sourcegraph, []ToolTag{TagAnalysis, TagReadOnly, TagPlan}, ToolRunsAnywhere},
@@ -459,12 +466,11 @@ func GetToolRegistry() []ToolDefinition {
 		// Metadata tools
 		{ToolMetadataWriter, (*ToolsFactory).MetadataWriter, []ToolTag{}, ToolRunsAnywhere},
 
-		// Layout & component tools
-		{ToolLayoutLibrary, (*ToolsFactory).LayoutLibrary, []ToolTag{TagReadOnly, TagPlan}, ToolRunsAnywhere},
-		{ToolComponentLibrary, (*ToolsFactory).ComponentLibrary, []ToolTag{TagDefault, TagReadOnly, TagPlan}, ToolRunsAnywhere},
+		// Component tools
+		{ToolComponentLibrary, (*ToolsFactory).ComponentLibrary, []ToolTag{TagReadOnly, TagPlan}, ToolRunsAnywhere},
 
 		// Worktree tools
-		{ToolWorktree, (*ToolsFactory).Worktree, []ToolTag{TagDefault}, ToolRunsAnywhere},
+		{ToolWorktree, (*ToolsFactory).Worktree, []ToolTag{}, ToolRunsAnywhere},
 
 		// Skill tools
 		{ToolSkill, (*ToolsFactory).Skill, []ToolTag{TagDefault, TagReadOnly, TagPlan}, ToolRunsAnywhere},
@@ -473,7 +479,7 @@ func GetToolRegistry() []ToolDefinition {
 		{ToolLoadTool, (*ToolsFactory).LoadTool, []ToolTag{TagDefault, TagReadOnly, TagPlan}, ToolRunsAnywhere},
 
 		// Code manipulation tools
-		{ToolMoveCode, (*ToolsFactory).MoveCode, []ToolTag{TagFile, TagDefault}, ToolRunsAnywhere},
+		{ToolMoveCode, (*ToolsFactory).MoveCode, []ToolTag{TagFile}, ToolRunsAnywhere},
 
 		// Workflow editing tools
 		{ToolCreateWorkflow, (*ToolsFactory).CreateWorkflow, []ToolTag{TagWorkflow}, ToolRunsOnServer},

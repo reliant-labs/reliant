@@ -194,6 +194,27 @@ func (f *findAndReplaceTool) Execute(rctx *rctx.ToolContext, params FindAndRepla
 		fmt.Fprintf(&responseText, "• %s: %d replacement(s)\n", file, matchesByFile[file])
 	}
 
+	if params.Preview {
+		totalDiffLen := 0
+		const maxDiffOutput = 4000
+		for _, change := range result.Changes {
+			if change.Diff == "" {
+				continue
+			}
+			relPath, _ := filepath.Rel(wd, change.File)
+			if relPath == "" {
+				relPath = change.File
+			}
+			entry := fmt.Sprintf("\n--- %s ---\n%s\n", relPath, change.Diff)
+			if totalDiffLen+len(entry) > maxDiffOutput {
+				fmt.Fprintf(&responseText, "\n... diff output truncated (exceeded %d chars) ...\n", maxDiffOutput)
+				break
+			}
+			responseText.WriteString(entry)
+			totalDiffLen += len(entry)
+		}
+	}
+
 	finalResponse := fmt.Sprintf("<result>\n%s\n</result>\n", responseText.String())
 
 	return WithResponseMetadata(

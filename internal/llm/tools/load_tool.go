@@ -20,7 +20,9 @@ type LoadToolMetadata struct {
 	LoadedTools []string `json:"loaded_tools,omitempty"`
 }
 
-type loadToolTool struct{}
+type loadToolTool struct {
+	deferredTools []string
+}
 
 const loadToolDescription = `Dynamically load a tool by name or search for available tools.
 
@@ -39,7 +41,19 @@ func (t *loadToolTool) Name() string {
 }
 
 func (t *loadToolTool) Description() string {
-	return loadToolDescription
+	if len(t.deferredTools) == 0 {
+		return loadToolDescription
+	}
+	namesJSON, err := json.Marshal(t.deferredTools)
+	if err != nil {
+		return loadToolDescription
+	}
+	return loadToolDescription + fmt.Sprintf(`
+
+Additional tools available (use load_tool to enable):
+%s
+
+Use load_tool(name="tool_name") to load a specific tool, or load_tool(query="keyword") to search.`, string(namesJSON))
 }
 
 func (t *loadToolTool) RequiresPermission(params LoadToolParams) (bool, error) {
@@ -160,27 +174,14 @@ func (t *loadToolTool) searchTools(query string, permission string) ToolResponse
 	return NewTextResponse(sb.String())
 }
 
-// FormatDeferredToolsAnnouncement creates the system prompt section announcing
-// tools that can be loaded via load_tool.
-// mcpToolNames are all available MCP tools; any not in currentToolNames will be
-// included in the deferred list so the LLM can discover and load them.
-func FormatDeferredToolsAnnouncement(chatID string, permission string, currentToolNames []string, mcpToolNames []string) string {
-	deferred := DeferredToolNames(chatID, permission, currentToolNames, mcpToolNames)
-	if len(deferred) == 0 {
-		return ""
-	}
+// DeferredToolsAware is implemented by tools that can receive the list of
+// deferred (not-yet-loaded) tools so they can advertise them in their description.
+type DeferredToolsAware interface {
+	SetDeferredTools(names []string)
+}
 
-	// Serialize the list
-	namesJSON, err := json.Marshal(deferred)
-	if err != nil {
-		return ""
-	}
-
-	return fmt.Sprintf(`
-<system-reminder>
-Additional tools available (use load_tool to enable):
-%s
-
-Use load_tool(name="tool_name") to load a specific tool, or load_tool(query="keyword") to search.
-</system-reminder>`, string(namesJSON))
+// SetDeferredTools sets the list of available-but-not-loaded tools so the
+// description can advertise them to the LLM.
+func (t *loadToolTool) SetDeferredTools(names []string) {
+	t.deferredTools = names
 }

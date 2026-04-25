@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"time"
@@ -237,13 +238,14 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// Check if this workflow was spawned by the spawn tool (prevents recursive spawn)
 	spawnedBySpawnTool := rtx.SpawnedBy == "spawn_tool"
 
-	// Tools enabled by default, disabled if explicitly set to false
-	toolsEnabled := !model.CelBoolIsSet(args.GetTools()) || model.CelBoolValue(args.GetTools())
+	// Resolve tools configuration
+	tc := args.GetToolsConfig()
+	toolsEnabled := tc != nil && tc.GetFilter() != nil
 
-	// Resolve permission level (defaults to orchestrator for backward compatibility)
-	permission := tools.PermissionOrchestrator
-	if model.CelStringIsSet(args.GetPermission()) {
-		permission = model.CelStringValue(args.GetPermission())
+	// Resolve permission level (defaults to mutating when no tools_config)
+	permission := tools.PermissionMutating
+	if tc != nil && model.CelStringIsSet(tc.GetPermission()) {
+		permission = model.CelStringValue(tc.GetPermission())
 	}
 	if chat != nil {
 		tools.GetLoadedToolsStore().SetPermission(chat.ID, permission)
@@ -401,7 +403,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		return nil, fmt.Errorf("failed to get LLM driver: %w", err)
 	}
 
-	// Get available tools (filtered by planning mode and tool_filter if provided)
+	// Get available tools (filtered by tools_config)
 	var availableTools []tools.Tool
 	var spawnPresets []string            // Track spawn presets for tool call validation
 	var toolsResult toolsWithSpawnResult // Hoisted for deferred tools announcement
@@ -409,7 +411,8 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		activity.GetLogger(ctx).Info("[CallLLM] Tools disabled")
 		availableTools = []tools.Tool{}
 	} else {
-		toolsResult = a.getAvailableToolsWithSpawn(ctx, chat, workingDir, projectCfg, model.CelStringListValue(args.GetToolFilter()), thread)
+		toolFilter := model.CelStringListValue(tc.GetFilter())
+		toolsResult = a.getAvailableToolsWithSpawn(ctx, chat, workingDir, projectCfg, toolFilter, thread)
 		availableTools = toolsResult.Tools
 
 		// Emit warning to chat if MCP servers failed to load
@@ -421,16 +424,21 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			})
 		}
 
-		// Add spawn tools from filter configs (spawn:workflow(presets) syntax)
+		// Add spawn tools from tools_config.spawn
 		// Workflows spawned via spawn tool should NOT have access to spawn tool to prevent infinite recursion
 		if !spawnedBySpawnTool {
-			for _, spawnConfig := range toolsResult.SpawnConfigs {
-				spawnTool := a.getSpawnToolFromFilterConfig(ctx, chat.ProjectID, spawnConfig)
+			// Parse spawn configs from the dedicated spawn field
+			spawnEntries := model.CelStringListValue(tc.GetSpawn())
+			for _, entry := range spawnEntries {
+				spawnConfig := tools.ParseSpawnEntry(entry)
+				if spawnConfig == nil {
+					continue
+				}
+				spawnTool := a.getSpawnToolFromFilterConfig(ctx, chat.ProjectID, *spawnConfig)
 				if spawnTool != nil {
 					availableTools = append(availableTools, spawnTool)
-					// Collect spawn presets for tool call validation
 					spawnPresets = append(spawnPresets, spawnConfig.Presets...)
-					activity.GetLogger(ctx).Info("[CallLLM] Added spawn tool from filter",
+					activity.GetLogger(ctx).Info("[CallLLM] Added spawn tool from tools_config",
 						"workflow", spawnConfig.Workflow,
 						"presets", spawnConfig.Presets)
 				}
@@ -476,15 +484,22 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		celStringValuePtr(args.GetSystemPrompt()),
 	)
 
-	// Announce deferred tools (available via load_tool but not yet loaded)
+	// Set deferred tools on the load_tool so its description advertises them
 	if toolsEnabled && len(availableTools) > 0 {
 		currentToolNames := make([]string, len(availableTools))
 		for i, t := range availableTools {
 			currentToolNames[i] = t.Name()
 		}
-		announcement := tools.FormatDeferredToolsAnnouncement(chat.ID, permission, currentToolNames, toolsResult.AllMCPToolNames)
-		if announcement != "" {
-			systemPrompts = append(systemPrompts, announcement)
+		deferred := tools.DeferredToolNames(chat.ID, permission, currentToolNames, toolsResult.AllMCPToolNames)
+		if len(deferred) > 0 {
+			for _, t := range availableTools {
+				if u, ok := t.(interface{ Unwrap() any }); ok {
+					if inner, ok := u.Unwrap().(tools.DeferredToolsAware); ok {
+						inner.SetDeferredTools(deferred)
+						break
+					}
+				}
+			}
 		}
 	}
 
@@ -822,7 +837,13 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 	// Inject skills loaded via the project config so the skill tool never
 	// touches the filesystem on the server side.
 	if projectCfg != nil && len(projectCfg.Skills) > 0 {
+		slog.Debug("[CallLLM] Injecting skills into tools factory", "skillCount", len(projectCfg.Skills))
 		projectScopedToolsFactory = projectScopedToolsFactory.WithSkills(projectCfg.Skills)
+		// Also store skills in the global store so the executor can access them
+		// when creating skill tool instances (the executor uses a different factory).
+		tools.GetLoadedToolsStore().SetSkills(chat.ID, projectCfg.Skills)
+	} else {
+		slog.Debug("[CallLLM] No skills available", "projectCfgNil", projectCfg == nil)
 	}
 
 	logInfo := func(msg string, keyvals ...interface{}) {

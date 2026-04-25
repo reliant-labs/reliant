@@ -67,11 +67,9 @@ func TestExtractFieldInfo_CallLLMArgs(t *testing.T) {
 		t.Errorf("max_tokens should have no default, got %q", maxTokens.DefaultValue)
 	}
 
-	// tools is hidden (redundant with tool_filter), verify via ExtractFieldInfo
-	if tools, ok := byName["tools"]; ok {
-		if !tools.Hidden {
-			t.Error("Expected 'tools' field to be hidden")
-		}
+	// tools_config should exist as a message field
+	if _, ok := byName["tools_config"]; !ok {
+		t.Error("Expected 'tools_config' field")
 	}
 
 	t.Logf("CallLLMArgs has %d fields, all annotations verified", len(fields))

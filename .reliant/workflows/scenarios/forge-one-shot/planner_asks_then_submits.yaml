@@ -1,0 +1,104 @@
+name: planner_asks_then_submits
+description: |
+  Planner uses ask tool for a conversation turn, then submits the plan.
+  Tests multi-iteration scope loop with ask tool → project_plan tool and the narrowed validation path.
+
+events:
+  - node: scope_loop.call_scope
+    output:
+      message:
+        role: assistant
+        text: "Let me ask some questions about your app."
+      response_text: "Let me ask some questions about your app."
+      tool_calls:
+        - id: "tc-ask"
+          name: "ask"
+          input: '{"question":"What type of users will this serve?"}'
+
+  - node: scope_loop.execute_scope
+    output:
+      tool_results:
+        - tool_call_id: "tc-ask"
+          name: "ask"
+          content: "Small businesses managing invoices."
+
+  - node: scope_loop.call_scope
+    output:
+      message:
+        role: assistant
+        text: "Got it. Here's the plan."
+      response_text: "Got it. Here's the plan."
+      tool_calls:
+        - id: "tc-plan"
+          name: "project_plan"
+          input: '{"project_name":"biz-invoices"}'
+
+  - node: scope_loop.execute_scope
+    output:
+      tool_results: []
+      response_data:
+        project_plan:
+          project_name: "biz-invoices"
+          go_module: "github.com/acme/biz-invoices"
+          services:
+            - name: "invoices"
+              description: "Invoice CRUD"
+              rpcs: ["CreateInvoice"]
+          packages:
+            - name: "billing"
+              description: "Billing logic"
+              interface_methods: ["CalculateTotal"]
+          frontends:
+            - name: "web"
+              pages: ["home"]
+          features:
+            - name: "basic-invoices"
+              description: "Basic invoice management"
+              touches_services: ["invoices"]
+              touches_packages: ["billing"]
+          entities: []
+
+  - node: scaffold_project
+    output: {exit_code: 0, stdout: "ok", stderr: ""}
+  - node: add_services
+    output: {exit_code: 0, stdout: "ok", stderr: ""}
+  - node: add_packages
+    output: {exit_code: 0, stdout: "ok", stderr: ""}
+  - node: add_frontends
+    output: {exit_code: 0, stdout: "ok", stderr: ""}
+  - node: architect
+    output: {response_text: "Contracts done."}
+  - node: generate_code
+    output: {exit_code: 0, stdout: "ok", stderr: ""}
+  - node: validate_contracts
+    output: {exit_code: 0, stdout: "ok", stderr: ""}
+  - node: baseline_build
+    output: {exit_code: 0, stdout: "ok", stderr: ""}
+  - node: implement_features
+    output:
+      _iterations: 1
+      _completed: 1
+      _failed: 0
+  - node: placeholder_guard
+    output: {exit_code: 0, stdout: "", stderr: ""}
+  - node: integration_verify_initial
+    output: {exit_code: 0, stdout: "ok", stderr: ""}
+
+expect:
+  outcome: completed
+  reached:
+    - scope_loop
+    - scope_loop.call_scope
+    - scope_loop.execute_scope
+    - plan_summary
+    - scaffold_project
+    - add_packages
+    - architect
+    - baseline_build
+    - implement_features
+    - integration_verify_initial
+    - success
+  not_reached:
+    - integration_failed
+    - scope_loop.remind_scope
+    - integration_fix_loop

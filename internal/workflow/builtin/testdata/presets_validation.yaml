@@ -95,7 +95,6 @@ presets:
     tag: agent
     required_params:
       - system_prompt
-      - spawn_presets
       - tools
       - model
 
@@ -111,13 +110,6 @@ presets:
     tag: agent
     required_params:
       - system_prompt
-      - model
-
-  conflict-resolver:
-    tag: agent
-    required_params:
-      - system_prompt
-      - tools
       - model
 
   workflow_builder:

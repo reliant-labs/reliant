@@ -1,0 +1,239 @@
+# Test scenarios for forge-one-shot.yaml workflow
+#
+# Five-phase workflow:
+#   scope_conversation → scaffold_and_verify → frontend_polish → frontend_done →
+#   mvp_backend → mvp_done → production_polish → success
+#
+# Failure paths:
+#   scaffold_and_verify → scaffold_failed    (strategy != 'pass')
+#   mvp_backend → mvp_failed                (strategy != 'pass')
+#   production_polish → production_failed   (strategy != 'pass')
+
+---
+name: happy_path
+description: All phases pass. Full pipeline to success.
+
+events:
+  - node: scope_conversation
+    output:
+      message: "FORGE_PLAN.md written. Ready to scaffold."
+      response_text: "I've written FORGE_PLAN.md with the project spec."
+
+  - node: scaffold_and_verify
+    output:
+      strategy: "pass"
+      eval_strategy: "pass"
+      review_grade: "pass"
+      review_feedback: "Project scaffolded, proto files generated, build passes, FORGE_PLAN.md exists."
+      iterations: 1
+      lint_exit: 0
+      build_exit: 0
+
+  - node: frontend_polish
+    output:
+      strategy: "pass"
+      eval_strategy: "pass"
+      review_grade: "pass"
+      review_feedback: "Frontend polished with working CRUD integration."
+      iterations: 1
+      lint_exit: 0
+      build_exit: 0
+
+  - node: mvp_backend
+    output:
+      strategy: "pass"
+      eval_strategy: "pass"
+      review_grade: "pass"
+      review_feedback: "Core features implemented, tests pass."
+      iterations: 2
+      lint_exit: 0
+      test_exit: 0
+      build_exit: 0
+
+  - node: production_polish
+    output:
+      strategy: "pass"
+      eval_strategy: "pass"
+      review_grade: "pass"
+      review_feedback: "All features complete, tests pass, production ready."
+      iterations: 3
+      lint_exit: 0
+      test_exit: 0
+      build_exit: 0
+
+expect:
+  outcome: completed
+  reached:
+    - scope_conversation
+    - scaffold_and_verify
+    - frontend_polish
+    - frontend_done
+    - mvp_backend
+    - mvp_done
+    - production_polish
+    - success
+  not_reached:
+    - scaffold_failed
+    - mvp_failed
+    - production_failed
+
+---
+name: scaffold_fails
+description: Scoping passes but scaffold phase fails. No other phases run.
+
+events:
+  - node: scope_conversation
+    output:
+      message: "FORGE_PLAN.md written."
+      response_text: "Plan is ready."
+
+  - node: scaffold_and_verify
+    output:
+      strategy: "continue"
+      eval_strategy: "continue"
+      review_grade: "fail"
+      review_feedback: "Proto files have errors, build fails."
+      iterations: 5
+      lint_exit: 1
+      build_exit: 1
+
+expect:
+  outcome: completed
+  reached:
+    - scope_conversation
+    - scaffold_and_verify
+    - scaffold_failed
+  not_reached:
+    - frontend_polish
+    - frontend_done
+    - mvp_backend
+    - mvp_done
+    - production_polish
+    - success
+    - mvp_failed
+    - production_failed
+
+---
+name: mvp_fails
+description: Scaffold and frontend pass, but MVP backend fails.
+
+events:
+  - node: scope_conversation
+    output:
+      message: "FORGE_PLAN.md written."
+      response_text: "Plan is ready."
+
+  - node: scaffold_and_verify
+    output:
+      strategy: "pass"
+      eval_strategy: "pass"
+      review_grade: "pass"
+      review_feedback: "Scaffold complete."
+      iterations: 1
+      lint_exit: 0
+      build_exit: 0
+
+  - node: frontend_polish
+    output:
+      strategy: "pass"
+      eval_strategy: "pass"
+      review_grade: "pass"
+      review_feedback: "Frontend polished."
+      iterations: 1
+      lint_exit: 0
+      build_exit: 0
+
+  - node: mvp_backend
+    output:
+      strategy: "continue"
+      eval_strategy: "continue"
+      review_grade: "fail"
+      review_feedback: "Tests failing after max retries."
+      iterations: 5
+      lint_exit: 0
+      test_exit: 1
+      build_exit: 0
+
+expect:
+  outcome: completed
+  reached:
+    - scope_conversation
+    - scaffold_and_verify
+    - frontend_polish
+    - frontend_done
+    - mvp_backend
+    - mvp_failed
+  not_reached:
+    - scaffold_failed
+    - mvp_done
+    - production_polish
+    - success
+    - production_failed
+
+---
+name: production_fails
+description: All phases pass except production polish.
+
+events:
+  - node: scope_conversation
+    output:
+      message: "FORGE_PLAN.md written."
+      response_text: "Plan is ready."
+
+  - node: scaffold_and_verify
+    output:
+      strategy: "pass"
+      eval_strategy: "pass"
+      review_grade: "pass"
+      review_feedback: "Scaffold complete."
+      iterations: 1
+      lint_exit: 0
+      build_exit: 0
+
+  - node: frontend_polish
+    output:
+      strategy: "pass"
+      eval_strategy: "pass"
+      review_grade: "pass"
+      review_feedback: "Frontend polished."
+      iterations: 1
+      lint_exit: 0
+      build_exit: 0
+
+  - node: mvp_backend
+    output:
+      strategy: "pass"
+      eval_strategy: "pass"
+      review_grade: "pass"
+      review_feedback: "MVP features done."
+      iterations: 2
+      lint_exit: 0
+      test_exit: 0
+      build_exit: 0
+
+  - node: production_polish
+    output:
+      strategy: "continue"
+      eval_strategy: "continue"
+      review_grade: "fail"
+      review_feedback: "Remaining features incomplete after max retries."
+      iterations: 5
+      lint_exit: 0
+      test_exit: 1
+      build_exit: 0
+
+expect:
+  outcome: completed
+  reached:
+    - scope_conversation
+    - scaffold_and_verify
+    - frontend_polish
+    - frontend_done
+    - mvp_backend
+    - mvp_done
+    - production_polish
+    - production_failed
+  not_reached:
+    - scaffold_failed
+    - mvp_failed
+    - success
