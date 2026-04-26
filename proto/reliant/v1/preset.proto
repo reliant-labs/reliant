@@ -74,6 +74,9 @@ message PresetInfo {
 
   // Whether this preset is hidden from the preset picker by default
   bool is_hidden = 8;
+
+  // Skill names recommended when this preset is active
+  repeated string recommended_skills = 9;
 }
 
 // ListPresetsRequest is the request for ListPresets.

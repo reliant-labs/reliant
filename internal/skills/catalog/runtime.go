@@ -66,9 +66,28 @@ var builtinSkillPaths = []string{
 	"reliant-config/SKILL.md",
 	"workflow-builder/SKILL.md",
 	"conflict-resolver/SKILL.md",
+	"simplification-assessment/SKILL.md",
+	"code-hygiene-review/SKILL.md",
+	"performance-review/SKILL.md",
+	"research-methodology/SKILL.md",
+	"refactoring-patterns/SKILL.md",
+	"reproduction-methodology/SKILL.md",
+	"testing-methodology/SKILL.md",
+	"git-operations/SKILL.md",
+	"planning-methodology/SKILL.md",
+	"documentation-writing/SKILL.md",
+	"debugging-orchestration/SKILL.md",
+	"architecture-review/SKILL.md",
+	"code-review-orchestration/SKILL.md",
+	"ux-review-methodology/SKILL.md",
+	"security-review/SKILL.md",
+	"ux-design/SKILL.md",
+	"general-agent/SKILL.md",
+	"forge-methodology/SKILL.md",
+	"migration-guidance/SKILL.md",
 }
 
-//go:embed builtin/reliant-config/SKILL.md builtin/workflow-builder/SKILL.md builtin/conflict-resolver/SKILL.md
+//go:embed builtin/reliant-config/SKILL.md builtin/workflow-builder/SKILL.md builtin/conflict-resolver/SKILL.md builtin/simplification-assessment/SKILL.md builtin/code-hygiene-review/SKILL.md builtin/performance-review/SKILL.md builtin/research-methodology/SKILL.md builtin/refactoring-patterns/SKILL.md builtin/reproduction-methodology/SKILL.md builtin/testing-methodology/SKILL.md builtin/git-operations/SKILL.md builtin/planning-methodology/SKILL.md builtin/documentation-writing/SKILL.md builtin/debugging-orchestration/SKILL.md builtin/architecture-review/SKILL.md builtin/code-review-orchestration/SKILL.md builtin/ux-review-methodology/SKILL.md builtin/security-review/SKILL.md builtin/ux-design/SKILL.md builtin/general-agent/SKILL.md builtin/forge-methodology/SKILL.md builtin/migration-guidance/SKILL.md
 var builtinSkillsFS embed.FS
 
 func ParseSkillMarkdown(path string, scope skillscore.Scope, data []byte) (Definition, error) {

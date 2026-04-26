@@ -22,6 +22,7 @@ type RuntimeContext struct {
 
 	// Spawn context
 	SpawnedBy   string       `json:"spawned_by,omitempty"`
+	SpawnDepth  int          `json:"spawn_depth,omitempty"`
 	SpawnConfig *SpawnConfig `json:"spawn_config,omitempty"`
 
 	// Project context

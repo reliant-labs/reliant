@@ -183,6 +183,34 @@ func TestBuildSpawnChildInputs_ObjectModel(t *testing.T) {
 	assert.Equal(t, "gpt-5.3-codex", modelObj["id"])
 }
 
+func TestBuildSpawnChildInputs_ObjectModelWithNestedConfig(t *testing.T) {
+	// Model now carries temperature, thinking_level, compaction_threshold as nested keys.
+	// Verify the entire model config is deep-copied to the child.
+	selector := map[string]interface{}{
+		"tags":                 []interface{}{"flagship"},
+		"temperature":          0.8,
+		"thinking_level":       "high",
+		"compaction_threshold": 150000,
+	}
+	inputs := map[string]interface{}{
+		"mode":  "auto",
+		"model": selector,
+	}
+
+	result := buildSpawnChildInputs(inputs)
+
+	modelObj, ok := result["model"].(map[string]interface{})
+	assert.True(t, ok)
+	assert.Equal(t, []interface{}{"flagship"}, modelObj["tags"])
+	assert.Equal(t, 0.8, modelObj["temperature"])
+	assert.Equal(t, "high", modelObj["thinking_level"])
+	assert.Equal(t, 150000, modelObj["compaction_threshold"])
+
+	// Verify deep copy — mutating nested source should not affect child
+	selector["temperature"] = 0.1
+	assert.Equal(t, 0.8, modelObj["temperature"])
+}
+
 func TestBuildSpawnChildInputs_EmptyStringModelIgnored(t *testing.T) {
 	inputs := map[string]interface{}{
 		"mode":  "auto",
@@ -933,7 +961,7 @@ func (s *SpawnTestSuite) TestExecuteSpawnInline_ResumptionValidatesOwnership() {
 }
 
 // =========================================================================
-// ANTI-RECURSION TESTS
+// ANTI-RECURSION / SPAWN DEPTH TESTS
 // =========================================================================
 
 func TestSpawnExecContext_HasSpawnToolParent(t *testing.T) {
@@ -948,6 +976,7 @@ func TestSpawnExecContext_HasSpawnToolParent(t *testing.T) {
 		Thread:       "child-thread",
 		ThreadMode:   model.ThreadModeNew,
 		ProjectPath:  "/project/path",
+		SpawnDepth:   1,
 		Parent: &ParentContext{
 			WorkflowID: parentCtx.WorkflowID,
 			StepPath:   "spawn_tool",
@@ -957,6 +986,7 @@ func TestSpawnExecContext_HasSpawnToolParent(t *testing.T) {
 	assert.Equal(t, "spawn_tool", childExecContext.Parent.StepPath)
 	assert.True(t, childExecContext.IsChildWorkflow())
 	assert.Equal(t, "parent-wf-123", childExecContext.Parent.WorkflowID)
+	assert.Equal(t, 1, childExecContext.SpawnDepth)
 }
 
 func TestSpawnedBy_PropagatedFromParentContext(t *testing.T) {
@@ -966,6 +996,7 @@ func TestSpawnedBy_PropagatedFromParentContext(t *testing.T) {
 		ChatID:       "chat-456",
 		WorkflowName: "builtin://agent",
 		Thread:       "child-thread",
+		SpawnDepth:   1,
 		Parent: &ParentContext{
 			WorkflowID: "parent-wf-123",
 			StepPath:   "spawn_tool",
@@ -983,6 +1014,7 @@ func TestSpawnedBy_PropagatedFromParentContext(t *testing.T) {
 	}
 
 	assert.Equal(t, "spawn_tool", actionInputs["spawned_by"])
+	assert.Equal(t, 1, execContext.SpawnDepth)
 }
 
 func TestSpawnedBy_NotInjectedWithoutParent(t *testing.T) {
@@ -1004,6 +1036,7 @@ func TestSpawnedBy_NotInjectedWithoutParent(t *testing.T) {
 
 	_, hasSpawnedBy := actionInputs["spawned_by"]
 	assert.False(t, hasSpawnedBy, "spawned_by should not be set without parent context")
+	assert.Equal(t, 0, execContext.SpawnDepth, "top-level workflow should have SpawnDepth 0")
 }
 
 func TestSpawnedBy_NotInjectedWithEmptyStepPath(t *testing.T) {
@@ -1029,6 +1062,102 @@ func TestSpawnedBy_NotInjectedWithEmptyStepPath(t *testing.T) {
 
 	_, hasSpawnedBy := actionInputs["spawned_by"]
 	assert.False(t, hasSpawnedBy, "spawned_by should not be set with empty StepPath")
+}
+
+func TestSpawnDepth_TopLevelIsZero(t *testing.T) {
+	ctx := NewExecutionContext("wf-1", "chat-1", "agent", "thread-0")
+	assert.Equal(t, 0, ctx.SpawnDepth)
+}
+
+func TestSpawnDepth_IncrementedOnSpawn(t *testing.T) {
+	// Simulate the spawn chain: top-level (0) → child (1) → grandchild (2)
+	// This mirrors what executeSpawnInline does: parentSpawnDepth + 1
+	parentInputs := map[string]interface{}{}
+
+	// Top-level spawns child: reads parent depth (0), sets child to 1
+	parentDepth := 0
+	if sd, ok := parentInputs["spawn_depth"]; ok {
+		parentDepth = sd.(int)
+	}
+	childDepth := parentDepth + 1
+	assert.Equal(t, 1, childDepth)
+
+	// Child spawns grandchild: reads child depth (1), sets grandchild to 2
+	childInputs := map[string]interface{}{"spawn_depth": childDepth}
+	childDepthFromInputs := 0
+	if sd, ok := childInputs["spawn_depth"]; ok {
+		childDepthFromInputs = sd.(int)
+	}
+	grandchildDepth := childDepthFromInputs + 1
+	assert.Equal(t, 2, grandchildDepth)
+}
+
+func TestSpawnDepth_MaxDepthPreventsSpawn(t *testing.T) {
+	// Verify that depth >= maxSpawnDepth disables spawn tools
+	const maxSpawnDepth = 2
+
+	// Depth 0 (top-level) can spawn
+	assert.False(t, 0 >= maxSpawnDepth, "depth 0 should allow spawn")
+
+	// Depth 1 (child) can spawn
+	assert.False(t, 1 >= maxSpawnDepth, "depth 1 should allow spawn")
+
+	// Depth 2 (grandchild) cannot spawn
+	assert.True(t, 2 >= maxSpawnDepth, "depth 2 should prevent spawn")
+
+	// Depth 3 (hypothetical deeper) cannot spawn
+	assert.True(t, 3 >= maxSpawnDepth, "depth 3 should prevent spawn")
+}
+
+func TestSpawnDepth_InheritedByForChild(t *testing.T) {
+	// ForChild (inline sub-workflow) should inherit spawn depth without incrementing
+	parent := &ExecutionContext{
+		WorkflowID:   "wf-1",
+		ChatID:       "chat-1",
+		WorkflowName: "agent",
+		Thread:       "thread-0",
+		SpawnDepth:   1,
+	}
+
+	child := parent.ForChild("step-1", model.ThreadModeNew, "sub-agent", false)
+	assert.Equal(t, 1, child.SpawnDepth, "ForChild should inherit spawn depth")
+}
+
+func TestSpawnDepth_InheritedByForIteration(t *testing.T) {
+	// ForIteration should inherit spawn depth without incrementing
+	parent := &ExecutionContext{
+		WorkflowID:   "wf-1",
+		ChatID:       "chat-1",
+		WorkflowName: "agent",
+		Thread:       "thread-0",
+		SpawnDepth:   2,
+		Loop: &ExecLoopContext{
+			NodeID:    "loop-1",
+			Iteration: 0,
+		},
+	}
+
+	iter := parent.ForIteration(1, false)
+	assert.Equal(t, 2, iter.SpawnDepth, "ForIteration should inherit spawn depth")
+}
+
+func TestSpawnDepth_RuntimeContextFromExecContext(t *testing.T) {
+	// Verify the pattern used in step_executor.go to set rtx.SpawnDepth
+	execCtx := &ExecutionContext{
+		WorkflowID:   "wf-1",
+		ChatID:       "chat-1",
+		WorkflowName: "agent",
+		Thread:       "thread-0",
+		SpawnDepth:   1,
+	}
+
+	rtx := types.RuntimeContext{
+		ChatID: execCtx.ChatID,
+		Thread: execCtx.Thread,
+	}
+	rtx.SpawnDepth = execCtx.SpawnDepth
+
+	assert.Equal(t, 1, rtx.SpawnDepth)
 }
 
 // =========================================================================

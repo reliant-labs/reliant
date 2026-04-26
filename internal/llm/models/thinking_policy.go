@@ -18,37 +18,12 @@ type ThinkingCapability struct {
 	FallbackPolicy   ThinkingFallbackPolicy
 }
 
-var (
-	defaultThinkingLevels = []string{"low", "medium", "high"}
-	xhighThinkingLevels   = []string{"low", "medium", "high", "xhigh"}
-	lowHighThinkingLevels = []string{"low", "high"}
+var defaultThinkingLevels = []string{"low", "medium", "high"}
 
-	// thinkingLevelOverrides is an explicit model+driver capability matrix.
-	// Key format: "<model_id>@<driver_id>"
-	thinkingLevelOverrides = map[string][]string{
-		"gpt-5.5@codex":                             xhighThinkingLevels,
-		"gpt-5.5@openai":                            xhighThinkingLevels,
-		"gpt-5.4@codex":                             xhighThinkingLevels,
-		"gpt-5.4@openai":                            xhighThinkingLevels,
-		"gpt-5.4-pro@openai":                        []string{"medium", "high", "xhigh"},
-		"gpt-5.4-mini@codex":                        xhighThinkingLevels,
-		"gpt-5.4-mini@openai":                       xhighThinkingLevels,
-		"gpt-5.4-mini@openrouter":                   xhighThinkingLevels,
-		"gpt-5.3-codex@codex":                       xhighThinkingLevels,
-		"gpt-5.3-codex-spark@codex":                 xhighThinkingLevels,
-		"gpt-5.2-codex@codex":                       xhighThinkingLevels,
-		"gemini-3.1-pro-preview@gemini":             lowHighThinkingLevels,
-		"gemini-3.1-pro-preview-customtools@gemini": lowHighThinkingLevels,
-		"gemini-3.1-pro-preview@openrouter":         lowHighThinkingLevels,
-		"gemini-3-pro-preview@gemini":               lowHighThinkingLevels,
-		"gemini-3-pro-preview@openrouter":           lowHighThinkingLevels,
-	}
-)
-
-// ResolveThinkingCapability resolves the canonical thinking capability for a
-// specific model@driver pair.
-func ResolveThinkingCapability(canReason bool, modelID, driver string) ThinkingCapability {
-	if !canReason {
+// ResolveThinkingCapability resolves the canonical thinking capability from
+// a model's capabilities.
+func ResolveThinkingCapability(caps ModelCapabilities) ThinkingCapability {
+	if !caps.CanReason {
 		return ThinkingCapability{
 			SupportsThinking: false,
 			Levels:           []string{},
@@ -57,10 +32,12 @@ func ResolveThinkingCapability(canReason bool, modelID, driver string) ThinkingC
 		}
 	}
 
-	levels := append([]string(nil), defaultThinkingLevels...)
-	if override, ok := thinkingLevelOverrides[modelID+"@"+driver]; ok {
-		levels = append([]string(nil), override...)
+	levels := caps.ThinkingLevels
+	if len(levels) == 0 {
+		levels = defaultThinkingLevels
 	}
+	// Defensive copy so callers can't mutate the definition.
+	levels = append([]string(nil), levels...)
 
 	defaultLevel := PreferredThinkingLevel(levels)
 

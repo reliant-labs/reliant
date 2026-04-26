@@ -333,6 +333,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	if input.ExecContext != nil && input.ExecContext.Parent != nil && input.ExecContext.Parent.StepPath != "" {
 		input.Inputs["spawned_by"] = input.ExecContext.Parent.StepPath
 	}
+	// Inject spawn_depth from ExecutionContext for depth-based spawn limiting
+	if input.ExecContext != nil && input.ExecContext.SpawnDepth > 0 {
+		input.Inputs["spawn_depth"] = input.ExecContext.SpawnDepth
+	}
 
 	// STEP 5.55: Set up signal handler and query handler NOW (after ApplyDefaults).
 	// ApplyDefaults creates a NEW map, so we must set up handlers after it runs
@@ -2279,6 +2283,19 @@ func executeSpawnInline(
 		}
 	}
 
+	// Calculate child spawn depth: read parent's depth from workflowInputs and increment
+	parentSpawnDepth := 0
+	if sd, ok := workflowInputs["spawn_depth"]; ok {
+		switch v := sd.(type) {
+		case int:
+			parentSpawnDepth = v
+		case float64:
+			parentSpawnDepth = int(v)
+		case int64:
+			parentSpawnDepth = int(v)
+		}
+	}
+
 	childExecContext := &ExecutionContext{
 		WorkflowID:   config.childWorkflowID,
 		ChatID:       chatID,
@@ -2289,6 +2306,7 @@ func executeSpawnInline(
 		ForkedFrom:   forkedFrom,
 		ParentThread: parentThread,
 		ProjectPath:  projectPath, // Always inherit from parent
+		SpawnDepth:   parentSpawnDepth + 1,
 		Parent: &ParentContext{
 			WorkflowID: parentWorkflowID,
 			StepPath:   "spawn_tool",

@@ -10,13 +10,14 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import { Settings2, RefreshCw, X } from "lucide-react";
+import { Settings2, RefreshCw, X, ChevronDown } from "lucide-react";
 import "./placeholder-fix.css";
 import { useAttachmentStore } from "../../store/attachmentStore";
 import { useChatParamsStore } from "../../store/chatParamsStore";
 import { useActiveChatId } from "../../store/chatStoreHooks";
 import {
   usePresetsForWorkflow,
+  useModels,
   type Preset,
 } from "../../store/globalDataStore";
 import { useChatNavigationStore } from "../../store/chatNavigationStore";
@@ -33,10 +34,8 @@ import type { ConnectionStatus } from "../../types/streaming";
 import { cn } from "../../lib/utils";
 import { Tooltip } from "../ui/Tooltip";
 import { getAcceptedMimeTypes } from "../../lib/filetypes";
-import {
-  WorkflowParamsPanel,
-  type WorkflowInputs,
-} from "../workflow/WorkflowParamsPanel";
+import { type WorkflowInputs } from "../workflow/WorkflowParamsPanel";
+import { ChatSettingsPopover } from "./settings";
 import { InlineParamInput } from "../workflow/InlineParamInput";
 import { InlinePresetPicker } from "../workflow/InlinePresetPicker";
 import type { InputDef } from "../../lib/inputHelpers";
@@ -54,6 +53,7 @@ import { useActiveThreads } from "../../store/threadActivityStore";
 import { getInputDefault, getInputNestedInputs, getInputPresetConfig, getInputUI } from "../../lib/inputHelpers";
 import { parseAskUserMetadata } from "./askUserUtils";
 import { QuestionPrompt } from "./QuestionPrompt";
+import { loadTagModelConfigs } from "../Settings/ModelPreferences";
 
 /** Extract WorkflowInputs schema from a proto Workflow's inputs.
  *  Returns { inputs, groupTags, groupUIs } for use with WorkflowParamsPanel. */
@@ -154,6 +154,9 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
     const containerRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLDivElement>(null);
     const [isCompact, setIsCompact] = useState(false);
+
+    // Models list for resolving tags to display names in the toolbar pill
+    const { models: availableModels } = useModels();
 
     // Forward the internal ref to the parent
     useImperativeHandle(ref, () => textareaRef.current!, []);
@@ -280,12 +283,12 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
     const [syncedParams, setSyncedParams] = useState<Record<string, unknown>>(
       {}
     ); // Last params synced to server
-    const [isParamsPanelExpanded, setIsParamsPanelExpanded] = useState(false);
+    const [settingsPage, setSettingsPage] = useState<'main' | 'model' | 'preset' | 'params' | null>(null);
     useEffect(() => {
-      if (isParamsPanelExpanded) {
+      if (settingsPage !== null) {
         window.dispatchEvent(new CustomEvent("contextual-tip-params-opened"));
       }
-    }, [isParamsPanelExpanded]);
+    }, [settingsPage]);
     const [isSyncing, setIsSyncing] = useState(false);
 
     // Get user's default workflow preference
@@ -612,6 +615,77 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
 
       loadDefaultPresets();
     }, [workflowName, chatId, currentProjectFromStore?.id, presets, workflowTagInfo]);
+
+    // Apply per-tag model preferences (model_id, thinking_level, temperature, compaction)
+    // to new chats that haven't had those values explicitly set yet.
+    const tagPrefsApplied = useRef(false);
+    useEffect(() => {
+      if (!workflowInputs || tagPrefsApplied.current) return;
+      if (chatId && !isPendingChat) return;
+
+      // Find the model key
+      let modelKey: string | null = null;
+      for (const [key, def] of Object.entries(workflowInputs)) {
+        if (def?.type === "model") { modelKey = key; break; }
+      }
+      if (!modelKey) return;
+
+      const applyTagPrefs = async () => {
+        const tagConfigs = await loadTagModelConfigs();
+        if (Object.keys(tagConfigs).length === 0) return;
+
+        const currentParams = chatId
+          ? useChatParamsStore.getState().getChatParams(chatId)
+          : useChatParamsStore.getState().tempNewChatParams;
+        const currentModel = (currentParams[modelKey!] ?? {}) as Record<string, unknown>;
+
+        // Find which tag the current model uses
+        const currentTags = currentModel.tags as string[] | undefined;
+        const currentTag = currentTags?.[0];
+        if (!currentTag) return;
+
+        const tagConfig = tagConfigs[currentTag];
+        if (!tagConfig) return;
+
+        // Merge tag preferences into model value (don't overwrite existing user/preset values)
+        const merged = { ...currentModel };
+        let changed = false;
+        if (tagConfig.model_id && !merged.id) {
+          merged.id = tagConfig.model_id;
+          changed = true;
+        }
+        if (tagConfig.thinking_level && !merged.thinking_level) {
+          merged.thinking_level = tagConfig.thinking_level;
+          changed = true;
+        }
+        if (tagConfig.temperature !== undefined && merged.temperature === undefined) {
+          merged.temperature = tagConfig.temperature;
+          changed = true;
+        }
+        if (tagConfig.compaction_threshold !== undefined && merged.compaction_threshold === undefined) {
+          merged.compaction_threshold = tagConfig.compaction_threshold;
+          changed = true;
+        }
+        if (!changed) return;
+
+        tagPrefsApplied.current = true;
+        const newParams = { ...currentParams, [modelKey!]: merged };
+        setWorkflowParams(newParams);
+        if (chatId) {
+          useChatParamsStore.getState().setChatParams(chatId, newParams);
+        } else {
+          useChatParamsStore.getState().setTempNewChatParams(newParams);
+        }
+        logger.info("[ChatInput] Applied tag model preferences", { tag: currentTag, config: tagConfig });
+      };
+
+      applyTagPrefs();
+    }, [workflowInputs, chatId, isPendingChat]);
+
+    // Reset tag prefs flag when workflow changes
+    useEffect(() => {
+      tagPrefsApplied.current = false;
+    }, [workflowName]);
 
     // Handle preset selection for a specific target (workflow or group)
     // targetName is "" for workflow-level, or group name like "Agent A"
@@ -1267,7 +1341,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
 
     // Local escape hatch: allow closing expanded settings with Escape when focus is in chat input area.
     useEffect(() => {
-      if (!isParamsPanelExpanded) return;
+      if (settingsPage === null) return;
 
       const handleEscapeToCloseSettings = (event: KeyboardEvent) => {
         if (event.key !== "Escape") return;
@@ -1283,7 +1357,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
 
         event.preventDefault();
         event.stopPropagation();
-        setIsParamsPanelExpanded(false);
+        setSettingsPage(null);
       };
 
       // Use capture to run before document-level handlers that may use ESC for pause/stop.
@@ -1291,7 +1365,37 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
       return () => {
         window.removeEventListener("keydown", handleEscapeToCloseSettings, true);
       };
-    }, [isParamsPanelExpanded]);
+    }, [settingsPage]);
+
+    // Compute effective popover props once (used by whichever trigger renders it)
+    const popoverInputs = isViewingThreadParams && threadParamsOverride
+      ? threadParamsOverride.inputs
+      : workflowInputs;
+    const popoverValues = isViewingThreadParams && threadParamsOverride
+      ? currentThreadParams
+      : workflowParams;
+    const popoverOnChange = isViewingThreadParams && threadParamsOverride
+      ? handleThreadParamsChange
+      : handleWorkflowParamsChange;
+
+    const renderSettingsPopover = (initialPage: 'main' | 'model' | 'preset' | 'params') => {
+      if (!popoverInputs) return null;
+      return (
+        <ChatSettingsPopover
+          isOpen={true}
+          onClose={() => setSettingsPage(null)}
+          initialPage={initialPage}
+          inputs={popoverInputs}
+          values={popoverValues}
+          onChange={popoverOnChange}
+          presets={presets}
+          selectedPreset={selectedPresets?.["default"] ?? null}
+          onPresetChange={(preset) => handlePresetChange("default", preset)}
+          workflowTag={workflowTagInfo?.workflowTag}
+          groupTags={workflowTagInfo?.groupTags}
+        />
+      );
+    };
 
     return (
       <div
@@ -1304,7 +1408,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
           <div className="max-w-[1200px] mx-auto">
             <div ref={containerRef} className="my-2">
               <div
-                className={`rounded-lg chat-input-container border-2 transition-all duration-200 cursor-text ${isDiscussMode ? "border-blue-500/70" : threadBorderColor ? "" : "border-border/70"}`}
+                className={`relative rounded-lg chat-input-container border-2 transition-all duration-200 cursor-text ${isDiscussMode ? "border-blue-500/70" : hasPendingQuestion ? "border-yellow-500/70" : threadBorderColor ? "" : "border-border/70"}`}
                 data-onboarding="chat-input"
                 onClick={handleInputContainerClick}
                 style={{
@@ -1383,80 +1487,17 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                     </div>
                   )}
 
-                  {/* Expanded Workflow Params Panel - toggled via expand button */}
-                  {/* Expanded Workflow Params Panel */}
-                  {isParamsPanelExpanded && isViewingThreadParams && threadParamsOverride && (
-                    <div className="px-2 py-2 border-t border-border/30 max-h-[45vh] overflow-y-auto overscroll-contain">
-                      <div className="flex items-center justify-between gap-2 mb-2 px-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-medium text-muted-foreground bg-muted/50 px-2 py-0.5 rounded">
-                            {threadParamsOverride.workflowName}
-                          </span>
-                          <span className="text-xs text-muted-foreground/70">
-                            {threadParamsOverride.isRunning ? "Running" : "Completed"}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setIsParamsPanelExpanded(false)}
-                          className="flex items-center justify-center h-5 w-5 rounded hover:bg-[var(--chat-button-hover)] text-muted-foreground hover:text-foreground transition-colors"
-                          aria-label="Hide settings"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      <WorkflowParamsPanel
-                        projectId={currentProjectFromStore?.id}
-                        workflowName={threadParamsOverride.workflowName}
-                        inputs={threadParamsOverride.inputs}
-                        values={currentThreadParams}
-                        onChange={handleThreadParamsChange}
-                        disabled={!threadParamsOverride.isRunning}
-                        defaultCollapsed={false}
-                        hideHeader={true}
-                        groupTags={{}}
-                        selectedPresets={{}}
-                        presets={[]}
-                        isChatInputContext={true}
+                  {/* Question prompt - shown when agent is waiting for user input */}
+                  {hasPendingQuestion && askUserQuestion && (
+                      <QuestionPrompt
+                        questions={askUserQuestion.questions.map((q: any) => ({
+                          question: q.question,
+                          options: q.options || [],
+                          allowMultiple: q.allow_multiple ?? false,
+                        }))}
+                        onSubmit={handleQuestionSubmit}
                       />
-                    </div>
                   )}
-                  {/* Editable params panel for main thread / all threads */}
-                  {isParamsPanelExpanded &&
-                    !isViewingThreadParams &&
-                    workflowInputs &&
-                    hasConfigurableParams && (
-                      <div
-                        className="px-2 py-2 border-t border-border/30 max-h-[45vh] overflow-y-auto overscroll-contain"
-                        data-contextual-tip="params-panel"
-                      >
-                        <div className="flex justify-end mb-2 px-1">
-                          <button
-                            type="button"
-                            onClick={() => setIsParamsPanelExpanded(false)}
-                            className="flex items-center justify-center h-5 w-5 rounded hover:bg-[var(--chat-button-hover)] text-muted-foreground hover:text-foreground transition-colors"
-                            aria-label="Hide settings"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                        <WorkflowParamsPanel
-                          projectId={currentProjectFromStore?.id}
-                          workflowName={workflowName}
-                          inputs={workflowInputs}
-                          values={workflowParams}
-                          onChange={handleWorkflowParamsChange}
-                          disabled={disabled || !isMessagingAllowed}
-                          defaultCollapsed={false}
-                          hideHeader={true}
-                          workflowTag={workflowTagInfo.workflowTag}
-                          groupTags={workflowTagInfo.groupTags}
-                          selectedPresets={selectedPresets}
-                          presets={presets}
-                          isChatInputContext={true}
-                        />
-                      </div>
-                    )}
 
                   {/* Single Bottom Row: All Controls */}
                   {<div className="flex items-center justify-between pt-2 mt-2 border-t border-border/50">
@@ -1472,8 +1513,8 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                             const effectiveWf = wf || userDefaultWorkflow;
                             skipDefaultPresetsForWorkflowRef.current = effectiveWf;
                             setSelectedWorkflow(wf);
-                            // Close params panel when workflow changes
-                            setIsParamsPanelExpanded(false);
+                            // Close settings popover when workflow changes
+                            setSettingsPage(null);
                             // Clear workflow params when switching workflows
                             // This prevents stale params from a different workflow
                             // being sent to the new workflow (which would cause validation errors)
@@ -1544,38 +1585,83 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                         </div>
                       )}
 
-                      {/* Expand/Settings Button - always clickable (params editable during streaming) */}
-                      {(hasConfigurableParams || isViewingThreadParams) && (
-                        <Tooltip
-                          content={
-                            isParamsPanelExpanded
-                              ? "Hide settings"
-                              : "Show all settings"
+                      {/* Model pill - opens settings popover directly to model page */}
+                      {hasConfigurableParams && (() => {
+                        const modelValue = workflowParams?.model as Record<string, unknown> | undefined
+                          ?? Object.entries(workflowParams).find(([k]) => k.endsWith('.model'))?.[1] as Record<string, unknown> | undefined;
+                        const currentModelTag = (modelValue?.tags as string[])?.[0];
+                        const currentModelId = modelValue?.id as string | undefined;
+                        const resolvedModel = currentModelTag
+                          ? availableModels.find(m => m.tags?.includes(currentModelTag))
+                          : currentModelId
+                            ? availableModels.find(m => m.id === currentModelId || m.id.split('@')[0] === currentModelId)
+                            : null;
+                        const currentModelDisplayName = resolvedModel?.name || currentModelId || 'auto';
+                        const getProviderColor = (driverId?: string): string => {
+                          switch (driverId) {
+                            case 'anthropic': return 'bg-orange-400';
+                            case 'openai': case 'codex': return 'bg-green-500';
+                            case 'gemini': case 'vertexai': return 'bg-blue-400';
+                            case 'xai': return 'bg-red-400';
+                            default: return 'bg-gray-400';
                           }
-                          placement="top"
-                        >
-                          <button
-                            data-contextual-tip="params-toggle"
-                            onClick={() =>
-                              setIsParamsPanelExpanded(!isParamsPanelExpanded)
+                        };
+                        const currentModelProvider = resolvedModel?.driverId || (modelValue?.driver_id as string) || undefined;
+                        return (
+                          <div className="relative">
+                            <button
+                              className={cn(
+                                "inline-flex items-center gap-1 h-6 px-2 rounded text-[10px] font-medium",
+                                "text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors",
+                                settingsPage === 'model' && "bg-primary/10 text-primary"
+                              )}
+                              onClick={() => setSettingsPage(settingsPage === 'model' ? null : 'model')}
+                              title="Model settings"
+                            >
+                              <span className={cn("w-1.5 h-1.5 rounded-full", getProviderColor(currentModelProvider))} />
+                              {currentModelDisplayName}
+                              <ChevronDown className="w-2.5 h-2.5 opacity-50" />
+                            </button>
+                            {settingsPage === 'model' && renderSettingsPopover('model')}
+                          </div>
+                        );
+                      })()}
+
+                      {/* Settings Button - opens settings popover */}
+                      {(hasConfigurableParams || isViewingThreadParams) && (
+                        <div className="relative">
+                          <Tooltip
+                            content={
+                              settingsPage !== null
+                                ? "Hide settings"
+                                : "Show all settings"
                             }
-                            disabled={disabled || !isMessagingAllowed}
-                            className={cn(
-                              "relative flex items-center justify-center rounded transition-colors h-6 w-6",
-                              !disabled
-                                ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
-                                : "cursor-default opacity-60",
-                              isParamsPanelExpanded
-                                ? "bg-primary/20 text-primary"
-                                : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]"
-                            )}
+                            placement="top"
                           >
-                            <Settings2 className="w-3.5 h-3.5" />
-                            {hasUnsetParams && (
-                              <div className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500" />
-                            )}
-                          </button>
-                        </Tooltip>
+                            <button
+                              data-contextual-tip="params-toggle"
+                              onClick={() =>
+                                setSettingsPage(settingsPage !== null ? null : 'main')
+                              }
+                              disabled={disabled || !isMessagingAllowed}
+                              className={cn(
+                                "relative flex items-center justify-center rounded transition-colors h-6 w-6",
+                                !disabled
+                                  ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
+                                  : "cursor-default opacity-60",
+                                settingsPage !== null
+                                  ? "bg-primary/20 text-primary"
+                                  : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]"
+                              )}
+                            >
+                              <Settings2 className="w-3.5 h-3.5" />
+                              {hasUnsetParams && (
+                                <div className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500" />
+                              )}
+                            </button>
+                          </Tooltip>
+                          {settingsPage !== null && settingsPage !== 'model' && renderSettingsPopover(settingsPage)}
+                        </div>
                       )}
 
                       {/* Sync Button - always clickable (can sync params while streaming) */}

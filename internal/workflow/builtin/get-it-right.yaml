@@ -54,19 +54,6 @@ inputs:
     default: true
     description: Pause for user review after each iteration.
 
-  temperature:
-    type: number
-    default: 1.0
-    min: 0
-    max: 1
-    description: Response randomness
-
-  thinking_level:
-    type: enum
-    enum: [low, medium, high, xhigh]
-    default: medium
-    description: Extended thinking level
-
   lint_command:
     type: string
     default: ""
@@ -164,8 +151,6 @@ nodes:
           args:
             model: "{{inputs.model}}"
             mode: "{{inputs.mode}}"
-            temperature: "{{inputs.temperature}}"
-            thinking_level: "{{inputs.thinking_level}}"
           thread:
             mode: fork
             memo: false
@@ -247,8 +232,6 @@ nodes:
           args:
             model: "{{inputs.model}}"
             mode: "{{inputs.mode}}"
-            temperature: "{{inputs.temperature}}"
-            thinking_level: "{{inputs.thinking_level}}"
             response_tool_name: submit_evaluation
             response_tool_description: "Submit your evaluation of the implementation attempt and recommended strategy"
             response_schema:
