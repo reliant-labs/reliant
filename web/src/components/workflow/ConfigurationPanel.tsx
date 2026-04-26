@@ -5,6 +5,7 @@ import { Tooltip } from '../ui/Tooltip'
 interface ConfigurationPanelProps {
   title: string
   subtitle?: string
+  subtitleMono?: boolean // Whether subtitle uses monospace font (default: true for node IDs)
   onSubtitleClick?: () => void
   onClose: () => void
   onDelete?: () => void  // Optional - if not provided, shows X to close instead of trash
@@ -20,6 +21,7 @@ interface ConfigurationPanelProps {
 export function ConfigurationPanel({
   title,
   subtitle,
+  subtitleMono = true,
   onSubtitleClick,
   onClose,
   onDelete,
@@ -37,7 +39,7 @@ export function ConfigurationPanel({
 
   return (
     <div
-      className="config-panel-v2 absolute right-3 w-96 bg-card border border-border rounded-2xl shadow-xl flex flex-col z-40 transition-all duration-300"
+      className="config-panel-v2 absolute right-3 w-[420px] bg-card border border-border rounded-2xl shadow-xl flex flex-col z-40 transition-all duration-300"
       style={{
         top: `${topOffset}px`,
         maxHeight: isExpanded
@@ -47,13 +49,13 @@ export function ConfigurationPanel({
       }}
     >
       {/* Header */}
-      <div className="p-4 border-b border-border flex items-start justify-between flex-shrink-0">
+      <div className="px-4 py-3 border-b border-border flex items-start justify-between flex-shrink-0">
         <div className="flex-1">
-          <h3 className="font-semibold text-foreground text-lg">{title}</h3>
+          <h3 className="font-semibold text-foreground text-base">{title}</h3>
           {subtitle && (
             <div className="flex items-center gap-1.5 mt-0.5">
               <p
-                className={`text-xs font-mono text-muted-foreground truncate${onSubtitleClick ? ' cursor-pointer hover:text-foreground transition-colors' : ''}`}
+                className={`text-xs ${subtitleMono ? 'font-mono ' : ''}text-muted-foreground truncate${onSubtitleClick ? ' cursor-pointer hover:text-foreground transition-colors' : ''}`}
                 onClick={onSubtitleClick}
                 title={onSubtitleClick ? 'Click to rename' : undefined}
               >{subtitle}</p>
@@ -92,7 +94,7 @@ export function ConfigurationPanel({
               className="text-muted-foreground hover:text-destructive transition-colors flex-shrink-0 ml-4"
               aria-label="Delete"
             >
-              <Trash2 className="w-5 h-5" />
+              <Trash2 className="w-4 h-4" />
             </button>
           </Tooltip>
         ) : (
@@ -102,7 +104,7 @@ export function ConfigurationPanel({
               className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 ml-4"
               aria-label="Close"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           </Tooltip>
         )}

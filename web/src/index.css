@@ -774,12 +774,12 @@
 
 
   /* Chat Font Settings */
-  /* Default: monospace font when no data-chat-font is set */
+  /* Default: system sans-serif font when no data-chat-font is set */
   textarea[data-testid="chat-input"],
   .chat-input,
   .user-message-content,
   .user-message-content * {
-    font-family: var(--font-mono) !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif !important;
   }
 
   :root[data-chat-font="inherit"] textarea[data-testid="chat-input"],
@@ -1433,32 +1433,7 @@
     transition: all 0.2s ease-in-out;
   }
 
-  /* Avatar styling improvements */
-  .message-avatar {
-    position: relative;
-    transition: transform 0.2s ease-in-out;
-    flex-shrink: 0;
-    width: 2rem;
-    height: 2rem;
-  }
 
-  .message-avatar:hover {
-    transform: scale(1.05);
-  }
-
-  /* Ensure assistant avatars have proper background */
-  .message-avatar:not(.bg-blue-500) {
-    background-color: hsl(var(--muted)) !important;
-    color: hsl(var(--muted-foreground)) !important;
-    border: 1px solid hsl(var(--border) / 0.2) !important;
-    /* Ensure exact same dimensions as user avatars */
-    width: 2rem !important;
-    height: 2rem !important;
-    min-width: 2rem !important;
-    min-height: 2rem !important;
-    max-width: 2rem !important;
-    max-height: 2rem !important;
-  }
 
   /* Message content area improvements */
   .message-content {
@@ -1469,54 +1444,20 @@
     margin-left: 0;
   }
 
-  /* User message content - full width */
+  /* User message content */
   .user-message-content {
-    flex: 1;
-    width: 100%;
     display: block;
-    max-width: 100%;
   }
 
-  /* Perfect alignment system */
+  /* Message layout - no avatar column */
   .message-layout {
     display: flex;
     align-items: flex-start;
-    gap: 0.75rem;
     width: 100%;
   }
 
   .message-layout-lg {
-    gap: 1rem;
-  }
-
-  /* Fix avatar alignment - ensure perfect vertical alignment */
-  .avatar-container {
-    position: relative;
-    flex-shrink: 0;
-    width: 2rem;
-    height: 2rem;
-    display: flex;
-    align-items: flex-start;
-    margin-top: 0;
-    margin-bottom: 0;
-    padding-top: 0.5rem;
-  }
-
-  .message-avatar {
-    position: relative;
-    flex-shrink: 0;
-    width: 2rem;
-    height: 2rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-top: 0;
-    margin-bottom: 0;
-    /* Ensure consistent sizing for all avatars */
-    min-width: 2rem;
-    min-height: 2rem;
-    max-width: 2rem;
-    max-height: 2rem;
+    /* no extra gap needed without avatar */
   }
 
   /* User message content - removed blue left border highlight */

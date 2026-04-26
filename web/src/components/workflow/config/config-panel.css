@@ -33,7 +33,7 @@
   background: none;
   border: none;
   padding: 10px 12px 8px;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
   color: hsl(var(--muted-foreground));
   cursor: pointer;
@@ -74,7 +74,7 @@
 }
 
 .cpv2-section-label {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -97,7 +97,7 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  font-size: 12px;
+  font-size: 13px;
   color: hsl(var(--muted-foreground));
   line-height: 1.5;
 }
@@ -122,7 +122,7 @@
   background: none;
   border: none;
   padding: 6px 12px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   color: hsl(var(--muted-foreground));
   cursor: pointer;
@@ -147,7 +147,7 @@
 
 /* --- Field hint --- */
 .cpv2-field-hint {
-  font-size: 11px;
+  font-size: 12px;
   color: hsl(var(--muted-foreground));
   margin-top: 4px;
   line-height: 1.4;

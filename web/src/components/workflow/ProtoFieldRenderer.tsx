@@ -107,7 +107,7 @@ export function ProtoFieldRenderer({
             <HelpPopover content={helperText} title={schema.label} />
           )}
           {!hideCELToggle && schema.celCapable && !supportsModeToggle && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-muted/80 text-muted-foreground font-mono">CEL</span>
+            <span className="text-xs px-1.5 py-0.5 rounded-sm bg-muted/80 text-muted-foreground font-mono">CEL</span>
           )}
           {supportsModeToggle && !disabled && (
             <div className="ml-auto flex items-center gap-0.5 p-0.5 bg-muted/50 rounded-md">

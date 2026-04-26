@@ -400,7 +400,7 @@ export function ConfigPanel({
             <button
               type="button"
               onClick={handleIdSave}
-              className="p-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-md transition-colors"
+              className="p-1 text-success hover:text-success/80 hover:bg-success/10 rounded-md transition-colors"
               title="Save"
             >
               <Check className="w-3.5 h-3.5" />
@@ -541,6 +541,7 @@ export function ConfigPanel({
           {/* Node Condition */}
           {!isJoinStep(step) && (
             <div className="space-y-1.5">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground/60 mb-1.5">Execution</div>
               <CELExpressionInput
                 label="Condition"
                 helpTooltip="CEL expression that determines if this node should execute. If false, node is skipped and outputs { skipped: true }. Available: inputs.*, nodes.*, workflow.*"
@@ -557,7 +558,7 @@ export function ConfigPanel({
                 showCELIndicator={false}
               />
               {getConditionExpression(step.condition) && (
-                <p className="text-[11px] text-muted-foreground/70">
+                <p className="text-xs text-muted-foreground/70">
                   If false, node skipped. Downstream edges can route on skipped output.
                 </p>
               )}

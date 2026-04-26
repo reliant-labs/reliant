@@ -92,7 +92,7 @@ export function MCPTabs({ tabs, activeTab, onTabChange, className }: MCPTabsProp
             {typeof tab.count === "number" && (
               <span
                 className={cn(
-                  "rounded-full px-1.5 py-0.5 text-xs font-mono",
+                  "rounded-full px-1.5 py-0.5 text-xs",
                   isActive
                     ? "bg-primary/10 text-primary"
                     : "bg-muted text-muted-foreground"

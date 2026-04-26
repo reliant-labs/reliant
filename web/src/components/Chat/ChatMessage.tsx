@@ -561,152 +561,168 @@ function ChatMessageComponent({
   return (
     <div
       className={cn(
-        "group copy-toast message-container",
-        isUser ? "mb-3" : "mb-1.5",
+        "group copy-toast message-container relative",
+        "mb-4",
         copied && "copied",
         isOptimistic && "opacity-60",
       )}
       data-testid={`message-${message.id}`}
     >
       <div className="message-layout lg:message-layout-lg">
-        {/* Avatar - always on the left, perfectly aligned */}
-        {/* <div className="avatar-container">
-          <div
-            className={cn(
-              "w-8 h-8 rounded-full flex items-center justify-center message-avatar",
-              isUser
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground border border-border/20"
-            )}
-          >
-            {isUser ? (
-              <User className="w-4 h-4 flex-shrink-0" />
-            ) : (
-              <Bot className="w-4 h-4 flex-shrink-0" />
-            )}
-          </div>
-        </div> */}
-
         {/* Message Content */}
         <div
           className={cn(
             "flex-1 min-w-0",
-            isUser && "flex flex-col items-start",
+            isUser && "flex flex-col items-end"
           )}
         >
           {/* User message bubble - flexible width */}
           {isUser ? (
-            <div
-              ref={bubbleRef}
-              className={cn(
-                "group/usermsg user-message-content border-2 border-border/70 rounded-lg w-full cursor-pointer block transition-all duration-200",
-                isOverflowing && !isExpanded && "hover:border-border",
-              )}
-              style={{
-                backgroundColor: "var(--chat-input-bg)",
-              }}
-              onClick={() => {
-                setIsExpanded((prev) => {
-                  const willExpand = !prev;
-                  if (willExpand) {
-                    // After expanding, scroll just enough so the bottom of the
-                    // message bubble is visible (not hidden behind the chat input).
-                    requestAnimationFrame(() => {
-                      bubbleRef.current?.scrollIntoView({
-                        block: "nearest",
-                        behavior: "smooth",
+            <div className="group/usermsg relative max-w-[85%]">
+              <div
+                ref={bubbleRef}
+                className={cn(
+                  "user-message-content border border-blue-700/50 rounded-lg cursor-pointer block transition-all duration-200 bg-blue-600 text-white",
+                  isOverflowing && !isExpanded && "hover:border-blue-600"
+                )}
+                onClick={() => {
+                  setIsExpanded((prev) => {
+                    const willExpand = !prev;
+                    if (willExpand) {
+                      // After expanding, scroll just enough so the bottom of the
+                      // message bubble is visible (not hidden behind the chat input).
+                      requestAnimationFrame(() => {
+                        bubbleRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
                       });
-                    });
-                  }
-                  return willExpand;
-                });
-              }}
-            >
-              {/* Text Content - show exactly as sent */}
-              {parsed.text && (
-                <div className="message-bubble relative">
-                  <div
-                    ref={contentRef}
-                    className={cn("text-sm leading-relaxed overflow-y-auto")}
-                    style={{
-                      maxHeight: isExpanded ? "30vh" : "3rem",
-                    }}
-                  >
-                    <div className="whitespace-pre-wrap break-words">
-                      {renderTextWithContextPills(parsed.text, chatWorktreeId)}
+                    }
+                    return willExpand;
+                  });
+                }}
+              >
+                {/* Text Content - show exactly as sent */}
+                {parsed.text && (
+                  <div className="message-bubble relative">
+                    <div
+                      ref={contentRef}
+                      className={cn(
+                        "text-sm leading-relaxed overflow-hidden",
+                      )}
+                      style={{
+                        maxHeight: isExpanded ? "none" : "3rem",
+                        transition: "max-height 0.2s ease-in-out",
+                      }}
+                    >
+                      <div className="whitespace-pre-wrap break-words">
+                        {renderTextWithContextPills(parsed.text, chatWorktreeId)}
+                      </div>
+                    </div>
+                    {/* Gradient fade overlay for truncated content */}
+                    {!isExpanded && isOverflowing && (
+                      <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-blue-600 to-transparent pointer-events-none rounded-b-lg" />
+                    )}
+                  </div>
+                )}
+
+                {/* Expand button - styled like diff expand button */}
+                {!isExpanded && isOverflowing && (
+                  <div className="flex justify-center border-t border-blue-500/30">
+                    <div
+                      className={cn(
+                        "flex items-center gap-1 px-2 py-1 text-xs font-medium w-full",
+                        "hover:bg-blue-500/30 transition-colors",
+                        "text-blue-100 hover:text-white justify-center"
+                      )}
+                    >
+                      <ChevronDown className="w-3 h-3" />
+                      Show more
                     </div>
                   </div>
-                  {/* Fade effect only when content is actually overflowing */}
-                </div>
-              )}
+                )}
 
-              {/* Attachments - always visible */}
-              {message.attachments && message.attachments.length > 0 && (
-                <MessageAttachments
-                  attachments={message.attachments}
-                  isUser={isUser}
-                  className={!parsed.text ? "pt-1" : ""}
-                />
-              )}
+                {/* Attachments */}
+                {isExpanded && message.attachments && message.attachments.length > 0 && (
+                  <MessageAttachments
+                    attachments={message.attachments}
+                    isUser={isUser}
+                    className={!parsed.text ? "pt-1" : ""}
+                  />
+                )}
+              </div>
 
-              {/* Action buttons and timestamp - shown on hover (collapsed) or always (expanded) */}
-              {
-                <div
+              {/* Slack-style hover toolbar - floats above user bubble */}
+              <div
+                className="absolute -top-8 right-2 flex items-center gap-0.5 px-1.5 py-1 rounded-lg border border-border/60 bg-[hsl(var(--popover))] shadow-md opacity-0 group-hover/usermsg:opacity-100 transition-opacity z-20"
+                title={formatTimestamp(message.createdAt || "")}
+              >
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleCopy();
+                  }}
+                  title={copied ? "Copied!" : "Copy"}
                   className={cn(
-                    "flex items-center justify-between text-xs text-muted-foreground pt-2 border-t mt-2",
-                    !isExpanded &&
-                      "opacity-0 group-hover/usermsg:opacity-100 transition-opacity duration-150",
+                    "p-1 rounded hover:bg-muted/80 transition-colors duration-150 text-muted-foreground hover:text-foreground",
+                    copied && "text-green-500"
                   )}
-                  style={{ borderColor: "var(--chat-border)" }}
                 >
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleCopy();
-                      }}
-                      title={copied ? "Copied!" : "Copy"}
-                      className={cn(
-                        "flex items-center gap-1 px-2 py-1 rounded-md hover:bg-muted/50 transition-colors duration-200 focus-ring",
-                        copied && "text-success",
-                      )}
-                    >
-                      {copied ? (
-                        <Check className="w-3 h-3" />
-                      ) : (
-                        <Copy className="w-3 h-3" />
-                      )}
-                    </button>
-                    <button
-                      onClick={handleBranchClick}
-                      disabled={isOptimistic}
-                      title={
-                        isOptimistic
-                          ? "Waiting for message to save..."
-                          : "Branch"
-                      }
-                      data-contextual-tip="branch-button"
-                      className={cn(
-                        "flex items-center gap-1 px-2 py-1 rounded-md transition-colors duration-200 focus-ring",
-                        isOptimistic
-                          ? "opacity-50 cursor-not-allowed"
-                          : "hover:bg-muted/50",
-                      )}
-                    >
-                      <GitBranch className="w-3 h-3" />
-                    </button>
-                  </div>
-
-                  {/* Timestamp on the right */}
-                  <span className="text-xs">
-                    {formatTimestamp(message.createdAt || "")}
-                  </span>
-                </div>
-              }
+                  {copied ? (
+                    <Check className="w-3.5 h-3.5" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleBranchClick(e);
+                  }}
+                  disabled={isOptimistic}
+                  title={isOptimistic ? "Waiting for message to save..." : "Branch"}
+                  data-contextual-tip="branch-button"
+                  className={cn(
+                    "p-1 rounded transition-colors duration-150 text-muted-foreground hover:text-foreground",
+                    isOptimistic
+                      ? "opacity-50 cursor-not-allowed"
+                      : "hover:bg-muted/80"
+                  )}
+                >
+                  <GitBranch className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           ) : (
-            // Assistant message - full width
-            <div className="message-content w-full px-2">
+            // Assistant message - full width, with relative for hover toolbar
+            <div className="message-content w-full px-2 relative group/assistant">
+              {/* Slack-style hover toolbar - floats above assistant message */}
+              <div
+                className="absolute -top-8 right-2 flex items-center gap-0.5 px-1.5 py-1 rounded-lg border border-border/60 bg-[hsl(var(--popover))] shadow-md opacity-0 group-hover/assistant:opacity-100 transition-opacity z-20"
+                title={formatTimestamp(message.createdAt || "")}
+              >
+                <button
+                  onClick={handleCopy}
+                  title={copied ? "Copied!" : "Copy"}
+                  className={cn(
+                    "p-1 rounded hover:bg-muted/80 transition-colors duration-150 text-muted-foreground hover:text-foreground",
+                    copied && "text-green-500"
+                  )}
+                >
+                  {copied ? (
+                    <Check className="w-3.5 h-3.5" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
+                </button>
+                {!isStreaming && (
+                  <button
+                    onClick={handleBranchClick}
+                    title="Branch"
+                    data-contextual-tip="branch-button"
+                    className="p-1 rounded hover:bg-muted/80 transition-colors duration-150 text-muted-foreground hover:text-foreground"
+                  >
+                    <GitBranch className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
               {/* Text Content */}
               {parsed.text && (
                 <div className="message-bubble w-full">
@@ -811,43 +827,7 @@ function ChatMessageComponent({
             </div>
           )}
 
-          {/* Message Footer - action buttons for assistant messages */}
-          {!isUser && (
-            <div
-              className={cn(
-                "items-center gap-1 text-xs text-muted-foreground px-2 h-6",
-                isLatestMessage ? "flex" : "hidden group-hover:flex",
-              )}
-            >
-              <button
-                onClick={handleCopy}
-                title={copied ? "Copied!" : "Copy"}
-                className={cn(
-                  "flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-muted/50 transition-colors duration-200 focus-ring",
-                  copied && "text-success",
-                )}
-              >
-                {copied ? (
-                  <Check className="w-3 h-3" />
-                ) : (
-                  <Copy className="w-3 h-3" />
-                )}
-              </button>
-              {!isStreaming && (
-                <button
-                  onClick={handleBranchClick}
-                  title="Branch"
-                  data-contextual-tip="branch-button"
-                  className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-muted/50 transition-colors duration-200 focus-ring"
-                >
-                  <GitBranch className="w-3 h-3" />
-                </button>
-              )}
-              <span className="ml-1 text-[11px] text-muted-foreground/70">
-                {formatTimestamp(message.createdAt || "")}
-              </span>
-            </div>
-          )}
+
         </div>
       </div>
 

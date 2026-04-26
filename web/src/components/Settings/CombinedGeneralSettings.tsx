@@ -676,7 +676,7 @@ export function CombinedGeneralSettings({
                   <div className="flex justify-end">
                     {oauthAvailability.available ? (
                       <button
-                        className="px-4 py-2 text-sm font-medium border-2 rounded-md transition-colors disabled:opacity-50 flex items-center gap-2"
+                        className="px-4 py-2 text-sm font-medium border rounded-md transition-colors disabled:opacity-50 flex items-center gap-2"
                         style={{
                           backgroundColor: "hsl(var(--primary) / 0.1)",
                           color: "hsl(var(--primary))",
@@ -796,7 +796,7 @@ export function CombinedGeneralSettings({
                       )}
                     </button>
                     <button
-                      className="px-4 py-2 text-sm font-medium border-2 rounded-md transition-colors disabled:opacity-50 flex items-center gap-2"
+                      className="px-4 py-2 text-sm font-medium border rounded-md transition-colors disabled:opacity-50 flex items-center gap-2"
                       style={{
                         backgroundColor: "hsl(var(--primary) / 0.1)",
                         color: "hsl(var(--primary))",

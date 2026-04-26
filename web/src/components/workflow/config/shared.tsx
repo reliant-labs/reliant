@@ -93,13 +93,13 @@ export function TimeoutSelector({
 
   return (
     <div>
-      <label className="block text-xs font-medium text-muted-foreground mb-1">
+      <label className="block text-xs font-medium text-foreground mb-1">
         Timeout (optional)
       </label>
       <select
         value={showCustom ? "custom" : value || ""}
         onChange={(e) => handleSelectChange(e.target.value)}
-        className="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-ring focus:border-ring bg-background text-foreground disabled:opacity-60 disabled:cursor-not-allowed"
+        className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
         disabled={disabled}
       >
         {TIMEOUT_OPTIONS.map((opt) => (
@@ -114,7 +114,7 @@ export function TimeoutSelector({
           type="text"
           value={customValue || ""}
           onChange={(e) => handleCustomChange(e.target.value)}
-          className="w-full mt-2 px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-ring focus:border-ring bg-background text-foreground disabled:opacity-60 disabled:cursor-not-allowed"
+          className="w-full mt-2 px-3 py-2 border border-input rounded-md bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           placeholder="e.g., 2h30m, 45m"
           disabled={disabled}
         />

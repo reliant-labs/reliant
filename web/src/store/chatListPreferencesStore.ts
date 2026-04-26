@@ -34,6 +34,7 @@ interface ChatListPreferencesState {
 }
 
 const STORAGE_KEY = "chat-list-preferences";
+const DEFAULT_SORT: ChatSortOption = "newest_first";
 
 // Load preferences from localStorage
 function loadPreferences(): Partial<ChatListPreferencesState> {
@@ -41,8 +42,11 @@ function loadPreferences(): Partial<ChatListPreferencesState> {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
+      // Migrate: old default was "recent_activity", new default is "newest_first"
+      const sortOrder =
+        parsed.sortOrder === "recent_activity" ? DEFAULT_SORT : parsed.sortOrder || DEFAULT_SORT;
       return {
-        sortOrder: parsed.sortOrder || "newest_first",
+        sortOrder,
         viewMode: parsed.viewMode || "grouped",
         filters: parsed.filters || {},
       };
@@ -81,7 +85,7 @@ export const useChatListPreferencesStore = create<ChatListPreferencesState>(
 
     return {
       // Initial state from localStorage or defaults
-      sortOrder: loaded.sortOrder || "newest_first",
+      sortOrder: loaded.sortOrder || DEFAULT_SORT,
       viewMode: loaded.viewMode || "grouped",
       filters: loaded.filters || defaultFilters,
 
@@ -107,7 +111,7 @@ export const useChatListPreferencesStore = create<ChatListPreferencesState>(
 
       resetAll: () => {
         const defaults = {
-          sortOrder: "newest_first" as ChatSortOption,
+          sortOrder: DEFAULT_SORT,
           viewMode: "grouped" as ChatViewMode,
           filters: defaultFilters,
         };

@@ -198,7 +198,7 @@ export function PromptsSettings({ projectId }: PromptsSettingsProps) {
                 onChange={(e) => handleChange(p.id, "content", e.target.value)}
                 placeholder="Prompt content…"
                 rows={4}
-                className="w-full px-2 py-2 border border-input bg-background rounded text-sm font-mono"
+                className="w-full px-2 py-2 border border-input bg-background rounded text-sm"
               />
             </div>
           ))

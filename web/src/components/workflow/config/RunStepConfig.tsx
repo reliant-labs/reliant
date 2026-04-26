@@ -15,7 +15,7 @@ export function RunStepConfig({
   return (
     <>
       <div>
-        <label className="block text-xs uppercase tracking-wider text-muted-foreground font-medium mb-1">
+        <label className="block text-xs font-medium text-foreground mb-1">
           Command
         </label>
         <textarea
@@ -25,7 +25,7 @@ export function RunStepConfig({
               withRunArgs(step, { command: celString(e.target.value) as any }) as RunStep,
             )
           }
-          className="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-ring focus:border-ring bg-background text-foreground font-mono text-sm disabled:opacity-60 disabled:cursor-not-allowed"
+          className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground font-mono text-sm focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           rows={3}
           placeholder="make lint"
           disabled={isReadOnly}

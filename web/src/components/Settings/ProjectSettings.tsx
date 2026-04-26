@@ -62,7 +62,7 @@ export function ProjectSettings({ projectId }: ProjectSettingsProps) {
     <div className="space-y-8">
       {/* Git Repository Section */}
       <div>
-        <h3 className="text-lg font-mono font-semibold mb-4">Git Repository</h3>
+        <h3 className="text-base font-semibold mb-4">Git Repository</h3>
         <div className="p-4 elevation-1 rounded-lg border border-border">
           <div className="flex items-start gap-4">
             <div className={`p-3 rounded-lg ${
@@ -100,7 +100,7 @@ export function ProjectSettings({ projectId }: ProjectSettingsProps) {
               {!currentProject?.is_git_repo && (
                 <button
                   onClick={() => setShowInitGitModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded text-sm font-mono transition-colors"
+                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded text-sm transition-colors"
                 >
                   <GitBranch className="w-4 h-4" />
                   Initialize Git Repository
@@ -112,13 +112,13 @@ export function ProjectSettings({ projectId }: ProjectSettingsProps) {
       </div>
 
       {/* Project Rescan Settings */}
-      <div>
-        <h3 className="text-lg font-mono font-semibold mb-4">Project Rescan Settings</h3>
+      <div className="border-t border-border/30 pt-5 mt-5">
+        <h3 className="text-base font-semibold mb-4">Project Rescan Settings</h3>
         
         <div className="space-y-4">
           {/* Rescan Interval */}
           <div className="space-y-2">
-            <label className="block text-sm font-mono text-foreground">
+            <label className="block text-sm text-foreground">
               Commits before rescan prompt
             </label>
             <div className="flex items-center gap-4">
@@ -128,7 +128,7 @@ export function ProjectSettings({ projectId }: ProjectSettingsProps) {
                 max="100"
                 value={rescanInterval}
                 onChange={(e) => handleIntervalChange(parseInt(e.target.value) || 10)}
-                className="w-24 px-3 py-2 elevation-0 border border-border/60 rounded text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-24 px-3 py-2 elevation-0 border border-border/60 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
               <span className="text-sm text-muted-foreground">
                 commits (default: 10)
@@ -148,7 +148,7 @@ export function ProjectSettings({ projectId }: ProjectSettingsProps) {
                 onChange={(e) => handleAutoRescanChange(e.target.checked)}
                 className="w-4 h-4 text-primary border-border rounded focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
               />
-              <span className="text-sm font-mono text-foreground">
+              <span className="text-sm text-foreground">
                 Automatically rescan without prompting
               </span>
             </label>
@@ -162,7 +162,7 @@ export function ProjectSettings({ projectId }: ProjectSettingsProps) {
             <div className="flex items-start gap-2">
               <RefreshCw className="w-4 h-4 text-muted-foreground mt-0.5" />
               <div className="space-y-1">
-                <p className="text-xs font-mono text-foreground">About Project Rescanning</p>
+                <p className="text-xs text-foreground">About Project Rescanning</p>
                 <p className="text-xs text-muted-foreground">
                   Rescanning updates the AI's understanding of your codebase, refreshes testing 
                   infrastructure, and ensures the LLM has current information about your project structure.
@@ -177,7 +177,7 @@ export function ProjectSettings({ projectId }: ProjectSettingsProps) {
               <button
                 onClick={handleSave}
                 disabled={isSaving}
-                className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded text-sm font-mono transition-colors disabled:opacity-50"
+                className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground hover:bg-primary/90 rounded text-sm transition-colors disabled:opacity-50"
               >
                 <Save className="w-4 h-4" />
                 {isSaving ? 'Saving...' : 'Save Changes'}

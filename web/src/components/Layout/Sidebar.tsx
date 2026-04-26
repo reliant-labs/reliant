@@ -39,7 +39,7 @@ import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProcessStore } from "../../store/processStore";
 import { useProjectStore } from "../../store/projectStore";
-import { cn, toTitleCase } from "../../lib/utils";
+import { cn } from "../../lib/utils";
 import { toast } from "../../lib/toast-manager";
 import { Tooltip } from "../ui/Tooltip";
 import { Button } from "../ui/Button";
@@ -186,10 +186,7 @@ const ChatItem = memo(function ChatItem({
   const isActive = activeChatId === chat.id;
   const showStatusDot = chat.activityState !== "idle" && chat.activityState !== "awaiting_approval";
   const showNotificationBadge = chat.unread || chat.activityState === "awaiting_approval";
-  const chatTitle = chat.title
-    ? toTitleCase(chat.title.toLowerCase().replace(/\s+/g, "_"))
-    : "New chat";
-  const [isHovered, setIsHovered] = useState(false);
+  const chatTitle = chat.title || "New chat";
   const isEditing = editingChatId === chat.id;
   const relativeTime = getRelativeTime(chat.updatedAt || chat.createdAt);
 
@@ -197,23 +194,14 @@ const ChatItem = memo(function ChatItem({
     <div
       data-chat-id={chat.id}
       className={cn(
-        "group flex items-center gap-2 px-2.5 py-2 rounded-md cursor-pointer transition-all duration-150 font-mono w-full text-left text-xs relative overflow-hidden",
+        "group flex items-center gap-2 px-2.5 py-2 rounded-md cursor-pointer transition-all duration-150 font-sans w-full text-left text-xs relative overflow-hidden",
         isActive
-          ? "text-foreground font-semibold"
+          ? "border-l-3 border-primary bg-muted text-foreground font-semibold"
           : showStatusDot
           ? "bg-accent/50 hover:bg-accent/70 text-foreground"
-          : "bg-transparent text-foreground/80 hover:text-foreground",
+          : "bg-transparent text-foreground/80 hover:text-foreground hover:bg-muted/50",
         "active:scale-[0.99]"
       )}
-      style={{
-        backgroundColor: isActive
-          ? "hsl(var(--primary) / 0.15)"
-          : !showStatusDot && isHovered
-          ? "hsl(var(--primary) / 0.1)"
-          : undefined,
-      }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       onClick={() => onChatClick(chat)}
       onContextMenu={(e) => onContextMenu(e, chat)}
     >
@@ -223,7 +211,7 @@ const ChatItem = memo(function ChatItem({
           placement="top" 
           delay={300}
         >
-          <div className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
+          <div className="absolute top-1 right-1 w-2.5 h-2.5 bg-destructive rounded-full" />
         </Tooltip>
       )}
 
@@ -312,10 +300,7 @@ interface ArchivedChatItemProps {
 
 const ArchivedChatItem = memo(function ArchivedChatItem({ chat, activeChatId }: ArchivedChatItemProps) {
   const chatId = chat.id;
-  const chatTitle = chat.title
-    ? toTitleCase(chat.title.toLowerCase().replace(/\s+/g, "_"))
-    : "New chat";
-  const [isHovered, setIsHovered] = useState(false);
+  const chatTitle = chat.title || "New chat";
   const isActive = activeChatId === chatId;
   const relativeTime = getRelativeTime(chat.updatedAt || chat.createdAt);
 
@@ -364,21 +349,12 @@ const ArchivedChatItem = memo(function ArchivedChatItem({ chat, activeChatId }: 
     <div
       data-chat-id={chatId}
       className={cn(
-        "group flex items-center gap-2 px-2.5 py-2 rounded-md cursor-pointer transition-all duration-150 font-mono w-full text-left text-xs relative overflow-hidden",
+        "group flex items-center gap-2 px-2.5 py-2 rounded-md cursor-pointer transition-all duration-150 font-sans w-full text-left text-xs relative overflow-hidden",
         isActive
-          ? "text-foreground font-semibold"
-          : "bg-transparent text-foreground/80 hover:text-foreground",
+          ? "border-l-3 border-primary bg-muted text-foreground font-semibold"
+          : "bg-transparent text-foreground/80 hover:text-foreground hover:bg-muted/50",
         "active:scale-[0.99]"
       )}
-      style={{
-        backgroundColor: isActive
-          ? "hsl(var(--primary) / 0.15)"
-          : isHovered
-          ? "hsl(var(--primary) / 0.1)"
-          : undefined,
-      }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       onClick={handleViewChat}
     >
       <div className="flex-1 min-w-0 transition-all duration-200">
@@ -488,7 +464,7 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
             {icon}
 
             <div className="flex-1 min-w-0 text-left flex items-baseline gap-2">
-              <div className="text-sm font-semibold text-foreground truncate font-mono">
+              <div className="text-sm font-semibold text-foreground truncate">
                 {title}
               </div>
               {subtitle && (
@@ -572,7 +548,7 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
               emptyState.onClick?.();
             }}
             className={cn(
-              "w-full text-left p-2 mx-2 mb-2 rounded-md text-xs font-mono text-muted-foreground transition-colors",
+              "w-full text-left p-2 mx-2 mb-2 rounded-md text-xs text-muted-foreground transition-colors",
               emptyState.onClick ? "hover:bg-muted/50 hover:text-foreground cursor-pointer" : "cursor-default"
             )}
           >

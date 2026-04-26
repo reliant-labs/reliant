@@ -50,7 +50,7 @@ function SettingToggle({
     <div className="flex items-center justify-between">
       <div>
         <label className="text-sm font-medium">{label}</label>
-        <p className="text-xs text-muted-foreground">{description}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
       </div>
       <Toggle checked={checked} onChange={onChange} label={label} />
     </div>
@@ -105,7 +105,7 @@ function SettingSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="block w-full px-4 py-3 bg-card border-2 border-border text-foreground font-mono rounded-lg text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary hover:border-primary/40 elevation-1"
+        className="block w-full px-3 py-2 bg-card border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -271,11 +271,11 @@ export function AppearanceSettings() {
       {/* Theme Toggle */}
       <div className="space-y-4">
         <h3 className="text-sm font-semibold">Theme</h3>
-        <div className="flex items-center gap-4 p-4 bg-card border-2 border-border rounded-lg">
+        <div className="flex items-center gap-4 p-3 bg-card border border-border/40 rounded-md shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
           <button
             onClick={() => setTheme('light')}
             className={cn(
-              "flex-1 px-4 py-3 rounded-md font-medium text-sm transition-all duration-200 border-2",
+              "flex-1 px-3 py-2 rounded-md font-medium text-sm transition-all duration-200 border",
               theme === 'light'
                 ? "border-primary text-foreground shadow-md"
                 : "border-border text-muted-foreground hover:bg-muted/80"
@@ -291,7 +291,7 @@ export function AppearanceSettings() {
           <button
             onClick={() => setTheme('dark')}
             className={cn(
-              "flex-1 px-4 py-3 rounded-md font-medium text-sm transition-all duration-200 border-2",
+              "flex-1 px-3 py-2 rounded-md font-medium text-sm transition-all duration-200 border",
               theme === 'dark'
                 ? "border-primary text-foreground shadow-md"
                 : "border-border text-muted-foreground hover:bg-muted/80"
@@ -359,7 +359,7 @@ export function AppearanceSettings() {
               id="appearance-font"
               value={font}
               onChange={(e) => setFont(e.target.value)}
-              className="block w-full px-4 py-3 bg-card border-2 border-border text-foreground font-mono rounded-lg text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary hover:border-primary/40 elevation-1"
+              className="block w-full px-3 py-2 bg-card border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
             >
               <option value="system">System Default (Default)</option>
               <option value="inter">Inter (Modern)</option>
@@ -378,7 +378,7 @@ export function AppearanceSettings() {
               id="chat-font"
               value={chatFont}
               onChange={(e) => setChatFont(e.target.value)}
-              className="block w-full px-4 py-3 bg-card border-2 border-border text-foreground font-mono rounded-lg text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary hover:border-primary/40 elevation-1"
+              className="block w-full px-3 py-2 bg-card border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
             >
               <option value="default">Monospace (Default)</option>
               <option value="mono">JetBrains Mono</option>
@@ -399,7 +399,7 @@ export function AppearanceSettings() {
               id="editor-font"
               value={editorFont}
               onChange={(e) => setEditorFont(e.target.value)}
-              className="block w-full px-4 py-3 bg-card border-2 border-border text-foreground font-mono rounded-lg text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary hover:border-primary/40 elevation-1"
+              className="block w-full px-3 py-2 bg-card border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
             >
               <option value="default">Monospace (Default)</option>
               <option value="mono">JetBrains Mono</option>
@@ -420,7 +420,7 @@ export function AppearanceSettings() {
               id="font-size"
               value={fontSize}
               onChange={(e) => setFontSize(e.target.value as FontSize)}
-              className="block w-full px-4 py-3 bg-card border-2 border-border text-foreground font-mono rounded-lg text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary hover:border-primary/40 elevation-1"
+              className="block w-full px-3 py-2 bg-card border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
             >
               {Object.entries(FONT_SIZE_LABELS).map(([key, label]) => (
                 <option key={key} value={key}>
@@ -443,11 +443,11 @@ export function AppearanceSettings() {
             Configure how spawn thread content is displayed in the timeline
           </p>
         </div>
-        <div className="flex items-center gap-4 p-4 bg-card border-2 border-border rounded-lg">
+        <div className="flex items-center gap-4 p-3 bg-card border border-border/40 rounded-md shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
           <button
             onClick={() => setSpawnDisplayMode('inline')}
             className={cn(
-              "flex-1 px-4 py-3 rounded-md font-medium text-sm transition-all duration-200 border-2",
+              "flex-1 px-3 py-2 rounded-md font-medium text-sm transition-all duration-200 border",
               spawnDisplayMode === 'inline'
                 ? "border-primary text-foreground shadow-md"
                 : "border-border text-muted-foreground hover:bg-muted/80"
@@ -463,7 +463,7 @@ export function AppearanceSettings() {
           <button
             onClick={() => setSpawnDisplayMode('preview')}
             className={cn(
-              "flex-1 px-4 py-3 rounded-md font-medium text-sm transition-all duration-200 border-2",
+              "flex-1 px-3 py-2 rounded-md font-medium text-sm transition-all duration-200 border",
               spawnDisplayMode === 'preview'
                 ? "border-primary text-foreground shadow-md"
                 : "border-border text-muted-foreground hover:bg-muted/80"
@@ -508,7 +508,7 @@ export function AppearanceSettings() {
           <select
             value={workflowViewerDefaultMode}
             onChange={(e) => setWorkflowViewerDefaultMode(e.target.value as 'inline' | 'side')}
-            className="block w-full px-4 py-3 bg-card border-2 border-border text-foreground font-mono rounded-lg text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary hover:border-primary/40 elevation-1"
+            className="block w-full px-3 py-2 bg-card border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
           >
             <option value="side">Side Panel (beside chat)</option>
             <option value="inline">Inline (above chat)</option>
@@ -734,7 +734,7 @@ function MonacoEditorSettings() {
             <select
               value={settings.diffSideBySide ? "side-by-side" : "inline"}
               onChange={(e) => updateSettings({ diffSideBySide: e.target.value === "side-by-side" })}
-              className="block w-full px-4 py-3 bg-card border-2 border-border text-foreground font-mono rounded-lg text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/60 focus:border-primary hover:border-primary/40 elevation-1"
+              className="block w-full px-3 py-2 bg-card border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
             >
               <option value="side-by-side">Side-by-side</option>
               <option value="inline">Inline</option>

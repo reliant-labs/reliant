@@ -54,6 +54,7 @@ export function WorkflowSettingsEditor({
     <ConfigurationPanel
       title="Workflow Settings"
       subtitle="Configure parameters, entry points, and outputs"
+      subtitleMono={false}
       onClose={onClose}
       bottomOffset={bottomOffset}
       topOffset={topOffset}
@@ -293,7 +294,7 @@ function OutputsEditor({
           {outputEntries.map(([key, value]) => (
             <div key={key} className="space-y-1">
               <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-foreground font-mono">
+                <label className="text-sm font-medium text-foreground">
                   {key}
                 </label>
                 <button
@@ -343,7 +344,7 @@ function OutputsEditor({
                       onClick={() => addOutputWithValue(suggestedName, suggestion.value)}
                       className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors"
                     >
-                      <div className="font-mono text-foreground">{suggestion.label}</div>
+                      <div className="text-foreground">{suggestion.label}</div>
                       <div className="text-xs text-muted-foreground">{suggestion.description}</div>
                     </button>
                   )

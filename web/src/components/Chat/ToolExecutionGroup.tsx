@@ -132,38 +132,38 @@ function ToolExecutionGroupComponent({
         onClick={() => setExpanded((v) => !v)}
       >
         <div className="flex items-center gap-1">
-          <ListTree className="w-3 h-3 text-muted-foreground" />
-          <span className="text-[11px] font-mono font-medium">
+          <ListTree className="w-3.5 h-3.5 text-muted-foreground" />
+          <span className="text-xs font-mono font-medium">
             {summary.total} tool call{summary.total === 1 ? "" : "s"}
           </span>
         </div>
 
         <div className="flex items-center gap-1">
           {summary.running > 0 && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-mono text-primary">
-              <Loader2 className="w-3 h-3 animate-spin" /> {summary.running}
+            <span className="inline-flex items-center gap-1 text-xs font-mono text-primary">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" /> {summary.running}
             </span>
           )}
           {summary.completed > 0 && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-mono text-success">
-              <CheckCircle2 className="w-3 h-3" /> {summary.completed}
+            <span className="inline-flex items-center gap-1 text-xs font-mono text-success">
+              <CheckCircle2 className="w-3.5 h-3.5" /> {summary.completed}
             </span>
           )}
           {summary.cancelled > 0 && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-mono text-muted-foreground">
-              <XCircle className="w-3 h-3" /> {summary.cancelled}
+            <span className="inline-flex items-center gap-1 text-xs font-mono text-muted-foreground">
+              <XCircle className="w-3.5 h-3.5" /> {summary.cancelled}
             </span>
           )}
           {summary.errors > 0 && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-mono text-destructive">
-              <AlertCircle className="w-3 h-3" /> {summary.errors}
+            <span className="inline-flex items-center gap-1 text-xs font-mono text-destructive">
+              <AlertCircle className="w-3.5 h-3.5" /> {summary.errors}
             </span>
           )}
 
           {expanded ? (
-            <ChevronDown className="w-3 h-3 text-muted-foreground" />
+            <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
           ) : (
-            <ChevronRight className="w-3 h-3 text-muted-foreground" />
+            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
           )}
         </div>
       </div>

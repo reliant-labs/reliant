@@ -75,17 +75,17 @@ function ToolExecutionCollapsibleGroupComponent({
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <div className="flex items-center gap-1.5">
-          <Eye className="w-3 h-3 text-muted-foreground" />
-          <span className="text-[11px] font-mono text-muted-foreground">
+          <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+          <span className="text-xs font-mono text-muted-foreground">
             {summaryText}
           </span>
         </div>
 
         <div className="flex items-center gap-1">
           {isExpanded ? (
-            <ChevronDown className="w-3 h-3 text-muted-foreground" />
+            <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
           ) : (
-            <ChevronRight className="w-3 h-3 text-muted-foreground" />
+            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
           )}
         </div>
       </div>

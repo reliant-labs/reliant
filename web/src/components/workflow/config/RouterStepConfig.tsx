@@ -275,7 +275,7 @@ function NodeRouterCandidateCard({
           type="text"
           value={candidate.id ?? ""}
           onChange={(e) => onUpdate(index, { id: e.target.value })}
-          className="w-full px-2.5 py-1.5 text-sm border border-input rounded-md bg-background text-foreground font-mono focus:ring-2 focus:ring-ring focus:border-ring disabled:opacity-60 disabled:cursor-not-allowed"
+          className="w-full px-2.5 py-1.5 text-sm border border-input rounded-md bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           placeholder="target_node_id"
           disabled={isReadOnly}
         />
@@ -289,7 +289,7 @@ function NodeRouterCandidateCard({
         <textarea
           value={candidate.description ?? ""}
           onChange={(e) => onUpdate(index, { description: e.target.value })}
-          className="w-full px-2.5 py-1.5 text-sm border border-input rounded-md bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-ring disabled:opacity-60 disabled:cursor-not-allowed"
+          className="w-full px-2.5 py-1.5 text-sm border border-input rounded-md bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
           rows={2}
           placeholder="When should the router select this node?"
           disabled={isReadOnly}
@@ -644,7 +644,7 @@ function RouterOutputsEditor({
           {entries.map(([key, value]) => (
             <div key={key} className="space-y-1">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-medium text-foreground font-mono">
+                <label className="text-xs font-medium text-foreground">
                   {key}
                 </label>
                 {!isReadOnly && (
@@ -677,7 +677,7 @@ function RouterOutputsEditor({
             onChange={(e) => setNewKey(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addOutput()}
             placeholder="output_name"
-            className="flex-1 px-2.5 py-1.5 text-sm border border-input rounded-md bg-background text-foreground font-mono focus:ring-2 focus:ring-ring focus:border-ring"
+            className="flex-1 px-2.5 py-1.5 text-sm border border-input rounded-md bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors"
           />
           <button
             type="button"
@@ -691,14 +691,14 @@ function RouterOutputsEditor({
         </div>
       )}
 
-      <div className="text-[11px] text-muted-foreground mt-2 space-y-0.5">
+      <div className="text-xs text-muted-foreground mt-2 space-y-0.5">
         <p className="font-medium">Available in expressions:</p>
         <ul className="list-disc list-inside">
-          <li><code className="text-[11px]">selected_workflow</code> &mdash; chosen workflow ref</li>
-          <li><code className="text-[11px]">selected_preset</code> &mdash; chosen preset</li>
-          <li><code className="text-[11px]">prompt</code> &mdash; prompt sent to child workflow</li>
-          <li><code className="text-[11px]">reasoning</code> &mdash; router reasoning</li>
-          <li><code className="text-[11px]">outputs.*</code> &mdash; child workflow outputs</li>
+          <li><code className="text-xs">selected_workflow</code> &mdash; chosen workflow ref</li>
+          <li><code className="text-xs">selected_preset</code> &mdash; chosen preset</li>
+          <li><code className="text-xs">prompt</code> &mdash; prompt sent to child workflow</li>
+          <li><code className="text-xs">reasoning</code> &mdash; router reasoning</li>
+          <li><code className="text-xs">outputs.*</code> &mdash; child workflow outputs</li>
         </ul>
       </div>
     </div>

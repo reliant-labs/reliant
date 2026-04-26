@@ -150,7 +150,7 @@ function ShellToolRendererComponent({ ctx }: ToolContentProps) {
           {/* Legacy plain text format (backwards compat for old results in DB, and bash_output tool) */}
           {isLegacy && (
             <div className={showCommandInput ? "border-t border-border/50" : ""}>
-              <div className="px-2 py-0.5 text-[9px] text-muted-foreground uppercase tracking-wider bg-muted/30 flex items-center justify-between">
+              <div className="px-2 py-1 text-[9px] text-muted-foreground uppercase tracking-wider bg-muted/40 border-b border-border/20 flex items-center justify-between">
                 <span>output</span>
                 {!result.is_error && result.content && (
                   <CopyButton content={result.content} className="opacity-100" />
@@ -177,7 +177,7 @@ function ShellToolRendererComponent({ ctx }: ToolContentProps) {
           {structured && hasAnyOutput && (
             <div className={showCommandInput ? "border-t border-border/50" : ""}>
               {/* Output label with optional exit code badge */}
-              <div className="px-2 py-0.5 text-[9px] text-muted-foreground uppercase tracking-wider bg-muted/30 flex items-center gap-1.5">
+              <div className="px-2 py-1 text-[9px] text-muted-foreground uppercase tracking-wider bg-muted/40 border-b border-border/20 flex items-center gap-1.5">
                 <span>output</span>
                 {hasNonZeroExit && (
                   <span className="text-destructive font-medium normal-case tracking-normal">

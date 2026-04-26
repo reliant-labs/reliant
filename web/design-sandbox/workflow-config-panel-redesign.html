@@ -1,0 +1,1517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Workflow Builder Config Panel Redesign</title>
+<style>
+  :root {
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #242424;
+    --bg-tertiary: #2d2d2d;
+    --bg-hover: #363636;
+    --bg-active: #404040;
+    --border: #3a3a3a;
+    --border-light: #4a4a4a;
+    --text-primary: #e5e5e5;
+    --text-secondary: #a0a0a0;
+    --text-tertiary: #707070;
+    --accent: #7c6ef0;
+    --accent-hover: #9080ff;
+    --accent-muted: rgba(124, 110, 240, 0.15);
+    --accent-border: rgba(124, 110, 240, 0.25);
+    --orange: #e8945a;
+    --green: #5cb85c;
+    --blue: #5b9bd5;
+    --red: #d9534f;
+    --cyan: #5bc0de;
+    --yellow: #f0ad4e;
+    --panel-bg: #282828;
+    --panel-border: #404040;
+    --panel-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.2);
+    --radius: 10px;
+    --radius-sm: 6px;
+    --radius-xs: 4px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    padding: 24px;
+  }
+
+  /* Layout: scenario picker top, panels side by side */
+  .page-header {
+    max-width: 1400px;
+    margin: 0 auto 24px;
+  }
+  .page-header h1 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+  .page-header p { font-size: 13px; color: var(--text-tertiary); margin-bottom: 16px; }
+
+  .scenario-bar {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+    max-width: 1400px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .scenario-btn {
+    padding: 6px 14px;
+    border-radius: var(--radius-xs);
+    font-size: 12px;
+    font-weight: 500;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .scenario-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .scenario-btn.active {
+    background: var(--accent-muted);
+    border-color: var(--accent-border);
+    color: var(--accent);
+  }
+
+  .panels-grid {
+    display: flex;
+    gap: 24px;
+    max-width: 1400px;
+    margin: 0 auto;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  /* ============================================ */
+  /* CONFIG PANEL — Right-side panel              */
+  /* ============================================ */
+
+  .config-panel {
+    width: 380px;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: var(--radius);
+    box-shadow: var(--panel-shadow);
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  /* Panel header */
+  .panel-header {
+    display: flex;
+    align-items: center;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    gap: 10px;
+  }
+  .panel-header .node-icon {
+    width: 28px; height: 28px;
+    border-radius: var(--radius-xs);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    font-size: 14px;
+  }
+  .panel-header .node-icon.llm { background: rgba(124, 110, 240, 0.15); color: var(--accent); }
+  .panel-header .node-icon.loop { background: rgba(91, 192, 222, 0.15); color: var(--cyan); }
+  .panel-header .node-icon.workflow { background: rgba(92, 184, 92, 0.15); color: var(--green); }
+  .panel-header .node-icon.router { background: rgba(240, 173, 78, 0.15); color: var(--yellow); }
+  .panel-header .header-text { flex: 1; min-width: 0; }
+  .panel-header .header-text h3 {
+    font-size: 13px; font-weight: 600; color: var(--text-primary);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .panel-header .header-text .node-id {
+    font-size: 10px; color: var(--text-tertiary); font-family: 'SF Mono', Menlo, monospace;
+    cursor: pointer;
+  }
+  .panel-header .header-text .node-id:hover { color: var(--text-secondary); }
+  .header-actions { display: flex; gap: 4px; }
+  .header-btn {
+    width: 24px; height: 24px; border-radius: var(--radius-xs);
+    background: transparent; border: none; color: var(--text-tertiary);
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: all 0.1s;
+  }
+  .header-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .header-btn.delete:hover { color: var(--red); }
+  .header-btn svg { width: 14px; height: 14px; }
+
+  /* Tab bar */
+  .tab-bar {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    padding: 0 12px;
+  }
+  .tab-btn {
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-tertiary);
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .tab-btn:hover { color: var(--text-secondary); }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-btn .badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 16px; height: 16px; padding: 0 4px;
+    border-radius: 8px; font-size: 9px; font-weight: 700;
+    background: var(--bg-active); color: var(--text-secondary);
+    margin-left: 4px;
+  }
+
+  /* Scrollable content */
+  .panel-content {
+    max-height: 600px;
+    overflow-y: auto;
+  }
+  .panel-content::-webkit-scrollbar { width: 4px; }
+  .panel-content::-webkit-scrollbar-track { background: transparent; }
+  .panel-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* ============================================ */
+  /* SECTION — grouping fields                    */
+  /* ============================================ */
+
+  .section {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section:last-child { border-bottom: none; }
+
+  .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-tertiary);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .section-label .collapse-btn {
+    background: none; border: none; color: inherit; cursor: pointer;
+    display: flex; align-items: center; padding: 0;
+    transition: transform 0.15s;
+  }
+  .section-label .collapse-btn.collapsed { transform: rotate(-90deg); }
+  .section-label .collapse-btn svg { width: 12px; height: 12px; }
+
+  /* ============================================ */
+  /* FIELD ROWS                                   */
+  /* ============================================ */
+
+  .field {
+    margin-bottom: 10px;
+  }
+  .field:last-child { margin-bottom: 0; }
+
+  .field-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 5px;
+  }
+  .field-label span {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+  .field-label .field-default {
+    font-size: 10px;
+    color: var(--text-tertiary);
+    font-weight: 400;
+  }
+  .field-label .cel-toggle {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-tertiary);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .field-label .cel-toggle:hover { border-color: var(--border-light); color: var(--text-secondary); }
+  .field-label .cel-toggle.active { background: var(--accent-muted); border-color: var(--accent-border); color: var(--accent); }
+
+  /* Text input */
+  .field-input {
+    width: 100%;
+    padding: 6px 10px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    color: var(--text-primary);
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .field-input:focus { border-color: var(--border-light); }
+  .field-input::placeholder { color: var(--text-tertiary); }
+
+  /* Textarea */
+  .field-textarea {
+    width: 100%;
+    min-height: 64px;
+    padding: 8px 10px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    color: var(--text-primary);
+    font-size: 12px;
+    font-family: 'SF Mono', Menlo, Consolas, monospace;
+    line-height: 1.5;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .field-textarea:focus { border-color: var(--border-light); }
+  .field-textarea::placeholder { color: var(--text-tertiary); }
+
+  /* Select */
+  .field-select {
+    width: 100%;
+    padding: 6px 10px;
+    padding-right: 28px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    color: var(--text-primary);
+    font-size: 12px;
+    outline: none;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23707070' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    transition: border-color 0.15s;
+  }
+  .field-select:focus { border-color: var(--border-light); }
+
+  /* Inline select (compact, no border, sits inside a row) */
+  .field-select-inline {
+    padding: 4px 24px 4px 8px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    color: var(--text-primary);
+    font-size: 11px;
+    font-weight: 500;
+    outline: none;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23707070' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 6px center;
+  }
+
+  /* Number input */
+  .field-number {
+    width: 80px;
+    padding: 6px 10px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    color: var(--text-primary);
+    font-size: 12px;
+    outline: none;
+    text-align: right;
+  }
+  .field-number:focus { border-color: var(--border-light); }
+
+  /* Inline row: label left, control right */
+  .field-inline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .field-inline:last-child { margin-bottom: 0; }
+  .field-inline .fi-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+  .field-inline .fi-hint {
+    font-size: 10px;
+    color: var(--text-tertiary);
+    font-weight: 400;
+  }
+
+  /* Slider row */
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .slider-row input[type="range"] {
+    width: 80px;
+    height: 4px;
+    appearance: none;
+    background: var(--bg-active);
+    border-radius: 2px;
+    cursor: pointer;
+    accent-color: var(--accent);
+  }
+  .slider-row .slider-val {
+    font-size: 11px;
+    color: var(--text-secondary);
+    min-width: 28px;
+    text-align: right;
+    font-family: 'SF Mono', Menlo, monospace;
+  }
+
+  /* Tag pills (for model tags, tools tags) */
+  .tag-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: 11px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    border: 1px solid var(--border);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+  }
+  .tag:hover { border-color: var(--border-light); color: var(--text-primary); }
+  .tag.selected {
+    background: var(--accent-muted);
+    border-color: var(--accent-border);
+    color: var(--accent);
+  }
+  .tag .tag-x {
+    font-size: 10px; opacity: 0.5; margin-left: 2px;
+    cursor: pointer;
+  }
+  .tag .tag-x:hover { opacity: 1; }
+
+  .provider-dot {
+    width: 6px; height: 6px; border-radius: 50%; display: inline-block; flex-shrink: 0;
+  }
+  .provider-dot.anthropic { background: var(--orange); }
+  .provider-dot.openai { background: var(--green); }
+  .provider-dot.gemini { background: var(--blue); }
+  .provider-dot.xai { background: var(--red); }
+
+  /* Drill-in row (clickable, shows chevron) */
+  .drill-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+    transition: background 0.1s;
+    margin: 0 -10px;
+    width: calc(100% + 20px);
+  }
+  .drill-row:hover { background: var(--bg-hover); }
+  .drill-row .dr-left {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .drill-row .dr-icon {
+    width: 20px; height: 20px; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; flex-shrink: 0;
+  }
+  .drill-row .dr-label { font-size: 12px; font-weight: 500; color: var(--text-primary); }
+  .drill-row .dr-sublabel { font-size: 10px; color: var(--text-tertiary); }
+  .drill-row .dr-right {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; color: var(--text-tertiary);
+  }
+  .drill-row .dr-right svg { width: 12px; height: 12px; }
+
+  /* Mode pills (inline toggle group) */
+  .mode-group {
+    display: flex;
+    gap: 4px;
+  }
+  .mode-pill {
+    flex: 1;
+    padding: 6px 10px;
+    border-radius: var(--radius-xs);
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 500;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-transform: capitalize;
+  }
+  .mode-pill:hover { border-color: var(--border-light); color: var(--text-primary); }
+  .mode-pill.active {
+    border-color: var(--accent-border);
+    background: var(--accent-muted);
+    color: var(--accent);
+  }
+
+  /* Card list (for candidates, items) */
+  .card-list { display: flex; flex-direction: column; gap: 6px; }
+  .card-item {
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-tertiary);
+    transition: border-color 0.15s;
+  }
+  .card-item:hover { border-color: var(--border-light); }
+  .card-item .card-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .card-item .card-title {
+    font-size: 12px; font-weight: 600; color: var(--text-primary);
+  }
+  .card-item .card-actions { display: flex; gap: 2px; }
+  .card-item .card-sub {
+    font-size: 11px; color: var(--text-tertiary); line-height: 1.4;
+  }
+
+  .add-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    width: 100%;
+    padding: 6px;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-tertiary);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .add-btn:hover { border-color: var(--border-light); color: var(--text-secondary); }
+  .add-btn svg { width: 12px; height: 12px; }
+
+  /* Group (collapsible, for nested params) */
+  .param-group {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    margin-bottom: 8px;
+    overflow: hidden;
+  }
+  .param-group:last-child { margin-bottom: 0; }
+  .param-group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    background: var(--bg-tertiary);
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .param-group-header:hover { background: var(--bg-hover); }
+  .param-group-header .pgh-left {
+    display: flex; align-items: center; gap: 6px;
+  }
+  .param-group-header .pgh-chevron {
+    width: 12px; height: 12px; color: var(--text-tertiary);
+    transition: transform 0.15s;
+  }
+  .param-group-header.collapsed .pgh-chevron { transform: rotate(-90deg); }
+  .param-group-header .pgh-label {
+    font-size: 12px; font-weight: 600; color: var(--text-primary);
+  }
+  .param-group-header .pgh-right {
+    display: flex; align-items: center; gap: 6px;
+  }
+  .param-group-header .pgh-preset {
+    font-size: 10px; color: var(--accent); font-weight: 500;
+    padding: 2px 6px;
+    background: var(--accent-muted);
+    border-radius: 3px;
+  }
+  .param-group-body {
+    padding: 10px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* CEL expression field */
+  .cel-field {
+    width: 100%;
+    padding: 6px 10px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xs);
+    color: var(--accent);
+    font-size: 12px;
+    font-family: 'SF Mono', Menlo, Consolas, monospace;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .cel-field:focus { border-color: var(--accent-border); }
+  .cel-field::placeholder { color: var(--text-tertiary); }
+
+  /* Design notes */
+  .design-notes {
+    max-width: 1400px;
+    margin: 40px auto 0;
+    padding: 20px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-secondary);
+  }
+  .design-notes h2 { font-size: 14px; font-weight: 700; margin-bottom: 12px; color: var(--text-primary); }
+  .design-notes h3 { font-size: 12px; font-weight: 600; margin: 12px 0 6px; color: var(--text-primary); }
+  .design-notes p, .design-notes li {
+    font-size: 12px; color: var(--text-secondary); line-height: 1.6;
+  }
+  .design-notes ul { padding-left: 18px; }
+  .design-notes code {
+    font-family: 'SF Mono', Menlo, monospace;
+    background: var(--bg-tertiary);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 11px;
+    color: var(--accent);
+  }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>Workflow Builder Config Panel Redesign</h1>
+  <p>Same drill-in popover pattern as the chat input. Panels shown side-by-side for comparison.</p>
+</div>
+
+<div class="scenario-bar">
+  <button class="scenario-btn active" onclick="showScenario('call_llm')">call_llm Node</button>
+  <button class="scenario-btn" onclick="showScenario('workflow_ref')">Workflow Ref Node</button>
+  <button class="scenario-btn" onclick="showScenario('loop')">Loop Node</button>
+  <button class="scenario-btn" onclick="showScenario('router')">Router Node</button>
+  <button class="scenario-btn" onclick="showScenario('top_level')">Top-Level Inputs</button>
+</div>
+
+<!-- ============================================ -->
+<!-- SCENARIO: call_llm Node                      -->
+<!-- ============================================ -->
+<div class="panels-grid" id="scene-call_llm">
+
+  <!-- Option A: Sectioned (current-ish, cleaned up) -->
+  <div class="config-panel">
+    <div class="panel-header">
+      <div class="node-icon llm">⚡</div>
+      <div class="header-text">
+        <h3>call_llm</h3>
+        <div class="node-id">agent_loop.call_llm</div>
+      </div>
+      <div class="header-actions">
+        <button class="header-btn" title="Duplicate">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+        <button class="header-btn delete" title="Delete">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+        </button>
+        <button class="header-btn" title="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="tab-bar">
+      <button class="tab-btn active">Config</button>
+      <button class="tab-btn">Thread</button>
+      <button class="tab-btn">Advanced</button>
+      <button class="tab-btn">Outputs</button>
+    </div>
+
+    <div class="panel-content">
+      <!-- Model Section -->
+      <div class="section">
+        <div class="section-label">Model</div>
+
+        <div class="field-inline">
+          <span class="fi-label">Model</span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="provider-dot anthropic"></span>
+            <select class="field-select-inline">
+              <option>flagship</option>
+              <option>moderate</option>
+              <option>fast</option>
+              <option>cheap</option>
+              <optgroup label="──────────">
+                <option>Claude 4.6 Opus</option>
+                <option>Claude 4.6 Sonnet</option>
+                <option>GPT-5.5</option>
+              </optgroup>
+            </select>
+          </div>
+        </div>
+
+        <div class="field-inline">
+          <span class="fi-label">Thinking <span class="fi-hint">· default: high</span></span>
+          <select class="field-select-inline">
+            <option selected>Auto</option>
+            <option>Low</option>
+            <option>Medium</option>
+            <option>High</option>
+            <option>X-High</option>
+          </select>
+        </div>
+
+        <div class="field-inline">
+          <span class="fi-label">Temperature</span>
+          <div class="slider-row">
+            <input type="range" min="0" max="100" value="70">
+            <span class="slider-val">0.7</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Prompt Section -->
+      <div class="section">
+        <div class="section-label">Prompt</div>
+        <div class="field">
+          <div class="field-label">
+            <span>System Prompt</span>
+            <button class="cel-toggle">CEL</button>
+          </div>
+          <textarea class="field-textarea" rows="3" placeholder="You are a helpful assistant...">{{inputs.system_prompt}}</textarea>
+        </div>
+      </div>
+
+      <!-- Tools Section -->
+      <div class="section">
+        <div class="section-label">Tools</div>
+        <div class="field">
+          <div class="field-label"><span>Filter</span></div>
+          <div class="tag-row">
+            <span class="tag selected">tag:default <span class="tag-x">×</span></span>
+            <span class="tag selected">bash <span class="tag-x">×</span></span>
+            <span class="tag" style="border-style:dashed;">+ add</span>
+          </div>
+        </div>
+
+        <div class="field" style="margin-top:10px;">
+          <div class="field-inline">
+            <span class="fi-label">Spawn presets</span>
+            <select class="field-select-inline">
+              <option>general, researcher</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="field-inline">
+            <span class="fi-label">Permission mode</span>
+            <select class="field-select-inline">
+              <option>auto</option>
+              <option>manual</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option B: Compact inline (everything visible at once) -->
+  <div class="config-panel">
+    <div class="panel-header">
+      <div class="node-icon llm">⚡</div>
+      <div class="header-text">
+        <h3>call_llm — Compact</h3>
+        <div class="node-id">agent_loop.call_llm</div>
+      </div>
+      <div class="header-actions">
+        <button class="header-btn" title="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="tab-bar">
+      <button class="tab-btn active">Config</button>
+      <button class="tab-btn">Advanced</button>
+      <button class="tab-btn">Outputs</button>
+    </div>
+
+    <div class="panel-content">
+      <div class="section" style="border-bottom:none;">
+
+        <!-- Model + params combined inline -->
+        <div class="field-inline">
+          <span class="fi-label">Model</span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="provider-dot anthropic"></span>
+            <select class="field-select-inline">
+              <option>flagship</option>
+              <option>moderate</option>
+              <option>fast</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field-inline">
+          <span class="fi-label">Thinking</span>
+          <div class="mode-group" style="gap:2px;">
+            <button class="mode-pill" style="padding:3px 6px;font-size:10px;">Low</button>
+            <button class="mode-pill" style="padding:3px 6px;font-size:10px;">Med</button>
+            <button class="mode-pill active" style="padding:3px 6px;font-size:10px;">High</button>
+            <button class="mode-pill" style="padding:3px 6px;font-size:10px;">XH</button>
+          </div>
+        </div>
+
+        <div class="field-inline">
+          <span class="fi-label">Temp</span>
+          <div class="slider-row">
+            <input type="range" min="0" max="100" value="70">
+            <span class="slider-val">0.7</span>
+          </div>
+        </div>
+
+        <div style="height:1px;background:var(--border);margin:10px 0;"></div>
+
+        <!-- System prompt -->
+        <div class="field">
+          <div class="field-label">
+            <span>System prompt</span>
+            <button class="cel-toggle active">CEL</button>
+          </div>
+          <textarea class="field-textarea" rows="2">{{inputs.system_prompt}}</textarea>
+        </div>
+
+        <div style="height:1px;background:var(--border);margin:10px 0;"></div>
+
+        <!-- Tools as drill-in -->
+        <div class="drill-row">
+          <div class="dr-left">
+            <span class="dr-label">Tools</span>
+          </div>
+          <div class="dr-right">
+            <span>tag:default + 1</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- SCENARIO: Workflow Ref Node                  -->
+<!-- ============================================ -->
+<div class="panels-grid" id="scene-workflow_ref" style="display:none;">
+
+  <div class="config-panel">
+    <div class="panel-header">
+      <div class="node-icon workflow">↗</div>
+      <div class="header-text">
+        <h3>workflow</h3>
+        <div class="node-id">run_implementer</div>
+      </div>
+      <div class="header-actions">
+        <button class="header-btn" title="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="tab-bar">
+      <button class="tab-btn active">Config</button>
+      <button class="tab-btn">Thread</button>
+      <button class="tab-btn">Advanced</button>
+      <button class="tab-btn">Outputs</button>
+    </div>
+
+    <div class="panel-content">
+      <div class="section">
+        <div class="section-label">Workflow</div>
+
+        <div class="field">
+          <div class="field-label"><span>Reference</span></div>
+          <select class="field-select">
+            <optgroup label="Built-in">
+              <option selected>agent</option>
+              <option>structured-agent</option>
+              <option>get-it-right</option>
+            </optgroup>
+            <optgroup label="Custom">
+              <option>my-custom-workflow</option>
+            </optgroup>
+          </select>
+        </div>
+
+        <div class="field" style="margin-top:8px;">
+          <div class="mode-group">
+            <button class="mode-pill active">Reference</button>
+            <button class="mode-pill">Inline</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Workflow inputs as nested groups -->
+      <div class="section">
+        <div class="section-label">Inputs</div>
+
+        <!-- Top-level (ungrouped) params -->
+        <div class="field-inline">
+          <span class="fi-label">Mode</span>
+          <div class="mode-group" style="gap:2px;">
+            <button class="mode-pill" style="padding:3px 8px;font-size:10px;">manual</button>
+            <button class="mode-pill active" style="padding:3px 8px;font-size:10px;">auto</button>
+            <button class="mode-pill" style="padding:3px 8px;font-size:10px;">plan</button>
+          </div>
+        </div>
+
+        <!-- Group: model (collapsed by default, shows preset) -->
+        <div class="param-group" style="margin-top:8px;">
+          <div class="param-group-header">
+            <div class="pgh-left">
+              <svg class="pgh-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+              <span class="pgh-label">model</span>
+            </div>
+            <div class="pgh-right">
+              <span style="font-size:10px;color:var(--text-tertiary);">flagship</span>
+            </div>
+          </div>
+          <div class="param-group-body">
+            <div class="field-inline">
+              <span class="fi-label">Tag</span>
+              <select class="field-select-inline">
+                <option selected>flagship</option>
+                <option>moderate</option>
+                <option>fast</option>
+                <option>cheap</option>
+              </select>
+            </div>
+            <div class="field-inline">
+              <span class="fi-label">Thinking</span>
+              <select class="field-select-inline">
+                <option selected>Auto</option>
+                <option>High</option>
+              </select>
+            </div>
+            <div class="field-inline">
+              <span class="fi-label">Temperature</span>
+              <div class="slider-row">
+                <input type="range" min="0" max="100" value="70">
+                <span class="slider-val">0.7</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Preset selector -->
+        <div class="field-inline" style="margin-top:8px;">
+          <span class="fi-label">Preset</span>
+          <select class="field-select-inline">
+            <option>general</option>
+            <option>researcher</option>
+            <option>code_reviewer</option>
+            <option>implementer</option>
+          </select>
+        </div>
+
+        <!-- Passthrough params (CEL expressions from parent) -->
+        <div class="field" style="margin-top:8px;">
+          <div class="field-label">
+            <span>System prompt</span>
+            <button class="cel-toggle active">CEL</button>
+          </div>
+          <input class="cel-field" value="{{inputs.system_prompt}}">
+        </div>
+
+        <div class="field" style="margin-top:8px;">
+          <div class="field-label">
+            <span>Tools</span>
+            <button class="cel-toggle active">CEL</button>
+          </div>
+          <input class="cel-field" value="{{inputs.tools}}">
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- SCENARIO: Loop Node                          -->
+<!-- ============================================ -->
+<div class="panels-grid" id="scene-loop" style="display:none;">
+
+  <div class="config-panel">
+    <div class="panel-header">
+      <div class="node-icon loop">↻</div>
+      <div class="header-text">
+        <h3>loop</h3>
+        <div class="node-id">agent_loop</div>
+      </div>
+      <div class="header-actions">
+        <button class="header-btn" title="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="tab-bar">
+      <button class="tab-btn active">Config</button>
+      <button class="tab-btn">Thread</button>
+      <button class="tab-btn">Inject</button>
+      <button class="tab-btn">Advanced</button>
+    </div>
+
+    <div class="panel-content">
+      <div class="section">
+        <div class="field-inline">
+          <span class="fi-label">Mode</span>
+          <div class="mode-group" style="gap:2px;">
+            <button class="mode-pill active" style="padding:4px 10px;font-size:11px;">Sequential</button>
+            <button class="mode-pill" style="padding:4px 10px;font-size:11px;">Parallel</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sequential: while condition -->
+      <div class="section">
+        <div class="section-label">While Condition</div>
+        <div class="field">
+          <div class="field-label">
+            <span>Continue while</span>
+          </div>
+          <input class="cel-field" value="size(outputs.tool_calls) > 0" placeholder="CEL expression">
+        </div>
+        <div style="margin-top:8px;">
+          <div class="field-inline">
+            <span class="fi-label">Max iterations</span>
+            <input class="field-number" type="number" value="0" placeholder="0 = unlimited">
+          </div>
+        </div>
+      </div>
+
+      <!-- Loop body -->
+      <div class="section">
+        <div class="section-label">Loop Body</div>
+        <div class="drill-row">
+          <div class="dr-left">
+            <div class="dr-icon" style="background:rgba(91,192,222,0.1);color:var(--cyan);">↗</div>
+            <div>
+              <div class="dr-label">Edit sub-workflow</div>
+              <div class="dr-sublabel">2 nodes, 3 edges</div>
+            </div>
+          </div>
+          <div class="dr-right">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Parallel variant -->
+  <div class="config-panel">
+    <div class="panel-header">
+      <div class="node-icon loop">↻</div>
+      <div class="header-text">
+        <h3>loop — Parallel Mode</h3>
+        <div class="node-id">parallel_check</div>
+      </div>
+      <div class="header-actions">
+        <button class="header-btn" title="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="tab-bar">
+      <button class="tab-btn active">Config</button>
+      <button class="tab-btn">Thread</button>
+      <button class="tab-btn">Advanced</button>
+    </div>
+
+    <div class="panel-content">
+      <div class="section">
+        <div class="field-inline">
+          <span class="fi-label">Mode</span>
+          <div class="mode-group" style="gap:2px;">
+            <button class="mode-pill" style="padding:4px 10px;font-size:11px;">Sequential</button>
+            <button class="mode-pill active" style="padding:4px 10px;font-size:11px;">Parallel</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">Iteration</div>
+        <div class="field">
+          <div class="field-label"><span>Items</span></div>
+          <input class="cel-field" value="inputs.checks" placeholder="CEL expression (list or map)">
+        </div>
+        <div class="field" style="margin-top:8px;">
+          <div class="field-label"><span>Key</span></div>
+          <input class="cel-field" value="" placeholder="Optional key expression">
+        </div>
+        <div class="field-inline" style="margin-top:8px;">
+          <span class="fi-label">On failure</span>
+          <select class="field-select-inline">
+            <option selected>continue</option>
+            <option>fail_fast</option>
+            <option>fail_all</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">Loop Body</div>
+        <div class="drill-row">
+          <div class="dr-left">
+            <div class="dr-icon" style="background:rgba(91,192,222,0.1);color:var(--cyan);">↗</div>
+            <div>
+              <div class="dr-label">Edit sub-workflow</div>
+              <div class="dr-sublabel">1 node, 2 edges</div>
+            </div>
+          </div>
+          <div class="dr-right">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- SCENARIO: Router Node                        -->
+<!-- ============================================ -->
+<div class="panels-grid" id="scene-router" style="display:none;">
+
+  <div class="config-panel">
+    <div class="panel-header">
+      <div class="node-icon router">⚙</div>
+      <div class="header-text">
+        <h3>router</h3>
+        <div class="node-id">task_router</div>
+      </div>
+      <div class="header-actions">
+        <button class="header-btn" title="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="tab-bar">
+      <button class="tab-btn active">Config</button>
+      <button class="tab-btn">Thread</button>
+      <button class="tab-btn">Advanced</button>
+    </div>
+
+    <div class="panel-content">
+      <div class="section">
+        <div class="field-inline">
+          <span class="fi-label">Routing mode</span>
+          <div class="mode-group" style="gap:2px;">
+            <button class="mode-pill active" style="padding:4px 10px;font-size:11px;">Workflow</button>
+            <button class="mode-pill" style="padding:4px 10px;font-size:11px;">Node</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">Router LLM</div>
+        <div class="field-inline">
+          <span class="fi-label">Model</span>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="provider-dot anthropic"></span>
+            <select class="field-select-inline">
+              <option selected>fast</option>
+              <option>flagship</option>
+              <option>moderate</option>
+            </select>
+          </div>
+        </div>
+        <div class="field" style="margin-top:8px;">
+          <div class="field-label"><span>Routing instructions</span></div>
+          <textarea class="field-textarea" rows="2" placeholder="Analyze the task and pick the best candidate..."></textarea>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">
+          Candidates
+          <span style="font-size:10px;font-weight:400;color:var(--text-tertiary);margin-left:auto;">3</span>
+        </div>
+        <div class="card-list">
+          <div class="card-item">
+            <div class="card-header">
+              <span class="card-title">Implementer</span>
+              <div class="card-actions">
+                <button class="header-btn" title="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+              </div>
+            </div>
+            <div class="card-sub">
+              <span style="color:var(--text-secondary);">agent</span> · preset: <span style="color:var(--accent);">general</span>
+            </div>
+            <div class="card-sub" style="margin-top:4px;">Handles implementation tasks: coding, file editing, testing</div>
+          </div>
+
+          <div class="card-item">
+            <div class="card-header">
+              <span class="card-title">Researcher</span>
+              <div class="card-actions">
+                <button class="header-btn" title="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+              </div>
+            </div>
+            <div class="card-sub">
+              <span style="color:var(--text-secondary);">agent</span> · preset: <span style="color:var(--accent);">researcher</span>
+            </div>
+            <div class="card-sub" style="margin-top:4px;">Deep research and analysis, read-only</div>
+          </div>
+
+          <div class="card-item">
+            <div class="card-header">
+              <span class="card-title">Code Reviewer</span>
+              <div class="card-actions">
+                <button class="header-btn" title="Remove"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+              </div>
+            </div>
+            <div class="card-sub">
+              <span style="color:var(--text-secondary);">agent</span> · preset: <span style="color:var(--accent);">code_reviewer</span>
+            </div>
+            <div class="card-sub" style="margin-top:4px;">Reviews code changes for quality and correctness</div>
+          </div>
+        </div>
+        <button class="add-btn" style="margin-top:6px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add candidate
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- SCENARIO: Top-Level Workflow Inputs           -->
+<!-- ============================================ -->
+<div class="panels-grid" id="scene-top_level" style="display:none;">
+
+  <!-- Option A: Full panel with groups -->
+  <div class="config-panel">
+    <div class="panel-header">
+      <div class="node-icon workflow">📋</div>
+      <div class="header-text">
+        <h3>Workflow Inputs</h3>
+        <div class="node-id">agent.yaml</div>
+      </div>
+      <div class="header-actions">
+        <button class="header-btn" title="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="panel-content">
+      <!-- Ungrouped top-level params -->
+      <div class="section">
+        <div class="section-label">Parameters</div>
+
+        <div class="field-inline">
+          <span class="fi-label">mode <span class="fi-hint">enum</span></span>
+          <div class="mode-group" style="gap:2px;">
+            <button class="mode-pill" style="padding:3px 8px;font-size:10px;">manual</button>
+            <button class="mode-pill active" style="padding:3px 8px;font-size:10px;">auto</button>
+            <button class="mode-pill" style="padding:3px 8px;font-size:10px;">plan</button>
+          </div>
+        </div>
+
+        <div class="field" style="margin-top:8px;">
+          <div class="field-label">
+            <span>system_prompt <span style="font-size:10px;color:var(--text-tertiary);">string</span></span>
+          </div>
+          <textarea class="field-textarea" rows="2" placeholder="Override the system prompt (empty = use default)"></textarea>
+        </div>
+
+        <div class="field" style="margin-top:8px;">
+          <div class="field-label">
+            <span>tools <span style="font-size:10px;color:var(--text-tertiary);">tools</span></span>
+          </div>
+          <div class="tag-row">
+            <span class="tag selected">tag:default <span class="tag-x">×</span></span>
+            <span class="tag" style="border-style:dashed;">+ add</span>
+          </div>
+        </div>
+
+        <div class="field" style="margin-top:8px;">
+          <div class="field-label">
+            <span>spawn_presets <span style="font-size:10px;color:var(--text-tertiary);">preset[]</span></span>
+          </div>
+          <div class="tag-row">
+            <span class="tag selected">general <span class="tag-x">×</span></span>
+            <span class="tag selected">researcher <span class="tag-x">×</span></span>
+            <span class="tag selected">code_reviewer <span class="tag-x">×</span></span>
+            <span class="tag" style="border-style:dashed;">+ add</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Group: model -->
+      <div class="section">
+        <div class="section-label">Groups</div>
+
+        <div class="param-group">
+          <div class="param-group-header">
+            <div class="pgh-left">
+              <svg class="pgh-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+              <span class="pgh-label">model</span>
+            </div>
+            <div class="pgh-right">
+              <span style="font-size:10px;color:var(--text-tertiary);">flagship</span>
+            </div>
+          </div>
+          <div class="param-group-body">
+            <div class="field-inline">
+              <span class="fi-label">tags</span>
+              <div class="tag-row">
+                <span class="tag selected" style="height:18px;font-size:10px;">flagship</span>
+              </div>
+            </div>
+            <div class="field-inline">
+              <span class="fi-label">thinking_level</span>
+              <select class="field-select-inline">
+                <option selected>Auto</option>
+                <option>High</option>
+                <option>X-High</option>
+              </select>
+            </div>
+            <div class="field-inline">
+              <span class="fi-label">temperature</span>
+              <div class="slider-row">
+                <input type="range" min="0" max="100" value="100">
+                <span class="slider-val">1.0</span>
+              </div>
+            </div>
+            <div class="field-inline">
+              <span class="fi-label">compaction_threshold</span>
+              <input class="field-number" type="number" value="185000">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Preset config -->
+      <div class="section">
+        <div class="section-label">Presets</div>
+        <div class="field-inline">
+          <span class="fi-label">Tag</span>
+          <span style="font-size:11px;color:var(--text-secondary);font-family:'SF Mono',monospace;">agent</span>
+        </div>
+        <div class="field-inline">
+          <span class="fi-label">Default</span>
+          <select class="field-select-inline">
+            <option selected>general</option>
+            <option>researcher</option>
+            <option>implementer</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- UI hints -->
+      <div class="section">
+        <div class="section-label">Display</div>
+        <div class="field-inline">
+          <span class="fi-label">mode → <code style="font-size:10px;color:var(--accent);">ui: toolbar</code></span>
+          <span style="font-size:10px;color:var(--text-tertiary);">shown as pill</span>
+        </div>
+        <div class="field-inline">
+          <span class="fi-label">system_prompt → <code style="font-size:10px;color:var(--accent);">ui: hidden</code></span>
+          <span style="font-size:10px;color:var(--text-tertiary);">hidden from chat</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Option B: Grouped with passthrough highlighting -->
+  <div class="config-panel">
+    <div class="panel-header">
+      <div class="node-icon workflow">📋</div>
+      <div class="header-text">
+        <h3>Inputs — parallel-compete.yaml</h3>
+        <div class="node-id">Nested groups with presets</div>
+      </div>
+      <div class="header-actions">
+        <button class="header-btn" title="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="panel-content">
+      <div class="section">
+        <div class="section-label">Top-Level</div>
+        <div class="field-inline">
+          <span class="fi-label">mode</span>
+          <div class="mode-group" style="gap:2px;">
+            <button class="mode-pill active" style="padding:3px 8px;font-size:10px;">auto</button>
+            <button class="mode-pill" style="padding:3px 8px;font-size:10px;">manual</button>
+            <button class="mode-pill" style="padding:3px 8px;font-size:10px;">plan</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="section" style="padding-bottom:6px;">
+        <div class="section-label">Input Groups</div>
+
+        <!-- Implementer group (expanded) -->
+        <div class="param-group">
+          <div class="param-group-header">
+            <div class="pgh-left">
+              <svg class="pgh-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+              <span class="pgh-label">implementer</span>
+            </div>
+            <div class="pgh-right">
+              <span class="pgh-preset">general</span>
+              <span style="font-size:10px;color:var(--text-tertiary);">4 params</span>
+            </div>
+          </div>
+          <div class="param-group-body">
+            <div class="field-inline">
+              <span class="fi-label">model</span>
+              <div style="display:flex;align-items:center;gap:4px;">
+                <span class="provider-dot anthropic"></span>
+                <select class="field-select-inline">
+                  <option selected>flagship</option>
+                  <option>moderate</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-inline">
+              <span class="fi-label">temperature</span>
+              <div class="slider-row">
+                <input type="range" min="0" max="100" value="70">
+                <span class="slider-val">0.7</span>
+              </div>
+            </div>
+            <div class="field">
+              <div class="field-label">
+                <span>system_prompt</span>
+              </div>
+              <textarea class="field-textarea" rows="2" placeholder="Implementer instructions...">You are an expert software engineer...</textarea>
+            </div>
+            <div class="field" style="margin-top:6px;">
+              <div class="field-label"><span>tools</span></div>
+              <div class="tag-row">
+                <span class="tag selected">tag:default <span class="tag-x">×</span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Reviewer group (collapsed) -->
+        <div class="param-group">
+          <div class="param-group-header collapsed">
+            <div class="pgh-left">
+              <svg class="pgh-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+              <span class="pgh-label">reviewer</span>
+            </div>
+            <div class="pgh-right">
+              <span class="pgh-preset">code_reviewer</span>
+              <span style="font-size:10px;color:var(--text-tertiary);">3 params</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Judge group (collapsed) -->
+        <div class="param-group">
+          <div class="param-group-header collapsed">
+            <div class="pgh-left">
+              <svg class="pgh-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+              <span class="pgh-label">judge</span>
+            </div>
+            <div class="pgh-right">
+              <span style="font-size:10px;color:var(--text-tertiary);">2 params</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- Design Notes                                  -->
+<!-- ============================================ -->
+<div class="design-notes">
+  <h2>Design Notes</h2>
+
+  <h3>Pattern: Same as Chat Input Popover</h3>
+  <ul>
+    <li>Uses the same visual language: dark panel, inline fields, section labels, mode pill groups, drill-in rows.</li>
+    <li>Sections replace the old category-divider approach with labeled groups.</li>
+    <li><code>CEL</code> toggle on fields that support expressions — same pattern as current.</li>
+    <li>Collapsible param groups for nested/group inputs (implementer, reviewer, model).</li>
+  </ul>
+
+  <h3>Key Differences from Chat Popover</h3>
+  <ul>
+    <li><strong>Config panel is a side panel</strong>, not a dropdown popover — wider (380px), persistent, scrollable.</li>
+    <li><strong>Tab bar</strong> (Config / Thread / Inject / Advanced / Outputs) stays — it's the right separation.</li>
+    <li><strong>Node identity</strong> in header with type icon, name, and ID (click-to-rename).</li>
+    <li><strong>More fields visible</strong> — workflow builder users need to see everything. No aggressive hiding.</li>
+  </ul>
+
+  <h3>call_llm: Two Options</h3>
+  <ul>
+    <li><strong>Option A (Sectioned)</strong>: Model / Prompt / Tools as distinct sections with labels. Cleaner for complex configs. Each section is self-contained.</li>
+    <li><strong>Option B (Compact)</strong>: Everything flat with divider lines. Fewer headers, more vertical density. Tools as a drill-in row. Better for simple configs.</li>
+    <li><strong>Recommendation</strong>: Option A for the builder (users need clarity). Option B style for the chat input popover (users need speed).</li>
+  </ul>
+
+  <h3>Top-Level Inputs: Two Options</h3>
+  <ul>
+    <li><strong>Option A (agent.yaml)</strong>: Simple workflow with ungrouped params + one model group. Shows the "Display" section (ui hints) — useful for workflow authors.</li>
+    <li><strong>Option B (parallel-compete.yaml)</strong>: Complex workflow with multiple nested groups, each with their own preset. Collapsed groups show preset badge + param count.</li>
+    <li>Group headers show the preset badge when a preset is selected — important visual signal.</li>
+  </ul>
+
+  <h3>Passthrough Params</h3>
+  <ul>
+    <li>When a workflow step passes inputs through via CEL (<code>{{inputs.system_prompt}}</code>), the field shows in a monospace <code>CEL</code> style.</li>
+    <li>The <code>CEL</code> toggle badge turns purple when active — same as current implementation.</li>
+    <li>Users can toggle between literal value and CEL expression on any field.</li>
+  </ul>
+
+  <h3>Router Candidates</h3>
+  <ul>
+    <li>Card-based list with workflow ref, preset, and description per candidate.</li>
+    <li>Add/remove with dashed "add" button at bottom.</li>
+    <li>Keeps the existing card pattern but with tighter spacing and better typography.</li>
+  </ul>
+</div>
+
+<script>
+function showScenario(id) {
+  document.querySelectorAll('.panels-grid').forEach(el => el.style.display = 'none');
+  document.querySelectorAll('.scenario-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('scene-' + id).style.display = 'flex';
+  // Find the button that matches this scenario and activate it
+  const btn = Array.from(document.querySelectorAll('.scenario-btn')).find(b => b.getAttribute('onclick')?.includes(id));
+  if (btn) btn.classList.add('active');
+}
+</script>
+</body>
+</html>

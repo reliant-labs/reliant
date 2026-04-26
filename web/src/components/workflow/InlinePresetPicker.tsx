@@ -129,7 +129,7 @@ export function InlinePresetPicker({
               <span className="inline-flex items-center rounded px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide bg-violet-500/20 border border-violet-500/30 flex-shrink-0">
                 Expr
               </span>
-              <span className="truncate max-w-28 font-mono">{value}</span>
+              <span className="truncate max-w-28">{value}</span>
             </>
           ) : (
             <>
@@ -156,7 +156,7 @@ export function InlinePresetPicker({
           </div>
           <div className="text-[11px] text-muted-foreground mb-2">
             This preset is set by an expression:
-            <div className="mt-1 font-mono text-[10px] break-all bg-muted/50 rounded px-1.5 py-1 text-foreground">
+            <div className="mt-1 text-[10px] break-all bg-muted/50 rounded px-1.5 py-1 text-foreground">
               {value}
             </div>
             Replacing overwrites it with a fixed preset.

@@ -100,7 +100,7 @@ export function AccountSettings() {
             <div>
               <h3 className="font-medium mb-1">Current Account</h3>
               <div className="space-y-1">
-                <p className="text-sm font-mono">{email || linkedProviders.join(', ') || 'Connected'}</p>
+                <p className="text-sm">{email || linkedProviders.join(', ') || 'Connected'}</p>
                 <p className="text-xs text-muted-foreground">
                   {linkedProviders.length > 0
                     ? `Connected via ${linkedProviders.join(', ')}`

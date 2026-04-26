@@ -85,7 +85,7 @@ export function WorktreeSettings() {
       <div>
         <div className="flex items-center gap-2 mb-2">
           <FolderGit2 className="w-5 h-5 text-foreground" />
-          <h2 className="text-xl font-semibold text-foreground">Workspace Settings</h2>
+          <h2 className="text-lg font-semibold text-foreground">Workspace Settings</h2>
         </div>
         <p className="text-sm text-muted-foreground">
           Configure how Reliant handles workspace directories when archiving worktrees.
@@ -151,7 +151,7 @@ export function WorktreeSettings() {
 
       {/* Default Cleanup Options - only shown for "always_cleanup" mode */}
       {preferences.worktree.archiveMode === 'always_cleanup' && (
-        <div className="space-y-4 pt-4 border-t border-border">
+        <div className="space-y-4 pt-5 mt-5 border-t border-border/30">
           <div>
             <h3 className="text-sm font-semibold text-foreground mb-1">
               Default Cleanup Options
@@ -242,7 +242,7 @@ export function WorktreeSettings() {
       )}
 
       {/* Branching Behavior */}
-      <div className="space-y-4 pt-4 border-t border-border">
+      <div className="space-y-4 pt-5 mt-5 border-t border-border/30">
         <div>
           <h3 className="text-sm font-semibold text-foreground mb-1">Branching Behavior</h3>
           <p className="text-xs text-muted-foreground">
@@ -291,7 +291,7 @@ export function WorktreeSettings() {
       </div>
 
       {/* File Operations Section */}
-      <div className="border-t border-border/40 pt-6 space-y-4">
+      <div className="border-t border-border/30 pt-5 mt-5 space-y-4">
         <div>
           <h3 className="text-sm font-semibold">File Operations</h3>
           <p className="text-xs text-muted-foreground mt-1">
@@ -346,7 +346,8 @@ export function WorktreeSettings() {
       </div>
 
       {/* Info Box */}
-      <div className="bg-muted/50 border border-border/50 rounded-lg p-4">
+      <div className="border-t border-border/30 pt-5 mt-5"></div>
+      <div className="bg-muted/30 border border-border/40 rounded-lg p-4">
         <div className="flex gap-3 text-xs text-muted-foreground">
           <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-primary" />
           <div className="space-y-2">

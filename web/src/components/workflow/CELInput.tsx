@@ -80,7 +80,7 @@ export function CELInput({
         <label className="block text-sm font-medium text-foreground mb-1 flex items-center gap-2">
           {label}
           {showCELIndicator && (pureExpression || isCELMode) && (
-            <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground bg-muted/80 px-1.5 py-0.5 rounded-sm font-mono">
+            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted/80 px-1.5 py-0.5 rounded-sm font-mono">
               <Code className="w-3 h-3" />
               CEL
             </span>
