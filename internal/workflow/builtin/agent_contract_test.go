@@ -19,12 +19,12 @@ import (
 // If someone changes the YAML expressions, these tests fail.
 
 const (
-	agentWhileExpr             = `((outputs.tool_calls != null && size(outputs.tool_calls) > 0) || outputs.has_feedback == true) && (inputs.max_turns == 0 || iter.iteration < inputs.max_turns)`
+	agentWhileExpr             = `(outputs.tool_calls != null && size(outputs.tool_calls) > 0) || outputs.has_feedback == true`
 	edgeCallLLMToApproval      = `nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode == 'manual'`
 	edgeCallLLMToExecuteTools  = `nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode != 'manual'`
 	edgeCallLLMToAskQuestion   = `(nodes.call_llm.tool_calls == null || size(nodes.call_llm.tool_calls) == 0) && inputs.ask`
 	edgeApprovalToExecuteTools = `nodes.approval.status == 'approved'`
-	edgeExecuteToolsToCompact  = `nodes.execute_tools.thread_token_count > inputs.compaction_threshold`
+	edgeExecuteToolsToCompact  = `nodes.execute_tools.thread_token_count > (has(inputs.model.compaction_threshold) ? inputs.model.compaction_threshold : 185000)`
 )
 
 func TestContractExpressionsMatchAgentYAML(t *testing.T) {
@@ -223,9 +223,12 @@ func TestContractAgentYAMLExpressionsEvaluate(t *testing.T) {
 						},
 					},
 					Inputs: map[string]interface{}{
-						"mode":                 "auto",
-						"ask":                  true,
-						"compaction_threshold": 185000,
+						"mode": "auto",
+						"ask":  true,
+						"model": map[string]interface{}{
+							"tags":                 []string{"flagship"},
+							"compaction_threshold": 185000,
+						},
 					},
 				}
 

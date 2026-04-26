@@ -17,25 +17,23 @@ import (
 
 // Preset represents the structure of a preset YAML file
 type Preset struct {
-	Name        string         `yaml:"name"`
-	Description string         `yaml:"description"`
-	Tag         string         `yaml:"tag"`
-	Params      map[string]any `yaml:"params"`
+	Name              string         `yaml:"name"`
+	Description       string         `yaml:"description"`
+	Tag               string         `yaml:"tag"`
+	Params            map[string]any `yaml:"params"`
+	RecommendedSkills []string       `yaml:"recommended_skills,omitempty"`
 }
 
 // ValidAgentParams are the valid input parameter names for the agent workflow.
 // These correspond to the inputs defined in agent.yaml.
 var ValidAgentParams = map[string]bool{
-	"mode":                 true,
-	"model":                true,
-	"temperature":          true,
-	"thinking_level":       true,
-	"tools":                true,
-	"spawn_presets":        true,
-	"system_prompt":        true,
-	"max_turns":            true,
-	"compaction_threshold": true,
-	"planning_prompt":      true,
+	"mode":            true,
+	"model":           true,
+	"tools":           true,
+	"spawn_presets":   true,
+	"system_prompt":   true,
+	"max_turns":       true,
+	"planning_prompt": true,
 }
 
 func TestPresetsLoad(t *testing.T) {
@@ -133,7 +131,14 @@ func TestPresetsHaveValidParams(t *testing.T) {
 	}
 }
 
-func TestAgentPresetsHaveSystemPrompt(t *testing.T) {
+func TestAgentPresetsNoSystemPrompt(t *testing.T) {
+	// Builtin presets should NOT set system_prompt — methodology comes from
+	// recommended_skills and the base prompt is injected by call_llm.
+	// Exception: workflow_builder uses system_prompt for draft ID reference.
+	allowedExceptions := map[string]bool{
+		"workflow_builder.yaml": true,
+	}
+
 	presets := loadAllPresets(t)
 
 	for name, preset := range presets {
@@ -142,17 +147,13 @@ func TestAgentPresetsHaveSystemPrompt(t *testing.T) {
 		}
 
 		t.Run(name, func(t *testing.T) {
-			systemPrompt, ok := preset.Params["system_prompt"]
-			if !ok {
-				// Some presets might intentionally not have a system prompt (e.g., using default)
-				t.Logf("preset %q has no system_prompt (using default)", preset.Name)
+			_, hasSystemPrompt := preset.Params["system_prompt"]
+			if allowedExceptions[name] {
+				// Exception presets may have system_prompt
 				return
 			}
-
-			// If present, it should be a non-empty string
-			sp, ok := systemPrompt.(string)
-			require.True(t, ok, "system_prompt should be a string")
-			assert.NotEmpty(t, sp, "system_prompt should not be empty if present")
+			assert.False(t, hasSystemPrompt,
+				"preset %q should not set system_prompt — use recommended_skills instead", preset.Name)
 		})
 	}
 }

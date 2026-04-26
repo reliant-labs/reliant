@@ -55,6 +55,10 @@ type Preset struct {
 	// These are applied to the workflow inputs when the preset is selected.
 	Params map[string]interface{} `yaml:"params" json:"params"`
 
+	// RecommendedSkills lists skill names whose bodies are auto-loaded and injected
+	// as system messages at the start of conversation history in call_llm.
+	RecommendedSkills []string `yaml:"recommended_skills,omitempty" json:"recommended_skills,omitempty"`
+
 	// Source indicates where the preset came from (builtin or project)
 	Source string `yaml:"-" json:"source,omitempty"`
 }
@@ -371,6 +375,16 @@ func validateModelParam(preset *Preset) error {
 	case string:
 		return fmt.Errorf("preset %q: model must be an object (e.g., {id: model-name} or {tags: [fast]}), string format %q is not allowed", preset.Name, v)
 	case map[string]interface{}:
+		// Validate allowed keys in model object
+		allowedKeys := map[string]bool{
+			"id": true, "tags": true, "providers": true,
+			"temperature": true, "thinking_level": true, "compaction_threshold": true,
+		}
+		for key := range v {
+			if !allowedKeys[key] {
+				return fmt.Errorf("preset %q: unknown key %q in model object (allowed: id, tags, providers, temperature, thinking_level, compaction_threshold)", preset.Name, key)
+			}
+		}
 		// Validate model ID if present
 		id, ok := v["id"].(string)
 		if !ok || id == "" {

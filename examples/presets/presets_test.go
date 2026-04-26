@@ -16,10 +16,11 @@ import (
 
 // Preset represents the structure of a preset YAML file
 type Preset struct {
-	Name        string         `yaml:"name"`
-	Description string         `yaml:"description"`
-	Tag         string         `yaml:"tag"`
-	Params      map[string]any `yaml:"params"`
+	Name              string         `yaml:"name"`
+	Description       string         `yaml:"description"`
+	Tag               string         `yaml:"tag"`
+	Params            map[string]any `yaml:"params"`
+	RecommendedSkills []string       `yaml:"recommended_skills,omitempty"`
 }
 
 // ValidAgentParams are the valid input parameter names for the agent workflow.
