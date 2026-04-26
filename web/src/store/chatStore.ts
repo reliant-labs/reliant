@@ -612,7 +612,7 @@ interface ChatStoreState {
   pauseChat: (chatId: string) => Promise<void>;
   setDiscussMode: (chatId: string, enabled: boolean) => void;
   resumeChat: (chatId: string) => Promise<void>;
-  forceYieldThread: (chatId: string, threadId: string) => Promise<void>;
+
   refreshChat: (chatId: string) => Promise<void>;
   forceRecalculateBusyState: (chatId: string) => void;
   forceResetChatToIdle: (chatId: string) => void;
@@ -3054,16 +3054,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       logger.error("Failed to cancel chat:", error);
       // UI state already updated optimistically, so no need to update again
       // The WebSocket will eventually send the actual cancelled status
-    }
-  },
-
-  // Force-yield a thread - sends signal to stop a sub-thread and return to parent
-  forceYieldThread: async (chatId: string, threadId: string) => {
-    try {
-      const { chatGrpc } = await import("../api/chat-grpc");
-      await chatGrpc.forceYieldThread(chatId, threadId);
-    } catch (error) {
-      logger.error("Failed to force-yield thread:", error instanceof Error ? error.message : error);
     }
   },
 

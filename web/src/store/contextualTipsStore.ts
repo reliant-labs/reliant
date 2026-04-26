@@ -33,7 +33,6 @@ interface ContextualTipsStoreState {
   tipState: Record<ContextualTipId, ContextualTipStateRecord>;
   featureEngagement: {
     threadInteraction: boolean;
-    threadForceYield: boolean;
     branching: boolean;
     params: boolean;
   };
@@ -44,7 +43,7 @@ interface ContextualTipsStoreState {
   dismissTip: (tipId: ContextualTipId) => Promise<void>;
   disableAllTips: () => Promise<void>;
   markTipEngaged: (tipId: ContextualTipId) => Promise<void>;
-  markFeatureEngaged: (feature: "threadInteraction" | "threadForceYield" | "branching" | "params") => Promise<void>;
+  markFeatureEngaged: (feature: "threadInteraction" | "branching" | "params") => Promise<void>;
   subscribeToSources: () => () => void;
   reset: () => void;
 }
@@ -75,7 +74,6 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
   tipState: createDefaultContextualTipState(),
   featureEngagement: {
     threadInteraction: false,
-    threadForceYield: false,
     branching: false,
     params: false,
   },
@@ -165,7 +163,6 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
         hasNonMainWorktree: worktreeState
           .worktrees.some((worktree) => !worktree.is_main && !worktree.deleted_at),
         threadInteractionEngaged: state.featureEngagement.threadInteraction || Boolean(state.tipState["spawned-thread-intro"].engagedAt),
-        threadForceYieldEngaged: state.featureEngagement.threadForceYield,
         branchingEngaged: state.featureEngagement.branching || Boolean(state.tipState["chat-branching"].engagedAt),
         paramsEngaged: state.featureEngagement.params,
         now: Date.now(),
@@ -298,16 +295,11 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
       void get().markTipEngaged("spawned-thread-intro");
       void get().markTipEngaged("spawned-thread-interact");
     };
-    const handleThreadForceYield = () => {
-      void get().markFeatureEngaged("threadForceYield");
-      void get().markTipEngaged("spawned-thread-interact");
-    };
     const handleParamsOpened = () => {
       void get().markFeatureEngaged("params");
     };
 
     window.addEventListener("contextual-tip-thread-interacted", handleThreadInteracted);
-    window.addEventListener("contextual-tip-thread-force-yield", handleThreadForceYield);
     window.addEventListener("contextual-tip-params-opened", handleParamsOpened);
 
     return () => {
@@ -317,7 +309,6 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
       unsubscribeWorktrees();
       unsubscribeOnboarding();
       window.removeEventListener("contextual-tip-thread-interacted", handleThreadInteracted);
-      window.removeEventListener("contextual-tip-thread-force-yield", handleThreadForceYield);
       window.removeEventListener("contextual-tip-params-opened", handleParamsOpened);
     };
   },
@@ -333,7 +324,6 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
       tipState: createDefaultContextualTipState(),
       featureEngagement: {
         threadInteraction: false,
-        threadForceYield: false,
         branching: false,
         params: false,
       },

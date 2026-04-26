@@ -15,7 +15,7 @@
 import React, { useMemo, useCallback, useRef, useState, useEffect, memo } from "react";
 import { MessageRole } from "../../../gen/reliant/v1/chat_pb";
 import { Virtuoso, type VirtuosoHandle, type ListRange } from "react-virtuoso";
-import { GitBranch, ArrowRightLeft, Plus, ArrowUp, Route, ArrowLeft } from "lucide-react";
+import { GitBranch, ArrowRightLeft, Plus, ArrowUp, Route } from "lucide-react";
 import { Tooltip } from "../../ui/Tooltip";
 import { ChatMessage } from "../ChatMessage";
 import { CompactionMessage, isCompactionMessage } from "../CompactionMessage";
@@ -681,27 +681,6 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     }
   }, [pinnedUserMessageIdx, virtuosoRef]);
 
-  // Force-yield: resolve spawn toolCallId → threadId, then call store method
-  const forceYieldThread = useChatStore((s) => s.forceYieldThread);
-  const handleForceYield = useCallback((toolCallId: string) => {
-    if (!workflowExecution || !chatId) return;
-    // Walk the workflow tree to find the child spawned by this tool call.
-    // Backend creates spawn nodes as "spawn-" + toolCallID.
-    const spawnNodeId = `spawn-${toolCallId}`;
-    function findThread(wf: WorkflowExecution): string | undefined {
-      if (wf.spawnedByNodeId === spawnNodeId) return wf.thread;
-      for (const child of wf.children) {
-        const found = findThread(child);
-        if (found) return found;
-      }
-      return undefined;
-    }
-    const threadId = findThread(workflowExecution);
-    if (threadId) {
-      forceYieldThread(chatId, threadId);
-    }
-  }, [workflowExecution, chatId, forceYieldThread]);
-
   // Get the pinned user message data
   const pinnedMessage = pinnedUserMessageIdx !== null ? flatItems[pinnedUserMessageIdx] : null;
   const pinnedUserMsg = pinnedMessage?.type === "message" ? pinnedMessage.message : null;
@@ -878,7 +857,6 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
           isLatestMessage={false}
           chatId={chatId}
           isStreaming={false}
-          onForceYield={handleForceYield}
           onSelectThread={onSelectThread}
         />
       );
@@ -908,13 +886,12 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
             isLatestMessage={isLastItem}
             chatId={chatId}
             isStreaming={isStreaming && isLastItem}
-            onForceYield={handleForceYield}
             onSelectThread={onSelectThread}
           />
         )}
       </div>
     );
-  }, [approvals, chatId, isStreaming, handleForceYield, onSelectThread]);
+  }, [approvals, chatId, isStreaming, onSelectThread]);
 
   // Wrap each Virtuoso item in the padding/max-width container
   const wrappedRenderItem = useCallback((index: number, item: (typeof flatItems)[number]) => {
@@ -953,29 +930,6 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     },
   }), []);
 
-  // Detect if viewing a spawn thread (for back-navigation bar)
-  const spawnThreadInfo = useMemo(() => {
-    if (!selectedThreads || selectedThreads.size === 0) return null;
-    const threadId = Array.from(selectedThreads)[0];
-    // Check workflow execution tree
-    const { displays } = buildWorkflowLookups(workflowExecution, chatId);
-    // Augment with streaming data
-    for (const at of activeThreads) {
-      const existing = displays.get(at.thread);
-      if (existing) {
-        if (at.thread_title && existing.name === "Thread") {
-          existing.name = formatNodeId(at.thread_title);
-        }
-        if (at.spawned_by_node_id === "spawn_tool") {
-          existing.isSpawn = true;
-        }
-      }
-    }
-    const display = displays.get(threadId);
-    if (!display?.isSpawn) return null;
-    return { title: display.name };
-  }, [selectedThreads, workflowExecution, chatId, activeThreads]);
-
   if (flatItems.length === 0) {
     return (
       <div className="p-8 text-center text-muted-foreground">No messages yet</div>
@@ -984,20 +938,6 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
 
   return (
     <div ref={timelineContainerRef} style={{ height: "100%", position: "relative" }}>
-      {/* Back to main chat bar when viewing a spawn thread */}
-      {spawnThreadInfo && (
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/30 border-b border-border/30 text-xs text-muted-foreground">
-          <button
-            onClick={() => onSelectThread?.(null)}
-            className="flex items-center gap-1 hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="w-3 h-3" />
-            Back to main chat
-          </button>
-          <span className="text-muted-foreground/50">&middot;</span>
-          <span className="truncate">{spawnThreadInfo.title}</span>
-        </div>
-      )}
       {/* Pinned user message overlay */}
       {pinnedUserMsg && (
         <div
@@ -1030,7 +970,6 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
                 isLatestMessage={false}
                 chatId={chatId}
                 isStreaming={false}
-                onForceYield={handleForceYield}
                 onSelectThread={onSelectThread}
               />
             </div>
