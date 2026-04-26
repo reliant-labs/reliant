@@ -14,6 +14,7 @@ const (
 	RefetchWorkflowExecutions RefetchType = "workflow_executions"
 	RefetchConfigHealth       RefetchType = "config_health"
 	RefetchPlanTasks          RefetchType = "plan_tasks"
+	RefetchFileTree           RefetchType = "file_tree"
 )
 
 // RefetchData is the JSON payload for refetch events.
