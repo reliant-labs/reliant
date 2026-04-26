@@ -13,7 +13,7 @@
  */
 
 import React, { useMemo, useCallback, useRef, useState, useEffect, memo } from "react";
-import { MessageRole } from "../../../gen/reliant/v1/chat_pb";
+import { MessageRole, DisplayStyle } from "../../../gen/reliant/v1/chat_pb";
 import { Virtuoso, type VirtuosoHandle, type ListRange } from "react-virtuoso";
 import { GitBranch, ArrowRightLeft, Plus, ArrowUp, Route } from "lucide-react";
 import { Tooltip } from "../../ui/Tooltip";
@@ -400,6 +400,9 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       if (msg.role === MessageRole.ASSISTANT) {
         seenAssistantOnThread.add(thread);
       }
+
+      // Skip hidden messages — these are for LLM context only, not shown to users.
+      if (msg.displayStyle === DisplayStyle.HIDDEN) continue;
 
       // Skip assistant messages with no visible content — they render as zero-height
       // elements and cause Virtuoso's "Zero-sized element" warning + layout thrashing.

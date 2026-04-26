@@ -40,6 +40,7 @@ import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProcessStore } from "../../store/processStore";
 import { useProjectStore } from "../../store/projectStore";
 import { cn, toTitleCase } from "../../lib/utils";
+import { toast } from "../../lib/toast-manager";
 import { Tooltip } from "../ui/Tooltip";
 import { Button } from "../ui/Button";
 import { ContextMenu } from "../ui/ContextMenu";
@@ -1218,6 +1219,19 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
 
   const handleArchiveChat = useCallback(async (chatId: string) => {
     await deleteChat(chatId);
+    toast.notify("Chat archived", {
+      action: {
+        label: "Undo",
+        onClick: async () => {
+          try {
+            const { api } = await import("../../api/client");
+            await api.chatsV2.unarchive(chatId);
+          } catch (error) {
+            console.error("Failed to restore chat:", error);
+          }
+        },
+      },
+    });
   }, [deleteChat]);
 
   // Scroll active chat into view when it changes (e.g., via keyboard navigation)
