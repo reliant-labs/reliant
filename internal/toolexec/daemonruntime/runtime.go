@@ -63,10 +63,12 @@ type daemonClient struct {
 	sendCh   chan *reliantv1.DaemonMessage
 	sendDone chan struct{} // closed when runSender exits
 
-	cancelMu     sync.Mutex
-	cancelByReq  map[string]context.CancelFunc
-	watchersMu   sync.Mutex
-	watchersByPr map[string]context.CancelFunc
+	cancelMu       sync.Mutex
+	cancelByReq    map[string]context.CancelFunc
+	watchersMu     sync.Mutex
+	watchersByPr   map[string]context.CancelFunc
+	fsWatchersMu   sync.Mutex
+	fsWatchersByPr map[string]context.CancelFunc
 
 	terminalPumps     *terminalPumpTracker
 	processOutputSubs *processOutputSubTracker
@@ -161,6 +163,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 		capabilities:      caps,
 		cancelByReq:       make(map[string]context.CancelFunc),
 		watchersByPr:      make(map[string]context.CancelFunc),
+		fsWatchersByPr:    make(map[string]context.CancelFunc),
 		terminalPumps:     newTerminalPumpTracker(),
 		processOutputSubs: newProcessOutputSubTracker(),
 	}, nil
@@ -702,6 +705,7 @@ func (d *daemonClient) startProjectWatcher(ctx context.Context, projectPath stri
 	d.watchersMu.Unlock()
 
 	go d.runProjectWatcher(watchCtx, projectPath, includeInitial)
+	d.startFileTreeWatcher(ctx, projectPath)
 }
 
 func (d *daemonClient) stopProjectWatcher(projectPath string) {
@@ -712,6 +716,7 @@ func (d *daemonClient) stopProjectWatcher(projectPath string) {
 		cancel()
 	}
 	delete(d.watchersByPr, projectPath)
+	d.stopFileTreeWatcher(projectPath)
 }
 
 func (d *daemonClient) stopAllWatchers() {
@@ -729,10 +734,49 @@ func (d *daemonClient) stopAllWatchers() {
 // output subscriptions. Called on disconnect / context cancellation.
 func (d *daemonClient) stopAllStreams() {
 	d.stopAllWatchers()
+	d.stopAllFileTreeWatchers()
 	d.terminalPumps.stopAll()
 	d.processOutputSubs.stopAll()
 	if terminalManager != nil {
 		terminalManager.Cleanup()
+	}
+}
+
+func (d *daemonClient) startFileTreeWatcher(ctx context.Context, projectPath string) {
+	projectPath = normalizePath(projectPath)
+	if projectPath == "" {
+		return
+	}
+
+	d.fsWatchersMu.Lock()
+	if existing := d.fsWatchersByPr[projectPath]; existing != nil {
+		existing()
+	}
+	watchCtx, cancel := context.WithCancel(ctx)
+	d.fsWatchersByPr[projectPath] = cancel
+	d.fsWatchersMu.Unlock()
+
+	go d.runFileTreeWatcher(watchCtx, projectPath)
+}
+
+func (d *daemonClient) stopFileTreeWatcher(projectPath string) {
+	projectPath = normalizePath(projectPath)
+	d.fsWatchersMu.Lock()
+	defer d.fsWatchersMu.Unlock()
+	if cancel := d.fsWatchersByPr[projectPath]; cancel != nil {
+		cancel()
+	}
+	delete(d.fsWatchersByPr, projectPath)
+}
+
+func (d *daemonClient) stopAllFileTreeWatchers() {
+	d.fsWatchersMu.Lock()
+	defer d.fsWatchersMu.Unlock()
+	for projectPath, cancel := range d.fsWatchersByPr {
+		if cancel != nil {
+			cancel()
+		}
+		delete(d.fsWatchersByPr, projectPath)
 	}
 }
 

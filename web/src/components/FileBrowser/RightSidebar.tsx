@@ -23,6 +23,7 @@ import { Tooltip } from "../ui/Tooltip";
 import { cn } from "../../lib/utils";
 import { logger } from "../../lib/logger";
 import { useGitStatusRefreshTrigger } from "../../store/gitStatusStore";
+import { subscribeToRefetch } from "../../store/refetchStore";
 import type { FileNode } from "./index";
 
 interface RightSidebarProps {
@@ -240,6 +241,20 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
       fileTreeRef.current.refresh();
     }
   }, [gitRefreshTrigger]);
+
+  // Refresh file tree on daemon filesystem poll changes and agent tool calls
+  useEffect(() => {
+    const unsubFs = subscribeToRefetch("file_tree", () => {
+      fileTreeRef.current?.refresh();
+    });
+    const unsubWt = subscribeToRefetch("worktree_changes", () => {
+      fileTreeRef.current?.refresh();
+    });
+    return () => {
+      unsubFs();
+      unsubWt();
+    };
+  }, []);
 
   const handleFileSelect = (file: FileNode) => {
     if (file.type === "file" && currentProject?.id) {

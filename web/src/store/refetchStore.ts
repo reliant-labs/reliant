@@ -19,7 +19,8 @@ export type RefetchType =
   | "worktree_changes"
   | "workflow_executions"
   | "config_health"
-  | "plan_tasks";
+  | "plan_tasks"
+  | "file_tree";
 
 export interface RefetchEvent {
   type: RefetchType;
@@ -48,6 +49,7 @@ export const useRefetchStore = create<RefetchStoreState>()(() => ({
     workflow_executions: 0,
     config_health: 0,
     plan_tasks: 0,
+    file_tree: 0,
   },
 }));
 

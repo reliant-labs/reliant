@@ -603,6 +603,11 @@ func (s *ToolsDaemonService) handleIncoming(ctx context.Context, conn *daemonCon
 				conn.dispatchProcessOutputEvent(evt)
 			}
 
+		case *reliantv1.DaemonMessage_FileSystemChanged:
+			if err := s.handleFileSystemChanged(ctx, conn, m.FileSystemChanged); err != nil {
+				logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to handle filesystem changed", "error", err)
+			}
+
 		default:
 			logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Unknown message type", "userID", conn.userID)
 		}
@@ -695,6 +700,29 @@ func (s *ToolsDaemonService) handleLoadProjectConfigsResponse(ctx context.Contex
 	}
 
 	return s.persistProjectConfigSnapshot(ctx, conn, resp.Snapshot, true)
+}
+
+func (s *ToolsDaemonService) handleFileSystemChanged(ctx context.Context, conn *daemonConnection, msg *reliantv1.FileSystemChanged) error {
+	if msg == nil {
+		return nil
+	}
+
+	projectPath := normalizeProjectPath(msg.ProjectPath)
+	if projectPath == "" {
+		return nil
+	}
+
+	project, err := s.database.GetProjectByPath(ctx, projectPath)
+	if err != nil {
+		return nil // project might not exist yet, that's fine
+	}
+	if project == nil {
+		return nil
+	}
+
+	return s.database.EmitUserRefetch(ctx, conn.userID, db.RefetchFileTree, db.RefetchOpts{
+		ProjectID: &project.ID,
+	})
 }
 
 func (s *ToolsDaemonService) handleProjectConfigDelta(ctx context.Context, conn *daemonConnection, delta *reliantv1.ProjectConfigDelta) error {
