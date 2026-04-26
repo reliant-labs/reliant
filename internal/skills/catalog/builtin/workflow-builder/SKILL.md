@@ -92,8 +92,8 @@ Key rules:
 
 ### Response tools
 - Force structured LLM output for routing/classification
-- `builtin://agent` yields when no tool calls remain
-- `builtin://structured-agent` yields when the response tool is called
+- `builtin://agent` returns when no tool calls remain (use `ask: true` to prompt for user feedback first)
+- `builtin://structured-agent` returns when the response tool is called (use `ask: true` to prompt for user feedback first)
 - Access structured output via `nodes.<execute_tools_id>.response_data.<tool_name>`
 
 ### Conditions on nodes

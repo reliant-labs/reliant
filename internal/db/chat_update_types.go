@@ -34,10 +34,10 @@ var (
 	UpdateTypeNodeExecution     UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_NODE_EXECUTION
 	UpdateTypeExecutionLog      UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_EXECUTION_LOG
 	UpdateTypeWorkflowExecution UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_WORKFLOW_EXECUTION
-	UpdateTypeYield             UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_YIELD
 	UpdateTypeInfo              UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_INFO
 	UpdateTypeWarning           UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_WARNING
 	UpdateTypeRefetch           UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_REFETCH
+	UpdateTypeQuestion          UpdateType = 18 // CHAT_UPDATE_TYPE_QUESTION (proto codegen pending)
 )
 
 // ============================================================================
@@ -87,23 +87,6 @@ const (
 )
 
 // ============================================================================
-// YIELD UPDATES
-// ============================================================================
-
-// YieldUpdate represents a yield state change for interactive agent loops
-type YieldUpdate struct {
-	UpdateType UpdateType `json:"update_type"` // Always "yield"
-	YieldID    string     `json:"yield_id"`
-	ChatID     string     `json:"chat_id"`
-	WorkflowID string     `json:"workflow_id"`
-	StepID     string     `json:"step_id"`
-	Status     string     `json:"status"`
-	Metadata   string     `json:"metadata,omitempty"`
-}
-
-func (u YieldUpdate) Type() UpdateType { return UpdateTypeYield }
-
-// ============================================================================
 // TYPED UPDATE INTERFACE
 // ============================================================================
 
@@ -122,8 +105,30 @@ func MarshalUpdate(update TypedChatUpdate) (string, error) {
 }
 
 // ============================================================================
+// QUESTION UPDATES
+// ============================================================================
+
+// QuestionUpdate represents a question status update
+type QuestionUpdate struct {
+	UpdateType UpdateType `json:"update_type"`
+	QuestionID string     `json:"question_id"`
+	ChatID     string     `json:"chat_id"`
+	WorkflowID string     `json:"workflow_id"`
+	StepID     string     `json:"step_id"`
+	Status     string     `json:"status"`
+	Metadata   string     `json:"metadata,omitempty"`
+}
+
+func (u QuestionUpdate) Type() UpdateType { return UpdateTypeQuestion }
+
+// ============================================================================
 // ENTITY ID GENERATORS
 // ============================================================================
+
+// EntityIDForQuestion generates entity ID for question updates
+func EntityIDForQuestion(questionID string) string {
+	return "question-" + questionID + "-" + formatTimestamp()
+}
 
 // EntityIDForToolCall generates entity ID for tool call updates
 func EntityIDForToolCall(contentBlockID string) string {
@@ -138,11 +143,6 @@ func EntityIDForToolCancelled(toolCallID string) string {
 // EntityIDForToolBackgrounded generates entity ID for backgrounded tool updates
 func EntityIDForToolBackgrounded(toolCallID string) string {
 	return "tool-backgrounded-" + toolCallID
-}
-
-// EntityIDForYield generates entity ID for yield updates
-func EntityIDForYield(yieldID string) string {
-	return yieldID
 }
 
 // formatTimestamp returns a nanosecond timestamp for entity ID uniqueness

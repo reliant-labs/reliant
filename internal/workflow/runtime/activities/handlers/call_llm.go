@@ -447,10 +447,6 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			activity.GetLogger(ctx).Info("[CallLLM] Skipping spawn tool for spawn-spawned workflow", "thread", thread)
 		}
 
-		// Add ask_user tool when included in tool_filter
-		if toolsResult.AskUserEnabled {
-			availableTools = append(availableTools, getAskUserTool())
-		}
 	}
 
 	// Add custom response tool defined in the workflow
@@ -776,7 +772,6 @@ streamLoop:
 type toolsWithSpawnResult struct {
 	Tools            []tools.Tool
 	SpawnConfigs     []tools.SpawnFilterConfig
-	AskUserEnabled   bool     // Whether ask_user was present in tool_filter
 	FailedMCPServers []string // Names of MCP servers that failed to load
 	AllMCPToolNames  []string // All available MCP tool names (for deferred loading announcement)
 }
@@ -964,7 +959,6 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 	return toolsWithSpawnResult{
 		Tools:            toolsList,
 		SpawnConfigs:     filterResult.SpawnConfigs,
-		AskUserEnabled:   filterResult.AskUserEnabled,
 		FailedMCPServers: failedMCPServers,
 		AllMCPToolNames:  mcpToolNames,
 	}
@@ -1075,77 +1069,6 @@ Parameters:
 }
 
 // getAskUserTool returns a schema-only tool that lets the LLM ask the user a question.
-func getAskUserTool() tools.Tool {
-	return tools.NewSchemaOnlyTool(
-		tools.ToolAskUser,
-		`Ask the user one or more questions and wait for their responses. Use this when you need to:
-1. Clarify ambiguous instructions
-2. Get user preferences or decisions
-3. Offer choices about implementation direction
-4. Confirm before taking significant actions
-
-Usage notes:
-- The user will always have an option to provide freetext input in addition to any predefined options.
-- If you recommend a specific option, list it first and add "(Recommended)" to the label.
-- Use allow_multiple: true when choices are not mutually exclusive.
-- Group related questions in a single call (up to 4 questions).`,
-		map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"questions": map[string]interface{}{
-					"type":        "array",
-					"description": "Questions to ask the user (1-4 questions).",
-					"minItems":    1,
-					"maxItems":    4,
-					"items": map[string]interface{}{
-						"type": "object",
-						"properties": map[string]interface{}{
-							"question": map[string]interface{}{
-								"type":        "string",
-								"description": "The question to ask. Should be clear and specific.",
-							},
-							"options": map[string]interface{}{
-								"type":        "array",
-								"description": "Available choices. The user can always provide freetext instead.",
-								"minItems":    2,
-								"maxItems":    6,
-								"items": map[string]interface{}{
-									"type": "object",
-									"properties": map[string]interface{}{
-										"label": map[string]interface{}{
-											"type":        "string",
-											"description": "Short display text for this option (1-5 words).",
-										},
-										"description": map[string]interface{}{
-											"type":        "string",
-											"description": "Explanation of what this option means.",
-										},
-										"preview": map[string]interface{}{
-											"type":        "string",
-											"description": "Optional preview content (code snippet, mockup) rendered as markdown.",
-										},
-									},
-									"required":             []string{"label", "description"},
-									"additionalProperties": false,
-								},
-							},
-							"allow_multiple": map[string]interface{}{
-								"type":        "boolean",
-								"description": "If true, the user can select multiple options. Default is false.",
-								"default":     false,
-							},
-						},
-						"required":             []string{"question", "options"},
-						"additionalProperties": false,
-					},
-				},
-			},
-			"required":             []string{"questions"},
-			"additionalProperties": false,
-		},
-	)
-}
-
 // getSystemPrompts generates system prompts for the LLM
 func (a *CallLLMActivity) getSystemPrompts(
 	chat *db.Chat,

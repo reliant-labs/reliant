@@ -9,7 +9,7 @@
 # - When denied, workflow stops after execute_audit (no save_approved_response or execute_tools)
 # - execute_tools only runs when main_agent has tool_calls and audit is approved
 # - Loop continues while tool_calls is not empty
-# - Loop yields when max_turns > 0 and iter.iteration >= max_turns
+# - Loop asks when max_turns > 0 and iter.iteration >= max_turns
 
 ---
 # Happy path: Agent responds with text only, no tool calls, loop exits after first iteration
@@ -522,16 +522,16 @@ expect:
     - audited_loop.execute_tools
 
 ---
-# Max turns limit scenario - loop yields when max_turns is reached
+# Max turns limit scenario - loop asks when max_turns is reached
 #
-# With the new yield-based max_turns behavior:
+# With the new ask-based max_turns behavior:
 # - The while condition only checks tool_calls (not max_turns)
-# - max_turns triggers yield instead of stopping the loop
+# - max_turns triggers ask instead of stopping the loop
 # - With max_turns=2, iterations 0 and 1 run with tool_calls
 # - A 3rd iteration starts, the LLM returns no tool_calls, loop exits
 # - The max_turns_notification edge fires because _iterations (3) >= max_turns (2)
 name: max_turns_limit_reached
-description: Loop yields when iter.iteration reaches inputs.max_turns, runs one extra iteration
+description: Loop asks when iter.iteration reaches inputs.max_turns, runs one extra iteration
 inputs:
   max_turns: 2
 events:
@@ -628,7 +628,7 @@ events:
         - tool_call_id: call_2
           content: "package main"
       thread_token_count: 700
-  # Iteration 2: yield fires (iter >= max_turns), LLM returns no tool calls, loop exits
+  # Iteration 2: ask fires (iter >= max_turns), LLM returns no tool calls, loop exits
   - node: audited_loop.main_agent
     output:
       message:

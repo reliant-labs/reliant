@@ -13,7 +13,6 @@ import {
   ChatState,
 } from "../gen/reliant/v1/chat_pb";
 import { ApprovalStatus } from "../gen/reliant/v1/approval_pb";
-import { YieldStatus } from "../gen/reliant/v1/yield_pb";
 import type { ProcessedMessage } from "../lib/messageProcessor";
 import { processMessage } from "../lib/messageProcessor";
 
@@ -32,8 +31,9 @@ import type {
   StreamingDelta,
   RunOutputUpdate,
   NodeExecutionUpdate,
-  YieldUpdate,
+  QuestionUpdate,
 } from "../types/streaming";
+import { questionGrpc, type QuestionInfo } from "../api/question-grpc";
 
 // ToolExecutionStateUpdate is a CLIENT-SIDE type synthesized from ToolCallUpdate.
 // The backend sends tool_call updates, which the frontend converts to this format
@@ -56,7 +56,6 @@ export interface ToolExecutionStateUpdate {
   timestamp: string;
 }
 import { triggerRefetch, type RefetchType } from "../store/refetchStore";
-import { yieldGrpc, type YieldInfo } from "../api/yield-grpc";
 
 import { useProjectStore } from "./projectStore";
 import { useActivityStore, ChatActivity } from "./activityStore";
@@ -337,8 +336,8 @@ function evictChatData(chatId: string, store: { get: () => ChatStoreState; set: 
   const newProcessedMessages = { ...state.processedMessages };
   const newApprovals = { ...state.approvals };
   const newPendingApprovals = { ...state.pendingApprovals };
-  const newPendingYields = { ...state.pendingYields };
   const newDiscussMode = { ...state.discussMode };
+  const newPendingQuestions = { ...state.pendingQuestions };
   const newErrorEvents = { ...state.errorEvents };
   const newInfoEvents = { ...state.infoEvents };
   const newRunOutputs = { ...state.runOutputs };
@@ -353,8 +352,8 @@ function evictChatData(chatId: string, store: { get: () => ChatStoreState; set: 
   delete newProcessedMessages[chatId];
   delete newApprovals[chatId];
   delete newPendingApprovals[chatId];
-  delete newPendingYields[chatId];
   delete newDiscussMode[chatId];
+  delete newPendingQuestions[chatId];
   delete newErrorEvents[chatId];
   delete newInfoEvents[chatId];
   delete newRunOutputs[chatId];
@@ -370,8 +369,8 @@ function evictChatData(chatId: string, store: { get: () => ChatStoreState; set: 
     processedMessages: newProcessedMessages,
     approvals: newApprovals,
     pendingApprovals: newPendingApprovals,
-    pendingYields: newPendingYields,
     discussMode: newDiscussMode,
+    pendingQuestions: newPendingQuestions,
     errorEvents: newErrorEvents,
     infoEvents: newInfoEvents,
     runOutputs: newRunOutputs,
@@ -510,8 +509,8 @@ interface ChatStoreState {
   messages: Record<string, Message[]>;
   approvals: Record<string, ToolApprovalRequest[]>;
   pendingApprovals: Record<string, ToolApprovalRequest[]>;
-  pendingYields: Record<string, YieldInfo | null>;
   discussMode: Record<string, boolean>;
+  pendingQuestions: Record<string, QuestionInfo | null>;
   errorEvents: Record<string, ErrorUpdate[]>; // Error events from workflow/activity failures
   infoEvents: Record<string, InfoUpdate[]>; // Info notifications (shown to user, not saved to thread)
   runOutputs: Record<string, RunOutputUpdate[]>; // Run step outputs from workflow execution
@@ -613,6 +612,7 @@ interface ChatStoreState {
   setDiscussMode: (chatId: string, enabled: boolean) => void;
   resumeChat: (chatId: string) => Promise<void>;
 
+  resolveQuestion: (chatId: string, questionId: string, action: string, responseData?: string) => Promise<void>;
   refreshChat: (chatId: string) => Promise<void>;
   forceRecalculateBusyState: (chatId: string) => void;
   forceResetChatToIdle: (chatId: string) => void;
@@ -634,7 +634,6 @@ interface ChatStoreState {
     denialReason?: string,
     actionTaken?: string,
   ) => Promise<void>;
-  resolveYield: (chatId: string, yieldId: string, action: string, responseData?: string) => Promise<void>;
   approveAllPending: (chatId: string, actionTaken?: string) => Promise<void>;
   denyAllPending: (
     chatId: string,
@@ -752,8 +751,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   messages: {},
   approvals: {},
   pendingApprovals: {},
-  pendingYields: {},
   discussMode: {},
+  pendingQuestions: {},
   errorEvents: {},
   infoEvents: {},
   runOutputs: {},
@@ -1129,7 +1128,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         messages: { ...state.messages, [chatId]: [] },
         approvals: { ...state.approvals, [chatId]: [] },
         pendingApprovals: { ...state.pendingApprovals, [chatId]: [] },
-        pendingYields: { ...state.pendingYields, [chatId]: null },
         toolCallStates: { ...state.toolCallStates, [chatId]: new Map() },
         processedMessages: { ...state.processedMessages, [chatId]: new Map() },
       };
@@ -1164,8 +1162,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     const newMessages = { ...state.messages };
     const newApprovals = { ...state.approvals };
     const newPendingApprovals = { ...state.pendingApprovals };
-    const newPendingYields = { ...state.pendingYields };
     const newDiscussMode = { ...state.discussMode };
+    const newPendingQuestions = { ...state.pendingQuestions };
     const newToolCallStates = { ...state.toolCallStates };
     const newProcessedMessages = { ...state.processedMessages };
     const newErrorEvents = { ...state.errorEvents };
@@ -1180,8 +1178,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     delete newMessages[chatId];
     delete newApprovals[chatId];
     delete newPendingApprovals[chatId];
-    delete newPendingYields[chatId];
     delete newDiscussMode[chatId];
+    delete newPendingQuestions[chatId];
     delete newToolCallStates[chatId];
     delete newProcessedMessages[chatId];
     delete newErrorEvents[chatId];
@@ -1199,8 +1197,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       messages: newMessages,
       approvals: newApprovals,
       pendingApprovals: newPendingApprovals,
-      pendingYields: newPendingYields,
       discussMode: newDiscussMode,
+      pendingQuestions: newPendingQuestions,
       toolCallStates: newToolCallStates,
       processedMessages: newProcessedMessages,
       errorEvents: newErrorEvents,
@@ -1315,7 +1313,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         messages: { ...state.messages, [chatId]: [] },
         approvals: { ...state.approvals, [chatId]: [] },
         pendingApprovals: { ...state.pendingApprovals, [chatId]: [] },
-        pendingYields: { ...state.pendingYields, [chatId]: null },
       });
     } else {
       // For existing chats with cached data, preserve messages and approvals
@@ -1408,29 +1405,19 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       }
     })();
 
-    // Load pending yield from API (fire-and-forget)
+    // Load pending question for this chat (fire-and-forget)
     void (async () => {
       try {
-        const pendingYield = await yieldGrpc.getPendingYield(chat.id);
+        const pendingQuestion = await questionGrpc.getPendingQuestion(chat.id);
         const state = get();
         set({
-          pendingYields: {
-            ...state.pendingYields,
-            [chat.id]: pendingYield,
+          pendingQuestions: {
+            ...state.pendingQuestions,
+            [chat.id]: pendingQuestion,
           },
         });
-        if (pendingYield) {
-          logger.debug("[ChatStore] Loaded pending yield", {
-            chatId: chat.id.slice(0, 8),
-            yieldId: pendingYield.yield_id.slice(0, 8),
-          });
-        }
       } catch (error) {
-        logger.error("[ChatStore] Failed to load pending yield:", error);
-        Sentry.captureMessage('Failed to load pending yield', {
-          level: 'warning',
-          tags: { component: 'chat', operation: 'load_pending_yield' },
-        });
+        logger.error("[ChatStore] Failed to load pending question:", error);
       }
     })();
 
@@ -1542,8 +1529,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // Model is now configured via workflow params or presets, not global preferences
       const workflowParams = options?.workflowParams || {};
 
-      // If there's a pending yield, include its ID so the backend resolves it
-      const pendingYield = get().pendingYields[chatId];
       const isDiscuss = options?.discuss || get().discussMode[chatId];
 
       const sendOptions = {
@@ -1560,7 +1545,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           options.systemMessages.length > 0 && {
             systemMessages: options.systemMessages,
           }),
-        ...(pendingYield && !isDiscuss && { yield_id: pendingYield.yield_id }),
         ...(isDiscuss && { discuss: true }),
       };
 
@@ -1966,17 +1950,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         const nodeExecutionUpdates = updates.filter(
           (u): u is NodeExecutionUpdate => u.update_type === "node_execution",
         );
-        const yieldUpdates = updates.filter(
-          (u): u is YieldUpdate => u.update_type === "yield",
-        );
-        if (yieldUpdates.length > 0) {
-          logger.info("[ChatStore] Stream received yield updates", {
-            chatId: chatId.slice(0, 8),
-            count: yieldUpdates.length,
-            yields: yieldUpdates.map(y => ({ id: y.yield_id?.slice(0, 8), status: y.status })),
-          });
-        }
-
         // Handle refetch signals from the chat stream (e.g., workflow_executions, plan_tasks)
         // After convertChatUpdateData, the JSON data is spread into the update object,
         // so { type: "workflow_executions" } becomes a top-level field.
@@ -1988,6 +1961,11 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             }
           }
         }
+
+        // Extract question updates
+        const questionUpdates = updates.filter(
+          (u): u is QuestionUpdate => u.update_type === "question",
+        );
 
         // Extract tool_call updates directly from the updates array
         // FIXED in migration 038: Tool calls now come as update_type='tool_call'
@@ -2899,28 +2877,26 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             }
           });
 
-          // Context usage comes from onContextUsage callback, not from message updates
-          const updatedContextUsage = { ...(state.contextUsage[chatId] || {}) };
-
-          // Process yield updates
-          let updatedPendingYield = state.pendingYields[chatId] ?? null;
-          if (yieldUpdates.length > 0) {
-            for (const yieldUpdate of yieldUpdates) {
-              if (yieldUpdate.status === "pending") {
-                updatedPendingYield = {
-                  yield_id: yieldUpdate.yield_id,
-                  chat_id: yieldUpdate.chat_id,
-                  workflow_id: yieldUpdate.workflow_id,
-                  step_id: yieldUpdate.step_id,
-                  status: YieldStatus.PENDING,
-                  created_at: new Date().toISOString(),
-                  metadata: yieldUpdate.metadata,
-                };
-              } else if (yieldUpdate.status === "resolved") {
-                updatedPendingYield = null;
-              }
+          // Process question updates
+          let updatedPendingQuestion = freshState.pendingQuestions[chatId] ?? null;
+          for (const qu of questionUpdates) {
+            if (qu.status === "pending") {
+              updatedPendingQuestion = {
+                question_id: qu.question_id,
+                chat_id: qu.chat_id,
+                workflow_id: qu.workflow_id,
+                step_id: qu.step_id,
+                status: qu.status,
+                created_at: "",
+                metadata: qu.metadata,
+              };
+            } else if (qu.status === "resolved") {
+              updatedPendingQuestion = null;
             }
           }
+
+          // Context usage comes from onContextUsage callback, not from message updates
+          const updatedContextUsage = { ...(state.contextUsage[chatId] || {}) };
 
           const newState = {
             messages: { ...state.messages, [chatId]: updatedMessages },
@@ -2933,9 +2909,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
               ...state.pendingApprovals,
               [chatId]: updatedPendingApprovals,
             },
-            pendingYields: yieldUpdates.length > 0
-              ? { ...state.pendingYields, [chatId]: updatedPendingYield }
-              : state.pendingYields,
+            pendingQuestions: { ...state.pendingQuestions, [chatId]: updatedPendingQuestion },
             errorEvents: { ...state.errorEvents, [chatId]: updatedErrorEvents },
             infoEvents: { ...state.infoEvents, [chatId]: updatedInfoEvents },
             runOutputs: { ...state.runOutputs, [chatId]: updatedRunOutputs },
@@ -3146,6 +3120,14 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     }
   },
 
+  resolveQuestion: async (chatId, questionId, action, responseData) => {
+    await questionGrpc.resolveQuestion(questionId, action, responseData);
+    // Optimistically clear
+    set((state) => ({
+      pendingQuestions: { ...state.pendingQuestions, [chatId]: null },
+    }));
+  },
+
   // Refresh chat - reconnects the unified stream to re-fetch data
   refreshChat: async (chatId: string) => {
     // Data refreshes via the unified global stream reconnection
@@ -3176,7 +3158,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       return {
         chats: newChats,
         pendingApprovals: { ...state.pendingApprovals, [chatId]: [] },
-        pendingYields: { ...state.pendingYields, [chatId]: null },
         // Mark any incomplete messages as finished
         messages: {
           ...state.messages,
@@ -3241,21 +3222,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         chatId: chatId.slice(0, 8),
       },
     );
-  },
-
-  // Resolve a pending yield (e.g., user clicks Continue)
-  resolveYield: async (chatId: string, yieldId: string, action: string, responseData?: string) => {
-    try {
-      await yieldGrpc.resolveYield(yieldId, action, responseData);
-      // Optimistically clear pending yield (stream update will also clear it)
-      const state = get();
-      set({
-        pendingYields: { ...state.pendingYields, [chatId]: null },
-      });
-    } catch (error) {
-      logger.error("[ChatStore] Failed to resolve yield:", error);
-      throw error;
-    }
   },
 
   // Add pending approval
@@ -3879,8 +3845,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       messages: {},
       approvals: {},
       pendingApprovals: {},
-      pendingYields: {},
       discussMode: {},
+      pendingQuestions: {},
       errorEvents: {},
       infoEvents: {},
       runOutputs: {},

@@ -161,9 +161,8 @@ type SpawnFilterConfig struct {
 
 // ToolFilterResult contains the expanded tool names and any spawn configurations.
 type ToolFilterResult struct {
-	ToolNames      []string            // Expanded tool names
-	SpawnConfigs   []SpawnFilterConfig // Spawn configurations parsed from filter
-	AskUserEnabled bool                // Whether ask_user was present in the filter
+	ToolNames    []string            // Expanded tool names
+	SpawnConfigs []SpawnFilterConfig // Spawn configurations parsed from filter
 }
 
 // ExpandToolFilterWithSpawn expands a tool filter and extracts spawn configurations.
@@ -196,8 +195,6 @@ func ExpandToolFilterWithSpawn(filter []string, mcpToolNames []string) ToolFilte
 			if spawnConfig := parseSpawnFilter(spec); spawnConfig != nil {
 				result.SpawnConfigs = append(result.SpawnConfigs, *spawnConfig)
 			}
-		} else if spec == ToolAskUser {
-			result.AskUserEnabled = true
 		} else {
 			regularFilter = append(regularFilter, spec)
 		}
@@ -494,6 +491,11 @@ func GetToolRegistry() []ToolDefinition {
 		{ToolGetWorkflowSuggestions, (*ToolsFactory).GetWorkflowSuggestions, []ToolTag{TagWorkflow, TagReadOnly}, ToolRunsOnServer},
 		{ToolListPresets, (*ToolsFactory).ListPresets, []ToolTag{TagWorkflow, TagReadOnly}, ToolRunsOnServer},
 		{ToolGetPreset, (*ToolsFactory).GetPreset, []ToolTag{TagWorkflow, TagReadOnly}, ToolRunsOnServer},
+
+		// Interaction tools
+		// ask_user is a schema-only tool — execution is intercepted by the workflow
+		// runtime (splitProtoToolCalls → executeAskUserInline), not the normal tool path.
+		{ToolAskUser, (*ToolsFactory).AskUser, nil, ToolRunsOnServer},
 
 		// Scenario tools
 		{ToolListScenarios, (*ToolsFactory).ListScenarios, []ToolTag{TagWorkflow, TagReadOnly}, ToolRunsOnServer},

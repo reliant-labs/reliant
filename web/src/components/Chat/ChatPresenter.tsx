@@ -42,7 +42,6 @@ interface ChatPresenterProps {
   chatId: string | null;
   isChatBusy: boolean;
   pendingApprovals: ToolApprovalRequest[];
-  hasPendingYield?: boolean;
   connectionStatus: string;
   currentActivity?: string;
 
@@ -78,6 +77,9 @@ interface ChatPresenterProps {
   isDiscussMode?: boolean;
   canDiscuss?: boolean;
   onToggleDiscuss?: () => void;
+
+  // Question (ask_user) state
+  hasPendingQuestion?: boolean;
 }
 
 export const ChatPresenter = memo(function ChatPresenter({
@@ -89,7 +91,6 @@ export const ChatPresenter = memo(function ChatPresenter({
   chatId,
   isChatBusy,
   pendingApprovals,
-  hasPendingYield = false,
   connectionStatus,
   currentActivity,
   worktreeId,
@@ -106,6 +107,7 @@ export const ChatPresenter = memo(function ChatPresenter({
   isDiscussMode,
   canDiscuss,
   onToggleDiscuss,
+  hasPendingQuestion,
 }: ChatPresenterProps) {
   const chatInputRef = useRef<HTMLDivElement>(null);
 
@@ -333,7 +335,7 @@ export const ChatPresenter = memo(function ChatPresenter({
   } | null>(null);
 
   // Thinking indicator element, passed as Virtuoso footer
-  const hasThinkingFooter = isChatBusy && pendingApprovals.length === 0 && !hasPendingYield;
+  const hasThinkingFooter = isChatBusy && pendingApprovals.length === 0 && !hasPendingQuestion;
   const thinkingFooter = hasThinkingFooter ? (
     <ChatThinkingIndicator
       chatId={chatId || undefined}

@@ -21,7 +21,7 @@ import (
 // 2. Child workflow updates existing workflow status (parent creates workflow+thread)
 // 3. Child workflow that doesn't exist returns error
 // 4. Child workflow already running is a no-op
-// 5. Completed/failed/cancelled/yielded status updates
+// 5. Completed/failed/cancelled status updates
 //
 // ============================================================================
 
@@ -246,88 +246,6 @@ func TestWorkflowStatus_CompletedUpdatesStatus(t *testing.T) {
 		updatedWorkflow, err := h.Repo().GetWorkflow(ctx, workflowID)
 		require.NoError(t, err)
 		assert.Equal(t, db.WorkflowStatusCompleted, updatedWorkflow.Status)
-	})
-}
-
-func TestWorkflowStatus_YieldedUpdatesStatusAndCompletesOwnedThreads(t *testing.T) {
-	h := NewIdempotencyTestHelper(t)
-	defer h.Cleanup()
-
-	ctx := context.Background()
-
-	// Setup test data
-	userID := uuid.New().String()
-	projectID := uuid.New().String()
-	chatID := uuid.New().String()
-	parentWorkflowID := uuid.New().String()
-	childWorkflowID := uuid.New().String()
-	threadRecordWorkflowID := uuid.New().String()
-
-	h.CreateTestProject(ctx, projectID, userID)
-	h.CreateTestChat(ctx, chatID, projectID, userID)
-
-	// Create a running parent workflow
-	parentWorkflow := &db.Workflow{
-		ID:           parentWorkflowID,
-		ChatID:       chatID,
-		WorkflowName: "builtin://chat",
-		Thread:       chatID,
-		Status:       db.WorkflowStatusRunning,
-	}
-	err := h.Repo().CreateWorkflow(ctx, parentWorkflow)
-	require.NoError(t, err)
-
-	// Create a running child workflow (the one that will be force-yielded)
-	childWorkflow := &db.Workflow{
-		ID:           childWorkflowID,
-		ParentID:     &parentWorkflowID,
-		ChatID:       chatID,
-		WorkflowName: "builtin://sub-agent",
-		Thread:       childWorkflowID,
-		Status:       db.WorkflowStatusRunning,
-	}
-	err = h.Repo().CreateWorkflow(ctx, childWorkflow)
-	require.NoError(t, err)
-
-	// Create a running thread metadata record owned by the child workflow.
-	// This should be completed by CompleteChildWorkflows when yielded is processed.
-	threadRecord := &db.Workflow{
-		ID:           threadRecordWorkflowID,
-		ParentID:     &childWorkflowID,
-		ChatID:       chatID,
-		WorkflowName: "thread:child-thread",
-		Thread:       "child-thread",
-		Status:       db.WorkflowStatusRunning,
-	}
-	err = h.Repo().CreateWorkflow(ctx, threadRecord)
-	require.NoError(t, err)
-
-	activity := NewWorkflowStatusActivity(h.Repo())
-
-	input := WorkflowStatusInput{
-		ChatID:           chatID,
-		WorkflowID:       childWorkflowID,
-		WorkflowName:     "builtin://sub-agent",
-		Status:           "yielded",
-		Thread:           childWorkflowID,
-		ParentWorkflowID: parentWorkflowID,
-	}
-
-	t.Run("Yielded status updates workflow and completes owned thread records", func(t *testing.T) {
-		var output WorkflowStatusOutput
-		err := h.ExecuteActivity(activity.Execute, input, &output)
-		require.NoError(t, err)
-		assert.True(t, output.Success)
-
-		// Yielded workflow should be persisted as completed (terminal).
-		updatedChildWorkflow, err := h.Repo().GetWorkflow(ctx, childWorkflowID)
-		require.NoError(t, err)
-		assert.Equal(t, db.WorkflowStatusCompleted, updatedChildWorkflow.Status)
-
-		// Owned thread metadata workflow should also be completed.
-		updatedThreadRecord, err := h.Repo().GetWorkflow(ctx, threadRecordWorkflowID)
-		require.NoError(t, err)
-		assert.Equal(t, db.WorkflowStatusCompleted, updatedThreadRecord.Status)
 	})
 }
 

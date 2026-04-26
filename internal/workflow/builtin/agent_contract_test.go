@@ -19,10 +19,10 @@ import (
 // If someone changes the YAML expressions, these tests fail.
 
 const (
-	agentWhileExpr             = `outputs.tool_calls != null && size(outputs.tool_calls) > 0`
-	agentYieldExpr             = `{{inputs.yield || (inputs.max_turns > 0 && iter.iteration >= inputs.max_turns)}}`
+	agentWhileExpr             = `((outputs.tool_calls != null && size(outputs.tool_calls) > 0) || outputs.has_feedback == true) && (inputs.max_turns == 0 || iter.iteration < inputs.max_turns)`
 	edgeCallLLMToApproval      = `nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode == 'manual'`
 	edgeCallLLMToExecuteTools  = `nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode != 'manual'`
+	edgeCallLLMToAskQuestion   = `(nodes.call_llm.tool_calls == null || size(nodes.call_llm.tool_calls) == 0) && inputs.ask`
 	edgeApprovalToExecuteTools = `nodes.approval.status == 'approved'`
 	edgeExecuteToolsToCompact  = `nodes.execute_tools.thread_token_count > inputs.compaction_threshold`
 )
@@ -39,7 +39,7 @@ func TestContractExpressionsMatchAgentYAML(t *testing.T) {
 	}
 
 	// Find agent_loop node
-	var loopWhileExpr, loopYieldExpr string
+	var loopWhileExpr string
 	type edgeInfo struct {
 		label     string
 		condition string
@@ -58,8 +58,6 @@ func TestContractExpressionsMatchAgentYAML(t *testing.T) {
 		if loopArgs.GetWhile() != nil {
 			loopWhileExpr = loopArgs.GetWhile().GetExpr()
 		}
-
-		loopYieldExpr = loopArgs.GetYield()
 
 		inline := loopArgs.GetInline()
 		if inline == nil {
@@ -88,11 +86,6 @@ func TestContractExpressionsMatchAgentYAML(t *testing.T) {
 		t.Errorf("while expression mismatch:\n  yaml:     %q\n  expected: %q\nUpdate the constants in v3/agent_contract_test.go and builtin/agent_contract_test.go", loopWhileExpr, agentWhileExpr)
 	}
 
-	// Verify yield expression
-	if loopYieldExpr != agentYieldExpr {
-		t.Errorf("yield expression mismatch:\n  yaml:     %q\n  expected: %q\nUpdate the constants in v3/agent_contract_test.go and builtin/agent_contract_test.go", loopYieldExpr, agentYieldExpr)
-	}
-
 	// Build edge expression map
 	edgeExprs := map[string]string{}
 	for _, edge := range inlineEdges {
@@ -102,6 +95,7 @@ func TestContractExpressionsMatchAgentYAML(t *testing.T) {
 	edgeChecks := map[string]string{
 		"require_approval": edgeCallLLMToApproval,
 		"auto_approve":     edgeCallLLMToExecuteTools,
+		"ask_user":         edgeCallLLMToAskQuestion,
 		"approved":         edgeApprovalToExecuteTools,
 		"compact":          edgeExecuteToolsToCompact,
 	}
@@ -138,7 +132,7 @@ func TestContractAgentYAMLExpressionsEvaluate(t *testing.T) {
 	}
 
 	// Find agent_loop node and extract expressions
-	var loopWhileExpr, loopYieldExpr string
+	var loopWhileExpr string
 	type edgeEntry struct {
 		label     string
 		condition string
@@ -157,7 +151,6 @@ func TestContractAgentYAMLExpressionsEvaluate(t *testing.T) {
 		if loopArgs.GetWhile() != nil {
 			loopWhileExpr = loopArgs.GetWhile().GetExpr()
 		}
-		loopYieldExpr = loopArgs.GetYield()
 
 		inline := loopArgs.GetInline()
 		if inline == nil {
@@ -197,7 +190,8 @@ func TestContractAgentYAMLExpressionsEvaluate(t *testing.T) {
 		ctx := &wfcel.LoopEvalContext{
 			Iter: &model.IterContext{Iteration: 5},
 			Outputs: map[string]interface{}{
-				"tool_calls": makeToolCalls(1),
+				"tool_calls":   makeToolCalls(1),
+				"has_feedback": false,
 			},
 			Inputs: map[string]interface{}{
 				"max_turns": 200,
@@ -210,29 +204,6 @@ func TestContractAgentYAMLExpressionsEvaluate(t *testing.T) {
 		}
 		if !result {
 			t.Error("expected while=true for iteration 5 with tool calls")
-		}
-	})
-
-	t.Run("yield_expression_from_yaml", func(t *testing.T) {
-		ctx := &wfcel.LoopEvalContext{
-			Iter:    &model.IterContext{Iteration: 200},
-			Outputs: map[string]interface{}{},
-			Inputs: map[string]interface{}{
-				"yield":     false,
-				"max_turns": 200,
-			},
-		}
-
-		val, err := wfcel.EvaluateTemplate(loopYieldExpr, ctx)
-		if err != nil {
-			t.Fatalf("yield expression failed to evaluate: %v", err)
-		}
-		result, ok := val.(bool)
-		if !ok {
-			t.Fatalf("expected bool, got %T", val)
-		}
-		if !result {
-			t.Error("expected yield=true when at max_turns")
 		}
 	})
 
@@ -253,6 +224,7 @@ func TestContractAgentYAMLExpressionsEvaluate(t *testing.T) {
 					},
 					Inputs: map[string]interface{}{
 						"mode":                 "auto",
+						"ask":                  true,
 						"compaction_threshold": 185000,
 					},
 				}

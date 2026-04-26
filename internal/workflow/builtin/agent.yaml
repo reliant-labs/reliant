@@ -1,7 +1,7 @@
 name: agent
 apiVersion: "0.0.5"
 description: |
-  Standard interactive agent. Loops while LLM returns tool calls, yields when LLM responds with no tool calls.
+  Standard interactive agent. Loops while LLM returns tool calls, returns when LLM responds with no tool calls.
   Will always start on a thread that is seeded with the user's message. User interaction occurs outside of the workflow. Uses inline save_message for frontend activity association.
 presets:
   tag: agent
@@ -62,10 +62,10 @@ inputs:
     min: 10000
     description: Token count to trigger context compaction
 
-  yield:
+  ask:
     type: boolean
     default: false
-    description: When true, wait for user interaction after agent completes before returning
+    description: When true, ask user for feedback after agent completes before returning
     ui: hidden
 
   # Hidden: prepended to system_prompt when mode='plan' (concatenates planning_prompt + system_prompt)
@@ -137,14 +137,14 @@ entry: [agent_loop]
 nodes:
   - id: agent_loop
     type: loop
-    # Continues while: has tool calls AND under max turns. No tools = yield to user.
-    while: outputs.tool_calls != null && size(outputs.tool_calls) > 0
-    yield: "{{inputs.yield || (inputs.max_turns > 0 && iter.iteration >= inputs.max_turns)}}"
+    # Continues while: has tool calls OR has feedback from ask_question. No tools and no feedback = return to user.
+    while: ((outputs.tool_calls != null && size(outputs.tool_calls) > 0) || outputs.has_feedback == true) && (inputs.max_turns == 0 || iter.iteration < inputs.max_turns)
     inline:
       outputs:
         tool_calls: "{{nodes.call_llm.tool_calls}}"
         message: "{{nodes.call_llm.message}}"
         response_text: "{{nodes.call_llm.response_text}}"
+        has_feedback: "{{has(nodes.ask_question) && has(nodes.ask_question.has_feedback) ? nodes.ask_question.has_feedback : false}}"
 
       entry: [call_llm]
 
@@ -186,6 +186,11 @@ nodes:
           type: compact
           timeout: "10m"
 
+        - id: ask_question
+          type: ask_question
+          args:
+            metadata: '{"type":"ask_user","questions":[{"question":"The workflow is ready to continue. What would you like to do?","options":[{"label":"Continue","description":"Continue to the next step in the workflow"},{"label":"Provide feedback","description":"Give feedback or instructions to adjust before moving on"}]}]}'
+
       edges:
         - from: call_llm
           cases:
@@ -196,6 +201,13 @@ nodes:
             - to: execute_tools
               condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode != 'manual'
               label: "auto_approve"
+
+        # From call_llm: when no tool calls and ask is enabled, go to ask_question
+        - from: call_llm
+          cases:
+            - to: ask_question
+              condition: (nodes.call_llm.tool_calls == null || size(nodes.call_llm.tool_calls) == 0) && inputs.ask
+              label: "ask_user"
 
         # No edge when denied - iteration ends, loop continues (user can re-prompt)
         - from: approval

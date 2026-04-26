@@ -1,9 +1,9 @@
 /**
- * Parse ask_user question metadata from a yield's metadata string.
+ * Parse ask_user question metadata from a question's metadata string.
  * Handles both new format (questions at top level) and old envelope format
  * (questions nested in a JSON-encoded "input" field with __reliant_tool_meta__ wrapper).
  *
- * Returns the parsed metadata with a `questions` array, or null if not an ask_user yield.
+ * Returns the parsed metadata with a `questions` array, or null if not an ask_user question.
  */
 export function parseAskUserMetadata(metadata: string | undefined | null): AskUserMetadata | null {
   if (!metadata) return null;

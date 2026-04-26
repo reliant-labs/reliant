@@ -308,7 +308,7 @@ describe("Workflow Serializer Round-Trip", () => {
                 model: "{{inputs.model}}",
               },
               presets: {},
-              yield: "",
+
             },
           } as Step["args"],
         },
@@ -388,7 +388,7 @@ describe("Workflow Serializer Round-Trip", () => {
                 prompt: "{{iter.item.spec}}",
               },
               presets: {},
-              yield: "",
+
               parallel: true,
               items: celExpr("{{nodes.decompose.output.components}}"),
               key: "{{iter.item.name}}",

@@ -8,7 +8,7 @@ describe("parseAskUserMetadata", () => {
     expect(parseAskUserMetadata("")).toBeNull();
   });
 
-  it("returns null for non-ask_user yields (regular yield)", () => {
+  it("returns null for non-ask_user metadata", () => {
     expect(parseAskUserMetadata("{}")).toBeNull();
     expect(parseAskUserMetadata('{"type":"other"}')).toBeNull();
   });

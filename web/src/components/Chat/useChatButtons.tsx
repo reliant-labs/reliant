@@ -11,9 +11,6 @@ interface UseChatButtonsProps {
   isStreaming: boolean;
   disabled: boolean;
 
-  // Yield
-  hasPendingYield?: boolean;
-
   // File actions
   onAttach: () => void;
   uploading: boolean;
@@ -48,7 +45,6 @@ export function useChatButtons({
   canSend,
   isStreaming,
   disabled,
-  hasPendingYield = false,
   onAttach,
   uploading,
   onToggleRecentChanges,
