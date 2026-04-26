@@ -1493,6 +1493,10 @@ func (e *InlineLoopExecutor) executeYield() (*YieldOutput, error) {
 	// to any Temporal execution. The Temporal ID is needed for signal routing.
 	temporalWorkflowID := workflow.GetInfo(e.ctx).WorkflowExecution.ID
 
+	// Build ask_user-style metadata so the frontend renders a structured question
+	// instead of the old Continue button + hint text.
+	yieldMetadata := `{"type":"ask_user","questions":[{"question":"The workflow is ready to continue. What would you like to do?","options":[{"label":"Continue","description":"Continue to the next step in the workflow"},{"label":"Provide feedback","description":"Give feedback or instructions to adjust before moving on"}]}]}`
+
 	yieldInput := map[string]interface{}{
 		"chat_id":              e.chatID,
 		"workflow_id":          e.workflowID,
@@ -1501,6 +1505,7 @@ func (e *InlineLoopExecutor) executeYield() (*YieldOutput, error) {
 		"step_id":              e.loopStep.Node.GetId(),
 		"loop_node_id":         e.loopID,
 		"loop_iteration":       e.iteration,
+		"metadata":             yieldMetadata,
 	}
 
 	var createOutput YieldCreateOutput

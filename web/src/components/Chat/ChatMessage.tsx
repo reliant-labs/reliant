@@ -429,9 +429,9 @@ function ChatMessageComponent({
     const checkOverflow = () => {
       rafId = requestAnimationFrame(() => {
         if (element) {
-          // 4.5rem = 72px for max height
+          // 3rem = 48px for max height
           // Reading scrollHeight here is batched with the browser's layout
-          const isCurrentlyOverflowing = element.scrollHeight > 72;
+          const isCurrentlyOverflowing = element.scrollHeight > 48;
           setIsOverflowing(isCurrentlyOverflowing);
         }
       });
@@ -576,7 +576,7 @@ function ChatMessageComponent({
             <div
               ref={bubbleRef}
               className={cn(
-                "user-message-content border-2 border-border/70 rounded-lg w-full cursor-pointer block transition-all duration-200",
+                "group/usermsg user-message-content border-2 border-border/70 rounded-lg w-full cursor-pointer block transition-all duration-200",
                 isOverflowing && !isExpanded && "hover:border-border"
               )}
               style={{
@@ -602,12 +602,10 @@ function ChatMessageComponent({
                   <div
                     ref={contentRef}
                     className={cn(
-                      "text-sm leading-relaxed",
-                      !isExpanded && "overflow-hidden",
-                      isExpanded && "overflow-y-auto"
+                      "text-sm leading-relaxed overflow-y-auto",
                     )}
                     style={{
-                      maxHeight: isExpanded ? "60vh" : "4.5rem",
+                      maxHeight: isExpanded ? "30vh" : "3rem",
                     }}
                   >
                     <div className="whitespace-pre-wrap break-words">
@@ -643,10 +641,13 @@ function ChatMessageComponent({
                 />
               )}
 
-              {/* Action buttons and timestamp - inside bubble, only shown when expanded */}
-              {isExpanded && (
+              {/* Action buttons and timestamp - shown on hover (collapsed) or always (expanded) */}
+              {
                 <div
-                  className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t mt-2"
+                  className={cn(
+                    "flex items-center justify-between text-xs text-muted-foreground pt-2 border-t mt-2",
+                    !isExpanded && "opacity-0 group-hover/usermsg:opacity-100 transition-opacity duration-150"
+                  )}
                   style={{ borderColor: "var(--chat-border)" }}
                 >
                   <div className="flex items-center gap-1">
@@ -688,7 +689,7 @@ function ChatMessageComponent({
                     {formatTimestamp(message.createdAt || "")}
                   </span>
                 </div>
-              )}
+              }
             </div>
           ) : (
             // Assistant message - full width

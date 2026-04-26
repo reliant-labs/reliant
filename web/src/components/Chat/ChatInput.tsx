@@ -940,6 +940,9 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
       [pendingYield?.metadata],
     );
 
+    // When an ask question is active, hide normal input and toolbar for a clean focused UX
+    const showAskOnly = hasPendingYield && !!askUserQuestion;
+
     // Thread color for border - non-main threads get their color
     const threadBorderColor = useMemo(() => {
       if (!selectedThreadId || !chatId || selectedThreadId === chatId) return undefined;
@@ -1211,24 +1214,28 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
       }
     }, [onStop, isStreaming]);
 
-    // Handle continue yield (skip sending a message, just continue the loop)
-    const handleContinueYield = useCallback(async () => {
-      if (!chatId || !pendingYield) return;
-      logger.info("⏭️ Continue yield clicked", { chatId, yieldId: pendingYield.yield_id });
-      await useChatStore.getState().resolveYield(chatId, pendingYield.yield_id, "continue");
-    }, [chatId, pendingYield]);
 
     // Handle ask_user question submission
     const handleQuestionSubmit = useCallback(async (answer: { answers: Array<{ question: string; selected: string[]; freetext?: string }> }) => {
       if (!chatId || !pendingYield) return;
       logger.info("Question answered", { chatId, yieldId: pendingYield.yield_id, answer });
-      await useChatStore.getState().resolveYield(
-        chatId,
-        pendingYield.yield_id,
-        "reply",
-        JSON.stringify(answer)
-      );
-    }, [chatId, pendingYield]);
+
+      // For yield-generated questions (no tool_call_id), "Continue" resolves as continue action
+      const isYieldQuestion = !askUserQuestion?.tool_call_id;
+      const firstAnswer = answer.answers[0];
+      const selectedContinue = isYieldQuestion && firstAnswer?.selected.includes("Continue") && !firstAnswer?.freetext?.trim();
+
+      if (selectedContinue) {
+        await useChatStore.getState().resolveYield(chatId, pendingYield.yield_id, "continue");
+      } else {
+        await useChatStore.getState().resolveYield(
+          chatId,
+          pendingYield.yield_id,
+          "reply",
+          JSON.stringify(answer)
+        );
+      }
+    }, [chatId, pendingYield, askUserQuestion]);
 
     // Handle compaction
     const [isCompacting, setIsCompacting] = useState(false);
@@ -1347,29 +1354,33 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                 />
                 <div className="flex flex-col gap-1 relative z-[1001]">
                   {/* Attachments */}
-                  <div className="pt-3 px-2">
-                    <AttachmentPreview
-                      attachments={attachments}
-                      onRemove={handleRemoveAttachment}
-                      className={attachments.length > 0 ? "" : "hidden"}
-                    />
-                  </div>
+                  {!showAskOnly && (
+                    <div className="pt-3 px-2">
+                      <AttachmentPreview
+                        attachments={attachments}
+                        onRemove={handleRemoveAttachment}
+                        className={attachments.length > 0 ? "" : "hidden"}
+                      />
+                    </div>
+                  )}
 
-                  <div className="px-2">
-                    <ChatTextArea
-                      ref={textareaRef}
-                      value={input}
-                      onChange={setInput}
-                      onSend={handleSend}
-                      onStop={handleStop}
-                      disabled={disabled || !isMessagingAllowed}
-                      isStreaming={effectiveStreaming}
-                      chatId={chatId}
-                    />
-                  </div>
+                  {!showAskOnly && (
+                    <div className="px-2">
+                      <ChatTextArea
+                        ref={textareaRef}
+                        value={input}
+                        onChange={setInput}
+                        onSend={handleSend}
+                        onStop={handleStop}
+                        disabled={disabled || !isMessagingAllowed}
+                        isStreaming={effectiveStreaming}
+                        chatId={chatId}
+                      />
+                    </div>
+                  )}
 
                   {/* Thread indicator - shown when typing into a sub-thread */}
-                  {threadBorderColor && !hasPendingYield && (
+                  {threadBorderColor && !hasPendingYield && !showAskOnly && (
                     <div className="px-3 py-0.5">
                       <span
                         className="text-[10px] font-medium"
@@ -1381,7 +1392,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                   )}
 
                   {/* Discuss mode hint */}
-                  {isDiscussMode && (
+                  {isDiscussMode && !showAskOnly && (
                     <div className="px-3 py-1">
                       <span className="text-[11px] text-blue-600 dark:text-blue-400">
                         Discussion mode — messages won't resume the workflow
@@ -1390,8 +1401,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                   )}
 
                   {/* Yield hint / Question prompt - shown when agent is waiting for user input */}
-                  {hasPendingYield && (
-                    askUserQuestion ? (
+                  {hasPendingYield && askUserQuestion && (
                       <QuestionPrompt
                         questions={askUserQuestion.questions.map((q: any) => ({
                           question: q.question,
@@ -1400,18 +1410,11 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                         }))}
                         onSubmit={handleQuestionSubmit}
                       />
-                    ) : (
-                      <div className="px-3 py-1">
-                        <span className="text-[11px] text-yellow-600 dark:text-yellow-500">
-                          Reply to keep chatting, or click Continue to advance
-                        </span>
-                      </div>
-                    )
                   )}
 
                   {/* Expanded Workflow Params Panel - toggled via expand button */}
                   {/* Expanded Workflow Params Panel */}
-                  {isParamsPanelExpanded && isViewingThreadParams && threadParamsOverride && (
+                  {!showAskOnly && isParamsPanelExpanded && isViewingThreadParams && threadParamsOverride && (
                     <div className="px-2 py-2 border-t border-border/30 max-h-[45vh] overflow-y-auto overscroll-contain">
                       <div className="flex items-center justify-between gap-2 mb-2 px-1">
                         <div className="flex items-center gap-2">
@@ -1448,7 +1451,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                     </div>
                   )}
                   {/* Editable params panel for main thread / all threads */}
-                  {isParamsPanelExpanded &&
+                  {!showAskOnly && isParamsPanelExpanded &&
                     !isViewingThreadParams &&
                     workflowInputs &&
                     hasConfigurableParams && (
@@ -1485,7 +1488,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                     )}
 
                   {/* Single Bottom Row: All Controls */}
-                  <div className="flex items-center justify-between pt-2 mt-2 border-t border-border/50">
+                  {!showAskOnly && <div className="flex items-center justify-between pt-2 mt-2 border-t border-border/50">
                     {/* Left side: Workflow selector + inline required params + expand button */}
                     <div className="flex items-center gap-1 flex-wrap" data-onboarding="chat-controls">
                       {/* Workflow Selector - disabled once chat has started (not pending) */}
@@ -1648,8 +1651,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                         isStreaming={effectiveStreaming}
                         disabled={disabled || !isMessagingAllowed}
                         hasPendingYield={hasPendingYield}
-                        onContinueYield={handleContinueYield}
-                        isAskUser={!!askUserQuestion}
+
                         onAttach={handleAttachClick}
                         uploading={uploading}
                         onToggleRecentChanges={onToggleRecentChanges}
@@ -1678,7 +1680,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                         compact={isCompact}
                       />
                     </div>
-                  </div>
+                  </div>}
 
                   {/* Hidden file input */}
                   <input
