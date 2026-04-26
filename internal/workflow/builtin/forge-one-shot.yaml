@@ -33,7 +33,7 @@ inputs:
     description: Execution mode for agent steps
     enum: [manual, auto]
 
-  yield:
+  ask:
     type: boolean
     ui: toolbar
     default: true
@@ -70,7 +70,7 @@ nodes:
   - id: scope_conversation
     type: workflow
     ref: builtin://agent
-    passthrough: [model, mode, temperature, thinking_level, yield]
+    passthrough: [model, mode, temperature, thinking_level, ask]
     args:
       tools: ["tag:default", "ask_user"]
     thread:
@@ -168,7 +168,7 @@ nodes:
   - id: scaffold_and_verify
     type: workflow
     ref: builtin://get-it-right
-    passthrough: [model, mode, temperature, thinking_level, yield]
+    passthrough: [model, mode, temperature, thinking_level, ask]
     args:
       implementer_preset: forge
       reviewer_preset: forge
@@ -341,7 +341,7 @@ nodes:
   - id: frontend_polish
     type: workflow
     ref: builtin://get-it-right
-    passthrough: [model, mode, temperature, thinking_level, yield]
+    passthrough: [model, mode, temperature, thinking_level, ask]
     args:
       implementer_preset: forge
       reviewer_preset: forge
@@ -474,7 +474,7 @@ nodes:
   - id: mvp_backend
     type: workflow
     ref: builtin://get-it-right
-    passthrough: [model, mode, temperature, thinking_level, yield]
+    passthrough: [model, mode, temperature, thinking_level, ask]
     args:
       implementer_preset: forge
       reviewer_preset: forge
@@ -581,7 +581,7 @@ nodes:
   - id: production_polish
     type: workflow
     ref: builtin://get-it-right
-    passthrough: [model, mode, temperature, thinking_level, yield]
+    passthrough: [model, mode, temperature, thinking_level, ask]
     args:
       implementer_preset: forge
       reviewer_preset: forge

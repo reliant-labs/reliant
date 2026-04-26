@@ -57,7 +57,7 @@ inputs:
     description: Token count to trigger context compaction
     min: 10000
 
-  yield:
+  ask:
     type: boolean
     default: false
     description: When true, wait for user interaction after agent completes before returning
@@ -106,7 +106,7 @@ nodes:
   - id: audited_loop
     type: loop
     while: outputs.tool_calls != null && size(outputs.tool_calls) > 0
-    yield: "{{inputs.yield || (inputs.max_turns > 0 && iter.iteration >= inputs.max_turns)}}"
+    ask: "{{inputs.ask || (inputs.max_turns > 0 && iter.iteration >= inputs.max_turns)}}"
     inline:
       name: audited_loop (Loop Body)
       description: Inline loop body for audited_loop

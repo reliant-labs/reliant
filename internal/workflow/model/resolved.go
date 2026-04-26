@@ -159,17 +159,6 @@ func NodeWhileExpr(node *reliantv1.Node) string {
 	return ""
 }
 
-// NodeYieldExpr returns the loop yield expression for loop nodes.
-func NodeYieldExpr(node *reliantv1.Node) string {
-	if node == nil {
-		return ""
-	}
-	if loopArgs := node.GetLoop(); loopArgs != nil {
-		return loopArgs.GetYield()
-	}
-	return ""
-}
-
 // NodeArgsAsMap returns the resolved node args as map[string]interface{} for Temporal serialization.
 // Uses proto reflection to find the populated oneof field, then protojson to serialize.
 //

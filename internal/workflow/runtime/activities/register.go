@@ -63,20 +63,21 @@ func init() {
 		reflect.TypeOf(handlers.ApprovalResolveInput{}),
 		reflect.TypeOf(handlers.ApprovalResolveOutput{}))
 
+	// QuestionCreate (not visible in builder, no metadata registration)
+	schema.RegisterActivityType("QuestionCreate",
+		reflect.TypeOf(handlers.QuestionCreateInput{}),
+		reflect.TypeOf(handlers.QuestionCreateOutput{}))
+
+	// QuestionResolve (not visible in builder, no metadata registration)
+	schema.RegisterActivityType("QuestionResolve",
+		reflect.TypeOf(handlers.QuestionResolveInput{}),
+		reflect.TypeOf(handlers.QuestionResolveOutput{}))
+
 	// CreateWorkflowWithThread (not visible in builder, no metadata registration)
 	schema.RegisterActivityType("CreateWorkflowWithThread",
 		reflect.TypeOf(handlers.CreateWorkflowWithThreadInput{}),
 		reflect.TypeOf(handlers.CreateWorkflowWithThreadOutput{}))
 
-	// YieldCreate (not visible in builder, no metadata registration)
-	schema.RegisterActivityType("YieldCreate",
-		reflect.TypeOf(handlers.YieldCreateInput{}),
-		reflect.TypeOf(handlers.YieldCreateOutput{}))
-
-	// YieldResolve (not visible in builder, no metadata registration)
-	schema.RegisterActivityType("YieldResolve",
-		reflect.TypeOf(handlers.YieldResolveInput{}),
-		reflect.TypeOf(handlers.YieldResolveOutput{}))
 }
 
 // registerNodeTypeActivities uses DiscoverNodeMetas to auto-register activity types,
@@ -176,6 +177,13 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	v2.RegisterActivity(registry, handlers.NewApprovalResolveActivity(deps.Repo))
 
 	// ========================================================================
+	// QUESTION ACTIVITIES
+	// ========================================================================
+
+	v2.RegisterActivity(registry, handlers.NewQuestionCreateActivity(deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewQuestionResolveActivity(deps.Repo))
+
+	// ========================================================================
 	// RUN STEP ACTIVITIES
 	// ========================================================================
 
@@ -210,12 +218,6 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	v2.RegisterActivity(registry, handlers.NewValidateThreadOwnershipActivity(deps.Repo))
 	v2.RegisterActivity(registry, handlers.NewLoadPresetParamsActivity(deps.Repo))
 
-	// ========================================================================
-	// YIELD ACTIVITIES
-	// ========================================================================
-
-	v2.RegisterActivity(registry, handlers.NewYieldCreateActivity(deps.Repo))
-	v2.RegisterActivity(registry, handlers.NewYieldResolveActivity(deps.Repo))
 }
 
 // initPreflightConfig sets up the PreflightConfig for RequiresDaemon.

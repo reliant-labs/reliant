@@ -860,17 +860,17 @@ func TestResolveCELFields_MapStructPBValueTemplates(t *testing.T) {
 		Type: "loop",
 		Args: &reliantv1.Node_Loop{Loop: &reliantv1.LoopArgs{
 			Args: map[string]*structpb.Value{
-				"yield":     structpb.NewStringValue("{{inputs.yield}}"),
+				"ask":       structpb.NewStringValue("{{inputs.ask}}"),
 				"max_turns": structpb.NewStringValue("{{inputs.max_turns}}"),
 				"nested": structpb.NewStructValue(&structpb.Struct{Fields: map[string]*structpb.Value{
-					"flag": structpb.NewStringValue("{{inputs.yield}}"),
+					"flag": structpb.NewStringValue("{{inputs.ask}}"),
 				}}),
 			},
 		}},
 	}
 
 	eval := newMockEvaluator(map[string]interface{}{
-		"{{inputs.yield}}":     true,
+		"{{inputs.ask}}":       true,
 		"{{inputs.max_turns}}": int64(200),
 	})
 
@@ -882,8 +882,8 @@ func TestResolveCELFields_MapStructPBValueTemplates(t *testing.T) {
 	resolved := result.(*reliantv1.Node)
 	resolvedArgs := resolved.GetLoop().GetArgs()
 
-	if got := resolvedArgs["yield"].AsInterface(); got != true {
-		t.Fatalf("expected yield bool true, got %T (%v)", got, got)
+	if got := resolvedArgs["ask"].AsInterface(); got != true {
+		t.Fatalf("expected ask bool true, got %T (%v)", got, got)
 	}
 	if got := resolvedArgs["max_turns"].AsInterface(); got != float64(200) {
 		t.Fatalf("expected max_turns numeric 200, got %T (%v)", got, got)

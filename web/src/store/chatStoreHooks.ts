@@ -187,19 +187,23 @@ export function usePendingApprovals(chatId: string): ToolApprovalRequest[] {
 }
 
 /**
- * Get pending yield for a chat
- */
-export function usePendingYield(chatId: string) {
-  return useChatStore((state) => state.pendingYields[chatId] ?? null);
-}
-
-/**
  * Get all approvals (pending + completed) for a chat
  */
 export function useChatApprovals(chatId: string): ToolApprovalRequest[] {
   return useChatStore(
     (state) => state.approvals[chatId] || (EMPTY_ARRAY as ToolApprovalRequest[])
   );
+}
+
+// ============================================================================
+// QUESTION SELECTORS
+// ============================================================================
+
+/**
+ * Get the pending question for a chat (if any)
+ */
+export function usePendingQuestion(chatId: string) {
+  return useChatStore((state) => state.pendingQuestions[chatId] ?? null);
 }
 
 // ============================================================================

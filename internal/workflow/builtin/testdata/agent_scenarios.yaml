@@ -3,7 +3,7 @@
 # Agent workflow structure:
 # - agent_loop (main loop) contains: call_llm -> approval -> execute_tools -> compact
 # - Loop continues while: tool_calls not empty
-# - Loop yields when: inputs.max_turns > 0 && iter.iteration >= inputs.max_turns
+# - Loop asks when: inputs.max_turns > 0 && iter.iteration >= inputs.max_turns
 # - After loop: max_turns_notification if _iterations >= max_turns
 #
 # Key behaviors:
@@ -11,7 +11,7 @@
 # - mode=manual: requires approval before tool execution
 # - mode=plan: read-only tools with planning prompt
 # - max_turns=0 (default): unlimited iterations
-# - max_turns>0: loop yields (pauses for user input) at that iteration count
+# - max_turns>0: loop asks (pauses for user input) at that iteration count
 #
 # Output format note:
 # Events use the 'output' field which matches activity output structures directly:
@@ -190,20 +190,21 @@ expect:
     - max_turns_notification
 
 ---
-# Max turns limit reached - loop yields when max_turns is hit
+# Max turns limit reached - while condition stops loop at max_turns
 #
-# With the new yield-based max_turns behavior:
-# - The while condition only checks tool_calls (not max_turns)
-# - max_turns triggers yield instead of stopping the loop
-# - With max_turns=2, iterations 0 and 1 run normally
-# - At while check after iteration 1: tool_calls exist (true), yield check (2 >= 2 = true)
-# - But the loop body already ran, so a 3rd iteration starts
-# - On iteration 2, the simulator has no more events, so call_llm returns no tool_calls
-# - The while condition becomes false, loop exits with 3 iterations total
+# The while condition includes max_turns enforcement:
+#   ((outputs.tool_calls != null && size(outputs.tool_calls) > 0) || outputs.has_feedback == true)
+#     && (inputs.max_turns == 0 || iter.iteration < inputs.max_turns)
 #
-# The max_turns_notification edge fires because _iterations (3) >= max_turns (2)
+# With max_turns=2:
+# - Iteration 0: call_llm returns tool_calls → execute_tools → iteration becomes 1
+#   → while check: tool_calls=true AND 1 < 2 = true → continue
+# - Iteration 1: call_llm returns tool_calls → execute_tools → iteration becomes 2
+#   → while check: tool_calls=true AND 2 < 2 = false → loop exits with 2 iterations
+#
+# The max_turns_notification edge fires because _iterations (2) >= max_turns (2)
 name: max_turns_reached
-description: Loop hits max_turns limit via yield, runs one extra iteration
+description: Loop hits max_turns limit, stops after 2 iterations
 inputs:
   mode: auto
   max_turns: 2
@@ -229,7 +230,7 @@ events:
         - tool_call_id: call_0
           content: '["file1.go"]'
       thread_token_count: 500
-  # Iteration 1: still wants more tools
+  # Iteration 1: still has tool calls, but max_turns stops loop after this
   - node: agent_loop.call_llm
     output:
       message:
@@ -250,15 +251,7 @@ events:
         - tool_call_id: call_1
           content: "// TODO: fix this"
       thread_token_count: 600
-  # Iteration 2: yield fires (iter >= max_turns), LLM returns no tool calls, loop exits
-  - node: agent_loop.call_llm
-    output:
-      message:
-        role: assistant
-        text: "I found a TODO that needs to be fixed in file1.go."
-      response_text: "I found a TODO that needs to be fixed in file1.go."
-      tool_calls: []
-  # max_turns_notification fires because _iterations (3) >= max_turns (2)
+  # max_turns_notification fires because _iterations (2) >= max_turns (2)
   - node: max_turns_notification
     output:
       message:
@@ -275,7 +268,7 @@ expect:
     - agent_loop.approval
   node_outputs:
     agent_loop:
-      _iterations: 3
+      _iterations: 2
 
 ---
 # Compaction triggered when token count exceeds threshold

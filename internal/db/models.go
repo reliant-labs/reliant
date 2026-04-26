@@ -122,31 +122,6 @@ type VisibilityOverride = core.VisibilityOverride
 // ItemDefault is an alias to the shared core item default model.
 type ItemDefault = core.ItemDefault
 
-// YieldStatus represents the status of a yield.
-type YieldStatus = reliantv1.YieldStatus
-
-const (
-	YieldStatusPending  YieldStatus = reliantv1.YieldStatus_YIELD_STATUS_PENDING
-	YieldStatusResolved YieldStatus = reliantv1.YieldStatus_YIELD_STATUS_RESOLVED
-)
-
-// Yield represents an interactive yield point in a loop that pauses for user interaction
-type Yield struct {
-	ID                 string      `json:"id"`
-	ChatID             string      `json:"chat_id"`
-	WorkflowID         string      `json:"workflow_id"`
-	TemporalWorkflowID string      `json:"temporal_workflow_id"` // The actual Temporal execution ID for signaling (differs from WorkflowID for inline spawns)
-	ThreadID           string      `json:"thread_id"`
-	StepID             string      `json:"step_id"`
-	LoopNodeID         *string     `json:"loop_node_id,omitempty"`
-	LoopIteration      *int        `json:"loop_iteration,omitempty"`
-	Status             YieldStatus `json:"status"`
-	ActionTaken        *string     `json:"action_taken,omitempty"`
-	Metadata           *string     `json:"metadata,omitempty"`
-	CreatedAt          time.Time   `json:"created_at"`
-	ResolvedAt         *time.Time  `json:"resolved_at,omitempty"`
-}
-
 // Approval is an alias to the shared core approval model.
 type Approval = core.Approval
 
@@ -512,3 +487,31 @@ type NodeExecutionState struct {
 
 // Preset is an alias to the shared core preset model.
 type Preset = core.Preset
+
+// ============================================================================
+// Question Types
+// ============================================================================
+
+// QuestionStatus represents the status of a question (stored as INTEGER in DB)
+const (
+	QuestionStatusPending  = 1 // QUESTION_STATUS_PENDING
+	QuestionStatusResolved = 2 // QUESTION_STATUS_RESOLVED
+)
+
+// Question represents a pending question for user interaction
+type Question struct {
+	ID                 string
+	ChatID             string
+	WorkflowID         string
+	TemporalWorkflowID string
+	ThreadID           string
+	StepID             string
+	LoopNodeID         *string
+	LoopIteration      *int
+	Status             int
+	Metadata           *string
+	ResponseData       *string
+	CreatedAt          time.Time
+	ResolvedAt         *time.Time
+	ToolCallID         *string
+}

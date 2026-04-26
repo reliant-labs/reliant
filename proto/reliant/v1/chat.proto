@@ -67,7 +67,7 @@ enum ContentBlockType {
 }
 
 // ChatActivity represents the computed activity state of a chat.
-// This is derived from workflow status, pending approvals, and yields.
+// This is derived from workflow status and pending approvals.
 enum ChatActivity {
   CHAT_ACTIVITY_IDLE = 0;
   CHAT_ACTIVITY_RUNNING = 1;
@@ -391,7 +391,7 @@ message SendMessageRequest {
   optional string target_thread = 13;  // Target thread ID for the message (defaults to main thread if not specified)
   map<string, string> selected_presets = 14; // Update preset selections (persisted with chat)
   repeated InputMessage messages = 15; // Messages to send (user and system). At least one user message required.
-  optional string yield_id = 16;  // If set, resolves this pending yield instead of starting new workflow
+  reserved 16;  // was: yield_id
   bool discuss = 17;              // If true, chat with LLM without resuming paused workflow
 }
 

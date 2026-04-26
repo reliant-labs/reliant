@@ -9,9 +9,6 @@ interface ChatActionButtonsProps {
   isStreaming: boolean;
   disabled: boolean;
 
-  // Yield
-  hasPendingYield?: boolean;
-
   // File actions
   onAttach: () => void;
   uploading: boolean;

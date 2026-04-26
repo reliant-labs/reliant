@@ -39,6 +39,16 @@ func (r *Repo) EmitToolCallCancelledUpdate(ctx context.Context, chatID string, u
 	return r.CreateChatUpdate(ctx, chatID, UpdateTypeToolCall, EntityIDForToolCancelled(update.ToolCallID), data)
 }
 
+// EmitQuestionUpdate emits a question status update to chat_updates
+func (r *Repo) EmitQuestionUpdate(ctx context.Context, chatID string, update QuestionUpdate) error {
+	update.UpdateType = UpdateTypeQuestion
+	data, err := MarshalUpdate(update)
+	if err != nil {
+		return fmt.Errorf("failed to marshal question update: %w", err)
+	}
+	return r.CreateChatUpdate(ctx, chatID, UpdateTypeQuestion, EntityIDForQuestion(update.QuestionID), data)
+}
+
 // EmitToolCallBackgroundedUpdate emits a tool call backgrounded update
 func (r *Repo) EmitToolCallBackgroundedUpdate(ctx context.Context, chatID string, update ToolCallUpdate) error {
 	update.UpdateType = UpdateTypeToolCall
@@ -48,14 +58,4 @@ func (r *Repo) EmitToolCallBackgroundedUpdate(ctx context.Context, chatID string
 		return fmt.Errorf("failed to marshal tool call backgrounded update: %w", err)
 	}
 	return r.CreateChatUpdate(ctx, chatID, UpdateTypeToolCall, EntityIDForToolBackgrounded(update.ToolCallID), data)
-}
-
-// EmitYieldUpdate emits a yield state update to chat_updates
-func (r *Repo) EmitYieldUpdate(ctx context.Context, chatID string, update YieldUpdate) error {
-	update.UpdateType = UpdateTypeYield
-	data, err := MarshalUpdate(update)
-	if err != nil {
-		return fmt.Errorf("failed to marshal yield update: %w", err)
-	}
-	return r.CreateChatUpdate(ctx, chatID, UpdateTypeYield, EntityIDForYield(update.YieldID), data)
 }

@@ -59,7 +59,7 @@ inputs:
       - build       # Enable building in the implementation loop
       - start_app   # Start dev server for UX review during implementation
 
-  yield:
+  ask:
     type: boolean
     ui: toolbar
     default: true
@@ -208,7 +208,7 @@ nodes:
             default: planner
           args:
             model: "{{inputs.model}}"
-            yield: "{{inputs.yield}}"
+            ask: "{{inputs.ask}}"
             mode: "{{inputs.mode}}"
           thread:
             mode: fork
@@ -355,7 +355,7 @@ nodes:
       model: "{{inputs.model}}"
       mode: "{{inputs.mode}}"
       max_retries: "{{inputs.max_retries}}"
-      yield: "{{inputs.yield}}"
+      ask: "{{inputs.ask}}"
       temperature: "{{inputs.temperature}}"
       thinking_level: "{{inputs.thinking_level}}"
       lint_command: "{{'lint' in inputs.steps ? inputs.lint_command : ''}}"

@@ -54,7 +54,7 @@ inputs:
     description: Execution mode for agent steps.
     enum: [manual, auto, plan]
 
-  yield:
+  ask:
     type: boolean
     ui: toolbar
     default: true
@@ -79,7 +79,7 @@ nodes:
     while: >
       (has(outputs.wave_status) && outputs.wave_status != "complete")
       && iter.iteration < inputs.max_waves
-    yield: "inputs.yield"
+    ask: "inputs.ask"
     inline:
       entry: [execute]
 

@@ -40,7 +40,7 @@ func taskStatusFromInt32(v int32) reliantv1.TaskStatus {
 	return reliantv1.TaskStatus(v)
 }
 
-// Note: YieldStatus, DaemonStatus, NodeExecutionStatus, and ToolExecutionStatus
+// Note: DaemonStatus, NodeExecutionStatus, and ToolExecutionStatus
 // are type aliases (=) to their proto enum types, so no conversion is needed.
 // The db package types ARE the proto types.
 
@@ -203,8 +203,6 @@ func chatUpdateTypeFromString(s string) reliantv1.ChatUpdateType {
 		return reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_EXECUTION_LOG
 	case "workflow_execution":
 		return reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_WORKFLOW_EXECUTION
-	case "yield":
-		return reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_YIELD
 	case "info":
 		return reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_INFO
 	case "warning":
@@ -215,6 +213,8 @@ func chatUpdateTypeFromString(s string) reliantv1.ChatUpdateType {
 		return reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_STREAMING_DELTA
 	case "skill_invocation":
 		return reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_SKILL_INVOCATION
+	case "question":
+		return reliantv1.ChatUpdateType(18) // CHAT_UPDATE_TYPE_QUESTION (proto codegen pending)
 	default:
 		return reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_UNSPECIFIED
 	}

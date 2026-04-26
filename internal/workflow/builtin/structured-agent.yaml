@@ -1,7 +1,7 @@
 name: structured-agent
 apiVersion: "0.0.5"
 description: |
-  Agent that requires structured output via response tool. Unlike builtin://agent which yields on
+  Agent that requires structured output via response tool. Unlike builtin://agent which returns on
   end_turn, this loops until the response tool is called. If LLM responds without tools, a reminder
   is injected. Access output via output.response (structured data) and output.completed (boolean).
 presets:
@@ -88,10 +88,10 @@ inputs:
     min: 10000
     description: Token count to trigger context compaction
 
-  yield:
+  ask:
     type: boolean
     default: false
-    description: When true, wait for user interaction after agent completes before returning
+    description: When true, ask user for feedback after agent completes before returning
     ui: hidden
 
 outputs:
@@ -103,9 +103,8 @@ outputs:
 nodes:
   - id: agent_loop
     type: loop
-    # Continue while response tool not called AND under max turns
-    while: outputs.completed != true
-    yield: "{{inputs.yield || (inputs.max_turns > 0 && iter.iteration >= inputs.max_turns)}}"
+    # Continue while response tool not called OR has feedback from ask_question, AND under max turns
+    while: (outputs.completed != true || outputs.has_feedback == true) && (inputs.max_turns == 0 || iter.iteration < inputs.max_turns)
     inline:
       entry: [call_llm]
 
@@ -117,6 +116,7 @@ nodes:
         # backfills it as nil from proto pointer zero-value).
         response: "{{has(nodes.execute_tools) && has(nodes.execute_tools.response_data) && nodes.execute_tools.response_data != null && inputs.response_tool_name in nodes.execute_tools.response_data ? nodes.execute_tools.response_data[inputs.response_tool_name] : null}}"
         completed: "{{has(nodes.execute_tools) && has(nodes.execute_tools.response_data) && nodes.execute_tools.response_data != null && inputs.response_tool_name in nodes.execute_tools.response_data && nodes.execute_tools.response_data[inputs.response_tool_name] != null}}"
+        has_feedback: "{{has(nodes.ask_question) && has(nodes.ask_question.has_feedback) ? nodes.ask_question.has_feedback : false}}"
 
       nodes:
         - id: call_llm
@@ -169,6 +169,11 @@ nodes:
           type: compact
           timeout: "10m"
 
+        - id: ask_question
+          type: ask_question
+          args:
+            metadata: '{"type":"ask_user","questions":[{"question":"The workflow is ready to continue. What would you like to do?","options":[{"label":"Continue","description":"Continue to the next step in the workflow"},{"label":"Provide feedback","description":"Give feedback or instructions to adjust before moving on"}]}]}'
+
       edges:
         - from: call_llm
           cases:
@@ -179,8 +184,11 @@ nodes:
               condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode != 'manual'
               label: auto_approve
             - to: remind_response
-              condition: nodes.call_llm.tool_calls == null || size(nodes.call_llm.tool_calls) == 0
+              condition: (nodes.call_llm.tool_calls == null || size(nodes.call_llm.tool_calls) == 0) && !inputs.ask
               label: no_tools
+            - to: ask_question
+              condition: (nodes.call_llm.tool_calls == null || size(nodes.call_llm.tool_calls) == 0) && inputs.ask
+              label: ask_user
 
         - from: approval
           cases:
@@ -228,8 +236,11 @@ nodes:
                 condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode != 'manual'
                 label: auto_approve
               - id: case-2
-                condition: nodes.call_llm.tool_calls == null || size(nodes.call_llm.tool_calls) == 0
+                condition: (nodes.call_llm.tool_calls == null || size(nodes.call_llm.tool_calls) == 0) && !inputs.ask
                 label: no_tools
+              - id: case-3
+                condition: (nodes.call_llm.tool_calls == null || size(nodes.call_llm.tool_calls) == 0) && inputs.ask
+                label: ask_user
 
   - id: max_turns_notification
     type: save_message

@@ -5,6 +5,7 @@ package model
 
 // Node type constants matching the type field discriminator in YAML.
 const (
+	NodeTypeAskQuestion    = "ask_question"
 	NodeTypeCallLLM        = "call_llm"
 	NodeTypeExecuteTools   = "execute_tools"
 	NodeTypeCompact        = "compact"

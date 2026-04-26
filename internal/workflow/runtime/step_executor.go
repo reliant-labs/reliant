@@ -50,8 +50,8 @@ type StepExecutor struct {
 	// pauseCtrl bundles pause-checking and cancellable-context callbacks.
 	// All methods are nil-receiver safe so callers never need a nil guard.
 	pauseCtrl *PauseController
-	// makeThreadPauseCtrl creates per-thread PauseControllers with thread-specific yield checks.
-	// Used by spawn support to create yield-aware controllers for child threads.
+	// makeThreadPauseCtrl creates per-thread PauseControllers for pause-aware execution.
+	// Used by spawn support to create pause-aware controllers for child threads.
 	makeThreadPauseCtrl func(string) *PauseController
 }
 

@@ -2,6 +2,7 @@
 package runtime
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -61,7 +62,7 @@ type InlineWorkflowExecutor struct {
 	// pauseCtrl bundles pause-checking and cancellable-context callbacks.
 	pauseCtrl *PauseController
 
-	// makeThreadPauseCtrl creates per-thread PauseControllers with thread-specific yield checks.
+	// makeThreadPauseCtrl creates per-thread PauseControllers for pause-aware execution.
 	// Propagated from the root workflow to support nested spawn tool calls.
 	makeThreadPauseCtrl func(string) *PauseController
 }
@@ -369,7 +370,7 @@ func (e *InlineWorkflowExecutor) compileSubWorkflowSemantics() error {
 // InputPolicyInlineInheritParentInputs (inline nodes):
 //
 //	Returns the parent's workflowInputs map *by reference*. Because the pointer
-//	is shared, any global signal update (e.g. user toggles yield:false in the
+//	is shared, any global signal update (e.g. user changes a param in the
 //	toolbar) mutates the parent map and is visible to every inline child
 //	immediately—no extra propagation path is needed. This is the correct
 //	semantic: an inline sub-workflow IS the parent, just scoped to a subset of
@@ -378,7 +379,7 @@ func (e *InlineWorkflowExecutor) compileSubWorkflowSemantics() error {
 // InputPolicyRefPresetsArgsDefaults (ref-based nodes):
 //
 //	Builds a *new* map by layering presets → resolved args → schema defaults.
-//	Args containing template expressions like `yield: "{{inputs.yield}}"` are
+//	Args containing template expressions like `model: "{{inputs.model}}"` are
 //	resolved once at node-start time. This map is then registered with the
 //	ChildWorkflowTracker (see RegisterThreadInputs) so that the signal handler
 //	in setupInputUpdateHandler can propagate global updates into it. Users can
@@ -390,7 +391,7 @@ func (e *InlineWorkflowExecutor) compileSubWorkflowSemantics() error {
 //	If a ref-based node resolves its args BEFORE a global signal arrives, those
 //	resolved values are stale. The global-to-thread propagation in
 //	setupInputUpdateHandler fixes this for values that are re-read at evaluation
-//	time (e.g. yield conditions in loops), because it writes directly into the
+//	time (e.g. conditions in loops), because it writes directly into the
 //	registered thread input map. However, args that were already expanded into
 //	concrete values during construction (e.g. a system_prompt template resolved
 //	at node start) are NOT retroactively updated. For those, callers should use
@@ -792,7 +793,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 				continue
 			}
 
-			// Handle approval nodes inline (signal-based, like yield)
+			// Handle approval nodes inline (signal-based)
 			if node.GetType() == model.NodeTypeApproval {
 				approvalOutput, err := e.executeApproval(triggered, subNodeOutputs, subInputs, uniqueActivityIDBase)
 				if err != nil {
@@ -809,6 +810,26 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 					Data:         approvalOutput,
 				}
 				events = append(events, approvalEvent)
+				continue
+			}
+
+			// Handle ask_question nodes inline (signal-based, like approval)
+			if node.GetType() == model.NodeTypeAskQuestion {
+				questionOutput, err := e.executeAskQuestion(triggered, subNodeOutputs, subInputs, uniqueActivityIDBase)
+				if err != nil {
+					return nil, fmt.Errorf("ask_question %s failed: %w", node.GetId(), err)
+				}
+				nid := node.GetId()
+				subNodeOutputs[nid] = questionOutput
+				questionEvent := &core.WorkflowEvent{
+					ID:           fmt.Sprintf("ask-question-%s-%s", nid, uniqueActivityIDBase),
+					WorkflowID:   e.workflowID,
+					ChatID:       e.chatID,
+					WorkflowName: e.subWorkflowName,
+					StepID:       nid,
+					Data:         questionOutput,
+				}
+				events = append(events, questionEvent)
 				continue
 			}
 
@@ -951,7 +972,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 }
 
 // executeApproval handles approval nodes inline using a signal-based wait pattern
-// (matching the yield system). It creates an approval record via the ApprovalCreate
+// (matching a signal-based system). It creates an approval record via the ApprovalCreate
 // activity, then waits for a Temporal signal from the gRPC approval service.
 func (e *InlineWorkflowExecutor) executeApproval(
 	triggered *core.TriggeredNode,
@@ -1095,6 +1116,164 @@ func (e *InlineWorkflowExecutor) executeApproval(
 	}
 
 	return output, nil
+}
+
+// executeAskQuestion handles ask_question nodes inline using a signal-based wait pattern
+// (matching the approval pattern). It creates a question record via the QuestionCreate
+// activity, then waits for a Temporal signal from the gRPC question service.
+func (e *InlineWorkflowExecutor) executeAskQuestion(
+	triggered *core.TriggeredNode,
+	nodeOutputs map[string]interface{},
+	_ map[string]interface{},
+	_ string,
+) (map[string]interface{}, error) {
+	const questionTimeout = 24 * time.Hour
+
+	node := triggered.Node
+
+	// Resolve metadata from node inputs (question text, options).
+	// Since ask_question has no proto args type yet, metadata comes from
+	// workflow inputs or node outputs that feed into this node.
+	metadata := ""
+	if nodeOutputs != nil {
+		if m, ok := nodeOutputs["metadata"]; ok {
+			if mStr, ok := m.(string); ok {
+				metadata = mStr
+			}
+		}
+	}
+
+	// Get thread and workflow context
+	threadID := ""
+	if e.execContext != nil {
+		threadID = e.execContext.Thread
+	}
+	temporalWorkflowID := workflow.GetInfo(e.ctx).WorkflowExecution.ID
+
+	// STEP 1: Call QuestionCreate activity (fast DB write)
+	createCtx := workflow.WithActivityOptions(e.ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 30 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts: 3,
+		},
+	})
+
+	questionInput := map[string]interface{}{
+		"chat_id":              e.chatID,
+		"workflow_id":          e.workflowID,
+		"temporal_workflow_id": temporalWorkflowID,
+		"thread_id":            threadID,
+		"step_id":              node.GetId(),
+		"loop_node_id":         e.loopNodeID,
+		"loop_iteration":       e.loopIteration,
+		"metadata":             metadata,
+	}
+
+	var createOutput struct {
+		QuestionID      string `json:"question_id"`
+		AlreadyResolved bool   `json:"already_resolved"`
+		ResponseData    string `json:"response_data"`
+	}
+	if err := workflow.ExecuteActivity(createCtx, "QuestionCreate", questionInput).Get(e.ctx, &createOutput); err != nil {
+		return nil, fmt.Errorf("QuestionCreate failed: %w", err)
+	}
+
+	// STEP 2: If already resolved (replay), return immediately
+	if createOutput.AlreadyResolved {
+		e.logger.Info("[AskQuestion] Already resolved (replay)", "stepID", node.GetId(), "questionID", createOutput.QuestionID)
+		return parseQuestionResponse(createOutput.ResponseData), nil
+	}
+
+	// STEP 3: Wait for signal or timeout
+	signalName := "signal.question." + createOutput.QuestionID
+	signalCh := workflow.GetSignalChannel(e.ctx, signalName)
+	timeoutCtx, cancelTimer := workflow.WithCancel(e.ctx)
+	timeoutFuture := workflow.NewTimer(timeoutCtx, questionTimeout)
+
+	selector := workflow.NewSelector(e.ctx)
+	var responseData string
+	var actionTaken string
+
+	selector.AddReceive(signalCh, func(ch workflow.ReceiveChannel, more bool) {
+		var signalData map[string]interface{}
+		ch.Receive(e.ctx, &signalData)
+		if a, ok := signalData["action"].(string); ok {
+			actionTaken = a
+		}
+		if rd, ok := signalData["response_data"].(string); ok {
+			responseData = rd
+		}
+		cancelTimer()
+	})
+
+	selector.AddFuture(timeoutFuture, func(f workflow.Future) {
+		actionTaken = "timeout"
+	})
+
+	selector.Select(e.ctx)
+
+	// STEP 4: On timeout, resolve in DB
+	if actionTaken == "timeout" {
+		resolveCtx := workflow.WithActivityOptions(e.ctx, workflow.ActivityOptions{
+			StartToCloseTimeout: 30 * time.Second,
+			RetryPolicy: &temporal.RetryPolicy{
+				MaximumAttempts: 3,
+			},
+		})
+		var resolveOutput map[string]interface{}
+		if err := workflow.ExecuteActivity(resolveCtx, "QuestionResolve", map[string]interface{}{
+			"question_id":   createOutput.QuestionID,
+			"response_data": "",
+		}).Get(e.ctx, &resolveOutput); err != nil {
+			e.logger.Warn("[AskQuestion] Failed to resolve question as timeout in DB",
+				"stepID", node.GetId(),
+				"questionID", createOutput.QuestionID,
+				"error", err,
+			)
+		}
+	}
+
+	return parseQuestionResponse(responseData), nil
+}
+
+// parseQuestionResponse converts the raw question response data into a map with has_feedback/response keys.
+func parseQuestionResponse(responseData string) map[string]interface{} {
+	result := map[string]interface{}{
+		"has_feedback": false,
+		"response":     "",
+	}
+	if responseData == "" {
+		return result
+	}
+	// Parse the answer to check if user provided feedback
+	var answer struct {
+		Answers []struct {
+			Question string   `json:"question"`
+			Selected []string `json:"selected"`
+			Freetext string   `json:"freetext"`
+		} `json:"answers"`
+	}
+	if err := json.Unmarshal([]byte(responseData), &answer); err == nil && len(answer.Answers) > 0 {
+		first := answer.Answers[0]
+		// If user selected "Continue" with no freetext, no feedback
+		hasContinue := false
+		for _, s := range first.Selected {
+			if s == "Continue" {
+				hasContinue = true
+			}
+		}
+		if hasContinue && first.Freetext == "" {
+			result["has_feedback"] = false
+		} else {
+			result["has_feedback"] = true
+			if first.Freetext != "" {
+				result["response"] = first.Freetext
+			} else {
+				result["response"] = strings.Join(first.Selected, ", ")
+			}
+		}
+	}
+	return result
 }
 
 // executeNestedWorkflow handles workflow: or agent: nodes within the sub-workflow

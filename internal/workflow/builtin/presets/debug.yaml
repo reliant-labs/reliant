@@ -185,7 +185,7 @@ params:
     - Make spawned agents mock things that might be causing the bug
     - Give up if first hypothesis is wrong - investigate alternatives
 
-    ## When to Yield to User
+    ## When to Return to User
     - You can't reproduce the bug programmatically AND
     - You need runtime evidence to confirm hypotheses
 

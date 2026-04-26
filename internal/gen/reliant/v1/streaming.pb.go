@@ -39,12 +39,12 @@ const (
 	ChatUpdateType_CHAT_UPDATE_TYPE_NODE_EXECUTION     ChatUpdateType = 9
 	ChatUpdateType_CHAT_UPDATE_TYPE_EXECUTION_LOG      ChatUpdateType = 10
 	ChatUpdateType_CHAT_UPDATE_TYPE_WORKFLOW_EXECUTION ChatUpdateType = 11
-	ChatUpdateType_CHAT_UPDATE_TYPE_YIELD              ChatUpdateType = 12
 	ChatUpdateType_CHAT_UPDATE_TYPE_INFO               ChatUpdateType = 13
 	ChatUpdateType_CHAT_UPDATE_TYPE_WARNING            ChatUpdateType = 14
 	ChatUpdateType_CHAT_UPDATE_TYPE_REFETCH            ChatUpdateType = 15
 	ChatUpdateType_CHAT_UPDATE_TYPE_STREAMING_DELTA    ChatUpdateType = 16
 	ChatUpdateType_CHAT_UPDATE_TYPE_SKILL_INVOCATION   ChatUpdateType = 17
+	ChatUpdateType_CHAT_UPDATE_TYPE_QUESTION           ChatUpdateType = 18
 )
 
 // Enum value maps for ChatUpdateType.
@@ -62,12 +62,12 @@ var (
 		9:  "CHAT_UPDATE_TYPE_NODE_EXECUTION",
 		10: "CHAT_UPDATE_TYPE_EXECUTION_LOG",
 		11: "CHAT_UPDATE_TYPE_WORKFLOW_EXECUTION",
-		12: "CHAT_UPDATE_TYPE_YIELD",
 		13: "CHAT_UPDATE_TYPE_INFO",
 		14: "CHAT_UPDATE_TYPE_WARNING",
 		15: "CHAT_UPDATE_TYPE_REFETCH",
 		16: "CHAT_UPDATE_TYPE_STREAMING_DELTA",
 		17: "CHAT_UPDATE_TYPE_SKILL_INVOCATION",
+		18: "CHAT_UPDATE_TYPE_QUESTION",
 	}
 	ChatUpdateType_value = map[string]int32{
 		"CHAT_UPDATE_TYPE_UNSPECIFIED":        0,
@@ -82,12 +82,12 @@ var (
 		"CHAT_UPDATE_TYPE_NODE_EXECUTION":     9,
 		"CHAT_UPDATE_TYPE_EXECUTION_LOG":      10,
 		"CHAT_UPDATE_TYPE_WORKFLOW_EXECUTION": 11,
-		"CHAT_UPDATE_TYPE_YIELD":              12,
 		"CHAT_UPDATE_TYPE_INFO":               13,
 		"CHAT_UPDATE_TYPE_WARNING":            14,
 		"CHAT_UPDATE_TYPE_REFETCH":            15,
 		"CHAT_UPDATE_TYPE_STREAMING_DELTA":    16,
 		"CHAT_UPDATE_TYPE_SKILL_INVOCATION":   17,
+		"CHAT_UPDATE_TYPE_QUESTION":           18,
 	}
 )
 
@@ -2003,7 +2003,7 @@ const file_reliant_v1_streaming_proto_rawDesc = "" +
 	"\x16WorkflowExecutionEvent\x12E\n" +
 	"\n" +
 	"event_type\x18\x01 \x01(\x0e2&.reliant.v1.WorkflowExecutionEventTypeR\teventType\x12>\n" +
-	"\bworkflow\x18\x02 \x01(\v2\".reliant.v1.WorkflowExecutionStateR\bworkflow*\xdc\x04\n" +
+	"\bworkflow\x18\x02 \x01(\v2\".reliant.v1.WorkflowExecutionStateR\bworkflow*\xe5\x04\n" +
 	"\x0eChatUpdateType\x12 \n" +
 	"\x1cCHAT_UPDATE_TYPE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18CHAT_UPDATE_TYPE_MESSAGE\x10\x01\x12\x1d\n" +
@@ -2017,13 +2017,13 @@ const file_reliant_v1_streaming_proto_rawDesc = "" +
 	"\x1fCHAT_UPDATE_TYPE_NODE_EXECUTION\x10\t\x12\"\n" +
 	"\x1eCHAT_UPDATE_TYPE_EXECUTION_LOG\x10\n" +
 	"\x12'\n" +
-	"#CHAT_UPDATE_TYPE_WORKFLOW_EXECUTION\x10\v\x12\x1a\n" +
-	"\x16CHAT_UPDATE_TYPE_YIELD\x10\f\x12\x19\n" +
+	"#CHAT_UPDATE_TYPE_WORKFLOW_EXECUTION\x10\v\x12\x19\n" +
 	"\x15CHAT_UPDATE_TYPE_INFO\x10\r\x12\x1c\n" +
 	"\x18CHAT_UPDATE_TYPE_WARNING\x10\x0e\x12\x1c\n" +
 	"\x18CHAT_UPDATE_TYPE_REFETCH\x10\x0f\x12$\n" +
 	" CHAT_UPDATE_TYPE_STREAMING_DELTA\x10\x10\x12%\n" +
-	"!CHAT_UPDATE_TYPE_SKILL_INVOCATION\x10\x11*\xc1\x06\n" +
+	"!CHAT_UPDATE_TYPE_SKILL_INVOCATION\x10\x11\x12\x1d\n" +
+	"\x19CHAT_UPDATE_TYPE_QUESTION\x10\x12\"\x04\b\f\x10\f*\xc1\x06\n" +
 	"\x0eUserUpdateType\x12 \n" +
 	"\x1cUSER_UPDATE_TYPE_UNSPECIFIED\x10\x00\x12&\n" +
 	"\"USER_UPDATE_TYPE_CHAT_STATE_CHANGE\x10\x01\x12(\n" +

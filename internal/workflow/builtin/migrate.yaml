@@ -401,7 +401,7 @@ nodes:
     type: loop
     condition: "inputs.generate_workflows && nodes.confirm.status == 'approved' && has(nodes.analyze_workflows.response) && nodes.analyze_workflows.response != null && has(nodes.analyze_workflows.response.workflow_candidates) && nodes.analyze_workflows.response.workflow_candidates != null && size(nodes.analyze_workflows.response.workflow_candidates) > 0"
     while: "iter.iteration + 1 < size(nodes.analyze_workflows.response.workflow_candidates)"
-    yield: "{{false}}"
+    ask: "{{false}}"
     inline:
       entry: [create_workflow_draft]
       outputs:
