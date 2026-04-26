@@ -69,4 +69,17 @@ describe("refetchStore", () => {
       ),
     ).toBe(true);
   });
+
+  it("supports file_tree refetch type", () => {
+    vi.useFakeTimers();
+    const events: RefetchEvent[] = [];
+    const unsubscribe = subscribeToRefetch("file_tree", (event) => {
+      events.push(event);
+    });
+    triggerRefetch("file_tree", "project-123");
+    vi.advanceTimersByTime(300);
+    unsubscribe();
+    expect(events).toEqual([{ type: "file_tree", entityId: "project-123" }]);
+    vi.useRealTimers();
+  });
 });
