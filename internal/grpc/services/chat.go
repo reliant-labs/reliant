@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -99,21 +98,30 @@ func (s *ChatService) checkParamsActuallyChanged(ctx context.Context, workflowID
 		return true
 	}
 
-	// Compare each incoming param with current value
+	// Compare each incoming param with current value using JSON normalization.
+	// Both sides go through JSON serialization (Temporal stores as JSON, protobuf
+	// values are JSON-compatible), so normalizing to JSON bytes eliminates type
+	// mismatches (e.g., float64 vs int from JSON round-trip, structpb types vs
+	// native Go types).
 	for key, newValue := range incomingParams {
 		currentValue, exists := currentInputs[key]
 		if !exists {
-			// New param that doesn't exist yet - this is a change
 			logging.Debug("Param change detected: new param", "key", key, "value", newValue)
 			return true
 		}
-		if !reflect.DeepEqual(currentValue, newValue) {
-			logging.Debug("Param change detected: value changed", "key", key, "old", currentValue, "new", newValue)
+		newJSON, errNew := json.Marshal(newValue)
+		curJSON, errCur := json.Marshal(currentValue)
+		if errNew != nil || errCur != nil {
+			// If marshaling fails, fall back to assuming changed
+			logging.Warn("Failed to marshal param for comparison, assuming changed", "key", key, "marshalNewErr", errNew, "marshalCurErr", errCur)
+			return true
+		}
+		if string(newJSON) != string(curJSON) {
+			logging.Debug("Param change detected: value changed", "key", key, "old", string(curJSON), "new", string(newJSON))
 			return true
 		}
 	}
 
-	// No actual changes detected
 	logging.Debug("No actual param changes detected", "workflowID", workflowID, "paramCount", len(incomingParams))
 	return false
 }
@@ -2808,8 +2816,16 @@ func (s *ChatService) BranchChat(
 		title = fmt.Sprintf("%s (branch)", sourceChat.Title)
 	}
 
-	// Determine worktree ID - use provided one or inherit from source chat
+	// Determine worktree ID - use provided one or inherit from the requesting chat
 	worktreeID := sourceChat.WorktreeID
+	// If the requesting chat differs from the source chat (branching from an inherited message),
+	// use the requesting chat's worktree as the default instead of the message's original chat's worktree.
+	if req.Msg.ChatId != "" && req.Msg.ChatId != sourceChatID {
+		requestingChat, err := s.database.GetChat(ctx, req.Msg.ChatId)
+		if err == nil && requestingChat.UserID == userID {
+			worktreeID = requestingChat.WorktreeID
+		}
+	}
 	var targetWorktree *db.Worktree // Store for system message creation
 	if req.Msg.WorktreeId != nil && *req.Msg.WorktreeId != "" {
 		// Verify the worktree exists and belongs to the same project

@@ -11,8 +11,6 @@ interface ChatActionButtonsProps {
 
   // Yield
   hasPendingYield?: boolean;
-  onContinueYield?: () => void;
-  isAskUser?: boolean;
 
   // File actions
   onAttach: () => void;
@@ -52,7 +50,7 @@ interface ButtonLayoutProps extends ChatActionButtonsProps {
 export function ChatActionButtons(props: ChatActionButtonsProps) {
   // Minimal layout - only attach, more menu (with everything else), and send
   const defaultLayout = [
-    "attach", "prompts", "recentChanges", "compact", "devTool", "discuss", "continueYield", "sendStop"
+    "attach", "prompts", "recentChanges", "compact", "devTool", "discuss", "sendStop"
   ];
 
   return <ButtonLayout {...props} layout={defaultLayout} />;
@@ -71,8 +69,7 @@ export function ButtonLayout({
 
   // Keep only attach always visible (not in collapsible group)
   const alwaysVisibleNames = ["attach"];
-  // continueYield renders after the collapsible group, before send
-  const rightOfMenuNames = ["discuss", "continueYield"];
+  const rightOfMenuNames = ["discuss"];
   const alwaysVisibleButtons = layout.filter(name => alwaysVisibleNames.includes(name) && !sendButtonNames.includes(name));
   const collapsibleButtons = layout.filter(name => !alwaysVisibleNames.includes(name) && !sendButtonNames.includes(name) && !rightOfMenuNames.includes(name));
 

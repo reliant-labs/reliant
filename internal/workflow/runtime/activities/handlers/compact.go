@@ -518,9 +518,8 @@ func (a *CompactActivity) emitThreadUpdate(ctx context.Context, chatID, thread, 
 	}
 }
 
-const compactionMsg = `Your task is to create a detailed summary of the conversation so far, paying close attention to the user's explicit requests and your previous actions.
-This summary should be thorough in capturing technical details, code patterns, and architectural decisions that would be essential for continuing development work without losing context.
-
-Prefer to weight on remaining tasks that still need to be done, or the more recent part of the conversation, so that things can continue to flow naturally, but include details that will help you continue.
-Make sure to include next steps (if any), as well as any explicit user directions.
+const compactionMsg = `You are approaching your context window. You need to provide a handoff statement.
+This can optionally detail any context you deem worth including, but should focus on next steps.
+Be particular about your current plan, and whether the remaining steps are indicative of what is actually remaining. Sometimes plans can grow stale.
+If you are unsure of the plan tool's state, you can include that in your handoff, and mention to use your handoff as canonical source of truth, or to yield to user if the agent is unsure.
 `
