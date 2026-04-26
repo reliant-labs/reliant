@@ -649,27 +649,6 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		}
 	})
 
-	// STEP 8.5: Set up force-yield signal infrastructure
-	// Track force-yield requests by thread ID. This is a regular Go map; Temporal
-	// workflow goroutines (workflow.Go) run cooperatively (single-threaded), so
-	// no mutex is needed.
-	yieldRequestedThreads := make(map[string]bool)
-
-	forceYieldCh := workflow.GetSignalChannel(ctx, workflow_constants.SignalForceYield)
-
-	// Background goroutine to listen for force-yield signals at any time.
-	workflow.Go(ctx, func(gCtx workflow.Context) {
-		for {
-			var targetThread string
-			forceYieldCh.Receive(gCtx, &targetThread)
-			logger.Info("[Workflow Runtime] Force-yield signal received",
-				"workflowID", workflowID,
-				"targetThread", targetThread,
-			)
-			yieldRequestedThreads[targetThread] = true
-		}
-	})
-
 	// requestPause triggers a self-pause from within the workflow.
 	// Used by executors when a retryable error (like a rate limit) exhausts retries.
 	requestPause := func() {
@@ -678,18 +657,12 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	}
 
 	// makeThreadPauseCtrl creates a per-thread PauseController that inherits
-	// pause/activity-context from the shared one but adds a thread-specific yield check.
+	// pause/activity-context from the shared one.
 	makeThreadPauseCtrl := func(thread string) *PauseController {
 		return &PauseController{
 			CheckPause:    checkPause,
 			ActivityCtxFn: getActivityCtx,
 			RequestPause:  requestPause,
-			CheckYield: func() bool {
-				return yieldRequestedThreads[thread]
-			},
-			ClearYield: func() {
-				delete(yieldRequestedThreads, thread)
-			},
 		}
 	}
 
@@ -958,11 +931,6 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 							continue retryLoop
 						}
 
-						// Handle force-yield - treat as completed with yield output
-						if errors.Is(execErr, ErrForceYielded) {
-							break retryLoop
-						}
-
 						logger.Error("[Workflow Runtime] Loop step execution failed",
 							"stepID", step.Node.GetId(),
 							"error", execErr,
@@ -975,33 +943,6 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 
 					// Success - break out of retry loop
 					break retryLoop
-				}
-
-				// Check if the loop was force-yielded
-				if loopOutput == nil {
-					// Force-yield: produce yield output instead of normal loop output
-					var threadID string
-					if loopExecCtx != nil {
-						threadID = loopExecCtx.Thread
-					}
-					logger.Info("[Workflow Runtime] Loop step force-yielded",
-						"stepID", step.Node.GetId(),
-						"thread", threadID,
-					)
-					yieldOutput := forceYieldNodeOutput(threadID)
-					nodeOutputStore.Set(step.Node.GetId(), yieldOutput)
-					if threadTracker != nil {
-						threadTracker.Mapping.MarkStepCompleted(step.Node.GetId())
-					}
-					events = append(events, &core.WorkflowEvent{
-						ID:           fmt.Sprintf("loop-yield-%s-%d", step.Node.GetId(), workflow.Now(ctx).UnixNano()),
-						WorkflowID:   workflowID,
-						ChatID:       input.ChatID,
-						WorkflowName: input.WorkflowName,
-						StepID:       step.Node.GetId(),
-						Data:         yieldOutput,
-					})
-					continue
 				}
 
 				// Store loop output for edge routing
@@ -1725,20 +1666,6 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 						continue
 					}
 
-					// Handle force-yield - treat as completed with yield output
-					if errors.Is(running.Error, ErrForceYielded) {
-						var threadID string
-						if running.ChildExecCtx != nil {
-							threadID = running.ChildExecCtx.Thread
-						}
-						logger.Info("[Workflow Runtime] Inline workflow force-yielded",
-							"stepID", running.StepID,
-							"thread", threadID,
-						)
-						running.Output = forceYieldNodeOutput(threadID)
-						running.Error = nil
-					}
-
 					if running.Error != nil {
 						logger.Error("[Workflow Runtime] Inline workflow execution failed",
 							"stepID", running.StepID,
@@ -2192,9 +2119,9 @@ func parseSpawnToolCall(ctx workflow.Context, spawnToolCall *reliantv1.ToolCallM
 
 // isTransientSpawnExecutionError returns true for errors that should trigger a retry
 // in the spawn execution loop (e.g., worker restarts, heartbeat timeouts).
-// Terminal errors (auth failures, validation errors) and force-yield are not transient.
+// Terminal errors (auth failures, validation errors) are not transient.
 func isTransientSpawnExecutionError(err error) bool {
-	if err == nil || errors.Is(err, ErrForceYielded) {
+	if err == nil {
 		return false
 	}
 	// Non-retryable ApplicationErrors are terminal
@@ -2212,7 +2139,6 @@ type spawnInlineResult struct {
 	ToolCallID string
 	Content    string
 	IsError    bool
-	Err        error // set only for force-yield propagation
 }
 
 // toToolResult converts to the map format expected by the tool result pipeline.
@@ -2463,37 +2389,6 @@ func executeSpawnInline(
 			break // Success
 		}
 
-		// Check for explicit force-yield error OR context cancellation while yield was requested.
-		// The latter happens when the child is mid-activity (e.g., call_llm streaming) and can't
-		// check yield at a step boundary — the context gets cancelled and the error is "canceled"
-		// rather than ErrForceYielded.
-		isForceYield := errors.Is(execErr, ErrForceYielded)
-		if !isForceYield && pauseCtrl.DoCheckYield() {
-			logger.Info("[SpawnInline] Context cancelled while yield was requested, treating as force-yield",
-				"toolCallID", config.toolCallID,
-				"childWorkflowID", config.childWorkflowID,
-				"originalError", execErr,
-			)
-			isForceYield = true
-		}
-
-		if isForceYield {
-			logger.Info("[SpawnInline] Force-yield requested for spawn",
-				"toolCallID", config.toolCallID,
-				"childWorkflowID", config.childWorkflowID,
-			)
-			// Clear the yield flag so it doesn't persist and cause future
-			// transient errors to be misinterpreted as force-yields.
-			pauseCtrl.DoClearYield()
-			notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, targetWorkflow, "yielded", parentWorkflowID, config.childThread, nil)
-			return &spawnInlineResult{
-				ToolCallID: config.toolCallID,
-				Content:    fmt.Sprintf("Spawned workflow yielded. Agent ID: %s", config.childWorkflowID),
-				IsError:    false,
-				Err:        ErrForceYielded,
-			}
-		}
-
 		// Transient errors (worker restart, heartbeat timeout) — retry with backoff.
 		// Spawn tool calls must survive any number of worker restarts. The thread's
 		// persisted messages ensure the agent resumes from where it left off.
@@ -2511,7 +2406,6 @@ func executeSpawnInline(
 					ToolCallID: config.toolCallID,
 					Content:    fmt.Sprintf("Spawned workflow failed: %v", execErr),
 					IsError:    true,
-					Err:        execErr,
 				}
 			}
 			// Exponential backoff capped at maxBackoff
@@ -2539,7 +2433,6 @@ func executeSpawnInline(
 			ToolCallID: config.toolCallID,
 			Content:    fmt.Sprintf("Spawned workflow failed: %v", execErr),
 			IsError:    true,
-			Err:        execErr,
 		}
 	}
 

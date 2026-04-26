@@ -54,9 +54,8 @@ var WorkflowExecutionTimeout = func() time.Duration {
 
 // Signal names
 const (
-	SignalPause      = "signal.pause"       // Signal to pause workflow at next step boundary
-	SignalResume     = "signal.resume"      // Signal to resume a paused workflow
-	SignalForceYield = "signal.force_yield" // Signal to force-yield a specific thread
+	SignalPause  = "signal.pause"  // Signal to pause workflow at next step boundary
+	SignalResume = "signal.resume" // Signal to resume a paused workflow
 )
 
 // RuntimeInjectedInputs is a set of input names that are injected at runtime

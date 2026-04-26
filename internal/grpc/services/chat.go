@@ -2264,45 +2264,6 @@ func (s *ChatService) UpdateChatState(
 	}), nil
 }
 
-// ForceYieldThread sends a force-yield signal for a specific thread in a chat's workflow
-func (s *ChatService) ForceYieldThread(
-	ctx context.Context,
-	req *connect.Request[reliantv1.ForceYieldThreadRequest],
-) (*connect.Response[reliantv1.ForceYieldThreadResponse], error) {
-	userID := auth.MustGetUserID(ctx)
-
-	chatID := req.Msg.ChatId
-	threadID := req.Msg.ThreadId
-	if chatID == "" || threadID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id and thread_id are required"))
-	}
-
-	// Get chat to verify ownership
-	chat, err := s.database.GetChat(ctx, chatID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
-	}
-	if chat.UserID != userID {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
-	}
-
-	if chat.WorkflowID == nil || *chat.WorkflowID == "" {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("chat has no workflow"))
-	}
-
-	// Send force-yield signal to the root workflow with thread ID as payload
-	err = s.tempClient.SignalWorkflow(ctx, *chat.WorkflowID, "", workflow.SignalForceYield, threadID)
-	if err != nil {
-		logging.Error("Failed to send force-yield signal", "error", err, "workflowID", *chat.WorkflowID)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to send force-yield signal"))
-	}
-
-	return connect.NewResponse(&reliantv1.ForceYieldThreadResponse{
-		Success: true,
-		Message: fmt.Sprintf("Force-yield signal sent for thread %s", threadID),
-	}), nil
-}
-
 // CancelChat cancels the running workflow for a chat
 func (s *ChatService) CancelChat(
 	ctx context.Context,

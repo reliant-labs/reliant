@@ -35,7 +35,6 @@ interface ChatMessageProps {
   isLatestMessage?: boolean;
   isStreaming?: boolean;
   chatId?: string; // Chat ID for branching functionality
-  onForceYield?: (toolCallId: string) => void;
   onSelectThread?: (threadId: string | null) => void;
 }
 
@@ -120,7 +119,6 @@ function ChatMessageComponent({
   isLatestMessage = false,
   isStreaming = false,
   chatId: propChatId,
-  onForceYield,
   onSelectThread,
 }: ChatMessageProps) {
   const isUser = message.role === MessageRole.USER;
@@ -774,7 +772,6 @@ function ChatMessageComponent({
                             approvals={approvals}
                             chatId={chatId || undefined}
                             showRichContent={true}
-                            onForceYield={onForceYield}
                             onSelectThread={onSelectThread}
                           />
                         ) : (
@@ -786,7 +783,6 @@ function ChatMessageComponent({
                               status={exec.status}
                               onCancel={exec.onCancel}
                               onConvertToBackground={exec.onConvertToBackground}
-                              onForceYield={onForceYield}
                               approval={exec.approval}
                               chatId={chatId || undefined}
                               showRichContent={true}

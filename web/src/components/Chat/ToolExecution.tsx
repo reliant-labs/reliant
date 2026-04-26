@@ -22,7 +22,7 @@ import {
   XCircle,
   Play,
   Zap,
-  CircleStop,
+  Maximize2,
 } from "lucide-react";
 import { cn, formatErrorMessage } from "../../lib/utils";
 import { ToolContentArea, type ToolRenderContext, type ToolResultData } from "./tool-renderers";
@@ -38,8 +38,24 @@ import { useTasksStore } from "../../store/tasksStore";
 import { shouldToolBeCollapsed } from "../Settings/ToolCallSettings";
 import { ApprovalStatus } from "../../gen/reliant/v1/approval_pb";
 import { useActivityStore, ChatActivity } from "../../store/activityStore";
+import { useActiveThreads } from "../../store/threadActivityStore";
+import { useWorkflowExecutions } from "../../hooks/useWorkflowExecutions";
+import type { WorkflowExecutionData } from "../../types/chat";
 
 export type { ToolResultData };
+
+/** Walk the workflow execution tree to find the child spawned by a given node ID. */
+function findSpawnWorkflow(
+  wf: WorkflowExecutionData,
+  spawnNodeId: string,
+): WorkflowExecutionData | undefined {
+  if (wf.spawnedByNodeId === spawnNodeId) return wf;
+  for (const child of wf.children) {
+    const found = findSpawnWorkflow(child, spawnNodeId);
+    if (found) return found;
+  }
+  return undefined;
+}
 
 interface ToolExecutionProps {
   toolCall: {
@@ -54,7 +70,6 @@ interface ToolExecutionProps {
   onDeny?: (id: string) => void;
   onCancel?: (id: string) => void;
   onConvertToBackground?: (id: string) => void;
-  onForceYield?: (toolCallId: string) => void;
   status?:
     | "pending"
     | "preparing"
@@ -81,7 +96,6 @@ function ToolExecutionComponent({
   onDeny,
   onCancel,
   onConvertToBackground,
-  onForceYield,
   status,
   approval,
   chatId,
@@ -218,6 +232,25 @@ function ToolExecutionComponent({
     return paramDescription || paramNotes || null;
   }, [isTaskToolFlag, toolCall.input, toolNameLower, storedTask]);
 
+  // Resolve spawn thread ID for the Open button
+  const activeThreads = useActiveThreads(isSpawnToolFlag ? (chatId || "") : "");
+  const { allWorkflows } = useWorkflowExecutions(isSpawnToolFlag ? (chatId || null) : null);
+  const spawnThreadId = useMemo(() => {
+    if (!isSpawnToolFlag) return undefined;
+    const spawnNodeId = `spawn-${toolCall.id}`;
+    // Source 1: active thread updates (live streaming)
+    const spawnThread = activeThreads.find(
+      (t) => t.spawned_by_tool_call_id === toolCall.id || t.spawned_by_node_id === spawnNodeId,
+    );
+    if (spawnThread?.thread) return spawnThread.thread;
+    // Source 2: workflow execution tree (persisted/historical)
+    for (const wf of allWorkflows) {
+      const found = findSpawnWorkflow(wf, spawnNodeId);
+      if (found?.thread) return found.thread;
+    }
+    return undefined;
+  }, [isSpawnToolFlag, toolCall.id, activeThreads, allWorkflows]);
+
   // Handlers
   const handleApprove = useCallback(() => {
     if (approval && chatId) {
@@ -253,13 +286,18 @@ function ToolExecutionComponent({
   };
 
   // Format tool call display
-  const formatToolCallDisplay = (name: string, input: Record<string, unknown> | string): React.ReactNode => {
+  const formatToolCallDisplay = (rawName: string, input: Record<string, unknown> | string): React.ReactNode => {
+    // Strip MCP prefix for display: mcp__reliant__spawn -> spawn
+    const name = rawName.startsWith('mcp__')
+      ? rawName.split('__').pop() || rawName
+      : rawName;
+
     // Task tools show task title
     if (isTaskToolFlag && taskTitle) {
       return taskTitle;
     }
 
-    const formatted = formatToolParams(name, input as ToolInput);
+    const formatted = formatToolParams(rawName, input as ToolInput);
     if (formatted) {
       // File paths with links
       if (formatted.structured?.filePaths && formatted.structured.filePaths.length > 0) {
@@ -494,13 +532,13 @@ function ToolExecutionComponent({
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
-            {toolNameLower.includes('spawn') && !isCompleted && !hasFailed && onForceYield && (
+            {isSpawnToolFlag && spawnThreadId && onSelectThread && (
               <button
-                onClick={(e) => { e.stopPropagation(); onForceYield(toolCall.id); }}
+                onClick={(e) => { e.stopPropagation(); onSelectThread(spawnThreadId); }}
                 className="p-0.5 hover:bg-muted rounded transition-colors"
-                title="Stop thread" aria-label="Stop thread"
+                title="Open full thread view" aria-label="Open full thread view"
               >
-                <CircleStop className="w-3 h-3 text-yellow-500" />
+                <Maximize2 className="w-3 h-3 text-muted-foreground" />
               </button>
             )}
             {isExecuting && !isCancelling && onConvertToBackground && (
@@ -560,7 +598,7 @@ function ToolExecutionComponent({
 
         {/* Content area - only shown when expanded */}
         {isExpandable && !shouldShowApprovalUI && isExpanded && (
-          <div className="border-t border-border/30 overflow-hidden">
+          <div className="border-t border-border/30 overflow-hidden max-h-[600px] overflow-y-auto">
             <ToolContentArea ctx={renderContext} />
           </div>
         )}

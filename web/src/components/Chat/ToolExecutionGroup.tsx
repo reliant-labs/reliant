@@ -27,7 +27,6 @@ interface ToolExecutionGroupProps {
   approvals?: ToolApprovalRequest[];
   chatId?: string;
   showRichContent?: boolean;
-  onForceYield?: (toolCallId: string) => void;
   onSelectThread?: (threadId: string | null) => void;
 }
 
@@ -38,7 +37,6 @@ function ToolExecutionGroupComponent({
   approvals = [],
   chatId,
   showRichContent = false,
-  onForceYield,
   onSelectThread,
 }: ToolExecutionGroupProps) {
   // Check if chat is no longer running - affects tool display state
@@ -184,7 +182,6 @@ function ToolExecutionGroupComponent({
                 status={execution.status}
                 onCancel={execution.onCancel}
                 onConvertToBackground={execution.onConvertToBackground}
-                onForceYield={onForceYield}
                 approval={approval}
                 chatId={chatId}
                 showRichContent={showRichContent}
