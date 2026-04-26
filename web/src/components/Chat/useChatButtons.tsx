@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Square, Paperclip, GitBranch, Minimize2, ArrowRight, MessageCircle } from "lucide-react";
+import { Square, Paperclip, GitBranch, Minimize2, MessageCircle } from "lucide-react";
 import { IoMdReturnLeft } from "react-icons/io";
 import { ChatButton } from "./ChatButton";
 
@@ -13,8 +13,6 @@ interface UseChatButtonsProps {
 
   // Yield
   hasPendingYield?: boolean;
-  onContinueYield?: () => void;
-  isAskUser?: boolean;
 
   // File actions
   onAttach: () => void;
@@ -51,8 +49,6 @@ export function useChatButtons({
   isStreaming,
   disabled,
   hasPendingYield = false,
-  onContinueYield,
-  isAskUser = false,
   onAttach,
   uploading,
   onToggleRecentChanges,
@@ -191,22 +187,7 @@ export function useChatButtons({
       </ChatButton>
     ) : null,
 
-    // Continue button - shown when yield is pending (agent is waiting for user to continue)
-    // Hidden when ask_user is active since QuestionPrompt has its own submit
-    continueYield: hasPendingYield && onContinueYield && !isAskUser ? (
-      <ChatButton
-        key="continueYield"
-        onClick={onContinueYield}
-        tooltip="Continue without replying"
-        compact={compact}
-        className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/25 hover:bg-emerald-500/25"
-      >
-        <span className={compact ? "" : "inline-flex items-center gap-1"}>
-          {!compact && <span className="text-[10px]">Continue</span>}
-          <ArrowRight className={compact ? "w-3 h-3" : "w-3 h-3"} />
-        </span>
-      </ChatButton>
-    ) : null,
+
 
     // Combined send/stop button that transitions smoothly
     sendStop: (() => {

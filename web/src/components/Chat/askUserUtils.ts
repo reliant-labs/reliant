@@ -41,6 +41,6 @@ export interface AskUserQuestion {
 
 export interface AskUserMetadata {
   type: "ask_user";
-  tool_call_id: string;
+  tool_call_id?: string;
   questions: AskUserQuestion[];
 }

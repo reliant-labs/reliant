@@ -2,9 +2,9 @@ import { create } from "zustand";
 
 // Sort options for chat list
 export type ChatSortOption =
-  | "recent_activity" // Default: by last_message_at (most recent first)
+  | "recent_activity" // by last_message_at (most recent first)
   | "needs_attention_first" // Chats needing attention at top, then by last_message_at
-  | "newest_first" // by created_at desc
+  | "newest_first" // Default: by created_at desc
   | "oldest_first" // by created_at asc
   | "alphabetical_asc" // by title A-Z
   | "alphabetical_desc"; // by title Z-A
@@ -42,7 +42,7 @@ function loadPreferences(): Partial<ChatListPreferencesState> {
     if (saved) {
       const parsed = JSON.parse(saved);
       return {
-        sortOrder: parsed.sortOrder || "recent_activity",
+        sortOrder: parsed.sortOrder || "newest_first",
         viewMode: parsed.viewMode || "grouped",
         filters: parsed.filters || {},
       };
@@ -81,7 +81,7 @@ export const useChatListPreferencesStore = create<ChatListPreferencesState>(
 
     return {
       // Initial state from localStorage or defaults
-      sortOrder: loaded.sortOrder || "recent_activity",
+      sortOrder: loaded.sortOrder || "newest_first",
       viewMode: loaded.viewMode || "grouped",
       filters: loaded.filters || defaultFilters,
 
@@ -107,7 +107,7 @@ export const useChatListPreferencesStore = create<ChatListPreferencesState>(
 
       resetAll: () => {
         const defaults = {
-          sortOrder: "recent_activity" as ChatSortOption,
+          sortOrder: "newest_first" as ChatSortOption,
           viewMode: "grouped" as ChatViewMode,
           filters: defaultFilters,
         };
