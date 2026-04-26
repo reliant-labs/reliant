@@ -29,7 +29,6 @@ import {
   WorkspaceBranchContextSchema,
   GetWorkflowExecutionsRequestSchema,
   GetThreadWorkflowInputsRequestSchema,
-  ForceYieldThreadRequestSchema,
   ChatState,
   MessageRole,
   DisplayStyle,
@@ -495,20 +494,6 @@ export const chatGrpc = {
       run_id: response.runId,
       needs_recovery: response.needsRecovery,
       recovery_type: response.recoveryType,
-    };
-  },
-
-  // Force-yield a running thread back to the parent workflow
-  async forceYieldThread(chatId: string, threadId: string): Promise<{
-    success: boolean;
-    message: string;
-  }> {
-    const client = grpcClient.chat();
-    const request = create(ForceYieldThreadRequestSchema, { chatId, threadId });
-    const response = await client.forceYieldThread(request);
-    return {
-      success: response.success,
-      message: response.message,
     };
   },
 

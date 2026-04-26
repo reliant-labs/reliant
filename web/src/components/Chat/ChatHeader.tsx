@@ -27,6 +27,7 @@ import {
   Workflow,
   Activity,
   BookMarked,
+  ArrowLeft,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useChatStore } from "../../store/chatStore";
@@ -88,7 +89,6 @@ export function ChatHeader({
   const currentProject = useProjectStore((state) => state.currentProject);
   const deleteChat = useChatStore((state) => state.deleteChat);
   const renameChat = useChatStore((state) => state.renameChat);
-  const forceYieldThread = useChatStore((state) => state.forceYieldThread);
   const createTerminalSession = useTerminalStore((state) => state.createSession);
   const showTerminal = useTerminalStore((state) => state.showTerminal);
   const setActiveSession = useTerminalStore((state) => state.setActiveSession);
@@ -608,9 +608,27 @@ export function ChatHeader({
                 showAllOption={true}
                 contextUsageByThread={contextUsageByThread}
                 chatId={chatId || undefined}
-                onForceYieldThread={chatId ? (threadId) => forceYieldThread(chatId, threadId) : undefined}
               />
             )}
+
+            {/* Back to main chat bar when viewing a spawn thread */}
+            {(() => {
+              const spawnThread = selectedThreadId ? threads.find(t => t.id === selectedThreadId && t.isSpawn) : null;
+              if (!spawnThread || !onSelectThread) return null;
+              return (
+                <div className="flex items-center gap-2 px-1 py-1 text-xs text-muted-foreground">
+                  <button
+                    onClick={() => onSelectThread(null)}
+                    className="flex items-center gap-1 hover:text-foreground transition-colors"
+                  >
+                    <ArrowLeft className="w-3 h-3" />
+                    Back to main chat
+                  </button>
+                  <span className="text-muted-foreground/50">&middot;</span>
+                  <span className="truncate max-w-[200px]">{spawnThread.name}</span>
+                </div>
+              );
+            })()}
           </div>
         </div>
       </div>

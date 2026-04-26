@@ -10,7 +10,7 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import { Settings2, RefreshCw, CircleStop, X } from "lucide-react";
+import { Settings2, RefreshCw, X } from "lucide-react";
 import "./placeholder-fix.css";
 import { useAttachmentStore } from "../../store/attachmentStore";
 import { useChatParamsStore } from "../../store/chatParamsStore";
@@ -310,29 +310,6 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
 
     // Whether we're currently showing a non-main thread's params
     const isViewingThreadParams = selectedThreadId != null && selectedThreadId !== chatId && threadParamsOverride != null;
-
-    // Determine if we're viewing a running sub-thread (for stop button)
-    const isActiveSubThread = useMemo(() => {
-      if (!selectedThreadId || !chatId || selectedThreadId === chatId || !workflowExecution) return false;
-      function findWf(wf: WorkflowExecution): WorkflowExecution | undefined {
-        if (wf.thread === selectedThreadId) return wf;
-        for (const child of wf.children) {
-          const found = findWf(child);
-          if (found) return found;
-        }
-        return undefined;
-      }
-      const wf = findWf(workflowExecution);
-      return wf?.status === 'running' || (wf?.status as string) === 'pending';
-    }, [selectedThreadId, chatId, workflowExecution]);
-
-    // Force yield a sub-thread
-    const forceYieldThread = useChatStore((s) => s.forceYieldThread);
-    const handleForceYieldThread = useCallback(() => {
-      if (chatId && selectedThreadId) {
-        forceYieldThread(chatId, selectedThreadId);
-      }
-    }, [chatId, selectedThreadId, forceYieldThread]);
 
     const currentProjectFromStore = useProjectStore(
       (state) => state.currentProject
@@ -1659,23 +1636,6 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
 
                     {/* Right side: Action buttons + Scroll to bottom */}
                     <div className="flex items-center gap-2">
-                      {/* Stop sub-thread button */}
-                      {isActiveSubThread && (
-                        <Tooltip content="Stop this thread" placement="top">
-                          <button
-                            onClick={handleForceYieldThread}
-                            className={cn(
-                              "flex items-center justify-center",
-                              "w-6 h-6 rounded-full",
-                              "bg-yellow-500/20 text-yellow-500",
-                              "hover:bg-yellow-500/30 transition-all duration-200",
-                              "border border-yellow-500/30"
-                            )}
-                          >
-                            <CircleStop className="w-3.5 h-3.5" />
-                          </button>
-                        </Tooltip>
-                      )}
                       {/* Action buttons */}
                       <ChatActionButtons
                         onSend={handleSend}

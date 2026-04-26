@@ -6,7 +6,7 @@
  */
 
 import { memo, useMemo } from "react";
-import { GitBranch, HandMetal } from "lucide-react";
+import { GitBranch } from "lucide-react";
 import { cn } from "../../../lib/utils";
 import { Tooltip } from "../../ui/Tooltip";
 import type { ThreadInfo } from "./useThreads";
@@ -25,8 +25,7 @@ interface ThreadTabsProps {
   contextUsageByThread?: Record<string, ContextUsageData>;
   /** Chat ID for main thread lookup */
   chatId?: string;
-  /** Callback to force-yield a running thread */
-  onForceYieldThread?: (threadId: string) => void;
+
 }
 
 /**
@@ -127,7 +126,6 @@ export const ThreadTabs = memo(function ThreadTabs({
   showAllOption = true,
   contextUsageByThread,
   chatId,
-  onForceYieldThread,
 }: ThreadTabsProps) {
   // Check if any thread is active (for "All" tab indicator)
   // Must be called before any early returns to satisfy hooks rules
@@ -234,32 +232,6 @@ export const ThreadTabs = memo(function ThreadTabs({
               return usage ? <MiniContextIndicator usage={usage} color={thread.color} /> : null;
             })()}
 
-            {/* Force-yield button for active non-main threads */}
-            {thread.isActive && !thread.isMain && onForceYieldThread && (
-              <Tooltip content="Force yield this thread" placement="bottom">
-                <span
-                  role="button"
-                  tabIndex={0}
-                  className="inline-flex items-center justify-center w-4 h-4 rounded hover:bg-foreground/10 transition-colors cursor-pointer flex-shrink-0"
-                  data-contextual-tip="spawned-thread-force-yield"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    window.dispatchEvent(new CustomEvent("contextual-tip-thread-force-yield"));
-                    onForceYieldThread(thread.id);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.stopPropagation();
-                      e.preventDefault();
-                      window.dispatchEvent(new CustomEvent("contextual-tip-thread-force-yield"));
-                      onForceYieldThread(thread.id);
-                    }
-                  }}
-                >
-                  <HandMetal className="h-3 w-3" />
-                </span>
-              </Tooltip>
-            )}
           </button>
         );
       })}

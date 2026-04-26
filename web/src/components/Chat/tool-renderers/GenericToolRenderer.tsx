@@ -7,6 +7,7 @@ import { memo } from 'react';
 import type { ToolContentProps } from './types';
 import { LightweightCodeViewer } from '../LightweightCodeViewer';
 import { formatErrorMessage } from '../../../lib/utils';
+import { CopyButton } from './CopyButton';
 
 function GenericToolRendererComponent({ ctx }: ToolContentProps) {
   const { input, result } = ctx;
@@ -31,7 +32,7 @@ function GenericToolRendererComponent({ ctx }: ToolContentProps) {
           <LightweightCodeViewer
             content={typeof input === 'string' ? input : JSON.stringify(input, null, 2)}
             language="json"
-            maxHeight={150}
+            maxHeight={300}
             minHeight={0}
             showLineNumbers={false}
             noBorder
@@ -42,8 +43,11 @@ function GenericToolRendererComponent({ ctx }: ToolContentProps) {
       {/* Result display */}
       {hasResult && (
         <div className={result.is_error ? 'bg-destructive/5' : ''}>
-          <div className={`px-2 py-0.5 text-[10px] ${result.is_error ? 'text-destructive' : 'text-muted-foreground'} bg-muted/30`}>
-            {result.is_error ? 'Error' : 'Output'}
+          <div className={`px-2 py-0.5 text-[10px] ${result.is_error ? 'text-destructive' : 'text-muted-foreground'} bg-muted/30 flex items-center justify-between`}>
+            <span>{result.is_error ? 'Error' : 'Output'}</span>
+            {!result.is_error && result.content && (
+              <CopyButton content={result.content} className="opacity-100" />
+            )}
           </div>
           {result.is_error ? (
             <div className="px-2 py-1.5 text-[11px] text-destructive">
@@ -53,7 +57,7 @@ function GenericToolRendererComponent({ ctx }: ToolContentProps) {
             <LightweightCodeViewer
               content={result.content}
               language="text"
-              maxHeight={200}
+              maxHeight={500}
               minHeight={0}
               showLineNumbers={false}
               noBorder
