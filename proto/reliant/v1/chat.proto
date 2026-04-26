@@ -120,9 +120,6 @@ service ChatService {
   // ResumeChat resumes a paused or expired workflow
   rpc ResumeChat(ResumeChatRequest) returns (ResumeChatResponse) {}
 
-  // ForceYieldThread force-yields a running thread back to the parent workflow
-  rpc ForceYieldThread(ForceYieldThreadRequest) returns (ForceYieldThreadResponse) {}
-
   // REMOVED: UpdateChatAgent - agent is now a workflow param, not stored on chat
   
   // ============================================
@@ -444,18 +441,6 @@ message CancelChatRequest {
 
 // CancelChatResponse confirms cancellation
 message CancelChatResponse {
-  bool success = 1;
-  string message = 2;
-}
-
-// ForceYieldThreadRequest force-yields a specific thread
-message ForceYieldThreadRequest {
-  string chat_id = 1;
-  string thread_id = 2;
-}
-
-// ForceYieldThreadResponse confirms force-yield was sent
-message ForceYieldThreadResponse {
   bool success = 1;
   string message = 2;
 }

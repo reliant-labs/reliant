@@ -30,7 +30,6 @@ function createBaseContext(): ContextualTipTriggerContext {
     ],
     hasNonMainWorktree: false,
     threadInteractionEngaged: false,
-    threadForceYieldEngaged: false,
     branchingEngaged: false,
     paramsEngaged: false,
     now: new Date("2025-01-01T12:00:00.000Z").getTime(),

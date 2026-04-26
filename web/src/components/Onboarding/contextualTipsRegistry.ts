@@ -25,7 +25,6 @@ export interface ContextualTipTriggerContext {
   activeThreads: ActiveThreadUpdate[];
   hasNonMainWorktree: boolean;
   threadInteractionEngaged: boolean;
-  threadForceYieldEngaged: boolean;
   branchingEngaged: boolean;
   paramsEngaged: boolean;
   now: number;
@@ -147,7 +146,6 @@ function hasResolvedThreadInteract(
 ): boolean {
   return (
     context.threadInteractionEngaged ||
-    context.threadForceYieldEngaged ||
     Boolean(state["spawned-thread-interact"].engagedAt)
   );
 }
@@ -173,9 +171,9 @@ export const CONTEXTUAL_TIP_DEFINITIONS: ContextualTipDefinition[] = [
   },
   {
     id: "spawned-thread-interact" as ContextualTipId,
-    title: "You can open or pause this thread",
-    body: "Spawned threads are interactive. Click into one to chat directly, or use the hand button to force-yield it when you want control back.",
-    targetSelector: "[data-contextual-tip='spawned-thread-force-yield']",
+    title: "You can interact with this thread",
+    body: "Spawned threads are interactive. Click into one to chat directly.",
+    targetSelector: "[data-contextual-tip='spawned-thread-item']",
     priority: 90,
     cooldownMs: THREAD_TIP_COOLDOWN_MS,
     shouldShow: (context: ContextualTipTriggerContext, state: Record<ContextualTipId, ContextualTipStateRecord>) => {

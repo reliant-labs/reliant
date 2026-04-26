@@ -30,7 +30,6 @@ interface ToolExecutionCollapsibleGroupProps {
   messageId?: string;
   chatId?: string;
   showRichContent?: boolean;
-  onForceYield?: (toolCallId: string) => void;
   onSelectThread?: (threadId: string | null) => void;
 }
 
@@ -39,7 +38,6 @@ function ToolExecutionCollapsibleGroupComponent({
   messageId,
   chatId,
   showRichContent = false,
-  onForceYield,
   onSelectThread,
 }: ToolExecutionCollapsibleGroupProps) {
   // Determine initial expanded state based on first tool's settings
@@ -103,7 +101,6 @@ function ToolExecutionCollapsibleGroupComponent({
               status={execution.status}
               onCancel={execution.onCancel}
               onConvertToBackground={execution.onConvertToBackground}
-              onForceYield={onForceYield}
               approval={execution.approval}
               chatId={chatId}
               showRichContent={showRichContent}

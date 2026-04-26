@@ -209,6 +209,11 @@ function FileToolRendererComponent({ ctx }: ToolContentProps) {
 
             return (
               <div key={index} className={index > 0 ? 'mt-2' : ''}>
+                {editFilePath && (
+                  <div className="px-2 py-0.5 text-[10px] text-muted-foreground font-mono bg-muted/30 border-b border-border/30 truncate">
+                    {editFilePath}
+                  </div>
+                )}
                 <PreviewAwareFileMutation
                   filePath={editFilePath}
                   originalContent={editOldString}

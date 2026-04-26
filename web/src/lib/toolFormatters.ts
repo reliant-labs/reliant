@@ -612,6 +612,80 @@ export const formatPatchParams: ToolFormatter = (input) => {
 };
 
 /**
+ * Format find_replace tool parameters
+ */
+export const formatFindReplaceParams: ToolFormatter = (input) => {
+  if (typeof input !== 'object' || input === null) return { summary: '', fullText: 'find_replace()' };
+  const findPattern = input.find_pattern as string | undefined;
+  const fileGlob = input.file_glob as string | undefined;
+  if (!findPattern) return { summary: '', fullText: 'find_replace()' };
+  const truncPattern = findPattern.length > 30 ? findPattern.slice(0, 27) + '...' : findPattern;
+  let summary = `"${truncPattern}"`;
+  if (fileGlob) summary += ` in ${fileGlob}`;
+  return { summary, fullText: `find_replace("${findPattern}"${fileGlob ? `, glob: "${fileGlob}"` : ''})`, structured: { query: findPattern } };
+};
+
+/**
+ * Format load_tool parameters
+ */
+export const formatLoadToolParams: ToolFormatter = (input) => {
+  if (typeof input !== 'object' || input === null) return { summary: '', fullText: 'load_tool()' };
+  const name = input.name as string | undefined;
+  const query = input.query as string | undefined;
+  if (name) return { summary: name, fullText: `load_tool(${name})`, structured: {} };
+  if (query) return { summary: `"${query}"`, fullText: `load_tool(query: "${query}")`, structured: { query } };
+  return { summary: '', fullText: 'load_tool()' };
+};
+
+/**
+ * Format skill tool parameters
+ */
+export const formatSkillParams: ToolFormatter = (input) => {
+  if (typeof input !== 'object' || input === null) return { summary: '', fullText: 'skill()' };
+  const action = input.action as string | undefined;
+  const path = input.path as string | undefined;
+  const query = input.query as string | undefined;
+  if (action === 'load' && path) return { summary: `load: ${path}`, fullText: `skill(load: ${path})`, structured: {} };
+  if (action === 'search' && query) return { summary: `search: "${query}"`, fullText: `skill(search: "${query}")`, structured: { query } };
+  if (action === 'list') return { summary: 'list', fullText: 'skill(list)', structured: {} };
+  if (action) return { summary: action, fullText: `skill(${action})`, structured: {} };
+  return { summary: '', fullText: 'skill()' };
+};
+
+/**
+ * Format spawn tool parameters
+ */
+export const formatSpawnParams: ToolFormatter = (input) => {
+  if (typeof input !== 'object' || input === null) return { summary: '', fullText: 'spawn()' };
+  const preset = input.preset as string | undefined;
+  const title = input.title as string | undefined;
+  if (preset && title) {
+    const truncTitle = title.length > 35 ? title.slice(0, 32) + '...' : title;
+    return { summary: `${preset}: "${truncTitle}"`, fullText: `spawn(${preset}: "${title}")`, structured: {} };
+  }
+  if (preset) return { summary: preset, fullText: `spawn(${preset})`, structured: {} };
+  return { summary: '', fullText: 'spawn()' };
+};
+
+/**
+ * Format create_plan tool parameters
+ */
+export const formatCreatePlanParams: ToolFormatter = (input) => {
+  if (typeof input !== 'object' || input === null) return { summary: '', fullText: 'create_plan()' };
+  const title = input.title as string | undefined;
+  if (!title) return { summary: '', fullText: 'create_plan()' };
+  const trunc = title.length > 40 ? title.slice(0, 37) + '...' : title;
+  return { summary: `"${trunc}"`, fullText: `create_plan("${title}")`, structured: {} };
+};
+
+/**
+ * Format list_tasks tool parameters
+ */
+export const formatListTasksParams: ToolFormatter = () => {
+  return { summary: '', fullText: 'list_tasks()' };
+};
+
+/**
  * Map of tool names to their formatters
  */
 export const TOOL_FORMATTERS: Record<string, ToolFormatter> = {
@@ -631,28 +705,89 @@ export const TOOL_FORMATTERS: Record<string, ToolFormatter> = {
   find_files: formatLsParams,
   update_task: formatUpdateTaskParams,
   add_task: formatAddTaskParams,
+  create_plan: formatCreatePlanParams,
+  list_tasks: formatListTasksParams,
   write: formatWriteParams,
   edit: formatEditParams,
   patch: formatPatchParams,
+  find_replace: formatFindReplaceParams,
+  load_tool: formatLoadToolParams,
+  skill: formatSkillParams,
+  spawn: formatSpawnParams,
 };
 
 /**
- * Get formatter for a tool, or return undefined if no specific formatter exists
+ * Get formatter for a tool, or return undefined if no specific formatter exists.
+ * Handles MCP-prefixed tool names (e.g. mcp__reliant__spawn -> spawn).
  */
 export function getToolFormatter(toolName: string): ToolFormatter | undefined {
-  return TOOL_FORMATTERS[toolName.toLowerCase()];
+  const lower = toolName.toLowerCase();
+  const formatter = TOOL_FORMATTERS[lower];
+  if (formatter) return formatter;
+  // Try stripping MCP prefix: mcp__server__tool -> tool
+  if (lower.startsWith('mcp__')) {
+    const parts = lower.split('__');
+    const baseName = parts[parts.length - 1];
+    return TOOL_FORMATTERS[baseName];
+  }
+  return undefined;
+}
+
+/**
+ * Generic fallthrough formatter for tools without a specific formatter.
+ * Introspects the input to show the most useful-looking param values.
+ */
+function formatGenericParams(toolName: string, input: ToolInput): FormattedToolParams {
+  const name = toolName.startsWith('mcp__')
+    ? toolName.split('__').pop() || toolName
+    : toolName;
+
+  if (typeof input !== 'object' || input === null) {
+    return { summary: '', fullText: `${name}()` };
+  }
+
+  // Priority order: look for the most descriptive-sounding keys
+  const priorityKeys = [
+    'name', 'title', 'query', 'path', 'file_path', 'pattern',
+    'url', 'command', 'action', 'preset', 'id', 'task_id',
+  ];
+
+  const parts: string[] = [];
+  for (const key of priorityKeys) {
+    const val = input[key];
+    if (typeof val === 'string' && val.length > 0) {
+      const trunc = val.length > 35 ? val.slice(0, 32) + '...' : val;
+      parts.push(trunc);
+      if (parts.length >= 2) break;
+    }
+  }
+
+  // If nothing from priority keys, grab first string value
+  if (parts.length === 0) {
+    for (const val of Object.values(input)) {
+      if (typeof val === 'string' && val.length > 0 && val.length < 60) {
+        parts.push(val.length > 35 ? val.slice(0, 32) + '...' : val);
+        break;
+      }
+    }
+  }
+
+  const summary = parts.join(', ');
+  return { summary, fullText: summary ? `${name}(${summary})` : `${name}()`, structured: {} };
 }
 
 /**
  * Format tool parameters for display
- * Returns formatted params or undefined if no formatter exists
+ * Uses specific formatter if available, otherwise falls through to generic.
  */
 export function formatToolParams(
   toolName: string,
   input: ToolInput
 ): FormattedToolParams | undefined {
   const formatter = getToolFormatter(toolName);
-  return formatter ? formatter(input) : undefined;
+  if (formatter) return formatter(input);
+  // Generic fallthrough — try to show something useful
+  return formatGenericParams(toolName, input);
 }
 
 /**

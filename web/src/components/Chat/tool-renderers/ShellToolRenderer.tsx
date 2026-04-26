@@ -13,6 +13,7 @@
 import { memo, useMemo } from 'react';
 import type { ToolContentProps } from './types';
 import { LightweightCodeViewer } from '../LightweightCodeViewer';
+import { CopyButton } from './CopyButton';
 
 // Threshold for showing command in expanded area vs relying on header
 const SHORT_COMMAND_THRESHOLD = 80;
@@ -149,8 +150,11 @@ function ShellToolRendererComponent({ ctx }: ToolContentProps) {
           {/* Legacy plain text format (backwards compat for old results in DB, and bash_output tool) */}
           {isLegacy && (
             <div className={showCommandInput ? "border-t border-border/50" : ""}>
-              <div className="px-2 py-0.5 text-[9px] text-muted-foreground uppercase tracking-wider bg-muted/30">
-                output
+              <div className="px-2 py-0.5 text-[9px] text-muted-foreground uppercase tracking-wider bg-muted/30 flex items-center justify-between">
+                <span>output</span>
+                {!result.is_error && result.content && (
+                  <CopyButton content={result.content} className="opacity-100" />
+                )}
               </div>
               {result.is_error ? (
                 <div className="px-2 py-1.5 text-[11px] text-destructive bg-destructive/5">
@@ -180,6 +184,10 @@ function ShellToolRendererComponent({ ctx }: ToolContentProps) {
                     exit code {structured.exit_code}
                   </span>
                 )}
+                <span className="flex-1" />
+                {hasStdout && (
+                  <CopyButton content={structured.stdout} className="opacity-100" />
+                )}
               </div>
 
               {/* Stdout */}
@@ -197,10 +205,11 @@ function ShellToolRendererComponent({ ctx }: ToolContentProps) {
               {/* Stderr */}
               {hasStderr && (
                 <div className={hasStdout ? "border-t border-border/50" : ""}>
-                  <div className="px-2 py-0.5 text-[9px] text-destructive/70 uppercase tracking-wider bg-destructive/5">
-                    stderr
+                  <div className="px-2 py-0.5 text-[9px] text-destructive/70 uppercase tracking-wider bg-destructive/5 flex items-center justify-between">
+                    <span>stderr</span>
+                    <CopyButton content={structured.stderr} className="opacity-100" />
                   </div>
-                  <div className="px-2 py-1.5 text-[11px] text-destructive bg-destructive/5 whitespace-pre-wrap font-mono">
+                  <div className="px-2 py-1.5 text-[11px] text-destructive bg-destructive/5 whitespace-pre-wrap font-mono max-h-[400px] overflow-y-auto">
                     {structured.stderr}
                   </div>
                 </div>

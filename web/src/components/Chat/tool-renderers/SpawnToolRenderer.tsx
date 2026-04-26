@@ -1,15 +1,17 @@
 /**
  * Renderer for spawn tool calls.
  *
- * In "preview" mode: shows a compact timeline of the spawned thread's messages
- * with text snippets and tool call summaries, plus an "Open Thread" button.
+ * In "preview" mode: shows a compact vertical list of the spawned thread's
+ * text snippets and tool call rows (status dot + name + detail), growing
+ * downward with scroll.
  * In "inline" mode: falls through to the generic renderer.
  */
 
-import { memo, useMemo } from "react";
+import { memo, useMemo, useRef, useEffect } from "react";
 import {
-  Wrench,
-  Maximize2,
+  Check,
+  X,
+  Loader2,
 } from "lucide-react";
 import type { ToolContentProps } from "./types";
 import { GenericToolRenderer } from "./GenericToolRenderer";
@@ -23,23 +25,94 @@ import { ChatWorkflowStatus } from "../../../gen/reliant/v1/chat_pb";
 import { getSpawnDisplayMode } from "../../Settings/SpawnDisplaySettings";
 import { cn } from "../../../lib/utils";
 
-const MAX_PREVIEW_MESSAGES = 8;
+const MAX_PREVIEW_MESSAGES = 10;
 const MAX_TEXT_LENGTH = 150;
+const MAX_DETAIL_LENGTH = 40;
+const MAX_HEIGHT = 150;
+
+/** Tool call info with optional detail extracted from input */
+interface ToolCallInfo {
+  name: string;
+  displayName: string;
+  completed: boolean;
+  failed: boolean;
+  detail: string;
+}
 
 /** Compact summary of a single message for the preview */
 interface MessageSummary {
   id: string;
   textSnippet: string;
-  toolCalls: { name: string; completed: boolean; failed: boolean }[];
+  toolCalls: ToolCallInfo[];
+}
+
+/** Extract a brief detail string from a tool call's input JSON */
+function extractToolDetail(toolName: string, inputJson?: string): string {
+  if (!inputJson) return "";
+  try {
+    const input = JSON.parse(inputJson);
+    const baseName = toolName.startsWith("mcp__")
+      ? toolName.split("__").pop() || toolName
+      : toolName;
+
+    switch (baseName) {
+      case "edit":
+      case "write":
+      case "view": {
+        const filePath = input.file_path || input.edits?.[0]?.file_path || "";
+        if (filePath) {
+          const parts = filePath.split("/");
+          return parts.length > 2 ? `…/${parts.slice(-2).join("/")}` : filePath;
+        }
+        return "";
+      }
+      case "bash": {
+        const cmd = input.command || "";
+        return cmd.length > 50 ? cmd.slice(0, 50) + "…" : cmd;
+      }
+      case "grep":
+        return input.pattern ? `/${input.pattern}/` : "";
+      case "glob":
+        return input.pattern || "";
+      case "find_replace":
+        return input.find_pattern ? `"${input.find_pattern}"` : "";
+      case "spawn":
+        return input.title || input.preset || "";
+      case "fetch": {
+        const url = input.url || "";
+        try { return new URL(url).hostname; } catch { return url.slice(0, 40); }
+      }
+      case "websearch":
+        return input.query ? `"${input.query}"` : "";
+      case "load_tool":
+        return input.name || (input.query ? `"${input.query}"` : "");
+      case "skill": {
+        const action = input.action || "";
+        if (action === "load") return input.path || "";
+        if (action === "search") return input.query ? `"${input.query}"` : "";
+        return action;
+      }
+      case "create_plan":
+        return input.title || "";
+      case "update_task":
+        return input.status || "";
+      case "add_task":
+        return input.title || "";
+      case "list_tasks":
+        return "";
+      case "update_plan":
+        return input.title || "";
+      default:
+        return "";
+    }
+  } catch {
+    return "";
+  }
 }
 
 function SpawnToolRendererComponent({ ctx }: ToolContentProps) {
   const mode = getSpawnDisplayMode();
-
-  if (mode === "inline") {
-    return <GenericToolRenderer ctx={ctx} />;
-  }
-
+  if (mode === "inline") return <GenericToolRenderer ctx={ctx} />;
   return <SpawnPreview ctx={ctx} />;
 }
 
@@ -57,22 +130,18 @@ function findSpawnWorkflow(
 }
 
 function SpawnPreview({ ctx }: ToolContentProps) {
-  const { chatId, toolCallId, isCompleted, hasFailed, onSelectThread } = ctx;
+  const { chatId, toolCallId, isCompleted, hasFailed } = ctx;
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Source 1: active thread updates (populated during live streaming)
   const activeThreads = useActiveThreads(chatId || "");
   const spawnNodeId = `spawn-${toolCallId}`;
   const spawnThread = useMemo(
-    () =>
-      activeThreads.find(
-        (t) =>
-          t.spawned_by_tool_call_id === toolCallId ||
-          t.spawned_by_node_id === spawnNodeId,
-      ),
+    () => activeThreads.find(
+      (t) => t.spawned_by_tool_call_id === toolCallId || t.spawned_by_node_id === spawnNodeId,
+    ),
     [activeThreads, toolCallId, spawnNodeId],
   );
 
-  // Source 2: workflow execution tree (persisted, works for historical chats)
   const { allWorkflows } = useWorkflowExecutions(chatId || null);
   const spawnWorkflow = useMemo(() => {
     if (!toolCallId) return undefined;
@@ -83,96 +152,91 @@ function SpawnPreview({ ctx }: ToolContentProps) {
     return undefined;
   }, [allWorkflows, toolCallId, spawnNodeId]);
 
-  // Prefer activeThread (has live status), fall back to workflow data
   const spawnThreadId = spawnThread?.thread || spawnWorkflow?.thread;
-
   const allMessages = useChatMessages(chatId);
+
   const summaries = useMemo((): MessageSummary[] => {
     if (!spawnThreadId) return [];
-
     const threadMsgs = allMessages.filter(
-      (msg) =>
-        msg.thread === spawnThreadId && msg.role === MessageRole.ASSISTANT,
+      (msg) => msg.thread === spawnThreadId && msg.role === MessageRole.ASSISTANT,
     );
 
     return threadMsgs.slice(-MAX_PREVIEW_MESSAGES).map((msg) => {
       const blocks = (msg.contentBlocks || []) as ContentBlock[];
       let textSnippet = "";
-      const toolCalls: MessageSummary["toolCalls"] = [];
+      const toolCalls: ToolCallInfo[] = [];
 
       for (const block of blocks) {
         if (block.type === ContentBlockType.TEXT && block.content) {
           if (!textSnippet) {
             const trimmed = block.content.trim();
-            textSnippet =
-              trimmed.length > MAX_TEXT_LENGTH
-                ? trimmed.slice(0, MAX_TEXT_LENGTH) + "\u2026"
-                : trimmed;
+            textSnippet = trimmed.length > MAX_TEXT_LENGTH
+              ? trimmed.slice(0, MAX_TEXT_LENGTH) + "\u2026"
+              : trimmed;
           }
         } else if (block.type === ContentBlockType.TOOL_CALL && block.toolName) {
           const result = block.matchedResult;
+          let detail = extractToolDetail(block.toolName, block.input);
+          if (detail.length > MAX_DETAIL_LENGTH) detail = detail.slice(0, MAX_DETAIL_LENGTH) + "\u2026";
           toolCalls.push({
-            name: formatToolName(block.toolName),
+            name: block.toolName,
+            displayName: formatToolName(block.toolName),
             completed: result != null && !result.isError,
             failed: result?.isError === true,
+            detail,
           });
         }
       }
-
       return { id: msg.id, textSnippet, toolCalls };
     });
   }, [allMessages, spawnThreadId]);
+
+  // Auto-scroll to bottom
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [summaries]);
 
   const workflowCompleted = spawnWorkflow?.status === ChatWorkflowStatus.COMPLETED;
   const workflowFailed =
     spawnWorkflow?.status === ChatWorkflowStatus.FAILED ||
     spawnWorkflow?.status === ChatWorkflowStatus.CANCELLED;
 
-  return (
-    <div className="tool-content-spawn">
-      {/* Open button */}
-      {spawnThreadId && onSelectThread && (
-        <div className="flex items-center justify-end px-2 py-1 bg-muted/30 border-b border-border/30">
-          <button
-            onClick={() => onSelectThread(spawnThreadId)}
-            className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors shrink-0"
-            title="Open full thread view"
-          >
-            <Maximize2 className="w-3 h-3" />
-            Open
-          </button>
-        </div>
-      )}
+  const hasContent = summaries.some((s) => s.textSnippet || s.toolCalls.length > 0);
 
-      {/* Message list */}
-      {summaries.length > 0 ? (
-        <div className="max-h-[200px] overflow-y-auto divide-y divide-border/20">
+  return (
+    <div className="tool-content-spawn w-full">
+      {hasContent ? (
+        <div ref={scrollRef} style={{ maxHeight: MAX_HEIGHT }} className="overflow-y-auto">
           {summaries.map((s) => (
-            <div key={s.id} className="px-2 py-1.5 space-y-1">
-              {/* Text snippet */}
+            <div key={s.id} className="px-2 py-1 border-b border-border/10 last:border-0">
               {s.textSnippet && (
-                <p className="text-[11px] text-foreground/80 leading-relaxed break-words whitespace-pre-wrap">
+                <p className="text-[11px] text-foreground/70 leading-snug break-words whitespace-pre-wrap mb-0.5">
                   {s.textSnippet}
                 </p>
               )}
-              {/* Tool call chips */}
               {s.toolCalls.length > 0 && (
-                <div className="flex flex-wrap gap-1">
+                <div className="space-y-px">
                   {s.toolCalls.map((tc, i) => (
-                    <span
+                    <div
                       key={i}
                       className={cn(
-                        "inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-mono",
-                        tc.failed
-                          ? "bg-destructive/10 text-destructive"
-                          : tc.completed
-                            ? "bg-muted text-muted-foreground"
-                            : "bg-primary/10 text-primary",
+                        "flex items-center gap-1.5 text-[10px] font-mono py-0.5",
+                        tc.failed ? "text-destructive" : tc.completed ? "text-muted-foreground" : "text-primary",
                       )}
                     >
-                      <Wrench className="w-2.5 h-2.5" />
-                      {tc.name}
-                    </span>
+                      {tc.failed ? (
+                        <X className="w-2.5 h-2.5 shrink-0" />
+                      ) : tc.completed ? (
+                        <Check className="w-2.5 h-2.5 shrink-0" />
+                      ) : (
+                        <Loader2 className="w-2.5 h-2.5 shrink-0 animate-spin" />
+                      )}
+                      <span className="shrink-0 font-medium">{tc.displayName}</span>
+                      {tc.detail && (
+                        <span className="text-foreground/40 truncate">{tc.detail}</span>
+                      )}
+                    </div>
                   ))}
                 </div>
               )}
@@ -180,12 +244,9 @@ function SpawnPreview({ ctx }: ToolContentProps) {
           ))}
         </div>
       ) : (
-        !isCompleted &&
-        !hasFailed &&
-        !workflowCompleted &&
-        !workflowFailed && (
-          <div className="px-2 py-2 text-[10px] text-muted-foreground italic">
-            Waiting for messages\u2026
+        !isCompleted && !hasFailed && !workflowCompleted && !workflowFailed && (
+          <div className="px-2 py-1.5 text-[10px] text-muted-foreground italic">
+            Starting…
           </div>
         )
       )}
@@ -193,7 +254,7 @@ function SpawnPreview({ ctx }: ToolContentProps) {
   );
 }
 
-/** Shorten tool name for chip display: mcp__foo__bar → bar */
+/** Shorten tool name for display: mcp__foo__bar → bar */
 function formatToolName(name: string): string {
   if (name.startsWith("mcp__")) {
     const parts = name.split("__");

@@ -64,9 +64,6 @@ const (
 	ChatServicePauseChatProcedure = "/reliant.v1.ChatService/PauseChat"
 	// ChatServiceResumeChatProcedure is the fully-qualified name of the ChatService's ResumeChat RPC.
 	ChatServiceResumeChatProcedure = "/reliant.v1.ChatService/ResumeChat"
-	// ChatServiceForceYieldThreadProcedure is the fully-qualified name of the ChatService's
-	// ForceYieldThread RPC.
-	ChatServiceForceYieldThreadProcedure = "/reliant.v1.ChatService/ForceYieldThread"
 	// ChatServiceDismissChatProcedure is the fully-qualified name of the ChatService's DismissChat RPC.
 	ChatServiceDismissChatProcedure = "/reliant.v1.ChatService/DismissChat"
 	// ChatServiceMarkUnreadChatProcedure is the fully-qualified name of the ChatService's
@@ -127,8 +124,6 @@ type ChatServiceClient interface {
 	PauseChat(context.Context, *connect.Request[v1.PauseChatRequest]) (*connect.Response[v1.PauseChatResponse], error)
 	// ResumeChat resumes a paused or expired workflow
 	ResumeChat(context.Context, *connect.Request[v1.ResumeChatRequest]) (*connect.Response[v1.ResumeChatResponse], error)
-	// ForceYieldThread force-yields a running thread back to the parent workflow
-	ForceYieldThread(context.Context, *connect.Request[v1.ForceYieldThreadRequest]) (*connect.Response[v1.ForceYieldThreadResponse], error)
 	// DismissChat clears needs_attention state when user views a chat
 	DismissChat(context.Context, *connect.Request[v1.DismissChatRequest]) (*connect.Response[v1.DismissChatResponse], error)
 	// MarkUnreadChat marks a chat as needing attention (mark as unread)
@@ -245,12 +240,6 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(chatServiceMethods.ByName("ResumeChat")),
 			connect.WithClientOptions(opts...),
 		),
-		forceYieldThread: connect.NewClient[v1.ForceYieldThreadRequest, v1.ForceYieldThreadResponse](
-			httpClient,
-			baseURL+ChatServiceForceYieldThreadProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("ForceYieldThread")),
-			connect.WithClientOptions(opts...),
-		),
 		dismissChat: connect.NewClient[v1.DismissChatRequest, v1.DismissChatResponse](
 			httpClient,
 			baseURL+ChatServiceDismissChatProcedure,
@@ -335,7 +324,6 @@ type chatServiceClient struct {
 	cancelChat              *connect.Client[v1.CancelChatRequest, v1.CancelChatResponse]
 	pauseChat               *connect.Client[v1.PauseChatRequest, v1.PauseChatResponse]
 	resumeChat              *connect.Client[v1.ResumeChatRequest, v1.ResumeChatResponse]
-	forceYieldThread        *connect.Client[v1.ForceYieldThreadRequest, v1.ForceYieldThreadResponse]
 	dismissChat             *connect.Client[v1.DismissChatRequest, v1.DismissChatResponse]
 	markUnreadChat          *connect.Client[v1.MarkUnreadChatRequest, v1.MarkUnreadChatResponse]
 	compactChat             *connect.Client[v1.CompactChatRequest, v1.CompactChatResponse]
@@ -412,11 +400,6 @@ func (c *chatServiceClient) PauseChat(ctx context.Context, req *connect.Request[
 // ResumeChat calls reliant.v1.ChatService.ResumeChat.
 func (c *chatServiceClient) ResumeChat(ctx context.Context, req *connect.Request[v1.ResumeChatRequest]) (*connect.Response[v1.ResumeChatResponse], error) {
 	return c.resumeChat.CallUnary(ctx, req)
-}
-
-// ForceYieldThread calls reliant.v1.ChatService.ForceYieldThread.
-func (c *chatServiceClient) ForceYieldThread(ctx context.Context, req *connect.Request[v1.ForceYieldThreadRequest]) (*connect.Response[v1.ForceYieldThreadResponse], error) {
-	return c.forceYieldThread.CallUnary(ctx, req)
 }
 
 // DismissChat calls reliant.v1.ChatService.DismissChat.
@@ -502,8 +485,6 @@ type ChatServiceHandler interface {
 	PauseChat(context.Context, *connect.Request[v1.PauseChatRequest]) (*connect.Response[v1.PauseChatResponse], error)
 	// ResumeChat resumes a paused or expired workflow
 	ResumeChat(context.Context, *connect.Request[v1.ResumeChatRequest]) (*connect.Response[v1.ResumeChatResponse], error)
-	// ForceYieldThread force-yields a running thread back to the parent workflow
-	ForceYieldThread(context.Context, *connect.Request[v1.ForceYieldThreadRequest]) (*connect.Response[v1.ForceYieldThreadResponse], error)
 	// DismissChat clears needs_attention state when user views a chat
 	DismissChat(context.Context, *connect.Request[v1.DismissChatRequest]) (*connect.Response[v1.DismissChatResponse], error)
 	// MarkUnreadChat marks a chat as needing attention (mark as unread)
@@ -616,12 +597,6 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(chatServiceMethods.ByName("ResumeChat")),
 		connect.WithHandlerOptions(opts...),
 	)
-	chatServiceForceYieldThreadHandler := connect.NewUnaryHandler(
-		ChatServiceForceYieldThreadProcedure,
-		svc.ForceYieldThread,
-		connect.WithSchema(chatServiceMethods.ByName("ForceYieldThread")),
-		connect.WithHandlerOptions(opts...),
-	)
 	chatServiceDismissChatHandler := connect.NewUnaryHandler(
 		ChatServiceDismissChatProcedure,
 		svc.DismissChat,
@@ -716,8 +691,6 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 			chatServicePauseChatHandler.ServeHTTP(w, r)
 		case ChatServiceResumeChatProcedure:
 			chatServiceResumeChatHandler.ServeHTTP(w, r)
-		case ChatServiceForceYieldThreadProcedure:
-			chatServiceForceYieldThreadHandler.ServeHTTP(w, r)
 		case ChatServiceDismissChatProcedure:
 			chatServiceDismissChatHandler.ServeHTTP(w, r)
 		case ChatServiceMarkUnreadChatProcedure:
@@ -799,10 +772,6 @@ func (UnimplementedChatServiceHandler) PauseChat(context.Context, *connect.Reque
 
 func (UnimplementedChatServiceHandler) ResumeChat(context.Context, *connect.Request[v1.ResumeChatRequest]) (*connect.Response[v1.ResumeChatResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.ResumeChat is not implemented"))
-}
-
-func (UnimplementedChatServiceHandler) ForceYieldThread(context.Context, *connect.Request[v1.ForceYieldThreadRequest]) (*connect.Response[v1.ForceYieldThreadResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.ForceYieldThread is not implemented"))
 }
 
 func (UnimplementedChatServiceHandler) DismissChat(context.Context, *connect.Request[v1.DismissChatRequest]) (*connect.Response[v1.DismissChatResponse], error) {
