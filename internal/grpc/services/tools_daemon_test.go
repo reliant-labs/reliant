@@ -489,6 +489,123 @@ func TestPR5Smoke_ConfigSyncCancelDisconnectReconnect(t *testing.T) {
 	}
 }
 
+func TestHandleFileSystemChanged(t *testing.T) {
+	t.Run("nil message returns no error", func(t *testing.T) {
+		repo, cleanup := db.SetupTestDB(t)
+		defer cleanup()
+
+		svc := NewToolsDaemonService(repo)
+		defer svc.Close()
+
+		conn := &daemonConnection{userID: "test-user", daemonID: uuid.New().String(), done: make(chan struct{})}
+		require.NoError(t, svc.handleFileSystemChanged(context.Background(), conn, nil))
+
+		updates, err := repo.GetUserUpdatesSince(context.Background(), "test-user", 0, 100)
+		require.NoError(t, err)
+		require.Empty(t, updates)
+	})
+
+	t.Run("empty project path returns no error", func(t *testing.T) {
+		repo, cleanup := db.SetupTestDB(t)
+		defer cleanup()
+
+		svc := NewToolsDaemonService(repo)
+		defer svc.Close()
+
+		conn := &daemonConnection{userID: "test-user", daemonID: uuid.New().String(), done: make(chan struct{})}
+		require.NoError(t, svc.handleFileSystemChanged(context.Background(), conn, &reliantv1.FileSystemChanged{
+			ProjectPath: "",
+		}))
+
+		updates, err := repo.GetUserUpdatesSince(context.Background(), "test-user", 0, 100)
+		require.NoError(t, err)
+		require.Empty(t, updates)
+	})
+
+	t.Run("unknown project path returns no error", func(t *testing.T) {
+		repo, cleanup := db.SetupTestDB(t)
+		defer cleanup()
+
+		svc := NewToolsDaemonService(repo)
+		defer svc.Close()
+
+		conn := &daemonConnection{userID: "test-user", daemonID: uuid.New().String(), done: make(chan struct{})}
+		require.NoError(t, svc.handleFileSystemChanged(context.Background(), conn, &reliantv1.FileSystemChanged{
+			ProjectPath: "/tmp/does-not-exist-" + uuid.New().String(),
+		}))
+
+		updates, err := repo.GetUserUpdatesSince(context.Background(), "test-user", 0, 100)
+		require.NoError(t, err)
+		require.Empty(t, updates)
+	})
+
+	t.Run("valid project emits RefetchFileTree", func(t *testing.T) {
+		repo, cleanup := db.SetupTestDB(t)
+		defer cleanup()
+
+		svc := NewToolsDaemonService(repo)
+		defer svc.Close()
+
+		ctx := context.Background()
+		now := time.Now().UTC()
+		userID := "test-user"
+		daemonID := uuid.New().String()
+		projectID := uuid.New().String()
+		projectPath := "/tmp/test-fs-" + uuid.New().String()
+
+		require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{
+			ID:            daemonID,
+			UserID:        userID,
+			Status:        db.DaemonStatusActive,
+			ConnectedAt:   &now,
+			LastHeartbeat: &now,
+		}))
+
+		require.NoError(t, repo.CreateProject(ctx, &db.Project{
+			ID:         projectID,
+			UserID:     userID,
+			Name:       "test-fs",
+			Path:       projectPath,
+			IsGitRepo:  true,
+			CreatedAt:  now,
+			UpdatedAt:  now,
+			LastActive: now,
+		}))
+
+		conn := &daemonConnection{
+			userID:   userID,
+			daemonID: daemonID,
+			sendCh:   make(chan *reliantv1.ServerMessage, 8),
+			done:     make(chan struct{}),
+		}
+		svc.mu.Lock()
+		registerTestConn(svc, conn)
+		svc.mu.Unlock()
+
+		require.NoError(t, svc.handleFileSystemChanged(ctx, conn, &reliantv1.FileSystemChanged{
+			ProjectPath: projectPath,
+		}))
+
+		updates, err := repo.GetUserUpdatesSince(ctx, userID, 0, 100)
+		require.NoError(t, err)
+		require.NotEmpty(t, updates, "expected a user update for RefetchFileTree")
+
+		// Find the refetch update
+		var found bool
+		for _, u := range updates {
+			if u.UpdateType == db.UserUpdateRefetch && u.EntityID == projectID {
+				var data db.RefetchData
+				require.NoError(t, json.Unmarshal(u.Data, &data))
+				require.Equal(t, db.RefetchFileTree, data.Type)
+				require.Equal(t, db.EntityTypeProject, u.EntityType)
+				found = true
+				break
+			}
+		}
+		require.True(t, found, "expected RefetchFileTree update with project entity ID")
+	})
+}
+
 func testStringPtr(v string) *string {
 	return &v
 }

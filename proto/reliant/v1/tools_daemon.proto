@@ -55,6 +55,9 @@ message DaemonMessage {
 
     // Process output streaming
     ProcessOutputChunkMessage process_output_chunk = 11;
+
+    // Filesystem change detection
+    FileSystemChanged file_system_changed = 12;
   }
 }
 
@@ -196,6 +199,13 @@ message ChangedFile {
   string relative_path = 1; // e.g. ".reliant/config.yaml"
   FileChangeType change_type = 2;
   string content_hash = 3; // empty on delete
+}
+
+// Sent by the daemon when it detects filesystem changes via polling.
+// This is a nudge signal — the frontend re-fetches the full file tree.
+message FileSystemChanged {
+  string project_path = 1;        // Which project directory had changes
+  int64 timestamp_unix_ms = 2;    // When the change was detected
 }
 
 message IndexedWorkflow {

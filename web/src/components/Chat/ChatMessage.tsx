@@ -1,4 +1,13 @@
-import { useMemo, useEffect, useCallback, memo, useState, useRef, useLayoutEffect, type JSX } from "react";
+import {
+  useMemo,
+  useEffect,
+  useCallback,
+  memo,
+  useState,
+  useRef,
+  useLayoutEffect,
+  type JSX,
+} from "react";
 import { ContentBlockType, MessageRole } from "../../gen/reliant/v1/chat_pb";
 import { GitBranch, Copy, Check, ChevronDown } from "lucide-react";
 import { cn } from "../../lib/utils";
@@ -16,7 +25,12 @@ import { BranchToExistingWorktreeModal } from "./BranchToExistingWorktreeModal";
 import { CodeContextPill } from "./CodeContextPill";
 import type { Message, ToolApprovalRequest } from "../../api/client";
 import { useChatStore } from "../../store/chatStore"; // For getState() only
-import { useActiveChatId, useProcessedMessages, useToolCallStates, useChat } from "../../store/chatStoreHooks";
+import {
+  useActiveChatId,
+  useProcessedMessages,
+  useToolCallStates,
+  useChat,
+} from "../../store/chatStoreHooks";
 // import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import { useProjectStore } from "../../store/projectStore";
 import { logger } from "../../lib/logger";
@@ -54,7 +68,7 @@ const CONTEXT_MARKER_PATTERN = /\[\[([^\]]+):(\d+)-(\d+)\]\]/g;
 
 function renderTextWithContextPills(
   text: string,
-  worktreeId?: string
+  worktreeId?: string,
 ): Array<string | JSX.Element> {
   CONTEXT_MARKER_PATTERN.lastIndex = 0;
   const out: Array<string | JSX.Element> = [];
@@ -77,7 +91,7 @@ function renderTextWithContextPills(
         context={{ filePath, fileName, startLine, endLine }}
         worktreeId={worktreeId}
         className="mx-1"
-      />
+      />,
     );
 
     lastIndex = match.index + marker.length;
@@ -110,8 +124,6 @@ interface EnhancedToolExecution {
   onConvertToBackground?: (id: string) => void;
 }
 
-
-
 function ChatMessageComponent({
   message,
   approvals = [],
@@ -137,7 +149,9 @@ function ChatMessageComponent({
 
   // Get pre-processed message data from store (FAST - no parsing needed)
   const processedMessages = useProcessedMessages(chatId || "");
-  const processedFromStore = chatId ? processedMessages.get(message.id) || null : null;
+  const processedFromStore = chatId
+    ? processedMessages.get(message.id) || null
+    : null;
 
   const currentProject = useProjectStore((state) => state.currentProject);
 
@@ -148,9 +162,16 @@ function ChatMessageComponent({
   const [fontKey, setFontKey] = useState(0);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isOverflowing, setIsOverflowing] = useState(false);
-  const [branchMenuPosition, setBranchMenuPosition] = useState<{ x: number; y: number } | null>(null);
-  const [showBranchToWorktreeModal, setShowBranchToWorktreeModal] = useState(false);
-  const [showBranchToExistingWorktreeModal, setShowBranchToExistingWorktreeModal] = useState(false);
+  const [branchMenuPosition, setBranchMenuPosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const [showBranchToWorktreeModal, setShowBranchToWorktreeModal] =
+    useState(false);
+  const [
+    showBranchToExistingWorktreeModal,
+    setShowBranchToExistingWorktreeModal,
+  ] = useState(false);
   const bubbleRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   // Track prop changes to diagnose re-renders
@@ -168,10 +189,14 @@ function ChatMessageComponent({
     if (prev) {
       const changes: string[] = [];
       if (prev.messageBlockCount !== (message.contentBlocks?.length || 0)) {
-        changes.push(`blocks(${prev.messageBlockCount}→${message.contentBlocks?.length || 0})`);
+        changes.push(
+          `blocks(${prev.messageBlockCount}→${message.contentBlocks?.length || 0})`,
+        );
       }
       if (prev.messageUpdatedAt !== message.updatedAt) {
-        changes.push(`updatedAt(${prev.messageUpdatedAt}→${message.updatedAt})`);
+        changes.push(
+          `updatedAt(${prev.messageUpdatedAt}→${message.updatedAt})`,
+        );
       }
       if (prev.approvalsLength !== approvals.length) {
         changes.push(`approvals(${prev.approvalsLength}→${approvals.length})`);
@@ -263,7 +288,7 @@ function ChatMessageComponent({
     (contentBlockId: string): ToolApprovalRequest | undefined => {
       return approvalsByContentBlockId.get(contentBlockId);
     },
-    [approvalsByContentBlockId]
+    [approvalsByContentBlockId],
   );
 
   // Show branch options menu when clicking the branch button
@@ -281,11 +306,15 @@ function ChatMessageComponent({
       return;
     }
     try {
-      logger.info("Branching chat:", { chatId: effectiveChatId, messageId: message.id });
+      logger.info("Branching chat:", {
+        chatId: effectiveChatId,
+        messageId: message.id,
+      });
       await useChatStore.getState().branchChat(effectiveChatId, message.id);
     } catch (error) {
       logger.error("Failed to branch chat:", error);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error occurred";
       toast.error(`Failed to branch chat: ${errorMessage}`, { duration: 5000 });
     }
   }, [activeChatId, chatId, message.id]);
@@ -299,8 +328,6 @@ function ChatMessageComponent({
   const handleBranchToExistingWorkspace = useCallback(() => {
     setShowBranchToExistingWorktreeModal(true);
   }, []);
-
-
 
   const handleCopy = async () => {
     try {
@@ -336,13 +363,13 @@ function ChatMessageComponent({
             // Check if the formatted parameters would be too long or cluttered
             const totalLength = params.length;
             const hasLongStrings = Object.values(execution.call.input).some(
-              (val) => typeof val === "string" && val.length > 50
+              (val) => typeof val === "string" && val.length > 50,
             );
             const hasComplexObjects = Object.values(execution.call.input).some(
               (val) =>
                 typeof val === "object" &&
                 val !== null &&
-                Object.keys(val).length > 3
+                Object.keys(val).length > 3,
             );
 
             // If parameters are too long, complex, or would be cluttered, just show the tool name
@@ -412,7 +439,6 @@ function ChatMessageComponent({
     };
   }, [message, approvals, processedFromStore]);
 
-
   // Check for overflow after rendering - runs on text changes, font changes, and initial render
   // PERFORMANCE: Use requestAnimationFrame to batch DOM reads and avoid forced synchronous layout
   useEffect(() => {
@@ -461,48 +487,45 @@ function ChatMessageComponent({
     | undefined => {
     if (!parsed.toolExecutions || !chatId) return parsed.toolExecutions;
 
-    const result = parsed.toolExecutions.map((execution): EnhancedToolExecution => {
-      // Get the live tool call state from the store
-      // CRITICAL: Use content_block_id for lookup, as that's what the backend sends in WebSocket updates
-      // The execution.call.id is the LLM-generated tool_use ID (e.g., toolu_01...)
-      // but the backend tracks by content_block_id
-      const lookupKey = execution.call.content_block_id || execution.call.id;
-      const toolCallState = toolCallStates.get(lookupKey);
+    const result = parsed.toolExecutions.map(
+      (execution): EnhancedToolExecution => {
+        // Get the live tool call state from the store
+        // CRITICAL: Use content_block_id for lookup, as that's what the backend sends in WebSocket updates
+        // The execution.call.id is the LLM-generated tool_use ID (e.g., toolu_01...)
+        // but the backend tracks by content_block_id
+        const lookupKey = execution.call.content_block_id || execution.call.id;
+        const toolCallState = toolCallStates.get(lookupKey);
 
-      // Prefer embedded approval, but fall back to separate approvals list
-      // Match approvals by content_block_id (unique identifier for content blocks)
-      // This handles the race where approval arrives after the message
-      const approval =
-        execution.approval ||
-        (execution.call.content_block_id
-          ? getApprovalStatus(execution.call.content_block_id)
-          : undefined);
+        // Prefer embedded approval, but fall back to separate approvals list
+        // Match approvals by content_block_id (unique identifier for content blocks)
+        // This handles the race where approval arrives after the message
+        const approval =
+          execution.approval ||
+          (execution.call.content_block_id
+            ? getApprovalStatus(execution.call.content_block_id)
+            : undefined);
 
-      return {
-        ...execution,
-        approval, // Use resolved approval (embedded or from approvals array)
-        status: toolCallState?.status,
-        onCancel: async (toolCallId: string) => {
-          if (chatId) {
-            await useChatStore.getState().cancelToolCall(chatId, toolCallId);
-          }
-        },
-        onConvertToBackground: async (toolCallId: string) => {
-          if (chatId) {
-            await api.toolCalls.convertToBackground(toolCallId);
-          }
-        },
-      };
-    });
+        return {
+          ...execution,
+          approval, // Use resolved approval (embedded or from approvals array)
+          status: toolCallState?.status,
+          onCancel: async (toolCallId: string) => {
+            if (chatId) {
+              await useChatStore.getState().cancelToolCall(chatId, toolCallId);
+            }
+          },
+          onConvertToBackground: async (toolCallId: string) => {
+            if (chatId) {
+              await api.toolCalls.convertToBackground(toolCallId);
+            }
+          },
+        };
+      },
+    );
 
     // Filter out ask_user tool calls — they render via the QuestionPrompt UI, not as tool cards
     return result.filter((exec) => exec.call.name !== "ask_user");
-  }, [
-    parsed.toolExecutions,
-    chatId,
-    toolCallStates,
-    getApprovalStatus,
-  ]);
+  }, [parsed.toolExecutions, chatId, toolCallStates, getApprovalStatus]);
 
   // Task processing moved to chatStore.ts for better performance
   // - Real-time updates: handled in WebSocket handler
@@ -541,7 +564,7 @@ function ChatMessageComponent({
         "group copy-toast message-container",
         isUser ? "mb-3" : "mb-1.5",
         copied && "copied",
-        isOptimistic && "opacity-60"
+        isOptimistic && "opacity-60",
       )}
       data-testid={`message-${message.id}`}
     >
@@ -568,7 +591,7 @@ function ChatMessageComponent({
         <div
           className={cn(
             "flex-1 min-w-0",
-            isUser && "flex flex-col items-start"
+            isUser && "flex flex-col items-start",
           )}
         >
           {/* User message bubble - flexible width */}
@@ -577,7 +600,7 @@ function ChatMessageComponent({
               ref={bubbleRef}
               className={cn(
                 "group/usermsg user-message-content border-2 border-border/70 rounded-lg w-full cursor-pointer block transition-all duration-200",
-                isOverflowing && !isExpanded && "hover:border-border"
+                isOverflowing && !isExpanded && "hover:border-border",
               )}
               style={{
                 backgroundColor: "var(--chat-input-bg)",
@@ -589,7 +612,10 @@ function ChatMessageComponent({
                     // After expanding, scroll just enough so the bottom of the
                     // message bubble is visible (not hidden behind the chat input).
                     requestAnimationFrame(() => {
-                      bubbleRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+                      bubbleRef.current?.scrollIntoView({
+                        block: "nearest",
+                        behavior: "smooth",
+                      });
                     });
                   }
                   return willExpand;
@@ -601,9 +627,7 @@ function ChatMessageComponent({
                 <div className="message-bubble relative">
                   <div
                     ref={contentRef}
-                    className={cn(
-                      "text-sm leading-relaxed overflow-y-auto",
-                    )}
+                    className={cn("text-sm leading-relaxed overflow-y-auto")}
                     style={{
                       maxHeight: isExpanded ? "30vh" : "3rem",
                     }}
@@ -616,24 +640,8 @@ function ChatMessageComponent({
                 </div>
               )}
 
-              {/* Expand button - styled like diff expand button */}
-              {!isExpanded && isOverflowing && (
-                <div className="flex justify-center border-t border-border/50">
-                  <div
-                    className={cn(
-                      "flex items-center gap-1 px-2 py-1 text-[11px] font-medium w-full",
-                      "bg-muted/50 hover:bg-muted/80 transition-colors",
-                      "text-muted-foreground hover:text-foreground justify-center"
-                    )}
-                  >
-                    <ChevronDown className="w-3 h-3" />
-                    Show more
-                  </div>
-                </div>
-              )}
-
-              {/* Attachments */}
-              {isExpanded && message.attachments && message.attachments.length > 0 && (
+              {/* Attachments - always visible */}
+              {message.attachments && message.attachments.length > 0 && (
                 <MessageAttachments
                   attachments={message.attachments}
                   isUser={isUser}
@@ -646,7 +654,8 @@ function ChatMessageComponent({
                 <div
                   className={cn(
                     "flex items-center justify-between text-xs text-muted-foreground pt-2 border-t mt-2",
-                    !isExpanded && "opacity-0 group-hover/usermsg:opacity-100 transition-opacity duration-150"
+                    !isExpanded &&
+                      "opacity-0 group-hover/usermsg:opacity-100 transition-opacity duration-150",
                   )}
                   style={{ borderColor: "var(--chat-border)" }}
                 >
@@ -659,7 +668,7 @@ function ChatMessageComponent({
                       title={copied ? "Copied!" : "Copy"}
                       className={cn(
                         "flex items-center gap-1 px-2 py-1 rounded-md hover:bg-muted/50 transition-colors duration-200 focus-ring",
-                        copied && "text-success"
+                        copied && "text-success",
                       )}
                     >
                       {copied ? (
@@ -671,13 +680,17 @@ function ChatMessageComponent({
                     <button
                       onClick={handleBranchClick}
                       disabled={isOptimistic}
-                      title={isOptimistic ? "Waiting for message to save..." : "Branch"}
+                      title={
+                        isOptimistic
+                          ? "Waiting for message to save..."
+                          : "Branch"
+                      }
                       data-contextual-tip="branch-button"
                       className={cn(
                         "flex items-center gap-1 px-2 py-1 rounded-md transition-colors duration-200 focus-ring",
                         isOptimistic
                           ? "opacity-50 cursor-not-allowed"
-                          : "hover:bg-muted/50"
+                          : "hover:bg-muted/50",
                       )}
                     >
                       <GitBranch className="w-3 h-3" />
@@ -726,13 +739,14 @@ function ChatMessageComponent({
               {/* Show tools even during streaming - they'll display in "preparing" state */}
               {!hideToolExecutions &&
                 enhancedToolExecutions &&
-                enhancedToolExecutions.length > 0 && (() => {
+                enhancedToolExecutions.length > 0 &&
+                (() => {
                   // Separate read-only tools from write/planning tools
                   const readOnlyTools = enhancedToolExecutions.filter((exec) =>
-                    isReadOnlyTool(exec.call.name)
+                    isReadOnlyTool(exec.call.name),
                   );
-                  const otherTools = enhancedToolExecutions.filter((exec) =>
-                    !isReadOnlyTool(exec.call.name)
+                  const otherTools = enhancedToolExecutions.filter(
+                    (exec) => !isReadOnlyTool(exec.call.name),
                   );
 
                   return (
@@ -764,8 +778,8 @@ function ChatMessageComponent({
                       )}
 
                       {/* Render other tools with existing logic */}
-                      {otherTools.length > 0 && (
-                        shouldGroup && otherTools.length > 1 ? (
+                      {otherTools.length > 0 &&
+                        (shouldGroup && otherTools.length > 1 ? (
                           <ToolExecutionGroup
                             executions={otherTools}
                             messageId={message.id}
@@ -790,12 +804,10 @@ function ChatMessageComponent({
                               onSelectThread={onSelectThread}
                             />
                           ))
-                        )
-                      )}
+                        ))}
                     </div>
                   );
                 })()}
-
             </div>
           )}
 
@@ -804,9 +816,7 @@ function ChatMessageComponent({
             <div
               className={cn(
                 "items-center gap-1 text-xs text-muted-foreground px-2 h-6",
-                isLatestMessage
-                  ? "flex"
-                  : "hidden group-hover:flex"
+                isLatestMessage ? "flex" : "hidden group-hover:flex",
               )}
             >
               <button
@@ -814,7 +824,7 @@ function ChatMessageComponent({
                 title={copied ? "Copied!" : "Copy"}
                 className={cn(
                   "flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-muted/50 transition-colors duration-200 focus-ring",
-                  copied && "text-success"
+                  copied && "text-success",
                 )}
               >
                 {copied ? (
@@ -917,8 +927,10 @@ export const ChatMessage = memo(ChatMessageComponent, (prev, next) => {
 
   // If lengths match, compare approval IDs and statuses
   for (let i = 0; i < prevApprovals.length; i++) {
-    if (prevApprovals[i].id !== nextApprovals[i].id ||
-        prevApprovals[i].status !== nextApprovals[i].status) {
+    if (
+      prevApprovals[i].id !== nextApprovals[i].id ||
+      prevApprovals[i].status !== nextApprovals[i].status
+    ) {
       return false;
     }
   }
