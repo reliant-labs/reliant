@@ -57,19 +57,6 @@ func TestParallelLoopDisallowsWhile(t *testing.T) {
 	}
 }
 
-func TestParallelLoopDisallowsYield(t *testing.T) {
-	wf := makeParallelLoopWorkflow(&reliantv1.LoopArgs{
-		Parallel: &reliantv1.CelBool{Value: &reliantv1.CelBool_Literal{Literal: true}},
-		Items:    &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "{{inputs.components}}"}},
-		Yield:    "inputs.yield",
-		Ref:      &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "builtin://agent"}},
-	})
-	result := StaticAnalysis(wf, nil)
-	if !hasStructuralError(result, "yield") {
-		t.Errorf("expected error about yield not allowed, got errors: %v", result.Errors())
-	}
-}
-
 func TestParallelLoopValidOnFailure(t *testing.T) {
 	for _, valid := range []string{"continue", "fail_fast", "fail_all"} {
 		wf := makeParallelLoopWorkflow(&reliantv1.LoopArgs{

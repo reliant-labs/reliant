@@ -130,7 +130,7 @@ func (c *EdgeEvalContext) Namespaces() []CELNamespace {
 // LOOP EVAL CONTEXT
 // =============================================================================
 
-// LoopEvalContext is used for while and yield condition evaluation inside loops.
+// LoopEvalContext is used for while condition evaluation inside loops.
 // Available namespaces: iter, outputs, inputs, nodes (optional).
 type LoopEvalContext struct {
 	Iter    *model.IterContext     // typed — compile-time enforced

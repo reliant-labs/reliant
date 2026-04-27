@@ -869,33 +869,4 @@ nodes:
 		assert.Equal(t, "{{output.content}}", saveMsg["content"], "save_message should remain as template")
 	})
 
-	t.Run("yield field preserved as template", func(t *testing.T) {
-		// Test that the yield field on loop nodes is preserved as a template
-		// (not replaced with __TEMPLATE_PLACEHOLDER__) so it can be evaluated
-		// at runtime by evaluateYieldCondition.
-		raw := map[string]interface{}{
-			"name": "test-workflow",
-			"nodes": []interface{}{
-				map[string]interface{}{
-					"id":    "agent_loop",
-					"type":  "loop",
-					"while": "outputs.tool_calls != null",
-					"yield": "{{inputs.yield}}",
-					"ref":   "builtin://agent-turn",
-				},
-			},
-		}
-
-		// Even with inputs provided, the yield field should stay as template
-		// because it's in the preserve list (evaluated at runtime, not load time)
-		inputs := map[string]interface{}{"yield": true}
-
-		resolved, err := ResolveWorkflowTemplates(raw, inputs)
-		require.NoError(t, err, "yield template should not cause errors")
-
-		nodes := resolved["nodes"].([]interface{})
-		yieldVal := nodes[0].(map[string]interface{})["yield"]
-		assert.Equal(t, "{{inputs.yield}}", yieldVal, "yield should remain as template for runtime evaluation")
-	})
-
 }

@@ -180,7 +180,6 @@ export interface SendMessageOptions {
   workflow_params?: Record<string, unknown>;
   target_thread?: string;
   selected_presets?: Record<string, string>; // Update preset selections
-  yield_id?: string; // If set, resolves a pending yield
   discuss?: boolean; // If true, chat with LLM without resuming paused workflow
 }
 
@@ -383,7 +382,6 @@ export const chatGrpc = {
       workflowParams,
       targetThread: options.target_thread,
       selectedPresets: options.selected_presets || {},
-      yieldId: options.yield_id,
       discuss: options.discuss,
     });
     const response = await client.sendMessage(request);

@@ -308,7 +308,7 @@ func validateNodeArgs(node *reliantv1.Node, nodePath []string, result *Result) {
 		hasItems := model.CelStringIsSet(args.GetItems())
 
 		if isParallel {
-			// Parallel loop: requires items, disallows while/yield
+			// Parallel loop: requires items, disallows while
 			if !hasItems {
 				result.AddError(CategoryStructure, nodePath, "items",
 					"parallel loop requires 'items' (CEL expression evaluating to a list or map)")
@@ -316,10 +316,6 @@ func validateNodeArgs(node *reliantv1.Node, nodePath []string, result *Result) {
 			if model.DirectCelIsSet(args.GetWhile()) {
 				result.AddError(CategoryStructure, nodePath, "while",
 					"parallel loop cannot use 'while' — iteration count is determined by 'items'")
-			}
-			if args.GetYield() != "" {
-				result.AddError(CategoryStructure, nodePath, "yield",
-					"parallel loop cannot use 'yield' — all iterations run concurrently")
 			}
 			// Validate on_failure enum
 			if onFailure := args.GetOnFailure(); onFailure != "" {

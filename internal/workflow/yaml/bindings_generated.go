@@ -53,6 +53,13 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 			"title":   {},
 		},
 	},
+	"ask_question": {
+		oneofFieldName: "ask_question",
+		isStructural:   false,
+		argFieldKeys: map[string]struct{}{
+			"metadata": {},
+		},
+	},
 	"call_llm": {
 		oneofFieldName: "call_llm",
 		isStructural:   false,
@@ -114,7 +121,6 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 			"ref":         {},
 			"thread":      {},
 			"while":       {},
-			"yield":       {},
 		},
 	},
 	"router": {

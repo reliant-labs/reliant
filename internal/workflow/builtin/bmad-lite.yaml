@@ -34,7 +34,7 @@ inputs:
     description: Execution mode for agent steps.
     enum: [manual, auto, plan]
 
-  yield:
+  ask:
     type: boolean
     ui: toolbar
     default: true
@@ -95,7 +95,7 @@ nodes:
     args:
       model: "{{inputs.model}}"
       mode: "{{inputs.mode}}"
-      yield: "{{inputs.yield}}"
+      ask: "{{inputs.ask}}"
       temperature: "{{inputs.temperature}}"
       thinking_level: "{{inputs.thinking_level}}"
       system_prompt: |
@@ -151,7 +151,7 @@ nodes:
     args:
       model: "{{inputs.model}}"
       mode: "{{inputs.mode}}"
-      yield: "{{inputs.yield}}"
+      ask: "{{inputs.ask}}"
       temperature: "{{inputs.temperature}}"
       thinking_level: "{{inputs.thinking_level}}"
       system_prompt: |
@@ -206,7 +206,7 @@ nodes:
     args:
       model: "{{inputs.model}}"
       mode: "{{inputs.mode}}"
-      yield: "{{inputs.yield}}"
+      ask: "{{inputs.ask}}"
       temperature: "{{inputs.temperature}}"
       thinking_level: "{{inputs.thinking_level}}"
       system_prompt: |
@@ -263,7 +263,7 @@ nodes:
     args:
       model: "{{inputs.model}}"
       mode: "{{inputs.mode}}"
-      yield: "{{inputs.yield}}"
+      ask: "{{inputs.ask}}"
       temperature: "{{inputs.temperature}}"
       thinking_level: "{{inputs.thinking_level}}"
       system_prompt: |

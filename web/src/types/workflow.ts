@@ -375,7 +375,7 @@ export function withWorkflowArgs(step: Step, updates: Partial<SubWorkflowArgs>):
 export function withLoopArgs(step: Step, updates: Partial<LoopArgs>): Step {
   const current: Partial<LoopArgs> = step.args?.case === 'loop'
     ? { ...(step.args.value as Partial<LoopArgs>) }
-    : { args: {}, presets: {}, yield: '' }
+    : { args: {}, presets: {} }
   return {
     ...step,
     args: { case: 'loop' as const, value: { ...current, ...updates } },
@@ -431,7 +431,7 @@ export function initStepArgs(type: string): Step['args'] {
     case 'workflow':
       return { case: 'workflow' as const, value: { args: {}, presets: {} } } as Step['args']
     case 'loop':
-      return { case: 'loop' as const, value: { args: {}, presets: {}, yield: '' } } as Step['args']
+      return { case: 'loop' as const, value: { args: {}, presets: {} } } as Step['args']
     case 'router':
       return { case: 'router' as const, value: { workflows: [] } } as Step['args']
     default: {

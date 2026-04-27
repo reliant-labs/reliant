@@ -13,7 +13,6 @@ function createLoopStep(overrides: Partial<LoopStep> = {}): LoopStep {
       value: {
         args: {},
         presets: {},
-        yield: "",
         inline: {
           name: "inline-loop",
           entry: [],
@@ -48,7 +47,7 @@ describe("LoopStepConfig", () => {
             value: {
               args: {},
               presets: {},
-              yield: "",
+
               inline: {
                 name: "inline-loop",
                 entry: [],
@@ -86,7 +85,7 @@ describe("LoopStepConfig", () => {
             value: {
               args: {},
               presets: {},
-              yield: "",
+
               inline: {
                 name: "inline-loop",
                 entry: [],

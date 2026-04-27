@@ -290,19 +290,6 @@ func TestNodeWhileExpr(t *testing.T) {
 	}
 }
 
-func TestNodeYieldExpr(t *testing.T) {
-	if NodeYieldExpr(nil) != "" {
-		t.Error("nil should return empty")
-	}
-
-	loopNode := &reliantv1.Node{
-		Args: &reliantv1.Node_Loop{Loop: &reliantv1.LoopArgs{Yield: "outputs.needs_input"}},
-	}
-	if NodeYieldExpr(loopNode) != "outputs.needs_input" {
-		t.Errorf("yield = %q", NodeYieldExpr(loopNode))
-	}
-}
-
 func TestNodeArgsAsMap(t *testing.T) {
 	mapped, err := NodeArgsAsMap(nil)
 	if err != nil || mapped != nil {

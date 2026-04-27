@@ -9,7 +9,6 @@ import { CatalogService } from "../gen/reliant/v1/catalog_pb";
 import { ProjectService } from "../gen/reliant/v1/project_pb";
 import { WorktreeService } from "../gen/reliant/v1/worktree_pb";
 import { ApprovalService } from "../gen/reliant/v1/approval_pb";
-import { YieldService } from "../gen/reliant/v1/yield_pb";
 import { ChatService } from "../gen/reliant/v1/chat_pb";
 import { MessageService } from "../gen/reliant/v1/message_pb";
 import { SettingsService } from "../gen/reliant/v1/settings_pb";
@@ -24,6 +23,7 @@ import { AttachmentService } from "../gen/reliant/v1/attachment_pb";
 import { ToolCallService } from "../gen/reliant/v1/tool_call_pb";
 import { PresetService } from "../gen/reliant/v1/preset_pb";
 import { DaemonRegistryService } from "../gen/reliant/v1/tools_daemon_pb";
+import { QuestionService } from "../gen/reliant/v1/question_pb";
 import { supabase } from "../lib/supabase";
 import { logger } from "../lib/logger";
 import { getIsDev } from "../lib/constants";
@@ -348,7 +348,6 @@ const clearClientCache = () => {
   _projectClient = null;
   _worktreeClient = null;
   _approvalClient = null;
-  _yieldClient = null;
   _chatClient = null;
   _messageClient = null;
   _settingsClient = null;
@@ -364,6 +363,7 @@ const clearClientCache = () => {
   _presetClient = null;
   _scenarioClient = null;
   _daemonRegistryClient = null;
+  _questionClient = null;
 };
 
 export const getGRPCBaseURLPublic = (): string | null => getGRPCBaseURL();
@@ -444,10 +444,6 @@ export const createApprovalClient = (): Client<typeof ApprovalService> => {
   return createClient(ApprovalService, getTransport());
 };
 
-export const createYieldClient = (): Client<typeof YieldService> => {
-  return createClient(YieldService, getTransport());
-};
-
 export const createChatClient = (): Client<typeof ChatService> => {
   return createClient(ChatService, getTransport());
 };
@@ -512,6 +508,10 @@ export const createDaemonRegistryClient = (): Client<typeof DaemonRegistryServic
   return createClient(DaemonRegistryService, getTransport());
 };
 
+export const createQuestionClient = (): Client<typeof QuestionService> => {
+  return createClient(QuestionService, getTransport());
+};
+
 // Singleton instances (lazy-initialized)
 let _systemClient: Client<typeof SystemService> | null = null;
 let _planClient: Client<typeof PlanService> | null = null;
@@ -520,7 +520,6 @@ let _catalogClient: Client<typeof CatalogService> | null = null;
 let _projectClient: Client<typeof ProjectService> | null = null;
 let _worktreeClient: Client<typeof WorktreeService> | null = null;
 let _approvalClient: Client<typeof ApprovalService> | null = null;
-let _yieldClient: Client<typeof YieldService> | null = null;
 let _chatClient: Client<typeof ChatService> | null = null;
 let _messageClient: Client<typeof MessageService> | null = null;
 let _settingsClient: Client<typeof SettingsService> | null = null;
@@ -536,6 +535,7 @@ let _toolCallClient: Client<typeof ToolCallService> | null = null;
 let _presetClient: Client<typeof PresetService> | null = null;
 let _scenarioClient: Client<typeof ScenarioService> | null = null;
 let _daemonRegistryClient: Client<typeof DaemonRegistryService> | null = null;
+let _questionClient: Client<typeof QuestionService> | null = null;
 
 export const getSystemClient = (): Client<typeof SystemService> => {
   if (!_systemClient) {
@@ -587,12 +587,6 @@ export const getApprovalClient = (): Client<typeof ApprovalService> => {
   return _approvalClient;
 };
 
-export const getYieldClient = (): Client<typeof YieldService> => {
-  if (!_yieldClient) {
-    _yieldClient = createYieldClient();
-  }
-  return _yieldClient;
-};
 
 export const getChatClient = (): Client<typeof ChatService> => {
   if (!_chatClient) {
@@ -706,6 +700,13 @@ export const getDaemonRegistryClient = (): Client<typeof DaemonRegistryService> 
   return _daemonRegistryClient;
 };
 
+export const getQuestionClient = (): Client<typeof QuestionService> => {
+  if (!_questionClient) {
+    _questionClient = createQuestionClient();
+  }
+  return _questionClient;
+};
+
 // Export for convenience
 export const grpcClient = {
   system: () => getSystemClient(),
@@ -715,7 +716,6 @@ export const grpcClient = {
   project: () => getProjectClient(),
   worktree: () => getWorktreeClient(),
   approval: () => getApprovalClient(),
-  yield: () => getYieldClient(),
   chat: () => getChatClient(),
   message: () => getMessageClient(),
   settings: () => getSettingsClient(),
@@ -732,4 +732,5 @@ export const grpcClient = {
   preset: () => getPresetClient(),
   scenario: () => getScenarioClient(),
   daemonRegistry: () => getDaemonRegistryClient(),
+  question: () => getQuestionClient(),
 };

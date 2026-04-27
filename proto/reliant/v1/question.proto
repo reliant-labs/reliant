@@ -1,0 +1,48 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+// QuestionStatus tracks the lifecycle of a question
+enum QuestionStatus {
+  QUESTION_STATUS_UNSPECIFIED = 0;
+  QUESTION_STATUS_PENDING = 1;
+  QUESTION_STATUS_RESOLVED = 2;
+}
+
+service QuestionService {
+  // ResolveQuestion resolves a pending question with the user's answer
+  rpc ResolveQuestion(ResolveQuestionRequest) returns (ResolveQuestionResponse) {}
+  // GetPendingQuestion gets the current pending question for a chat
+  rpc GetPendingQuestion(GetPendingQuestionRequest) returns (GetPendingQuestionResponse) {}
+}
+
+message ResolveQuestionRequest {
+  string question_id = 1;
+  string action = 2; // "reply"
+  optional string response_data = 3; // JSON-encoded answer data
+}
+
+message ResolveQuestionResponse {
+  bool success = 1;
+}
+
+message GetPendingQuestionRequest {
+  string chat_id = 1;
+}
+
+message GetPendingQuestionResponse {
+  optional QuestionInfo question = 1;
+}
+
+message QuestionInfo {
+  string question_id = 1;
+  string chat_id = 2;
+  string workflow_id = 3;
+  string step_id = 4;
+  string status = 5;
+  string created_at = 6;
+  optional string metadata = 7;
+}

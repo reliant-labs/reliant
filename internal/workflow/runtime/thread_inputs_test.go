@@ -358,7 +358,7 @@ func (s *ThreadInputsSuite) TestSignal_GlobalUpdate_PreservesThreadOnlyKeys() {
 	env.RegisterDelayedCallback(func() {
 		// Send global signal that adds a new key
 		env.SignalWorkflow("update_workflow_state", map[string]interface{}{
-			"yield": false,
+			"ask": false,
 		})
 	}, 100*time.Millisecond)
 
@@ -368,23 +368,23 @@ func (s *ThreadInputsSuite) TestSignal_GlobalUpdate_PreservesThreadOnlyKeys() {
 		s.NoError(err)
 		var rootInputs map[string]interface{}
 		s.NoError(rootResult.Get(&rootInputs))
-		s.Equal(false, rootInputs["yield"])
+		s.Equal(false, rootInputs["ask"])
 
-		// Thread-abc should have yield AND retain its own keys (mode, model)
+		// Thread-abc should have ask AND retain its own keys (mode, model)
 		threadResult, err := env.QueryWorkflow("get_thread_inputs", "thread-abc")
 		s.NoError(err)
 		var threadInputs map[string]interface{}
 		s.NoError(threadResult.Get(&threadInputs))
-		s.Equal(false, threadInputs["yield"])
+		s.Equal(false, threadInputs["ask"])
 		s.Equal("claude", threadInputs["model"])  // thread-specific key preserved
 		s.Equal("research", threadInputs["mode"]) // thread-specific key preserved
 
-		// Thread-def should also have yield and retain its own model
+		// Thread-def should also have ask and retain its own model
 		thread2Result, err := env.QueryWorkflow("get_thread_inputs", "thread-def")
 		s.NoError(err)
 		var thread2Inputs map[string]interface{}
 		s.NoError(thread2Result.Get(&thread2Inputs))
-		s.Equal(false, thread2Inputs["yield"])
+		s.Equal(false, thread2Inputs["ask"])
 		s.Equal("gemini", thread2Inputs["model"]) // thread-specific key preserved
 
 		env.CancelWorkflow()
@@ -448,7 +448,7 @@ func TestChildWorkflowTracker_GlobalPropagation_Unit(t *testing.T) {
 	tracker.RegisterThreadInputs("t2", inputs2)
 
 	// Simulate global propagation: apply update to all thread inputs
-	update := map[string]interface{}{"yield": false}
+	update := map[string]interface{}{"ask": false}
 	for _, threadInputs := range tracker.GetAllThreadInputs() {
 		for key, value := range update {
 			threadInputs[key] = value
@@ -456,8 +456,8 @@ func TestChildWorkflowTracker_GlobalPropagation_Unit(t *testing.T) {
 	}
 
 	// Both threads should have the new key
-	assert.Equal(t, false, inputs1["yield"])
-	assert.Equal(t, false, inputs2["yield"])
+	assert.Equal(t, false, inputs1["ask"])
+	assert.Equal(t, false, inputs2["ask"])
 
 	// Existing keys should be preserved
 	assert.Equal(t, "claude", inputs1["model"])
@@ -476,7 +476,7 @@ func TestChildWorkflowTracker_GlobalPropagation_DoesNotAffectUnregistered(t *tes
 	// Unregister t1, then propagate
 	tracker.UnregisterThreadInputs("t1")
 
-	update := map[string]interface{}{"yield": false}
+	update := map[string]interface{}{"ask": false}
 	for _, threadInputs := range tracker.GetAllThreadInputs() {
 		for key, value := range update {
 			threadInputs[key] = value
@@ -484,14 +484,14 @@ func TestChildWorkflowTracker_GlobalPropagation_DoesNotAffectUnregistered(t *tes
 	}
 
 	// Original map should NOT have been touched (thread was unregistered)
-	assert.Nil(t, inputs1["yield"])
+	assert.Nil(t, inputs1["ask"])
 }
 
 // TestInlineInheritedSubWorkflow_SharesParentMap verifies that inline-inherited
 // sub-workflows get the exact same map pointer as the parent, so signal updates
 // to the parent are visible immediately without any propagation.
 func TestInlineInheritedSubWorkflow_SharesParentMap(t *testing.T) {
-	parentInputs := map[string]interface{}{"model": "gpt-4", "yield": true}
+	parentInputs := map[string]interface{}{"model": "gpt-4", "ask": true}
 
 	executor := &InlineWorkflowExecutor{
 		workflowInputs: parentInputs,
@@ -507,8 +507,8 @@ func TestInlineInheritedSubWorkflow_SharesParentMap(t *testing.T) {
 		"inline-inherited sub-workflow should share parent map reference")
 
 	// Mutations to parent should be visible via subInputs
-	parentInputs["yield"] = false
-	assert.Equal(t, false, subInputs["yield"])
+	parentInputs["ask"] = false
+	assert.Equal(t, false, subInputs["ask"])
 
 	// Mutations to subInputs should be visible via parent
 	subInputs["new_key"] = "value"

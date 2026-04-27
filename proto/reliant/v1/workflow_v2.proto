@@ -243,6 +243,7 @@ message Node {
     ExecuteToolsArgs execute_tools = 11;
     CompactArgs compact = 12;
     ApprovalArgs approval = 13;
+    AskQuestionArgs ask_question = 16;
     SaveMessageNodeArgs save_message_node = 14;
     CreateWorktreeArgs create_worktree = 15;
     RunArgs run = 20;
@@ -415,6 +416,24 @@ message ApprovalArgs {
   reserved 5; // metadata (removed: never used)
 }
 
+// AskQuestionArgs configures an ask_question node — pauses for user input.
+//
+// Output fields accessible via nodes.<id>.*:
+//   has_feedback, response
+message AskQuestionArgs {
+  option (node_meta) = {
+    node_type: "ask_question"
+    display_name: "Ask Question"
+    description: "Pause workflow execution to ask the user a question"
+    is_structural: false
+    category: "utility"
+    icon: "MessageCircleQuestion"
+  };
+
+  // Metadata is a JSON string containing the question definition.
+  CelString metadata = 1 [(reliant) = { description: "JSON metadata with question text and options" }];
+}
+
 // SaveMessageNodeArgs configures a save_message node — saves a message to a thread.
 // All fields support CEL expressions for dynamic content.
 //
@@ -584,14 +603,12 @@ message LoopArgs {
   // Loop continues while true. Required for sequential loops.
   // Has access to: outputs.* (sub-workflow output), iter.iteration (0-indexed count).
   DirectCelBool while = 6 [(reliant) = { description: "CEL condition: loop continues while true" }];
-  // Yield is a CEL expression. When true and while is false, yield to user before exiting.
-  // Not allowed when parallel is true.
-  string yield = 7 [(reliant) = { description: "CEL expression to yield to user on loop exit" }];
+  reserved 7;  // was: yield
 
   // === Parallel loop fields ===
 
   // Parallel enables concurrent execution of all iterations.
-  // When true, items is required and while/yield are disallowed.
+  // When true, items is required and while is disallowed.
   // Each iteration runs in its own thread with isolated context.
   CelBool parallel = 8 [(reliant) = { description: "Execute all iterations concurrently" }];
   // Items is a CEL expression that evaluates to a list or map.
@@ -1044,6 +1061,12 @@ message RouterOutput {
   string reasoning = 4;              // LLM's reasoning for the selection (both modes)
   google.protobuf.Struct outputs = 5; // Child workflow outputs (workflow routing mode)
   string selected_node = 6;          // The node ID that was selected (node routing mode)
+}
+
+// AskQuestionOutput is the output from the ask_question activity.
+message AskQuestionOutput {
+  bool has_feedback = 1;  // Whether the user provided feedback (vs just clicking Continue)
+  string response = 2;   // The user's feedback text (empty when has_feedback is false)
 }
 
 // SkippedOutput is the output for nodes skipped due to conditions.

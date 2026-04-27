@@ -24,7 +24,7 @@ simulator:
     inputs:
       mode: auto
       model: gpt-5
-      yield: false
+      ask: false
       steps: [plan]
       max_retries: 3
       temperature: 1.0
@@ -54,5 +54,5 @@ runtime:
       parent_inputs:
         mode: auto
         model: gpt-5
-        yield: false
+        ask: false
       expected_model: gpt-5

@@ -521,5 +521,5 @@ func (a *CompactActivity) emitThreadUpdate(ctx context.Context, chatID, thread, 
 const compactionMsg = `You are approaching your context window. You need to provide a handoff statement.
 This can optionally detail any context you deem worth including, but should focus on next steps.
 Be particular about your current plan, and whether the remaining steps are indicative of what is actually remaining. Sometimes plans can grow stale.
-If you are unsure of the plan tool's state, you can include that in your handoff, and mention to use your handoff as canonical source of truth, or to yield to user if the agent is unsure.
+If you are unsure of the plan tool's state, you can include that in your handoff, and mention to use your handoff as canonical source of truth, or to return to user if the agent is unsure.
 `

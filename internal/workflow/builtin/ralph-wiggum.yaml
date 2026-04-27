@@ -48,7 +48,7 @@ inputs:
     description: Execution mode for agent steps.
     enum: [manual, auto, plan]
 
-  yield:
+  ask:
     type: boolean
     ui: toolbar
     default: true
@@ -73,7 +73,7 @@ nodes:
     while: >
       (has(outputs.review_strategy) && outputs.review_strategy != "pass")
       && iter.iteration < inputs.max_iterations
-    yield: "inputs.yield"
+    ask: "inputs.ask"
     inline:
       entry: [implement]
 

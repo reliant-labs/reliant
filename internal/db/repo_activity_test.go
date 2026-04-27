@@ -63,24 +63,6 @@ func insertTestApproval(t *testing.T, repo *Repo, id, chatID string, status int3
 	}
 }
 
-func insertTestYield(t *testing.T, repo *Repo, id, chatID, workflowID string, status YieldStatus) {
-	t.Helper()
-	ctx := context.Background()
-	yield := &Yield{
-		ID:                 id,
-		ChatID:             chatID,
-		WorkflowID:         workflowID,
-		TemporalWorkflowID: workflowID,
-		ThreadID:           workflowID,
-		StepID:             "step-1",
-		Status:             status,
-		CreatedAt:          time.Now(),
-	}
-	if err := repo.CreateYield(ctx, yield); err != nil {
-		t.Fatalf("insertTestYield: %v", err)
-	}
-}
-
 // activityUpdatesForChat filters user_updates to only chat_activity_changed
 // events for the given chat.
 func activityUpdatesForChat(t *testing.T, repo *Repo, chatID string) []UserUpdate {
@@ -181,24 +163,6 @@ func TestGetChatActivity_AwaitingInput_PendingApproval(t *testing.T) {
 	chatID := "chat-approval"
 	createActivityTestChat(t, repo, chatID)
 	insertTestApproval(t, repo, "approval-1", chatID, 1) // status=1 → PENDING
-
-	activity, err := repo.GetChatActivity(context.Background(), chatID)
-	if err != nil {
-		t.Fatalf("GetChatActivity: %v", err)
-	}
-	if activity != 2 {
-		t.Fatalf("expected activity=2 (AWAITING_INPUT), got %d", activity)
-	}
-}
-
-func TestGetChatActivity_AwaitingInput_PendingYield(t *testing.T) {
-	repo, cleanup := setupTestDB(t)
-	defer cleanup()
-
-	chatID := "chat-yield"
-	createActivityTestChat(t, repo, chatID)
-	insertTestWorkflow(t, repo, "wf-yield", chatID, "builtin://agent", WorkflowStatusRunning)
-	insertTestYield(t, repo, "yield-1", chatID, "wf-yield", YieldStatusPending)
 
 	activity, err := repo.GetChatActivity(context.Background(), chatID)
 	if err != nil {

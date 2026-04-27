@@ -228,7 +228,6 @@ export const api = {
         target_thread?: string;
         selected_presets?: Record<string, string>;
         systemMessages?: Array<{ content: string }>; // Optional system messages to prepend
-        yield_id?: string; // If set, resolves a pending yield
         discuss?: boolean; // If true, chat with LLM without resuming paused workflow
       }
     ) => {
@@ -252,7 +251,6 @@ export const api = {
         workflow_params: options?.workflow_params,
         target_thread: options?.target_thread,
         selected_presets: options?.selected_presets,
-        yield_id: options?.yield_id,
         discuss: options?.discuss,
       });
       // Return workflow metadata for state updates
