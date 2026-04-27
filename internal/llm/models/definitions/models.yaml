@@ -21,6 +21,8 @@ models:
       supports_caching: true
       max_context_window: 200000
       max_output_tokens: 20000
+      thinking_levels: [low, medium, high]
+      supported_file_types: [image, pdf, text]
     cost:
       input_per_1m: 5.0
       output_per_1m: 25.0
@@ -30,6 +32,9 @@ models:
         api_model: claude-opus-4-6
       - driver: openrouter
         api_model: anthropic/claude-opus-4.6
+    default_thinking_level: high
+    default_temperature: 1.0
+    default_compaction_threshold: 185000
 
   - id: claude-4.5-opus
     name: Claude 4.5 Opus
@@ -43,6 +48,8 @@ models:
       supports_caching: true
       max_context_window: 200000
       max_output_tokens: 20000
+      thinking_levels: [low, medium, high]
+      supported_file_types: [image, pdf, text]
     cost:
       input_per_1m: 5.0
       output_per_1m: 25.0
@@ -52,6 +59,9 @@ models:
         api_model: claude-opus-4-5-20251101
       - driver: openrouter
         api_model: anthropic/claude-opus-4.5
+    default_thinking_level: high
+    default_temperature: 1.0
+    default_compaction_threshold: 185000
 
   - id: gpt-5.5
     name: GPT-5.5
@@ -65,6 +75,8 @@ models:
       supports_caching: true
       max_context_window: 1050000
       max_output_tokens: 128000
+      thinking_levels: [low, medium, high, xhigh]
+      supported_file_types: [image, text]
     cost:
       input_per_1m: 2.5
       output_per_1m: 15.0
@@ -80,6 +92,8 @@ models:
       preferred_endpoint: responses
       temperature_mode: omit
       use_max_completion_tokens: true
+    default_thinking_level: xhigh
+    default_compaction_threshold: 900000
 
   - id: gpt-5.4
     name: GPT-5.4
@@ -93,6 +107,8 @@ models:
       supports_caching: true
       max_context_window: 1050000
       max_output_tokens: 128000
+      thinking_levels: [low, medium, high, xhigh]
+      supported_file_types: [image, text]
     cost:
       input_per_1m: 2.5
       output_per_1m: 15.0
@@ -108,6 +124,8 @@ models:
       preferred_endpoint: responses
       temperature_mode: omit
       use_max_completion_tokens: true
+    default_thinking_level: xhigh
+    default_compaction_threshold: 900000
 
   - id: gpt-5.4-pro
     name: GPT-5.4 Pro
@@ -121,6 +139,8 @@ models:
       supports_caching: false
       max_context_window: 1050000
       max_output_tokens: 128000
+      thinking_levels: [medium, high, xhigh]
+      supported_file_types: [image, text]
     cost:
       input_per_1m: 30.0
       output_per_1m: 180.0
@@ -131,6 +151,8 @@ models:
       preferred_endpoint: responses
       temperature_mode: omit
       use_max_completion_tokens: true
+    default_thinking_level: xhigh
+    default_compaction_threshold: 900000
 
   - id: gpt-5.3-codex
     name: GPT-5.3 Codex
@@ -144,6 +166,8 @@ models:
       supports_caching: true
       max_context_window: 400000
       max_output_tokens: 128000
+      thinking_levels: [low, medium, high, xhigh]
+      supported_file_types: [image, text]
     cost:
       input_per_1m: 1.75
       output_per_1m: 14.0
@@ -160,6 +184,8 @@ models:
       temperature_mode: omit
       use_max_completion_tokens: true
       reasoning_summary_mode: detailed_only
+    default_thinking_level: xhigh
+    default_compaction_threshold: 370000
 
   - id: gpt-5.3-codex-spark
     name: GPT-5.3 Codex Spark
@@ -173,6 +199,7 @@ models:
       supports_caching: true
       max_context_window: 128000
       max_output_tokens: 10000
+      thinking_levels: [low, medium, high, xhigh]
     cost:
       input_per_1m: 1.75
       output_per_1m: 14.0
@@ -184,6 +211,8 @@ models:
       preferred_endpoint: responses
       temperature_mode: omit
       use_max_completion_tokens: true
+    default_thinking_level: high
+    default_compaction_threshold: 115000
 
   - id: gpt-5.2-codex
     name: GPT-5.2 Codex
@@ -197,6 +226,8 @@ models:
       supports_caching: true
       max_context_window: 400000
       max_output_tokens: 128000
+      thinking_levels: [low, medium, high, xhigh]
+      supported_file_types: [image, text]
     cost:
       input_per_1m: 1.75
       output_per_1m: 14.0
@@ -213,6 +244,8 @@ models:
       temperature_mode: omit
       use_max_completion_tokens: true
       reasoning_summary_mode: detailed_only
+    default_thinking_level: xhigh
+    default_compaction_threshold: 370000
 
   - id: gemini-3.1-pro-preview
     name: Gemini 3.1 Pro Preview
@@ -226,6 +259,8 @@ models:
       supports_caching: true
       max_context_window: 1048576
       max_output_tokens: 65536
+      thinking_levels: [low, high]
+      supported_file_types: [image, pdf, text, audio, video]
     cost:
       input_per_1m: 1.25
       output_per_1m: 10.0
@@ -234,6 +269,9 @@ models:
         api_model: gemini-3.1-pro-preview
       - driver: openrouter
         api_model: google/gemini-3.1-pro-preview
+    default_thinking_level: high
+    default_temperature: 1.0
+    default_compaction_threshold: 900000
 
   - id: gemini-3-pro-preview
     name: Gemini 3 Pro Preview
@@ -247,6 +285,8 @@ models:
       supports_caching: false
       max_context_window: 1048576
       max_output_tokens: 65536
+      thinking_levels: [low, high]
+      supported_file_types: [image, pdf, text, audio, video]
     cost:
       input_per_1m: 1.25
       output_per_1m: 10.0
@@ -255,6 +295,9 @@ models:
         api_model: gemini-3-pro-preview
       - driver: openrouter
         api_model: google/gemini-3-pro-preview
+    default_thinking_level: high
+    default_temperature: 1.0
+    default_compaction_threshold: 900000
 
   - id: gemini-3.1-pro-preview-customtools
     name: Gemini 3.1 Pro Preview (Custom Tools)
@@ -268,12 +311,17 @@ models:
       supports_caching: true
       max_context_window: 1048576
       max_output_tokens: 65536
+      thinking_levels: [low, high]
+      supported_file_types: [image, pdf, text, audio, video]
     cost:
       input_per_1m: 1.25
       output_per_1m: 10.0
     providers:
       - driver: gemini
         api_model: gemini-3.1-pro-preview-customtools
+    default_thinking_level: high
+    default_temperature: 1.0
+    default_compaction_threshold: 900000
 
   - id: grok-4
     name: Grok 4
@@ -287,6 +335,7 @@ models:
       supports_caching: true
       max_context_window: 256000
       max_output_tokens: 20000
+      thinking_levels: [low, medium, high]
     cost:
       input_per_1m: 3.0
       output_per_1m: 15.0
@@ -294,6 +343,9 @@ models:
     providers:
       - driver: xai
         api_model: grok-4
+    default_thinking_level: medium
+    default_temperature: 1.0
+    default_compaction_threshold: 235000
 
   # ============================================================================
   # MODERATE MODELS - Good balance of quality and cost
@@ -311,6 +363,8 @@ models:
       supports_caching: true
       max_context_window: 200000
       max_output_tokens: 20000
+      thinking_levels: [low, medium, high]
+      supported_file_types: [image, pdf, text]
     cost:
       input_per_1m: 3.0
       output_per_1m: 15.0
@@ -320,6 +374,9 @@ models:
         api_model: claude-sonnet-4-6
       - driver: openrouter
         api_model: anthropic/claude-sonnet-4.6
+    default_thinking_level: medium
+    default_temperature: 1.0
+    default_compaction_threshold: 185000
 
   - id: claude-4.5-sonnet
     name: Claude 4.5 Sonnet
@@ -333,6 +390,8 @@ models:
       supports_caching: true
       max_context_window: 200000
       max_output_tokens: 20000
+      thinking_levels: [low, medium, high]
+      supported_file_types: [image, pdf, text]
     cost:
       input_per_1m: 3.0
       output_per_1m: 15.0
@@ -342,6 +401,10 @@ models:
         api_model: claude-sonnet-4-5-20250929
       - driver: openrouter
         api_model: anthropic/claude-sonnet-4.5
+    default_thinking_level: medium
+    default_temperature: 1.0
+    default_compaction_threshold: 185000
+
   - id: gpt-5.2-pro
     name: GPT-5.2 Pro
     tags: [moderate, reasoning]
@@ -354,6 +417,8 @@ models:
       supports_caching: true
       max_context_window: 400000
       max_output_tokens: 128000
+      thinking_levels: [low, medium, high]
+      supported_file_types: [image, text]
     cost:
       input_per_1m: 5.0
       output_per_1m: 40.0
@@ -367,6 +432,8 @@ models:
       preferred_endpoint: responses
       temperature_mode: omit
       use_max_completion_tokens: true
+    default_thinking_level: xhigh
+    default_compaction_threshold: 370000
 
   - id: gpt-5.2
     name: GPT-5.2
@@ -380,6 +447,8 @@ models:
       supports_caching: true
       max_context_window: 400000
       max_output_tokens: 128000
+      thinking_levels: [low, medium, high]
+      supported_file_types: [image, text]
     cost:
       input_per_1m: 1.75
       output_per_1m: 14.0
@@ -393,6 +462,8 @@ models:
       preferred_endpoint: responses
       temperature_mode: omit
       use_max_completion_tokens: true
+    default_thinking_level: xhigh
+    default_compaction_threshold: 370000
 
   - id: gemini-2.5-pro
     name: Gemini 2.5 Pro
@@ -406,6 +477,8 @@ models:
       supports_caching: false
       max_context_window: 1048576
       max_output_tokens: 65536
+      thinking_levels: [low, medium, high]
+      supported_file_types: [image, pdf, text, audio, video]
     cost:
       input_per_1m: 1.25
       output_per_1m: 10.0
@@ -414,6 +487,9 @@ models:
         api_model: gemini-2.5-pro
       - driver: openrouter
         api_model: google/gemini-2.5-pro
+    default_thinking_level: high
+    default_temperature: 1.0
+    default_compaction_threshold: 900000
 
   # ============================================================================
   # FAST MODELS - Quick responses, good for simple tasks
@@ -431,6 +507,7 @@ models:
       supports_caching: true
       max_context_window: 200000
       max_output_tokens: 8192
+      supported_file_types: [image, pdf, text]
     cost:
       input_per_1m: 0.8
       output_per_1m: 4.0
@@ -440,6 +517,9 @@ models:
         api_model: claude-haiku-4-5-20251001
       - driver: openrouter
         api_model: anthropic/claude-haiku-4.5
+    default_thinking_level: low
+    default_temperature: 1.0
+    default_compaction_threshold: 185000
 
   - id: gpt-5.4-mini
     name: GPT-5.4 Mini
@@ -453,6 +533,8 @@ models:
       supports_caching: true
       max_context_window: 400000
       max_output_tokens: 128000
+      thinking_levels: [low, medium, high, xhigh]
+      supported_file_types: [image, text]
     cost:
       input_per_1m: 0.25
       output_per_1m: 2.0
@@ -468,6 +550,8 @@ models:
       preferred_endpoint: responses
       temperature_mode: omit
       use_max_completion_tokens: true
+    default_thinking_level: high
+    default_compaction_threshold: 370000
 
   - id: gemini-3-flash-preview
     name: Gemini 3 Flash Preview
@@ -481,6 +565,7 @@ models:
       supports_caching: false
       max_context_window: 1048576
       max_output_tokens: 65536
+      supported_file_types: [image, pdf, text, audio, video]
     cost:
       input_per_1m: 0.15
       output_per_1m: 0.60
@@ -489,6 +574,9 @@ models:
         api_model: gemini-3-flash-preview
       - driver: openrouter
         api_model: google/gemini-3-flash-preview
+    default_thinking_level: low
+    default_temperature: 1.0
+    default_compaction_threshold: 900000
 
   - id: gemini-2.5-flash
     name: Gemini 2.5 Flash
@@ -502,6 +590,7 @@ models:
       supports_caching: false
       max_context_window: 1048576
       max_output_tokens: 65536
+      supported_file_types: [image, pdf, text, audio, video]
     cost:
       input_per_1m: 0.15
       output_per_1m: 0.60
@@ -510,6 +599,9 @@ models:
         api_model: gemini-2.5-flash
       - driver: openrouter
         api_model: google/gemini-2.5-flash
+    default_thinking_level: low
+    default_temperature: 1.0
+    default_compaction_threshold: 900000
 
 
   # ============================================================================
@@ -528,6 +620,7 @@ models:
       supports_caching: false
       max_context_window: 1048576
       max_output_tokens: 65536
+      supported_file_types: [image, pdf, text, audio, video]
     cost:
       input_per_1m: 0.075
       output_per_1m: 0.30
@@ -536,6 +629,9 @@ models:
         api_model: gemini-2.5-flash-lite
       - driver: openrouter
         api_model: google/gemini-2.5-flash-lite
+    default_thinking_level: low
+    default_temperature: 1.0
+    default_compaction_threshold: 900000
 
   - id: grok-3-mini-beta
     name: Grok 3 Mini Beta
@@ -555,6 +651,9 @@ models:
     providers:
       - driver: xai
         api_model: grok-3-mini-beta
+    default_thinking_level: low
+    default_temperature: 1.0
+    default_compaction_threshold: 115000
 
   # ============================================================================
   # VERTEX AI MODELS - Google Cloud Vertex AI hosted models
@@ -572,6 +671,8 @@ models:
       supports_caching: true
       max_context_window: 200000
       max_output_tokens: 20000
+      thinking_levels: [low, medium, high]
+      supported_file_types: [image, pdf, text]
     cost:
       input_per_1m: 5.0
       output_per_1m: 25.0
@@ -579,6 +680,9 @@ models:
     providers:
       - driver: vertexai
         api_model: claude-opus-4-6
+    default_thinking_level: high
+    default_temperature: 1.0
+    default_compaction_threshold: 185000
 
   - id: vertex-claude-4.5-sonnet
     name: Vertex Claude 4.5 Sonnet
@@ -592,6 +696,8 @@ models:
       supports_caching: true
       max_context_window: 200000
       max_output_tokens: 20000
+      thinking_levels: [low, medium, high]
+      supported_file_types: [image, pdf, text]
     cost:
       input_per_1m: 3.0
       output_per_1m: 15.0
@@ -599,6 +705,9 @@ models:
     providers:
       - driver: vertexai
         api_model: claude-sonnet-4-5@20250929
+    default_thinking_level: medium
+    default_temperature: 1.0
+    default_compaction_threshold: 185000
 
   - id: vertex-claude-4.5-haiku
     name: Vertex Claude 4.5 Haiku
@@ -612,6 +721,7 @@ models:
       supports_caching: true
       max_context_window: 200000
       max_output_tokens: 8192
+      supported_file_types: [image, pdf, text]
     cost:
       input_per_1m: 0.8
       output_per_1m: 4.0
@@ -619,6 +729,9 @@ models:
     providers:
       - driver: vertexai
         api_model: claude-haiku-4-5@20250512
+    default_thinking_level: low
+    default_temperature: 1.0
+    default_compaction_threshold: 185000
 
   - id: vertex-gemini-2.5-pro
     name: Vertex Gemini 2.5 Pro
@@ -632,12 +745,17 @@ models:
       supports_caching: false
       max_context_window: 1000000
       max_output_tokens: 50000
+      thinking_levels: [low, medium, high]
+      supported_file_types: [image, pdf, text, audio, video]
     cost:
       input_per_1m: 1.25
       output_per_1m: 10.0
     providers:
       - driver: vertexai
         api_model: gemini-2.5-pro
+    default_thinking_level: high
+    default_temperature: 1.0
+    default_compaction_threshold: 900000
 
   - id: vertex-gemini-2.5-flash
     name: Vertex Gemini 2.5 Flash
@@ -651,12 +769,16 @@ models:
       supports_caching: false
       max_context_window: 1000000
       max_output_tokens: 50000
+      supported_file_types: [image, pdf, text, audio, video]
     cost:
       input_per_1m: 0.15
       output_per_1m: 0.60
     providers:
       - driver: vertexai
         api_model: gemini-2.5-flash
+    default_thinking_level: low
+    default_temperature: 1.0
+    default_compaction_threshold: 900000
 
   # ============================================================================
   # TEST/MOCK MODELS - For testing only
@@ -674,12 +796,16 @@ models:
       supports_caching: false
       max_context_window: 128000
       max_output_tokens: 8192
+      supported_file_types: [image, text]
     cost:
       input_per_1m: 0.11
       output_per_1m: 0.34
     providers:
       - driver: mock
         api_model: mock-model
+    default_thinking_level: low
+    default_temperature: 1.0
+    default_compaction_threshold: 115000
 
   - id: tiny-context
     name: Tiny Context Model
@@ -699,6 +825,9 @@ models:
     providers:
       - driver: mock
         api_model: tiny-context
+    default_thinking_level: low
+    default_temperature: 1.0
+    default_compaction_threshold: 900
 
   - id: small-context
     name: Small Context Model
@@ -718,3 +847,6 @@ models:
     providers:
       - driver: mock
         api_model: small-context
+    default_thinking_level: low
+    default_temperature: 1.0
+    default_compaction_threshold: 3600

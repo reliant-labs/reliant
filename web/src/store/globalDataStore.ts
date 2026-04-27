@@ -29,6 +29,7 @@ interface Model {
   canReason?: boolean;
   supportedThinkingLevels?: string[];
   capabilities: string[];
+  tags: string[];
   metadata?: Record<string, unknown>;
 }
 

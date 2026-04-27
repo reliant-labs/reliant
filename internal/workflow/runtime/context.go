@@ -50,6 +50,10 @@ type ExecutionContext struct {
 	// nil if not in a loop
 	Loop *ExecLoopContext
 
+	// Spawn depth - tracks how deep in the spawn chain this workflow is.
+	// 0 = top-level (not spawned), 1 = spawned child, 2 = grandchild, etc.
+	SpawnDepth int
+
 	// Parent context - set for child workflows
 	// nil if this is a root workflow
 	Parent *ParentContext
@@ -248,6 +252,7 @@ func (ctx *ExecutionContext) ForIteration(iteration int, reuseThread bool) *Exec
 		ParentThread:   ctx.ParentThread,   // Preserve parent thread chain
 		ProjectPath:    ctx.ProjectPath,    // Inherit project path (can be overridden by loop's project config)
 		DaemonSelector: ctx.DaemonSelector, // Inherit daemon selector
+		SpawnDepth:     ctx.SpawnDepth,     // Inherit spawn depth (iterations don't increase depth)
 		Parent:         ctx.Parent,
 	}
 
@@ -282,6 +287,7 @@ func (ctx *ExecutionContext) ForChild(stepID string, mode string, workflowName s
 		ParentThread:   ctx.Thread,         // Always track parent's thread for save_message
 		ProjectPath:    ctx.ProjectPath,    // Inherit project path (can be overridden by node's project config)
 		DaemonSelector: ctx.DaemonSelector, // Inherit daemon selector (can be overridden by node's daemon field)
+		SpawnDepth:     ctx.SpawnDepth,     // Inherit spawn depth (inline children don't increase depth)
 		Loop:           ctx.Loop,           // Inherit loop context
 		Parent: &ParentContext{
 			WorkflowID: ctx.WorkflowID,

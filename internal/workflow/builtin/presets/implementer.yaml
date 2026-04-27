@@ -1,0 +1,10 @@
+name: implementer
+description: "Implementation specialist for well-specified code changes — follows detailed instructions to write clean, correct code"
+tag: agent
+params:
+  model:
+    tags: [moderate]
+  tools:
+    - tag:default
+  spawn_presets:
+    - researcher

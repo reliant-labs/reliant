@@ -1,28 +1,16 @@
 package models
 
-// SupportedThinkingLevelsForModelDriver returns supported non-empty thinking
-// levels for the given model capability and model+driver combination.
-func SupportedThinkingLevelsForModelDriver(canReason bool, modelID, driver string) []string {
-	cap := ResolveThinkingCapability(canReason, modelID, driver)
+// SupportedThinkingLevels returns supported non-empty thinking levels
+// for the given model capabilities.
+func SupportedThinkingLevels(caps ModelCapabilities) []string {
+	cap := ResolveThinkingCapability(caps)
 	return append([]string(nil), cap.Levels...)
 }
 
-// SupportsThinkingLevelForModelDriver returns true if the requested thinking
-// level is supported for the model capability and model+driver combination.
+// SupportsThinkingLevel returns true if the requested thinking level is
+// supported for the given model capabilities.
 // Empty thinking level is always valid (meaning "off").
-func SupportsThinkingLevelForModelDriver(canReason bool, modelID, driver, level string) bool {
-	cap := ResolveThinkingCapability(canReason, modelID, driver)
+func SupportsThinkingLevelForCaps(caps ModelCapabilities, level string) bool {
+	cap := ResolveThinkingCapability(caps)
 	return SupportsThinkingLevel(cap, level)
-}
-
-// SupportedThinkingLevelsForDriver is retained as a compatibility wrapper for
-// legacy call sites that do not yet have model-level context.
-func SupportedThinkingLevelsForDriver(canReason bool, driver string) []string {
-	return SupportedThinkingLevelsForModelDriver(canReason, "", driver)
-}
-
-// SupportsThinkingLevelForDriver is retained as a compatibility wrapper for
-// legacy call sites that do not yet have model-level context.
-func SupportsThinkingLevelForDriver(canReason bool, driver, level string) bool {
-	return SupportsThinkingLevelForModelDriver(canReason, "", driver, level)
 }

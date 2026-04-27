@@ -765,6 +765,11 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 		rtx.SpawnedBy = e.execContext.Parent.StepPath
 	}
 
+	// Spawn depth from execution context
+	if e.execContext != nil {
+		rtx.SpawnDepth = e.execContext.SpawnDepth
+	}
+
 	// Project path
 	if e.execContext != nil && e.execContext.ProjectPath != "" {
 		rtx.ProjectPath = e.execContext.ProjectPath

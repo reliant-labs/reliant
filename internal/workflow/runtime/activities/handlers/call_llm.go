@@ -132,11 +132,13 @@ func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, a
 		return nil, fmt.Errorf("thread is required")
 	}
 
-	// Validate thinking level if provided
+	// Validate thinking level if explicitly provided (empty string means "use model default")
 	if model.CelStringIsSet(args.GetThinkingLevel()) && !model.CelStringIsExpr(args.GetThinkingLevel()) {
-		tl := ThinkingLevel(model.CelStringValue(args.GetThinkingLevel()))
-		if !tl.IsValid() {
-			return nil, fmt.Errorf("invalid thinking_level: %s (must be one of: low, medium, high, xhigh)", tl)
+		if v := model.CelStringValue(args.GetThinkingLevel()); v != "" {
+			tl := ThinkingLevel(v)
+			if !tl.IsValid() {
+				return nil, fmt.Errorf("invalid thinking_level: %s (must be one of: low, medium, high, xhigh)", tl)
+			}
 		}
 	}
 
@@ -235,8 +237,9 @@ func (a *CallLLMActivity) mcpRuntimeFromContext(ctx context.Context) tools.MCPRu
 // streamLLMResponse streams an LLM response to content_block_chunks (UI-only) and collects data in memory
 func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, thread string, history []message.Message, rtx RuntimeContext, args *reliantv1.CallLLMArgs) (*reliantv1.CallLLMOutput, error) {
 	// Extract options from runtime context
-	// Check if this workflow was spawned by the spawn tool (prevents recursive spawn)
-	spawnedBySpawnTool := rtx.SpawnedBy == "spawn_tool"
+	// Check if this workflow has reached the maximum spawn depth (prevents unbounded recursive spawn)
+	const maxSpawnDepth = 2
+	spawnDisabled := rtx.SpawnDepth >= maxSpawnDepth
 
 	// Resolve tools configuration
 	tc := args.GetToolsConfig()
@@ -261,6 +264,8 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// model resolution since the injected resolver provides its own driver/model.
 	var legacyModel models.Model
 	var modelIDWithDriver string
+	var effectiveTemperature *float64
+	var effectiveThinkingLevel string
 
 	if a.driverResolver != nil {
 		// Probe the injected resolver for its model
@@ -270,6 +275,11 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		}
 		legacyModel = probeDriver.Model()
 		modelIDWithDriver = string(legacyModel.ID)
+		// For injected resolvers, use arg values directly (no model defaults available)
+		effectiveTemperature = celDoubleValuePtr(args.GetTemperature())
+		if model.CelStringIsSet(args.GetThinkingLevel()) && !model.CelStringIsExpr(args.GetThinkingLevel()) {
+			effectiveThinkingLevel = model.CelStringValue(args.GetThinkingLevel())
+		}
 		activity.GetLogger(ctx).Info("[CallLLM] Using injected driver resolver",
 			"modelID", legacyModel.ID)
 	} else {
@@ -306,22 +316,40 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			"modelID", resolved.Definition.ID,
 			"provider", resolved.Provider.Driver)
 
-		if model.CelStringIsSet(args.GetThinkingLevel()) && !model.CelStringIsExpr(args.GetThinkingLevel()) {
-			thinkingLevel := model.CelStringValue(args.GetThinkingLevel())
-			if !models.SupportsThinkingLevelForModelDriver(
-				resolved.Definition.Capabilities.CanReason,
-				resolved.Definition.ID,
-				resolved.Provider.Driver,
-				thinkingLevel,
+		// Apply model defaults for unset parameters
+		resolvedDef := resolved.Definition
+
+		// Determine effective temperature: 0.0 means "not set, use model default"
+		if model.CelDoubleIsSet(args.GetTemperature()) && !model.CelDoubleIsExpr(args.GetTemperature()) && model.CelDoubleValue(args.GetTemperature()) != 0.0 {
+			v := model.CelDoubleValue(args.GetTemperature())
+			effectiveTemperature = &v
+		} else if resolvedDef.DefaultTemperature != nil {
+			effectiveTemperature = resolvedDef.DefaultTemperature
+		}
+
+		// Determine effective thinking level: empty string means "not set, use model default"
+		if model.CelStringIsSet(args.GetThinkingLevel()) && !model.CelStringIsExpr(args.GetThinkingLevel()) && model.CelStringValue(args.GetThinkingLevel()) != "" {
+			effectiveThinkingLevel = model.CelStringValue(args.GetThinkingLevel())
+		} else if resolvedDef.DefaultThinkingLevel != "" {
+			effectiveThinkingLevel = resolvedDef.DefaultThinkingLevel
+		}
+
+		// Validate effective thinking level against model/driver capabilities
+		if effectiveThinkingLevel != "" {
+			tl := ThinkingLevel(effectiveThinkingLevel)
+			if !tl.IsValid() {
+				return nil, fmt.Errorf("invalid thinking_level: %s (must be one of: low, medium, high, xhigh)", tl)
+			}
+			if !models.SupportsThinkingLevelForCaps(
+				resolved.Definition.Capabilities,
+				effectiveThinkingLevel,
 			) {
-				supported := models.SupportedThinkingLevelsForModelDriver(
-					resolved.Definition.Capabilities.CanReason,
-					resolved.Definition.ID,
-					resolved.Provider.Driver,
+				supported := models.SupportedThinkingLevels(
+					resolved.Definition.Capabilities,
 				)
 				return nil, fmt.Errorf(
 					"thinking_level '%s' is not supported for model '%s' on driver '%s' (supported: %s)",
-					thinkingLevel,
+					effectiveThinkingLevel,
 					resolved.Definition.ID,
 					resolved.Provider.Driver,
 					strings.Join(supported, ", "),
@@ -343,7 +371,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	preferences := models.Preferences{
 		{
 			ModelID:     models.ModelID(modelIDWithDriver),
-			Temperature: celDoubleValuePtr(args.GetTemperature()),
+			Temperature: effectiveTemperature,
 		},
 	}
 
@@ -393,9 +421,8 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	if model.CelIntIsSet(args.GetMaxTokens()) {
 		driverOpts = append(driverOpts, llm.WithMaxTokens(model.CelIntValue(args.GetMaxTokens())))
 	}
-	if model.CelStringIsSet(args.GetThinkingLevel()) && !model.CelStringIsExpr(args.GetThinkingLevel()) {
-		// Validation already done in Execute(), just pass it to the driver
-		driverOpts = append(driverOpts, llm.WithReasoningEffort(model.CelStringValue(args.GetThinkingLevel())))
+	if effectiveThinkingLevel != "" {
+		driverOpts = append(driverOpts, llm.WithReasoningEffort(effectiveThinkingLevel))
 	}
 
 	driver, err := a.resolveDriver(ctx, chat.UserID, preferences, driverOpts...)
@@ -425,8 +452,8 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		}
 
 		// Add spawn tools from tools_config.spawn
-		// Workflows spawned via spawn tool should NOT have access to spawn tool to prevent infinite recursion
-		if !spawnedBySpawnTool {
+		// Workflows at max spawn depth should NOT have access to spawn tool to prevent unbounded recursion
+		if !spawnDisabled {
 			// Parse spawn configs from the dedicated spawn field
 			spawnEntries := model.CelStringListValue(tc.GetSpawn())
 			for _, entry := range spawnEntries {
@@ -529,6 +556,28 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// propagates cancellation through the context when the workflow is paused/cancelled.
 	streamCtx, cancelStream := context.WithCancel(ctx)
 	defer cancelStream()
+
+	// Build prefix messages that appear before conversation history:
+	// 1. Memory (reliant.md) — global/project context
+	// 2. Recommended skill bodies from active preset(s)
+	// These are NOT saved to DB — re-injected each turn so the Anthropic
+	// cache handles deduplication.
+	var prefix []message.Message
+	if memoryContent := formatStoredMemories(projectCfg); memoryContent != "" {
+		prefix = append(prefix, message.Message{
+			Role:  message.System,
+			Parts: []message.ContentPart{message.TextContent{Text: memoryContent}},
+		})
+	}
+	if skillMsgs := a.loadRecommendedSkillMessages(ctx, chat, projectCfg); len(skillMsgs) > 0 {
+		prefix = append(prefix, skillMsgs...)
+		activity.GetLogger(ctx).Info("[CallLLM] Injected recommended skill messages",
+			"chatID", chat.ID,
+			"count", len(skillMsgs))
+	}
+	if len(prefix) > 0 {
+		history = append(prefix, history...)
+	}
 
 	// Append injected messages to history (for ad-hoc LLM calls like filtering)
 	if len(args.GetMessages()) > 0 {
@@ -1085,11 +1134,6 @@ func (a *CallLLMActivity) getSystemPrompts(
 	var bb strings.Builder
 	bb.WriteString("You are Reliant, a world class Software Engineer with advanced reasoning and capabilities. Note: it is very likely you are working in parallel with other agents, potentially in the same directory, or across multiple git worktrees. Please be careful of other's work.")
 
-	storedMemories := formatStoredMemories(projectCfg)
-	if storedMemories != "" {
-		bb.WriteString(storedMemories)
-	}
-
 	if workingDir != "" {
 		bb.WriteString("\n\nIMPORTANT: You are working in a git worktree at: ")
 		bb.WriteString(workingDir)
@@ -1580,9 +1624,86 @@ func formatStoredMemories(projectCfg *cfgpkg.Config) string {
 	if len(memories) == 0 {
 		return ""
 	}
-	preamble := "\n\n# User defined rules, memories, and context\n\nYou must adhere to the user's defined rules and context below at all times while assisting them.\n\n"
+	preamble := "# User defined rules, memories, and context\n\nYou must adhere to the user's defined rules and context below at all times.\n\n"
 	memories = append([]string{preamble}, memories...)
 	return strings.Join(memories, "\n\n")
+}
+
+// loadRecommendedSkillMessages loads skill bodies for the recommended_skills
+// specified in the chat's active preset(s) and returns them as system messages.
+// Returns nil when no recommended skills are found or none resolve to known skills.
+func (a *CallLLMActivity) loadRecommendedSkillMessages(ctx context.Context, chat *db.Chat, projectCfg *cfgpkg.Config) []message.Message {
+	if chat == nil || projectCfg == nil || len(chat.SelectedPresets) == 0 || len(projectCfg.Skills) == 0 {
+		return nil
+	}
+
+	// Load stored presets from the project config record for preset resolution.
+	var storedPresets []cfgpkg.StoredPreset
+	if chat.ProjectID != "" && a.repo != nil {
+		record, err := a.repo.GetProjectConfigRecord(ctx, chat.ProjectID)
+		if err == nil {
+			storedPresets, _ = cfgpkg.ParseStoredPresets(record.ProjectPresetsJSON)
+		}
+	}
+
+	// Collect unique recommended skill names from all active presets.
+	seen := make(map[string]bool)
+	var skillNames []string
+	for _, presetName := range chat.SelectedPresets {
+		if presetName == "" {
+			continue
+		}
+		p := loadPresetForSkills(storedPresets, presetName)
+		if p == nil {
+			continue
+		}
+		for _, name := range p.RecommendedSkills {
+			if !seen[name] {
+				seen[name] = true
+				skillNames = append(skillNames, name)
+			}
+		}
+	}
+
+	if len(skillNames) == 0 {
+		return nil
+	}
+
+	// Resolve each skill name to a StoredSkill and build a system message.
+	var msgs []message.Message
+	for _, name := range skillNames {
+		skill := cfgpkg.FindStoredSkillByPath(projectCfg.Skills, name)
+		if skill == nil || strings.TrimSpace(skill.Body) == "" {
+			continue
+		}
+		msgs = append(msgs, message.Message{
+			Role:  message.System,
+			Parts: []message.ContentPart{message.TextContent{Text: "# Skill: " + skill.Name + "\n\n" + skill.Body}},
+		})
+	}
+	return msgs
+}
+
+// loadPresetForSkills loads a preset by name from stored project presets or builtins.
+// Returns nil if not found. This is a lightweight helper for skill injection only.
+func loadPresetForSkills(storedPresets []cfgpkg.StoredPreset, name string) *preset.Preset {
+	// Try stored project presets first.
+	sp := cfgpkg.FindStoredPresetByName(storedPresets, name)
+	if sp != nil {
+		p, err := preset.ParsePreset([]byte(sp.YAMLContent), name)
+		if err == nil {
+			return p
+		}
+	}
+	// Fall back to builtin presets.
+	data, err := builtin.BuiltinPresetsFS.ReadFile("presets/" + name + ".yaml")
+	if err == nil {
+		p, err := preset.ParsePreset(data, name)
+		if err == nil {
+			return p
+		}
+	}
+	return nil
 }
 
 // writeStreamingDelta publishes a streaming delta event to the in-memory hub

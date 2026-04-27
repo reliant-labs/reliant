@@ -84,25 +84,21 @@ func (s *CatalogService) ListModels(
 			driverDisplayName := getDriverDisplayName(driverID)
 
 			modelList = append(modelList, &reliantv1.ModelInfo{
-				Id:                  uniqueID,
-				Name:                model.Name,
-				Provider:            driverDisplayName, // For UI grouping
-				DriverId:            driverID,          // For routing
-				Capabilities:        capabilitiesToStrings(model.Capabilities),
-				ContextWindow:       int64(model.Capabilities.MaxContextWindow),
-				DefaultMaxTokens:    int64(model.Capabilities.MaxOutputTokens),
-				CostPer_1MIn:        model.Cost.InputPer1M,
-				CostPer_1MOut:       model.Cost.OutputPer1M,
-				CanReason:           model.Capabilities.CanReason,
-				SupportsAttachments: model.Capabilities.SupportsAttachments,
-				Tags:                model.Tags,
-				SupportsTools:       model.Capabilities.SupportsTools,
-				SupportsCaching:     model.Capabilities.SupportsCaching,
-				SupportedThinkingLevels: models.SupportedThinkingLevelsForModelDriver(
-					model.Capabilities.CanReason,
-					model.ID,
-					driverID,
-				),
+				Id:                      uniqueID,
+				Name:                    model.Name,
+				Provider:                driverDisplayName, // For UI grouping
+				DriverId:                driverID,          // For routing
+				Capabilities:            capabilitiesToStrings(model.Capabilities),
+				ContextWindow:           int64(model.Capabilities.MaxContextWindow),
+				DefaultMaxTokens:        int64(model.Capabilities.MaxOutputTokens),
+				CostPer_1MIn:            model.Cost.InputPer1M,
+				CostPer_1MOut:           model.Cost.OutputPer1M,
+				CanReason:               model.Capabilities.CanReason,
+				SupportsAttachments:     model.Capabilities.SupportsAttachments,
+				Tags:                    model.Tags,
+				SupportsTools:           model.Capabilities.SupportsTools,
+				SupportsCaching:         model.Capabilities.SupportsCaching,
+				SupportedThinkingLevels: models.SupportedThinkingLevels(model.Capabilities),
 			})
 		}
 	}
@@ -237,20 +233,16 @@ func (s *CatalogService) ListModelsByProvider(
 	modelInfos := make([]*reliantv1.ModelInfo, 0, len(providerModels))
 	for _, def := range providerModels {
 		modelInfos = append(modelInfos, &reliantv1.ModelInfo{
-			Id:               def.ID,
-			Name:             def.Name,
-			Provider:         provider,
-			DriverId:         provider,
-			ContextWindow:    int64(def.Capabilities.MaxContextWindow),
-			DefaultMaxTokens: int64(def.Capabilities.MaxOutputTokens),
-			CostPer_1MIn:     def.Cost.InputPer1M,
-			CostPer_1MOut:    def.Cost.OutputPer1M,
-			CanReason:        def.Capabilities.CanReason,
-			SupportedThinkingLevels: models.SupportedThinkingLevelsForModelDriver(
-				def.Capabilities.CanReason,
-				def.ID,
-				provider,
-			),
+			Id:                      def.ID,
+			Name:                    def.Name,
+			Provider:                provider,
+			DriverId:                provider,
+			ContextWindow:           int64(def.Capabilities.MaxContextWindow),
+			DefaultMaxTokens:        int64(def.Capabilities.MaxOutputTokens),
+			CostPer_1MIn:            def.Cost.InputPer1M,
+			CostPer_1MOut:           def.Cost.OutputPer1M,
+			CanReason:               def.Capabilities.CanReason,
+			SupportedThinkingLevels: models.SupportedThinkingLevels(def.Capabilities),
 		})
 	}
 

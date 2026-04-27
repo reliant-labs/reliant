@@ -26,6 +26,11 @@
   .animate-spin-slow {
     animation: spin-slow 3s linear infinite;
   }
+
+  @keyframes chatSettingsPopoverIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
 }
 
 /* GLOBAL FIX: Prevent accidental transparency */

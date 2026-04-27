@@ -281,6 +281,33 @@ type ModelDefinition struct {
 	// YAML key: driver_settings
 	// Required: No
 	DriverSettings *DriverSettings `yaml:"driver_settings,omitempty" json:"driver_settings,omitempty" mapstructure:"driver_settings"`
+
+	// Model-owned defaults — used when preset/workflow doesn't specify these.
+	// These provide sensible per-model defaults that can be overridden at
+	// the preset or workflow level.
+
+	// DefaultThinkingLevel is the default thinking/reasoning effort level.
+	// Valid values: "low", "medium", "high", "xhigh".
+	// Empty means the system picks a default.
+	//
+	// YAML key: default_thinking_level
+	// Required: No
+	DefaultThinkingLevel string `yaml:"default_thinking_level,omitempty" json:"default_thinking_level,omitempty" mapstructure:"default_thinking_level"`
+
+	// DefaultTemperature is the default sampling temperature for the model.
+	// Pointer type so we can distinguish "not set" from zero.
+	//
+	// YAML key: default_temperature
+	// Required: No
+	DefaultTemperature *float64 `yaml:"default_temperature,omitempty" json:"default_temperature,omitempty" mapstructure:"default_temperature"`
+
+	// DefaultCompactionThreshold is the token count at which context compaction triggers.
+	// Typically set to 90-95% of max_context_window. Pointer type so we can
+	// distinguish "not set" from zero.
+	//
+	// YAML key: default_compaction_threshold
+	// Required: No
+	DefaultCompactionThreshold *int `yaml:"default_compaction_threshold,omitempty" json:"default_compaction_threshold,omitempty" mapstructure:"default_compaction_threshold"`
 }
 
 // ToModel converts a ModelDefinition to the legacy Model struct.
@@ -423,6 +450,16 @@ type ModelCapabilities struct {
 	// YAML key: max_output_tokens
 	// Default: 4096 (if not specified)
 	MaxOutputTokens int `yaml:"max_output_tokens" json:"max_output_tokens" mapstructure:"max_output_tokens"`
+
+	// ThinkingLevels lists the supported thinking/reasoning effort levels for this model.
+	// When empty and CanReason is true, defaults to ["low", "medium", "high"].
+	// Common values: "low", "medium", "high", "xhigh"
+	ThinkingLevels []string `yaml:"thinking_levels,omitempty" json:"thinking_levels,omitempty" mapstructure:"thinking_levels"`
+
+	// SupportedFileTypes lists the file types this model can process as attachments.
+	// Common values: "image", "pdf", "text", "audio", "video"
+	// When empty and SupportsAttachments is true, assumed to support common types.
+	SupportedFileTypes []string `yaml:"supported_file_types,omitempty" json:"supported_file_types,omitempty" mapstructure:"supported_file_types"`
 }
 
 // ModelCost represents pricing information in USD per 1 million tokens.
