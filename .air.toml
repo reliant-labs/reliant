@@ -10,7 +10,7 @@ tmp_dir = "tmp"
   # The SDK's initBinaryChecksum() is called on worker start regardless of BuildID.
   cmd = "CGO_ENABLED=0 go build -buildvcs=false -o ./dist/reliant.tmp ./cmd/reliant/ && mv ./dist/reliant.tmp ./dist/reliant"
   delay = 1000
-  exclude_dir = ["assets", "tmp", "vendor", "testdata", "web", "mobile", "dist", ".claude_plan", "test", "electron", "node_modules", "e2e", "internal/gen", "web/src/gen", ".reliant"]
+  exclude_dir = ["assets", "tmp", "vendor", "testdata", "web", "mobile", "dist", ".claude_plan", "test", "electron", "node_modules", "e2e", "internal/gen", "web/src/gen", ".reliant", "examples"]
   exclude_file = []
   exclude_regex = ["_test.go"]
   exclude_unchanged = false

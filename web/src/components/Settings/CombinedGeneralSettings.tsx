@@ -17,6 +17,7 @@ import { Toggle } from "../ui/Toggle";
 import { cn } from "../../lib/utils";
 import { api } from "../../api/client";
 import { useGlobalDataStore } from "../../store/globalDataStore";
+import { ModelPreferences } from "./ModelPreferences";
 import {
   useApiKeySetupStore,
   resetApiKeySetupDismissed,
@@ -1010,6 +1011,9 @@ export function CombinedGeneralSettings({
 
         </div>
       </div>
+
+      {/* Model Preferences Section */}
+      <ModelPreferences providers={providers} />
     </div>
   );
 }

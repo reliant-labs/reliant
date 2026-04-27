@@ -3,13 +3,18 @@ package models
 import "testing"
 
 func TestBuildThinkingCapabilityMatrix(t *testing.T) {
+	xhigh := []string{"low", "medium", "high", "xhigh"}
+	noLow := []string{"medium", "high", "xhigh"}
+	defaults := []string{"low", "medium", "high"}
+
 	defs := []ModelDefinition{
 		{
 			ID:         "gpt-5.5",
 			Name:       "GPT-5.5",
 			Visibility: VisibilityUser,
 			Capabilities: ModelCapabilities{
-				CanReason: true,
+				CanReason:      true,
+				ThinkingLevels: xhigh,
 			},
 			Providers: []ProviderMapping{
 				{Driver: "codex", APIModel: "gpt-5.5"},
@@ -21,7 +26,8 @@ func TestBuildThinkingCapabilityMatrix(t *testing.T) {
 			Name:       "GPT-5.4",
 			Visibility: VisibilityUser,
 			Capabilities: ModelCapabilities{
-				CanReason: true,
+				CanReason:      true,
+				ThinkingLevels: xhigh,
 			},
 			Providers: []ProviderMapping{
 				{Driver: "codex", APIModel: "gpt-5.4"},
@@ -33,7 +39,8 @@ func TestBuildThinkingCapabilityMatrix(t *testing.T) {
 			Name:       "GPT-5.4 Pro",
 			Visibility: VisibilityUser,
 			Capabilities: ModelCapabilities{
-				CanReason: true,
+				CanReason:      true,
+				ThinkingLevels: noLow,
 			},
 			Providers: []ProviderMapping{
 				{Driver: "openai", APIModel: "gpt-5.4-pro"},
@@ -44,7 +51,8 @@ func TestBuildThinkingCapabilityMatrix(t *testing.T) {
 			Name:       "GPT-5.3 Codex",
 			Visibility: VisibilityUser,
 			Capabilities: ModelCapabilities{
-				CanReason: true,
+				CanReason:      true,
+				ThinkingLevels: xhigh,
 			},
 			Providers: []ProviderMapping{
 				{Driver: "codex", APIModel: "gpt-5.3-codex"},
@@ -56,7 +64,8 @@ func TestBuildThinkingCapabilityMatrix(t *testing.T) {
 			Name:       "GPT-5.4 Mini",
 			Visibility: VisibilityUser,
 			Capabilities: ModelCapabilities{
-				CanReason: true,
+				CanReason:      true,
+				ThinkingLevels: xhigh,
 			},
 			Providers: []ProviderMapping{
 				{Driver: "codex", APIModel: "gpt-5.4-mini"},
@@ -69,7 +78,8 @@ func TestBuildThinkingCapabilityMatrix(t *testing.T) {
 			Name:       "GPT-5.3 Codex Spark",
 			Visibility: VisibilityUser,
 			Capabilities: ModelCapabilities{
-				CanReason: true,
+				CanReason:      true,
+				ThinkingLevels: xhigh,
 			},
 			Providers: []ProviderMapping{{Driver: "codex", APIModel: "gpt-5.3-codex-spark"}},
 		},
@@ -78,15 +88,26 @@ func TestBuildThinkingCapabilityMatrix(t *testing.T) {
 			Name:       "Claude 4.5 Haiku",
 			Visibility: VisibilityUser,
 			Capabilities: ModelCapabilities{
-				CanReason: false,
+				CanReason:      false,
+				ThinkingLevels: nil,
 			},
 			Providers: []ProviderMapping{{Driver: "anthropic", APIModel: "claude-haiku-4-5"}},
+		},
+		{
+			ID:         "claude-4.6-opus",
+			Name:       "Claude 4.6 Opus",
+			Visibility: VisibilityUser,
+			Capabilities: ModelCapabilities{
+				CanReason:      true,
+				ThinkingLevels: defaults,
+			},
+			Providers: []ProviderMapping{{Driver: "anthropic", APIModel: "claude-opus-4-6"}},
 		},
 	}
 
 	matrix := BuildThinkingCapabilityMatrix(defs)
-	if len(matrix) != 12 {
-		t.Fatalf("expected 12 matrix rows, got %d", len(matrix))
+	if len(matrix) != 13 {
+		t.Fatalf("expected 13 matrix rows, got %d", len(matrix))
 	}
 
 	var gpt55CodexRow *ThinkingCapabilityMatrixEntry
@@ -100,6 +121,7 @@ func TestBuildThinkingCapabilityMatrix(t *testing.T) {
 	var sparkRow *ThinkingCapabilityMatrixEntry
 	var openAIRow *ThinkingCapabilityMatrixEntry
 	var noReasonRow *ThinkingCapabilityMatrixEntry
+	var claudeOpusRow *ThinkingCapabilityMatrixEntry
 	for i := range matrix {
 		row := &matrix[i]
 		switch row.ModelID + "@" + row.DriverID {
@@ -125,6 +147,8 @@ func TestBuildThinkingCapabilityMatrix(t *testing.T) {
 			openAIRow = row
 		case "claude-4.5-haiku@anthropic":
 			noReasonRow = row
+		case "claude-4.6-opus@anthropic":
+			claudeOpusRow = row
 		}
 	}
 
@@ -194,8 +218,8 @@ func TestBuildThinkingCapabilityMatrix(t *testing.T) {
 	if openAIRow == nil {
 		t.Fatal("missing openai row")
 	}
-	if len(openAIRow.Levels) != 3 {
-		t.Fatalf("expected openai row to have 3 levels, got %v", openAIRow.Levels)
+	if len(openAIRow.Levels) != 4 {
+		t.Fatalf("expected openai row to have 4 levels, got %v", openAIRow.Levels)
 	}
 
 	if noReasonRow == nil {
@@ -206,5 +230,15 @@ func TestBuildThinkingCapabilityMatrix(t *testing.T) {
 	}
 	if len(noReasonRow.Levels) != 0 {
 		t.Fatalf("expected non-reasoning row to have empty levels, got %v", noReasonRow.Levels)
+	}
+
+	if claudeOpusRow == nil {
+		t.Fatal("missing claude opus row")
+	}
+	if len(claudeOpusRow.Levels) != 3 || claudeOpusRow.Levels[2] != "high" {
+		t.Fatalf("expected claude opus row to be [low medium high], got %v", claudeOpusRow.Levels)
+	}
+	if claudeOpusRow.DefaultLevel != "medium" {
+		t.Fatalf("expected claude opus default medium, got %q", claudeOpusRow.DefaultLevel)
 	}
 }

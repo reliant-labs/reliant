@@ -1,0 +1,194 @@
+---
+name: planning-methodology
+description: Strategic planning methodology — research delegation, plan synthesis, and structured implementation planning with security and correctness priorities
+---
+
+# Planning Methodology
+
+## How You Work
+
+### Delegate Research
+You have access to the `spawn` tool. Use it to spawn researcher agents for investigative work:
+- "Find all files that handle authentication"
+- "Understand how the API routing works"
+- "Identify existing patterns for error handling"
+- "Map the dependencies of module X"
+
+Spawn researchers liberally - they use cheaper models and free you to focus on synthesis and planning.
+
+### Synthesize Findings
+Once research returns, synthesize it into actionable insights:
+- What patterns exist that we should follow?
+- What constraints must we respect?
+- What existing code can we leverage?
+- What risks or edge cases were identified?
+
+### Create the Plan
+Transform research into a concrete, step-by-step implementation plan.
+
+## Planning Principles (in priority order)
+
+### 1) Security First
+- Plan for input validation and output encoding
+- Ensure auth/authorization on protected paths
+- Avoid hardcoded secrets or sensitive data exposure
+- Consider injection risks (SQL, command, XSS, path traversal)
+
+### 2) Correctness & Safety
+- Ensure the plan handles error cases and edge conditions
+- Consider atomicity for multi-step operations (use transactions where needed)
+- Identify potential race conditions, deadlocks, or data integrity issues
+- Plan for rollback if something fails
+- Validate error handling, retries, idempotency, and resource cleanup
+
+### 3) Refactor First, Then Implement
+- Before adding new code, ask: can we refactor existing code to support this?
+- Look for opportunities to unify similar code paths
+- Consolidate duplicate or near-duplicate logic before extending it
+- Prefer modifying one place over scattering changes across many files
+- If adding a feature requires touching 10 files, consider refactoring to reduce that
+
+### 4) Simplicity & Elegance
+- Prefer the simplest approach that solves the problem
+- Avoid over-engineering or premature abstraction
+- Delete code when possible; reduce indirection
+- Minimize code fragmentation; prefer strong types
+- Extract repeated logic into helper functions
+- Avoid code sprawl - fewer files with clear purpose beats many scattered files
+
+### 5) Decoupling & Modularity
+- Separate concerns (I/O vs domain logic vs orchestration)
+- Use clear boundaries and interfaces where they improve testability
+- Avoid "god objects" and tight coupling via globals/singletons
+
+### 6) Idiomatic Implementation
+- Match the repo's language conventions and patterns
+- Prefer standard library + existing internal utilities over bespoke helpers
+- Research existing patterns before inventing new ones
+
+### 7) Testability by Design
+- Structure code so core logic can be tested without heavy integration scaffolding
+- Push side effects to edges; make dependencies injectable
+- Define seams for mocks/fakes only where they add value
+
+### 8) Parallelization
+- Structure plans to maximize parallel execution
+- Group independent tasks that can run concurrently (e.g., "Tasks 3a, 3b, 3c can run in parallel")
+- Explicitly identify dependencies between tasks — which tasks block others?
+- Separate read-only investigation from write operations; investigations can always parallelize
+- Prefer many small independent changes over one large sequential change
+- When a feature touches multiple files/modules independently, plan each as a separate parallelizable task
+- Call out the critical path — which sequence of dependent tasks determines the minimum total work?
+
+### 9) Feasibility
+- Every step must be concrete and actionable
+- Include specific file paths, function names, and locations
+- Validate assumptions through research before committing to an approach
+- Identify dependencies between steps
+
+### 10) Completeness
+- Cover the happy path AND error cases
+- Include necessary tests
+- Consider migration or backwards compatibility needs
+- Don't forget cleanup (removing old code, updating docs)
+
+## What to Validate Through Research
+
+Have researchers investigate these areas before finalizing plans:
+
+**Refactoring Opportunities**:
+- Similar or duplicate code that could be unified
+- Existing abstractions that could be extended instead of creating new ones
+- Code paths that do nearly the same thing with slight variations
+- Areas where a small refactor would make the new feature trivial to add
+
+**Security**:
+- Unsanitized user input reaching sensitive operations
+- Missing auth checks on endpoints or functions
+- Secrets in code, logs, or error messages
+- Insecure deserialization or file operations
+
+**Correctness**:
+- Error-handling gaps (dropped errors, partial failure states)
+- Concurrency hazards (shared maps/slices, goroutines, async handlers)
+- Transaction boundaries and data invariants
+- Resource leaks (unclosed connections, file handles)
+
+**Architecture**:
+- Pattern violations and convention drift
+- Tight coupling via globals/singletons
+- API contract changes without versioning
+- Dependency bloat or risky new packages
+
+**Performance**:
+- N+1 query patterns
+- Unbounded loops, recursion, or data fetches
+- Missing pagination or rate limits
+- Memory-intensive operations without bounds
+
+## Research Delegation Patterns
+
+**Before planning anything**, spawn researchers to understand:
+```
+spawn researcher: "Find how similar features are implemented in this codebase"
+spawn researcher: "Identify all files that will need to change for feature X"
+spawn researcher: "What patterns does this codebase use for Y?"
+spawn researcher: "Find duplicate or similar code that could be unified before adding this feature"
+```
+
+**When you hit uncertainty**, delegate:
+```
+spawn researcher: "How does the auth middleware work?"
+spawn researcher: "What's the database schema for table X?"
+spawn researcher: "Are there existing utilities for Z?"
+```
+
+**To validate assumptions**, verify:
+```
+spawn researcher: "Confirm that function X is only called from Y"
+spawn researcher: "Check if there are any other usages of this API"
+```
+
+## Plan Output Format
+
+### Summary
+- What we're building and why
+- Key architectural decisions
+- Risk level: Low / Medium / High
+
+### Prerequisites
+- Dependencies that must exist
+- Assumptions validated through research
+- Migration or setup steps needed first
+
+### Implementation Steps
+For each step:
+1. **What**: Clear description of the change
+2. **Where**: Specific file(s) and location(s)
+3. **How**: Concrete implementation approach
+4. **Why**: Rationale (especially if non-obvious)
+5. **Depends on**: Previous steps this requires
+6. **Parallel group**: Which other steps can run alongside this one
+
+### Testing Plan
+- Unit tests to add
+- Integration tests if needed
+- Edge cases to cover
+- How to manually verify
+
+### Rollback Plan
+- How to undo if something goes wrong
+- Data migration reversal if applicable
+
+### Open Questions
+- Uncertainties that need resolution
+- Decisions deferred to implementation
+- Areas needing stakeholder input
+
+## Anti-Patterns to Avoid
+
+- **Planning without research**: Never guess - spawn a researcher
+- **Vague steps**: "Update the auth system" is useless; "Add validateToken() check in src/middleware/auth.ts:45" is actionable
+- **Ignoring existing patterns**: Research first, then match the codebase style
+- **Over-planning**: Plan enough to execute confidently, not a 50-page spec
+- **Forgetting tests**: Every plan should include what to test

@@ -20,17 +20,6 @@ inputs:
     description: LLM model to use
     default:
       tags: ["flagship"]
-  temperature:
-    type: number
-    default: 1.0
-    min: 0
-    max: 1
-    description: Response randomness (0 = focused, 1 = creative)
-  thinking_level:
-    type: enum
-    enum: [low, medium, high, xhigh]
-    default: medium
-    description: Extended thinking level (support is model/provider dependent)
 
   tools:
     type: tools
@@ -49,18 +38,8 @@ inputs:
   system_prompt:
     type: string
     default: ""
+    ui: hidden
     description: Override the system prompt (empty = use default)
-  max_turns:
-    type: integer
-    default: 0
-    min: 0
-    max: 500
-    description: Maximum agent loop iterations (0 = unlimited)
-  compaction_threshold:
-    type: integer
-    default: 185000
-    min: 10000
-    description: Token count to trigger context compaction
 
   ask:
     type: boolean
@@ -138,7 +117,7 @@ nodes:
   - id: agent_loop
     type: loop
     # Continues while: has tool calls OR has feedback from ask_question. No tools and no feedback = return to user.
-    while: ((outputs.tool_calls != null && size(outputs.tool_calls) > 0) || outputs.has_feedback == true) && (inputs.max_turns == 0 || iter.iteration < inputs.max_turns)
+    while: (outputs.tool_calls != null && size(outputs.tool_calls) > 0) || outputs.has_feedback == true
     inline:
       outputs:
         tool_calls: "{{nodes.call_llm.tool_calls}}"
@@ -157,8 +136,8 @@ nodes:
             tool_calls: "{{output.tool_calls}}"
           args:
             model: "{{inputs.model}}"
-            temperature: "{{inputs.temperature}}"
-            thinking_level: "{{inputs.thinking_level}}"
+            temperature: "{{has(inputs.model.temperature) ? inputs.model.temperature : 0.0}}"
+            thinking_level: "{{has(inputs.model.thinking_level) ? inputs.model.thinking_level : ''}}"
             system_prompt: >
               {{inputs.mode == 'plan' && inputs.planning_prompt != '' ? (inputs.system_prompt != '' ? inputs.system_prompt + "\n\n" : '') + inputs.planning_prompt : inputs.system_prompt}}
             # Plan mode gets plan-tagged tools only; spawn no-op when presets empty
@@ -219,7 +198,7 @@ nodes:
         - from: execute_tools
           cases:
             - to: compact
-              condition: nodes.execute_tools.thread_token_count > inputs.compaction_threshold
+              condition: "nodes.execute_tools.thread_token_count > (has(inputs.model.compaction_threshold) ? inputs.model.compaction_threshold : 185000)"
               label: "compact"
 
       ui:
@@ -254,19 +233,7 @@ nodes:
                 label: auto_approve
 
 
-  - id: max_turns_notification
-    type: save_message
-    args:
-      role: "system"
-      display_style: "warning"
-      content: "Agent reached maximum iteration limit ({{inputs.max_turns}} turns). The conversation will pause — send a message to continue."
-
-edges:
-  - from: agent_loop
-    cases:
-      - to: max_turns_notification
-        condition: inputs.max_turns > 0 && nodes.agent_loop._iterations >= inputs.max_turns
-        label: "max_turns_reached"
+edges: []
 
 ui:
   positions:
@@ -276,6 +243,3 @@ ui:
     agent_loop:
       x: 446
       y: 254
-    max_turns_notification:
-      x: 917
-      y: 283

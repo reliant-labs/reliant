@@ -28,7 +28,7 @@ func BuildThinkingCapabilityMatrix(defs []ModelDefinition) []ThinkingCapabilityM
 
 	for _, def := range defs {
 		for _, provider := range def.Providers {
-			cap := ResolveThinkingCapability(def.Capabilities.CanReason, def.ID, provider.Driver)
+			cap := ResolveThinkingCapability(def.Capabilities)
 			matrix = append(matrix, ThinkingCapabilityMatrixEntry{
 				ModelID:          def.ID,
 				ModelName:        def.Name,

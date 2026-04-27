@@ -47,9 +47,11 @@ type PresetInfo struct {
 	// URL-safe slug for runtime reference
 	Slug string `protobuf:"bytes,7,opt,name=slug,proto3" json:"slug,omitempty"`
 	// Whether this preset is hidden from the preset picker by default
-	IsHidden      bool `protobuf:"varint,8,opt,name=is_hidden,json=isHidden,proto3" json:"is_hidden,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	IsHidden bool `protobuf:"varint,8,opt,name=is_hidden,json=isHidden,proto3" json:"is_hidden,omitempty"`
+	// Skill names recommended when this preset is active
+	RecommendedSkills []string `protobuf:"bytes,9,rep,name=recommended_skills,json=recommendedSkills,proto3" json:"recommended_skills,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *PresetInfo) Reset() {
@@ -136,6 +138,13 @@ func (x *PresetInfo) GetIsHidden() bool {
 		return x.IsHidden
 	}
 	return false
+}
+
+func (x *PresetInfo) GetRecommendedSkills() []string {
+	if x != nil {
+		return x.RecommendedSkills
+	}
+	return nil
 }
 
 // ListPresetsRequest is the request for ListPresets.
@@ -1189,7 +1198,7 @@ var File_reliant_v1_preset_proto protoreflect.FileDescriptor
 const file_reliant_v1_preset_proto_rawDesc = "" +
 	"\n" +
 	"\x17reliant/v1/preset.proto\x12\n" +
-	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\"\xbc\x02\n" +
+	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\"\xeb\x02\n" +
 	"\n" +
 	"PresetInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
@@ -1199,7 +1208,8 @@ const file_reliant_v1_preset_proto_rawDesc = "" +
 	"\x03tag\x18\x05 \x01(\tR\x03tag\x12\x0e\n" +
 	"\x02id\x18\x06 \x01(\tR\x02id\x12\x12\n" +
 	"\x04slug\x18\a \x01(\tR\x04slug\x12\x1b\n" +
-	"\tis_hidden\x18\b \x01(\bR\bisHidden\x1aQ\n" +
+	"\tis_hidden\x18\b \x01(\bR\bisHidden\x12-\n" +
+	"\x12recommended_skills\x18\t \x03(\tR\x11recommendedSkills\x1aQ\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
 	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01\"Z\n" +

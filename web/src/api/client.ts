@@ -55,6 +55,7 @@ export const api = {
           canReason: m.canReason,
           supportedThinkingLevels: m.supportedThinkingLevels,
           capabilities: m.capabilities,
+          tags: m.tags || [],
           metadata: undefined,
         })),
         total: response.total,
