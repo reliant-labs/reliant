@@ -4,8 +4,10 @@ package grpc
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"reflect"
 
 	"connectrpc.com/connect"
@@ -48,6 +50,7 @@ type Config struct {
 	Port                int
 	BindAddress         string                             // Bind address (default: "127.0.0.1", use "0.0.0.0" for containers)
 	JWTPublicKey        string                             // RSA public key for JWT validation
+	JWKSURL             string                             // JWKS endpoint URL for JWT validation (alternative to JWTPublicKey)
 	CORSAllowedOrigins  []string                           // Allowed CORS origins; defaults to ["*"] if empty
 	AllowedEmailDomains []string                           // If non-empty, only these email domains may access the system
 	Database            db.Repository                      // Database repository
@@ -93,7 +96,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		"/reliant.v1.SystemService/DevAuthClear",
 	}
 
-	authInterceptor, err := interceptors.NewAuthInterceptor(cfg.JWTPublicKey, publicMethods)
+	authInterceptor, err := interceptors.NewAuthInterceptor(cfg.JWTPublicKey, cfg.JWKSURL, publicMethods)
 	if err != nil {
 		if !cfg.LocalMode {
 			return nil, fmt.Errorf("auth interceptor required in cloud mode: %w", err)
@@ -205,11 +208,20 @@ func NewServer(cfg *Config) (*Server, error) {
 		terminalPath, terminalHandler = reliantv1connect.NewTerminalServiceHandler(termProxy, opts...)
 
 		// WebSocket terminal handler (browser bidi terminal I/O)
-		var jwtValidator *auth.JWTValidator
-		if cfg.JWTPublicKey != "" {
-			jwtValidator, _ = auth.NewJWTValidator(cfg.JWTPublicKey)
+		var wsValidator auth.TokenValidator
+		switch auth.GetAuthMode() {
+		case "apikey":
+			if key := os.Getenv("AUTH_API_KEY"); key != "" {
+				wsValidator, _ = auth.NewAPIKeyValidator(key)
+			}
+		default: // supabase
+			if cfg.JWTPublicKey != "" {
+				wsValidator, _ = auth.NewJWTValidator(cfg.JWTPublicKey)
+			} else if cfg.JWKSURL != "" {
+				wsValidator, _ = auth.LoadJWKS(context.Background(), cfg.JWKSURL)
+			}
 		}
-		mux.HandleFunc("/api/v2/terminal/ws", services.TerminalWSHandler(router, jwtValidator))
+		mux.HandleFunc("/api/v2/terminal/ws", services.TerminalWSHandler(router, wsValidator))
 	} else {
 		// No daemon router available: use DB-backed FileSystem and provider-backed Background.
 		// These provide read-only / limited functionality without a connected daemon.
@@ -262,6 +274,17 @@ func NewServer(cfg *Config) (*Server, error) {
 	if terminalHandler != nil {
 		mux.Handle(terminalPath, terminalHandler)
 	}
+
+	// JSON health endpoint on the gRPC mux so the frontend can discover auth_mode
+	// without needing to reach the dedicated health port.
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"status":    "ok",
+			"service":   "grpc-server",
+			"auth_mode": auth.GetAuthMode(),
+		})
+	})
 
 	// Create CORS handler that wraps the entire mux
 	// MaxAge of 24 hours to cache preflight responses and reduce OPTIONS requests

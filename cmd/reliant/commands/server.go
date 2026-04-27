@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/serverapi"
 	"github.com/reliant-labs/reliant/internal/servergateway"
 	"github.com/reliant-labs/reliant/internal/serverworker"
@@ -106,11 +105,8 @@ Designed to run as N replicas behind a load balancer.`,
 	cmd.Flags().StringVar(&opts.NATSURL, "nats-url", serverEnvOrDefault("NATS_URL", ""), "NATS server URL (required)")
 	cmd.Flags().StringVar(&opts.StreamingDriver, "streaming-driver", serverEnvOrDefault("STREAMING_DRIVER", "nats"), "Streaming driver (memory or nats)")
 
-	// CORS — default to wildcard in dev, restrictive in production
-	corsDefault := "https://reliant-prod.web.app,https://reliantlabs.io"
-	if config.IsDevelopmentEnvironment() {
-		corsDefault = "*"
-	}
+	// CORS — default to wildcard; hosted deployments override via CORS_ALLOWED_ORIGINS
+	corsDefault := "*"
 	cmd.Flags().String("cors-origins", serverEnvOrDefault("CORS_ALLOWED_ORIGINS", corsDefault), "Comma-separated CORS allowed origins, or * for all")
 
 	// TLS
@@ -119,8 +115,9 @@ Designed to run as N replicas behind a load balancer.`,
 	cmd.Flags().BoolVar(&opts.DisableTLS, "disable-tls", serverEnvOrDefaultBool("DISABLE_TLS", false), "Disable TLS (use plaintext HTTP)")
 
 	// JWT
-	cmd.Flags().StringVar(&opts.JWTPublicKey, "jwt-public-key", serverEnvOrDefault("JWT_PUBLIC_KEY", ""), "JWT public key PEM (falls back to embedded Supabase key)")
+	cmd.Flags().StringVar(&opts.JWTPublicKey, "jwt-public-key", serverEnvOrDefault("JWT_PUBLIC_KEY", ""), "JWT public key PEM for token validation")
 	cmd.Flags().StringVar(&opts.JWTPublicKeyFile, "jwt-public-key-file", serverEnvOrDefault("JWT_PUBLIC_KEY_FILE", ""), "Path to JWT public key PEM file")
+	cmd.Flags().StringVar(&opts.JWKSURL, "jwks-url", serverEnvOrDefault("RELIANT_JWKS_URL", ""), "JWKS endpoint URL for JWT validation (alternative to PEM key)")
 
 	return cmd
 }

@@ -2,6 +2,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/sha256"
@@ -12,7 +13,9 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
+	"net/http"
 	"strings"
 	"time"
 )
@@ -131,6 +134,32 @@ func NewJWTValidatorFromJWKS(jwksJSON string) (*JWTValidator, error) {
 	return &JWTValidator{
 		publicKey: ecdsaPub,
 	}, nil
+}
+
+// LoadJWKS fetches a JWKS document from the given URL and returns a JWTValidator.
+func LoadJWKS(ctx context.Context, jwksURL string) (*JWTValidator, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, jwksURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to create JWKS request: %v", ErrInvalidPublicKey, err)
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to fetch JWKS from %s: %v", ErrInvalidPublicKey, jwksURL, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%w: JWKS endpoint returned status %d", ErrInvalidPublicKey, resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // 1MB limit
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to read JWKS response: %v", ErrInvalidPublicKey, err)
+	}
+
+	return NewJWTValidatorFromJWKS(string(body))
 }
 
 // ValidateToken validates a JWT token and returns the claims

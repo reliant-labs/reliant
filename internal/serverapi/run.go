@@ -75,6 +75,7 @@ type Options struct {
 	// JWT
 	JWTPublicKey     string
 	JWTPublicKeyFile string
+	JWKSURL          string
 }
 
 // Run boots the stateless API server with the given options. It blocks until
@@ -101,7 +102,7 @@ func Run(ctx context.Context, opts Options) error {
 		logging.Info("api-server: forcing STREAMING_DRIVER to nats (memory driver cannot receive cross-process events)")
 	}
 
-	// JWT public key: explicit value > file > embedded
+	// JWT public key: explicit value > file > env var
 	jwtPublicKey := opts.JWTPublicKey
 	if jwtPublicKey == "" && opts.JWTPublicKeyFile != "" {
 		data, err := os.ReadFile(opts.JWTPublicKeyFile)
@@ -111,8 +112,17 @@ func Run(ctx context.Context, opts Options) error {
 		jwtPublicKey = string(data)
 	}
 	if jwtPublicKey == "" {
-		jwtPublicKey = auth.GetJWTPublicKey()
+		jwtPublicKey = os.Getenv("RELIANT_JWT_PUBLIC_KEY")
 	}
+
+	// JWKS URL: flag > env var (alternative to PEM key)
+	jwksURL := opts.JWKSURL
+	if jwksURL == "" {
+		jwksURL = os.Getenv("RELIANT_JWKS_URL")
+	}
+
+	// Auth mode
+	authMode := auth.GetAuthMode()
 
 	// -----------------------------------------------------------------
 	// 2. Initialize subsystems
@@ -147,6 +157,7 @@ func Run(ctx context.Context, opts Options) error {
 		"temporal", fmt.Sprintf("%s:%d", opts.TemporalHost, opts.TemporalPort),
 		"db_driver", opts.DatabaseDriver,
 		"data_dir", opts.DataDir,
+		"auth_mode", authMode,
 	)
 
 	// Ensure RELIANT_DATA_DIR is set for activities that need to locate files
@@ -308,6 +319,7 @@ func Run(ctx context.Context, opts Options) error {
 		Port:                opts.GRPCPort,
 		BindAddress:         opts.BindAddress,
 		JWTPublicKey:        jwtPublicKey,
+		JWKSURL:             jwksURL,
 		CORSAllowedOrigins:  opts.CORSAllowedOrigins,
 		AllowedEmailDomains: opts.AllowedEmailDomains,
 		Database:            repo,
@@ -367,7 +379,11 @@ func Run(ctx context.Context, opts Options) error {
 	healthMux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ok","service":"api-server"}`))
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"status":    "ok",
+			"service":   "api-server",
+			"auth_mode": auth.GetAuthMode(),
+		})
 	})
 	healthMux.HandleFunc("/ready", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

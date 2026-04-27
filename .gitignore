@@ -123,9 +123,6 @@ mobile-app/android/app/debug.keystore
 dist/
 *.expo-shared
 
-# Supabase
-.supabase/
-
 # Testing
 coverage/
 *.lcov

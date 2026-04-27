@@ -37,6 +37,7 @@ import { WorkflowHeader } from "./components/workflow/WorkflowHeader";
 import { SettingsPage } from "./components/Settings/SettingsPage";
 import { SettingsHeader } from "./components/Settings/SettingsHeader";
 import { ContextualTipsLayer, OnboardingWizard } from "./components/Onboarding";
+import { OnboardingOverlay } from "./components/OnboardingFlow";
 
 import { Header, type HeaderRef } from "./components/Layout/Header";
 import { ProjectPicker } from "./components/Projects/ProjectPicker";
@@ -1476,6 +1477,7 @@ function App() {
         {/* Toast Notifications */}
         <Toaster />
         {/* Onboarding wizard must render in all layout modes */}
+        <OnboardingOverlay />
         <OnboardingWizard />
         <ContextualTipsLayer />
       </div>
@@ -1502,6 +1504,7 @@ function App() {
         {/* Toast Notifications */}
         <Toaster />
         {/* Onboarding wizard must render in all layout modes */}
+        <OnboardingOverlay />
         <OnboardingWizard />
         <ContextualTipsLayer />
       </div>
@@ -1527,9 +1530,6 @@ function App() {
         onToggleChatSidebar={() => setShowChatSidebar((prev) => !prev)}
         onOpenWorkflows={() => {
           useViewerStore.getState().setWorkflowMode(true);
-        }}
-        onOpenFeedback={() => {
-          setSettingsMode(true, "feedback");
         }}
       />
 
@@ -1691,6 +1691,7 @@ function App() {
       <GlobalUpdateHandler />
 
       {/* Onboarding - welcome modal + floating checklist */}
+      <OnboardingOverlay />
       <OnboardingWizard />
       <ContextualTipsLayer />
     </div>
