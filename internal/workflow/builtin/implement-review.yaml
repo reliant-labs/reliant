@@ -156,12 +156,9 @@ nodes:
 
                 Review the implementation. Your prior reviews (if any) are in this thread — use them to track progress across attempts.
 
-                Spawn appropriate reviewers based on the nature of the changes:
-                - **code_reviewer** / **code_hygiene_reviewer** for code quality, correctness, patterns
-                - **security_reviewer** for auth, input validation, secrets, injection risks
-                - **performance_reviewer** for scalability, resource usage, concurrency
-                - **architect** for design, API contracts, structural concerns
-                - **ux_reviewer** if the task involves UI and a running application is available
+                Spawn a **code_reviewer** to perform comprehensive review. The code reviewer will load
+                appropriate review sub-skills (hygiene, security, performance, architecture, UX) based on
+                the nature of the changes.
 
                 Your job:
                 1. Assess correctness and completeness against the original request

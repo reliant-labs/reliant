@@ -4,7 +4,7 @@ description: |
   3 agents implement in parallel worktrees, reviewer picks winner or synthesizes.
   Thread mode: new (isolated context). Each worktree is independent.
   Apply path: use_winner copies via rsync, synthesize merges best parts.
-discuss: true
+
 entry: [improve_prompt]
 
 outputs:

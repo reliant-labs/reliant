@@ -122,7 +122,6 @@ interface ChatInputProps {
   workflowExecution?: WorkflowExecution;  // Root workflow execution tree
   // Discuss mode
   isDiscussMode?: boolean;
-  canDiscuss?: boolean;
   onToggleDiscuss?: () => void;
 }
 
@@ -145,7 +144,6 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
       selectedThreadId,
       workflowExecution,
       isDiscussMode,
-      canDiscuss,
       onToggleDiscuss,
     },
     ref
@@ -1730,7 +1728,6 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                           />
                         }
                         isDiscussMode={isDiscussMode}
-                        canDiscuss={canDiscuss}
                         onToggleDiscuss={onToggleDiscuss}
                         isPaused={isPaused}
                         compact={isCompact}

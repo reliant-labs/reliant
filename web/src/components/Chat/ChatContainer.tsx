@@ -88,7 +88,6 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
   const pendingApprovals = usePendingApprovals(chatId);
   const isDiscussMode = useDiscussMode(chatId);
   const pendingQuestion = usePendingQuestion(chatId);
-  const canDiscuss = currentChat?.canDiscuss ?? false;
   const currentActivity = useChatCurrentActivity(chatId);
 
   // Process messages: sort by ordinal and filter out agent messages
@@ -276,7 +275,6 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
       onToggleRecentChanges={handleToggleRecentChanges}
       workflowExecution={workflowExecution}
       isDiscussMode={isDiscussMode}
-      canDiscuss={canDiscuss}
       onToggleDiscuss={handleToggleDiscuss}
       hasPendingQuestion={!!pendingQuestion}
     />

@@ -1,0 +1,620 @@
+# Test scenarios for pitch-deck.yaml workflow
+#
+# Pitch Deck workflow structure:
+#   classify (router) → scrape_website → [research_competitors, research_market] → research_done (join)
+#   → founder_interview → plan_deck (structured-agent) → slide_pipeline (parallel loop)
+#   → slides_loop (while loop: build_slides → start_dev_server → screenshot_slides → visual_review → stop_dev_server)
+#   → complete (save_message)
+#
+# Node types:
+#   - classify           type: router — routes to starting phase
+#   - scrape_website      type: workflow, ref: builtin://agent (BLACK BOX)
+#   - research_competitors type: workflow, ref: builtin://agent (BLACK BOX)
+#   - research_market     type: workflow, ref: builtin://agent (BLACK BOX)
+#   - research_done       type: join
+#   - founder_interview   type: workflow, ref: builtin://agent (BLACK BOX)
+#   - plan_deck           type: workflow, ref: builtin://structured-agent (BLACK BOX)
+#   - slide_pipeline      type: loop (parallel) — per-slide write + review
+#   - slides_loop         type: loop (while) — build → screenshot → visual review
+#   - complete            type: save_message
+
+---
+# Happy Path: All phases succeed, reviews pass on first try
+#
+# Tests the full pipeline:
+# 1. scrape_website — agent
+# 2. research_competitors + research_market — parallel agents
+# 3. research_done — join
+# 4. founder_interview — agent
+# 5. plan_deck — structured-agent (standalone)
+# 6. slide_pipeline — parallel loop (write_slide → slide_review per slide)
+# 7. slides_loop — while loop (build_slides → start_dev_server → visual_review → stop_dev_server)
+# 8. complete — save_message
+
+name: happy_path
+description: Full pipeline succeeds, all reviews pass on first iteration
+
+inputs:
+  mode: auto
+  yield: false
+  website_url: "https://example.com"
+  deck_purpose: seed
+  pitch_deck_dir: "pitch-deck"
+  existing_deck_dir: ""
+
+events:
+  # Phase 1: Scrape website
+  - node: scrape_website
+    output:
+      response_text: |
+        ## Company Overview
+        Example Corp builds developer tools with AI workflows.
+
+        ## Products
+        - Example Code: shipped, beta
+        - Example Engine: waitlist only
+
+        ## Traction Claims
+        - "5,000+ downloads" — PLAUSIBLE
+        - GitHub: 340 stars — VERIFIED
+
+        ## Brand Identity
+        Colors: #a855f7 purple, #0a0a0a bg
+        Font: Inter
+        Tone: Technical, casual
+
+  # Phase 2a: Competitive research
+  - node: research_competitors
+    output:
+      response_text: |
+        ## Direct Competitors
+        - Cursor: $2.5B valuation, 20M+ downloads
+        - Copilot: 15M users
+
+        ## Honest Assessment
+        Behind on users, ahead on workflows.
+
+  # Phase 2b: Market research
+  - node: research_market
+    output:
+      response_text: |
+        ## Market Size
+        AI-assisted dev tools: $22.1B by 2028 (IDC)
+
+        ## Comparable Raises
+        Codeium: $150M Series C, Augment: $227M Series B
+
+  # Phase 3: Founder interview
+  - node: founder_interview
+    output:
+      response_text: |
+        ## Founder Brief
+        Downloads: 3,200. WAU: 800. Revenue: $0.
+        Raising $2M seed. 2 founders (AWS, Google).
+
+        ## Claims to Soften
+        - 5,000 → 3,200 real downloads
+        - Remove big company name-dropping
+
+  # Phase 4a: Plan deck (standalone structured-agent)
+  - node: plan_deck
+    output:
+      response_text: "Planned 3-slide deck with demo-first narrative."
+      response:
+        narrative_arc: "Demo-first: open with product, build through traction to the ask."
+        slides:
+          - filename: "01-hook.md"
+            title: "What if your IDE could run multi-agent workflows?"
+            purpose: "Hook with a demo-first opening"
+            key_content: "AI-powered IDE with workflow automation, 3,200 downloads"
+            layout_hint: centered-hero
+            sources: "phase-1-scrape/website-analysis.md, phase-3-interview/founder-brief.md"
+          - filename: "02-traction.md"
+            title: "3,200 downloads, 800 weekly active"
+            purpose: "Show honest traction"
+            key_content: "3,200 downloads (not 5K), 800 WAU, 40% retention"
+            layout_hint: full-bleed-stat
+            sources: "phase-3-interview/founder-brief.md"
+          - filename: "03-ask.md"
+            title: "Raising $2M seed"
+            purpose: "The ask"
+            key_content: "$2M seed, 18 months runway, hire 3 engineers"
+            layout_hint: centered-hero
+            sources: "phase-3-interview/founder-brief.md"
+
+  # Phase 4b: slide_pipeline — parallel loop (mocked as black box)
+  - node: slide_pipeline
+    output:
+      _completed: 3
+      _failed: 0
+      _parallel: true
+      _results:
+        "01-hook.md":
+          response_text: "Wrote hook slide."
+          verdict: pass
+          feedback: "Strong opening with specific product angle."
+        "02-traction.md":
+          response_text: "Wrote traction slide."
+          verdict: pass
+          feedback: "Honest numbers, well-sourced."
+        "03-ask.md":
+          response_text: "Wrote ask slide."
+          verdict: pass
+          feedback: "Clear and direct ask."
+
+  # Phase 5: slides_loop — while loop inner nodes
+  - node: slides_loop.build_slides
+    output:
+      response_text: "Built 3 React slide components in pitch-deck/src/slides/"
+
+  - node: slides_loop.start_dev_server
+    output:
+      exit_code: 0
+      stdout: "Dev server started on http://localhost:5174"
+      stderr: ""
+
+  - node: slides_loop.visual_review
+    output:
+      response_text: "Slides pass visual review."
+      response:
+        verdict: pass
+        summary: "Clean, professional slides. Brand colors match. Good layout variety."
+        slide_issues: []
+        brand_consistency: "Colors match brand identity. Inter font used throughout."
+        layout_issues: []
+        ai_visual_tells: []
+        typography_issues: []
+      completed: true
+
+  - node: slides_loop.stop_dev_server
+    output:
+      exit_code: 0
+      stdout: ""
+      stderr: ""
+
+expect:
+  outcome: completed
+  reached:
+    - scrape_website
+    - research_competitors
+    - research_market
+    - research_done
+    - founder_interview
+    - plan_deck
+    - slide_pipeline
+    - slides_loop
+    - complete
+
+---
+# Loop Outputs → Downstream Access
+#
+# Tests that loop outputs (slide_pipeline, slides_loop) are accessible
+# from downstream nodes like `complete`.
+#
+# Specifically verifies:
+# - slide_pipeline _completed count is available
+# - slides_loop verdict output is available
+# - The complete node can reference these in its save_message content
+
+name: loop_save_message_self_ref
+description: Loop outputs (slide_pipeline._completed, slides_loop.verdict) are accessible from downstream complete node
+
+inputs:
+  mode: auto
+  yield: false
+  website_url: "https://example.com"
+  deck_purpose: seed
+  pitch_deck_dir: "pitch-deck"
+  existing_deck_dir: ""
+
+events:
+  # Phases 1-3: Minimal stubs
+  - node: scrape_website
+    output:
+      response_text: "Company analysis done."
+
+  - node: research_competitors
+    output:
+      response_text: "Competitors analyzed."
+
+  - node: research_market
+    output:
+      response_text: "Market sized."
+
+  - node: founder_interview
+    output:
+      response_text: "Founder brief done."
+
+  # Phase 4a: plan_deck with 3 slides
+  - node: plan_deck
+    output:
+      response_text: "Planned 3 slides."
+      response:
+        narrative_arc: "Demo-first: open with product, build to traction."
+        slides:
+          - filename: "01-hook.md"
+            title: "What we built"
+            purpose: "Open with the product"
+            key_content: "Developer tool with AI workflows"
+            layout_hint: centered-hero
+            sources: "phase-1-scrape/website-analysis.md"
+          - filename: "02-traction.md"
+            title: "3,200 downloads in 3 months"
+            purpose: "Show early traction"
+            key_content: "3,200 downloads, 800 WAU"
+            layout_hint: full-bleed-stat
+            sources: "phase-3-interview/founder-brief.md"
+          - filename: "03-ask.md"
+            title: "Raising $2M seed"
+            purpose: "Close with the ask"
+            key_content: "$2M seed, 18 months runway"
+            layout_hint: centered-hero
+            sources: "phase-3-interview/founder-brief.md"
+
+  # Phase 4b: slide_pipeline (parallel loop) completes
+  - node: slide_pipeline
+    output:
+      _completed: 3
+      _failed: 0
+      _parallel: true
+      _results:
+        "01-hook.md":
+          response_text: "Wrote hook slide."
+          verdict: pass
+          feedback: "Good."
+        "02-traction.md":
+          response_text: "Wrote traction slide."
+          verdict: pass
+          feedback: "Good."
+        "03-ask.md":
+          response_text: "Wrote ask slide."
+          verdict: pass
+          feedback: "Good."
+
+  # Phase 5: slides_loop passes on first iteration
+  - node: slides_loop.build_slides
+    output:
+      response_text: "Built slides."
+
+  - node: slides_loop.start_dev_server
+    output:
+      exit_code: 0
+      stdout: "Dev server started"
+
+  - node: slides_loop.visual_review
+    output:
+      response:
+        verdict: pass
+        summary: "Slides pass."
+        slide_issues: []
+        brand_consistency: "Matches."
+        layout_issues: []
+        ai_visual_tells: []
+        typography_issues: []
+      completed: true
+
+  - node: slides_loop.stop_dev_server
+    output:
+      exit_code: 0
+
+expect:
+  outcome: completed
+  reached:
+    - plan_deck
+    - slide_pipeline
+    - slides_loop
+    - complete
+
+---
+# Slide Pipeline Per-Slide Results
+#
+# Tests that slide_pipeline produces per-slide results with mixed verdicts.
+# plan_deck returns 4 slides, slide_pipeline returns 4 results — some pass, some fail.
+#
+# Verifies:
+# - Parallel loop _results are keyed by filename
+# - Mixed verdicts are captured per slide
+# - Pipeline still completes even with per-slide failures (they're review verdicts, not execution failures)
+
+name: slide_review_results
+description: Tests slide_pipeline per-slide results structure with 4 slides, mix of pass and fail verdicts
+
+inputs:
+  mode: auto
+  yield: false
+  website_url: "https://example.com"
+  deck_purpose: seed
+  pitch_deck_dir: "pitch-deck"
+  existing_deck_dir: ""
+
+events:
+  # Phases 1-3: Minimal stubs
+  - node: scrape_website
+    output:
+      response_text: "Company analysis done."
+
+  - node: research_competitors
+    output:
+      response_text: "Competitors analyzed."
+
+  - node: research_market
+    output:
+      response_text: "Market sized."
+
+  - node: founder_interview
+    output:
+      response_text: "Founder brief done."
+
+  # Phase 4a: plan_deck with 4 slides
+  - node: plan_deck
+    output:
+      response_text: "Planned 4 slides."
+      response:
+        narrative_arc: "Traction-first: lead with growth, build to the ask."
+        slides:
+          - filename: "01-hook.md"
+            title: "3,200 downloads in 90 days"
+            purpose: "Lead with traction"
+            key_content: "3,200 downloads, 800 WAU"
+            layout_hint: full-bleed-stat
+            sources: "phase-3-interview/founder-brief.md"
+          - filename: "02-product.md"
+            title: "Multi-agent workflows in your IDE"
+            purpose: "Show the product"
+            key_content: "YAML pipelines, parallel execution"
+            layout_hint: demo-screenshot
+            sources: "phase-1-scrape/website-analysis.md"
+          - filename: "03-market.md"
+            title: "$22.1B by 2028"
+            purpose: "Market validation"
+            key_content: "IDC 2024 market sizing"
+            layout_hint: two-column
+            sources: "phase-2-research/market-sizing.md"
+          - filename: "04-ask.md"
+            title: "Raising $2M seed"
+            purpose: "The ask"
+            key_content: "$2M, 18 months, 3 hires"
+            layout_hint: centered-hero
+            sources: "phase-3-interview/founder-brief.md"
+
+  # Phase 4b: slide_pipeline with mixed results
+  - node: slide_pipeline
+    output:
+      _completed: 4
+      _failed: 0
+      _parallel: true
+      _results:
+        "01-hook.md":
+          response_text: "Wrote hook slide."
+          verdict: pass
+          feedback: "Strong opening with verified traction numbers."
+        "02-product.md":
+          response_text: "Wrote product slide."
+          verdict: fail
+          feedback: "Uses buzzwords: 'seamlessly integrates' and 'comprehensive platform'. Rewrite without AI language."
+        "03-market.md":
+          response_text: "Wrote market slide."
+          verdict: pass
+          feedback: "IDC source cited, bottom-up math shown."
+        "04-ask.md":
+          response_text: "Wrote ask slide."
+          verdict: fail
+          feedback: "Missing specific use-of-funds breakdown. Just says '$2M seed' with no detail."
+
+  # Phase 5: slides_loop passes on first try
+  - node: slides_loop.build_slides
+    output:
+      response_text: "Built 4 slide components."
+
+  - node: slides_loop.start_dev_server
+    output:
+      exit_code: 0
+      stdout: "Dev server started on http://localhost:5174"
+
+  - node: slides_loop.visual_review
+    output:
+      response_text: "Slides pass visual review."
+      response:
+        verdict: pass
+        summary: "Slides look professional. Brand consistent."
+        slide_issues: []
+        brand_consistency: "Matches brand identity."
+        layout_issues: []
+        ai_visual_tells: []
+        typography_issues: []
+      completed: true
+
+  - node: slides_loop.stop_dev_server
+    output:
+      exit_code: 0
+      stdout: ""
+
+expect:
+  outcome: completed
+  reached:
+    - scrape_website
+    - research_competitors
+    - research_market
+    - research_done
+    - founder_interview
+    - plan_deck
+    - slide_pipeline
+    - slides_loop
+    - complete
+
+---
+# Visual Review Fail → Rebuild → Pass
+#
+# Tests the slides_loop retry path:
+# 1-4. All prior phases + slide_pipeline pass normally
+# 5. slides_loop iteration 0: builder creates slides, visual reviewer FAILS (AI tells)
+# 6. slides_loop iteration 1: builder fixes, visual reviewer PASSES
+# 7. complete
+#
+# Verifies:
+# - Visual review catches AI visual patterns
+# - Review feedback flows back to the builder via loop outputs
+# - The while loop exits when verdict == 'pass'
+
+name: visual_review_retry
+description: Visual reviewer fails first build (AI visual tells), builder fixes, passes on second try
+
+inputs:
+  mode: auto
+  yield: false
+  website_url: "https://example.com"
+  deck_purpose: seed
+  pitch_deck_dir: "pitch-deck"
+  existing_deck_dir: ""
+
+events:
+  # Phases 1-3: Minimal stubs
+  - node: scrape_website
+    output:
+      response_text: "Company analysis complete. Brand: purple #a855f7, dark bg, Inter font."
+
+  - node: research_competitors
+    output:
+      response_text: "Competitors analyzed."
+
+  - node: research_market
+    output:
+      response_text: "Market sized."
+
+  - node: founder_interview
+    output:
+      response_text: "Founder brief complete."
+
+  # Phase 4a: plan_deck (standalone)
+  - node: plan_deck
+    output:
+      response_text: "Planned 3 slides."
+      response:
+        narrative_arc: "Demo-first."
+        slides:
+          - filename: "01-hook.md"
+            title: "Hook"
+            purpose: "Open"
+            key_content: "Product"
+            layout_hint: centered-hero
+            sources: "phase-1-scrape/website-analysis.md"
+          - filename: "02-traction.md"
+            title: "Traction"
+            purpose: "Numbers"
+            key_content: "3,200 downloads"
+            layout_hint: full-bleed-stat
+            sources: "phase-3-interview/founder-brief.md"
+          - filename: "03-ask.md"
+            title: "The Ask"
+            purpose: "Close"
+            key_content: "$2M seed"
+            layout_hint: centered-hero
+            sources: "phase-3-interview/founder-brief.md"
+
+  # Phase 4b: slide_pipeline passes
+  - node: slide_pipeline
+    output:
+      _completed: 3
+      _failed: 0
+      _parallel: true
+      _results:
+        "01-hook.md":
+          response_text: "Wrote hook."
+          verdict: pass
+          feedback: "Good."
+        "02-traction.md":
+          response_text: "Wrote traction."
+          verdict: pass
+          feedback: "Good."
+        "03-ask.md":
+          response_text: "Wrote ask."
+          verdict: pass
+          feedback: "Good."
+
+  # Phase 5, Iteration 0: Build slides
+  - node: slides_loop.build_slides
+    iteration: 0
+    output:
+      response_text: "Built 3 slide components."
+
+  - node: slides_loop.start_dev_server
+    iteration: 0
+    output:
+      exit_code: 0
+      stdout: "Dev server started"
+
+  # Phase 5, Iteration 0: Visual reviewer FAILS
+  - node: slides_loop.visual_review
+    iteration: 0
+    output:
+      response_text: "Slides fail visual review."
+      response:
+        verdict: fail
+        summary: "Multiple AI visual tells and brand mismatch. Blue instead of purple. Same 3-card layout on every slide."
+        slide_issues:
+          - slide_number: 1
+            description: "Title text too small for projection."
+            severity: warning
+          - slide_number: 3
+            description: "Content overflows the slide boundary."
+            severity: critical
+        brand_consistency: "FAIL. Uses blue (#3b82f6) instead of brand purple (#a855f7)."
+        layout_issues:
+          - "Slides 1, 2, 3 all use identical card layout. Needs variety."
+        ai_visual_tells:
+          - "Purple gradient blob in top-right corner on every slide"
+          - "Emoji characters used as icons"
+        typography_issues:
+          - "Body text at 12px is unreadable when projected"
+      completed: true
+
+  - node: slides_loop.stop_dev_server
+    iteration: 0
+    output:
+      exit_code: 0
+
+  # Phase 5, Iteration 1: Rebuild
+  - node: slides_loop.build_slides
+    iteration: 1
+    output:
+      response_text: "Rebuilt slides. Fixed colors, varied layouts, removed gradient blobs and emoji icons."
+
+  - node: slides_loop.start_dev_server
+    iteration: 1
+    output:
+      exit_code: 0
+      stdout: "Dev server started"
+
+  # Phase 5, Iteration 1: Visual reviewer PASSES
+  - node: slides_loop.visual_review
+    iteration: 1
+    output:
+      response_text: "Rebuilt slides pass visual review."
+      response:
+        verdict: pass
+        summary: "Brand colors correct, layout variety good, text readable at projection size."
+        slide_issues: []
+        brand_consistency: "Matches. Purple #a855f7, #0a0a0a bg, Inter font."
+        layout_issues: []
+        ai_visual_tells: []
+        typography_issues: []
+      completed: true
+
+  - node: slides_loop.stop_dev_server
+    iteration: 1
+    output:
+      exit_code: 0
+
+expect:
+  outcome: completed
+  reached:
+    - scrape_website
+    - research_competitors
+    - research_market
+    - research_done
+    - founder_interview
+    - plan_deck
+    - slide_pipeline
+    - slides_loop
+    - complete
+

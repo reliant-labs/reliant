@@ -1,0 +1,174 @@
+# Visual Review Fail → Rebuild → Pass
+#
+# Tests the slides_loop retry path:
+# 1-4. All prior phases + slide_pipeline pass normally
+# 5. slides_loop iteration 0: builder creates slides, visual reviewer FAILS (AI tells)
+# 6. slides_loop iteration 1: builder fixes, visual reviewer PASSES
+# 7. complete
+#
+# Verifies:
+# - Visual review catches AI visual patterns
+# - Review feedback flows back to the builder via loop outputs
+# - The while loop exits when verdict == 'pass'
+
+name: visual_review_retry
+description: Visual reviewer fails first build (AI visual tells), builder fixes, passes on second try
+
+inputs:
+  mode: auto
+  yield: false
+  website_url: "https://example.com"
+  deck_purpose: seed
+  pitch_deck_dir: "pitch-deck"
+  existing_deck_dir: ""
+
+events:
+  # Phases 1-3: Minimal stubs
+  - node: scrape_website
+    output:
+      response_text: "Company analysis complete. Brand: purple #a855f7, dark bg, Inter font."
+
+  - node: research_competitors
+    output:
+      response_text: "Competitors analyzed."
+
+  - node: research_market
+    output:
+      response_text: "Market sized."
+
+  - node: founder_interview
+    output:
+      response_text: "Founder brief complete."
+
+  # Phase 4a: plan_deck (standalone)
+  - node: plan_deck
+    output:
+      response_text: "Planned 3 slides."
+      response:
+        narrative_arc: "Demo-first."
+        slides:
+          - filename: "01-hook.md"
+            title: "Hook"
+            purpose: "Open"
+            key_content: "Product"
+            layout_hint: centered-hero
+            sources: "phase-1-scrape/website-analysis.md"
+          - filename: "02-traction.md"
+            title: "Traction"
+            purpose: "Numbers"
+            key_content: "3,200 downloads"
+            layout_hint: full-bleed-stat
+            sources: "phase-3-interview/founder-brief.md"
+          - filename: "03-ask.md"
+            title: "The Ask"
+            purpose: "Close"
+            key_content: "$2M seed"
+            layout_hint: centered-hero
+            sources: "phase-3-interview/founder-brief.md"
+
+  # Phase 4b: slide_pipeline passes
+  - node: slide_pipeline
+    output:
+      _completed: 3
+      _failed: 0
+      _parallel: true
+      _results:
+        "01-hook.md":
+          response_text: "Wrote hook."
+          verdict: pass
+          feedback: "Good."
+        "02-traction.md":
+          response_text: "Wrote traction."
+          verdict: pass
+          feedback: "Good."
+        "03-ask.md":
+          response_text: "Wrote ask."
+          verdict: pass
+          feedback: "Good."
+
+  # Phase 5, Iteration 0: Build slides
+  - node: slides_loop.build_slides
+    iteration: 0
+    output:
+      response_text: "Built 3 slide components."
+
+  - node: slides_loop.start_dev_server
+    iteration: 0
+    output:
+      exit_code: 0
+      stdout: "Dev server started"
+
+  # Phase 5, Iteration 0: Visual reviewer FAILS
+  - node: slides_loop.visual_review
+    iteration: 0
+    output:
+      response_text: "Slides fail visual review."
+      response:
+        verdict: fail
+        summary: "Multiple AI visual tells and brand mismatch. Blue instead of purple. Same 3-card layout on every slide."
+        slide_issues:
+          - slide_number: 1
+            description: "Title text too small for projection."
+            severity: warning
+          - slide_number: 3
+            description: "Content overflows the slide boundary."
+            severity: critical
+        brand_consistency: "FAIL. Uses blue (#3b82f6) instead of brand purple (#a855f7)."
+        layout_issues:
+          - "Slides 1, 2, 3 all use identical card layout. Needs variety."
+        ai_visual_tells:
+          - "Purple gradient blob in top-right corner on every slide"
+          - "Emoji characters used as icons"
+        typography_issues:
+          - "Body text at 12px is unreadable when projected"
+      completed: true
+
+  - node: slides_loop.stop_dev_server
+    iteration: 0
+    output:
+      exit_code: 0
+
+  # Phase 5, Iteration 1: Rebuild
+  - node: slides_loop.build_slides
+    iteration: 1
+    output:
+      response_text: "Rebuilt slides. Fixed colors, varied layouts, removed gradient blobs and emoji icons."
+
+  - node: slides_loop.start_dev_server
+    iteration: 1
+    output:
+      exit_code: 0
+      stdout: "Dev server started"
+
+  # Phase 5, Iteration 1: Visual reviewer PASSES
+  - node: slides_loop.visual_review
+    iteration: 1
+    output:
+      response_text: "Rebuilt slides pass visual review."
+      response:
+        verdict: pass
+        summary: "Brand colors correct, layout variety good, text readable at projection size."
+        slide_issues: []
+        brand_consistency: "Matches. Purple #a855f7, #0a0a0a bg, Inter font."
+        layout_issues: []
+        ai_visual_tells: []
+        typography_issues: []
+      completed: true
+
+  - node: slides_loop.stop_dev_server
+    iteration: 1
+    output:
+      exit_code: 0
+
+expect:
+  outcome: completed
+  reached:
+    - scrape_website
+    - research_competitors
+    - research_market
+    - research_done
+    - founder_interview
+    - plan_deck
+    - slide_pipeline
+    - slides_loop
+    - complete

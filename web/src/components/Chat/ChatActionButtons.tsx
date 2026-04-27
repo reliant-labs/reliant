@@ -29,7 +29,6 @@ interface ChatActionButtonsProps {
 
   // Discuss
   isDiscussMode?: boolean;
-  canDiscuss?: boolean;
   onToggleDiscuss?: () => void;
   isPaused?: boolean;
 

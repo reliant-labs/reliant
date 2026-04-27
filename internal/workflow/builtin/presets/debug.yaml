@@ -2,12 +2,11 @@ name: debug
 description: Debugging orchestrator that coordinates research and testing to isolate bugs without fixing them
 tag: agent
 recommended_skills:
-  - debugging-orchestration
+  - debug
 params:
   spawn_presets:
   - researcher
   - tester
-  - reproducer
   tools:
   - view          # Read code and logs
   - tag:search    # grep, glob for finding code

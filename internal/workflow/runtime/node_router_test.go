@@ -208,6 +208,58 @@ func TestParseNodeRoutingDecision(t *testing.T) {
 		assert.Contains(t, err.Error(), "empty selected_node")
 	})
 
+	t.Run("recovers unambiguous prose candidate mention", func(t *testing.T) {
+		executor := newExecutor()
+		executor.evalResult = &reliantv1.Node{
+			Args: &reliantv1.Node_Router{Router: &reliantv1.RouterArgs{
+				Nodes: []*reliantv1.NodeRouterCandidate{
+					{Id: "scrape_website"},
+					{Id: "write_summary"},
+				},
+			}},
+		}
+
+		decision, err := executor.parseNodeRoutingDecision(&reliantv1.CallLLMOutput{
+			ResponseText: "The request should go to `scrape_website` because it needs page content first.",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "scrape_website", decision.SelectedNode)
+		assert.Contains(t, decision.Reasoning, "Recovered")
+	})
+
+	t.Run("does not recover ambiguous prose candidate mentions", func(t *testing.T) {
+		executor := newExecutor()
+		executor.evalResult = &reliantv1.Node{
+			Args: &reliantv1.Node_Router{Router: &reliantv1.RouterArgs{
+				Nodes: []*reliantv1.NodeRouterCandidate{
+					{Id: "scrape_website"},
+					{Id: "write_summary"},
+				},
+			}},
+		}
+
+		_, err := executor.parseNodeRoutingDecision(&reliantv1.CallLLMOutput{
+			ResponseText: "Maybe `scrape_website` first, or `write_summary` if content already exists.",
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to parse node routing decision JSON")
+	})
+
+	t.Run("does not recover partial candidate name", func(t *testing.T) {
+		executor := newExecutor()
+		executor.evalResult = &reliantv1.Node{
+			Args: &reliantv1.Node_Router{Router: &reliantv1.RouterArgs{
+				Nodes: []*reliantv1.NodeRouterCandidate{{Id: "scrape"}},
+			}},
+		}
+
+		_, err := executor.parseNodeRoutingDecision(&reliantv1.CallLLMOutput{
+			ResponseText: "The request should go to scrape_website because it needs page content first.",
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to parse node routing decision JSON")
+	})
+
 	t.Run("errors on invalid JSON", func(t *testing.T) {
 		executor := newExecutor()
 		_, err := executor.parseNodeRoutingDecision(&reliantv1.CallLLMOutput{

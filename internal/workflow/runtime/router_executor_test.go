@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"testing"
 
@@ -14,6 +15,7 @@ import (
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -131,6 +133,154 @@ func TestRouterWorkflowIdentity(t *testing.T) {
 		}
 		assert.Equal(t, "router[builtin://agent]", routerWorkflowIdentity(node))
 	})
+}
+
+func TestNodeRoutingCallLLMUsesExecutionContextThread(t *testing.T) {
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+
+	var capturedThread string
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, input json.RawMessage) (*reliantv1.CallLLMOutput, error) {
+			var envelope struct {
+				Runtime struct {
+					Thread string `json:"thread"`
+				} `json:"runtime"`
+			}
+			require.NoError(t, json.Unmarshal(input, &envelope))
+			capturedThread = envelope.Runtime.Thread
+
+			responseData, err := structpb.NewStruct(map[string]interface{}{
+				"selected_node": "summarize",
+				"reasoning":     "best match",
+			})
+			require.NoError(t, err)
+			return &reliantv1.CallLLMOutput{ResponseData: responseData}, nil
+		},
+		activity.RegisterOptions{Name: "CallLLM"},
+	)
+
+	env.ExecuteWorkflow(func(ctx workflow.Context) error {
+		node := buildTestNodeRoutingRouter()
+		executor := NewRouterExecutor(
+			ctx,
+			"wf-123",
+			"chat-456",
+			"test-router",
+			map[string]interface{}{"mode": "manual"},
+			map[string]interface{}{},
+			&ChildWorkflowTracker{children: make(map[string]bool)},
+			node,
+			node,
+		).WithExecContext(&ExecutionContext{
+			WorkflowID:   "wf-123",
+			ChatID:       "chat-456",
+			Thread:       "thread-parent-abc",
+			ThreadMode:   model.ThreadModeNew,
+			WorkflowName: "test-router",
+		})
+
+		output, err := executor.executeNodeRouting(node.GetRouter())
+		if err != nil {
+			return err
+		}
+		if output["selected_node"] != "summarize" {
+			return fmt.Errorf("selected_node = %v", output["selected_node"])
+		}
+		return nil
+	})
+
+	require.NoError(t, env.GetWorkflowError())
+	assert.Equal(t, "thread-parent-abc", capturedThread)
+}
+
+func TestDynamicWorkflowNodeRoutingPassesThreadToCallLLM(t *testing.T) {
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+
+	workflowBytes, err := protojson.Marshal(&reliantv1.Workflow{
+		Name:  "node-router-workflow",
+		Entry: []string{"classify"},
+		Nodes: []*reliantv1.Node{
+			buildTestNodeRoutingRouter(),
+			{
+				Id:   "done",
+				Type: model.NodeTypeJoin,
+				Args: &reliantv1.Node_Join{Join: &reliantv1.JoinArgs{}},
+			},
+		},
+		Edges: []*reliantv1.Edge{
+			{From: "classify", Default: []string{"done"}},
+		},
+	})
+	require.NoError(t, err)
+
+	var capturedCallLLMThread string
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, input json.RawMessage) (*reliantv1.CallLLMOutput, error) {
+			var envelope struct {
+				Runtime struct {
+					Thread string `json:"thread"`
+				} `json:"runtime"`
+			}
+			require.NoError(t, json.Unmarshal(input, &envelope))
+			capturedCallLLMThread = envelope.Runtime.Thread
+			responseData, err := structpb.NewStruct(map[string]interface{}{
+				"selected_node": "summarize",
+				"reasoning":     "best match",
+			})
+			require.NoError(t, err)
+			return &reliantv1.CallLLMOutput{ResponseData: responseData}, nil
+		},
+		activity.RegisterOptions{Name: "CallLLM"},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ map[string]string) (LoadedWorkflow, error) {
+			return LoadedWorkflow{WorkflowJSON: workflowBytes}, nil
+		},
+		activity.RegisterOptions{Name: "ActivityLoadWorkflow"},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ map[string]interface{}) (interface{}, error) {
+			return nil, nil
+		},
+		activity.RegisterOptions{Name: "WorkflowStatus"},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
+			return map[string]interface{}{}, nil
+		},
+		activity.RegisterOptions{Name: "Cleanup"},
+	)
+
+	env.ExecuteWorkflow(DynamicWorkflow, WorkflowInput{
+		ChatID:       "chat-456",
+		WorkflowName: "node-router-workflow",
+		Inputs:       map[string]interface{}{},
+		ExecContext: &ExecutionContext{
+			WorkflowID:   "wf-ignored",
+			ChatID:       "chat-456",
+			Thread:       "thread-root-xyz",
+			ThreadMode:   model.ThreadModeNew,
+			WorkflowName: "node-router-workflow",
+		},
+	})
+
+	require.NoError(t, env.GetWorkflowError())
+	assert.Equal(t, "thread-root-xyz", capturedCallLLMThread)
+}
+
+func buildTestNodeRoutingRouter() *reliantv1.Node {
+	return &reliantv1.Node{
+		Id:   "classify",
+		Type: model.NodeTypeRouter,
+		Args: &reliantv1.Node_Router{Router: &reliantv1.RouterArgs{
+			Model: &reliantv1.CelModelSelector{Value: &reliantv1.CelModelSelector_Literal{Literal: &reliantv1.ModelSelector{Id: "test-model"}}},
+			Nodes: []*reliantv1.NodeRouterCandidate{
+				{Id: "summarize", Description: "Summarize the request"},
+			},
+		}},
+	}
 }
 
 func TestParseRoutingDecision(t *testing.T) {

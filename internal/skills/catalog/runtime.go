@@ -67,28 +67,33 @@ var builtinSkillPaths = []string{
 	"workflow-builder/SKILL.md",
 	"conflict-resolver/SKILL.md",
 	"simplification-assessment/SKILL.md",
-	"code-hygiene-review/SKILL.md",
-	"performance-review/SKILL.md",
 	"research-methodology/SKILL.md",
-	"refactoring-patterns/SKILL.md",
-	"reproduction-methodology/SKILL.md",
 	"testing-methodology/SKILL.md",
 	"git-operations/SKILL.md",
 	"planning-methodology/SKILL.md",
 	"documentation-writing/SKILL.md",
-	"debugging-orchestration/SKILL.md",
-	"architecture-review/SKILL.md",
-	"code-review-orchestration/SKILL.md",
-	"ux-review-methodology/SKILL.md",
-	"security-review/SKILL.md",
 	"ux-design/SKILL.md",
 	"general-agent/SKILL.md",
 	"forge-methodology/SKILL.md",
-	"migration-guidance/SKILL.md",
+	// code-review parent + sub-skills
+	"code-review/SKILL.md",
+	"code-review/code-hygiene-review/SKILL.md",
+	"code-review/performance-review/SKILL.md",
+	"code-review/security-review/SKILL.md",
+	"code-review/architecture-review/SKILL.md",
+	"code-review/ux-review-methodology/SKILL.md",
+	// debug parent + sub-skills
+	"debug/SKILL.md",
+	"debug/reproduction-methodology/SKILL.md",
+	// refactor parent + sub-skills
+	"refactor/SKILL.md",
+	"refactor/migration-guidance/SKILL.md",
 }
 
-//go:embed builtin/reliant-config/SKILL.md builtin/workflow-builder/SKILL.md builtin/conflict-resolver/SKILL.md builtin/simplification-assessment/SKILL.md builtin/code-hygiene-review/SKILL.md builtin/performance-review/SKILL.md builtin/research-methodology/SKILL.md builtin/refactoring-patterns/SKILL.md builtin/reproduction-methodology/SKILL.md builtin/testing-methodology/SKILL.md builtin/git-operations/SKILL.md builtin/planning-methodology/SKILL.md builtin/documentation-writing/SKILL.md builtin/debugging-orchestration/SKILL.md builtin/architecture-review/SKILL.md builtin/code-review-orchestration/SKILL.md builtin/ux-review-methodology/SKILL.md builtin/security-review/SKILL.md builtin/ux-design/SKILL.md builtin/general-agent/SKILL.md builtin/forge-methodology/SKILL.md builtin/migration-guidance/SKILL.md
-var builtinSkillsFS embed.FS
+// BuiltinSkillsFS is exported for test use.
+//
+//go:embed builtin/reliant-config/SKILL.md builtin/workflow-builder/SKILL.md builtin/conflict-resolver/SKILL.md builtin/simplification-assessment/SKILL.md builtin/research-methodology/SKILL.md builtin/testing-methodology/SKILL.md builtin/git-operations/SKILL.md builtin/planning-methodology/SKILL.md builtin/documentation-writing/SKILL.md builtin/ux-design/SKILL.md builtin/general-agent/SKILL.md builtin/forge-methodology/SKILL.md builtin/code-review/SKILL.md builtin/code-review/code-hygiene-review/SKILL.md builtin/code-review/performance-review/SKILL.md builtin/code-review/security-review/SKILL.md builtin/code-review/architecture-review/SKILL.md builtin/code-review/ux-review-methodology/SKILL.md builtin/debug/SKILL.md builtin/debug/reproduction-methodology/SKILL.md builtin/refactor/SKILL.md builtin/refactor/migration-guidance/SKILL.md
+var BuiltinSkillsFS embed.FS
 
 func ParseSkillMarkdown(path string, scope skillscore.Scope, data []byte) (Definition, error) {
 	return parseSkillMarkdown(path, scope, data, true)
@@ -359,7 +364,7 @@ func ReadBuiltinSkillDefinition(path string) ([]byte, error) {
 		canonical := filepath.ToSlash(filepath.Clean(filepath.Join("builtin", p)))
 		legacy := filepath.ToSlash(filepath.Clean(p))
 		if normalized == canonical || normalized == legacy {
-			return builtinSkillsFS.ReadFile(filepath.ToSlash(filepath.Join("builtin", p)))
+			return BuiltinSkillsFS.ReadFile(filepath.ToSlash(filepath.Join("builtin", p)))
 		}
 	}
 	return nil, fs.ErrNotExist
@@ -384,6 +389,13 @@ func builtinSkills(loadFullDefinitions bool) []Definition {
 		}
 
 		definition.SkillDir = filepath.Dir(filepath.Join("builtin", p))
+		// Set SkillPath for builtins so the skill tool can find them by path.
+		// For builtins, p is like "code-review/SKILL.md" or "code-review/security-review/SKILL.md",
+		// so filepath.Dir(p) gives "code-review" or "code-review/security-review".
+		if definition.SkillPath == "" {
+			definition.SkillPath = filepath.ToSlash(filepath.Dir(p))
+			definition.NormalizedKey = definition.SkillPath
+		}
 		defs = append(defs, definition)
 	}
 	return defs
@@ -541,11 +553,8 @@ func hasChildSkillDirs(skillDir string) bool {
 	return false
 }
 
-// isTopLevelSkill returns true if the skill is at the top level (depth 1) or is a builtin.
+// isTopLevelSkill returns true if the skill is at the top level (depth 1).
 func isTopLevelSkill(def Definition) bool {
-	if def.Scope == skillscore.ScopeBuiltin {
-		return true
-	}
 	return !strings.Contains(def.SkillPath, "/")
 }
 

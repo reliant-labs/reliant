@@ -429,7 +429,7 @@ func (e *InlineWorkflowExecutor) buildSubWorkflowInputs() map[string]interface{}
 	}
 
 	if len(e.subWorkflow.GetInputs()) > 0 {
-		subInputs = ApplyDefaults(subInputs, e.subWorkflow.GetInputs())
+		subInputs = ApplyDefaultsForRuntime(subInputs, e.subWorkflow.GetInputs())
 	}
 
 	return subInputs
@@ -1124,116 +1124,46 @@ func (e *InlineWorkflowExecutor) executeApproval(
 func (e *InlineWorkflowExecutor) executeAskQuestion(
 	triggered *core.TriggeredNode,
 	nodeOutputs map[string]interface{},
-	_ map[string]interface{},
+	workflowInputs map[string]interface{},
 	_ string,
 ) (map[string]interface{}, error) {
-	const questionTimeout = 24 * time.Hour
-
 	node := triggered.Node
-
-	// Resolve metadata from node inputs (question text, options).
-	// Since ask_question has no proto args type yet, metadata comes from
-	// workflow inputs or node outputs that feed into this node.
-	metadata := ""
-	if nodeOutputs != nil {
-		if m, ok := nodeOutputs["metadata"]; ok {
-			if mStr, ok := m.(string); ok {
-				metadata = mStr
-			}
-		}
+	event := triggered.Event
+	iterCtx := model.BuildIterContext(e.loopIteration)
+	evalResult, err := EvaluateNodeConfig(
+		node,
+		nodeOutputs,
+		e.workflowID,
+		event.WorkflowName,
+		workflowInputs,
+		iterCtx,
+		nil,
+		e.execContext,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to evaluate ask_question node config: %w", err)
 	}
 
-	// Get thread and workflow context
+	metadata := ""
+	if args := model.GetAskQuestionArgs(evalResult); args != nil {
+		metadata = model.CelStringValue(args.GetMetadata())
+	}
+
 	threadID := ""
 	if e.execContext != nil {
 		threadID = e.execContext.Thread
 	}
-	temporalWorkflowID := workflow.GetInfo(e.ctx).WorkflowExecution.ID
 
-	// STEP 1: Call QuestionCreate activity (fast DB write)
-	createCtx := workflow.WithActivityOptions(e.ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: 30 * time.Second,
-		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts: 3,
-		},
+	return executeAskQuestionSignalFlow(e.ctx, askQuestionExecution{
+		ChatID:        e.chatID,
+		WorkflowID:    e.workflowID,
+		ThreadID:      threadID,
+		StepID:        node.GetId(),
+		LoopNodeID:    e.loopNodeID,
+		LoopIteration: e.loopIteration,
+		Metadata:      metadata,
+		Logger:        e.logger,
 	})
-
-	questionInput := map[string]interface{}{
-		"chat_id":              e.chatID,
-		"workflow_id":          e.workflowID,
-		"temporal_workflow_id": temporalWorkflowID,
-		"thread_id":            threadID,
-		"step_id":              node.GetId(),
-		"loop_node_id":         e.loopNodeID,
-		"loop_iteration":       e.loopIteration,
-		"metadata":             metadata,
-	}
-
-	var createOutput struct {
-		QuestionID      string `json:"question_id"`
-		AlreadyResolved bool   `json:"already_resolved"`
-		ResponseData    string `json:"response_data"`
-	}
-	if err := workflow.ExecuteActivity(createCtx, "QuestionCreate", questionInput).Get(e.ctx, &createOutput); err != nil {
-		return nil, fmt.Errorf("QuestionCreate failed: %w", err)
-	}
-
-	// STEP 2: If already resolved (replay), return immediately
-	if createOutput.AlreadyResolved {
-		e.logger.Info("[AskQuestion] Already resolved (replay)", "stepID", node.GetId(), "questionID", createOutput.QuestionID)
-		return parseQuestionResponse(createOutput.ResponseData), nil
-	}
-
-	// STEP 3: Wait for signal or timeout
-	signalName := "signal.question." + createOutput.QuestionID
-	signalCh := workflow.GetSignalChannel(e.ctx, signalName)
-	timeoutCtx, cancelTimer := workflow.WithCancel(e.ctx)
-	timeoutFuture := workflow.NewTimer(timeoutCtx, questionTimeout)
-
-	selector := workflow.NewSelector(e.ctx)
-	var responseData string
-	var actionTaken string
-
-	selector.AddReceive(signalCh, func(ch workflow.ReceiveChannel, more bool) {
-		var signalData map[string]interface{}
-		ch.Receive(e.ctx, &signalData)
-		if a, ok := signalData["action"].(string); ok {
-			actionTaken = a
-		}
-		if rd, ok := signalData["response_data"].(string); ok {
-			responseData = rd
-		}
-		cancelTimer()
-	})
-
-	selector.AddFuture(timeoutFuture, func(f workflow.Future) {
-		actionTaken = "timeout"
-	})
-
-	selector.Select(e.ctx)
-
-	// STEP 4: On timeout, resolve in DB
-	if actionTaken == "timeout" {
-		resolveCtx := workflow.WithActivityOptions(e.ctx, workflow.ActivityOptions{
-			StartToCloseTimeout: 30 * time.Second,
-			RetryPolicy: &temporal.RetryPolicy{
-				MaximumAttempts: 3,
-			},
-		})
-		var resolveOutput map[string]interface{}
-		if err := workflow.ExecuteActivity(resolveCtx, "QuestionResolve", map[string]interface{}{
-			"question_id":   createOutput.QuestionID,
-			"response_data": "",
-		}).Get(e.ctx, &resolveOutput); err != nil {
-			e.logger.Warn("[AskQuestion] Failed to resolve question as timeout in DB",
-				"stepID", node.GetId(),
-				"questionID", createOutput.QuestionID,
-				"error", err,
-			)
-		}
-	}
-
-	return parseQuestionResponse(responseData), nil
 }
 
 // parseQuestionResponse converts the raw question response data into a map with has_feedback/response keys.

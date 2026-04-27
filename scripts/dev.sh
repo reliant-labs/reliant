@@ -313,7 +313,7 @@ fi
 # Generate docs, shortcuts, and presets from sources of truth
 # Source: config/shortcuts.yaml -> web/src/store/shortcutsData.generated.ts
 # Source: internal/llm/tools/*.go -> generated/docs/tools-reference.md
-# Source: generated reference docs -> docs/reference/*.mdx and workflow_builder.yaml
+# Source: generated reference docs -> docs/reference/*.mdx and workflow-builder SKILL.md
 print_step "Generating docs and shortcuts..."
 cd "$PROJECT_ROOT"
 if make generate >> "$LOG_FILE" 2>&1; then

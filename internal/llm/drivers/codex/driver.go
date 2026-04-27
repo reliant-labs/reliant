@@ -321,6 +321,15 @@ func pruneDuplicateCodexToolNames(toolList []tools.Tool) []tools.Tool {
 	return pruned
 }
 
+func firstCodexResponseToolName(toolList []tools.Tool) (string, bool) {
+	for _, tool := range toolList {
+		if tools.IsResponseTool(tool) {
+			return tool.Name(), true
+		}
+	}
+	return "", false
+}
+
 // convertTools converts internal tools to SDK tool format
 func (c *CodexClient) convertTools(toolList []tools.Tool) ([]responses.ToolUnionParam, error) {
 	result := make([]responses.ToolUnionParam, 0, len(toolList))
@@ -417,6 +426,11 @@ func (c *CodexClient) buildParams(prompts []string, messages []message.Message, 
 			return responses.ResponseNewParams{}, err
 		}
 		params.Tools = convertedTools
+		if responseToolName, ok := firstCodexResponseToolName(validatedTools); ok {
+			params.ToolChoice = responses.ResponseNewParamsToolChoiceUnion{
+				OfFunctionTool: &responses.ToolChoiceFunctionParam{Name: responseToolName},
+			}
+		}
 	}
 
 	// Temperature

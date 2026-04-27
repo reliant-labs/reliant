@@ -116,6 +116,11 @@ func TestCallLLMActivity_ToolParametersReachMockDriver(t *testing.T) {
 			expectExactlyOneTool: "view",
 		},
 		{
+			name:                 "component library explicit tool is available",
+			toolFilter:           []string{"component_library"},
+			expectExactlyOneTool: "component_library",
+		},
+		{
 			name:          "no tools_config disables tools",
 			noToolsConfig: true,
 			expectNoTools: true,

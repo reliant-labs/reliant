@@ -58,8 +58,8 @@ nodes:
 	}
 	t.Logf("User inputs: %v", userInputs)
 
-	// Step 3: Apply defaults
-	inputsWithDefaults := ApplyDefaults(userInputs, wf.GetInputs())
+	// Step 3: Apply runtime defaults after required inputs are validated
+	inputsWithDefaults := ApplyDefaultsForRuntime(userInputs, wf.GetInputs())
 	t.Logf("After ApplyDefaults: %v", inputsWithDefaults)
 
 	// Step 4: Verify temperature is in the result
@@ -149,11 +149,11 @@ nodes:
 	}
 	t.Logf("temperature default: %v (type %T)", model.GetInputDefault(tempInput), model.GetInputDefault(tempInput))
 
-	// Step 3: Apply defaults
+	// Step 3: Apply runtime defaults after required inputs are validated
 	userInputs := map[string]interface{}{
 		"message": "Hello world",
 	}
-	result := ApplyDefaults(userInputs, wf.GetInputs())
+	result := ApplyDefaultsForRuntime(userInputs, wf.GetInputs())
 
 	t.Logf("After ApplyDefaults:")
 	for k, v := range result {

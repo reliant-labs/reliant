@@ -280,6 +280,9 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 		future = e.executeFailActivity(fmt.Sprintf("approval node %s should be handled inline", node.GetId()))
 		activityName = "InlineApprovalError"
 
+	case model.NodeTypeAskQuestion:
+		future, activityName = e.startAskQuestion(node, evalResult)
+
 	default:
 		// All other types are activities (e.g., call_llm, save_message, execute_tools)
 		if isActivityType(stepType) {
@@ -619,6 +622,40 @@ func (e *StepExecutor) startAction(
 
 	future := workflow.ExecuteActivity(e.activityOptions(node), activityName, input)
 	return future, activityName
+}
+
+// startAskQuestion runs the signal-backed ask_question node flow.
+func (e *StepExecutor) startAskQuestion(node *reliantv1.Node, evalResult *reliantv1.Node) (workflow.Future, string) {
+	resultFuture, resultSettable := workflow.NewFuture(e.ctx)
+	threadID := ""
+	if e.execContext != nil {
+		threadID = e.execContext.Thread
+	}
+
+	metadata := ""
+	if args := model.GetAskQuestionArgs(evalResult); args != nil {
+		metadata = model.CelStringValue(args.GetMetadata())
+	}
+
+	workflow.Go(e.ctx, func(gCtx workflow.Context) {
+		output, err := executeAskQuestionSignalFlow(gCtx, askQuestionExecution{
+			ChatID:        e.chatID,
+			WorkflowID:    e.workflowID,
+			ThreadID:      threadID,
+			StepID:        node.GetId(),
+			LoopNodeID:    e.loopNodeID,
+			LoopIteration: e.loopIteration,
+			Metadata:      metadata,
+			Logger:        workflow.GetLogger(gCtx),
+		})
+		if err != nil {
+			resultSettable.SetError(err)
+			return
+		}
+		resultSettable.SetValue(output)
+	})
+
+	return resultFuture, "AskQuestion"
 }
 
 // startRun starts a run (shell command) activity.

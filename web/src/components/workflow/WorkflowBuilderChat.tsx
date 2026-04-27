@@ -85,9 +85,9 @@ interface WorkflowBuilderChatProps {
   onVersionChange?: (version: number) => void;
 }
 
-// The workflow_builder preset contains the comprehensive system prompt with full documentation.
-// It's auto-generated from repo-local generated docs during build (see: make generate-workflow-builder-preset).
-// Source: tools/docgen/assembler/main.go -> internal/workflow/builtin/presets/workflow_builder.yaml
+// The workflow_builder preset tells the agent to load the workflow-builder skill.
+// The skill is auto-generated from repo-local generated docs during build (see: make generate-workflow-builder-skill).
+// Source: tools/docgen/assembler/main.go -> internal/skills/catalog/builtin/workflow-builder/SKILL.md
 const WORKFLOW_BUILDER_PRESET = "workflow_builder";
 
 /**

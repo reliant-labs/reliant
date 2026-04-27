@@ -2,15 +2,10 @@ name: code_reviewer
 description: Code review orchestrator that spawns specialized reviewers for comprehensive analysis. Read-only access - produces unified review reports, does not modify code
 tag: agent
 recommended_skills:
-  - code-review-orchestration
+  - code-review
 params:
   spawn_presets:
   - researcher
-  - security_reviewer
-  - architect
-  - performance_reviewer
-  - code_hygiene_reviewer
-  - ux_reviewer
   tools:
   - tag:search   # grep, glob for finding code
   - tag:web      # fetch for documentation
