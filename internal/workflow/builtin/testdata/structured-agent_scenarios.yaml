@@ -3,7 +3,7 @@
 # Structured Agent workflow structure:
 # - agent_loop (main loop) contains: call_llm -> remind_response -> approval -> execute_tools -> compact
 # - Loop continues while: response tool NOT called (outputs.completed != true)
-# - Loop yields when: inputs.max_turns > 0 && iter.iteration >= inputs.max_turns
+# - Loop asks when: inputs.max_turns > 0 && iter.iteration >= inputs.max_turns
 # - Requires LLM to call a response tool (default: submit_response) to complete
 #
 # Key behaviors:
@@ -12,7 +12,7 @@
 # - mode=manual: requires approval before tool execution
 # - Response tool output is captured as structured data via response_data
 # - max_turns=0 (default): unlimited iterations
-# - max_turns>0: loop yields (pauses for user input) at that iteration count
+# - max_turns>0: loop asks (pauses for user input) at that iteration count
 
 ---
 # Happy path: LLM immediately calls the response tool
@@ -624,16 +624,17 @@ expect:
     - agent_loop.approval
 
 ---
-# Max turns without response - loop yields when max_turns reached without response tool
+# Max turns without response - loop stops when max_turns reached without response tool
 #
-# With the new yield-based max_turns behavior:
-# - The while condition only checks outputs.completed (not max_turns)
-# - max_turns triggers yield instead of stopping the loop
-# - With max_turns=3, the LLM never calls tools for 3 iterations
-# - At iteration 3, yield fires (3 >= 3), loop yields/exits
-# - completed is never set to true since response tool was never called
+# The while condition includes max_turns enforcement:
+#   (outputs.completed != true || outputs.has_feedback == true)
+#     && (inputs.max_turns == 0 || iter.iteration < inputs.max_turns)
+#
+# With max_turns=3, the LLM never calls tools for 3 iterations
+# After iteration 2, iter.iteration=3, 3 < 3 = false → loop exits
+# completed is never set to true since response tool was never called
 name: max_turns_without_response
-description: Loop yields when max_turns reached and agent never called response tool
+description: Loop stops when max_turns reached and agent never called response tool
 inputs:
   mode: auto
   max_turns: 3
@@ -668,7 +669,7 @@ events:
       response_text: "I need more time to think."
       tool_calls: []
   # remind_response triggers again
-  # Yield fires at iteration 3 (3 >= 3), loop yields/exits
+  # Ask fires at iteration 3 (3 >= 3), loop asks/exits
   # Note: completed is never set to true since response tool was never called
 expect:
   outcome: completed

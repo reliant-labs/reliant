@@ -10,22 +10,25 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 )
 
-func TestGetAskUserTool_Name(t *testing.T) {
-	tool := getAskUserTool()
+func TestAskUserTool_Name(t *testing.T) {
+	factory := &tools.ToolsFactory{}
+	tool := factory.AskUser()
 
 	assert.Equal(t, tools.ToolAskUser, tool.Name())
 	assert.Equal(t, "ask_user", tool.Name())
 }
 
-func TestGetAskUserTool_HasDescription(t *testing.T) {
-	tool := getAskUserTool()
+func TestAskUserTool_HasDescription(t *testing.T) {
+	factory := &tools.ToolsFactory{}
+	tool := factory.AskUser()
 
 	assert.NotEmpty(t, tool.Description())
 	assert.Contains(t, tool.Description(), "Ask the user one or more questions")
 }
 
-func TestGetAskUserTool_SchemaProperties(t *testing.T) {
-	tool := getAskUserTool()
+func TestAskUserTool_SchemaProperties(t *testing.T) {
+	factory := &tools.ToolsFactory{}
+	tool := factory.AskUser()
 
 	schemaOnly, ok := tool.(*tools.SchemaOnlyTool)
 	require.True(t, ok, "ask_user tool should be a SchemaOnlyTool")

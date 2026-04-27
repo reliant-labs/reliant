@@ -181,14 +181,6 @@ type Repository interface {
 	AddCommandFavorite(ctx context.Context, userID, projectID, commandKey string) error
 	RemoveCommandFavorite(ctx context.Context, userID, projectID, commandKey string) error
 
-	// Yields (interactive agent loop pausing)
-	CreateYield(ctx context.Context, yield *Yield) error
-	GetYieldByID(ctx context.Context, id string) (*Yield, error)
-	GetPendingYieldByChatID(ctx context.Context, chatID string) (*Yield, error)
-	GetPendingYieldsByWorkflow(ctx context.Context, workflowID string) ([]*Yield, error)
-	GetYieldsByWorkflowStepIteration(ctx context.Context, workflowID, stepID string, loopIteration int) ([]*Yield, error)
-	ResolveYield(ctx context.Context, id string, actionTaken string) error
-
 	// Approvals (consolidated tool and workflow approvals)
 	CreateApproval(ctx context.Context, approval *Approval) error
 	GetApproval(ctx context.Context, id string) (*Approval, error)
@@ -221,12 +213,18 @@ type Repository interface {
 	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
 	GetNextSequenceNumber(ctx context.Context, chatID string) (int64, error)
 
+	// Question methods
+	CreateQuestion(ctx context.Context, question *Question) error
+	GetQuestionByID(ctx context.Context, id string) (*Question, error)
+	GetPendingQuestionByChatID(ctx context.Context, chatID string) (*Question, error)
+	GetQuestionsByWorkflowStepIteration(ctx context.Context, workflowID, stepID string, iteration int) ([]*Question, error)
+	ResolveQuestion(ctx context.Context, id string, responseData *string) error
+
 	// Typed Chat Update Emitters (type-safe alternatives to CreateChatUpdate)
+	EmitQuestionUpdate(ctx context.Context, chatID string, update QuestionUpdate) error
 	EmitToolCallUpdate(ctx context.Context, chatID string, update ToolCallUpdate) error
 	EmitToolCallCancelledUpdate(ctx context.Context, chatID string, update ToolCallUpdate) error
 	EmitToolCallBackgroundedUpdate(ctx context.Context, chatID string, update ToolCallUpdate) error
-	EmitYieldUpdate(ctx context.Context, chatID string, update YieldUpdate) error
-
 	// Refetch Signals (tell frontend to re-fetch specific data)
 	EmitUserRefetch(ctx context.Context, userID string, refetchType RefetchType, opts RefetchOpts) error
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType RefetchType) error

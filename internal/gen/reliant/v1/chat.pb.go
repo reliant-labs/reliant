@@ -370,7 +370,7 @@ func (ContentBlockType) EnumDescriptor() ([]byte, []int) {
 }
 
 // ChatActivity represents the computed activity state of a chat.
-// This is derived from workflow status, pending approvals, and yields.
+// This is derived from workflow status and pending approvals.
 type ChatActivity int32
 
 const (
@@ -2066,7 +2066,6 @@ type SendMessageRequest struct {
 	TargetThread    *string                    `protobuf:"bytes,13,opt,name=target_thread,json=targetThread,proto3,oneof" json:"target_thread,omitempty"`                                                                              // Target thread ID for the message (defaults to main thread if not specified)
 	SelectedPresets map[string]string          `protobuf:"bytes,14,rep,name=selected_presets,json=selectedPresets,proto3" json:"selected_presets,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // Update preset selections (persisted with chat)
 	Messages        []*InputMessage            `protobuf:"bytes,15,rep,name=messages,proto3" json:"messages,omitempty"`                                                                                                                // Messages to send (user and system). At least one user message required.
-	YieldId         *string                    `protobuf:"bytes,16,opt,name=yield_id,json=yieldId,proto3,oneof" json:"yield_id,omitempty"`                                                                                             // If set, resolves this pending yield instead of starting new workflow
 	Discuss         bool                       `protobuf:"varint,17,opt,name=discuss,proto3" json:"discuss,omitempty"`                                                                                                                 // If true, chat with LLM without resuming paused workflow
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
@@ -2170,13 +2169,6 @@ func (x *SendMessageRequest) GetMessages() []*InputMessage {
 		return x.Messages
 	}
 	return nil
-}
-
-func (x *SendMessageRequest) GetYieldId() string {
-	if x != nil && x.YieldId != nil {
-		return *x.YieldId
-	}
-	return ""
 }
 
 func (x *SendMessageRequest) GetDiscuss() bool {
@@ -4939,7 +4931,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x18ListArchivedChatsRequest\"a\n" +
 	"\x19ListArchivedChatsResponse\x12.\n" +
 	"\x05chats\x18\x01 \x03(\v2\x18.reliant.v1.ArchivedChatR\x05chats\x12\x14\n" +
-	"\x05total\x18\x02 \x01(\x05R\x05total\"\xbc\x06\n" +
+	"\x05total\x18\x02 \x01(\x05R\x05total\"\x95\x06\n" +
 	"\x12SendMessageRequest\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12 \n" +
 	"\vattachments\x18\x03 \x03(\tR\vattachments\x12\x1f\n" +
@@ -4951,8 +4943,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x04mode\x18\f \x01(\tH\x03R\x04mode\x88\x01\x01\x12(\n" +
 	"\rtarget_thread\x18\r \x01(\tH\x04R\ftargetThread\x88\x01\x01\x12^\n" +
 	"\x10selected_presets\x18\x0e \x03(\v23.reliant.v1.SendMessageRequest.SelectedPresetsEntryR\x0fselectedPresets\x124\n" +
-	"\bmessages\x18\x0f \x03(\v2\x18.reliant.v1.InputMessageR\bmessages\x12\x1e\n" +
-	"\byield_id\x18\x10 \x01(\tH\x05R\ayieldId\x88\x01\x01\x12\x18\n" +
+	"\bmessages\x18\x0f \x03(\v2\x18.reliant.v1.InputMessageR\bmessages\x12\x18\n" +
 	"\adiscuss\x18\x11 \x01(\bR\adiscuss\x1aY\n" +
 	"\x13WorkflowParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
@@ -4964,9 +4955,8 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\f_temperatureB\r\n" +
 	"\v_max_tokensB\a\n" +
 	"\x05_modeB\x10\n" +
-	"\x0e_target_threadB\v\n" +
-	"\t_yield_idJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\n" +
-	"\x10\v\"\xdf\x01\n" +
+	"\x0e_target_threadJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\n" +
+	"\x10\vJ\x04\b\x10\x10\x11\"\xdf\x01\n" +
 	"\x13SendMessageResponse\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +

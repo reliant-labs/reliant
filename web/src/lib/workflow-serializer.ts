@@ -513,7 +513,7 @@ function parseRawStep(raw: Record<string, unknown>): Step {
     step.args = { case: 'workflow' as const, value: workflowArgs } as Step['args']
   } else if (type === 'loop') {
     const ref = parseOptionalString(raw.ref)
-    const loopArgs: Record<string, unknown> = { args: {}, presets: {}, yield: '' }
+    const loopArgs: Record<string, unknown> = { args: {}, presets: {} }
     if (ref) loopArgs.ref = celString(ref)
     if (isRecord(raw.inputs)) loopArgs.args = raw.inputs
     if (isRecord(raw.presets)) {

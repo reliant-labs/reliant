@@ -626,10 +626,10 @@ func TestUserMessageRoundTrip_MultipleContextWindows(t *testing.T) {
 		"Last message should be user")
 }
 
-// TestUserMessageRoundTrip_YieldReply verifies the yield reply path where
-// a message is saved to a yield's thread (not the root thread) and the
+// TestUserMessageRoundTrip_SubThreadReply verifies the sub-thread reply path where
+// a message is saved to a child thread (not the root thread) and the
 // next CallLLM on that thread sees it.
-func TestUserMessageRoundTrip_YieldReply(t *testing.T) {
+func TestUserMessageRoundTrip_SubThreadReply(t *testing.T) {
 	repo, cleanup := setupTestRepoWithCleanup(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -641,8 +641,8 @@ func TestUserMessageRoundTrip_YieldReply(t *testing.T) {
 	_, err := repo.SaveMessageToThread(ctx, chatID, parentThread, roleUser, "Start", &parentWorkflowID, nil, nil)
 	require.NoError(t, err)
 
-	// Create a child workflow with its own thread (simulating spawn that yields)
-	childWorkflowID := "child-yield-workflow"
+	// Create a child workflow with its own thread (simulating spawn with sub-thread)
+	childWorkflowID := "child-sub-workflow"
 	childThread := childWorkflowID
 	childWf := &db.Workflow{
 		ID:           childWorkflowID,
@@ -668,8 +668,8 @@ func TestUserMessageRoundTrip_YieldReply(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// User replies to yield — message goes to child thread via SaveMessageToThread
-	// (same as yield reply path in SendMessage)
+	// User replies — message goes to child thread via SaveMessageToThread
+	// (same as sub-thread reply path in SendMessage)
 	_, err = repo.SaveMessageToThread(ctx, chatID, childThread, roleUser, "Do the thing", &childWorkflowID, nil, nil)
 	require.NoError(t, err)
 
@@ -678,7 +678,7 @@ func TestUserMessageRoundTrip_YieldReply(t *testing.T) {
 	require.NoError(t, err)
 	require.Greater(t, len(messages), 0)
 	assert.Equal(t, "user", string(messages[len(messages)-1].Role),
-		"Last message on yield thread must be user's reply")
+		"Last message on child thread must be user's reply")
 }
 
 // TestUserMessageRoundTrip_EmptyContentWithAttachment verifies that a message

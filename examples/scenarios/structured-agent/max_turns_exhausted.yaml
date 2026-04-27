@@ -1,23 +1,21 @@
-# Max Turns Exhausted: Loop yields when max_turns reached without response tool
+# Max Turns Exhausted: Loop stops when max_turns reached without response tool
 #
-# Tests the max_turns safety limit with yield-based behavior:
+# Tests the max_turns safety limit:
 # 1. max_turns is set low (3)
 # 2. LLM responds with text only on every iteration (never calls tools)
 # 3. remind_response fires each time
-# 4. At iteration 3, yield fires (3 >= 3) but the while condition
-#    (outputs.completed != true) is still true, so the loop yields
+# 4. After iteration 2, iter.iteration=3, and 3 < 3 = false → loop exits
 # 5. completed is NEVER set to true (response tool was never called)
 #
 # This verifies:
-# - The loop yields at max_turns instead of just stopping
+# - The loop stops at max_turns via while condition
 # - The workflow terminates gracefully even without a response tool call
 # - output.completed remains false when response tool is never invoked
 #
-# Loop condition: outputs.completed != true
-# Yield: inputs.yield || (inputs.max_turns > 0 && iter.iteration >= inputs.max_turns)
+# Loop condition: (outputs.completed != true || outputs.has_feedback == true) && (inputs.max_turns == 0 || iter.iteration < inputs.max_turns)
 
 name: max_turns_exhausted
-description: Loop yields when max_turns is reached without the response tool being called
+description: Loop stops when max_turns is reached without the response tool being called
 
 inputs:
   mode: "auto"
@@ -42,7 +40,7 @@ events:
     type: llm_response
     text: "I need more time to think."
     # No tool_calls - remind_response fires
-    # Yield fires at iteration 3 (3 >= 3), loop yields/exits
+    # After this: iter.iteration=3, 3 < 3 = false → loop exits
 
 expect:
   outcome: completed

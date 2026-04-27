@@ -29,7 +29,7 @@ simulator:
         id: gpt-5
       tools: [tag:default]
       spawn_presets: [general, researcher]
-      yield: false
+      ask: false
     events:
       - node: agent_loop.call_llm
         type: llm_response

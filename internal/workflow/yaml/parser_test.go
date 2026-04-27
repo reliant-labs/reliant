@@ -599,7 +599,6 @@ nodes:
   - id: agent
     type: loop
     while: outputs.stop_reason != 'end_turn'
-    yield: "{{inputs.yield}}"
     ref: builtin://agent
 `
 	wf, err := ParseWorkflow([]byte(yaml))
@@ -612,9 +611,6 @@ nodes:
 	}
 	if args.While.GetExpr() != "outputs.stop_reason != 'end_turn'" {
 		t.Errorf("while: got %q", args.While.GetExpr())
-	}
-	if args.Yield != "{{inputs.yield}}" {
-		t.Errorf("yield: got %q", args.Yield)
 	}
 	if args.Ref.GetLiteral() != "builtin://agent" {
 		t.Errorf("ref: got %q", args.Ref.GetLiteral())

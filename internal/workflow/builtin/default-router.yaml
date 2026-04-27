@@ -24,7 +24,7 @@ inputs:
     description: "Model for the routed workflow (routing uses a fast model)"
     ui: toolbar
 
-  yield:
+  ask:
     type: boolean
     ui: toolbar
     default: true

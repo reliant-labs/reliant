@@ -58,11 +58,11 @@ export type {
   StreamingDelta,
   RunOutputUpdate,
   RefetchUpdate,
-  YieldUpdate,
   NodeExecutionUpdate,
   WorkflowExecutionUpdate,
   ExecutionLogUpdate,
   ProtoMessageUpdate,
+  QuestionUpdate,
   ChatUpdate,
   ConnectionStatus,
   MessagePaginationInfo,
@@ -101,11 +101,11 @@ const CHAT_UPDATE_TYPE_MAP: Record<number, string> = {
   [ChatUpdateType.NODE_EXECUTION]: "node_execution",
   [ChatUpdateType.EXECUTION_LOG]: "execution_log",
   [ChatUpdateType.WORKFLOW_EXECUTION]: "workflow_execution",
-  [ChatUpdateType.YIELD]: "yield",
   [ChatUpdateType.INFO]: "info",
   [ChatUpdateType.WARNING]: "warning",
   [ChatUpdateType.REFETCH]: "refetch",
   [ChatUpdateType.STREAMING_DELTA]: "streaming_delta",
+  [ChatUpdateType.QUESTION]: "question",
 };
 
 // Valid update types that we expect from the backend
@@ -124,8 +124,8 @@ const VALID_UPDATE_TYPES = new Set([
   "node_execution",
   "execution_log",
   "workflow_execution",
-  "yield",
   "refetch",
+  "question",
 ]);
 
 /**

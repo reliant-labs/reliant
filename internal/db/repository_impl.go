@@ -3530,282 +3530,139 @@ func (r *Repo) RemoveCommandFavorite(ctx context.Context, userID, projectID, com
 	return r.workflows.RemoveCommandFavorite(ctx, userID, projectID, commandKey)
 }
 
-// ==================== Yields ====================
+// ==================== Questions ====================
 
-// CreateYield creates a new yield record and emits an activity event if the activity changed.
-func (r *Repo) CreateYield(ctx context.Context, yield *Yield) error {
-	if yield == nil {
-		return fmt.Errorf("yield cannot be nil")
+func (r *Repo) CreateQuestion(ctx context.Context, question *Question) error {
+	if question == nil {
+		return fmt.Errorf("question cannot be nil")
 	}
-	if yield.ID == "" {
-		return fmt.Errorf("yield ID cannot be empty")
+	if question.ID == "" {
+		return fmt.Errorf("question ID cannot be empty")
 	}
 
-	query := `INSERT INTO yields (id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, action_taken, metadata, created_at, resolved_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	query := `INSERT INTO questions (id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, metadata, response_data, created_at, resolved_at, tool_call_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	query = r.bindQuery(query)
 
-	_, err := r.DB.ExecContext(ctx, query,
-		yield.ID, yield.ChatID, yield.WorkflowID, yield.TemporalWorkflowID, yield.ThreadID, yield.StepID,
-		yield.LoopNodeID, yield.LoopIteration,
-		yield.Status, yield.ActionTaken, yield.Metadata,
-		yield.CreatedAt, yield.ResolvedAt,
+	_, err := r.DB.DB(ctx).ExecContext(ctx, query,
+		question.ID,
+		question.ChatID,
+		question.WorkflowID,
+		question.TemporalWorkflowID,
+		question.ThreadID,
+		question.StepID,
+		question.LoopNodeID,
+		question.LoopIteration,
+		question.Status,
+		question.Metadata,
+		question.ResponseData,
+		question.CreatedAt,
+		question.ResolvedAt,
+		question.ToolCallID,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create question: %w", err)
 	}
-	// Activity may have changed from RUNNING → AWAITING_INPUT
-	return r.emitChatActivityIfChanged(ctx, yield.ChatID)
+
+	_ = r.emitChatActivityIfChanged(ctx, question.ChatID)
+	return nil
 }
 
-// GetYieldByID retrieves a yield by ID
-func (r *Repo) GetYieldByID(ctx context.Context, id string) (*Yield, error) {
+func (r *Repo) GetQuestionByID(ctx context.Context, id string) (*Question, error) {
 	if id == "" {
-		return nil, fmt.Errorf("yield ID cannot be empty")
+		return nil, fmt.Errorf("question ID cannot be empty")
 	}
 
-	var y Yield
-	var loopNodeID sql.NullString
-	var loopIteration sql.NullInt64
-	var actionTaken sql.NullString
-	var metadata sql.NullString
-	var resolvedAt sql.NullTime
-
-	query := `SELECT id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, action_taken, metadata, created_at, resolved_at
-		 FROM yields WHERE id = ?`
+	query := `SELECT id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, metadata, response_data, created_at, resolved_at, tool_call_id
+		FROM questions WHERE id = ?`
 	query = r.bindQuery(query)
 
-	err := r.DB.QueryRowContext(ctx, query, id).Scan(&y.ID, &y.ChatID, &y.WorkflowID, &y.TemporalWorkflowID, &y.ThreadID, &y.StepID,
-		&loopNodeID, &loopIteration, &y.Status, &actionTaken, &metadata,
-		&y.CreatedAt, &resolvedAt)
+	var q Question
+	err := r.DB.DB(ctx).QueryRowContext(ctx, query, id).Scan(
+		&q.ID, &q.ChatID, &q.WorkflowID, &q.TemporalWorkflowID, &q.ThreadID, &q.StepID,
+		&q.LoopNodeID, &q.LoopIteration, &q.Status, &q.Metadata, &q.ResponseData,
+		&q.CreatedAt, &q.ResolvedAt, &q.ToolCallID,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to get yield: %w", err)
+		return nil, fmt.Errorf("failed to get question: %w", err)
 	}
-
-	if loopNodeID.Valid {
-		y.LoopNodeID = &loopNodeID.String
-	}
-	if loopIteration.Valid {
-		v := int(loopIteration.Int64)
-		y.LoopIteration = &v
-	}
-	if actionTaken.Valid {
-		y.ActionTaken = &actionTaken.String
-	}
-	if metadata.Valid {
-		y.Metadata = &metadata.String
-	}
-	if resolvedAt.Valid {
-		y.ResolvedAt = &resolvedAt.Time
-	}
-
-	return &y, nil
+	return &q, nil
 }
 
-// GetPendingYieldByChatID retrieves the most recent pending yield for a chat
-func (r *Repo) GetPendingYieldByChatID(ctx context.Context, chatID string) (*Yield, error) {
+func (r *Repo) GetPendingQuestionByChatID(ctx context.Context, chatID string) (*Question, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
 
-	var y Yield
-	var loopNodeID sql.NullString
-	var loopIteration sql.NullInt64
-	var actionTaken sql.NullString
-	var metadata sql.NullString
-	var resolvedAt sql.NullTime
-
-	query := `SELECT id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, action_taken, metadata, created_at, resolved_at
-		 FROM yields WHERE chat_id = ? AND status = ?
-		 ORDER BY created_at DESC LIMIT 1`
+	query := `SELECT id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, metadata, response_data, created_at, resolved_at, tool_call_id
+		FROM questions WHERE chat_id = ? AND status = 1 ORDER BY created_at DESC LIMIT 1`
 	query = r.bindQuery(query)
 
-	err := r.DB.QueryRowContext(ctx, query, chatID, YieldStatusPending).Scan(&y.ID, &y.ChatID, &y.WorkflowID, &y.TemporalWorkflowID, &y.ThreadID, &y.StepID,
-		&loopNodeID, &loopIteration, &y.Status, &actionTaken, &metadata,
-		&y.CreatedAt, &resolvedAt)
+	var q Question
+	err := r.DB.DB(ctx).QueryRowContext(ctx, query, chatID).Scan(
+		&q.ID, &q.ChatID, &q.WorkflowID, &q.TemporalWorkflowID, &q.ThreadID, &q.StepID,
+		&q.LoopNodeID, &q.LoopIteration, &q.Status, &q.Metadata, &q.ResponseData,
+		&q.CreatedAt, &q.ResolvedAt, &q.ToolCallID,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to get pending yield: %w", err)
+		return nil, fmt.Errorf("failed to get pending question: %w", err)
 	}
-
-	if loopNodeID.Valid {
-		y.LoopNodeID = &loopNodeID.String
-	}
-	if loopIteration.Valid {
-		v := int(loopIteration.Int64)
-		y.LoopIteration = &v
-	}
-	if actionTaken.Valid {
-		y.ActionTaken = &actionTaken.String
-	}
-	if metadata.Valid {
-		y.Metadata = &metadata.String
-	}
-	if resolvedAt.Valid {
-		y.ResolvedAt = &resolvedAt.Time
-	}
-
-	return &y, nil
+	return &q, nil
 }
 
-// GetPendingYieldsByWorkflow retrieves all pending yields for a workflow
-func (r *Repo) GetPendingYieldsByWorkflow(ctx context.Context, workflowID string) ([]*Yield, error) {
-	if workflowID == "" {
-		return nil, fmt.Errorf("workflow ID cannot be empty")
-	}
-
-	query := `SELECT id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, action_taken, metadata, created_at, resolved_at
-		 FROM yields WHERE workflow_id = ? AND status = ?`
+func (r *Repo) GetQuestionsByWorkflowStepIteration(ctx context.Context, workflowID, stepID string, iteration int) ([]*Question, error) {
+	query := `SELECT id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, metadata, response_data, created_at, resolved_at, tool_call_id
+		FROM questions WHERE workflow_id = ? AND step_id = ? AND loop_iteration = ?`
 	query = r.bindQuery(query)
 
-	rows, err := r.DB.QueryContext(ctx, query, workflowID, YieldStatusPending)
+	rows, err := r.DB.DB(ctx).QueryContext(ctx, query, workflowID, stepID, iteration)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get pending yields: %w", err)
+		return nil, fmt.Errorf("failed to get questions by workflow step iteration: %w", err)
 	}
 	defer rows.Close()
 
-	var yields []*Yield
+	var questions []*Question
 	for rows.Next() {
-		var y Yield
-		var loopNodeID sql.NullString
-		var loopIteration sql.NullInt64
-		var actionTaken sql.NullString
-		var metadata sql.NullString
-		var resolvedAt sql.NullTime
-
-		if err := rows.Scan(&y.ID, &y.ChatID, &y.WorkflowID, &y.TemporalWorkflowID, &y.ThreadID, &y.StepID,
-			&loopNodeID, &loopIteration, &y.Status, &actionTaken, &metadata,
-			&y.CreatedAt, &resolvedAt); err != nil {
-			return nil, fmt.Errorf("failed to scan yield: %w", err)
+		var q Question
+		if err := rows.Scan(
+			&q.ID, &q.ChatID, &q.WorkflowID, &q.TemporalWorkflowID, &q.ThreadID, &q.StepID,
+			&q.LoopNodeID, &q.LoopIteration, &q.Status, &q.Metadata, &q.ResponseData,
+			&q.CreatedAt, &q.ResolvedAt, &q.ToolCallID,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan question: %w", err)
 		}
-
-		if loopNodeID.Valid {
-			y.LoopNodeID = &loopNodeID.String
-		}
-		if loopIteration.Valid {
-			v := int(loopIteration.Int64)
-			y.LoopIteration = &v
-		}
-		if actionTaken.Valid {
-			y.ActionTaken = &actionTaken.String
-		}
-		if metadata.Valid {
-			y.Metadata = &metadata.String
-		}
-		if resolvedAt.Valid {
-			y.ResolvedAt = &resolvedAt.Time
-		}
-
-		yields = append(yields, &y)
+		questions = append(questions, &q)
 	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate yields: %w", err)
-	}
-
-	return yields, nil
+	return questions, rows.Err()
 }
 
-// GetYieldsByWorkflowStepIteration returns all yields (any status) for a workflow+step+iteration.
-// Used by the yield activity's idempotency check to detect yields that were already resolved
-// between a crash and the activity retry.
-func (r *Repo) GetYieldsByWorkflowStepIteration(ctx context.Context, workflowID, stepID string, loopIteration int) ([]*Yield, error) {
-	if workflowID == "" {
-		return nil, fmt.Errorf("workflow ID cannot be empty")
-	}
-
-	rows, err := r.DB.QueryContext(ctx,
-		`SELECT id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, action_taken, metadata, created_at, resolved_at
-		 FROM yields WHERE workflow_id = ? AND step_id = ? AND loop_iteration = ?
-		 ORDER BY created_at DESC`, workflowID, stepID, loopIteration)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get yields: %w", err)
-	}
-	defer rows.Close()
-
-	var yields []*Yield
-	for rows.Next() {
-		var y Yield
-		var loopNodeID sql.NullString
-		var loopIter sql.NullInt64
-		var actionTaken sql.NullString
-		var metadata sql.NullString
-		var resolvedAt sql.NullTime
-
-		if err := rows.Scan(&y.ID, &y.ChatID, &y.WorkflowID, &y.TemporalWorkflowID, &y.ThreadID, &y.StepID,
-			&loopNodeID, &loopIter, &y.Status, &actionTaken, &metadata,
-			&y.CreatedAt, &resolvedAt); err != nil {
-			return nil, fmt.Errorf("failed to scan yield: %w", err)
-		}
-
-		if loopNodeID.Valid {
-			y.LoopNodeID = &loopNodeID.String
-		}
-		if loopIter.Valid {
-			v := int(loopIter.Int64)
-			y.LoopIteration = &v
-		}
-		if actionTaken.Valid {
-			y.ActionTaken = &actionTaken.String
-		}
-		if metadata.Valid {
-			y.Metadata = &metadata.String
-		}
-		if resolvedAt.Valid {
-			y.ResolvedAt = &resolvedAt.Time
-		}
-
-		yields = append(yields, &y)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate yields: %w", err)
-	}
-
-	return yields, nil
-}
-
-// ResolveYield resolves a yield with an action and emits an activity event if the activity changed.
-func (r *Repo) ResolveYield(ctx context.Context, id string, actionTaken string) error {
+func (r *Repo) ResolveQuestion(ctx context.Context, id string, responseData *string) error {
 	if id == "" {
-		return fmt.Errorf("yield ID cannot be empty")
-	}
-	if actionTaken == "" {
-		return fmt.Errorf("action_taken cannot be empty")
+		return fmt.Errorf("question ID cannot be empty")
 	}
 
-	// Get yield first for chatID before resolving
-	yield, err := r.GetYieldByID(ctx, id)
-	if err != nil {
-		return fmt.Errorf("failed to get yield for activity emission: %w", err)
-	}
-	if yield == nil {
-		return fmt.Errorf("yield not found: %s", id)
-	}
-
-	query := `UPDATE yields SET status = ?, action_taken = ?, resolved_at = CURRENT_TIMESTAMP WHERE id = ?`
+	now := time.Now().UTC()
+	query := `UPDATE questions SET status = 2, response_data = ?, resolved_at = ? WHERE id = ?`
 	query = r.bindQuery(query)
 
-	result, err := r.DB.ExecContext(ctx, query, YieldStatusResolved, actionTaken, id)
+	_, err := r.DB.DB(ctx).ExecContext(ctx, query, responseData, now, id)
 	if err != nil {
-		return fmt.Errorf("failed to resolve yield: %w", err)
+		return fmt.Errorf("failed to resolve question: %w", err)
 	}
 
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to check rows affected: %w", err)
-	}
-	if rowsAffected == 0 {
-		return fmt.Errorf("yield not found: %s", id)
+	// Emit activity change
+	q, err := r.GetQuestionByID(ctx, id)
+	if err == nil && q != nil {
+		_ = r.emitChatActivityIfChanged(ctx, q.ChatID)
 	}
 
-	// Activity may have changed from AWAITING_INPUT → RUNNING
-	return r.emitChatActivityIfChanged(ctx, yield.ChatID)
+	return nil
 }
 
 // ==================== Helper Functions ====================

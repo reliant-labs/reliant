@@ -16,7 +16,7 @@ import {
   useInfoEvents,
   useRunOutputs,
   usePendingApprovals,
-  usePendingYield,
+  usePendingQuestion,
   useStreamingMessages,
   useDiscussMode,
 } from "../../store/chatStoreHooks";
@@ -86,9 +86,8 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
   const connectionStatus = useGlobalUpdatesStore((s) => s.connectionStatus);
   const isChatBusy = useIsChatRunning(chatId);
   const pendingApprovals = usePendingApprovals(chatId);
-  const pendingYield = usePendingYield(chatId);
-  const hasPendingYield = !!pendingYield;
   const isDiscussMode = useDiscussMode(chatId);
+  const pendingQuestion = usePendingQuestion(chatId);
   const canDiscuss = currentChat?.canDiscuss ?? false;
   const currentActivity = useChatCurrentActivity(chatId);
 
@@ -264,7 +263,6 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
       chatId={chatId}
       isChatBusy={isChatBusy}
       pendingApprovals={pendingApprovals}
-      hasPendingYield={hasPendingYield}
       connectionStatus={connectionStatus}
       currentActivity={currentActivity ?? undefined}
       worktreeId={currentChat?.worktreeId ?? undefined}
@@ -280,6 +278,7 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
       isDiscussMode={isDiscussMode}
       canDiscuss={canDiscuss}
       onToggleDiscuss={handleToggleDiscuss}
+      hasPendingQuestion={!!pendingQuestion}
     />
   );
 }

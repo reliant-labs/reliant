@@ -30,7 +30,7 @@ type WorkflowStatusInput struct {
 	ChatID              string              `json:"chat_id" reliant:"-"`
 	WorkflowID          string              `json:"workflow_id"`
 	WorkflowName        string              `json:"workflow_name"`
-	Status              string              `json:"status"`                            // "started", "completed", "failed", "cancelled", or "yielded"
+	Status              string              `json:"status"`                            // "started", "completed", "failed", or "cancelled"
 	ParentWorkflowID    string              `json:"parent_workflow_id,omitempty"`      // Parent workflow UUID (empty for root)
 	Thread              string              `json:"thread,omitempty"`                  // Thread path for message isolation
 	ThreadTitle         string              `json:"thread_title,omitempty"`            // Human-readable title for the thread (e.g., preset name or node ID)
@@ -86,7 +86,6 @@ func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStat
 	// Note: Activity (running) is derived from workflow.status, not stored in chat.state
 	// - "started" -> no change
 	// - "completed" -> mark unread (only for ROOT workflow - user should see result)
-	// - "yielded" -> no change (control returns to parent flow)
 	// - "cancelled" -> no change (user cancelled, no action needed)
 	// - "failed" -> no change (nothing pending)
 	if input.Status == "completed" && isRootWorkflow {
@@ -225,14 +224,6 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 		// Thread records ("thread:*") are created by fork()/new() in action configs
 		return a.repo.CompleteChildWorkflows(ctx, input.WorkflowID)
 
-	case "yielded":
-		// Yielded child workflows are terminal from the child's perspective.
-		// Persist as completed so they no longer contribute to RUNNING activity.
-		if err := a.repo.UpdateWorkflowStatus(ctx, input.WorkflowID, db.WorkflowStatusCompleted); err != nil {
-			return err
-		}
-		return a.repo.CompleteChildWorkflows(ctx, input.WorkflowID)
-
 	case "failed":
 		if err := a.repo.UpdateWorkflowStatus(ctx, input.WorkflowID, db.WorkflowStatusFailed); err != nil {
 			return err
@@ -350,9 +341,6 @@ func (a *WorkflowStatusActivity) trackAnalytics(ctx context.Context, input Workf
 	case "started":
 		analyticsClient.TrackWorkflowStarted(metrics)
 	case "completed":
-		metrics.Success = true
-		analyticsClient.TrackWorkflowEnded(metrics)
-	case "yielded":
 		metrics.Success = true
 		analyticsClient.TrackWorkflowEnded(metrics)
 	case "failed":

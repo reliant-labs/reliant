@@ -516,36 +516,30 @@ func TestExpandToolFilterWithSpawn(t *testing.T) {
 func TestExpandToolFilterWithSpawn_AskUser(t *testing.T) {
 	mcpTools := []string{}
 
-	t.Run("ask_user in filter sets AskUserEnabled", func(t *testing.T) {
+	t.Run("ask_user in filter appears in ToolNames", func(t *testing.T) {
 		filter := []string{"tag:default", "ask_user"}
 		result := ExpandToolFilterWithSpawn(filter, mcpTools)
 
-		if !result.AskUserEnabled {
-			t.Error("Expected AskUserEnabled=true when ask_user is in filter")
-		}
-		// ask_user should not appear in tool names
+		found := false
 		for _, name := range result.ToolNames {
 			if name == "ask_user" {
-				t.Error("ask_user should not appear in ToolNames")
+				found = true
+				break
 			}
+		}
+		if !found {
+			t.Error("Expected ask_user in ToolNames when explicitly in filter")
 		}
 	})
 
-	t.Run("no ask_user means AskUserEnabled is false", func(t *testing.T) {
+	t.Run("ask_user not in ToolNames when not in filter", func(t *testing.T) {
 		filter := []string{"tag:default"}
 		result := ExpandToolFilterWithSpawn(filter, mcpTools)
 
-		if result.AskUserEnabled {
-			t.Error("Expected AskUserEnabled=false when ask_user not in filter")
-		}
-	})
-
-	t.Run("empty string does not enable ask_user", func(t *testing.T) {
-		filter := []string{"tag:default", ""}
-		result := ExpandToolFilterWithSpawn(filter, mcpTools)
-
-		if result.AskUserEnabled {
-			t.Error("Expected AskUserEnabled=false for empty string")
+		for _, name := range result.ToolNames {
+			if name == "ask_user" {
+				t.Error("ask_user should not be in ToolNames when not in filter")
+			}
 		}
 	})
 }

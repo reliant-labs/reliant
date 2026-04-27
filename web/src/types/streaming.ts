@@ -71,7 +71,6 @@ export interface WorkflowStatusUpdate {
   status:
     | "started"
     | "completed"
-    | "yielded"
     | "cancelled"
     | "failed"
     | "paused"
@@ -186,10 +185,10 @@ export interface RefetchUpdate {
   sequence_number?: number;
 }
 
-// YieldUpdate represents a yield state change from the backend
-export interface YieldUpdate {
-  update_type: "yield";
-  yield_id: string;
+// QuestionUpdate represents a question event (ask_user) from the backend
+export interface QuestionUpdate {
+  update_type: "question";
+  question_id: string;
   chat_id: string;
   workflow_id: string;
   step_id: string;
@@ -284,7 +283,7 @@ export type ChatUpdate =
   | WorkflowExecutionUpdate
   | ExecutionLogUpdate
   | RefetchUpdate
-  | YieldUpdate;
+  | QuestionUpdate;
 
 // ============================================================================
 // Connection & Callback Types
