@@ -12,7 +12,6 @@ import (
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 )
@@ -93,35 +92,19 @@ func devUserID() string {
 
 // AuthInterceptor provides JWT authentication for gRPC requests
 type AuthInterceptor struct {
-	validator      *auth.JWTValidator
+	validator      auth.TokenValidator
 	sessionTracker *sessionTracker
 	publicMethods  map[string]bool // Methods that don't require auth
 	devMode        bool            // If true, bypass auth with dev user
 }
 
-// NewAuthInterceptor creates a new auth interceptor using RSA public key
-func NewAuthInterceptor(publicKeyPEM string, publicMethods []string) (*AuthInterceptor, error) {
-	// Check if we're in dev mode - bypass auth entirely
-	devMode := config.IsDevelopmentEnvironment()
-	if devMode {
-		logging.Info("[gRPC Auth] Development mode detected - auth bypass enabled",
-			"dev_user_id", DevUser.Sub,
-			"dev_user_email", DevUser.Email)
-	}
-
-	// In dev mode, we don't need a valid JWT key
-	var validator *auth.JWTValidator
-	if !devMode {
-		if publicKeyPEM == "" {
-			return nil, auth.ErrInvalidPublicKey
-		}
-
-		var err error
-		validator, err = auth.NewJWTValidator(publicKeyPEM)
-		if err != nil {
-			return nil, err
-		}
-	}
+// NewAuthInterceptor creates a new auth interceptor.
+// The auth mode is determined by auth.GetAuthMode():
+//   - "dev":      bypass auth entirely with a hardcoded dev user
+//   - "apikey":   validate bearer tokens against AUTH_API_KEY env var
+//   - "supabase": validate JWTs using publicKeyPEM or jwksURL (default)
+func NewAuthInterceptor(publicKeyPEM string, jwksURL string, publicMethods []string) (*AuthInterceptor, error) {
+	mode := auth.GetAuthMode()
 
 	// Build public methods map for fast lookup
 	publicMethodsMap := make(map[string]bool)
@@ -129,12 +112,61 @@ func NewAuthInterceptor(publicKeyPEM string, publicMethods []string) (*AuthInter
 		publicMethodsMap[method] = true
 	}
 
-	return &AuthInterceptor{
-		validator:      validator,
-		sessionTracker: newSessionTracker(),
-		publicMethods:  publicMethodsMap,
-		devMode:        devMode,
-	}, nil
+	switch mode {
+	case "dev":
+		logging.Info("[gRPC Auth] Development mode detected - auth bypass enabled",
+			"dev_user_id", DevUser.Sub,
+			"dev_user_email", DevUser.Email)
+		return &AuthInterceptor{
+			validator:      nil,
+			sessionTracker: newSessionTracker(),
+			publicMethods:  publicMethodsMap,
+			devMode:        true,
+		}, nil
+
+	case "apikey":
+		apiKey := os.Getenv("AUTH_API_KEY")
+		if apiKey == "" {
+			return nil, fmt.Errorf("AUTH_MODE=apikey requires AUTH_API_KEY to be set")
+		}
+		validator, err := auth.NewAPIKeyValidator(apiKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create API key validator: %w", err)
+		}
+		logging.Info("[gRPC Auth] API key auth mode enabled")
+		return &AuthInterceptor{
+			validator:      validator,
+			sessionTracker: newSessionTracker(),
+			publicMethods:  publicMethodsMap,
+			devMode:        false,
+		}, nil
+
+	default: // "supabase"
+		var validator auth.TokenValidator
+		switch {
+		case publicKeyPEM != "":
+			var err error
+			validator, err = auth.NewJWTValidator(publicKeyPEM)
+			if err != nil {
+				return nil, err
+			}
+		case jwksURL != "":
+			var err error
+			validator, err = auth.LoadJWKS(context.Background(), jwksURL)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load JWKS from %s: %w", jwksURL, err)
+			}
+		default:
+			return nil, auth.ErrInvalidPublicKey
+		}
+		logging.Info("[gRPC Auth] Supabase JWT auth mode enabled")
+		return &AuthInterceptor{
+			validator:      validator,
+			sessionTracker: newSessionTracker(),
+			publicMethods:  publicMethodsMap,
+			devMode:        false,
+		}, nil
+	}
 }
 
 // authenticateRequest validates the auth token and returns the authenticated context, claims, and raw token.

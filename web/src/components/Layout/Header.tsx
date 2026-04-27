@@ -1,4 +1,3 @@
-import { RiFeedbackLine } from "react-icons/ri";
 import {
   Minus,
   Square,
@@ -47,7 +46,6 @@ interface HeaderProps {
   onToggleChatSidebar?: () => void;
   onOpenPageOverview?: () => void;
   onOpenWorkflows?: () => void;
-  onOpenFeedback?: () => void;
 }
 
 export interface HeaderRef {
@@ -72,7 +70,6 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
       onToggleChatSidebar,
       onOpenPageOverview: _onOpenPageOverview,
       onOpenWorkflows,
-      onOpenFeedback,
     },
     ref
   ) => {
@@ -328,27 +325,6 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
                   aria-label="Open Temporal UI"
                 >
                   <Activity className="w-4 h-4" />
-                </button>
-              </Tooltip>
-            )}
-
-            {/* Feedback button */}
-            {!projectPickerMode && onOpenFeedback && (
-              <Tooltip
-                content="Report bugs or suggest features"
-                placement="bottom"
-                delay={300}
-              >
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onOpenFeedback();
-                  }}
-                  className="header-icon-btn p-1.5 rounded text-xs transition-colors"
-                  aria-label="Send Feedback"
-                  style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-                >
-                  <RiFeedbackLine className="w-4 h-4" />
                 </button>
               </Tooltip>
             )}

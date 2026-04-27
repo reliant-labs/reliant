@@ -1,10 +1,9 @@
 import React, { Component } from 'react';
 import type { ReactNode } from 'react';
 import * as Sentry from '@sentry/react';
-import { AlertTriangle, Copy, MessageSquareWarning, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Copy, RefreshCw } from 'lucide-react';
 import { getPrivacySettings } from '../store/privacyStore';
 import { Button } from './ui/Button';
-import { useFeedbackModalStore } from '../store/feedbackModalStore';
 import { isDev } from '../lib/constants';
 
 interface Props {
@@ -99,28 +98,9 @@ export function ErrorFallbackUI(props: {
   } = props;
 
   const [copied, setCopied] = React.useState(false);
-  const openFeedbackModal = useFeedbackModalStore((s) => s.open);
 
   const err = error instanceof Error ? error : new Error(String(error));
   const report = formatDiagnosticReport({ error, componentStack, errorId, occurredAt });
-
-  const diagnosticContext = React.useMemo(() => {
-    const e = error instanceof Error ? error : new Error(String(error));
-    return {
-      kind: 'crash',
-      errorId,
-      occurredAt,
-      url: typeof window !== 'undefined' ? window.location.href : undefined,
-      error: {
-        name: e.name,
-        message: e.message,
-        stack: e.stack,
-      },
-      react: {
-        componentStack,
-      },
-    };
-  }, [componentStack, error, errorId, occurredAt]);
 
   return (
     <div
@@ -145,23 +125,6 @@ export function ErrorFallbackUI(props: {
                 leftIcon={<RefreshCw className="h-4 w-4" />}
               >
                 Reload
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  const { crashReportingEnabled } = getPrivacySettings();
-                  const includeDiagnostics = crashReportingEnabled;
-
-                  openFeedbackModal({
-                    type: 'bug',
-                    title: errorId ? `App crash (Error ID: ${errorId})` : 'App crash',
-                    description: '',
-                    extraContext: includeDiagnostics ? diagnosticContext : { kind: 'crash', errorId, occurredAt },
-                  });
-                }}
-                leftIcon={<MessageSquareWarning className="h-4 w-4" />}
-              >
-                Report this problem
               </Button>
               <Button
                 variant="secondary"
