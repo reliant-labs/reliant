@@ -57,7 +57,8 @@
               "features/threads",
               "features/attachments",
               "features/skills",
-              "features/processes"
+              "features/processes",
+              "features/remote-daemons"
             ]
           },
           {

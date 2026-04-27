@@ -430,7 +430,6 @@ func (*DaemonMessage_FileSystemChanged) isDaemonMessage_Message() {}
 // DaemonRegister is sent when daemon first connects
 type DaemonRegister struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	DaemonId      string                 `protobuf:"bytes,1,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`                                                       // Unique daemon instance ID (stable, persisted per-host)
 	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`                                                             // User this daemon belongs to
 	Hostname      string                 `protobuf:"bytes,3,opt,name=hostname,proto3" json:"hostname,omitempty"`                                                                       // Machine hostname
 	Platform      string                 `protobuf:"bytes,4,opt,name=platform,proto3" json:"platform,omitempty"`                                                                       // OS platform (darwin, linux, windows)
@@ -471,13 +470,6 @@ func (x *DaemonRegister) ProtoReflect() protoreflect.Message {
 // Deprecated: Use DaemonRegister.ProtoReflect.Descriptor instead.
 func (*DaemonRegister) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *DaemonRegister) GetDaemonId() string {
-	if x != nil {
-		return x.DaemonId
-	}
-	return ""
 }
 
 func (x *DaemonRegister) GetUserId() string {
@@ -1086,6 +1078,7 @@ type RegistrationAck struct {
 	state                 protoimpl.MessageState `protogen:"open.v1"`
 	Accepted              bool                   `protobuf:"varint,1,opt,name=accepted,proto3" json:"accepted,omitempty"`
 	RequestedProjectPaths []string               `protobuf:"bytes,2,rep,name=requested_project_paths,json=requestedProjectPaths,proto3" json:"requested_project_paths,omitempty"` // "send me config for these"
+	DaemonId              string                 `protobuf:"bytes,3,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`                                          // Gateway-assigned daemon identity (from PAT binding or newly generated)
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache
 }
@@ -1132,6 +1125,13 @@ func (x *RegistrationAck) GetRequestedProjectPaths() []string {
 		return x.RequestedProjectPaths
 	}
 	return nil
+}
+
+func (x *RegistrationAck) GetDaemonId() string {
+	if x != nil {
+		return x.DaemonId
+	}
+	return ""
 }
 
 type LoadProjectConfigsRequest struct {
@@ -3941,9 +3941,8 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	" \x01(\v2 .reliant.v1.TerminalSessionEventH\x00R\x14terminalSessionEvent\x12Y\n" +
 	"\x14process_output_chunk\x18\v \x01(\v2%.reliant.v1.ProcessOutputChunkMessageH\x00R\x12processOutputChunk\x12O\n" +
 	"\x13file_system_changed\x18\f \x01(\v2\x1d.reliant.v1.FileSystemChangedH\x00R\x11fileSystemChangedB\t\n" +
-	"\amessage\"\xf9\x02\n" +
-	"\x0eDaemonRegister\x12\x1b\n" +
-	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x17\n" +
+	"\amessage\"\xe2\x02\n" +
+	"\x0eDaemonRegister\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x1a\n" +
 	"\bhostname\x18\x03 \x01(\tR\bhostname\x12\x1a\n" +
 	"\bplatform\x18\x04 \x01(\tR\bplatform\x12\x1f\n" +
@@ -3957,7 +3956,7 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"daemonType\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\a\x10\b\"\x80\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\x01\x10\x02J\x04\b\a\x10\b\"\x80\x02\n" +
 	"\fToolResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x18\n" +
@@ -4001,10 +4000,11 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\n" +
 	"timeout_ms\x18\b \x01(\x05R\ttimeoutMsJ\x04\b\a\x10\b\"/\n" +
 	"\x0fServerHeartbeat\x12\x1c\n" +
-	"\ttimestamp\x18\x01 \x01(\x03R\ttimestamp\"e\n" +
+	"\ttimestamp\x18\x01 \x01(\x03R\ttimestamp\"\x82\x01\n" +
 	"\x0fRegistrationAck\x12\x1a\n" +
 	"\baccepted\x18\x01 \x01(\bR\baccepted\x126\n" +
-	"\x17requested_project_paths\x18\x02 \x03(\tR\x15requestedProjectPaths\"]\n" +
+	"\x17requested_project_paths\x18\x02 \x03(\tR\x15requestedProjectPaths\x12\x1b\n" +
+	"\tdaemon_id\x18\x03 \x01(\tR\bdaemonId\"]\n" +
 	"\x19LoadProjectConfigsRequest\x12!\n" +
 	"\fproject_path\x18\x01 \x01(\tR\vprojectPath\x12\x1d\n" +
 	"\n" +
@@ -4251,9 +4251,10 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\x19DAEMON_STATUS_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14DAEMON_STATUS_ACTIVE\x10\x01\x12\x16\n" +
 	"\x12DAEMON_STATUS_IDLE\x10\x02\x12\x1e\n" +
-	"\x1aDAEMON_STATUS_DISCONNECTED\x10\x032\xc2\x01\n" +
+	"\x1aDAEMON_STATUS_DISCONNECTED\x10\x032\x90\x02\n" +
 	"\x12ToolsDaemonService\x12K\n" +
-	"\rConnectDaemon\x12\x19.reliant.v1.DaemonMessage\x1a\x19.reliant.v1.ServerMessage\"\x00(\x010\x01\x12_\n" +
+	"\rConnectDaemon\x12\x19.reliant.v1.DaemonMessage\x1a\x19.reliant.v1.ServerMessage\"\x00(\x010\x01\x12L\n" +
+	"\x0eConnectGateway\x12\x19.reliant.v1.ServerMessage\x1a\x19.reliant.v1.DaemonMessage\"\x00(\x010\x01\x12_\n" +
 	"\x10ReportToolResult\x12#.reliant.v1.ReportToolResultRequest\x1a$.reliant.v1.ReportToolResultResponse\"\x002\x8b\x05\n" +
 	"\x15DaemonRegistryService\x12P\n" +
 	"\vListDaemons\x12\x1e.reliant.v1.ListDaemonsRequest\x1a\x1f.reliant.v1.ListDaemonsResponse\"\x00\x12J\n" +
@@ -4389,25 +4390,27 @@ var file_reliant_v1_tools_daemon_proto_depIdxs = []int32{
 	59, // 45: reliant.v1.DaemonInfo.last_heartbeat:type_name -> google.protobuf.Timestamp
 	2,  // 46: reliant.v1.TerminalSessionEvent.event_type:type_name -> reliant.v1.TerminalSessionEvent.EventType
 	3,  // 47: reliant.v1.ToolsDaemonService.ConnectDaemon:input_type -> reliant.v1.DaemonMessage
-	26, // 48: reliant.v1.ToolsDaemonService.ReportToolResult:input_type -> reliant.v1.ReportToolResultRequest
-	32, // 49: reliant.v1.DaemonRegistryService.ListDaemons:input_type -> reliant.v1.ListDaemonsRequest
-	34, // 50: reliant.v1.DaemonRegistryService.GetDaemon:input_type -> reliant.v1.GetDaemonRequest
-	36, // 51: reliant.v1.DaemonRegistryService.CreateDaemonToken:input_type -> reliant.v1.CreateDaemonTokenRequest
-	38, // 52: reliant.v1.DaemonRegistryService.ListDaemonTokens:input_type -> reliant.v1.ListDaemonTokensRequest
-	41, // 53: reliant.v1.DaemonRegistryService.RevokeDaemonToken:input_type -> reliant.v1.RevokeDaemonTokenRequest
-	43, // 54: reliant.v1.DaemonRegistryService.ResolveDaemon:input_type -> reliant.v1.ResolveDaemonRequest
-	45, // 55: reliant.v1.DaemonRegistryService.ResumeDaemon:input_type -> reliant.v1.ResumeDaemonRequest
-	7,  // 56: reliant.v1.ToolsDaemonService.ConnectDaemon:output_type -> reliant.v1.ServerMessage
-	27, // 57: reliant.v1.ToolsDaemonService.ReportToolResult:output_type -> reliant.v1.ReportToolResultResponse
-	33, // 58: reliant.v1.DaemonRegistryService.ListDaemons:output_type -> reliant.v1.ListDaemonsResponse
-	35, // 59: reliant.v1.DaemonRegistryService.GetDaemon:output_type -> reliant.v1.GetDaemonResponse
-	37, // 60: reliant.v1.DaemonRegistryService.CreateDaemonToken:output_type -> reliant.v1.CreateDaemonTokenResponse
-	39, // 61: reliant.v1.DaemonRegistryService.ListDaemonTokens:output_type -> reliant.v1.ListDaemonTokensResponse
-	42, // 62: reliant.v1.DaemonRegistryService.RevokeDaemonToken:output_type -> reliant.v1.RevokeDaemonTokenResponse
-	44, // 63: reliant.v1.DaemonRegistryService.ResolveDaemon:output_type -> reliant.v1.ResolveDaemonResponse
-	46, // 64: reliant.v1.DaemonRegistryService.ResumeDaemon:output_type -> reliant.v1.ResumeDaemonResponse
-	56, // [56:65] is the sub-list for method output_type
-	47, // [47:56] is the sub-list for method input_type
+	7,  // 48: reliant.v1.ToolsDaemonService.ConnectGateway:input_type -> reliant.v1.ServerMessage
+	26, // 49: reliant.v1.ToolsDaemonService.ReportToolResult:input_type -> reliant.v1.ReportToolResultRequest
+	32, // 50: reliant.v1.DaemonRegistryService.ListDaemons:input_type -> reliant.v1.ListDaemonsRequest
+	34, // 51: reliant.v1.DaemonRegistryService.GetDaemon:input_type -> reliant.v1.GetDaemonRequest
+	36, // 52: reliant.v1.DaemonRegistryService.CreateDaemonToken:input_type -> reliant.v1.CreateDaemonTokenRequest
+	38, // 53: reliant.v1.DaemonRegistryService.ListDaemonTokens:input_type -> reliant.v1.ListDaemonTokensRequest
+	41, // 54: reliant.v1.DaemonRegistryService.RevokeDaemonToken:input_type -> reliant.v1.RevokeDaemonTokenRequest
+	43, // 55: reliant.v1.DaemonRegistryService.ResolveDaemon:input_type -> reliant.v1.ResolveDaemonRequest
+	45, // 56: reliant.v1.DaemonRegistryService.ResumeDaemon:input_type -> reliant.v1.ResumeDaemonRequest
+	7,  // 57: reliant.v1.ToolsDaemonService.ConnectDaemon:output_type -> reliant.v1.ServerMessage
+	3,  // 58: reliant.v1.ToolsDaemonService.ConnectGateway:output_type -> reliant.v1.DaemonMessage
+	27, // 59: reliant.v1.ToolsDaemonService.ReportToolResult:output_type -> reliant.v1.ReportToolResultResponse
+	33, // 60: reliant.v1.DaemonRegistryService.ListDaemons:output_type -> reliant.v1.ListDaemonsResponse
+	35, // 61: reliant.v1.DaemonRegistryService.GetDaemon:output_type -> reliant.v1.GetDaemonResponse
+	37, // 62: reliant.v1.DaemonRegistryService.CreateDaemonToken:output_type -> reliant.v1.CreateDaemonTokenResponse
+	39, // 63: reliant.v1.DaemonRegistryService.ListDaemonTokens:output_type -> reliant.v1.ListDaemonTokensResponse
+	42, // 64: reliant.v1.DaemonRegistryService.RevokeDaemonToken:output_type -> reliant.v1.RevokeDaemonTokenResponse
+	44, // 65: reliant.v1.DaemonRegistryService.ResolveDaemon:output_type -> reliant.v1.ResolveDaemonResponse
+	46, // 66: reliant.v1.DaemonRegistryService.ResumeDaemon:output_type -> reliant.v1.ResumeDaemonResponse
+	57, // [57:67] is the sub-list for method output_type
+	47, // [47:57] is the sub-list for method input_type
 	47, // [47:47] is the sub-list for extension type_name
 	47, // [47:47] is the sub-list for extension extendee
 	0,  // [0:47] is the sub-list for field type_name

@@ -40,6 +40,9 @@ const (
 	// ToolsDaemonServiceConnectDaemonProcedure is the fully-qualified name of the ToolsDaemonService's
 	// ConnectDaemon RPC.
 	ToolsDaemonServiceConnectDaemonProcedure = "/reliant.v1.ToolsDaemonService/ConnectDaemon"
+	// ToolsDaemonServiceConnectGatewayProcedure is the fully-qualified name of the ToolsDaemonService's
+	// ConnectGateway RPC.
+	ToolsDaemonServiceConnectGatewayProcedure = "/reliant.v1.ToolsDaemonService/ConnectGateway"
 	// ToolsDaemonServiceReportToolResultProcedure is the fully-qualified name of the
 	// ToolsDaemonService's ReportToolResult RPC.
 	ToolsDaemonServiceReportToolResultProcedure = "/reliant.v1.ToolsDaemonService/ReportToolResult"
@@ -73,6 +76,11 @@ type ToolsDaemonServiceClient interface {
 	// - Client sends ToolResponse messages with execution results
 	// - On connect, server streams any pending requests from the database
 	ConnectDaemon(context.Context) *connect.BidiStreamForClient[v1.DaemonMessage, v1.ServerMessage]
+	// ConnectGateway is the reverse of ConnectDaemon: the daemon listens as a
+	// gRPC server and the gateway dials in. The gateway sends ServerMessages and
+	// receives DaemonMessages — same message types, but the connection direction
+	// is flipped.
+	ConnectGateway(context.Context) *connect.BidiStreamForClient[v1.ServerMessage, v1.DaemonMessage]
 	// ReportToolResult is a unary fallback for reporting tool execution results
 	// when the bidirectional stream is unavailable. The daemon calls this when
 	// a tool completes but the bidi stream send fails (e.g. temporary disconnect).
@@ -96,6 +104,12 @@ func NewToolsDaemonServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(toolsDaemonServiceMethods.ByName("ConnectDaemon")),
 			connect.WithClientOptions(opts...),
 		),
+		connectGateway: connect.NewClient[v1.ServerMessage, v1.DaemonMessage](
+			httpClient,
+			baseURL+ToolsDaemonServiceConnectGatewayProcedure,
+			connect.WithSchema(toolsDaemonServiceMethods.ByName("ConnectGateway")),
+			connect.WithClientOptions(opts...),
+		),
 		reportToolResult: connect.NewClient[v1.ReportToolResultRequest, v1.ReportToolResultResponse](
 			httpClient,
 			baseURL+ToolsDaemonServiceReportToolResultProcedure,
@@ -108,12 +122,18 @@ func NewToolsDaemonServiceClient(httpClient connect.HTTPClient, baseURL string, 
 // toolsDaemonServiceClient implements ToolsDaemonServiceClient.
 type toolsDaemonServiceClient struct {
 	connectDaemon    *connect.Client[v1.DaemonMessage, v1.ServerMessage]
+	connectGateway   *connect.Client[v1.ServerMessage, v1.DaemonMessage]
 	reportToolResult *connect.Client[v1.ReportToolResultRequest, v1.ReportToolResultResponse]
 }
 
 // ConnectDaemon calls reliant.v1.ToolsDaemonService.ConnectDaemon.
 func (c *toolsDaemonServiceClient) ConnectDaemon(ctx context.Context) *connect.BidiStreamForClient[v1.DaemonMessage, v1.ServerMessage] {
 	return c.connectDaemon.CallBidiStream(ctx)
+}
+
+// ConnectGateway calls reliant.v1.ToolsDaemonService.ConnectGateway.
+func (c *toolsDaemonServiceClient) ConnectGateway(ctx context.Context) *connect.BidiStreamForClient[v1.ServerMessage, v1.DaemonMessage] {
+	return c.connectGateway.CallBidiStream(ctx)
 }
 
 // ReportToolResult calls reliant.v1.ToolsDaemonService.ReportToolResult.
@@ -128,6 +148,11 @@ type ToolsDaemonServiceHandler interface {
 	// - Client sends ToolResponse messages with execution results
 	// - On connect, server streams any pending requests from the database
 	ConnectDaemon(context.Context, *connect.BidiStream[v1.DaemonMessage, v1.ServerMessage]) error
+	// ConnectGateway is the reverse of ConnectDaemon: the daemon listens as a
+	// gRPC server and the gateway dials in. The gateway sends ServerMessages and
+	// receives DaemonMessages — same message types, but the connection direction
+	// is flipped.
+	ConnectGateway(context.Context, *connect.BidiStream[v1.ServerMessage, v1.DaemonMessage]) error
 	// ReportToolResult is a unary fallback for reporting tool execution results
 	// when the bidirectional stream is unavailable. The daemon calls this when
 	// a tool completes but the bidi stream send fails (e.g. temporary disconnect).
@@ -147,6 +172,12 @@ func NewToolsDaemonServiceHandler(svc ToolsDaemonServiceHandler, opts ...connect
 		connect.WithSchema(toolsDaemonServiceMethods.ByName("ConnectDaemon")),
 		connect.WithHandlerOptions(opts...),
 	)
+	toolsDaemonServiceConnectGatewayHandler := connect.NewBidiStreamHandler(
+		ToolsDaemonServiceConnectGatewayProcedure,
+		svc.ConnectGateway,
+		connect.WithSchema(toolsDaemonServiceMethods.ByName("ConnectGateway")),
+		connect.WithHandlerOptions(opts...),
+	)
 	toolsDaemonServiceReportToolResultHandler := connect.NewUnaryHandler(
 		ToolsDaemonServiceReportToolResultProcedure,
 		svc.ReportToolResult,
@@ -157,6 +188,8 @@ func NewToolsDaemonServiceHandler(svc ToolsDaemonServiceHandler, opts ...connect
 		switch r.URL.Path {
 		case ToolsDaemonServiceConnectDaemonProcedure:
 			toolsDaemonServiceConnectDaemonHandler.ServeHTTP(w, r)
+		case ToolsDaemonServiceConnectGatewayProcedure:
+			toolsDaemonServiceConnectGatewayHandler.ServeHTTP(w, r)
 		case ToolsDaemonServiceReportToolResultProcedure:
 			toolsDaemonServiceReportToolResultHandler.ServeHTTP(w, r)
 		default:
@@ -170,6 +203,10 @@ type UnimplementedToolsDaemonServiceHandler struct{}
 
 func (UnimplementedToolsDaemonServiceHandler) ConnectDaemon(context.Context, *connect.BidiStream[v1.DaemonMessage, v1.ServerMessage]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ToolsDaemonService.ConnectDaemon is not implemented"))
+}
+
+func (UnimplementedToolsDaemonServiceHandler) ConnectGateway(context.Context, *connect.BidiStream[v1.ServerMessage, v1.DaemonMessage]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ToolsDaemonService.ConnectGateway is not implemented"))
 }
 
 func (UnimplementedToolsDaemonServiceHandler) ReportToolResult(context.Context, *connect.Request[v1.ReportToolResultRequest]) (*connect.Response[v1.ReportToolResultResponse], error) {

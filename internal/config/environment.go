@@ -10,9 +10,11 @@ import (
 type Environment string
 
 const (
-	EnvironmentDev  Environment = "dev"
-	EnvironmentTest Environment = "test"
-	EnvironmentProd Environment = "prod"
+	EnvironmentDev     Environment = "dev"
+	EnvironmentTest    Environment = "test"
+	EnvironmentStaging Environment = "staging"
+	EnvironmentPreprod Environment = "preprod"
+	EnvironmentProd    Environment = "prod"
 )
 
 // GetEnvironment returns the current environment from environment variables
@@ -28,6 +30,10 @@ func GetEnvironment() Environment {
 	switch env {
 	case "test", "testing":
 		return EnvironmentTest
+	case "staging":
+		return EnvironmentStaging
+	case "preprod":
+		return EnvironmentPreprod
 	case "production", "prod":
 		return EnvironmentProd
 	default:
@@ -48,4 +54,14 @@ func IsDevelopmentEnvironment() bool {
 // IsProductionEnvironment returns true if running in production environment
 func IsProductionEnvironment() bool {
 	return GetEnvironment() == EnvironmentProd
+}
+
+// IsStagingEnvironment returns true if running in staging environment
+func IsStagingEnvironment() bool {
+	return GetEnvironment() == EnvironmentStaging
+}
+
+// IsPreprodEnvironment returns true if running in preprod environment
+func IsPreprodEnvironment() bool {
+	return GetEnvironment() == EnvironmentPreprod
 }

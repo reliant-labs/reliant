@@ -155,6 +155,52 @@ func (m *Middleware) RequireAuth(next http.Handler) http.Handler {
 	})
 }
 
+// DomainWhitelist is HTTP middleware that rejects authenticated requests whose
+// email domain is not in the allowed list. If allowedDomains is empty, all
+// domains are allowed. Unauthenticated requests pass through unchanged.
+func DomainWhitelist(allowedDomains []string) func(http.Handler) http.Handler {
+	domainSet := make(map[string]bool, len(allowedDomains))
+	for _, d := range allowedDomains {
+		d = strings.TrimSpace(strings.ToLower(d))
+		if d != "" {
+			domainSet[d] = true
+		}
+	}
+
+	return func(next http.Handler) http.Handler {
+		if len(domainSet) == 0 {
+			return next
+		}
+
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			email, ok := GetUserEmailFromContext(r.Context())
+			if !ok || email == "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			parts := strings.SplitN(email, "@", 2)
+			if len(parts) != 2 {
+				next.ServeHTTP(w, r)
+				return
+			}
+			domain := strings.ToLower(parts[1])
+
+			if !domainSet[domain] {
+				logging.Warn("[Domain Whitelist] Rejected email domain",
+					"email", email,
+					"domain", domain,
+					"path", r.URL.Path,
+				)
+				http.Error(w, `{"error": "forbidden", "message": "email domain not allowed in this environment"}`, http.StatusForbidden)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // isWebSocketUpgrade checks if the request is a WebSocket upgrade request
 func isWebSocketUpgrade(r *http.Request) bool {
 	// Connection header may contain multiple values like "Upgrade, keep-alive"

@@ -2,6 +2,7 @@ import { createRootRoute, createRoute, createRouter, Outlet, Navigate } from '@t
 import { ErrorFallbackUI } from './components/ErrorBoundary'
 import { AuthScreen } from './components/AuthScreen'
 import { OAuthCallback } from './components/OAuthCallback'
+import { ProxyAuth } from './components/ProxyAuth'
 import { ResetPasswordScreen } from './components/ResetPasswordScreen'
 import { EmailVerification } from './components/EmailVerification'
 import { AuthGuard } from './components/AuthGuard'
@@ -37,6 +38,15 @@ const oauthCallbackRoute = createRoute({
   component: OAuthCallback,
 })
 
+const proxyAuthRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/auth/proxy',
+  validateSearch: (search: Record<string, unknown>) => ({
+    return: (search.return as string) || undefined,
+  }),
+  component: ProxyAuth,
+})
+
 const resetPasswordRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/reset-password',
@@ -67,7 +77,7 @@ const indexRoute = createRoute({
   ),
 })
 
-const routeTree = rootRoute.addChildren([authRoute, oauthCallbackRoute, resetPasswordRoute, verifyEmailRoute, indexRoute])
+const routeTree = rootRoute.addChildren([authRoute, oauthCallbackRoute, proxyAuthRoute, resetPasswordRoute, verifyEmailRoute, indexRoute])
 
 export const router = createRouter({ routeTree })
 

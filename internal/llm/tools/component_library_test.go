@@ -76,7 +76,7 @@ func TestComponentLibraryGet(t *testing.T) {
 	tool := &componentLibraryTool{}
 
 	// Get existing component
-	resp, err := tool.get("quadrant_chart")
+	resp, err := tool.get("quadrant_chart", false)
 	if err != nil {
 		t.Fatalf("get quadrant_chart: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestComponentLibraryGet(t *testing.T) {
 	}
 
 	// Get non-existing component
-	resp, err = tool.get("nonexistent")
+	resp, err = tool.get("nonexistent", false)
 	if err != nil {
 		t.Fatalf("get nonexistent: %v", err)
 	}
