@@ -103,6 +103,16 @@ const authInterceptor: Interceptor = (next) => async (req) => {
     return await next(req);
   }
 
+  // Check for API key auth first (stored by ApiKeyLogin)
+  const apiKey = localStorage.getItem('reliant-api-key');
+  if (apiKey) {
+    req.header.set("Authorization", `Bearer ${apiKey}`);
+    logger.info("[gRPC Client] API key auth set for request:", {
+      method: req.method.name,
+    });
+    return await next(req);
+  }
+
   try {
     const {
       data: { session },

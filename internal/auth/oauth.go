@@ -19,18 +19,28 @@ import (
 	"time"
 )
 
-var (
-	defaultSupabaseURL = envOrDefault("RELIANT_AUTH_URL", "https://dash.reliantlabs.io")
-	defaultSupabaseKey = envOrDefault("RELIANT_AUTH_KEY", "sb_publishable_KKiB3B0EdEv7nguwKfEE5A_iY9rVXod")
-)
+// ErrAuthNotConfigured is returned when OAuth is attempted without required env vars.
+var ErrAuthNotConfigured = fmt.Errorf("auth provider not configured")
 
-const ()
+func getAuthURL() string {
+	return os.Getenv("RELIANT_AUTH_URL")
+}
 
-func envOrDefault(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
+func getAuthKey() string {
+	return os.Getenv("RELIANT_AUTH_KEY")
+}
+
+func requireAuthConfig() (serverURL string, anonKey string, err error) {
+	serverURL = getAuthURL()
+	anonKey = getAuthKey()
+	if serverURL == "" {
+		return "", "", fmt.Errorf("%w: RELIANT_AUTH_URL must be set for OAuth login. See docs for auth provider setup", ErrAuthNotConfigured)
 	}
-	return fallback
+	if anonKey == "" {
+		return "", "", fmt.Errorf("%w: RELIANT_AUTH_KEY must be set for OAuth login. See docs for auth provider setup", ErrAuthNotConfigured)
+	}
+	serverURL = strings.TrimRight(serverURL, "/")
+	return serverURL, anonKey, nil
 }
 
 // LoginOptions configures the OAuth PKCE login flow.
@@ -53,8 +63,10 @@ type oauthProvider struct {
 // LoginWithOAuthProvider performs a direct OAuth PKCE login for a single provider
 // using a localhost callback listener and returns the resulting Supabase tokens.
 func LoginWithOAuthProvider(ctx context.Context, provider string, opts LoginOptions) (*LoginResult, error) {
-	serverURL := strings.TrimRight(defaultSupabaseURL, "/")
-	anonKey := defaultSupabaseKey
+	serverURL, anonKey, err := requireAuthConfig()
+	if err != nil {
+		return nil, err
+	}
 
 	verifier, err := generateCodeVerifier()
 	if err != nil {
@@ -133,8 +145,10 @@ func LoginWithOAuthProvider(ctx context.Context, provider string, opts LoginOpti
 
 // Login performs login via a local web page that supports email/password and OAuth providers.
 func Login(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
-	serverURL := strings.TrimRight(defaultSupabaseURL, "/")
-	anonKey := defaultSupabaseKey
+	serverURL, anonKey, err := requireAuthConfig()
+	if err != nil {
+		return nil, err
+	}
 
 	// PKCE parameters (used by OAuth providers).
 	verifier, err := generateCodeVerifier()

@@ -12,7 +12,6 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -52,8 +51,8 @@ type wsResizeMessage struct {
 //
 // The handler works identically with NATSDaemonRouter (daemon-gateway) and
 // LocalDaemonRouter (monolith).
-func TerminalWSHandler(router toolexec.DaemonRouter, validator *auth.JWTValidator) http.HandlerFunc {
-	devMode := config.IsDevelopmentEnvironment()
+func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidator) http.HandlerFunc {
+	devMode := auth.GetAuthMode() == "dev"
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()

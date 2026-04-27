@@ -3,6 +3,7 @@ package auth
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -14,8 +15,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/telemetry"
 )
 
-// tokenValidator defines the interface for JWT token validation
-type tokenValidator interface {
+// TokenValidator defines the interface for token validation.
+// Implementations include JWTValidator (Supabase JWTs) and apiKeyValidator
+// (simple bearer-token auth for self-hosted deployments).
+type TokenValidator interface {
 	ValidateToken(token string) (*JWTClaims, error)
 }
 
@@ -34,9 +37,26 @@ func devUserID() string {
 	return "530eb7d2-1f6a-4305-890e-c05becebcf03"
 }
 
-// Middleware provides JWT authentication for HTTP requests
+// GetAuthMode returns the configured auth mode from the AUTH_MODE env var.
+// Recognized values: "dev", "apikey", "supabase". Defaults to "supabase"
+// when unset. When config.IsDevelopmentEnvironment() is true the mode is
+// always "dev" regardless of the env var.
+func GetAuthMode() string {
+	if config.IsDevelopmentEnvironment() {
+		return "dev"
+	}
+	mode := strings.ToLower(os.Getenv("AUTH_MODE"))
+	switch mode {
+	case "dev", "apikey":
+		return mode
+	default:
+		return "supabase"
+	}
+}
+
+// Middleware provides token authentication for HTTP requests
 type Middleware struct {
-	validator        tokenValidator
+	validator        TokenValidator
 	firstSeenTracker *firstSeenTracker
 	devMode          bool
 }
@@ -65,11 +85,16 @@ func (t *firstSeenTracker) isFirstTimeSeen(userID string) bool {
 	return result
 }
 
-// NewMiddleware creates a new auth middleware using RSA public key
-func NewMiddleware(publicKeyPEM string) (*Middleware, error) {
-	// Check if we're in dev mode - bypass auth entirely
-	devMode := config.IsDevelopmentEnvironment()
-	if devMode {
+// NewMiddleware creates a new auth middleware.
+// The auth mode is determined by GetAuthMode():
+//   - "dev":      bypass auth entirely with a hardcoded dev user
+//   - "apikey":   validate bearer tokens against AUTH_API_KEY env var
+//   - "supabase": validate JWTs using publicKeyPEM or jwksURL (default)
+func NewMiddleware(publicKeyPEM string, jwksURL string) (*Middleware, error) {
+	mode := GetAuthMode()
+
+	switch mode {
+	case "dev":
 		logging.Info("[HTTP Auth] Development mode detected - auth bypass enabled",
 			"dev_user_id", DevUser.Sub,
 			"dev_user_email", DevUser.Email)
@@ -78,22 +103,49 @@ func NewMiddleware(publicKeyPEM string) (*Middleware, error) {
 			firstSeenTracker: newFirstSeenTracker(),
 			devMode:          true,
 		}, nil
-	}
 
-	if publicKeyPEM == "" {
-		return nil, ErrInvalidPublicKey
-	}
+	case "apikey":
+		apiKey := os.Getenv("AUTH_API_KEY")
+		if apiKey == "" {
+			return nil, fmt.Errorf("AUTH_MODE=apikey requires AUTH_API_KEY to be set")
+		}
+		validator, err := NewAPIKeyValidator(apiKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create API key validator: %w", err)
+		}
+		logging.Info("[HTTP Auth] API key auth mode enabled",
+			"user_id", validator.userID)
+		return &Middleware{
+			validator:        validator,
+			firstSeenTracker: newFirstSeenTracker(),
+			devMode:          false,
+		}, nil
 
-	validator, err := NewJWTValidator(publicKeyPEM)
-	if err != nil {
-		return nil, err
+	default: // "supabase"
+		var validator *JWTValidator
+		switch {
+		case publicKeyPEM != "":
+			var err error
+			validator, err = NewJWTValidator(publicKeyPEM)
+			if err != nil {
+				return nil, err
+			}
+		case jwksURL != "":
+			var err error
+			validator, err = LoadJWKS(context.Background(), jwksURL)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load JWKS from %s: %w", jwksURL, err)
+			}
+		default:
+			return nil, ErrInvalidPublicKey
+		}
+		logging.Info("[HTTP Auth] Supabase JWT auth mode enabled")
+		return &Middleware{
+			validator:        validator,
+			firstSeenTracker: newFirstSeenTracker(),
+			devMode:          false,
+		}, nil
 	}
-
-	return &Middleware{
-		validator:        validator,
-		firstSeenTracker: newFirstSeenTracker(),
-		devMode:          false,
-	}, nil
 }
 
 // RequireAuth is a middleware that requires authentication

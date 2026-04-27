@@ -5,6 +5,7 @@ import { logger } from '@/lib/logger'
 import { getIsDev } from '@/lib/constants'
 import { setSentryUser } from '@/lib/sentry'
 import { devAuthGrpc } from '@/api/grpc-unauth'
+import { persistProviderToken } from '@/lib/persist-provider-token'
 
 const isElectron = !!window.electronAPI
 const getOAuthRedirectUrl = async (): Promise<string> => {
@@ -169,6 +170,7 @@ interface AuthState {
   verifyEmailOTP: (code: string, emailOverride?: string) => Promise<void>
   signInAnonymously: () => Promise<void>
   signOut: () => Promise<void>
+  setApiKeySession: (apiKey: string) => void
 
   initialize: () => Promise<void>
   refreshSession: () => Promise<void>
@@ -498,6 +500,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signOut: async () => {
     set({ loading: true })
     try {
+      // Clear API key if present
+      localStorage.removeItem('reliant-api-key')
+
       const { error } = await supabase.auth.signOut()
       if (error) throw error
 
@@ -829,6 +834,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
+  setApiKeySession: (apiKey: string) => {
+    localStorage.setItem('reliant-api-key', apiKey)
+    set({
+      user: {
+        id: 'apikey-user',
+        email: 'apikey@localhost',
+        email_confirmed_at: new Date().toISOString(),
+        is_anonymous: false,
+      } as User,
+      session: { access_token: apiKey } as Session,
+      loading: false,
+      initialized: true,
+    })
+  },
+
   initialize: async () => {
     if (get().initialized) return
 
@@ -858,6 +878,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
 
     logger.info('[AuthStore] Production mode - using real auth')
+
+    // Restore API key session from localStorage
+    const storedApiKey = localStorage.getItem('reliant-api-key')
+    if (storedApiKey) {
+      logger.info('[AuthStore] Restoring API key session')
+      set({
+        user: {
+          id: 'apikey-user',
+          email: 'apikey@localhost',
+          email_confirmed_at: new Date().toISOString(),
+          is_anonymous: false,
+        } as User,
+        session: { access_token: storedApiKey } as Session,
+        loading: false,
+        initialized: true,
+      })
+      return
+    }
 
     // Mock mode: skip auth entirely and set a mock user
     const isMockMode = (window as unknown as { __MOCK_MODE__?: boolean }).__MOCK_MODE__;
@@ -895,13 +933,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         // Update Sentry user context for error correlation
         setSentryUser(session?.user ? { id: session.user.id, email: session.user.email } : null)
 
-        // Capture GitHub provider_token if available (only emitted once at sign-in)
-        if (session?.provider_token) {
-          try {
-            const { saveGitCredential } = await import('@/api/controlplane-client')
-            await saveGitCredential('github', session.provider_token, 'repo')
-          } catch (err) {
-            console.warn('Failed to save git credential:', err)
+        // Best-effort backup: capture provider_token if present.
+        // Supabase may not include provider_token here — it's transient and
+        // only reliably available from exchangeCodeForSession() in OAuthCallback.
+        // This handler fires for ALL providers, so check before persisting.
+        if (_event === 'SIGNED_IN' && session?.provider_token && !session.user?.is_anonymous) {
+          const provider = session.user?.app_metadata?.provider
+          if (provider === 'github') {
+            try {
+              await persistProviderToken(session.provider_token, 'github', 'repo')
+            } catch (err) {
+              logger.warn('[AuthStore] Failed to persist provider token', err)
+            }
           }
         }
 
