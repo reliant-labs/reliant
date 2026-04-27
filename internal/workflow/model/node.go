@@ -69,6 +69,14 @@ func GetApprovalArgs(n *reliantv1.Node) *reliantv1.ApprovalArgs {
 	return n.GetApproval()
 }
 
+// GetAskQuestionArgs returns the AskQuestionArgs if this is an ask_question node, nil otherwise.
+func GetAskQuestionArgs(n *reliantv1.Node) *reliantv1.AskQuestionArgs {
+	if n == nil {
+		return nil
+	}
+	return n.GetAskQuestion()
+}
+
 // GetSaveMessageNodeArgs returns the SaveMessageNodeArgs if this is a save_message node, nil otherwise.
 func GetSaveMessageNodeArgs(n *reliantv1.Node) *reliantv1.SaveMessageNodeArgs {
 	if n == nil {

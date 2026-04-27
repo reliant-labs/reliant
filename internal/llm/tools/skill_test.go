@@ -320,6 +320,28 @@ func TestSkillTool_Search_ShowsFullPath(t *testing.T) {
 		"results should include the full skill path")
 }
 
+func TestSkillTool_ListAndSearch_RenderNormalizedStoredSkillPaths(t *testing.T) {
+	skills := config.NormalizeStoredSkills([]config.StoredSkill{
+		{
+			Name:        "testing-methodology",
+			Description: "Testing methodology",
+			Scope:       "builtin",
+			Body:        "Testing guidance",
+		},
+	})
+	env := &skillTestEnv{tool: &skillTool{skills: skills}}
+
+	listResp := env.execute(t, SkillParams{Action: "list"})
+	require.False(t, listResp.IsError)
+	assert.Contains(t, listResp.Content, "- testing-methodology: Testing methodology")
+	assert.NotContains(t, listResp.Content, "- :")
+
+	searchResp := env.execute(t, SkillParams{Action: "search", Query: "testing"})
+	require.False(t, searchResp.IsError)
+	assert.Contains(t, searchResp.Content, "- testing-methodology: Testing methodology")
+	assert.NotContains(t, searchResp.Content, "- :")
+}
+
 func TestSkillTool_Search_EmptyQuery_ReturnsError(t *testing.T) {
 	env := newSkillTestEnv(t)
 

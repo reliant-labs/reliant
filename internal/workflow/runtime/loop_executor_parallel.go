@@ -706,7 +706,7 @@ func (e *InlineLoopExecutor) buildParallelIterationInputs(
 		iterInputs[k] = v
 	}
 	if len(e.subWorkflow.GetInputs()) > 0 {
-		iterInputs = ApplyDefaults(iterInputs, e.subWorkflow.GetInputs())
+		iterInputs = ApplyDefaultsForRuntime(iterInputs, e.subWorkflow.GetInputs())
 	}
 	iterInputs["loop"] = map[string]interface{}{"iteration": index}
 	iterInputs["iter"] = model.BuildParallelIterContext(index, item, key)

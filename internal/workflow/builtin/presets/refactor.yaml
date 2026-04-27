@@ -3,7 +3,7 @@ description: Code refactoring specialist who reorganizes and improves code struc
   while preserving behavior
 tag: agent
 recommended_skills:
-  - refactoring-patterns
+  - refactor
 params:
   spawn_presets:
   - researcher

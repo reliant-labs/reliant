@@ -1,0 +1,63 @@
+# Start from deai: skip all earlier phases via router
+#
+# Tests that the classify router can route to deai_prep, skipping earlier phases.
+
+name: start_from_deai
+description: Router routes to deai_prep, skipping all phases through distribution
+
+inputs:
+  yield: false
+
+events:
+  # Context intake: existing final artifact should be enough
+  - node: context_intake
+    output:
+      response_text: "Existing final blog post artifact is the relevant context."
+
+  # Router selects deai_prep as starting point
+  - node: classify
+    output:
+      selected_node: deai_prep
+      reasoning: "Content is finalized and needs de-AI treatment."
+
+  # De-AI Prep
+  - node: deai_prep
+    output:
+      response_text: "Manifest written with 10 paragraphs."
+
+  # De-AI Loop — 1 iteration then done
+  - node: deai_loop.rewrite
+    output:
+      response_text: "PARAGRAPH_INDEX: 0\nNO_ISSUES: true"
+  - node: deai_loop.select
+    output:
+      response_text: "SELECTED: ORIGINAL\nSTATUS: done"
+  - node: deai_loop.check_continue
+    output:
+      exit_code: 1
+
+  # Reddit Summary
+  - node: reddit_summary
+    output:
+      response_text: "Reddit post written."
+
+expect:
+  outcome: completed
+  reached:
+    - context_intake
+    - classify
+    - deai_prep
+    - deai_loop
+    - reddit_summary
+    - validate_artifacts
+    - complete
+  not_reached:
+    - topic_discovery
+    - research_brief
+    - writing
+    - copyedit
+    - da_content
+    - da_style
+    - evaluation
+    - visual_generation
+    - distribution

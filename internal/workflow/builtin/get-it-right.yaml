@@ -24,7 +24,6 @@ description: |
     review forks — memo'd across iterations. Builds on its own prior analysis + check results via inject.
     refactor forks — gets review feedback via inject (node references).
 
-discuss: true
 entry: [attempt]
 
 inputs:
@@ -36,7 +35,7 @@ inputs:
 
   max_retries:
     type: integer
-    default: 10
+    default: 5
     min: 1
     max: 10
     description: Maximum implement→review→refactor iterations
@@ -103,29 +102,25 @@ inputs:
     description: Port the application runs on (for UX reviewer).
 
   implementer_preset:
-    type: string
+    type: preset
+    tags: [agent]
     default: general
     description: |
       Preset applied to the implementer agent. Swap for role-specific behavior
       (e.g. "ux" for frontend work, "backend" for server work). Sets the
       implementer's system_prompt, tools, and spawn_presets as one unit.
 
-  reviewer_preset:
-    type: string
-    default: general
-    description: |
-      Preset applied to the reviewer structured-agent. Usually "general" is
-      fine; override when the review rubric itself needs a specialist lens.
-
 nodes:
   - id: attempt
     type: loop
     while: >
-      (has(outputs.eval_strategy) && outputs.eval_strategy != "pass"
+      ((has(outputs.eval_strategy) && outputs.eval_strategy != "pass"
+        && !(outputs.eval_strategy == "stuck" && !outputs.has_feedback)
        || (has(outputs.lint_exit) && outputs.lint_exit != 0)
        || (has(outputs.test_exit) && outputs.test_exit != 0)
        || (has(outputs.build_exit) && outputs.build_exit != 0))
-      && iter.iteration < inputs.max_retries
+      && iter.iteration < inputs.max_retries)
+      || outputs.has_feedback == true
     ask: "inputs.ask"
     inline:
       entry: [implement]
@@ -141,6 +136,7 @@ nodes:
               ? 'continue' : 'pass'}}
         review_grade: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null && has(nodes.review.response.grade) ? nodes.review.response.grade : 'pass'}}"
         review_feedback: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null ? nodes.review.response.feedback : ''}}"
+        has_feedback: "{{has(nodes.stuck_checkpoint) && has(nodes.stuck_checkpoint.has_feedback) ? nodes.stuck_checkpoint.has_feedback : (has(nodes.review_checkpoint) && has(nodes.review_checkpoint.has_feedback) ? nodes.review_checkpoint.has_feedback : (has(nodes.check_failure_checkpoint) && has(nodes.check_failure_checkpoint.has_feedback) ? nodes.check_failure_checkpoint.has_feedback : false))}}"
 
       nodes:
         - id: implement
@@ -224,11 +220,16 @@ nodes:
         - id: join_checks
           type: join
 
+        - id: check_failure_checkpoint
+          type: ask_question
+          args:
+            metadata: '{"type":"ask_user","questions":[{"question":"Verification has failed across multiple attempts. Continue retrying automatically, or provide guidance before the next attempt?","options":[{"label":"Continue","description":"Continue retrying with the latest lint/test/build output"},{"label":"Provide feedback","description":"Give instructions or context for the next implementation attempt"}]}]}'
+
         - id: review
           type: workflow
           ref: builtin://structured-agent
           presets:
-            default: "{{inputs.reviewer_preset}}"
+            default: code_reviewer
           args:
             model: "{{inputs.model}}"
             mode: "{{inputs.mode}}"
@@ -250,11 +251,17 @@ nodes:
                     fail — implementation has blocking issues that must be fixed.
                 strategy:
                   type: string
-                  enum: ["pass", "continue", "refactor"]
+                  enum: ["pass", "continue", "refactor", "stuck"]
                   description: |
                     "pass" — implementation is correct and complete. Break the loop.
                     "continue" — implementation is incomplete or has minor issues. Loop back to implement.
                     "refactor" — approach is fundamentally wrong. The refactor agent will undo the problematic work, then the next implement iteration starts fresh with your insights.
+                    "stuck" — LAST RESORT. Use ONLY when:
+                      (a) The refactor agent already tried and the same fundamental problem persists, OR
+                      (b) The issue is NOT a coding problem — it's a tooling failure, environment issue,
+                          missing dependency, broken CLI command, or something else outside the user's code.
+                    Do NOT use "stuck" for normal implementation difficulties — use "continue" or "refactor" first.
+                    "stuck" pauses the workflow and escalates to the user for help.
                 feedback:
                   type: string
                   description: |
@@ -278,7 +285,7 @@ nodes:
                 - Test: {{inputs.test_command == '' ? 'skipped' : (nodes.test.exit_code == 0 ? 'passed' : 'FAILED')}}
                 - Build: {{inputs.build_command == '' ? 'skipped' : (nodes.build.exit_code == 0 ? 'passed' : 'FAILED')}}
 
-                {{inputs.start_app_command != '' ? 'The application is running at: http://localhost:' + string(inputs.app_port) + ' — spawn the ux_reviewer to audit it via Chrome DevTools.' : ''}}
+                {{inputs.start_app_command != '' ? 'The application is running at: http://localhost:' + string(inputs.app_port) + ' — load the ux-review-methodology skill to audit it via Chrome DevTools.' : ''}}
 
                 {{has(inputs.review_instructions) && inputs.review_instructions != '' ? inputs.review_instructions : 'Analyze the implementation attempt. Your prior reviews (if any) are in this thread — use them to track progress across attempts.\n\nYour job:\n1. Is the implementation correct and complete? Grade it.\n2. Decide the strategy: pass, continue, or refactor.\n3. Write detailed feedback for the next attempt.\n\n**Your feedback is the primary bridge to the next attempt.**\nThe next implement agent starts with a fresh fork but sees your accumulated review feedback and implementation summaries on the parent thread.\nBe thorough: describe what worked, what didn\'t, what patterns in the codebase matter, and what approach should be taken.\n\n**Strategy guidance:**\n- **pass**: implementation is correct and complete. Break the loop.\n- **continue**: incomplete but approach is sound. Loop back, skip refactor.\n- **refactor**: fundamentally wrong. Refactor agent will UNDO the work, next attempt starts fresh with your feedback.\n\n**Bias toward refactoring** for complex changes that fight the codebase\'s patterns.\nFor trivial changes (CSS, spacing, config): bias toward `pass`.'}}
           save_message:
@@ -320,6 +327,16 @@ nodes:
 
                 After undoing, summarize what was reverted and what state the workspace is in.
 
+        - id: review_checkpoint
+          type: ask_question
+          args:
+            metadata: '{"type":"ask_user","questions":[{"question":"Review complete. Here are the findings — would you like to continue with the recommended strategy, or provide guidance?","options":[{"label":"Continue","description":"Continue with the recommended strategy"},{"label":"Provide feedback","description":"Give feedback or change direction"}]}]}'
+
+        - id: stuck_checkpoint
+          type: ask_question
+          args:
+            metadata: '{"type":"ask_user","questions":[{"question":"The workflow is stuck on a problem that appears to be outside the codebase (tooling, environment, or infrastructure issue). Human intervention is needed.","options":[{"label":"I fixed it, continue","description":"I resolved the external issue — retry the implementation"},{"label":"Provide guidance","description":"Give specific instructions on how to work around this"},{"label":"Stop","description":"End the workflow here"}]}]}'
+
       edges:
         - from: implement
           default: [lint]
@@ -338,13 +355,21 @@ nodes:
         - from: join_checks
           cases:
             - condition: >
+                (nodes.lint.exit_code != 0 || nodes.test.exit_code != 0 || nodes.build.exit_code != 0)
+                && iter.iteration >= 2
+              to: [check_failure_checkpoint]
+            - condition: >
                 nodes.lint.exit_code != 0 || nodes.test.exit_code != 0 || nodes.build.exit_code != 0
               to: []
           default: [review]
         - from: review
           cases:
+            - condition: "has(nodes.review.response) && nodes.review.response.strategy == 'stuck'"
+              to: [stuck_checkpoint]
             - condition: "has(nodes.review.response) && nodes.review.response.strategy == 'refactor'"
               to: [refactor]
+            - condition: "inputs.ask && has(nodes.review.response) && nodes.review.response.strategy != 'pass'"
+              to: [review_checkpoint]
           default: []
 
 outputs:
@@ -356,5 +381,6 @@ outputs:
   test_exit: "{{nodes.attempt.test_exit}}"
   build_exit: "{{nodes.attempt.build_exit}}"
   iterations: "{{nodes.attempt._iterations}}"
+  stuck: "{{nodes.attempt.eval_strategy == 'stuck'}}"
 
 edges: []

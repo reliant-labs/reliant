@@ -1131,9 +1131,7 @@ message Workflow {
   repeated string entry = 9;
   // APIVersion specifies the schema version. Optional, for future compatibility.
   string api_version = 10;
-  // Discuss enables a lightweight discussion mode when the workflow is paused.
-  // When true, users can chat with the LLM without resuming workflow execution.
-  bool discuss = 11;
+  reserved 11; // was: discuss (removed: always enabled when paused)
   // Daemon specifies the default daemon for tool execution in this workflow.
   // Can be overridden per-node. Supports string shorthand ("local"),
   // structured object ({type: "cloud"}), or CEL expression ("{{ params.daemon }}").

@@ -649,7 +649,7 @@ func (e *InlineLoopExecutor) buildIterationInputs() (map[string]interface{}, err
 		iterInputs[key] = value
 	}
 	if len(e.subWorkflow.GetInputs()) > 0 {
-		iterInputs = ApplyDefaults(iterInputs, e.subWorkflow.GetInputs())
+		iterInputs = ApplyDefaultsForRuntime(iterInputs, e.subWorkflow.GetInputs())
 	}
 	iterInputs["loop"] = map[string]interface{}{"iteration": e.iteration}
 	iterInputs["iter"] = e.buildIterCtx()

@@ -24,7 +24,6 @@ description: |
     - "continue" — implementation is incomplete, go back to implement. Skip refactor.
     - "refactor" — approach is fundamentally wrong. Undo, then fresh attempt.
 
-discuss: true
 entry: [classify]
 
 inputs:

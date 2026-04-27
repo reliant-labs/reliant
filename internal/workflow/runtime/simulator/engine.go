@@ -66,11 +66,10 @@ func (e *Engine) RunScenario(scenario *Scenario) *ScenarioResult {
 		inputs[k] = v
 	}
 
-	// Apply workflow input defaults from schema
-	// This fills in default values for any inputs not provided by the scenario
-	// ApplyDefaults produces nested structure directly for CEL access
+	// Apply workflow input defaults from schema. Simulator execution mirrors runtime
+	// behavior here and inserts zero values after scenario validation has completed.
 	if len(e.workflow.GetInputs()) > 0 {
-		inputs = v2.ApplyDefaults(inputs, e.workflow.GetInputs())
+		inputs = v2.ApplyDefaultsForRuntime(inputs, e.workflow.GetInputs())
 	}
 
 	// Set defaults for common system inputs

@@ -500,7 +500,6 @@ type Chat struct {
 	NeedsRecovery  bool         `protobuf:"varint,26,opt,name=needs_recovery,json=needsRecovery,proto3" json:"needs_recovery,omitempty"`
 	Activity       ChatActivity `protobuf:"varint,27,opt,name=activity,proto3,enum=reliant.v1.ChatActivity" json:"activity,omitempty"`             // Computed activity state (from chats_with_activity view)
 	Unread         bool         `protobuf:"varint,28,opt,name=unread,proto3" json:"unread,omitempty"`                                              // Whether this chat has unseen content (decoupled from activity/state)
-	CanDiscuss     bool         `protobuf:"varint,29,opt,name=can_discuss,json=canDiscuss,proto3" json:"can_discuss,omitempty"`                    // Whether this chat's workflow supports discuss mode when paused
 	ActiveDaemonId *string      `protobuf:"bytes,30,opt,name=active_daemon_id,json=activeDaemonId,proto3,oneof" json:"active_daemon_id,omitempty"` // Active daemon for this session (UI-selectable)
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
@@ -658,13 +657,6 @@ func (x *Chat) GetActivity() ChatActivity {
 func (x *Chat) GetUnread() bool {
 	if x != nil {
 		return x.Unread
-	}
-	return false
-}
-
-func (x *Chat) GetCanDiscuss() bool {
-	if x != nil {
-		return x.CanDiscuss
 	}
 	return false
 }
@@ -4740,7 +4732,7 @@ var File_reliant_v1_chat_proto protoreflect.FileDescriptor
 const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\n" +
 	"\x15reliant/v1/chat.proto\x12\n" +
-	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x17reliant/v1/common.proto\"\x8e\b\n" +
+	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x17reliant/v1/common.proto\"\xf3\a\n" +
 	"\x04Chat\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x14\n" +
@@ -4765,9 +4757,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x10selected_presets\x18\x19 \x03(\v2%.reliant.v1.Chat.SelectedPresetsEntryR\x0fselectedPresets\x12%\n" +
 	"\x0eneeds_recovery\x18\x1a \x01(\bR\rneedsRecovery\x124\n" +
 	"\bactivity\x18\x1b \x01(\x0e2\x18.reliant.v1.ChatActivityR\bactivity\x12\x16\n" +
-	"\x06unread\x18\x1c \x01(\bR\x06unread\x12\x1f\n" +
-	"\vcan_discuss\x18\x1d \x01(\bR\n" +
-	"canDiscuss\x12-\n" +
+	"\x06unread\x18\x1c \x01(\bR\x06unread\x12-\n" +
 	"\x10active_daemon_id\x18\x1e \x01(\tH\x06R\x0eactiveDaemonId\x88\x01\x01\x1aB\n" +
 	"\x14SelectedPresetsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
@@ -4780,7 +4770,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x10_workflow_statusB\x13\n" +
 	"\x11_active_daemon_idJ\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\t\x10\n" +
 	"J\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\b\x18\x10\x19\"\xbd\x01\n" +
+	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\b\x18\x10\x19J\x04\b\x1d\x10\x1e\"\xbd\x01\n" +
 	"\fArchivedChat\x12$\n" +
 	"\x04chat\x18\x01 \x01(\v2\x10.reliant.v1.ChatR\x04chat\x12(\n" +
 	"\rworktree_name\x18\x02 \x01(\tH\x00R\fworktreeName\x88\x01\x01\x123\n" +

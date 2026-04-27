@@ -1,0 +1,135 @@
+# Slide Pipeline Per-Slide Results
+#
+# Tests that slide_pipeline produces per-slide results with mixed verdicts.
+# plan_deck returns 4 slides, slide_pipeline returns 4 results — some pass, some fail.
+#
+# Verifies:
+# - Parallel loop _results are keyed by filename
+# - Mixed verdicts are captured per slide
+# - Pipeline still completes even with per-slide failures (they're review verdicts, not execution failures)
+
+name: slide_review_results
+description: Tests slide_pipeline per-slide results structure with 4 slides, mix of pass and fail verdicts
+
+inputs:
+  mode: auto
+  yield: false
+  website_url: "https://example.com"
+  deck_purpose: seed
+  pitch_deck_dir: "pitch-deck"
+  existing_deck_dir: ""
+
+events:
+  # Phases 1-3: Minimal stubs
+  - node: scrape_website
+    output:
+      response_text: "Company analysis done."
+
+  - node: research_competitors
+    output:
+      response_text: "Competitors analyzed."
+
+  - node: research_market
+    output:
+      response_text: "Market sized."
+
+  - node: founder_interview
+    output:
+      response_text: "Founder brief done."
+
+  # Phase 4a: plan_deck with 4 slides
+  - node: plan_deck
+    output:
+      response_text: "Planned 4 slides."
+      response:
+        narrative_arc: "Traction-first: lead with growth, build to the ask."
+        slides:
+          - filename: "01-hook.md"
+            title: "3,200 downloads in 90 days"
+            purpose: "Lead with traction"
+            key_content: "3,200 downloads, 800 WAU"
+            layout_hint: full-bleed-stat
+            sources: "phase-3-interview/founder-brief.md"
+          - filename: "02-product.md"
+            title: "Multi-agent workflows in your IDE"
+            purpose: "Show the product"
+            key_content: "YAML pipelines, parallel execution"
+            layout_hint: demo-screenshot
+            sources: "phase-1-scrape/website-analysis.md"
+          - filename: "03-market.md"
+            title: "$22.1B by 2028"
+            purpose: "Market validation"
+            key_content: "IDC 2024 market sizing"
+            layout_hint: two-column
+            sources: "phase-2-research/market-sizing.md"
+          - filename: "04-ask.md"
+            title: "Raising $2M seed"
+            purpose: "The ask"
+            key_content: "$2M, 18 months, 3 hires"
+            layout_hint: centered-hero
+            sources: "phase-3-interview/founder-brief.md"
+
+  # Phase 4b: slide_pipeline with mixed results
+  - node: slide_pipeline
+    output:
+      _completed: 4
+      _failed: 0
+      _parallel: true
+      _results:
+        "01-hook.md":
+          response_text: "Wrote hook slide."
+          verdict: pass
+          feedback: "Strong opening with verified traction numbers."
+        "02-product.md":
+          response_text: "Wrote product slide."
+          verdict: fail
+          feedback: "Uses buzzwords: 'seamlessly integrates' and 'comprehensive platform'. Rewrite without AI language."
+        "03-market.md":
+          response_text: "Wrote market slide."
+          verdict: pass
+          feedback: "IDC source cited, bottom-up math shown."
+        "04-ask.md":
+          response_text: "Wrote ask slide."
+          verdict: fail
+          feedback: "Missing specific use-of-funds breakdown. Just says '$2M seed' with no detail."
+
+  # Phase 5: slides_loop passes on first try
+  - node: slides_loop.build_slides
+    output:
+      response_text: "Built 4 slide components."
+
+  - node: slides_loop.start_dev_server
+    output:
+      exit_code: 0
+      stdout: "Dev server started on http://localhost:5174"
+
+  - node: slides_loop.visual_review
+    output:
+      response_text: "Slides pass visual review."
+      response:
+        verdict: pass
+        summary: "Slides look professional. Brand consistent."
+        slide_issues: []
+        brand_consistency: "Matches brand identity."
+        layout_issues: []
+        ai_visual_tells: []
+        typography_issues: []
+      completed: true
+
+  - node: slides_loop.stop_dev_server
+    output:
+      exit_code: 0
+      stdout: ""
+
+expect:
+  outcome: completed
+  reached:
+    - scrape_website
+    - research_competitors
+    - research_market
+    - research_done
+    - founder_interview
+    - plan_deck
+    - slide_pipeline
+    - slides_loop
+    - complete

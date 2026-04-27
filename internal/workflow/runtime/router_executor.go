@@ -3,6 +3,7 @@ package runtime
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -340,6 +341,9 @@ func (r *RouterExecutor) parseNodeRoutingDecision(output *reliantv1.CallLLMOutpu
 		}
 	} else if responseText := output.GetResponseText(); responseText != "" {
 		if err := json.Unmarshal([]byte(responseText), &decision); err != nil {
+			if recoveredDecision, ok := r.parseNodeRoutingDecisionFromProse(responseText); ok {
+				return recoveredDecision, nil
+			}
 			return nil, fmt.Errorf("failed to parse node routing decision JSON: %w (raw: %s)", err, responseText)
 		}
 	} else {
@@ -351,6 +355,41 @@ func (r *RouterExecutor) parseNodeRoutingDecision(output *reliantv1.CallLLMOutpu
 	}
 
 	return &decision, nil
+}
+
+func (r *RouterExecutor) parseNodeRoutingDecisionFromProse(responseText string) (*nodeRouterDecision, bool) {
+	args := model.GetRouterArgs(r.evalResult)
+	if args == nil {
+		args = model.GetRouterArgs(r.node)
+	}
+	if args == nil || len(args.GetNodes()) == 0 {
+		return nil, false
+	}
+
+	selectedNode := ""
+	for _, candidate := range args.GetNodes() {
+		candidateID := strings.TrimSpace(candidate.GetId())
+		if candidateID == "" || !nodeRoutingProseMentionsCandidate(responseText, candidateID) {
+			continue
+		}
+		if selectedNode != "" && selectedNode != candidateID {
+			return nil, false
+		}
+		selectedNode = candidateID
+	}
+	if selectedNode == "" {
+		return nil, false
+	}
+
+	return &nodeRouterDecision{
+		SelectedNode: selectedNode,
+		Reasoning:    "Recovered from unstructured router response mentioning a single candidate node.",
+	}, true
+}
+
+func nodeRoutingProseMentionsCandidate(responseText string, candidateID string) bool {
+	pattern := fmt.Sprintf(`(^|[^A-Za-z0-9_-])%s([^A-Za-z0-9_-]|$)`, regexp.QuoteMeta(candidateID))
+	return regexp.MustCompile(pattern).MatchString(responseText)
 }
 
 // loadCandidates loads workflow metadata for all configured candidates.

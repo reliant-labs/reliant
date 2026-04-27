@@ -14,22 +14,16 @@ params:
   - planner
   - implementer
   - code_reviewer
-  - code_hygiene_reviewer
-  - security_reviewer
-  - performance_reviewer
-  - architect
   - documentation
   - refactor
   - debug
   - tester
-  - reproducer
   - git
   - ux
   tools:
   - tag:default   # Focused default toolset (~18 tools)
   - mcp__chrome-devtools__take_screenshot
   - mcp__chrome-devtools__take_snapshot
-  - mcp__chrome-devtools__navigate_page
   - mcp__chrome-devtools__new_page
   - mcp__chrome-devtools__select_page
   - mcp__chrome-devtools__list_pages
@@ -38,4 +32,4 @@ params:
   - mcp__chrome-devtools__fill
   - mcp__chrome-devtools__press_key
   - mcp__chrome-devtools__evaluate_script
-  - mcp__reliant__component_library
+  - component_library

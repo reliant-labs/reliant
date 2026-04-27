@@ -267,8 +267,8 @@ dev/
 #   -> docs/data/releases/*.yaml
 #   -> docs/changelog.mdx
 #
-# Workflow Builder Preset (from generated docs + runtime reference data):
-#   -> internal/workflow/builtin/presets/workflow_builder.yaml
+# Workflow Builder Skill (from generated docs + runtime reference data):
+#   -> internal/skills/catalog/builtin/workflow-builder/SKILL.md
 
 # Generated directory (intermediate build artifacts)
 generated/
@@ -285,9 +285,6 @@ internal/db/sqlite/generated/
 
 # Generated mocks
 internal/llm/drivers/mocks/
-
-# Generated presets
-internal/workflow/builtin/presets/workflow_builder.yaml
 
 # Generated TypeScript
 web/src/store/shortcutsData.generated.ts

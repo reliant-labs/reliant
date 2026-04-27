@@ -11,7 +11,7 @@ import { PresetPicker } from "./PresetPicker";
 import { ProtoFieldRenderer } from "./ProtoFieldRenderer";
 import { inputDefToSchema } from "../../lib/nodeFieldAdapter";
 import { logger } from "../../lib/logger";
-import { type InputDef, getInputUI, getInputDefault, getInputTag } from "../../lib/inputHelpers";
+import { type InputDef, getInputUI, getInputDefault, getInputTag, getInputMulti } from "../../lib/inputHelpers";
 
 // Workflow inputs from the backend
 export interface WorkflowInputs {
@@ -453,7 +453,7 @@ export function WorkflowParamsPanel({
       const presetSchema = {
         ...schema,
         type: "enum",
-        multi: true,
+        multi: getInputMulti(schema) ?? false,
         enum: matchingPresets.map(p => p.name),
       } as unknown as InputDef;
       return (

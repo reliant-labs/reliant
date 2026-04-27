@@ -331,7 +331,7 @@ func TestLoopWhileConditionWithApplyDefaults(t *testing.T) {
 			"max_iterations": float64(5),
 		}
 
-		result := ApplyDefaults(inputs, schema)
+		result := ApplyDefaultsForRuntime(inputs, schema)
 
 		assert.IsType(t, int64(0), result["max_iterations"],
 			"float64 should be coerced to int64, got %T", result["max_iterations"])
@@ -360,7 +360,7 @@ func TestLoopWhileConditionWithApplyDefaults(t *testing.T) {
 
 		inputs := map[string]interface{}{}
 
-		result := ApplyDefaults(inputs, schema)
+		result := ApplyDefaultsForRuntime(inputs, schema)
 
 		assert.IsType(t, int64(0), result["max_iterations"],
 			"default should be coerced to int64, got %T", result["max_iterations"])
