@@ -147,6 +147,20 @@ func TestBuiltinSkills_DiscoverIncludesReliantConfig(t *testing.T) {
 	require.Contains(t, definition.Body, ".reliant.local/skills")
 }
 
+func TestBuiltinSkills_HaveSkillPath(t *testing.T) {
+	snapshot := Discover(DiscoverInput{ProjectPath: t.TempDir(), LoadFullDefinitions: true})
+
+	for _, def := range snapshot.Definitions {
+		if def.Scope != skillscore.ScopeBuiltin {
+			continue
+		}
+		t.Run(def.Name, func(t *testing.T) {
+			require.NotEmpty(t, def.SkillPath,
+				"builtin skill %q must have a non-empty SkillPath so skill tool load works", def.Name)
+		})
+	}
+}
+
 func TestDiscover_IncludesExternalProviderSkillRoots(t *testing.T) {
 	project := t.TempDir()
 	home := t.TempDir()

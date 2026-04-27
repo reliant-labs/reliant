@@ -301,7 +301,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		// IMPORTANT: Use original Inputs schema (with group structure) NOT allSchemas (flattened).
 		// AllInputs() flattens groups to "GroupName.param" keys which ApplyDefaults can't reconstruct.
 		// The original Inputs schema has group entries which ApplyDefaults handles correctly.
-		input.Inputs = ApplyDefaults(filteredInputs, wfWithPlaceholders.GetInputs())
+		input.Inputs = ApplyDefaultsForRuntime(filteredInputs, wfWithPlaceholders.GetInputs())
 
 		// Restore runtime-injected inputs after ApplyDefaults
 		// (they were filtered out for validation but are needed for CEL evaluation)
@@ -1249,9 +1249,11 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 					evalResult,
 				)
 
-				// Node routing needs a pause controller and workflow context for the CallLLM activity,
-				// but no child execution context, child threads, or thread tracker.
+				// Node routing needs the current execution context so the synthetic CallLLM
+				// activity can load conversation history from the active thread, but it does
+				// not create child threads or use the thread tracker.
 				routerExec = routerExec.
+					WithExecContext(execCtx).
 					WithPauseController(makeThreadPauseCtrl(execCtx.Thread))
 
 				// Launch in workflow.Go for proper Temporal activity context
@@ -1569,7 +1571,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 						// Distinguish between router nodes and regular workflow nodes
 						nodeType := running.Node.GetType()
 						if nodeType == model.NodeTypeRouter && running.IsNodeRouting {
-							// Re-create RouterExecutor for node routing routers (no child context)
+							// Re-create RouterExecutor for node routing routers on the current thread.
 							routerExec := NewRouterExecutor(
 								ctx,
 								workflowID,
@@ -1582,6 +1584,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 								running.EvalResult,
 							)
 							routerExec = routerExec.
+								WithExecContext(execCtx).
 								WithPauseController(makeThreadPauseCtrl(execCtx.Thread))
 
 							routerCopy := routerExec

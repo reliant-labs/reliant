@@ -196,7 +196,7 @@ message Chat {
   bool needs_recovery = 26;
   ChatActivity activity = 27; // Computed activity state (from chats_with_activity view)
   bool unread = 28; // Whether this chat has unseen content (decoupled from activity/state)
-  bool can_discuss = 29; // Whether this chat's workflow supports discuss mode when paused
+  reserved 29; // was: can_discuss (removed: always enabled when paused)
   optional string active_daemon_id = 30; // Active daemon for this session (UI-selectable)
 }
 

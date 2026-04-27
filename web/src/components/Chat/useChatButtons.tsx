@@ -31,7 +31,6 @@ interface UseChatButtonsProps {
 
   // Discuss
   isDiscussMode?: boolean;
-  canDiscuss?: boolean;
   onToggleDiscuss?: () => void;
   isPaused?: boolean;
 
@@ -56,7 +55,6 @@ export function useChatButtons({
   forceStreaming = false,
   onToggleForceStreaming,
   isDiscussMode = false,
-  canDiscuss = false,
   onToggleDiscuss,
   isPaused = false,
   compact = false,
@@ -163,8 +161,8 @@ export function useChatButtons({
       </ChatButton>
     ),
 
-    // Discuss button - shown when workflow is paused and supports discuss mode
-    discuss: canDiscuss && isPaused && onToggleDiscuss ? (
+    // Discuss button - shown when workflow is paused
+    discuss: isPaused && onToggleDiscuss ? (
       <ChatButton
         key="discuss"
         onClick={onToggleDiscuss}

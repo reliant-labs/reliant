@@ -12,6 +12,8 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	toolspkg "github.com/reliant-labs/reliant/internal/llm/tools"
+	skillscatalog "github.com/reliant-labs/reliant/internal/skills/catalog"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 )
 
@@ -172,18 +174,20 @@ func TestPresetNamesAreUnique(t *testing.T) {
 
 func TestPresetToolsAreValid(t *testing.T) {
 	presets := loadAllPresets(t)
+	knownToolNames := knownRegistryToolNames()
+	knownToolTags := knownRegistryToolTags()
 
 	for name, preset := range presets {
 		t.Run(name, func(t *testing.T) {
-			tools, ok := preset.Params["tools"]
+			toolsRaw, ok := preset.Params["tools"]
 			if !ok {
 				// Preset doesn't specify tools
 				return
 			}
 
-			toolsList, ok := tools.([]any)
+			toolsList, ok := toolsRaw.([]any)
 			if !ok {
-				t.Errorf("tools should be a list, got %T", tools)
+				t.Errorf("tools should be a list, got %T", toolsRaw)
 				return
 			}
 
@@ -192,17 +196,49 @@ func TestPresetToolsAreValid(t *testing.T) {
 				require.True(t, ok, "tool at index %d should be a string", i)
 				assert.NotEmpty(t, toolStr, "tool at index %d should not be empty", i)
 
-				// Basic validation of tool format
 				// Tools can be:
 				// - Simple names: "view", "edit", "bash"
 				// - Tag references: "tag:default", "tag:search", "tag:mcp"
-				// - Spawn references: "spawn:..." (shouldn't be in tools list though)
+				// - External MCP names: "mcp__server__tool"
 				if strings.HasPrefix(toolStr, "spawn:") {
 					t.Errorf("spawn references should not be in tools list: %q", toolStr)
+					continue
 				}
+				if strings.HasPrefix(toolStr, "mcp__reliant__") {
+					t.Errorf("preset tools must use built-in tool names, not Claude Code transport aliases: %q", toolStr)
+					continue
+				}
+				if strings.HasPrefix(toolStr, "mcp__") {
+					continue
+				}
+				if strings.HasPrefix(toolStr, "tag:") {
+					tag := strings.TrimPrefix(toolStr, "tag:")
+					assert.True(t, knownToolTags[tag], "tool tag %q at index %d is not registered", tag, i)
+					continue
+				}
+
+				assert.True(t, knownToolNames[toolStr], "tool %q at index %d is not registered", toolStr, i)
 			}
 		})
 	}
+}
+
+func knownRegistryToolNames() map[string]bool {
+	knownToolNames := make(map[string]bool)
+	for _, tool := range toolspkg.GetToolRegistry() {
+		knownToolNames[tool.Name] = true
+	}
+	return knownToolNames
+}
+
+func knownRegistryToolTags() map[string]bool {
+	knownToolTags := make(map[string]bool)
+	for _, tool := range toolspkg.GetToolRegistry() {
+		for _, tag := range tool.Tags {
+			knownToolTags[string(tag)] = true
+		}
+	}
+	return knownToolTags
 }
 
 func TestPresetSpawnPresetsAreValid(t *testing.T) {
@@ -301,8 +337,6 @@ func TestAffectedPresetsResolveForCodex(t *testing.T) {
 
 	affectedPresets := []string{
 		"documentation.yaml",
-		"performance_reviewer.yaml",
-		"code_hygiene_reviewer.yaml",
 		"refactor.yaml",
 		"tester.yaml",
 	}
@@ -327,6 +361,35 @@ func TestAffectedPresetsResolveForCodex(t *testing.T) {
 			require.NoError(t, err, "preset %q should resolve for Codex", presetName)
 			assert.NotEmpty(t, resolved.Definition.ID, "preset %q should resolve to a concrete model for Codex", presetName)
 		})
+	}
+}
+
+func TestPresetRecommendedSkillsExist(t *testing.T) {
+	// Build set of known builtin skill paths (including nested sub-skills)
+	knownSkills := make(map[string]bool)
+	fs.WalkDir(skillscatalog.BuiltinSkillsFS, "builtin", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || !d.IsDir() {
+			return nil
+		}
+		// Check if this directory contains a SKILL.md
+		if _, readErr := fs.ReadFile(skillscatalog.BuiltinSkillsFS, path+"/SKILL.md"); readErr == nil {
+			// Convert "builtin/code-review/security-review" -> "code-review/security-review"
+			skillPath := strings.TrimPrefix(path, "builtin/")
+			knownSkills[skillPath] = true
+		}
+		return nil
+	})
+	require.NotEmpty(t, knownSkills, "should find builtin skills")
+
+	presets := loadAllPresets(t)
+	for name, preset := range presets {
+		for _, skill := range preset.RecommendedSkills {
+			t.Run(name+"/"+skill, func(t *testing.T) {
+				assert.True(t, knownSkills[skill],
+					"preset %q references recommended_skill %q which does not exist as a builtin skill directory",
+					preset.Name, skill)
+			})
+		}
 	}
 }
 

@@ -8,6 +8,8 @@ metadata:
 ---
 # Workflow Builder
 
+You build Reliant workflows. Your goal: create working workflows that solve the user's problem.
+
 ## When to use
 
 - Creating a new Reliant workflow from scratch
@@ -16,7 +18,15 @@ metadata:
 - Writing scenario tests for workflows
 - Understanding workflow patterns and best practices
 
+## Sub-Skills
+
+Load sub-skills as needed with `skill(action="load", path="workflow-builder/<name>")`:
+
+1. **workflow-builder/design-patterns** — Do's and don'ts for thread management, context flow, loops, inputs, prompts, error handling, composition, and token efficiency. Load when building new workflows or reviewing existing ones for quality.
+
 ## Approach
+
+IMPORTANT: You are given a workflow draft ID in the system message. Use this ID for all workflow operations.
 
 Follow the 6-step process:
 
@@ -123,7 +133,7 @@ Load these with `load_tool` as needed:
 
 ## CEL Reference
 
-> **Authoritative source**: Use `get_cel_reference` tool for the complete, auto-generated reference. This section covers essential patterns and quick-lookup tables.
+> Auto-generated from `internal/workflow/reference`. Use `get_cel_reference` for the complete authoritative reference.
 
 ### Syntax rules
 
@@ -134,53 +144,53 @@ Load these with `load_tool` as needed:
 
 ### Namespaces
 
-| Namespace | Description |
-|-----------|-------------|
-| `inputs.*` | Workflow input values passed at invocation |
-| `iter.*` | Loop iteration context (iteration count, first/last flags) |
-| `nodes.*` | Output from completed nodes (`nodes.<id>.<field>`) |
-| `output.*` | Current activity output (for `save_message` context) |
-| `outputs.*` | Loop iteration outputs for `while` condition evaluation |
-| `thread.*` | Current thread context (token_count, message_count) |
-| `trigger.*` | Trigger context (message, attachments) for triggered workflows |
-| `workflow.*` | Workflow execution context (id, name, run_id, session_id, path, branch, mode) |
-
-#### `workflow` fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `workflow.id` | string | Workflow execution ID (unique per run) |
-| `workflow.name` | string | Workflow definition name |
-| `workflow.run_id` | string | Temporal run ID |
-| `workflow.session_id` | string | Session ID |
-| `workflow.path` | string | Working directory path |
-| `workflow.worktree_path` | string | Git worktree path (if applicable) |
-| `workflow.branch` | string | Current git branch |
-| `workflow.mode` | string | Execution mode (auto, manual, plan) |
+| Namespace | Description | Fields |
+|-----------|-------------|--------|
+| `inputs.*` | Workflow input values passed at invocation | workflow-specific |
+| `iter.*` | Loop iteration context (iteration count, first/last flags) | `iteration` |
+| `nodes.*` | Output from completed nodes (nodes.<id>.<field>) | workflow-specific |
+| `output.*` | Current activity output (for save_message context) | workflow-specific |
+| `outputs.*` | Loop iteration outputs for while condition evaluation | workflow-specific |
+| `thread.*` | Current thread context (token_count, message_count) | workflow-specific |
+| `trigger.*` | Trigger context (message, attachments) for triggered workflows | workflow-specific |
+| `workflow.*` | Workflow execution context (id, name, run_id, etc.) | `id`, `name`, `run_id`, `session_id`, `path`, `worktree_path`, `branch`, `mode` |
 
 #### `iter` fields
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `iter.iteration` | int | Current loop iteration (0-indexed) |
+| `iter.iteration` | `int` | Current loop iteration (0-indexed) |
+
+#### `workflow` fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `workflow.branch` | `string` | Current git branch (empty if not in git repo) |
+| `workflow.id` | `string` | Workflow execution ID (unique per run) |
+| `workflow.mode` | `string` | Execution mode (auto, manual, plan) |
+| `workflow.name` | `string` | Workflow definition name |
+| `workflow.path` | `string` | Working directory path |
+| `workflow.run_id` | `string` | Workflow run ID (Temporal run ID) |
+| `workflow.session_id` | `string` | Session ID for the workflow |
+| `workflow.worktree_path` | `string` | Git worktree path (if in a worktree) |
 
 ### Key functions
 
-| Function | Example |
-|----------|--------|
-| `parseJson(string) -> dyn` | `parseJson(nodes.run.stdout)` |
-| `toJson(dyn) -> string` | `toJson(nodes.llm.tool_calls)` |
-| `coalesce(dyn, dyn) -> dyn` | `coalesce(inputs.name, "default")` |
-| `getOrDefault(map, key, default) -> dyn` | `getOrDefault(inputs, "mode", "auto")` |
-| `now() -> string` | `now()` |
-| `parseDuration(string) -> double` | `parseDuration("5m") == 300.0` |
-| `spawn(string, list) -> string` | `spawn("builtin://agent", ["general", "researcher"])` |
-| `string.trimPrefix(string) -> string` | `nodes.run.stdout.trimPrefix("Error: ")` |
-| `string.trimSuffix(string) -> string` | `nodes.run.stdout.trimSuffix("\n")` |
-| `string.replace(string, string) -> string` | `nodes.llm.response_text.replace("\n", " ")` |
-| `string.split(string) -> list(string)` | `nodes.run.stdout.split("\n")` |
-| `list.join(string) -> string` | `["a", "b"].join(", ")` |
-| `string.format(list) -> string` | `"Hello %s, you have %d items".format([name, count])` |
+| Function | Description | Example |
+|----------|-------------|--------|
+| `coalesce(dyn, dyn) -> dyn` | Return first non-null/non-empty argument | `coalesce(inputs.name, "default")` |
+| `string.format(list) -> string` | Format a string with positional arguments | `"Hello %s, you have %d items".format([name, count])` |
+| `getOrDefault(map, key, default) -> dyn` | Safely access a map key with a fallback default value | `getOrDefault(inputs, "mode", "auto")` |
+| `list.join(string) -> string` | Join list elements with separator | `["a", "b"].join(", ")` |
+| `now() -> string` | Return current time as RFC3339 string | `now()` |
+| `parseDuration(string) -> double` | Parse a Go duration string and return seconds as a number | `parseDuration("5m") == 300.0` |
+| `parseJson(string) -> dyn` | Parse a JSON string into a dynamic value | `parseJson(nodes.run.stdout)` |
+| `string.replace(string, string) -> string` | Replace all occurrences of old with new | `nodes.llm.response_text.replace("\n", " ")` |
+| `spawn(string, list) -> string` | Generate a spawn directive for a child workflow with presets | `spawn("builtin://agent", ["general", "researcher"])` |
+| `string.split(string) -> list(string)` | Split string by separator | `nodes.run.stdout.split("\n")` |
+| `toJson(dyn) -> string` | Serialize a value to a JSON string | `toJson(nodes.llm.tool_calls)` |
+| `string.trimPrefix(string) -> string` | Remove prefix from string | `nodes.run.stdout.trimPrefix("Error: ")` |
+| `string.trimSuffix(string) -> string` | Remove suffix from string | `nodes.run.stdout.trimSuffix("\n")` |
 
 ### Common patterns
 
@@ -200,8 +210,7 @@ condition: "has(nodes.classify) && nodes.classify.response_data.route.category =
 # Safe navigation with ?.
 condition: "nodes.result.?error_message == null"
 
-# Parse JSON from a command output
-# (in a CEL-interpolated field)
+# Parse JSON from command output in an interpolated field
 result: "{{parseJson(nodes.run.stdout)}}"
 
 # Coalesce to provide defaults
@@ -219,44 +228,214 @@ condition: "has(nodes.check) && nodes.check.exit_code == 0"
 # Good — safe navigation
 condition: "nodes.result.?data != null"
 
-# Bad — will error if node was skipped or field doesn't exist
+# Bad — errors if node was skipped or field doesn't exist
 condition: "nodes.check.exit_code == 0"
 ```
+
+## Builtin Workflows
+
+> Auto-generated from `internal/workflow/builtin/*.yaml`. Reference via `builtin://<name>` in workflow nodes.
+
+| Name | Description |
+|------|-------------|
+| `agent` | Standard interactive agent. Loops while LLM returns tool calls, returns when LLM responds with no tool calls. Will always start on a thread that is seeded with the user's message. User interaction occurs outside of the workflow. Uses inline save_message for frontend activity association. |
+| `auditing-agent` | Agent with per-turn audit oversight. Main agent generates response, auditor (cheap model) reviews it. If denied, guidance is injected and tools are NOT executed. If approved, response is saved and tools run. Main agent response is deferred until audit approval to keep thread clean. The auditor replaces the manual approval gate — there is no separate "mode" input because every turn is automatically audited. |
+| `blog-content-pipeline` | Structured content pipeline for producing technical blog posts for Reliant Labs. |
+| `bmad-lite` | BMAD-Lite — Simplified BMAD methodology with persona-driven planning. Inspired by https://github.com/bmad-code-org/BMAD-METHOD |
+| `default-router` | Default workflow router — classifies the user's request and dispatches to the best strategy from a curated set of workflows. |
+| `discovery-relay` | Discovery Relay — iterative waves with progressive knowledge transfer. |
+| `env-setup` | Environment isolation pipeline: [setup → validate] (loop) → complete. Analyzes any codebase, sets up dynamic ports, isolated databases, worktree-named processes, language-appropriate hot-reload, consolidated logging (including browser console capture), and writes all state to .reliant/ephemeral/. Validation agent tests the full setup in a feedback loop until everything works. |
+| `forge-one-shot` | Build a production Forge app from a conversation in five phases. |
+| `get-it-right` | Get It Right — for complex brownfield codebases where LLMs paper-mache code on top. The insight: sometimes you need to try and fail to truly understand the codebase. |
+| `gsd` | GSD (Get Shit Done) — A pragmatic, no-ceremony workflow focused on rapid parallel execution. Inspired by https://github.com/gsd-build/get-shit-done. |
+| `implement-review` | Generic implement → review loop. Implements changes then reviews them in a structured cycle until the reviewer approves or max iterations are reached. |
+| `migrate` | Guided migration workflow for importing useful configuration from Claude Code, Cursor, Codex, or Windsurf into Reliant. |
+| `one-ring` | Unified development pipeline: planning → write_tests → [get-it-right loop] → complete. |
+| `parallel-compete` | 3 agents implement in parallel worktrees, reviewer picks winner or synthesizes. Thread mode: new (isolated context). Each worktree is independent. Apply path: use_winner copies via rsync, synthesize merges best parts. |
+| `parallel-loop-sample` | Minimal sample showing a parallel loop over items with a custom key. Each item runs a builtin agent in parallel and the workflow routes based on iteration count, while scenarios assert the keyed aggregate result map. |
+| `pitch-deck` | Generate an investor pitch deck from a company website with competitive research and founder interview. Includes parallel per-slide write+review pipeline and visual review via puppeteer screenshots + image attachments. |
+| `ralph-wiggum` | Ralph Wiggum — brute-force iteration for complex tasks. |
+| `structured-agent` | Agent that requires structured output via response tool. Unlike builtin://agent which returns on end_turn, this loops until the response tool is called. If LLM responds without tools, a reminder is injected. Access output via output.response (structured data) and output.completed (boolean). |
+
+
+## Node Types
+
+> Auto-generated from `reference.ListNodeTypes()` / `reference.GetNodeType()`. Use `get_schema(name="<type>")` for full field documentation.
+
+### Common Fields (all nodes)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | string | Node type (required) |
+| `id` | string | Unique node ID (required) |
+| `condition` | CEL | Skip if false; on join nodes: `all` or `any` |
+| `thread` | ThreadConfig | Thread mode: `inherit`, `new`, `fork` |
+| `timeout` | string | Override timeout (e.g., `5m`) |
+| `save_message` | SaveMessageConfig | Auto-save message after completion |
+
+### Available Types
+
+| Type | Description |
+|------|-------------|
+| `approval` | Pause workflow execution for user approval |
+| `ask_question` | Pause workflow execution to ask the user a question |
+| `call_llm` | Send a prompt to a language model and get a response |
+| `compact` | Conversation context to reduce token usage |
+| `create_worktree` | Create a git worktree for isolated development |
+| `execute_tools` | Execute tool calls from an LLM response |
+| `join` | Wait for parallel branches to complete before continuing |
+| `loop` | Execute a sub-workflow in a loop with conditions |
+| `router` | Route to a workflow or node based on LLM classification |
+| `run` | Execute a shell command |
+| `save_message` | Save a message to the conversation thread |
+| `workflow` | Invoke an agent or sub-workflow |
+
+
+## Input Types
+
+> Auto-generated from `reference.ListInputTypes()` / `reference.GetInputType()`. Use `get_schema(name="<type>")` for full documentation.
+
+| Type | Description |
+|------|-------------|
+| `any` | Generic input accepting any JSON value |
+| `array` | Generic array input |
+| `attachments` | File attachment input |
+| `boolean` | Boolean toggle input |
+| `enum` | Dropdown with predefined values |
+| `group` | Input group for organizing related inputs with preset matching |
+| `integer` | Whole number input with optional min/max |
+| `message` | Primary user message/prompt input |
+| `model` | Model selector dropdown |
+| `number` | Decimal number input with optional min/max |
+| `object` | Structured object with JSON Schema validation |
+| `preset` | Dynamic preset picker filtered by tags |
+| `string` | Text string input with optional validation |
+| `tools` | Tool selector input |
+
+
+## Workflow Structure
+
+> Auto-generated from `generated/docs-source/reference/workflow-schema.md`.
+
+## Workflow
+
+Defines a complete workflow with nodes, edges, inputs, and outputs.
+
+### Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | - |
+| `nodes` | Node[] | No | *Use list_node_types and get_node_type tools for node type details.* |
+| `edges` | Edge[] | No | *See Edge type below.* |
+| `description` | string | No | - |
+| `inputs` | map[string]Input | No | *Use list_input_types and get_input_type tools for input type details.* |
+| `outputs` | map[string]string | No | *CEL expressions mapping output names to values. Use get_cel_reference for CEL syntax.* |
+| `presets` | PresetsConfig | No | - |
+| `entry` | string[] | No | - |
+| `api_version` | string | No | - |
+| `daemon` | CelDaemonSelector | No | - |
+
+## Edge
+
+Connects a source node to destination(s) with conditional routing.
+
+### Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `from` | string | Yes | - |
+| `cases` | EdgeCase[] | No | - |
+| `default` | string[] | No | - |
+
+## EdgeCase
+
+Defines one conditional routing path from an edge.
+
+### Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `to` | string[] | No | - |
+| `condition` | string | No | - |
+| `label` | string | No | - |
 
 ## Scenario Testing
 
 Test workflows by simulating LLM and tool responses without making real API calls.
 
+> Auto-generated schema details from `generated/docs-source/reference/scenario-schema.md`.
+
 ### Scenario fields
 
-| Field | Description |
-|-------|-------------|
-| `name` | Unique scenario identifier (required) |
-| `description` | What this scenario tests |
-| `events` | Simulated events in execution order (required) |
-| `expect` | Expected outcome and assertions |
-| `inputs` | Override workflow inputs |
-| `start_at` | Begin execution at a specific node |
-| `state` | Pre-populate node outputs |
+Scenario defines a complete test case for a workflow.
 
-### Event types
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Name uniquely identifies this scenario. Required. |
+| `apiVersion` | string | No | ApiVersion specifies the schema version. Optional, for future compatibility. |
+| `description` | string | No | Description documents what this scenario tests. |
+| `events` | SimulatedEvent[] | Yes | Events lists the simulated events in execution order. Required. |
+| `expect` | Expectation | No | Expect defines the expected outcome and assertions. Optional. |
+| `inputs` | object | No | Inputs overrides workflow inputs for this scenario. Optional. |
+| `start_at` | string | No | StartAt begins execution at a specific node instead of the entry point. Optional. |
+| `state` | map[string]object | No | State pre-populates node outputs before execution. Optional. |
 
-| Type | Key Fields | Description |
-|------|------------|-------------|
-| `llm_response` | `text` or `tool_calls` | Simulate LLM output |
-| `tool_result` | `tool`, `tool_output` | Simulate tool execution result |
-| `tool_error` | `tool`, `tool_output` | Simulate tool failure |
-| `user_input` | `text` | Simulate user message |
+### Event fields
 
-### Expectations
+SimulatedEvent represents a single mocked event in a test scenario.
 
-| Field | Description |
-|-------|-------------|
-| `outcome` | `completed` or `error` |
-| `reached` | Nodes that must be scheduled |
-| `not_reached` | Nodes that must NOT be scheduled |
-| `error_contains` | Substring that must appear in the error message |
-| `node_outputs` | Assert specific output values from nodes |
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `node` | string | No | Node targets a specific node using dot-notation for qualified IDs. |
+| `output` | object | No | Output is the raw mock output (mutually exclusive with Type). |
+| `type` | string | No | Type specifies the event type for automatic conversion. |
+| `text` | string | No | Text is the LLM response text (for type: llm_response). |
+| `tool_calls` | SimToolCall[] | No | ToolCalls are tool invocations from the LLM (for type: llm_response). |
+| `tool` | string | No | Tool is the tool name (for type: tool_result or tool_error). |
+| `tool_output` | object | No | ToolOutput is the tool execution result (for type: tool_result). |
+
+### Expectation fields
+
+Expectation defines what to verify after a scenario runs.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `outcome` | string | No | Outcome specifies whether the workflow should complete or error. |
+| `reached` | string[] | No | Reached lists nodes that must be scheduled during the scenario (completed, skipped, or errored). |
+| `not_reached` | string[] | No | NotReached lists nodes that must NOT be scheduled during the scenario. |
+| `completed` | string[] | No | Completed lists nodes that must have executed successfully. |
+| `skipped` | string[] | No | Skipped lists nodes that must have been skipped due to a false condition. |
+| `error_contains` | string | No | ErrorContains specifies a substring that should appear in the error message. |
+| `error_node` | string | No | ErrorNode specifies which node should produce the error. |
+| `node_outputs` | map[string]object | No | NodeOutputs specifies expected output values for specific nodes. |
+
+### Targeting Nodes
+
+The `node` field on events targets specific nodes by ID:
+
+- **Top-level nodes**: `node: "call_llm"`
+- **Inner loop nodes**: `node: "loop_id.inner_node_id"` (dot-separated)
+- **Inner workflow nodes**: `node: "workflow_id.inner_node_id"` (for `type: workflow` with `inline:`)
+- **Nested structures**: `node: "outer.inner.node_id"`
+
+For inline loops and inline workflow nodes, the simulator executes each inner node individually, evaluates conditions, and tracks skipped nodes with their qualified IDs.
+For ref-based nodes (external workflow reference), the node is mocked as a black box using the ref name.
+
+**Event matching:**
+- Events with a `node` field are matched to that specific node
+- Events without a `node` field are consumed sequentially in order
+- Multiple events with the same node are consumed in order per-node (use for multi-iteration loops)
+
+### Event Types
+
+| Type | Description | Required Fields |
+|------|-------------|-----------------|
+| `llm_response` | Simulate LLM returning text and/or tool_calls | `text` or `tool_calls` |
+| `tool_result` | Simulate tool returning output | `tool`, `tool_output` |
+| `tool_error` | Simulate tool error | `tool`, `tool_output` (with error) |
+| `llm_error` | Simulate LLM error | `output` (with error structure) |
+| `user_input` | Simulate user message | `text` |
 
 ### Example scenario
 
@@ -266,7 +445,9 @@ description: Agent calls a tool and completes
 events:
   - node: agent_loop.call_llm
     type: llm_response
-    tool_calls: [{name: bash, input: {command: ls}}]
+    tool_calls:
+      - name: bash
+        input: {command: ls}
   - node: agent_loop.execute_tools
     type: tool_result
     tool: bash
@@ -289,17 +470,6 @@ expect:
 - **Use `state`** — to pre-populate node outputs when testing downstream logic
 - **Name scenarios descriptively** — e.g., `error_handling_api_failure` not `test_3`
 - **Try to break it** — simulate unexpected LLM responses, tool failures, and edge cases. Finding bugs in scenarios is much cheaper than finding them during a real 1-hour workflow run.
-
-### Scenario tools
-
-| Tool | Purpose |
-|------|--------|
-| `write_scenario` | Create a new scenario |
-| `run_scenario` | Execute a scenario and see results |
-| `list_scenarios` | List existing scenarios for a workflow |
-| `view_scenario` | Read a scenario's content |
-| `edit_scenario` | Modify an existing scenario |
-| `delete_scenario` | Remove a scenario |
 
 ## References
 

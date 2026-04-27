@@ -1,0 +1,118 @@
+# Loop Outputs → Downstream Access
+#
+# Tests that loop outputs (slide_pipeline, slides_loop) are accessible
+# from downstream nodes like `complete`.
+#
+# Specifically verifies:
+# - slide_pipeline _completed count is available
+# - slides_loop verdict output is available
+# - The complete node can reference these in its save_message content
+
+name: loop_save_message_self_ref
+description: Loop outputs (slide_pipeline._completed, slides_loop.verdict) are accessible from downstream complete node
+
+inputs:
+  mode: auto
+  yield: false
+  website_url: "https://example.com"
+  deck_purpose: seed
+  pitch_deck_dir: "pitch-deck"
+  existing_deck_dir: ""
+
+events:
+  # Phases 1-3: Minimal stubs
+  - node: scrape_website
+    output:
+      response_text: "Company analysis done."
+
+  - node: research_competitors
+    output:
+      response_text: "Competitors analyzed."
+
+  - node: research_market
+    output:
+      response_text: "Market sized."
+
+  - node: founder_interview
+    output:
+      response_text: "Founder brief done."
+
+  # Phase 4a: plan_deck with 3 slides
+  - node: plan_deck
+    output:
+      response_text: "Planned 3 slides."
+      response:
+        narrative_arc: "Demo-first: open with product, build to traction."
+        slides:
+          - filename: "01-hook.md"
+            title: "What we built"
+            purpose: "Open with the product"
+            key_content: "Developer tool with AI workflows"
+            layout_hint: centered-hero
+            sources: "phase-1-scrape/website-analysis.md"
+          - filename: "02-traction.md"
+            title: "3,200 downloads in 3 months"
+            purpose: "Show early traction"
+            key_content: "3,200 downloads, 800 WAU"
+            layout_hint: full-bleed-stat
+            sources: "phase-3-interview/founder-brief.md"
+          - filename: "03-ask.md"
+            title: "Raising $2M seed"
+            purpose: "Close with the ask"
+            key_content: "$2M seed, 18 months runway"
+            layout_hint: centered-hero
+            sources: "phase-3-interview/founder-brief.md"
+
+  # Phase 4b: slide_pipeline (parallel loop) completes
+  - node: slide_pipeline
+    output:
+      _completed: 3
+      _failed: 0
+      _parallel: true
+      _results:
+        "01-hook.md":
+          response_text: "Wrote hook slide."
+          verdict: pass
+          feedback: "Good."
+        "02-traction.md":
+          response_text: "Wrote traction slide."
+          verdict: pass
+          feedback: "Good."
+        "03-ask.md":
+          response_text: "Wrote ask slide."
+          verdict: pass
+          feedback: "Good."
+
+  # Phase 5: slides_loop passes on first iteration
+  - node: slides_loop.build_slides
+    output:
+      response_text: "Built slides."
+
+  - node: slides_loop.start_dev_server
+    output:
+      exit_code: 0
+      stdout: "Dev server started"
+
+  - node: slides_loop.visual_review
+    output:
+      response:
+        verdict: pass
+        summary: "Slides pass."
+        slide_issues: []
+        brand_consistency: "Matches."
+        layout_issues: []
+        ai_visual_tells: []
+        typography_issues: []
+      completed: true
+
+  - node: slides_loop.stop_dev_server
+    output:
+      exit_code: 0
+
+expect:
+  outcome: completed
+  reached:
+    - plan_deck
+    - slide_pipeline
+    - slides_loop
+    - complete

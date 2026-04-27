@@ -69,29 +69,17 @@ func TestOpenAIFamilyAgentGuidance_PreservesReliantIdentity(t *testing.T) {
 	if !strings.Contains(guidance, "recoverable workspace state") {
 		t.Fatalf("expected guidance to preserve graceful recovery behavior, got: %s", guidance)
 	}
-	if !strings.Contains(guidance, "<personality_and_writing_controls>") {
-		t.Fatalf("expected guidance to include personality and writing controls, got: %s", guidance)
+	if !strings.Contains(guidance, "<reliant_runtime_context>") {
+		t.Fatalf("expected guidance to include runtime context block, got: %s", guidance)
 	}
-	if !strings.Contains(guidance, "calm, direct, practical tone") {
-		t.Fatalf("expected guidance to preserve writing style controls, got: %s", guidance)
+	if !strings.Contains(guidance, "<reliant_execution_model>") {
+		t.Fatalf("expected guidance to include execution model block, got: %s", guidance)
 	}
-	if !strings.Contains(guidance, "<task_update_handling>") {
-		t.Fatalf("expected guidance to include task update handling, got: %s", guidance)
+	if !strings.Contains(guidance, "concise, direct, and friendly") {
+		t.Fatalf("expected guidance to preserve personality traits, got: %s", guidance)
 	}
-	if !strings.Contains(guidance, "<empty_result_recovery>") {
-		t.Fatalf("expected guidance to include empty result recovery, got: %s", guidance)
-	}
-	if !strings.Contains(guidance, "explicitly marked [blocked]") {
-		t.Fatalf("expected guidance to preserve strengthened completeness contract, got: %s", guidance)
-	}
-	if !strings.Contains(guidance, "routine tool calls") {
-		t.Fatalf("expected guidance to preserve strengthened user updates spec, got: %s", guidance)
-	}
-	if !strings.Contains(guidance, "<frontend_defaults>") {
-		t.Fatalf("expected guidance to preserve frontend defaults block, got: %s", guidance)
-	}
-	if !strings.Contains(guidance, "generic templates") {
-		t.Fatalf("expected guidance to preserve compact frontend quality guidance, got: %s", guidance)
+	if !strings.Contains(guidance, "update_plan") {
+		t.Fatalf("expected guidance to include planning tool reference, got: %s", guidance)
 	}
 }
 
@@ -135,7 +123,7 @@ func TestConvertMessages_AppendsGuidanceOnceForChatCompletions(t *testing.T) {
 	jsonStr := string(b)
 
 	// json.Marshal escapes angle brackets, so search for the escaped form.
-	if count := strings.Count(jsonStr, `\u003coutput_contract\u003e`); count != 1 {
+	if count := strings.Count(jsonStr, `\u003creliant_runtime_context\u003e`); count != 1 {
 		t.Fatalf("expected shared guidance exactly once in chat completions payload, got %d: %s", count, jsonStr)
 	}
 	if !strings.Contains(jsonStr, "system prompt") {
@@ -152,7 +140,7 @@ func TestResponsesInstructions_AppendsGuidanceOnceForSupportedModel(t *testing.T
 	if !strings.Contains(instructions, "system prompt") {
 		t.Fatalf("expected original prompt in instructions, got: %s", instructions)
 	}
-	if count := strings.Count(instructions, "<output_contract>"); count != 1 {
+	if count := strings.Count(instructions, "<reliant_runtime_context>"); count != 1 {
 		t.Fatalf("expected shared guidance exactly once in responses instructions, got %d", count)
 	}
 }
@@ -185,7 +173,7 @@ func TestConvertMessagesToResponsesInput_UsesSingleDeveloperMessageWithGuidance(
 	jsonStr := string(b)
 
 	// json.Marshal escapes angle brackets, so search for the escaped form.
-	if count := strings.Count(jsonStr, `\u003coutput_contract\u003e`); count != 1 {
+	if count := strings.Count(jsonStr, `\u003creliant_runtime_context\u003e`); count != 1 {
 		t.Fatalf("expected shared guidance exactly once in responses input, got %d: %s", count, jsonStr)
 	}
 	if count := strings.Count(jsonStr, "\"role\":\"developer\""); count != 1 {

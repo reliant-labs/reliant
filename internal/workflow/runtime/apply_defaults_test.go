@@ -46,7 +46,7 @@ func TestApplyDefaultsNilValues(t *testing.T) {
 		assert.Equal(t, "default_value", result["system_prompt"])
 	})
 
-	t.Run("nil value with no default gets zero value", func(t *testing.T) {
+	t.Run("nil value with no default remains missing before validation", func(t *testing.T) {
 		noDefaultSchema := map[string]*reliantv1.Input{
 			"compaction_threshold": {
 				Type: "integer",
@@ -62,8 +62,26 @@ func TestApplyDefaultsNilValues(t *testing.T) {
 
 		result := ApplyDefaults(inputs, noDefaultSchema)
 
-		// Should get zero value for integer, not nil
-		assert.NotNil(t, result["compaction_threshold"])
+		assert.Nil(t, result["compaction_threshold"])
+	})
+
+	t.Run("nil value with no default gets runtime zero value after validation", func(t *testing.T) {
+		noDefaultSchema := map[string]*reliantv1.Input{
+			"compaction_threshold": {
+				Type: "integer",
+				Config: &reliantv1.Input_IntegerInput{
+					IntegerInput: &reliantv1.IntegerInputConfig{},
+				},
+			},
+		}
+
+		inputs := map[string]interface{}{
+			"compaction_threshold": nil,
+		}
+
+		result := ApplyDefaultsForRuntime(inputs, noDefaultSchema)
+
+		assert.Equal(t, int64(0), result["compaction_threshold"])
 	})
 
 	t.Run("nil value in CEL comparison works", func(t *testing.T) {
@@ -71,7 +89,7 @@ func TestApplyDefaultsNilValues(t *testing.T) {
 			"compaction_threshold": nil,
 		}
 
-		result := ApplyDefaults(inputs, schema)
+		result := ApplyDefaultsForRuntime(inputs, schema)
 
 		// Simulate the edge condition that was failing
 		ctx := &wfcel.EdgeEvalContext{
@@ -195,7 +213,7 @@ func TestApplyDefaultsWithGroupInputs(t *testing.T) {
 		assert.Equal(t, "default_value", result["other_input"])
 	})
 
-	t.Run("creates group from scratch when not provided", func(t *testing.T) {
+	t.Run("creates group from scratch when defaults exist", func(t *testing.T) {
 		inputs := map[string]interface{}{
 			"other_input": "provided_value",
 		}
@@ -212,6 +230,51 @@ func TestApplyDefaultsWithGroupInputs(t *testing.T) {
 
 		// Provided value preserved
 		assert.Equal(t, "provided_value", result["other_input"])
+	})
+
+	t.Run("does not create group for missing required nested inputs", func(t *testing.T) {
+		requiredSchema := map[string]*reliantv1.Input{
+			"agent": {
+				Type: "group",
+				Config: &reliantv1.Input_GroupInput{GroupInput: &reliantv1.GroupInputConfig{
+					Inputs: map[string]*reliantv1.Input{
+						"model": {
+							Type: "model",
+							Config: &reliantv1.Input_ModelInput{
+								ModelInput: &reliantv1.ModelInputConfig{},
+							},
+						},
+					},
+				}},
+			},
+		}
+
+		result := ApplyDefaults(map[string]interface{}{}, requiredSchema)
+
+		assert.NotContains(t, result, "agent")
+	})
+
+	t.Run("runtime defaults create group for missing required nested inputs", func(t *testing.T) {
+		requiredSchema := map[string]*reliantv1.Input{
+			"agent": {
+				Type: "group",
+				Config: &reliantv1.Input_GroupInput{GroupInput: &reliantv1.GroupInputConfig{
+					Inputs: map[string]*reliantv1.Input{
+						"max_turns": {
+							Type: "integer",
+							Config: &reliantv1.Input_IntegerInput{
+								IntegerInput: &reliantv1.IntegerInputConfig{},
+							},
+						},
+					},
+				}},
+			},
+		}
+
+		result := ApplyDefaultsForRuntime(map[string]interface{}{}, requiredSchema)
+		agent, ok := result["agent"].(map[string]interface{})
+		require.True(t, ok)
+		assert.Equal(t, int64(0), agent["max_turns"])
 	})
 
 	t.Run("CEL can access nested group values", func(t *testing.T) {
