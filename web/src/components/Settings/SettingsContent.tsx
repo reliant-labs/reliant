@@ -9,7 +9,6 @@ import { NotificationSettings } from "./NotificationSettings";
 import { MCPSettings } from "./MCPSettings";
 import { WorkspacesSection } from "./WorkspacesSection";
 import { BrowserSettings } from "./BrowserSettings";
-import { FeedbackSettings } from "./FeedbackSettings";
 import { TokenSettings } from "./TokenSettings";
 import type { SettingsSection } from "./SettingsNavigation";
 import { useEffect, useState } from "react";
@@ -87,9 +86,6 @@ export function SettingsContent({
     }
     if (activeSection === "tokens") {
       return <TokenSettings />;
-    }
-    if (activeSection === "feedback") {
-      return <FeedbackSettings />;
     }
     if (activeSection === "developer") {
       return <DeveloperSettings />;

@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { 
   Search, Settings, Keyboard, Info, Palette, Shield, 
   FolderOpen, GitBranch, Workflow, Bot, Terminal,
-  Code, MessageSquare
+  Code
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useViewerStore } from "../../store/viewerStore";
@@ -212,18 +212,6 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         keywords: ["version", "info"],
         action: () => {
           setSettingsMode(true, "about");
-          closeAndFocus();
-        },
-      },
-      {
-        id: "feedback",
-        title: "Send Feedback",
-        description: "Report bugs or suggest features",
-        icon: <MessageSquare className="w-4 h-4" />,
-        category: "settings",
-        keywords: ["bug", "report", "feature", "request", "help", "support"],
-        action: () => {
-          setSettingsMode(true, "feedback");
           closeAndFocus();
         },
       },

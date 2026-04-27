@@ -187,9 +187,22 @@ func runMonolith(_ *cobra.Command, _ []string, dataDir *string) error {
 	}
 	logging.Info("✓ Integration server started", "duration", time.Since(serverStartTime))
 
-	// JWT public key: RELIANT_JWT_PUBLIC_KEY env var > embedded Supabase key
-	jwtPublicKey := auth.GetJWTPublicKey()
-	logging.Info("Using ES256 JWT public key")
+	// Auth mode
+	authMode := auth.GetAuthMode()
+	logging.Info("Auth mode resolved", "auth_mode", authMode)
+
+	// JWT configuration from env vars (required for supabase auth, optional otherwise)
+	jwtPublicKey := os.Getenv("RELIANT_JWT_PUBLIC_KEY")
+	jwksURL := os.Getenv("RELIANT_JWKS_URL")
+	if authMode == "supabase" {
+		if jwtPublicKey != "" {
+			logging.Info("Using ES256 JWT public key from RELIANT_JWT_PUBLIC_KEY")
+		} else if jwksURL != "" {
+			logging.Info("Using JWKS endpoint for JWT validation", "url", jwksURL)
+		} else {
+			logging.Info("No JWT key configured; auth will use dev mode or fail in production")
+		}
+	}
 
 	// Generate/load TLS certificates for HTTP/2 support (unless DISABLE_TLS is set)
 	// TLS certificate configuration. Priority:
@@ -213,11 +226,8 @@ func runMonolith(_ *cobra.Command, _ []string, dataDir *string) error {
 		tlsKeyFile = certPaths.KeyFile
 	}
 
-	// CORS origins: default to wildcard in dev, restrictive in production.
-	corsDefault := "https://reliant-prod.web.app,https://reliantlabs.io"
-	if config.IsDevelopmentEnvironment() {
-		corsDefault = "*"
-	}
+	// CORS origins: default to wildcard; hosted deployments override via CORS_ALLOWED_ORIGINS.
+	corsDefault := "*"
 	corsOriginsRaw := envutil.GetEnv("CORS_ALLOWED_ORIGINS", corsDefault)
 	var corsAllowedOrigins []string
 	if corsOriginsRaw == "*" {
@@ -292,6 +302,7 @@ func runMonolith(_ *cobra.Command, _ []string, dataDir *string) error {
 		Port:                grpcPort,
 		BindAddress:         bindAddress,
 		JWTPublicKey:        jwtPublicKey,
+		JWKSURL:             jwksURL,
 		CORSAllowedOrigins:  corsAllowedOrigins,
 		AllowedEmailDomains: allowedEmailDomains,
 		Database:            server.Database(),

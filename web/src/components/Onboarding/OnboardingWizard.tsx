@@ -27,6 +27,7 @@ import { useOnboardingChecklistStore } from "../../store/onboardingChecklistStor
 import { useViewerStore } from "../../store/viewerStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { useProjectStore } from "../../store/projectStore";
+import { useOnboardingFlowStore } from "../OnboardingFlow/onboardingStore";
 import {
   ONBOARDING_STEPS,
   getStepById,
@@ -327,6 +328,7 @@ export function OnboardingWizard() {
   const currentProject = useProjectStore((s) => s.currentProject);
   const isWorkflowMode = useViewerStore((s) => s.isWorkflowMode);
   const isSettingsMode = useViewerStore((s) => s.isSettingsMode);
+  const onboardingFlowState = useOnboardingFlowStore((s) => s.state);
 
   // Load state on mount
   useEffect(() => {
@@ -335,12 +337,16 @@ export function OnboardingWizard() {
     }
   }, [isInitialized, loadState]);
 
-  // Auto-start wizard for first-time users after project loads
+  // Auto-start wizard for first-time users after project loads.
+  // Defer if the new onboarding flow is still active (not_started or in_progress).
   useEffect(() => {
     if (isInitialized && !hasCompletedOnboarding && !isWizardActive && currentProject) {
+      if (onboardingFlowState === "not_started" || onboardingFlowState === "in_progress") {
+        return; // New onboarding overlay is active — defer spotlight tour
+      }
       startWizard();
     }
-  }, [isInitialized, hasCompletedOnboarding, isWizardActive, startWizard, currentProject]);
+  }, [isInitialized, hasCompletedOnboarding, isWizardActive, startWizard, currentProject, onboardingFlowState]);
 
   // Handle view context based on current step
   useEffect(() => {

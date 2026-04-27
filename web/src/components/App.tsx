@@ -4,7 +4,6 @@ import { SentryErrorBoundary } from "./ErrorBoundary";
 import { AuthInitializer } from "./AuthInitializer";
 import { useThemeInitialization } from "../hooks/useThemeInitialization";
 import { useSettingsHydration } from "../hooks/useSettingsHydration";
-import { FeedbackModal } from "./Feedback/FeedbackModal";
 
 export function App() {
   // Initialize theme from database
@@ -15,8 +14,6 @@ export function App() {
 
   return (
     <SentryErrorBoundary>
-      {/* Mounted at the top-level so it works even when the router shows an error boundary */}
-      <FeedbackModal />
       <AuthInitializer>
         <RouterProvider router={router} />
       </AuthInitializer>
