@@ -11,29 +11,34 @@ import (
 )
 
 type mockPATValidator struct {
-	validTokens map[string]string // rawToken -> userID
+	validTokens map[string]mockPATResult // rawToken -> result
 }
 
-func (m *mockPATValidator) ValidatePAT(_ context.Context, rawToken string) (string, string, error) {
-	if userID, ok := m.validTokens[rawToken]; ok {
-		return userID, "pat-id", nil
+type mockPATResult struct {
+	userID   string
+	daemonID string
+}
+
+func (m *mockPATValidator) ValidatePAT(_ context.Context, rawToken string) (string, string, string, error) {
+	if result, ok := m.validTokens[rawToken]; ok {
+		return result.userID, "pat-id", result.daemonID, nil
 	}
-	return "", "", fmt.Errorf("invalid token")
+	return "", "", "", fmt.Errorf("invalid token")
 }
 
 func TestNewDaemonAuthInterceptorValidation(t *testing.T) {
 	_, err := NewDaemonAuthInterceptor(nil)
 	require.Error(t, err)
 
-	interceptor, err := NewDaemonAuthInterceptor(&mockPATValidator{})
+	interceptor, err := NewDaemonAuthInterceptor(&mockPATValidator{validTokens: map[string]mockPATResult{}})
 	require.NoError(t, err)
 	require.NotNil(t, interceptor)
 }
 
 func TestDaemonAuthInterceptorAuthenticateSuccess(t *testing.T) {
 	validator := &mockPATValidator{
-		validTokens: map[string]string{
-			"rlnt_pat_AbCdEfGhIjKlMnOpQrStUvWxYz123456": "user-123",
+		validTokens: map[string]mockPATResult{
+			"rlnt_pat_AbCdEfGhIjKlMnOpQrStUvWxYz123456": {userID: "user-123", daemonID: "daemon-42"},
 		},
 	}
 	interceptor, err := NewDaemonAuthInterceptor(validator)
@@ -50,10 +55,39 @@ func TestDaemonAuthInterceptorAuthenticateSuccess(t *testing.T) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	require.True(t, ok)
 	require.Equal(t, "user-123", userID)
+
+	daemonID := auth.GetDaemonIDFromContext(ctx)
+	require.Equal(t, "daemon-42", daemonID)
+}
+
+func TestDaemonAuthInterceptorAuthenticateUnboundPAT(t *testing.T) {
+	validator := &mockPATValidator{
+		validTokens: map[string]mockPATResult{
+			"rlnt_pat_AbCdEfGhIjKlMnOpQrStUvWxYz123456": {userID: "user-123", daemonID: ""},
+		},
+	}
+	interceptor, err := NewDaemonAuthInterceptor(validator)
+	require.NoError(t, err)
+
+	ctx, err := interceptor.authenticate(context.Background(), func(key string) string {
+		if key == "Authorization" {
+			return "Bearer rlnt_pat_AbCdEfGhIjKlMnOpQrStUvWxYz123456"
+		}
+		return ""
+	})
+	require.NoError(t, err)
+
+	userID, ok := auth.GetUserIDFromContext(ctx)
+	require.True(t, ok)
+	require.Equal(t, "user-123", userID)
+
+	// Unbound PAT should not inject daemon_id into context.
+	daemonID := auth.GetDaemonIDFromContext(ctx)
+	require.Equal(t, "", daemonID)
 }
 
 func TestDaemonAuthInterceptorAuthenticateRejectsMissingHeader(t *testing.T) {
-	interceptor, err := NewDaemonAuthInterceptor(&mockPATValidator{})
+	interceptor, err := NewDaemonAuthInterceptor(&mockPATValidator{validTokens: map[string]mockPATResult{}})
 	require.NoError(t, err)
 
 	_, err = interceptor.authenticate(context.Background(), func(string) string { return "" })
@@ -62,7 +96,7 @@ func TestDaemonAuthInterceptorAuthenticateRejectsMissingHeader(t *testing.T) {
 }
 
 func TestDaemonAuthInterceptorAuthenticateRejectsInvalidHeader(t *testing.T) {
-	interceptor, err := NewDaemonAuthInterceptor(&mockPATValidator{})
+	interceptor, err := NewDaemonAuthInterceptor(&mockPATValidator{validTokens: map[string]mockPATResult{}})
 	require.NoError(t, err)
 
 	_, err = interceptor.authenticate(context.Background(), func(key string) string {
@@ -77,8 +111,8 @@ func TestDaemonAuthInterceptorAuthenticateRejectsInvalidHeader(t *testing.T) {
 
 func TestDaemonAuthInterceptorAuthenticateRejectsWrongToken(t *testing.T) {
 	validator := &mockPATValidator{
-		validTokens: map[string]string{
-			"rlnt_pat_ValidTokenHere1234567890abcdef": "user-123",
+		validTokens: map[string]mockPATResult{
+			"rlnt_pat_ValidTokenHere1234567890abcdef": {userID: "user-123"},
 		},
 	}
 	interceptor, err := NewDaemonAuthInterceptor(validator)

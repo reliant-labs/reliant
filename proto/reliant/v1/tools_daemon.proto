@@ -69,7 +69,7 @@ message DaemonMessage {
 
 // DaemonRegister is sent when daemon first connects
 message DaemonRegister {
-  string daemon_id = 1; // Unique daemon instance ID (stable, persisted per-host)
+  reserved 1; // was: daemon_id (now assigned by gateway from PAT binding)
   string user_id = 2; // User this daemon belongs to
   string hostname = 3; // Machine hostname
   string platform = 4; // OS platform (darwin, linux, windows)
@@ -148,6 +148,7 @@ message ServerHeartbeat {
 message RegistrationAck {
   bool accepted = 1;
   repeated string requested_project_paths = 2; // "send me config for these"
+  string daemon_id = 3; // Gateway-assigned daemon identity (from PAT binding or newly generated)
 }
 
 message LoadProjectConfigsRequest {

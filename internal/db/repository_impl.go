@@ -1428,8 +1428,8 @@ func (r *Repo) CreateDaemonPAT(ctx context.Context, pat *DaemonPAT) error {
 	}
 
 	query := `
-		INSERT INTO daemon_pats (id, user_id, token_hash, token_prefix, name, ephemeral, expires_at, revoked_at, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)
+		INSERT INTO daemon_pats (id, user_id, daemon_id, token_hash, token_prefix, name, ephemeral, expires_at, revoked_at, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
 	`
 	query = r.bindQuery(query)
 
@@ -1438,9 +1438,15 @@ func (r *Repo) CreateDaemonPAT(ctx context.Context, pat *DaemonPAT) error {
 		createdAt = time.Now().UTC()
 	}
 
+	var daemonID *string
+	if pat.DaemonID != "" {
+		daemonID = &pat.DaemonID
+	}
+
 	_, err := r.DB.ExecContext(ctx, query,
 		pat.ID,
 		pat.UserID,
+		daemonID,
 		pat.TokenHash,
 		pat.TokenPrefix,
 		pat.Name,
@@ -1461,7 +1467,7 @@ func (r *Repo) GetDaemonPATByTokenHash(ctx context.Context, tokenHash string) (*
 	}
 
 	query := `
-		SELECT id, user_id, token_hash, token_prefix, name, ephemeral, expires_at, last_used_at, revoked_at, created_at
+		SELECT id, user_id, COALESCE(daemon_id, ''), token_hash, token_prefix, name, ephemeral, expires_at, last_used_at, revoked_at, created_at
 		FROM daemon_pats
 		WHERE token_hash = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
 	`
@@ -1478,6 +1484,7 @@ func (r *Repo) GetDaemonPATByTokenHash(ctx context.Context, tokenHash string) (*
 	err := r.DB.QueryRowContext(ctx, query, tokenHash).Scan(
 		&pat.ID,
 		&pat.UserID,
+		&pat.DaemonID,
 		&pat.TokenHash,
 		&pat.TokenPrefix,
 		&pat.Name,
@@ -1508,7 +1515,7 @@ func (r *Repo) ListDaemonPATsByUserID(ctx context.Context, userID string) ([]*Da
 	}
 
 	query := `
-		SELECT id, user_id, token_hash, token_prefix, name, ephemeral, expires_at, last_used_at, revoked_at, created_at
+		SELECT id, user_id, COALESCE(daemon_id, ''), token_hash, token_prefix, name, ephemeral, expires_at, last_used_at, revoked_at, created_at
 		FROM daemon_pats
 		WHERE user_id = ?
 		ORDER BY created_at DESC
@@ -1534,6 +1541,7 @@ func (r *Repo) ListDaemonPATsByUserID(ctx context.Context, userID string) ([]*Da
 		if err := rows.Scan(
 			&pat.ID,
 			&pat.UserID,
+			&pat.DaemonID,
 			&pat.TokenHash,
 			&pat.TokenPrefix,
 			&pat.Name,

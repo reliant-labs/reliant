@@ -64,6 +64,9 @@ type Options struct {
 	// CORS
 	CORSAllowedOrigins []string
 
+	// Domain whitelist
+	AllowedEmailDomains []string
+
 	// TLS
 	TLSCertFile string
 	TLSKeyFile  string
@@ -302,24 +305,25 @@ func Run(ctx context.Context, opts Options) error {
 	bgProvider := services.NewDBBackgroundProcessProvider(repo, daemonRouter)
 
 	grpcSrv, err := grpcserver.NewServer(&grpcserver.Config{
-		Port:               opts.GRPCPort,
-		BindAddress:        opts.BindAddress,
-		JWTPublicKey:       jwtPublicKey,
-		CORSAllowedOrigins: opts.CORSAllowedOrigins,
-		Database:           repo,
-		ToolsFactory:       toolsFactory,
-		TemporalClient:     temporalClient,
-		StreamingHub:       streamingHub,
-		UserUpdateHub:      userUpdateHub,
-		ChatUpdateHub:      chatUpdateHub,
-		PauseService:       pauseService,
-		SharedTaskQueue:    v2workflow.SharedTaskQueue,
-		ToolExecutor:       remoteExecutor,
-		DaemonRouter:       daemonRouter,
-		BackgroundProvider: bgProvider,
-		NATSChecker:        natsChecker,
-		TLSCertFile:        tlsCertFile,
-		TLSKeyFile:         tlsKeyFile,
+		Port:                opts.GRPCPort,
+		BindAddress:         opts.BindAddress,
+		JWTPublicKey:        jwtPublicKey,
+		CORSAllowedOrigins:  opts.CORSAllowedOrigins,
+		AllowedEmailDomains: opts.AllowedEmailDomains,
+		Database:            repo,
+		ToolsFactory:        toolsFactory,
+		TemporalClient:      temporalClient,
+		StreamingHub:        streamingHub,
+		UserUpdateHub:       userUpdateHub,
+		ChatUpdateHub:       chatUpdateHub,
+		PauseService:        pauseService,
+		SharedTaskQueue:     v2workflow.SharedTaskQueue,
+		ToolExecutor:        remoteExecutor,
+		DaemonRouter:        daemonRouter,
+		BackgroundProvider:  bgProvider,
+		NATSChecker:         natsChecker,
+		TLSCertFile:         tlsCertFile,
+		TLSKeyFile:          tlsKeyFile,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create gRPC server: %w", err)

@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"context"
 	crypto_tls "crypto/tls"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -317,7 +318,35 @@ Credential resolution order:
 
 			logging.Setup(slog.LevelInfo)
 
-			// Resolve credentials: --token > existing creds > auto-register > login+register
+			ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+			defer cancel()
+
+			// Clean up background processes on shutdown.
+			defer shell.GetBackgroundManager().KillAllRunning()
+			defer shell.GetProcessMonitor().Stop()
+
+			// In server mode, skip credential resolution — the gateway dials
+			// into us and already knows our identity from the NATS connect command.
+			if serverMode {
+				logging.Info("Starting tools-daemon in server mode",
+					"listen_port", listenPort, "data_dir", dataDir)
+
+				err := daemonruntime.Start(ctx, daemonruntime.StartOptions{
+					BootstrapConfig: bootstrap.DaemonBootstrapConfig{
+						ServerMode: true,
+						ListenPort: listenPort,
+						DataDir:    dataDir,
+						Name:       daemonName,
+					},
+				})
+				if err != nil && !errors.Is(err, context.Canceled) {
+					return fmt.Errorf("tools-daemon exited with error: %w", err)
+				}
+				logging.Info("tools-daemon shut down gracefully")
+				return nil
+			}
+
+			// --- Client mode: resolve credentials for outbound connection ---
 			var creds *auth.DaemonCredentials
 			var err error
 			if useToken {
@@ -355,18 +384,7 @@ Credential resolution order:
 				parsedTLSMode = bootstrap.TLSModeTLS
 			}
 
-			ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-			defer cancel()
-
-			if serverMode {
-				logging.Info("Starting tools-daemon in server mode", "listen_port", listenPort, "data_dir", dataDir)
-			} else {
-				logging.Info("Starting tools-daemon", "port", port, "tls_mode", string(parsedTLSMode), "gateway_url", daemonGRPCURL, "data_dir", dataDir)
-			}
-
-			// Clean up background processes on shutdown.
-			defer shell.GetBackgroundManager().KillAllRunning()
-			defer shell.GetProcessMonitor().Stop()
+			logging.Info("Starting tools-daemon", "port", port, "tls_mode", string(parsedTLSMode), "gateway_url", daemonGRPCURL, "data_dir", dataDir)
 
 			startDaemon := func(c *auth.DaemonCredentials) error {
 				return daemonruntime.Start(ctx, daemonruntime.StartOptions{
@@ -377,17 +395,13 @@ Credential resolution order:
 						TLSMode:    parsedTLSMode,
 						DataDir:    dataDir,
 						Name:       daemonName,
-						ServerMode: serverMode,
+						ServerMode: false,
 						ListenPort: listenPort,
 					},
 				})
 			}
 
-			if serverMode {
-				logging.Info("Daemon listening for gateway connections", "listen_port", listenPort, "user_id", creds.UserID)
-			} else {
-				logging.Info("Connecting daemon to gateway", "gateway_url", daemonGRPCURL, "user_id", creds.UserID)
-			}
+			logging.Info("Connecting daemon to gateway", "gateway_url", daemonGRPCURL, "user_id", creds.UserID)
 			err = startDaemon(creds)
 			if err != nil {
 				// On auth failure, delete stale credentials and re-register automatically

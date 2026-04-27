@@ -38,10 +38,11 @@ type LoginOptions struct{}
 
 // LoginResult holds the tokens and user info returned after a successful login.
 type LoginResult struct {
-	AccessToken  string
-	RefreshToken string
-	UserID       string
-	Email        string
+	AccessToken   string
+	RefreshToken  string
+	UserID        string
+	Email         string
+	ProviderToken string // OAuth provider access token (e.g. GitHub PAT)
 }
 
 type oauthProvider struct {
@@ -322,11 +323,12 @@ func openBrowser(url string) error {
 
 // tokenResponse mirrors the Supabase /auth/v1/token JSON response.
 type tokenResponse struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	TokenType    string `json:"token_type"`
-	ExpiresIn    int    `json:"expires_in"`
-	User         struct {
+	AccessToken   string `json:"access_token"`
+	RefreshToken  string `json:"refresh_token"`
+	TokenType     string `json:"token_type"`
+	ExpiresIn     int    `json:"expires_in"`
+	ProviderToken string `json:"provider_token"`
+	User          struct {
 		ID    string `json:"id"`
 		Email string `json:"email"`
 	} `json:"user"`
@@ -376,10 +378,11 @@ func exchangeCodeForTokens(ctx context.Context, serverURL, anonKey, code, verifi
 	}
 
 	return &LoginResult{
-		AccessToken:  tok.AccessToken,
-		RefreshToken: tok.RefreshToken,
-		UserID:       tok.User.ID,
-		Email:        tok.User.Email,
+		AccessToken:   tok.AccessToken,
+		RefreshToken:  tok.RefreshToken,
+		UserID:        tok.User.ID,
+		Email:         tok.User.Email,
+		ProviderToken: tok.ProviderToken,
 	}, nil
 }
 

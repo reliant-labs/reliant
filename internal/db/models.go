@@ -155,6 +155,7 @@ type Daemon struct {
 type DaemonPAT struct {
 	ID          string
 	UserID      string
+	DaemonID    string // Bound daemon ID (empty for unbound/general-purpose PATs)
 	TokenHash   string // SHA-256 hex digest of the raw token
 	TokenPrefix string // First 8 chars of raw token for display in UI
 	Name        string // Human-readable label ("Sean's MacBook", "CI runner")

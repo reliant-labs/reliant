@@ -226,6 +226,12 @@ func runMonolith(_ *cobra.Command, _ []string, dataDir *string) error {
 		corsAllowedOrigins = strings.Split(corsOriginsRaw, ",")
 	}
 
+	// Allowed email domains: empty = allow all (for dev/prod)
+	var allowedEmailDomains []string
+	if raw := envutil.GetEnv("ALLOWED_EMAIL_DOMAINS", ""); raw != "" {
+		allowedEmailDomains = strings.Split(raw, ",")
+	}
+
 	// Bind address: default 127.0.0.1 for local, 0.0.0.0 for containers
 	bindAddress := envutil.GetEnv("BIND_ADDRESS", "127.0.0.1")
 
@@ -283,25 +289,26 @@ func runMonolith(_ *cobra.Command, _ []string, dataDir *string) error {
 	)
 
 	grpcSrv, err := grpcserver.NewServer(&grpcserver.Config{
-		Port:               grpcPort,
-		BindAddress:        bindAddress,
-		JWTPublicKey:       jwtPublicKey,
-		CORSAllowedOrigins: corsAllowedOrigins,
-		Database:           server.Database(),
-		ToolsFactory:       server.ToolsFactory(),
-		TemporalClient:     server.Client(),
-		StreamingHub:       server.StreamingHub(),
-		UserUpdateHub:      userUpdateHub,
-		ChatUpdateHub:      chatUpdateHub,
-		PauseService:       server.PauseService(),
-		SharedTaskQueue:    server.SharedTaskQueueName(),
-		ToolExecutor:       remoteToolExecutor,
-		ToolsDaemonService: sharedToolsDaemonService,
-		DaemonRouter:       server.DaemonRouter(),
-		BackgroundProvider: services.NewLocalBackgroundProcessProvider(),
-		TLSCertFile:        tlsCertFile,
-		TLSKeyFile:         tlsKeyFile,
-		LocalMode:          true,
+		Port:                grpcPort,
+		BindAddress:         bindAddress,
+		JWTPublicKey:        jwtPublicKey,
+		CORSAllowedOrigins:  corsAllowedOrigins,
+		AllowedEmailDomains: allowedEmailDomains,
+		Database:            server.Database(),
+		ToolsFactory:        server.ToolsFactory(),
+		TemporalClient:      server.Client(),
+		StreamingHub:        server.StreamingHub(),
+		UserUpdateHub:       userUpdateHub,
+		ChatUpdateHub:       chatUpdateHub,
+		PauseService:        server.PauseService(),
+		SharedTaskQueue:     server.SharedTaskQueueName(),
+		ToolExecutor:        remoteToolExecutor,
+		ToolsDaemonService:  sharedToolsDaemonService,
+		DaemonRouter:        server.DaemonRouter(),
+		BackgroundProvider:  services.NewLocalBackgroundProcessProvider(),
+		TLSCertFile:         tlsCertFile,
+		TLSKeyFile:          tlsKeyFile,
+		LocalMode:           true,
 	})
 	if err != nil {
 		logging.Warn("gRPC server auth setup issue (local mode, non-fatal)", "error", err)

@@ -31,10 +31,10 @@ type DaemonBootstrapConfig struct {
 }
 
 func (c DaemonBootstrapConfig) Validate() error {
-	if strings.TrimSpace(c.UserID) == "" {
+	if !c.ServerMode && strings.TrimSpace(c.UserID) == "" {
 		return fmt.Errorf("missing required user ID (run 'reliant daemon register' to set up credentials)")
 	}
-	if strings.TrimSpace(c.AuthToken) == "" {
+	if !c.ServerMode && strings.TrimSpace(c.AuthToken) == "" {
 		return fmt.Errorf("missing required daemon PAT (run 'reliant daemon register' to set up credentials)")
 	}
 	if !c.ServerMode {

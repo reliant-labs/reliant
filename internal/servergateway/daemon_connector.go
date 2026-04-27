@@ -76,18 +76,8 @@ func NewDaemonConnector(js jetstream.JetStream, daemonService *services.ToolsDae
 // Start subscribes to the DAEMON_COMMANDS JetStream stream and processes
 // connect/disconnect commands. It blocks until ctx is cancelled.
 func (dc *DaemonConnector) Start(ctx context.Context) error {
-	// Ensure the stream exists.
-	if _, err := dc.nc.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
-		Name:      streamDaemonCommands,
-		Subjects:  []string{subjectCommandsAll},
-		Retention: jetstream.LimitsPolicy,
-		Storage:   jetstream.FileStorage,
-		MaxAge:    24 * time.Hour,
-		MaxMsgs:   100000,
-	}); err != nil {
-		return fmt.Errorf("ensure %s stream: %w", streamDaemonCommands, err)
-	}
-
+	// The DAEMON_COMMANDS stream is created by the control-plane's
+	// EnsureStreams(). We just create our consumer on it.
 	consumer, err := dc.nc.CreateOrUpdateConsumer(ctx, streamDaemonCommands, jetstream.ConsumerConfig{
 		Durable:        consumerDaemonCommands,
 		AckPolicy:      jetstream.AckExplicitPolicy,
@@ -244,15 +234,18 @@ func (dc *DaemonConnector) connectOnce(ctx context.Context, cmd DaemonConnectCom
 		return fmt.Errorf("first message was not DaemonRegister")
 	}
 
+	// Identity comes from the NATS connect command, not from the daemon.
+	// The daemon is untrusted — the gateway is the authority.
 	logging.Info(connectorLogPrefix+" Received registration from daemon",
-		"daemonId", reg.DaemonId, "userId", reg.UserId,
+		"daemonId", cmd.DaemonID, "userId", cmd.UserID,
 		"hostname", reg.Hostname, "daemonType", reg.DaemonType)
 
-	// Send registration ack.
+	// Send registration ack with the assigned daemon_id.
 	regAck := &reliantv1.ServerMessage{
 		Message: &reliantv1.ServerMessage_RegistrationAck{
 			RegistrationAck: &reliantv1.RegistrationAck{
 				Accepted: true,
+				DaemonId: cmd.DaemonID,
 			},
 		},
 	}
@@ -262,10 +255,9 @@ func (dc *DaemonConnector) connectOnce(ctx context.Context, cmd DaemonConnectCom
 		return fmt.Errorf("sending registration ack: %w", err)
 	}
 
-	// Register with ToolsDaemonService — this sets up the connection in the
-	// internal maps, starts sender/heartbeat goroutines, and notifies listeners
-	// (NATSToolBridge) so NATS subscriptions are created.
-	outbound, err := dc.daemonService.RegisterOutboundConnection(ctx, reg, stream)
+	// Register with ToolsDaemonService — identity comes from the NATS
+	// command, capabilities/platform from the daemon.
+	outbound, err := dc.daemonService.RegisterOutboundConnection(ctx, cmd.UserID, cmd.DaemonID, reg, stream)
 	if err != nil {
 		_ = stream.CloseRequest()
 		_ = stream.CloseResponse()

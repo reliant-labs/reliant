@@ -54,7 +54,8 @@ func IsPATFormat(token string) bool {
 
 // PATValidator validates a raw PAT token and returns the associated user ID.
 type PATValidator interface {
-	// ValidatePAT checks a raw token against the DB. Returns the user ID if valid.
-	// Returns an error if the token is invalid, revoked, or expired.
-	ValidatePAT(ctx context.Context, rawToken string) (userID string, patID string, err error)
+	// ValidatePAT checks a raw token against the DB. Returns the user ID and
+	// optionally the PAT-bound daemon ID (empty if unbound). Returns an error
+	// if the token is invalid, revoked, or expired.
+	ValidatePAT(ctx context.Context, rawToken string) (userID string, patID string, daemonID string, err error)
 }

@@ -46,10 +46,9 @@ func TestDaemonServer_RegistrationMessageContents(t *testing.T) {
 	d.daemonName = "work-daemon"
 
 	// The ConnectGateway handler sends a DaemonRegister as the first message.
-	// We can verify the registration construction logic directly.
+	// daemon_id is no longer in the register message — it's assigned by the gateway.
 	register := &reliantv1.DaemonMessage{
 		Message: &reliantv1.DaemonMessage_Register{Register: &reliantv1.DaemonRegister{
-			DaemonId:     d.daemonID,
 			UserId:       d.userID,
 			Hostname:     d.hostname,
 			Platform:     d.platform,
@@ -62,7 +61,6 @@ func TestDaemonServer_RegistrationMessageContents(t *testing.T) {
 
 	reg := register.GetRegister()
 	require.NotNil(t, reg)
-	assert.Equal(t, "daemon-abc", reg.DaemonId)
 	assert.Equal(t, "user-42", reg.UserId)
 	assert.Equal(t, "my-laptop", reg.Hostname)
 	assert.Equal(t, "darwin", reg.Platform)

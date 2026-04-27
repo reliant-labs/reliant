@@ -430,7 +430,6 @@ func (*DaemonMessage_FileSystemChanged) isDaemonMessage_Message() {}
 // DaemonRegister is sent when daemon first connects
 type DaemonRegister struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	DaemonId      string                 `protobuf:"bytes,1,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`                                                       // Unique daemon instance ID (stable, persisted per-host)
 	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`                                                             // User this daemon belongs to
 	Hostname      string                 `protobuf:"bytes,3,opt,name=hostname,proto3" json:"hostname,omitempty"`                                                                       // Machine hostname
 	Platform      string                 `protobuf:"bytes,4,opt,name=platform,proto3" json:"platform,omitempty"`                                                                       // OS platform (darwin, linux, windows)
@@ -471,13 +470,6 @@ func (x *DaemonRegister) ProtoReflect() protoreflect.Message {
 // Deprecated: Use DaemonRegister.ProtoReflect.Descriptor instead.
 func (*DaemonRegister) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *DaemonRegister) GetDaemonId() string {
-	if x != nil {
-		return x.DaemonId
-	}
-	return ""
 }
 
 func (x *DaemonRegister) GetUserId() string {
@@ -1086,6 +1078,7 @@ type RegistrationAck struct {
 	state                 protoimpl.MessageState `protogen:"open.v1"`
 	Accepted              bool                   `protobuf:"varint,1,opt,name=accepted,proto3" json:"accepted,omitempty"`
 	RequestedProjectPaths []string               `protobuf:"bytes,2,rep,name=requested_project_paths,json=requestedProjectPaths,proto3" json:"requested_project_paths,omitempty"` // "send me config for these"
+	DaemonId              string                 `protobuf:"bytes,3,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`                                          // Gateway-assigned daemon identity (from PAT binding or newly generated)
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache
 }
@@ -1132,6 +1125,13 @@ func (x *RegistrationAck) GetRequestedProjectPaths() []string {
 		return x.RequestedProjectPaths
 	}
 	return nil
+}
+
+func (x *RegistrationAck) GetDaemonId() string {
+	if x != nil {
+		return x.DaemonId
+	}
+	return ""
 }
 
 type LoadProjectConfigsRequest struct {
@@ -3941,9 +3941,8 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	" \x01(\v2 .reliant.v1.TerminalSessionEventH\x00R\x14terminalSessionEvent\x12Y\n" +
 	"\x14process_output_chunk\x18\v \x01(\v2%.reliant.v1.ProcessOutputChunkMessageH\x00R\x12processOutputChunk\x12O\n" +
 	"\x13file_system_changed\x18\f \x01(\v2\x1d.reliant.v1.FileSystemChangedH\x00R\x11fileSystemChangedB\t\n" +
-	"\amessage\"\xf9\x02\n" +
-	"\x0eDaemonRegister\x12\x1b\n" +
-	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x17\n" +
+	"\amessage\"\xe2\x02\n" +
+	"\x0eDaemonRegister\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x1a\n" +
 	"\bhostname\x18\x03 \x01(\tR\bhostname\x12\x1a\n" +
 	"\bplatform\x18\x04 \x01(\tR\bplatform\x12\x1f\n" +
@@ -3957,7 +3956,7 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"daemonType\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\a\x10\b\"\x80\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\x01\x10\x02J\x04\b\a\x10\b\"\x80\x02\n" +
 	"\fToolResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x18\n" +
@@ -4001,10 +4000,11 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\n" +
 	"timeout_ms\x18\b \x01(\x05R\ttimeoutMsJ\x04\b\a\x10\b\"/\n" +
 	"\x0fServerHeartbeat\x12\x1c\n" +
-	"\ttimestamp\x18\x01 \x01(\x03R\ttimestamp\"e\n" +
+	"\ttimestamp\x18\x01 \x01(\x03R\ttimestamp\"\x82\x01\n" +
 	"\x0fRegistrationAck\x12\x1a\n" +
 	"\baccepted\x18\x01 \x01(\bR\baccepted\x126\n" +
-	"\x17requested_project_paths\x18\x02 \x03(\tR\x15requestedProjectPaths\"]\n" +
+	"\x17requested_project_paths\x18\x02 \x03(\tR\x15requestedProjectPaths\x12\x1b\n" +
+	"\tdaemon_id\x18\x03 \x01(\tR\bdaemonId\"]\n" +
 	"\x19LoadProjectConfigsRequest\x12!\n" +
 	"\fproject_path\x18\x01 \x01(\tR\vprojectPath\x12\x1d\n" +
 	"\n" +

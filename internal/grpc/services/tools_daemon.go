@@ -350,11 +350,12 @@ func (s *ToolsDaemonService) ConnectDaemon(
 		return err
 	}
 
-	daemonID := reg.DaemonId
-
+	// Daemon ID is assigned by the gateway from the PAT binding, not self-asserted.
+	daemonID := auth.GetDaemonIDFromContext(ctx)
 	if daemonID == "" {
-		logging.Error(LOG_PREFIX_TOOLS_DAEMON + " Missing daemon_id in registration")
-		return connect.NewError(connect.CodeInvalidArgument, nil)
+		// Unbound PAT (external daemon self-registration) — generate a new ID.
+		daemonID = uuid.NewString()
+		logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Generated daemon_id for unbound PAT", "daemonID", daemonID, "userID", userID)
 	}
 
 	requestedProjectPaths, err := s.listAllProjectPaths(ctx, userID)
@@ -442,6 +443,7 @@ func (s *ToolsDaemonService) ConnectDaemon(
 			RegistrationAck: &reliantv1.RegistrationAck{
 				Accepted:              true,
 				RequestedProjectPaths: requestedProjectPaths,
+				DaemonId:              daemonID,
 			},
 		},
 	}
@@ -507,19 +509,17 @@ func (s *ToolsDaemonService) ConnectDaemon(
 
 // RegisterOutboundConnection registers an outbound gateway→daemon connection.
 // The DaemonConnector calls this after opening a ConnectGateway bidi stream and
-// receiving the DaemonRegister message. It creates the same internal state as
-// ConnectDaemon (connection map, heartbeat, sender) so the NATSToolBridge works.
+// receiving the DaemonRegister message. Identity (userID, daemonID) is provided
+// by the caller (from the NATS command), not from the daemon's register message.
 // The caller is responsible for running the receive loop via HandleIncomingLoop.
 func (s *ToolsDaemonService) RegisterOutboundConnection(
 	ctx context.Context,
+	userID, daemonID string,
 	reg *reliantv1.DaemonRegister,
 	stream *connect.BidiStreamForClient[reliantv1.ServerMessage, reliantv1.DaemonMessage],
 ) (*OutboundConn, error) {
-	userID := reg.GetUserId()
-	daemonID := reg.GetDaemonId()
-
 	if daemonID == "" || userID == "" {
-		return nil, fmt.Errorf("missing daemonID or userID in registration")
+		return nil, fmt.Errorf("missing daemonID or userID")
 	}
 
 	now := time.Now().UTC()

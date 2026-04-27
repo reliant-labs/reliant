@@ -38,16 +38,16 @@ func (s *daemonServer) ConnectGateway(
 	d := s.client
 
 	// Send registration as the first message.
+	// Send capabilities/platform info only — the gateway assigns identity
+	// (daemonID, userID) from the NATS connect command.
 	register := &reliantv1.DaemonMessage{
 		Message: &reliantv1.DaemonMessage_Register{Register: &reliantv1.DaemonRegister{
-			DaemonId:     d.daemonID,
-			UserId:       d.userID,
 			Hostname:     d.hostname,
 			Platform:     d.platform,
 			WorkingDir:   d.cwd,
 			Capabilities: d.capabilities,
 			Name:         d.daemonName,
-			DaemonType:   "local",
+			DaemonType:   "cloud",
 		}},
 	}
 	if err := stream.Send(register); err != nil {
@@ -136,8 +136,6 @@ func (d *daemonClient) runServerMode(ctx context.Context) error {
 
 	logging.Info(serverLogPrefix+" Listening for gateway connections",
 		"addr", addr,
-		"daemonID", d.daemonID,
-		"userID", d.userID,
 	)
 
 	errCh := make(chan error, 1)

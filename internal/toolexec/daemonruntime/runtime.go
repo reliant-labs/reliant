@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -88,6 +89,10 @@ func Start(ctx context.Context, opts StartOptions) error {
 	if err != nil {
 		return err
 	}
+
+	// If GIT_TOKEN is set (injected by workspace reconciler in cloud mode),
+	// configure git credential-store so all git operations use the token.
+	setupGitCredentials()
 
 	if opts.BootstrapConfig.ServerMode {
 		logging.Info(logPrefix+" Starting in server mode (listening for gateway)",
@@ -183,6 +188,46 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 	}, nil
 }
 
+// setupGitCredentials configures git credential-store globally when GIT_TOKEN
+// is set (injected by the workspace reconciler in cloud mode). This runs once
+// at daemon startup so all subsequent git operations use the token.
+func setupGitCredentials() {
+	token := os.Getenv("GIT_TOKEN")
+	if token == "" {
+		return
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		logging.Warn(logPrefix+" Failed to resolve home dir for git credentials", "error", err)
+		return
+	}
+
+	// Configure git to use the credential-store helper globally.
+	if err := exec.Command("git", "config", "--global", "credential.helper", "store").Run(); err != nil {
+		logging.Warn(logPrefix+" Failed to configure git credential.helper", "error", err)
+		return
+	}
+
+	// Append the token to ~/.git-credentials (don't overwrite existing entries).
+	credFile := filepath.Join(homeDir, ".git-credentials")
+	credLine := fmt.Sprintf("https://x-access-token:%s@github.com\n", token)
+
+	f, err := os.OpenFile(credFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		logging.Warn(logPrefix+" Failed to open .git-credentials", "error", err)
+		return
+	}
+	defer f.Close()
+
+	if _, err := f.WriteString(credLine); err != nil {
+		logging.Warn(logPrefix+" Failed to write .git-credentials", "error", err)
+		return
+	}
+
+	logging.Info(logPrefix + " Configured git credential-store with GIT_TOKEN")
+}
+
 // isFatalError returns true for errors that should not be retried (e.g. auth failures).
 func isFatalError(err error) bool {
 	if err == nil {
@@ -262,9 +307,9 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 	stream := client.ConnectDaemon(ctx)
 
 	// --- Registration: send directly before starting the sender goroutine ---
+	// daemon_id is no longer self-asserted; the gateway assigns it from the PAT binding.
 	register := &reliantv1.DaemonMessage{
 		Message: &reliantv1.DaemonMessage_Register{Register: &reliantv1.DaemonRegister{
-			DaemonId:     d.daemonID,
 			UserId:       d.userID,
 			Hostname:     d.hostname,
 			Platform:     d.platform,
@@ -331,6 +376,11 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, msg *reliantv1.S
 
 	case *reliantv1.ServerMessage_RegistrationAck:
 		if m.RegistrationAck != nil {
+			// Update daemon identity from the gateway-assigned ID.
+			if m.RegistrationAck.DaemonId != "" {
+				d.daemonID = m.RegistrationAck.DaemonId
+				logging.Info(logPrefix+" Daemon identity assigned by gateway", "daemonID", d.daemonID)
+			}
 			for _, projectPath := range m.RegistrationAck.RequestedProjectPaths {
 				if err := d.sendLoadProjectConfigResponse(projectPath, uuid.New().String()); err != nil {
 					logging.Warn(logPrefix+" Failed responding to registration requested project load", "projectPath", projectPath, "error", err)
