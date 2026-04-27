@@ -59,6 +59,30 @@ type ToolsDaemonService struct {
 	userUpdateHub streaming.UpdateHub[db.UserUpdate]
 }
 
+// daemonStream abstracts the send/receive operations for a daemon connection.
+// This allows both inbound (ConnectDaemon) and outbound (ConnectGateway) streams
+// to be handled uniformly.
+type daemonStream interface {
+	Send(msg *reliantv1.ServerMessage) error
+	Receive() (*reliantv1.DaemonMessage, error)
+}
+
+// inboundStream wraps a connect.BidiStream (server-side, inbound daemon connection).
+type inboundStream struct {
+	stream *connect.BidiStream[reliantv1.DaemonMessage, reliantv1.ServerMessage]
+}
+
+func (s *inboundStream) Send(msg *reliantv1.ServerMessage) error    { return s.stream.Send(msg) }
+func (s *inboundStream) Receive() (*reliantv1.DaemonMessage, error) { return s.stream.Receive() }
+
+// outboundStream wraps a connect.BidiStreamForClient (client-side, outbound gateway connection).
+type outboundStream struct {
+	stream *connect.BidiStreamForClient[reliantv1.ServerMessage, reliantv1.DaemonMessage]
+}
+
+func (s *outboundStream) Send(msg *reliantv1.ServerMessage) error    { return s.stream.Send(msg) }
+func (s *outboundStream) Receive() (*reliantv1.DaemonMessage, error) { return s.stream.Receive() }
+
 // daemonConnection represents an active daemon connection
 type daemonConnection struct {
 	userID       string
@@ -68,7 +92,7 @@ type daemonConnection struct {
 	daemonType   string // "local" or "cloud"
 	connectedAt  time.Time
 	lastActivity time.Time
-	stream       *connect.BidiStream[reliantv1.DaemonMessage, reliantv1.ServerMessage]
+	stream       daemonStream
 	sendCh       chan *reliantv1.ServerMessage
 	done         chan struct{}
 	doneOnce     sync.Once
@@ -326,11 +350,12 @@ func (s *ToolsDaemonService) ConnectDaemon(
 		return err
 	}
 
-	daemonID := reg.DaemonId
-
+	// Daemon ID is assigned by the gateway from the PAT binding, not self-asserted.
+	daemonID := auth.GetDaemonIDFromContext(ctx)
 	if daemonID == "" {
-		logging.Error(LOG_PREFIX_TOOLS_DAEMON + " Missing daemon_id in registration")
-		return connect.NewError(connect.CodeInvalidArgument, nil)
+		// Unbound PAT (external daemon self-registration) — generate a new ID.
+		daemonID = uuid.NewString()
+		logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Generated daemon_id for unbound PAT", "daemonID", daemonID, "userID", userID)
 	}
 
 	requestedProjectPaths, err := s.listAllProjectPaths(ctx, userID)
@@ -380,7 +405,7 @@ func (s *ToolsDaemonService) ConnectDaemon(
 		daemonType:          reg.GetDaemonType(),
 		connectedAt:         now2,
 		lastActivity:        now2,
-		stream:              stream,
+		stream:              &inboundStream{stream: stream},
 		sendCh:              make(chan *reliantv1.ServerMessage, 256),
 		done:                make(chan struct{}),
 		pendingCommands:     make(map[string]chan *reliantv1.DaemonCommandResponse),
@@ -418,6 +443,7 @@ func (s *ToolsDaemonService) ConnectDaemon(
 			RegistrationAck: &reliantv1.RegistrationAck{
 				Accepted:              true,
 				RequestedProjectPaths: requestedProjectPaths,
+				DaemonId:              daemonID,
 			},
 		},
 	}
@@ -479,6 +505,131 @@ func (s *ToolsDaemonService) ConnectDaemon(
 
 	logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Daemon disconnected", "userID", userID)
 	return err
+}
+
+// RegisterOutboundConnection registers an outbound gateway→daemon connection.
+// The DaemonConnector calls this after opening a ConnectGateway bidi stream and
+// receiving the DaemonRegister message. Identity (userID, daemonID) is provided
+// by the caller (from the NATS command), not from the daemon's register message.
+// The caller is responsible for running the receive loop via HandleIncomingLoop.
+func (s *ToolsDaemonService) RegisterOutboundConnection(
+	ctx context.Context,
+	userID, daemonID string,
+	reg *reliantv1.DaemonRegister,
+	stream *connect.BidiStreamForClient[reliantv1.ServerMessage, reliantv1.DaemonMessage],
+) (*OutboundConn, error) {
+	if daemonID == "" || userID == "" {
+		return nil, fmt.Errorf("missing daemonID or userID")
+	}
+
+	now := time.Now().UTC()
+	capabilitiesJSON, err := jsonStringSlicePtr(reg.Capabilities)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode capabilities: %w", err)
+	}
+
+	if err := s.database.UpsertDaemon(ctx, &db.Daemon{
+		ID:            daemonID,
+		UserID:        userID,
+		Hostname:      daemonStringPtrOrNil(reg.Hostname),
+		Platform:      daemonStringPtrOrNil(reg.Platform),
+		Status:        db.DaemonStatusActive,
+		Capabilities:  capabilitiesJSON,
+		ConnectedAt:   &now,
+		LastHeartbeat: &now,
+	}); err != nil {
+		return nil, fmt.Errorf("failed to persist daemon registration: %w", err)
+	}
+
+	conn := &daemonConnection{
+		userID:              userID,
+		daemonID:            daemonID,
+		name:                reg.GetName(),
+		labels:              reg.GetLabels(),
+		daemonType:          reg.GetDaemonType(),
+		connectedAt:         now,
+		lastActivity:        now,
+		stream:              &outboundStream{stream: stream},
+		sendCh:              make(chan *reliantv1.ServerMessage, 256),
+		done:                make(chan struct{}),
+		pendingCommands:     make(map[string]chan *reliantv1.DaemonCommandResponse),
+		pendingToolRequests: make(map[string]chan *toolexec.ToolExecutionResponse),
+		terminalSubs:        make(map[string][]chan *toolexec.TerminalOutputEvent),
+		processOutputSubs:   make(map[string][]chan *toolexec.ProcessOutputEvent),
+	}
+
+	// Register connection.
+	s.mu.Lock()
+	oldConn := s.connections[daemonID]
+	s.connections[daemonID] = conn
+	if oldConn == nil {
+		s.userDaemons[userID] = append(s.userDaemons[userID], daemonID)
+	}
+	s.mu.Unlock()
+
+	if oldConn != nil {
+		oldConn.closeDone()
+		logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Replaced old daemon connection (outbound)", "userID", userID, "daemonID", daemonID)
+	}
+
+	s.notifyConnected(userID, daemonID)
+	s.publishDaemonHeartbeat(context.Background(), userID, daemonID, time.Now().UTC())
+
+	// Start sender and heartbeat goroutines.
+	go s.runSender(conn)
+	go s.runHeartbeat(conn)
+
+	return &OutboundConn{service: s, conn: conn}, nil
+}
+
+// OutboundConn wraps a daemonConnection created via RegisterOutboundConnection.
+// It exposes HandleIncoming (blocking receive loop) and Disconnect (cleanup).
+type OutboundConn struct {
+	service *ToolsDaemonService
+	conn    *daemonConnection
+}
+
+// HandleIncoming runs the blocking receive loop, dispatching incoming daemon
+// messages exactly like ConnectDaemon does. Returns when the stream ends.
+func (o *OutboundConn) HandleIncoming(ctx context.Context) error {
+	return o.service.handleIncoming(ctx, o.conn)
+}
+
+// Disconnect removes the connection from the service's internal state and
+// notifies listeners. Must be called when the stream ends.
+func (o *OutboundConn) Disconnect() {
+	conn := o.conn
+	userID := conn.userID
+	daemonID := conn.daemonID
+
+	var wasConnected bool
+	o.service.mu.Lock()
+	if o.service.connections[daemonID] == conn {
+		delete(o.service.connections, daemonID)
+		ids := o.service.userDaemons[userID]
+		for i, id := range ids {
+			if id == daemonID {
+				o.service.userDaemons[userID] = append(ids[:i], ids[i+1:]...)
+				break
+			}
+		}
+		if len(o.service.userDaemons[userID]) == 0 {
+			delete(o.service.userDaemons, userID)
+		}
+		wasConnected = true
+	}
+	o.service.mu.Unlock()
+	conn.closeDone()
+	conn.closeAllSubscribers()
+
+	if wasConnected {
+		o.service.notifyDisconnected(userID, daemonID)
+	}
+
+	disconnectedAt := time.Now().UTC()
+	if err := o.service.database.UpdateDaemonStatus(context.Background(), daemonID, db.DaemonStatusDisconnected, nil, nil, &disconnectedAt); err != nil {
+		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to mark daemon disconnected (outbound)", "daemonID", daemonID, "error", err)
+	}
 }
 
 // handleIncoming handles incoming messages from the daemon

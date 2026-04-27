@@ -111,6 +111,16 @@ const setupElectronOAuthCallbackListener = (setState: (state: Partial<AuthState>
           identities: data.user?.identities?.map(i => i.provider),
         })
 
+        // Capture GitHub provider_token if available (only emitted once at sign-in)
+        if (data.session?.provider_token) {
+          try {
+            const { saveGitCredential } = await import('@/api/controlplane-client')
+            await saveGitCredential('github', data.session.provider_token, 'repo')
+          } catch (err) {
+            console.warn('Failed to save git credential:', err)
+          }
+        }
+
         setState({
           user: data.user,
           session: data.session,
@@ -319,7 +329,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     try {
       if (isElectron) {
-        const oauthSession = await devAuthGrpc.startOAuthSignIn('github', 120)
+        const oauthSession = await devAuthGrpc.startOAuthSignIn('github')
         const { data, error } = await supabase.auth.setSession({
           access_token: oauthSession.accessToken,
           refresh_token: oauthSession.refreshToken,
@@ -329,6 +339,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           logger.error('[AuthStore] Electron GitHub session hydration failed:', error)
           set({ loading: false })
           throw error
+        }
+
+        // Save GitHub provider token as git credential if available
+        if (oauthSession.providerToken) {
+          try {
+            const { saveGitCredential } = await import('@/api/controlplane-client')
+            await saveGitCredential('github', oauthSession.providerToken, 'repo')
+          } catch (err) {
+            console.warn('Failed to save git credential:', err)
+          }
         }
 
         set({
@@ -348,6 +368,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'github',
         options: {
+          scopes: 'repo',
           redirectTo,
           skipBrowserRedirect: true,
         },
@@ -525,6 +546,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const { data, error } = await supabase.auth.linkIdentity({
         provider: 'github',
         options: {
+          scopes: 'repo',
           redirectTo,
           skipBrowserRedirect: true,
         },
@@ -864,7 +886,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       })
 
       // Set up auth state listener to keep store in sync
-      supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
+      supabase.auth.onAuthStateChange(async (_event: AuthChangeEvent, session: Session | null) => {
         set({
           user: session?.user ?? null,
           session: session,
@@ -872,6 +894,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
         // Update Sentry user context for error correlation
         setSentryUser(session?.user ? { id: session.user.id, email: session.user.email } : null)
+
+        // Capture GitHub provider_token if available (only emitted once at sign-in)
+        if (session?.provider_token) {
+          try {
+            const { saveGitCredential } = await import('@/api/controlplane-client')
+            await saveGitCredential('github', session.provider_token, 'repo')
+          } catch (err) {
+            console.warn('Failed to save git credential:', err)
+          }
+        }
 
         // NOTE: Supabase automatically saves session through custom storage adapter
       })

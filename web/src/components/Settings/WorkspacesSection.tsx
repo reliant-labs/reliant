@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { cn } from "../../lib/utils";
 import { Settings, FolderGit2 } from "lucide-react";
+import { useDaemonStatus } from "../../hooks/useDaemonStatus";
 import { WorktreesPanel } from "../Worktrees/WorktreesPanel";
 import { ArchivedWorktreesPanel } from "../Worktrees/ArchivedWorktreesPanel";
 import { WorktreeDetailView } from "../Worktrees/WorktreeDetailView";
@@ -18,6 +19,7 @@ type WorkspacesTab = "active" | "archived" | "settings";
  */
 export function WorkspacesSection() {
   const [activeTab, setActiveTab] = useState<WorkspacesTab>("active");
+  const { activeDaemon } = useDaemonStatus();
 
   const tabs: Array<{ id: WorkspacesTab; label: string; icon: React.ReactNode }> = [
     { id: "active", label: "Active", icon: <FolderGit2 className="w-4 h-4" /> },
@@ -61,7 +63,7 @@ export function WorkspacesSection() {
             {/* Left Sidebar - Workspace List */}
             <div className="w-64 flex-shrink-0 border-r border-border overflow-hidden">
               {activeTab === "active" ? (
-                <WorktreesPanel />
+                <WorktreesPanel daemonName={activeDaemon?.hostname} />
               ) : (
                 <ArchivedWorktreesPanel />
               )}

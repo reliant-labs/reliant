@@ -101,6 +101,7 @@ export const devAuthGrpc = {
     refreshToken: string
     userId: string
     email: string
+    providerToken: string
   }> {
     const client = createClient(SystemService, getTransport());
     const response = await client.startOAuthSignIn(
@@ -111,6 +112,7 @@ export const devAuthGrpc = {
       refreshToken: response.refreshToken,
       userId: response.userId,
       email: response.email,
+      providerToken: response.providerToken,
     };
   },
 

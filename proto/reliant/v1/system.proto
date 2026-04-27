@@ -106,6 +106,7 @@ message StartOAuthSignInResponse {
   string refresh_token = 2;
   string user_id = 3;
   string email = 4;
+  string provider_token = 5;
 }
 
 // ============================================

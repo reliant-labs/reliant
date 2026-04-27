@@ -1,0 +1,268 @@
+---
+title: "Remote Daemons"
+description: "Connecting remote daemons, managed cloud daemons, and daemon selection behavior"
+---
+
+The tools daemon is the component that executes tools — shell commands, file operations, MCP servers — on a machine with access to your code. In [monolith mode](/architecture/monolith), the daemon runs in-process and there's nothing to configure. In [distributed mode](/architecture/distributed), the daemon runs as a separate process and connects to the server infrastructure through a gateway.
+
+This page covers how to connect remote daemons, how managed cloud daemons work, and how Reliant selects a daemon when you have more than one.
+
+## Connecting a Remote Daemon
+
+A remote daemon runs on your local machine and connects outbound to a Reliant gateway. This is the standard setup for distributed mode — your code stays on your machine, and the daemon dials out to the gateway over a persistent gRPC stream.
+
+### Registration
+
+Before starting a daemon, register it to create authentication credentials:
+
+```bash
+reliant daemon register
+```
+
+This opens a browser for OAuth login (if not already signed in), creates a Personal Access Token (PAT), and saves credentials locally. The credentials file is stored at:
+
+| OS | Path |
+|----|------|
+| macOS | `~/Library/Application Support/reliant/auth/reliant-daemon.json` |
+| Linux | `~/.config/reliant/auth/reliant-daemon.json` |
+| Windows | `~/AppData/Roaming/reliant/auth/reliant-daemon.json` |
+
+<Tip>
+Registration is usually automatic. If you run `reliant daemon start` without registering first, it will detect that you're logged in and auto-register.
+</Tip>
+
+### Starting the Daemon
+
+```bash
+reliant daemon start
+```
+
+The daemon connects to the gateway, registers itself, and begins accepting tool execution requests. By default it uses the hostname of your machine as its display name.
+
+#### Options
+
+| Flag | Env Var | Default | Description |
+|------|---------|---------|-------------|
+| `--name` | — | hostname | Human-friendly daemon name |
+| `--port` | `TOOLS_DAEMON_PORT` | `9190` | Local daemon listen port |
+| `--grpc-url` | `DAEMON_GRPC_URL` | — | gRPC server URL to connect to |
+| `--tls-cert` | `TLS_CERT_FILE` | — | TLS certificate file path |
+| `--tls-key` | `TLS_KEY_FILE` | — | TLS key file path |
+| `--tls-mode` | `DAEMON_TLS_MODE` | — | TLS mode: `tls`, `insecure_tls_skip_verify`, or `h2c` |
+| `--token` | — | `false` | Read a PAT from stdin instead of browser auth |
+| `--background` | — | `false` | Run in background |
+
+Global flags control which server the daemon connects to:
+
+| Flag | Env Var | Default | Description |
+|------|---------|---------|-------------|
+| `--server` | `RELIANT_SERVER_URL` | `https://reliantapi.com` | API server URL |
+| `--gateway` | `RELIANT_GATEWAY_URL` | derived from `--server` | Gateway URL |
+
+When `--gateway` is not set, it's derived from the server URL automatically (e.g., `https://reliantapi.com` becomes `https://gateway.reliantapi.com`).
+
+### Token-Based Authentication
+
+For headless or CI environments where a browser flow isn't possible, use the `--token` flag to provide a PAT directly:
+
+```bash
+echo "rlnt_pat_..." | reliant daemon start --token
+```
+
+### Managing the Daemon
+
+```bash
+reliant daemon status   # Check if the daemon is running
+reliant daemon stop     # Stop the daemon
+reliant daemon logs     # Tail daemon logs
+```
+
+### Auto-Recovery
+
+If the daemon loses its connection or receives an authentication error, it automatically:
+
+1. Deletes stale credentials
+2. Re-registers with fresh credentials
+3. Retries the connection
+
+No manual intervention is needed for transient failures.
+
+## Managed Cloud Daemons
+
+Managed daemons are cloud-hosted daemon instances provisioned by the Reliant control plane. Unlike local daemons that run on your machine and dial out to the gateway, managed daemons run as pods in the cloud and accept inbound connections from the gateway.
+
+### How They Differ from Local Daemons
+
+| | Local Daemon | Managed Daemon |
+|---|---|---|
+| **Runs on** | Your machine | Cloud pod |
+| **Connection direction** | Daemon → Gateway (outbound) | Gateway → Daemon (inbound) |
+| **Type** | `local` | `cloud` |
+| **Authentication** | PAT-based | Identity injected by control plane |
+| **Lifecycle** | User-managed | Auto-provisioned, suspendable |
+| **Filesystem access** | Your local files | Cloud-attached storage |
+
+### Reverse Connection Architecture
+
+Managed daemons use a reverse connection model:
+
+1. The control plane provisions a daemon pod and publishes a connect command to NATS
+2. The gateway receives the command and opens a gRPC stream **to** the daemon pod (instead of the other way around)
+3. The daemon's identity (daemon ID, user ID) is stamped by the gateway from the connect command — the daemon pod itself doesn't need credentials
+
+This design keeps managed daemons simple — they don't need PATs, credential files, or outbound network access to the gateway. The gateway initiates the connection.
+
+### Suspend and Resume
+
+Managed daemons can be suspended when idle to save resources. When a workflow needs to execute tools on a suspended daemon, the system automatically resumes it:
+
+1. The NATS daemon router resolves the daemon and sees its status is `IDLE` or `DISCONNECTED`
+2. It calls `ResumeDaemon` on the control plane
+3. The control plane brings the pod back up
+4. The gateway reconnects and tool execution proceeds
+
+This happens transparently — you don't need to manually wake a managed daemon.
+
+## Daemon Selection
+
+When you have multiple daemons (e.g., a local laptop daemon and a cloud daemon), Reliant uses a priority-based selection algorithm to determine which daemon handles tool execution.
+
+### Selection Priority
+
+The daemon is resolved in this order, from highest to lowest priority:
+
+```
+Node daemon  →  Workflow daemon  →  Session daemon  →  Default resolution
+```
+
+1. **Node-level `daemon` field** — A per-node override in workflow YAML. Takes highest priority.
+2. **Workflow-level `daemon` field** — A top-level field on the workflow. Applies to all nodes unless overridden.
+3. **Session daemon** — The daemon selected in the chat UI via the daemon picker. Stored as `active_daemon_id` on the chat.
+4. **Default resolution** — Automatic selection when nothing is explicitly set.
+
+### Default Resolution Algorithm
+
+When no daemon is explicitly selected, resolution follows a three-step cascade:
+
+**Step 1: Connected daemons.** Check all daemons currently connected to the gateway for this user. If multiple are connected, prefer **local over cloud**. If multiple of the same type exist, pick the **most recently connected**.
+
+**Step 2: Control plane lookup.** If no connected daemon matched and a control plane is configured, ask it to resolve a daemon. The control plane prefers active daemons and can automatically resume suspended ones.
+
+**Step 3: Database fallback.** Query the database for the user's daemons and return the first with an `active` status.
+
+<Note>
+Local daemons always win over cloud daemons in default resolution. If you have a local daemon running, it will be used unless you explicitly select a different daemon via the UI or a workflow `daemon` field.
+</Note>
+
+### Setting the Session Daemon
+
+In the chat UI, use the daemon picker to select which daemon a chat session should use. This sets the `active_daemon_id` on the chat, which is injected into all workflow executions from that chat as the session daemon.
+
+Clearing the daemon picker returns to default resolution behavior.
+
+### The `daemon` Field in Workflows
+
+Workflows and individual nodes can specify a `daemon` field to control which daemon runs their tools. The field supports three formats:
+
+**String shorthand** — Use a type keyword or a daemon name:
+
+```yaml
+daemon: local          # Use a local daemon
+daemon: cloud          # Use a cloud daemon
+daemon: any            # Any available daemon
+daemon: my-workstation # Match by daemon name
+```
+
+The keywords `local`, `cloud`, and `any` are treated as type selectors. Any other string is treated as a daemon name.
+
+**Structured selector** — Specify multiple criteria:
+
+```yaml
+daemon:
+  id: "550e8400-e29b-41d4-a716-446655440000"   # Exact daemon ID
+  name: "production-runner"                      # Match by name
+  type: cloud                                    # "local", "cloud", or "any"
+  labels:                                        # Match by labels
+    env: production
+    region: us-west-2
+```
+
+All specified fields must match. Labels use AND semantics — every label in the selector must be present on the daemon.
+
+**CEL expression** — Compute the selector dynamically:
+
+```yaml
+daemon: "{{ inputs.daemon_type }}"
+daemon: "{{ params.target_daemon }}"
+```
+
+CEL expressions can return a string (shorthand rules apply) or a map with `id`, `name`, `type`, and `labels` keys.
+
+### Per-Node Overrides
+
+Individual workflow nodes can override the workflow-level daemon:
+
+```yaml
+daemon: local   # Default for the workflow
+
+nodes:
+  local_work:
+    agent:
+      model: { name: claude-sonnet }
+      system_prompt: "Handle local file operations"
+
+  cloud_work:
+    daemon: cloud   # Override: run this node's tools on a cloud daemon
+    agent:
+      model: { name: claude-sonnet }
+      system_prompt: "Run compute-intensive tasks"
+```
+
+### Daemon Labels
+
+Labels are arbitrary key-value pairs attached to a daemon. They allow fine-grained selection when you have multiple daemons of the same type.
+
+Labels are stored in the daemon's identity file (`~/.reliant/daemon.json`) and sent to the gateway on connection. Use them in workflow selectors:
+
+```yaml
+daemon:
+  type: cloud
+  labels:
+    gpu: "true"
+    env: staging
+```
+
+Label matching requires **all** specified labels to be present on the daemon — it's a subset match. A daemon with `{gpu: "true", env: staging, region: us-west-2}` matches the selector above, but a daemon with only `{gpu: "true"}` does not.
+
+## Daemon Status Lifecycle
+
+Daemons go through the following status transitions:
+
+| Status | Description |
+|--------|-------------|
+| `active` | Connected and processing requests |
+| `idle` | Connected but not recently active |
+| `disconnected` | Not connected to any gateway |
+
+```
+Connect/Register ──→ ACTIVE ──→ (heartbeat timeout) ──→ IDLE
+                       ↑  │                                │
+                       │  │ Disconnect                     │ Disconnect
+                       │  ↓                                ↓
+                       │  DISCONNECTED ←───────────────────┘
+                       │       │
+                 Reconnect/Resume
+                       └───────┘
+```
+
+The daemon sends heartbeats every 15 seconds. If no heartbeat is received for 30 seconds, the daemon is considered stale. On disconnect, the status moves to `disconnected`. Reconnecting or resuming a managed daemon transitions back to `active`.
+
+## Troubleshooting
+
+**Daemon not connecting:** Verify your credentials with `reliant daemon status`. If credentials are stale, delete the credentials file and re-register with `reliant daemon register`.
+
+**Wrong daemon being used:** Check which daemon is selected in the chat UI daemon picker. If no session daemon is set, local daemons take priority over cloud. Use the workflow `daemon` field to explicitly target a specific daemon.
+
+**Managed daemon not waking:** The auto-resume mechanism requires a control plane connection. Check that the server is configured with a control plane client and that the NATS broker is reachable.
+
+**TLS errors:** Use `--tls-mode insecure_tls_skip_verify` for development environments with self-signed certificates. For production, provide valid certificates with `--tls-cert` and `--tls-key`.

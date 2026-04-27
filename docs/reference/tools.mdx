@@ -40,7 +40,7 @@ Tools are organized by tags for filtering:
 - [File Operations](#file-operations) (4 tools)
 - [Workflow Management](#workflow-management) (16 tools)
 - [System & Execution](#system--execution) (2 tools)
-- [Other Tools](#other-tools) (2 tools)
+- [Other Tools](#other-tools) (3 tools)
 
 ---
 
@@ -295,6 +295,9 @@ ACTIONS:
 CATEGORIES: layouts (11), charts (6), diagrams (5), deck (7), ui (32)
 
 TAGS: layout, chart, diagram, deck, ui, landing, marketing, dashboard, analytics, admin, portal, crm, comparison, pricing, hero, form, auth, slide, presentation, saas, funnel, competitive, market, pipeline, process, team, docs, technical, crud, table, stats, detail, search, navigation, modal, dialog, filter, badge, status, tabs, pagination, toast, notification, avatar, dropdown, menu, skeleton, loading, toggle, switch, alert, banner, activity, feed, metric, breadcrumb
+
+OPTIONS:
+- forge_integrated: Set to true in forge-generated projects to get integration guidance for useUiStore, useEventBus, and useAuth
 
 CHARTS handle all coordinate math internally — pass data, get pixels. No spatial reasoning required.
 
@@ -1668,8 +1671,25 @@ _Miscellaneous tools and utilities._
 
 | Tool | Tags | Description |
 |------|------|-------------|
+| [`ask_user`](#ask_user) | - | Ask the user one or more questions and wait for their responses. Use this when you need to: |
 | [`metadata_writer`](#metadata_writer) | - | Writes and updates project metadata YAML file |
 | [`worktree`](#worktree) | - | Manage git worktrees for parallel development workflows. |
+
+### ask_user
+
+Ask the user one or more questions and wait for their responses. Use this when you need to:
+1. Clarify ambiguous instructions
+2. Get user preferences or decisions
+3. Offer choices about implementation direction
+4. Confirm before taking significant actions
+
+Usage notes:
+- The user will always have an option to provide freetext input in addition to any predefined options.
+- If you recommend a specific option, list it first and add "(Recommended)" to the label.
+- Use allow_multiple: true when choices are not mutually exclusive.
+- Group related questions in a single call (up to 4 questions).
+
+---
 
 ### metadata_writer
 
