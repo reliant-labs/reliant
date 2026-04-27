@@ -162,10 +162,11 @@ func (s *SystemService) StartOAuthSignIn(
 	}
 
 	return connect.NewResponse(&reliantv1.StartOAuthSignInResponse{
-		AccessToken:  result.AccessToken,
-		RefreshToken: result.RefreshToken,
-		UserId:       result.UserID,
-		Email:        result.Email,
+		AccessToken:   result.AccessToken,
+		RefreshToken:  result.RefreshToken,
+		UserId:        result.UserID,
+		Email:         result.Email,
+		ProviderToken: result.ProviderToken,
 	}), nil
 }
 

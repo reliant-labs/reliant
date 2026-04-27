@@ -8,6 +8,7 @@ import { useWorktreeStore } from "../../store/worktreeStore";
 import { MonacoDiffViewer } from "../FileBrowser/MonacoDiffViewer";
 import { FileViewerTab } from "../FileBrowser/FileViewerTab";
 
+import { useDaemonStatus } from "../../hooks/useDaemonStatus";
 import { WorktreesPanel } from "../Worktrees/WorktreesPanel";
 import { ArchivedWorktreesPanel } from "../Worktrees/ArchivedWorktreesPanel";
 import { WorktreeDetailView } from "../Worktrees/WorktreeDetailView";
@@ -333,6 +334,7 @@ function WorktreesViewerContent() {
   const [worktreeView, setWorktreeView] = useState<"active" | "archived">(
     "active"
   );
+  const { activeDaemon } = useDaemonStatus();
 
   return (
     <div className="flex h-full">
@@ -382,7 +384,7 @@ function WorktreesViewerContent() {
         {/* List Content */}
         <div className="flex-1 overflow-auto">
           {worktreeView === "active" ? (
-            <WorktreesPanel />
+            <WorktreesPanel daemonName={activeDaemon?.hostname} />
           ) : (
             <ArchivedWorktreesPanel />
           )}

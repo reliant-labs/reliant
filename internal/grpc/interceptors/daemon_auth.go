@@ -37,13 +37,17 @@ func (i *DaemonAuthInterceptor) authenticate(ctx context.Context, header func(st
 	}
 	rawToken = strings.TrimSpace(rawToken)
 
-	userID, _, err := i.validator.ValidatePAT(ctx, rawToken)
+	userID, _, daemonID, err := i.validator.ValidatePAT(ctx, rawToken)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("invalid daemon auth token: %w", err))
 	}
 
 	// Always inject user ID into context — PAT-based auth always resolves to a user
 	ctx = context.WithValue(ctx, auth.UserIDContextKey, userID)
+	// Inject PAT-bound daemon ID (may be empty for unbound PATs)
+	if daemonID != "" {
+		ctx = context.WithValue(ctx, auth.DaemonIDContextKey, daemonID)
+	}
 	return ctx, nil
 }
 

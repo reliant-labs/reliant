@@ -77,6 +77,11 @@ Designed to run as N replicas behind a load balancer.`,
 				opts.CORSAllowedOrigins = strings.Split(corsRaw, ",")
 			}
 
+			// Parse allowed email domains (empty = allow all)
+			if raw := serverEnvOrDefault("ALLOWED_EMAIL_DOMAINS", ""); raw != "" {
+				opts.AllowedEmailDomains = strings.Split(raw, ",")
+			}
+
 			return serverapi.Run(cmd.Context(), opts)
 		},
 	}

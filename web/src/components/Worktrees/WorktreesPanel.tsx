@@ -1,19 +1,21 @@
 import { useState, useEffect } from "react";
-import { RefreshCw, Loader2, Search, AlertCircle, FolderGit2 } from "lucide-react";
+import { RefreshCw, Loader2, Search, AlertCircle, FolderGit2, Download } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { CreateWorktreeModal } from "./CreateWorktreeModal";
 import { DiscoverWorktreesModal } from "./DiscoverWorktreesModal";
+import { AddRepoModal } from "./AddRepoModal";
 import { InitializeGitModal } from "../Git/InitializeGitModal";
 import { Button } from "../ui/Button";
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
 
 interface WorktreesPanelProps {
   paddingClass?: string;
+  daemonName?: string;
 }
 
-export function WorktreesPanel({ paddingClass = "" }: WorktreesPanelProps) {
+export function WorktreesPanel({ paddingClass = "", daemonName }: WorktreesPanelProps) {
   const allWorktrees = useWorktreeStore((state) => state.worktrees);
   const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
   const loadWorktrees = useWorktreeStore((state) => state.loadWorktrees);
@@ -29,6 +31,7 @@ export function WorktreesPanel({ paddingClass = "" }: WorktreesPanelProps) {
   const refreshCurrentProject = useProjectStore((state) => state.refreshCurrentProject);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDiscoverModal, setShowDiscoverModal] = useState(false);
+  const [showAddRepoModal, setShowAddRepoModal] = useState(false);
   const [showInitGitModal, setShowInitGitModal] = useState(false);
 
   const getStatusColor = (status: WorktreeStatus) => {
@@ -194,6 +197,17 @@ export function WorktreesPanel({ paddingClass = "" }: WorktreesPanelProps) {
           >
             Create
           </Button>
+          {daemonName && (
+            <Button
+              onClick={() => setShowAddRepoModal(true)}
+              leftIcon={<Download className="w-3 h-3" />}
+              variant="secondary"
+              size="sm"
+              className="flex-1"
+            >
+              Add Repo
+            </Button>
+          )}
         </div>
       </div>
 
@@ -259,6 +273,13 @@ export function WorktreesPanel({ paddingClass = "" }: WorktreesPanelProps) {
             onWorktreesImported={handleWorktreesImported}
             projectId={currentProject.id}
           />
+          {daemonName && (
+            <AddRepoModal
+              isOpen={showAddRepoModal}
+              onClose={() => setShowAddRepoModal(false)}
+              daemonName={daemonName}
+            />
+          )}
         </>
       )}
     </div>

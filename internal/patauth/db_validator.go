@@ -22,18 +22,18 @@ func NewDBPATValidator(repo db.Repository) *DBPATValidator {
 	return &DBPATValidator{repo: repo}
 }
 
-func (v *DBPATValidator) ValidatePAT(ctx context.Context, rawToken string) (userID string, patID string, err error) {
+func (v *DBPATValidator) ValidatePAT(ctx context.Context, rawToken string) (userID string, patID string, daemonID string, err error) {
 	if !auth.IsPATFormat(rawToken) {
-		return "", "", fmt.Errorf("invalid token format")
+		return "", "", "", fmt.Errorf("invalid token format")
 	}
 
 	hash := auth.HashPAT(rawToken)
 	pat, err := v.repo.GetDaemonPATByTokenHash(ctx, hash)
 	if err != nil {
-		return "", "", fmt.Errorf("token lookup failed: %w", err)
+		return "", "", "", fmt.Errorf("token lookup failed: %w", err)
 	}
 	if pat == nil {
-		return "", "", fmt.Errorf("invalid or expired token")
+		return "", "", "", fmt.Errorf("invalid or expired token")
 	}
 
 	// Update last_used_at asynchronously (don't block auth on this)
@@ -45,5 +45,5 @@ func (v *DBPATValidator) ValidatePAT(ctx context.Context, rawToken string) (user
 		}
 	}()
 
-	return pat.UserID, pat.ID, nil
+	return pat.UserID, pat.ID, pat.DaemonID, nil
 }
