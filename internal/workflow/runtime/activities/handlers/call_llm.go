@@ -238,7 +238,7 @@ func (a *CallLLMActivity) mcpRuntimeFromContext(ctx context.Context) tools.MCPRu
 func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, thread string, history []message.Message, rtx RuntimeContext, args *reliantv1.CallLLMArgs) (*reliantv1.CallLLMOutput, error) {
 	// Extract options from runtime context
 	// Check if this workflow has reached the maximum spawn depth (prevents unbounded recursive spawn)
-	const maxSpawnDepth = 2
+	const maxSpawnDepth = 1
 	spawnDisabled := rtx.SpawnDepth >= maxSpawnDepth
 
 	// Resolve tools configuration
