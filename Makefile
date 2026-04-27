@@ -46,7 +46,7 @@ NC := \033[0m # No Color
 MINTLIFY_DOCS_DIR := docs
 MINTLIFY_PORT ?= 3000
 
-.PHONY: all build build-all clean test test-race test-coverage test-ci deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-preset generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit generate-yaml-bindings build-api-server build-temporal-worker build-tools-daemon build-services docker-build
+.PHONY: all build build-all clean test test-race test-coverage test-ci deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit generate-yaml-bindings build-api-server build-temporal-worker build-tools-daemon build-services docker-build
 
 # Default target
 all: deps fmt vet test build
@@ -316,8 +316,8 @@ CONFIG_DIR=config
 WEB_SRC_DIR=web/src
 CHANGELOG_DIR=$(MINTLIFY_DOCS_DIR)/data/releases
 
-## generate: Generate all docs and presets (run during build)
-generate: generate-yaml-bindings schema-generate sqlc generate-schema generate-scenario-schema generate-refcheck generate-cel-reference generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-models generate-presets generate-workflow-builder-preset generate-changelog generate-mintlify-reference
+## generate: Generate all docs, presets, and skills (run during build)
+generate: generate-yaml-bindings schema-generate sqlc generate-schema generate-scenario-schema generate-refcheck generate-cel-reference generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-models generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference
 	@echo "$(GREEN)✅ All generated files up to date$(NC)"
 
 ## generate-schema: Generate workflow schema reference from proto types
@@ -396,11 +396,11 @@ generate-changelog:
 	@$(GOCMD) run ./tools/docgen/changelog/... $(CHANGELOG_DIR) $(MINTLIFY_DOCS_DIR)/changelog.mdx
 	@echo "$(GREEN)✅ Mintlify changelog generated$(NC)"
 
-## generate-workflow-builder-preset: Generate workflow_builder.yaml
-generate-workflow-builder-preset:
-	@echo "$(YELLOW)Generating workflow builder preset...$(NC)"
-	@$(GOCMD) run ./tools/docgen/assembler/... $(PRESETS_DIR)/workflow_builder.yaml
-	@echo "$(GREEN)✅ Workflow builder preset generated$(NC)"
+## generate-workflow-builder-skill: Generate workflow-builder SKILL.md
+generate-workflow-builder-skill:
+	@echo "$(YELLOW)Generating workflow builder skill...$(NC)"
+	@$(GOCMD) run ./tools/docgen/assembler/... $(REFERENCE_DIR) internal/skills/catalog/builtin/workflow-builder/SKILL.md
+	@echo "$(GREEN)✅ Workflow builder skill generated$(NC)"
 
 ## generate-mintlify-reference: Convert generated reference markdown into Mintlify .mdx pages
 generate-mintlify-reference:

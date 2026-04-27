@@ -94,7 +94,39 @@ func ParseStoredSkills(jsonStr *string) ([]StoredSkill, error) {
 	if err := json.Unmarshal([]byte(*jsonStr), &items); err != nil {
 		return nil, fmt.Errorf("failed to parse stored skills JSON: %w", err)
 	}
-	return items, nil
+	return NormalizeStoredSkills(items), nil
+}
+
+// NormalizeStoredSkills ensures stored skill records always carry the canonical
+// path used by skill list/load/search, including builtin records from producers
+// that only populate the normalized skill name.
+func NormalizeStoredSkills(skills []StoredSkill) []StoredSkill {
+	if len(skills) == 0 {
+		return skills
+	}
+
+	normalized := make([]StoredSkill, len(skills))
+	copy(normalized, skills)
+	for i := range normalized {
+		normalized[i].SkillPath = normalizeStoredSkillPath(normalized[i])
+	}
+	return normalized
+}
+
+func normalizeStoredSkillPath(skill StoredSkill) string {
+	if path := canonicalStoredSkillPath(skill.SkillPath); path != "" {
+		return path
+	}
+	return canonicalStoredSkillPath(NormalizeSlug(skill.Name))
+}
+
+func canonicalStoredSkillPath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	path = strings.ReplaceAll(path, "\\", "/")
+	return strings.Trim(path, "/")
 }
 
 // FindStoredSkillByPath looks up a skill by its hierarchical path.

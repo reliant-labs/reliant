@@ -20,4 +20,5 @@ params:
   - update_task
   - component_library
   model:
-    tags: [moderate]
+    tags: [flagship]
+    thinking: high

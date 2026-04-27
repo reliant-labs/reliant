@@ -1,0 +1,33 @@
+# De-AI loop terminates after 1 iteration
+#
+# Tests that the loop exits when check_continue returns exit_code 1.
+
+name: deai_loop_single_iteration
+description: De-AI loop runs one paragraph and exits
+
+inputs:
+  yield: false
+
+events:
+  - node: deai_loop.rewrite
+    output:
+      response_text: "PARAGRAPH_INDEX: 0\nOPTION_A: Better version.\nNO_ISSUES: false"
+  - node: deai_loop.select
+    output:
+      response_text: "SELECTED: A\nAPPLIED: true\nSTATUS: done"
+  - node: deai_loop.check_continue
+    output:
+      exit_code: 1
+  - node: reddit_summary
+    output:
+      response_text: "Reddit post written."
+
+expect:
+  outcome: completed
+  reached:
+    - deai_loop
+    - deai_loop.rewrite
+    - deai_loop.select
+    - deai_loop.check_continue
+    - reddit_summary
+    - complete

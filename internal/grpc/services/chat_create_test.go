@@ -86,6 +86,46 @@ nodes:
 	require.Len(t, chats, 0, "chat should not be created when workflow validation fails")
 }
 
+func TestChatService_ValidateWorkflowInputs_RejectsMissingRequiredWorkflowParams(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
+	now := time.Now().UTC()
+	requiredWorkflow := strings.TrimSpace(`
+name: required-param-workflow
+apiVersion: v2
+inputs:
+  prompt:
+    type: string
+entry: [echo]
+nodes:
+  - id: echo
+    type: run
+    command: "echo {{inputs.prompt}}"
+`)
+
+	require.NoError(t, repo.CreateWorkflowDraft(ctx, &db.WorkflowDraft{
+		ID:               uuid.NewString(),
+		UserID:           "test-user",
+		Name:             "Required Param Workflow",
+		Slug:             "required-param-workflow",
+		Definition:       requiredWorkflow,
+		IsValid:          true,
+		ValidationErrors: nil,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		IsHidden:         false,
+		Version:          1,
+	}))
+
+	service := &ChatService{database: repo}
+	validationErrors := service.validateWorkflowInputs(ctx, "required-param-workflow", "", map[string]interface{}{})
+
+	require.NotEmpty(t, validationErrors)
+	require.Contains(t, validationErrors[0].Error(), "required input 'prompt' is not provided")
+}
+
 func TestChatService_CreateChat_EarlyWorkflowTreeValidationSuccess(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)

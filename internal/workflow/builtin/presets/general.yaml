@@ -12,15 +12,10 @@ params:
   - planner
   - implementer
   - code_reviewer
-  - code_hygiene_reviewer
-  - security_reviewer
-  - performance_reviewer
-  - architect
   - documentation
   - refactor
   - debug
   - tester
-  - reproducer
   - git
   - ux
   tools:

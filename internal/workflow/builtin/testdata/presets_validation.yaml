@@ -63,13 +63,6 @@ presets:
       - tools
       - model
 
-  reproducer:
-    tag: agent
-    required_params:
-      - system_prompt
-      - tools
-      - model
-
   code_reviewer:
     tag: agent
     required_params:
@@ -104,12 +97,6 @@ presets:
       - system_prompt
       - spawn_presets
       - tools
-      - model
-
-  auditor:
-    tag: agent
-    required_params:
-      - system_prompt
       - model
 
   workflow_builder:

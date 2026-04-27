@@ -169,20 +169,6 @@ func chatToProto(c *db.Chat) *reliantv1.Chat {
 	return proto
 }
 
-// enrichChatProto populates workflow-derived fields on a proto Chat.
-// Currently sets CanDiscuss from the workflow definition's Discuss field.
-func (s *ChatService) enrichChatProto(ctx context.Context, proto *reliantv1.Chat, chat *db.Chat) {
-	if chat.WorkflowName == nil || *chat.WorkflowName == "" {
-		return
-	}
-	userID := chat.UserID
-	wf, err := s.loadCreateChatWorkflowForValidation(ctx, userID, *chat.WorkflowName, chat.ProjectID)
-	if err != nil {
-		return
-	}
-	proto.CanDiscuss = wf.GetDiscuss()
-}
-
 // displayStyleProtoToInt32Ptr converts a proto DisplayStyle pointer to an *int32 for the database.
 func displayStyleProtoToInt32Ptr(ds *reliantv1.DisplayStyle) *int32 {
 	if ds == nil {
@@ -834,7 +820,6 @@ func (s *ChatService) CreateChat(
 	}
 
 	createChatProto := chatToProto(createdChat)
-	s.enrichChatProto(ctx, createChatProto, createdChat)
 	response := &reliantv1.CreateChatResponse{
 		Chat:       createChatProto,
 		WorkflowId: workflowID,
@@ -879,7 +864,6 @@ func (s *ChatService) ListChats(
 	protoChats := make([]*reliantv1.Chat, len(chats))
 	for i, c := range chats {
 		protoChats[i] = chatToProto(c)
-		s.enrichChatProto(ctx, protoChats[i], c)
 	}
 
 	// Get latest user update sequence for stream sync —
@@ -947,7 +931,6 @@ func (s *ChatService) GetChat(
 
 	protoChat := chatToProto(chat)
 	protoChat.NeedsRecovery = needsRecovery
-	s.enrichChatProto(ctx, protoChat, chat)
 	return connect.NewResponse(&reliantv1.GetChatResponse{
 		Chat: protoChat,
 	}), nil
@@ -1090,7 +1073,6 @@ func (s *ChatService) UpdateChat(
 	}
 
 	updateChatProto := chatToProto(chat)
-	s.enrichChatProto(ctx, updateChatProto, chat)
 	return connect.NewResponse(&reliantv1.UpdateChatResponse{
 		Chat: updateChatProto,
 	}), nil
@@ -1195,7 +1177,6 @@ func (s *ChatService) SearchChats(
 	protoChats := make([]*reliantv1.Chat, len(chats))
 	for i, c := range chats {
 		protoChats[i] = chatToProto(c)
-		s.enrichChatProto(ctx, protoChats[i], c)
 	}
 
 	return connect.NewResponse(&reliantv1.SearchChatsResponse{
@@ -1220,7 +1201,6 @@ func (s *ChatService) ListArchivedChats(
 	protoChats := make([]*reliantv1.ArchivedChat, len(archivedChats))
 	for i, ac := range archivedChats {
 		acProto := chatToProto(&ac.Chat)
-		s.enrichChatProto(ctx, acProto, &ac.Chat)
 		protoChats[i] = &reliantv1.ArchivedChat{
 			Chat: acProto,
 		}
@@ -2803,7 +2783,6 @@ func (s *ChatService) BranchChat(
 	}
 
 	branchChatProto := chatToProto(branchChat)
-	s.enrichChatProto(ctx, branchChatProto, branchChat)
 	return connect.NewResponse(&reliantv1.BranchChatResponse{
 		Chat: branchChatProto,
 	}), nil
@@ -3669,7 +3648,8 @@ func (s *ChatService) buildWorkflowInputs(
 	logging.Info("[buildWorkflowInputs] After user params", "tools", initialData["tools"])
 
 	// Apply workflow schema defaults (e.g. model: { id: gpt-4o }) so validation and execution
-	// see the same inputs the workflow defines. Ensures model/message etc. are present when UI sends empty params.
+	// see the same inputs the workflow defines. Required inputs without defaults remain absent
+	// so validateWorkflowInputs can reject missing required params before a chat starts.
 	protoInputs := s.loadWorkflowInputsForBuild(ctx, userID, workflowName, projectID)
 	if len(protoInputs) > 0 {
 		initialData = v2.ApplyDefaults(initialData, protoInputs)
@@ -3803,8 +3783,8 @@ func (s *ChatService) validateWorkflowInputs(ctx context.Context, workflowName, 
 		}
 	}
 
-	// Apply defaults before validation - this mirrors what happens when workflow starts
-	// and ensures validation sees the same inputs the workflow will receive
+	// Apply explicit defaults before validation so optional schema defaults are included.
+	// Required inputs without defaults intentionally remain absent and are rejected below.
 	protoInputs := s.loadWorkflowInputsForBuild(ctx, userID, workflowName, projectID)
 	inputsWithDefaults := v2.ApplyDefaults(filteredInputs, protoInputs)
 

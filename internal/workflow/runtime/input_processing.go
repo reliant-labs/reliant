@@ -1,4 +1,3 @@
-// Copyright (c) 2025 Reliant Labs
 // Package runtime input processing utilities.
 //
 // This file contains runtime utilities for processing workflow inputs:
@@ -126,9 +125,20 @@ func coerceToString(value interface{}) (interface{}, bool) {
 // For group inputs (type: group), this function creates nested map structure
 // (e.g., inputs["agent"]["model"]) for direct CEL access via inputs.agent.model.
 //
-// All schema-defined inputs are guaranteed to exist in the result (with zero
-// values for those without explicit defaults) to prevent CEL "no such key" errors.
+// Schema-defined inputs are only added when they define explicit defaults; required
+// inputs without defaults remain absent so validation can reject missing values.
 func ApplyDefaults(inputs map[string]interface{}, schemas map[string]*reliantv1.Input) map[string]interface{} {
+	return applyDefaults(inputs, schemas, false)
+}
+
+// ApplyDefaultsForRuntime applies schema defaults after required inputs have already
+// been validated. It also inserts zero values for any remaining missing inputs so
+// CEL expressions can safely access optional schema fields without no-key errors.
+func ApplyDefaultsForRuntime(inputs map[string]interface{}, schemas map[string]*reliantv1.Input) map[string]interface{} {
+	return applyDefaults(inputs, schemas, true)
+}
+
+func applyDefaults(inputs map[string]interface{}, schemas map[string]*reliantv1.Input, includeZeroValues bool) map[string]interface{} {
 	if schemas == nil {
 		return inputs
 	}
@@ -140,22 +150,19 @@ func ApplyDefaults(inputs map[string]interface{}, schemas map[string]*reliantv1.
 		result[k] = v
 	}
 
-	// Apply defaults for missing fields and coerce all values to schema types
+	// Apply defaults for missing optional fields and coerce all values to schema types.
 	for name, input := range schemas {
 		if input == nil {
 			continue
 		}
 
-		inputType := model.GetInputType(input)
-
-		// Handle group inputs by creating nested map structure
+		// Handle group inputs by creating nested map structure when defaults or provided
+		// values require it. Required nested inputs without defaults are intentionally
+		// left absent so validation can reject missing required params.
 		if nested := model.GetGroupInputs(input); nested != nil {
 			var groupMap map[string]interface{}
 			if existing, ok := result[name].(map[string]interface{}); ok {
 				groupMap = existing
-			} else {
-				groupMap = make(map[string]interface{})
-				result[name] = groupMap
 			}
 
 			for nestedName, nestedInput := range nested {
@@ -163,13 +170,23 @@ func ApplyDefaults(inputs map[string]interface{}, schemas map[string]*reliantv1.
 					continue
 				}
 
-				value, exists := groupMap[nestedName]
+				var value interface{}
+				exists := false
+				if groupMap != nil {
+					value, exists = groupMap[nestedName]
+				}
 
 				if !exists || value == nil {
 					if def := model.GetInputDefault(nestedInput); def != nil {
 						value = def
-					} else {
+					} else if includeZeroValues {
 						value = zeroValueForType(model.GetInputType(nestedInput))
+					} else {
+						continue
+					}
+					if groupMap == nil {
+						groupMap = make(map[string]interface{})
+						result[name] = groupMap
 					}
 					groupMap[nestedName] = value
 				}
@@ -188,8 +205,10 @@ func ApplyDefaults(inputs map[string]interface{}, schemas map[string]*reliantv1.
 		if !exists || value == nil {
 			if def := model.GetInputDefault(input); def != nil {
 				value = def
+			} else if includeZeroValues {
+				value = zeroValueForType(model.GetInputType(input))
 			} else {
-				value = zeroValueForType(inputType)
+				continue
 			}
 			result[name] = value
 		}
@@ -243,15 +262,11 @@ func coerceToType(value interface{}, typeName string) (interface{}, bool) {
 	}
 }
 
-// zeroValueForType returns the zero value for a given schema type.
-// This ensures keys exist in the inputs map to prevent CEL "no such key" errors.
 func zeroValueForType(schemaType string) interface{} {
 	switch schemaType {
 	case "string", "enum":
 		return ""
 	case "model":
-		// Model inputs are resolved at runtime via tag system when not provided.
-		// Return nil so validation skips them (they're optional unless marked required).
 		return nil
 	case "integer":
 		return int64(0)

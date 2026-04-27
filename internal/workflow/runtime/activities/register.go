@@ -28,6 +28,7 @@ var nodeTypeActivities = map[string]nodeTypeActivityDef{
 	model.NodeTypeExecuteTools:   {"ExecuteTools", reflect.TypeOf(reliantv1.ExecuteToolsArgs{}), reflect.TypeOf((*reliantv1.ExecuteToolsOutput)(nil))},
 	model.NodeTypeCompact:        {"Compact", reflect.TypeOf(reliantv1.CompactArgs{}), reflect.TypeOf(handlers.CompactOutput{})},
 	model.NodeTypeCreateWorktree: {"CreateWorktree", reflect.TypeOf(reliantv1.CreateWorktreeArgs{}), reflect.TypeOf(handlers.CreateWorktreeOutput{})},
+	model.NodeTypeAskQuestion:    {"AskQuestion", reflect.TypeOf(reliantv1.AskQuestionArgs{}), reflect.TypeOf((*reliantv1.AskQuestionOutput)(nil))},
 	model.NodeTypeSaveMessage:    {"SaveMessage", reflect.TypeOf(reliantv1.SaveMessageNodeArgs{}), reflect.TypeOf(reliantv1.SaveMessageOutput{})},
 }
 

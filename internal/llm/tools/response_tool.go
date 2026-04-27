@@ -45,6 +45,17 @@ type ResponseTool struct {
 	schema      *jsonschema.Schema
 }
 
+// ResponseToolMarker is implemented by tools that are used only for structured LLM output.
+type ResponseToolMarker interface {
+	IsResponseTool() bool
+}
+
+// IsResponseTool reports whether a tool is a structured-output response tool.
+func IsResponseTool(tool Tool) bool {
+	marker, ok := tool.(ResponseToolMarker)
+	return ok && marker.IsResponseTool()
+}
+
 // NewResponseTool creates a response tool from a definition
 func NewResponseTool(def ResponseToolDefinition) Tool {
 	schema := schemaFromMap(def.Schema)
@@ -96,6 +107,10 @@ func (t *ResponseTool) RequiresPermission(rctx *rctx.ToolContext, params ToolCal
 }
 
 func (t *ResponseTool) IsReadOnly() bool {
+	return true
+}
+
+func (t *ResponseTool) IsResponseTool() bool {
 	return true
 }
 

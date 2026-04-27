@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/invopop/jsonschema"
+	"github.com/openai/openai-go/v3/responses"
 	"github.com/reliant-labs/reliant/internal/llm"
 	openaidriver "github.com/reliant-labs/reliant/internal/llm/drivers/openai"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -463,7 +464,7 @@ func TestBuildParams_AllowsNonEmptyInput(t *testing.T) {
 		t.Fatalf("expected marshaled params to include input field, got: %s", jsonStr)
 	}
 	// json.Marshal escapes angle brackets, so search for the escaped form.
-	if count := strings.Count(jsonStr, `\u003coutput_contract\u003e`); count != 1 {
+	if count := strings.Count(jsonStr, `\u003creliant_runtime_context\u003e`); count != 1 {
 		t.Fatalf("expected shared guidance exactly once in codex instructions, got %d: %s", count, jsonStr)
 	}
 }
@@ -504,6 +505,53 @@ func TestBuildParams_PrunesDuplicateToolNamesDeterministically(t *testing.T) {
 	second := params.Tools[1].OfFunction.Name
 	if first != "a_tool" || second != "z_tool" {
 		t.Fatalf("expected deterministic sorted order [a_tool z_tool], got [%s %s]", first, second)
+	}
+}
+
+func TestBuildParams_ForcesResponseToolChoice(t *testing.T) {
+	client := &CodexClient{}
+	messages := []message.Message{{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "route this"}}}}
+	responseTool := llmtools.NewResponseTool(llmtools.ResponseToolDefinition{
+		Name:        "node_routing_decision",
+		Description: "Select the node to route to",
+		Schema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"selected_node": map[string]interface{}{"type": "string"},
+			},
+		},
+	})
+
+	params, err := client.buildParams([]string{"system prompt"}, messages, []llmtools.Tool{
+		stubTool{name: "ordinary_tool"},
+		responseTool,
+	})
+	if err != nil {
+		t.Fatalf("buildParams returned error: %v", err)
+	}
+
+	if params.ToolChoice.OfFunctionTool == nil {
+		t.Fatalf("expected response tool to force a named function tool choice")
+	}
+	if got := params.ToolChoice.OfFunctionTool.Name; got != "node_routing_decision" {
+		t.Fatalf("forced tool choice = %q, want node_routing_decision", got)
+	}
+}
+
+func TestBuildParams_KeepsAutoToolChoiceWithoutResponseTool(t *testing.T) {
+	client := &CodexClient{}
+	messages := []message.Message{{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "hello"}}}}
+
+	params, err := client.buildParams([]string{"system prompt"}, messages, []llmtools.Tool{stubTool{name: "ordinary_tool"}})
+	if err != nil {
+		t.Fatalf("buildParams returned error: %v", err)
+	}
+
+	if params.ToolChoice.OfFunctionTool != nil {
+		t.Fatalf("ordinary tools should not force a specific function tool choice")
+	}
+	if !params.ToolChoice.OfToolChoiceMode.Valid() || params.ToolChoice.OfToolChoiceMode.Value != responses.ToolChoiceOptionsAuto {
+		t.Fatalf("ordinary tools should keep auto tool choice, got %#v", params.ToolChoice)
 	}
 }
 

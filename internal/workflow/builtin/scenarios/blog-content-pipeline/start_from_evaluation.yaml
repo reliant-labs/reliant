@@ -1,0 +1,67 @@
+# Start from evaluation: skip phases 1-3.6 via router
+#
+# Tests that the classify router can route to evaluation, skipping earlier phases.
+
+name: start_from_evaluation
+description: Router routes to evaluation, skipping writing/copyedit/DA phases
+
+inputs:
+  yield: false
+
+events:
+  # Context intake: existing edited draft should be enough
+  - node: context_intake
+    output:
+      response_text: "Existing edited draft artifact is the relevant context."
+
+  # Router selects evaluation as starting point
+  - node: classify
+    output:
+      selected_node: evaluation
+      reasoning: "Edited draft ready — evaluate quality and fact-check."
+
+  - node: evaluation
+    output:
+      response_text: "Evaluation complete."
+  - node: visual_generation
+    output:
+      response_text: "Visuals generated."
+  - node: distribution
+    output:
+      response_text: "Assembly complete."
+  - node: deai_prep
+    output:
+      response_text: "Manifest written."
+  - node: deai_loop.rewrite
+    output:
+      response_text: "NO_ISSUES: true"
+  - node: deai_loop.select
+    output:
+      response_text: "SELECTED: ORIGINAL\nSTATUS: done"
+  - node: deai_loop.check_continue
+    output:
+      exit_code: 1
+  - node: reddit_summary
+    output:
+      response_text: "Reddit post written."
+
+expect:
+  outcome: completed
+  reached:
+    - context_intake
+    - classify
+    - evaluation
+    - visual_generation
+    - distribution
+    - deai_prep
+    - deai_loop
+    - reddit_summary
+    - validate_artifacts
+    - complete
+  not_reached:
+    - topic_discovery
+    - research_brief
+    - writing
+    - copyedit
+    - da_content
+    - da_style

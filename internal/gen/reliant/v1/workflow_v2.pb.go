@@ -6131,9 +6131,6 @@ type Workflow struct {
 	Entry []string `protobuf:"bytes,9,rep,name=entry,proto3" json:"entry,omitempty"`
 	// APIVersion specifies the schema version. Optional, for future compatibility.
 	ApiVersion string `protobuf:"bytes,10,opt,name=api_version,json=apiVersion,proto3" json:"api_version,omitempty"`
-	// Discuss enables a lightweight discussion mode when the workflow is paused.
-	// When true, users can chat with the LLM without resuming workflow execution.
-	Discuss bool `protobuf:"varint,11,opt,name=discuss,proto3" json:"discuss,omitempty"`
 	// Daemon specifies the default daemon for tool execution in this workflow.
 	// Can be overridden per-node. Supports string shorthand ("local"),
 	// structured object ({type: "cloud"}), or CEL expression ("{{ params.daemon }}").
@@ -6240,13 +6237,6 @@ func (x *Workflow) GetApiVersion() string {
 		return x.ApiVersion
 	}
 	return ""
-}
-
-func (x *Workflow) GetDiscuss() bool {
-	if x != nil {
-		return x.Discuss
-	}
-	return false
 }
 
 func (x *Workflow) GetDaemon() *CelDaemonSelector {
@@ -6853,7 +6843,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v2\x14.reliant.v1.PositionR\x05value:\x028\x01\x1aW\n" +
 	"\rSwitchesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
-	"\x05value\x18\x02 \x01(\v2\x1a.reliant.v1.SwitchMetadataR\x05value:\x028\x01\"\xf6\x04\n" +
+	"\x05value\x18\x02 \x01(\v2\x1a.reliant.v1.SwitchMetadataR\x05value:\x028\x01\"\xe2\x04\n" +
 	"\bWorkflow\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12&\n" +
 	"\x05nodes\x18\x02 \x03(\v2\x10.reliant.v1.NodeR\x05nodes\x12&\n" +
@@ -6866,15 +6856,14 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x05entry\x18\t \x03(\tR\x05entry\x12\x1f\n" +
 	"\vapi_version\x18\n" +
 	" \x01(\tR\n" +
-	"apiVersion\x12\x18\n" +
-	"\adiscuss\x18\v \x01(\bR\adiscuss\x125\n" +
+	"apiVersion\x125\n" +
 	"\x06daemon\x18\f \x01(\v2\x1d.reliant.v1.CelDaemonSelectorR\x06daemon\x1aL\n" +
 	"\vInputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12'\n" +
 	"\x05value\x18\x02 \x01(\v2\x11.reliant.v1.InputR\x05value:\x028\x01\x1a:\n" +
 	"\fOutputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01BCZAgithub.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\v\x10\fBCZAgithub.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_workflow_v2_proto_rawDescOnce sync.Once
