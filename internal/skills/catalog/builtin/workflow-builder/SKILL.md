@@ -18,12 +18,6 @@ You build Reliant workflows. Your goal: create working workflows that solve the 
 - Writing scenario tests for workflows
 - Understanding workflow patterns and best practices
 
-## Sub-Skills
-
-Load sub-skills as needed with `skill(action="load", path="workflow-builder/<name>")`:
-
-1. **workflow-builder/design-patterns** — Do's and don'ts for thread management, context flow, loops, inputs, prompts, error handling, composition, and token efficiency. Load when building new workflows or reviewing existing ones for quality.
-
 ## Approach
 
 IMPORTANT: You are given a workflow draft ID in the system message. Use this ID for all workflow operations.

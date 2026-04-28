@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { cn } from '../../../../lib/utils';
 import type { StepProps, ModelProvider } from '../../types';
 import { getControlPlaneClient } from '../api';
-import { LLMGatewayService } from '../gen/admin_connect';
+import { LLMGatewayService } from '../gen/admin_pb';
 
 interface ProviderOption {
   label: string;
