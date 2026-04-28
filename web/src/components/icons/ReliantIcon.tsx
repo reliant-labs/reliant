@@ -2,6 +2,7 @@ import { forwardRef } from "react";
 
 interface ReliantIconProps extends React.SVGProps<SVGSVGElement> {
   size?: number | string;
+  title?: string;
 }
 
 /**
@@ -12,7 +13,23 @@ interface ReliantIconProps extends React.SVGProps<SVGSVGElement> {
  * the logo content and prevent clipping when used with square dimensions.
  */
 export const ReliantIcon = forwardRef<SVGSVGElement, ReliantIconProps>(
-  ({ size, className, ...props }, ref) => {
+  (
+    {
+      size,
+      className,
+      children,
+      title,
+      role,
+      focusable,
+      "aria-hidden": ariaHidden,
+      "aria-label": ariaLabel,
+      "aria-labelledby": ariaLabelledBy,
+      ...props
+    },
+    ref
+  ) => {
+    const isDecorative = !children && !title && !role && !ariaLabel && !ariaLabelledBy;
+
     // Original viewBox: 0 0 1187.07 682.09 (wide aspect ratio)
     // To make it square, we center vertically by adjusting minY
     // New height = 1187.07 (same as width for square)
@@ -27,8 +44,14 @@ export const ReliantIcon = forwardRef<SVGSVGElement, ReliantIconProps>(
         height={size}
         className={className}
         fill="currentColor"
+        role={role}
+        focusable={focusable ?? "false"}
+        aria-hidden={ariaHidden ?? (isDecorative ? true : undefined)}
+        aria-label={ariaLabel}
+        aria-labelledby={ariaLabelledBy}
         {...props}
       >
+        {title && <title>{title}</title>}
         <g>
           <path
             className="fill-[#0d8cff]"
@@ -47,6 +70,7 @@ export const ReliantIcon = forwardRef<SVGSVGElement, ReliantIconProps>(
             d="M1187.07,313.38h-137.92c-5.9-43.99-25.93-84.55-57.85-116.47-38.5-38.5-89.67-59.72-144.14-59.72-41.02,0-80.21,12.03-113.5,34.48-10.88,7.32-21.13,15.73-30.68,25.24l-109.43,109.47-34.66,34.66-96.99,96.99-5.76-5.76-91.27-91.23,91.27-91.23,40.42-40.42,96.99-97.04,12.48-12.48c9.42-9.42,19.21-18.2,29.5-26.34C695.58,25.88,769.39,0,847.17,0c91.05,0,176.74,35.49,241.17,99.87,57.85,57.89,92.37,132.84,98.73,213.51Z"
           />
         </g>
+        {children}
       </svg>
     );
   }

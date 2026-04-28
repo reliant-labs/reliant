@@ -78,7 +78,7 @@ export function AccountSettings() {
         </p>
       </div>
 
-      <div className="border border-border rounded-lg p-6 space-y-4">
+      <div className="border border-border/40 rounded-lg p-6 space-y-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
         {linkSuccess && (
           <div className="rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 p-3 flex items-center gap-2">
             <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
@@ -111,11 +111,11 @@ export function AccountSettings() {
           </div>
         </div>
 
-        <div className="border-t border-border pt-4">
+        <div className="border-t border-border/40 pt-4">
           <LinkedAccounts />
         </div>
 
-        <div className="border-t border-border pt-4">
+        <div className="border-t border-border/40 pt-4">
           <Button
             variant="destructive"
             size="xs"

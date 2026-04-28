@@ -6,6 +6,7 @@
 import { memo } from 'react';
 import type { ToolContentProps } from './types';
 import { LightweightCodeViewer } from '../LightweightCodeViewer';
+import { GenericToolRenderer } from './GenericToolRenderer';
 import { FileLink } from '../FileLink';
 import { parseFilePath } from '../../../lib/filePath';
 import { openFile } from '../../../lib/fileOpener';
@@ -69,44 +70,92 @@ function ExecutingView({ toolName, input }: { toolName: string; input: Record<st
   );
 }
 
+function ToolInputBlock({ input }: { input: Record<string, unknown> | string }) {
+  const hasInput = input !== undefined &&
+    (typeof input === 'object' ? Object.keys(input).length > 0 : input !== '');
+
+  if (!hasInput) return null;
+
+  return (
+    <div className="border-b border-border/30">
+      <div className="px-2 py-0.5 text-[10px] text-muted-foreground bg-muted/40">
+        Input
+      </div>
+      <LightweightCodeViewer
+        content={typeof input === 'string' ? input : JSON.stringify(input, null, 2)}
+        language="json"
+        maxHeight={180}
+        minHeight={0}
+        showLineNumbers={false}
+        noBorder
+      />
+    </div>
+  );
+}
+
 function ReadToolRendererComponent({ ctx }: ToolContentProps) {
   const { toolName, input, result, worktreeId, isExecuting } = ctx;
   const toolNameLower = toolName.toLowerCase();
+
+  if (toolNameLower === 'view' || toolNameLower === 'read' || toolNameLower === 'read_files') {
+    return <GenericToolRenderer ctx={ctx} />;
+  }
 
   // During execution, show input parameters
   if (!result?.content) {
     if (isExecuting && input) {
       return <ExecutingView toolName={toolNameLower} input={input} />;
     }
-    return null;
+    return <GenericToolRenderer ctx={ctx} />;
   }
 
   const content = result.content.trim();
 
   // Grep output formatter
   if (toolNameLower === 'grep') {
-    return <GrepOutput content={content} input={input} worktreeId={worktreeId} />;
+    return (
+      <>
+        <ToolInputBlock input={input} />
+        <GrepOutput content={content} input={input} worktreeId={worktreeId} />
+      </>
+    );
   }
 
   // Glob output formatter
   if (toolNameLower === 'glob') {
-    return <GlobOutput content={content} worktreeId={worktreeId} />;
+    return (
+      <>
+        <ToolInputBlock input={input} />
+        <GlobOutput content={content} worktreeId={worktreeId} />
+      </>
+    );
   }
 
   // Websearch output formatter
   if (toolNameLower === 'websearch') {
-    return <WebsearchOutput content={content} />;
+    return (
+      <>
+        <ToolInputBlock input={input} />
+        <WebsearchOutput content={content} />
+      </>
+    );
   }
 
   // LS / find_files output
   if (toolNameLower === 'ls' || toolNameLower === 'find_files') {
-    return <FileListOutput content={content} worktreeId={worktreeId} />;
+    return (
+      <>
+        <ToolInputBlock input={input} />
+        <FileListOutput content={content} worktreeId={worktreeId} />
+      </>
+    );
   }
 
   // Diagnostics
   if (toolNameLower === 'diagnostics') {
     return (
       <div className="tool-content-read">
+        <ToolInputBlock input={input} />
         <LightweightCodeViewer
           content={content}
           language="text"
@@ -122,6 +171,7 @@ function ReadToolRendererComponent({ ctx }: ToolContentProps) {
   // Default: code viewer
   return (
     <div className="tool-content-read">
+      <ToolInputBlock input={input} />
       <LightweightCodeViewer
         content={content}
         language="text"

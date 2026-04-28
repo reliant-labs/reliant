@@ -347,7 +347,7 @@ export function WorktreeSettings() {
 
       {/* Info Box */}
       <div className="border-t border-border/30 pt-5 mt-5"></div>
-      <div className="bg-muted/30 border border-border/40 rounded-lg p-4">
+      <div className="bg-muted/30 border border-border/40 rounded-lg p-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
         <div className="flex gap-3 text-xs text-muted-foreground">
           <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-primary" />
           <div className="space-y-2">

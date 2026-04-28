@@ -606,7 +606,7 @@ export function CombinedGeneralSettings({
 
       {/* Add Provider Section */}
       {availableProviders.length > 0 && (
-        <div className="border border-border rounded-lg p-6 bg-card">
+        <div className="border border-border/40 rounded-lg p-6 bg-card shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
           <h3 className="text-lg font-semibold mb-4">Add New Provider</h3>
 
           <div className="space-y-4">
@@ -620,7 +620,7 @@ export function CombinedGeneralSettings({
                     setSelectedProvider(providerId);
                     setValidationMessage(null);
                   }}
-                  className="w-full px-3 py-2 pr-10 border border-input bg-background rounded-md appearance-none cursor-pointer"
+                  className="w-full px-3 py-2 pr-10 border border-border/40 bg-background rounded-md text-sm appearance-none cursor-pointer focus:ring-2 focus:ring-ring/40"
                 >
                   <option value="">Choose a provider...</option>
                   {availableProviders.map(([id, config]) => (
@@ -637,7 +637,7 @@ export function CombinedGeneralSettings({
               providerConfigs[selectedProvider as ProviderId]?.usesOAuth ? (
                 /* OAuth Section */
                 <div className="space-y-4">
-                  <div className="p-4 rounded-lg border border-border bg-muted/30">
+                  <div className="p-4 rounded-lg border border-border/40 bg-muted/30">
                     <div className="space-y-2">
                       <p className="text-sm font-medium text-foreground">
                         Authenticate via {providerConfigs[selectedProvider as ProviderId]?.name}
@@ -648,7 +648,7 @@ export function CombinedGeneralSettings({
                           : "The local OAuth helper is not running. Start it in your terminal to enable login:"}
                       </p>
                       {!oauthAvailability.available && !oauthAvailability.loading && (
-                        <code className="block mt-2 px-3 py-2 text-sm bg-background border border-border rounded-md font-mono select-all">
+                        <code className="block mt-2 px-3 py-2 text-sm bg-background border border-border/40 rounded-md font-mono select-all">
                           reliant auth serve
                         </code>
                       )}
@@ -676,12 +676,7 @@ export function CombinedGeneralSettings({
                   <div className="flex justify-end">
                     {oauthAvailability.available ? (
                       <button
-                        className="px-4 py-2 text-sm font-medium border rounded-md transition-colors disabled:opacity-50 flex items-center gap-2"
-                        style={{
-                          backgroundColor: "hsl(var(--primary) / 0.1)",
-                          color: "hsl(var(--primary))",
-                          borderColor: "hsl(var(--primary))",
-                        }}
+                        className="px-4 py-2 text-sm font-medium border border-primary/40 bg-primary/10 text-primary rounded-md transition-colors hover:bg-primary/20 disabled:opacity-50 flex items-center gap-2"
                         onClick={() => handleConnectOAuth(providerConfigs[selectedProvider as ProviderId]?.usesOAuth as string)}
                         disabled={validating}
                       >
@@ -696,7 +691,7 @@ export function CombinedGeneralSettings({
                       </button>
                     ) : (
                       <button
-                        className="px-4 py-2 text-sm font-medium border rounded-md transition-colors disabled:opacity-50"
+                        className="px-4 py-2 text-sm font-medium border border-border/40 bg-background rounded-md transition-colors hover:bg-accent disabled:opacity-50"
                         onClick={oauthAvailability.recheck}
                         disabled={oauthAvailability.loading}
                       >
@@ -723,7 +718,7 @@ export function CombinedGeneralSettings({
                             selectedProvider as ProviderId
                           ]?.name
                         } API key`}
-                        className="w-full px-3 py-2 border border-input bg-background rounded-md pr-10 font-mono text-sm"
+                        className="w-full px-3 py-2 border border-border/40 bg-background rounded-md pr-10 font-mono text-sm focus:ring-2 focus:ring-ring/40"
                       />
                       <button
                         type="button"
@@ -779,7 +774,7 @@ export function CombinedGeneralSettings({
 
                   <div className="flex gap-2">
                     <button
-                      className="px-4 py-2 text-sm font-medium border border-input bg-background hover:bg-accent hover:text-accent-foreground rounded-md transition-colors disabled:opacity-50 flex items-center gap-2"
+                      className="px-4 py-2 text-sm font-medium border border-border/40 bg-background hover:bg-accent hover:text-accent-foreground rounded-md transition-colors disabled:opacity-50 flex items-center gap-2"
                       onClick={handleValidateApiKey}
                       disabled={!apiKey || validating}
                     >
@@ -796,12 +791,7 @@ export function CombinedGeneralSettings({
                       )}
                     </button>
                     <button
-                      className="px-4 py-2 text-sm font-medium border rounded-md transition-colors disabled:opacity-50 flex items-center gap-2"
-                      style={{
-                        backgroundColor: "hsl(var(--primary) / 0.1)",
-                        color: "hsl(var(--primary))",
-                        borderColor: "hsl(var(--primary))",
-                      }}
+                      className="px-4 py-2 text-sm font-medium border border-primary/40 bg-primary/10 text-primary rounded-md transition-colors hover:bg-primary/20 disabled:opacity-50 flex items-center gap-2"
                       onClick={() => handleSaveApiKey()}
                       disabled={!apiKey || saving}
                     >
@@ -838,7 +828,7 @@ export function CombinedGeneralSettings({
               return (
                 <div
                   key={provider.provider}
-                  className="border border-border rounded-lg bg-card p-4"
+                  className="border border-border/40 rounded-lg bg-card p-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -868,7 +858,7 @@ export function CombinedGeneralSettings({
                       {/* Hide Update button for providers that use OAuth auth (like Codex) */}
                       {!config?.usesOAuth && (
                         <button
-                          className="px-3 py-1.5 text-sm border border-border rounded-md hover:bg-accent transition-colors flex items-center gap-1"
+                          className="px-3 py-1.5 text-sm border border-border/40 rounded-md hover:bg-accent transition-colors flex items-center gap-1"
                           onClick={() => {
                             if (editingProvider === provider.provider) {
                               setEditingProvider(null);
@@ -912,7 +902,7 @@ export function CombinedGeneralSettings({
 
                   {/* Only show edit section for providers that use API-key auth */}
                   {editingProvider === provider.provider && !config?.usesOAuth && (
-                    <div className="border-t border-border mt-4 pt-4 space-y-4">
+                    <div className="border-t border-border/40 mt-4 pt-4 space-y-4">
                       <div className="space-y-2">
                         <label className="text-sm font-medium">
                           Update API Key
@@ -932,7 +922,7 @@ export function CombinedGeneralSettings({
                               });
                             }}
                             placeholder="Enter new API key to update"
-                            className="w-full px-3 py-2 border border-input bg-background rounded-md pr-10 font-mono text-sm"
+                            className="w-full px-3 py-2 border border-border/40 bg-background rounded-md pr-10 font-mono text-sm focus:ring-2 focus:ring-ring/40"
                           />
                           <button
                             type="button"
@@ -978,7 +968,7 @@ export function CombinedGeneralSettings({
       )}
 
       {/* Chat Preferences Section */}
-      <div className="mt-6 border border-border rounded-lg bg-card p-4">
+      <div className="mt-6 border border-border/40 rounded-lg bg-card p-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
         <h3 className="text-base font-semibold mb-4">Chat Preferences</h3>
 
         <div className="space-y-4">

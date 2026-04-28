@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, Plus, Trash2 } from "lucide-react";
+import { X, Trash2 } from "lucide-react";
 import type { Step, RouterStep } from "../../../types/workflow";
 import { withRouterArgs } from "../../../types/workflow";
 import { CELInput, CELExpressionInput } from "../CELInput";
@@ -15,6 +15,17 @@ import type {
   RouterWorkflowCandidate,
   NodeRouterCandidate,
 } from "../../../gen/reliant/v1/workflow_v2_pb";
+import {
+  AddButton,
+  CardList,
+  FieldInput,
+  FieldLabel,
+  ModeGroup,
+  ModePill,
+  Section,
+  SectionFields,
+  SectionLabel,
+} from "./primitives";
 
 type RouterMode = "workflow" | "node";
 
@@ -102,7 +113,7 @@ function RouterCandidateCard({
   };
 
   return (
-    <div className="relative border border-input rounded-md p-3 space-y-2 bg-background">
+    <div className="cpv2-card-form space-y-2.5">
       {/* Header + Delete */}
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-muted-foreground">
@@ -122,11 +133,11 @@ function RouterCandidateCard({
 
       {/* Workflow Ref dropdown */}
       <div>
-        <label className="block text-xs text-muted-foreground mb-0.5">
+        <label className="cpv2-card-field-label">
           Workflow
         </label>
         {loadingWorkflows ? (
-          <div className="w-full px-2.5 py-1.5 text-sm border border-input rounded-md bg-background text-muted-foreground">
+          <div className="cpv2-card-field-input cpv2-card-field-loading">
             Loading workflows...
           </div>
         ) : (
@@ -145,7 +156,7 @@ function RouterCandidateCard({
                 });
               }
             }}
-            className="w-full px-2.5 py-1.5 text-sm border border-input rounded-md focus:ring-2 focus:ring-ring focus:border-ring bg-background text-foreground disabled:opacity-60 disabled:cursor-not-allowed"
+            className="cpv2-card-field-select"
             disabled={isReadOnly}
           >
             <option value="">Select a workflow...</option>
@@ -186,7 +197,7 @@ function RouterCandidateCard({
                 ),
               })
             }
-            className="w-full mt-1 px-2.5 py-1.5 text-sm border border-input rounded-md bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-ring disabled:opacity-60 disabled:cursor-not-allowed"
+            className="cpv2-card-field-input mt-1"
             placeholder="Workflow reference or {{expression}}"
             disabled={isReadOnly}
           />
@@ -195,7 +206,7 @@ function RouterCandidateCard({
 
       {/* Presets multi-select */}
       <div>
-        <label className="block text-xs text-muted-foreground mb-0.5">
+        <label className="cpv2-card-field-label">
           Presets
         </label>
         <MultiSelectDropdown
@@ -214,13 +225,13 @@ function RouterCandidateCard({
 
       {/* Description */}
       <div>
-        <label className="block text-xs text-muted-foreground mb-0.5">
+        <label className="cpv2-card-field-label">
           Description
         </label>
         <textarea
           value={candidate.description ?? ""}
           onChange={(e) => onUpdate(index, { description: e.target.value })}
-          className="w-full px-2.5 py-1.5 text-sm border border-input rounded-md bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-ring disabled:opacity-60 disabled:cursor-not-allowed"
+          className="cpv2-card-field-textarea"
           rows={2}
           placeholder="Optional routing context override"
           disabled={isReadOnly}
@@ -248,7 +259,7 @@ function NodeRouterCandidateCard({
   isReadOnly,
 }: NodeRouterCandidateCardProps) {
   return (
-    <div className="relative border border-input rounded-md p-3 space-y-2 bg-background">
+    <div className="cpv2-card-form space-y-2.5">
       {/* Header + Delete */}
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-muted-foreground">
@@ -268,14 +279,14 @@ function NodeRouterCandidateCard({
 
       {/* Node ID */}
       <div>
-        <label className="block text-xs text-muted-foreground mb-0.5">
+        <label className="cpv2-card-field-label">
           Node ID
         </label>
         <input
           type="text"
           value={candidate.id ?? ""}
           onChange={(e) => onUpdate(index, { id: e.target.value })}
-          className="w-full px-2.5 py-1.5 text-sm border border-input rounded-md bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          className="cpv2-card-field-input transition-colors"
           placeholder="target_node_id"
           disabled={isReadOnly}
         />
@@ -283,13 +294,13 @@ function NodeRouterCandidateCard({
 
       {/* Description */}
       <div>
-        <label className="block text-xs text-muted-foreground mb-0.5">
+        <label className="cpv2-card-field-label">
           Description
         </label>
         <textarea
           value={candidate.description ?? ""}
           onChange={(e) => onUpdate(index, { description: e.target.value })}
-          className="w-full px-2.5 py-1.5 text-sm border border-input rounded-md bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          className="cpv2-card-field-textarea transition-colors"
           rows={2}
           placeholder="When should the router select this node?"
           disabled={isReadOnly}
@@ -311,32 +322,14 @@ function ModeToggle({
   disabled: boolean;
 }) {
   return (
-    <div className="inline-flex rounded-md border border-input bg-muted p-0.5">
-      <button
-        type="button"
-        onClick={() => onChange("workflow")}
-        disabled={disabled}
-        className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
-          mode === "workflow"
-            ? "bg-background text-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground"
-        } disabled:opacity-60 disabled:cursor-not-allowed`}
-      >
-        Workflow Routing
-      </button>
-      <button
-        type="button"
-        onClick={() => onChange("node")}
-        disabled={disabled}
-        className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
-          mode === "node"
-            ? "bg-background text-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground"
-        } disabled:opacity-60 disabled:cursor-not-allowed`}
-      >
-        Node Routing
-      </button>
-    </div>
+    <ModeGroup>
+      <ModePill active={mode === "workflow"} onClick={() => !disabled && onChange("workflow")}>
+        Workflow
+      </ModePill>
+      <ModePill active={mode === "node"} onClick={() => !disabled && onChange("node")}>
+        Node
+      </ModePill>
+    </ModeGroup>
   );
 }
 
@@ -460,21 +453,16 @@ export function RouterStepConfig({
 
   return (
     <>
-      {/* Mode Toggle */}
-      <div>
-        <label className="block text-xs uppercase tracking-wider text-muted-foreground font-medium mb-1">
-          Routing Mode
-        </label>
+      <Section>
+        <SectionLabel>Routing Mode</SectionLabel>
         <ModeToggle mode={mode} onChange={handleModeChange} disabled={isReadOnly} />
-      </div>
+      </Section>
 
       {/* Candidates */}
       {mode === "workflow" ? (
-        <div>
-          <label className="block text-xs uppercase tracking-wider text-muted-foreground font-medium mb-2">
-            Candidate Workflows
-          </label>
-          <div className="space-y-2">
+        <Section>
+          <SectionLabel>Candidate Workflows</SectionLabel>
+          <CardList>
             {workflows.map((candidate, index) => (
               <RouterCandidateCard
                 key={index}
@@ -489,23 +477,14 @@ export function RouterStepConfig({
             ))}
 
             {!isReadOnly && (
-              <button
-                type="button"
-                onClick={addCandidate}
-                className="flex items-center gap-1.5 text-sm text-primary hover:text-primary/80 transition-colors py-1"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Add Candidate
-              </button>
+              <AddButton onClick={addCandidate}>Add candidate</AddButton>
             )}
-          </div>
-        </div>
+          </CardList>
+        </Section>
       ) : (
-        <div>
-          <label className="block text-xs uppercase tracking-wider text-muted-foreground font-medium mb-2">
-            Candidate Nodes
-          </label>
-          <div className="space-y-2">
+        <Section>
+          <SectionLabel>Candidate Nodes</SectionLabel>
+          <CardList>
             {nodes.map((candidate, index) => (
               <NodeRouterCandidateCard
                 key={index}
@@ -518,71 +497,60 @@ export function RouterStepConfig({
             ))}
 
             {!isReadOnly && (
-              <button
-                type="button"
-                onClick={addNodeCandidate}
-                className="flex items-center gap-1.5 text-sm text-primary hover:text-primary/80 transition-colors py-1"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Add Candidate
-              </button>
+              <AddButton onClick={addNodeCandidate}>Add candidate</AddButton>
             )}
-          </div>
-        </div>
+          </CardList>
+        </Section>
       )}
 
-      {/* System Prompt (optional) — shared */}
-      <div>
-        <CELInput
-          label="System Prompt"
-          value={systemPromptValue}
-          onChange={(val) =>
-            onUpdate(
-              withRouterArgs(step, { systemPrompt: celString(val) }),
-            )
-          }
-          multiline
-          rows={2}
-          placeholder="Optional system prompt override"
-          disabled={isReadOnly}
-        />
-      </div>
+      <Section>
+        <SectionLabel>Router LLM</SectionLabel>
+        <SectionFields>
+          <CELInput
+            label="System Prompt"
+            value={systemPromptValue}
+            onChange={(val) =>
+              onUpdate(
+                withRouterArgs(step, { systemPrompt: celString(val) }),
+              )
+            }
+            multiline
+            rows={2}
+            placeholder="Optional system prompt override"
+            disabled={isReadOnly}
+            hideCELHint
+          />
 
-      {/* Model — shared */}
-      <div>
-        <label className="block text-xs uppercase tracking-wider text-muted-foreground font-medium mb-1">
-          Model
-        </label>
-        <ModelDropdown
-          value={modelId ? { id: modelId } : undefined}
-          onChange={(val) =>
-            onUpdate(
-              withRouterArgs(step, {
-                model: { value: { case: "literal" as const, value: val } },
-              }),
-            )
-          }
-          disabled={isReadOnly}
-          placeholder="Default model"
-        />
-      </div>
+          <div>
+            <FieldLabel>Model</FieldLabel>
+            <ModelDropdown
+              value={modelId ? { id: modelId } : undefined}
+              onChange={(val) =>
+                onUpdate(
+                  withRouterArgs(step, {
+                    model: { value: { case: "literal" as const, value: val } },
+                  }),
+                )
+              }
+              disabled={isReadOnly}
+              placeholder="Default model"
+            />
+          </div>
 
-      {/* Fallback — label changes per mode */}
-      <div>
-        <label className="block text-xs uppercase tracking-wider text-muted-foreground font-medium mb-1">
-          {mode === "node" ? "Fallback Node" : "Fallback Preset"}
-        </label>
-        <input
-          type="text"
-          value={fallback}
-          onChange={(e) =>
-            onUpdate(withRouterArgs(step, { fallback: e.target.value }))
-          }
-          className="w-full px-2.5 py-1.5 text-sm border border-input rounded-md bg-background text-foreground focus:ring-2 focus:ring-ring focus:border-ring disabled:opacity-60 disabled:cursor-not-allowed"
-          placeholder={mode === "node" ? "Node ID to use if routing fails" : "Preset name to use if routing fails"}
-          disabled={isReadOnly}
-        />
-      </div>
+          <div>
+            <FieldLabel>{mode === "node" ? "Fallback Node" : "Fallback Preset"}</FieldLabel>
+            <FieldInput
+              type="text"
+              value={fallback}
+              onChange={(e) =>
+                onUpdate(withRouterArgs(step, { fallback: e.target.value }))
+              }
+              placeholder={mode === "node" ? "Node ID to use if routing fails" : "Preset name to use if routing fails"}
+              disabled={isReadOnly}
+            />
+          </div>
+        </SectionFields>
+      </Section>
 
       {/* Declared Outputs — only for workflow routing */}
       {mode === "workflow" && (
@@ -629,11 +597,9 @@ function RouterOutputsEditor({
   const entries = Object.entries(outputs);
 
   return (
-    <div>
-      <label className="block text-xs uppercase tracking-wider text-muted-foreground font-medium mb-1">
-        Declared Outputs
-      </label>
-      <p className="text-xs text-muted-foreground mb-2">
+    <Section>
+      <SectionLabel>Declared Outputs</SectionLabel>
+      <p className="cpv2-field-hint !mt-0 mb-2">
         Map output names to CEL expressions evaluated in the router context.
         Downstream nodes access these as{" "}
         <code className="bg-muted px-1 rounded">nodes.&lt;router_id&gt;.&lt;name&gt;</code>.
@@ -677,21 +643,20 @@ function RouterOutputsEditor({
             onChange={(e) => setNewKey(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addOutput()}
             placeholder="output_name"
-            className="flex-1 px-2.5 py-1.5 text-sm border border-input rounded-md bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors"
+            className="cpv2-field-input flex-1"
           />
           <button
             type="button"
             onClick={addOutput}
             disabled={!newKey.trim() || outputs[newKey] !== undefined}
-            className="flex items-center gap-1 px-2.5 py-1.5 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="cpv2-mode-pill active !flex-none disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <Plus className="w-3.5 h-3.5" />
             Add
           </button>
         </div>
       )}
 
-      <div className="text-xs text-muted-foreground mt-2 space-y-0.5">
+      <div className="cpv2-field-hint space-y-0.5">
         <p className="font-medium">Available in expressions:</p>
         <ul className="list-disc list-inside">
           <li><code className="text-xs">selected_workflow</code> &mdash; chosen workflow ref</li>
@@ -701,6 +666,6 @@ function RouterOutputsEditor({
           <li><code className="text-xs">outputs.*</code> &mdash; child workflow outputs</li>
         </ul>
       </div>
-    </div>
+    </Section>
   );
 }

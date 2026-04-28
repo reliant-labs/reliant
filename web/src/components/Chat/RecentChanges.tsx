@@ -1041,7 +1041,6 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
             </span>
           </div>
         }
-        className="border-b-0 mb-1"
         headerClassName="bg-muted/30"
       >
         <div className="space-y-0.5 px-1">
@@ -1489,7 +1488,7 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
                       disabled={prDisabled}
                       className={cn(
                         "w-full h-9 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-1.5",
-                        "border border-border bg-background btn-hover-bg-muted hover:border-primary/40 text-foreground",
+                        "border border-border bg-background hover:bg-muted hover:border-primary/40 text-foreground",
                         prDisabled && "opacity-50 cursor-not-allowed"
                       )}
                     >
@@ -1525,6 +1524,36 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
             </div>
           ) : (
             <>
+              <div className="mb-2 rounded-[10px] border border-border bg-card/95 p-3 shadow-sm">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground/80">
+                      Working Tree
+                    </div>
+                    <div className="truncate text-xs text-muted-foreground">
+                      {data?.branch || "Current branch"}
+                    </div>
+                  </div>
+                  <div className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
+                    {data?.total_files || 0} files
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
+                  <div className="rounded-md bg-muted/40 px-2 py-1.5">
+                    <div className="font-semibold text-foreground">{stagedFiles.length}</div>
+                    <div className="text-muted-foreground">Staged</div>
+                  </div>
+                  <div className="rounded-md bg-muted/40 px-2 py-1.5">
+                    <div className="font-semibold text-foreground">{modifiedFiles.length}</div>
+                    <div className="text-muted-foreground">Changed</div>
+                  </div>
+                  <div className="rounded-md bg-muted/40 px-2 py-1.5">
+                    <div className="font-semibold text-foreground">{untrackedFiles.length}</div>
+                    <div className="text-muted-foreground">New</div>
+                  </div>
+                </div>
+              </div>
+
               {renderFileList(stagedFiles, "staged")}
               {renderFileList(modifiedFiles, "modified")}
               {renderFileList(untrackedFiles, "untracked")}

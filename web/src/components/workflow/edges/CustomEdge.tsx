@@ -21,8 +21,7 @@ export function CustomEdge({
   selected,
 }: EdgeProps) {
   const edgeData = data as CustomEdgeData | undefined
-  
-  // Use bezier path for both horizontal and vertical layouts for smooth, curved connections
+
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,
@@ -32,30 +31,25 @@ export function CustomEdge({
     targetPosition,
   })
 
-  // Cast data to our custom type (already done above)
   const label = edgeData?.label || ''
   const executionStatus = edgeData?.executionStatus
-
-  // Edge color based on execution status
-  // "taken" edges (source completed/running) show in green
   const isTaken = executionStatus === 'completed' || executionStatus === 'running'
   const isFailed = executionStatus === 'failed'
-  
-  const strokeColor = isFailed 
-    ? '#ef4444' // red-500
-    : isTaken 
-      ? '#10b981' // emerald-500
-      : '#b1b1b7' // default gray
-  
-  const strokeWidth = isTaken || isFailed ? 2.5 : 2
+
+  const strokeColor = isFailed
+    ? 'hsl(var(--destructive))'
+    : isTaken
+      ? 'hsl(var(--success))'
+      : 'hsl(var(--muted-foreground) / 0.42)'
+
+  const strokeWidth = selected ? 3 : isTaken || isFailed ? 2.5 : 2
 
   const edgeStyle = {
     ...(style || {}),
-    stroke: strokeColor,
+    stroke: selected ? 'hsl(var(--primary))' : strokeColor,
     strokeWidth,
   }
 
-  // Invisible wider path for easier clicking/selection
   const interactionPath = getBezierPath({
     sourceX,
     sourceY,
@@ -65,8 +59,8 @@ export function CustomEdge({
     targetPosition,
   })[0]
 
-  // Use SVG marker with unique ID for this edge
   const markerId = `arrow-${id}`
+  const markerColor = selected ? 'hsl(var(--primary))' : strokeColor
 
   return (
     <>
@@ -82,17 +76,16 @@ export function CustomEdge({
             refY="0"
           >
             <polyline
-              stroke={strokeColor}
+              stroke={markerColor}
               strokeLinecap="round"
               strokeLinejoin="round"
               strokeWidth="1.5"
-              fill={strokeColor}
+              fill={markerColor}
               points="-6,-5 0,0 -6,5 -6,-5"
             />
           </marker>
         </defs>
       </svg>
-      {/* Invisible wider path for easier selection */}
       <path
         d={interactionPath}
         fill="none"
@@ -110,23 +103,23 @@ export function CustomEdge({
               transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
               fontSize: 10,
               pointerEvents: 'all',
-              zIndex: 30, // Ensure label appears above edge lines
+              zIndex: 30,
             }}
             className="nodrag nopan"
           >
             <div
-              className={`px-2 py-1 rounded border text-xs font-medium cursor-pointer transition-colors ${
+              className={`rounded-full border px-2 py-1 text-xs font-medium shadow-sm backdrop-blur-sm transition-colors ${
                 selected
-                  ? 'bg-blue-500 border-blue-600 text-white shadow-lg'
+                  ? 'border-primary bg-primary text-primary-foreground shadow-primary/20'
                   : isTaken
-                    ? 'bg-emerald-50 border-emerald-500 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                    ? 'border-success/50 bg-success/10 text-success'
                     : isFailed
-                      ? 'bg-red-50 border-red-500 text-red-700 dark:bg-red-950 dark:text-red-300'
-                      : 'bg-background border-border text-foreground'
+                      ? 'border-destructive/50 bg-destructive/10 text-destructive'
+                      : 'border-border bg-card/95 text-muted-foreground hover:text-foreground'
               }`}
               title={label}
-              onClick={(e) => {
-                e.stopPropagation()
+              onClick={(event) => {
+                event.stopPropagation()
                 const edgeElement = document.querySelector(`[data-id="${id}"]`)
                 if (edgeElement) {
                   edgeElement.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))

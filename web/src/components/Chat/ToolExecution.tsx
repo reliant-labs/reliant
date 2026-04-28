@@ -24,8 +24,8 @@ import {
   Zap,
   Maximize2,
 } from "lucide-react";
-import { cn, formatErrorMessage } from "../../lib/utils";
-import { ToolContentArea, type ToolRenderContext, type ToolResultData } from "./tool-renderers";
+import { cn } from "../../lib/utils";
+import { GenericToolRenderer, ToolContentArea, type ToolRenderContext, type ToolResultData } from "./tool-renderers";
 import { useChatStore } from "../../store/chatStore";
 import { useChat, useToolCallStates } from "../../store/chatStoreHooks";
 import type { ToolApprovalRequest } from "../../api/client";
@@ -86,6 +86,7 @@ interface ToolExecutionProps {
   chatId?: string;
   showRichContent?: boolean;
   onSelectThread?: (threadId: string | null) => void;
+  density?: "compact" | "card" | "minimal";
 }
 
 
@@ -101,6 +102,7 @@ function ToolExecutionComponent({
   chatId,
   showRichContent = false,
   onSelectThread,
+  density = "compact",
 }: ToolExecutionProps) {
   const toolNameLower = (toolCall.name || '').toLowerCase();
   const isViewOnlyToolFlag = isViewOnlyTool(toolNameLower);
@@ -354,7 +356,7 @@ function ToolExecutionComponent({
     }
     if (isCancelled) return <X className="w-3.5 h-3.5 text-destructive" />;
     if (isCancelling) return <Square className="w-3.5 h-3.5 text-warning animate-pulse" />;
-    if (hasFailed) return <AlertCircle className="w-3.5 h-3.5 text-destructive" />;
+    if (hasFailed) return <AlertCircle className="w-3.5 h-3.5 text-warning" />;
     if (isBackgrounded) return <Play className="w-3.5 h-3.5 text-primary" />;
     if (isCompleted) {
       if (isTaskToolFlag && taskTargetStatus) {
@@ -382,9 +384,9 @@ function ToolExecutionComponent({
     if (isCancelling) return "Cancelling...";
     if (toolResult?.is_error) {
       if (toolResult.content?.includes("blocked")) return "Blocked";
-      return "Error";
+      return "Warning";
     }
-    if (hasFailed) return "Failed";
+    if (hasFailed) return "Warning";
     if (isBackgrounded) return "Background";
     if (isCompleted) {
       if (isTaskToolFlag && taskTargetStatus) {
@@ -400,16 +402,18 @@ function ToolExecutionComponent({
     return "Pending";
   };
 
-  // Determine if expandable - read tools need results OR be executing, action tools always expandable
-  const hasContent = toolCall.input !== undefined || !!toolResult;
-  const readToolHasResults = isReadToolFlag ? (!!toolResult?.content || isExecuting) : true;
-  const isExpandable = hasContent && !isViewOnlyToolFlag && (!isTaskToolFlag || !!taskDescription) && readToolHasResults;
+  // Determine if expandable. Even compact/read-only/view-only tools need an inspector for input/output.
+  const hasInput = toolCall.input !== undefined;
+  const hasResult = !!toolResult;
+  const hasContent = hasInput || hasResult;
+  const isExpandable = hasContent && (!isTaskToolFlag || !!taskDescription || hasResult);
+  const hasFileOpenAffordance = isViewOnlyToolFlag && extractFilePaths(toolCall.input).length > 0;
 
   // Left border color strip for status indication
   const leftBorderColor = isCancelled
     ? "border-l-2 border-l-muted-foreground"
     : hasFailed || toolResult?.is_error
-    ? "border-l-2 border-l-destructive"
+    ? "border-l-2 border-l-warning"
     : isCompleted || toolResult
     ? "border-l-2 border-l-success"
     : isExecuting
@@ -436,11 +440,55 @@ function ToolExecutionComponent({
     onSelectThread,
   };
 
+  const rootClassName = cn(
+    "overflow-hidden border border-border/50 shadow-sm",
+    density === "card" ? "rounded-xl bg-card" : density === "minimal" ? "rounded-md bg-transparent shadow-none" : "rounded-md",
+    leftBorderColor
+  );
+  const headerClassName = cn(
+    "flex items-center justify-between bg-muted/30",
+    density === "card" ? "px-4 py-3" : density === "minimal" ? "px-2 py-1.5" : "px-3 py-2",
+    isExpandable && "cursor-pointer hover:bg-muted/50"
+  );
+  const contentClassName = cn(
+    "border-t border-border/30 overflow-hidden overflow-y-auto bg-muted/15 py-1",
+    density === "card" ? "max-h-[720px]" : "max-h-[600px]"
+  );
+
+  const openPrimaryFile = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const filePaths = extractFilePaths(toolCall.input);
+    if (filePaths.length === 0) return;
+
+    const parsed = parseFilePath(filePaths[0]);
+    if (!parsed) return;
+
+    // Check if path is external before opening
+    const classification = classifyPath(parsed, chatWorktreeId);
+    if (!classification.isClickable) {
+      toast.error(classification.tooltipMessage);
+      return;
+    }
+
+    if (typeof toolCall.input === 'object') {
+      const input = toolCall.input as Record<string, unknown>;
+      if (typeof input.offset === 'number' && input.offset > 0) {
+        parsed.line = input.offset;
+        if (typeof input.limit === 'number' && input.limit > 1) {
+          parsed.lineEnd = input.offset + input.limit - 1;
+        }
+      }
+    }
+
+    // Use targetWorktreeId from classification for correct worktree context
+    openFile(parsed, classification.targetWorktreeId || chatWorktreeId);
+  };
+
   // Task tool special rendering
   if (isTaskToolFlag) {
     const displayTitle = taskTitle || (toolNameLower === 'add_task' ? 'Adding task...' : 'Updating task...');
     const currentTaskStatus = storedTask?.status || taskTargetStatus || 'pending';
-    const hasExpandedContent = !!taskDescription || hasFailed;
+    const hasExpandedContent = isExpandable;
 
     const statusStyles: Record<string, { icon: typeof CheckCircle; color: string }> = {
       pending: { icon: Clock, color: "text-muted-foreground" },
@@ -452,13 +500,10 @@ function ToolExecutionComponent({
     const style = statusStyles[currentTaskStatus] || statusStyles.pending;
 
     return (
-      <div className={cn("rounded-md border border-border/50 shadow-sm overflow-hidden", leftBorderColor)}>
+      <div className={rootClassName}>
         {/* Header */}
         <div
-          className={cn(
-            "flex items-center gap-2 px-3 py-2 bg-muted/30",
-            hasExpandedContent && "cursor-pointer hover:bg-muted/50"
-          )}
+          className={cn(headerClassName, "gap-2")}
           onClick={() => hasExpandedContent && setIsExpanded(!isExpanded)} role={hasExpandedContent ? "button" : undefined} tabIndex={hasExpandedContent ? 0 : undefined} onKeyDown={(e) => hasExpandedContent && (e.key === "Enter" || e.key === " ") && (e.preventDefault(), setIsExpanded(!isExpanded))} aria-expanded={hasExpandedContent ? isExpanded : undefined} aria-label={hasExpandedContent ? `Toggle task details for ${displayTitle}` : undefined}
         >
           {isPreparing ? (
@@ -466,7 +511,7 @@ function ToolExecutionComponent({
           ) : isExecuting ? (
             <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />
           ) : hasFailed ? (
-            <XCircle className="w-3.5 h-3.5 text-destructive" />
+            <AlertCircle className="w-3.5 h-3.5 text-warning" />
           ) : (
             <style.icon className={cn("w-3.5 h-3.5", style.color)} />
           )}
@@ -481,12 +526,13 @@ function ToolExecutionComponent({
 
         {/* Expanded content */}
         {isExpanded && hasExpandedContent && (
-          <div className="px-2 py-1.5 border-t border-border/30 bg-background text-xs text-muted-foreground">
-            {hasFailed && toolResult?.content ? (
-              <p className="text-destructive">{formatErrorMessage(toolResult.content)}</p>
-            ) : taskDescription ? (
-              <p>{taskDescription}</p>
-            ) : null}
+          <div className={contentClassName}>
+            {taskDescription && (
+              <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                <p>{taskDescription}</p>
+              </div>
+            )}
+            <GenericToolRenderer ctx={renderContext} />
           </div>
         )}
       </div>
@@ -495,44 +541,27 @@ function ToolExecutionComponent({
 
   // Standard tool rendering
   return (
-    <div className={cn("rounded-md border border-border/50 shadow-sm overflow-hidden", leftBorderColor)}>
+    <div className={rootClassName}>
       {/* Header row */}
       <div
-        className={cn(
-          "flex items-center justify-between px-3 py-2 bg-muted/30",
-          (isViewOnlyToolFlag || isExpandable) && "cursor-pointer hover:bg-muted/50"
-        )}
+        className={headerClassName}
         onClick={() => {
-          if (isViewOnlyToolFlag) {
-            const filePaths = extractFilePaths(toolCall.input);
-            if (filePaths.length > 0) {
-              const parsed = parseFilePath(filePaths[0]);
-              if (parsed) {
-                // Check if path is external before opening
-                const classification = classifyPath(parsed, chatWorktreeId);
-                if (!classification.isClickable) {
-                  toast.error(classification.tooltipMessage);
-                  return;
-                }
-                
-                if (typeof toolCall.input === 'object') {
-                  const input = toolCall.input as Record<string, unknown>;
-                  if (typeof input.offset === 'number' && input.offset > 0) {
-                    parsed.line = input.offset;
-                    if (typeof input.limit === 'number' && input.limit > 1) {
-                      parsed.lineEnd = input.offset + input.limit - 1;
-                    }
-                  }
-                }
-                // Use targetWorktreeId from classification for correct worktree context
-                openFile(parsed, classification.targetWorktreeId || chatWorktreeId);
-              }
-            }
-          } else if (isExpandable) {
+          if (isExpandable) {
             setUserHasToggled(true);
             setIsExpanded(!isExpanded);
           }
         }}
+        role={isExpandable ? "button" : undefined}
+        tabIndex={isExpandable ? 0 : undefined}
+        onKeyDown={(e) => {
+          if (isExpandable && (e.key === "Enter" || e.key === " ")) {
+            e.preventDefault();
+            setUserHasToggled(true);
+            setIsExpanded(!isExpanded);
+          }
+        }}
+        aria-expanded={isExpandable ? isExpanded : undefined}
+        aria-label={isExpandable ? `Toggle tool details for ${toolCall.name}` : undefined}
       >
           <div className="flex items-center gap-2 flex-1 min-w-0">
             {getStatusIcon()}
@@ -541,8 +570,8 @@ function ToolExecutionComponent({
             </span>
             <span className={cn(
               "px-1.5 py-0.5 rounded text-[11px] font-medium shrink-0",
-              toolResult?.is_error ? "bg-destructive/10 text-destructive"
-                : hasFailed ? "bg-destructive/10 text-destructive"
+              toolResult?.is_error ? "bg-warning/10 text-warning"
+                : hasFailed ? "bg-warning/10 text-warning"
                 : isCancelled ? "bg-muted text-muted-foreground"
                 : isCompleted ? "bg-success/10 text-success"
                 : needsApproval ? "bg-warning/10 text-warning"
@@ -554,6 +583,17 @@ function ToolExecutionComponent({
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
+            {hasFileOpenAffordance && (
+              <button
+                onClick={openPrimaryFile}
+                className="rounded px-1.5 py-0.5 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10"
+                title="Open file"
+                aria-label="Open file"
+                type="button"
+              >
+                Open
+              </button>
+            )}
             {isSpawnToolFlag && spawnThreadId && onSelectThread && (
               <button
                 onClick={(e) => { e.stopPropagation(); onSelectThread(spawnThreadId); }}
@@ -621,7 +661,7 @@ function ToolExecutionComponent({
 
         {/* Content area - only shown when expanded */}
         {isExpandable && !shouldShowApprovalUI && isExpanded && (
-          <div className="border-t border-border/30 overflow-hidden max-h-[600px] overflow-y-auto bg-muted/15 py-1">
+          <div className={contentClassName}>
             <ToolContentArea ctx={renderContext} />
           </div>
         )}

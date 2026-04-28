@@ -97,7 +97,7 @@ export function PrivacySettings() {
 
         {/* Information notice */}
         <div className="border-t border-border/30 pt-5 mt-5"></div>
-        <div className="p-4 border border-border/40 rounded-lg bg-muted/30">
+        <div className="p-4 border border-border/40 rounded-lg bg-muted/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
           <p className="text-xs text-muted-foreground mb-2">
             <strong className="text-foreground">Note:</strong> These settings control telemetry and crash
             reporting. Your code, conversations, and project data are always

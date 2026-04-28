@@ -1,8 +1,8 @@
 import { FileText, Terminal as TerminalIcon, FolderOpen, Workflow, FolderGit2 } from "lucide-react";
-import Logo from "../../assets/logo.svg";
 import { useTerminalStore } from "../../store/terminalStore";
 import { useViewerStore } from "../../store/viewerStore";
 import { useProjectStore } from "../../store/projectStore";
+import { BrandMark } from "../icons/BrandMark";
 
 interface MenuItem {
   label: string;
@@ -91,7 +91,7 @@ export function NavigationOverlay({ onClose }: NavigationOverlayProps) {
           <div className="p-8">
             {/* Logo */}
             <div className="flex items-center justify-center mb-12">
-              <img src={Logo} alt="Reliant Logo" className="w-32 h-32 opacity-50" />
+              <BrandMark className="w-32 h-32 opacity-50" />
             </div>
 
             {/* Menu Items */}

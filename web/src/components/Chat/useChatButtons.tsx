@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { Square, Paperclip, GitBranch, Minimize2, MessageCircle } from "lucide-react";
-import { IoMdReturnLeft } from "react-icons/io";
+import { CornerDownLeft, Sparkles, Square, Paperclip, GitBranch, Minimize2, MessageCircle } from "lucide-react";
 import { ChatButton } from "./ChatButton";
 
 interface UseChatButtonsProps {
@@ -140,7 +139,7 @@ export function useChatButtons({
               : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] hover:bg-[var(--chat-button-hover)]"
           }
         >
-          🔮
+          <Sparkles className={compact ? "w-2.5 h-2.5" : "w-3 h-3"} />
         </ChatButton>
       ) : null,
 
@@ -216,11 +215,11 @@ export function useChatButtons({
             ) : (
               <>
                 {compact ? (
-                  <IoMdReturnLeft className="w-3.5 h-3.5" />
+                  <CornerDownLeft className="w-3.5 h-3.5" />
                 ) : (
                   <>
                     <span className="text-[10px]">Send</span>
-                    <IoMdReturnLeft className="w-3 h-3 ml-0.5" />
+                    <CornerDownLeft className="w-3 h-3 ml-0.5" />
                   </>
                 )}
               </>

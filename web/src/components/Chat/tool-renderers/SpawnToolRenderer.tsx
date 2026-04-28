@@ -9,8 +9,8 @@
 
 import { memo, useMemo, useRef, useEffect } from "react";
 import {
+  AlertCircle,
   Check,
-  X,
   Loader2,
 } from "lucide-react";
 import type { ToolContentProps } from "./types";
@@ -222,11 +222,11 @@ function SpawnPreview({ ctx }: ToolContentProps) {
                       key={i}
                       className={cn(
                         "flex items-center gap-1.5 text-[10px] font-mono py-0.5",
-                        tc.failed ? "text-destructive" : tc.completed ? "text-muted-foreground" : "text-primary",
+                        tc.failed ? "text-warning" : tc.completed ? "text-muted-foreground" : "text-primary",
                       )}
                     >
                       {tc.failed ? (
-                        <X className="w-2.5 h-2.5 shrink-0" />
+                        <AlertCircle className="w-2.5 h-2.5 shrink-0" />
                       ) : tc.completed ? (
                         <Check className="w-2.5 h-2.5 shrink-0" />
                       ) : (

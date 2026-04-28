@@ -1612,8 +1612,8 @@ function App() {
             {/* File Browser Sidebar */}
             {showFileBrowser && (
               <ResizableSidebar
-                defaultWidth={200}
-                minWidth={200}
+                defaultWidth={360}
+                minWidth={300}
                 maxWidth={600}
                 side="right"
                 storageKey="file-browser-width"

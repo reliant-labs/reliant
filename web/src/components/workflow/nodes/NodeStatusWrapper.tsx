@@ -218,7 +218,7 @@ export function NodeStatusWrapper({
 
   return (
     <div
-      className={`px-4 py-3 rounded-lg border-2 transition-all ${borderClass} ${animateClass} ${ringClass} ${bgClass} ${className}`}
+      className={`workflow-node-card px-4 py-3 rounded-xl border transition-all duration-150 shadow-md shadow-black/5 hover:shadow-lg hover:shadow-black/10 ${borderClass} ${animateClass} ${ringClass} ${bgClass} ${className}`}
       style={style}
     >
       {children}

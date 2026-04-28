@@ -77,16 +77,18 @@ export function CELInput({
   return (
     <div className="relative">
       {label && (
-        <label className="block text-sm font-medium text-foreground mb-1 flex items-center gap-2">
-          {label}
+        <label className="cpv2-field-label">
+          <span className="flex items-center gap-1.5">
+            {label}
+            {helpTooltip && (
+              <HelpPopover content={helpTooltip} title={label} />
+            )}
+          </span>
           {showCELIndicator && (pureExpression || isCELMode) && (
-            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted/80 px-1.5 py-0.5 rounded-sm font-mono">
+            <span className="cpv2-cel-toggle active inline-flex items-center gap-1">
               <Code className="w-3 h-3" />
               CEL
             </span>
-          )}
-          {helpTooltip && (
-            <HelpPopover content={helpTooltip} title={label} />
           )}
         </label>
       )}
@@ -109,21 +111,21 @@ export function CELInput({
       />
 
       {helpText && (
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="cpv2-field-hint">
           {helpText}
         </p>
       )}
 
       {/* Help text for templated mode */}
       {!hideCELHint && !pureExpression && !isCELMode && !disabled && (
-        <div className="mt-1.5 text-xs text-muted-foreground">
+        <div className="cpv2-field-hint">
           Use <code className="bg-muted px-1 rounded font-mono">{'{{'}</code> <code className="bg-muted px-1 rounded font-mono">{'}}'}</code> for dynamic values, e.g. <code className="bg-muted px-1 rounded font-mono">{'{{nodes.llm.response_text}}'}</code>
         </div>
       )}
 
       {/* Help text for pure CEL mode */}
       {!hideCELHint && pureExpression && !disabled && (
-        <div className="mt-1.5 text-xs text-muted-foreground">
+        <div className="cpv2-field-hint">
           CEL expression evaluated directly, e.g. <code className="bg-muted px-1 rounded font-mono">nodes.agent.tool_calls.size() == 0</code>
         </div>
       )}

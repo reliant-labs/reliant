@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { CELInput } from "../CELInput";
 import type { Step } from "../../../types/workflow";
+import { FieldInput, FieldLabel, FieldSelect, SectionFields } from "./primitives";
 
 export function getConditionExpression(condition: Step["condition"]): string {
   return condition?.expr ?? "";
@@ -93,34 +94,32 @@ export function TimeoutSelector({
 
   return (
     <div>
-      <label className="block text-xs font-medium text-foreground mb-1">
-        Timeout (optional)
-      </label>
-      <select
-        value={showCustom ? "custom" : value || ""}
-        onChange={(e) => handleSelectChange(e.target.value)}
-        className="w-full px-3 py-2 border border-input rounded-md bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-        disabled={disabled}
-      >
-        {TIMEOUT_OPTIONS.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
-
-      {showCustom && (
-        <input
-          type="text"
-          value={customValue || ""}
-          onChange={(e) => handleCustomChange(e.target.value)}
-          className="w-full mt-2 px-3 py-2 border border-input rounded-md bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-          placeholder="e.g., 2h30m, 45m"
+      <FieldLabel>Timeout (optional)</FieldLabel>
+      <SectionFields className="gap-2">
+        <FieldSelect
+          value={showCustom ? "custom" : value || ""}
+          onChange={(e) => handleSelectChange(e.target.value)}
           disabled={disabled}
-        />
-      )}
+        >
+          {TIMEOUT_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </FieldSelect>
 
-      <p className="mt-1 text-xs text-muted-foreground">
+        {showCustom && (
+          <FieldInput
+            type="text"
+            value={customValue || ""}
+            onChange={(e) => handleCustomChange(e.target.value)}
+            placeholder="e.g., 2h30m, 45m"
+            disabled={disabled}
+          />
+        )}
+      </SectionFields>
+
+      <p className="cpv2-field-hint">
         Maximum time to wait before timing out
       </p>
     </div>

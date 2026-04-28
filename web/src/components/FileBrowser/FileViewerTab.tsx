@@ -6,6 +6,7 @@ import {
   RotateCcw,
   RefreshCw,
   Music,
+  Check,
 } from "lucide-react";
 import Editor from "@monaco-editor/react";
 import type { FileNode } from "./index";
@@ -1034,7 +1035,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
                 {isSaving ? (
                   <Loader2 className="w-3 h-3 animate-spin" />
                 ) : saveSuccess ? (
-                  <span className="text-green-500">✓</span>
+                  <Check className="w-3 h-3 text-green-500" />
                 ) : (
                   <Save className="w-3 h-3" />
                 )}
@@ -1050,7 +1051,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
                   </>
                 ) : saveSuccess ? (
                   <>
-                    <span className="text-green-500">✓</span>
+                    <Check className="w-3 h-3 text-green-500" />
                     <span className="text-green-500">Auto-saved</span>
                   </>
                 ) : null}

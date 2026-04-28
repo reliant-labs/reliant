@@ -28,6 +28,7 @@ interface ToolExecutionGroupProps {
   chatId?: string;
   showRichContent?: boolean;
   onSelectThread?: (threadId: string | null) => void;
+  density?: "compact" | "card" | "minimal";
 }
 
 function ToolExecutionGroupComponent({
@@ -38,6 +39,7 @@ function ToolExecutionGroupComponent({
   chatId,
   showRichContent = false,
   onSelectThread,
+  density = "compact",
 }: ToolExecutionGroupProps) {
   // Check if chat is no longer running - affects tool display state
   const chatActivity = useActivityStore((s) => s.activities.get(chatId || ""));
@@ -115,9 +117,11 @@ function ToolExecutionGroupComponent({
   return (
     <div
       className={cn(
-        "border rounded-lg overflow-hidden",
+        "border overflow-hidden",
+        density === "card" ? "rounded-xl shadow-sm" : "rounded-lg",
+        density === "minimal" && "rounded-md shadow-none",
         hasAnyErrors
-          ? "border-destructive/40 bg-destructive/5"
+          ? "border-warning/40 bg-warning/5"
           : hasAnyCancelled
           ? "border-muted/60 bg-muted/10"
           : isAllCompleted
@@ -127,7 +131,8 @@ function ToolExecutionGroupComponent({
     >
       <div
         className={cn(
-          "flex items-center justify-between px-1.5 py-1 cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+          "flex items-center justify-between cursor-pointer hover:bg-muted/30 transition-colors",
+          density === "card" ? "px-3 py-2" : "px-1.5 py-1"
         )}
         onClick={() => setExpanded((v) => !v)}
       >
@@ -155,7 +160,7 @@ function ToolExecutionGroupComponent({
             </span>
           )}
           {summary.errors > 0 && (
-            <span className="inline-flex items-center gap-1 text-xs font-mono text-destructive">
+            <span className="inline-flex items-center gap-1 text-xs font-mono text-warning">
               <AlertCircle className="w-3.5 h-3.5" /> {summary.errors}
             </span>
           )}
@@ -170,7 +175,7 @@ function ToolExecutionGroupComponent({
 
       {/* Show all tool calls when expanded */}
       {expanded && (
-        <div className="border-t border-muted/50 p-1 space-y-1">
+        <div className={cn("border-t border-muted/50 p-1", density === "card" ? "space-y-2" : "space-y-1")}>
           {executions.map((execution, index) => {
             const approval = execution.approval || getApprovalStatus(execution.call.id);
 
@@ -186,6 +191,7 @@ function ToolExecutionGroupComponent({
                 chatId={chatId}
                 showRichContent={showRichContent}
                 onSelectThread={onSelectThread}
+                density={density}
               />
             );
           })}

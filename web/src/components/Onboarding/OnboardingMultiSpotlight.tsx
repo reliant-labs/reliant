@@ -342,14 +342,14 @@ export function OnboardingMultiSpotlight({
             }
           }}
           className={cn(
-            "absolute bg-zinc-900 border border-zinc-700/60 rounded-lg shadow-[0_4px_16px_rgba(0,0,0,0.4)] px-3.5 py-2.5 max-w-48 pointer-events-none transition-opacity duration-300",
+            "absolute max-w-48 pointer-events-none rounded-lg border border-border bg-popover px-3.5 py-2.5 text-popover-foreground shadow-xl transition-opacity duration-300",
             highlightVisible ? "opacity-100" : "opacity-0"
           )}
           style={calculateLabelStyle(r.cutout, r.labelPosition, labelRefs.current.get(i) ?? null)}
         >
-          <p className="text-sm font-semibold text-white">{r.target.label}</p>
+          <p className="text-sm font-semibold text-foreground">{r.target.label}</p>
           {r.target.description && (
-            <p className="text-xs text-zinc-400 mt-0.5">{r.target.description}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{r.target.description}</p>
           )}
         </div>
       ))}

@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { FolderSync, FolderGit2 } from "lucide-react";
+import { AlertTriangle, FolderSync, FolderGit2 } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { useChatStore } from "../../store/chatStore";
 import { useWorktreeStore, type Worktree } from "../../store/worktreeStore";
@@ -121,7 +121,7 @@ export function BranchToExistingWorktreeModal({
         {error && (
           <div className="p-4 bg-destructive/10 border border-destructive/30 text-destructive rounded-lg text-sm">
             <div className="flex items-start gap-2">
-              <span className="text-destructive mt-0.5">⚠️</span>
+              <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-destructive" aria-hidden />
               <span className="flex-1">{error}</span>
             </div>
           </div>

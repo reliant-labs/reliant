@@ -4,7 +4,7 @@
  */
 
 import { useState, memo } from 'react';
-import { ChevronDown, ChevronRight, Eye } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronRight, Eye } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { ToolExecution, type ToolResultData } from './ToolExecution';
 import type { ToolApprovalRequest } from '../../api/client';
@@ -31,6 +31,7 @@ interface ToolExecutionCollapsibleGroupProps {
   chatId?: string;
   showRichContent?: boolean;
   onSelectThread?: (threadId: string | null) => void;
+  density?: "compact" | "card" | "minimal";
 }
 
 function ToolExecutionCollapsibleGroupComponent({
@@ -39,6 +40,7 @@ function ToolExecutionCollapsibleGroupComponent({
   chatId,
   showRichContent = false,
   onSelectThread,
+  density = "compact",
 }: ToolExecutionCollapsibleGroupProps) {
   // Determine initial expanded state based on first tool's settings
   // If any tool in the group should be expanded, expand the group
@@ -55,6 +57,10 @@ function ToolExecutionCollapsibleGroupComponent({
     }))
   );
 
+  const hasWarnings = executions.some(
+    ({ status, result }) => status === 'failed' || result?.is_error
+  );
+
   // Check if all tools are completed or running in background
   const allCompleted = executions.every(
     ({ status, result }) => status === 'completed' || status === 'backgrounded' || result !== undefined
@@ -63,20 +69,31 @@ function ToolExecutionCollapsibleGroupComponent({
   return (
     <div
       className={cn(
-        'border rounded-lg overflow-hidden',
-        allCompleted
+        'border overflow-hidden',
+        density === 'card' ? 'rounded-xl shadow-sm' : 'rounded-lg',
+        density === 'minimal' && 'rounded-md shadow-none',
+        hasWarnings
+          ? 'border-warning/40 bg-warning/5'
+          : allCompleted
           ? 'border-muted/30 bg-muted/5'
           : 'border-muted/50 bg-muted/10'
       )}
     >
       {/* Collapsible header */}
       <div
-        className="flex items-center justify-between px-1.5 py-1 cursor-pointer hover:bg-muted/30 transition-colors"
+        className={cn(
+          "flex items-center justify-between cursor-pointer hover:bg-muted/30 transition-colors",
+          density === "card" ? "px-3 py-2" : "px-1.5 py-1"
+        )}
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <div className="flex items-center gap-1.5">
-          <Eye className="w-3.5 h-3.5 text-muted-foreground" />
-          <span className="text-xs font-mono text-muted-foreground">
+          {hasWarnings ? (
+            <AlertCircle className="w-3.5 h-3.5 text-warning" />
+          ) : (
+            <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+          )}
+          <span className={cn("text-xs font-mono", hasWarnings ? "text-warning" : "text-muted-foreground")}>
             {summaryText}
           </span>
         </div>
@@ -92,7 +109,7 @@ function ToolExecutionCollapsibleGroupComponent({
 
       {/* Expanded content - show individual tool executions */}
       {isExpanded && (
-        <div className="border-t border-muted/30 p-1 space-y-1">
+        <div className={cn("border-t border-muted/30 p-1", density === "card" ? "space-y-2" : "space-y-1")}>
           {executions.map((execution, index) => (
             <ToolExecution
               key={`${messageId || 'msg'}-readonly-${index}-${execution.call.id}`}
@@ -105,6 +122,7 @@ function ToolExecutionCollapsibleGroupComponent({
               chatId={chatId}
               showRichContent={showRichContent}
               onSelectThread={onSelectThread}
+              density={density}
             />
           ))}
         </div>

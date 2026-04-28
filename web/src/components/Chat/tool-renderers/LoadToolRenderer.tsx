@@ -1,10 +1,10 @@
 /**
  * Compact renderer for the `load_tool` tool
- * Shows tool name + success/denied status as a small notification
+ * Shows tool name + success/warning/denied status as a small notification
  */
 
 import { memo } from 'react';
-import { Wrench, CheckCircle, XCircle } from 'lucide-react';
+import { Wrench, AlertCircle, CheckCircle, XCircle } from 'lucide-react';
 import type { ToolContentProps } from './types';
 
 function LoadToolRendererComponent({ ctx }: ToolContentProps) {
@@ -15,7 +15,7 @@ function LoadToolRendererComponent({ ctx }: ToolContentProps) {
   const isError = result?.is_error ?? false;
   const resultContent = result?.content || '';
 
-  // Try to determine if it was denied vs failed
+  // Try to determine if it was denied vs a non-fatal warning
   const isDenied = isError && resultContent.toLowerCase().includes('denied');
 
   return (
@@ -27,9 +27,9 @@ function LoadToolRendererComponent({ ctx }: ToolContentProps) {
         </span>
         {result && (
           isError ? (
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-destructive/10 text-destructive border border-destructive/20">
-              <XCircle className="w-2.5 h-2.5" />
-              {isDenied ? 'denied' : 'failed'}
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-warning/10 text-warning border border-warning/20">
+              {isDenied ? <XCircle className="w-2.5 h-2.5" /> : <AlertCircle className="w-2.5 h-2.5" />}
+              {isDenied ? 'denied' : 'warning'}
             </span>
           ) : (
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-success/10 text-success border border-success/20">
@@ -39,9 +39,9 @@ function LoadToolRendererComponent({ ctx }: ToolContentProps) {
           )
         )}
       </div>
-      {/* Show denial/error reason if present */}
+      {/* Show denial/warning reason if present */}
       {isError && resultContent && (
-        <div className="px-2 pb-1.5 text-[10px] text-destructive/80 truncate">
+        <div data-testid="load-tool-warning-reason" className="px-2 pb-1.5 text-[10px] text-[hsl(var(--warning)/0.8)] truncate">
           {resultContent}
         </div>
       )}

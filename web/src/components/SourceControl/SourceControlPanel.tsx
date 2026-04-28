@@ -284,7 +284,7 @@ export function SourceControlPanel({
               disabled={prDisabled}
               className={cn(
                 "flex-1 h-9 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-1.5",
-                "border border-border bg-background btn-hover-bg-muted hover:border-primary/40 text-foreground",
+                "border border-border bg-background hover:bg-muted hover:border-primary/40 text-foreground",
                 prDisabled && "opacity-50 cursor-not-allowed"
               )}
             >

@@ -12,6 +12,13 @@ import { getSpawnDisplayMode, setSpawnDisplayMode as saveSpawnDisplayMode, type 
 import "./settings-range.css";
 
 type FontSize = "xs" | "sm" | "md" | "lg" | "xl";
+type ChatTimelineVariant = "compact" | "card" | "minimal";
+
+const CHAT_TIMELINE_VARIANTS: Array<{ id: ChatTimelineVariant; label: string; description: string }> = [
+  { id: "compact", label: "Compact", description: "Balanced spacing for everyday chats" },
+  { id: "card", label: "Card", description: "Stronger message grouping and separation" },
+  { id: "minimal", label: "Minimal", description: "Reduced chrome for dense timelines" },
+];
 
 const FONT_SIZE_MAP: Record<FontSize, string> = {
   xs: "12px",
@@ -105,7 +112,7 @@ function SettingSelect({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="block w-full px-3 py-2 bg-card border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
+        className="block w-full px-3 py-2 bg-card border border-border/40 text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -126,6 +133,7 @@ export function AppearanceSettings() {
   const [chatFont, setChatFont] = useState<string>("default");
   const [editorFont, setEditorFont] = useState<string>("default");
   const [fontSize, setFontSize] = useState<FontSize>("md");
+  const [chatTimelineVariant, setChatTimelineVariant] = useState<ChatTimelineVariant>("compact");
   const [workflowViewerDefaultMode, setWorkflowViewerDefaultMode] = useState<'inline' | 'side'>('side');
   const [spawnDisplayMode, setSpawnDisplayMode] = useState<SpawnDisplayMode>("preview");
   const [isLoaded, setIsLoaded] = useState(false);
@@ -150,6 +158,7 @@ export function AppearanceSettings() {
       setChatFont(readPref(SETTINGS_KEYS.CHAT_FONT, "default"));
       setEditorFont(readPref(SETTINGS_KEYS.EDITOR_FONT, "default"));
       setFontSize(readPref(SETTINGS_KEYS.FONT_SIZE, "md"));
+      setChatTimelineVariant(readPref(SETTINGS_KEYS.CHAT_TIMELINE_VARIANT, "compact"));
       setWorkflowViewerDefaultMode(readPref(SETTINGS_KEYS.WORKFLOW_VIEWER_DEFAULT_MODE, "side"));
       setSpawnDisplayMode(getSpawnDisplayMode());
       setIsLoaded(true);
@@ -249,6 +258,12 @@ export function AppearanceSettings() {
 
   useEffect(() => {
     if (!isLoaded) return;
+    settingsSync.setSetting(SETTINGS_KEYS.CHAT_TIMELINE_VARIANT, chatTimelineVariant).catch(console.error);
+    window.dispatchEvent(new CustomEvent('appearance-updated'));
+  }, [chatTimelineVariant, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded) return;
     saveSpawnDisplayMode(spawnDisplayMode).catch(console.error);
     window.dispatchEvent(new CustomEvent('appearance-updated'));
   }, [spawnDisplayMode, isLoaded]);
@@ -308,7 +323,9 @@ export function AppearanceSettings() {
       </div>
 
       {/* Color Scheme Selector */}
-      <ColorSchemeSelector />
+      <div className="border-t border-border/40 pt-6">
+        <ColorSchemeSelector />
+      </div>
 
       {/* File Browser Settings */}
       <div className="border-t border-border/40 pt-6 space-y-4">
@@ -338,6 +355,7 @@ export function AppearanceSettings() {
               setChatFont("default");
               setEditorFont("default");
               setFontSize("md");
+              setChatTimelineVariant("compact");
               setWorkflowViewerDefaultMode("side");
             }}
             className="text-xs text-muted-foreground hover:text-foreground underline"
@@ -359,7 +377,7 @@ export function AppearanceSettings() {
               id="appearance-font"
               value={font}
               onChange={(e) => setFont(e.target.value)}
-              className="block w-full px-3 py-2 bg-card border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
+              className="block w-full px-3 py-2 bg-card border border-border/40 text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
             >
               <option value="system">System Default (Default)</option>
               <option value="inter">Inter (Modern)</option>
@@ -372,18 +390,18 @@ export function AppearanceSettings() {
           {/* Chat Input Font */}
           <div className="space-y-3">
             <label htmlFor="chat-font" className="text-sm font-medium block">
-              Chat Input Font
+              Chat Font
             </label>
             <select
               id="chat-font"
               value={chatFont}
               onChange={(e) => setChatFont(e.target.value)}
-              className="block w-full px-3 py-2 bg-card border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
+              className="block w-full px-3 py-2 bg-card border border-border/40 text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
             >
-              <option value="default">Monospace (Default)</option>
+              <option value="default">System Default (Default)</option>
               <option value="mono">JetBrains Mono</option>
               <option value="inherit">Inherit from System</option>
-              <option value="system">System Default</option>
+              <option value="system">System Native</option>
               <option value="inter">Inter (Modern)</option>
               <option value="geist">Geist</option>
               <option value="comic">Comic Sans (Fun)</option>
@@ -399,7 +417,7 @@ export function AppearanceSettings() {
               id="editor-font"
               value={editorFont}
               onChange={(e) => setEditorFont(e.target.value)}
-              className="block w-full px-3 py-2 bg-card border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
+              className="block w-full px-3 py-2 bg-card border border-border/40 text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
             >
               <option value="default">Monospace (Default)</option>
               <option value="mono">JetBrains Mono</option>
@@ -420,7 +438,7 @@ export function AppearanceSettings() {
               id="font-size"
               value={fontSize}
               onChange={(e) => setFontSize(e.target.value as FontSize)}
-              className="block w-full px-3 py-2 bg-card border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
+              className="block w-full px-3 py-2 bg-card border border-border/40 text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
             >
               {Object.entries(FONT_SIZE_LABELS).map(([key, label]) => (
                 <option key={key} value={key}>
@@ -428,6 +446,30 @@ export function AppearanceSettings() {
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* Chat Timeline Density */}
+          <div className="space-y-3">
+            <label className="text-sm font-medium block">Chat Timeline Density</label>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {CHAT_TIMELINE_VARIANTS.map((variant) => (
+                <button
+                  key={variant.id}
+                  type="button"
+                  onClick={() => setChatTimelineVariant(variant.id)}
+                  className={cn(
+                    "rounded-md border px-3 py-2 text-left transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40",
+                    chatTimelineVariant === variant.id
+                      ? "border-primary bg-primary/10 text-foreground shadow-sm"
+                      : "border-border/40 bg-card text-muted-foreground hover:border-border/80 hover:bg-muted/50 hover:text-foreground"
+                  )}
+                  aria-pressed={chatTimelineVariant === variant.id}
+                >
+                  <span className="block text-sm font-medium">{variant.label}</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">{variant.description}</span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -508,7 +550,7 @@ export function AppearanceSettings() {
           <select
             value={workflowViewerDefaultMode}
             onChange={(e) => setWorkflowViewerDefaultMode(e.target.value as 'inline' | 'side')}
-            className="block w-full px-3 py-2 bg-card border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
+            className="block w-full px-3 py-2 bg-card border border-border/40 text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
           >
             <option value="side">Side Panel (beside chat)</option>
             <option value="inline">Inline (above chat)</option>
@@ -734,7 +776,7 @@ function MonacoEditorSettings() {
             <select
               value={settings.diffSideBySide ? "side-by-side" : "inline"}
               onChange={(e) => updateSettings({ diffSideBySide: e.target.value === "side-by-side" })}
-              className="block w-full px-3 py-2 bg-card border border-border text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
+              className="block w-full px-3 py-2 bg-card border border-border/40 text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
             >
               <option value="side-by-side">Side-by-side</option>
               <option value="inline">Inline</option>

@@ -110,7 +110,7 @@ function getModelDisplayLabel(
   return { label: "Default" };
 }
 
-/** Count extra params beyond model/mode/preset. */
+/** Count extra params beyond model/mode/preset that are not already in the toolbar. */
 function countExtraParams(
   inputs: Record<string, InputDef> | null,
   modelKey: string | null,
@@ -122,7 +122,7 @@ function countExtraParams(
     if (key === modelKey || key === modeKey) continue;
     if (def?.type === "preset" || def?.type === "tools") continue;
     const ui = getInputUI(def);
-    if (ui === "hidden") continue;
+    if (ui === "hidden" || ui === "toolbar") continue;
     if (def?.type === "message" || def?.type === "attachments" || def?.type === "thread") continue;
     count++;
   }
@@ -222,19 +222,19 @@ export function ChatSettingsPopover({
         style={{
           animation: "chatSettingsPopoverIn 0.12s ease-out",
         }}
-        className="absolute bottom-[calc(100%+8px)] right-0 z-[100] w-[360px] bg-[#282828] border border-[#404040] rounded-[10px] shadow-[0_8px_32px_rgba(0,0,0,0.5),0_2px_8px_rgba(0,0,0,0.3)] overflow-hidden"
+        className="absolute bottom-[calc(100%+8px)] left-0 z-[100] w-[360px] bg-popover border border-border rounded-xl shadow-xl overflow-hidden"
       >
         {/* Main page */}
         {currentPage === "main" && (
           <div>
             {/* Header */}
-            <div className="flex items-center px-3 py-2.5 border-b border-[#3a3a3a] gap-2">
-              <h3 className="text-[13px] font-semibold text-[#e5e5e5] flex-1">
+            <div className="flex items-center px-3 py-2.5 border-b border-border/50 gap-2">
+              <h3 className="text-[13px] font-semibold text-foreground flex-1">
                 Chat Settings
               </h3>
               <button
                 onClick={onClose}
-                className="w-6 h-6 flex items-center justify-center rounded text-[#707070] hover:text-[#e5e5e5] transition-colors"
+                className="w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -244,13 +244,13 @@ export function ChatSettingsPopover({
             {modelKey && (
               <button
                 onClick={() => setCurrentPage("model")}
-                className="w-full flex items-center justify-between px-4 py-2.5 text-[13px] text-[#e5e5e5] hover:bg-[#363636] transition-colors text-left"
+                className="w-full flex items-center justify-between px-4 py-2.5 text-[13px] text-foreground hover:bg-muted/50 transition-colors text-left"
               >
                 <div className="flex items-center gap-2.5">
-                  <Box className="w-4 h-4 text-[#a0a0a0] shrink-0" />
+                  <Box className="w-4 h-4 text-muted-foreground shrink-0" />
                   <span className="font-medium">Model</span>
                 </div>
-                <div className="flex items-center gap-1.5 text-xs text-[#707070]">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground/70">
                   {modelDisplay.label !== "Default" && (
                     <span
                       className="w-1.5 h-1.5 rounded-full inline-block shrink-0"
@@ -261,7 +261,7 @@ export function ChatSettingsPopover({
                     />
                   )}
                   <span>{modelDisplay.label}</span>
-                  <ChevronRight className="w-3 h-3 text-[#707070]" />
+                  <ChevronRight className="w-3 h-3 text-muted-foreground/70" />
                 </div>
               </button>
             )}
@@ -270,15 +270,15 @@ export function ChatSettingsPopover({
             {presets && presets.length > 0 && (
               <button
                 onClick={() => setCurrentPage("preset")}
-                className="w-full flex items-center justify-between px-4 py-2.5 text-[13px] text-[#e5e5e5] hover:bg-[#363636] transition-colors text-left"
+                className="w-full flex items-center justify-between px-4 py-2.5 text-[13px] text-foreground hover:bg-muted/50 transition-colors text-left"
               >
                 <div className="flex items-center gap-2.5">
-                  <LayoutGrid className="w-4 h-4 text-[#a0a0a0] shrink-0" />
+                  <LayoutGrid className="w-4 h-4 text-muted-foreground shrink-0" />
                   <span className="font-medium">Preset</span>
                 </div>
-                <div className="flex items-center gap-1.5 text-xs text-[#707070]">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground/70">
                   <span>{selectedPreset || "None"}</span>
-                  <ChevronRight className="w-3 h-3 text-[#707070]" />
+                  <ChevronRight className="w-3 h-3 text-muted-foreground/70" />
                 </div>
               </button>
             )}
@@ -286,10 +286,10 @@ export function ChatSettingsPopover({
             {/* Divider before mode */}
             {modeKey && modeOptions && (
               <>
-                <div className="h-px bg-[#3a3a3a] mx-0 my-1" />
+                <div className="h-px bg-border/50 mx-0 my-1" />
 
                 {/* Mode section */}
-                <div className="px-4 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-[#707070]">
+                <div className="px-4 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
                   Execution Mode
                 </div>
                 <div className="px-4 pb-2.5 flex gap-1.5">
@@ -304,8 +304,8 @@ export function ChatSettingsPopover({
                         className={cn(
                           "flex-1 px-2.5 py-1.5 rounded-md border text-xs font-medium text-center transition-all capitalize",
                           isSelected
-                            ? "border-[#7c6ef0] bg-[rgba(124,110,240,0.15)] text-[#7c6ef0]"
-                            : "border-[#3a3a3a] bg-transparent text-[#a0a0a0] hover:border-[#4a4a4a] hover:text-[#e5e5e5]",
+                            ? "border-primary bg-primary/15 text-primary"
+                            : "border-border bg-transparent text-muted-foreground hover:border-border/80 hover:text-foreground",
                         )}
                       >
                         {mode}
@@ -320,21 +320,21 @@ export function ChatSettingsPopover({
             {extraParamCount > 0 && (
               <>
                 {!modeKey && (
-                  <div className="h-px bg-[#3a3a3a] mx-0 my-1" />
+                  <div className="h-px bg-border/50 mx-0 my-1" />
                 )}
                 <button
                   onClick={() => setCurrentPage("params")}
-                  className="w-full flex items-center justify-between px-4 py-2.5 text-[13px] text-[#e5e5e5] hover:bg-[#363636] transition-colors text-left"
+                  className="w-full flex items-center justify-between px-4 py-2.5 text-[13px] text-foreground hover:bg-muted/50 transition-colors text-left"
                 >
                   <div className="flex items-center gap-2.5">
-                    <Settings2 className="w-4 h-4 text-[#a0a0a0] shrink-0" />
+                    <Settings2 className="w-4 h-4 text-muted-foreground shrink-0" />
                     <span className="font-medium">More Settings</span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-xs text-[#707070]">
-                    <span className="inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-[#363636] text-[10px] font-semibold">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground/70">
+                    <span className="inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-muted text-[10px] font-semibold">
                       {extraParamCount}
                     </span>
-                    <ChevronRight className="w-3 h-3 text-[#707070]" />
+                    <ChevronRight className="w-3 h-3 text-muted-foreground/70" />
                   </div>
                 </button>
               </>

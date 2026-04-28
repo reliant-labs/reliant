@@ -1,25 +1,27 @@
 import type { ReactNode } from 'react'
-import { ExternalLink, Pencil, Trash2, X } from 'lucide-react'
+import { ExternalLink, Trash2, X } from 'lucide-react'
 import { Tooltip } from '../ui/Tooltip'
+import './config/config-panel.css'
 
 interface ConfigurationPanelProps {
   title: string
+  icon?: ReactNode
   subtitle?: string
-  subtitleMono?: boolean // Whether subtitle uses monospace font (default: true for node IDs)
+  subtitleMono?: boolean
   onSubtitleClick?: () => void
   onClose: () => void
-  onDelete?: () => void  // Optional - if not provided, shows X to close instead of trash
-  deleteLabel?: string // Custom label for delete button tooltip (e.g., "Ungroup")
+  onDelete?: () => void
+  deleteLabel?: string
   children: ReactNode
-  /** Optional element rendered between header and scrollable content (e.g., tab bar) */
   tabBar?: ReactNode
-  bottomOffset?: number // Space to reserve at bottom (e.g., for chat panel)
-  topOffset?: number // Distance from top (to align with left sidebar)
-  isExpanded?: boolean // Whether the panel should use expanded positioning
+  bottomOffset?: number
+  topOffset?: number
+  isExpanded?: boolean
 }
 
 export function ConfigurationPanel({
   title,
+  icon,
   subtitle,
   subtitleMono = true,
   onSubtitleClick,
@@ -29,8 +31,8 @@ export function ConfigurationPanel({
   children,
   tabBar,
   bottomOffset = 0,
-  topOffset = 64, // Default to top-16 (64px) to match left sidebar base position
-  isExpanded = true, // Default to expanded to prevent dropdown clipping
+  topOffset = 64,
+  isExpanded = true,
 }: ConfigurationPanelProps) {
   const handleDelete = () => {
     onDelete?.()
@@ -39,82 +41,73 @@ export function ConfigurationPanel({
 
   return (
     <div
-      className="config-panel-v2 absolute right-3 w-[420px] bg-card border border-border rounded-2xl shadow-xl flex flex-col z-40 transition-all duration-300"
+      className="config-panel-v2 absolute right-3 w-[380px] bg-card border border-border rounded-[10px] flex flex-col z-40 transition-all duration-300 overflow-hidden"
       style={{
         top: `${topOffset}px`,
         maxHeight: isExpanded
           ? `calc(100vh - ${topOffset}px - 1rem - ${bottomOffset}px)`
           : '550px',
-        bottom: isExpanded ? `${Math.max(16, bottomOffset + 16)}px` : 'auto'
+        bottom: isExpanded ? `${Math.max(16, bottomOffset + 16)}px` : 'auto',
+        boxShadow: 'var(--cpv2-shadow)',
       }}
     >
-      {/* Header */}
-      <div className="px-4 py-3 border-b border-border flex items-start justify-between flex-shrink-0">
-        <div className="flex-1">
-          <h3 className="font-semibold text-foreground text-base">{title}</h3>
-          {subtitle && (
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <p
-                className={`text-xs ${subtitleMono ? 'font-mono ' : ''}text-muted-foreground truncate${onSubtitleClick ? ' cursor-pointer hover:text-foreground transition-colors' : ''}`}
+      <div className="cpv2-panel-header">
+        {icon && <div className="cpv2-panel-icon" aria-hidden>{icon}</div>}
+        <div className="min-w-0 flex-1">
+          <h3 className="cpv2-panel-title">{title}</h3>
+          <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
+            {subtitle && (
+              <button
+                type="button"
+                className={`cpv2-panel-subtitle ${subtitleMono ? 'font-mono ' : ''}${onSubtitleClick ? 'clickable' : ''}`}
                 onClick={onSubtitleClick}
                 title={onSubtitleClick ? 'Click to rename' : undefined}
-              >{subtitle}</p>
-              {onSubtitleClick && (
-                <Pencil className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-              )}
-              <a
-                href="https://docs.reliantlabs.io/reference/nodes/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center text-muted-foreground/50 hover:text-muted-foreground transition-colors flex-shrink-0 ml-auto"
-                title="Node reference docs"
+                disabled={!onSubtitleClick}
               >
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            </div>
-          )}
-          {!subtitle && (
-            <div className="mt-0.5">
-              <a
-                href="https://docs.reliantlabs.io/reference/nodes/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center text-muted-foreground/50 hover:text-muted-foreground transition-colors"
-                title="Node reference docs"
-              >
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            </div>
-          )}
-        </div>
-        {onDelete ? (
-          <Tooltip content={deleteLabel} placement="left" delay={300}>
-            <button
-              onClick={handleDelete}
-              className="text-muted-foreground hover:text-destructive transition-colors flex-shrink-0 ml-4"
-              aria-label="Delete"
+                {subtitle}
+              </button>
+            )}
+            <a
+              href="https://docs.reliantlabs.io/reference/nodes/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center text-muted-foreground/50 hover:text-muted-foreground transition-colors flex-shrink-0 ml-auto"
+              title="Node reference docs"
             >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          </Tooltip>
-        ) : (
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
+        </div>
+
+        <div className="cpv2-header-actions">
+          {onDelete && (
+            <Tooltip content={deleteLabel} placement="left" delay={300}>
+              <button
+                type="button"
+                onClick={handleDelete}
+                className="cpv2-header-btn delete"
+                aria-label="Delete"
+              >
+                <Trash2 />
+              </button>
+            </Tooltip>
+          )}
           <Tooltip content="Close" placement="left" delay={300}>
             <button
+              type="button"
               onClick={onClose}
-              className="text-muted-foreground hover:text-foreground transition-colors flex-shrink-0 ml-4"
+              className="cpv2-header-btn"
               aria-label="Close"
             >
-              <X className="w-4 h-4" />
+              <X />
             </button>
           </Tooltip>
-        )}
+        </div>
       </div>
 
-      {/* Tab bar (optional, between header and scrollable content) */}
       {tabBar}
 
-      {/* Content */}
-      <div className="flex-1 p-3 pb-3 space-y-3 overflow-y-auto overflow-x-hidden">
+      <div className="cpv2-panel-content flex-1 overflow-x-hidden">
         {children}
       </div>
     </div>

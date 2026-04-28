@@ -113,7 +113,7 @@ export function TokenSettings() {
       )}
 
       {/* Usage instructions */}
-      <div className="border border-border rounded-lg p-4 bg-muted/30">
+      <div className="border border-border/40 rounded-lg p-4 bg-muted/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
         <p className="text-xs text-muted-foreground mb-2">
           Use a token to connect a headless daemon:
         </p>
@@ -156,7 +156,7 @@ export function TokenSettings() {
       )}
 
       {/* Create token */}
-      <div className="border border-border rounded-lg p-6 space-y-4">
+      <div className="border border-border/40 rounded-lg p-6 space-y-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
         <h3 className="font-medium">Create Token</h3>
         {creating ? (
           <div className="flex items-center gap-2">
@@ -203,7 +203,7 @@ export function TokenSettings() {
       </div>
 
       {/* Token list */}
-      <div className="border border-border rounded-lg p-6 space-y-4">
+      <div className="border border-border/40 rounded-lg p-6 space-y-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
         <h3 className="font-medium">Active Tokens</h3>
         {loading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -217,7 +217,7 @@ export function TokenSettings() {
             {activeTokens.map((token) => (
               <div
                 key={token.id}
-                className="flex items-center justify-between border border-border rounded-lg p-3"
+                className="flex items-center justify-between border border-border/40 rounded-lg p-3"
               >
                 <div className="space-y-1">
                   <p className="text-sm font-medium">{token.name}</p>

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { cn } from "../../lib/utils";
 
 export interface MCPTabItem {
@@ -5,6 +6,7 @@ export interface MCPTabItem {
   label: string;
   shortLabel?: string;
   count?: number;
+  icon?: ReactNode;
 }
 
 interface MCPTabsProps {
@@ -61,7 +63,7 @@ export function MCPTabs({ tabs, activeTab, onTabChange, className }: MCPTabsProp
       role="tablist"
       aria-label="MCP settings sections"
       className={cn(
-        "inline-flex w-full items-center gap-1 overflow-x-auto rounded-xl border border-border/60 bg-muted/40 p-1",
+        "inline-flex w-full items-center gap-1 overflow-x-auto rounded-lg border border-border/50 bg-background/70 p-1",
         className
       )}
     >
@@ -80,13 +82,14 @@ export function MCPTabs({ tabs, activeTab, onTabChange, className }: MCPTabsProp
             onClick={() => onTabChange(tab.id)}
             onKeyDown={(event) => handleTabKeyDown(event, index)}
             className={cn(
-              "inline-flex min-w-max shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors md:min-w-0 md:flex-1",
+              "inline-flex min-w-max shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors md:min-w-0 md:flex-1",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
               isActive
-                ? "border border-border/60 bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:bg-background/60 hover:text-foreground"
+                ? "border border-border/60 bg-card text-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
             )}
           >
+            {tab.icon && <span className="flex h-3.5 w-3.5 items-center justify-center">{tab.icon}</span>}
             <span className="sm:hidden">{tab.shortLabel ?? tab.label}</span>
             <span className="hidden sm:inline">{tab.label}</span>
             {typeof tab.count === "number" && (

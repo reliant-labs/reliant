@@ -2,8 +2,6 @@ import { ALargeSmall, Braces, List } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { cn } from '../../lib/utils'
 import { HelpPopover } from '../ui/HelpPopover'
-import { Input } from '../ui/Input'
-import { Textarea } from '../ui/Textarea'
 import { Toggle } from '../ui/Toggle'
 import { CELInput } from './CELInput'
 import { ModelDropdown, extractModelId } from './ModelDropdown'
@@ -93,58 +91,53 @@ export function ProtoFieldRenderer({
 
   const isCelInput = schema.celExpressionOnly || (supportsModeToggle && useCelMode && (schema.widget === 'text' || schema.widget === 'textarea'))
 
+  const labelAction = (
+    <div className="ml-auto flex items-center gap-1">
+      {!hideCELToggle && schema.celCapable && !supportsModeToggle && (
+        <span className="cpv2-cel-toggle active">CEL</span>
+      )}
+      {supportsModeToggle && !disabled && (
+        <div className="cpv2-mode-group gap-[2px]">
+          <button
+            type="button"
+            onClick={() => {
+              setUseCelMode(false)
+              if (schema.widget === 'select' && !canRenderAsSelectLiteral(normalizedStringValue, options)) {
+                const fallbackOption = options[0]
+                onChange(fallbackOption ? fallbackOption.value : '')
+              }
+            }}
+            className={cn('cpv2-mode-pill !flex-none !p-[3px_6px]', !useCelMode && 'active')}
+            title={schema.widget === 'select' || schema.widget === 'model' || schema.widget === 'tools' ? 'Use dropdown' : 'Use literal value'}
+          >
+            {schema.widget === 'select' || schema.widget === 'model' || schema.widget === 'tools' ? (
+              <List className="w-3 h-3" />
+            ) : (
+              <ALargeSmall className="w-3 h-3" />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setUseCelMode(true)}
+            className={cn('cpv2-mode-pill !flex-none !p-[3px_6px]', useCelMode && 'active')}
+            title="Use CEL expression"
+          >
+            <Braces className="w-3 h-3" />
+          </button>
+        </div>
+      )}
+    </div>
+  )
+
   return (
     <div className={cn('space-y-1.5', className)}>
       {!isInlineCheckbox && (
-        <div className="flex items-center gap-2">
-          <label
-            htmlFor={inputId}
-            className="text-sm font-medium text-foreground"
-          >
-            {schema.label}
-          </label>
-          {helperText && (
-            <HelpPopover content={helperText} title={schema.label} />
-          )}
-          {!hideCELToggle && schema.celCapable && !supportsModeToggle && (
-            <span className="text-xs px-1.5 py-0.5 rounded-sm bg-muted/80 text-muted-foreground font-mono">CEL</span>
-          )}
-          {supportsModeToggle && !disabled && (
-            <div className="ml-auto flex items-center gap-0.5 p-0.5 bg-muted/50 rounded-md">
-              <button
-                type="button"
-                onClick={() => {
-                  setUseCelMode(false)
-                  if (schema.widget === 'select' && !canRenderAsSelectLiteral(normalizedStringValue, options)) {
-                    const fallbackOption = options[0]
-                    onChange(fallbackOption ? fallbackOption.value : '')
-                  }
-                }}
-                className={cn(
-                  'p-1 rounded transition-colors cursor-pointer',
-                  !useCelMode ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                )}
-                title={schema.widget === 'select' || schema.widget === 'model' || schema.widget === 'tools' ? 'Use dropdown' : 'Use literal value'}
-              >
-                {schema.widget === 'select' || schema.widget === 'model' || schema.widget === 'tools' ? (
-                  <List className="w-3.5 h-3.5" />
-                ) : (
-                  <ALargeSmall className="w-3.5 h-3.5" />
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => setUseCelMode(true)}
-                className={cn(
-                  'p-1 rounded transition-colors cursor-pointer',
-                  useCelMode ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                )}
-                title="Use CEL expression"
-              >
-                <Braces className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
+        <div className="cpv2-field-label">
+          <span className="flex items-center gap-1.5">
+            <label htmlFor={inputId}>{schema.label}</label>
+            {helperText && <HelpPopover content={helperText} title={schema.label} />}
+          </span>
+          {labelAction}
         </div>
       )}
 
@@ -162,14 +155,13 @@ export function ProtoFieldRenderer({
             currentNodeType={currentNodeType}
           />
         ) : (
-          <Input
+          <input
             id={inputId}
             value={normalizedStringValue}
             onChange={(event) => onChange(event.target.value)}
             placeholder={schema.placeholder}
             disabled={disabled}
-            variant="default"
-            className="h-8 text-sm border-[hsl(var(--config-input-border))] bg-[hsl(var(--config-input-bg))]"
+            className="cpv2-field-input"
           />
         ))}
 
@@ -189,14 +181,14 @@ export function ProtoFieldRenderer({
             currentNodeType={currentNodeType}
           />
         ) : (
-          <Textarea
+          <textarea
             id={inputId}
             value={normalizedStringValue}
             onChange={(event) => onChange(event.target.value)}
             placeholder={schema.placeholder}
             disabled={disabled}
             rows={3}
-            className="text-sm"
+            className="cpv2-field-textarea"
           />
         ))}
 
@@ -220,11 +212,7 @@ export function ProtoFieldRenderer({
           value={normalizedStringValue}
           onChange={(event) => onChange(event.target.value)}
           disabled={disabled}
-          className={cn(
-            'w-full px-2.5 py-1.5 text-sm border border-[hsl(var(--config-input-border))] rounded-md',
-            'focus:ring-2 focus:ring-ring/20 focus:border-ring bg-[hsl(var(--config-input-bg))] text-foreground',
-            'disabled:opacity-60 disabled:cursor-not-allowed'
-          )}
+          className="cpv2-field-select"
         >
           {schema.allowEmptyOption && (
             <option value="">{schema.emptyOptionLabel || schema.placeholder || 'Select an option'}</option>
@@ -288,11 +276,7 @@ export function ProtoFieldRenderer({
           }}
           step={schema.isInteger ? 1 : 'any'}
           disabled={disabled}
-          className={cn(
-            'w-full px-2.5 py-1.5 text-sm border border-[hsl(var(--config-input-border))] rounded-md',
-            'focus:ring-2 focus:ring-ring/20 focus:border-ring bg-[hsl(var(--config-input-bg))] text-foreground',
-            'disabled:opacity-60 disabled:cursor-not-allowed'
-          )}
+          className="cpv2-field-input"
         />
       ))}
 
@@ -335,9 +319,9 @@ export function ProtoFieldRenderer({
           </div>
         ) : (
           <div className="space-y-1">
-            <div className="flex items-center justify-between gap-3 py-1.5">
+            <div className="cpv2-field-inline py-1.5">
               <div className="flex items-center gap-2 min-w-0">
-                <span className="text-sm font-medium text-foreground">
+                <span className="cpv2-fi-label">
                   {schema.label}
                 </span>
                 {helperText && (

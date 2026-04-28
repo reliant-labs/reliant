@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { Files, GitBranch, ListTodo, Check, Terminal, Globe } from "lucide-react";
+import { Files, GitBranch, ListTodo, Check, Terminal, Globe, type LucideIcon } from "lucide-react";
 import { FileTree, type FileTreeHandle } from "./FileTree";
 import { FileTreeToolbar } from "./FileTreeToolbar";
 import { useProjectStore } from "../../store/projectStore";
@@ -479,126 +479,111 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
     }
   };
 
+  const tabItems: Array<{
+    id: RightSidebarTab;
+    label: string;
+    tooltip: string;
+    icon: LucideIcon;
+    badge?: number;
+    status?: "active" | "pending" | "complete";
+    onClick: () => void;
+  }> = [
+    {
+      id: "files",
+      label: "Files",
+      tooltip: "Files",
+      icon: Files,
+      onClick: handleFilesTabClick,
+    },
+    {
+      id: "changes",
+      label: "Git",
+      tooltip: "Changes",
+      icon: GitBranch,
+      onClick: () => handleTabClick("changes"),
+    },
+    {
+      id: "processes",
+      label: "Runs",
+      tooltip: "Monitor running processes",
+      icon: Terminal,
+      badge: totalRunningCount,
+      status: totalRunningCount > 0 ? "active" : undefined,
+      onClick: () => handleTabClick("processes"),
+    },
+    {
+      id: "tasks",
+      label: "Tasks",
+      tooltip: "Tasks",
+      icon: ListTodo,
+      badge: taskStats.total,
+      status: taskStats.inProgress > 0
+        ? "active"
+        : taskStats.pending > 0
+          ? "pending"
+          : taskStats.total > 0 && taskStats.completed === taskStats.total
+            ? "complete"
+            : undefined,
+      onClick: () => handleTabClick("tasks"),
+    },
+    {
+      id: "browser",
+      label: "Web",
+      tooltip: "Browser",
+      icon: Globe,
+      badge: worktreeBrowserTabs.length,
+      status: worktreeBrowserTabs.length > 0 ? "active" : undefined,
+      onClick: () => handleTabClick("browser"),
+    },
+  ];
+
+  const getTabButtonClassName = (tab: RightSidebarTab) => cn(
+    "relative flex h-full min-w-max items-center gap-1.5 border-b-2 px-2.5 text-[11px] font-semibold uppercase tracking-[0.04em] transition-all",
+    activeSidebarTab === tab
+      ? "border-primary bg-primary/5 text-primary"
+      : "border-transparent text-muted-foreground/75 hover:text-foreground"
+  );
+
+  const getStatusDotClassName = (status?: "active" | "pending" | "complete") => cn(
+    "h-1.5 w-1.5 rounded-full",
+    status === "active" && "bg-green-500 animate-pulse",
+    status === "pending" && "bg-yellow-500",
+    status === "complete" && "bg-green-500",
+  );
+
   return (
-    <div className="flex flex-col h-full" data-onboarding="right-sidebar">
+    <div className="flex flex-col h-full bg-background" data-onboarding="right-sidebar">
       {/* Tabs */}
-      <div className="flex justify-center bg-accent border-b border-border h-10 overflow-visible pt-1">
-        <Tooltip content="Files" placement="bottom">
-          <button
-            onClick={handleFilesTabClick}
-            tabIndex={-1}
-            className={cn(
-              "px-3 h-full transition-colors border-b-2 flex items-center justify-center",
-              activeSidebarTab === "files"
-                ? "text-foreground"
-                : "text-muted-foreground bg-accent header-icon-btn"
-            )}
-            style={activeSidebarTab === "files" ? {
-              backgroundColor: 'hsl(var(--tab-active) / 0.15)',
-              borderBottomColor: 'hsl(var(--tab-active))'
-            } : undefined}
-          >
-            <Files className="w-4 h-4" />
-          </button>
-        </Tooltip>
-        <Tooltip content="Changes" placement="bottom">
-          <button
-            onClick={() => handleTabClick("changes")}
-            tabIndex={-1}
-            className={cn(
-              "px-3 h-full transition-colors border-b-2 flex items-center justify-center",
-              activeSidebarTab === "changes"
-                ? "text-foreground"
-                : "text-muted-foreground bg-accent header-icon-btn"
-            )}
-            style={activeSidebarTab === "changes" ? {
-              backgroundColor: 'hsl(var(--tab-active) / 0.15)',
-              borderBottomColor: 'hsl(var(--tab-active))'
-            } : undefined}
-          >
-            <GitBranch className="w-4 h-4" />
-          </button>
-        </Tooltip>
-        <Tooltip content="Monitor running processes" placement="bottom">
-          <button
-            onClick={() => handleTabClick("processes")}
-            tabIndex={-1}
-            className={cn(
-              "px-3 h-full transition-colors border-b-2 flex items-center justify-center",
-              activeSidebarTab === "processes"
-                ? "text-foreground"
-                : "text-muted-foreground bg-accent header-icon-btn"
-            )}
-            style={activeSidebarTab === "processes" ? {
-              backgroundColor: 'hsl(var(--tab-active) / 0.15)',
-              borderBottomColor: 'hsl(var(--tab-active))'
-            } : undefined}
-          >
-            <span className="relative">
-              <Terminal className="w-4 h-4" />
-              {totalRunningCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              )}
-            </span>
-          </button>
-        </Tooltip>
-        <Tooltip content="Tasks" placement="bottom">
-          <button
-            onClick={() => handleTabClick("tasks")}
-            tabIndex={-1}
-            className={cn(
-              "px-3 h-full transition-colors border-b-2 flex items-center justify-center",
-              activeSidebarTab === "tasks"
-                ? "text-foreground"
-                : "text-muted-foreground bg-accent header-icon-btn"
-            )}
-            style={activeSidebarTab === "tasks" ? {
-              backgroundColor: 'hsl(var(--tab-active) / 0.15)',
-              borderBottomColor: 'hsl(var(--tab-active))'
-            } : undefined}
-          >
-            <span className="relative">
-              <ListTodo className="w-4 h-4" />
-              {/* Yellow dot for pending tasks (not yet started) */}
-              {taskStats.pending > 0 && taskStats.inProgress === 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-yellow-500" />
-              )}
-              {/* Green pulsing dot for in-progress tasks */}
-              {taskStats.inProgress > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              )}
-              {/* Checkmark for all tasks completed */}
-              {taskStats.total > 0 && taskStats.completed === taskStats.total && (
-                <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center">
-                  <Check className="w-2.5 h-2.5 text-green-500" />
-                </span>
-              )}
-            </span>
-          </button>
-        </Tooltip>
-        <Tooltip content="Browser" placement="bottom">
-          <button
-            onClick={() => handleTabClick("browser")}
-            tabIndex={-1}
-            className={cn(
-              "px-3 h-full transition-colors border-b-2 flex items-center justify-center",
-              activeSidebarTab === "browser"
-                ? "text-foreground"
-                : "text-muted-foreground bg-accent header-icon-btn"
-            )}
-            style={activeSidebarTab === "browser" ? {
-              backgroundColor: 'hsl(var(--tab-active) / 0.15)',
-              borderBottomColor: 'hsl(var(--tab-active))'
-            } : undefined}
-          >
-            <span className="relative">
-              <Globe className="w-4 h-4" />
-              {worktreeBrowserTabs.length > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-blue-500" />
-              )}
-            </span>
-          </button>
-        </Tooltip>
+      <div className="flex h-11 shrink-0 overflow-x-auto overflow-y-hidden border-b border-border bg-card px-2 pt-1 shadow-sm">
+        {tabItems.map((item) => {
+          const Icon = item.icon;
+          const showBadge = typeof item.badge === "number" && item.badge > 0;
+
+          return (
+            <Tooltip key={item.id} content={item.tooltip} placement="bottom">
+              <button
+                onClick={item.onClick}
+                tabIndex={-1}
+                className={getTabButtonClassName(item.id)}
+              >
+                <Icon className="w-3.5 h-3.5 flex-shrink-0" />
+                <span>{item.label}</span>
+                {showBadge && (
+                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] leading-none text-muted-foreground">
+                    {item.badge}
+                  </span>
+                )}
+                {item.status && (
+                  item.status === "complete" ? (
+                    <Check className="w-3 h-3 text-green-500" />
+                  ) : (
+                    <span className={getStatusDotClassName(item.status)} />
+                  )
+                )}
+              </button>
+            </Tooltip>
+          );
+        })}
       </div>
 
       {/* Header and search bar - only show for files tab */}

@@ -1,5 +1,4 @@
-import { ChevronDown, ChevronRight } from 'lucide-react';
-import { LuBookMarked } from 'react-icons/lu';
+import { BookMarked, ChevronDown, ChevronRight } from 'lucide-react';
 import type { InfoUpdate } from '../../types/streaming';
 import { useState } from 'react';
 
@@ -13,7 +12,7 @@ export function WorkflowInfoMessage({ info }: WorkflowInfoMessageProps) {
   const rawMessage = (info.message || '').trim();
 
   const getIcon = () => {
-    return <LuBookMarked className="w-3 h-3 text-muted-foreground" />;
+    return <BookMarked className="w-3 h-3 text-muted-foreground" />;
   };
 
   const hasTitle = info.title && info.title.trim() !== '';

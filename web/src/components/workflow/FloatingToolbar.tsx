@@ -1,4 +1,5 @@
 import { Hand, MousePointer2, Undo, Redo, ZoomIn, ZoomOut, Maximize2, Lock, Unlock, Wand2 } from 'lucide-react'
+import { cn } from '../../lib/utils'
 
 export type InteractionMode = 'pan' | 'select'
 
@@ -34,151 +35,116 @@ export function FloatingToolbar({
   onLockToggle,
   isReadOnly = false,
 }: FloatingToolbarProps) {
+  const toolbarButtonClass = (active = false, disabled = false) => cn(
+    'inline-flex h-9 w-9 items-center justify-center rounded-lg transition-all',
+    active
+      ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
+      : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+    disabled && 'cursor-not-allowed opacity-40 hover:bg-transparent hover:text-muted-foreground',
+  )
+
   return (
-    <div className="flex items-center gap-2 bg-card border border-border rounded-xl shadow-lg p-2">
-      {/* Pan Mode Button */}
+    <div className="flex items-center gap-1 rounded-2xl border border-border/80 bg-card/95 p-1.5 shadow-xl shadow-black/10 backdrop-blur-sm">
       <button
         onClick={() => onModeChange('pan')}
-        className={`
-          p-2.5 rounded-lg transition-all
-          ${mode === 'pan'
-            ? 'bg-blue-500 text-white shadow-sm'
-            : 'hover:bg-muted text-muted-foreground hover:text-foreground'
-          }
-        `}
+        className={toolbarButtonClass(mode === 'pan')}
         title="Pan Mode (Hand Tool)"
         aria-label="Pan Mode"
       >
-        <Hand className="w-5 h-5" />
+        <Hand className="w-4 h-4" />
       </button>
 
-      {/* Selection Mode Button */}
       <button
         onClick={() => onModeChange('select')}
-        className={`
-          p-2.5 rounded-lg transition-all
-          ${mode === 'select'
-            ? 'bg-blue-500 text-white shadow-sm'
-            : 'hover:bg-muted text-muted-foreground hover:text-foreground'
-          }
-        `}
+        className={toolbarButtonClass(mode === 'select')}
         title="Selection Mode (Box Select)"
         aria-label="Selection Mode"
       >
-        <MousePointer2 className="w-5 h-5" />
+        <MousePointer2 className="w-4 h-4" />
       </button>
 
-      {/* Edit controls - hidden in read-only mode */}
       {!isReadOnly && (
         <>
-          {/* Lock Button */}
           {onLockToggle && (
             <button
               onClick={onLockToggle}
-              className={`
-                p-2.5 rounded-lg transition-all
-                ${isLocked
-                  ? 'bg-amber-500 text-white shadow-sm'
-                  : 'hover:bg-muted text-muted-foreground hover:text-foreground'
-                }
-              `}
+              className={toolbarButtonClass(isLocked)}
               title={isLocked ? "Unlock Nodes" : "Lock Nodes"}
               aria-label={isLocked ? "Unlock Nodes" : "Lock Nodes"}
             >
-              {isLocked ? <Lock className="w-5 h-5" /> : <Unlock className="w-5 h-5" />}
+              {isLocked ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
             </button>
           )}
 
-          {/* Divider */}
-          <div className="w-px h-6 bg-border" />
+          <div className="mx-1 h-6 w-px bg-border/80" />
 
-          {/* Undo Button */}
           <button
             onClick={onUndo}
             disabled={!canUndo}
-            className={`
-              p-2.5 rounded-lg transition-all
-              ${canUndo
-                ? 'hover:bg-muted text-muted-foreground hover:text-foreground'
-                : 'text-muted-foreground/40 cursor-not-allowed'
-              }
-            `}
+            className={toolbarButtonClass(false, !canUndo)}
             title="Undo (Ctrl+Z)"
             aria-label="Undo"
           >
-            <Undo className="w-5 h-5" />
+            <Undo className="w-4 h-4" />
           </button>
 
-          {/* Redo Button */}
           <button
             onClick={onRedo}
             disabled={!canRedo}
-            className={`
-              p-2.5 rounded-lg transition-all
-              ${canRedo
-                ? 'hover:bg-muted text-muted-foreground hover:text-foreground'
-                : 'text-muted-foreground/40 cursor-not-allowed'
-              }
-            `}
+            className={toolbarButtonClass(false, !canRedo)}
             title="Redo (Ctrl+Shift+Z)"
             aria-label="Redo"
           >
-            <Redo className="w-5 h-5" />
+            <Redo className="w-4 h-4" />
           </button>
         </>
       )}
 
-      {/* Zoom/View controls - only show if handlers provided */}
       {(onZoomIn || onZoomOut || onFitView) && (
         <>
-          {/* Divider */}
-          <div className="w-px h-6 bg-border" />
+          <div className="mx-1 h-6 w-px bg-border/80" />
 
-          {/* Zoom Out Button */}
           {onZoomOut && (
             <button
               onClick={onZoomOut}
-              className="p-2.5 rounded-lg transition-all hover:bg-muted text-muted-foreground hover:text-foreground"
+              className={toolbarButtonClass()}
               title="Zoom Out"
               aria-label="Zoom Out"
             >
-              <ZoomOut className="w-5 h-5" />
+              <ZoomOut className="w-4 h-4" />
             </button>
           )}
 
-          {/* Zoom In Button */}
           {onZoomIn && (
             <button
               onClick={onZoomIn}
-              className="p-2.5 rounded-lg transition-all hover:bg-muted text-muted-foreground hover:text-foreground"
+              className={toolbarButtonClass()}
               title="Zoom In"
               aria-label="Zoom In"
             >
-              <ZoomIn className="w-5 h-5" />
+              <ZoomIn className="w-4 h-4" />
             </button>
           )}
 
-          {/* Fit View Button */}
           {onFitView && (
             <button
               onClick={onFitView}
-              className="p-2.5 rounded-lg transition-all hover:bg-muted text-muted-foreground hover:text-foreground"
+              className={toolbarButtonClass()}
               title="Fit to View"
               aria-label="Fit to View"
             >
-              <Maximize2 className="w-5 h-5" />
+              <Maximize2 className="w-4 h-4" />
             </button>
           )}
 
-          {/* Organize Layout Button */}
           {!isReadOnly && onOrganizeNodes && (
             <button
               onClick={onOrganizeNodes}
-              className="p-2.5 rounded-lg transition-all hover:bg-muted text-muted-foreground hover:text-foreground"
+              className={toolbarButtonClass()}
               title="Organize Nodes"
               aria-label="Organize Nodes"
             >
-              <Wand2 className="w-5 h-5" />
+              <Wand2 className="w-4 h-4" />
             </button>
           )}
         </>

@@ -14,8 +14,7 @@ import {
   useImperativeHandle,
   type ReactNode,
 } from "react";
-import { Square } from "lucide-react";
-import { IoMdReturnLeft } from "react-icons/io";
+import { CornerDownLeft, Square } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { ChatTextArea } from "./ChatTextArea";
 import { ChatButton } from "./ChatButton";
@@ -128,7 +127,7 @@ export const BaseChatInput = forwardRef<HTMLDivElement, BaseChatInputProps>(
           ) : (
             <>
               <span className="text-[10px]">Send</span>
-              <IoMdReturnLeft className="w-3 h-3 ml-0.5" />
+              <CornerDownLeft className="w-3 h-3 ml-0.5" />
             </>
           )}
         </span>

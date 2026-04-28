@@ -375,7 +375,7 @@ export function ConfigPanel({
     >
       {/* Inline Node ID Editor (only visible when editing) */}
       {isEditingId && (
-        <div className="-mt-2 mb-2 space-y-1.5">
+        <div className="cpv2-section">
           <div className="flex items-center gap-1.5">
             <input
               ref={idInputRef}
@@ -387,34 +387,31 @@ export function ConfigPanel({
               }}
               onKeyDown={handleIdKeyDown}
               onBlur={() => {
-                // Small delay to allow button clicks to register
                 setTimeout(() => {
                   if (isEditingId) handleIdCancel();
                 }, 150);
               }}
-              className={`flex-1 px-2 py-1 text-xs font-mono border rounded-md focus:ring-2 focus:ring-ring focus:border-ring bg-background text-foreground ${
-                idError ? "border-destructive" : "border-input"
-              }`}
+              className={`cpv2-field-input flex-1 font-mono ${idError ? "!border-destructive" : ""}`}
               placeholder="node-id"
             />
             <button
               type="button"
               onClick={handleIdSave}
-              className="p-1 text-success hover:text-success/80 hover:bg-success/10 rounded-md transition-colors"
+              className="cpv2-header-btn text-success hover:text-success"
               title="Save"
             >
-              <Check className="w-3.5 h-3.5" />
+              <Check />
             </button>
             <button
               type="button"
               onClick={handleIdCancel}
-              className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md transition-colors"
+              className="cpv2-header-btn"
               title="Cancel"
             >
-              <X className="w-3.5 h-3.5" />
+              <X />
             </button>
           </div>
-          {idError && <p className="text-xs text-destructive">{idError}</p>}
+          {idError && <p className="cpv2-field-hint !text-destructive">{idError}</p>}
         </div>
       )}
 
@@ -473,9 +470,11 @@ export function ConfigPanel({
       {/* ============ THREAD TAB ============ */}
       {activeTab === "thread" && hasThreadSupport(step) && (
         <>
-          <div className="cpv2-info-banner">
-            <Info className="w-3.5 h-3.5" />
-            <span>Controls what thread context is passed to the child workflow.</span>
+          <div className="cpv2-section">
+            <div className="cpv2-info-banner">
+              <Info className="w-3.5 h-3.5" />
+              <span>Controls what thread context is passed to the child workflow.</span>
+            </div>
           </div>
           <NodeThreadConfigEditor
             config={stepThread}
@@ -499,9 +498,11 @@ export function ConfigPanel({
       {/* ============ INJECT TAB ============ */}
       {activeTab === "inject" && hasThreadSupport(step) && (
         <>
-          <div className="cpv2-info-banner">
-            <Info className="w-3.5 h-3.5" />
-            <span>Adds a message to the thread <strong>before</strong> this node executes.</span>
+          <div className="cpv2-section">
+            <div className="cpv2-info-banner">
+              <Info className="w-3.5 h-3.5" />
+              <span>Adds a message to the thread <strong>before</strong> this node executes.</span>
+            </div>
           </div>
           <NodeThreadConfigEditor
             config={stepThread}
@@ -540,8 +541,8 @@ export function ConfigPanel({
         <>
           {/* Node Condition */}
           {!isJoinStep(step) && (
-            <div className="space-y-1.5">
-              <div className="text-xs uppercase tracking-wider text-muted-foreground/60 mb-1.5">Execution</div>
+            <div className="cpv2-section">
+              <div className="cpv2-section-label">Execution</div>
               <CELExpressionInput
                 label="Condition"
                 helpTooltip="CEL expression that determines if this node should execute. If false, node is skipped and outputs { skipped: true }. Available: inputs.*, nodes.*, workflow.*"
@@ -558,7 +559,7 @@ export function ConfigPanel({
                 showCELIndicator={false}
               />
               {getConditionExpression(step.condition) && (
-                <p className="text-xs text-muted-foreground/70">
+                <p className="cpv2-field-hint">
                   If false, node skipped. Downstream edges can route on skipped output.
                 </p>
               )}
@@ -567,20 +568,20 @@ export function ConfigPanel({
 
           {/* Project settings - only for workflow/loop steps */}
           {hasProjectSupport(step) && (
-            <div className="border-t border-border/50 pt-3">
+            <div className="cpv2-section">
               <button
                 type="button"
                 onClick={() => setIsProjectExpanded(!isProjectExpanded)}
-                className="w-full flex items-center gap-2 py-1.5 text-sm font-medium text-foreground hover:text-foreground/80 transition-colors"
+                className={`cpv2-param-group-header w-full${isProjectExpanded ? "" : " collapsed"}`}
               >
-                {isProjectExpanded ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
-                <span>Project Override</span>
-                {hasProjectConfig && (
-                  <span className="ml-auto text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary">configured</span>
-                )}
+                <div className="cpv2-pgh-left">
+                  {isProjectExpanded ? <ChevronDown className="cpv2-pgh-chevron" /> : <ChevronRight className="cpv2-pgh-chevron" />}
+                  <span className="cpv2-pgh-label">Project Override</span>
+                </div>
+                {hasProjectConfig && <span className="cpv2-pgh-preset">configured</span>}
               </button>
               {isProjectExpanded && (
-                <div className="pt-2">
+                <div className="cpv2-param-group-body">
                   <AdvancedProjectSettings
                     project={
                       getStepProject(step)
@@ -598,20 +599,20 @@ export function ConfigPanel({
 
           {/* Save Message Configuration */}
           {!(isActionStep(step) && step.type === "save_message") && (
-            <div className="border-t border-border/50 pt-3">
+            <div className="cpv2-section">
               <button
                 type="button"
                 onClick={() => setIsSaveMessageExpanded(!isSaveMessageExpanded)}
-                className="w-full flex items-center gap-2 py-1.5 text-sm font-medium text-foreground hover:text-foreground/80 transition-colors"
+                className={`cpv2-param-group-header w-full${isSaveMessageExpanded ? "" : " collapsed"}`}
               >
-                {isSaveMessageExpanded ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
-                <span>Save Message</span>
-                {hasSaveMessageConfig && (
-                  <span className="ml-auto text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary">configured</span>
-                )}
+                <div className="cpv2-pgh-left">
+                  {isSaveMessageExpanded ? <ChevronDown className="cpv2-pgh-chevron" /> : <ChevronRight className="cpv2-pgh-chevron" />}
+                  <span className="cpv2-pgh-label">Save Message</span>
+                </div>
+                {hasSaveMessageConfig && <span className="cpv2-pgh-preset">configured</span>}
               </button>
               {isSaveMessageExpanded && (
-                <div className="pt-2">
+                <div className="cpv2-param-group-body">
                   <SaveMessageConfigEditor
                     config={step.saveMessage}
                     onChange={(saveMessage) => updateStep({ saveMessage })}

@@ -102,8 +102,8 @@ export function SettingsNavigation({
   const visibleIdSet = new Set(getVisibleSettingsSectionIds());
 
   return (
-    <div className={cn("px-4 pb-4 pt-2", isCollapsed && "px-2 pb-2 pt-2")}>
-      <nav className="space-y-0.5">
+    <div className={cn("px-2 pb-4 pt-1", isCollapsed && "pb-2 pt-1")}>
+      <nav className="space-y-1">
         {sectionGroups.map((group) => {
           const visibleItems = group.items.filter((item) => visibleIdSet.has(item.id));
           if (visibleItems.length === 0) return null;
@@ -111,7 +111,7 @@ export function SettingsNavigation({
           return (
             <div key={group.label}>
               {!isCollapsed && (
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 px-3 pt-3 pb-1 font-medium">
+                <div className="px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/70">
                   {group.label}
                 </div>
               )}
@@ -124,15 +124,15 @@ export function SettingsNavigation({
                       onClick={() => onSectionChange(section.id)}
                       title={isCollapsed ? section.label : undefined}
                       className={cn(
-                        "px-3 py-1.5 rounded-md cursor-pointer transition-all w-full",
-                        isCollapsed ? "flex items-center justify-center" : "text-left",
+                        "w-full cursor-pointer rounded-md border-l-2 px-3 py-1.5 text-sm transition-all",
+                        isCollapsed ? "flex items-center justify-center px-2" : "text-left",
                         isActive
-                          ? "border-l-2 border-primary bg-primary/10 text-primary font-medium"
-                          : "hover:bg-muted/50 text-foreground/80 hover:text-foreground border-l-2 border-transparent"
+                          ? "border-primary bg-primary/10 text-primary font-medium"
+                          : "border-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                       )}
                     >
-                      <div className={cn("flex items-center", isCollapsed ? "" : "gap-2.5")}>
-                        <section.icon className="w-4 h-4" />
+                      <div className={cn("flex items-center", isCollapsed ? "justify-center" : "gap-2.5")}>
+                        <section.icon className="h-4 w-4 flex-shrink-0" />
                         {!isCollapsed && (
                           <div>
                             <div className="font-medium">{section.label}</div>
