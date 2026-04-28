@@ -85,6 +85,25 @@ Invoke an agent or sub-workflow
 
 ---
 
+## Ask Question
+
+Pause workflow execution to ask the user a question
+
+### Inputs
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `metadata` | string | No | - | JSON metadata with question text and options |
+
+### Outputs
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `has_feedback` | boolean | - |
+| `response` | string | - |
+
+---
+
 ## Call LLM
 
 Send a prompt to a language model and get a response

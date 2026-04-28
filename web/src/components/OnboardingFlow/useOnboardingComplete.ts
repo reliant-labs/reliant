@@ -33,10 +33,15 @@ export function useOnboardingComplete() {
         }
       }
 
-      // Set the selected workflow as the user's default
+      // Set the selected workflow as the user's default. Bare names from the
+      // intent options (e.g. "agent") need the builtin:// prefix so the backend
+      // workflow loader resolves them — the plain slug isn't a valid workflow ref.
       if (plan.workflowId) {
+        const defaultWorkflow = plan.workflowId.includes("://")
+          ? plan.workflowId
+          : `builtin://${plan.workflowId}`;
         try {
-          await updatePreferences({ defaultWorkflow: plan.workflowId });
+          await updatePreferences({ defaultWorkflow });
         } catch (err) {
           logger.warn("[OnboardingComplete] Failed to set default workflow", err);
         }

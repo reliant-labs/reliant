@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getGRPCBaseURL } from '@/api/grpc-client'
+import { getGRPCBaseURLPublic } from '@/api/grpc-client'
 
 export type AuthMode = 'dev' | 'apikey' | 'supabase'
 

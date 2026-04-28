@@ -7,13 +7,13 @@
  * relative to that position.
  */
 
+import type { JsonObject } from "@bufbuild/protobuf";
 import { registerOnboardingCompleteHandler } from "../useOnboardingComplete";
 import type { LaunchPlan } from "../types";
 import { getControlPlaneClient } from "./api";
-import { UserService, DaemonService } from "./gen/admin_connect";
-import { DaemonType, DaemonSize } from "./gen/admin_pb";
+import { UserService, DaemonService, DaemonType, DaemonSize } from "./gen/admin_pb";
 
-function planToStruct(plan: LaunchPlan): Record<string, unknown> {
+function planToStruct(plan: LaunchPlan): JsonObject {
   return {
     intent: plan.intent,
     compute: plan.compute,
@@ -24,7 +24,7 @@ function planToStruct(plan: LaunchPlan): Record<string, unknown> {
       repo: {
         provider: plan.repo.provider,
         url: plan.repo.url,
-        branch: plan.repo.branch,
+        ...(plan.repo.branch !== undefined && { branch: plan.repo.branch }),
       },
     }),
     ...(plan.localPath && { localPath: plan.localPath }),

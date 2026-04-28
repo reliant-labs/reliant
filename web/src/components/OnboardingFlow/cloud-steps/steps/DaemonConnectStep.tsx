@@ -2,8 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { cn } from '../../../../lib/utils';
 import type { StepProps } from '../../types';
 import { getControlPlaneClient } from '../api';
-import { DaemonService } from '../gen/admin_connect';
-import { DaemonStatus } from '../gen/admin_pb';
+import { DaemonService, DaemonStatus } from '../gen/admin_pb';
 
 type ChecklistItemStatus = 'done' | 'active' | 'pending';
 
