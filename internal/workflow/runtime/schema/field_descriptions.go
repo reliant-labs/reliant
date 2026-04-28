@@ -7,6 +7,7 @@ package schema
 // init populates FieldDescriptions with descriptions from proto annotations.
 // The map and GetFieldDescription function are defined in field_descriptions_base.go.
 func init() {
+	FieldDescriptions["ask_question.metadata"] = "JSON metadata with question text and options"
 	FieldDescriptions["call_llm.model"] = "Model selector using tags (e.g. flagship) or explicit ID"
 	FieldDescriptions["call_llm.system_prompt"] = "System message for this LLM call"
 	FieldDescriptions["call_llm.temperature"] = "Temperature (0-1) controls randomness"

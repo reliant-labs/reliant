@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { cn } from '../../../../lib/utils';
 import type { StepProps } from '../../types';
 import { getControlPlaneClient } from '../api';
-import { GitCredentialService } from '../gen/admin_connect';
+import { GitCredentialService } from '../gen/admin_pb';
 
 type Phase = 'pat' | 'repo';
 
