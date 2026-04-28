@@ -14,6 +14,15 @@ import (
 type WorktreeInfo struct {
 	ID   string
 	Path string
+	// RepoID identifies which nested repo this worktree belongs to.
+	// Empty for legacy single-repo projects whose worktrees pre-date the
+	// multi-repo migration.
+	RepoID string
+	// RepoPath is the absolute on-disk path of the repo's git root.
+	// For legacy single-repo projects this equals the project path.
+	// Tools that run git commands should use this, not Project.Path,
+	// so they target the correct nested repo.
+	RepoPath string
 }
 
 // ToolContext is a minimal context for tool execution in V2
@@ -81,6 +90,17 @@ func (tc *ToolContext) WorkingDir() string {
 		return tc.Project.Path
 	}
 	return ""
+}
+
+// GitDir returns the absolute path of the underlying git repo for this
+// execution context — the directory that should be the cwd for git
+// commands targeting the parent repo (worktree add/list/prune, etc.).
+// Falls back to WorkingDir for legacy contexts predating multi-repo.
+func (tc *ToolContext) GitDir() string {
+	if tc.Worktree != nil && tc.Worktree.RepoPath != "" {
+		return tc.Worktree.RepoPath
+	}
+	return tc.WorkingDir()
 }
 
 // WithCancel returns a copy with a new Done channel

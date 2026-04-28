@@ -9,6 +9,10 @@ import { InitializeGitModal } from "../Git/InitializeGitModal";
 import { Button } from "../ui/Button";
 import { cn } from "../../lib/utils";
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
+import { repoGrpc, type Repo } from "../../api/repo-grpc";
+import { worktreeGrpc } from "../../api/worktree-grpc";
+import { toast } from "../../lib/toast-manager";
+import { logger } from "../../lib/logger";
 
 interface CreateWorktreeModalProps {
   isOpen: boolean;
@@ -94,6 +98,43 @@ export function CreateWorktreeModal({
   const [normalizedName, setNormalizedName] = useState<string | null>(null);
   const [normalizedBranch, setNormalizedBranch] = useState<string | null>(null);
 
+  // Nested-repo multi-select state. Only rendered when the project has >1 repo.
+  const [repos, setRepos] = useState<Repo[]>([]);
+  const [selectedRepoIds, setSelectedRepoIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!isOpen || !projectId) return;
+    let cancelled = false;
+    repoGrpc
+      .list(projectId)
+      .then(({ repos: loaded }) => {
+        if (cancelled) return;
+        setRepos(loaded);
+        setSelectedRepoIds(new Set(loaded.map((r) => r.id)));
+      })
+      .catch((err) => {
+        // Non-fatal: fall back to single-repo path if RepoService is unavailable.
+        if (cancelled) return;
+        logger.warn("[CreateWorktreeModal] Failed to list repos", { err });
+        setRepos([]);
+        setSelectedRepoIds(new Set());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, projectId]);
+
+  const toggleRepo = (repoId: string) => {
+    setSelectedRepoIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(repoId)) next.delete(repoId);
+      else next.add(repoId);
+      return next;
+    });
+  };
+
+  const showRepoSelect = repos.length > 1;
+
   // Helper function to normalize names (replace spaces with hyphens, trim trailing spaces)
   const normalizeName = (value: string): string => {
     return value.trim().replace(/\s+/g, "-");
@@ -150,11 +191,29 @@ export function CreateWorktreeModal({
     return [...localBranches, ...remoteBranches];
   }, [branches]);
 
+  const resetFormState = () => {
+    setFormData({
+      name: "",
+      branch: "",
+      base_branch: "main",
+      copy_files: [".env", ".env.local"],
+      force: false,
+    });
+    setNormalizedName(null);
+    setNormalizedBranch(null);
+    setCustomFilesInput(".env, .env.local");
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.branch) {
       setError("Branch name is required");
+      return;
+    }
+
+    if (showRepoSelect && selectedRepoIds.size === 0) {
+      setError("Select at least one repo");
       return;
     }
 
@@ -168,7 +227,50 @@ export function CreateWorktreeModal({
     try {
       // Merge default copy_files with any additional files (e.g., modified/untracked files from source worktree)
       const allCopyFiles = [...new Set([...formData.copy_files, ...additionalCopyFiles])];
-      
+
+      // Multi-repo branch: project has >1 nested repo and user picked >1 of them.
+      if (showRepoSelect && selectedRepoIds.size > 1) {
+        const repoIds = Array.from(selectedRepoIds);
+        const result = await worktreeGrpc.batchCreate(
+          projectId,
+          repoIds,
+          finalName,
+          finalBranch,
+          {
+            baseBranch: formData.base_branch,
+            copyFiles: allCopyFiles,
+            force: formData.force,
+          }
+        );
+
+        if (result.all_succeeded) {
+          const firstWorktreeId = result.results.find((r) => r.worktree)?.worktree?.id;
+          if (firstWorktreeId) {
+            await onWorktreeCreated(firstWorktreeId);
+          }
+          toast.success(
+            `Workspace "${finalName}" created in ${result.results.length} repos`,
+            { duration: 4000 }
+          );
+          onClose();
+          resetFormState();
+        } else {
+          const failed = result.results.filter((r) => r.error);
+          const lines = failed.map((r) => {
+            const repoName = repos.find((rr) => rr.id === r.repo_id)?.name || r.repo_id;
+            return `${repoName}: ${r.error}`;
+          });
+          const heading = result.rolled_back
+            ? "Batch creation failed; rolled back successful creates"
+            : "Batch creation failed";
+          toast.error(`${heading}\n${lines.join("\n")}`);
+          setError(`${heading}: ${lines.join("; ")}`);
+        }
+        return;
+      }
+
+      // Single-repo path. If the user picked exactly one repo from the select,
+      // it's still the legacy single-create RPC.
       const worktree = await createWorktree({
         name: finalName,
         branch: finalBranch,
@@ -182,17 +284,7 @@ export function CreateWorktreeModal({
 
       await onWorktreeCreated(worktree.id);
       onClose();
-
-      setFormData({
-        name: "",
-        branch: "",
-        base_branch: "main",
-        copy_files: [".env", ".env.local"],
-        force: false,
-      });
-      setNormalizedName(null);
-      setNormalizedBranch(null);
-      setCustomFilesInput(".env, .env.local");
+      resetFormState();
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to create worktree"
@@ -356,6 +448,59 @@ export function CreateWorktreeModal({
             )}
           </div>
 
+          {showRepoSelect && (
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-foreground">
+                Repos <span className="text-destructive">*</span>
+              </label>
+              <div className="elevation-0 border border-border/60 rounded-lg divide-y divide-border/60">
+                {repos.map((r) => {
+                  const checked = selectedRepoIds.has(r.id);
+                  return (
+                    <label
+                      key={r.id}
+                      className="flex items-center gap-3 p-3 cursor-pointer hover:bg-muted/40 transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleRepo(r.id)}
+                        className="sr-only"
+                      />
+                      <div
+                        className={cn(
+                          "w-5 h-5 rounded border-2 transition-all flex items-center justify-center shrink-0",
+                          checked
+                            ? "border-foreground bg-background"
+                            : "border-border bg-background"
+                        )}
+                      >
+                        {checked && (
+                          <svg className="w-3 h-3 text-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-foreground truncate">
+                          {r.name}
+                        </div>
+                        {r.relative_path && (
+                          <div className="text-xs text-muted-foreground font-mono truncate">
+                            {r.relative_path}
+                          </div>
+                        )}
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                The same workspace will be created in each selected repo. All-or-nothing: if any fails, all are rolled back.
+              </p>
+            </div>
+          )}
+
           <div className="space-y-2 mb-4">
             <label className="block text-sm font-semibold text-foreground">
               Base Branch
@@ -472,7 +617,7 @@ export function CreateWorktreeModal({
           <button
             type="submit"
             className="flex-1 px-5 py-3 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-semibold shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={isCreating}
+            disabled={isCreating || (showRepoSelect && selectedRepoIds.size === 0)}
           >
             {isCreating ? "Creating..." : "Create Workspace"}
           </button>

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -1689,6 +1690,61 @@ func (r *Repo) UnarchiveWorktree(ctx context.Context, id string) error {
 		return fmt.Errorf("worktree ID cannot be empty")
 	}
 	return r.worktrees.UnarchiveWorktree(ctx, id)
+}
+
+// =============================================================================
+// Repos (nested git repositories within a project)
+// =============================================================================
+
+func (r *Repo) CreateRepo(ctx context.Context, repo *core.Repo) error {
+	if repo == nil {
+		return fmt.Errorf("repo cannot be nil")
+	}
+	if repo.ID == "" {
+		return fmt.Errorf("repo ID cannot be empty")
+	}
+	if repo.ProjectID == "" {
+		return fmt.Errorf("repo project_id cannot be empty")
+	}
+	return r.repos.CreateRepo(ctx, repo)
+}
+
+func (r *Repo) GetRepo(ctx context.Context, id string) (*core.Repo, error) {
+	if id == "" {
+		return nil, fmt.Errorf("repo ID cannot be empty")
+	}
+	return r.repos.GetRepo(ctx, id)
+}
+
+func (r *Repo) GetRepoByProjectAndPath(ctx context.Context, projectID, relativePath string) (*core.Repo, error) {
+	if projectID == "" {
+		return nil, fmt.Errorf("project ID cannot be empty")
+	}
+	return r.repos.GetRepoByProjectAndPath(ctx, projectID, relativePath)
+}
+
+func (r *Repo) ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error) {
+	if projectID == "" {
+		return nil, fmt.Errorf("project ID cannot be empty")
+	}
+	return r.repos.ListReposByProject(ctx, projectID)
+}
+
+func (r *Repo) UpdateRepo(ctx context.Context, repo *core.Repo) error {
+	if repo == nil {
+		return fmt.Errorf("repo cannot be nil")
+	}
+	if repo.ID == "" {
+		return fmt.Errorf("repo ID cannot be empty")
+	}
+	return r.repos.UpdateRepo(ctx, repo)
+}
+
+func (r *Repo) DeleteRepo(ctx context.Context, id string) error {
+	if id == "" {
+		return fmt.Errorf("repo ID cannot be empty")
+	}
+	return r.repos.DeleteRepo(ctx, id)
 }
 
 // Plans and Tasks methods are provided by the embedded sqlitedb.Querier

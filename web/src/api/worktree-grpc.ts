@@ -15,6 +15,7 @@ import { FileChangeStatus } from "../gen/reliant/v1/common_pb";
 export { WorktreeStatus };
 import {
   CreateWorktreeRequestSchema,
+  BatchCreateWorktreesRequestSchema,
   ListWorktreesRequestSchema,
   GetWorktreeRequestSchema,
   UpdateWorktreeRequestSchema,
@@ -125,6 +126,18 @@ export interface PRInfo {
   state?: string;
 }
 
+export interface BatchCreateWorktreeResult {
+  repo_id: string;
+  worktree?: Worktree;
+  error?: string;
+}
+
+export interface BatchCreateResult {
+  results: BatchCreateWorktreeResult[];
+  all_succeeded: boolean;
+  rolled_back: boolean;
+}
+
 // Convert proto Worktree to frontend Worktree
 function protoToFrontend(proto: ProtoWorktree): Worktree {
   return {
@@ -221,6 +234,42 @@ export const worktreeGrpc = {
     const response = await client.createWorktree(request);
     if (!response.worktree) throw new Error("No worktree in response");
     return protoToFrontend(response.worktree);
+  },
+
+  // Create worktrees in multiple repos atomically (all-or-nothing).
+  async batchCreate(
+    projectId: string,
+    repoIds: string[],
+    name: string,
+    branch: string,
+    options?: {
+      baseBranch?: string;
+      chatId?: string;
+      copyFiles?: string[];
+      force?: boolean;
+    }
+  ): Promise<BatchCreateResult> {
+    const client = grpcClient.worktree();
+    const request = create(BatchCreateWorktreesRequestSchema, {
+      projectId,
+      repoIds,
+      name,
+      branch,
+      baseBranch: options?.baseBranch,
+      chatId: options?.chatId,
+      copyFiles: options?.copyFiles || [],
+      force: options?.force || false,
+    });
+    const response = await client.batchCreateWorktrees(request);
+    return {
+      results: response.results.map((r) => ({
+        repo_id: r.repoId,
+        worktree: r.worktree ? protoToFrontend(r.worktree) : undefined,
+        error: r.error,
+      })),
+      all_succeeded: response.allSucceeded,
+      rolled_back: response.rolledBack,
+    };
   },
 
   // List worktrees for a project

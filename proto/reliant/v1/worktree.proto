@@ -20,6 +20,10 @@ enum WorktreeStatus {
 service WorktreeService {
   // CRUD Operations
   rpc CreateWorktree(CreateWorktreeRequest) returns (CreateWorktreeResponse) {}
+  // BatchCreateWorktrees creates a worktree (sharing name + branch) in each
+  // listed repo of a project. All-or-nothing: any failure rolls back already-
+  // created worktrees so the caller never has to clean up partial state.
+  rpc BatchCreateWorktrees(BatchCreateWorktreesRequest) returns (BatchCreateWorktreesResponse) {}
   rpc ListWorktrees(ListWorktreesRequest) returns (ListWorktreesResponse) {}
   rpc GetWorktree(GetWorktreeRequest) returns (GetWorktreeResponse) {}
   rpc UpdateWorktree(UpdateWorktreeRequest) returns (UpdateWorktreeResponse) {}
@@ -68,6 +72,10 @@ message Worktree {
   string last_active = 12;
   optional string deleted_at = 13;  // Archive timestamp
   optional CleanupMetadata cleanup_metadata = 14;
+  // repo_id identifies which nested repo this worktree belongs to. For
+  // single-repo projects this is the project's root-level repo. Optional
+  // during the multi-repo migration; required once backfill completes.
+  optional string repo_id = 15;
 }
 
 // CleanupMetadata tracks what was cleaned up during archive
@@ -119,11 +127,48 @@ message CreateWorktreeRequest {
   repeated string copy_files = 6;  // Files to copy (searches recursively in all directories)
   bool force = 7;
   optional string source_worktree_id = 8; // Source worktree to copy files from (if not set, copies from project path)
+  // repo_id selects which nested repo to create the worktree from. Required
+  // when the project has multiple repos. Optional when the project has a
+  // single root-level repo (defaults to that one).
+  optional string repo_id = 9;
 }
 
 // CreateWorktreeResponse returns the created worktree
 message CreateWorktreeResponse {
   Worktree worktree = 1;
+}
+
+// BatchCreateWorktreesRequest creates a worktree in each listed repo.
+// name + branch are shared across all repos so the resulting worktrees form
+// a coherent sibling set the user can open as one project context.
+message BatchCreateWorktreesRequest {
+  string project_id = 1;
+  // repo_ids selects which nested repos to create the worktree in. All must
+  // belong to project_id. Empty is rejected.
+  repeated string repo_ids = 2;
+  string name = 3;
+  string branch = 4;
+  optional string base_branch = 5;
+  optional string chat_id = 6;
+  repeated string copy_files = 7;
+  bool force = 8;
+}
+
+// BatchCreateWorktreeResult is the per-repo outcome of a batch create.
+// On success worktree is set; on failure (or rollback) error is set.
+message BatchCreateWorktreeResult {
+  string repo_id = 1;
+  optional Worktree worktree = 2;
+  optional string error = 3;
+}
+
+// BatchCreateWorktreesResponse reports the outcome per repo. all_succeeded
+// is true only when every repo got a worktree. rolled_back is true if we
+// rolled back partial successes after a downstream failure.
+message BatchCreateWorktreesResponse {
+  repeated BatchCreateWorktreeResult results = 1;
+  bool all_succeeded = 2;
+  bool rolled_back = 3;
 }
 
 // ListWorktreesRequest lists worktrees with filters

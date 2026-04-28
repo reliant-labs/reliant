@@ -38,6 +38,9 @@ const (
 	// WorktreeServiceCreateWorktreeProcedure is the fully-qualified name of the WorktreeService's
 	// CreateWorktree RPC.
 	WorktreeServiceCreateWorktreeProcedure = "/reliant.v1.WorktreeService/CreateWorktree"
+	// WorktreeServiceBatchCreateWorktreesProcedure is the fully-qualified name of the WorktreeService's
+	// BatchCreateWorktrees RPC.
+	WorktreeServiceBatchCreateWorktreesProcedure = "/reliant.v1.WorktreeService/BatchCreateWorktrees"
 	// WorktreeServiceListWorktreesProcedure is the fully-qualified name of the WorktreeService's
 	// ListWorktrees RPC.
 	WorktreeServiceListWorktreesProcedure = "/reliant.v1.WorktreeService/ListWorktrees"
@@ -104,6 +107,10 @@ const (
 type WorktreeServiceClient interface {
 	// CRUD Operations
 	CreateWorktree(context.Context, *connect.Request[v1.CreateWorktreeRequest]) (*connect.Response[v1.CreateWorktreeResponse], error)
+	// BatchCreateWorktrees creates a worktree (sharing name + branch) in each
+	// listed repo of a project. All-or-nothing: any failure rolls back already-
+	// created worktrees so the caller never has to clean up partial state.
+	BatchCreateWorktrees(context.Context, *connect.Request[v1.BatchCreateWorktreesRequest]) (*connect.Response[v1.BatchCreateWorktreesResponse], error)
 	ListWorktrees(context.Context, *connect.Request[v1.ListWorktreesRequest]) (*connect.Response[v1.ListWorktreesResponse], error)
 	GetWorktree(context.Context, *connect.Request[v1.GetWorktreeRequest]) (*connect.Response[v1.GetWorktreeResponse], error)
 	UpdateWorktree(context.Context, *connect.Request[v1.UpdateWorktreeRequest]) (*connect.Response[v1.UpdateWorktreeResponse], error)
@@ -144,6 +151,12 @@ func NewWorktreeServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+WorktreeServiceCreateWorktreeProcedure,
 			connect.WithSchema(worktreeServiceMethods.ByName("CreateWorktree")),
+			connect.WithClientOptions(opts...),
+		),
+		batchCreateWorktrees: connect.NewClient[v1.BatchCreateWorktreesRequest, v1.BatchCreateWorktreesResponse](
+			httpClient,
+			baseURL+WorktreeServiceBatchCreateWorktreesProcedure,
+			connect.WithSchema(worktreeServiceMethods.ByName("BatchCreateWorktrees")),
 			connect.WithClientOptions(opts...),
 		),
 		listWorktrees: connect.NewClient[v1.ListWorktreesRequest, v1.ListWorktreesResponse](
@@ -272,6 +285,7 @@ func NewWorktreeServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 // worktreeServiceClient implements WorktreeServiceClient.
 type worktreeServiceClient struct {
 	createWorktree       *connect.Client[v1.CreateWorktreeRequest, v1.CreateWorktreeResponse]
+	batchCreateWorktrees *connect.Client[v1.BatchCreateWorktreesRequest, v1.BatchCreateWorktreesResponse]
 	listWorktrees        *connect.Client[v1.ListWorktreesRequest, v1.ListWorktreesResponse]
 	getWorktree          *connect.Client[v1.GetWorktreeRequest, v1.GetWorktreeResponse]
 	updateWorktree       *connect.Client[v1.UpdateWorktreeRequest, v1.UpdateWorktreeResponse]
@@ -297,6 +311,11 @@ type worktreeServiceClient struct {
 // CreateWorktree calls reliant.v1.WorktreeService.CreateWorktree.
 func (c *worktreeServiceClient) CreateWorktree(ctx context.Context, req *connect.Request[v1.CreateWorktreeRequest]) (*connect.Response[v1.CreateWorktreeResponse], error) {
 	return c.createWorktree.CallUnary(ctx, req)
+}
+
+// BatchCreateWorktrees calls reliant.v1.WorktreeService.BatchCreateWorktrees.
+func (c *worktreeServiceClient) BatchCreateWorktrees(ctx context.Context, req *connect.Request[v1.BatchCreateWorktreesRequest]) (*connect.Response[v1.BatchCreateWorktreesResponse], error) {
+	return c.batchCreateWorktrees.CallUnary(ctx, req)
 }
 
 // ListWorktrees calls reliant.v1.WorktreeService.ListWorktrees.
@@ -403,6 +422,10 @@ func (c *worktreeServiceClient) CreateWorktreePR(ctx context.Context, req *conne
 type WorktreeServiceHandler interface {
 	// CRUD Operations
 	CreateWorktree(context.Context, *connect.Request[v1.CreateWorktreeRequest]) (*connect.Response[v1.CreateWorktreeResponse], error)
+	// BatchCreateWorktrees creates a worktree (sharing name + branch) in each
+	// listed repo of a project. All-or-nothing: any failure rolls back already-
+	// created worktrees so the caller never has to clean up partial state.
+	BatchCreateWorktrees(context.Context, *connect.Request[v1.BatchCreateWorktreesRequest]) (*connect.Response[v1.BatchCreateWorktreesResponse], error)
 	ListWorktrees(context.Context, *connect.Request[v1.ListWorktreesRequest]) (*connect.Response[v1.ListWorktreesResponse], error)
 	GetWorktree(context.Context, *connect.Request[v1.GetWorktreeRequest]) (*connect.Response[v1.GetWorktreeResponse], error)
 	UpdateWorktree(context.Context, *connect.Request[v1.UpdateWorktreeRequest]) (*connect.Response[v1.UpdateWorktreeResponse], error)
@@ -439,6 +462,12 @@ func NewWorktreeServiceHandler(svc WorktreeServiceHandler, opts ...connect.Handl
 		WorktreeServiceCreateWorktreeProcedure,
 		svc.CreateWorktree,
 		connect.WithSchema(worktreeServiceMethods.ByName("CreateWorktree")),
+		connect.WithHandlerOptions(opts...),
+	)
+	worktreeServiceBatchCreateWorktreesHandler := connect.NewUnaryHandler(
+		WorktreeServiceBatchCreateWorktreesProcedure,
+		svc.BatchCreateWorktrees,
+		connect.WithSchema(worktreeServiceMethods.ByName("BatchCreateWorktrees")),
 		connect.WithHandlerOptions(opts...),
 	)
 	worktreeServiceListWorktreesHandler := connect.NewUnaryHandler(
@@ -565,6 +594,8 @@ func NewWorktreeServiceHandler(svc WorktreeServiceHandler, opts ...connect.Handl
 		switch r.URL.Path {
 		case WorktreeServiceCreateWorktreeProcedure:
 			worktreeServiceCreateWorktreeHandler.ServeHTTP(w, r)
+		case WorktreeServiceBatchCreateWorktreesProcedure:
+			worktreeServiceBatchCreateWorktreesHandler.ServeHTTP(w, r)
 		case WorktreeServiceListWorktreesProcedure:
 			worktreeServiceListWorktreesHandler.ServeHTTP(w, r)
 		case WorktreeServiceGetWorktreeProcedure:
@@ -616,6 +647,10 @@ type UnimplementedWorktreeServiceHandler struct{}
 
 func (UnimplementedWorktreeServiceHandler) CreateWorktree(context.Context, *connect.Request[v1.CreateWorktreeRequest]) (*connect.Response[v1.CreateWorktreeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.CreateWorktree is not implemented"))
+}
+
+func (UnimplementedWorktreeServiceHandler) BatchCreateWorktrees(context.Context, *connect.Request[v1.BatchCreateWorktreesRequest]) (*connect.Response[v1.BatchCreateWorktreesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.BatchCreateWorktrees is not implemented"))
 }
 
 func (UnimplementedWorktreeServiceHandler) ListWorktrees(context.Context, *connect.Request[v1.ListWorktreesRequest]) (*connect.Response[v1.ListWorktreesResponse], error) {

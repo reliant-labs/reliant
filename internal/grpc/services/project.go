@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/configadapter"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -123,14 +124,23 @@ func (s *ProjectService) CreateProject(
 		return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("a project already exists at this path"))
 	}
 
-	// Auto-detect if path is a git repository via daemon
-	var checkGitResp struct {
-		IsGitRepo bool `json:"is_git_repo"`
+	// Discover nested git repos under the project path. A project may
+	// contain 0..N repos (a docs folder is a valid project with zero).
+	// IsGitRepo is derived from "any repos discovered". If the daemon is
+	// unreachable, project creation still succeeds with zero repos —
+	// repos can be added later via AddRepo.
+	type discoveredRepo struct {
+		RelativePath string `json:"relative_path"`
+		Name         string `json:"name"`
+		RemoteURL    string `json:"remote_url,omitempty"`
 	}
-	if err := s.sendProjectDaemonCommand(ctx, userID, "project.check_git", map[string]string{"path": req.Msg.Path}, &checkGitResp); err != nil {
-		logging.Warn("Failed to check git status via daemon, defaulting to false", "error", err, "path", req.Msg.Path)
+	var discoverResp struct {
+		Discovered []discoveredRepo `json:"discovered"`
 	}
-	isGitRepo := checkGitResp.IsGitRepo
+	if err := s.sendProjectDaemonCommand(ctx, userID, "repo.discover", map[string]interface{}{"path": req.Msg.Path}, &discoverResp); err != nil {
+		logging.Warn("Failed to discover repos via daemon, project will start with zero repos", "error", err, "path", req.Msg.Path)
+	}
+	isGitRepo := len(discoverResp.Discovered) > 0
 
 	// Set defaults
 	defaultBranch := "main"
@@ -155,6 +165,36 @@ func (s *ProjectService) CreateProject(
 	if err := s.database.CreateProject(ctx, project); err != nil {
 		logging.Error("Failed to create project", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create project"))
+	}
+
+	// Persist discovered repos. Failures here are logged but don't fail
+	// project creation — the project is still usable, repos can be added
+	// later, and re-running discovery will pick them up.
+	for _, found := range discoverResp.Discovered {
+		repoName := found.Name
+		if repoName == "" {
+			repoName = filepath.Base(found.RelativePath)
+			if repoName == "" || repoName == "." {
+				repoName = req.Msg.Name
+			}
+		}
+		var remoteURL *string
+		if found.RemoteURL != "" {
+			rurl := found.RemoteURL
+			remoteURL = &rurl
+		}
+		repoRecord := &core.Repo{
+			ID:           uuid.New().String(),
+			ProjectID:    project.ID,
+			Name:         repoName,
+			RelativePath: found.RelativePath,
+			RemoteURL:    remoteURL,
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		}
+		if err := s.database.CreateRepo(ctx, repoRecord); err != nil {
+			logging.Warn("Failed to persist discovered repo", "error", err, "project_id", project.ID, "relative_path", found.RelativePath)
+		}
 	}
 
 	// Create reliant.md with default instructions if it doesn't exist (via daemon)

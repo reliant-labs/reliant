@@ -1,0 +1,80 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+// RepoService manages git repositories nested inside a project.
+// A project may contain 0..N repos. A repo with relative_path == "" is
+// a single-repo project at the project root (the legacy shape).
+service RepoService {
+  rpc DiscoverRepos(DiscoverReposRequest) returns (DiscoverReposResponse) {}
+  rpc ListRepos(ListReposRequest) returns (ListReposResponse) {}
+  rpc AddRepo(AddRepoRequest) returns (AddRepoResponse) {}
+  rpc RemoveRepo(RemoveRepoRequest) returns (RemoveRepoResponse) {}
+  rpc GetRepoGitInfo(GetRepoGitInfoRequest) returns (GetRepoGitInfoResponse) {}
+}
+
+// Repo is a git repository nested inside a project.
+message Repo {
+  string id = 1;
+  string project_id = 2;
+  string name = 3;             // display name; defaults to dir basename
+  string relative_path = 4;    // path relative to project root; "" means project root itself
+  string remote_url = 5;       // remote.origin.url, "" if no remote
+  string created_at = 6;
+  string updated_at = 7;
+}
+
+message DiscoverReposRequest {
+  string project_id = 1;
+  int32 max_depth = 2;  // default 2; how many dirs deep to scan
+}
+
+message DiscoverReposResponse {
+  repeated Repo discovered = 1;  // repos found on disk (not yet persisted)
+}
+
+message ListReposRequest {
+  string project_id = 1;
+}
+
+message ListReposResponse {
+  repeated Repo repos = 1;
+}
+
+message AddRepoRequest {
+  string project_id = 1;
+  string relative_path = 2;     // required; "" means project root
+  optional string name = 3;     // defaults to basename of relative_path
+}
+
+message AddRepoResponse {
+  Repo repo = 1;
+}
+
+message RemoveRepoRequest {
+  string repo_id = 1;
+}
+
+message RemoveRepoResponse {
+  bool success = 1;
+}
+
+message GetRepoGitInfoRequest {
+  string repo_id = 1;
+}
+
+message GetRepoGitInfoResponse {
+  string repo_id = 1;
+  string current_branch = 2;
+  bool has_changes = 3;
+  string status = 4;            // "clean" or "dirty"
+  repeated string staged_files = 5;
+  repeated string unstaged_files = 6;
+  repeated string untracked_files = 7;
+  int32 ahead = 8;
+  int32 behind = 9;
+  string remote_url = 10;
+}

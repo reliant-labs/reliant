@@ -27,12 +27,15 @@ type CleanupMetadata struct {
 
 // Worktree represents a git worktree.
 type Worktree struct {
-	ID              string
-	Name            string
-	Path            string
-	Branch          string
-	BaseBranch      string
-	ProjectID       string
+	ID         string
+	Name       string
+	Path       string
+	Branch     string
+	BaseBranch string
+	ProjectID  string
+	// RepoID identifies which nested repo this worktree belongs to. Optional
+	// during the multi-repo migration; required once backfill completes.
+	RepoID          *string
 	ChatID          *string
 	Status          int32
 	IsMain          bool
@@ -41,6 +44,21 @@ type Worktree struct {
 	LastActive      time.Time
 	DeletedAt       *time.Time
 	CleanupMetadata *CleanupMetadata `json:"cleanup_metadata,omitempty"`
+}
+
+// Repo is a git repository nested inside a project.
+//
+// A project that is itself a git repo has one Repo with RelativePath == "".
+// A project that contains N sibling repos has one Repo per sibling with
+// RelativePath set to the sibling's path relative to the project root.
+type Repo struct {
+	ID           string    `json:"id"`
+	ProjectID    string    `json:"project_id"`
+	Name         string    `json:"name"`
+	RelativePath string    `json:"relative_path"`
+	RemoteURL    *string   `json:"remote_url,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 // ProjectFilters contains options for filtering projects.
@@ -83,4 +101,14 @@ type WorktreeStore interface {
 	DeleteWorktree(ctx context.Context, id string) error
 	ArchiveWorktree(ctx context.Context, id string) error
 	UnarchiveWorktree(ctx context.Context, id string) error
+}
+
+// RepoStore is the shared contract for nested-repo persistence across drivers.
+type RepoStore interface {
+	CreateRepo(ctx context.Context, repo *Repo) error
+	GetRepo(ctx context.Context, id string) (*Repo, error)
+	GetRepoByProjectAndPath(ctx context.Context, projectID, relativePath string) (*Repo, error)
+	ListReposByProject(ctx context.Context, projectID string) ([]*Repo, error)
+	UpdateRepo(ctx context.Context, repo *Repo) error
+	DeleteRepo(ctx context.Context, id string) error
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -117,6 +119,40 @@ func worktreeToProto(w *db.Worktree) *reliantv1.Worktree {
 	return proto
 }
 
+// resolveTargetRepo selects the nested repo a worktree operation targets.
+//
+// If repoIDOverride is set, the named repo is returned (must belong to the
+// project). If unset, projects with exactly one repo default to that repo;
+// zero-repo projects are rejected and multi-repo projects require the caller
+// to specify which repo.
+func (s *WorktreeService) resolveTargetRepo(ctx context.Context, project *db.Project, repoIDOverride *string) (*core.Repo, error) {
+	if repoIDOverride != nil && *repoIDOverride != "" {
+		repo, err := s.database.GetRepo(ctx, *repoIDOverride)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("repo not found: %s", *repoIDOverride))
+		}
+		if repo.ProjectID != project.ID {
+			return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("repo does not belong to this project"))
+		}
+		return repo, nil
+	}
+
+	repos, err := s.database.ListReposByProject(ctx, project.ID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list repos for project"))
+	}
+	switch len(repos) {
+	case 0:
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("project has no git repos; initialize one or add a nested repo before creating worktrees"))
+	case 1:
+		return repos[0], nil
+	default:
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("project has %d repos; specify repo_id to choose one", len(repos)))
+	}
+}
+
 // generateRepoID generates a unique ID for a git repository via daemon
 func (s *WorktreeService) generateRepoID(ctx context.Context, userID, projectPath string) (string, error) {
 	var resp struct {
@@ -155,6 +191,131 @@ func (s *WorktreeService) validateWorktreeForGitOps(ctx context.Context, userID 
 // CRUD Operations
 // =============================================================================
 
+// createWorktreeOpts collects the per-repo inputs to createWorktreeForRepo.
+// SourcePath, when empty, defaults to the resolved repo path inside the helper.
+type createWorktreeOpts struct {
+	Name       string
+	Branch     string
+	BaseBranch string
+	ChatID     *string
+	CopyFiles  []string
+	Force      bool
+	SourcePath string
+}
+
+// createWorktreeForRepo runs the daemon worktree.create + DB insert for a
+// single (project, repo) pair. Caller is responsible for project ownership
+// and repo-belongs-to-project checks. Returned errors are already wrapped as
+// connect errors.
+func (s *WorktreeService) createWorktreeForRepo(
+	ctx context.Context,
+	userID string,
+	project *db.Project,
+	repo *core.Repo,
+	opts createWorktreeOpts,
+) (*db.Worktree, error) {
+	repoPath := filepath.Join(project.Path, repo.RelativePath)
+
+	baseBranch := opts.BaseBranch
+	if baseBranch == "" {
+		baseBranch = "main"
+	}
+
+	// Generate the daemon-side repo ID hash (used to scope worktree dir on disk).
+	// This is independent of the persisted Repo entity ID — it derives from the
+	// repo's remote URL or absolute path so paths remain stable across sessions.
+	repoID, err := s.generateRepoID(ctx, userID, repoPath)
+	if err != nil {
+		logging.Error("Failed to generate repo ID", "error", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to generate repo ID"))
+	}
+
+	if opts.Force {
+		if err := s.handleForceCreate(ctx, userID, repoPath, opts.Name, opts.Branch, project.ID); err != nil {
+			return nil, err
+		}
+	}
+
+	// Default source to the repo path so file copy works for nested repos.
+	sourcePath := opts.SourcePath
+	if sourcePath == "" {
+		sourcePath = repoPath
+	}
+
+	type createReq struct {
+		ProjectPath string   `json:"project_path"`
+		RepoID      string   `json:"repo_id"`
+		Name        string   `json:"name"`
+		Branch      string   `json:"branch"`
+		BaseBranch  string   `json:"base_branch"`
+		Force       bool     `json:"force"`
+		CopyFiles   []string `json:"copy_files,omitempty"`
+		SourcePath  string   `json:"source_path,omitempty"`
+	}
+	var createResp struct {
+		Success      bool   `json:"success"`
+		WorktreePath string `json:"worktree_path"`
+		Error        string `json:"error,omitempty"`
+	}
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.create", createReq{
+		ProjectPath: repoPath,
+		RepoID:      repoID,
+		Name:        opts.Name,
+		Branch:      opts.Branch,
+		BaseBranch:  baseBranch,
+		Force:       opts.Force,
+		CopyFiles:   opts.CopyFiles,
+		SourcePath:  sourcePath,
+	}, &createResp); err != nil {
+		logging.Error("Failed to create git worktree via daemon", "error", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create worktree"))
+	}
+	if !createResp.Success {
+		logging.Error("Failed to create git worktree", "error", createResp.Error)
+		return nil, s.parseGitWorktreeError(createResp.Error, createResp.WorktreePath, opts.Branch, baseBranch)
+	}
+	worktreePath := createResp.WorktreePath
+
+	worktreeID := uuid.New().String()
+	now := time.Now().UTC()
+
+	var chatID *string
+	if opts.ChatID != nil && *opts.ChatID != "" {
+		chatID = opts.ChatID
+	}
+
+	resolvedRepoID := repo.ID
+	worktree := &db.Worktree{
+		ID:         worktreeID,
+		Name:       opts.Name,
+		Path:       worktreePath,
+		Branch:     opts.Branch,
+		BaseBranch: baseBranch,
+		ProjectID:  project.ID,
+		RepoID:     &resolvedRepoID,
+		ChatID:     chatID,
+		Status:     int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE),
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		LastActive: now,
+	}
+
+	if err := s.database.CreateWorktree(ctx, worktree); err != nil {
+		logging.Error("Failed to create worktree in database", "error", err)
+		_ = s.sendWorktreeDaemonCommand(ctx, userID, "worktree.delete_directory", map[string]string{
+			"project_path":  project.Path,
+			"worktree_path": worktreePath,
+		}, nil)
+
+		if strings.Contains(err.Error(), "UNIQUE constraint") {
+			return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("worktree with name '%s' already exists in this project; enable force to override", opts.Name))
+		}
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create worktree"))
+	}
+
+	return worktree, nil
+}
+
 // CreateWorktree creates a new worktree
 func (s *WorktreeService) CreateWorktree(
 	ctx context.Context,
@@ -172,45 +333,35 @@ func (s *WorktreeService) CreateWorktree(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
 	}
 
-	// Check project permission
 	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
 		return nil, err
 	}
 
-	// Get the project
 	project, err := s.database.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
 		logging.Error("Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
 	}
 
-	if !project.IsGitRepo {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("project must be a git repository to create worktrees; please initialize git for this project first"))
+	// Resolve which nested repo this worktree should be created against.
+	// If req.Msg.RepoId is set, use it (must belong to the project). Otherwise,
+	// for projects with exactly one repo we default to that repo. Projects
+	// with zero repos cannot host worktrees; projects with multiple require
+	// the caller to disambiguate.
+	resolvedRepo, err := s.resolveTargetRepo(ctx, project, req.Msg.RepoId)
+	if err != nil {
+		return nil, err
 	}
 
-	baseBranch := "main"
-	if req.Msg.BaseBranch != nil && *req.Msg.BaseBranch != "" {
+	baseBranch := ""
+	if req.Msg.BaseBranch != nil {
 		baseBranch = *req.Msg.BaseBranch
 	}
 
-	// Generate repo ID for centralized worktree location
-	repoID, err := s.generateRepoID(ctx, userID, project.Path)
-	if err != nil {
-		logging.Error("Failed to generate repo ID", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to generate repo ID"))
-	}
-
-	// Handle force mode - clean up existing worktree via daemon + database
-	if req.Msg.Force {
-		if err := s.handleForceCreate(ctx, userID, project.Path, req.Msg.Name, req.Msg.Branch, req.Msg.ProjectId); err != nil {
-			return nil, err
-		}
-	}
-
-	// Determine source path for file copying
-	sourcePath := project.Path
+	// Resolve a custom source worktree if specified. Falls back to the repo
+	// path inside the helper when sourcePath is empty.
+	sourcePath := ""
 	if req.Msg.SourceWorktreeId != nil && *req.Msg.SourceWorktreeId != "" {
-		// Verify user owns the source worktree before using it
 		if err := s.worktreeBelongsToUser(ctx, *req.Msg.SourceWorktreeId, userID); err != nil {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("source worktree not found"))
 		}
@@ -222,80 +373,159 @@ func (s *WorktreeService) CreateWorktree(
 		}
 	}
 
-	// Create the worktree via daemon (handles mkdir, branch check, git worktree add, file copy)
-	type createReq struct {
-		ProjectPath string   `json:"project_path"`
-		RepoID      string   `json:"repo_id"`
-		Name        string   `json:"name"`
-		Branch      string   `json:"branch"`
-		BaseBranch  string   `json:"base_branch"`
-		Force       bool     `json:"force"`
-		CopyFiles   []string `json:"copy_files,omitempty"`
-		SourcePath  string   `json:"source_path,omitempty"`
-	}
-	var createResp struct {
-		Success      bool   `json:"success"`
-		WorktreePath string `json:"worktree_path"`
-		Error        string `json:"error,omitempty"`
-	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.create", createReq{
-		ProjectPath: project.Path,
-		RepoID:      repoID,
-		Name:        req.Msg.Name,
-		Branch:      req.Msg.Branch,
-		BaseBranch:  baseBranch,
-		Force:       req.Msg.Force,
-		CopyFiles:   req.Msg.CopyFiles,
-		SourcePath:  sourcePath,
-	}, &createResp); err != nil {
-		logging.Error("Failed to create git worktree via daemon", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create worktree"))
-	}
-	if !createResp.Success {
-		logging.Error("Failed to create git worktree", "error", createResp.Error)
-		return nil, s.parseGitWorktreeError(createResp.Error, createResp.WorktreePath, req.Msg.Branch, baseBranch)
-	}
-	worktreePath := createResp.WorktreePath
-
-	// Create worktree record
-	worktreeID := uuid.New().String()
-	now := time.Now().UTC()
-
-	var chatID *string
-	if req.Msg.ChatId != nil && *req.Msg.ChatId != "" {
-		chatID = req.Msg.ChatId
-	}
-
-	worktree := &db.Worktree{
-		ID:         worktreeID,
+	worktree, err := s.createWorktreeForRepo(ctx, userID, project, resolvedRepo, createWorktreeOpts{
 		Name:       req.Msg.Name,
-		Path:       worktreePath,
 		Branch:     req.Msg.Branch,
 		BaseBranch: baseBranch,
-		ProjectID:  req.Msg.ProjectId,
-		ChatID:     chatID,
-		Status:     int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE),
-		CreatedAt:  now,
-		UpdatedAt:  now,
-		LastActive: now,
-	}
-
-	if err := s.database.CreateWorktree(ctx, worktree); err != nil {
-		logging.Error("Failed to create worktree in database", "error", err)
-		// Clean up git worktree via daemon
-		_ = s.sendWorktreeDaemonCommand(ctx, userID, "worktree.delete_directory", map[string]string{
-			"project_path":  project.Path,
-			"worktree_path": worktreePath,
-		}, nil)
-
-		if strings.Contains(err.Error(), "UNIQUE constraint") {
-			return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("worktree with name '%s' already exists in this project; enable force to override", req.Msg.Name))
-		}
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create worktree"))
+		ChatID:     req.Msg.ChatId,
+		CopyFiles:  req.Msg.CopyFiles,
+		Force:      req.Msg.Force,
+		SourcePath: sourcePath,
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return connect.NewResponse(&reliantv1.CreateWorktreeResponse{
 		Worktree: worktreeToProto(worktree),
+	}), nil
+}
+
+// BatchCreateWorktrees creates a worktree (sharing name + branch) in each of
+// the listed repos. All-or-nothing: any per-repo failure rolls back the
+// successful ones via DB delete + daemon directory cleanup. source_worktree_id
+// is intentionally not exposed for batch — each repo uses its own path as
+// the file-copy source, since one source path cannot meaningfully span
+// multiple unrelated repos.
+func (s *WorktreeService) BatchCreateWorktrees(
+	ctx context.Context,
+	req *connect.Request[reliantv1.BatchCreateWorktreesRequest],
+) (*connect.Response[reliantv1.BatchCreateWorktreesResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+
+	if req.Msg.ProjectId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+	}
+	if len(req.Msg.RepoIds) == 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("repo_ids is required"))
+	}
+	if req.Msg.Name == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("name is required"))
+	}
+	if req.Msg.Branch == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("branch is required"))
+	}
+
+	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+		return nil, err
+	}
+
+	project, err := s.database.GetProject(ctx, req.Msg.ProjectId)
+	if err != nil {
+		logging.Error("Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
+	}
+
+	// Pre-load and validate every repo before creating anything so an obvious
+	// mismatch fails fast without leaving partial state.
+	repos := make([]*core.Repo, 0, len(req.Msg.RepoIds))
+	for _, repoID := range req.Msg.RepoIds {
+		repo, err := s.database.GetRepo(ctx, repoID)
+		if err != nil || repo == nil {
+			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("repo not found: %s", repoID))
+		}
+		if repo.ProjectID != project.ID {
+			return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("repo %s does not belong to this project", repoID))
+		}
+		repos = append(repos, repo)
+	}
+
+	baseBranch := ""
+	if req.Msg.BaseBranch != nil {
+		baseBranch = *req.Msg.BaseBranch
+	}
+
+	results := make([]*reliantv1.BatchCreateWorktreeResult, len(repos))
+	successes := make([]*db.Worktree, 0, len(repos))
+	successIdx := make([]int, 0, len(repos))
+	var failure error
+	failedAt := -1
+
+	for i, repo := range repos {
+		worktree, err := s.createWorktreeForRepo(ctx, userID, project, repo, createWorktreeOpts{
+			Name:       req.Msg.Name,
+			Branch:     req.Msg.Branch,
+			BaseBranch: baseBranch,
+			ChatID:     req.Msg.ChatId,
+			CopyFiles:  req.Msg.CopyFiles,
+			Force:      req.Msg.Force,
+		})
+		if err != nil {
+			errStr := err.Error()
+			results[i] = &reliantv1.BatchCreateWorktreeResult{
+				RepoId: repo.ID,
+				Error:  &errStr,
+			}
+			failure = err
+			failedAt = i
+			break
+		}
+		results[i] = &reliantv1.BatchCreateWorktreeResult{
+			RepoId:   repo.ID,
+			Worktree: worktreeToProto(worktree),
+		}
+		successes = append(successes, worktree)
+		successIdx = append(successIdx, i)
+	}
+
+	if failure == nil {
+		return connect.NewResponse(&reliantv1.BatchCreateWorktreesResponse{
+			Results:      results,
+			AllSucceeded: true,
+			RolledBack:   false,
+		}), nil
+	}
+
+	// Roll back partial successes. Best-effort: a failed cleanup leaves orphans
+	// but should not mask the original error or fail the RPC. Operators can
+	// reconcile via the existing force/cleanup paths.
+	for j, worktree := range successes {
+		if err := s.database.DeleteWorktree(ctx, worktree.ID); err != nil {
+			logging.Warn("Rollback: failed to delete worktree from database",
+				"worktreeID", worktree.ID, "error", err)
+		}
+		if worktree.Path != "" {
+			if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.delete_directory", map[string]string{
+				"project_path":  project.Path,
+				"worktree_path": worktree.Path,
+			}, nil); err != nil {
+				logging.Warn("Rollback: failed to delete worktree directory",
+					"worktreePath", worktree.Path, "error", err)
+			}
+		}
+		rolledBackMsg := "rolled back"
+		results[successIdx[j]] = &reliantv1.BatchCreateWorktreeResult{
+			RepoId: repos[successIdx[j]].ID,
+			Error:  &rolledBackMsg,
+		}
+	}
+
+	// Mark unattempted repos (after the failure) with a rollback note so the
+	// client gets a result for every requested repo_id.
+	for i := failedAt + 1; i < len(repos); i++ {
+		if results[i] == nil {
+			rolledBackMsg := "not attempted"
+			results[i] = &reliantv1.BatchCreateWorktreeResult{
+				RepoId: repos[i].ID,
+				Error:  &rolledBackMsg,
+			}
+		}
+	}
+
+	return connect.NewResponse(&reliantv1.BatchCreateWorktreesResponse{
+		Results:      results,
+		AllSucceeded: false,
+		RolledBack:   true,
 	}), nil
 }
 

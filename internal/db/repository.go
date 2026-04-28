@@ -92,6 +92,14 @@ type Repository interface {
 	ArchiveWorktree(ctx context.Context, id string) error
 	UnarchiveWorktree(ctx context.Context, id string) error
 
+	// Repos (nested git repositories within a project)
+	CreateRepo(ctx context.Context, repo *core.Repo) error
+	GetRepo(ctx context.Context, id string) (*core.Repo, error)
+	GetRepoByProjectAndPath(ctx context.Context, projectID, relativePath string) (*core.Repo, error)
+	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
+	UpdateRepo(ctx context.Context, repo *core.Repo) error
+	DeleteRepo(ctx context.Context, id string) error
+
 	// Plans
 	CreatePlan(ctx context.Context, plan *Plan) error
 	GetPlan(ctx context.Context, id string) (*Plan, error)
