@@ -125,7 +125,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
   {
     id: "completion",
     type: "modal",
-    title: "Ready to Go!",
+    title: "Ready to go",
     description: "You're all set to start building",
     skippable: false,
   },

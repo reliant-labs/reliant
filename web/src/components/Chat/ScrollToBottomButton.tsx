@@ -1,4 +1,4 @@
-import { memo, useState, useEffect, useRef } from "react";
+import { memo, useState, useEffect, useRef, useCallback } from "react";
 import { ArrowDown } from "lucide-react";
 import { cn } from "../../lib/utils";
 
@@ -6,6 +6,8 @@ interface ScrollToBottomButtonProps {
   visible: boolean;
   onClick: () => void;
 }
+
+const IDLE_FADE_MS = 2000;
 
 /**
  * Floating scroll-to-bottom pill that sits above the chat input.
@@ -15,6 +17,9 @@ interface ScrollToBottomButtonProps {
  *
  * Starts as a small circle, then expands into a labeled pill after a
  * short delay so users notice it during longer scrolls.
+ *
+ * Fades to low opacity after a couple seconds of inactivity so it
+ * doesn't obstruct the view. Hovering brings it back to full opacity.
  */
 export const ScrollToBottomButton = memo(function ScrollToBottomButton({
   visible,
@@ -22,15 +27,35 @@ export const ScrollToBottomButton = memo(function ScrollToBottomButton({
 }: ScrollToBottomButtonProps) {
   const [mounted, setMounted] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [idleFaded, setIdleFaded] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const expandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const startIdleTimer = useCallback(() => {
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    idleTimerRef.current = setTimeout(() => setIdleFaded(true), IDLE_FADE_MS);
+  }, []);
+
+  const clearIdleTimer = useCallback(() => {
+    if (idleTimerRef.current) {
+      clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     if (visible) {
       setMounted(true);
       setExpanded(false);
+      setIdleFaded(false);
       expandTimerRef.current = setTimeout(() => setExpanded(true), 600);
+      startIdleTimer();
     } else {
       setExpanded(false);
+      setIdleFaded(false);
+      setHovered(false);
+      clearIdleTimer();
       const exitTimer = setTimeout(() => setMounted(false), 200);
       if (expandTimerRef.current) {
         clearTimeout(expandTimerRef.current);
@@ -43,8 +68,19 @@ export const ScrollToBottomButton = memo(function ScrollToBottomButton({
         clearTimeout(expandTimerRef.current);
         expandTimerRef.current = null;
       }
+      clearIdleTimer();
     };
-  }, [visible]);
+  }, [visible, startIdleTimer, clearIdleTimer]);
+
+  const handleMouseEnter = useCallback(() => {
+    setHovered(true);
+    clearIdleTimer();
+  }, [clearIdleTimer]);
+
+  const handleMouseLeave = useCallback(() => {
+    setHovered(false);
+    startIdleTimer();
+  }, [startIdleTimer]);
 
   if (!mounted) return null;
 
@@ -52,6 +88,8 @@ export const ScrollToBottomButton = memo(function ScrollToBottomButton({
     <div className="flex-shrink-0 flex justify-center relative z-20" style={{ height: 0 }}>
       <button
         onClick={onClick}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
         style={{ marginTop: -44 }}
         className={cn(
           "flex items-center justify-center gap-1.5",
@@ -62,8 +100,10 @@ export const ScrollToBottomButton = memo(function ScrollToBottomButton({
           "transition-all duration-300 ease-out",
           "cursor-pointer select-none",
           visible
-            ? "opacity-100 translate-y-0 scale-100"
-            : "opacity-0 translate-y-2 scale-95",
+            ? idleFaded && !hovered
+              ? "opacity-15 translate-y-0 scale-100"
+              : "opacity-100 translate-y-0 scale-100"
+            : "opacity-0 translate-y-2 scale-95 pointer-events-none",
           expanded
             ? "h-8 px-3.5"
             : "h-8 w-8",

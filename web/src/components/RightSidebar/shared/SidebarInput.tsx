@@ -65,8 +65,8 @@ export const SidebarInput = forwardRef<HTMLInputElement, SidebarInputProps>(
           placeholder={placeholder}
           disabled={disabled}
           className={cn(
-            "w-full py-1.5 text-sm",
-            "bg-muted/50 border border-border rounded-md",
+            "w-full py-1.5 text-xs",
+            "rounded-md border border-border bg-background/80 shadow-inner",
             "focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50",
             "placeholder:text-muted-foreground/50",
             "disabled:opacity-50 disabled:cursor-not-allowed",

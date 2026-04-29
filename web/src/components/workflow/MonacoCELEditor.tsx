@@ -48,6 +48,7 @@ export function MonacoCELEditor({
   const completionDisposableRef = useRef<{ dispose(): void } | null>(null);
   const isUpdatingRef = useRef(false);
   const [isFocused, setIsFocused] = useState(false);
+  const horizontalPadding = 10;
 
   // Keep onChange in a ref so the Monaco listener always calls the latest callback
   const onChangeRef = useRef(onChange);
@@ -104,7 +105,7 @@ export function MonacoCELEditor({
       folding: false,
       renderLineHighlight: 'none',
       glyphMargin: false,
-      lineDecorationsWidth: 0,
+      lineDecorationsWidth: horizontalPadding,
       lineNumbersMinChars: 0,
       automaticLayout: true,
       readOnly: disabled,
@@ -115,7 +116,7 @@ export function MonacoCELEditor({
         verticalScrollbarSize: 6,
         horizontalScrollbarSize: 6,
       },
-      padding: { top: multiline ? 6 : 6, bottom: multiline ? 6 : 6 },
+      padding: { top: 6, bottom: 6 },
       contextmenu: false,
       suggest: {
         showIcons: true,
@@ -271,22 +272,23 @@ export function MonacoCELEditor({
   return (
     <div
       className={cn(
-        'relative rounded-md border text-sm',
-        'bg-background',
-        isFocused && 'ring-2 ring-ring border-ring',
+        'relative rounded-[6px] border text-xs',
+        'bg-[hsl(var(--config-input-bg))]',
+        isFocused && 'border-ring shadow-[0_0_0_2px_hsl(var(--ring)/0.15)]',
         disabled && 'opacity-50 cursor-not-allowed',
-        !isFocused && !disabled && 'border-input hover:border-ring/50',
+        !isFocused && !disabled && 'border-[hsl(var(--config-input-border))] hover:border-ring/50',
         className,
       )}
       style={{ height }}
     >
       <div
         ref={containerRef}
-        className="h-full w-full overflow-hidden rounded-md"
+        className="h-full w-full overflow-hidden rounded-[6px]"
       />
       {showPlaceholder && (
         <div
-          className="absolute inset-0 flex items-center px-3 text-muted-foreground pointer-events-none select-none text-sm font-mono truncate"
+          className="absolute inset-0 flex items-center text-muted-foreground pointer-events-none select-none text-xs font-mono truncate"
+          style={{ paddingLeft: horizontalPadding, paddingRight: horizontalPadding }}
           aria-hidden
         >
           {placeholder}
@@ -317,9 +319,9 @@ function FallbackInput({
   );
 
   const classes = cn(
-    'w-full px-3 py-2 border rounded-md text-sm font-mono',
-    'focus:ring-2 focus:ring-ring focus:border-ring',
-    'bg-background text-foreground border-input',
+    'w-full px-2.5 py-1.5 border rounded-[6px] text-xs font-mono',
+    'focus:outline-none focus:border-ring focus:shadow-[0_0_0_2px_hsl(var(--ring)/0.15)]',
+    'bg-[hsl(var(--config-input-bg))] text-foreground border-[hsl(var(--config-input-border))]',
     disabled && 'opacity-50 cursor-not-allowed',
     className,
   );

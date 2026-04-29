@@ -24,8 +24,8 @@ import {
   Zap,
   Maximize2,
 } from "lucide-react";
-import { cn, formatErrorMessage } from "../../lib/utils";
-import { ToolContentArea, type ToolRenderContext, type ToolResultData } from "./tool-renderers";
+import { cn } from "../../lib/utils";
+import { GenericToolRenderer, ToolContentArea, type ToolRenderContext, type ToolResultData } from "./tool-renderers";
 import { useChatStore } from "../../store/chatStore";
 import { useChat, useToolCallStates } from "../../store/chatStoreHooks";
 import type { ToolApprovalRequest } from "../../api/client";
@@ -86,6 +86,7 @@ interface ToolExecutionProps {
   chatId?: string;
   showRichContent?: boolean;
   onSelectThread?: (threadId: string | null) => void;
+  density?: "compact" | "card" | "minimal";
 }
 
 
@@ -101,6 +102,7 @@ function ToolExecutionComponent({
   chatId,
   showRichContent = false,
   onSelectThread,
+  density = "compact",
 }: ToolExecutionProps) {
   const toolNameLower = (toolCall.name || '').toLowerCase();
   const isViewOnlyToolFlag = isViewOnlyTool(toolNameLower);
@@ -305,17 +307,19 @@ function ToolExecutionComponent({
         if (isViewOnlyToolFlag && filePaths.length === 1) {
           return (
             <span className="inline-flex items-center gap-1">
-              <span>{name}(</span>
+              <span className="text-foreground font-medium">{name}</span>
+              <span className="text-muted-foreground">(</span>
               <FileLink path={filePaths[0]} inline showIcon={false} worktreeId={chatWorktreeId}>
                 {formatted.summary}
               </FileLink>
-              <span>)</span>
+              <span className="text-muted-foreground">)</span>
             </span>
           );
         }
         return (
           <span className="inline-flex items-center gap-1 flex-wrap">
-            <span>{name}(</span>
+            <span className="text-foreground font-medium">{name}</span>
+            <span className="text-muted-foreground">(</span>
             {filePaths.slice(0, 3).map((fp, idx) => (
               <span key={`${fp}-${idx}`} className="inline-flex items-center">
                 <FileLink path={fp} inline showIcon={false} worktreeId={chatWorktreeId} />
@@ -325,43 +329,53 @@ function ToolExecutionComponent({
             {filePaths.length > 3 && (
               <span className="text-muted-foreground">+{filePaths.length - 3} more</span>
             )}
-            <span>)</span>
+            <span className="text-muted-foreground">)</span>
           </span>
         );
       }
-      return `${name}(${formatted.summary})`;
+      return (
+        <span className="inline-flex items-center">
+          <span className="text-foreground font-medium">{name}</span>
+          <span className="text-muted-foreground">({formatted.summary})</span>
+        </span>
+      );
     }
 
-    return `${name}()`;
+    return (
+      <span className="inline-flex items-center">
+        <span className="text-foreground font-medium">{name}</span>
+        <span className="text-muted-foreground">()</span>
+      </span>
+    );
   };
 
   // Get status icon
   const getStatusIcon = () => {
     if (toolResult?.is_error && toolResult?.content?.includes("blocked")) {
-      return <Shield className="w-3 h-3 text-amber-500" />;
+      return <Shield className="w-3.5 h-3.5 text-warning" />;
     }
-    if (isCancelled) return <X className="w-3 h-3 text-destructive" />;
-    if (isCancelling) return <Square className="w-3 h-3 text-warning animate-pulse" />;
-    if (hasFailed) return <AlertCircle className="w-3 h-3 text-destructive" />;
-    if (isBackgrounded) return <Play className="w-3 h-3 text-primary" />;
+    if (isCancelled) return <X className="w-3.5 h-3.5 text-destructive" />;
+    if (isCancelling) return <Square className="w-3.5 h-3.5 text-warning animate-pulse" />;
+    if (hasFailed) return <AlertCircle className="w-3.5 h-3.5 text-warning" />;
+    if (isBackgrounded) return <Play className="w-3.5 h-3.5 text-primary" />;
     if (isCompleted) {
       if (isTaskToolFlag && taskTargetStatus) {
         const statusIcons: Record<string, React.ReactNode> = {
-          completed: <CheckCircle className="w-3 h-3 text-success" />,
-          in_progress: <Loader2 className="w-3 h-3 text-info" />,
-          failed: <XCircle className="w-3 h-3 text-destructive" />,
-          blocked: <AlertCircle className="w-3 h-3 text-warning" />,
+          completed: <CheckCircle className="w-3.5 h-3.5 text-success" />,
+          in_progress: <Loader2 className="w-3.5 h-3.5 text-info" />,
+          failed: <XCircle className="w-3.5 h-3.5 text-destructive" />,
+          blocked: <AlertCircle className="w-3.5 h-3.5 text-warning" />,
         };
-        return statusIcons[taskTargetStatus] || <CheckCircle className="w-3 h-3 text-muted-foreground" />;
+        return statusIcons[taskTargetStatus] || <CheckCircle className="w-3.5 h-3.5 text-muted-foreground" />;
       }
-      return <CheckCircle className="w-3 h-3 text-success" />;
+      return <CheckCircle className="w-3.5 h-3.5 text-success" />;
     }
-    if (needsApproval) return <Shield className="w-3 h-3 text-info" />;
-    if (isDenied) return <X className="w-3 h-3 text-destructive" />;
-    if (isExecuting) return <Loader2 className="w-3 h-3 text-primary animate-spin" />;
-    if (isPreparing) return <Loader2 className="w-3 h-3 text-muted-foreground animate-spin" />;
-    if (isRequested) return <Clock className="w-3 h-3 text-info" />;
-    return <Clock className="w-3 h-3 text-muted-foreground" />;
+    if (needsApproval) return <Shield className="w-3.5 h-3.5 text-info" />;
+    if (isDenied) return <X className="w-3.5 h-3.5 text-destructive" />;
+    if (isExecuting) return <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />;
+    if (isPreparing) return <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin" />;
+    if (isRequested) return <Clock className="w-3.5 h-3.5 text-info" />;
+    return <Clock className="w-3.5 h-3.5 text-muted-foreground" />;
   };
 
   // Get status text
@@ -370,9 +384,9 @@ function ToolExecutionComponent({
     if (isCancelling) return "Cancelling...";
     if (toolResult?.is_error) {
       if (toolResult.content?.includes("blocked")) return "Blocked";
-      return "Error";
+      return "Warning";
     }
-    if (hasFailed) return "Failed";
+    if (hasFailed) return "Warning";
     if (isBackgrounded) return "Background";
     if (isCompleted) {
       if (isTaskToolFlag && taskTargetStatus) {
@@ -388,21 +402,27 @@ function ToolExecutionComponent({
     return "Pending";
   };
 
-  // Determine if expandable - read tools need results OR be executing, action tools always expandable
-  const hasContent = toolCall.input !== undefined || !!toolResult;
-  const readToolHasResults = isReadToolFlag ? (!!toolResult?.content || isExecuting) : true;
-  const isExpandable = hasContent && !isViewOnlyToolFlag && (!isTaskToolFlag || !!taskDescription) && readToolHasResults;
+  // Determine if expandable. Even compact/read-only/view-only tools need an inspector for input/output.
+  const hasInput = toolCall.input !== undefined;
+  const hasResult = !!toolResult;
+  const hasContent = hasInput || hasResult;
+  const isExpandable = hasContent && (!isTaskToolFlag || !!taskDescription || hasResult);
+  const hasFileOpenAffordance = isViewOnlyToolFlag && extractFilePaths(toolCall.input).length > 0;
 
-  // Border color based on state
-  const borderColor = isCancelled || isCancelling
-    ? "border-destructive/30"
+  // Left border color strip for status indication
+  const leftBorderColor = isCancelled
+    ? "border-l-2 border-l-muted-foreground"
     : hasFailed || toolResult?.is_error
-    ? "border-destructive/30"
+    ? "border-l-2 border-l-warning"
     : isCompleted || toolResult
-    ? "border-success/20"
+    ? "border-l-2 border-l-success"
+    : isExecuting
+    ? "border-l-2 border-l-primary"
+    : isPreparing || isCancelling
+    ? "border-l-2 border-l-warning"
     : needsApproval
-    ? "border-info/20"
-    : "border-border";
+    ? "border-l-2 border-l-warning"
+    : "border-l-2 border-l-border";
 
   // Build render context for content area
   const renderContext: ToolRenderContext = {
@@ -420,57 +440,99 @@ function ToolExecutionComponent({
     onSelectThread,
   };
 
+  const rootClassName = cn(
+    "overflow-hidden border border-border/50 shadow-sm",
+    density === "card" ? "rounded-xl bg-card" : density === "minimal" ? "rounded-md bg-transparent shadow-none" : "rounded-md",
+    leftBorderColor
+  );
+  const headerClassName = cn(
+    "flex items-center justify-between bg-muted/30",
+    density === "card" ? "px-4 py-3" : density === "minimal" ? "px-2 py-1.5" : "px-3 py-2",
+    isExpandable && "cursor-pointer hover:bg-muted/50"
+  );
+  const contentClassName = cn(
+    "border-t border-border/30 overflow-hidden overflow-y-auto bg-muted/15 py-1",
+    density === "card" ? "max-h-[720px]" : "max-h-[600px]"
+  );
+
+  const openPrimaryFile = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const filePaths = extractFilePaths(toolCall.input);
+    if (filePaths.length === 0) return;
+
+    const parsed = parseFilePath(filePaths[0]);
+    if (!parsed) return;
+
+    // Check if path is external before opening
+    const classification = classifyPath(parsed, chatWorktreeId);
+    if (!classification.isClickable) {
+      toast.error(classification.tooltipMessage);
+      return;
+    }
+
+    if (typeof toolCall.input === 'object') {
+      const input = toolCall.input as Record<string, unknown>;
+      if (typeof input.offset === 'number' && input.offset > 0) {
+        parsed.line = input.offset;
+        if (typeof input.limit === 'number' && input.limit > 1) {
+          parsed.lineEnd = input.offset + input.limit - 1;
+        }
+      }
+    }
+
+    // Use targetWorktreeId from classification for correct worktree context
+    openFile(parsed, classification.targetWorktreeId || chatWorktreeId);
+  };
+
   // Task tool special rendering
   if (isTaskToolFlag) {
     const displayTitle = taskTitle || (toolNameLower === 'add_task' ? 'Adding task...' : 'Updating task...');
     const currentTaskStatus = storedTask?.status || taskTargetStatus || 'pending';
-    const hasExpandedContent = !!taskDescription || hasFailed;
+    const hasExpandedContent = isExpandable;
 
     const statusStyles: Record<string, { icon: typeof CheckCircle; color: string }> = {
       pending: { icon: Clock, color: "text-muted-foreground" },
       in_progress: { icon: Zap, color: "text-primary" },
-      completed: { icon: CheckCircle, color: "text-green-500" },
-      failed: { icon: XCircle, color: "text-red-500" },
-      blocked: { icon: AlertCircle, color: "text-amber-500" },
+      completed: { icon: CheckCircle, color: "text-success" },
+      failed: { icon: XCircle, color: "text-destructive" },
+      blocked: { icon: AlertCircle, color: "text-warning" },
     };
     const style = statusStyles[currentTaskStatus] || statusStyles.pending;
 
     return (
-      <div className={cn("rounded-md border overflow-hidden", borderColor)}>
+      <div className={rootClassName}>
         {/* Header */}
         <div
-          className={cn(
-            "flex items-center gap-2 px-2 py-1.5 bg-muted/30",
-            hasExpandedContent && "cursor-pointer hover:bg-muted/50"
-          )}
+          className={cn(headerClassName, "gap-2")}
           onClick={() => hasExpandedContent && setIsExpanded(!isExpanded)} role={hasExpandedContent ? "button" : undefined} tabIndex={hasExpandedContent ? 0 : undefined} onKeyDown={(e) => hasExpandedContent && (e.key === "Enter" || e.key === " ") && (e.preventDefault(), setIsExpanded(!isExpanded))} aria-expanded={hasExpandedContent ? isExpanded : undefined} aria-label={hasExpandedContent ? `Toggle task details for ${displayTitle}` : undefined}
         >
           {isPreparing ? (
             <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin" />
           ) : isExecuting ? (
-            <Loader2 className="w-3.5 h-3.5 text-blue-500 animate-spin" />
+            <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />
           ) : hasFailed ? (
-            <XCircle className="w-3.5 h-3.5 text-red-500" />
+            <AlertCircle className="w-3.5 h-3.5 text-warning" />
           ) : (
             <style.icon className={cn("w-3.5 h-3.5", style.color)} />
           )}
           
-          <span className="text-[10px] text-muted-foreground font-mono">task()</span>
-          <span className="flex-1 text-[11px] font-medium truncate">{displayTitle}</span>
+          <span className="text-xs text-muted-foreground font-mono">task()</span>
+          <span className="flex-1 text-xs font-medium truncate">{displayTitle}</span>
           
           {hasExpandedContent && (
-            isExpanded ? <ChevronDown className="w-3 h-3 text-muted-foreground" /> : <ChevronRight className="w-3 h-3 text-muted-foreground" />
+            isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
           )}
         </div>
 
         {/* Expanded content */}
         {isExpanded && hasExpandedContent && (
-          <div className="px-2 py-1.5 border-t border-border/30 bg-background text-[11px] text-muted-foreground">
-            {hasFailed && toolResult?.content ? (
-              <p className="text-destructive">{formatErrorMessage(toolResult.content)}</p>
-            ) : taskDescription ? (
-              <p>{taskDescription}</p>
-            ) : null}
+          <div className={contentClassName}>
+            {taskDescription && (
+              <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                <p>{taskDescription}</p>
+              </div>
+            )}
+            <GenericToolRenderer ctx={renderContext} />
           </div>
         )}
       </div>
@@ -479,66 +541,66 @@ function ToolExecutionComponent({
 
   // Standard tool rendering
   return (
-    <div className={cn("rounded-md border overflow-hidden font-mono", borderColor)}>
+    <div className={rootClassName}>
       {/* Header row */}
       <div
-        className={cn(
-          "flex items-center justify-between px-2 py-1.5 bg-muted/30",
-          (isViewOnlyToolFlag || isExpandable) && "cursor-pointer hover:bg-muted/50"
-        )}
+        className={headerClassName}
         onClick={() => {
-          if (isViewOnlyToolFlag) {
-            const filePaths = extractFilePaths(toolCall.input);
-            if (filePaths.length > 0) {
-              const parsed = parseFilePath(filePaths[0]);
-              if (parsed) {
-                // Check if path is external before opening
-                const classification = classifyPath(parsed, chatWorktreeId);
-                if (!classification.isClickable) {
-                  toast.error(classification.tooltipMessage);
-                  return;
-                }
-                
-                if (typeof toolCall.input === 'object') {
-                  const input = toolCall.input as Record<string, unknown>;
-                  if (typeof input.offset === 'number' && input.offset > 0) {
-                    parsed.line = input.offset;
-                    if (typeof input.limit === 'number' && input.limit > 1) {
-                      parsed.lineEnd = input.offset + input.limit - 1;
-                    }
-                  }
-                }
-                // Use targetWorktreeId from classification for correct worktree context
-                openFile(parsed, classification.targetWorktreeId || chatWorktreeId);
-              }
-            }
-          } else if (isExpandable) {
+          if (isExpandable) {
             setUserHasToggled(true);
             setIsExpanded(!isExpanded);
           }
         }}
+        role={isExpandable ? "button" : undefined}
+        tabIndex={isExpandable ? 0 : undefined}
+        onKeyDown={(e) => {
+          if (isExpandable && (e.key === "Enter" || e.key === " ")) {
+            e.preventDefault();
+            setUserHasToggled(true);
+            setIsExpanded(!isExpanded);
+          }
+        }}
+        aria-expanded={isExpandable ? isExpanded : undefined}
+        aria-label={isExpandable ? `Toggle tool details for ${toolCall.name}` : undefined}
       >
           <div className="flex items-center gap-2 flex-1 min-w-0">
             {getStatusIcon()}
-            <span className="text-[11px] font-medium truncate">
+            <span className="text-xs truncate">
               {formatToolCallDisplay(toolCall.name, toolCall.input)}
             </span>
             <span className={cn(
-              "text-[10px] shrink-0",
-              toolResult?.is_error ? "text-destructive" : isCompleted ? "text-success" : "text-muted-foreground"
+              "px-1.5 py-0.5 rounded text-[11px] font-medium shrink-0",
+              toolResult?.is_error ? "bg-warning/10 text-warning"
+                : hasFailed ? "bg-warning/10 text-warning"
+                : isCancelled ? "bg-muted text-muted-foreground"
+                : isCompleted ? "bg-success/10 text-success"
+                : needsApproval ? "bg-warning/10 text-warning"
+                : isExecuting ? "bg-primary/10 text-primary"
+                : "bg-muted text-muted-foreground"
             )}>
               {getStatusText()}
             </span>
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
+            {hasFileOpenAffordance && (
+              <button
+                onClick={openPrimaryFile}
+                className="rounded px-1.5 py-0.5 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10"
+                title="Open file"
+                aria-label="Open file"
+                type="button"
+              >
+                Open
+              </button>
+            )}
             {isSpawnToolFlag && spawnThreadId && onSelectThread && (
               <button
                 onClick={(e) => { e.stopPropagation(); onSelectThread(spawnThreadId); }}
                 className="p-0.5 hover:bg-muted rounded transition-colors"
                 title="Open full thread view" aria-label="Open full thread view"
               >
-                <Maximize2 className="w-3 h-3 text-muted-foreground" />
+                <Maximize2 className="w-3.5 h-3.5 text-muted-foreground" />
               </button>
             )}
             {isExecuting && !isCancelling && onConvertToBackground && (
@@ -547,7 +609,7 @@ function ToolExecutionComponent({
                 className="p-0.5 hover:bg-muted rounded transition-colors"
                 title="Push to background" aria-label="Push tool execution to background"
               >
-                <Play className="w-3 h-3 text-info" />
+                <Play className="w-3.5 h-3.5 text-info" />
               </button>
             )}
             {(isExecuting || isCancelling) && onCancel && (
@@ -557,7 +619,7 @@ function ToolExecutionComponent({
                 title="Cancel" aria-label="Cancel tool execution"
                 disabled={isCancelling}
               >
-                <Square className={cn("w-3 h-3", isCancelling ? "text-warning animate-pulse" : "text-destructive")} />
+                <Square className={cn("w-3.5 h-3.5", isCancelling ? "text-warning animate-pulse" : "text-destructive")} />
               </button>
             )}
             {isExpandable && (
@@ -570,20 +632,21 @@ function ToolExecutionComponent({
 
         {/* Approval UI */}
         {shouldShowApprovalUI && (
-          <div className="px-2 py-1.5 border-t border-border/30 bg-info/5">
+          <div className="px-2 py-2 border-t border-warning/20 bg-warning/5">
             {showRichContent && toolCall.input && <ToolContentArea ctx={renderContext} />}
-            <div className="flex gap-1.5 mt-1">
+            <p className="text-[11px] font-medium text-warning mb-1.5">Approval required</p>
+            <div className="flex gap-2">
               <button
                 onClick={handleApprove} aria-label="Approve tool execution"
-                className="flex items-center gap-1 px-2 py-1 bg-success hover:bg-success/90 text-success-foreground rounded text-[10px] font-medium"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-success hover:bg-success/90 text-success-foreground rounded text-xs font-medium"
               >
-                <CheckCircle className="w-3 h-3" /> Approve
+                <CheckCircle className="w-3.5 h-3.5" /> Approve
               </button>
               <button
                 onClick={handleDeny} aria-label="Deny tool execution"
-                className="flex items-center gap-1 px-2 py-1 bg-destructive hover:bg-destructive/90 text-destructive-foreground rounded text-[10px] font-medium"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-destructive hover:bg-destructive/90 text-destructive-foreground rounded text-xs font-medium"
               >
-                <XCircle className="w-3 h-3" /> Deny
+                <XCircle className="w-3.5 h-3.5" /> Deny
               </button>
             </div>
           </div>
@@ -591,14 +654,14 @@ function ToolExecutionComponent({
 
         {/* Denial reason */}
         {approval?.status === ApprovalStatus.DENIED && approval.denial_reason && (
-          <div className="px-2 py-1 border-t border-destructive/20 bg-destructive/5 text-[10px] text-destructive">
+          <div className="px-2 py-1 border-t border-destructive/20 bg-destructive/5 text-xs text-destructive">
             Denied: {approval.denial_reason}
           </div>
         )}
 
         {/* Content area - only shown when expanded */}
         {isExpandable && !shouldShowApprovalUI && isExpanded && (
-          <div className="border-t border-border/30 overflow-hidden max-h-[600px] overflow-y-auto">
+          <div className={contentClassName}>
             <ToolContentArea ctx={renderContext} />
           </div>
         )}

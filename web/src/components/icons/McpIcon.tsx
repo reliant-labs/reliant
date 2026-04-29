@@ -1,13 +1,34 @@
 import type { SVGProps } from "react";
 
-export function McpIcon(props: SVGProps<SVGSVGElement>) {
+interface McpIconProps extends SVGProps<SVGSVGElement> {
+  title?: string;
+}
+
+export function McpIcon({
+  children,
+  title,
+  role,
+  focusable,
+  "aria-hidden": ariaHidden,
+  "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledBy,
+  ...props
+}: McpIconProps) {
+  const isDecorative = !children && !title && !role && !ariaLabel && !ariaLabelledBy;
+
   return (
     <svg
       viewBox="12 18 162 172"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
+      role={role}
+      focusable={focusable ?? "false"}
+      aria-hidden={ariaHidden ?? (isDecorative ? true : undefined)}
+      aria-label={ariaLabel}
+      aria-labelledby={ariaLabelledBy}
       {...props}
     >
+      {title && <title>{title}</title>}
       <path
         d="M25 97.8528L92.8823 29.9706C102.255 20.598 117.451 20.598 126.823 29.9706V29.9706C136.196 39.3431 136.196 54.5391 126.823 63.9117L75.5581 115.177"
         stroke="currentColor"
@@ -26,6 +47,7 @@ export function McpIcon(props: SVGProps<SVGSVGElement>) {
         strokeWidth="12"
         strokeLinecap="round"
       />
+      {children}
     </svg>
   );
 }

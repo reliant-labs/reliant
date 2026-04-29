@@ -25,6 +25,21 @@ export function RightContentPanel({
   // Use the global active worktree (from worktreeStore) as the single source of truth
   const activeWorktreeId = useActiveWorktreeId();
 
+  const renderPanelHeader = () => (
+    <div className="flex h-11 items-center justify-between border-b border-border bg-card px-3">
+      <h2 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Reliant
+      </h2>
+      <button
+        onClick={onClose}
+        className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        aria-label="Close"
+      >
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+  );
+
   useEffect(() => {
     if (!isResizing) return;
 
@@ -56,18 +71,7 @@ export function RightContentPanel({
       case "files":
         return (
           <div className="flex flex-col h-full">
-            <div className="p-3 border-b border-border flex items-center justify-between">
-              <h2 className="text-sm font-mono font-semibold uppercase text-muted-foreground">
-                RELIANT
-              </h2>
-              <button
-                onClick={onClose}
-                className="p-1 hover:bg-accent rounded transition-colors"
-                aria-label="Close"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+            {renderPanelHeader()}
             <div className="flex-1 overflow-hidden">
               <RightSidebar />
             </div>
@@ -76,18 +80,7 @@ export function RightContentPanel({
       case "changes":
         return (
           <div className="flex flex-col h-full">
-            <div className="p-3 border-b border-border flex items-center justify-between">
-              <h2 className="text-sm font-mono font-semibold uppercase text-muted-foreground">
-                RELIANT
-              </h2>
-              <button
-                onClick={onClose}
-                className="p-1 hover:bg-accent rounded transition-colors"
-                aria-label="Close"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+            {renderPanelHeader()}
             <div className="flex-1 overflow-hidden">
               <RecentChanges
                 onClose={onClose}

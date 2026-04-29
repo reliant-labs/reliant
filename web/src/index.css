@@ -33,43 +33,6 @@
   }
 }
 
-/* GLOBAL FIX: Prevent accidental transparency */
-@layer utilities {
-  /* Override any default opacity on theme background colors */
-  /* This ensures bg-background, bg-muted, etc. are ALWAYS opaque unless explicitly using /opacity modifier */
-  .bg-background {
-    background-color: hsl(var(--background)) !important;
-  }
-  .bg-foreground {
-    background-color: hsl(var(--foreground)) !important;
-  }
-  .bg-card {
-    background-color: hsl(var(--card)) !important;
-  }
-  .bg-popover {
-    background-color: hsl(var(--popover)) !important;
-  }
-  .bg-primary {
-    background-color: hsl(var(--primary)) !important;
-  }
-  .bg-secondary {
-    background-color: hsl(var(--secondary)) !important;
-  }
-  .bg-muted {
-    background-color: hsl(var(--muted)) !important;
-  }
-  .bg-accent {
-    background-color: hsl(var(--accent)) !important;
-  }
-  .bg-destructive {
-    background-color: hsl(var(--destructive)) !important;
-  }
-  /* Hover bg for secondary-style buttons (e.g. Create PR) - must come after .bg-background so it wins on hover */
-  .btn-hover-bg-muted:hover {
-    background-color: hsl(var(--muted)) !important;
-  }
-}
-
 /* Syntax highlighting themes - using .dark class instead of media queries */
 @layer base {
   :root {
@@ -78,21 +41,6 @@
 
   .dark {
     @import "highlight.js/styles/github-dark.css";
-  }
-}
-
-/* Override Shiki syntax highlighting background to use theme background */
-@layer components {
-  /* Make shiki code blocks transparent and use our theme colors */
-  pre.shiki,
-  pre.shiki > code {
-    background-color: transparent !important;
-    background: transparent !important;
-  }
-
-  /* Ensure syntax highlighting respects theme */
-  .shiki {
-    background-color: transparent !important;
   }
 }
 
@@ -273,464 +221,15 @@
   }
 }
 
-/* Theme tokens: override variables based on data-theme */
-@layer base {
-  :root[data-theme="light-default"] {
-    /* VIBRANT BLUE LIGHT - colorful and modern */
-    --background: 0 0% 98%;
-    --foreground: 0 0% 15%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 15%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 15%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 280 85% 65%;
-    --secondary-foreground: 0 0% 100%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 217 91% 60%;
-    --destructive: 0 70% 50%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 217 91% 60%;
-    /* Tab colors - Blue */
-    --tab-active: 217 91% 60%;
-    --tab-active-foreground: 0 0% 100%;
-    --tab-active-accent: 217 91% 50%;
-    /* Code colors - neutral */
-    --code-bg: #f5f5f5; --code-fg: #1a1a1a; --code-accent: #333333;
-    /* Chat input - better contrast */
-    --chat-input-bg: #f5f5f5;
-    --chat-input-text: #1a1a1a;
-    --chat-input-placeholder: #666666;
-    --chat-button-bg: #e0e0e0;
-    --chat-button-text: #0a0a0a;
-    --chat-button-hover: #d0d0d0;
-    --chat-border: #b0b0b0;
-    /* Neutral transparent hover */
-    --transparent-button-hover: rgba(0, 0, 0, 0.08);
-    /* Streaming mode - better visibility */
-    --chat-button-bg-streaming: rgba(0, 0, 0, 0.12);
-    --chat-button-text-streaming: #0a0a0a;
-    --chat-button-hover-streaming: rgba(0, 0, 0, 0.18);
-    --chat-border-streaming: rgba(0, 0, 0, 0.30);
-    /* Dropdown-specific colors */
-    --chat-dropdown-bg: #e8e8e8;
-    --chat-dropdown-search-bg: #f2f2f2;
-    --chat-dropdown-input-bg: #ffffff;
-    --chat-dropdown-group-bg: #ececec;
-    --chat-dropdown-item-hover: #d8d8d8;
-    --chat-dropdown-item-selected: #d0d0d0;
-    /* Tooltip colors - neutral */
-    --tooltip-bg: 0 0% 20%;
-    --tooltip-foreground: 0 0% 98%;
-  }
-  :root[data-theme="dark-default"] {
-    /* VIBRANT BLUE DARK - colorful and modern */
-    --background: 222 47% 11%;
-    --foreground: 210 40% 98%;
-    --card: 222 47% 13%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222 47% 13%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217 91% 70%;
-    --primary-foreground: 222 47% 11%;
-    --secondary: 280 85% 70%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 217 33% 17%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 70% 55%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 217 33% 24%;
-    --input: 217 33% 24%;
-    --ring: 217 91% 70%;
-    /* Tab colors - Blue */
-    --tab-active: 217 91% 70%;
-    --tab-active-foreground: 222 47% 11%;
-    --tab-active-accent: 217 91% 60%;
-    /* Code colors - neutral dark */
-    --code-bg: #1f1f1f; --code-fg: #e6e6e6; --code-accent: #b8b8b8;
-    /* Chat input - better contrast for dark mode */
-    --chat-input-bg: hsl(217 33% 20%);
-    --chat-input-text: hsl(var(--foreground));
-    --chat-input-placeholder: hsl(var(--muted-foreground));
-    --chat-button-bg: hsl(217 33% 22%);
-    --chat-button-text: hsl(210 40% 98%);
-    --chat-button-hover: hsl(217 33% 28%);
-    --chat-border: hsl(217 33% 32%);
-    /* Neutral transparent hover */
-    --transparent-button-hover: rgba(255, 255, 255, 0.12);
-    /* Streaming mode - better visibility */
-    --chat-button-bg-streaming: rgba(255, 255, 255, 0.16);
-    --chat-button-text-streaming: #f0f0f0;
-    --chat-button-hover-streaming: rgba(255, 255, 255, 0.24);
-    --chat-border-streaming: rgba(255, 255, 255, 0.35);
-    /* Dropdown-specific colors */
-    --chat-dropdown-bg: hsl(217 33% 18%);
-    --chat-dropdown-search-bg: hsl(217 33% 24%);
-    --chat-dropdown-input-bg: hsl(217 33% 26%);
-    --chat-dropdown-group-bg: hsl(217 33% 20%);
-    --chat-dropdown-item-hover: hsl(217 33% 30%);
-    --chat-dropdown-item-selected: hsl(217 33% 28%);
-    /* Tooltip colors - neutral */
-    --tooltip-bg: 0 0% 20%;
-    --tooltip-foreground: 0 0% 98%;
-  }
-  :root[data-theme="github-light"] { /* GitHub Light */
-    --background: 210 20% 98%;
-    --foreground: 220 13% 18%;
-    --card: 0 0% 100%;
-    --card-foreground: 220 13% 18%;
-    --muted: 210 29% 97%;
-    --muted-foreground: 220 9% 46%;
-    --accent: 210 29% 97%;
-    --accent-foreground: 220 13% 18%;
-    --primary: 212 100% 43%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 210 29% 97%;
-    --secondary-foreground: 220 13% 18%;
-    --destructive: 0 73% 42%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 214 15% 91%;
-    --input: 214 15% 91%;
-    --ring: 212 100% 43%;
-    /* Tab colors */
-    --tab-active: 212 100% 43%;
-    --tab-active-foreground: 0 0% 100%;
-    --tab-active-accent: 212 100% 43%;
-    --code-bg: #f6f8fa; --code-fg: #24292e; --code-accent: #0969da;
-    /* GitHub Light chat colors - use theme variables */
-    --chat-input-bg: hsl(var(--card));
-    --chat-input-text: hsl(var(--foreground));
-    --chat-input-placeholder: hsl(var(--muted-foreground));
-    --chat-button-bg: hsl(var(--muted));
-    --chat-button-text: hsl(var(--foreground));
-    --chat-button-hover: hsl(var(--accent));
-    --chat-border: hsl(var(--border));
-    --transparent-button-hover: rgba(0, 0, 0, 0.04);
-    --chat-button-bg-streaming: rgba(13, 110, 253, 0.05);
-    --chat-button-text-streaming: #24292f;
-    --chat-button-hover-streaming: rgba(13, 110, 253, 0.1);
-    --chat-border-streaming: rgba(13, 110, 253, 0.2);
-    /* Dropdown-specific colors */
-    --chat-dropdown-bg: hsl(210 29% 95%);
-    --chat-dropdown-search-bg: hsl(210 29% 97%);
-    --chat-dropdown-input-bg: hsl(0 0% 100%);
-    --chat-dropdown-group-bg: hsl(210 29% 96%);
-    --chat-dropdown-item-hover: hsl(210 29% 93%);
-    --chat-dropdown-item-selected: hsl(210 29% 94%);
-    /* Tooltip colors - neutral */
-    --tooltip-bg: 0 0% 20%;
-    --tooltip-foreground: 0 0% 98%;
-  }
-  :root[data-theme="solarized-light"] { /* Solarized Light */
-    --background: 44 87% 94%; /* base3 */
-    --foreground: 192 13% 23%; /* base00 */
-    --card: 44 87% 94%;
-    --card-foreground: 192 13% 23%;
-    --muted: 44 40% 90%;
-    --muted-foreground: 192 9% 35%;
-    --accent: 44 40% 90%;
-    --accent-foreground: 192 13% 23%;
-    --primary: 205 69% 40%; /* blue */
-    --primary-foreground: 0 0% 100%;
-    --secondary: 44 40% 90%;
-    --secondary-foreground: 192 13% 23%;
-    --destructive: 6 84% 44%; /* red */
-    --destructive-foreground: 0 0% 100%;
-    --border: 44 25% 80%;
-    --input: 44 25% 80%;
-    --ring: 205 69% 40%;
-    /* Tab colors */
-    --tab-active: 205 69% 40%;
-    --tab-active-foreground: 0 0% 100%;
-    --tab-active-accent: 43 100% 50%;
-    --code-bg: #fdf6e3; --code-fg: #586e75; --code-accent: #268bd2;
-    /* Solarized Light chat colors - use theme variables */
-    --chat-input-bg: hsl(var(--card));
-    --chat-input-text: hsl(var(--foreground));
-    --chat-input-placeholder: hsl(var(--muted-foreground));
-    --chat-button-bg: hsl(var(--muted));
-    --chat-button-text: hsl(var(--foreground));
-    --chat-button-hover: hsl(var(--accent));
-    --chat-border: hsl(var(--border));
-    --transparent-button-hover: rgba(88, 110, 117, 0.06);
-    --chat-button-bg-streaming: rgba(38, 139, 210, 0.08);
-    --chat-button-text-streaming: #586e75;
-    --chat-button-hover-streaming: rgba(38, 139, 210, 0.12);
-    --chat-border-streaming: rgba(38, 139, 210, 0.25);
-    /* Dropdown-specific colors */
-    --chat-dropdown-bg: hsl(44 87% 96%);
-    --chat-dropdown-search-bg: hsl(44 87% 98%);
-    --chat-dropdown-input-bg: hsl(0 0% 100%);
-    --chat-dropdown-group-bg: hsl(44 87% 97%);
-    --chat-dropdown-item-hover: hsl(44 87% 94%);
-    --chat-dropdown-item-selected: hsl(44 87% 95%);
-    /* Tooltip colors - neutral */
-    --tooltip-bg: 0 0% 20%;
-    --tooltip-foreground: 0 0% 98%;
-  }
-  :root[data-theme="one-light"] { /* One Light */
-    --background: 0 0% 100%;
-    --foreground: 210 13% 23%;
-    --card: 0 0% 100%;
-    --card-foreground: 210 13% 23%;
-    --muted: 210 20% 96%;
-    --muted-foreground: 210 10% 40%;
-    --accent: 210 20% 96%;
-    --accent-foreground: 210 13% 23%;
-    --primary: 207 82% 66%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 210 20% 96%;
-    --secondary-foreground: 210 13% 23%;
-    --destructive: 357 79% 65%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 210 16% 90%;
-    --input: 210 16% 90%;
-    --ring: 207 82% 66%;
-    /* Tab colors */
-    --tab-active: 207 82% 66%;
-    --tab-active-foreground: 0 0% 100%;
-    --tab-active-accent: 116 60% 50%;
-    --code-bg: #fafafa; --code-fg: #383a42; --code-accent: #4078f2;
-    /* One Light chat colors - use theme variables */
-    --chat-input-bg: hsl(var(--card));
-    --chat-input-text: hsl(var(--foreground));
-    --chat-input-placeholder: hsl(var(--muted-foreground));
-    --chat-button-bg: hsl(var(--muted));
-    --chat-button-text: hsl(var(--foreground));
-    --chat-button-hover: hsl(var(--accent));
-    --chat-border: hsl(var(--border));
-    --transparent-button-hover: rgba(56, 58, 66, 0.05);
-    --chat-button-bg-streaming: rgba(64, 120, 242, 0.06);
-    --chat-button-text-streaming: #383a42;
-    --chat-button-hover-streaming: rgba(64, 120, 242, 0.1);
-    --chat-border-streaming: rgba(64, 120, 242, 0.2);
-    /* Dropdown-specific colors */
-    --chat-dropdown-bg: hsl(230 25% 98%);
-    --chat-dropdown-search-bg: hsl(230 25% 99%);
-    --chat-dropdown-input-bg: hsl(0 0% 100%);
-    --chat-dropdown-group-bg: hsl(230 25% 98%);
-    --chat-dropdown-item-hover: hsl(230 25% 95%);
-    --chat-dropdown-item-selected: hsl(230 25% 96%);
-    /* Tooltip colors - neutral */
-    --tooltip-bg: 0 0% 20%;
-    --tooltip-foreground: 0 0% 98%;
-  }
-  :root[data-theme="dracula"] { /* Dracula */
-    --background: 231 15% 18%;
-    --foreground: 60 30% 96%;
-    --card: 231 15% 20%;
-    --card-foreground: 60 30% 96%;
-    --muted: 231 15% 22%;
-    --muted-foreground: 60 10% 80%;
-    --accent: 260 89% 76%; /* purple */
-    --accent-foreground: 231 15% 18%;
-    --primary: 191 97% 77%; /* cyan */
-    --primary-foreground: 231 15% 18%;
-    --secondary: 326 85% 76%; /* pink */
-    --secondary-foreground: 231 15% 18%;
-    --destructive: 0 100% 67%;
-    --destructive-foreground: 231 15% 18%;
-    --border: 231 15% 28%;
-    --input: 231 15% 28%;
-    --ring: 260 89% 76%;
-    /* Tab colors */
-    --tab-active: 260 89% 76%;
-    --tab-active-foreground: 231 15% 18%;
-    --tab-active-accent: 326 85% 76%;
-    --code-bg: #282a36; --code-fg: #f8f8f2; --code-accent: #bd93f9;
-    /* Dracula chat colors - use theme variables */
-    --chat-input-bg: hsl(var(--card));
-    --chat-input-text: hsl(var(--foreground));
-    --chat-input-placeholder: hsl(var(--muted-foreground));
-    --chat-button-bg: hsl(var(--muted));
-    --chat-button-text: hsl(var(--foreground));
-    --chat-button-hover: hsl(var(--accent));
-    --chat-border: hsl(var(--border));
-    --transparent-button-hover: rgba(189, 147, 249, 0.08);
-    --chat-button-bg-streaming: rgba(189, 147, 249, 0.12);
-    --chat-button-text-streaming: #f8f8f2;
-    --chat-button-hover-streaming: rgba(189, 147, 249, 0.18);
-    --chat-border-streaming: rgba(189, 147, 249, 0.3);
-    /* Dropdown-specific colors */
-    --chat-dropdown-bg: hsl(231 15% 20%);
-    --chat-dropdown-search-bg: hsl(231 15% 24%);
-    --chat-dropdown-input-bg: hsl(231 15% 26%);
-    --chat-dropdown-group-bg: hsl(231 15% 21%);
-    --chat-dropdown-item-hover: hsl(231 15% 28%);
-    --chat-dropdown-item-selected: hsl(231 15% 26%);
-    /* Tooltip colors - neutral */
-    --tooltip-bg: 0 0% 20%;
-    --tooltip-foreground: 0 0% 98%;
-  }
-  :root[data-theme="tokyo-night"] { /* Tokyo Night */
-    --background: 235 20% 20%;
-    --foreground: 220 27% 92%;
-    --card: 235 20% 22%;
-    --card-foreground: 220 27% 92%;
-    --muted: 235 15% 26%;
-    --muted-foreground: 218 14% 71%;
-    --accent: 199 94% 70%;
-    --accent-foreground: 235 20% 20%;
-    --primary: 267 84% 81%;
-    --primary-foreground: 235 20% 20%;
-    --secondary: 204 94% 68%;
-    --secondary-foreground: 235 20% 20%;
-    --destructive: 346 74% 60%;
-    --destructive-foreground: 235 20% 20%;
-    --border: 235 15% 28%;
-    --input: 235 15% 28%;
-    --ring: 199 94% 70%;
-    /* Tab colors */
-    --tab-active: 267 84% 81%;
-    --tab-active-foreground: 235 20% 20%;
-    --tab-active-accent: 199 94% 70%;
-    --code-bg: #1a1b26; --code-fg: #c0caf5; --code-accent: #7aa2f7;
-    /* Tokyo Night chat colors - use theme variables */
-    --chat-input-bg: hsl(var(--card));
-    --chat-input-text: hsl(var(--foreground));
-    --chat-input-placeholder: hsl(var(--muted-foreground));
-    --chat-button-bg: hsl(var(--muted));
-    --chat-button-text: hsl(var(--foreground));
-    --chat-button-hover: hsl(var(--accent));
-    --chat-border: hsl(var(--border));
-    --transparent-button-hover: rgba(122, 162, 247, 0.08);
-    --chat-button-bg-streaming: rgba(122, 162, 247, 0.12);
-    --chat-button-text-streaming: #c0caf5;
-    --chat-button-hover-streaming: rgba(122, 162, 247, 0.18);
-    --chat-border-streaming: rgba(122, 162, 247, 0.3);
-    /* Dropdown-specific colors */
-    --chat-dropdown-bg: hsl(220 16% 20%);
-    --chat-dropdown-search-bg: hsl(220 16% 24%);
-    --chat-dropdown-input-bg: hsl(220 16% 26%);
-    --chat-dropdown-group-bg: hsl(220 16% 21%);
-    --chat-dropdown-item-hover: hsl(220 16% 28%);
-    --chat-dropdown-item-selected: hsl(220 16% 26%);
-    /* Tooltip colors - neutral */
-    --tooltip-bg: 0 0% 20%;
-    --tooltip-foreground: 0 0% 98%;
-  }
-  :root[data-theme="nord"] { /* Nord */
-    --background: 220 16% 22%;
-    --foreground: 218 27% 94%;
-    --card: 220 16% 24%;
-    --card-foreground: 218 27% 94%;
-    --muted: 220 16% 28%;
-    --muted-foreground: 218 16% 78%;
-    --accent: 199 53% 47%;
-    --accent-foreground: 218 27% 94%;
-    --primary: 210 34% 63%;
-    --primary-foreground: 220 16% 22%;
-    --secondary: 179 25% 65%;
-    --secondary-foreground: 220 16% 22%;
-    --destructive: 354 42% 56%;
-    --destructive-foreground: 220 16% 22%;
-    --border: 220 16% 30%;
-    --input: 220 16% 30%;
-    --ring: 199 53% 47%;
-    /* Tab colors */
-    --tab-active: 210 34% 63%;
-    --tab-active-foreground: 220 16% 22%;
-    --tab-active-accent: 199 53% 47%;
-    --code-bg: #2e3440; --code-fg: #d8dee9; --code-accent: #88c0d0;
-    /* Nord chat colors - use theme variables */
-    --chat-input-bg: hsl(var(--card));
-    --chat-input-text: hsl(var(--foreground));
-    --chat-input-placeholder: hsl(var(--muted-foreground));
-    --chat-button-bg: hsl(var(--muted));
-    --chat-button-text: hsl(var(--foreground));
-    --chat-button-hover: hsl(var(--accent));
-    --chat-border: hsl(var(--border));
-    --transparent-button-hover: rgba(136, 192, 208, 0.08);
-    --chat-button-bg-streaming: rgba(136, 192, 208, 0.12);
-    --chat-button-text-streaming: #d8dee9;
-    --chat-button-hover-streaming: rgba(136, 192, 208, 0.18);
-    --chat-border-streaming: rgba(136, 192, 208, 0.3);
-    /* Dropdown-specific colors */
-    --chat-dropdown-bg: hsl(220 16% 18%);
-    --chat-dropdown-search-bg: hsl(220 16% 22%);
-    --chat-dropdown-input-bg: hsl(220 16% 24%);
-    --chat-dropdown-group-bg: hsl(220 16% 19%);
-    --chat-dropdown-item-hover: hsl(220 16% 26%);
-    --chat-dropdown-item-selected: hsl(220 16% 24%);
-    /* Tooltip colors - neutral */
-    --tooltip-bg: 0 0% 20%;
-    --tooltip-foreground: 0 0% 98%;
-  }
-}
-
-/* Override highlight.js colors to match current theme */
-[data-theme] .hljs {
-  background: var(--code-bg) !important;
-  color: var(--code-fg) !important;
-  white-space: pre-wrap !important;
-  word-break: break-word !important;
-}
-[data-theme] pre code {
-  background: transparent !important;
-  color: inherit !important;
-  white-space: pre-wrap !important;
-  word-break: break-word !important;
-}
-[data-theme] .hljs-keyword, [data-theme] .hljs-selector-tag { color: var(--ring) !important; }
-[data-theme] .hljs-string, [data-theme] .hljs-title, [data-theme] .hljs-name { color: var(--code-accent) !important; }
-
-/* Keep markdown code blocks simple and neutral in both modes */
-[data-theme] .prose pre {
-  background: transparent !important;
-  border: 0 !important;
-  box-shadow: none !important;
-  padding: 0 !important;
-}
-
 /* Dynamic chat button styling based on streaming state */
 .chat-streaming .chat-button {
-  background-color: var(--chat-button-bg-streaming) !important;
-  color: var(--chat-button-text-streaming) !important;
-  border-color: var(--chat-border-streaming) !important;
+  background-color: var(--chat-button-bg-streaming);
+  color: var(--chat-button-text-streaming);
+  border-color: var(--chat-border-streaming);
 }
 
 .chat-streaming .chat-button:hover {
-  background-color: var(--chat-button-hover-streaming) !important;
-}
-
-/* Auto-approve button uses distinct primary color when enabled */
-.chat-streaming .chat-button.auto-approve-active {
-  background-color: hsl(var(--primary) / 0.3) !important;
-  color: hsl(var(--primary)) !important;
-  border-color: hsl(var(--primary) / 0.4) !important;
-}
-
-.chat-streaming .chat-button.auto-approve-active:hover {
-  background-color: hsl(var(--primary) / 0.4) !important;
-}
-
-/* Auto-approve button when not streaming but still enabled */
-.chat-button.auto-approve-active:not(.chat-streaming *) {
-  background-color: hsl(var(--primary) / 0.2) !important;
-  color: hsl(var(--primary)) !important;
-  border-color: hsl(var(--primary) / 0.3) !important;
-}
-
-.chat-button.auto-approve-active:not(.chat-streaming *):hover {
-  background-color: hsl(var(--primary) / 0.3) !important;
-}
-
-/* Plan mode button when active (matches auto-approve styling) */
-.chat-button.plan-mode-active {
-  background-color: hsl(var(--primary) / 0.2) !important;
-  color: hsl(var(--primary)) !important;
-  border-color: hsl(var(--primary) / 0.3) !important;
-}
-
-.chat-button.plan-mode-active:hover {
-  background-color: hsl(var(--primary) / 0.3) !important;
+  background-color: var(--chat-button-hover-streaming);
 }
 
 @layer base {
@@ -751,77 +250,63 @@
     letter-spacing: -0.011em;
   }
 
-  /* Font family presets - IMPORTANT: These override the default --font-sans */
+  /* Font family presets override the default --font-sans token. */
   :root[data-font="system"] {
-    --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif !important;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
   }
 
   :root[data-font="inter"] {
-    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   }
 
   :root[data-font="mono"] {
-    --font-sans: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'SF Mono', ui-monospace, Menlo, Monaco, Consolas, monospace !important;
+    --font-sans: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'SF Mono', ui-monospace, Menlo, Monaco, Consolas, monospace;
   }
 
   :root[data-font="geist"] {
-    --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+    --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   }
 
   :root[data-font="comic"] {
-    --font-sans: 'Comic Sans MS', 'Chalkboard SE', 'Comic Neue', cursive, sans-serif !important;
+    --font-sans: 'Comic Sans MS', 'Chalkboard SE', 'Comic Neue', cursive, sans-serif;
   }
 
 
   /* Chat Font Settings */
-  /* Default: monospace font when no data-chat-font is set */
+  :root {
+    --chat-font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  }
+
+  :root[data-chat-font="default"],
+  :root[data-chat-font="system"] {
+    --chat-font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  }
+
+  :root[data-chat-font="mono"] {
+    --chat-font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'SF Mono', ui-monospace, Menlo, Monaco, Consolas, monospace;
+  }
+
+  :root[data-chat-font="inherit"] {
+    --chat-font-family: inherit;
+  }
+
+  :root[data-chat-font="inter"] {
+    --chat-font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  :root[data-chat-font="geist"] {
+    --chat-font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  :root[data-chat-font="comic"] {
+    --chat-font-family: 'Comic Sans MS', 'Chalkboard SE', 'Comic Neue', cursive, sans-serif;
+  }
+
   textarea[data-testid="chat-input"],
   .chat-input,
   .user-message-content,
   .user-message-content * {
-    font-family: var(--font-mono) !important;
-  }
-
-  :root[data-chat-font="inherit"] textarea[data-testid="chat-input"],
-  :root[data-chat-font="inherit"] .chat-input,
-  :root[data-chat-font="inherit"] .user-message-content,
-  :root[data-chat-font="inherit"] .user-message-content * {
-    font-family: inherit !important;
-  }
-
-  :root[data-chat-font="system"] textarea[data-testid="chat-input"],
-  :root[data-chat-font="system"] .chat-input,
-  :root[data-chat-font="system"] .user-message-content,
-  :root[data-chat-font="system"] .user-message-content * {
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif !important;
-  }
-
-  :root[data-chat-font="inter"] textarea[data-testid="chat-input"],
-  :root[data-chat-font="inter"] .chat-input,
-  :root[data-chat-font="inter"] .user-message-content,
-  :root[data-chat-font="inter"] .user-message-content * {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
-  }
-
-  :root[data-chat-font="mono"] textarea[data-testid="chat-input"],
-  :root[data-chat-font="mono"] .chat-input,
-  :root[data-chat-font="mono"] .user-message-content,
-  :root[data-chat-font="mono"] .user-message-content * {
-    font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'SF Mono', ui-monospace, Menlo, Monaco, Consolas, monospace !important;
-  }
-
-  :root[data-chat-font="geist"] textarea[data-testid="chat-input"],
-  :root[data-chat-font="geist"] .chat-input,
-  :root[data-chat-font="geist"] .user-message-content,
-  :root[data-chat-font="geist"] .user-message-content * {
-    font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
-  }
-
-  :root[data-chat-font="comic"] textarea[data-testid="chat-input"],
-  :root[data-chat-font="comic"] .chat-input,
-  :root[data-chat-font="comic"] .user-message-content,
-  :root[data-chat-font="comic"] .user-message-content * {
-    font-family: 'Comic Sans MS', 'Chalkboard SE', 'Comic Neue', cursive, sans-serif !important;
+    font-family: var(--chat-font-family);
   }
 
   /* Editor Font Settings */
@@ -1143,8 +628,7 @@
   /* Force word wrapping in code blocks */
   pre, pre code, .hljs, .hljs code {
     white-space: pre-wrap !important;
-    word-break: break-word !important;
-    overflow-wrap: break-word !important;
+    overflow-wrap: anywhere !important;
   }
 
   /* Override prose plugin to use our font variable */
@@ -1186,12 +670,7 @@
 
   /* Header icon buttons: visible hover in all themes (foreground overlay) */
   .header-icon-btn:hover {
-    background-color: hsl(var(--foreground) / 0.08) !important;
-  }
-
-  /* Primary button: visible hover (inline background overrides Tailwind otherwise) */
-  .btn-primary:hover:not(:disabled) {
-    background-color: hsl(var(--primary) / 0.9) !important;
+    background-color: hsl(var(--foreground) / 0.08);
   }
 
   /* Prevent layout shifts */
@@ -1423,41 +902,10 @@
     display: none;
   }
 
-  .message-actions {
-    display: none;
-  }
-
   /* Enhanced message layout for better UX */
   .message-container {
     position: relative;
     transition: all 0.2s ease-in-out;
-  }
-
-  /* Avatar styling improvements */
-  .message-avatar {
-    position: relative;
-    transition: transform 0.2s ease-in-out;
-    flex-shrink: 0;
-    width: 2rem;
-    height: 2rem;
-  }
-
-  .message-avatar:hover {
-    transform: scale(1.05);
-  }
-
-  /* Ensure assistant avatars have proper background */
-  .message-avatar:not(.bg-blue-500) {
-    background-color: hsl(var(--muted)) !important;
-    color: hsl(var(--muted-foreground)) !important;
-    border: 1px solid hsl(var(--border) / 0.2) !important;
-    /* Ensure exact same dimensions as user avatars */
-    width: 2rem !important;
-    height: 2rem !important;
-    min-width: 2rem !important;
-    min-height: 2rem !important;
-    max-width: 2rem !important;
-    max-height: 2rem !important;
   }
 
   /* Message content area improvements */
@@ -1467,60 +915,17 @@
     flex: 1;
     min-width: 0;
     margin-left: 0;
-  }
-
-  /* User message content - full width */
-  .user-message-content {
-    flex: 1;
-    width: 100%;
-    display: block;
-    max-width: 100%;
-  }
-
-  /* Perfect alignment system */
-  .message-layout {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.75rem;
-    width: 100%;
-  }
-
-  .message-layout-lg {
-    gap: 1rem;
-  }
-
-  /* Fix avatar alignment - ensure perfect vertical alignment */
-  .avatar-container {
-    position: relative;
-    flex-shrink: 0;
-    width: 2rem;
-    height: 2rem;
-    display: flex;
-    align-items: flex-start;
+    padding-top: 0;
     margin-top: 0;
-    margin-bottom: 0;
-    padding-top: 0.5rem;
-  }
-
-  .message-avatar {
-    position: relative;
-    flex-shrink: 0;
-    width: 2rem;
-    height: 2rem;
     display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-top: 0;
-    margin-bottom: 0;
-    /* Ensure consistent sizing for all avatars */
-    min-width: 2rem;
-    min-height: 2rem;
-    max-width: 2rem;
-    max-height: 2rem;
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
   }
 
   /* User message content - removed blue left border highlight */
   .user-message-content {
+    display: block;
     position: relative;
     padding: 6px!important;
     box-sizing: border-box;
@@ -1528,14 +933,16 @@
     transition: all 0.2s ease-in-out;
   }
 
+  /* Message layout - no avatar column */
+  .message-layout {
+    display: flex;
+    align-items: flex-start;
+    width: 100%;
+  }
+
   /* User message bubble with max height and fade */
   .user-message-content .message-bubble {
     position: relative;
-  }
-
-  /* Consistent message spacing */
-  .message-spacing {
-    margin-bottom: 0.25rem;
   }
 
   /* Improved visual hierarchy */
@@ -1570,20 +977,9 @@
     width: 100%;
   }
 
-  /* Message content area - ensure proper alignment with avatar */
-  .message-content {
-    padding-top: 0;
-    margin-top: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    width: 100%;
-  }
-
   /* Aggressive word wrapping for long text */
   .overflow-wrap-anywhere {
     overflow-wrap: anywhere;
-    word-break: break-word;
   }
 
   @keyframes blink {

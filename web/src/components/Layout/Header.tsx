@@ -11,6 +11,7 @@ import {
   FolderOpen,
   FolderGit2,
   Shield,
+  MessageSquarePlus,
 } from "lucide-react";
 import {
   useState,
@@ -328,6 +329,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
                 </button>
               </Tooltip>
             )}
+
 
             {/* Terminal button */}
             {!projectPickerMode && onToggleTerminal && (

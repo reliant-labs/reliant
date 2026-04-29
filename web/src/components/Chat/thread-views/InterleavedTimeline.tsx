@@ -17,7 +17,7 @@ import { MessageRole, DisplayStyle } from "../../../gen/reliant/v1/chat_pb";
 import { Virtuoso, type VirtuosoHandle, type ListRange } from "react-virtuoso";
 import { GitBranch, ArrowRightLeft, Plus, ArrowUp, Route } from "lucide-react";
 import { Tooltip } from "../../ui/Tooltip";
-import { ChatMessage } from "../ChatMessage";
+import { ChatMessage, type ChatTimelineVariant } from "../ChatMessage";
 import { CompactionMessage, isCompactionMessage } from "../CompactionMessage";
 import { WorkflowErrorMessage } from "../WorkflowErrorMessage";
 import { WorkflowInfoMessage } from "../WorkflowInfoMessage";
@@ -34,8 +34,8 @@ import { cn } from "../../../lib/utils";
 import { getActivitySteps } from "./activityIndicators";
 import { ActivityIndicator } from "./ActivityIndicator";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads, resolveRouterDecisionFromActiveThreads } from "./threadUtils";
-import { useChatStore } from "../../../store/chatStore";
 import { useActiveThreads } from "../../../store/threadActivityStore";
+import { settingsSync, SETTINGS_KEYS } from "../../../services/settingsSync";
 import { getSpawnDisplayMode } from "../../Settings/SpawnDisplaySettings";
 import { RubberBandScroller } from "./RubberBandScroller";
 
@@ -97,6 +97,15 @@ type TimelineItem =
   | { type: "error"; error: ErrorUpdate }
   | { type: "info"; info: InfoUpdate }
   | { type: "run_output"; runOutput: RunOutputUpdate };
+
+const TIMELINE_VARIANTS: ChatTimelineVariant[] = ["compact", "card", "minimal"];
+
+function getStoredTimelineVariant(): ChatTimelineVariant {
+  const stored = settingsSync.getSetting(SETTINGS_KEYS.CHAT_TIMELINE_VARIANT, "compact");
+  return TIMELINE_VARIANTS.includes(stored as ChatTimelineVariant)
+    ? (stored as ChatTimelineVariant)
+    : "compact";
+}
 
 /**
  * Build lookup maps from WorkflowExecution tree.
@@ -265,6 +274,25 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   onResumeFollow,
 }: InterleavedTimelineProps) {
   const activeThreads = useActiveThreads(chatId);
+  const [timelineVariant, setTimelineVariant] = useState<ChatTimelineVariant>(() => getStoredTimelineVariant());
+
+  useEffect(() => {
+    const handleAppearanceUpdated = () => {
+      setTimelineVariant(getStoredTimelineVariant());
+    };
+
+    window.addEventListener("appearance-updated", handleAppearanceUpdated);
+    return () => window.removeEventListener("appearance-updated", handleAppearanceUpdated);
+  }, []);
+
+  const timelineShellClass = cn(
+    "chat-timeline-shell h-full",
+    timelineVariant === "card" && "chat-timeline-card",
+    timelineVariant === "minimal" && "chat-timeline-minimal"
+  );
+  const contentMaxWidthClass = timelineVariant === "minimal" ? "max-w-[900px]" : "max-w-[1200px]";
+  const timelineHorizontalPaddingClass = timelineVariant === "minimal" ? "px-4 sm:px-8" : "px-4 sm:px-6 lg:px-8";
+  const timelineGapClass = timelineVariant === "card" ? "py-1" : timelineVariant === "minimal" ? "py-0.5" : "";
   const timelineItems = useMemo(() => {
     // Build workflow lookups from execution tree
     const { byId, displays } = buildWorkflowLookups(workflowExecution, chatId);
@@ -808,12 +836,17 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     if (item.type === "activity") {
       return (
         <div
-          className={cn("transition-all", !item.workflow.isMain && "ml-1 pl-3")}
+          className={cn(
+            "transition-all",
+            !item.workflow.isMain && "pl-3",
+            !item.workflow.isMain && timelineVariant !== "minimal" && "ml-1",
+            timelineVariant === "card" && "rounded-xl border border-border/50 bg-card/60 p-2 shadow-sm"
+          )}
           style={
             !item.workflow.isMain
               ? {
                   borderLeftColor: item.workflow.color,
-                  borderLeftWidth: 3,
+                  borderLeftWidth: timelineVariant === "minimal" ? 2 : 3,
                   borderLeftStyle: "solid",
                 }
               : undefined
@@ -861,18 +894,24 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
           chatId={chatId}
           isStreaming={false}
           onSelectThread={onSelectThread}
+          timelineVariant={timelineVariant}
         />
       );
     }
 
     return (
       <div
-        className={cn("transition-all", !item.workflow.isMain && "ml-1 pl-3")}
+        className={cn(
+          "transition-all",
+          !item.workflow.isMain && "pl-3",
+          !item.workflow.isMain && timelineVariant !== "minimal" && "ml-1",
+          timelineVariant === "card" && !item.workflow.isMain && "rounded-xl bg-background/30"
+        )}
         style={
           !item.workflow.isMain
             ? {
                 borderLeftColor: item.workflow.color,
-                borderLeftWidth: 3,
+                borderLeftWidth: timelineVariant === "minimal" ? 2 : 3,
                 borderLeftStyle: "solid",
               }
             : undefined
@@ -890,42 +929,54 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
             chatId={chatId}
             isStreaming={isStreaming && isLastItem}
             onSelectThread={onSelectThread}
+            timelineVariant={timelineVariant}
           />
         )}
       </div>
     );
-  }, [approvals, chatId, isStreaming, onSelectThread]);
+  }, [approvals, chatId, isStreaming, onSelectThread, timelineVariant]);
 
   // Wrap each Virtuoso item in the padding/max-width container
   const wrappedRenderItem = useCallback((index: number, item: (typeof flatItems)[number]) => {
     return (
-      <div className="px-4 sm:px-6 lg:px-8 overflow-hidden">
-        <div className="max-w-[1200px] mx-auto">
+      <div className={cn(timelineHorizontalPaddingClass, timelineGapClass)}>
+        <div className={cn(contentMaxWidthClass, "mx-auto")}>
           {renderItem(index, item)}
         </div>
       </div>
     );
-  }, [renderItem]);
+  }, [contentMaxWidthClass, renderItem, timelineGapClass, timelineHorizontalPaddingClass]);
 
   // Use Virtuoso's context prop to pass footer content to the Footer component.
   // This keeps the Footer component identity stable (preventing Virtuoso re-mounts
   // that cause layout recalculations) while still re-rendering when footer changes.
-  const footerContext = useMemo(() => ({ footer, isStreaming }), [footer, isStreaming]);
+  const footerContext = useMemo(
+    () => ({ footer, isStreaming, contentMaxWidthClass, timelineHorizontalPaddingClass }),
+    [contentMaxWidthClass, footer, isStreaming, timelineHorizontalPaddingClass]
+  );
 
   const virtuosoComponents = useMemo(() => ({
     Scroller: RubberBandScroller,
     Header: function VirtuosoHeader() {
       return <div className="pt-2" />;
     },
-    Footer: function VirtuosoFooter({ context }: { context?: { footer?: React.ReactNode } }) {
+    Footer: function VirtuosoFooter({
+      context,
+    }: {
+      context?: {
+        footer?: React.ReactNode;
+        contentMaxWidthClass?: string;
+        timelineHorizontalPaddingClass?: string;
+      };
+    }) {
       // Always render bottom padding that stays within atBottomThreshold (80px)
       // so overscroll bounces don't cause atBottom to flap.
       if (!context?.footer) {
         return <div className="pb-10" />;
       }
       return (
-        <div className="px-4 sm:px-6 lg:px-8 pb-10">
-          <div className="max-w-[1200px] mx-auto">
+        <div className={cn(context.timelineHorizontalPaddingClass || "px-4 sm:px-6 lg:px-8", "pb-10")}>
+          <div className={cn(context.contentMaxWidthClass || "max-w-[1200px]", "mx-auto")}>
             {context.footer}
           </div>
         </div>
@@ -940,7 +991,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   }
 
   return (
-    <div ref={timelineContainerRef} style={{ height: "100%", position: "relative" }}>
+    <div ref={timelineContainerRef} className={timelineShellClass} style={{ position: "relative" }}>
       {/* Pinned user message overlay */}
       {pinnedUserMsg && (
         <div
@@ -965,8 +1016,8 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
               </button>
             </Tooltip>
           </div>
-          <div className="px-4 sm:px-6 lg:px-8">
-            <div className="max-w-[1200px] mx-auto">
+          <div className={timelineHorizontalPaddingClass}>
+            <div className={cn(contentMaxWidthClass, "mx-auto")}>
               <ChatMessage
                 message={pinnedUserMsg}
                 approvals={approvals}
@@ -974,6 +1025,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
                 chatId={chatId}
                 isStreaming={false}
                 onSelectThread={onSelectThread}
+                timelineVariant={timelineVariant}
               />
             </div>
           </div>

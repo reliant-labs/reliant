@@ -5,7 +5,7 @@ import { useAuthStore } from '@/store/authStore'
 import { logger } from '@/lib/logger'
 import { persistProviderToken } from '@/lib/persist-provider-token'
 import { GradientBackground } from './GradientBackground'
-import Logo from '../assets/logo.svg'
+import { BrandMark } from './icons/BrandMark'
 
 export function OAuthCallback() {
   const navigate = useNavigate()
@@ -89,7 +89,7 @@ export function OAuthCallback() {
         <div className="flex-1 flex items-center justify-center p-4">
           <div className="max-w-md w-full bg-background border border-border rounded-lg shadow-xl p-8 space-y-6">
             <div className="flex flex-col items-center gap-4">
-              <img src={Logo} alt="Reliant Logo" className="h-8 w-auto" />
+              <BrandMark className="h-8 w-8" />
               <h2 className="text-xl font-semibold text-destructive">Authentication Failed</h2>
             </div>
             <div className="rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 p-4">
@@ -114,7 +114,7 @@ export function OAuthCallback() {
       <div className="flex-1 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-background border border-border rounded-lg shadow-xl p-8">
           <div className="flex flex-col items-center gap-4">
-            <img src={Logo} alt="Reliant Logo" className="h-8 w-auto" />
+            <BrandMark className="h-8 w-8" />
             <h2 className="text-lg font-medium">Completing sign in...</h2>
             <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
           </div>

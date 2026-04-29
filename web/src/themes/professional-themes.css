@@ -228,7 +228,6 @@
   --popover: 0 0% 100%;             /* Popover/dropdown background */
   --popover-foreground: 185 20% 18%;
   --surface-modal: 0 0% 100%;       /* Modal background */
-  --surface-modal: 0 0% 100%;       /* Modal background */
   --muted: 185 14% 95%;             /* Warm teal-tinted gray */
   --muted-foreground: 185 18% 45%;
   --primary: 180 88% 42%;           /* Modern teal */
@@ -278,7 +277,6 @@
   --card-foreground: 185 12% 92%;
   --popover: 185 20% 17%;             /* Popover/dropdown background */
   --popover-foreground: 185 12% 92%;
-  --surface-modal: 185 20% 14%;     /* Modal background */
   --surface-modal: 185 20% 14%;     /* Modal background */
   --muted: 185 14% 22%;             /* Deep teal-gray */
   --muted-foreground: 185 12% 65%;
@@ -335,7 +333,6 @@
   --popover: 0 0% 100%;             /* Popover/dropdown background */
   --popover-foreground: 215 22% 18%;
   --surface-modal: 0 0% 100%;       /* Modal background */
-  --surface-modal: 0 0% 100%;       /* Modal background */
   --muted: 215 18% 94%;             /* Soft slate gray */
   --muted-foreground: 215 16% 45%;
   --primary: 215 28% 32%;           /* Deep slate blue */
@@ -385,7 +382,6 @@
   --card-foreground: 215 20% 94%;
   --popover: 215 22% 18%;             /* Popover/dropdown background */
   --popover-foreground: 215 20% 94%;
-  --surface-modal: 215 22% 15%;     /* Modal background */
   --surface-modal: 215 22% 15%;     /* Modal background */
   --muted: 215 18% 22%;             /* Deep cool slate */
   --muted-foreground: 215 16% 65%;
@@ -442,7 +438,6 @@
   --popover: 0 0% 100%;             /* Popover/dropdown background */
   --popover-foreground: 145 20% 18%;
   --surface-modal: 0 0% 100%;       /* Modal background */
-  --surface-modal: 0 0% 100%;       /* Modal background */
   --muted: 145 12% 94%;             /* Warm sage-gray */
   --muted-foreground: 145 15% 45%;
   --primary: 158 58% 38%;           /* Deep forest green */
@@ -492,7 +487,6 @@
   --card-foreground: 145 12% 92%;
   --popover: 145 18% 18%;             /* Popover/dropdown background */
   --popover-foreground: 145 12% 92%;
-  --surface-modal: 145 18% 15%;     /* Modal background */
   --surface-modal: 145 18% 15%;     /* Modal background */
   --muted: 145 14% 22%;             /* Deep sage-gray */
   --muted-foreground: 145 12% 65%;
@@ -550,7 +544,6 @@
   --popover: 0 0% 100%;             /* Popover/dropdown background */
   --popover-foreground: 330 15% 18%;
   --surface-modal: 0 0% 100%;       /* Modal background */
-  --surface-modal: 0 0% 100%;       /* Modal background */
   --muted: 330 20% 95%;             /* Soft pink-gray */
   --muted-foreground: 330 12% 45%;
   --primary: 330 85% 55%;           /* Vibrant pink */
@@ -600,7 +593,6 @@
   --card-foreground: 330 15% 92%;
   --popover: 330 20% 17%;             /* Popover/dropdown background */
   --popover-foreground: 330 15% 92%;
-  --surface-modal: 330 20% 14%;     /* Modal background */
   --surface-modal: 330 20% 14%;     /* Modal background */
   --muted: 330 18% 20%;             /* Deep pink-gray */
   --muted-foreground: 330 12% 65%;
@@ -658,7 +650,6 @@
   --popover: 0 0% 100%;             /* Popover/dropdown background */
   --popover-foreground: 25 18% 18%;
   --surface-modal: 0 0% 100%;       /* Modal background */
-  --surface-modal: 0 0% 100%;       /* Modal background */
   --muted: 25 25% 95%;              /* Soft orange-gray */
   --muted-foreground: 25 15% 45%;
   --primary: 25 95% 53%;            /* Vibrant orange */
@@ -708,7 +699,6 @@
   --card-foreground: 25 15% 92%;
   --popover: 25 22% 17%;             /* Popover/dropdown background */
   --popover-foreground: 25 15% 92%;
-  --surface-modal: 25 22% 14%;      /* Modal background */
   --surface-modal: 25 22% 14%;      /* Modal background */
   --muted: 25 20% 20%;              /* Deep orange-gray */
   --muted-foreground: 25 12% 65%;
@@ -766,7 +756,6 @@
   --popover: 0 0% 100%;             /* Popover/dropdown background */
   --popover-foreground: 0 15% 18%;
   --surface-modal: 0 0% 100%;       /* Modal background */
-  --surface-modal: 0 0% 100%;       /* Modal background */
   --muted: 0 20% 95%;               /* Soft red-gray */
   --muted-foreground: 0 12% 45%;
   --primary: 0 84% 60%;             /* Bold red */
@@ -816,7 +805,6 @@
   --card-foreground: 0 15% 92%;
   --popover: 0 20% 17%;             /* Popover/dropdown background */
   --popover-foreground: 0 15% 92%;
-  --surface-modal: 0 20% 14%;       /* Modal background */
   --surface-modal: 0 20% 14%;       /* Modal background */
   --muted: 0 18% 20%;               /* Deep red-gray */
   --muted-foreground: 0 12% 65%;
@@ -874,7 +862,6 @@
   --popover: 0 0% 100%;             /* Popover/dropdown background */
   --popover-foreground: 270 15% 18%;
   --surface-modal: 0 0% 100%;       /* Modal background */
-  --surface-modal: 0 0% 100%;       /* Modal background */
   --muted: 270 20% 95%;             /* Soft purple-gray */
   --muted-foreground: 270 12% 45%;
   --primary: 270 85% 60%;           /* Vibrant purple */
@@ -924,7 +911,6 @@
   --card-foreground: 270 15% 92%;
   --popover: 270 25% 17%;             /* Popover/dropdown background */
   --popover-foreground: 270 15% 92%;
-  --surface-modal: 270 25% 14%;     /* Modal background */
   --surface-modal: 270 25% 14%;     /* Modal background */
   --muted: 270 18% 20%;             /* Deep purple-gray */
   --muted-foreground: 270 12% 65%;
@@ -1092,5 +1078,5 @@
   data-color-scheme="purple-classic"
   data-color-scheme="pure-black"
   
-  These work with existing dark/light mode and data-theme attributes.
+  These work with the existing dark/light mode class.
 */

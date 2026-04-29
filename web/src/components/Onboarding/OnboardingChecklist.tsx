@@ -183,16 +183,16 @@ export function OnboardingChecklist() {
         className={cn(
           "fixed bottom-4 right-4 z-40",
           "flex items-center gap-2.5 px-5 py-2.5 font-sans",
-          "bg-blue-600 text-white rounded-full",
-          "shadow-lg shadow-blue-600/30 cursor-pointer",
-          "hover:bg-blue-500 transition-colors",
+          "bg-primary text-primary-foreground rounded-full",
+          "shadow-lg shadow-primary/25 cursor-pointer",
+          "hover:bg-primary/90 transition-colors",
         )}
       >
         <ProgressRing percentage={percentage} size={24} strokeWidth={2.5} variant="inverted" />
         <span className="text-sm font-medium">
           Setup Guide
         </span>
-        <span className="text-xs text-blue-200 tabular-nums">
+        <span className="text-xs text-primary-foreground/70 tabular-nums">
           {completed}/{total}
         </span>
       </button>
@@ -295,7 +295,7 @@ export function OnboardingChecklist() {
           href="https://cal.com/team/reliant/onboarding"
           target="_blank"
           rel="noopener noreferrer"
-          className="no-color text-sm font-medium text-white visited:text-white hover:text-white inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 transition-colors"
+          className="no-color text-sm font-medium text-primary-foreground visited:text-primary-foreground hover:text-primary-foreground inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary/90 transition-colors"
         >
           <Calendar className="size-3.5" />
           Book a demo

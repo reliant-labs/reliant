@@ -11,7 +11,6 @@ import { ChatState } from "../../gen/reliant/v1/chat_pb";
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
 import {
   Plus,
-  Search,
   Trash2,
   Archive,
   ChevronDown,
@@ -31,7 +30,6 @@ import {
   SortDesc,
   Bell,
   GitBranch,
-  SlidersHorizontal,
   Check,
 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
@@ -39,14 +37,13 @@ import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProcessStore } from "../../store/processStore";
 import { useProjectStore } from "../../store/projectStore";
-import { cn, toTitleCase } from "../../lib/utils";
+import { cn } from "../../lib/utils";
 import { toast } from "../../lib/toast-manager";
 import { Tooltip } from "../ui/Tooltip";
 import { Button } from "../ui/Button";
 import { ContextMenu } from "../ui/ContextMenu";
 import type { ContextMenuItem } from "../ui/ContextMenu";
 import type { Chat } from "../../api/client";
-import { useDebounce } from "../../hooks/useDebounce";
 import {
   useChatListPreferencesStore,
   type ChatSortOption,
@@ -91,19 +88,6 @@ const SORT_OPTIONS: {
     label: "Z → A",
     icon: <SortDesc className="w-3.5 h-3.5" />,
   },
-];
-
-// Filter options for state filtering
-type StateFilterOption = "all" | "needs_attention" | "active" | "idle";
-
-const STATE_FILTER_OPTIONS: {
-  value: StateFilterOption;
-  label: string;
-}[] = [
-  { value: "all", label: "All" },
-  { value: "needs_attention", label: "Needs Attention" },
-  { value: "active", label: "Active" },
-  { value: "idle", label: "Idle" },
 ];
 
 interface SidebarProps {
@@ -186,10 +170,7 @@ const ChatItem = memo(function ChatItem({
   const isActive = activeChatId === chat.id;
   const showStatusDot = chat.activityState !== "idle" && chat.activityState !== "awaiting_approval";
   const showNotificationBadge = chat.unread || chat.activityState === "awaiting_approval";
-  const chatTitle = chat.title
-    ? toTitleCase(chat.title.toLowerCase().replace(/\s+/g, "_"))
-    : "New chat";
-  const [isHovered, setIsHovered] = useState(false);
+  const chatTitle = chat.title || "New chat";
   const isEditing = editingChatId === chat.id;
   const relativeTime = getRelativeTime(chat.updatedAt || chat.createdAt);
 
@@ -197,23 +178,14 @@ const ChatItem = memo(function ChatItem({
     <div
       data-chat-id={chat.id}
       className={cn(
-        "group flex items-center gap-2 px-2.5 py-2 rounded-md cursor-pointer transition-all duration-150 font-mono w-full text-left text-xs relative overflow-hidden",
+        "group relative flex w-full cursor-pointer items-center gap-2 overflow-hidden rounded-md border-l-2 border-transparent px-2.5 py-1.5 text-left font-sans text-xs transition-all duration-150",
         isActive
-          ? "text-foreground font-semibold"
+          ? "border-primary bg-primary/10 text-foreground font-semibold"
           : showStatusDot
-          ? "bg-accent/50 hover:bg-accent/70 text-foreground"
-          : "bg-transparent text-foreground/80 hover:text-foreground",
+            ? "border-success/30 bg-success/5 text-foreground hover:bg-success/10"
+            : "bg-transparent text-foreground/80 hover:bg-muted/50 hover:text-foreground",
         "active:scale-[0.99]"
       )}
-      style={{
-        backgroundColor: isActive
-          ? "hsl(var(--primary) / 0.15)"
-          : !showStatusDot && isHovered
-          ? "hsl(var(--primary) / 0.1)"
-          : undefined,
-      }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       onClick={() => onChatClick(chat)}
       onContextMenu={(e) => onContextMenu(e, chat)}
     >
@@ -223,7 +195,7 @@ const ChatItem = memo(function ChatItem({
           placement="top" 
           delay={300}
         >
-          <div className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
+          <div className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-destructive ring-2 ring-card" />
         </Tooltip>
       )}
 
@@ -312,10 +284,7 @@ interface ArchivedChatItemProps {
 
 const ArchivedChatItem = memo(function ArchivedChatItem({ chat, activeChatId }: ArchivedChatItemProps) {
   const chatId = chat.id;
-  const chatTitle = chat.title
-    ? toTitleCase(chat.title.toLowerCase().replace(/\s+/g, "_"))
-    : "New chat";
-  const [isHovered, setIsHovered] = useState(false);
+  const chatTitle = chat.title || "New chat";
   const isActive = activeChatId === chatId;
   const relativeTime = getRelativeTime(chat.updatedAt || chat.createdAt);
 
@@ -364,21 +333,12 @@ const ArchivedChatItem = memo(function ArchivedChatItem({ chat, activeChatId }: 
     <div
       data-chat-id={chatId}
       className={cn(
-        "group flex items-center gap-2 px-2.5 py-2 rounded-md cursor-pointer transition-all duration-150 font-mono w-full text-left text-xs relative overflow-hidden",
+        "group relative flex w-full cursor-pointer items-center gap-2 overflow-hidden rounded-md border-l-2 border-transparent px-2.5 py-1.5 text-left font-sans text-xs transition-all duration-150",
         isActive
-          ? "text-foreground font-semibold"
-          : "bg-transparent text-foreground/80 hover:text-foreground",
+          ? "border-primary bg-primary/10 text-foreground font-semibold"
+          : "bg-transparent text-foreground/80 hover:bg-muted/50 hover:text-foreground",
         "active:scale-[0.99]"
       )}
-      style={{
-        backgroundColor: isActive
-          ? "hsl(var(--primary) / 0.15)"
-          : isHovered
-          ? "hsl(var(--primary) / 0.1)"
-          : undefined,
-      }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       onClick={handleViewChat}
     >
       <div className="flex-1 min-w-0 transition-all duration-200">
@@ -451,7 +411,7 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
   chats,
   isExpanded,
   onToggle,
-  chatCount: _chatCount,
+  chatCount,
   renderChat,
   hasActiveChat,
   onNewChat,
@@ -459,42 +419,41 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
   onContextMenu,
   emptyState,
 }: WorktreeGroupComponentProps) {
-  const [isHovered, setIsHovered] = useState(false);
-
   return (
-    <div className="mb-2">
+    <div className="mb-1.5">
       {/* Worktree Container */}
       <div
-        className="rounded-lg overflow-hidden transition-all duration-200 border border-transparent"
-        style={{
-          backgroundColor: hasActiveChat
-            ? "hsl(var(--primary) / 0.08)"
-            : isHovered
-            ? "hsl(var(--primary) / 0.05)"
-            : undefined,
-        }}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
+        className={cn(
+          "overflow-hidden rounded-lg border transition-all duration-150",
+          hasActiveChat
+            ? "border-primary/20 bg-primary/10"
+            : "border-transparent hover:border-border/50 hover:bg-muted/30"
+        )}
       >
         {/* Header */}
         <div
-          className="flex items-center gap-1 w-full px-3 py-2 group/header"
+          className="flex w-full items-center gap-1.5 px-2.5 py-1.5 group/header"
           onContextMenu={(e) => onContextMenu?.(e)}
         >
           <button
             onClick={onToggle}
-            className="flex items-center gap-2.5 flex-1 min-w-0 transition-all duration-200 rounded-lg"
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-md text-left transition-all duration-150"
           >
             {icon}
 
-            <div className="flex-1 min-w-0 text-left flex items-baseline gap-2">
-              <div className="text-sm font-semibold text-foreground truncate font-mono">
+            <div className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
+              <div
+                className={cn(
+                  "min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-wide",
+                  hasActiveChat ? "text-primary" : "text-muted-foreground"
+                )}
+              >
                 {title}
               </div>
               {subtitle && (
-                <div className="text-xs flex-shrink-0 leading-none">
+                <div className="flex-shrink-0 text-xs leading-none">
                   {typeof subtitle === "string" ? (
-                    <span className="text-muted-foreground truncate">
+                    <span className="truncate text-muted-foreground">
                       {subtitle}
                     </span>
                   ) : (
@@ -504,6 +463,17 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
               )}
             </div>
           </button>
+
+          {chatCount > 0 && (
+            <span
+              className={cn(
+                "rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                hasActiveChat ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+              )}
+            >
+              {chatCount}
+            </span>
+          )}
 
           {/* New Chat Button - shows on hover */}
           {onNewChat && (
@@ -517,7 +487,7 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
                   e.stopPropagation();
                   onNewChat();
                 }}
-                className="opacity-0 group-hover/header:opacity-100 transition-opacity duration-200 hover:bg-muted/70 rounded p-1 flex-shrink-0"
+                className="flex-shrink-0 rounded p-1 opacity-0 transition-opacity duration-150 hover:bg-muted/70 group-hover/header:opacity-100"
               >
                 <Plus className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground transition-colors duration-200" />
               </button>
@@ -536,7 +506,7 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
                   e.stopPropagation();
                   onArchiveWorktree();
                 }}
-                className="opacity-0 group-hover/header:opacity-100 transition-opacity duration-200 hover:bg-muted/70 rounded p-1 flex-shrink-0"
+                className="flex-shrink-0 rounded p-1 opacity-0 transition-opacity duration-150 hover:bg-muted/70 group-hover/header:opacity-100"
               >
                 <Archive className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground transition-colors duration-200" />
               </button>
@@ -545,7 +515,7 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
 
           <button
             onClick={onToggle}
-            className="flex items-center transition-all duration-200 p-1 flex-shrink-0"
+            className="flex flex-shrink-0 items-center rounded p-1 transition-all duration-150 hover:bg-muted/60"
           >
             {isExpanded ? (
               <ChevronDown className="w-3.5 h-3.5 text-foreground/60 transition-transform" />
@@ -557,7 +527,7 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
 
         {/* Chats List */}
         {isExpanded && chats.length > 0 && (
-          <div className="p-2 space-y-1.5">
+          <div className="space-y-0.5 px-1.5 pb-1.5 pt-0.5">
             {chats.map((chat) => (
               <div key={chat.id}>{renderChat(chat)}</div>
             ))}
@@ -572,7 +542,7 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
               emptyState.onClick?.();
             }}
             className={cn(
-              "w-full text-left p-2 mx-2 mb-2 rounded-md text-xs font-mono text-muted-foreground transition-colors",
+              "mx-2 mb-2 w-auto rounded-md p-2 text-left text-xs text-muted-foreground transition-colors",
               emptyState.onClick ? "hover:bg-muted/50 hover:text-foreground cursor-pointer" : "cursor-default"
             )}
           >
@@ -612,14 +582,13 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
   // Chat list preferences
   const sortOrder = useChatListPreferencesStore((state) => state.sortOrder);
   const viewMode = useChatListPreferencesStore((state) => state.viewMode);
-  const filters = useChatListPreferencesStore((state) => state.filters);
   const setSortOrder = useChatListPreferencesStore((state) => state.setSortOrder);
   const setViewMode = useChatListPreferencesStore((state) => state.setViewMode);
-  const setFilters = useChatListPreferencesStore((state) => state.setFilters);
 
   // UI State
-  const [searchQuery, _setSearchQuery] = useState("");
-  const [isOptionsMenuOpen, setIsOptionsMenuOpen] = useState(false);
+  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
+  const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
+  const [chatListTab, setChatListTab] = useState<"active" | "archived">("active");
 
   const [expandedWorktreeGroups, setExpandedWorktreeGroups] = useState<
     Record<string, boolean>
@@ -649,9 +618,6 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
 
   // Ref for scroll container
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-
-  // Debounce search query for performance
-  const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
   // Load archived chats once on mount - subsequent updates come through gRPC stream
   // (chat_state_change events in globalUpdatesStore handle archive/restore transitions)
@@ -730,86 +696,9 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
     [worktrees]
   );
 
-  // Backend search results state
-  const [searchResults, setSearchResults] = useState<Chat[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-
-  // Perform backend search when query changes
-  useEffect(() => {
-    const performSearch = async () => {
-      if (!debouncedSearchQuery || !currentProject) {
-        setSearchResults([]);
-        setIsSearching(false);
-        return;
-      }
-
-      setIsSearching(true);
-      try {
-        const { api } = await import("../../api/client");
-        const results = await api.chatsV2.search(
-          currentProject.id,
-          debouncedSearchQuery
-        );
-        setSearchResults(results);
-      } catch (error) {
-        console.error("Search failed:", error);
-        // Fallback to client-side search on error
-        setSearchResults([]);
-      } finally {
-        setIsSearching(false);
-      }
-    };
-
-    performSearch();
-  }, [debouncedSearchQuery, currentProject]);
-
   // Filtered and sorted chats grouped by worktree (or flat list)
   const { activeGroups, flatList, archivedChats: filteredArchivedChats, archivedGroups } = useMemo(() => {
-    let filtered = chatsWithActivity;
-
-    // State filter - filter by chat state
-    if (filters.states && filters.states.length > 0) {
-      filtered = filtered.filter((chat) => {
-        // Map activityState to filter states
-        // "needs_attention" filter matches unread chats AND awaiting_approval activity
-        // "active" filter matches thinking, streaming
-        // "idle" filter matches idle state
-        if (filters.states!.includes("needs_attention")) {
-          return chat.unread || chat.activityState === "awaiting_approval";
-        }
-        if (filters.states!.includes("active")) {
-          return chat.activityState === "thinking" || 
-                 chat.activityState === "streaming";
-        }
-        if (filters.states!.includes("idle")) {
-          return chat.activityState === "idle";
-        }
-        return true;
-      });
-    }
-
-    // Search filter - use backend search results if available, otherwise client-side
-    if (debouncedSearchQuery) {
-      if (searchResults.length > 0 || isSearching) {
-        // Use backend search results
-        const searchResultIds = new Set(searchResults.map((r) => r.id));
-        filtered = filtered.filter((chat) => searchResultIds.has(chat.id));
-      } else {
-        // Fallback to client-side filtering
-        const query = debouncedSearchQuery.toLowerCase();
-        filtered = filtered.filter((chat) => {
-          const title = (chat.title || "New chat").toLowerCase();
-          const worktree = getWorktreeForChat(chat);
-          const branch = worktree?.branch?.toLowerCase() || "";
-          const worktreeName = worktree?.name?.toLowerCase() || "";
-          return (
-            title.includes(query) ||
-            branch.includes(query) ||
-            worktreeName.includes(query)
-          );
-        });
-      }
-    }
+    const filtered = chatsWithActivity;
 
     // Categorize chats - ONLY use active (non-archived) chats from the main list
     // All chats now have worktree_id, no null handling needed
@@ -1034,13 +923,9 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
     };
   }, [
     chatsWithActivity,
-    debouncedSearchQuery,
-    searchResults,
-    isSearching,
     getWorktreeForChat,
     projectArchivedChats,
     sortOrder,
-    filters,
     worktrees,
   ]);
 
@@ -1265,9 +1150,13 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
 
     if (!chat) return;
 
-    // If archived, expand the archived section
-    if (isArchived && !isArchivedExpanded) {
-      setIsArchivedExpanded(true);
+    if (isArchived) {
+      setChatListTab("archived");
+      if (!isArchivedExpanded) {
+        setIsArchivedExpanded(true);
+      }
+    } else {
+      setChatListTab("active");
     }
 
     // If in grouped view and not archived, expand the worktree group containing this chat
@@ -1511,75 +1400,74 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
     [expandedArchivedGroups, activeChatId, handleWorktreeContextMenu]
   );
 
+  const activeChatCount = activeGroups.reduce((total, group) => total + group.chats.length, 0);
+  const visibleChatCount = chatListTab === "active" ? activeChatCount : filteredArchivedChats.length;
+  const hasAnyVisibleChats = visibleChatCount > 0;
+  const emptyTitle = chatListTab === "active" ? "No active chats" : "No archived chats";
+  const emptyDescription =
+    chatListTab === "active" ? "Create your first chat to get started" : "Archived chats will appear here";
+  const currentSortOption =
+    SORT_OPTIONS.find((option) => option.value === sortOrder) ?? SORT_OPTIONS[0];
+  if (!currentSortOption) {
+    return null;
+  }
+
   return (
-    <div className="flex flex-col h-full dense-ui" data-onboarding="left-sidebar">
+    <div className="flex h-full flex-col bg-card dense-ui" data-onboarding="left-sidebar">
       {/* Header section - only when not fullscreen */}
       {paddingClass && (
-        <div className="h-12 border-b border-border/40 elevation-1"></div>
+        <div className="h-12 border-b border-border/40 bg-card"></div>
       )}
 
-      <div className="p-3 border-b border-border/40 bg-accent">
-        {/* Options Menu with New Chat Button */}
-        <div className="flex items-center gap-2">
-          {/* Options Menu */}
+      <div className="border-b border-border/50 bg-card px-3 py-2">
+        <div className="flex items-center gap-1.5">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setChatListTab("active")}
+              className={cn(
+                "text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ring/40",
+                chatListTab === "active" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+              )}
+              aria-pressed={chatListTab === "active"}
+            >
+              Active
+            </button>
+            <button
+              type="button"
+              onClick={() => setChatListTab("archived")}
+              className={cn(
+                "text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ring/40",
+                chatListTab === "archived" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+              )}
+              aria-pressed={chatListTab === "archived"}
+            >
+              Archived
+            </button>
+          </div>
+
           <Dropdown
-            isOpen={isOptionsMenuOpen}
-            onOpenChange={setIsOptionsMenuOpen}
-            align="left"
+            isOpen={isSortMenuOpen}
+            onOpenChange={setIsSortMenuOpen}
+            align="right"
             trigger={
-              <Tooltip content="Sort, filter & view options" placement="bottom" delay={300}>
+              <Tooltip content={`Sort: ${currentSortOption.label}`} placement="bottom" delay={300}>
                 <button
-                  onClick={() => setIsOptionsMenuOpen(!isOptionsMenuOpen)}
-                  className={cn(
-                    "header-icon-btn p-2.5 rounded-md border border-border/50 transition-colors",
-                    (filters.states && filters.states.length > 0)
-                      ? "bg-primary/10 text-primary border-primary/30"
-                      : "bg-background/50 text-muted-foreground hover:text-foreground"
-                  )}
+                  type="button"
+                  onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring/40"
+                  aria-label="Sort chats"
                 >
-                  <SlidersHorizontal className="w-4 h-4" />
+                  <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+                    {currentSortOption.icon}
+                  </span>
                 </button>
               </Tooltip>
             }
-            contentClassName="min-w-[200px]"
+            contentClassName="min-w-[190px]"
           >
             <div className="py-1">
-              {/* View Mode Section */}
-              <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                View
-              </div>
-              <button
-                onClick={() => setViewMode("grouped")}
-                className={cn(
-                  "w-full flex items-center justify-between gap-2 px-3 py-2 text-xs transition-colors rounded-sm hover:bg-[var(--chat-dropdown-item-hover)]",
-                  viewMode === "grouped" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <LayoutGrid className="w-3.5 h-3.5" />
-                  <span>Grouped by workspace</span>
-                </div>
-                {viewMode === "grouped" && <Check className="w-3.5 h-3.5 text-primary" />}
-              </button>
-              <button
-                onClick={() => setViewMode("flat")}
-                className={cn(
-                  "w-full flex items-center justify-between gap-2 px-3 py-2 text-xs transition-colors rounded-sm hover:bg-[var(--chat-dropdown-item-hover)]",
-                  viewMode === "flat" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <LayoutList className="w-3.5 h-3.5" />
-                  <span>Flat list</span>
-                </div>
-                {viewMode === "flat" && <Check className="w-3.5 h-3.5 text-primary" />}
-              </button>
-
-              {/* Divider */}
-              <div className="h-px bg-border/50 my-1" />
-
-              {/* Sort Section */}
-              <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+              <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Sort by
               </div>
               {SORT_OPTIONS.map((option) => (
@@ -1587,92 +1475,101 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
                   key={option.value}
                   onClick={() => setSortOrder(option.value)}
                   className={cn(
-                    "w-full flex items-center justify-between gap-2 px-3 py-2 text-xs transition-colors rounded-sm hover:bg-[var(--chat-dropdown-item-hover)]",
+                    "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-2 text-xs transition-colors hover:bg-muted/50",
                     sortOrder === option.value ? "text-foreground" : "text-muted-foreground hover:text-foreground"
                   )}
                 >
                   <div className="flex items-center gap-2">
-                    <span className="w-3.5 h-3.5 flex items-center justify-center">{option.icon}</span>
+                    <span className="flex h-3.5 w-3.5 items-center justify-center">{option.icon}</span>
                     <span>{option.label}</span>
                   </div>
-                  {sortOrder === option.value && <Check className="w-3.5 h-3.5 text-primary" />}
+                  {sortOrder === option.value && <Check className="h-3.5 w-3.5 text-primary" />}
                 </button>
               ))}
-
-              {/* Divider */}
-              <div className="h-px bg-border/50 my-1" />
-
-              {/* Filter Section */}
-              <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                Filter
-              </div>
-              {STATE_FILTER_OPTIONS.map((option) => {
-                const isSelected = option.value === "all"
-                  ? !filters.states || filters.states.length === 0
-                  : filters.states?.includes(option.value as "active" | "needs_attention" | "idle");
-                return (
-                  <button
-                    key={option.value}
-                    onClick={() => {
-                      if (option.value === "all") {
-                        setFilters({ ...filters, states: undefined });
-                      } else {
-                        setFilters({ ...filters, states: [option.value as "active" | "needs_attention" | "idle"] });
-                      }
-                    }}
-                    className={cn(
-                      "w-full flex items-center justify-between gap-2 px-3 py-2 text-xs transition-colors rounded-sm hover:bg-[var(--chat-dropdown-item-hover)]",
-                      isSelected ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    <span>{option.label}</span>
-                    {isSelected && <Check className="w-3.5 h-3.5 text-primary" />}
-                  </button>
-                );
-              })}
             </div>
           </Dropdown>
 
-          <Button
-            onClick={handleNewChat}
-            leftIcon={<Plus className="w-3 h-3" />}
-            variant="primary"
-            size="sm"
-            className="flex-1 !h-auto py-2.5"
-            data-testid="create-chat-button"
+          <Dropdown
+            isOpen={isViewMenuOpen}
+            onOpenChange={setIsViewMenuOpen}
+            align="right"
+            trigger={
+              <Tooltip content="View options" placement="bottom" delay={300}>
+                <button
+                  type="button"
+                  onClick={() => setIsViewMenuOpen(!isViewMenuOpen)}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring/40"
+                  aria-label="View options"
+                >
+                  {viewMode === "grouped" ? (
+                    <LayoutGrid className="h-3.5 w-3.5" />
+                  ) : (
+                    <LayoutList className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              </Tooltip>
+            }
+            contentClassName="min-w-[220px]"
           >
-            New Chat
-          </Button>
+            <div className="py-1">
+              <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                View
+              </div>
+              <button
+                onClick={() => setViewMode("grouped")}
+                className={cn(
+                  "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-2 text-xs transition-colors hover:bg-muted/50",
+                  viewMode === "grouped" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  <span>Grouped by workspace</span>
+                </div>
+                {viewMode === "grouped" && <Check className="h-3.5 w-3.5 text-primary" />}
+              </button>
+              <button
+                onClick={() => setViewMode("flat")}
+                className={cn(
+                  "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-2 text-xs transition-colors hover:bg-muted/50",
+                  viewMode === "flat" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <LayoutList className="h-3.5 w-3.5" />
+                  <span>Flat list</span>
+                </div>
+                {viewMode === "flat" && <Check className="h-3.5 w-3.5 text-primary" />}
+              </button>
+            </div>
+          </Dropdown>
+
+          <Tooltip content="New chat" placement="bottom" delay={300}>
+            <button
+              type="button"
+              onClick={handleNewChat}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring/40"
+              aria-label="New chat"
+              data-testid="create-chat-button"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </Tooltip>
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Combined Active + Archived in single scroll container */}
-        <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto p-3">
-          {/* Active Section - Grouped or Flat based on viewMode */}
-          {viewMode === "grouped" ? (
-            // Grouped View (by workspace)
-            activeGroups.length > 0 && (
-              <>
-                <div className="text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-2 px-2 flex items-center gap-2">
-                  <span>Active</span>
-                  <div className="h-px flex-1 bg-border/50"></div>
-                </div>
-                <div className="mb-3 space-y-2">
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+          {chatListTab === "active" ? (
+            viewMode === "grouped" ? (
+              activeGroups.length > 0 && (
+                <div className="space-y-1.5">
                   {activeGroups.map((group) => renderWorktreeGroup(group))}
                 </div>
-              </>
-            )
-          ) : (
-            // Flat View (all chats in a single list)
-            flatList.length > 0 && (
-              <>
-                <div className="text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-2 px-2 flex items-center gap-2">
-                  <span>Active</span>
-                  <span className="text-muted-foreground/50">({flatList.length})</span>
-                  <div className="h-px flex-1 bg-border/50"></div>
-                </div>
-                <div className="mb-3 space-y-1">
+              )
+            ) : (
+              flatList.length > 0 && (
+                <div className="space-y-1">
                   {flatList.map((chat) => {
                     const worktree = getWorktreeForChat(chat);
                     return (
@@ -1694,61 +1591,31 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
                     );
                   })}
                 </div>
-              </>
+              )
             )
-          )}
-
-          {/* Archived Section - Grouped by workspace or flat list based on viewMode */}
-          {filteredArchivedChats.length > 0 && (
-            <div>
-              <button
-                onClick={() => setIsArchivedExpanded(!isArchivedExpanded)}
-                className="w-full text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-2 px-2 flex items-center gap-2 hover:text-foreground/80 transition-colors"
-              >
-                {isArchivedExpanded ? (
-                  <ChevronDown className="w-3 h-3" />
-                ) : (
-                  <ChevronRight className="w-3 h-3" />
-                )}
-                <span>Archived</span>
-                <span className="text-muted-foreground/50">({filteredArchivedChats.length})</span>
-                <div className="h-px flex-1 bg-border/50"></div>
-              </button>
-              {isArchivedExpanded && viewMode === "grouped" ? (
-                // Grouped View - show archived chats grouped by workspace
-                <div className="space-y-2">
-                  {archivedGroups.map((group) => renderArchivedGroup(group))}
-                </div>
-              ) : isArchivedExpanded ? (
-                // Flat View - show all archived chats in a flat list
-                <div className="space-y-1">
-                  {filteredArchivedChats.map((chat) => (
-                    <ArchivedChatItem key={chat.id || chat.id} chat={chat} activeChatId={activeChatId} />
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          )}
+          ) : filteredArchivedChats.length > 0 ? (
+            viewMode === "grouped" ? (
+              <div className="space-y-2">
+                {archivedGroups.map((group) => renderArchivedGroup(group))}
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {filteredArchivedChats.map((chat) => (
+                  <ArchivedChatItem key={chat.id} chat={chat} activeChatId={activeChatId} />
+                ))}
+              </div>
+            )
+          ) : null}
 
           {/* Empty State */}
-          {((viewMode === "grouped" && activeGroups.length === 0) ||
-            (viewMode === "flat" && flatList.length === 0)) &&
-            filteredArchivedChats.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground">
-              <div className="w-12 h-12 mx-auto mb-3 rounded-full elevation-1 flex items-center justify-center">
-                <Search className="w-5 h-5" />
+          {!hasAnyVisibleChats && (
+            <div className="py-8 text-center text-muted-foreground">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-border/50 bg-muted/40">
+                {chatListTab === "active" ? <Plus className="h-5 w-5" /> : <Archive className="h-5 w-5" />}
               </div>
-              <p className="text-sm font-medium mb-1">
-                {searchQuery
-                  ? "No chats match your search"
-                  : "No chats"}
-              </p>
-              <p className="text-xs text-muted-foreground/70">
-                {searchQuery
-                  ? "Try adjusting your search"
-                  : "Create your first chat to get started"}
-              </p>
-              {!searchQuery && (
+              <p className="mb-1 text-sm font-medium">{emptyTitle}</p>
+              <p className="text-xs text-muted-foreground/70">{emptyDescription}</p>
+              {chatListTab === "active" && (
                 <div className="mt-3 flex flex-col items-center gap-2">
                   <Button
                     onClick={handleNewChat}

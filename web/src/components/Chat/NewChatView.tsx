@@ -22,8 +22,8 @@ import {
   Wrench,
   Code2,
   ArrowRightLeft,
+  FolderPlus,
 } from "lucide-react";
-import { LuFolderPlus } from "react-icons/lu";
 import { toast } from "sonner";
 import { cn } from "../../lib/utils";
 import { safeGetSetting, upsertStringSetting } from "../../lib/settingsPersistence";
@@ -474,7 +474,7 @@ export function NewChatView({
                           className="w-full px-3 py-2 text-xs text-center"
                         >
                           <div className="flex items-center justify-center gap-2 text-primary">
-                            <LuFolderPlus className="w-3.5 h-3.5 shrink-0 -translate-y-px" />
+                            <FolderPlus className="w-3.5 h-3.5 shrink-0 -translate-y-px" />
                             <span className="font-medium leading-none">New workspace</span>
                           </div>
                         </button>
@@ -488,7 +488,7 @@ export function NewChatView({
                   onClick={() => setShowCreateWorktreeModal(true)}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-muted-foreground border border-border/40 rounded-md hover:border-border hover:text-foreground transition-colors"
                 >
-                  <LuFolderPlus className="w-3.5 h-3.5 shrink-0 -translate-y-px" />
+                  <FolderPlus className="w-3.5 h-3.5 shrink-0 -translate-y-px" />
                   <span className="leading-none">New workspace</span>
                 </button>
               </div>

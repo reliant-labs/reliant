@@ -67,7 +67,7 @@ export function WelcomeStep({ stepNumber, totalSteps }: StepProps) {
             href="https://cal.com/team/reliant/onboarding"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sm text-blue-400 hover:text-blue-300 transition-colors inline-flex items-center gap-1.5"
+            className="text-sm text-muted-foreground hover:text-primary transition-colors inline-flex items-center gap-1.5"
           >
             <Calendar className="w-3.5 h-3.5" />
             Book a demo

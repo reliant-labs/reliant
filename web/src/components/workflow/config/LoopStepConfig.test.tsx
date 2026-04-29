@@ -30,8 +30,9 @@ describe("LoopStepConfig", () => {
   it("shows sequential fields by default and hides parallel-only fields", () => {
     render(<LoopStepConfig step={createLoopStep()} onUpdate={vi.fn()} />);
 
-    expect(screen.getByLabelText("Mode")).toHaveValue("sequential");
-    expect(screen.getByLabelText("While (optional)")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sequential" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Parallel" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByLabelText("Continue while")).toBeInTheDocument();
     expect(screen.queryByLabelText("Items")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("On Failure")).not.toBeInTheDocument();
   });
@@ -63,13 +64,11 @@ describe("LoopStepConfig", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Mode"), {
-      target: { value: "parallel" },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Parallel" }));
 
     expect(onUpdate).toHaveBeenCalledTimes(1);
     expect(onUpdate.mock.calls[0][0].args.value).toMatchObject({
-      parallel: true,
+      parallel: { value: { case: "literal", value: true } },
       while: undefined,
     });
   });
@@ -93,7 +92,7 @@ describe("LoopStepConfig", () => {
                 edges: [],
                 outputs: {},
               },
-              parallel: true,
+              parallel: { value: { case: "literal", value: true } } as any,
               items: celExpr("{{inputs.items}}"),
               key: "{{iter.item.id}}",
               onFailure: "fail_fast",
@@ -104,14 +103,13 @@ describe("LoopStepConfig", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Mode")).toHaveValue("parallel");
+    expect(screen.getByRole("button", { name: "Sequential" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "Parallel" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByLabelText("Items")).toBeInTheDocument();
     expect(screen.getByLabelText("On Failure")).toBeInTheDocument();
-    expect(screen.queryByLabelText("While (optional)")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Continue while")).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText("Mode"), {
-      target: { value: "sequential" },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Sequential" }));
 
     expect(onUpdate).toHaveBeenCalledTimes(1);
     expect(onUpdate.mock.calls[0][0].args.value).toMatchObject({

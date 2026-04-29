@@ -7,7 +7,9 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const THEMES_CSS_PATH = path.resolve(__dirname, '../../../themes/professional-themes.css')
+const INDEX_CSS_PATH = path.resolve(__dirname, '../../../index.css')
 const THEMES_CSS = fs.readFileSync(THEMES_CSS_PATH, 'utf-8')
+const INDEX_CSS = fs.readFileSync(INDEX_CSS_PATH, 'utf-8')
 
 const COLOR_SCHEMES = [
   'professional-blue',
@@ -62,5 +64,9 @@ describe('professional color scheme token contract', () => {
   it('maps generic --input token to config-input-border for color-scheme surfaces', () => {
     expect(THEMES_CSS).toContain(':root[data-color-scheme]')
     expect(THEMES_CSS).toContain('--input: var(--config-input-border);')
+  })
+
+  it('does not keep legacy data-theme selectors in global CSS', () => {
+    expect(INDEX_CSS).not.toContain('data-theme')
   })
 })

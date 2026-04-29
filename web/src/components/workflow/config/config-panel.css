@@ -5,13 +5,241 @@
    ========================================================================== */
 
 .config-panel-v2 {
+  --cpv2-radius-xs: 4px;
   --cpv2-radius-sm: 6px;
   --cpv2-radius-md: 10px;
-  --cpv2-radius-lg: 14px;
-  --cpv2-radius-xl: 18px;
-  --cpv2-shadow: 0 8px 32px rgba(0,0,0,.45), 0 1px 3px rgba(0,0,0,.3);
+  --cpv2-accent: hsl(var(--primary));
+  --cpv2-accent-soft: hsl(var(--primary) / 0.15);
+  --cpv2-accent-subtle: hsl(var(--primary) / 0.04);
+  --cpv2-accent-border: hsl(var(--primary) / 0.25);
+  --cpv2-accent-focus: hsl(var(--primary) / 0.4);
+  --cpv2-accent-ring: hsl(var(--primary) / 0.1);
+  --cpv2-shadow: 0 8px 32px rgba(0,0,0,.4), 0 2px 8px rgba(0,0,0,.2);
   --cpv2-transition: 150ms cubic-bezier(.4,0,.2,1);
+  position: absolute;
+  right: 0.75rem;
+  z-index: 40;
+  display: flex;
+  width: 380px;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--cpv2-radius-md);
+  background: hsl(var(--card));
+  box-shadow: var(--cpv2-shadow);
+  font-family: inherit;
+  transition: all 300ms ease;
 }
+
+.config-panel-v2--purple {
+  --cpv2-accent: #a855f7;
+  --cpv2-accent-soft: rgba(168, 85, 247, 0.15);
+  --cpv2-accent-subtle: rgba(168, 85, 247, 0.04);
+  --cpv2-accent-border: rgba(168, 85, 247, 0.25);
+  --cpv2-accent-focus: rgba(168, 85, 247, 0.4);
+  --cpv2-accent-ring: rgba(168, 85, 247, 0.1);
+}
+
+.config-panel-v2--violet {
+  --cpv2-accent: #8b5cf6;
+  --cpv2-accent-soft: rgba(139, 92, 246, 0.15);
+  --cpv2-accent-subtle: rgba(139, 92, 246, 0.04);
+  --cpv2-accent-border: rgba(139, 92, 246, 0.25);
+  --cpv2-accent-focus: rgba(139, 92, 246, 0.4);
+  --cpv2-accent-ring: rgba(139, 92, 246, 0.1);
+}
+
+.config-panel-v2--indigo {
+  --cpv2-accent: #6366f1;
+  --cpv2-accent-soft: rgba(99, 102, 241, 0.15);
+  --cpv2-accent-subtle: rgba(99, 102, 241, 0.04);
+  --cpv2-accent-border: rgba(99, 102, 241, 0.25);
+  --cpv2-accent-focus: rgba(99, 102, 241, 0.4);
+  --cpv2-accent-ring: rgba(99, 102, 241, 0.1);
+}
+
+.config-panel-v2--blue {
+  --cpv2-accent: #3b82f6;
+  --cpv2-accent-soft: rgba(59, 130, 246, 0.15);
+  --cpv2-accent-subtle: rgba(59, 130, 246, 0.04);
+  --cpv2-accent-border: rgba(59, 130, 246, 0.25);
+  --cpv2-accent-focus: rgba(59, 130, 246, 0.4);
+  --cpv2-accent-ring: rgba(59, 130, 246, 0.1);
+}
+
+.config-panel-v2--sky {
+  --cpv2-accent: #0ea5e9;
+  --cpv2-accent-soft: rgba(14, 165, 233, 0.15);
+  --cpv2-accent-subtle: rgba(14, 165, 233, 0.04);
+  --cpv2-accent-border: rgba(14, 165, 233, 0.25);
+  --cpv2-accent-focus: rgba(14, 165, 233, 0.4);
+  --cpv2-accent-ring: rgba(14, 165, 233, 0.1);
+}
+
+.config-panel-v2--cyan {
+  --cpv2-accent: #06b6d4;
+  --cpv2-accent-soft: rgba(6, 182, 212, 0.15);
+  --cpv2-accent-subtle: rgba(6, 182, 212, 0.04);
+  --cpv2-accent-border: rgba(6, 182, 212, 0.25);
+  --cpv2-accent-focus: rgba(6, 182, 212, 0.4);
+  --cpv2-accent-ring: rgba(6, 182, 212, 0.1);
+}
+
+.config-panel-v2--teal {
+  --cpv2-accent: #14b8a6;
+  --cpv2-accent-soft: rgba(20, 184, 166, 0.15);
+  --cpv2-accent-subtle: rgba(20, 184, 166, 0.04);
+  --cpv2-accent-border: rgba(20, 184, 166, 0.25);
+  --cpv2-accent-focus: rgba(20, 184, 166, 0.4);
+  --cpv2-accent-ring: rgba(20, 184, 166, 0.1);
+}
+
+.config-panel-v2--emerald {
+  --cpv2-accent: #10b981;
+  --cpv2-accent-soft: rgba(16, 185, 129, 0.15);
+  --cpv2-accent-subtle: rgba(16, 185, 129, 0.04);
+  --cpv2-accent-border: rgba(16, 185, 129, 0.25);
+  --cpv2-accent-focus: rgba(16, 185, 129, 0.4);
+  --cpv2-accent-ring: rgba(16, 185, 129, 0.1);
+}
+
+.config-panel-v2--amber {
+  --cpv2-accent: #f59e0b;
+  --cpv2-accent-soft: rgba(245, 158, 11, 0.15);
+  --cpv2-accent-subtle: rgba(245, 158, 11, 0.04);
+  --cpv2-accent-border: rgba(245, 158, 11, 0.25);
+  --cpv2-accent-focus: rgba(245, 158, 11, 0.4);
+  --cpv2-accent-ring: rgba(245, 158, 11, 0.1);
+}
+
+.config-panel-v2--orange {
+  --cpv2-accent: #f97316;
+  --cpv2-accent-soft: rgba(249, 115, 22, 0.15);
+  --cpv2-accent-subtle: rgba(249, 115, 22, 0.04);
+  --cpv2-accent-border: rgba(249, 115, 22, 0.25);
+  --cpv2-accent-focus: rgba(249, 115, 22, 0.4);
+  --cpv2-accent-ring: rgba(249, 115, 22, 0.1);
+}
+
+.config-panel-v2--pink {
+  --cpv2-accent: #ec4899;
+  --cpv2-accent-soft: rgba(236, 72, 153, 0.15);
+  --cpv2-accent-subtle: rgba(236, 72, 153, 0.04);
+  --cpv2-accent-border: rgba(236, 72, 153, 0.25);
+  --cpv2-accent-focus: rgba(236, 72, 153, 0.4);
+  --cpv2-accent-ring: rgba(236, 72, 153, 0.1);
+}
+
+.config-panel-v2--rose {
+  --cpv2-accent: #f43f5e;
+  --cpv2-accent-soft: rgba(244, 63, 94, 0.15);
+  --cpv2-accent-subtle: rgba(244, 63, 94, 0.04);
+  --cpv2-accent-border: rgba(244, 63, 94, 0.25);
+  --cpv2-accent-focus: rgba(244, 63, 94, 0.4);
+  --cpv2-accent-ring: rgba(244, 63, 94, 0.1);
+}
+
+/* --- Panel shell/header --- */
+.cpv2-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid hsl(var(--border));
+  flex-shrink: 0;
+}
+
+.cpv2-panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cpv2-panel-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--cpv2-radius-sm);
+  flex-shrink: 0;
+  background: var(--cpv2-accent-soft);
+  color: var(--cpv2-accent);
+  box-shadow: inset 0 0 0 1px var(--cpv2-accent-border);
+}
+
+.cpv2-panel-icon svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.25;
+}
+
+.cpv2-panel-subtitle {
+  font-size: 10px;
+  color: hsl(var(--muted-foreground) / 0.75);
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cpv2-panel-subtitle.clickable {
+  cursor: pointer;
+  transition: color var(--cpv2-transition);
+}
+
+.cpv2-panel-subtitle.clickable:hover {
+  color: hsl(var(--muted-foreground));
+}
+
+.cpv2-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.cpv2-header-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--cpv2-radius-xs);
+  background: transparent;
+  border: none;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 100ms ease;
+}
+
+.cpv2-header-btn:hover {
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
+}
+
+.cpv2-header-btn.delete:hover {
+  color: hsl(var(--destructive));
+}
+
+.cpv2-header-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.cpv2-panel-content {
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+.cpv2-panel-content::-webkit-scrollbar { width: 4px; }
+.cpv2-panel-content::-webkit-scrollbar-track { background: transparent; }
+.cpv2-panel-content::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 2px; }
 
 /* --- Tab Bar --- */
 .cpv2-tab-bar {
@@ -24,18 +252,19 @@
   position: sticky;
   top: 0;
   z-index: 2;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: auto hidden;
   -webkit-overflow-scrolling: touch;
 }
 
 .cpv2-tab-bar button {
   background: none;
   border: none;
-  padding: 10px 12px 8px;
-  font-size: 12.5px;
-  font-weight: 500;
-  color: hsl(var(--muted-foreground));
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: hsl(var(--muted-foreground) / 0.72);
   cursor: pointer;
   border-bottom: 2px solid transparent;
   transition: all var(--cpv2-transition);
@@ -52,8 +281,8 @@
 }
 
 .cpv2-tab-bar button.active {
-  color: hsl(var(--primary));
-  border-bottom-color: hsl(var(--primary));
+  color: var(--cpv2-accent);
+  border-bottom-color: var(--cpv2-accent);
 }
 
 .cpv2-tab-badge {
@@ -61,12 +290,12 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: hsl(var(--primary));
+  background: var(--cpv2-accent);
 }
 
 /* --- Section (flat, no border box) --- */
 .cpv2-section {
-  padding: 16px 18px;
+  padding: 12px 14px;
 }
 
 .cpv2-section + .cpv2-section {
@@ -74,12 +303,15 @@
 }
 
 .cpv2-section-label {
-  font-size: 10.5px;
-  font-weight: 600;
+  font-size: 10px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: hsl(var(--muted-foreground));
+  letter-spacing: 0.6px;
+  color: hsl(var(--muted-foreground) / 0.72);
   margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .cpv2-section-fields {
@@ -92,12 +324,12 @@
 .cpv2-info-banner {
   padding: 10px 14px;
   border-radius: var(--cpv2-radius-md);
-  background: hsl(var(--muted));
-  border: 1px solid hsl(var(--border));
+  background: var(--cpv2-accent-subtle);
+  border: 1px solid var(--cpv2-accent-border);
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  font-size: 12px;
+  font-size: 13px;
   color: hsl(var(--muted-foreground));
   line-height: 1.5;
 }
@@ -105,6 +337,15 @@
 .cpv2-info-banner svg {
   flex-shrink: 0;
   margin-top: 1px;
+}
+
+.config-panel-v2 input:not([type="range"]):not([type="checkbox"]),
+.config-panel-v2 textarea,
+.config-panel-v2 select {
+  font-size: 12px;
+  border-radius: var(--cpv2-radius-sm);
+  background-color: hsl(var(--config-input-bg));
+  border-color: hsl(var(--config-input-border));
 }
 
 /* --- Segmented Control --- */
@@ -122,7 +363,7 @@
   background: none;
   border: none;
   padding: 6px 12px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   color: hsl(var(--muted-foreground));
   cursor: pointer;
@@ -147,8 +388,502 @@
 
 /* --- Field hint --- */
 .cpv2-field-hint {
-  font-size: 11px;
+  font-size: 12px;
   color: hsl(var(--muted-foreground));
   margin-top: 4px;
   line-height: 1.4;
 }
+
+/* ==========================================================================
+   Field primitives — ported from design sandbox
+   All scoped under .config-panel-v2
+   ========================================================================== */
+
+/* --- Text input --- */
+.cpv2-field-input {
+  width: 100%;
+  padding: 6px 10px;
+  background: hsl(var(--config-input-bg));
+  border: 1px solid hsl(var(--config-input-border));
+  border-radius: var(--cpv2-radius-sm);
+  color: hsl(var(--foreground));
+  font-size: 12px;
+  outline: none;
+  transition: border-color var(--cpv2-transition), box-shadow var(--cpv2-transition);
+}
+.cpv2-field-input:focus { border-color: hsl(var(--ring)); box-shadow: 0 0 0 2px hsl(var(--ring) / 0.15); }
+.cpv2-field-input::placeholder { color: hsl(var(--muted-foreground)); }
+
+/* --- Textarea --- */
+.cpv2-field-textarea {
+  width: 100%;
+  min-height: 64px;
+  padding: 8px 10px;
+  background: hsl(var(--config-input-bg));
+  border: 1px solid hsl(var(--config-input-border));
+  border-radius: var(--cpv2-radius-sm);
+  color: hsl(var(--foreground));
+  font-size: 12px;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+  transition: border-color var(--cpv2-transition), box-shadow var(--cpv2-transition);
+}
+.cpv2-field-textarea:focus { border-color: hsl(var(--ring)); box-shadow: 0 0 0 2px hsl(var(--ring) / 0.15); }
+.cpv2-field-textarea::placeholder { color: hsl(var(--muted-foreground)); }
+
+/* --- Select --- */
+.cpv2-field-select {
+  width: 100%;
+  padding: 6px 10px;
+  padding-right: 28px;
+  background: hsl(var(--config-input-bg));
+  border: 1px solid hsl(var(--config-input-border));
+  border-radius: var(--cpv2-radius-sm);
+  color: hsl(var(--foreground));
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23707070' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  transition: border-color var(--cpv2-transition), box-shadow var(--cpv2-transition);
+}
+.cpv2-field-select:focus { border-color: hsl(var(--ring)); box-shadow: 0 0 0 2px hsl(var(--ring) / 0.15); }
+
+/* --- Inline select (compact) --- */
+.cpv2-field-select-inline {
+  padding: 4px 24px 4px 8px;
+  background: hsl(var(--muted));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--cpv2-radius-sm);
+  color: hsl(var(--foreground));
+  font-size: 11px;
+  font-weight: 500;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23707070' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+}
+
+/* --- Number input --- */
+.cpv2-field-number {
+  width: 80px;
+  padding: 6px 10px;
+  background: hsl(var(--config-input-bg));
+  border: 1px solid hsl(var(--config-input-border));
+  border-radius: var(--cpv2-radius-sm);
+  color: hsl(var(--foreground));
+  font-size: 12px;
+  outline: none;
+  text-align: right;
+  transition: border-color var(--cpv2-transition), box-shadow var(--cpv2-transition);
+}
+.cpv2-field-number:focus { border-color: hsl(var(--ring)); box-shadow: 0 0 0 2px hsl(var(--ring) / 0.15); }
+
+/* --- Inline field row (label left, control right) --- */
+.cpv2-field-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cpv2-fi-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+}
+
+.cpv2-fi-hint {
+  font-size: 10px;
+  color: hsl(var(--muted-foreground) / 0.6);
+  font-weight: 400;
+}
+
+/* --- Field label (for stacked fields) --- */
+.cpv2-field-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 5px;
+}
+
+.cpv2-field-label span {
+  font-size: 12px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+}
+
+.cpv2-field-default {
+  font-size: 10px;
+  color: hsl(var(--muted-foreground) / 0.6);
+  font-weight: 400;
+}
+
+/* --- CEL toggle button --- */
+.cpv2-cel-toggle {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: transparent;
+  border: 1px solid hsl(var(--border));
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  transition: all var(--cpv2-transition);
+}
+.cpv2-cel-toggle:hover { border-color: hsl(var(--border) / 0.8); color: hsl(var(--foreground)); }
+.cpv2-cel-toggle.active { background: var(--cpv2-accent-soft); border-color: var(--cpv2-accent-border); color: var(--cpv2-accent); }
+
+/* --- Slider row --- */
+.cpv2-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cpv2-slider-row input[type="range"] {
+  width: 80px;
+  height: 4px;
+  appearance: none;
+  background: hsl(var(--muted));
+  border-radius: 2px;
+  cursor: pointer;
+  accent-color: var(--cpv2-accent);
+}
+
+.cpv2-slider-val {
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+  min-width: 28px;
+  text-align: right;
+  font-family: 'SF Mono', Menlo, monospace;
+}
+
+/* --- Tag row + pills --- */
+.cpv2-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.cpv2-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 11px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--cpv2-transition);
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+}
+.cpv2-tag:hover { border-color: hsl(var(--border) / 0.8); color: hsl(var(--foreground)); }
+.cpv2-tag.selected {
+  background: var(--cpv2-accent-soft);
+  border-color: var(--cpv2-accent-border);
+  color: var(--cpv2-accent);
+}
+.cpv2-tag.dashed { border-style: dashed; }
+
+.cpv2-tag-x {
+  font-size: 10px;
+  opacity: 0.5;
+  margin-left: 2px;
+  cursor: pointer;
+}
+.cpv2-tag-x:hover { opacity: 1; }
+
+/* --- Provider dot --- */
+.cpv2-provider-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.cpv2-provider-dot.anthropic { background: #e8945a; }
+.cpv2-provider-dot.openai { background: #5cb85c; }
+.cpv2-provider-dot.gemini { background: #5b9bd5; }
+.cpv2-provider-dot.xai { background: #d9534f; }
+
+/* --- Drill-in row (clickable, chevron) --- */
+.cpv2-drill-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: var(--cpv2-radius-sm);
+  cursor: pointer;
+  transition: background var(--cpv2-transition);
+  margin: 0 -10px;
+  width: calc(100% + 20px);
+}
+.cpv2-drill-row:hover { background: hsl(var(--muted)); }
+
+.cpv2-dr-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cpv2-dr-icon {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.cpv2-dr-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: hsl(var(--foreground));
+}
+
+.cpv2-dr-sublabel {
+  font-size: 10px;
+  color: hsl(var(--muted-foreground));
+}
+
+.cpv2-dr-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+}
+.cpv2-dr-right svg { width: 12px; height: 12px; }
+
+/* --- Mode pill group (inline toggle) --- */
+.cpv2-mode-group {
+  display: flex;
+  gap: 4px;
+}
+
+.cpv2-mode-pill {
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: var(--cpv2-radius-sm);
+  border: 1px solid hsl(var(--border));
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+  font-weight: 500;
+  text-align: center;
+  cursor: pointer;
+  transition: all var(--cpv2-transition);
+  text-transform: capitalize;
+}
+.cpv2-mode-pill:hover { border-color: hsl(var(--border) / 0.8); color: hsl(var(--foreground)); }
+.cpv2-mode-pill.active {
+  border-color: var(--cpv2-accent-border);
+  background: var(--cpv2-accent-soft);
+  color: var(--cpv2-accent);
+}
+
+/* --- Card list --- */
+.cpv2-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cpv2-card-form {
+  position: relative;
+  padding: 8px 10px;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--cpv2-radius-sm);
+  background: hsl(var(--muted));
+  box-shadow: none;
+}
+
+.cpv2-card-field-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+}
+
+.cpv2-card-field-input,
+.cpv2-card-field-select,
+.cpv2-card-field-textarea {
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 12px;
+  border: 1px solid hsl(var(--config-input-border));
+  border-radius: var(--cpv2-radius-sm);
+  background: hsl(var(--config-input-bg));
+  color: hsl(var(--foreground));
+}
+
+.cpv2-card-field-input,
+.cpv2-card-field-select {
+  min-height: 32px;
+}
+
+.cpv2-card-field-input:focus,
+.cpv2-card-field-select:focus,
+.cpv2-card-field-textarea:focus {
+  outline: none;
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.2);
+}
+
+.cpv2-card-field-input:disabled,
+.cpv2-card-field-select:disabled,
+.cpv2-card-field-textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.cpv2-card-field-loading {
+  color: hsl(var(--muted-foreground));
+}
+
+.cpv2-card-field-input + .cpv2-card-field-input {
+  margin-top: 4px;
+}
+
+.cpv2-card-item {
+  padding: 8px 10px;
+  border: 1px solid hsl(var(--border) / 0.5);
+  border-radius: var(--cpv2-radius-sm);
+  background: hsl(var(--muted) / 0.3);
+  transition: border-color var(--cpv2-transition);
+}
+.cpv2-card-item:hover { border-color: hsl(var(--border)); }
+
+.cpv2-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.cpv2-card-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+.cpv2-card-actions { display: flex; gap: 2px; }
+
+.cpv2-card-sub {
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+  line-height: 1.4;
+}
+
+/* --- Add button (dashed) --- */
+.cpv2-add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  padding: 6px;
+  border: 1px dashed hsl(var(--border));
+  border-radius: var(--cpv2-radius-sm);
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--cpv2-transition);
+}
+.cpv2-add-btn:hover { border-color: hsl(var(--border) / 0.8); color: hsl(var(--foreground)); }
+.cpv2-add-btn svg { width: 12px; height: 12px; }
+
+/* --- Param group (collapsible nested) --- */
+.cpv2-param-group {
+  border: 1px solid hsl(var(--border) / 0.5);
+  border-radius: var(--cpv2-radius-sm);
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+.cpv2-param-group:last-child { margin-bottom: 0; }
+
+.cpv2-param-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: hsl(var(--muted));
+  cursor: pointer;
+  transition: background var(--cpv2-transition);
+}
+.cpv2-param-group-header:hover { background: hsl(var(--muted) / 0.8); }
+
+.cpv2-pgh-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cpv2-pgh-chevron {
+  width: 12px;
+  height: 12px;
+  color: hsl(var(--muted-foreground));
+  transition: transform var(--cpv2-transition);
+}
+.cpv2-param-group-header.collapsed .cpv2-pgh-chevron { transform: rotate(-90deg); }
+
+.cpv2-pgh-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+.cpv2-pgh-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cpv2-pgh-preset {
+  font-size: 10px;
+  color: var(--cpv2-accent);
+  font-weight: 500;
+  padding: 2px 6px;
+  background: var(--cpv2-accent-soft);
+  border-radius: 3px;
+}
+
+.cpv2-param-group-body {
+  padding: 10px;
+  border-top: 1px solid hsl(var(--border));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* --- CEL expression field --- */
+.cpv2-cel-field {
+  width: 100%;
+  padding: 6px 10px;
+  background: hsl(var(--config-input-bg));
+  border: 1px solid hsl(var(--config-input-border));
+  border-radius: var(--cpv2-radius-sm);
+  color: var(--cpv2-accent);
+  font-size: 12px;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  outline: none;
+  transition: border-color var(--cpv2-transition), box-shadow var(--cpv2-transition);
+}
+.cpv2-cel-field:focus { border-color: var(--cpv2-accent-focus); box-shadow: 0 0 0 2px var(--cpv2-accent-ring); }
+.cpv2-cel-field::placeholder { color: hsl(var(--muted-foreground)); }

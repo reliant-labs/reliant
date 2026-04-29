@@ -44,6 +44,23 @@ export function isInputRequired(schema: InputDef): boolean {
   return d === undefined || d === null || d === '';
 }
 
+const PARAM_CONTROL_BASE_CLASS =
+  "rounded-lg border border-border/50 bg-background/80 text-sm text-foreground shadow-sm shadow-black/5 transition-all placeholder:text-muted-foreground/60 hover:border-border hover:bg-background focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20";
+const PARAM_CONTROL_CLASS = `w-full px-3 py-2 ${PARAM_CONTROL_BASE_CLASS}`;
+const PARAM_COMPACT_CONTROL_CLASS = `px-2.5 py-1.5 ${PARAM_CONTROL_BASE_CLASS}`;
+const PARAM_SELECT_CLASS =
+  "flex w-full items-center justify-between gap-2 rounded-lg border border-border/50 bg-background/80 px-3 py-2 text-sm text-foreground shadow-sm shadow-black/5 transition-all hover:border-border hover:bg-accent/30 focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/20";
+const PARAM_DROPDOWN_CLASS =
+  "absolute left-0 right-0 top-full mt-1.5 overflow-hidden rounded-xl border border-border/50 shadow-xl shadow-black/10 backdrop-blur-sm";
+const PARAM_DROPDOWN_ITEM_CLASS =
+  "w-full px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-accent/60";
+
+function getDropdownSurfaceClass(isChatInputContext: boolean): string {
+  return isChatInputContext
+    ? "z-[1000] bg-[var(--chat-dropdown-bg)]"
+    : "z-50 bg-popover/95";
+}
+
 interface WorkflowParamInputProps {
   // Parameter name
   name: string;
@@ -354,15 +371,15 @@ function BooleanInput({
               onClick={() => !nativeDisabled && nativeOnChange(!isOn)}
               disabled={nativeDisabled}
               className={cn(
-                "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                isOn ? "bg-primary" : "bg-muted",
+                "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border border-border/40 p-0.5 shadow-inner transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25",
+                isOn ? "bg-primary" : "bg-muted/70 hover:bg-muted",
                 nativeDisabled && "opacity-50 cursor-not-allowed"
               )}
             >
               <span
                 className={cn(
-                  "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-background shadow-lg ring-0 transition-transform",
+                  "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-background shadow-md ring-0 transition-transform",
                   isOn ? "translate-x-5" : "translate-x-0"
                 )}
               />
@@ -448,9 +465,9 @@ function NumberInput({
                   onChange={(e) => nativeOnChange(parseFloat(e.target.value))}
                   disabled={nativeDisabled}
                   className={cn(
-                    "flex-1 h-2 bg-muted rounded-full appearance-none cursor-pointer",
-                    "[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4",
-                    "[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary",
+                    "h-2 flex-1 cursor-pointer appearance-none rounded-full bg-muted/60 accent-primary",
+                    "[&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none",
+                    "[&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-background [&::-webkit-slider-thumb]:bg-primary",
                     "[&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-md",
                     nativeDisabled && "opacity-50 cursor-not-allowed"
                   )}
@@ -467,8 +484,8 @@ function NumberInput({
                   onChange={(e) => handleInputChange(e.target.value)}
                   disabled={nativeDisabled}
                   className={cn(
-                    "w-16 px-2 py-0.5 text-sm text-right tabular-nums rounded border border-border bg-background",
-                    "focus:outline-none focus:ring-1 focus:ring-ring",
+                    PARAM_COMPACT_CONTROL_CLASS,
+                    "w-20 text-right tabular-nums",
                     nativeDisabled && "opacity-50 cursor-not-allowed"
                   )}
                 />
@@ -501,9 +518,8 @@ function NumberInput({
               step={schema.type === "integer" ? 1 : 0.1}
               disabled={nativeDisabled}
               className={cn(
-                "w-24 px-3 py-1.5 text-sm rounded-md border border-border bg-background text-foreground",
-                "focus:outline-none focus:ring-2 focus:ring-ring",
-                "[&::-webkit-inner-spin-button]:opacity-100 [&::-webkit-outer-spin-button]:opacity-100",
+                PARAM_COMPACT_CONTROL_CLASS,
+                "w-28 tabular-nums",
                 "[&::-webkit-inner-spin-button]:cursor-pointer [&::-webkit-outer-spin-button]:cursor-pointer",
                 nativeDisabled && "opacity-50 cursor-not-allowed"
               )}
@@ -614,24 +630,20 @@ function EnumDropdown({
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
         className={cn(
-          "flex items-center justify-between gap-2 w-full px-3 py-1.5 text-sm rounded-md",
-          "border border-border bg-background",
-          "focus:outline-none focus:ring-2 focus:ring-ring",
+          PARAM_SELECT_CLASS,
           disabled && "opacity-50 cursor-not-allowed"
         )}
       >
         <span className="truncate">{getDisplayLabel(currentValue) || "Select..."}</span>
-        <ChevronDown className="w-4 h-4 opacity-50" />
+        <ChevronDown className="w-4 h-4 text-muted-foreground" />
       </button>
 
       {isOpen && (
         <div className={cn(
-          "absolute top-full left-0 right-0 mt-1 rounded-md border border-border shadow-lg",
-          isChatInputContext
-            ? "z-[1000] bg-[var(--chat-dropdown-bg)]"
-            : "z-50 bg-popover"
+          PARAM_DROPDOWN_CLASS,
+          getDropdownSurfaceClass(isChatInputContext)
         )}>
-          <div className="py-1 max-h-48 overflow-y-auto">
+          <div className="max-h-48 overflow-y-auto p-1">
             {options.map((option) => (
               <button
                 key={option}
@@ -640,8 +652,9 @@ function EnumDropdown({
                   setIsOpen(false);
                 }}
                 className={cn(
-                  "w-full px-3 py-1.5 text-left text-sm transition-colors",
-                  currentValue === option ? "bg-accent" : "hover:bg-accent/50"
+                  PARAM_DROPDOWN_ITEM_CLASS,
+                  "rounded-lg",
+                  currentValue === option && "bg-primary/10 text-primary"
                 )}
               >
                 <div className="flex items-center justify-between">
@@ -775,28 +788,21 @@ function MultiEnumDropdown({
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
         className={cn(
-          "flex items-center justify-between gap-2 w-full px-3 py-1.5 text-sm rounded-md",
-          "border border-border bg-background",
-          "focus:outline-none focus:ring-2 focus:ring-ring",
+          PARAM_SELECT_CLASS,
           selectedValues.length === 0 && "text-muted-foreground",
           disabled && "opacity-50 cursor-not-allowed"
         )}
       >
         <span className="truncate">{summary}</span>
-        <ChevronDown className="w-4 h-4 opacity-50" />
+        <ChevronDown className="w-4 h-4 text-muted-foreground" />
       </button>
 
       {isOpen && (
         <div className={cn(
-          "absolute top-full left-0 right-0 mt-1 rounded-md border border-border shadow-lg",
-          isChatInputContext
-            ? "z-[1000] bg-[var(--chat-dropdown-bg)]"
-            : "z-50 bg-popover"
+          PARAM_DROPDOWN_CLASS,
+          getDropdownSurfaceClass(isChatInputContext)
         )}>
-          <div className={cn(
-            "flex items-center justify-between px-3 py-2 border-b border-border",
-            isChatInputContext ? "bg-[var(--chat-dropdown-bg)]" : "bg-popover"
-          )}>
+          <div className="flex items-center justify-between border-b border-border/50 bg-muted/20 px-3 py-2">
             <span className="text-xs text-muted-foreground">
               {selectedValues.length} selected
             </span>
@@ -810,11 +816,11 @@ function MultiEnumDropdown({
             </div>
           </div>
 
-          <div className="py-1 max-h-48 overflow-y-auto">
+          <div className="max-h-48 overflow-y-auto p-1">
             {options.length === 0 && selectedValues.length > 0 ? (
               // When no options defined but values exist, show selected values as removable items
               <>
-                <div className="px-3 py-2 text-xs text-muted-foreground border-b border-border">
+                <div className="mb-1 border-b border-border/50 px-3 py-2 text-xs text-muted-foreground">
                   No enum values defined. Showing selected values:
                 </div>
                 {selectedValues.map((value) => (
@@ -822,7 +828,7 @@ function MultiEnumDropdown({
                     key={value}
                     type="button"
                     onClick={() => toggleValue(value)}
-                    className="w-full px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent/50"
+                    className={cn(PARAM_DROPDOWN_ITEM_CLASS, "rounded-lg")}
                   >
                     <div className="flex items-center gap-2">
                       <div className="w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 bg-primary border-primary">
@@ -843,10 +849,7 @@ function MultiEnumDropdown({
                   key={option}
                   type="button"
                   onClick={() => toggleValue(option)}
-                  className={cn(
-                    "w-full px-3 py-1.5 text-left text-sm transition-colors",
-                    "hover:bg-accent/50"
-                  )}
+                  className={cn(PARAM_DROPDOWN_ITEM_CLASS, "rounded-lg")}
                 >
                   <div className="flex items-center gap-2">
                     <div className={cn(
@@ -1055,9 +1058,7 @@ function ModelDropdown({
         }}
         disabled={disabled || isActuallyLoading}
         className={cn(
-          "flex items-center justify-between gap-2 w-full px-3 py-1.5 text-sm rounded-md",
-          "border border-border bg-background",
-          "focus:outline-none focus:ring-2 focus:ring-ring",
+          PARAM_SELECT_CLASS,
           (disabled || isActuallyLoading) && "opacity-50 cursor-not-allowed"
         )}
       >
@@ -1065,20 +1066,18 @@ function ModelDropdown({
           {isActuallyLoading ? "Loading models..." : (selectedModel?.name || "Select model...")}
         </span>
         {isActuallyLoading ? (
-          <Loader2 className="w-4 h-4 opacity-50 animate-spin" />
+          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
         ) : (
-          <ChevronDown className="w-4 h-4 opacity-50" />
+          <ChevronDown className="w-4 h-4 text-muted-foreground" />
         )}
       </button>
 
       {isOpen && (
         <div className={cn(
-          "absolute top-full left-0 right-0 mt-1 rounded-md border border-border shadow-lg",
-          isChatInputContext
-            ? "z-[1000] bg-[var(--chat-dropdown-bg)]"
-            : "z-50 bg-popover"
+          PARAM_DROPDOWN_CLASS,
+          getDropdownSurfaceClass(isChatInputContext)
         )}>
-          <div className="py-1 max-h-64 overflow-y-auto">
+          <div className="max-h-64 overflow-y-auto p-1">
             {models.map((model) => (
               <button
                 key={model.id}
@@ -1087,8 +1086,9 @@ function ModelDropdown({
                   setIsOpen(false);
                 }}
                 className={cn(
-                  "w-full px-3 py-2 text-left text-sm transition-colors",
-                  (currentValue === model.id || model.id.split('@')[0] === currentValue) ? "bg-accent" : "hover:bg-accent/50"
+                  PARAM_DROPDOWN_ITEM_CLASS,
+                  "rounded-lg",
+                  (currentValue === model.id || model.id.split('@')[0] === currentValue) && "bg-primary/10 text-primary"
                 )}
               >
                 <div className="flex items-center justify-between">
@@ -1167,9 +1167,9 @@ function StringInput({ name, schema, value, onChange, disabled, className }: Str
           disabled={disabled}
           rows={3}
           className={cn(
-            "w-full px-3 py-2 text-sm rounded-md border bg-background resize-y",
-            "focus:outline-none focus:ring-2 focus:ring-ring",
-            hasTemplate ? "border-ring/50 font-mono" : "border-border",
+            PARAM_CONTROL_CLASS,
+            "min-h-24 resize-y leading-relaxed",
+            hasTemplate && "border-primary/50 bg-primary/5",
             disabled && "opacity-50 cursor-not-allowed"
           )}
           placeholder={placeholder}
@@ -1192,9 +1192,8 @@ function StringInput({ name, schema, value, onChange, disabled, className }: Str
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
         className={cn(
-          "w-full px-3 py-1.5 text-sm rounded-md border bg-background",
-          "focus:outline-none focus:ring-2 focus:ring-ring",
-          hasTemplate ? "border-ring/50 font-mono" : "border-border",
+          PARAM_CONTROL_CLASS,
+          hasTemplate && "border-primary/50 bg-primary/5",
           disabled && "opacity-50 cursor-not-allowed"
         )}
         placeholder={placeholder}
@@ -1230,14 +1229,14 @@ function ParamWrapper({ name, description, hasDefault, defaultValue: _defaultVal
   if (inline) {
     // Inline layout: label and input on the same row (used for booleans)
     return (
-      <div className={cn("space-y-1", className)}>
-        <div className="flex items-center justify-between gap-2">
-          <label className="text-sm font-medium text-foreground flex items-center gap-1 whitespace-nowrap">
-            {displayName}
+      <div className={cn("rounded-xl border border-border/40 bg-muted/20 px-3 py-2.5 shadow-sm shadow-black/5", className)}>
+        <div className="flex items-center justify-between gap-3">
+          <label className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-foreground">
+            <span className="truncate">{displayName}</span>
             {!hasDefault && <span className="text-destructive">*</span>}
             {description && (
               <Tooltip content={description} placement="top" delay={200}>
-                <Info className="w-3 h-3 text-muted-foreground" />
+                <Info className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               </Tooltip>
             )}
           </label>
@@ -1249,14 +1248,14 @@ function ParamWrapper({ name, description, hasDefault, defaultValue: _defaultVal
 
   // Stacked layout: label above, children below (full width)
   return (
-    <div className={cn("space-y-1.5", className)}>
+    <div className={cn("space-y-2 rounded-xl border border-border/40 bg-muted/20 p-3 shadow-sm shadow-black/5", className)}>
       <div className="flex items-center gap-2">
-        <label className="text-sm font-medium text-foreground flex items-center gap-1 whitespace-nowrap">
-          {displayName}
+        <label className="flex min-w-0 items-center gap-1.5 text-sm font-medium text-foreground">
+          <span className="truncate">{displayName}</span>
           {!hasDefault && <span className="text-destructive">*</span>}
           {description && (
             <Tooltip content={description} placement="top" delay={200}>
-              <Info className="w-3 h-3 text-muted-foreground" />
+              <Info className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             </Tooltip>
           )}
         </label>

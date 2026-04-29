@@ -290,88 +290,6 @@
   animation: pulse-border 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-/* Expanded loop node styling - ensure child nodes are visible */
-.react-flow__node[data-expanded-loop] {
-  z-index: 1;
-}
-
-/* Child nodes inside expanded loops should be visible and properly styled */
-.react-flow__node[data-parent-id] {
-  z-index: 2;
-  position: relative;
-}
-
-/* Ensure child nodes don't get cut off */
-.react-flow__node[data-parent-id] > div {
-  overflow: visible;
-}
-
-/* Expanded loop group container */
-.react-flow__node.expandedLoopNode {
-  overflow: visible !important;
-  background-color: hsl(var(--background)) !important;
-  z-index: 0 !important;
-}
-
-/* Ensure the background div doesn't cover child nodes */
-.react-flow__node.expandedLoopNode > div {
-  z-index: 0 !important;
-}
-
-/* Ensure child content area allows overflow */
-.react-flow__node.expandedLoopNode .child-content-area {
-  overflow: visible !important;
-}
-
-/* Make sure the expanded loop node wrapper doesn't clip children */
-.react-flow__node.expandedLoopNode > div {
-  overflow: visible !important;
-}
-
-/* Child nodes inside expanded loops - ensure they're visible and properly styled */
-.react-flow__node[data-parent-id] {
-  z-index: 100 !important;
-  position: relative !important;
-}
-
-/* Ensure child nodes have proper styling and don't get cut off */
-.react-flow__node[data-parent-id] > div {
-  overflow: visible !important;
-  position: relative !important;
-  z-index: 100 !important;
-}
-
-/* Ensure child nodes inside expanded loops use their proper node components and styling */
-/* Remove any default React Flow background that might override NodeStatusWrapper */
-.react-flow__node[data-parent-id] {
-  background: transparent !important;
-}
-
-/* Ensure child nodes use their proper node type components - remove any default React Flow styling */
-.react-flow__node[data-parent-id] > div {
-  background: transparent !important;
-}
-
-/* Make sure NodeStatusWrapper styling is applied to child nodes */
-.react-flow__node[data-parent-id] .px-4 {
-  /* NodeStatusWrapper uses px-4, ensure it's visible */
-}
-
-/* Make child nodes more prominent with better shadows and borders */
-.react-flow__node[data-parent-id] .react-flow__node {
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
-  z-index: 100 !important;
-}
-
-/* Improve edge visibility inside expanded loops */
-.react-flow__edge[data-parent-id] {
-  z-index: 50 !important;
-}
-
-.react-flow__edge[data-parent-id] path {
-  z-index: 50 !important;
-}
-
 /* ReactFlow container z-index - edges must be above nodes */
 .react-flow__edges {
   z-index: 20 !important;
@@ -394,15 +312,6 @@
   z-index: 20 !important;
 }
 
-/* Edge labels and markers must appear above edge lines */
-.react-flow__edge-label {
-  z-index: 30 !important;
-}
-
-.react-flow__edge-label-wrapper {
-  z-index: 30 !important;
-}
-
 /* SVG markers (arrows) should appear above edge paths */
 .react-flow__edge marker {
   z-index: 25 !important;
@@ -411,21 +320,4 @@
 .react-flow__edge path[marker-end],
 .react-flow__edge path[marker-start] {
   z-index: 20 !important;
-}
-
-.react-flow__edge[data-parent-id] .react-flow__edge-path {
-  stroke-width: 2.5 !important;
-  opacity: 0.9 !important;
-  transition: stroke 0.2s ease, stroke-width 0.2s ease;
-}
-
-/* Ensure EdgeLabelRenderer container is above edge lines */
-.react-flow__edge-label-wrapper,
-.react-flow__edge-label {
-  z-index: 30 !important;
-}
-
-/* Ensure edge labels appear above everything */
-[data-edge-id] {
-  z-index: 30 !important;
 }

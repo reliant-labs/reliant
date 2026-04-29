@@ -1,7 +1,7 @@
 import { normalizeCelBoolean, normalizeCelString } from '../lib/celAdapter'
 
 export type ProtoFieldWidget = 'text' | 'textarea' | 'select' | 'checkbox' | 'model' | 'tools' | 'number'
-export type ProtoFieldValueKind = 'string' | 'boolean'
+export type ProtoFieldValueKind = 'string' | 'boolean' | 'model'
 
 export interface ProtoFieldOption {
   value: string
@@ -19,6 +19,8 @@ export interface ProtoFieldSchema {
   widget: ProtoFieldWidget
   /** For 'number' widget: true = integer (step=1, parseInt), false = float (step=any, parseFloat) */
   isInteger?: boolean
+  minValue?: number
+  maxValue?: number
   valueKind?: ProtoFieldValueKind
   celCapable?: boolean
   celExpressionOnly?: boolean
@@ -91,6 +93,10 @@ export function normalizeProtoFieldValue(schema: ProtoFieldSchema, value: unknow
   if (schema.valueKind === 'boolean' || schema.widget === 'checkbox') {
     const boolFallback = typeof schema.defaultValue === 'boolean' ? schema.defaultValue : false
     return normalizeCelBoolean(value, boolFallback)
+  }
+
+  if (schema.valueKind === 'model' || schema.widget === 'model') {
+    return value
   }
 
   if (schema.valueKind === 'string' || schema.widget === 'text' || schema.widget === 'textarea' || schema.widget === 'select' || schema.widget === 'tools') {

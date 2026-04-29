@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, Mail, KeyRound, CheckCircle } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
+import { cn } from '../lib/utils'
 
 interface ForgotPasswordProps {
   onBackToSignIn: () => void
@@ -154,23 +155,16 @@ export function ForgotPassword({ onBackToSignIn }: ForgotPasswordProps) {
           <div className="space-y-2">
             <button
               onClick={onBackToSignIn}
-              className="flex items-center gap-2 text-sm font-medium transition-colors mb-4"
-              style={{ color: 'hsl(var(--muted-foreground))' }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.color = 'hsl(var(--primary))'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = 'hsl(var(--muted-foreground))'
-              }}
+              className="flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-primary mb-4"
             >
               <ArrowLeft className="w-4 h-4" />
               Back to Sign In
             </button>
 
-            <h2 className="text-2xl font-semibold" style={{ color: 'hsl(var(--foreground))' }}>
+            <h2 className="text-2xl font-semibold text-foreground">
               Forgot Password?
             </h2>
-            <p className="text-sm" style={{ color: 'hsl(var(--muted-foreground))' }}>
+            <p className="text-sm text-muted-foreground">
               No worries! Enter your email and we'll send you a verification code.
             </p>
           </div>
@@ -180,16 +174,12 @@ export function ForgotPassword({ onBackToSignIn }: ForgotPasswordProps) {
             <div className="space-y-2">
               <label 
                 htmlFor="email" 
-                className="text-sm font-medium"
-                style={{ color: 'hsl(var(--foreground))' }}
+                className="text-sm font-medium text-foreground"
               >
                 Email Address
               </label>
               <div className="relative">
-                <Mail 
-                  className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5" 
-                  style={{ color: 'hsl(var(--muted-foreground))' }}
-                />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                 <input
                   id="email"
                   type="email"
@@ -197,26 +187,14 @@ export function ForgotPassword({ onBackToSignIn }: ForgotPasswordProps) {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
                   disabled={loading}
-                  className="w-full pl-10 pr-4 py-2 rounded-lg border-2 transition-all outline-none disabled:opacity-50"
-                  style={{
-                    backgroundColor: 'hsl(var(--background))',
-                    borderColor: error ? 'hsl(var(--destructive))' : 'hsl(var(--border))',
-                    color: 'hsl(var(--foreground))',
-                  }}
-                  onFocus={(e) => {
-                    if (!error) {
-                      e.currentTarget.style.borderColor = 'hsl(var(--primary))'
-                    }
-                  }}
-                  onBlur={(e) => {
-                    if (!error) {
-                      e.currentTarget.style.borderColor = 'hsl(var(--border))'
-                    }
-                  }}
+                  className={cn(
+                    'w-full pl-10 pr-4 py-2 rounded-lg border-2 bg-background text-foreground transition-all outline-none focus:border-primary disabled:opacity-50',
+                    error ? 'border-destructive' : 'border-border'
+                  )}
                 />
               </div>
               {error && (
-                <p className="text-sm" style={{ color: 'hsl(var(--destructive))' }}>
+                <p className="text-sm text-destructive">
                   {error}
                 </p>
               )}
@@ -225,33 +203,14 @@ export function ForgotPassword({ onBackToSignIn }: ForgotPasswordProps) {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2 px-4 rounded-lg font-medium transition-all disabled:opacity-50"
-              style={{
-                backgroundColor: 'hsl(var(--primary))',
-                color: 'hsl(var(--primary-foreground))',
-              }}
-              onMouseEnter={(e) => {
-                if (!loading) {
-                  e.currentTarget.style.opacity = '0.9'
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.opacity = '1'
-              }}
+              className="w-full py-2 px-4 rounded-lg bg-primary text-primary-foreground font-medium transition-colors hover:bg-primary/90 disabled:opacity-50"
             >
               {loading ? 'Sending...' : 'Send Verification Code'}
             </button>
           </form>
 
           {/* Info Box */}
-          <div 
-            className="p-3 rounded-lg border text-sm"
-            style={{
-              backgroundColor: 'hsl(var(--muted) / 0.5)',
-              borderColor: 'hsl(var(--border))',
-              color: 'hsl(var(--muted-foreground))',
-            }}
-          >
+          <div className="p-3 rounded-lg border border-border bg-muted/50 text-sm text-muted-foreground">
             💡 <strong>Tip:</strong> Check your spam folder if you don't see the email within a few minutes.
           </div>
         </div>
@@ -267,32 +226,20 @@ export function ForgotPassword({ onBackToSignIn }: ForgotPasswordProps) {
         <div className="space-y-2">
           <button
             onClick={handleBackToEmail}
-            className="flex items-center gap-2 text-sm font-medium transition-colors mb-4"
-            style={{ color: 'hsl(var(--muted-foreground))' }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.color = 'hsl(var(--primary))'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.color = 'hsl(var(--muted-foreground))'
-            }}
+            className="flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-primary mb-4"
           >
             <ArrowLeft className="w-4 h-4" />
             Back
           </button>
 
-          <div 
-            className="w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4"
-            style={{
-              backgroundColor: 'hsl(var(--primary) / 0.15)',
-            }}
-          >
-            <CheckCircle className="w-8 h-8" style={{ color: 'hsl(var(--primary))' }} />
+          <div className="w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4 bg-primary/15">
+            <CheckCircle className="w-8 h-8 text-primary" />
           </div>
 
-          <h2 className="text-2xl font-semibold text-center" style={{ color: 'hsl(var(--foreground))' }}>
+          <h2 className="text-2xl font-semibold text-center text-foreground">
             Check Your Email
           </h2>
-          <p className="text-sm text-center" style={{ color: 'hsl(var(--muted-foreground))' }}>
+          <p className="text-sm text-center text-muted-foreground">
             We've sent a 6-digit verification code to <strong>{email}</strong>
           </p>
         </div>
@@ -302,16 +249,12 @@ export function ForgotPassword({ onBackToSignIn }: ForgotPasswordProps) {
           <div className="space-y-2">
             <label 
               htmlFor="code" 
-              className="text-sm font-medium"
-              style={{ color: 'hsl(var(--foreground))' }}
+              className="text-sm font-medium text-foreground"
             >
               Verification Code
             </label>
             <div className="relative">
-              <KeyRound 
-                className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5" 
-                style={{ color: 'hsl(var(--muted-foreground))' }}
-              />
+              <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
               <input
                 id="code"
                 type="text"
@@ -323,28 +266,16 @@ export function ForgotPassword({ onBackToSignIn }: ForgotPasswordProps) {
                 }}
                 placeholder="000000"
                 disabled={loading}
-                className="w-full pl-10 pr-4 py-2 rounded-lg border-2 transition-all outline-none disabled:opacity-50 text-center text-2xl tracking-widest"
-                style={{
-                  backgroundColor: 'hsl(var(--background))',
-                  borderColor: error ? 'hsl(var(--destructive))' : 'hsl(var(--border))',
-                  color: 'hsl(var(--foreground))',
-                }}
-                onFocus={(e) => {
-                  if (!error) {
-                    e.currentTarget.style.borderColor = 'hsl(var(--primary))'
-                  }
-                }}
-                onBlur={(e) => {
-                  if (!error) {
-                    e.currentTarget.style.borderColor = 'hsl(var(--border))'
-                  }
-                }}
+                className={cn(
+                  'w-full pl-10 pr-4 py-2 rounded-lg border-2 bg-background text-foreground transition-all outline-none focus:border-primary disabled:opacity-50 text-center text-2xl tracking-widest',
+                  error ? 'border-destructive' : 'border-border'
+                )}
                 maxLength={6}
                 autoComplete="one-time-code"
               />
             </div>
             {error && (
-              <p className="text-sm" style={{ color: 'hsl(var(--destructive))' }}>
+              <p className="text-sm text-destructive">
                 {error}
               </p>
             )}
@@ -353,19 +284,7 @@ export function ForgotPassword({ onBackToSignIn }: ForgotPasswordProps) {
           <button
             type="submit"
             disabled={loading || code.length !== 6}
-            className="w-full py-2 px-4 rounded-lg font-medium transition-all disabled:opacity-50"
-            style={{
-              backgroundColor: 'hsl(var(--primary))',
-              color: 'hsl(var(--primary-foreground))',
-            }}
-            onMouseEnter={(e) => {
-              if (!loading && code.length === 6) {
-                e.currentTarget.style.opacity = '0.9'
-              }
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.opacity = '1'
-            }}
+            className="w-full py-2 px-4 rounded-lg bg-primary text-primary-foreground font-medium transition-colors hover:bg-primary/90 disabled:opacity-50"
           >
             {loading ? 'Verifying...' : 'Verify Code'}
           </button>
@@ -373,7 +292,7 @@ export function ForgotPassword({ onBackToSignIn }: ForgotPasswordProps) {
           {/* Resend Code */}
           <div className="text-center">
             {resendCooldown > 0 ? (
-              <p className="text-sm" style={{ color: 'hsl(var(--muted-foreground))' }}>
+              <p className="text-sm text-muted-foreground">
                 Resend code in {resendCooldown}s
               </p>
             ) : (
@@ -381,16 +300,7 @@ export function ForgotPassword({ onBackToSignIn }: ForgotPasswordProps) {
                 type="button"
                 onClick={handleResendCode}
                 disabled={loading}
-                className="text-sm font-medium transition-colors disabled:opacity-50"
-                style={{ color: 'hsl(var(--primary))' }}
-                onMouseEnter={(e) => {
-                  if (!loading) {
-                    e.currentTarget.style.opacity = '0.8'
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.opacity = '1'
-                }}
+                className="text-sm font-medium text-primary transition-colors hover:text-primary/80 disabled:opacity-50"
               >
                 Resend verification code
               </button>
@@ -399,14 +309,7 @@ export function ForgotPassword({ onBackToSignIn }: ForgotPasswordProps) {
         </form>
 
         {/* Info Box */}
-        <div 
-          className="p-3 rounded-lg border text-sm"
-          style={{
-            backgroundColor: 'hsl(var(--muted) / 0.5)',
-            borderColor: 'hsl(var(--border))',
-            color: 'hsl(var(--muted-foreground))',
-          }}
-        >
+        <div className="p-3 rounded-lg border border-border bg-muted/50 text-sm text-muted-foreground">
           🔒 <strong>Security tip:</strong> The verification code expires in 10 minutes.
         </div>
       </div>

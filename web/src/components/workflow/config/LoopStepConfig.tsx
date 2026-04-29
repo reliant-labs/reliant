@@ -16,12 +16,8 @@ import { ProtoFieldRenderer } from "../ProtoFieldRenderer";
 import { inputDefToSchema } from "../../../lib/nodeFieldAdapter";
 import { getInputUI } from "../../../lib/inputHelpers";
 import { directCel, celString } from "../../../lib/celAdapter";
+import { DrillRow, ModeGroup, ModePill, Section, SectionFields, SectionLabel } from "./primitives";
 
-/**
- * Editor for inline loop inputs - displays inputs defined in the inline workflow
- * and allows users to set values that get passed as args.
- * Uses ProtoFieldRenderer for consistent rendering with action steps.
- */
 export function InlineLoopInputsEditor({
   inputs,
   values,
@@ -44,11 +40,9 @@ export function InlineLoopInputsEditor({
   };
 
   return (
-    <div className="space-y-3 border-t border-border pt-3">
-      <label className="block text-sm font-medium text-foreground">
-        Loop Inputs
-      </label>
-      <div className="space-y-2">
+    <Section>
+      <SectionLabel>Loop Inputs</SectionLabel>
+      <SectionFields>
         {inputEntries.map(([name, param]) => {
           if (!param.type) return null;
           return (
@@ -60,24 +54,10 @@ export function InlineLoopInputsEditor({
             />
           );
         })}
-      </div>
-    </div>
+      </SectionFields>
+    </Section>
   );
 }
-
-const LOOP_MODE_SCHEMA: ProtoFieldSchema = {
-  key: "mode",
-  label: "Mode",
-  widget: "select",
-  valueKind: "string",
-  defaultValue: "sequential",
-  options: [
-    { value: "sequential", label: "Sequential" },
-    { value: "parallel", label: "Parallel" },
-  ],
-  helpText:
-    "Sequential loops use While. Parallel loops use Items and expose per-iteration outputs via _results.",
-};
 
 const ON_FAILURE_SCHEMA: ProtoFieldSchema = {
   key: "on_failure",
@@ -114,17 +94,13 @@ export function LoopStepConfig({
   const isParallel = parallelValue === true || (typeof parallelValue === "string" && parallelValue.length > 0);
   const modeValue = isParallel ? "parallel" : "sequential";
 
-  const handleModeChange = (value: unknown) => {
-    const nextMode = value === "parallel" ? "parallel" : "sequential";
-
-    if (nextMode === modeValue) {
-      return;
-    }
+  const handleModeChange = (nextMode: "parallel" | "sequential") => {
+    if (nextMode === modeValue) return;
 
     if (nextMode === "parallel") {
       onUpdate(
         withLoopArgs(step, {
-          parallel: true,
+          parallel: { value: { case: "literal" as const, value: true } } as any,
           while: undefined,
         }) as LoopStep,
       );
@@ -141,7 +117,6 @@ export function LoopStepConfig({
     );
   };
 
-  // Initialize inline workflow if it doesn't exist
   const inlineWorkflow = getStepInline(step);
   if (!inlineWorkflow) {
     onUpdate(
@@ -159,132 +134,127 @@ export function LoopStepConfig({
 
   return (
     <>
-      {/* Loop Body */}
-      <div>
-        <label className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-2 block">
-          Loop Body
-        </label>
-        <button
-          onClick={() => onEditLoopBody?.(step)}
-          disabled={!onEditLoopBody}
-          className="w-full flex items-center justify-between px-3 py-2 border border-input rounded-md bg-muted/30 hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-        >
-          <span className="text-muted-foreground">
-            {inlineWorkflow?.nodes?.length || 0} nodes ·{" "}
-            {inlineWorkflow?.edges?.length || 0} edges
-          </span>
-          <span className="flex items-center gap-1 text-primary">
-            {isReadOnly ? (
-              <Eye className="w-3.5 h-3.5" />
-            ) : (
-              <Edit3 className="w-3.5 h-3.5" />
-            )}
-            {isReadOnly ? "View" : "Edit"}
-          </span>
-        </button>
-      </div>
+      <Section>
+        <FieldMode value={modeValue} onChange={handleModeChange} disabled={isReadOnly} />
+      </Section>
 
-      {/* Inline loop inputs - show params defined in the inline workflow */}
-      {inlineWorkflow?.inputs &&
-        Object.keys(inlineWorkflow.inputs).length > 0 && (
-          <InlineLoopInputsEditor
-            inputs={inlineWorkflow.inputs}
-            values={stepInputs}
-            onChange={(inputs) =>
-              onUpdate(withLoopArgs(step, { args: inputs as any }) as LoopStep)
+      {isParallel ? (
+        <Section>
+          <SectionLabel>Iteration</SectionLabel>
+          <SectionFields>
+            <CELExpressionInput
+              label="Items"
+              helpTooltip="CEL expression that evaluates to a list or map of iteration items for parallel execution."
+              value={itemsValue}
+              onChange={(val) =>
+                onUpdate(
+                  withLoopArgs(step, {
+                    items: val ? celString(val) as any : undefined,
+                  }) as LoopStep,
+                )
+              }
+              placeholder="nodes.decompose.output.components"
+              celContext="default"
+              disabled={isReadOnly}
+              hideCELHint
+              showCELIndicator={false}
+            />
+
+            <CELExpressionInput
+              label="Key (optional)"
+              helpTooltip="CEL expression used to key each iteration in nodes.<loop>._results. Defaults to the iteration index."
+              value={keyValue}
+              onChange={(val) =>
+                onUpdate(
+                  withLoopArgs(step, {
+                    key: val || undefined,
+                  }) as LoopStep,
+                )
+              }
+              placeholder="iter.item.name"
+              celContext="default"
+              disabled={isReadOnly}
+              hideCELHint
+              showCELIndicator={false}
+            />
+
+            <ProtoFieldRenderer
+              schema={ON_FAILURE_SCHEMA}
+              value={onFailureValue}
+              onChange={(value) =>
+                onUpdate(
+                  withLoopArgs(step, {
+                    onFailure: typeof value === "string" ? value : undefined,
+                  }) as LoopStep,
+                )
+              }
+              disabled={isReadOnly}
+              celContext="workflow"
+            />
+          </SectionFields>
+        </Section>
+      ) : (
+        <Section>
+          <SectionLabel>While Condition</SectionLabel>
+          <CELExpressionInput
+            label="Continue while"
+            helpTooltip="CEL expression that ends the loop when true. Access iteration outputs via 'outputs' namespace."
+            value={whileValue}
+            onChange={(val) =>
+              onUpdate(
+                withLoopArgs(step, {
+                  while: val ? directCel(val) as any : undefined,
+                }) as LoopStep,
+              )
             }
+            placeholder="outputs.done == true"
+            celContext="loop_while"
+            disabled={isReadOnly}
+            hideCELHint
+            showCELIndicator={false}
           />
-        )}
-
-      <ProtoFieldRenderer
-        schema={LOOP_MODE_SCHEMA}
-        value={modeValue}
-        onChange={handleModeChange}
-        disabled={isReadOnly}
-        celContext="workflow"
-      />
-
-      {isParallel && (
-        <CELExpressionInput
-          label="Items"
-          helpTooltip="CEL expression that evaluates to a list or map of iteration items for parallel execution."
-          value={itemsValue}
-          onChange={(val) =>
-            onUpdate(
-              withLoopArgs(step, {
-                items: val ? celString(val) as any : undefined,
-              }) as LoopStep,
-            )
-          }
-          placeholder="nodes.decompose.output.components"
-          celContext="workflow"
-          disabled={isReadOnly}
-          hideCELHint
-          showCELIndicator={false}
-        />
+        </Section>
       )}
 
-      {isParallel && (
-        <CELExpressionInput
-          label="Key (optional)"
-          helpTooltip="CEL expression used to key each iteration in nodes.<loop>._results. Defaults to the iteration index."
-          value={keyValue}
-          onChange={(val) =>
-            onUpdate(
-              withLoopArgs(step, {
-                key: val || undefined,
-              }) as LoopStep,
-            )
-          }
-          placeholder="{{iter.item.name}}"
-          celContext="workflow"
-          disabled={isReadOnly}
-          hideCELHint
-          showCELIndicator={false}
+      <Section>
+        <SectionLabel>Loop Body</SectionLabel>
+        <DrillRow
+          label={isReadOnly ? "View sub-workflow" : "Edit sub-workflow"}
+          sublabel={`${inlineWorkflow?.nodes?.length || 0} nodes, ${inlineWorkflow?.edges?.length || 0} edges`}
+          icon={isReadOnly ? <Eye className="w-3 h-3" /> : <Edit3 className="w-3 h-3" />}
+          onClick={() => onEditLoopBody?.(step)}
         />
-      )}
+      </Section>
 
-      {isParallel && (
-        <ProtoFieldRenderer
-          schema={ON_FAILURE_SCHEMA}
-          value={onFailureValue}
-          onChange={(value) =>
-            onUpdate(
-              withLoopArgs(step, {
-                onFailure: typeof value === "string" ? value : undefined,
-              }) as LoopStep,
-            )
+      {inlineWorkflow?.inputs && Object.keys(inlineWorkflow.inputs).length > 0 && (
+        <InlineLoopInputsEditor
+          inputs={inlineWorkflow.inputs}
+          values={stepInputs}
+          onChange={(inputs) =>
+            onUpdate(withLoopArgs(step, { args: inputs as any }) as LoopStep)
           }
-          disabled={isReadOnly}
-          celContext="workflow"
         />
-      )}
-
-      {!isParallel && (
-        <CELExpressionInput
-          label="While (optional)"
-          helpTooltip="CEL expression that ends the loop when true. Access iteration outputs via 'outputs' namespace."
-          value={whileValue}
-          onChange={(val) =>
-            onUpdate(
-              withLoopArgs(step, {
-                while: val ? directCel(val) as any : undefined,
-              }) as LoopStep,
-            )
-          }
-          placeholder="outputs.done == true"
-          celContext="loop_while"
-          disabled={isReadOnly}
-          hideCELHint
-          showCELIndicator={false}
-        />
-      )}
-
-      {isParallel && (
-        <p className="text-xs text-muted-foreground">
-          Parallel loop outputs are available under <code className="bg-muted px-1 rounded">nodes.{step.id || "loop"}._results</code>, with summary fields for completed, failed, and parallel execution state.
-        </p>
       )}
     </>
+  );
+}
+
+function FieldMode({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: "parallel" | "sequential";
+  onChange: (value: "parallel" | "sequential") => void;
+  disabled: boolean;
+}) {
+  return (
+    <div className="cpv2-field-inline">
+      <span className="cpv2-fi-label">Mode</span>
+      <ModeGroup>
+        <ModePill active={value === "sequential"} onClick={() => !disabled && onChange("sequential")}>Sequential</ModePill>
+        <ModePill active={value === "parallel"} onClick={() => !disabled && onChange("parallel")}>Parallel</ModePill>
+      </ModeGroup>
+    </div>
   );
 }

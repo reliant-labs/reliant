@@ -170,7 +170,7 @@ export function OnboardingModal({
                   onClick={onSkipAll}
                   className="px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  Skip Tutorial
+                  Skip tour
                 </button>
               )}
             </div>
