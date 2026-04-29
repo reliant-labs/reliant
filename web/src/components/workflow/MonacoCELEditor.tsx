@@ -48,6 +48,7 @@ export function MonacoCELEditor({
   const completionDisposableRef = useRef<{ dispose(): void } | null>(null);
   const isUpdatingRef = useRef(false);
   const [isFocused, setIsFocused] = useState(false);
+  const horizontalPadding = 10;
 
   // Keep onChange in a ref so the Monaco listener always calls the latest callback
   const onChangeRef = useRef(onChange);
@@ -104,7 +105,7 @@ export function MonacoCELEditor({
       folding: false,
       renderLineHighlight: 'none',
       glyphMargin: false,
-      lineDecorationsWidth: 0,
+      lineDecorationsWidth: horizontalPadding,
       lineNumbersMinChars: 0,
       automaticLayout: true,
       readOnly: disabled,
@@ -115,7 +116,7 @@ export function MonacoCELEditor({
         verticalScrollbarSize: 6,
         horizontalScrollbarSize: 6,
       },
-      padding: { top: multiline ? 6 : 6, bottom: multiline ? 6 : 6 },
+      padding: { top: 6, bottom: 6 },
       contextmenu: false,
       suggest: {
         showIcons: true,
@@ -286,7 +287,8 @@ export function MonacoCELEditor({
       />
       {showPlaceholder && (
         <div
-          className="absolute inset-0 flex items-center px-2.5 text-muted-foreground pointer-events-none select-none text-xs font-mono truncate"
+          className="absolute inset-0 flex items-center text-muted-foreground pointer-events-none select-none text-xs font-mono truncate"
+          style={{ paddingLeft: horizontalPadding, paddingRight: horizontalPadding }}
           aria-hidden
         >
           {placeholder}

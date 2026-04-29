@@ -235,6 +235,7 @@ export function ModePill({
   return (
     <button
       type="button"
+      aria-pressed={active}
       className={`cpv2-mode-pill${active ? " active" : ""} ${className}`}
       onClick={onClick}
     >

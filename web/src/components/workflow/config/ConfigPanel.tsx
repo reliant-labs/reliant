@@ -1,6 +1,7 @@
 import { useCallback, useState, useEffect, useRef, useMemo } from "react";
 import { Check, X, Info, ChevronDown, ChevronRight } from "lucide-react";
 import { CELExpressionInput } from "../CELInput";
+import { getNodeTheme } from "../../../lib/node-metadata";
 import type {
   Step,
   RunStep,
@@ -42,7 +43,7 @@ import { ConfigPanelTabBar, type ConfigTab } from "./ConfigPanelTabBar";
 import { getCatalogClient } from "../../../api/grpc-client";
 import type { NodeInfo } from "../../../gen/reliant/v1/catalog_pb";
 import { withWorkflowArgs, withLoopArgs, withRouterArgs } from "../../../types/workflow";
-import "./config-panel.css";
+import type { ConfigurationPanelAccent } from "../ConfigurationPanel";
 
 interface ConfigPanelProps {
   step: Step;
@@ -82,6 +83,30 @@ function hasThreadSupport(step: Step): boolean {
 /** Whether this step type supports project configuration */
 function hasProjectSupport(step: Step): boolean {
   return isWorkflowStep(step) || isLoopStep(step) || isRouterStep(step);
+}
+
+const NODE_THEME_TO_PANEL_ACCENT: Partial<Record<string, ConfigurationPanelAccent>> = {
+  purple: 'purple',
+  violet: 'violet',
+  indigo: 'indigo',
+  blue: 'blue',
+  sky: 'sky',
+  cyan: 'cyan',
+  teal: 'teal',
+  emerald: 'emerald',
+  amber: 'amber',
+  orange: 'orange',
+  pink: 'pink',
+  rose: 'rose',
+};
+
+function getStepPanelAccent(step: Step): ConfigurationPanelAccent {
+  const nodeType = isActionStep(step)
+    ? step.type || 'action'
+    : isRunStep(step)
+      ? 'run'
+      : step.type || 'workflow';
+  return NODE_THEME_TO_PANEL_ACCENT[getNodeTheme(nodeType)] ?? 'default';
 }
 
 export function ConfigPanel({
@@ -360,6 +385,7 @@ export function ConfigPanel({
     <ConfigurationPanel
       title={isReadOnly ? `${getStepTitle()} (View Only)` : getStepTitle()}
       subtitle={step.id}
+      accent={getStepPanelAccent(step)}
       onSubtitleClick={isReadOnly ? undefined : () => setIsEditingId(true)}
       onClose={onClose}
       onDelete={isReadOnly ? undefined : onDelete}

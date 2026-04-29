@@ -6,6 +6,7 @@ import { Toggle } from '../ui/Toggle'
 import { CELInput } from './CELInput'
 import { ModelDropdown, extractModelId } from './ModelDropdown'
 import { ToolsSelector } from './ToolsSelector'
+import type { ModelValue } from './ModelDropdown'
 import type { ProtoFieldContext, ProtoFieldSchema } from '../../types/workflowFieldSchema'
 import { isProtoFieldVisible, normalizeProtoFieldValue } from '../../types/workflowFieldSchema'
 
@@ -16,7 +17,7 @@ interface ProtoFieldRendererProps {
   context?: ProtoFieldContext
   disabled?: boolean
   className?: string
-  celContext?: 'default' | 'loop_while' | 'edge_condition' | 'save_message' | 'thread'
+  celContext?: 'default' | 'workflow' | 'loop_while' | 'edge_condition' | 'save_message' | 'thread'
   currentNodeType?: string
   /** Hide CEL toggle and CEL badge — for contexts where CEL doesn't apply (e.g. workflow params) */
   hideCELToggle?: boolean
@@ -32,6 +33,62 @@ function canRenderAsSelectLiteral(value: string, options: NonNullable<ProtoField
   return options.some((option) => option.value === value)
 }
 
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function getModelStringValue(value: unknown): string {
+  if (typeof value === 'string') {
+    return value
+  }
+
+  if (isObjectRecord(value)) {
+    const wrapper = value as { value?: { case?: string; value?: unknown }; literal?: unknown; expr?: unknown }
+    if (wrapper.value?.case === 'expr' && typeof wrapper.value.value === 'string') {
+      return wrapper.value.value
+    }
+    if (wrapper.value?.case === 'literal') {
+      return extractModelId(wrapper.value.value as ModelValue)
+    }
+    if (typeof wrapper.expr === 'string') {
+      return wrapper.expr
+    }
+    if (wrapper.literal) {
+      return extractModelId(wrapper.literal as ModelValue)
+    }
+  }
+
+  return extractModelId(value as ModelValue)
+}
+
+function getNumberStringValue(value: unknown): string {
+  if (typeof value === 'number' || typeof value === 'bigint') {
+    return String(value)
+  }
+
+  if (typeof value === 'string') {
+    return value
+  }
+
+  if (isObjectRecord(value)) {
+    const wrapper = value as { value?: { case?: string; value?: unknown }; literal?: unknown; expr?: unknown }
+    if (wrapper.value?.case === 'literal' && (typeof wrapper.value.value === 'number' || typeof wrapper.value.value === 'bigint')) {
+      return String(wrapper.value.value)
+    }
+    if (wrapper.value?.case === 'expr' && typeof wrapper.value.value === 'string') {
+      return wrapper.value.value
+    }
+    if (typeof wrapper.literal === 'number' || typeof wrapper.literal === 'bigint') {
+      return String(wrapper.literal)
+    }
+    if (typeof wrapper.expr === 'string') {
+      return wrapper.expr
+    }
+  }
+
+  return ''
+}
+
 export function ProtoFieldRenderer({
   schema,
   value,
@@ -45,9 +102,12 @@ export function ProtoFieldRenderer({
 }: ProtoFieldRendererProps) {
   const helperText = schema.helpText || schema.description
   const normalizedValue = normalizeProtoFieldValue(schema, value)
+  const resolvedCelContext = celContext === 'workflow' ? 'default' : celContext
   const isInlineCheckbox = schema.widget === 'checkbox' && typeof normalizedValue !== 'string'
   const normalizedStringValue = typeof normalizedValue === 'string' ? normalizedValue : ''
   const normalizedBooleanValue = typeof normalizedValue === 'boolean' ? normalizedValue : Boolean(normalizedValue)
+  const modelStringValue = getModelStringValue(value)
+  const numberStringValue = getNumberStringValue(value)
   const inputId = schema.key.replace(/\./g, '-')
 
   const supportsModeToggle = !hideCELToggle && schema.celCapable && !schema.celExpressionOnly && (
@@ -60,22 +120,16 @@ export function ProtoFieldRenderer({
       return false
     }
 
-    if (DEFAULT_CEL_REGEX.test(normalizedStringValue)) {
+    if (DEFAULT_CEL_REGEX.test(normalizedStringValue) || DEFAULT_CEL_REGEX.test(modelStringValue) || DEFAULT_CEL_REGEX.test(numberStringValue)) {
       return true
     }
 
-    // Text/textarea/number: only force CEL mode when value contains CEL expressions (handled above)
-    if (schema.widget === 'text' || schema.widget === 'textarea' || schema.widget === 'number') {
-      return false
-    }
-
-    // Model widget: never force CEL mode for normal string values
-    if (schema.widget === 'model') {
+    if (schema.widget === 'text' || schema.widget === 'textarea' || schema.widget === 'number' || schema.widget === 'model') {
       return false
     }
 
     return !canRenderAsSelectLiteral(normalizedStringValue, options)
-  }, [normalizedStringValue, options, supportsModeToggle, schema.widget])
+  }, [normalizedStringValue, modelStringValue, numberStringValue, options, supportsModeToggle, schema.widget])
 
   const [useCelMode, setUseCelMode] = useState(shouldForceCelMode)
 
@@ -89,7 +143,7 @@ export function ProtoFieldRenderer({
     return null
   }
 
-  const isCelInput = schema.celExpressionOnly || (supportsModeToggle && useCelMode && (schema.widget === 'text' || schema.widget === 'textarea'))
+  const isCelInput = schema.celExpressionOnly || (supportsModeToggle && useCelMode && (schema.widget === 'text' || schema.widget === 'textarea' || schema.widget === 'number'))
 
   const labelAction = (
     <div className="ml-auto flex items-center gap-1">
@@ -129,6 +183,22 @@ export function ProtoFieldRenderer({
     </div>
   )
 
+  const renderCelInput = (celValue: string, { multiline = false, placeholder = schema.placeholder }: { multiline?: boolean; placeholder?: string } = {}) => (
+    <CELInput
+      value={celValue}
+      onChange={(nextValue) => onChange(nextValue)}
+      placeholder={placeholder}
+      disabled={disabled}
+      multiline={multiline}
+      rows={multiline ? 3 : undefined}
+      hideCELHint
+      showCELIndicator={false}
+      pureExpression={schema.celExpressionOnly}
+      celContext={resolvedCelContext}
+      currentNodeType={currentNodeType}
+    />
+  )
+
   return (
     <div className={cn('space-y-1.5', className)}>
       {!isInlineCheckbox && (
@@ -143,17 +213,7 @@ export function ProtoFieldRenderer({
 
       {schema.widget === 'text' &&
         (isCelInput ? (
-          <CELInput
-            value={normalizedStringValue}
-            onChange={(nextValue) => onChange(nextValue)}
-            placeholder={schema.placeholder}
-            disabled={disabled}
-            hideCELHint
-            showCELIndicator={false}
-            pureExpression={schema.celExpressionOnly}
-            celContext={celContext}
-            currentNodeType={currentNodeType}
-          />
+          renderCelInput(normalizedStringValue)
         ) : (
           <input
             id={inputId}
@@ -167,19 +227,7 @@ export function ProtoFieldRenderer({
 
       {schema.widget === 'textarea' &&
         (isCelInput ? (
-          <CELInput
-            value={normalizedStringValue}
-            onChange={(nextValue) => onChange(nextValue)}
-            placeholder={schema.placeholder}
-            disabled={disabled}
-            multiline
-            rows={3}
-            hideCELHint
-            showCELIndicator={false}
-            pureExpression={schema.celExpressionOnly}
-            celContext={celContext}
-            currentNodeType={currentNodeType}
-          />
+          renderCelInput(normalizedStringValue, { multiline: true })
         ) : (
           <textarea
             id={inputId}
@@ -194,17 +242,7 @@ export function ProtoFieldRenderer({
 
       {schema.widget === 'select' && (supportsModeToggle && useCelMode ? (
         <div className="border-l-2 border-primary/30 pl-2">
-          <CELInput
-            value={normalizedStringValue}
-            onChange={(nextValue) => onChange(nextValue)}
-            placeholder={schema.placeholder || '{{...}}'}
-            disabled={disabled}
-            hideCELHint
-            showCELIndicator={false}
-            pureExpression={schema.celExpressionOnly}
-            celContext={celContext}
-            currentNodeType={currentNodeType}
-          />
+          {renderCelInput(normalizedStringValue, { placeholder: schema.placeholder || '{{...}}' })}
         </div>
       ) : (
         <select
@@ -227,54 +265,39 @@ export function ProtoFieldRenderer({
 
       {schema.widget === 'model' && (supportsModeToggle && useCelMode ? (
         <div className="border-l-2 border-primary/30 pl-2">
-          <CELInput
-            value={typeof value === 'string' ? value : extractModelId(value as Parameters<typeof extractModelId>[0])}
-            onChange={(nextValue) => onChange(nextValue)}
-            placeholder={schema.placeholder || '{{...}}'}
-            disabled={disabled}
-            hideCELHint
-            showCELIndicator={false}
-            pureExpression={schema.celExpressionOnly}
-            celContext={celContext}
-            currentNodeType={currentNodeType}
-          />
+          {renderCelInput(modelStringValue, { placeholder: schema.placeholder || '{{...}}' })}
         </div>
       ) : (
         <ModelDropdown
-          value={value as Parameters<typeof ModelDropdown>[0]['value']}
-          onChange={onChange}
+          value={modelStringValue ? { id: modelStringValue } : value as Parameters<typeof ModelDropdown>[0]['value']}
+          onChange={(nextModel) => onChange(extractModelId(nextModel))}
           disabled={disabled}
           placeholder={schema.placeholder}
         />
       ))}
 
       {schema.widget === 'number' && (supportsModeToggle && useCelMode ? (
-        <CELInput
-          value={typeof value === 'string' ? value : typeof value === 'number' ? String(value) : ''}
-          onChange={(nextValue) => onChange(nextValue)}
-          placeholder={schema.placeholder}
-          disabled={disabled}
-          hideCELHint
-          showCELIndicator={false}
-          pureExpression={schema.celExpressionOnly}
-          celContext={celContext}
-          currentNodeType={currentNodeType}
-        />
+        renderCelInput(numberStringValue)
       ) : (
         <input
           id={inputId}
           type="number"
-          value={typeof value === 'number' ? value : ''}
-          onChange={(e) => {
-            const val = e.target.value
-            if (val === '') {
+          value={numberStringValue}
+          onChange={(event) => {
+            const nextValue = event.target.value
+            if (nextValue === '') {
               onChange(undefined)
-            } else {
-              const num = schema.isInteger ? parseInt(val, 10) : parseFloat(val)
-              if (!isNaN(num)) onChange(num)
+              return
+            }
+
+            const parsedValue = schema.isInteger ? parseInt(nextValue, 10) : parseFloat(nextValue)
+            if (!Number.isNaN(parsedValue)) {
+              onChange(parsedValue)
             }
           }}
           step={schema.isInteger ? 1 : 'any'}
+          min={schema.minValue}
+          max={schema.maxValue}
           disabled={disabled}
           className="cpv2-field-input"
         />
@@ -282,17 +305,7 @@ export function ProtoFieldRenderer({
 
       {schema.widget === 'tools' && (supportsModeToggle && useCelMode ? (
         <div className="border-l-2 border-primary/30 pl-2">
-          <CELInput
-            value={normalizedStringValue}
-            onChange={(nextValue) => onChange(nextValue)}
-            placeholder={schema.placeholder || '{{...}}'}
-            disabled={disabled}
-            hideCELHint
-            showCELIndicator={false}
-            pureExpression={schema.celExpressionOnly}
-            celContext={celContext}
-            currentNodeType={currentNodeType}
-          />
+          {renderCelInput(normalizedStringValue, { placeholder: schema.placeholder || '{{...}}' })}
         </div>
       ) : (
         <ToolsSelector
@@ -306,16 +319,7 @@ export function ProtoFieldRenderer({
       {schema.widget === 'checkbox' && (
         typeof normalizedValue === 'string' ? (
           <div className="border-l-2 border-primary/30 pl-2">
-            <CELInput
-              value={normalizedValue}
-              onChange={(nextValue) => onChange(nextValue)}
-              placeholder={schema.placeholder || '{{...}}'}
-              disabled={disabled}
-              hideCELHint
-              showCELIndicator={false}
-              pureExpression={schema.celExpressionOnly}
-              celContext={celContext}
-            />
+            {renderCelInput(normalizedValue, { placeholder: schema.placeholder || '{{...}}' })}
           </div>
         ) : (
           <div className="space-y-1">

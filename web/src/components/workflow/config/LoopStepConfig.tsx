@@ -100,7 +100,7 @@ export function LoopStepConfig({
     if (nextMode === "parallel") {
       onUpdate(
         withLoopArgs(step, {
-          parallel: true,
+          parallel: { value: { case: "literal" as const, value: true } } as any,
           while: undefined,
         }) as LoopStep,
       );
@@ -154,7 +154,7 @@ export function LoopStepConfig({
                 )
               }
               placeholder="nodes.decompose.output.components"
-              celContext="workflow"
+              celContext="default"
               disabled={isReadOnly}
               hideCELHint
               showCELIndicator={false}
@@ -172,7 +172,7 @@ export function LoopStepConfig({
                 )
               }
               placeholder="iter.item.name"
-              celContext="workflow"
+              celContext="default"
               disabled={isReadOnly}
               hideCELHint
               showCELIndicator={false}

@@ -3,11 +3,27 @@ import { ExternalLink, Trash2, X } from 'lucide-react'
 import { Tooltip } from '../ui/Tooltip'
 import './config/config-panel.css'
 
+export type ConfigurationPanelAccent =
+  | 'default'
+  | 'purple'
+  | 'violet'
+  | 'indigo'
+  | 'blue'
+  | 'sky'
+  | 'cyan'
+  | 'teal'
+  | 'emerald'
+  | 'amber'
+  | 'orange'
+  | 'pink'
+  | 'rose'
+
 interface ConfigurationPanelProps {
   title: string
   icon?: ReactNode
   subtitle?: string
   subtitleMono?: boolean
+  accent?: ConfigurationPanelAccent
   onSubtitleClick?: () => void
   onClose: () => void
   onDelete?: () => void
@@ -24,6 +40,7 @@ export function ConfigurationPanel({
   icon,
   subtitle,
   subtitleMono = true,
+  accent = 'default',
   onSubtitleClick,
   onClose,
   onDelete,
@@ -39,16 +56,17 @@ export function ConfigurationPanel({
     onClose()
   }
 
+  const accentClassName = accent === 'default' ? '' : ` config-panel-v2--${accent}`
+
   return (
     <div
-      className="config-panel-v2 absolute right-3 w-[380px] bg-card border border-border rounded-[10px] flex flex-col z-40 transition-all duration-300 overflow-hidden"
+      className={`config-panel-v2${accentClassName}`}
       style={{
         top: `${topOffset}px`,
         maxHeight: isExpanded
           ? `calc(100vh - ${topOffset}px - 1rem - ${bottomOffset}px)`
           : '550px',
         bottom: isExpanded ? `${Math.max(16, bottomOffset + 16)}px` : 'auto',
-        boxShadow: 'var(--cpv2-shadow)',
       }}
     >
       <div className="cpv2-panel-header">
@@ -107,7 +125,7 @@ export function ConfigurationPanel({
 
       {tabBar}
 
-      <div className="cpv2-panel-content flex-1 overflow-x-hidden">
+      <div className="cpv2-panel-content">
         {children}
       </div>
     </div>
