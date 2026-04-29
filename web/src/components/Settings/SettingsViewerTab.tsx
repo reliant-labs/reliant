@@ -1,10 +1,12 @@
 import { useState, useEffect, Suspense, lazy, useRef, useMemo } from "react";
+import { Settings as SettingsIcon } from "lucide-react";
 import {
   SettingsNavigation,
   getVisibleSettingsSectionIds,
   type SettingsSection,
 } from "./SettingsNavigation";
 import { settingsSync, SETTINGS_KEYS } from "../../services/settingsSync";
+import { cn } from "../../lib/utils";
 
 const SettingsContent = lazy(() =>
   import("./SettingsContent").then((module) => ({
@@ -147,28 +149,47 @@ export function SettingsViewerTab({ initialSection }: SettingsViewerTabProps) {
   };
 
   return (
-    <div ref={containerRef} className="flex h-full bg-background min-w-[500px]">
+    <div ref={containerRef} className="flex h-full min-w-[500px] bg-background">
       {/* Settings Navigation Sidebar */}
-      <div
-        className="border-r border-border flex-shrink-0 overflow-y-auto transition-all duration-200"
-        style={{
-          width: isCollapsed ? '64px' : '256px',
-          minWidth: isCollapsed ? '64px' : '200px',
-        }}
+      <aside
+        className={cn(
+          "flex-shrink-0 overflow-y-auto border-r border-border/60 bg-card transition-all duration-200",
+          isCollapsed ? "w-16 min-w-16" : "w-[220px] min-w-[220px]"
+        )}
       >
+        <div className={cn("px-3 pb-2 pt-3", isCollapsed && "px-2")}>
+          <div
+            className={cn(
+              "flex items-center gap-2 rounded-lg border border-border/40 bg-background/50 p-2",
+              isCollapsed && "justify-center p-1.5"
+            )}
+          >
+            <div className="flex h-7 w-7 items-center justify-center rounded-md border border-border/50 bg-card text-muted-foreground">
+              <SettingsIcon className="h-3.5 w-3.5" />
+            </div>
+            {!isCollapsed && (
+              <div className="min-w-0">
+                <h1 className="truncate text-sm font-semibold text-foreground">Settings</h1>
+                <p className="truncate text-[11px] text-muted-foreground">Configure Reliant</p>
+              </div>
+            )}
+          </div>
+        </div>
         <SettingsNavigation
           activeSection={activeSection}
           onSectionChange={setActiveSection}
           isCollapsed={isCollapsed}
         />
-      </div>
+      </aside>
 
       {/* Settings Content */}
-      <div className="flex-1 overflow-hidden">
+      <main className="min-w-0 flex-1 overflow-hidden bg-background">
         <Suspense
           fallback={
-            <div className="flex items-center justify-center h-full">
-              <div className="text-sm text-muted-foreground">Loading settings...</div>
+            <div className="flex h-full items-center justify-center">
+              <div className="rounded-lg border border-border/50 bg-card px-4 py-3 text-sm text-muted-foreground">
+                Loading settings...
+              </div>
             </div>
           }
         >
@@ -177,7 +198,7 @@ export function SettingsViewerTab({ initialSection }: SettingsViewerTabProps) {
             apiUrl={getApiUrl()}
           />
         </Suspense>
-      </div>
+      </main>
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { ProxyAuth } from './components/ProxyAuth'
 import { ResetPasswordScreen } from './components/ResetPasswordScreen'
 import { EmailVerification } from './components/EmailVerification'
 import { AuthGuard } from './components/AuthGuard'
+import { DesignSandboxPage } from './components/DesignSandbox/DesignSandboxPage'
 import App from './App'
 
 const rootRoute = createRootRoute({
@@ -77,7 +78,21 @@ const indexRoute = createRoute({
   ),
 })
 
-const routeTree = rootRoute.addChildren([authRoute, oauthCallbackRoute, proxyAuthRoute, resetPasswordRoute, verifyEmailRoute, indexRoute])
+const designSandboxRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/design-sandbox',
+  component: DesignSandboxPage,
+})
+
+const routeTree = rootRoute.addChildren([
+  authRoute,
+  oauthCallbackRoute,
+  proxyAuthRoute,
+  resetPasswordRoute,
+  verifyEmailRoute,
+  designSandboxRoute,
+  indexRoute,
+])
 
 export const router = createRouter({ routeTree })
 

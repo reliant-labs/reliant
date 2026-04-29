@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat List — Reliant Design Sandbox</title>
+  <link rel="stylesheet" href="shared.css">
+  <style>
+    body { display: flex; justify-content: center; padding: 40px; gap: 32px; flex-wrap: wrap; }
+
+    .sidebar {
+      width: 280px;
+      height: 700px;
+      background: var(--bg-raised);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    /* Header */
+    .sidebar-header {
+      padding: 12px 12px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .sidebar-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .sidebar-title {
+      font-size: var(--text-sm);
+      font-weight: var(--fw-semi);
+      color: var(--text-primary);
+    }
+    .header-actions { display: flex; gap: 2px; }
+
+    /* Search */
+    .sidebar-search {
+      position: relative;
+    }
+    .sidebar-search svg {
+      position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+      width: 13px; height: 13px; color: var(--text-tertiary); pointer-events: none;
+    }
+    .sidebar-search .input {
+      padding: 6px 10px 6px 30px;
+      font-size: var(--text-xs);
+      background: var(--bg-inset);
+      border-radius: var(--radius-md);
+    }
+
+    /* Sort/filter bar */
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 12px;
+      border-bottom: 1px solid var(--border-muted);
+    }
+    .filter-chip {
+      font-size: var(--text-2xs);
+      font-weight: var(--fw-medium);
+      padding: 3px 8px;
+      border-radius: var(--radius-full);
+      background: transparent;
+      color: var(--text-tertiary);
+      border: none;
+      cursor: pointer;
+      transition: all var(--transition-base);
+    }
+    .filter-chip:hover { color: var(--text-secondary); background: var(--bg-overlay); }
+    .filter-chip.active { color: var(--text-primary); background: var(--accent-muted); }
+    .filter-spacer { flex: 1; }
+    .sort-btn {
+      display: flex; align-items: center; gap: 3px;
+      font-size: var(--text-2xs); color: var(--text-tertiary);
+      background: none; border: none; cursor: pointer;
+      padding: 3px 6px; border-radius: var(--radius-sm);
+      transition: all var(--transition-base);
+    }
+    .sort-btn:hover { color: var(--text-secondary); background: var(--bg-overlay); }
+    .sort-btn svg { width: 11px; height: 11px; }
+
+    /* Chat list */
+    .chat-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px 6px;
+    }
+
+    /* Worktree group */
+    .wt-group { margin-bottom: 2px; }
+    .wt-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 8px 4px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .wt-header svg { width: 11px; height: 11px; color: var(--text-tertiary); }
+    .wt-icon { width: 12px; height: 12px; color: var(--text-tertiary); }
+    .wt-name {
+      font-size: var(--text-2xs);
+      font-weight: var(--fw-medium);
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      flex: 1;
+    }
+    .wt-count {
+      font-size: var(--text-2xs);
+      color: var(--text-tertiary);
+      background: var(--bg-overlay);
+      padding: 1px 5px;
+      border-radius: var(--radius-full);
+    }
+
+    /* Chat item */
+    .chat-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: all var(--dur-fast) var(--ease-out);
+      position: relative;
+    }
+    .chat-item:hover { background: var(--bg-hover); }
+    .chat-item.active {
+      background: var(--accent-subtle);
+      border-left: 3px solid var(--accent);
+      padding-left: 7px;
+    }
+    .chat-item.has-activity { background: rgba(63,185,80,0.04); }
+    .chat-item.has-activity:hover { background: rgba(63,185,80,0.08); }
+
+    .chat-title {
+      flex: 1; min-width: 0;
+      font-size: var(--text-xs);
+      color: var(--text-primary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .chat-item.active .chat-title { font-weight: var(--fw-semi); }
+    .chat-branch {
+      display: flex; align-items: center; gap: 3px;
+      font-size: 10px; color: var(--text-tertiary); margin-top: 1px;
+    }
+    .chat-branch svg { width: 10px; height: 10px; }
+
+    .chat-time {
+      font-size: var(--text-2xs);
+      color: var(--text-tertiary);
+      flex-shrink: 0;
+      min-width: 24px;
+      text-align: right;
+    }
+
+    /* Notification badge */
+    .chat-notif {
+      position: absolute;
+      top: 4px; right: 4px;
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--red);
+      box-shadow: 0 0 4px rgba(248,81,73,0.4);
+    }
+
+    /* Archive section */
+    .archive-toggle {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 12px;
+      border-top: 1px solid var(--border-muted);
+      font-size: var(--text-2xs); color: var(--text-tertiary);
+      cursor: pointer; user-select: none;
+    }
+    .archive-toggle:hover { color: var(--text-secondary); }
+    .archive-toggle svg { width: 12px; height: 12px; }
+
+    /* More actions menu (hover reveal) */
+    .chat-actions {
+      opacity: 0;
+      transition: opacity var(--dur-fast);
+      display: flex; gap: 1px;
+    }
+    .chat-item:hover .chat-actions { opacity: 1; }
+    .chat-item:hover .chat-time { display: none; }
+    .chat-action-btn {
+      width: 22px; height: 22px;
+      display: flex; align-items: center; justify-content: center;
+      border: none; background: none; cursor: pointer;
+      border-radius: var(--radius-sm); color: var(--text-tertiary);
+      transition: all var(--dur-fast);
+    }
+    .chat-action-btn:hover { background: var(--bg-overlay); color: var(--text-primary); }
+    .chat-action-btn svg { width: 12px; height: 12px; }
+
+    /* Demo label */
+    .demo-label {
+      text-align: center;
+      font-size: var(--text-xs);
+      color: var(--text-tertiary);
+      margin-bottom: 8px;
+      font-weight: var(--fw-medium);
+    }
+  </style>
+</head>
+<body>
+  <!-- SIDEBAR 1: Grouped by worktree -->
+  <div>
+    <div class="demo-label">Grouped by Worktree</div>
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-title-row">
+          <span class="sidebar-title">Chats</span>
+          <div class="header-actions">
+            <button class="btn btn-ghost btn-icon btn-sm" title="New chat">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="sidebar-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <input type="text" class="input" placeholder="Search chats...">
+        </div>
+      </div>
+
+      <div class="filter-bar">
+        <button class="filter-chip active">All</button>
+        <button class="filter-chip">Attention</button>
+        <button class="filter-chip">Active</button>
+        <div class="filter-spacer"></div>
+        <button class="sort-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          Recent
+        </button>
+      </div>
+
+      <div class="chat-list">
+        <!-- Main workspace -->
+        <div class="wt-group">
+          <div class="wt-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            <svg class="wt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 01-9 9"/></svg>
+            <span class="wt-name">main</span>
+            <span class="wt-count">5</span>
+          </div>
+          <div>
+            <div class="chat-item active">
+              <div class="dot dot-think"></div>
+              <div style="flex:1;min-width:0;">
+                <div class="chat-title">Redesign settings page layout</div>
+              </div>
+              <span class="chat-time">now</span>
+              <div class="chat-actions">
+                <button class="chat-action-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8V5a2 2 0 00-2-2H5a2 2 0 00-2 2v3"/><path d="M21 16v3a2 2 0 01-2 2H5a2 2 0 01-2-2v-3"/><line x1="12" y1="2" x2="12" y2="22"/></svg></button>
+                <button class="chat-action-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button>
+              </div>
+            </div>
+            <div class="chat-item has-activity">
+              <div class="dot dot-active"></div>
+              <div style="flex:1;min-width:0;">
+                <div class="chat-title">Fix NATS connection pooling issue</div>
+              </div>
+              <span class="chat-time">3m</span>
+              <div class="chat-actions">
+                <button class="chat-action-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button>
+              </div>
+            </div>
+            <div class="chat-item">
+              <div class="dot dot-waiting"></div>
+              <div style="flex:1;min-width:0;">
+                <div class="chat-title">Add OAuth callback handler</div>
+              </div>
+              <span class="chat-time">15m</span>
+              <div class="chat-notif"></div>
+              <div class="chat-actions">
+                <button class="chat-action-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button>
+              </div>
+            </div>
+            <div class="chat-item">
+              <div style="flex:1;min-width:0;">
+                <div class="chat-title">Database migration helpers</div>
+              </div>
+              <span class="chat-time">2h</span>
+              <div class="chat-actions">
+                <button class="chat-action-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button>
+              </div>
+            </div>
+            <div class="chat-item">
+              <div style="flex:1;min-width:0;">
+                <div class="chat-title">Update Temporal workflow retries</div>
+              </div>
+              <span class="chat-time">1d</span>
+              <div class="chat-actions">
+                <button class="chat-action-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Feature worktree -->
+        <div class="wt-group">
+          <div class="wt-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            <svg class="wt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 01-9 9"/></svg>
+            <span class="wt-name">feat/ux-redesign</span>
+            <span class="wt-count">3</span>
+          </div>
+          <div>
+            <div class="chat-item has-activity">
+              <div class="dot dot-active"></div>
+              <div style="flex:1;min-width:0;">
+                <div class="chat-title">Design sandbox v2 mockups</div>
+              </div>
+              <span class="chat-time">2m</span>
+              <div class="chat-actions">
+                <button class="chat-action-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button>
+              </div>
+            </div>
+            <div class="chat-item">
+              <div style="flex:1;min-width:0;">
+                <div class="chat-title">Refactor sidebar components</div>
+              </div>
+              <span class="chat-time">45m</span>
+              <div class="chat-actions">
+                <button class="chat-action-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button>
+              </div>
+            </div>
+            <div class="chat-item">
+              <div style="flex:1;min-width:0;">
+                <div class="chat-title">Theme system improvements</div>
+              </div>
+              <span class="chat-time">3h</span>
+              <div class="chat-actions">
+                <button class="chat-action-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bugfix worktree -->
+        <div class="wt-group">
+          <div class="wt-header">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 6 15 12 9 18"/></svg>
+            <svg class="wt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 01-9 9"/></svg>
+            <span class="wt-name">fix/memory-leak</span>
+            <span class="wt-count">1</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="archive-toggle">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 6 15 12 9 18"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8V5a2 2 0 00-2-2H5a2 2 0 00-2 2v3"/><path d="M21 16v3a2 2 0 01-2 2H5a2 2 0 01-2-2v-3"/><line x1="4" y1="12" x2="20" y2="12"/></svg>
+        Archived (7)
+      </div>
+    </div>
+  </div>
+
+  <!-- SIDEBAR 2: Flat list (no grouping) -->
+  <div>
+    <div class="demo-label">Flat List (Alternative)</div>
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-title-row">
+          <span class="sidebar-title">Chats</span>
+          <div class="header-actions">
+            <button class="btn btn-ghost btn-icon btn-sm">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            </button>
+            <button class="btn btn-ghost btn-icon btn-sm">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="sidebar-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <input type="text" class="input" placeholder="Search chats...">
+        </div>
+      </div>
+
+      <div class="filter-bar">
+        <button class="filter-chip active">All</button>
+        <button class="filter-chip">Active</button>
+        <button class="filter-chip">Idle</button>
+        <div class="filter-spacer"></div>
+        <button class="sort-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          Activity
+        </button>
+      </div>
+
+      <div class="chat-list">
+        <div class="chat-item active">
+          <div class="dot dot-think"></div>
+          <div style="flex:1;min-width:0;">
+            <div class="chat-title">Redesign settings page layout</div>
+            <div class="chat-branch">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 01-9 9"/></svg>
+              main
+            </div>
+          </div>
+          <span class="chat-time">now</span>
+        </div>
+        <div class="chat-item has-activity">
+          <div class="dot dot-active"></div>
+          <div style="flex:1;min-width:0;">
+            <div class="chat-title">Design sandbox v2 mockups</div>
+            <div class="chat-branch">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 01-9 9"/></svg>
+              feat/ux-redesign
+            </div>
+          </div>
+          <span class="chat-time">2m</span>
+        </div>
+        <div class="chat-item has-activity">
+          <div class="dot dot-active"></div>
+          <div style="flex:1;min-width:0;">
+            <div class="chat-title">Fix NATS connection pooling</div>
+            <div class="chat-branch">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 01-9 9"/></svg>
+              main
+            </div>
+          </div>
+          <span class="chat-time">3m</span>
+        </div>
+        <div class="chat-item">
+          <div class="dot dot-waiting"></div>
+          <div style="flex:1;min-width:0;">
+            <div class="chat-title">Add OAuth callback handler</div>
+            <div class="chat-branch">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 01-9 9"/></svg>
+              main
+            </div>
+          </div>
+          <div class="chat-notif"></div>
+          <span class="chat-time">15m</span>
+        </div>
+        <div class="chat-item">
+          <div style="flex:1;min-width:0;">
+            <div class="chat-title">Refactor sidebar components</div>
+            <div class="chat-branch">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 01-9 9"/></svg>
+              feat/ux-redesign
+            </div>
+          </div>
+          <span class="chat-time">45m</span>
+        </div>
+        <div class="chat-item">
+          <div style="flex:1;min-width:0;">
+            <div class="chat-title">Database migration helpers</div>
+            <div class="chat-branch">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 01-9 9"/></svg>
+              main
+            </div>
+          </div>
+          <span class="chat-time">2h</span>
+        </div>
+        <div class="chat-item">
+          <div style="flex:1;min-width:0;">
+            <div class="chat-title">Theme system improvements</div>
+            <div class="chat-branch">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 01-9 9"/></svg>
+              feat/ux-redesign
+            </div>
+          </div>
+          <span class="chat-time">3h</span>
+        </div>
+        <div class="chat-item">
+          <div style="flex:1;min-width:0;">
+            <div class="chat-title">Update Temporal workflow retries</div>
+            <div class="chat-branch">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 01-9 9"/></svg>
+              main
+            </div>
+          </div>
+          <span class="chat-time">1d</span>
+        </div>
+      </div>
+
+      <div class="archive-toggle">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 6 15 12 9 18"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8V5a2 2 0 00-2-2H5a2 2 0 00-2 2v3"/><path d="M21 16v3a2 2 0 01-2 2H5a2 2 0 01-2-2v-3"/><line x1="4" y1="12" x2="20" y2="12"/></svg>
+        Archived (7)
+      </div>
+    </div>
+  </div>
+</body>
+</html>

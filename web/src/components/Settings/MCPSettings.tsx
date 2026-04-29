@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import * as Sentry from "@sentry/react";
-import { AlertCircle, RefreshCw, Plus } from "lucide-react";
+import { AlertCircle, RefreshCw, Plus, Server, Compass } from "lucide-react";
 import {
   mcpGrpc,
   type MCPServer,
@@ -469,19 +469,25 @@ export function MCPSettings() {
   }
 
   const topTabs = [
-    { id: "installed", label: "Installed", count: installedServers.length },
+    {
+      id: "installed",
+      label: "Installed",
+      count: installedServers.length,
+      icon: <Server className="h-3.5 w-3.5" />,
+    },
     {
       id: "discover",
       label: "Discover",
       count: recommendedServers.filter((server) => !server.installed).length,
+      icon: <Compass className="h-3.5 w-3.5" />,
     },
   ];
 
   return (
-    <div className="space-y-6" data-onboarding="mcp-server">
+    <div className="space-y-5" data-onboarding="mcp-server">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-base font-semibold mb-1">MCP Servers</h2>
+          <h2 className="mb-1 text-lg font-semibold text-foreground">MCP Servers</h2>
           <p className="text-sm text-muted-foreground">
             Install and manage tool servers for this project
           </p>
@@ -489,7 +495,7 @@ export function MCPSettings() {
         <Button
           size="sm"
           onClick={() => setShowCustomServerModal(true)}
-          leftIcon={<Plus className="w-4 h-4" />}
+          leftIcon={<Plus className="h-4 w-4" />}
         >
           Add Custom Server
         </Button>
@@ -531,7 +537,7 @@ export function MCPSettings() {
 
       </div>
 
-      <div className="rounded-lg border border-border bg-muted/40 p-3">
+      <div className="rounded-lg border border-border/40 bg-muted/40 p-3 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
         <div className="flex items-start gap-2">
           <AlertCircle className="h-4 w-4 mt-0.5 text-muted-foreground" />
           <div className="text-sm text-muted-foreground">

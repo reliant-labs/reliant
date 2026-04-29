@@ -29,13 +29,13 @@ export function SidebarHeader({
   return (
     <div
       className={cn(
-        "flex items-center gap-2 px-3 py-2 border-b border-border bg-background/50",
+        "m-2 flex items-center gap-2 rounded-[10px] border border-border bg-card/95 px-3 py-2 shadow-sm",
         className
       )}
     >
       {/* Title (e.g. project name) on the left */}
       {title ? (
-        <div className="flex-1 min-w-0 truncate text-sm font-medium text-foreground/80 uppercase mr-3">
+        <div className="mr-3 min-w-0 flex-1 truncate text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground/80">
           {title}
         </div>
       ) : searchInput ? (
@@ -87,7 +87,7 @@ export function SidebarHeaderButton({
         onClick={onClick}
         disabled={disabled}
         className={cn(
-          "header-icon-btn p-1.5 rounded text-muted-foreground hover:text-foreground transition-colors",
+          "header-icon-btn rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
           "disabled:opacity-50 disabled:cursor-not-allowed",
           className
         )}

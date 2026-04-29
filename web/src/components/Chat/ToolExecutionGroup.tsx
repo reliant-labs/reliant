@@ -28,6 +28,7 @@ interface ToolExecutionGroupProps {
   chatId?: string;
   showRichContent?: boolean;
   onSelectThread?: (threadId: string | null) => void;
+  density?: "compact" | "card" | "minimal";
 }
 
 function ToolExecutionGroupComponent({
@@ -38,6 +39,7 @@ function ToolExecutionGroupComponent({
   chatId,
   showRichContent = false,
   onSelectThread,
+  density = "compact",
 }: ToolExecutionGroupProps) {
   // Check if chat is no longer running - affects tool display state
   const chatActivity = useActivityStore((s) => s.activities.get(chatId || ""));
@@ -115,9 +117,11 @@ function ToolExecutionGroupComponent({
   return (
     <div
       className={cn(
-        "border rounded-lg overflow-hidden",
+        "border overflow-hidden",
+        density === "card" ? "rounded-xl shadow-sm" : "rounded-lg",
+        density === "minimal" && "rounded-md shadow-none",
         hasAnyErrors
-          ? "border-destructive/40 bg-destructive/5"
+          ? "border-warning/40 bg-warning/5"
           : hasAnyCancelled
           ? "border-muted/60 bg-muted/10"
           : isAllCompleted
@@ -127,50 +131,51 @@ function ToolExecutionGroupComponent({
     >
       <div
         className={cn(
-          "flex items-center justify-between px-1.5 py-1 cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+          "flex items-center justify-between cursor-pointer hover:bg-muted/30 transition-colors",
+          density === "card" ? "px-3 py-2" : "px-1.5 py-1"
         )}
         onClick={() => setExpanded((v) => !v)}
       >
         <div className="flex items-center gap-1">
-          <ListTree className="w-3 h-3 text-muted-foreground" />
-          <span className="text-[11px] font-mono font-medium">
+          <ListTree className="w-3.5 h-3.5 text-muted-foreground" />
+          <span className="text-xs font-mono font-medium">
             {summary.total} tool call{summary.total === 1 ? "" : "s"}
           </span>
         </div>
 
         <div className="flex items-center gap-1">
           {summary.running > 0 && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-mono text-primary">
-              <Loader2 className="w-3 h-3 animate-spin" /> {summary.running}
+            <span className="inline-flex items-center gap-1 text-xs font-mono text-primary">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" /> {summary.running}
             </span>
           )}
           {summary.completed > 0 && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-mono text-success">
-              <CheckCircle2 className="w-3 h-3" /> {summary.completed}
+            <span className="inline-flex items-center gap-1 text-xs font-mono text-success">
+              <CheckCircle2 className="w-3.5 h-3.5" /> {summary.completed}
             </span>
           )}
           {summary.cancelled > 0 && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-mono text-muted-foreground">
-              <XCircle className="w-3 h-3" /> {summary.cancelled}
+            <span className="inline-flex items-center gap-1 text-xs font-mono text-muted-foreground">
+              <XCircle className="w-3.5 h-3.5" /> {summary.cancelled}
             </span>
           )}
           {summary.errors > 0 && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-mono text-destructive">
-              <AlertCircle className="w-3 h-3" /> {summary.errors}
+            <span className="inline-flex items-center gap-1 text-xs font-mono text-warning">
+              <AlertCircle className="w-3.5 h-3.5" /> {summary.errors}
             </span>
           )}
 
           {expanded ? (
-            <ChevronDown className="w-3 h-3 text-muted-foreground" />
+            <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
           ) : (
-            <ChevronRight className="w-3 h-3 text-muted-foreground" />
+            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
           )}
         </div>
       </div>
 
       {/* Show all tool calls when expanded */}
       {expanded && (
-        <div className="border-t border-muted/50 p-1 space-y-1">
+        <div className={cn("border-t border-muted/50 p-1", density === "card" ? "space-y-2" : "space-y-1")}>
           {executions.map((execution, index) => {
             const approval = execution.approval || getApprovalStatus(execution.call.id);
 
@@ -186,6 +191,7 @@ function ToolExecutionGroupComponent({
                 chatId={chatId}
                 showRichContent={showRichContent}
                 onSelectThread={onSelectThread}
+                density={density}
               />
             );
           })}

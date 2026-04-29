@@ -43,8 +43,10 @@ function TasksPanelComponent({ chatId: propChatId }: TasksPanelProps) {
   // Calculate stats from tasks
   const total = tasks.length;
   const completed = tasks.filter((t) => t.status === "completed").length;
+  const inProgress = tasks.filter((t) => t.status === "in_progress").length;
+  const pending = tasks.filter((t) => t.status === "pending").length;
   const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
-  const stats = { total, completed, percent };
+  const stats = { total, completed, inProgress, pending, percent };
 
   const sortedTasks = useMemo(() => {
     // Stable sort: incomplete first, then by createdAt (creation order)
@@ -105,12 +107,36 @@ function TasksPanelComponent({ chatId: propChatId }: TasksPanelProps) {
   return (
     <div className="flex flex-col h-full">
       {/* Progress */}
-      <div className="px-4 py-3 border-b border-border/60">
-        <div className="h-2 w-full bg-muted rounded">
-          <div className="h-2 bg-success rounded transition-all" style={{ width: `${stats.percent}%` }} />
+      <div className="m-2 rounded-[10px] border border-border bg-card/95 p-3 shadow-sm">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground/80">
+              Task Progress
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {stats.total > 0 ? `${stats.completed}/${stats.total} complete` : "No tasks yet"}
+            </div>
+          </div>
+          <div className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
+            {stats.percent}%
+          </div>
         </div>
-        <div className="mt-2 text-xs text-muted-foreground">
-          {stats.total > 0 ? `${stats.percent}% complete (${stats.completed}/${stats.total})` : "No tasks yet"}
+        <div className="h-2 w-full rounded-full bg-muted">
+          <div className="h-2 rounded-full bg-success transition-all" style={{ width: `${stats.percent}%` }} />
+        </div>
+        <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[11px]">
+          <div className="rounded-md bg-muted/40 px-2 py-1.5">
+            <div className="font-semibold text-foreground">{stats.inProgress}</div>
+            <div className="text-muted-foreground">Active</div>
+          </div>
+          <div className="rounded-md bg-muted/40 px-2 py-1.5">
+            <div className="font-semibold text-foreground">{stats.pending}</div>
+            <div className="text-muted-foreground">Pending</div>
+          </div>
+          <div className="rounded-md bg-muted/40 px-2 py-1.5">
+            <div className="font-semibold text-foreground">{stats.completed}</div>
+            <div className="text-muted-foreground">Done</div>
+          </div>
         </div>
       </div>
 
@@ -138,7 +164,7 @@ function TasksPanelComponent({ chatId: propChatId }: TasksPanelProps) {
                   <div
                     key={task.id}
                     className={cn(
-                      "p-2 border border-border/60 rounded bg-background/40",
+                      "rounded-md border border-border bg-background/50 p-2 shadow-sm",
                       task.status === "completed" && "opacity-80"
                     )}
                   >

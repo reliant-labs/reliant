@@ -13,6 +13,7 @@ import { InlinePresetPicker } from "./InlinePresetPicker";
 import { toJson } from "@bufbuild/protobuf";
 import { ValueSchema } from "@bufbuild/protobuf/wkt";
 import type { PresetsConfig } from "../../types/workflow";
+import { Section, SectionFields, SectionLabel } from "./config/primitives";
 
 // ============================================
 // Shared Types
@@ -253,10 +254,10 @@ export function WorkflowInputGroup({
   // Top-level group: no collapsible header, render inputs directly
   if (isTopLevel) {
     return (
-      <div className="space-y-3">
-        {/* Preset picker for top-level */}
+      <Section>
+        <SectionLabel>Inputs</SectionLabel>
         {presets.length > 0 && (
-          <div className="flex items-center justify-end">
+          <div className="mb-3 flex items-center justify-end">
             <InlinePresetPicker
               presets={presets}
               value={selectedPreset}
@@ -268,10 +269,9 @@ export function WorkflowInputGroup({
           </div>
         )}
 
-        {/* Inputs - no indentation */}
         {hasInputs && (
           <>
-            <div className="space-y-3">
+            <SectionFields>
               {group.inputs.map(({ name, schema }) => (
                 <ProtoFieldRenderer
                   key={name}
@@ -282,7 +282,7 @@ export function WorkflowInputGroup({
                   hideCELToggle
                 />
               ))}
-            </div>
+            </SectionFields>
 
             {/* Save preset UI */}
             {groupIsDirty && group.presets?.tag && projectId && (
@@ -383,58 +383,62 @@ export function WorkflowInputGroup({
             )}
           </>
         )}
-      </div>
+      </Section>
     );
   }
 
   // Named group: collapsible header with chevron
   return (
-    <div className="space-y-3">
-      {/* Group header */}
-      <div className="flex items-center justify-between gap-2">
+    <Section>
+      <SectionLabel>Input Group</SectionLabel>
+      <div className="cpv2-param-group">
         <button
+          type="button"
           onClick={() => setIsExpanded(!isExpanded)}
-          className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-foreground/80"
+          className={`cpv2-param-group-header w-full${isExpanded ? "" : " collapsed"}`}
         >
-          {isExpanded ? (
-            <ChevronDown className="w-4 h-4" />
-          ) : (
-            <ChevronRight className="w-4 h-4" />
-          )}
-          {group.label}
-          <span className="text-xs text-muted-foreground font-normal">
-            ({group.inputs.length})
-          </span>
-          {groupIsDirty && (
-            <span className="w-2 h-2 rounded-full bg-amber-500" title="Modified" />
-          )}
+          <div className="cpv2-pgh-left">
+            {isExpanded ? (
+              <ChevronDown className="cpv2-pgh-chevron" />
+            ) : (
+              <ChevronRight className="cpv2-pgh-chevron" />
+            )}
+            <span className="cpv2-pgh-label">{group.label}</span>
+          </div>
+          <div className="cpv2-pgh-right">
+            {selectedPreset && <span className="cpv2-pgh-preset">{selectedPreset}</span>}
+            <span className="text-[10px] text-muted-foreground">{group.inputs.length} params</span>
+            {groupIsDirty && (
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Modified" />
+            )}
+          </div>
         </button>
 
-        {presets.length > 0 && (
-          <InlinePresetPicker
-            presets={presets}
-            value={selectedPreset}
-            onChange={onPresetSelect}
-            groupLabel={group.name || undefined}
-            isLoading={presetsLoading}
-            disabled={disabled}
-          />
-        )}
-      </div>
-
-      {/* Group inputs */}
-      {isExpanded && hasInputs && (
-        <div className="space-y-3 pl-4">
-          {group.inputs.map(({ name, schema }) => (
-            <ProtoFieldRenderer
-              key={name}
-              schema={inputDefToSchema(name, schema)}
-              value={getInputValue(name, schema, values)}
-              onChange={(value) => onChange(name, value)}
+        {presets.length > 0 && isExpanded && (
+          <div className="px-2.5 pt-2 flex justify-end">
+            <InlinePresetPicker
+              presets={presets}
+              value={selectedPreset}
+              onChange={onPresetSelect}
+              groupLabel={group.name || undefined}
+              isLoading={presetsLoading}
               disabled={disabled}
-              hideCELToggle
             />
-          ))}
+          </div>
+        )}
+
+        {isExpanded && hasInputs && (
+          <div className="cpv2-param-group-body">
+            {group.inputs.map(({ name, schema }) => (
+              <ProtoFieldRenderer
+                key={name}
+                schema={inputDefToSchema(name, schema)}
+                value={getInputValue(name, schema, values)}
+                onChange={(value) => onChange(name, value)}
+                disabled={disabled}
+                hideCELToggle
+              />
+            ))}
 
           {/* Save preset UI */}
           {groupIsDirty && group.presets?.tag && projectId && (
@@ -533,9 +537,10 @@ export function WorkflowInputGroup({
               )}
             </div>
           )}
-        </div>
-      )}
-    </div>
+          </div>
+        )}
+      </div>
+    </Section>
   );
 }
 

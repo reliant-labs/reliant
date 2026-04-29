@@ -1,9 +1,9 @@
 import { Activity } from 'lucide-react';
-import logoSvg from '../../assets/logo.svg';
 import { GradientBackground } from '../GradientBackground';
 import { Tooltip } from '../ui/Tooltip';
 import { isDev } from '../../lib/constants';
 import { openExternalLink } from '../../lib/open-link';
+import { BrandMark } from '../icons/BrandMark';
 
 export function LoadingSpinner() {
   const isMac = window.electronAPI?.platform === 'darwin';
@@ -59,12 +59,14 @@ export function LoadingSpinner() {
             className="absolute inset-0 w-full h-full" 
             viewBox="0 0 100 100" 
             style={{ animation: "spin 1.5s linear infinite" }}
+            aria-hidden="true"
+            focusable="false"
           >
             <defs>
               <linearGradient id="gradient-ring" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#60a5fa" />
-                <stop offset="50%" stopColor="#a78bfa" />
-                <stop offset="100%" stopColor="#60a5fa" stopOpacity="0" />
+                <stop offset="0%" stopColor="hsl(var(--primary))" />
+                <stop offset="50%" stopColor="hsl(var(--secondary))" />
+                <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity="0" />
               </linearGradient>
             </defs>
             <circle
@@ -77,7 +79,7 @@ export function LoadingSpinner() {
               strokeLinecap="round"
             />
           </svg>
-          <img src={logoSvg} alt="" className="w-16 h-16" draggable={false} />
+          <BrandMark className="w-16 h-16" />
         </div>
       </div>
     </div>

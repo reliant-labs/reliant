@@ -142,15 +142,15 @@ function WorkflowHubStep(props: StepProps) {
           <p>{step.description}</p>
           <div className="text-xs text-muted-foreground/80 space-y-1">
             <p className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
+              <span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
               <strong>Agent</strong> — General-purpose coding assistant
             </p>
             <p className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
+              <span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
               <strong>Checklist</strong> — Full dev pipeline with planning, TDD, review
             </p>
             <p className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
+              <span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />
               <strong>Auditing Agent</strong> — Agent with per-turn audit oversight
             </p>
           </div>
@@ -429,7 +429,7 @@ export function OnboardingWizard() {
 
     const isFirstStep = stepIndex === 0;
     const isLastStep = stepIndex === ONBOARDING_STEPS.length - 1;
-    const nextLabel = isFirstStep ? "Get Started" : isLastStep ? "Finish" : "Next";
+    const nextLabel = isFirstStep ? "Get started" : isLastStep ? "Finish" : "Next";
 
     return (
       <>

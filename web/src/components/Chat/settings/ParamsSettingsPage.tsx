@@ -1,11 +1,9 @@
 // Copyright (c) 2025 Reliant Labs
 
-import { useMemo } from "react";
-import { ChevronLeft, X, ChevronDown, ChevronRight } from "lucide-react";
-import { cn } from "../../../lib/utils";
+import { useMemo, useState } from "react";
+import { ChevronLeft, X, ChevronDown, ChevronRight, SlidersHorizontal } from "lucide-react";
 import { WorkflowParamInput } from "../../workflow/WorkflowParamInput";
-import { type InputDef, getInputUI, getInputDefault, getInputDescription } from "../../../lib/inputHelpers";
-import { useState } from "react";
+import { type InputDef, getInputUI, getInputDefault } from "../../../lib/inputHelpers";
 
 const DEFAULT_EXCLUDE = ["model", "mode"];
 
@@ -89,16 +87,21 @@ export function ParamsSettingsPage({
   if (groups.length === 0) {
     return (
       <div>
-        <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border">
-          <button onClick={onBack} className="p-1 rounded hover:bg-accent transition-colors">
-            <ChevronLeft className="w-4 h-4 text-muted-foreground" />
+        <div className="flex items-center gap-2 border-b border-border/50 px-3 py-2.5">
+          <button onClick={onBack} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+            <ChevronLeft className="h-4 w-4" />
           </button>
-          <h3 className="text-sm font-semibold flex-1">Settings</h3>
-          <button onClick={onClose} className="p-1 rounded hover:bg-accent transition-colors">
-            <X className="w-3.5 h-3.5 text-muted-foreground" />
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+            </div>
+            <h3 className="text-sm font-semibold">Settings</h3>
+          </div>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+            <X className="h-3.5 w-3.5" />
           </button>
         </div>
-        <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+        <div className="px-4 py-8 text-center text-sm text-muted-foreground">
           No additional settings available
         </div>
       </div>
@@ -108,46 +111,67 @@ export function ParamsSettingsPage({
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border">
-        <button onClick={onBack} className="p-1 rounded hover:bg-accent transition-colors">
-          <ChevronLeft className="w-4 h-4 text-muted-foreground" />
+      <div className="flex items-center gap-2 border-b border-border/50 px-3 py-2.5">
+        <button onClick={onBack} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+          <ChevronLeft className="h-4 w-4" />
         </button>
-        <h3 className="text-sm font-semibold flex-1">Settings</h3>
-        <button onClick={onClose} className="p-1 rounded hover:bg-accent transition-colors">
-          <X className="w-3.5 h-3.5 text-muted-foreground" />
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold leading-none">Settings</h3>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Tune workflow parameters for this chat
+            </p>
+          </div>
+        </div>
+        <button onClick={onClose} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+          <X className="h-3.5 w-3.5" />
         </button>
       </div>
 
       {/* Scrollable content */}
-      <div className="overflow-y-auto max-h-[350px] px-4 py-3">
-        {groups.map((paramGroup) => (
-          <div
-            key={paramGroup.group}
-            className="border-t border-border/50 first:border-t-0 pt-2 first:pt-0"
-          >
-            {/* Named group header (collapsible) */}
-            {paramGroup.group ? (
-              <button
-                type="button"
-                onClick={() => toggleGroup(paramGroup.group)}
-                className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground transition-colors mb-2 w-full"
-              >
-                {expandedGroups.has(paramGroup.group) ? (
-                  <ChevronDown className="w-3.5 h-3.5" />
-                ) : (
-                  <ChevronRight className="w-3.5 h-3.5" />
-                )}
-                {paramGroup.label}
-                <span className="text-[10px] font-normal">({paramGroup.params.length})</span>
-              </button>
-            ) : null}
+      <div className="max-h-[360px] space-y-3 overflow-y-auto bg-muted/10 px-3 py-3">
+        {groups.map((paramGroup) => {
+          const isExpanded = !paramGroup.group || expandedGroups.has(paramGroup.group);
+          return (
+            <section
+              key={paramGroup.group}
+              className="overflow-visible rounded-2xl border border-border/40 bg-background/70 p-2.5 shadow-sm shadow-black/5"
+            >
+              {/* Named group header (collapsible) */}
+              {paramGroup.group ? (
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(paramGroup.group)}
+                  className="mb-2 flex w-full items-center gap-2 rounded-xl px-1.5 py-1 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
+                >
+                  {isExpanded ? (
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  ) : (
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  )}
+                  <span className="flex-1 truncate">{paramGroup.label}</span>
+                  <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                    {paramGroup.params.length}
+                  </span>
+                </button>
+              ) : (
+                <div className="mb-2 flex items-center justify-between px-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <span>{paramGroup.label}</span>
+                  <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
+                    {paramGroup.params.length}
+                  </span>
+                </div>
+              )}
 
-            {/* Params */}
-            {(!paramGroup.group || expandedGroups.has(paramGroup.group)) && (
-              <div className="space-y-3">
-                {paramGroup.params.map(([name, schema]) => (
-                  <div key={name}>
+              {/* Params */}
+              {isExpanded && (
+                <div className="space-y-2.5">
+                  {paramGroup.params.map(([name, schema]) => (
                     <WorkflowParamInput
+                      key={name}
                       name={name}
                       schema={schema}
                       value={getParamValue(name, schema)}
@@ -156,12 +180,12 @@ export function ParamsSettingsPage({
                       formValues={values}
                       isChatInputContext
                     />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
+                  ))}
+                </div>
+              )}
+            </section>
+          );
+        })}
       </div>
     </div>
   );

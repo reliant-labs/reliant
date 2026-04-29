@@ -211,7 +211,7 @@ export function DeveloperSettings() {
                     id="mock-mode"
                     value={config.mode}
                     onChange={handleModeChange}
-                    className="w-full px-3 py-2 border border-border rounded-md text-sm"
+                    className="w-full px-3 py-2 border border-border/40 rounded-md bg-background text-sm"
                   >
                     <option value="replay">Replay (JSON file)</option>
                     <option value="mock_static">Mock Static (Scenario)</option>
@@ -227,7 +227,7 @@ export function DeveloperSettings() {
                       <select
                         value={config.replayFile || 'none'}
                         onChange={handleReplayFileChange}
-                        className="flex-1 px-3 py-2 border border-border rounded-md text-sm"
+                        className="flex-1 px-3 py-2 border border-border/40 rounded-md bg-background text-sm"
                       >
                         {PREDEFINED_REPLAY_FILES.map(file => (
                           <option key={file.value} value={file.value}>
@@ -295,7 +295,7 @@ export function DeveloperSettings() {
       </Card>
 
       {/* Additional Information */}
-      <div className="p-3 rounded-lg border border-border bg-muted">
+      <div className="p-3 rounded-lg border border-border/40 bg-muted/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
         <div className="flex items-start gap-2">
           <AlertCircle className="h-4 w-4 mt-0.5" />
           <div className="text-sm">

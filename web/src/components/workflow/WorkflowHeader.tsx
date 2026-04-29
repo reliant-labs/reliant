@@ -1,4 +1,4 @@
-import { X, Settings, Activity } from "lucide-react";
+import { X, Settings, Activity, GitBranch } from "lucide-react";
 import { Tooltip } from "../ui/Tooltip";
 import { useState, useEffect } from "react";
 import { isDev } from "../../lib/constants";
@@ -43,7 +43,7 @@ export function WorkflowHeader({
 
   return (
     <header
-      className="h-12 border-b border-border flex items-center bg-background dense-ui select-none cursor-move relative z-[100]"
+      className="h-12 border-b border-border/70 flex items-center bg-card/95 dense-ui select-none cursor-move relative z-[100] shadow-sm shadow-black/5"
       style={
         {
           WebkitAppRegion: "drag",
@@ -62,9 +62,10 @@ export function WorkflowHeader({
       {/* Center - Title */}
       <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center">
         <div
-          className="text-sm font-medium text-foreground/80 px-4 py-1"
+          className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/70 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-sm"
           style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
         >
+          <GitBranch className="h-3.5 w-3.5 text-primary" />
           Workflow Builder
         </div>
       </div>

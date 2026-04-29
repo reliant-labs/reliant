@@ -2509,6 +2509,11 @@ function WorkflowBuilderInner({
     setChatPanelOpen(false);
   }, [setNodes, nodes, edges, takeSnapshot, canDragNodes, screenToFlowPosition, findNonOverlappingPosition, markDirty]);
 
+  const headerButtonClass = "inline-flex items-center gap-2 rounded-lg border border-border/70 bg-card/90 px-3 py-2 text-sm font-medium text-muted-foreground shadow-sm shadow-black/5 transition-colors hover:bg-muted hover:text-foreground";
+  const secondaryHeaderButtonClass = "inline-flex items-center gap-2 rounded-lg border border-border/70 bg-secondary px-3 py-2 text-sm font-semibold text-secondary-foreground shadow-sm shadow-black/5 transition-colors hover:bg-secondary/90";
+  const primaryHeaderButtonClass = "inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground shadow-sm shadow-primary/20 transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50";
+  const compactIconButtonClass = "inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground";
+
   return (
     <div className="relative h-full bg-background">
       {/* Floating Left Sidebar Stack - position based on visible headers (builtin banner + breadcrumb) */}
@@ -2530,15 +2535,15 @@ function WorkflowBuilderInner({
         )}
 
         {/* Stats Counter */}
-        <div className="bg-card border border-border rounded-xl shadow-lg p-3">
-          <div className="text-sm space-y-1">
-            <div>
-              <span className="text-foreground font-medium">Steps:</span>{" "}
-              <span className="text-muted-foreground">{nodes.length}</span>
+        <div className="rounded-2xl border border-border/80 bg-card/95 p-3 shadow-xl shadow-black/10 backdrop-blur-sm">
+          <div className="grid grid-cols-2 gap-2 text-center">
+            <div className="rounded-lg bg-muted/50 px-3 py-2">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Steps</div>
+              <div className="text-lg font-semibold leading-none text-foreground">{nodes.length}</div>
             </div>
-            <div>
-              <span className="text-foreground font-medium">Connections:</span>{" "}
-              <span className="text-muted-foreground">{edges.length}</span>
+            <div className="rounded-lg bg-muted/50 px-3 py-2">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Edges</div>
+              <div className="text-lg font-semibold leading-none text-foreground">{edges.length}</div>
             </div>
           </div>
         </div>
@@ -2573,13 +2578,13 @@ function WorkflowBuilderInner({
         )}
 
         {/* Header */}
-        <div className="bg-background p-4 flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-4 border-b border-border/70 bg-card/80 px-4 py-3 shadow-sm shadow-black/5 backdrop-blur-sm">
           <div className="flex items-center gap-3">
             {/* Back button - either exit loop edit or go back to workflows */}
             {isEditingLoop ? (
               <button
                 onClick={() => exitLoopEdit(!isBuiltinWorkflow)}
-                className="p-2 hover:bg-muted rounded-lg transition-colors"
+                className={compactIconButtonClass}
                 title={
                   isBuiltinWorkflow
                     ? "Exit loop viewer"
@@ -2592,7 +2597,7 @@ function WorkflowBuilderInner({
               onBack && (
                 <button
                   onClick={handleBackClick}
-                  className="p-2 hover:bg-muted rounded-lg transition-colors"
+                  className={compactIconButtonClass}
                   title="Back to workflows"
                 >
                   <ArrowLeft className="w-5 h-5 text-muted-foreground" />
@@ -2674,7 +2679,7 @@ function WorkflowBuilderInner({
               // Loop viewing mode for builtin workflow - just show Done button
               <button
                 onClick={() => exitLoopEdit(false)}
-                className="flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/90 transition-colors font-semibold"
+                className={secondaryHeaderButtonClass}
               >
                 Done
               </button>
@@ -2683,13 +2688,13 @@ function WorkflowBuilderInner({
               <>
                 <button
                   onClick={() => exitLoopEdit(false)}
-                  className="px-4 py-2 bg-muted text-muted-foreground rounded-lg hover:bg-muted/80 hover:text-foreground transition-colors"
+                  className={headerButtonClass}
                 >
                   Discard Changes
                 </button>
                 <button
                   onClick={() => exitLoopEdit(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/90 transition-colors font-semibold"
+                  className={secondaryHeaderButtonClass}
                 >
                   Apply Changes
                 </button>
@@ -2699,14 +2704,14 @@ function WorkflowBuilderInner({
               <>
                 <button
                   onClick={handleUseAsTemplate}
-                  className="flex items-center gap-2 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/90 transition-colors font-semibold"
+                  className={secondaryHeaderButtonClass}
                 >
                   <Copy className="w-4 h-4" />
                   Create a Copy
                 </button>
                 <button
                   onClick={() => setShowYamlEditor(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-muted text-muted-foreground rounded-lg hover:bg-muted/80 hover:text-foreground transition-colors"
+                  className={headerButtonClass}
                 >
                   <Code className="w-4 h-4" />
                   View YAML
@@ -2717,14 +2722,14 @@ function WorkflowBuilderInner({
               <>
                 <button
                   onClick={() => setShowYamlEditor(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-muted text-muted-foreground rounded-lg hover:bg-muted/80 hover:text-foreground transition-colors"
+                  className={headerButtonClass}
                 >
                   <Code className="w-4 h-4" />
                   YAML
                 </button>
                 <button
                   onClick={() => setShowScenarioPanel(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-muted text-muted-foreground rounded-lg hover:bg-muted/80 hover:text-foreground transition-colors"
+                  className={headerButtonClass}
                 >
                   <TestTube2 className="w-4 h-4" />
                   Tests
@@ -2736,14 +2741,14 @@ function WorkflowBuilderInner({
                     setShowSettingsEditor(true);
                     setChatPanelOpen(false);
                   }}
-                  className="flex items-center gap-2 px-4 py-2 bg-muted text-muted-foreground rounded-lg hover:bg-muted/80 hover:text-foreground transition-colors"
+                  className={headerButtonClass}
                 >
                   <Settings2 className="w-4 h-4" />
                   Parameters
                 </button>
                 <button
                   onClick={handleUseAsTemplate}
-                  className="flex items-center gap-2 px-4 py-2 bg-muted text-muted-foreground rounded-lg hover:bg-muted/80 hover:text-foreground transition-colors"
+                  className={headerButtonClass}
                 >
                   <Copy className="w-4 h-4" />
                   Duplicate
@@ -2754,7 +2759,7 @@ function WorkflowBuilderInner({
                   title={
                     isChatBusy ? "Wait for assistant to finish" : undefined
                   }
-                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                  className={primaryHeaderButtonClass}
                 >
                   {isChatBusy ? "Working..." : "Save"}
                 </button>
@@ -2823,7 +2828,7 @@ function WorkflowBuilderInner({
             <Background
               id="workflow-bg"
               gap={24}
-              color="#a855f7"
+              color="hsl(var(--muted-foreground))"
               size={1.5}
               variant={"dots" as BackgroundVariant}
             />

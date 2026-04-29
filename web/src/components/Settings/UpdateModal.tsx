@@ -112,7 +112,7 @@ export function UpdateModal({
                   {/* Progress bar */}
                   <div className="relative w-full bg-muted/50 rounded-full h-4 overflow-hidden border border-border/50">
                     <div
-                      className="absolute inset-y-0 left-0 bg-gradient-to-r from-purple-500 via-purple-600 to-purple-700 rounded-full transition-all duration-300 ease-out shadow-sm"
+                      className="absolute inset-y-0 left-0 bg-gradient-to-r from-primary/80 via-primary to-primary rounded-full transition-all duration-300 ease-out shadow-sm"
                       style={{ width: `${Math.round(progress?.percent || 0)}%` }}
                     >
                       <div className="absolute inset-0 bg-white/20 animate-pulse" />

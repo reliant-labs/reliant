@@ -42,6 +42,8 @@ import {
   type ToolResultData as ProcessedToolResultData,
 } from "../../lib/messageProcessor";
 
+export type ChatTimelineVariant = "compact" | "card" | "minimal";
+
 interface ChatMessageProps {
   message: Message;
   approvals?: ToolApprovalRequest[];
@@ -50,6 +52,7 @@ interface ChatMessageProps {
   isStreaming?: boolean;
   chatId?: string; // Chat ID for branching functionality
   onSelectThread?: (threadId: string | null) => void;
+  timelineVariant?: ChatTimelineVariant;
 }
 
 // Re-export for components that import from here
@@ -132,6 +135,7 @@ function ChatMessageComponent({
   isStreaming = false,
   chatId: propChatId,
   onSelectThread,
+  timelineVariant = "compact",
 }: ChatMessageProps) {
   const isUser = message.role === MessageRole.USER;
   const activeChatId = useActiveChatId();
@@ -557,156 +561,156 @@ function ChatMessageComponent({
   const shouldGroup = (enhancedToolExecutions?.length || 0) > 1;
 
   const isOptimistic = message.id.startsWith("optimistic-");
+  const timestampText = message.createdAt ? formatTimestamp(message.createdAt) : "";
+  const variantClass = `chat-message-${timelineVariant}`;
+
+  const messageActions = (
+    <div
+      className={cn(
+        "message-actions mt-0.5 flex items-center gap-0.5 text-[9px] text-muted-foreground/70 opacity-0 transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100",
+        isUser ? "justify-start pl-0.5" : "justify-start px-0.5"
+      )}
+    >
+      {timestampText && (
+        <time
+          dateTime={message.createdAt}
+          className="px-0.5 text-[9px] leading-none text-muted-foreground/70"
+          title={new Date(message.createdAt).toLocaleString()}
+        >
+          {timestampText}
+        </time>
+      )}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          handleCopy();
+        }}
+        title={copied ? "Copied" : "Copy"}
+        aria-label={copied ? "Copied" : "Copy message"}
+        className={cn(
+          "rounded p-0.5 transition-colors duration-150 hover:bg-muted/70 hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring/40",
+          copied && "text-success"
+        )}
+        type="button"
+      >
+        {copied ? <Check className="h-2.5 w-2.5" /> : <Copy className="h-2.5 w-2.5" />}
+      </button>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          handleBranchClick(e);
+        }}
+        disabled={isOptimistic}
+        title={isOptimistic ? "Waiting for message to save" : "Branch"}
+        aria-label="Branch from message"
+        data-contextual-tip="branch-button"
+        className={cn(
+          "rounded p-0.5 transition-colors duration-150 hover:bg-muted/70 hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring/40",
+          isOptimistic && "cursor-not-allowed opacity-50"
+        )}
+        type="button"
+      >
+        <GitBranch className="h-2.5 w-2.5" />
+      </button>
+    </div>
+  );
 
   return (
     <div
       className={cn(
-        "group copy-toast message-container",
-        isUser ? "mb-3" : "mb-1.5",
+        "group copy-toast message-container relative",
+        "mb-1",
+        variantClass,
         copied && "copied",
         isOptimistic && "opacity-60",
       )}
       data-testid={`message-${message.id}`}
+      data-chat-timeline-variant={timelineVariant}
     >
       <div className="message-layout lg:message-layout-lg">
-        {/* Avatar - always on the left, perfectly aligned */}
-        {/* <div className="avatar-container">
-          <div
-            className={cn(
-              "w-8 h-8 rounded-full flex items-center justify-center message-avatar",
-              isUser
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground border border-border/20"
-            )}
-          >
-            {isUser ? (
-              <User className="w-4 h-4 flex-shrink-0" />
-            ) : (
-              <Bot className="w-4 h-4 flex-shrink-0" />
-            )}
-          </div>
-        </div> */}
-
         {/* Message Content */}
-        <div
-          className={cn(
-            "flex-1 min-w-0",
-            isUser && "flex flex-col items-start",
-          )}
-        >
-          {/* User message bubble - flexible width */}
+        <div className="flex-1 min-w-0">
+          {/* User message bubble - stable width */}
           {isUser ? (
-            <div
-              ref={bubbleRef}
-              className={cn(
-                "group/usermsg user-message-content border-2 border-border/70 rounded-lg w-full cursor-pointer block transition-all duration-200",
-                isOverflowing && !isExpanded && "hover:border-border",
-              )}
-              style={{
-                backgroundColor: "var(--chat-input-bg)",
-              }}
-              onClick={() => {
-                setIsExpanded((prev) => {
-                  const willExpand = !prev;
-                  if (willExpand) {
-                    // After expanding, scroll just enough so the bottom of the
-                    // message bubble is visible (not hidden behind the chat input).
-                    requestAnimationFrame(() => {
-                      bubbleRef.current?.scrollIntoView({
-                        block: "nearest",
-                        behavior: "smooth",
-                      });
-                    });
-                  }
-                  return willExpand;
-                });
-              }}
-            >
-              {/* Text Content - show exactly as sent */}
-              {parsed.text && (
-                <div className="message-bubble relative">
-                  <div
-                    ref={contentRef}
-                    className={cn("text-sm leading-relaxed overflow-y-auto")}
-                    style={{
-                      maxHeight: isExpanded ? "30vh" : "3rem",
-                    }}
-                  >
-                    <div className="whitespace-pre-wrap break-words">
-                      {renderTextWithContextPills(parsed.text, chatWorktreeId)}
-                    </div>
-                  </div>
-                  {/* Fade effect only when content is actually overflowing */}
-                </div>
-              )}
-
-              {/* Attachments - always visible */}
-              {message.attachments && message.attachments.length > 0 && (
-                <MessageAttachments
-                  attachments={message.attachments}
-                  isUser={isUser}
-                  className={!parsed.text ? "pt-1" : ""}
-                />
-              )}
-
-              {/* Action buttons and timestamp - shown on hover (collapsed) or always (expanded) */}
-              {
+            <div className="group/usermsg relative inline-flex max-w-[85%] flex-col items-start sm:max-w-2xl">
+              <div className="relative">
                 <div
+                  ref={bubbleRef}
                   className={cn(
-                    "flex items-center justify-between text-xs text-muted-foreground pt-2 border-t mt-2",
-                    !isExpanded &&
-                      "opacity-0 group-hover/usermsg:opacity-100 transition-opacity duration-150",
+                    "user-message-content relative block cursor-pointer overflow-hidden rounded-2xl border border-blue-500/25 bg-blue-500/20 text-blue-950 shadow-sm transition-colors duration-200 dark:border-blue-400/20 dark:bg-blue-500/15 dark:text-blue-50",
+                    "hover:border-blue-500/35 hover:bg-blue-500/25 dark:hover:border-blue-400/30 dark:hover:bg-blue-500/20",
+                    timelineVariant === "card" && "shadow-md",
+                    timelineVariant === "minimal" && "shadow-none"
                   )}
-                  style={{ borderColor: "var(--chat-border)" }}
-                >
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleCopy();
-                      }}
-                      title={copied ? "Copied!" : "Copy"}
-                      className={cn(
-                        "flex items-center gap-1 px-2 py-1 rounded-md hover:bg-muted/50 transition-colors duration-200 focus-ring",
-                        copied && "text-success",
-                      )}
-                    >
-                      {copied ? (
-                        <Check className="w-3 h-3" />
-                      ) : (
-                        <Copy className="w-3 h-3" />
-                      )}
-                    </button>
-                    <button
-                      onClick={handleBranchClick}
-                      disabled={isOptimistic}
-                      title={
-                        isOptimistic
-                          ? "Waiting for message to save..."
-                          : "Branch"
+                  onClick={() => {
+                    setIsExpanded((prev) => {
+                      const willExpand = !prev;
+                      if (willExpand) {
+                        // After expanding, scroll just enough so the bottom of the
+                        // message bubble is visible (not hidden behind the chat input).
+                        requestAnimationFrame(() => {
+                          bubbleRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+                        });
                       }
-                      data-contextual-tip="branch-button"
-                      className={cn(
-                        "flex items-center gap-1 px-2 py-1 rounded-md transition-colors duration-200 focus-ring",
-                        isOptimistic
-                          ? "opacity-50 cursor-not-allowed"
-                          : "hover:bg-muted/50",
+                      return willExpand;
+                    });
+                  }}
+                >
+                  {/* Text Content - show exactly as sent */}
+                  {parsed.text && (
+                    <div className="message-bubble relative">
+                      <div
+                        ref={contentRef}
+                        className="overflow-hidden text-sm leading-relaxed text-blue-950 dark:text-blue-50"
+                        style={{
+                          maxHeight: isExpanded ? "none" : "3rem",
+                          transition: "max-height 0.2s ease-in-out",
+                        }}
+                      >
+                        <div className="whitespace-pre-wrap break-words">
+                          {renderTextWithContextPills(parsed.text, chatWorktreeId)}
+                        </div>
+                      </div>
+                      {/* Gradient fade overlay for truncated content */}
+                      {!isExpanded && isOverflowing && (
+                        <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-6 rounded-b-2xl bg-gradient-to-t from-blue-500/20 to-transparent dark:from-blue-500/15" />
                       )}
-                    >
-                      <GitBranch className="w-3 h-3" />
-                    </button>
-                  </div>
+                    </div>
+                  )}
 
-                  {/* Timestamp on the right */}
-                  <span className="text-xs">
-                    {formatTimestamp(message.createdAt || "")}
-                  </span>
+                  {/* Expand button - styled like diff expand button */}
+                  {!isExpanded && isOverflowing && (
+                    <div className="flex justify-center border-t border-border/60">
+                      <div
+                        className="flex w-full items-center justify-center gap-1 px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                      >
+                        <ChevronDown className="w-3 h-3" />
+                        Show more
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Attachments */}
+                  {isExpanded && message.attachments && message.attachments.length > 0 && (
+                    <MessageAttachments
+                      attachments={message.attachments}
+                      isUser={isUser}
+                      className={!parsed.text ? "pt-1" : ""}
+                    />
+                  )}
                 </div>
-              }
+              </div>
+              {messageActions}
             </div>
           ) : (
             // Assistant message - full width
-            <div className="message-content w-full px-2">
+            <div
+              className={cn(
+                "message-content group/assistant relative w-full px-2",
+                timelineVariant === "card" && "rounded-xl border border-border/60 bg-card/60 p-3 shadow-sm",
+                timelineVariant === "minimal" && "px-0"
+              )}
+            >
               {/* Text Content */}
               {parsed.text && (
                 <div className="message-bubble w-full">
@@ -748,9 +752,10 @@ function ChatMessageComponent({
                   const otherTools = enhancedToolExecutions.filter(
                     (exec) => !isReadOnlyTool(exec.call.name),
                   );
+                  const toolDensity = timelineVariant === "card" ? "card" : timelineVariant === "minimal" ? "minimal" : "compact";
 
                   return (
-                    <div className="tool-executions-container space-y-1 mb-1">
+                    <div className={cn("tool-executions-container mb-1", timelineVariant === "card" ? "space-y-2" : "space-y-1")}>
                       {/* Render read-only tools - only group if 2+ tools */}
                       {readOnlyTools.length > 1 ? (
                         <ToolExecutionCollapsibleGroup
@@ -759,6 +764,7 @@ function ChatMessageComponent({
                           chatId={chatId || undefined}
                           showRichContent={true}
                           onSelectThread={onSelectThread}
+                          density={toolDensity}
                         />
                       ) : (
                         readOnlyTools.map((exec, idx) => (
@@ -773,6 +779,7 @@ function ChatMessageComponent({
                             chatId={chatId || undefined}
                             showRichContent={true}
                             onSelectThread={onSelectThread}
+                            density={toolDensity}
                           />
                         ))
                       )}
@@ -788,6 +795,7 @@ function ChatMessageComponent({
                             chatId={chatId || undefined}
                             showRichContent={true}
                             onSelectThread={onSelectThread}
+                            density={toolDensity}
                           />
                         ) : (
                           otherTools.map((exec, idx) => (
@@ -802,52 +810,18 @@ function ChatMessageComponent({
                               chatId={chatId || undefined}
                               showRichContent={true}
                               onSelectThread={onSelectThread}
+                              density={toolDensity}
                             />
                           ))
                         ))}
                     </div>
                   );
                 })()}
+              {messageActions}
             </div>
           )}
 
-          {/* Message Footer - action buttons for assistant messages */}
-          {!isUser && (
-            <div
-              className={cn(
-                "items-center gap-1 text-xs text-muted-foreground px-2 h-6",
-                isLatestMessage ? "flex" : "hidden group-hover:flex",
-              )}
-            >
-              <button
-                onClick={handleCopy}
-                title={copied ? "Copied!" : "Copy"}
-                className={cn(
-                  "flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-muted/50 transition-colors duration-200 focus-ring",
-                  copied && "text-success",
-                )}
-              >
-                {copied ? (
-                  <Check className="w-3 h-3" />
-                ) : (
-                  <Copy className="w-3 h-3" />
-                )}
-              </button>
-              {!isStreaming && (
-                <button
-                  onClick={handleBranchClick}
-                  title="Branch"
-                  data-contextual-tip="branch-button"
-                  className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-muted/50 transition-colors duration-200 focus-ring"
-                >
-                  <GitBranch className="w-3 h-3" />
-                </button>
-              )}
-              <span className="ml-1 text-[11px] text-muted-foreground/70">
-                {formatTimestamp(message.createdAt || "")}
-              </span>
-            </div>
-          )}
+
         </div>
       </div>
 
@@ -903,6 +877,8 @@ export const ChatMessage = memo(ChatMessageComponent, (prev, next) => {
       prev.isStreaming === next.isStreaming &&
       prev.chatId === next.chatId &&
       prev.hideToolExecutions === next.hideToolExecutions &&
+      prev.timelineVariant === next.timelineVariant &&
+      prev.onSelectThread === next.onSelectThread &&
       prev.approvals === next.approvals
     );
   }
@@ -915,6 +891,8 @@ export const ChatMessage = memo(ChatMessageComponent, (prev, next) => {
   if (prev.isStreaming !== next.isStreaming) return false;
   if (prev.chatId !== next.chatId) return false;
   if (prev.hideToolExecutions !== next.hideToolExecutions) return false;
+  if (prev.timelineVariant !== next.timelineVariant) return false;
+  if (prev.onSelectThread !== next.onSelectThread) return false;
 
   // Check approvals - if same reference, skip deep comparison
   if (prev.approvals === next.approvals) return true;

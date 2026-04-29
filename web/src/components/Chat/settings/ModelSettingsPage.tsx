@@ -223,14 +223,14 @@ export function ModelSettingsPage({
   return (
     <div className="flex flex-col">
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[#3a3a3a]">
+      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/50">
         <button
           onClick={onBack}
-          className="w-6 h-6 flex items-center justify-center rounded hover:bg-[#363636] text-[#a0a0a0] hover:text-[#e5e5e5] transition-colors"
+          className="w-6 h-6 flex items-center justify-center rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
         >
           <ChevronLeft className="w-3.5 h-3.5" />
         </button>
-        <h3 className="text-[13px] font-semibold text-[#e5e5e5] flex-1">
+        <h3 className="text-[13px] font-semibold text-foreground flex-1">
           Model
         </h3>
         <button
@@ -239,27 +239,27 @@ export function ModelSettingsPage({
             useViewerStore.getState().setSettingsMode(true, 'general');
           }}
           title="Model preferences"
-          className="w-6 h-6 flex items-center justify-center rounded text-[#707070] hover:text-[#e5e5e5] transition-colors"
+          className="w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors"
         >
           <Settings2 className="w-3.5 h-3.5" />
         </button>
         <button
           onClick={onClose}
-          className="w-6 h-6 flex items-center justify-center rounded text-[#707070] hover:text-[#e5e5e5] transition-colors"
+          className="w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors"
         >
           <X className="w-3.5 h-3.5" />
         </button>
       </div>
 
       {/* Tab bar */}
-      <div className="flex border-b border-[#3a3a3a] px-3">
+      <div className="flex border-b border-border/50 px-3">
         <button
           onClick={() => setActiveTab("tag")}
           className={cn(
             "px-3 py-2 text-xs font-medium border-b-2 transition-colors bg-transparent",
             activeTab === "tag"
-              ? "text-[#7c6ef0] border-[#7c6ef0]"
-              : "text-[#a0a0a0] border-transparent hover:text-[#e5e5e5]",
+              ? "text-primary border-primary"
+              : "text-muted-foreground border-transparent hover:text-foreground",
           )}
         >
           By Tag
@@ -269,8 +269,8 @@ export function ModelSettingsPage({
           className={cn(
             "px-3 py-2 text-xs font-medium border-b-2 transition-colors bg-transparent",
             activeTab === "explicit"
-              ? "text-[#7c6ef0] border-[#7c6ef0]"
-              : "text-[#a0a0a0] border-transparent hover:text-[#e5e5e5]",
+              ? "text-primary border-primary"
+              : "text-muted-foreground border-transparent hover:text-foreground",
           )}
         >
           Explicit
@@ -290,20 +290,20 @@ export function ModelSettingsPage({
                 className={cn(
                   "w-full flex items-center justify-between px-2.5 py-2 rounded-md cursor-pointer transition-colors mb-0.5 text-left",
                   isSelected
-                    ? "bg-[rgba(124,110,240,0.15)] outline outline-1 outline-[rgba(124,110,240,0.25)]"
-                    : "hover:bg-[#363636]",
+                    ? "bg-primary/15 outline outline-1 outline-primary/25"
+                    : "hover:bg-muted/50",
                 )}
               >
                 <div className="flex flex-col gap-px">
-                  <span className="text-[13px] font-semibold text-[#e5e5e5] capitalize">
+                  <span className="text-[13px] font-semibold text-foreground capitalize">
                     {tag}
                   </span>
-                  <span className="text-[11px] text-[#707070]">
+                  <span className="text-[11px] text-muted-foreground/70">
                     {tagDescriptions[tag]}
                   </span>
                 </div>
                 {resolved && (
-                  <div className="flex items-center gap-1 text-[11px] text-[#a0a0a0] shrink-0">
+                  <div className="flex items-center gap-1 text-[11px] text-muted-foreground shrink-0">
                     <span
                       className="w-1.5 h-1.5 rounded-full inline-block shrink-0"
                       style={{
@@ -326,13 +326,13 @@ export function ModelSettingsPage({
           {/* Search */}
           <div className="px-2.5 pt-2">
             <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#707070]" />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/70" />
               <input
                 type="text"
                 placeholder="Search models..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-2.5 py-1.5 bg-[#2d2d2d] border border-[#3a3a3a] rounded text-[#e5e5e5] text-xs outline-none focus:border-[#4a4a4a] placeholder:text-[#707070]"
+                className="w-full pl-8 pr-2.5 py-1.5 bg-muted border border-border rounded text-foreground text-xs outline-none focus:border-border/80 placeholder:text-muted-foreground/70"
               />
             </div>
           </div>
@@ -341,7 +341,7 @@ export function ModelSettingsPage({
           <div className="p-1 max-h-60 overflow-y-auto">
             {providers.map((provider) => (
               <div key={provider}>
-                <div className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-[#707070]">
+                <div className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
                   {provider}
                 </div>
                 {groupedModels[provider].map((model) => {
@@ -355,8 +355,8 @@ export function ModelSettingsPage({
                       className={cn(
                         "w-full flex items-center justify-between px-2.5 py-1.5 rounded text-left transition-colors mx-0.5",
                         isSelected
-                          ? "bg-[rgba(124,110,240,0.15)]"
-                          : "hover:bg-[#363636]",
+                          ? "bg-primary/15"
+                          : "hover:bg-muted/50",
                       )}
                     >
                       <div className="flex items-center gap-2">
@@ -368,18 +368,18 @@ export function ModelSettingsPage({
                             ),
                           }}
                         />
-                        <span className="text-[13px] font-medium text-[#e5e5e5]">
+                        <span className="text-[13px] font-medium text-foreground">
                           {model.name}
                         </span>
                       </div>
-                      <div className="flex items-center gap-1.5 text-[10px] text-[#707070]">
+                      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/70">
                         {model.canReason && (
-                          <span className="inline-flex px-1 py-px rounded-sm text-[9px] font-semibold uppercase tracking-tight bg-[rgba(124,110,240,0.15)] text-[#7c6ef0]">
+                          <span className="inline-flex px-1 py-px rounded-sm text-[9px] font-semibold uppercase tracking-tight bg-primary/15 text-primary">
                             reasoning
                           </span>
                         )}
                         {model.capabilities?.includes("fast") && (
-                          <span className="inline-flex px-1 py-px rounded-sm text-[9px] font-semibold uppercase tracking-tight bg-[rgba(91,192,222,0.15)] text-[#5bc0de]">
+                          <span className="inline-flex px-1 py-px rounded-sm text-[9px] font-semibold uppercase tracking-tight bg-sky-400/15 text-sky-400">
                             fast
                           </span>
                         )}
@@ -390,7 +390,7 @@ export function ModelSettingsPage({
               </div>
             ))}
             {providers.length === 0 && (
-              <div className="px-4 py-6 text-center text-xs text-[#707070]">
+              <div className="px-4 py-6 text-center text-xs text-muted-foreground/70">
                 {searchQuery
                   ? "No models match your search"
                   : "No models available"}
@@ -401,17 +401,17 @@ export function ModelSettingsPage({
       )}
 
       {/* Overrides section */}
-      <div className="border-t border-[#3a3a3a] px-3.5 py-2.5">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-[#707070] mb-2">
+      <div className="border-t border-border/50 px-3.5 py-2.5">
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-2">
           Overrides
         </div>
 
         {/* Thinking Level */}
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-[#a0a0a0] font-medium">
+          <span className="text-xs text-muted-foreground font-medium">
             Thinking
             {modelDefaultThinking && (
-              <span className="text-[10px] text-[#707070] font-normal">
+              <span className="text-[10px] text-muted-foreground/70 font-normal">
                 {" "}
                 · default: {modelDefaultThinking}
               </span>
@@ -422,7 +422,7 @@ export function ModelSettingsPage({
             onChange={(e) =>
               handleOverrideChange("thinking_level", e.target.value || undefined)
             }
-            className="px-2 py-1 bg-[#2d2d2d] border border-[#3a3a3a] rounded text-[#e5e5e5] text-xs cursor-pointer outline-none hover:border-[#4a4a4a]"
+            className="px-2 py-1 bg-muted border border-border rounded text-foreground text-xs cursor-pointer outline-none hover:border-border/80"
           >
             {THINKING_LEVELS.map((level) => (
               <option key={level.value} value={level.value}>
@@ -434,7 +434,7 @@ export function ModelSettingsPage({
 
         {/* Temperature */}
         <div className="flex items-center justify-between mb-2">
-          <span className="text-xs text-[#a0a0a0] font-medium">
+          <span className="text-xs text-muted-foreground font-medium">
             Temperature
           </span>
           <div className="flex items-center gap-2">
@@ -451,9 +451,9 @@ export function ModelSettingsPage({
                 const val = Number(e.target.value) / 100;
                 handleOverrideChange("temperature", val);
               }}
-              className="w-20 h-1 appearance-none bg-[#404040] rounded cursor-pointer accent-[#7c6ef0]"
+              className="w-20 h-1 appearance-none bg-border rounded cursor-pointer accent-primary"
             />
-            <span className="text-[11px] text-[#a0a0a0] min-w-7 text-right">
+            <span className="text-[11px] text-muted-foreground min-w-7 text-right">
               {currentTemperature !== undefined
                 ? currentTemperature.toFixed(1)
                 : "1.0"}
@@ -463,7 +463,7 @@ export function ModelSettingsPage({
 
         {/* Compaction */}
         <div className="flex items-center justify-between">
-          <span className="text-xs text-[#a0a0a0] font-medium">
+          <span className="text-xs text-muted-foreground font-medium">
             Compaction
           </span>
           <input
@@ -481,7 +481,7 @@ export function ModelSettingsPage({
               handleOverrideChange("compaction_threshold", val);
             }}
             step={5000}
-            className="w-[70px] px-2 py-1 bg-[#2d2d2d] border border-[#3a3a3a] rounded text-[#e5e5e5] text-xs outline-none text-right focus:border-[#4a4a4a]"
+            className="w-[70px] px-2 py-1 bg-muted border border-border rounded text-foreground text-xs outline-none text-right focus:border-border/80"
           />
         </div>
       </div>

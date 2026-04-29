@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Workflow & Preset Hub — Reliant Design Sandbox</title>
+  <link rel="stylesheet" href="shared.css">
+  <style>
+    body { padding: 40px; max-width: 1000px; margin: 0 auto; }
+
+    .hub-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 24px;
+    }
+    .hub-header h1 { font-size: var(--text-xl); font-weight: var(--fw-bold); letter-spacing: -0.02em; }
+    .hub-header-actions { display: flex; gap: 8px; }
+
+    /* Tabs */
+    .hub-tabs {
+      display: flex; gap: 4px; margin-bottom: 20px;
+    }
+    .hub-tab {
+      padding: 7px 16px; font-size: var(--text-sm); font-weight: var(--fw-medium);
+      color: var(--text-secondary); background: transparent; border: none;
+      border-radius: var(--radius-lg); cursor: pointer; transition: all var(--transition-base);
+    }
+    .hub-tab:hover { color: var(--text-primary); background: var(--bg-overlay); }
+    .hub-tab.active { color: var(--text-primary); background: var(--bg-surface); box-shadow: var(--shadow-sm); }
+    .hub-tab .count {
+      margin-left: 6px; font-size: var(--text-xs);
+      padding: 1px 6px; border-radius: var(--radius-full);
+      background: var(--bg-overlay);
+    }
+    .hub-tab.active .count { background: var(--accent-muted); color: var(--accent); }
+
+    /* Workflow grid */
+    .wf-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 12px;
+    }
+
+    .wf-card {
+      background: var(--bg-raised);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      padding: 18px;
+      cursor: pointer;
+      transition: all var(--transition-base);
+      position: relative;
+    }
+    .wf-card:hover { border-color: var(--accent); box-shadow: var(--shadow-glow); transform: translateY(-1px); }
+
+    .wf-card-top { display: flex; align-items: flex-start; gap: 12px; }
+    .wf-icon {
+      width: 40px; height: 40px;
+      border-radius: var(--radius-lg);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .wf-icon svg { width: 20px; height: 20px; }
+    .wf-content { flex: 1; min-width: 0; }
+    .wf-name { font-size: var(--text-base); font-weight: var(--fw-semi); margin-bottom: 4px; }
+    .wf-desc { font-size: var(--text-sm); color: var(--text-secondary); line-height: var(--lh-relaxed); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .wf-badges { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+
+    /* Default star */
+    .wf-default-star {
+      position: absolute; top: -6px; right: -6px;
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      background: var(--yellow);
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: var(--shadow-sm);
+    }
+    .wf-default-star svg { width: 12px; height: 12px; color: #000; fill: #000; }
+
+    .wf-card.default-wf { border-color: rgba(227,179,65,0.3); }
+
+    /* Hidden overlay */
+    .wf-hidden-overlay {
+      position: absolute; inset: 0;
+      background: rgba(13,17,23,0.5);
+      border-radius: var(--radius-xl);
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; transition: opacity var(--transition-base);
+    }
+    .wf-card.hidden-wf:hover .wf-hidden-overlay { opacity: 1; }
+
+    /* Activity indicator */
+    .wf-activity {
+      position: absolute; bottom: 14px; right: 14px;
+      display: flex; align-items: center; gap: 6px;
+      padding: 3px 10px; border-radius: var(--radius-full);
+      background: var(--purple-muted); color: var(--purple);
+      font-size: var(--text-2xs); font-weight: var(--fw-medium);
+    }
+    .wf-activity svg { width: 12px; height: 12px; animation: spin 1.5s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Hover actions */
+    .wf-actions {
+      position: absolute; top: 12px; right: 12px;
+      display: flex; gap: 4px;
+      opacity: 0; transition: opacity var(--transition-base);
+    }
+    .wf-card:hover .wf-actions { opacity: 1; }
+    .wf-action-btn {
+      width: 28px; height: 28px;
+      display: flex; align-items: center; justify-content: center;
+      border: 1px solid var(--border); border-radius: var(--radius-md);
+      background: var(--bg-raised); color: var(--text-secondary);
+      cursor: pointer; transition: all var(--transition-base);
+    }
+    .wf-action-btn:hover { color: var(--text-primary); background: var(--bg-overlay); }
+    .wf-action-btn svg { width: 14px; height: 14px; }
+
+    /* Import area */
+    .import-area {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius-xl);
+      padding: 32px;
+      text-align: center;
+      cursor: pointer;
+      transition: all var(--transition-base);
+    }
+    .import-area:hover { border-color: var(--accent); background: var(--accent-subtle); }
+    .import-area svg { width: 28px; height: 28px; color: var(--text-tertiary); margin-bottom: 8px; }
+    .import-area span { font-size: var(--text-sm); color: var(--text-secondary); display: block; }
+
+    /* Preset section */
+    .preset-section { margin-top: 32px; }
+    .preset-section h2 {
+      font-size: var(--text-lg); font-weight: var(--fw-semi);
+      margin-bottom: 16px; display: flex; align-items: center; gap: 8px;
+    }
+    .preset-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+    }
+    .preset-card {
+      background: var(--bg-raised); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); padding: 14px;
+      transition: all var(--transition-base); cursor: pointer;
+    }
+    .preset-card:hover { border-color: var(--purple); box-shadow: 0 0 16px rgba(188,140,255,0.1); }
+    .preset-name { font-size: var(--text-sm); font-weight: var(--fw-semi); margin-bottom: 4px; }
+    .preset-meta { font-size: var(--text-xs); color: var(--text-secondary); }
+    .preset-params {
+      margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px;
+    }
+    .preset-param {
+      font-size: var(--text-2xs); padding: 2px 6px;
+      background: var(--bg-overlay); border-radius: var(--radius-sm);
+      color: var(--text-secondary); font-family: var(--font-mono);
+    }
+  </style>
+</head>
+<body>
+  <div class="hub-header">
+    <h1>Workflows & Presets</h1>
+    <div class="hub-header-actions">
+      <button class="btn btn-outline btn-sm">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Import
+      </button>
+      <button class="btn btn-primary btn-sm">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Create Workflow
+      </button>
+    </div>
+  </div>
+
+  <div class="hub-tabs">
+    <button class="hub-tab active">Workflows <span class="count">6</span></button>
+    <button class="hub-tab">Presets <span class="count">4</span></button>
+  </div>
+
+  <div class="wf-grid">
+    <!-- Default workflow -->
+    <div class="wf-card default-wf">
+      <div class="wf-default-star">
+        <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      </div>
+      <div class="wf-card-top">
+        <div class="wf-icon" style="background: var(--accent-muted); color: var(--accent);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        </div>
+        <div class="wf-content">
+          <div class="wf-name">default</div>
+          <div class="wf-desc">Standard agent workflow with tool use, planning, and task management capabilities.</div>
+          <div class="wf-badges">
+            <span class="badge badge-blue">Built-in</span>
+            <span class="badge badge-yellow">Default</span>
+          </div>
+        </div>
+      </div>
+      <div class="wf-actions">
+        <button class="wf-action-btn" title="Configure presets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12.22 2h-.44a2 2 0 00-2 2v.18a2 2 0 01-1 1.73l-.43.25a2 2 0 01-2 0l-.15-.08a2 2 0 00-2.73.73l-.22.38a2 2 0 00.73 2.73l.15.1a2 2 0 011 1.72v.51a2 2 0 01-1 1.74l-.15.09a2 2 0 00-.73 2.73l.22.38a2 2 0 002.73.73l.15-.08a2 2 0 012 0l.43.25a2 2 0 011 1.73V20a2 2 0 002 2h.44a2 2 0 002-2v-.18a2 2 0 011-1.73l.43-.25a2 2 0 012 0l.15.08a2 2 0 002.73-.73l.22-.39a2 2 0 00-.73-2.73l-.15-.08a2 2 0 01-1-1.74v-.5a2 2 0 011-1.74l.15-.09a2 2 0 00.73-2.73l-.22-.38a2 2 0 00-2.73-.73l-.15.08a2 2 0 01-2 0l-.43-.25a2 2 0 01-1-1.73V4a2 2 0 00-2-2z"/></svg></button>
+        <button class="wf-action-btn" title="Export"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+      </div>
+    </div>
+
+    <!-- Code review workflow -->
+    <div class="wf-card">
+      <div class="wf-card-top">
+        <div class="wf-icon" style="background: var(--green-muted); color: var(--green);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        </div>
+        <div class="wf-content">
+          <div class="wf-name">code-review</div>
+          <div class="wf-desc">Comprehensive code review with security, performance, and hygiene analysis spawned in parallel.</div>
+          <div class="wf-badges">
+            <span class="badge badge-blue">Built-in</span>
+          </div>
+        </div>
+      </div>
+      <div class="wf-actions">
+        <button class="wf-action-btn" title="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+        <button class="wf-action-btn" title="Export"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+      </div>
+    </div>
+
+    <!-- Custom workflow being edited -->
+    <div class="wf-card">
+      <div class="wf-card-top">
+        <div class="wf-icon" style="background: var(--purple-muted); color: var(--purple);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        </div>
+        <div class="wf-content">
+          <div class="wf-name">my-deploy-flow</div>
+          <div class="wf-desc">Custom deployment pipeline with staging validation, canary checks, and rollback.</div>
+          <div class="wf-badges">
+            <span class="badge badge-purple">Custom</span>
+          </div>
+        </div>
+      </div>
+      <div class="wf-activity">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+        Editing
+      </div>
+      <div class="wf-actions">
+        <button class="wf-action-btn" title="Edit"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+        <button class="wf-action-btn" title="Delete" style="color: var(--red);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+      </div>
+    </div>
+
+    <!-- Project workflow -->
+    <div class="wf-card">
+      <div class="wf-card-top">
+        <div class="wf-icon" style="background: var(--green-subtle); color: var(--green);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        </div>
+        <div class="wf-content">
+          <div class="wf-name">pr-pipeline</div>
+          <div class="wf-desc">Project-specific PR pipeline with lint, test, and review steps.</div>
+          <div class="wf-badges">
+            <span class="badge badge-green">Project</span>
+            <span class="badge badge-muted">Preset: sonnet-4</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hidden workflow -->
+    <div class="wf-card hidden-wf" style="opacity: 0.6;">
+      <div class="wf-card-top">
+        <div class="wf-icon" style="background: var(--bg-overlay); color: var(--text-tertiary);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        </div>
+        <div class="wf-content">
+          <div class="wf-name" style="display: flex; align-items: center; gap: 6px;">
+            legacy-flow
+            <span class="badge badge-muted" style="font-size: 9px; padding: 1px 5px;">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 01-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+              Hidden
+            </span>
+          </div>
+          <div class="wf-desc">Old workflow kept for reference. Hidden from dropdown.</div>
+          <div class="wf-badges">
+            <span class="badge badge-purple">Custom</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Import CTA -->
+    <div class="import-area">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <span>Import YAML workflow</span>
+    </div>
+  </div>
+
+  <!-- Presets section (shown when Presets tab is active) -->
+  <div class="preset-section">
+    <h2>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2"><path d="M12 3l1.5 4.5H18l-3.5 2.5L16 14.5 12 12l-4 2.5 1.5-4.5L6 7.5h4.5z"/></svg>
+      Presets
+    </h2>
+    <div class="preset-grid">
+      <div class="preset-card">
+        <div class="preset-name">Fast Mode</div>
+        <div class="preset-meta">For quick iterations</div>
+        <div class="preset-params">
+          <span class="preset-param">model: haiku</span>
+          <span class="preset-param">thinking: off</span>
+          <span class="preset-param">tools: minimal</span>
+        </div>
+      </div>
+      <div class="preset-card">
+        <div class="preset-name">Deep Analysis</div>
+        <div class="preset-meta">For complex architecture tasks</div>
+        <div class="preset-params">
+          <span class="preset-param">model: sonnet-4</span>
+          <span class="preset-param">thinking: extended</span>
+          <span class="preset-param">tools: all</span>
+        </div>
+      </div>
+      <div class="preset-card">
+        <div class="preset-name">Code Review</div>
+        <div class="preset-meta">Optimized for review workflows</div>
+        <div class="preset-params">
+          <span class="preset-param">model: sonnet-4</span>
+          <span class="preset-param">thinking: normal</span>
+          <span class="preset-param">tools: read-only</span>
+        </div>
+      </div>
+      <div class="preset-card" style="border: 2px dashed var(--border); background: transparent; display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--text-secondary);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New Preset
+      </div>
+    </div>
+  </div>
+</body>
+</html>

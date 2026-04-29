@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
-import { ExternalLink, BookOpen, FileText, Shield, Globe, Terminal, Calendar } from "lucide-react";
-import { FaHatWizard, FaSlack, FaGithub } from "react-icons/fa";
+import { ExternalLink, BookOpen, FileText, Shield, Globe, Terminal, Calendar, Github, Slack, WandSparkles } from "lucide-react";
 import { toast } from "../../lib/toast-manager";
-import Logo from "../../assets/logo.svg";
 import { UpdateSection } from "./UpdateSection";
 import { systemGrpc } from "../../api/system-grpc";
 import { useOnboardingChecklistStore } from "../../store/onboardingChecklistStore";
+import { BrandMark } from "../icons/BrandMark";
 
 type LinkItem = {
   icon: React.ComponentType<{ className?: string }>;
@@ -85,12 +84,12 @@ export function AboutSection() {
       href: "https://cal.com/team/reliant/onboarding",
     },
     {
-      icon: FaGithub,
+      icon: Github,
       label: "GitHub",
       href: "https://github.com/reliant-labs/reliant",
     },
     {
-      icon: FaSlack,
+      icon: Slack,
       label: "Join Slack",
       href: "https://join.slack.com/t/reliant-pn51441/shared_invite/zt-3g6mhfnhx-~CWMzNRZUylWHevlJXO89A",
     },
@@ -105,7 +104,7 @@ export function AboutSection() {
       href: "https://reliantlabs.io/privacy",
     },
     {
-      icon: FaHatWizard,
+      icon: WandSparkles,
       label: "Restart Onboarding Guide",
       onClick: async () => {
         const store = useOnboardingChecklistStore.getState();
@@ -128,7 +127,7 @@ export function AboutSection() {
       <div className="relative z-10 w-full max-w-sm px-6" data-onboarding="about-settings">
         {/* Logo & Brand */}
         <div className="text-center mb-10">
-          <img src={Logo} alt="Reliant Logo" className="w-24 h-24 mx-auto mb-4" />
+          <BrandMark className="w-24 h-24 mx-auto mb-4" />
           <h1 className="text-3xl font-semibold text-foreground tracking-tight">
             Reliant
           </h1>

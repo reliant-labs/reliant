@@ -40,6 +40,9 @@ export const SETTINGS_KEYS = {
   
   // Spawn display settings
   SPAWN_DISPLAY_MODE: "appearance.spawnDisplayMode",
+
+  // Chat timeline display settings
+  CHAT_TIMELINE_VARIANT: "appearance.chatTimelineVariant",
   
   // Notification settings
   NOTIFICATIONS_ENABLED: "notifications.enabled",

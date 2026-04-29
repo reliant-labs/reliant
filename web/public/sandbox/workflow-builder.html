@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Workflow Builder UI — Reliant Design Sandbox</title>
+  <link rel="stylesheet" href="shared.css">
+  <style>
+    body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+    /* ======== HEADER ======== */
+    .wf-header {
+      height: 48px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center;
+      background: var(--bg-raised);
+      flex-shrink: 0;
+      padding: 0 16px;
+    }
+    .wf-header-left {
+      display: flex; align-items: center; gap: 8px; flex: 1;
+    }
+    .wf-header-center {
+      position: absolute; left: 50%; transform: translateX(-50%);
+      font-size: var(--text-sm); font-weight: var(--fw-medium);
+      color: var(--text-secondary);
+    }
+    .wf-header-right {
+      display: flex; align-items: center; gap: 6px; flex: 1; justify-content: flex-end;
+    }
+    .header-icon {
+      width: 32px; height: 32px;
+      display: flex; align-items: center; justify-content: center;
+      border: none; background: none; color: var(--text-tertiary);
+      cursor: pointer; border-radius: var(--radius-md);
+      transition: all var(--transition-base);
+    }
+    .header-icon:hover { background: var(--bg-overlay); color: var(--text-primary); }
+    .header-icon svg { width: 16px; height: 16px; }
+
+    /* Save status */
+    .save-status {
+      display: flex; align-items: center; gap: 4px;
+      font-size: var(--text-2xs); color: var(--text-tertiary);
+    }
+    .save-status.saved { color: var(--green); }
+    .save-status svg { width: 12px; height: 12px; }
+
+    /* ======== BREADCRUMB ======== */
+    .breadcrumb-bar {
+      display: flex; align-items: center; gap: 4px;
+      padding: 6px 16px;
+      background: var(--bg-base);
+      border-bottom: 1px solid var(--border-muted);
+      font-size: var(--text-xs);
+    }
+    .breadcrumb-item {
+      display: flex; align-items: center; gap: 4px;
+      color: var(--text-tertiary);
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: var(--radius-sm);
+      transition: all var(--transition-base);
+    }
+    .breadcrumb-item:hover { color: var(--text-secondary); background: var(--bg-overlay); }
+    .breadcrumb-item.current { color: var(--text-primary); font-weight: var(--fw-medium); }
+    .breadcrumb-item svg { width: 12px; height: 12px; }
+    .breadcrumb-sep { color: var(--text-tertiary); font-size: 10px; }
+
+    /* ======== CANVAS AREA ======== */
+    .canvas-area {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 50% 50%, rgba(88,166,255,0.03), transparent 70%),
+        linear-gradient(var(--border-muted) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border-muted) 1px, transparent 1px);
+      background-size: 100% 100%, 24px 24px, 24px 24px;
+    }
+
+    /* Mock nodes on canvas */
+    .mock-node {
+      position: absolute;
+      background: var(--bg-raised);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      padding: 14px 18px;
+      min-width: 180px;
+      cursor: move;
+      transition: box-shadow var(--transition-base);
+    }
+    .mock-node:hover { box-shadow: var(--shadow-md); }
+    .mock-node.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-muted); }
+    .mock-node-header {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+    }
+    .mock-node-icon {
+      width: 28px; height: 28px; border-radius: var(--radius-md);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .mock-node-icon svg { width: 14px; height: 14px; }
+    .mock-node-name { font-size: var(--text-sm); font-weight: var(--fw-semi); }
+    .mock-node-detail { font-size: var(--text-2xs); color: var(--text-tertiary); }
+    .mock-node-ports {
+      display: flex; justify-content: space-between; margin-top: 8px;
+    }
+    .mock-port {
+      width: 10px; height: 10px; border-radius: 50%;
+      border: 2px solid var(--border); background: var(--bg-raised);
+    }
+    .mock-port.connected { border-color: var(--accent); background: var(--accent); }
+
+    /* Mock edges (SVG lines) */
+    .canvas-edges {
+      position: absolute; inset: 0; pointer-events: none;
+    }
+    .edge { stroke: var(--border); stroke-width: 2; fill: none; }
+    .edge.active { stroke: var(--accent); stroke-width: 2.5; }
+
+    /* ======== FLOATING TOOLBAR ======== */
+    .floating-toolbar {
+      position: absolute;
+      bottom: 20px; left: 50%;
+      transform: translateX(-50%);
+      display: flex; align-items: center; gap: 2px;
+      background: var(--bg-raised);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      padding: 6px;
+      box-shadow: var(--shadow-lg);
+      z-index: 10;
+    }
+    .toolbar-btn {
+      width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      border: none; background: none; color: var(--text-secondary);
+      cursor: pointer; border-radius: var(--radius-lg);
+      transition: all var(--transition-base);
+    }
+    .toolbar-btn:hover { background: var(--bg-overlay); color: var(--text-primary); }
+    .toolbar-btn.active { background: var(--accent); color: var(--text-on-accent); box-shadow: var(--shadow-glow); }
+    .toolbar-btn:disabled { opacity: 0.3; pointer-events: none; }
+    .toolbar-btn svg { width: 18px; height: 18px; }
+    .toolbar-sep { width: 1px; height: 24px; background: var(--border); margin: 0 4px; }
+
+    /* ======== NODE CONFIG PANEL ======== */
+    .config-panel {
+      position: absolute; top: 0; right: 0;
+      width: 340px; height: 100%;
+      background: var(--bg-raised);
+      border-left: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      z-index: 5;
+      box-shadow: var(--shadow-lg);
+    }
+    .config-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-muted);
+    }
+    .config-title {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .config-title-icon {
+      width: 28px; height: 28px; border-radius: var(--radius-md);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .config-title-icon svg { width: 14px; height: 14px; }
+    .config-title h3 { font-size: var(--text-sm); font-weight: var(--fw-semi); }
+    .config-tabs {
+      display: flex; border-bottom: 1px solid var(--border-muted); padding: 0 12px;
+    }
+    .config-tab {
+      padding: 8px 12px; font-size: var(--text-xs); font-weight: var(--fw-medium);
+      color: var(--text-tertiary); background: none; border: none;
+      border-bottom: 2px solid transparent;
+      cursor: pointer; transition: all var(--transition-base);
+    }
+    .config-tab:hover { color: var(--text-secondary); }
+    .config-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .config-body { flex: 1; overflow-y: auto; padding: 16px; }
+
+    .config-field { margin-bottom: 16px; }
+    .config-label {
+      font-size: var(--text-xs); font-weight: var(--fw-medium);
+      color: var(--text-secondary); margin-bottom: 6px; display: block;
+    }
+    .config-help {
+      font-size: var(--text-2xs); color: var(--text-tertiary);
+      margin-top: 4px; line-height: var(--lh-relaxed);
+    }
+
+    /* CEL input */
+    .cel-input {
+      font-family: var(--font-mono); font-size: var(--text-xs);
+      padding: 8px 10px; background: var(--bg-inset);
+      border: 1px solid var(--border); border-radius: var(--radius-md);
+      color: var(--text-primary); width: 100%;
+      min-height: 60px; resize: vertical;
+      outline: none; transition: border-color var(--transition-base);
+    }
+    .cel-input:focus { border-color: var(--border-focus); }
+
+    /* Validation badge */
+    .validation-ok {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: var(--text-2xs); color: var(--green);
+      background: var(--green-subtle); padding: 2px 8px;
+      border-radius: var(--radius-full);
+    }
+    .validation-ok svg { width: 10px; height: 10px; }
+    .validation-err {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: var(--text-2xs); color: var(--red);
+      background: var(--red-muted); padding: 2px 8px;
+      border-radius: var(--radius-full);
+    }
+    .validation-err svg { width: 10px; height: 10px; }
+
+    /* ======== FLOATING SIDEBAR ======== */
+    .floating-sidebar {
+      position: absolute; top: 12px; left: 12px;
+      display: flex; flex-direction: column; gap: 4px;
+      z-index: 10;
+    }
+    .sidebar-float-btn {
+      width: 40px; height: 40px;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--bg-raised); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); cursor: pointer;
+      color: var(--text-secondary);
+      transition: all var(--transition-base);
+      box-shadow: var(--shadow-md);
+    }
+    .sidebar-float-btn:hover { background: var(--bg-surface); color: var(--text-primary); border-color: var(--accent); }
+    .sidebar-float-btn svg { width: 18px; height: 18px; }
+
+    /* Info popover */
+    .info-popover {
+      position: absolute; top: 12px; left: 60px;
+      width: 280px;
+      background: var(--bg-raised); border: 1px solid var(--border);
+      border-radius: var(--radius-xl); box-shadow: var(--shadow-lg);
+      padding: 16px; z-index: 10;
+    }
+    .info-popover h4 {
+      font-size: var(--text-sm); font-weight: var(--fw-semi);
+      margin-bottom: 8px;
+    }
+    .info-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 4px 0; font-size: var(--text-xs);
+    }
+    .info-row-label { color: var(--text-secondary); }
+    .info-row-value { color: var(--text-primary); font-weight: var(--fw-medium); }
+
+    /* Scenario panel */
+    .scenario-bar {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 16px;
+      background: var(--bg-raised);
+      border-top: 1px solid var(--border);
+    }
+    .scenario-bar span { font-size: var(--text-xs); color: var(--text-secondary); }
+    .scenario-chips { display: flex; gap: 4px; flex: 1; }
+    .scenario-chip {
+      padding: 3px 10px; font-size: var(--text-2xs); font-weight: var(--fw-medium);
+      border-radius: var(--radius-full); cursor: pointer;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--text-secondary); transition: all var(--transition-base);
+    }
+    .scenario-chip:hover { border-color: var(--text-tertiary); color: var(--text-primary); }
+    .scenario-chip.active { border-color: var(--accent); background: var(--accent-muted); color: var(--accent); }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="wf-header">
+    <div class="wf-header-left" style="padding-left: 68px;">
+      <div class="save-status saved">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        Saved
+      </div>
+    </div>
+    <div class="wf-header-center">Workflow Builder</div>
+    <div class="wf-header-right">
+      <button class="header-icon" title="Activity Log">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      </button>
+      <button class="header-icon" title="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12.22 2h-.44a2 2 0 00-2 2v.18a2 2 0 01-1 1.73l-.43.25a2 2 0 01-2 0l-.15-.08a2 2 0 00-2.73.73l-.22.38a2 2 0 00.73 2.73l.15.1a2 2 0 011 1.72v.51a2 2 0 01-1 1.74l-.15.09a2 2 0 00-.73 2.73l.22.38a2 2 0 002.73.73l.15-.08a2 2 0 012 0l.43.25a2 2 0 011 1.73V20a2 2 0 002 2h.44a2 2 0 002-2v-.18a2 2 0 011-1.73l.43-.25a2 2 0 012 0l.15.08a2 2 0 002.73-.73l.22-.39a2 2 0 00-.73-2.73l-.15-.08a2 2 0 01-1-1.74v-.5a2 2 0 011-1.74l.15-.09a2 2 0 00.73-2.73l-.22-.38a2 2 0 00-2.73-.73l-.15.08a2 2 0 01-2 0l-.43-.25a2 2 0 01-1-1.73V4a2 2 0 00-2-2z"/></svg>
+      </button>
+      <button class="header-icon" title="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Breadcrumb -->
+  <div class="breadcrumb-bar">
+    <span class="breadcrumb-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      Workflows
+    </span>
+    <span class="breadcrumb-sep">/</span>
+    <span class="breadcrumb-item">my-deploy-flow</span>
+    <span class="breadcrumb-sep">/</span>
+    <span class="breadcrumb-item current">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8"/><path d="m8 12 4 4 4-4"/></svg>
+      run_step_1
+    </span>
+  </div>
+
+  <!-- Canvas -->
+  <div class="canvas-area">
+    <!-- Floating sidebar (left) -->
+    <div class="floating-sidebar">
+      <button class="sidebar-float-btn" title="Workflow info">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+      </button>
+      <button class="sidebar-float-btn" title="Chat with builder">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+      </button>
+      <button class="sidebar-float-btn" title="YAML editor">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+      </button>
+    </div>
+
+    <!-- Info popover -->
+    <div class="info-popover">
+      <h4>my-deploy-flow</h4>
+      <div class="info-row">
+        <span class="info-row-label">Source</span>
+        <span class="badge badge-purple">Custom</span>
+      </div>
+      <div class="info-row">
+        <span class="info-row-label">Steps</span>
+        <span class="info-row-value">4</span>
+      </div>
+      <div class="info-row">
+        <span class="info-row-label">Last modified</span>
+        <span class="info-row-value">2 min ago</span>
+      </div>
+      <div class="info-row">
+        <span class="info-row-label">Validation</span>
+        <span class="validation-ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Valid</span>
+      </div>
+      <div class="divider"></div>
+      <div style="font-size: var(--text-xs); color: var(--text-secondary); line-height: var(--lh-relaxed);">
+        Deployment pipeline with staging validation, canary analysis, and automated rollback on failure.
+      </div>
+    </div>
+
+    <!-- SVG edges -->
+    <svg class="canvas-edges" viewBox="0 0 1200 600">
+      <path class="edge active" d="M 350 160 C 400 160, 430 220, 480 220" />
+      <path class="edge active" d="M 620 220 C 670 220, 700 160, 740 160" />
+      <path class="edge" d="M 620 220 C 670 220, 700 280, 740 280" />
+      <path class="edge" d="M 880 160 C 930 160, 930 220, 950 220" />
+      <path class="edge" d="M 880 280 C 930 280, 930 220, 950 220" />
+    </svg>
+
+    <!-- Mock nodes -->
+    <div class="mock-node" style="left: 200px; top: 130px;">
+      <div class="mock-node-header">
+        <div class="mock-node-icon" style="background: var(--green-muted); color: var(--green);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+        <div>
+          <div class="mock-node-name">event_start</div>
+          <div class="mock-node-detail">Trigger</div>
+        </div>
+      </div>
+      <div class="mock-node-ports"><div></div><div class="mock-port connected"></div></div>
+    </div>
+
+    <div class="mock-node selected" style="left: 440px; top: 190px;">
+      <div class="mock-node-header">
+        <div class="mock-node-icon" style="background: var(--accent-muted); color: var(--accent);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8"/><path d="m8 12 4 4 4-4"/></svg></div>
+        <div>
+          <div class="mock-node-name">run_step_1</div>
+          <div class="mock-node-detail">Agent · sonnet-4</div>
+        </div>
+      </div>
+      <div class="mock-node-ports"><div class="mock-port connected"></div><div class="mock-port connected"></div></div>
+    </div>
+
+    <div class="mock-node" style="left: 700px; top: 130px;">
+      <div class="mock-node-header">
+        <div class="mock-node-icon" style="background: var(--orange-muted); color: var(--orange);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5"/><path d="M8 3H3v5"/><path d="M12 22v-8.3a4 4 0 00-1.172-2.872L3 3"/><path d="m15 9 6-6"/></svg></div>
+        <div>
+          <div class="mock-node-name">router</div>
+          <div class="mock-node-detail">Branch</div>
+        </div>
+      </div>
+      <div class="mock-node-ports"><div class="mock-port connected"></div><div class="mock-port"></div></div>
+    </div>
+
+    <div class="mock-node" style="left: 700px; top: 250px;">
+      <div class="mock-node-header">
+        <div class="mock-node-icon" style="background: var(--purple-muted); color: var(--purple);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></div>
+        <div>
+          <div class="mock-node-name">run_review</div>
+          <div class="mock-node-detail">Agent · reviewer</div>
+        </div>
+      </div>
+      <div class="mock-node-ports"><div class="mock-port"></div><div class="mock-port"></div></div>
+    </div>
+
+    <div class="mock-node" style="left: 920px; top: 190px;">
+      <div class="mock-node-header">
+        <div class="mock-node-icon" style="background: var(--cyan-muted); color: var(--cyan);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg></div>
+        <div>
+          <div class="mock-node-name">join</div>
+          <div class="mock-node-detail">Merge all</div>
+        </div>
+      </div>
+      <div class="mock-node-ports"><div class="mock-port"></div><div></div></div>
+    </div>
+
+    <!-- Floating toolbar (bottom center) -->
+    <div class="floating-toolbar">
+      <button class="toolbar-btn" title="Pan (Hand)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 11V6a2 2 0 00-2-2v0a2 2 0 00-2 2v0"/><path d="M14 10V4a2 2 0 00-2-2v0a2 2 0 00-2 2v6"/><path d="M10 10.5V6a2 2 0 00-2-2v0a2 2 0 00-2 2v8"/><path d="M18 8a2 2 0 114 0v6a8 8 0 01-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 012.83-2.82L7 15"/></svg>
+      </button>
+      <button class="toolbar-btn active" title="Select">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/></svg>
+      </button>
+      <button class="toolbar-btn" title="Lock Nodes">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+      </button>
+      <div class="toolbar-sep"></div>
+      <button class="toolbar-btn" title="Undo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+      </button>
+      <button class="toolbar-btn" disabled title="Redo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+      </button>
+      <div class="toolbar-sep"></div>
+      <button class="toolbar-btn" title="Zoom In">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+      </button>
+      <button class="toolbar-btn" title="Zoom Out">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+      </button>
+      <button class="toolbar-btn" title="Fit View">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/></svg>
+      </button>
+      <div class="toolbar-sep"></div>
+      <button class="toolbar-btn" title="Auto-layout">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l1.5 4.5H18l-3.5 2.5L16 14.5 12 12l-4 2.5 1.5-4.5L6 7.5h4.5z"/></svg>
+      </button>
+    </div>
+
+    <!-- Config panel (right) -->
+    <div class="config-panel">
+      <div class="config-header">
+        <div class="config-title">
+          <div class="config-title-icon" style="background: var(--accent-muted); color: var(--accent);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v8"/><path d="m8 12 4 4 4-4"/></svg>
+          </div>
+          <h3>run_step_1</h3>
+        </div>
+        <button class="header-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="config-tabs">
+        <button class="config-tab active">Config</button>
+        <button class="config-tab">Outputs</button>
+        <button class="config-tab">Logs</button>
+      </div>
+      <div class="config-body">
+        <div class="config-field">
+          <label class="config-label">Preset</label>
+          <select class="select" style="width: 100%;">
+            <option>implementer</option>
+            <option>researcher</option>
+            <option>general</option>
+            <option>code_reviewer</option>
+          </select>
+          <div class="config-help">Agent preset determines available tools and system prompt.</div>
+        </div>
+
+        <div class="config-field">
+          <label class="config-label">Model</label>
+          <select class="select" style="width: 100%;">
+            <option>claude-sonnet-4-20250514</option>
+            <option>claude-haiku-4</option>
+          </select>
+        </div>
+
+        <div class="config-field">
+          <label class="config-label">Prompt (CEL)</label>
+          <textarea class="cel-input">steps.event_start.output.prompt + "\n\nContext:\n" + steps.event_start.output.context</textarea>
+          <div style="margin-top: 6px;">
+            <span class="validation-ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Valid CEL</span>
+          </div>
+        </div>
+
+        <div class="config-field">
+          <label class="config-label">Max Turns</label>
+          <input type="number" class="input" value="50" style="width: 100px;">
+        </div>
+
+        <div class="config-field">
+          <label class="config-label">Tools</label>
+          <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;">
+            <span class="badge badge-blue">bash</span>
+            <span class="badge badge-blue">edit</span>
+            <span class="badge badge-blue">write</span>
+            <span class="badge badge-blue">view</span>
+            <span class="badge badge-blue">grep</span>
+            <span class="badge badge-blue">glob</span>
+            <span class="badge badge-muted">+ 8 more</span>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="config-field">
+          <label class="config-label">Thread Configuration</label>
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 4px;">
+            <span style="font-size: var(--text-xs); color: var(--text-secondary);">Save messages to parent</span>
+            <div class="toggle-track active"><div class="toggle-thumb"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scenario bar -->
+  <div class="scenario-bar">
+    <span>Scenario:</span>
+    <div class="scenario-chips">
+      <button class="scenario-chip active">Default</button>
+      <button class="scenario-chip">Large PR</button>
+      <button class="scenario-chip">Hotfix</button>
+      <button class="scenario-chip" style="border-style: dashed;">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -1px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New
+      </button>
+    </div>
+    <button class="btn btn-primary btn-sm">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      Run
+    </button>
+  </div>
+</body>
+</html>

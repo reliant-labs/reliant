@@ -1,7 +1,7 @@
 import { useNavigate } from '@tanstack/react-router'
 import { ResetPassword } from './ResetPassword'
 import { useAuthStore } from '@/store/authStore'
-import Logo from '../assets/logo.svg'
+import { BrandMark } from './icons/BrandMark'
 
 export function ResetPasswordScreen() {
   const navigate = useNavigate()
@@ -24,7 +24,7 @@ export function ResetPasswordScreen() {
           <div className="p-8">
             <div className="flex flex-col items-center gap-4 mb-6">
               <div className="flex items-center gap-3">
-                <img src={Logo} alt="Reliant Logo" className="h-8 w-auto" />
+                <BrandMark className="h-8 w-8" />
                 <h1 className="text-3xl font-bold">Reliant</h1>
               </div>
             </div>

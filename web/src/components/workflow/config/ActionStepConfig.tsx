@@ -15,6 +15,7 @@ import {
   withActionArgs,
   hasTypedArgs,
 } from "../../../lib/actionStepArgs";
+import { Section, SectionFields, SectionLabel } from "./primitives";
 
 export function ActionStepConfig({
   step,
@@ -28,7 +29,6 @@ export function ActionStepConfig({
   const [nodes, setNodes] = useState<NodeInfo[]>([]);
   const [loadingNodes, setLoadingNodes] = useState(true);
 
-  // Fetch nodes from gRPC on mount
   useEffect(() => {
     const fetchNodes = async () => {
       try {
@@ -48,12 +48,10 @@ export function ActionStepConfig({
   const currentNode = nodes.find((n) => n.id === step.type);
   const allFields = currentNode?.inputFields || [];
 
-  // Apply field defaults for new nodes with no args set
   useEffect(() => {
     if (!currentNode || allFields.length === 0) return
     if (!hasTypedArgs(step)) return
 
-    // Only apply if no args fields have values yet (new node)
     const hasExistingValues = allFields.some(
       (field) => getActionArgValue(step, field.name) !== undefined,
     )
@@ -77,7 +75,6 @@ export function ActionStepConfig({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentNode?.id]);
 
-
   const handleFieldChange = (fieldName: string, fieldType: string, isCel: boolean, value: unknown) => {
     onUpdate(withActionArg(step, fieldName, value, fieldType, isCel));
   };
@@ -95,43 +92,38 @@ export function ActionStepConfig({
     );
   };
 
-  // Read response_tool from proto args (CallLLMArgs.responseTool)
   const responseTool = getActionArgValue(step, 'response_tool') as ResponseToolDefinition | undefined;
 
   return (
     <>
-      {/* Activity description */}
       {currentNode?.description && (
-        <p className="text-xs text-muted-foreground mb-4">
-          {currentNode.description}
-        </p>
+        <Section>
+          <p className="cpv2-field-hint !mt-0">{currentNode.description}</p>
+        </Section>
       )}
 
-      {/* Dynamic input fields based on node metadata */}
       {loadingNodes ? (
-        <div className="text-sm text-muted-foreground">
-          Loading configuration...
-        </div>
+        <Section>
+          <p className="cpv2-field-hint !mt-0">Loading configuration...</p>
+        </Section>
       ) : allFields.length > 0 ? (
-        <div className="space-y-4">
-          {groupFieldsByCategory(allFields).map((group, idx) => (
-            <div key={group.category}>
-              {idx > 0 && (
-                <div className="h-px bg-border/30 my-3" />
-              )}
-              <div className="space-y-3">
-                {group.fields.map(renderField)}
-              </div>
-            </div>
-          ))}
-        </div>
+        groupFieldsByCategory(allFields).map((group) => (
+          <Section key={group.category}>
+            <SectionLabel>{group.category || "Configuration"}</SectionLabel>
+            <SectionFields>
+              {group.fields.map(renderField)}
+            </SectionFields>
+          </Section>
+        ))
       ) : step.type !== 'call_llm' ? (
-        <p className="text-sm text-muted-foreground italic">No configuration required</p>
+        <Section>
+          <p className="cpv2-field-hint !mt-0 italic">No configuration required</p>
+        </Section>
       ) : null}
 
-      {/* Response Tool editor - only for call_llm action */}
       {step.type === "call_llm" && (
-        <div className="mt-4 pt-4 border-t border-border">
+        <Section>
+          <SectionLabel>Response Tool</SectionLabel>
           <ResponseToolsEditor
             tool={responseTool || null}
             onChange={(tool) =>
@@ -139,7 +131,7 @@ export function ActionStepConfig({
             }
             isReadOnly={isReadOnly}
           />
-        </div>
+        </Section>
       )}
     </>
   );

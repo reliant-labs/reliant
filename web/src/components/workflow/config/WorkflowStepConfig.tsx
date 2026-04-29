@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
 import { Pencil, Eye } from "lucide-react";
-import { cn } from "../../../lib/utils";
 import type { WorkflowStep } from "../../../types/workflow";
 import {
   isInlineWorkflow,
@@ -19,6 +18,16 @@ import { ResponseToolsEditor } from "../ResponseToolsEditor";
 import type { ResponseToolDefinition } from "../../../types/workflow";
 import { toJson } from "@bufbuild/protobuf";
 import { ValueSchema } from "@bufbuild/protobuf/wkt";
+import {
+  DrillRow,
+  FieldInput,
+  FieldLabel,
+  FieldSelect,
+  ModeGroup,
+  ModePill,
+  Section,
+  SectionLabel,
+} from "./primitives";
 
 export function WorkflowStepConfig({
   step,
@@ -234,55 +243,30 @@ export function WorkflowStepConfig({
 
   return (
     <>
-      {/* Mode toggle - Workflow Reference vs Inline (text-foreground for contrast in dark + light) */}
-      <div>
-        <label className="block text-xs uppercase tracking-wider text-muted-foreground font-medium mb-1">
-          Workflow Definition
-        </label>
-        <div className="flex rounded-md overflow-hidden border border-input bg-background">
-          <button
-            onClick={switchToWorkflow}
-            disabled={isReadOnly}
-            className={cn(
-              "flex-1 px-3 py-1.5 text-sm transition-colors border-r border-input",
-              selectedMode === "workflow"
-                ? "bg-muted text-foreground font-medium"
-                : "text-foreground hover:bg-muted/50",
-              "disabled:opacity-60 disabled:cursor-not-allowed",
-            )}
-          >
+      <Section>
+        <SectionLabel>Workflow Definition</SectionLabel>
+        <ModeGroup>
+          <ModePill active={selectedMode === "workflow"} onClick={() => !isReadOnly && switchToWorkflow()}>
             Reference
-          </button>
-          <button
-            onClick={switchToInline}
-            disabled={isReadOnly}
-            className={cn(
-              "flex-1 px-3 py-1.5 text-sm transition-colors",
-              selectedMode === "inline"
-                ? "bg-muted text-foreground font-medium"
-                : "text-foreground hover:bg-muted/50",
-              "disabled:opacity-60 disabled:cursor-not-allowed",
-            )}
-          >
+          </ModePill>
+          <ModePill active={selectedMode === "inline"} onClick={() => !isReadOnly && switchToInline()}>
             Inline
-          </button>
-        </div>
-      </div>
+          </ModePill>
+        </ModeGroup>
+      </Section>
 
       {/* Workflow Reference Mode */}
       {selectedMode === "workflow" && (
         <>
-          {/* Workflow selector */}
-          <div>
-            <label className="block text-xs uppercase tracking-wider text-muted-foreground font-medium mb-1">
-              Workflow Reference
-            </label>
+          <Section>
+            <SectionLabel>Workflow</SectionLabel>
+            <FieldLabel>Reference</FieldLabel>
             {loadingWorkflows ? (
-              <div className="w-full px-3 py-2 border border-input rounded-md bg-background text-muted-foreground">
+              <div className="cpv2-field-input text-muted-foreground">
                 Loading workflows...
               </div>
             ) : (
-              <select
+              <FieldSelect
                 value={getSelectionType()}
                 onChange={(e) => {
                   if (e.target.value === "custom") {
@@ -301,7 +285,6 @@ export function WorkflowStepConfig({
                     );
                   }
                 }}
-                className="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-ring focus:border-ring bg-background text-foreground disabled:opacity-60 disabled:cursor-not-allowed"
                 disabled={isReadOnly}
               >
                 <option value="">Select a workflow...</option>
@@ -328,35 +311,37 @@ export function WorkflowStepConfig({
                 <optgroup label="Other">
                   <option value="custom">Custom path...</option>
                 </optgroup>
-              </select>
+              </FieldSelect>
             )}
-          </div>
+          </Section>
 
           {/* Custom path input */}
           {(getSelectionType() === "custom" || isCustomPath) && (
-            <input
-              type="text"
-              value={workflowRefValue}
-              onChange={(e) =>
-                onUpdate(
-                  withWorkflowArgs(step, {
-                    ref: celString(e.target.value) as any,
-                  }) as WorkflowStep,
-                )
-              }
-              className="w-full px-3 py-2 border border-input rounded-md focus:ring-2 focus:ring-ring focus:border-ring bg-background text-foreground disabled:opacity-60 disabled:cursor-not-allowed -mt-1"
-              placeholder="Workflow reference or {{expression}}"
-              disabled={isReadOnly}
-            />
+            <Section>
+              <FieldLabel>Custom path</FieldLabel>
+              <FieldInput
+                type="text"
+                value={workflowRefValue}
+                onChange={(e) =>
+                  onUpdate(
+                    withWorkflowArgs(step, {
+                      ref: celString(e.target.value) as any,
+                    }) as WorkflowStep,
+                  )
+                }
+                placeholder="Workflow reference or {{expression}}"
+                disabled={isReadOnly}
+              />
+            </Section>
           )}
 
           {/* Schema-aware inputs */}
           {loadingDef ? (
-            <div className="py-4 text-center text-sm text-muted-foreground">
-              Loading workflow inputs...
-            </div>
+            <Section>
+              <p className="cpv2-field-hint !mt-0 text-center">Loading workflow inputs...</p>
+            </Section>
           ) : (filteredInputGroups.length > 0 || hasResponseToolFields) ? (
-            <div className="space-y-4 border-t border-border pt-4">
+            <>
               {filteredInputGroups.map((group) => (
                 <WorkflowInputGroup
                   key={`${step.id}-${group.name || "_default"}`}
@@ -376,42 +361,31 @@ export function WorkflowStepConfig({
                 />
               ))}
               {hasResponseToolFields && (
-                <ResponseToolsEditor
-                  tool={getResponseTool()}
-                  onChange={handleResponseToolChange}
-                  isReadOnly={isReadOnly}
-                />
+                <Section>
+                  <SectionLabel>Response Tool</SectionLabel>
+                  <ResponseToolsEditor
+                    tool={getResponseTool()}
+                    onChange={handleResponseToolChange}
+                    isReadOnly={isReadOnly}
+                  />
+                </Section>
               )}
-            </div>
+            </>
           ) : null}
         </>
       )}
 
       {/* Inline Mode */}
       {selectedMode === "inline" && (
-        <div>
-          <label className="block text-sm font-medium text-foreground mb-1">
-            Inline Workflow
-          </label>
-          <button
+        <Section>
+          <SectionLabel>Inline Workflow</SectionLabel>
+          <DrillRow
+            label={isReadOnly ? "View sub-workflow" : "Edit sub-workflow"}
+            sublabel={`${inlineWorkflow?.nodes?.length || 0} nodes, ${inlineWorkflow?.edges?.length || 0} edges`}
+            icon={isReadOnly ? <Eye className="w-3 h-3" /> : <Pencil className="w-3 h-3" />}
             onClick={() => onEditInlineBody?.(step)}
-            disabled={!onEditInlineBody}
-            className="w-full flex items-center justify-between px-3 py-2 border border-input rounded-md bg-muted/30 hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-          >
-            <span className="text-muted-foreground">
-              {inlineWorkflow?.nodes?.length || 0} nodes ·{" "}
-              {inlineWorkflow?.edges?.length || 0} edges
-            </span>
-            <span className="flex items-center gap-1 text-primary">
-              {isReadOnly ? (
-                <Eye className="w-3.5 h-3.5" />
-              ) : (
-                <Pencil className="w-3.5 h-3.5" />
-              )}
-              {isReadOnly ? "View" : "Edit"}
-            </span>
-          </button>
-        </div>
+          />
+        </Section>
       )}
 
     </>
