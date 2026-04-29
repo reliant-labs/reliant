@@ -380,7 +380,7 @@ export function OnboardingSpotlight({
       {/* Tooltip content - shows and animates from last position */}
       <div
         className={cn(
-          "absolute bg-zinc-900 border border-zinc-700/60 rounded-xl shadow-[0_8px_32px_rgba(0,0,0,0.5)]",
+          "absolute rounded-xl border border-border bg-popover text-popover-foreground shadow-2xl",
           "w-80 transition-all duration-500 ease-out",
           isVisible ? "opacity-100 scale-100" : "opacity-0 scale-95"
         )}
@@ -388,8 +388,8 @@ export function OnboardingSpotlight({
       >
         <div className="p-5">
           {/* Title & Description */}
-          <h3 className="text-lg font-semibold text-white mb-2.5 tracking-tight">{title}</h3>
-          <div className="text-sm text-zinc-300 leading-relaxed">{description}</div>
+          <h3 className="text-lg font-semibold text-foreground mb-2.5 tracking-tight">{title}</h3>
+          <div className="text-sm text-muted-foreground leading-relaxed">{description}</div>
         </div>
       </div>
     </div>

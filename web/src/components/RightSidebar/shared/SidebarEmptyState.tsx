@@ -33,14 +33,14 @@ export function SidebarEmptyState({
 }: SidebarEmptyStateProps) {
   const sizeClasses = {
     sm: {
-      container: "py-6 px-3",
-      icon: "w-6 h-6 mb-2",
+      container: "py-4 px-3",
+      icon: "w-5 h-5 mb-2",
       title: "text-xs",
       description: "text-[10px] mt-0.5",
     },
     md: {
-      container: "py-8 px-4",
-      icon: "w-8 h-8 mb-3",
+      container: "py-6 px-4",
+      icon: "w-7 h-7 mb-3",
       title: "text-sm",
       description: "text-xs mt-1",
     },
@@ -57,19 +57,19 @@ export function SidebarEmptyState({
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center text-center",
+        "m-2 flex flex-col items-center justify-center rounded-[10px] border border-border bg-card/95 text-center shadow-sm",
         styles.container,
         className
       )}
     >
       <Icon
-        className={cn("text-muted-foreground/50", styles.icon)}
+        className={cn("text-primary/60", styles.icon)}
       />
-      <p className={cn("text-muted-foreground font-medium", styles.title)}>
+      <p className={cn("text-foreground font-semibold", styles.title)}>
         {title}
       </p>
       {description && (
-        <p className={cn("text-muted-foreground/70", styles.description)}>
+        <p className={cn("text-muted-foreground/75", styles.description)}>
           {description}
         </p>
       )}

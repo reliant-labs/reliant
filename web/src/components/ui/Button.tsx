@@ -90,28 +90,6 @@ export function Button({
   style,
   ...props
 }: ButtonProps) {
-  // Inline styles for variants that use primary/secondary colors
-  // This is needed because Tailwind utility classes aren't resolving CSS custom properties correctly
-  const getVariantStyles = () => {
-    switch (variant) {
-      case 'default':
-      case 'primary':
-        return {
-          backgroundColor: 'hsl(var(--primary))',
-          color: 'hsl(var(--primary-foreground))',
-          borderColor: 'hsl(var(--primary) / 0.2)',
-        };
-      case 'secondary':
-        return {
-          backgroundColor: 'hsl(var(--secondary))',
-          color: 'hsl(var(--secondary-foreground))',
-          borderColor: 'hsl(var(--border) / 0.5)',
-        };
-      default:
-        return undefined;
-    }
-  };
-
   return (
     <button
       className={cn(
@@ -121,18 +99,15 @@ export function Button({
         'disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none',
         'cursor-pointer',
 
-        // Variant styles (keep for non-color properties like hover effects)
+        // Variant styles
         buttonVariants[variant],
-
-        // Class for visible hover when variant uses inline background
-        (variant === 'primary' || variant === 'default') && 'btn-primary',
 
         // Size styles
         buttonSizes[size],
 
         className
       )}
-      style={{ ...getVariantStyles(), ...style }}
+      style={style}
       disabled={disabled || loading}
       {...props}
     >

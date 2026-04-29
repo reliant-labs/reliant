@@ -79,9 +79,9 @@ export function NotificationSettings() {
     switch (permission) {
       case "granted":
         return (
-          <div className="flex items-center gap-2 text-green-500">
+          <div className="flex items-center gap-2 text-green-400">
             <CheckCircle className="w-4 h-4" />
-            <span className="text-sm">Permission granted</span>
+            <span className="text-sm font-medium">Permission granted</span>
           </div>
         );
       case "denied":
@@ -127,7 +127,7 @@ export function NotificationSettings() {
 
       <div className="space-y-4">
         {/* Permission Status */}
-        <div className="p-4 border border-border rounded-lg bg-card">
+        <div className="p-4 border border-border/40 rounded-lg bg-card shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-medium mb-1">Browser Permission</h3>
@@ -145,7 +145,7 @@ export function NotificationSettings() {
         </div>
 
         {/* Notifications Toggle */}
-        <div className="flex items-start justify-between p-4 border border-border rounded-lg bg-card">
+        <div className="flex items-start justify-between p-4 border border-border/40 rounded-lg bg-card shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
           <div className="flex-1 pr-4">
             <h3 className="text-sm font-medium mb-1">Desktop Notifications</h3>
             <p className="text-xs text-muted-foreground">
@@ -162,8 +162,8 @@ export function NotificationSettings() {
 
         {/* Warning if enabled but permission denied */}
         {notificationsEnabled && permission === "denied" && (
-          <div className="flex items-start gap-3 p-4 border border-red-500/30 bg-red-500/5 rounded-lg">
-            <XCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+          <div className="flex items-start gap-3 p-4 border border-red-500/40 bg-red-500/10 rounded-lg">
+            <XCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-sm text-foreground font-medium mb-1">
                 Permission Required
@@ -177,8 +177,8 @@ export function NotificationSettings() {
 
         {/* When to Notify Section */}
         {notificationsEnabled && permission === "granted" && (
-          <div className="p-4 border border-border rounded-lg bg-card space-y-4">
-            <h3 className="text-sm font-medium">When to Notify</h3>
+          <div className="p-4 border border-border/40 rounded-lg bg-card shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)] space-y-4">
+            <h3 className="text-sm font-semibold text-foreground">When to Notify</h3>
             
             {/* Notify when app is unfocused */}
             <div className="flex items-start justify-between">
@@ -187,7 +187,7 @@ export function NotificationSettings() {
                   <AppWindow className="w-4 h-4 text-muted-foreground" />
                   <span className="text-sm">When app is in background</span>
                 </div>
-                <p className="text-xs text-muted-foreground ml-6">
+                <p className="text-xs text-muted-foreground mt-0.5 pl-6">
                   Notify when Reliant window is not focused (you're in another app)
                 </p>
               </div>
@@ -206,7 +206,7 @@ export function NotificationSettings() {
                   <MessageSquare className="w-4 h-4 text-muted-foreground" />
                   <span className="text-sm">When viewing a different chat</span>
                 </div>
-                <p className="text-xs text-muted-foreground ml-6">
+                <p className="text-xs text-muted-foreground mt-0.5 pl-6">
                   Notify when a background chat completes while you're in another chat
                 </p>
               </div>
@@ -225,7 +225,7 @@ export function NotificationSettings() {
                   <BellRing className="w-4 h-4 text-muted-foreground" />
                   <span className="text-sm">Always notify</span>
                 </div>
-                <p className="text-xs text-muted-foreground ml-6">
+                <p className="text-xs text-muted-foreground mt-0.5 pl-6">
                   Always show notifications, even when viewing the active chat
                 </p>
               </div>
@@ -239,7 +239,8 @@ export function NotificationSettings() {
         )}
 
         {/* Sound Settings */}
-        <div className="flex items-start justify-between p-4 border border-border rounded-lg bg-card">
+        <div className="border-t border-border/30 pt-5 mt-5"></div>
+        <div className="flex items-start justify-between p-4 border border-border/40 rounded-lg bg-card shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
           <div className="flex-1 pr-4">
             <div className="flex items-center gap-2 mb-1">
               {soundEnabled ? (
@@ -261,7 +262,7 @@ export function NotificationSettings() {
         </div>
 
         {/* Test Notification Button */}
-        <div className="p-4 border border-border rounded-lg bg-card">
+        <div className="p-4 border border-border/40 rounded-lg bg-card shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-medium mb-1">Test Notification</h3>
@@ -280,9 +281,10 @@ export function NotificationSettings() {
         </div>
 
         {/* Information notice */}
-        <div className="p-4 border border-border rounded-lg elevation-1">
+        <div className="border-t border-border/30 pt-5 mt-5"></div>
+        <div className="p-4 border border-border/40 rounded-lg bg-muted/30">
           <p className="text-xs text-muted-foreground mb-2">
-            <strong>What triggers notifications?</strong>
+            <strong className="text-foreground">What triggers notifications?</strong>
           </p>
           <ul className="text-xs text-muted-foreground list-disc list-inside space-y-1">
             <li>Workflow completes (LLM finishes responding)</li>

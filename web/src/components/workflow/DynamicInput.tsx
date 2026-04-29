@@ -226,7 +226,7 @@ export function DynamicInput({
             disabled={disabled}
             placeholder="inputs.param_name"
             className={cn(
-              "w-full px-3 py-1.5 text-sm rounded-md border font-mono",
+              "w-full px-3 py-1.5 text-sm rounded-md border",
               "bg-background focus:outline-none focus:ring-2 focus:ring-ring",
               "border-input",
               disabled && "opacity-50 cursor-not-allowed",
@@ -262,7 +262,7 @@ export function DynamicInput({
                       key={item.value}
                       type="button"
                       onClick={() => insertSuggestion(item.value)}
-                      className="w-full px-3 py-1.5 text-left text-sm font-mono hover:bg-accent/50 transition-colors"
+                      className="w-full px-3 py-1.5 text-left text-sm hover:bg-accent/50 transition-colors"
                     >
                       {item.label}
                     </button>

@@ -218,7 +218,7 @@ export function ToolCallSettings() {
           </button>
         </div>
 
-        <div className="border border-border rounded-lg divide-y divide-border">
+        <div className="border border-border/40 rounded-lg divide-y divide-border/40">
           <ToolCategoryToggle
             icon={<Eye className="w-4 h-4" />}
             label="File View Tools"
@@ -343,7 +343,7 @@ export function ToolCallSettingsCompact() {
         </button>
       </div>
 
-      <div className="border border-border rounded-lg divide-y divide-border">
+      <div className="border border-border/40 rounded-lg divide-y divide-border/40">
         <ToolCategoryToggle
           icon={<Eye className="w-4 h-4" />}
           label="File View Tools"

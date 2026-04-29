@@ -80,9 +80,9 @@ export function ModelDropdown({
         }}
         disabled={disabled || isActuallyLoading}
         className={cn(
-          'flex items-center justify-between gap-2 w-full px-2.5 py-1.5 text-sm rounded-md',
+          'flex items-center justify-between gap-2 w-full px-2.5 py-1.5 text-xs rounded-[6px]',
           'border border-[hsl(var(--config-input-border))] bg-[hsl(var(--config-input-bg))] text-foreground',
-          'focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring',
+          'focus:outline-none focus:border-ring focus:shadow-[0_0_0_2px_hsl(var(--ring)/0.15)]',
           (disabled || isActuallyLoading) && 'opacity-50 cursor-not-allowed',
         )}
       >
@@ -95,7 +95,7 @@ export function ModelDropdown({
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-1 z-[1000] rounded-md border border-border bg-[var(--chat-dropdown-bg)] shadow-lg">
+        <div className="absolute top-full left-0 right-0 mt-1 z-[1000] rounded-[6px] border border-border bg-card shadow-lg overflow-hidden">
           <div className="py-1 max-h-64 overflow-y-auto">
             {providers.map((provider) => (
               <div key={provider}>
@@ -114,8 +114,8 @@ export function ModelDropdown({
                         setIsOpen(false)
                       }}
                       className={cn(
-                        'w-full px-3 py-1.5 text-left text-sm transition-colors',
-                        isSelected ? 'bg-accent' : 'hover:bg-accent/50',
+                        'w-full px-3 py-1.5 text-left text-xs transition-colors',
+                        isSelected ? 'bg-primary/15 text-primary' : 'hover:bg-muted',
                       )}
                     >
                       <div className="flex items-center justify-between">

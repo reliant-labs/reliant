@@ -45,16 +45,16 @@ export function SidebarSection({
   variant = "default",
 }: SidebarSectionProps) {
   return (
-    <div className={cn("border-b border-border", className)}>
+    <div className={cn("mx-2 mb-2 overflow-hidden rounded-[10px] border border-border bg-card/95 shadow-sm", className)}>
       {/* Section header */}
       <div
         className={cn(
-          "flex items-center",
+          "flex items-center border-b border-border/50",
           variant === "highlighted"
             ? "bg-primary/5 hover:bg-primary/10"
             : headerClassName
               ? undefined
-              : "bg-muted/30 hover:bg-muted/50",
+              : "bg-muted/20 hover:bg-muted/40",
           "transition-colors",
           headerClassName
         )}
@@ -72,7 +72,7 @@ export function SidebarSection({
       >
         <button
           onClick={onToggle}
-          className="flex-1 flex items-center gap-2 px-3 py-2 text-left"
+          className="flex flex-1 items-center gap-2 px-3 py-2 text-left"
         >
           {isExpanded ? (
             <ChevronDown className="w-3 h-3 text-muted-foreground flex-shrink-0" />
@@ -84,16 +84,16 @@ export function SidebarSection({
           )}
           <span
             className={cn(
-              "text-xs font-medium uppercase tracking-wider",
+              "text-[11px] font-bold uppercase tracking-[0.06em]",
               variant === "highlighted"
                 ? "text-primary"
-                : "text-muted-foreground"
+                : "text-muted-foreground/80"
             )}
           >
             {title}
           </span>
           {count !== undefined && (
-            <span className="ml-auto text-xs text-muted-foreground">
+            <span className="ml-auto rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
               {count}
             </span>
           )}
@@ -106,7 +106,7 @@ export function SidebarSection({
       </div>
 
       {/* Section content */}
-      {isExpanded && <div className="pb-2">{children}</div>}
+      {isExpanded && <div className="py-1.5">{children}</div>}
     </div>
   );
 }
@@ -138,7 +138,7 @@ export function SidebarSectionItem({
     <Component
       onClick={onClick}
       className={cn(
-        "w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm",
+        "w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm rounded-md",
         "transition-colors",
         onClick && "cursor-pointer hover:bg-muted/50",
         isActive && "bg-primary/10 text-primary",

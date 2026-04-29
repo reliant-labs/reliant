@@ -14,9 +14,9 @@ import { LoadToolRenderer } from './LoadToolRenderer';
 import { GenericToolRenderer } from './GenericToolRenderer';
 import { SpawnToolRenderer } from './SpawnToolRenderer';
 import {
-  isViewOnlyTool,
   isShellTool,
   isFileTool,
+  isViewOnlyTool,
   isReadToolWithResults,
   isPlanTool,
   isSkillTool,
@@ -37,11 +37,6 @@ interface ToolContentAreaProps {
 function ToolContentAreaComponent({ ctx }: ToolContentAreaProps) {
   const toolName = ctx.toolName;
 
-  // View-only tools don't render content - they just open files on click
-  if (isViewOnlyTool(toolName)) {
-    return null;
-  }
-
   // Route to appropriate renderer
   if (isSkillTool(toolName)) {
     return <SkillToolRenderer ctx={ctx} />;
@@ -59,7 +54,7 @@ function ToolContentAreaComponent({ ctx }: ToolContentAreaProps) {
     return <FileToolRenderer ctx={ctx} />;
   }
 
-  if (isReadToolWithResults(toolName)) {
+  if (isViewOnlyTool(toolName) || isReadToolWithResults(toolName)) {
     return <ReadToolRenderer ctx={ctx} />;
   }
 

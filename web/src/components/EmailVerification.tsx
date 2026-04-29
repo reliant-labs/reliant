@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { KeyRound, CheckCircle, LogOut } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
-import Logo from '../assets/logo.svg'
+import { BrandMark } from './icons/BrandMark'
 
 interface EmailVerificationProps {
   autoSend?: boolean
@@ -180,7 +180,7 @@ export function EmailVerification({ autoSend = true, email }: EmailVerificationP
           {/* Logo */}
           <div className="flex flex-col items-center gap-4 mb-8">
             <div className="flex items-center gap-3">
-              <img src={Logo} alt="Reliant Logo" className="h-8 w-auto" />
+              <BrandMark className="h-8 w-8" />
               <h1 className="text-3xl font-bold">Reliant</h1>
             </div>
           </div>
@@ -188,19 +188,14 @@ export function EmailVerification({ autoSend = true, email }: EmailVerificationP
           <div className="space-y-6">
             {/* Header */}
             <div className="space-y-2">
-              <div
-                className="w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4"
-                style={{
-                  backgroundColor: 'hsl(var(--primary) / 0.15)',
-                }}
-              >
-                <CheckCircle className="w-8 h-8" style={{ color: 'hsl(var(--primary))' }} />
+              <div className="w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4 bg-primary/15">
+                <CheckCircle className="w-8 h-8 text-primary" />
               </div>
 
-              <h2 className="text-2xl font-semibold text-center" style={{ color: 'hsl(var(--foreground))' }}>
+              <h2 className="text-2xl font-semibold text-center text-foreground">
                 Verify Your Email
               </h2>
-              <p className="text-sm text-center" style={{ color: 'hsl(var(--muted-foreground))' }}>
+              <p className="text-sm text-center text-muted-foreground">
                 We've sent a 6-digit verification code to <strong>{emailToShow}</strong>
               </p>
             </div>
@@ -210,16 +205,12 @@ export function EmailVerification({ autoSend = true, email }: EmailVerificationP
               <div className="space-y-2">
                 <label
                   htmlFor="code"
-                  className="text-sm font-medium"
-                  style={{ color: 'hsl(var(--foreground))' }}
+                  className="text-sm font-medium text-foreground"
                 >
                   Verification Code
                 </label>
                 <div className="relative">
-                  <KeyRound
-                    className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5"
-                    style={{ color: 'hsl(var(--muted-foreground))' }}
-                  />
+                  <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   <input
                     id="code"
                     type="text"
@@ -233,25 +224,14 @@ export function EmailVerification({ autoSend = true, email }: EmailVerificationP
                     }}
                     placeholder="000000"
                     disabled={loading}
-                    className="w-full pl-10 pr-4 py-2 rounded-lg border-2 transition-all outline-none disabled:opacity-50 text-center text-2xl tracking-widest"
-                    style={{
-                      backgroundColor: 'hsl(var(--background))',
-                      borderColor: 'hsl(var(--border))',
-                      color: 'hsl(var(--foreground))',
-                    }}
-                    onFocus={(e) => {
-                      e.currentTarget.style.borderColor = 'hsl(var(--primary))'
-                    }}
-                    onBlur={(e) => {
-                      e.currentTarget.style.borderColor = 'hsl(var(--border))'
-                    }}
+                    className="w-full pl-10 pr-4 py-2 rounded-lg border-2 border-border bg-background text-foreground transition-all outline-none focus:border-primary disabled:opacity-50 text-center text-2xl tracking-widest"
                     maxLength={6}
                     autoComplete="one-time-code"
                     autoFocus
                   />
                 </div>
                 {showInlineError && (
-                  <p className="text-sm" style={{ color: 'hsl(var(--destructive))' }}>
+                  <p className="text-sm text-destructive">
                     {error}
                   </p>
                 )}
@@ -260,19 +240,7 @@ export function EmailVerification({ autoSend = true, email }: EmailVerificationP
               <button
                 type="submit"
                 disabled={loading || code.length !== 6}
-                className="w-full py-2 px-4 rounded-lg font-medium transition-all disabled:opacity-50"
-                style={{
-                  backgroundColor: 'hsl(var(--primary))',
-                  color: 'hsl(var(--primary-foreground))',
-                }}
-                onMouseEnter={(e) => {
-                  if (!loading && code.length === 6) {
-                    e.currentTarget.style.opacity = '0.9'
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.opacity = '1'
-                }}
+                className="w-full py-2 px-4 rounded-lg bg-primary text-primary-foreground font-medium transition-colors hover:bg-primary/90 disabled:opacity-50"
               >
                 {loading ? 'Verifying...' : 'Verify Email'}
               </button>
@@ -280,7 +248,7 @@ export function EmailVerification({ autoSend = true, email }: EmailVerificationP
               {/* Resend Code */}
               <div className="text-center">
                 {resendCooldown > 0 ? (
-                  <p className="text-sm" style={{ color: 'hsl(var(--destructive))' }}>
+                  <p className="text-sm text-destructive">
                     For security purposes, you can only request this after {resendCooldown} seconds.
                   </p>
                 ) : (
@@ -288,16 +256,7 @@ export function EmailVerification({ autoSend = true, email }: EmailVerificationP
                     type="button"
                     onClick={handleResendCode}
                     disabled={loading}
-                    className="text-sm font-medium transition-colors disabled:opacity-50"
-                    style={{ color: 'hsl(var(--primary))' }}
-                    onMouseEnter={(e) => {
-                      if (!loading) {
-                        e.currentTarget.style.opacity = '0.8'
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.opacity = '1'
-                    }}
+                    className="text-sm font-medium text-primary transition-colors hover:text-primary/80 disabled:opacity-50"
                   >
                     Resend verification code
                   </button>
@@ -306,30 +265,16 @@ export function EmailVerification({ autoSend = true, email }: EmailVerificationP
             </form>
 
             {/* Info Box */}
-            <div
-              className="p-3 rounded-lg border text-sm"
-              style={{
-                backgroundColor: 'hsl(var(--muted) / 0.5)',
-                borderColor: 'hsl(var(--border))',
-                color: 'hsl(var(--muted-foreground))',
-              }}
-            >
+            <div className="p-3 rounded-lg border border-border bg-muted/50 text-sm text-muted-foreground">
               🔒 <strong>Security tip:</strong> The verification code expires in 10 minutes.
             </div>
 
             {/* Sign Out Option */}
-            <div className="text-center pt-4 border-t" style={{ borderColor: 'hsl(var(--border))' }}>
+            <div className="text-center pt-4 border-t border-border">
               <button
                 type="button"
                 onClick={handleSignOut}
-                className="flex items-center justify-center gap-2 mx-auto text-sm font-medium transition-colors"
-                style={{ color: 'hsl(var(--muted-foreground))' }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.color = 'hsl(var(--destructive))'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.color = 'hsl(var(--muted-foreground))'
-                }}
+                className="flex items-center justify-center gap-2 mx-auto text-sm font-medium text-muted-foreground transition-colors hover:text-destructive"
               >
                 <LogOut className="w-4 h-4" />
                 Sign out and use different email

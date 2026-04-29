@@ -44,6 +44,9 @@ export function nodeInputFieldToSchema(field: NodeInputField): ProtoFieldSchema 
     helpText,
     placeholder: field.placeholder,
     omitIfEmpty: field.cleanupSemantics === 'trim',
+    defaultValue: field.defaultValue || undefined,
+    minValue: field.minValue,
+    maxValue: field.maxValue,
   }
 
   // Enum fields → select widget with CEL toggle
@@ -69,13 +72,14 @@ export function nodeInputFieldToSchema(field: NodeInputField): ProtoFieldSchema 
     }
   }
 
-  // Numbers are always entered as text/CEL
+  // Numeric fields use compact number controls with CEL escape hatch
   if (field.type === 'integer' || field.type === 'number') {
     return {
       ...base,
-      widget: 'text',
-      valueKind: 'string',
+      widget: 'number',
+      isInteger: field.type === 'integer',
       celCapable: true,
+      showCelModeToggle: true,
     }
   }
 
@@ -94,7 +98,7 @@ export function nodeInputFieldToSchema(field: NodeInputField): ProtoFieldSchema 
     return {
       ...base,
       widget: 'model',
-      valueKind: 'string',
+      valueKind: 'model',
       celCapable: true,
       showCelModeToggle: true,
     }
@@ -190,6 +194,9 @@ export function inputDefToSchema(name: string, input: InputDef): ProtoFieldSchem
     label,
     description: description || undefined,
     helpText,
+    defaultValue: defaultVal,
+    minValue: min,
+    maxValue: max,
   }
 
   const type = input?.type as string | undefined
@@ -201,7 +208,7 @@ export function inputDefToSchema(name: string, input: InputDef): ProtoFieldSchem
 
   // Model → model picker with CEL toggle
   if (type === 'model') {
-    return { ...base, widget: 'model', valueKind: 'string', celCapable: true, showCelModeToggle: true } as ProtoFieldSchema
+    return { ...base, widget: 'model', valueKind: 'model', celCapable: true, showCelModeToggle: true } as ProtoFieldSchema
   }
 
   // Enum → select widget

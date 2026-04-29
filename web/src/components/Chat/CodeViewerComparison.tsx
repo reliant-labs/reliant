@@ -102,7 +102,7 @@ export function CodeViewerComparison() {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">Lightweight Viewer (Prism)</h2>
-              <span className="text-xs text-success font-mono">~50KB bundle ✨</span>
+              <span className="text-xs text-success font-mono">~50KB bundle</span>
             </div>
             <LightweightCodeViewer
               content={sampleCode}
@@ -146,7 +146,7 @@ export function CodeViewerComparison() {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold">Lightweight Diff Viewer</h2>
-              <span className="text-xs text-success font-mono">~10KB bundle ✨</span>
+              <span className="text-xs text-success font-mono">~10KB bundle</span>
             </div>
             <LightweightDiffViewer
               original={originalCode}
@@ -162,13 +162,13 @@ export function CodeViewerComparison() {
       <div className="mt-8 p-4 border border-border rounded-lg bg-card">
         <h3 className="font-semibold mb-2">Comparison Notes</h3>
         <ul className="space-y-2 text-sm text-muted-foreground">
-          <li>✅ <strong>Bundle Size:</strong> Lightweight is 100x smaller (50KB vs 5-10MB)</li>
-          <li>✅ <strong>Load Time:</strong> Lightweight loads instantly, Monaco takes 500ms-2s</li>
-          <li>✅ <strong>Colors:</strong> Both use the same VSCode color scheme</li>
-          <li>✅ <strong>Theme Support:</strong> Both auto-switch with app theme</li>
-          <li>✅ <strong>Line Numbers:</strong> Both show line numbers</li>
-          <li>❌ <strong>Interactive Features:</strong> Monaco has auto-complete, go-to-definition (not needed for read-only)</li>
-          <li>❌ <strong>Minimap:</strong> Monaco has minimap (not needed for small snippets)</li>
+          <li><strong>Bundle Size:</strong> Lightweight is 100x smaller (50KB vs 5-10MB)</li>
+          <li><strong>Load Time:</strong> Lightweight loads instantly, Monaco takes 500ms-2s</li>
+          <li><strong>Colors:</strong> Both use the same VSCode color scheme</li>
+          <li><strong>Theme Support:</strong> Both auto-switch with app theme</li>
+          <li><strong>Line Numbers:</strong> Both show line numbers</li>
+          <li><strong>Interactive Features:</strong> Monaco has auto-complete, go-to-definition (not needed for read-only)</li>
+          <li><strong>Minimap:</strong> Monaco has minimap (not needed for small snippets)</li>
         </ul>
       </div>
 

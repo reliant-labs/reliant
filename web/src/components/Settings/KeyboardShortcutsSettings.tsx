@@ -111,7 +111,7 @@ function KeyInput({
           ref={inputRef}
           tabIndex={0}
           className={cn(
-            "flex-1 px-3 py-2 border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring min-h-[38px] flex items-center justify-center",
+            "flex-1 px-3 py-2 border border-border/40 rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring min-h-[38px] flex items-center justify-center",
             conflictWarning && "border-destructive bg-destructive/5"
           )}
         >
@@ -252,7 +252,7 @@ function ShortcutRow({ shortcutId }: { shortcutId: string }) {
                 conflictWarning={conflictWarning}
               />
             ) : (
-              <kbd className="px-2 py-1 bg-muted rounded border text-xs font-mono min-w-[120px] text-center">
+              <kbd className="px-2 py-1 bg-muted rounded border border-border/40 text-xs font-mono min-w-[120px] text-center">
                 {formatKeyBinding(shortcut.currentBinding)}
               </kbd>
             )}
@@ -296,7 +296,7 @@ function ShortcutRow({ shortcutId }: { shortcutId: string }) {
               </div>
             ) : (
               <>
-                <kbd className="px-2 py-1 bg-muted rounded border text-xs font-mono flex-1 text-center">
+                <kbd className="px-2 py-1 bg-muted rounded border border-border/40 text-xs font-mono flex-1 text-center">
                   {formatKeyBinding(shortcut.currentBinding)}
                 </kbd>
                 <div className="flex items-center gap-1">
@@ -395,7 +395,7 @@ export function KeyboardShortcutsSettings() {
             placeholder="Search shortcuts..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full px-3 py-2 border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+            className="w-full px-3 py-2 border border-border/40 rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring text-sm"
           />
         </div>
 
@@ -432,12 +432,12 @@ export function KeyboardShortcutsSettings() {
             <h3 className="text-sm font-semibold text-foreground mb-3">
               {category}
             </h3>
-            <div className="border border-border rounded-lg overflow-hidden bg-card">
+            <div className="border border-border/40 rounded-lg overflow-hidden bg-card">
               {shortcuts.map((shortcut, index) => (
                 <div key={shortcut.id}>
                   <ShortcutRow shortcutId={shortcut.id} />
                   {index < shortcuts.length - 1 && (
-                    <div className="border-t border-border" />
+                    <div className="border-t border-border/40" />
                   )}
                 </div>
               ))}
@@ -454,7 +454,7 @@ export function KeyboardShortcutsSettings() {
       )}
 
       {/* Tips */}
-      <div className="mt-8 p-4 elevation-1 rounded-lg border border-border">
+      <div className="mt-8 p-4 elevation-1 rounded-lg border border-border/40">
         <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
           <Keyboard className="w-4 h-4" />
           Tips

@@ -30,7 +30,7 @@ export function WorkspacesSection() {
   return (
     <div className="flex flex-col h-full">
       {/* Tab Header */}
-      <div className="flex border-b border-border bg-muted/20 flex-shrink-0">
+      <div className="flex border-b border-border/40 bg-muted/20 flex-shrink-0">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -61,7 +61,7 @@ export function WorkspacesSection() {
           /* Active/Archived tabs - sidebar + detail view layout */
           <div className="flex h-full">
             {/* Left Sidebar - Workspace List */}
-            <div className="w-64 flex-shrink-0 border-r border-border overflow-hidden">
+            <div className="w-64 flex-shrink-0 border-r border-border/40 overflow-hidden">
               {activeTab === "active" ? (
                 <WorktreesPanel daemonName={activeDaemon?.hostname} />
               ) : (

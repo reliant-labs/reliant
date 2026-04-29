@@ -149,7 +149,7 @@ export function BrowserSettings() {
                 value={defaultPage}
                 onChange={(e) => setDefaultPage(e.target.value)}
                 placeholder="https://www.google.com"
-                className="w-full pl-10 pr-3 py-2 border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring text-sm"
+                className="w-full pl-10 pr-3 py-2 border border-border/40 rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring text-sm"
               />
             </div>
             <Button
@@ -166,7 +166,7 @@ export function BrowserSettings() {
       </div>
 
       {/* UI Context Capture Feature Info */}
-      <div className="mt-8 p-4 elevation-1 rounded-lg border border-border">
+      <div className="mt-8 p-4 elevation-1 rounded-lg border border-border/40">
         <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
           <Globe className="w-4 h-4" />
           UI Context Capture

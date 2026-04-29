@@ -48,7 +48,7 @@ describe('LoadToolRenderer', () => {
 
     expect(screen.getByText('loaded')).toBeInTheDocument();
     expect(screen.queryByText('denied')).not.toBeInTheDocument();
-    expect(screen.queryByText('failed')).not.toBeInTheDocument();
+    expect(screen.queryByText('warning')).not.toBeInTheDocument();
   });
 
   it('renders "denied" badge when result indicates permission denial', () => {
@@ -71,7 +71,7 @@ describe('LoadToolRenderer', () => {
     expect(screen.getByText('permission denied by policy')).toBeInTheDocument();
   });
 
-  it('renders "failed" badge for non-denial errors', () => {
+  it('renders "warning" badge for non-denial errors', () => {
     render(
       <LoadToolRenderer
         ctx={createContext({
@@ -86,7 +86,7 @@ describe('LoadToolRenderer', () => {
       />
     );
 
-    expect(screen.getByText('failed')).toBeInTheDocument();
+    expect(screen.getByText('warning')).toBeInTheDocument();
     expect(screen.queryByText('denied')).not.toBeInTheDocument();
   });
 
@@ -95,7 +95,7 @@ describe('LoadToolRenderer', () => {
 
     expect(screen.queryByText('loaded')).not.toBeInTheDocument();
     expect(screen.queryByText('denied')).not.toBeInTheDocument();
-    expect(screen.queryByText('failed')).not.toBeInTheDocument();
+    expect(screen.queryByText('warning')).not.toBeInTheDocument();
   });
 
   it('handles missing input gracefully', () => {
@@ -127,7 +127,7 @@ describe('LoadToolRenderer', () => {
     // scrollable/body region is rendered.
     const wrapper = container.querySelector('.tool-content-load-tool');
     expect(wrapper).not.toBeNull();
-    // Only the header row exists when successful — no error body.
-    expect(wrapper?.querySelectorAll('.text-destructive\\/80').length).toBe(0);
+    // Only the header row exists when successful — no warning body.
+    expect(screen.queryByTestId('load-tool-warning-reason')).not.toBeInTheDocument();
   });
 });

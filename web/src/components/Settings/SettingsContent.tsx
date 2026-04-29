@@ -101,15 +101,17 @@ export function SettingsContent({
   // Special handling for sections that need full height/width
   if (activeSection === "about") {
     return (
-      <div className="h-full">
-        <AboutSection />
+      <div className="h-full overflow-auto px-8 py-8">
+        <div className="mx-auto max-w-5xl rounded-xl border border-border/50 bg-card p-6 shadow-sm">
+          <AboutSection />
+        </div>
       </div>
     );
   }
 
   if (activeSection === "projects") {
     return (
-      <div className="h-full overflow-auto">
+      <div className="h-full overflow-auto bg-background">
         <ProjectPanel />
       </div>
     );
@@ -117,15 +119,19 @@ export function SettingsContent({
 
   if (activeSection === "workspaces") {
     return (
-      <div className="h-full">
-        <WorkspacesSection />
+      <div className="h-full overflow-auto px-8 py-8">
+        <div className="mx-auto max-w-5xl rounded-xl border border-border/50 bg-card p-6 shadow-sm">
+          <WorkspacesSection />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="h-full overflow-auto">
-      <div className="max-w-4xl mx-auto p-6">{renderContent()}</div>
+    <div className="h-full overflow-auto px-8 py-8">
+      <div className="mx-auto max-w-[700px] rounded-xl border border-border/50 bg-card p-6 shadow-sm [&_h2]:text-xl [&_h2]:font-bold [&_h2]:tracking-tight [&_h2]:text-foreground [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-foreground">
+        {renderContent()}
+      </div>
     </div>
   );
 }

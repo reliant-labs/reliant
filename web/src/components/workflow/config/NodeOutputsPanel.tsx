@@ -114,7 +114,7 @@ function OutputFieldRow({
             <code className="text-xs font-mono text-foreground">
               {field.name}
             </code>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+            <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
               {field.type}
             </span>
           </div>

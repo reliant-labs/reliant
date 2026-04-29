@@ -103,7 +103,7 @@ export function LightweightCodeViewer({
 
   const prismLanguage = getPrismLanguage(language);
 
-  const bgColor = isDark ? '#1E1E1E' : '#FFFFFF'; // Monaco's exact background colors
+  const bgColor = 'transparent'; // Inherit from parent container
   const lineNumberColor = isDark ? '#858585' : '#237893'; // Monaco's line number colors
   const lineNumberWidth = `${Math.max(2, String(lines).length) + 1}em`;
 

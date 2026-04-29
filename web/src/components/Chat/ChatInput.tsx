@@ -11,7 +11,6 @@ import {
   useImperativeHandle,
 } from "react";
 import { Settings2, RefreshCw, X, ChevronDown } from "lucide-react";
-import "./placeholder-fix.css";
 import { useAttachmentStore } from "../../store/attachmentStore";
 import { useChatParamsStore } from "../../store/chatParamsStore";
 import { useActiveChatId } from "../../store/chatStoreHooks";

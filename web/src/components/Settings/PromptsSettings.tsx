@@ -159,19 +159,19 @@ export function PromptsSettings({ projectId }: PromptsSettingsProps) {
       </div>
 
       {error && (
-        <div className="p-3 border border-destructive/30 bg-destructive/10 text-destructive rounded-md text-xs">{error}</div>
+        <div className="p-3 border border-destructive/40 bg-destructive/10 text-destructive rounded-md text-xs">{error}</div>
       )}
 
       <div className="space-y-3">
         {loading ? (
           <div className="p-6 text-sm text-muted-foreground">Loading prompts…</div>
         ) : filtered.length === 0 ? (
-          <div className="p-6 text-sm text-muted-foreground border border-border rounded-md">
+          <div className="p-6 text-sm text-muted-foreground border border-border/40 rounded-md">
             No prompts yet. Click New to add your first prompt.
           </div>
         ) : (
           filtered.map((p) => (
-            <div key={p.id} className="border border-border rounded-lg p-3 bg-card">
+            <div key={p.id} className="border border-border/40 rounded-lg p-3 bg-card">
               <div className="flex items-center gap-2 mb-2">
 
                 <input
@@ -198,7 +198,7 @@ export function PromptsSettings({ projectId }: PromptsSettingsProps) {
                 onChange={(e) => handleChange(p.id, "content", e.target.value)}
                 placeholder="Prompt content…"
                 rows={4}
-                className="w-full px-2 py-2 border border-input bg-background rounded text-sm font-mono"
+                className="w-full px-2 py-2 border border-input bg-background rounded text-sm"
               />
             </div>
           ))
@@ -206,7 +206,7 @@ export function PromptsSettings({ projectId }: PromptsSettingsProps) {
       </div>
 
       {isDirty && (
-        <div className="sticky bottom-0 left-0 right-0 bg-card border-t border-border p-3 mt-2">
+        <div className="sticky bottom-0 left-0 right-0 bg-card border-t border-border/40 p-3 mt-2">
           <div className="max-w-4xl mx-auto flex items-center justify-between">
             <span className="text-xs text-muted-foreground">You have unsaved changes</span>
             <div className="flex items-center gap-2">

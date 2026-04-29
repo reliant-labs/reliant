@@ -7,7 +7,7 @@ import { EmailVerification } from './EmailVerification'
 import { PasswordInput, ConfirmPasswordInput } from './PasswordInput'
 import { validatePassword } from '../utils/passwordValidation'
 import { GradientBackground } from './GradientBackground'
-import Logo from '../assets/logo.svg'
+import { BrandMark } from './icons/BrandMark'
 
 export function AuthScreen() {
   const [mode, setMode] = useState<'login' | 'signup' | 'forgot-password'>('login')
@@ -204,7 +204,7 @@ export function AuthScreen() {
           <div className="p-8 space-y-6">
             <div className="flex flex-col items-center gap-4">
               <div className="flex items-center gap-3">
-                <img src={Logo} alt="Reliant Logo" className="h-8 w-auto" />
+                <BrandMark className="h-8 w-8" />
                 <h1 className="text-3xl font-bold">Reliant</h1>
               </div>
               <div className="text-center">
@@ -235,8 +235,7 @@ export function AuthScreen() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="block w-full px-3 py-2.5 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-colors"
-                style={{ backgroundColor: 'transparent' }}
+                className="block w-full px-3 py-2.5 border border-border rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-colors"
                 placeholder="you@example.com"
               />
             </div>

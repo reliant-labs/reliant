@@ -181,7 +181,7 @@ export function MCPServerListItem({
           {settingsOpen && (
             <div
               role="menu"
-              className="absolute right-0 top-10 z-30 w-[min(20rem,calc(100vw-3rem))] rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-xl"
+              className="absolute right-0 top-10 z-30 w-[min(20rem,calc(100vw-3rem))] rounded-lg border border-border/40 bg-popover p-3 text-popover-foreground shadow-xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]"
             >
               <div className="space-y-3">
                 <div className="space-y-1.5">
@@ -190,7 +190,7 @@ export function MCPServerListItem({
                     value={scope}
                     onChange={(event) => onMoveScope?.(Number(event.target.value) as ConfigScope)}
                     disabled={disabled || loadingAction === "scope"}
-                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground"
+                    className="h-8 w-full rounded-md border border-border/40 bg-background px-2 text-xs text-foreground"
                     aria-label={`Change install scope for ${title}`}
                   >
                     <option value={ConfigScope.GLOBAL}>Global</option>

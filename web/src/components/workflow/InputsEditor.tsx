@@ -188,7 +188,7 @@ export function InputsEditor({
                 type="text"
                 value={key}
                 onChange={(e) => renameKey(key, e.target.value)}
-                className="w-28 px-2 py-1.5 border border-input rounded text-sm bg-background text-foreground font-mono"
+                className="w-28 px-2 py-1.5 border border-input rounded text-sm bg-background text-foreground"
                 placeholder="key"
               />
               {renderInput(key, value)}

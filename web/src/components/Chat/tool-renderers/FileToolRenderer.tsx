@@ -33,7 +33,7 @@ function ToolErrorBanner({ result }: { result?: ToolResultData }) {
   }
 
   return (
-    <div className="px-2 py-1.5 text-[11px] text-destructive bg-destructive/5 border-t border-border/50">
+    <div className="px-2 py-1.5 text-[11px] text-warning bg-warning/5 border-t border-border/50">
       {result.content}
     </div>
   );

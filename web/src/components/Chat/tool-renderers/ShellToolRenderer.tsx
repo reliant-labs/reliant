@@ -150,14 +150,14 @@ function ShellToolRendererComponent({ ctx }: ToolContentProps) {
           {/* Legacy plain text format (backwards compat for old results in DB, and bash_output tool) */}
           {isLegacy && (
             <div className={showCommandInput ? "border-t border-border/50" : ""}>
-              <div className="px-2 py-0.5 text-[9px] text-muted-foreground uppercase tracking-wider bg-muted/30 flex items-center justify-between">
+              <div className="px-2 py-1 text-[9px] text-muted-foreground uppercase tracking-wider bg-muted/40 border-b border-border/20 flex items-center justify-between">
                 <span>output</span>
                 {!result.is_error && result.content && (
                   <CopyButton content={result.content} className="opacity-100" />
                 )}
               </div>
               {result.is_error ? (
-                <div className="px-2 py-1.5 text-[11px] text-destructive bg-destructive/5">
+                <div className="px-2 py-1.5 text-[11px] text-warning bg-warning/5">
                   {result.content}
                 </div>
               ) : (
@@ -177,10 +177,10 @@ function ShellToolRendererComponent({ ctx }: ToolContentProps) {
           {structured && hasAnyOutput && (
             <div className={showCommandInput ? "border-t border-border/50" : ""}>
               {/* Output label with optional exit code badge */}
-              <div className="px-2 py-0.5 text-[9px] text-muted-foreground uppercase tracking-wider bg-muted/30 flex items-center gap-1.5">
+              <div className="px-2 py-1 text-[9px] text-muted-foreground uppercase tracking-wider bg-muted/40 border-b border-border/20 flex items-center gap-1.5">
                 <span>output</span>
                 {hasNonZeroExit && (
-                  <span className="text-destructive font-medium normal-case tracking-normal">
+                  <span className="text-warning font-medium normal-case tracking-normal">
                     exit code {structured.exit_code}
                   </span>
                 )}
@@ -205,11 +205,11 @@ function ShellToolRendererComponent({ ctx }: ToolContentProps) {
               {/* Stderr */}
               {hasStderr && (
                 <div className={hasStdout ? "border-t border-border/50" : ""}>
-                  <div className="px-2 py-0.5 text-[9px] text-destructive/70 uppercase tracking-wider bg-destructive/5 flex items-center justify-between">
+                  <div className="px-2 py-0.5 text-[9px] text-[hsl(var(--warning)/0.8)] uppercase tracking-wider bg-warning/5 flex items-center justify-between">
                     <span>stderr</span>
                     <CopyButton content={structured.stderr} className="opacity-100" />
                   </div>
-                  <div className="px-2 py-1.5 text-[11px] text-destructive bg-destructive/5 whitespace-pre-wrap font-mono max-h-[400px] overflow-y-auto">
+                  <div className="px-2 py-1.5 text-[11px] text-warning bg-warning/5 whitespace-pre-wrap font-mono max-h-[400px] overflow-y-auto">
                     {structured.stderr}
                   </div>
                 </div>

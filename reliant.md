@@ -123,6 +123,21 @@ cat .env.ports
 ./.reliant/tools/port-info.sh
 ```
 
+### Web styling contract
+
+Use the standard Tailwind + CSS variable token path for UI styling:
+
+- Prefer semantic Tailwind classes such as `bg-background`, `text-foreground`, `text-muted-foreground`, `border-border`, `bg-primary`, `text-primary-foreground`, `text-destructive`, and component variants over inline token styles.
+- Use `cn()` for conditional classes; do not mutate DOM styles in hover/focus handlers when Tailwind state variants can express the state.
+- Theme palettes are controlled by `data-color-scheme`; light/dark mode is controlled by the `.dark` class. Do not add new `data-theme` selectors.
+- Keep new shared styling in component primitives under `web/src/components/ui/` or token variables in CSS, not deep ad-hoc selector chains.
+- For workflow config panel styles, add explicit `cpv2-*` ownership classes at the rendered component boundary instead of overriding shared primitives or targeting nested generated markup.
+- Inline styles are acceptable for runtime geometry, Electron drag regions (`WebkitAppRegion`), dynamic SVG/data colors, and third-party APIs that require style objects.
+- Avoid broad `!important`, magic negative margins, incidental parent selectors, hardcoded brand colors, and arbitrary CSS values unless the exception is documented near the use.
+- `!important` is acceptable only for browser quirks or generated third-party DOM such as WebKit autofill, Monaco, XTerm, and ReactFlow; keep selectors scoped and prefer component props/classes first.
+- Run `npm run lint:css` from `web/` when changing stylesheets; keep the Stylelint config focused on correctness/hygiene rather than formatting churn.
+- When changing tokens or color-scheme CSS, run the color-scheme contract test and a web build path when practical.
+
 ---
 
 ### Project nuances

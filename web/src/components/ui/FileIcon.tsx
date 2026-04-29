@@ -1,5 +1,4 @@
-import { FileText, Image, FileCode, Table, File, Database, Terminal } from 'lucide-react';
-import { GrDocumentConfig } from 'react-icons/gr';
+import { FileText, Image, FileCode, Table, File, Database, Terminal, FileCog } from 'lucide-react';
 
 interface FileIconProps {
   mimeType?: string;
@@ -96,7 +95,7 @@ export function FileIcon({ mimeType, fileName, className = "w-4 h-4" }: FileIcon
     
     switch (category) {
       case 'code': return <FileCode {...iconProps} />;
-      case 'config': return <GrDocumentConfig {...iconProps} />;
+      case 'config': return <FileCog {...iconProps} />;
       case 'data': return <Table {...iconProps} />;
       case 'image': return <Image {...iconProps} />;
       case 'document': return <FileText {...iconProps} />;

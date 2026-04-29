@@ -539,7 +539,7 @@ export const ChatTextArea = forwardRef<HTMLDivElement, ChatTextAreaProps>(functi
     const paddingTop = parseFloat(computedStyle.paddingTop) || 0;
     const paddingBottom = parseFloat(computedStyle.paddingBottom) || 0;
     const minHeight = lineHeight + paddingTop + paddingBottom;
-    const maxHeight = 300;
+    const maxHeight = lineHeight * 10 + paddingTop + paddingBottom;
 
     const currentHeight = el.offsetHeight;
     const hasContent = serializeFromDom(el).length > 0;
@@ -1013,7 +1013,7 @@ export const ChatTextArea = forwardRef<HTMLDivElement, ChatTextAreaProps>(functi
       style={{
         color: "var(--chat-input-text)",
         backgroundColor: "transparent",
-        maxHeight: 300,
+        maxHeight: 200,
       }}
     />
   );

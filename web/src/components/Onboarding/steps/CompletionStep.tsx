@@ -43,7 +43,7 @@ export function CompletionStep({
   return (
     <OnboardingModal
       isOpen={true}
-      title="Ready to Go!"
+      title="Ready to go"
       stepNumber={stepNumber}
       totalSteps={totalSteps}
       hideNavigation
@@ -52,7 +52,7 @@ export function CompletionStep({
       <div className="space-y-5">
         {/* Primary CTA */}
         <div className="text-center">
-          <p className="text-sm text-zinc-400 mb-4">
+          <p className="text-sm text-muted-foreground mb-4">
             {projectHasCode !== false
               ? "We detected code in your project. Let's dive in."
               : "Start building something new."}
@@ -95,25 +95,25 @@ export function CompletionStep({
                 useViewerStore.getState().setWorkflowMode(true);
               }, 300);
             }}
-            className="text-muted-foreground hover:text-foreground transition-colors"
+            className="text-muted-foreground hover:text-primary transition-colors"
           >
-            Browse workflow templates →
+            Browse workflow templates
           </button>
           <a
             href="https://docs.reliantlabs.io/"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-muted-foreground hover:text-foreground transition-colors"
+            className="text-muted-foreground hover:text-primary transition-colors"
           >
-            Read the docs →
+            Read the docs
           </a>
           <a
             href="https://cal.com/team/reliant/onboarding"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-blue-400 hover:text-blue-300 transition-colors"
+            className="text-muted-foreground hover:text-primary transition-colors"
           >
-            Book a walkthrough →
+            Book a walkthrough
           </a>
         </div>
 
