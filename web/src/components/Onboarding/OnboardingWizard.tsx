@@ -26,7 +26,6 @@ import { Workflow, Sparkles, Settings2 } from "lucide-react";
 import { useOnboardingChecklistStore } from "../../store/onboardingChecklistStore";
 import { useViewerStore } from "../../store/viewerStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
-import { useProjectStore } from "../../store/projectStore";
 import { useOnboardingFlowStore } from "../OnboardingFlow/onboardingStore";
 import {
   ONBOARDING_STEPS,
@@ -318,17 +317,15 @@ export function OnboardingWizard() {
     skipAll,
     nextStep,
     previousStep,
-    hasCompletedOnboarding,
-    startWizard,
     panelState,
     detectCompletedItems,
     subscribeToStoreChanges,
   } = useOnboardingChecklistStore();
 
-  const currentProject = useProjectStore((s) => s.currentProject);
   const isWorkflowMode = useViewerStore((s) => s.isWorkflowMode);
   const isSettingsMode = useViewerStore((s) => s.isSettingsMode);
   const onboardingFlowState = useOnboardingFlowStore((s) => s.state);
+  const onboardingSetupComplete = onboardingFlowState === "completed";
 
   // Load state on mount
   useEffect(() => {
@@ -337,16 +334,7 @@ export function OnboardingWizard() {
     }
   }, [isInitialized, loadState]);
 
-  // Auto-start wizard for first-time users after project loads.
-  // Defer if the new onboarding flow is still active (not_started or in_progress).
-  useEffect(() => {
-    if (isInitialized && !hasCompletedOnboarding && !isWizardActive && currentProject) {
-      if (onboardingFlowState === "not_started" || onboardingFlowState === "in_progress") {
-        return; // New onboarding overlay is active — defer spotlight tour
-      }
-      startWizard();
-    }
-  }, [isInitialized, hasCompletedOnboarding, isWizardActive, startWizard, currentProject, onboardingFlowState]);
+  // The guided tour is started explicitly from onboarding launch choices or the setup guide.
 
   // Handle view context based on current step
   useEffect(() => {
@@ -380,13 +368,13 @@ export function OnboardingWizard() {
     }
   }, [currentStepId]);
 
-  // Set up checklist detection after tour completes
+  // Set up checklist detection after checklist state is ready
   useEffect(() => {
-    if (!isInitialized || !hasCompletedOnboarding) return;
+    if (!isInitialized) return;
     detectCompletedItems();
     const unsub = subscribeToStoreChanges();
     return unsub;
-  }, [isInitialized, hasCompletedOnboarding, detectCompletedItems, subscribeToStoreChanges]);
+  }, [isInitialized, detectCompletedItems, subscribeToStoreChanges]);
 
   // Not ready yet
   if (!isInitialized) return null;
@@ -454,8 +442,13 @@ export function OnboardingWizard() {
     );
   }
 
-  // Phase 2: Tour done, show checklist if not dismissed (only on main chat page)
-  if (hasCompletedOnboarding && panelState !== "dismissed" && !isWorkflowMode && !isSettingsMode) {
+  // Phase 2: Show checklist after setup if not dismissed (only on main chat page)
+  if (
+    onboardingSetupComplete &&
+    panelState !== "dismissed" &&
+    !isWorkflowMode &&
+    !isSettingsMode
+  ) {
     return <OnboardingChecklist />;
   }
 

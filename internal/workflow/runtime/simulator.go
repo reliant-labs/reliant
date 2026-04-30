@@ -663,10 +663,8 @@ func (s *WorkflowSimulator) Run(mocker StepMocker) error {
 }
 
 // executeLoop executes a loop step and returns loop output.
-// For inline loops, it recursively simulates each inner node individually,
-// allowing scenario tests to target inner nodes with qualified IDs (e.g., "loop_id.inner_node_id").
-// For referenced (external) loops, it falls back to black-box mocking since
-// external workflows can't be loaded without Temporal.
+// Inline loops recursively simulate each inner node with qualified IDs (for example,
+// "loop_id.inner_node_id"). Referenced loops use black-box mocking by default.
 func (s *WorkflowSimulator) executeLoop(nodePath string, protoNode *reliantv1.Node, mocker StepMocker) (map[string]interface{}, error) {
 	// Check for parallel loop
 	la := model.GetLoopArgs(protoNode)

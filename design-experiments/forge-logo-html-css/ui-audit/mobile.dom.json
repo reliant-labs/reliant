@@ -1,0 +1,58 @@
+[
+  {
+    "key": "scope",
+    "selector": "[data-audit=\"forge-logo-html-css\"]",
+    "role": "",
+    "auditId": "",
+    "tagName": "div",
+    "text": "",
+    "rect": {
+      "x": 22,
+      "y": 22,
+      "width": 346,
+      "height": 346,
+      "top": 22,
+      "right": 368,
+      "bottom": 368,
+      "left": 22
+    },
+    "scrollWidth": 406,
+    "scrollHeight": 344,
+    "clientWidth": 344,
+    "clientHeight": 344,
+    "overflowX": "hidden",
+    "overflowY": "hidden",
+    "lineCount": 1,
+    "fontSize": "16px",
+    "display": "grid",
+    "position": "relative"
+  },
+  {
+    "key": "mesh-anvil-primary",
+    "selector": "[data-audit-key='mesh-anvil-primary']",
+    "role": "",
+    "auditId": "",
+    "tagName": "div",
+    "text": "",
+    "rect": {
+      "x": 90,
+      "y": 90,
+      "width": 210,
+      "height": 210,
+      "top": 90,
+      "right": 300,
+      "bottom": 300,
+      "left": 90
+    },
+    "scrollWidth": 210,
+    "scrollHeight": 210,
+    "clientWidth": 210,
+    "clientHeight": 210,
+    "overflowX": "visible",
+    "overflowY": "visible",
+    "lineCount": 33,
+    "fontSize": "16px",
+    "display": "block",
+    "position": "relative"
+  }
+]

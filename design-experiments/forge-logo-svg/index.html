@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Forge Logo SVG Experiment</title>
+  <link rel="icon" href="forge-mark.svg" type="image/svg+xml">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #070b12;
+      --panel: #0d1521;
+      --panel-line: #1c2a3b;
+      --text: #ecf2fb;
+      --muted: #8fa1b8;
+      --blue: #5a9cff;
+      --ember: #ff6a3d;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at 50% 18%, rgba(90, 156, 255, 0.16), transparent 34rem),
+        linear-gradient(135deg, #05070b 0%, var(--bg) 52%, #101724 100%);
+      color: var(--text);
+      font: 16px/1.5 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    main {
+      width: min(1040px, calc(100vw - 40px));
+      display: grid;
+      grid-template-columns: minmax(280px, 0.9fr) minmax(320px, 1.1fr);
+      gap: 28px;
+      align-items: center;
+    }
+
+    .stage,
+    .notes {
+      border: 1px solid var(--panel-line);
+      border-radius: 32px;
+      background: rgba(13, 21, 33, 0.76);
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.36);
+      backdrop-filter: blur(18px);
+    }
+
+    .stage {
+      display: grid;
+      place-items: center;
+      min-height: 560px;
+      padding: 48px;
+    }
+
+    .mark {
+      width: min(100%, 420px);
+      height: auto;
+      display: block;
+    }
+
+    .scale-row {
+      margin-top: 32px;
+      display: flex;
+      gap: 20px;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .scale-chip {
+      display: grid;
+      place-items: center;
+      width: 72px;
+      height: 72px;
+      border: 1px solid rgba(143, 161, 184, 0.22);
+      border-radius: 18px;
+      background: #090e16;
+    }
+
+    .scale-chip.small {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+    }
+
+    .scale-chip img {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .notes {
+      padding: 40px;
+    }
+
+    .eyebrow {
+      margin: 0 0 12px;
+      color: var(--blue);
+      font-size: 0.76rem;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2.5rem, 7vw, 5.75rem);
+      line-height: 0.88;
+      letter-spacing: -0.075em;
+    }
+
+    .summary {
+      margin: 24px 0 0;
+      color: var(--muted);
+      max-width: 48ch;
+      font-size: 1.05rem;
+    }
+
+    .swatches {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 32px;
+    }
+
+    .swatch {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      border: 1px solid rgba(143, 161, 184, 0.22);
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    .dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+    }
+
+    .dot.void { background: #070b12; box-shadow: inset 0 0 0 1px #263d59; }
+    .dot.steel { background: #e8eef8; }
+    .dot.blue { background: #5a9cff; }
+    .dot.ember { background: var(--ember); }
+
+    @media (max-width: 820px) {
+      main {
+        grid-template-columns: 1fr;
+        padding: 32px 0;
+      }
+
+      .stage {
+        min-height: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="stage" aria-label="Forge logo mark preview" data-audit="forge-logo-svg">
+      <div data-audit="primary-logo-surface">
+        <img class="mark" src="forge-mark.svg" alt="Forge mesh anvil mark" data-audit="primary-svg-artifact">
+        <div class="scale-row" aria-label="Small-size logo previews" data-audit="scale-previews">
+          <span class="scale-chip" data-audit="scale-preview-72"><img src="forge-mark.svg" alt="72 pixel preview"></span>
+          <span class="scale-chip small" data-audit="scale-preview-48"><img src="forge-mark.svg" alt="48 pixel preview"></span>
+        </div>
+      </div>
+    </section>
+    <section class="notes" data-audit="concept-notes">
+      <p class="eyebrow" data-audit="experiment-label">SVG only experiment</p>
+      <h1>Forge</h1>
+      <p class="summary" data-audit="concept-summary">A compact app-icon mark where the anvil itself is made from mesh material: graph nodes, blueprint struts, and harness geometry that keep an LLM-oriented build system production-ready from day 0.</p>
+      <div class="swatches" aria-label="Color palette" data-audit="color-palette">
+        <span class="swatch"><span class="dot void"></span>#070B12</span>
+        <span class="swatch"><span class="dot steel"></span>#E8EEF8</span>
+        <span class="swatch"><span class="dot blue"></span>#5A9CFF</span>
+        <span class="swatch"><span class="dot ember"></span>#FF6A3D</span>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

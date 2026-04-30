@@ -1,25 +1,35 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { stepRegistry } from "./StepRegistry";
+import { derivePath } from "./steps";
 import type { LaunchPlan, OnboardingState, StepConfig } from "./types";
+
+type HydrationFn = () => Promise<boolean>;
+let hydrationFn: HydrationFn | null = null;
+
+export function registerHydrationFn(fn: HydrationFn) {
+  hydrationFn = fn;
+}
 
 interface OnboardingStore {
   state: OnboardingState;
   plan: Partial<LaunchPlan>;
   currentStepIndex: number;
+  hydrating: boolean;
+  devForceShow: boolean;
 
   updatePlan: (updates: Partial<LaunchPlan>) => void;
   nextStep: () => void;
   prevStep: () => void;
-  skipOnboarding: () => void;
   completeOnboarding: () => void;
+  requireOnboarding: () => void;
   reset: () => void;
+  hydrateFromBackend: (options?: { force?: boolean }) => Promise<void>;
+  setDevForceShow: (force: boolean) => void;
 
-  // Computed-style getters
   visibleSteps: () => StepConfig[];
   currentStep: () => StepConfig | null;
-  currentCategory: () => string;
-  progress: () => { current: number; total: number; categoryIndex: number };
+  progress: () => { current: number; total: number };
 }
 
 export const useOnboardingFlowStore = create<OnboardingStore>()(
@@ -28,12 +38,13 @@ export const useOnboardingFlowStore = create<OnboardingStore>()(
       state: "not_started" as OnboardingState,
       plan: {},
       currentStepIndex: 0,
+      hydrating: false,
+      devForceShow: false,
 
       updatePlan: (updates) => {
         const current = get();
-        const nextState: Partial<OnboardingStore> = {
-          plan: { ...current.plan, ...updates },
-        };
+        const plan = { ...current.plan, ...updates };
+        const nextState: Partial<OnboardingStore> = { plan };
         if (current.state === "not_started") {
           nextState.state = "in_progress";
         }
@@ -42,8 +53,9 @@ export const useOnboardingFlowStore = create<OnboardingStore>()(
 
       nextStep: () => {
         const { currentStepIndex, plan } = get();
-        const visible = stepRegistry.getVisibleSteps(plan);
-        if (currentStepIndex < visible.length - 1) {
+        const path = derivePath(plan);
+        const steps = stepRegistry.getStepsForPath(path);
+        if (currentStepIndex < steps.length - 1) {
           set({ currentStepIndex: currentStepIndex + 1 });
         }
       },
@@ -55,42 +67,61 @@ export const useOnboardingFlowStore = create<OnboardingStore>()(
         }
       },
 
-      skipOnboarding: () => {
-        set({ state: "skipped" });
-      },
-
       completeOnboarding: () => {
         set({ state: "completed" });
       },
 
+      requireOnboarding: () => {
+        const { state } = get();
+        if (state === "completed") {
+          set({ state: "not_started", currentStepIndex: 0 });
+        }
+      },
+
       reset: () => {
-        set({ state: "not_started", plan: {}, currentStepIndex: 0 });
+        set({ state: "not_started", plan: {}, currentStepIndex: 0, devForceShow: false });
+      },
+
+      hydrateFromBackend: async (options) => {
+        const { state, devForceShow } = get();
+        if (!options?.force && state === "completed") return;
+        if (devForceShow) return;
+        if (!hydrationFn) return;
+
+        set({ hydrating: true });
+        try {
+          const completed = await hydrationFn();
+          if (completed) {
+            set({ state: "completed" });
+          }
+        } catch {
+          // Fail silently — show onboarding if we can't reach backend.
+        } finally {
+          set({ hydrating: false });
+        }
+      },
+
+      setDevForceShow: (force: boolean) => {
+        set({ devForceShow: force });
       },
 
       visibleSteps: () => {
-        return stepRegistry.getVisibleSteps(get().plan);
+        const path = derivePath(get().plan);
+        return stepRegistry.getStepsForPath(path);
       },
 
       currentStep: () => {
-        const steps = stepRegistry.getVisibleSteps(get().plan);
+        const path = derivePath(get().plan);
+        const steps = stepRegistry.getStepsForPath(path);
         const idx = get().currentStepIndex;
         return steps[idx] ?? null;
       },
 
-      currentCategory: () => {
-        const step = get().currentStep();
-        return step?.category ?? "goal";
-      },
-
       progress: () => {
-        const steps = stepRegistry.getVisibleSteps(get().plan);
+        const path = derivePath(get().plan);
+        const steps = stepRegistry.getStepsForPath(path);
         const idx = get().currentStepIndex;
-        const current = steps[idx];
-        const categories = stepRegistry.getCategories();
-        const categoryIndex = current
-          ? categories.indexOf(current.category)
-          : 0;
-        return { current: idx + 1, total: steps.length, categoryIndex };
+        return { current: idx + 1, total: steps.length };
       },
     }),
     {
@@ -100,6 +131,6 @@ export const useOnboardingFlowStore = create<OnboardingStore>()(
         plan: s.plan,
         currentStepIndex: s.currentStepIndex,
       }),
-    }
-  )
+    },
+  ),
 );

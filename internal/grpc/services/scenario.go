@@ -156,7 +156,8 @@ func (s *ScenarioService) CreateScenario(
 	var result *simulator.ScenarioResult
 	if req.Msg.Run {
 		// Run the simulation
-		engine := simulator.NewEngine(wf)
+		workflowLoader := createScenarioWorkflowLoader(s.database, ctx, userID, req.Msg.ProjectId)
+		engine := simulator.NewEngineWithLoader(wf, workflowLoader)
 		result = engine.RunScenario(simScenario)
 	}
 
@@ -226,6 +227,7 @@ func (s *ScenarioService) RunScenario(
 	var simScenario *simulator.Scenario
 	var workflowYAML string
 	var isProjectScenario bool
+	projectID := req.Msg.ProjectId
 
 	if req.Msg.ScenarioId != "" {
 		// Check if this is a project (file-based) scenario
@@ -249,6 +251,7 @@ func (s *ScenarioService) RunScenario(
 			if err != nil || project == nil || project.Path == "" {
 				return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found: %s", req.Msg.ProjectId))
 			}
+			projectID = project.ID
 
 			// Load the scenario from stored config
 			record, err := s.database.GetProjectConfigRecord(ctx, project.ID)
@@ -330,7 +333,8 @@ func (s *ScenarioService) RunScenario(
 	}
 
 	// Run the simulation
-	engine := simulator.NewEngine(wf)
+	workflowLoader := createScenarioWorkflowLoader(s.database, ctx, userID, projectID)
+	engine := simulator.NewEngineWithLoader(wf, workflowLoader)
 	result := engine.RunScenario(simScenario)
 
 	// Update last run result if this was a saved DB scenario (not project scenarios)

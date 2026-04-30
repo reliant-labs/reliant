@@ -13,7 +13,7 @@
 # deploy time: `user: root` in compose or securityContext in k8s.
 
 # ── Build ────────────────────────────────────────────────────────────────────
-FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
 ARG TARGETARCH
 RUN apk add --no-cache git
 WORKDIR /app

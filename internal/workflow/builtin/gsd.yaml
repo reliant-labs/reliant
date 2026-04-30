@@ -20,8 +20,6 @@ description: |
     Main thread: [user msg] → [preferences] → [research] → [plan] → [impl summary] → [verify] → [done]
     Each agent forks from main: isolated conversation, only summary saved back.
 
-entry: [discuss]
-
 inputs:
   model:
     type: model
@@ -74,7 +72,7 @@ outputs:
   test_exit: "{{has(nodes.verify_test) && has(nodes.verify_test.exit_code) ? nodes.verify_test.exit_code : -1}}"
   build_exit: "{{has(nodes.verify_build) && has(nodes.verify_build.exit_code) ? nodes.verify_build.exit_code : -1}}"
 
-nodes:
+sequence:
   # ── Phase 1: Discuss ───────────────────────────────────────────────────────
   #
   # Quick discussion to resolve ambiguities. Uses ask so the user can weigh in
@@ -248,20 +246,18 @@ nodes:
   #
   # Run lint, test, and build in parallel to verify nothing is broken.
 
-  - id: verify_lint
-    type: run
-    command: "{{inputs.lint_command}}"
-
-  - id: verify_test
-    type: run
-    command: "{{inputs.test_command}}"
-
-  - id: verify_build
-    type: run
-    command: "{{inputs.build_command}}"
-
-  - id: verify_join
-    type: join
+  - id: verify
+    type: parallel
+    branches:
+      - id: verify_lint
+        type: run
+        command: "{{inputs.lint_command}}"
+      - id: verify_test
+        type: run
+        command: "{{inputs.test_command}}"
+      - id: verify_build
+        type: run
+        command: "{{inputs.build_command}}"
 
   - id: verify_report
     type: save_message
@@ -282,31 +278,3 @@ nodes:
       content: |
         ## GSD — Done
         {{has(nodes.verify_lint) && has(nodes.verify_lint.exit_code) && nodes.verify_lint.exit_code != 0 ? 'WARNING: Lint failed. ' : ''}}{{has(nodes.verify_test) && has(nodes.verify_test.exit_code) && nodes.verify_test.exit_code != 0 ? 'WARNING: Tests failed. ' : ''}}{{has(nodes.verify_build) && has(nodes.verify_build.exit_code) && nodes.verify_build.exit_code != 0 ? 'WARNING: Build failed. ' : ''}}Workflow complete. Check verification results above.
-
-edges:
-  # discuss → research → plan → implement (linear chain)
-  - from: discuss
-    default: research
-  - from: research
-    default: plan
-  - from: plan
-    default: implement
-  # implement → parallel verification (fan-out)
-  - from: implement
-    default: verify_lint
-  - from: implement
-    default: verify_test
-  - from: implement
-    default: verify_build
-  # verification → join (fan-in)
-  - from: verify_lint
-    default: verify_join
-  - from: verify_test
-    default: verify_join
-  - from: verify_build
-    default: verify_join
-  # join → report → complete
-  - from: verify_join
-    default: verify_report
-  - from: verify_report
-    default: complete

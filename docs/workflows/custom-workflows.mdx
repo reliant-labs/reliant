@@ -985,6 +985,176 @@ The `default` key targets ungrouped inputs (or inputs matching the workflow's `t
 
 ---
 
+## Syntax Sugar
+
+Reliant provides two syntactic sugar features that simplify common workflow patterns. Both compile to standard nodes and edges at parse time — they produce the exact same internal representation as writing the expanded form by hand.
+
+### `sequence:`
+
+The `sequence:` field replaces the combination of `entry:`, `nodes:`, and sequential `edges:` for linear chains of nodes. Instead of manually wiring nodes together, list them in order and Reliant generates the entry point and edges automatically.
+
+<CodeGroup>
+
+```yaml Before (explicit)
+entry: [research]
+nodes:
+  - id: research
+    type: workflow
+    ref: builtin://agent
+    args:
+      system_prompt: Research the topic
+  - id: implement
+    type: workflow
+    ref: builtin://agent
+    args:
+      system_prompt: Implement the solution
+  - id: review
+    type: workflow
+    ref: builtin://structured-agent
+    args:
+      system_prompt: Review the implementation
+edges:
+  - from: research
+    default: implement
+  - from: implement
+    default: review
+```
+
+```yaml After (sequence sugar)
+sequence:
+  - id: research
+    type: workflow
+    ref: builtin://agent
+    args:
+      system_prompt: Research the topic
+  - id: implement
+    type: workflow
+    ref: builtin://agent
+    args:
+      system_prompt: Implement the solution
+  - id: review
+    type: workflow
+    ref: builtin://structured-agent
+    args:
+      system_prompt: Review the implementation
+```
+
+</CodeGroup>
+
+**Rules:**
+- `sequence:` cannot coexist with `entry:` — it automatically sets the first node as the entry point
+- `sequence:` **can** coexist with additional `nodes:` and `edges:` for mixed patterns where the main flow is linear but you need extra branches
+
+```yaml
+# Mixed: linear main flow with an extra branch
+sequence:
+  - id: research
+    type: workflow
+    ref: builtin://agent
+  - id: implement
+    type: workflow
+    ref: builtin://agent
+
+# Additional nodes and edges for branching
+nodes:
+  - id: notify
+    type: run
+    command: echo "Done"
+edges:
+  - from: implement
+    default: notify
+```
+
+### `type: parallel`
+
+A node with `type: parallel` and `branches:` desugars into multiple branch nodes, a join node, and the fan-out/fan-in edges between them. The parallel node's `id` becomes the join node's id, so downstream edges that reference it continue to work.
+
+<CodeGroup>
+
+```yaml Before (explicit)
+nodes:
+  - id: research
+    type: workflow
+    ref: builtin://agent
+    args:
+      system_prompt: Research the problem
+  - id: design
+    type: workflow
+    ref: builtin://agent
+    args:
+      system_prompt: Design the solution
+  - id: explore_done
+    type: join
+    condition: all
+edges:
+  - from: trigger
+    default: [research, design]
+  - from: research
+    default: explore_done
+  - from: design
+    default: explore_done
+  - from: explore_done
+    default: next_step
+```
+
+```yaml After (parallel sugar)
+nodes:
+  - id: explore_done
+    type: parallel
+    branches:
+      - id: research
+        type: workflow
+        ref: builtin://agent
+        args:
+          system_prompt: Research the problem
+      - id: design
+        type: workflow
+        ref: builtin://agent
+        args:
+          system_prompt: Design the solution
+edges:
+  - from: trigger
+    default: explore_done
+  - from: explore_done
+    default: next_step
+```
+
+</CodeGroup>
+
+**Rules:**
+- The parallel node must have an `id` and `branches` (a list of node definitions)
+- All branches must complete before the join fires (`condition: all`)
+- Edges targeting the parallel node automatically fan out to all branches
+- The parallel node's `id` is reused as the join node's id — downstream edges work unchanged
+
+<Tip>
+Both `sequence:` and `type: parallel` are purely cosmetic — they produce the exact same proto representation as hand-written nodes, edges, and entry. You can freely mix sugar and explicit syntax in the same workflow.
+</Tip>
+
+### Combining Sugar
+
+You can use both `sequence:` and `type: parallel` together:
+
+```yaml
+sequence:
+  - id: gather
+    type: parallel
+    branches:
+      - id: research
+        type: workflow
+        ref: builtin://agent
+      - id: design
+        type: workflow
+        ref: builtin://agent
+  - id: synthesize
+    type: workflow
+    ref: builtin://agent
+```
+
+This creates a parallel fan-out for `gather`, waits for all branches, then proceeds to `synthesize` — all without writing a single edge.
+
+---
+
 ## Inline Message Saving
 
 Often you want to save a node's output as a message without adding a separate `SaveMessage` node. The `save_message` field on nodes does this automatically.

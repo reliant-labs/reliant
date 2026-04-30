@@ -37,7 +37,9 @@ import { WorkflowHeader } from "./components/workflow/WorkflowHeader";
 import { SettingsPage } from "./components/Settings/SettingsPage";
 import { SettingsHeader } from "./components/Settings/SettingsHeader";
 import { ContextualTipsLayer, OnboardingWizard } from "./components/Onboarding";
-import { OnboardingOverlay } from "./components/OnboardingFlow";
+import { OnboardingOverlay, useOnboardingFlowStore } from "./components/OnboardingFlow";
+import { DaemonConnectionDiagrams } from "./components/OnboardingFlow/DaemonConnectionDiagrams";
+
 
 import { Header, type HeaderRef } from "./components/Layout/Header";
 import { ProjectPicker } from "./components/Projects/ProjectPicker";
@@ -82,8 +84,14 @@ function App() {
   const chatError = useChatStore((state) => state.error);
   const activeChatId = useChatStore((state) => state.activeChatId);
   const currentProject = useProjectStore((state) => state.currentProject);
+  const projects = useProjectStore((state) => state.projects);
+  const projectsLoading = useProjectStore((state) => state.isLoading);
   const selectProject = useProjectStore((state) => state.selectProject);
   const loadProjects = useProjectStore((state) => state.loadProjects);
+  const devForceShowOnboarding = useOnboardingFlowStore(
+    (state) => state.devForceShow
+  );
+  const onboardingFlowState = useOnboardingFlowStore((state) => state.state);
 
   const isTerminalOpen = useTerminalStore((state) => state.isOpen);
   const toggleTerminal = useTerminalStore((state) => state.toggleTerminal);
@@ -1413,7 +1421,52 @@ function App() {
     return <LoadingSpinner />;
   }
 
-  // Show project picker if no project is selected
+  const hasProjects = projects.length > 0 || Boolean(currentProject);
+  const forceOnboardingFromUrl =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).has("reset-onboarding");
+  const shouldMountOnboardingOverlay =
+    (!projectsLoading && !hasProjects) ||
+    onboardingFlowState === "in_progress" ||
+    forceOnboardingFromUrl ||
+    devForceShowOnboarding;
+  const searchParams =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search)
+      : null;
+  const showDaemonDiagramPreview = searchParams?.has("preview-daemon-diagrams") ?? false;
+  if (showDaemonDiagramPreview) {
+    return (
+      <div className="min-h-screen overflow-y-auto bg-background px-6 py-12 font-sans">
+        <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+          <div className="space-y-2 text-center">
+            <p className="text-xs font-medium uppercase tracking-[0.24em] text-primary">
+              Temporary Preview
+            </p>
+            <h1 className="text-2xl font-semibold text-foreground">
+              Daemon Connection Diagrams
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Remove the query param to return to the app.
+            </p>
+          </div>
+          <DaemonConnectionDiagrams />
+        </div>
+      </div>
+    );
+  }
+
+  // If this account has no projects, onboarding owns project creation/selection.
+  if (!hasProjects && !projectsLoading) {
+    return (
+      <div className="flex h-screen flex-col overflow-hidden bg-background">
+        <OnboardingOverlay />
+        <Toaster />
+      </div>
+    );
+  }
+
+  // Show project picker only after the account has projects but none is selected.
   if (!currentProject) {
     return (
       <div className="flex flex-col h-screen overflow-hidden">
@@ -1459,6 +1512,7 @@ function App() {
             selectProject(fullProject);
           }}
         />
+        {shouldMountOnboardingOverlay && <OnboardingOverlay />}
       </div>
     );
   }
@@ -1477,7 +1531,7 @@ function App() {
         {/* Toast Notifications */}
         <Toaster />
         {/* Onboarding wizard must render in all layout modes */}
-        <OnboardingOverlay />
+        {shouldMountOnboardingOverlay && <OnboardingOverlay />}
         <OnboardingWizard />
         <ContextualTipsLayer />
       </div>
@@ -1504,7 +1558,7 @@ function App() {
         {/* Toast Notifications */}
         <Toaster />
         {/* Onboarding wizard must render in all layout modes */}
-        <OnboardingOverlay />
+        {shouldMountOnboardingOverlay && <OnboardingOverlay />}
         <OnboardingWizard />
         <ContextualTipsLayer />
       </div>
@@ -1691,7 +1745,7 @@ function App() {
       <GlobalUpdateHandler />
 
       {/* Onboarding - welcome modal + floating checklist */}
-      <OnboardingOverlay />
+      {shouldMountOnboardingOverlay && <OnboardingOverlay />}
       <OnboardingWizard />
       <ContextualTipsLayer />
     </div>

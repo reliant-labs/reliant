@@ -12,22 +12,23 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"os/exec"
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/builddefaults"
 )
 
 // ErrAuthNotConfigured is returned when OAuth is attempted without required env vars.
 var ErrAuthNotConfigured = fmt.Errorf("auth provider not configured")
 
 func getAuthURL() string {
-	return os.Getenv("RELIANT_AUTH_URL")
+	return builddefaults.Value("RELIANT_AUTH_URL", builddefaults.AuthURL, "")
 }
 
 func getAuthKey() string {
-	return os.Getenv("RELIANT_AUTH_KEY")
+	return builddefaults.Value("RELIANT_AUTH_KEY", builddefaults.AuthKey, "")
 }
 
 func requireAuthConfig() (serverURL string, anonKey string, err error) {

@@ -75,13 +75,11 @@ nodes:
       && iter.iteration < inputs.max_iterations
     ask: "inputs.ask"
     inline:
-      entry: [implement]
-
       outputs:
         review_strategy: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null ? nodes.review.response.strategy : 'pass'}}"
         review_feedback: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null ? nodes.review.response.feedback : ''}}"
 
-      nodes:
+      sequence:
         - id: implement
           type: workflow
           ref: builtin://agent
@@ -151,9 +149,6 @@ nodes:
                 **Important:** The next agent starts completely from scratch — it won't see
                 your feedback or the code from this attempt. Your review is purely a gate:
                 pass if the task is done correctly, retry if not. Don't over-optimize.
-      edges:
-        - from: implement
-          default: [review]
 
 outputs:
   review_strategy: "{{nodes.attempt.review_strategy}}"

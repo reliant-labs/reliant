@@ -51,23 +51,31 @@ the Reliant cloud platform via a bidirectional gRPC stream.`,
 // 1. Ensures user is logged in (runs OAuth if not)
 // 2. Calls CreateDaemonToken RPC to get a PAT
 // 3. Writes daemon credentials to local file
-func registerDaemon(cmd *cobra.Command, apiURL, gwURL string) error {
-	// Step 1: Ensure we have an access token (OAuth login if needed)
-	accessToken, err := auth.ReadAccessTokenFromAuthFile()
-	if err != nil {
-		return fmt.Errorf("reading auth file: %w", err)
-	}
+//
+// If preAuthToken is non-empty, it is used directly (e.g. obtained via
+// browser-based auth handoff) and the interactive login step is skipped.
+func registerDaemon(cmd *cobra.Command, apiURL, gwURL, preAuthToken string) error {
+	accessToken := preAuthToken
+
 	if accessToken == "" {
-		fmt.Fprintln(cmd.OutOrStdout(), "Not logged in. Starting authentication...")
-		result, err := auth.Login(cmd.Context(), auth.LoginOptions{})
+		// Step 1: Ensure we have an access token (OAuth login if needed)
+		var err error
+		accessToken, err = auth.ReadAccessTokenFromAuthFile()
 		if err != nil {
-			return fmt.Errorf("login failed: %w", err)
+			return fmt.Errorf("reading auth file: %w", err)
 		}
-		if err := auth.WriteAuthSession(result.AccessToken, result.RefreshToken, result.UserID, result.Email); err != nil {
-			return fmt.Errorf("saving credentials: %w", err)
+		if accessToken == "" {
+			fmt.Fprintln(cmd.OutOrStdout(), "Not logged in. Starting authentication...")
+			result, err := auth.Login(cmd.Context(), auth.LoginOptions{})
+			if err != nil {
+				return fmt.Errorf("login failed: %w", err)
+			}
+			if err := auth.WriteAuthSession(result.AccessToken, result.RefreshToken, result.UserID, result.Email); err != nil {
+				return fmt.Errorf("saving credentials: %w", err)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Logged in as %s\n", result.Email)
+			accessToken = result.AccessToken
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "Logged in as %s\n", result.Email)
-		accessToken = result.AccessToken
 	}
 
 	// Step 2: Call CreateDaemonToken RPC (via the API server, not the gateway)
@@ -109,7 +117,12 @@ func registerDaemon(cmd *cobra.Command, apiURL, gwURL string) error {
 
 // ensureDaemonCredentials returns existing daemon credentials or creates new ones.
 // This is the shared credential resolution logic used by both `open` and `daemon start`.
-func ensureDaemonCredentials(cmd *cobra.Command, apiURL, gwURL string) (*auth.DaemonCredentials, error) {
+//
+// If webURL is non-empty, browser-based auth handoff is attempted first:
+// the daemon opens the user's browser to the Reliant web UI, which POSTs
+// the user's session token back to a temporary localhost server. This lets
+// users authenticate the daemon without a separate CLI login step.
+func ensureDaemonCredentials(cmd *cobra.Command, apiURL, gwURL, webURL string) (*auth.DaemonCredentials, error) {
 	creds, err := auth.ReadDaemonCredentials(apiURL)
 	if err != nil {
 		return nil, fmt.Errorf("reading daemon credentials: %w", err)
@@ -123,9 +136,22 @@ func ensureDaemonCredentials(cmd *cobra.Command, apiURL, gwURL string) (*auth.Da
 		return creds, nil
 	}
 
-	// No credentials found — register
-	fmt.Fprintln(cmd.OutOrStdout(), "No daemon credentials found. Registering...")
-	if err := registerDaemon(cmd, apiURL, gwURL); err != nil {
+	// No credentials found — try browser-based auth handoff first.
+	var preAuthToken string
+	if webURL != "" {
+		fmt.Fprintln(cmd.OutOrStdout(), "No daemon credentials found. Opening browser to authenticate...")
+		token, err := browserAuth(cmd.Context(), webURL)
+		if err != nil {
+			logging.Warn("Browser-based auth failed, falling back to CLI login", "error", err)
+			fmt.Fprintf(cmd.OutOrStdout(), "Browser authentication failed: %v\nFalling back to CLI login...\n", err)
+		} else {
+			preAuthToken = token
+		}
+	} else {
+		fmt.Fprintln(cmd.OutOrStdout(), "No daemon credentials found. Registering...")
+	}
+
+	if err := registerDaemon(cmd, apiURL, gwURL, preAuthToken); err != nil {
 		return nil, fmt.Errorf("daemon registration failed: %w", err)
 	}
 
@@ -276,7 +302,7 @@ After registering, run 'reliant daemon start' to connect.`,
 				return nil
 			}
 
-			return registerDaemon(cmd, serverURL, resolveGatewayURL())
+			return registerDaemon(cmd, serverURL, resolveGatewayURL(), "")
 		},
 	}
 
@@ -296,6 +322,7 @@ func newDaemonStartCmd() *cobra.Command {
 		daemonName string
 		serverMode bool
 		listenPort int
+		webURL     string
 	)
 
 	cmd := &cobra.Command{
@@ -355,7 +382,7 @@ Credential resolution order:
 					return err
 				}
 			} else {
-				creds, err = ensureDaemonCredentials(cmd, serverURL, resolveGatewayURL())
+				creds, err = ensureDaemonCredentials(cmd, serverURL, resolveGatewayURL(), webURL)
 				if err != nil {
 					return err
 				}
@@ -412,7 +439,7 @@ Credential resolution order:
 					_ = auth.DeleteDaemonCredentials(serverURL)
 
 					fmt.Fprintln(cmd.OutOrStdout(), "Credentials expired or revoked. Re-registering...")
-					if regErr := registerDaemon(cmd, serverURL, resolveGatewayURL()); regErr != nil {
+					if regErr := registerDaemon(cmd, serverURL, resolveGatewayURL(), ""); regErr != nil {
 						return fmt.Errorf("re-registration failed: %w (original: %v)", regErr, err)
 					}
 
@@ -449,6 +476,7 @@ Credential resolution order:
 	cmd.Flags().StringVar(&daemonName, "name", "", "Human-friendly daemon name (default: hostname)")
 	cmd.Flags().BoolVar(&serverMode, "server-mode", envOrDefault("DAEMON_SERVER_MODE", "") == "true", "Listen for incoming gateway connections instead of dialing out")
 	cmd.Flags().IntVar(&listenPort, "listen-port", envOrDefaultInt("DAEMON_LISTEN_PORT", 9190), "Port to listen on in server mode")
+	cmd.Flags().StringVar(&webURL, "web-url", resolveWebURL(), "Reliant web UI URL for browser-based auth")
 
 	return cmd
 }

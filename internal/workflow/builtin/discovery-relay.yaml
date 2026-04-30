@@ -81,13 +81,11 @@ nodes:
       && iter.iteration < inputs.max_waves
     ask: "inputs.ask"
     inline:
-      entry: [execute]
-
       outputs:
         wave_status: "{{has(nodes.debrief) && has(nodes.debrief.response) && nodes.debrief.response != null ? nodes.debrief.response.status : 'continue'}}"
         discovery_brief: "{{has(nodes.debrief) && has(nodes.debrief.response) && nodes.debrief.response != null ? nodes.debrief.response.brief : ''}}"
 
-      nodes:
+      sequence:
         # ── Execute (wave agent) ──────────────────────────────────────────────
         #
         # A general agent that works on the task. It has full access to spawn
@@ -203,9 +201,6 @@ nodes:
 
               **Status:** {{has(output.response) && output.response != null ? output.response.status : 'unknown'}}
 
-      edges:
-        - from: execute
-          default: [debrief]
 
 outputs:
   wave_status: "{{nodes.wave.wave_status}}"

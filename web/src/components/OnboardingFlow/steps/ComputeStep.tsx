@@ -1,0 +1,463 @@
+import { useEffect, useMemo, useState } from "react";
+import { Cloud, Download, Loader2, Monitor } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { getIsDev } from "@/lib/constants";
+import type { CodeSource, ComputeChoice, OnboardingIntent, StepProps } from "../types";
+import { createDaemon, getCurrentUser, getFirstDaemonId, hasActiveDaemon, hasReliantCreditEligibility, listDaemons, resumeDaemon } from "../api";
+import { DaemonConnectionDiagrams } from "../DaemonConnectionDiagrams";
+
+const DOWNLOAD_BASE =
+  import.meta.env.VITE_DOWNLOAD_BASE_URL || "https://downloads.reliantlabs.io";
+const HAS_CLOUD_WORKSPACES = Boolean(
+  import.meta.env.VITE_CONTROL_PLANE_API_URL,
+);
+const DAEMON_TYPE_MANAGED = 1;
+const DAEMON_SIZE_SMALL = 1;
+
+type DetectedOS = "mac-arm64" | "mac-x64" | "windows" | "linux" | "unknown";
+
+interface DownloadLink {
+  label: string;
+  url: string;
+  os: DetectedOS;
+}
+
+const DOWNLOAD_LINKS: DownloadLink[] = [
+  {
+    label: "Mac (Apple Silicon)",
+    url: `${DOWNLOAD_BASE}/Reliant-latest-mac-arm64.dmg`,
+    os: "mac-arm64",
+  },
+  {
+    label: "Mac (Intel)",
+    url: `${DOWNLOAD_BASE}/Reliant-latest-mac-x64.dmg`,
+    os: "mac-x64",
+  },
+  {
+    label: "Windows x64",
+    url: `${DOWNLOAD_BASE}/Reliant-latest-win-x64.exe`,
+    os: "windows",
+  },
+  {
+    label: "Windows ARM64",
+    url: `${DOWNLOAD_BASE}/Reliant-latest-win-arm64.exe`,
+    os: "windows",
+  },
+  {
+    label: "Linux x86_64",
+    url: `${DOWNLOAD_BASE}/Reliant-latest-linux-x86_64.AppImage`,
+    os: "linux",
+  },
+  {
+    label: "Linux ARM64",
+    url: `${DOWNLOAD_BASE}/Reliant-latest-linux-arm64.AppImage`,
+    os: "linux",
+  },
+];
+
+function getOS(): DetectedOS {
+  const platform = navigator.platform;
+  if (/Mac/i.test(platform)) {
+    return (
+      navigator as Navigator & { userAgentData?: { architecture?: string } }
+    ).userAgentData?.architecture === "arm"
+      ? "mac-arm64"
+      : "mac-x64";
+  }
+  if (/Win/i.test(platform)) return "windows";
+  if (/Linux/i.test(platform)) return "linux";
+  return "unknown";
+}
+
+function getPrimaryDownload(os: DetectedOS): DownloadLink | null {
+  if (os === "unknown") return null;
+  return DOWNLOAD_LINKS.find((link) => link.os === os) ?? null;
+}
+
+function codeSourceForCompute(
+  current: CodeSource | undefined,
+  compute: ComputeChoice,
+  intent: OnboardingIntent | undefined,
+): CodeSource {
+  if (current === "local_folder" && compute === "cloud_free_trial")
+    return "github_repo";
+  if (current === "github_repo" && compute === "local_daemon")
+    return "local_folder";
+  if (current) return current;
+
+  // Default codeSource when not yet set (e.g. compute pre-selected before GoalStep)
+  if (intent === "existing_codebase") {
+    return compute === "cloud_free_trial" ? "github_repo" : "local_folder";
+  }
+  if (intent === "explore") return "sample_project";
+  return "new_project";
+}
+
+export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
+  const [showLocal, setShowLocal] = useState(
+    plan.compute === "local_daemon",
+  );
+  const [showOtherPlatforms, setShowOtherPlatforms] = useState(false);
+  const [startingCloud, setStartingCloud] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [cloudStatus, setCloudStatus] = useState<{
+    eligible: boolean;
+    reason: string | null;
+    loading: boolean;
+  }>({ eligible: HAS_CLOUD_WORKSPACES, reason: null, loading: HAS_CLOUD_WORKSPACES });
+
+  useEffect(() => {
+    if (!HAS_CLOUD_WORKSPACES) return;
+    if (getIsDev()) {
+      setCloudStatus({ eligible: true, reason: null, loading: false });
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { user } = await getCurrentUser();
+        if (cancelled) return;
+        if (!user) {
+          setCloudStatus({ eligible: false, reason: "Sign up required to use cloud daemons.", loading: false });
+        } else if (user.ipRestricted === true || user.ipAllowed === false) {
+          setCloudStatus({ eligible: false, reason: "Cloud daemons are not available from your current network.", loading: false });
+        } else if (user.globalBudgetAvailable === false || user.budgetAvailable === false) {
+          setCloudStatus({ eligible: false, reason: "Your plan's cloud budget has been reached.", loading: false });
+        } else if (!hasReliantCreditEligibility(user)) {
+          setCloudStatus({ eligible: false, reason: "No cloud credits available. Upgrade your plan to continue.", loading: false });
+        } else {
+          setCloudStatus({ eligible: true, reason: null, loading: false });
+        }
+      } catch {
+        if (!cancelled) {
+          // Can't reach control plane — allow attempt anyway
+          setCloudStatus({ eligible: true, reason: null, loading: false });
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const detectedOS = useMemo(() => getOS(), []);
+  const primaryDownload = useMemo(
+    () => getPrimaryDownload(detectedOS),
+    [detectedOS],
+  );
+  const otherDownloads = useMemo(
+    () => DOWNLOAD_LINKS.filter((link) => link !== primaryDownload),
+    [primaryDownload],
+  );
+
+  const handleCloud = async () => {
+    if (!HAS_CLOUD_WORKSPACES) return;
+
+    setStartingCloud(true);
+    setError(null);
+    try {
+      const existing = await listDaemons();
+      const daemons = existing.daemons;
+
+      if (hasActiveDaemon(daemons)) {
+        // Active daemon already exists — reuse it, skip creation
+        updatePlan({
+          compute: "cloud_free_trial",
+          daemonLocation: "reliant_cloud",
+          daemonProvisioning: false,
+          codeSource: codeSourceForCompute(plan.codeSource, "cloud_free_trial", plan.intent),
+          localPath: undefined,
+          projectName: undefined,
+        });
+        onNext();
+        return;
+      }
+
+      if (daemons.length > 0) {
+        // Daemon exists but is not active — resume it
+        const daemonId = getFirstDaemonId(daemons);
+        if (!daemonId) {
+          throw new Error("Found existing daemon but could not determine its ID. Please try again.");
+        }
+        try {
+          await resumeDaemon(daemonId);
+        } catch (resumeErr) {
+          console.warn("resumeDaemon failed, proceeding with provisioning state:", resumeErr);
+        }
+        updatePlan({
+          compute: "cloud_free_trial",
+          daemonLocation: "reliant_cloud",
+          daemonProvisioning: true,
+          codeSource: codeSourceForCompute(plan.codeSource, "cloud_free_trial", plan.intent),
+          localPath: undefined,
+          projectName: undefined,
+        });
+        onNext();
+        return;
+      }
+
+      // No daemons at all — create a new one
+      try {
+        await createDaemon({
+          name: "onboarding-workspace",
+          daemonType: DAEMON_TYPE_MANAGED,
+          size: DAEMON_SIZE_SMALL,
+          gitRepo: "",
+          gitBranch: "main",
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message.toLowerCase() : "";
+        if (message.includes("plan limit") || message.includes("already") || message.includes("exists")) {
+          // Plan limit or already exists — try to find and resume existing daemon
+          const fallback = await listDaemons();
+          const fallbackId = getFirstDaemonId(fallback.daemons);
+          if (fallbackId) {
+            try {
+              await resumeDaemon(fallbackId);
+            } catch (resumeErr) {
+              console.warn("Fallback resumeDaemon failed, proceeding:", resumeErr);
+            }
+          }
+        } else {
+          throw err;
+        }
+      }
+
+      updatePlan({
+        compute: "cloud_free_trial",
+        daemonLocation: "reliant_cloud",
+        daemonProvisioning: true,
+        codeSource: codeSourceForCompute(plan.codeSource, "cloud_free_trial", plan.intent),
+        localPath: undefined,
+        projectName: undefined,
+      });
+      onNext();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to start hosted daemon",
+      );
+    } finally {
+      setStartingCloud(false);
+    }
+  };
+
+  const handleLocal = () => {
+    setError(null);
+    updatePlan({
+      compute: "local_daemon",
+      daemonLocation: "self_hosted",
+      daemonProvisioning: false,
+      codeSource: codeSourceForCompute(plan.codeSource, "local_daemon", plan.intent),
+      localPath: undefined,
+      projectName: undefined,
+    });
+    setShowLocal(true);
+  };
+
+  const handleLocalContinue = () => {
+    handleLocal();
+    onNext();
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="space-y-2 text-center">
+        <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+          Where should Reliant run your daemon?
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          The daemon runs next to your code so agents can read files, run
+          commands, and keep work moving.
+        </p>
+      </div>
+
+      {!showLocal && <DaemonConnectionDiagrams />}
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div
+          className={cn(
+            "flex min-w-0 flex-col gap-4 rounded-xl border-2 p-5 text-left transition-all",
+            plan.compute === "cloud_free_trial"
+              ? "border-primary bg-primary/10"
+              : "border-primary/25 bg-primary/5",
+            !HAS_CLOUD_WORKSPACES && "border-border/50 bg-muted/30 opacity-80",
+          )}
+        >
+          <div className="flex min-w-0 items-start gap-4">
+            <div className="flex-shrink-0 rounded-lg bg-primary/15 p-2.5 text-primary">
+              {startingCloud ? (
+                <Loader2 className="h-6 w-6 animate-spin" />
+              ) : (
+                <Cloud className="h-6 w-6" />
+              )}
+            </div>
+            <div className="min-w-0 space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-semibold text-foreground">
+                  Reliant Cloud
+                </span>
+                <span className="rounded bg-primary/20 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">
+                  Fastest
+                </span>
+              </div>
+              <span className="block text-xs leading-relaxed text-muted-foreground">
+                {HAS_CLOUD_WORKSPACES
+                  ? "Start a hosted daemon now. If provisioning takes a few minutes, Reliant will continue setup and connect when it is ready."
+                  : "Cloud daemons are not enabled for this environment."}
+              </span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleCloud}
+            disabled={startingCloud || !HAS_CLOUD_WORKSPACES || !cloudStatus.eligible || cloudStatus.loading}
+            className={cn(
+              "inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors",
+              startingCloud || !HAS_CLOUD_WORKSPACES || !cloudStatus.eligible || cloudStatus.loading
+                ? "cursor-not-allowed bg-muted text-muted-foreground"
+                : "bg-sky-600 text-white shadow-sm shadow-sky-600/20 hover:bg-sky-500",
+            )}
+          >
+            {(startingCloud || cloudStatus.loading) && <Loader2 className="h-4 w-4 animate-spin" />}
+            {startingCloud ? "Requesting daemon..." : cloudStatus.loading ? "Checking availability..." : "Start cloud daemon"}
+          </button>
+          {(!HAS_CLOUD_WORKSPACES || (!cloudStatus.eligible && cloudStatus.reason)) && (
+            <div className="space-y-1.5">
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {!HAS_CLOUD_WORKSPACES
+                  ? 'Cloud daemons are unavailable because this environment is not configured for cloud mode. Choose "I\'ll connect my own" to continue.'
+                  : cloudStatus.reason}
+              </p>
+              {HAS_CLOUD_WORKSPACES && !cloudStatus.eligible && (
+                <a
+                  href="https://reliantlabs.io/pricing"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs font-medium text-sky-500 transition-colors hover:text-sky-400"
+                >
+                  View plans &rarr;
+                </a>
+              )}
+            </div>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={handleLocal}
+          className={cn(
+            "flex min-w-0 items-start gap-4 rounded-xl border-2 p-5 text-left transition-all",
+            "hover:border-primary/50 hover:bg-muted/50",
+            plan.compute === "local_daemon"
+              ? "border-primary bg-primary/10"
+              : "border-border/50 bg-background",
+          )}
+        >
+          <div className="flex-shrink-0 rounded-lg bg-muted p-2.5 text-muted-foreground">
+            <Monitor className="h-6 w-6" />
+          </div>
+          <div className="min-w-0 space-y-1">
+            <span className="block text-sm font-semibold text-foreground">
+              I'll connect my own
+            </span>
+            <span className="block text-xs leading-relaxed text-muted-foreground">
+              Run the daemon on a laptop or server that can access the directory
+              you choose.
+            </span>
+          </div>
+        </button>
+      </div>
+
+      {error && <p className="text-center text-xs text-destructive">{error}</p>}
+
+      {showLocal && (
+        <div className="space-y-4 rounded-xl border border-border/50 bg-muted/30 p-4">
+          <div className="flex items-start gap-3">
+            <Download className="mt-0.5 h-4 w-4 text-primary" />
+            <div>
+              <h3 className="text-sm font-medium text-foreground">
+                Install or connect Reliant Daemon
+              </h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                After it connects, you'll choose a directory for Reliant to
+                write code.
+              </p>
+            </div>
+          </div>
+
+          {primaryDownload ? (
+            <div className="space-y-3">
+              <a
+                href={primaryDownload.url}
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-sky-600 py-3 text-sm font-semibold text-white shadow-sm shadow-sky-600/20 transition-colors hover:bg-sky-500"
+              >
+                Download for {primaryDownload.label}
+              </a>
+
+              <button
+                type="button"
+                onClick={() => setShowOtherPlatforms(!showOtherPlatforms)}
+                className="w-full text-center text-xs text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {showOtherPlatforms ? "Hide" : "Other platforms"}
+              </button>
+
+              {showOtherPlatforms && (
+                <div className="space-y-1.5">
+                  {otherDownloads.map((link) => (
+                    <a
+                      key={link.url}
+                      href={link.url}
+                      className="flex items-center justify-between rounded px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                    >
+                      <span>{link.label}</span>
+                      <span className="text-sky-500">Download</span>
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              {DOWNLOAD_LINKS.map((link) => (
+                <a
+                  key={link.url}
+                  href={link.url}
+                  className="flex items-center justify-between rounded border border-border/40 px-3 py-2 text-xs text-foreground transition-colors hover:bg-muted/50"
+                >
+                  <span>{link.label}</span>
+                  <span className="text-sky-500">Download</span>
+                </a>
+              ))}
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <span className="block text-xs text-muted-foreground">
+              Or install via Homebrew:
+            </span>
+            <code className="block select-all rounded border border-border/40 bg-background px-3 py-2 font-mono text-xs text-foreground">
+              brew install --cask reliant-labs/reliant/reliant
+            </code>
+          </div>
+
+          <div className="space-y-1.5 border-t border-border/30 pt-2">
+            <span className="block text-xs text-muted-foreground">
+              After installing, run:
+            </span>
+            <code className="block select-all rounded border border-border/40 bg-background px-3 py-2 font-mono text-xs text-foreground">
+              reliant daemon start
+            </code>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleLocalContinue}
+            className="w-full rounded-lg bg-zinc-950 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+          >
+            Continue to daemon check
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

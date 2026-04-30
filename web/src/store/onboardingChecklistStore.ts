@@ -41,6 +41,15 @@ import { useWorktreeStore } from "./worktreeStore";
 import { useProjectStore } from "./projectStore";
 import { useGlobalDataStore } from "./globalDataStore";
 import { useViewerStore } from "./viewerStore";
+import { useChatParamsStore } from "./chatParamsStore";
+import { useAttachmentStore } from "./attachmentStore";
+import { useWorkspaceStateStore } from "./workspaceStateStore";
+
+let suppressNextChatLaunch = false;
+
+export function suppressNextOnboardingChatLaunch(): void {
+  suppressNextChatLaunch = true;
+}
 
 // ─── Store Interface ──────────────────────────────────────────────────────────
 
@@ -159,6 +168,80 @@ async function promptApiKeyIfNeededAfterOnboarding(): Promise<void> {
   // Reset hasChecked so the check actually re-runs (it may have been set during app startup)
   useApiKeySetupStore.setState({ hasChecked: false });
   await useApiKeySetupStore.getState().ensureApiKeyOrShowModal();
+}
+
+function getLaunchPrompt(projectHasCode: boolean | null): string {
+  const projectId = useProjectStore.getState().currentProject?.id;
+  if (projectId) {
+    const draft = useWorkspaceStateStore.getState().getNewChatDraft(projectId).trim();
+    if (draft) return draft;
+  }
+
+  return projectHasCode !== false
+    ? "Search for refactoring opportunities in this codebase"
+    : "Write me a Python hello world HTTP server";
+}
+
+function selectedPresetsFromTemp(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const selectedPresets: Record<string, string> = {};
+  for (const [target, preset] of Object.entries(value as Record<string, string | null>)) {
+    if (preset) selectedPresets[target] = preset;
+  }
+  return Object.keys(selectedPresets).length > 0 ? selectedPresets : undefined;
+}
+
+async function launchConfiguredOnboardingChat(projectHasCode: boolean | null): Promise<boolean> {
+  const worktreeStore = useWorktreeStore.getState();
+  const worktreeId =
+    worktreeStore.currentWorktree?.id ??
+    worktreeStore.worktrees.find((worktree) => worktree.is_main && !worktree.deleted_at)?.id;
+  if (!worktreeId) return false;
+
+  const tempParams = useChatParamsStore.getState().tempNewChatParams;
+  if (Object.keys(tempParams).length === 0) return false;
+
+  const {
+    __selectedWorkflow,
+    __selectedPresets,
+    ...workflowParams
+  } = tempParams;
+  const workflow = typeof __selectedWorkflow === "string" ? __selectedWorkflow : undefined;
+  const selectedPresets = selectedPresetsFromTemp(__selectedPresets);
+  const prompt = getLaunchPrompt(projectHasCode);
+
+  const chat = await useChatStore
+    .getState()
+    .createChat(
+      worktreeId,
+      prompt,
+      undefined,
+      Object.keys(workflowParams).length > 0 ? workflowParams : undefined,
+      workflow,
+      selectedPresets,
+    );
+
+  useChatParamsStore.getState().transferTempToChat(chat.id);
+  useChatStore.getState().selectChat(chat);
+  useAttachmentStore.getState().clearAttachments("temp");
+  return true;
+}
+
+async function finishTourAndLaunchChat(projectHasCode: boolean | null): Promise<void> {
+  if (suppressNextChatLaunch) {
+    suppressNextChatLaunch = false;
+    return;
+  }
+
+  try {
+    const launched = await launchConfiguredOnboardingChat(projectHasCode);
+    if (!launched) {
+      useChatStore.getState().clearCurrentChat();
+    }
+  } catch (error) {
+    logger.error("[ChecklistStore] Failed to launch onboarding chat", error);
+    useChatStore.getState().clearCurrentChat();
+  }
 }
 /** Detect if the project has source code files. */
 async function detectHasCode(): Promise<boolean> {
@@ -371,7 +454,13 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
         }
       }
 
-      // 5. Create a workspace — check if any non-main worktrees exist
+      // 5. Take product tour — check if the tour has been completed
+      if (!newItems.has("take-product-tour") && get().hasCompletedOnboarding) {
+        newItems.add("take-product-tour");
+        changed = true;
+      }
+
+      // 6. Create a workspace — check if any non-main worktrees exist
       if (!newItems.has("create-workspace")) {
         const worktrees = useWorktreeStore.getState().worktrees;
         const hasUserWorktree = worktrees.some(
@@ -383,7 +472,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
         }
       }
 
-      // 6. Install an MCP server
+      // 7. Install an MCP server
       if (!newItems.has("install-mcp") && projectId) {
         try {
           const result = await mcpGrpc.listServers(projectId);
@@ -396,7 +485,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
         }
       }
 
-      // 7. Create a preset — check if any user presets exist
+      // 8. Create a preset — check if any user presets exist
       if (!newItems.has("create-preset") && projectId) {
         try {
           const presets = useGlobalDataStore.getState().presets;
@@ -409,7 +498,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
         }
       }
 
-      // 8. Read docs — this is manually marked only (external link click)
+      // 9. Read docs — this is manually marked only (external link click)
       // No auto-detection needed.
 
       if (changed) {
@@ -504,6 +593,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
         currentStepId: ONBOARDING_STEPS[0].id,
         completedSteps: new Set(),
         skippedSteps: new Set(),
+        hasCompletedOnboarding: false,
       });
       await get().saveTourState();
       await get().detectProjectCode();
@@ -520,6 +610,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
 
     closeWizard: () => {
       set({ isWizardActive: false });
+      suppressNextChatLaunch = false;
       get().saveTourState();
     },
 
@@ -550,7 +641,6 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
 
       set({
         isWizardActive: false,
-        hasCompletedOnboarding: true,
         currentStepId: null,
         welcomeShown: true,
       });
@@ -562,6 +652,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
       await upsertStringSetting(TOUR_SETTINGS_KEYS.SKIPPED_ALL, "true");
       await get().saveTourState();
 
+      void finishTourAndLaunchChat(get().projectHasCode);
       void promptApiKeyIfNeededAfterOnboarding();
     },
 
@@ -579,19 +670,27 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
         viewerStore.setSettingsMode(false);
         viewerStore.setWorkflowMode(false);
 
+        const completedItems = new Set(get().completedItems);
+        completedItems.add("take-product-tour");
+
         set({
           isWizardActive: false,
           hasCompletedOnboarding: true,
           currentStepId: null,
           welcomeShown: true,
+          completedItems,
         });
 
         // Persist welcomeShown via localStorage too
         localStorage.setItem("reliant.checklist.welcomeShown", "true");
 
-
+        void upsertStringSetting(
+          CHECKLIST_SETTINGS_KEYS.COMPLETED_ITEMS,
+          serializeItems(completedItems),
+        );
         get().saveTourState();
 
+        void finishTourAndLaunchChat(state.projectHasCode);
         void promptApiKeyIfNeededAfterOnboarding();
       }
     },
@@ -658,6 +757,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
 
       // Clear localStorage welcomeShown
       localStorage.removeItem("reliant.checklist.welcomeShown");
+      suppressNextChatLaunch = false;
 
       await get().saveTourState();
       await get().detectProjectCode();
@@ -705,6 +805,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
         hasCompletedOnboarding: false,
         projectHasCode: null,
       });
+      suppressNextChatLaunch = false;
     },
   }),
 );

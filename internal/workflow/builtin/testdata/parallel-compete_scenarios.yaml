@@ -2,17 +2,18 @@
 #
 # Parallel Compete workflow:
 # 1. improve_prompt -> save_improved_prompt
-# 2. Parallel chains: create_worktree_1 -> impl_1, create_worktree_2 -> impl_2, create_worktree_3 -> impl_3
-# 3. implementations_done (join)
-# 4. review (structured response with winner/strategy)
-# 5. apply_winner OR synthesizer (conditional based on strategy)
-# 6. complete
+# 2. implementations (parallel loop: create_wt -> impl for each of [1, 2, 3])
+# 3. review (structured response with winner/strategy)
+# 4. apply_winner OR synthesizer (conditional based on strategy)
+# 5. complete
 #
-# NOTE: impl_1, impl_2, impl_3, and synthesizer are `type: workflow` nodes referencing builtin://agent.
-# review is a `type: workflow` node referencing builtin://structured-agent.
-# The simulator treats them as BLACK BOXES.
-# Mock events should provide the WORKFLOW'S FINAL OUTPUTS (message, response_text, response, completed),
-# not internal call_llm events.
+# NOTE: implementations is a parallel loop with inline sub-workflow.
+# The simulator runs per-iteration mocking: provide one event per iteration (3 total).
+# Each event's output matches the inline outputs: worktree_path, worktree_branch, response_text.
+# The simulator assembles these into _results keyed by candidate number.
+#
+# review is a `type: workflow` node referencing builtin://structured-agent (BLACK BOX).
+# synthesizer is a `type: workflow` node referencing builtin://agent (BLACK BOX).
 
 ---
 # Happy path: All three implementations complete, reviewer picks winner (use_winner strategy)
@@ -37,58 +38,24 @@ events:
         - Include rate limiting
         - Write unit tests
       tool_calls: []
-  
-  # Create worktrees (worktree nodes - parallel)
-  - node: create_worktree_1
+
+  # Per-iteration mocks for the parallel loop (one per candidate)
+  - node: implementations
     output:
-      id: "wt1"
-      name: "compete-impl-1"
-      path: "/tmp/worktrees/compete-impl-1"
-      branch: "compete-impl-1"
-      base_branch: "main"
-      repo_id: "test-repo"
-      status: "created"
-  - node: create_worktree_2
-    output:
-      id: "wt2"
-      name: "compete-impl-2"
-      path: "/tmp/worktrees/compete-impl-2"
-      branch: "compete-impl-2"
-      base_branch: "main"
-      repo_id: "test-repo"
-      status: "created"
-  - node: create_worktree_3
-    output:
-      id: "wt3"
-      name: "compete-impl-3"
-      path: "/tmp/worktrees/compete-impl-3"
-      branch: "compete-impl-3"
-      base_branch: "main"
-      repo_id: "test-repo"
-      status: "created"
-  
-  # Parallel implementations (workflow nodes - BLACK BOX outputs)
-  - node: impl_1
-    output:
-      message:
-        role: assistant
-        text: "Candidate 1 implementation complete. Used basic password auth."
+      worktree_path: "/tmp/worktrees/compete-impl-1"
+      worktree_branch: "compete-impl-1"
       response_text: "Candidate 1 implementation complete. Used basic password auth."
-  
-  - node: impl_2
+  - node: implementations
     output:
-      message:
-        role: assistant
-        text: "Candidate 2 implementation complete. Full OAuth + password with tests."
+      worktree_path: "/tmp/worktrees/compete-impl-2"
+      worktree_branch: "compete-impl-2"
       response_text: "Candidate 2 implementation complete. Full OAuth + password with tests."
-  
-  - node: impl_3
+  - node: implementations
     output:
-      message:
-        role: assistant
-        text: "Candidate 3 implementation complete. OAuth only, minimal tests."
+      worktree_path: "/tmp/worktrees/compete-impl-3"
+      worktree_branch: "compete-impl-3"
       response_text: "Candidate 3 implementation complete. OAuth only, minimal tests."
-  
+
   # Reviewer with structured response (use_winner strategy)
   - node: review
     output:
@@ -96,17 +63,16 @@ events:
         role: assistant
         text: |
           After reviewing all implementations:
-          
+
           - Candidate 1: Basic but incomplete
           - Candidate 2: Complete with good test coverage
           - Candidate 3: Missing password auth
       response_text: |
         After reviewing all implementations:
-        
+
         - Candidate 1: Basic but incomplete
         - Candidate 2: Complete with good test coverage
         - Candidate 3: Missing password auth
-      # Structured response fields (nested under response for structured-agent)
       response:
         winner: 2
         strategy: "use_winner"
@@ -127,12 +93,7 @@ expect:
   reached:
     - improve_prompt
     - save_improved_prompt
-    - create_worktree_1
-    - create_worktree_2
-    - create_worktree_3
-    - impl_1
-    - impl_2
-    - impl_3
+    - implementations
     - review
     - apply_winner
     - complete
@@ -151,56 +112,23 @@ events:
         text: "Build a cache layer with TTL support"
       response_text: "Build a cache layer with TTL support"
       tool_calls: []
-  
-  - node: create_worktree_1
+
+  - node: implementations
     output:
-      id: "wt1"
-      name: "b1"
-      path: "/wt/1"
-      branch: "b1"
-      base_branch: "main"
-      repo_id: "test"
-      status: "created"
-  - node: create_worktree_2
-    output:
-      id: "wt2"
-      name: "b2"
-      path: "/wt/2"
-      branch: "b2"
-      base_branch: "main"
-      repo_id: "test"
-      status: "created"
-  - node: create_worktree_3
-    output:
-      id: "wt3"
-      name: "b3"
-      path: "/wt/3"
-      branch: "b3"
-      base_branch: "main"
-      repo_id: "test"
-      status: "created"
-  
-  - node: impl_1
-    output:
-      message:
-        role: assistant
-        text: "Created cache.go with excellent TTL implementation"
+      worktree_path: "/wt/1"
+      worktree_branch: "b1"
       response_text: "Created cache.go with excellent TTL implementation"
-  
-  - node: impl_2
+  - node: implementations
     output:
-      message:
-        role: assistant
-        text: "Created cache.go with great test coverage but basic TTL"
+      worktree_path: "/wt/2"
+      worktree_branch: "b2"
       response_text: "Created cache.go with great test coverage but basic TTL"
-  
-  - node: impl_3
+  - node: implementations
     output:
-      message:
-        role: assistant
-        text: "Created cache.go with good API design but minimal tests"
+      worktree_path: "/wt/3"
+      worktree_branch: "b3"
       response_text: "Created cache.go with good API design but minimal tests"
-  
+
   # Reviewer chooses synthesize strategy
   - node: review
     output:
@@ -240,12 +168,7 @@ expect:
   reached:
     - improve_prompt
     - save_improved_prompt
-    - create_worktree_1
-    - create_worktree_2
-    - create_worktree_3
-    - impl_1
-    - impl_2
-    - impl_3
+    - implementations
     - review
     - synthesizer
     - complete
@@ -263,74 +186,41 @@ events:
         role: assistant
         text: |
           ## Improved Task Specification
-          
+
           ### Objective
           Create a user management API endpoint
-          
+
           ### Acceptance Criteria
           - GET /users returns paginated list
           - POST /users creates new user
           - Input validation required
-          
+
           ### Edge Cases
           - Empty database returns empty array
           - Duplicate email returns 409
       response_text: |
         ## Improved Task Specification
-        
+
         ### Objective
         Create a user management API endpoint
       tool_calls: []
-  
-  # Worktrees
-  - node: create_worktree_1
+
+  - node: implementations
     output:
-      id: "wt1"
-      name: "b1"
-      path: "/wt/1"
-      branch: "b1"
-      base_branch: "main"
-      repo_id: "test"
-      status: "created"
-  - node: create_worktree_2
-    output:
-      id: "wt2"
-      name: "b2"
-      path: "/wt/2"
-      branch: "b2"
-      base_branch: "main"
-      repo_id: "test"
-      status: "created"
-  - node: create_worktree_3
-    output:
-      id: "wt3"
-      name: "b3"
-      path: "/wt/3"
-      branch: "b3"
-      base_branch: "main"
-      repo_id: "test"
-      status: "created"
-  
-  # Implementations (black-box workflow outputs)
-  - node: impl_1
-    output:
-      message:
-        role: assistant
-        text: "Done"
+      worktree_path: "/wt/1"
+      worktree_branch: "b1"
       response_text: "Done"
-  - node: impl_2
+  - node: implementations
     output:
-      message:
-        role: assistant
-        text: "Done"
+      worktree_path: "/wt/2"
+      worktree_branch: "b2"
       response_text: "Done"
-  - node: impl_3
+  - node: implementations
     output:
-      message:
-        role: assistant
-        text: "Done"
+      worktree_path: "/wt/3"
+      worktree_branch: "b3"
       response_text: "Done"
-  
+
   # Review with structured response
   - node: review
     output:
@@ -357,6 +247,7 @@ expect:
   reached:
     - improve_prompt
     - save_improved_prompt
+    - implementations
     - review
     - apply_winner
     - complete
@@ -373,57 +264,23 @@ events:
         text: "Build a cache layer"
       response_text: "Build a cache layer"
       tool_calls: []
-  
-  - node: create_worktree_1
+
+  - node: implementations
     output:
-      id: "wt1"
-      name: "b1"
-      path: "/wt/1"
-      branch: "b1"
-      base_branch: "main"
-      repo_id: "test"
-      status: "created"
-  - node: create_worktree_2
-    output:
-      id: "wt2"
-      name: "b2"
-      path: "/wt/2"
-      branch: "b2"
-      base_branch: "main"
-      repo_id: "test"
-      status: "created"
-  - node: create_worktree_3
-    output:
-      id: "wt3"
-      name: "b3"
-      path: "/wt/3"
-      branch: "b3"
-      base_branch: "main"
-      repo_id: "test"
-      status: "created"
-  
-  # All impls complete (black-box outputs)
-  - node: impl_1
-    output:
-      message:
-        role: assistant
-        text: "Created cache.go with basic implementation"
+      worktree_path: "/wt/1"
+      worktree_branch: "b1"
       response_text: "Created cache.go with basic implementation"
-  
-  - node: impl_2
+  - node: implementations
     output:
-      message:
-        role: assistant
-        text: "Created cache.go and cache_test.go with full test coverage"
+      worktree_path: "/wt/2"
+      worktree_branch: "b2"
       response_text: "Created cache.go and cache_test.go with full test coverage"
-  
-  - node: impl_3
+  - node: implementations
     output:
-      message:
-        role: assistant
-        text: "Minimal cache implementation"
+      worktree_path: "/wt/3"
+      worktree_branch: "b3"
       response_text: "Minimal cache implementation"
-  
+
   # Reviewer picks winner with structured response
   - node: review
     output:
@@ -448,9 +305,7 @@ events:
 expect:
   outcome: completed
   reached:
-    - impl_1
-    - impl_2
-    - impl_3
+    - implementations
     - review
     - apply_winner
     - complete
@@ -467,54 +322,23 @@ events:
         text: "Create REST API"
       response_text: "Create REST API"
       tool_calls: []
-  
-  - node: create_worktree_1
+
+  - node: implementations
     output:
-      id: "wt1"
-      name: "b1"
-      path: "/wt/1"
-      branch: "b1"
-      base_branch: "main"
-      repo_id: "test"
-      status: "created"
-  - node: create_worktree_2
-    output:
-      id: "wt2"
-      name: "b2"
-      path: "/wt/2"
-      branch: "b2"
-      base_branch: "main"
-      repo_id: "test"
-      status: "created"
-  - node: create_worktree_3
-    output:
-      id: "wt3"
-      name: "b3"
-      path: "/wt/3"
-      branch: "b3"
-      base_branch: "main"
-      repo_id: "test"
-      status: "created"
-  
-  - node: impl_1
-    output:
-      message:
-        role: assistant
-        text: "Implementation 1 done"
+      worktree_path: "/wt/1"
+      worktree_branch: "b1"
       response_text: "Implementation 1 done"
-  - node: impl_2
+  - node: implementations
     output:
-      message:
-        role: assistant
-        text: "Implementation 2 done"
+      worktree_path: "/wt/2"
+      worktree_branch: "b2"
       response_text: "Implementation 2 done"
-  - node: impl_3
+  - node: implementations
     output:
-      message:
-        role: assistant
-        text: "Implementation 3 done"
+      worktree_path: "/wt/3"
+      worktree_branch: "b3"
       response_text: "Implementation 3 done"
-  
+
   # Thorough reviewer analysis with structured response
   - node: review
     output:
@@ -522,32 +346,32 @@ events:
         role: assistant
         text: |
           ## Detailed Code Review
-          
+
           ### Candidate 1 Analysis
           - Basic CRUD implementation
           - Missing input validation
           - No tests
-          
+
           ### Candidate 2 Analysis
           - Complete REST implementation
           - Proper error handling
           - Unit tests included
-          
+
           ### Candidate 3 Analysis
           - Incomplete, no tests
       response_text: |
         ## Detailed Code Review
-        
+
         ### Candidate 1 Analysis
         - Basic CRUD implementation
         - Missing input validation
         - No tests
-        
+
         ### Candidate 2 Analysis
         - Complete REST implementation
         - Proper error handling
         - Unit tests included
-        
+
         ### Candidate 3 Analysis
         - Incomplete, no tests
       response:
@@ -573,6 +397,8 @@ expect:
 
 ---
 # Implementation failure scenario - one impl fails, others succeed
+# With the parallel loop using on_failure: continue, a failed iteration
+# still produces an entry in _results. The _failed count reflects the failure.
 name: implementation_failure
 description: One implementation fails but workflow continues with review
 events:
@@ -583,73 +409,37 @@ events:
         text: "Implement error handling"
       response_text: "Implement error handling"
       tool_calls: []
-  
-  - node: create_worktree_1
+
+  - node: implementations
     output:
-      id: "wt1"
-      name: "b1"
-      path: "/wt/1"
-      branch: "b1"
-      base_branch: "main"
-      repo_id: "test"
-      status: "created"
-  - node: create_worktree_2
-    output:
-      id: "wt2"
-      name: "b2"
-      path: "/wt/2"
-      branch: "b2"
-      base_branch: "main"
-      repo_id: "test"
-      status: "created"
-  - node: create_worktree_3
-    output:
-      id: "wt3"
-      name: "b3"
-      path: "/wt/3"
-      branch: "b3"
-      base_branch: "main"
-      repo_id: "test"
-      status: "created"
-  
-  # Impl 1 succeeds
-  - node: impl_1
-    output:
-      message:
-        role: assistant
-        text: "Implementation 1 complete with error handling"
+      worktree_path: "/wt/1"
+      worktree_branch: "b1"
       response_text: "Implementation 1 complete with error handling"
-  
-  # Impl 2 fails (outputs error message)
-  - node: impl_2
+  - node: implementations
     output:
-      message:
-        role: assistant
-        text: "ERROR: Unable to complete implementation due to unforeseen issue"
+      worktree_path: "/wt/2"
+      worktree_branch: "b2"
       response_text: "ERROR: Unable to complete implementation due to unforeseen issue"
-  
-  # Impl 3 succeeds
-  - node: impl_3
+  - node: implementations
     output:
-      message:
-        role: assistant
-        text: "Implementation 3 complete with robust error handling"
+      worktree_path: "/wt/3"
+      worktree_branch: "b3"
       response_text: "Implementation 3 complete with robust error handling"
-  
-  # Reviewer notes impl_2 failed and picks from remaining
+
+  # Reviewer notes impl 2 failed and picks from remaining
   - node: review
     output:
       message:
         role: assistant
         text: |
           ## Review Summary
-          
+
           Candidate 1: Complete implementation
           Candidate 2: FAILED - no implementation
           Candidate 3: Complete implementation with robust error handling
       response_text: |
         ## Review Summary
-        
+
         Candidate 1: Complete implementation
         Candidate 2: FAILED - no implementation
         Candidate 3: Complete implementation with robust error handling
@@ -672,24 +462,18 @@ expect:
   reached:
     - improve_prompt
     - save_improved_prompt
-    - create_worktree_1
-    - create_worktree_2
-    - create_worktree_3
-    - impl_1
-    - impl_2
-    - impl_3
+    - implementations
     - review
     - apply_winner
     - complete
 
 ---
-# Worktree creation failure scenario
-# When one worktree creation fails but the workflow continues, the review node
-# runs but its response is null (no strategy chosen). The edge conditions
-# correctly handle null response: neither use_winner nor synthesize matches,
-# so the workflow completes without routing to either branch.
-name: worktree_creation_failure
-description: One worktree creation fails, review completes with null response, no edge matches
+# Parallel loop with degraded review - null response
+# When the review node runs but produces a null response (no strategy chosen),
+# the edge conditions correctly handle it: neither use_winner nor synthesize
+# matches, so the workflow completes without routing to either branch.
+name: loop_failure_null_review
+description: Parallel loop completes, review has null response, no edge matches
 events:
   - node: improve_prompt
     output:
@@ -698,56 +482,22 @@ events:
         text: "Build a feature"
       response_text: "Build a feature"
       tool_calls: []
-  
-  - node: create_worktree_1
-    output:
-      id: "wt1"
-      name: "b1"
-      path: "/wt/1"
-      branch: "b1"
-      base_branch: "main"
-      repo_id: "test"
-      status: "created"
-  
-  # Worktree 2 fails - no path field returned
-  - node: create_worktree_2
-    output:
-      id: "wt2"
-      name: "b2"
-      status: "error"
-      error: "Failed to create worktree: branch already exists"
-  
-  - node: create_worktree_3
-    output:
-      id: "wt3"
-      name: "b3"
-      path: "/wt/3"
-      branch: "b3"
-      base_branch: "main"
-      repo_id: "test"
-      status: "created"
 
-  # impl_1 completes (has valid path)
-  - node: impl_1
+  - node: implementations
     output:
-      message:
-        role: assistant
-        text: "Implementation 1 done"
+      worktree_path: "/wt/1"
+      worktree_branch: "b1"
       response_text: "Implementation 1 done"
-
-  - node: impl_2
+  - node: implementations
     output:
-      message:
-        role: assistant
-        text: "Implementation 2 done"
-      response_text: "Implementation 2 done"
-
-  - node: impl_3
+      worktree_path: "/wt/2"
+      worktree_branch: "b2"
+      response_text: "ERROR: Failed"
+  - node: implementations
     output:
-      message:
-        role: assistant
-        text: "Implementation 3 done"
-      response_text: "Implementation 3 done"
+      worktree_path: "/wt/3"
+      worktree_branch: "b3"
+      response_text: "ERROR: Failed"
 
   # Review runs but response is null (no response tool called or incomplete)
   - node: review
@@ -760,13 +510,7 @@ expect:
   reached:
     - improve_prompt
     - save_improved_prompt
-    - create_worktree_1
-    - create_worktree_2
-    - create_worktree_3
-    - impl_1
-    - impl_2
-    - impl_3
-    - implementations_done
+    - implementations
     - review
 
 ---
@@ -781,54 +525,23 @@ events:
         text: "Build authentication system"
       response_text: "Build authentication system"
       tool_calls: []
-  
-  - node: create_worktree_1
+
+  - node: implementations
     output:
-      id: "wt1"
-      name: "b1"
-      path: "/wt/1"
-      branch: "b1"
-      base_branch: "main"
-      repo_id: "test"
-      status: "created"
-  - node: create_worktree_2
-    output:
-      id: "wt2"
-      name: "b2"
-      path: "/wt/2"
-      branch: "b2"
-      base_branch: "main"
-      repo_id: "test"
-      status: "created"
-  - node: create_worktree_3
-    output:
-      id: "wt3"
-      name: "b3"
-      path: "/wt/3"
-      branch: "b3"
-      base_branch: "main"
-      repo_id: "test"
-      status: "created"
-  
-  - node: impl_1
-    output:
-      message:
-        role: assistant
-        text: "OAuth implementation complete"
+      worktree_path: "/wt/1"
+      worktree_branch: "b1"
       response_text: "OAuth implementation complete"
-  - node: impl_2
+  - node: implementations
     output:
-      message:
-        role: assistant
-        text: "Password auth implementation complete"
+      worktree_path: "/wt/2"
+      worktree_branch: "b2"
       response_text: "Password auth implementation complete"
-  - node: impl_3
+  - node: implementations
     output:
-      message:
-        role: assistant
-        text: "JWT token handling complete"
+      worktree_path: "/wt/3"
+      worktree_branch: "b3"
       response_text: "JWT token handling complete"
-  
+
   # High confidence synthesis
   - node: review
     output:

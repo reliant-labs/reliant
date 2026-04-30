@@ -1,18 +1,13 @@
 # Winner Candidate 3: Reviewer selects the third implementation
 #
 # Tests that the winner selection logic works for any candidate number.
-# The apply_winner node uses a ternary expression to map the winner number
-# to the correct worktree path:
-#   winner == 1 ? create_worktree_1.path : (winner == 2 ? create_worktree_2.path : create_worktree_3.path)
-#
-# This scenario ensures candidate 3 is reachable through that expression
-# and that the full use_winner path completes successfully.
+# The apply_winner node uses a map lookup on _results with the winner number
+# to get the correct worktree path.
 
 name: winner_candidate_3
 description: Reviewer selects candidate 3 as the winner via use_winner strategy
 
 events:
-  # Prompt improvement
   - node: improve_prompt
     output:
       message:
@@ -21,58 +16,22 @@ events:
       response_text: "Create a REST API for user management with pagination"
       tool_calls: []
 
-  # Create worktrees
-  - node: create_worktree_1
+  - node: implementations
     output:
-      id: "wt1"
-      name: "b1"
-      path: "/wt/1"
-      branch: "b1"
-      base_branch: "main"
-      repo_id: "test"
-      status: "created"
-  - node: create_worktree_2
-    output:
-      id: "wt2"
-      name: "b2"
-      path: "/wt/2"
-      branch: "b2"
-      base_branch: "main"
-      repo_id: "test"
-      status: "created"
-  - node: create_worktree_3
-    output:
-      id: "wt3"
-      name: "b3"
-      path: "/wt/3"
-      branch: "b3"
-      base_branch: "main"
-      repo_id: "test"
-      status: "created"
-
-  # Implementations
-  - node: impl_1
-    output:
-      message:
-        role: assistant
-        text: "Basic CRUD implementation, no pagination"
+      worktree_path: "/wt/1"
+      worktree_branch: "b1"
       response_text: "Basic CRUD implementation, no pagination"
-
-  - node: impl_2
+  - node: implementations
     output:
-      message:
-        role: assistant
-        text: "CRUD with offset pagination, missing input validation"
+      worktree_path: "/wt/2"
+      worktree_branch: "b2"
       response_text: "CRUD with offset pagination, missing input validation"
-
-  - node: impl_3
+  - node: implementations
     output:
-      message:
-        role: assistant
-        text: "Full REST API with cursor pagination, input validation, and comprehensive tests"
+      worktree_path: "/wt/3"
+      worktree_branch: "b3"
       response_text: "Full REST API with cursor pagination, input validation, and comprehensive tests"
 
-  # Reviewer picks candidate 3
   - node: review
     output:
       message:
@@ -91,7 +50,6 @@ events:
         synthesis_instructions: ""
       completed: true
 
-  # apply_winner rsync from worktree 3
   - node: apply_winner
     output:
       exit_code: 0
@@ -103,12 +61,7 @@ expect:
   reached:
     - improve_prompt
     - save_improved_prompt
-    - create_worktree_1
-    - create_worktree_2
-    - create_worktree_3
-    - impl_1
-    - impl_2
-    - impl_3
+    - implementations
     - review
     - apply_winner
     - complete
