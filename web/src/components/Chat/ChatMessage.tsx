@@ -544,11 +544,13 @@ function ChatMessageComponent({
     }
   });
 
+  const hasAttachments = Boolean(message.attachments?.length);
+
   // Hide messages that have no useful content at all
   // When hideToolExecutions is true, treat tool executions as if they don't exist
   const hasVisibleContent =
     parsed.text ||
-    (message.attachments && message.attachments.length > 0) ||
+    hasAttachments ||
     (!hideToolExecutions &&
       enhancedToolExecutions &&
       enhancedToolExecutions.length > 0);
@@ -637,8 +639,8 @@ function ChatMessageComponent({
                 <div
                   ref={bubbleRef}
                   className={cn(
-                    "user-message-content relative block cursor-pointer overflow-hidden rounded-2xl border border-blue-500/25 bg-blue-500/20 text-blue-950 shadow-sm transition-colors duration-200 dark:border-blue-400/20 dark:bg-blue-500/15 dark:text-blue-50",
-                    "hover:border-blue-500/35 hover:bg-blue-500/25 dark:hover:border-blue-400/30 dark:hover:bg-blue-500/20",
+                    "user-message-content relative block cursor-pointer overflow-hidden rounded-2xl border border-primary/25 bg-primary/15 text-foreground shadow-sm transition-colors duration-200",
+                    "hover:border-primary/35 hover:bg-primary/20",
                     timelineVariant === "card" && "shadow-md",
                     timelineVariant === "minimal" && "shadow-none"
                   )}
@@ -658,32 +660,24 @@ function ChatMessageComponent({
                 >
                   {/* Text Content - show exactly as sent */}
                   {parsed.text && (
-                    <div className="message-bubble relative">
-                      <div
-                        ref={contentRef}
-                        className="overflow-hidden text-sm leading-relaxed text-blue-950 dark:text-blue-50"
-                        style={{
-                          maxHeight: isExpanded ? "none" : "3rem",
-                          transition: "max-height 0.2s ease-in-out",
-                        }}
-                      >
-                        <div className="whitespace-pre-wrap break-words">
-                          {renderTextWithContextPills(parsed.text, chatWorktreeId)}
-                        </div>
+                    <div
+                      ref={contentRef}
+                      className="overflow-hidden text-sm leading-relaxed text-foreground"
+                      style={{
+                        maxHeight: isExpanded ? "none" : "3rem",
+                        transition: "max-height 0.2s ease-in-out",
+                      }}
+                    >
+                      <div className="whitespace-pre-wrap break-words">
+                        {renderTextWithContextPills(parsed.text, chatWorktreeId)}
                       </div>
-                      {/* Gradient fade overlay for truncated content */}
-                      {!isExpanded && isOverflowing && (
-                        <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-6 rounded-b-2xl bg-gradient-to-t from-blue-500/20 to-transparent dark:from-blue-500/15" />
-                      )}
                     </div>
                   )}
 
                   {/* Expand button - styled like diff expand button */}
                   {!isExpanded && isOverflowing && (
-                    <div className="flex justify-center border-t border-border/60">
-                      <div
-                        className="flex w-full items-center justify-center gap-1 px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-                      >
+                    <div className="mt-1 flex justify-center border-t border-primary/15 pt-1">
+                      <div className="flex w-full items-center justify-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground">
                         <ChevronDown className="w-3 h-3" />
                         Show more
                       </div>
@@ -691,7 +685,7 @@ function ChatMessageComponent({
                   )}
 
                   {/* Attachments */}
-                  {isExpanded && message.attachments && message.attachments.length > 0 && (
+                  {hasAttachments && (
                     <MessageAttachments
                       attachments={message.attachments}
                       isUser={isUser}
@@ -731,7 +725,7 @@ function ChatMessageComponent({
               )}
 
               {/* Attachments */}
-              {message.attachments && message.attachments.length > 0 && (
+              {hasAttachments && (
                 <MessageAttachments
                   attachments={message.attachments}
                   isUser={isUser}
@@ -887,6 +881,7 @@ export const ChatMessage = memo(ChatMessageComponent, (prev, next) => {
   if (prev.message.id !== next.message.id) return false;
   if (prev.message.updatedAt !== next.message.updatedAt) return false;
   if (prev.message.contentBlocks !== next.message.contentBlocks) return false;
+  if (prev.message.attachments !== next.message.attachments) return false;
   if (prev.isLatestMessage !== next.isLatestMessage) return false;
   if (prev.isStreaming !== next.isStreaming) return false;
   if (prev.chatId !== next.chatId) return false;
