@@ -148,11 +148,12 @@ func (s *worktreeStore) ListWorktrees(ctx context.Context, filters core.Worktree
 	}
 
 	sqlcWorktrees, err := s.q.ListWorktrees(ctx, sqlitedb.ListWorktreesParams{
-		ProjectID: projectIDFilter,
-		ChatID:    chatIDFilter,
-		Status:    statusFilter,
-		Limit:     limit,
-		Offset:    offset,
+		ProjectID:       projectIDFilter,
+		ChatID:          chatIDFilter,
+		Status:          statusFilter,
+		IncludeArchived: filters.IncludeArchived,
+		Limit:           limit,
+		Offset:          offset,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list worktrees: %w", err)

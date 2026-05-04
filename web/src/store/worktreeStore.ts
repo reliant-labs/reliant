@@ -98,8 +98,9 @@ interface WorktreeStore {
   isDiscovering: boolean;
   deletingId: string | null;
   error: string | null;
+  lastLoadIncludedArchived: boolean;
 
-  loadWorktrees: (projectId?: string) => Promise<void>;
+  loadWorktrees: (projectId?: string, options?: { includeArchived?: boolean }) => Promise<void>;
   selectWorktree: (worktree: Worktree | null, options?: { skipWorkspaceStateSave?: boolean }) => void;
   createWorktree: (data: Partial<Worktree> & { force?: boolean; source_worktree_id?: string }) => Promise<Worktree>;
   importWorktree: (data: { path: string; name?: string; project_id: string }) => Promise<Worktree>;
@@ -118,6 +119,10 @@ interface WorktreeStore {
   reset: () => void;
 }
 
+function getCurrentLoadOptions(): { includeArchived: boolean } {
+  return { includeArchived: useWorktreeStore.getState().lastLoadIncludedArchived };
+}
+
 export const useWorktreeStore = create<WorktreeStore>((set) => ({
   worktrees: [],
   currentWorktree: null,
@@ -127,25 +132,28 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
   isDiscovering: false,
   deletingId: null,
   error: null,
+  lastLoadIncludedArchived: false,
 
-  loadWorktrees: async (projectId?: string) => {
+  loadWorktrees: async (projectId?: string, options?: { includeArchived?: boolean }) => {
     if (!projectId) {
       // gRPC requires projectId - return empty if not provided
-      set({ worktrees: [], isLoading: false, hasLoaded: true });
+      set({ worktrees: [], isLoading: false, hasLoaded: true, lastLoadIncludedArchived: false });
       return;
     }
     set({ isLoading: true, error: null });
     try {
       // Use singleflight to deduplicate concurrent calls for the same project
       // (e.g., selectProject + useWorkspaceRestore both calling loadWorktrees)
-      const loadedWorktrees = await singleflight(`loadWorktrees:${projectId}`, async () => {
-        const response = await worktreeGrpc.list(projectId);
+      const includeArchived = options?.includeArchived ?? false;
+      const loadedWorktrees = await singleflight(`loadWorktrees:${projectId}:${includeArchived ? "with-archived" : "active"}`, async () => {
+        const response = await worktreeGrpc.list(projectId, { includeArchived });
         return response.worktrees.map(grpcToStore);
       });
       set({
         worktrees: loadedWorktrees,
         isLoading: false,
         hasLoaded: true,
+        lastLoadIncludedArchived: includeArchived,
       });
       
       // Auto-select main worktree if no worktree is currently selected
@@ -269,7 +277,7 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
         // Get active chat ID before reloading to check if we need to remove it from queue
         const activeChatId = useChatStore.getState().activeChatId;
 
-        await useWorktreeStore.getState().loadWorktrees(currentProject);
+        await useWorktreeStore.getState().loadWorktrees(currentProject, getCurrentLoadOptions());
         // Reload chats to remove archived ones from the list
         await useChatStore.getState().loadChats();
 
@@ -389,7 +397,7 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
           // Get active chat ID before reloading to check if we need to remove it from queue
           const activeChatId = useChatStore.getState().activeChatId;
 
-          await useWorktreeStore.getState().loadWorktrees(currentProject);
+          await useWorktreeStore.getState().loadWorktrees(currentProject, getCurrentLoadOptions());
           // Reload chats to remove archived ones from the list
           await useChatStore.getState().loadChats();
 
@@ -444,7 +452,7 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
 
       // Reload worktrees and chats to get updated state
       if (worktree?.project_id) {
-        await useWorktreeStore.getState().loadWorktrees(worktree.project_id);
+        await useWorktreeStore.getState().loadWorktrees(worktree.project_id, getCurrentLoadOptions());
         // Reload chats to bring back unarchived ones
         await useChatStore.getState().loadChats();
       }
@@ -648,6 +656,7 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
       isDiscovering: false,
       deletingId: null,
       error: null,
+      lastLoadIncludedArchived: false,
     });
   },
 }));

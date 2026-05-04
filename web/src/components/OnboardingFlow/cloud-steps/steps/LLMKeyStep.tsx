@@ -1,3 +1,4 @@
+import { Gift, KeyRound } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '../../../../lib/utils';
 import type { StepProps, ModelProvider } from '../../types';
@@ -82,9 +83,9 @@ export function LLMKeyStep({ plan, updatePlan, onNext }: StepProps) {
               : 'border-primary/30 bg-primary/5',
           )}
         >
-          <span className="text-3xl shrink-0" role="img" aria-label="Credits">
-            🎁
-          </span>
+          <div className="flex-shrink-0 p-2.5 rounded-lg bg-primary/15 text-primary">
+            <Gift className="w-6 h-6" aria-hidden="true" />
+          </div>
           <div className="space-y-1 flex-1">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-foreground">
@@ -111,9 +112,9 @@ export function LLMKeyStep({ plan, updatePlan, onNext }: StepProps) {
               : 'border-border/40 bg-background',
           )}
         >
-          <span className="text-2xl shrink-0" role="img" aria-label="Key">
-            🔑
-          </span>
+          <div className="flex-shrink-0 p-2 rounded-lg bg-muted text-muted-foreground">
+            <KeyRound className="w-5 h-5" aria-hidden="true" />
+          </div>
           <div className="space-y-0.5">
             <span className="block text-sm font-medium text-foreground">
               Bring your own key

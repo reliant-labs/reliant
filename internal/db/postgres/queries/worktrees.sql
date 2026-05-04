@@ -16,8 +16,8 @@ WHERE
     (sqlc.narg('project_id')::text IS NULL OR project_id = sqlc.narg('project_id')::text)
     AND (sqlc.narg('chat_id')::text IS NULL OR chat_id = sqlc.narg('chat_id')::text)
     AND (sqlc.narg('status')::integer IS NULL OR status = sqlc.narg('status')::integer)
-    AND deleted_at IS NULL
-ORDER BY last_active DESC
+    AND (sqlc.arg('include_archived')::boolean OR deleted_at IS NULL)
+ORDER BY (deleted_at IS NOT NULL), last_active DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: UpdateWorktree :exec

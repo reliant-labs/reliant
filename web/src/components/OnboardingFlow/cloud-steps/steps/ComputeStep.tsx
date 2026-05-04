@@ -1,48 +1,136 @@
-import { useState, useMemo } from 'react';
+import { ChevronDown, Cloud, Cpu, Download } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { cn } from '../../../../lib/utils';
 import type { StepProps, ComputeChoice } from '../../types';
 
-type DetectedOS = 'mac-arm64' | 'mac-x64' | 'windows' | 'linux' | 'unknown';
+type DownloadTarget =
+  | 'mac-arm64'
+  | 'mac-x64'
+  | 'windows-x64'
+  | 'windows-arm64'
+  | 'linux-x64'
+  | 'linux-arm64';
+type DetectedDownloadTarget = DownloadTarget | 'unknown';
+
+interface BrowserUserAgentData {
+  platform?: string;
+  getHighEntropyValues?: (hints: string[]) => Promise<{
+    architecture?: string;
+    platform?: string;
+  }>;
+}
+
+interface NavigatorWithUserAgentData extends Navigator {
+  userAgentData?: BrowserUserAgentData;
+}
 
 interface DownloadLink {
   label: string;
   url: string;
-  os: DetectedOS;
+  target: DownloadTarget;
 }
 
 const DOWNLOAD_LINKS: DownloadLink[] = [
-  { label: 'Mac (Apple Silicon)', url: 'https://downloads.reliantlabs.io/Reliant-latest-mac-arm64.dmg', os: 'mac-arm64' },
-  { label: 'Mac (Intel)', url: 'https://downloads.reliantlabs.io/Reliant-latest-mac-x64.dmg', os: 'mac-x64' },
-  { label: 'Windows x64', url: 'https://downloads.reliantlabs.io/Reliant-latest-win-x64.exe', os: 'windows' },
-  { label: 'Windows ARM64', url: 'https://downloads.reliantlabs.io/Reliant-latest-win-arm64.exe', os: 'windows' },
-  { label: 'Linux x86_64', url: 'https://downloads.reliantlabs.io/Reliant-latest-linux-x86_64.AppImage', os: 'linux' },
-  { label: 'Linux ARM64', url: 'https://downloads.reliantlabs.io/Reliant-latest-linux-arm64.AppImage', os: 'linux' },
+  { label: 'Mac (Apple Silicon)', url: 'https://downloads.reliantlabs.io/Reliant-latest-mac-arm64.dmg', target: 'mac-arm64' },
+  { label: 'Mac (Intel)', url: 'https://downloads.reliantlabs.io/Reliant-latest-mac-x64.dmg', target: 'mac-x64' },
+  { label: 'Windows x64', url: 'https://downloads.reliantlabs.io/Reliant-latest-win-x64.exe', target: 'windows-x64' },
+  { label: 'Windows ARM64', url: 'https://downloads.reliantlabs.io/Reliant-latest-win-arm64.exe', target: 'windows-arm64' },
+  { label: 'Linux x86_64', url: 'https://downloads.reliantlabs.io/Reliant-latest-linux-x86_64.AppImage', target: 'linux-x64' },
+  { label: 'Linux ARM64', url: 'https://downloads.reliantlabs.io/Reliant-latest-linux-arm64.AppImage', target: 'linux-arm64' },
 ];
 
-function getOS(): DetectedOS {
-  const platform = navigator.platform;
-  if (/Mac/i.test(platform)) {
-    return (navigator as any).userAgentData?.architecture === 'arm'
-      ? 'mac-arm64'
-      : 'mac-x64';
+function getDownloadTargetFromPlatform(
+  platform: string | undefined,
+  architecture?: string,
+): DetectedDownloadTarget {
+  const platformText = platform?.toLowerCase() ?? '';
+  const architectureText = architecture?.toLowerCase() ?? '';
+  const isArm = /arm|aarch64/.test(architectureText);
+  const isX64 = /x86|x64|amd64|intel/.test(architectureText);
+
+  if (/mac|darwin/.test(platformText)) {
+    return isArm || !isX64 ? 'mac-arm64' : 'mac-x64';
   }
-  if (/Win/i.test(platform)) return 'windows';
-  if (/Linux/i.test(platform)) return 'linux';
+  if (/win/.test(platformText)) {
+    return isArm ? 'windows-arm64' : 'windows-x64';
+  }
+  if (/linux/.test(platformText)) {
+    return isArm ? 'linux-arm64' : 'linux-x64';
+  }
   return 'unknown';
 }
 
-function getPrimaryDownload(os: DetectedOS): DownloadLink | null {
-  if (os === 'unknown') return null;
-  // Return the first match for the detected OS
-  return DOWNLOAD_LINKS.find((l) => l.os === os) ?? null;
+function getFallbackDownloadTarget(): DetectedDownloadTarget {
+  if (typeof navigator === 'undefined') return 'unknown';
+
+  const navigatorWithUAData = navigator as NavigatorWithUserAgentData;
+  const platform =
+    navigatorWithUAData.userAgentData?.platform ||
+    navigator.platform ||
+    navigator.userAgent;
+  const platformAndAgent = `${platform} ${navigator.userAgent}`;
+  const isMac = /mac|darwin/i.test(platformAndAgent);
+  const architecture = /arm|aarch64/i.test(platformAndAgent)
+    ? 'arm'
+    : !isMac && /x86|x64|amd64|intel|win64|wow64/i.test(platformAndAgent)
+      ? 'x86'
+      : undefined;
+
+  return getDownloadTargetFromPlatform(platform, architecture);
+}
+
+async function detectDownloadTarget(): Promise<DetectedDownloadTarget> {
+  if (typeof navigator === 'undefined') return 'unknown';
+
+  const navigatorWithUAData = navigator as NavigatorWithUserAgentData;
+  const userAgentData = navigatorWithUAData.userAgentData;
+
+  if (userAgentData?.getHighEntropyValues) {
+    try {
+      const highEntropy = await userAgentData.getHighEntropyValues([
+        'architecture',
+        'platform',
+      ]);
+      const target = getDownloadTargetFromPlatform(
+        highEntropy.platform || userAgentData.platform || navigator.platform,
+        highEntropy.architecture,
+      );
+      if (target !== 'unknown') return target;
+    } catch {
+      // Fall back to lower-entropy platform hints below.
+    }
+  }
+
+  return getFallbackDownloadTarget();
+}
+
+function getPrimaryDownload(target: DetectedDownloadTarget): DownloadLink | null {
+  if (target === 'unknown') return null;
+  return DOWNLOAD_LINKS.find((link) => link.target === target) ?? null;
 }
 
 export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
   const [showLocal, setShowLocal] = useState(plan.compute === 'local_daemon');
   const [showOtherPlatforms, setShowOtherPlatforms] = useState(false);
+  const [detectedTarget, setDetectedTarget] = useState<DetectedDownloadTarget>(
+    () => getFallbackDownloadTarget(),
+  );
 
-  const detectedOS = useMemo(() => getOS(), []);
-  const primaryDownload = useMemo(() => getPrimaryDownload(detectedOS), [detectedOS]);
+  useEffect(() => {
+    let cancelled = false;
+
+    void detectDownloadTarget().then((target) => {
+      if (!cancelled) {
+        setDetectedTarget(target);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const primaryDownload = useMemo(() => getPrimaryDownload(detectedTarget), [detectedTarget]);
   const otherDownloads = useMemo(
     () => DOWNLOAD_LINKS.filter((l) => l !== primaryDownload),
     [primaryDownload],
@@ -81,9 +169,9 @@ export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
               : 'border-primary/30 bg-primary/5',
           )}
         >
-          <span className="text-3xl shrink-0" role="img" aria-label="Cloud">
-            ☁️
-          </span>
+          <div className="flex-shrink-0 p-2.5 rounded-lg bg-primary/15 text-primary">
+            <Cloud className="w-6 h-6" aria-hidden="true" />
+          </div>
           <div className="space-y-1 flex-1">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-foreground">
@@ -110,9 +198,9 @@ export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
               : 'border-border/40 bg-background',
           )}
         >
-          <span className="text-2xl shrink-0" role="img" aria-label="Local">
-            💻
-          </span>
+          <div className="flex-shrink-0 p-2 rounded-lg bg-muted text-muted-foreground">
+            <Cpu className="w-5 h-5" aria-hidden="true" />
+          </div>
           <div className="space-y-0.5">
             <span className="block text-sm font-medium text-foreground">
               Run locally on my machine
@@ -137,18 +225,23 @@ export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
               <a
                 href={primaryDownload.url}
                 className={cn(
-                  'flex items-center justify-center gap-2 w-full py-3 rounded-lg text-sm font-semibold transition-colors',
-                  'bg-primary text-primary-foreground hover:bg-primary/90',
+                  'flex items-center justify-center gap-2 w-full py-3 rounded-lg text-sm font-semibold transition-colors border',
+                  'border-border/60 bg-background text-foreground hover:bg-muted/70',
                 )}
               >
+                <Download className="w-4 h-4" aria-hidden="true" />
                 Download for {primaryDownload.label}
               </a>
 
               <button
                 onClick={() => setShowOtherPlatforms(!showOtherPlatforms)}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors w-full text-center"
+                className="inline-flex items-center justify-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors w-full text-center"
               >
-                {showOtherPlatforms ? 'Hide' : 'Other platforms'} ▾
+                {showOtherPlatforms ? 'Hide' : 'Other platforms'}
+                <ChevronDown className={cn(
+                  'w-3.5 h-3.5 transition-transform',
+                  showOtherPlatforms && 'rotate-180',
+                )} aria-hidden="true" />
               </button>
 
               {showOtherPlatforms && (
@@ -160,7 +253,7 @@ export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
                       className="flex items-center justify-between px-3 py-2 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
                     >
                       <span>{link.label}</span>
-                      <span className="text-primary">↓</span>
+                      <Download className="w-3.5 h-3.5 text-primary" aria-hidden="true" />
                     </a>
                   ))}
                 </div>
@@ -176,7 +269,7 @@ export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
                   className="flex items-center justify-between px-3 py-2 rounded text-xs text-foreground hover:bg-muted/50 transition-colors border border-border/40"
                 >
                   <span>{link.label}</span>
-                  <span className="text-primary">↓</span>
+                  <Download className="w-3.5 h-3.5 text-primary" aria-hidden="true" />
                 </a>
               ))}
             </div>
