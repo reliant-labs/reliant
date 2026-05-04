@@ -281,6 +281,82 @@ function trimMessages(messages: Message[]): Message[] {
   return messages;
 }
 
+type AttachmentMetadataInput = {
+  id?: unknown;
+  filename?: unknown;
+  size?: unknown;
+  mimeType?: unknown;
+  mime_type?: unknown;
+  url?: unknown;
+};
+
+function normalizeAttachmentSize(size: unknown): bigint {
+  if (typeof size === "bigint") {
+    return size;
+  }
+  if (typeof size === "number" && Number.isFinite(size)) {
+    return BigInt(Math.max(0, Math.trunc(size)));
+  }
+  if (typeof size === "string" && size.trim() !== "") {
+    try {
+      return BigInt(size);
+    } catch {
+      return BigInt(0);
+    }
+  }
+  return BigInt(0);
+}
+
+function normalizeMessageAttachments(rawAttachments: unknown): Attachment[] {
+  if (!Array.isArray(rawAttachments)) {
+    return [];
+  }
+
+  return rawAttachments
+    .map((attachment): Attachment | null => {
+      if (!attachment || typeof attachment !== "object") {
+        return null;
+      }
+
+      const raw = attachment as AttachmentMetadataInput;
+      const id = typeof raw.id === "string" ? raw.id : "";
+      if (!id) {
+        return null;
+      }
+
+      const filename =
+        typeof raw.filename === "string" && raw.filename !== ""
+          ? raw.filename
+          : "file";
+      const mimeType =
+        typeof raw.mimeType === "string"
+          ? raw.mimeType
+          : typeof raw.mime_type === "string"
+            ? raw.mime_type
+            : "";
+      const url =
+        typeof raw.url === "string" && raw.url !== ""
+          ? raw.url
+          : `/api/attachments/${id}`;
+
+      return {
+        id,
+        filename,
+        size: normalizeAttachmentSize(raw.size),
+        mimeType,
+        url,
+      } as Attachment;
+    })
+    .filter((attachment): attachment is Attachment => attachment !== null);
+}
+
+function normalizeMessageAttachmentFields(message: Message): Message {
+  return {
+    ...message,
+    attachments: normalizeMessageAttachments(message.attachments),
+  };
+}
+
 // Helper to look up attachment metadata from the attachment store by IDs
 // Returns proto Attachment[] for use in optimistic messages
 function getAttachmentsFromStore(attachmentIds: string[]): Attachment[] {
@@ -295,13 +371,10 @@ function getAttachmentsFromStore(attachmentIds: string[]): Attachment[] {
   attachmentStore.attachments.forEach((attachments) => {
     for (const att of attachments) {
       if (attachmentIds.includes(att.id)) {
-        allAttachments.push({
-          id: att.id,
-          filename: att.filename,
-          size: BigInt(att.size),
-          mimeType: att.mime_type,
-          url: att.url,
-        } as unknown as Attachment);
+        const [normalizedAttachment] = normalizeMessageAttachments([att]);
+        if (normalizedAttachment) {
+          allAttachments.push(normalizedAttachment);
+        }
       }
     }
   });
@@ -1613,7 +1686,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         `[ChatStore] Loading messages for chat ${chatId.slice(0, 8)}`,
       );
       const response = await api.chatsV2.listMessages(chatId);
-      const messages = response.messages || [];
+      const messages = (response.messages || []).map(normalizeMessageAttachmentFields);
 
       logger.debug(`[ChatStore] gRPC returned ${messages.length} messages`, {
         total: response.total,
@@ -1728,7 +1801,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         recent: 100,
         beforeOrdinal: pagination.oldestOrdinal,
       });
-      const olderMessages = response.messages || [];
+      const olderMessages = (response.messages || []).map(normalizeMessageAttachmentFields);
 
       // Prepend older messages to existing messages
       const currentState = get();
@@ -2215,6 +2288,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             role: typeof protoMsg.role === 'string' ? protoMsg.role : protoMsg.role,
             streamingState: typeof protoMsg.streamingState === 'string' ? protoMsg.streamingState : protoMsg.streamingState,
             displayStyle: protoMsg.displayStyle,
+            attachments: normalizeMessageAttachments(protoMsg.attachments),
             contentBlocks: (protoMsg.contentBlocks || []).map((b: any) => ({
               ...b,
               type: typeof b.type === 'string' ? b.type : b.type,

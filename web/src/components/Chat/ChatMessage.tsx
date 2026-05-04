@@ -544,11 +544,13 @@ function ChatMessageComponent({
     }
   });
 
+  const hasAttachments = Boolean(message.attachments?.length);
+
   // Hide messages that have no useful content at all
   // When hideToolExecutions is true, treat tool executions as if they don't exist
   const hasVisibleContent =
     parsed.text ||
-    (message.attachments && message.attachments.length > 0) ||
+    hasAttachments ||
     (!hideToolExecutions &&
       enhancedToolExecutions &&
       enhancedToolExecutions.length > 0);
@@ -691,7 +693,7 @@ function ChatMessageComponent({
                   )}
 
                   {/* Attachments */}
-                  {isExpanded && message.attachments && message.attachments.length > 0 && (
+                  {hasAttachments && (
                     <MessageAttachments
                       attachments={message.attachments}
                       isUser={isUser}
@@ -731,7 +733,7 @@ function ChatMessageComponent({
               )}
 
               {/* Attachments */}
-              {message.attachments && message.attachments.length > 0 && (
+              {hasAttachments && (
                 <MessageAttachments
                   attachments={message.attachments}
                   isUser={isUser}
@@ -887,6 +889,7 @@ export const ChatMessage = memo(ChatMessageComponent, (prev, next) => {
   if (prev.message.id !== next.message.id) return false;
   if (prev.message.updatedAt !== next.message.updatedAt) return false;
   if (prev.message.contentBlocks !== next.message.contentBlocks) return false;
+  if (prev.message.attachments !== next.message.attachments) return false;
   if (prev.isLatestMessage !== next.isLatestMessage) return false;
   if (prev.isStreaming !== next.isStreaming) return false;
   if (prev.chatId !== next.chatId) return false;

@@ -1608,9 +1608,10 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                           <div className="relative">
                             <button
                               className={cn(
-                                "inline-flex items-center gap-1 h-6 px-2 rounded text-[10px] font-medium",
-                                "text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors",
-                                settingsPage === 'model' && "bg-primary/10 text-primary"
+                                "flex items-center gap-1 rounded transition-colors text-[10px] font-medium h-6 px-2",
+                                settingsPage === 'model'
+                                  ? "bg-primary/20 text-primary hover:bg-primary/30"
+                                  : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] hover:bg-[var(--chat-button-hover)]"
                               )}
                               onClick={() => setSettingsPage(settingsPage === 'model' ? null : 'model')}
                               title="Model settings"
