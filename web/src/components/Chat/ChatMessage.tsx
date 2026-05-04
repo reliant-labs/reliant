@@ -639,8 +639,8 @@ function ChatMessageComponent({
                 <div
                   ref={bubbleRef}
                   className={cn(
-                    "user-message-content relative block cursor-pointer overflow-hidden rounded-2xl border border-blue-500/25 bg-blue-500/20 text-blue-950 shadow-sm transition-colors duration-200 dark:border-blue-400/20 dark:bg-blue-500/15 dark:text-blue-50",
-                    "hover:border-blue-500/35 hover:bg-blue-500/25 dark:hover:border-blue-400/30 dark:hover:bg-blue-500/20",
+                    "user-message-content relative block cursor-pointer overflow-hidden rounded-2xl border border-primary/25 bg-primary/15 text-foreground shadow-sm transition-colors duration-200",
+                    "hover:border-primary/35 hover:bg-primary/20",
                     timelineVariant === "card" && "shadow-md",
                     timelineVariant === "minimal" && "shadow-none"
                   )}
@@ -663,7 +663,7 @@ function ChatMessageComponent({
                     <div className="message-bubble relative">
                       <div
                         ref={contentRef}
-                        className="overflow-hidden text-sm leading-relaxed text-blue-950 dark:text-blue-50"
+                        className="overflow-hidden text-sm leading-relaxed text-foreground"
                         style={{
                           maxHeight: isExpanded ? "none" : "3rem",
                           transition: "max-height 0.2s ease-in-out",
@@ -675,7 +675,7 @@ function ChatMessageComponent({
                       </div>
                       {/* Gradient fade overlay for truncated content */}
                       {!isExpanded && isOverflowing && (
-                        <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-6 rounded-b-2xl bg-gradient-to-t from-blue-500/20 to-transparent dark:from-blue-500/15" />
+                        <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-6 rounded-b-2xl bg-gradient-to-t from-primary/15 to-transparent" />
                       )}
                     </div>
                   )}
