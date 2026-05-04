@@ -1,4 +1,4 @@
-import { Gift, KeyRound } from 'lucide-react';
+import { CheckCircle2, Circle, Gift, KeyRound } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '../../../../lib/utils';
 import type { StepProps, ModelProvider } from '../../types';
@@ -59,6 +59,8 @@ export function LLMKeyStep({ plan, updatePlan, onNext }: StepProps) {
   };
 
   const currentProviderConfig = BYOK_PROVIDERS.find((p) => p.value === selectedProvider);
+  const isCreditsSelected = plan.modelProvider === 'reliant_credits';
+  const isBYOKSelected = showBYOK;
 
   return (
     <div className="space-y-6">
@@ -75,19 +77,23 @@ export function LLMKeyStep({ plan, updatePlan, onNext }: StepProps) {
         {/* Primary: Reliant credits */}
         <button
           onClick={handleCredits}
+          aria-pressed={isCreditsSelected}
           className={cn(
-            'flex items-center gap-4 p-5 rounded-lg border-2 transition-all text-left',
+            'flex items-center gap-4 p-4 rounded-lg border-2 transition-all text-left',
             'hover:border-primary/50 hover:bg-muted/50',
-            plan.modelProvider === 'reliant_credits'
-              ? 'border-primary bg-primary/10'
-              : 'border-primary/30 bg-primary/5',
+            isCreditsSelected
+              ? 'border-primary bg-primary/10 ring-1 ring-primary/30'
+              : 'border-border/50 bg-background',
           )}
         >
-          <div className="flex-shrink-0 p-2.5 rounded-lg bg-primary/15 text-primary">
-            <Gift className="w-6 h-6" aria-hidden="true" />
+          <div className={cn(
+            'flex-shrink-0 p-2 rounded-lg',
+            isCreditsSelected ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground',
+          )}>
+            <Gift className="w-5 h-5" aria-hidden="true" />
           </div>
-          <div className="space-y-1 flex-1">
-            <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium text-foreground">
                 Start with Reliant credits
               </span>
@@ -99,23 +105,32 @@ export function LLMKeyStep({ plan, updatePlan, onNext }: StepProps) {
               Use your welcome credit to get started — no API key needed.
             </span>
           </div>
+          {isCreditsSelected ? (
+            <CheckCircle2 className="w-5 h-5 text-primary flex-shrink-0" aria-hidden="true" />
+          ) : (
+            <Circle className="w-5 h-5 text-muted-foreground/50 flex-shrink-0" aria-hidden="true" />
+          )}
         </button>
 
         {/* Secondary: Bring your own key */}
         <button
           onClick={() => setShowBYOK(!showBYOK)}
+          aria-pressed={isBYOKSelected}
           className={cn(
             'flex items-center gap-4 p-4 rounded-lg border-2 transition-all text-left',
             'hover:border-primary/50 hover:bg-muted/50',
-            showBYOK
-              ? 'border-primary bg-primary/10'
-              : 'border-border/40 bg-background',
+            isBYOKSelected
+              ? 'border-primary bg-primary/10 ring-1 ring-primary/30'
+              : 'border-border/50 bg-background',
           )}
         >
-          <div className="flex-shrink-0 p-2 rounded-lg bg-muted text-muted-foreground">
+          <div className={cn(
+            'flex-shrink-0 p-2 rounded-lg',
+            isBYOKSelected ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground',
+          )}>
             <KeyRound className="w-5 h-5" aria-hidden="true" />
           </div>
-          <div className="space-y-0.5">
+          <div className="min-w-0 flex-1 space-y-0.5">
             <span className="block text-sm font-medium text-foreground">
               Bring your own key
             </span>
@@ -123,6 +138,11 @@ export function LLMKeyStep({ plan, updatePlan, onNext }: StepProps) {
               Use your own API key from Anthropic, OpenAI, OpenRouter, or another provider.
             </span>
           </div>
+          {isBYOKSelected ? (
+            <CheckCircle2 className="w-5 h-5 text-primary flex-shrink-0" aria-hidden="true" />
+          ) : (
+            <Circle className="w-5 h-5 text-muted-foreground/50 flex-shrink-0" aria-hidden="true" />
+          )}
         </button>
       </div>
 

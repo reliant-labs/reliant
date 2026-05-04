@@ -1,4 +1,4 @@
-import { ChevronDown, Cloud, Cpu, Download } from 'lucide-react';
+import { CheckCircle2, ChevronDown, Circle, Cloud, Cpu, Download } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { cn } from '../../../../lib/utils';
 import type { StepProps, ComputeChoice } from '../../types';
@@ -135,6 +135,8 @@ export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
     () => DOWNLOAD_LINKS.filter((l) => l !== primaryDownload),
     [primaryDownload],
   );
+  const isCloudSelected = plan.compute === 'cloud_free_trial';
+  const isLocalSelected = plan.compute === 'local_daemon';
 
   const handleCloud = () => {
     updatePlan({ compute: 'cloud_free_trial' as ComputeChoice });
@@ -161,19 +163,23 @@ export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
         {/* Primary: Cloud free trial */}
         <button
           onClick={handleCloud}
+          aria-pressed={isCloudSelected}
           className={cn(
-            'flex items-center gap-4 p-5 rounded-lg border-2 transition-all text-left',
+            'flex items-center gap-4 p-4 rounded-lg border-2 transition-all text-left',
             'hover:border-primary/50 hover:bg-muted/50',
-            plan.compute === 'cloud_free_trial'
-              ? 'border-primary bg-primary/10'
-              : 'border-primary/30 bg-primary/5',
+            isCloudSelected
+              ? 'border-primary bg-primary/10 ring-1 ring-primary/30'
+              : 'border-border/50 bg-background',
           )}
         >
-          <div className="flex-shrink-0 p-2.5 rounded-lg bg-primary/15 text-primary">
-            <Cloud className="w-6 h-6" aria-hidden="true" />
+          <div className={cn(
+            'flex-shrink-0 p-2 rounded-lg',
+            isCloudSelected ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground',
+          )}>
+            <Cloud className="w-5 h-5" aria-hidden="true" />
           </div>
-          <div className="space-y-1 flex-1">
-            <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1 space-y-0.5">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium text-foreground">
                 Use 20 free minutes of Reliant cloud compute
               </span>
@@ -185,23 +191,32 @@ export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
               No installation required. Start coding immediately in the cloud.
             </span>
           </div>
+          {isCloudSelected ? (
+            <CheckCircle2 className="w-5 h-5 text-primary flex-shrink-0" aria-hidden="true" />
+          ) : (
+            <Circle className="w-5 h-5 text-muted-foreground/50 flex-shrink-0" aria-hidden="true" />
+          )}
         </button>
 
         {/* Secondary: Local daemon */}
         <button
           onClick={handleLocal}
+          aria-pressed={isLocalSelected}
           className={cn(
             'flex items-center gap-4 p-4 rounded-lg border-2 transition-all text-left',
             'hover:border-primary/50 hover:bg-muted/50',
-            plan.compute === 'local_daemon'
-              ? 'border-primary bg-primary/10'
-              : 'border-border/40 bg-background',
+            isLocalSelected
+              ? 'border-primary bg-primary/10 ring-1 ring-primary/30'
+              : 'border-border/50 bg-background',
           )}
         >
-          <div className="flex-shrink-0 p-2 rounded-lg bg-muted text-muted-foreground">
+          <div className={cn(
+            'flex-shrink-0 p-2 rounded-lg',
+            isLocalSelected ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground',
+          )}>
             <Cpu className="w-5 h-5" aria-hidden="true" />
           </div>
-          <div className="space-y-0.5">
+          <div className="min-w-0 flex-1 space-y-0.5">
             <span className="block text-sm font-medium text-foreground">
               Run locally on my machine
             </span>
@@ -209,6 +224,11 @@ export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
               Download and install the Reliant daemon to run on your own hardware.
             </span>
           </div>
+          {isLocalSelected ? (
+            <CheckCircle2 className="w-5 h-5 text-primary flex-shrink-0" aria-hidden="true" />
+          ) : (
+            <Circle className="w-5 h-5 text-muted-foreground/50 flex-shrink-0" aria-hidden="true" />
+          )}
         </button>
       </div>
 
