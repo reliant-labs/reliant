@@ -52,11 +52,12 @@ type ProjectFilters struct {
 
 // WorktreeFilters contains options for filtering worktrees.
 type WorktreeFilters struct {
-	ProjectID *string
-	ChatID    *string
-	Status    *int32
-	Limit     int
-	Offset    int
+	ProjectID       *string
+	ChatID          *string
+	Status          *int32
+	IncludeArchived bool
+	Limit           int
+	Offset          int
 }
 
 // ProjectStore is the shared contract for project persistence across drivers.

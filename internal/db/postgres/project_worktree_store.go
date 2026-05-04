@@ -169,11 +169,12 @@ func (s *worktreeStore) ListWorktrees(ctx context.Context, filters core.Worktree
 	}
 
 	rows, err := s.q.ListWorktrees(ctx, pgdb.ListWorktreesParams{
-		ProjectID: projectIDNull,
-		ChatID:    chatIDNull,
-		Status:    statusNull,
-		Limit:     int32(limit),
-		Offset:    int32(offset),
+		ProjectID:       projectIDNull,
+		ChatID:          chatIDNull,
+		Status:          statusNull,
+		IncludeArchived: filters.IncludeArchived,
+		Limit:           int32(limit),
+		Offset:          int32(offset),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list worktrees: %w", err)

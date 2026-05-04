@@ -375,8 +375,9 @@ func (s *WorktreeService) ListWorktrees(
 
 	projectID := req.Msg.ProjectId
 	filters := db.WorktreeFilters{
-		ProjectID: &projectID,
-		Limit:     100,
+		ProjectID:       &projectID,
+		IncludeArchived: req.Msg.GetIncludeArchived(),
+		Limit:           100,
 	}
 
 	if req.Msg.ChatId != nil && *req.Msg.ChatId != "" {

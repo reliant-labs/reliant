@@ -676,12 +676,13 @@ func (x *CreateWorktreeResponse) GetWorktree() *Worktree {
 
 // ListWorktreesRequest lists worktrees with filters
 type ListWorktreesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"` // Required
-	ChatId        *string                `protobuf:"bytes,2,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`
-	Limit         int32                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId       string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"` // Required
+	ChatId          *string                `protobuf:"bytes,2,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`
+	Limit           int32                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
+	IncludeArchived bool                   `protobuf:"varint,4,opt,name=include_archived,json=includeArchived,proto3" json:"include_archived,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ListWorktreesRequest) Reset() {
@@ -733,6 +734,13 @@ func (x *ListWorktreesRequest) GetLimit() int32 {
 		return x.Limit
 	}
 	return 0
+}
+
+func (x *ListWorktreesRequest) GetIncludeArchived() bool {
+	if x != nil {
+		return x.IncludeArchived
+	}
+	return false
 }
 
 // ListWorktreesResponse returns a list of worktrees
@@ -3050,12 +3058,13 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\b_chat_idB\x15\n" +
 	"\x13_source_worktree_id\"J\n" +
 	"\x16CreateWorktreeResponse\x120\n" +
-	"\bworktree\x18\x01 \x01(\v2\x14.reliant.v1.WorktreeR\bworktree\"u\n" +
+	"\bworktree\x18\x01 \x01(\v2\x14.reliant.v1.WorktreeR\bworktree\"\xa0\x01\n" +
 	"\x14ListWorktreesRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1c\n" +
 	"\achat_id\x18\x02 \x01(\tH\x00R\x06chatId\x88\x01\x01\x12\x14\n" +
-	"\x05limit\x18\x03 \x01(\x05R\x05limitB\n" +
+	"\x05limit\x18\x03 \x01(\x05R\x05limit\x12)\n" +
+	"\x10include_archived\x18\x04 \x01(\bR\x0fincludeArchivedB\n" +
 	"\n" +
 	"\b_chat_id\"a\n" +
 	"\x15ListWorktreesResponse\x122\n" +

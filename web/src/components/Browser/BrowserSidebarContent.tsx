@@ -163,7 +163,7 @@ export function BrowserSidebarContent({ worktreeId }: BrowserSidebarContentProps
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto pt-2">
         {/* Open Tabs Section */}
         <SidebarSection
           title="Open Tabs"

@@ -119,10 +119,8 @@ export function SettingsContent({
 
   if (activeSection === "workspaces") {
     return (
-      <div className="h-full overflow-auto px-8 py-8">
-        <div className="mx-auto max-w-5xl rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-          <WorkspacesSection />
-        </div>
+      <div className="h-full overflow-hidden bg-background">
+        <WorkspacesSection />
       </div>
     );
   }

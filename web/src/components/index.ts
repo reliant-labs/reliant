@@ -41,9 +41,6 @@ export { ResizableTerminalPanel } from "./Terminal/ResizableTerminalPanel";
 // FileBrowser components
 // Note: FileBrowser component removed - use RightSidebar instead
 
-// Git components
-export { GitOperations } from "./Git/GitOperations";
-
 // UI components
 export { Modal } from "./ui/Modal";
 export { ErrorAlert } from "./ui/ErrorAlert";

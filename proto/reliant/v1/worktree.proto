@@ -131,6 +131,7 @@ message ListWorktreesRequest {
   string project_id = 1;  // Required
   optional string chat_id = 2;
   int32 limit = 3;
+  bool include_archived = 4;
 }
 
 // ListWorktreesResponse returns a list of worktrees
