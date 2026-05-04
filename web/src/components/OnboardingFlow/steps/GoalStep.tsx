@@ -1,9 +1,18 @@
+import {
+  ChartColumn,
+  Compass,
+  FolderCode,
+  Palette,
+  PenLine,
+  Rocket,
+  type LucideIcon,
+} from "lucide-react";
 import { cn } from "../../../lib/utils";
 import type { StepProps, OnboardingIntent, CodeSource } from "../types";
 
 const INTENT_OPTIONS: {
   intent: OnboardingIntent;
-  emoji: string;
+  icon: LucideIcon;
   label: string;
   description: string;
   workflowId: string;
@@ -12,21 +21,21 @@ const INTENT_OPTIONS: {
 }[] = [
   {
     intent: "build_app",
-    emoji: "🚀",
+    icon: Rocket,
     label: "Build an app",
     description: "Start a new project from scratch",
     workflowId: "forge-one-shot",
   },
   {
     intent: "existing_codebase",
-    emoji: "📂",
+    icon: FolderCode,
     label: "Work on existing code",
     description: "Navigate and improve your codebase",
     workflowId: "agent",
   },
   {
     intent: "landing_page",
-    emoji: "🎨",
+    icon: Palette,
     label: "Create landing page",
     description: "Design and build a web page",
     workflowId: "get-it-right",
@@ -34,14 +43,14 @@ const INTENT_OPTIONS: {
   },
   {
     intent: "pitch_deck",
-    emoji: "📊",
+    icon: ChartColumn,
     label: "Create pitch deck",
     description: "Build a presentation or deck",
     workflowId: "get-it-right",
   },
   {
     intent: "blog_post",
-    emoji: "✍️",
+    icon: PenLine,
     label: "Write blog / doc",
     description: "Draft documentation or articles",
     workflowId: "agent",
@@ -49,7 +58,7 @@ const INTENT_OPTIONS: {
   },
   {
     intent: "explore",
-    emoji: "🔍",
+    icon: Compass,
     label: "Just explore",
     description: "Browse features and templates",
     workflowId: "agent",
@@ -80,32 +89,35 @@ export function GoalStep({ plan, updatePlan, onNext }: StepProps) {
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        {INTENT_OPTIONS.map((option) => (
-          <button
-            key={option.intent}
-            type="button"
-            onClick={() => handleSelect(option)}
-            className={cn(
-              "flex items-start gap-3 p-4 rounded-lg border text-left transition-all",
-              "hover:bg-muted/70 hover:border-primary/40",
-              plan.intent === option.intent
-                ? "border-primary bg-primary/10"
-                : "border-border/60 bg-muted/30"
-            )}
-          >
-            <span className="text-2xl flex-shrink-0 mt-0.5" role="img">
-              {option.emoji}
-            </span>
-            <div className="min-w-0">
-              <h3 className="text-sm font-medium text-foreground">
-                {option.label}
-              </h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {option.description}
-              </p>
-            </div>
-          </button>
-        ))}
+        {INTENT_OPTIONS.map((option) => {
+          const Icon = option.icon;
+          return (
+            <button
+              key={option.intent}
+              type="button"
+              onClick={() => handleSelect(option)}
+              className={cn(
+                "flex items-start gap-3 p-4 rounded-lg border text-left transition-all",
+                "hover:bg-muted/70 hover:border-primary/40",
+                plan.intent === option.intent
+                  ? "border-primary bg-primary/10"
+                  : "border-border/60 bg-muted/30"
+              )}
+            >
+              <div className="flex-shrink-0 p-2 rounded-lg bg-primary/15 text-primary mt-0.5">
+                <Icon className="w-5 h-5" aria-hidden="true" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-sm font-medium text-foreground">
+                  {option.label}
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {option.description}
+                </p>
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

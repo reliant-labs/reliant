@@ -92,7 +92,7 @@ export const ScrollToBottomButton = memo(function ScrollToBottomButton({
         onMouseLeave={handleMouseLeave}
         style={{ marginTop: -44 }}
         className={cn(
-          "flex items-center justify-center gap-1.5",
+          "flex items-center justify-center",
           "rounded-full shadow-lg",
           "bg-primary text-primary-foreground",
           "hover:bg-primary/90 active:scale-95",
@@ -105,8 +105,8 @@ export const ScrollToBottomButton = memo(function ScrollToBottomButton({
               : "opacity-100 translate-y-0 scale-100"
             : "opacity-0 translate-y-2 scale-95 pointer-events-none",
           expanded
-            ? "h-8 px-3.5"
-            : "h-8 w-8",
+            ? "h-8 px-3.5 gap-1.5"
+            : "h-8 w-8 gap-0",
         )}
       >
         <ArrowDown className="w-3.5 h-3.5 flex-shrink-0" />

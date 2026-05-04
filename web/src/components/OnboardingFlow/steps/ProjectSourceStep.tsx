@@ -1,4 +1,4 @@
-import { FolderOpen, Github, Sparkles } from "lucide-react";
+import { ChevronLeft, FolderOpen, Github, Sparkles } from "lucide-react";
 import { useEffect } from "react";
 import { cn } from "../../../lib/utils";
 import type { StepProps, CodeSource } from "../types";
@@ -99,9 +99,10 @@ export function ProjectSourceStep({
       <button
         type="button"
         onClick={onBack}
-        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
-        ← Change goal
+        <ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />
+        Change goal
       </button>
     </div>
   );

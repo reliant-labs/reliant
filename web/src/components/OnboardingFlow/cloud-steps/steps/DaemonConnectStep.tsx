@@ -1,3 +1,4 @@
+import { Check } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { cn } from '../../../../lib/utils';
 import type { StepProps } from '../../types';
@@ -13,7 +14,7 @@ interface ChecklistItem {
 
 function StatusIcon({ status }: { status: ChecklistItemStatus }) {
   if (status === 'done') {
-    return <span className="text-sm text-green-500">✓</span>;
+    return <Check className="w-3.5 h-3.5 text-green-500" aria-hidden="true" />;
   }
   if (status === 'active') {
     return (

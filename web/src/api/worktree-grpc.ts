@@ -226,13 +226,14 @@ export const worktreeGrpc = {
   // List worktrees for a project
   async list(
     projectId: string,
-    options?: { chatId?: string; limit?: number }
+    options?: { chatId?: string; limit?: number; includeArchived?: boolean }
   ): Promise<{ worktrees: Worktree[]; total: number }> {
     const client = grpcClient.worktree();
     const request = create(ListWorktreesRequestSchema, {
       projectId,
       chatId: options?.chatId,
       limit: options?.limit || 100,
+      includeArchived: options?.includeArchived ?? false,
     });
     const response = await client.listWorktrees(request);
     return {

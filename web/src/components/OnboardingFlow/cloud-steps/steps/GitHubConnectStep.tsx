@@ -1,3 +1,4 @@
+import { ArrowUpRight, ChevronLeft, KeyRound } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '../../../../lib/utils';
 import type { StepProps } from '../../types';
@@ -66,8 +67,9 @@ export function GitHubConnectStep({ plan, updatePlan, onNext, onBack }: StepProp
             rel="noopener noreferrer"
             className="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg text-sm font-medium transition-colors border border-border/40 bg-background hover:bg-muted/50 text-foreground"
           >
-            <span role="img" aria-label="GitHub">🔑</span>
-            Create a token on GitHub →
+            <KeyRound className="w-4 h-4 text-primary" aria-hidden="true" />
+            Create a token on GitHub
+            <ArrowUpRight className="w-3.5 h-3.5" aria-hidden="true" />
           </a>
 
           <div className="space-y-1.5">
@@ -108,9 +110,10 @@ export function GitHubConnectStep({ plan, updatePlan, onNext, onBack }: StepProp
 
         <button
           onClick={onBack}
-          className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
+          className="inline-flex w-full items-center justify-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
         >
-          ← Back
+          <ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />
+          Back
         </button>
       </div>
     );
@@ -181,9 +184,10 @@ export function GitHubConnectStep({ plan, updatePlan, onNext, onBack }: StepProp
 
       <button
         onClick={() => setPhase('pat')}
-        className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
+        className="inline-flex w-full items-center justify-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
       >
-        ← Back to token
+        <ChevronLeft className="w-3.5 h-3.5" aria-hidden="true" />
+        Back to token
       </button>
     </div>
   );

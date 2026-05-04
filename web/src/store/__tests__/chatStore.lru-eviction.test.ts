@@ -4,7 +4,7 @@ import { useChatStore } from "../chatStore";
 import { useActivityStore } from "../activityStore";
 import { useThreadActivityStore } from "../threadActivityStore";
 import type { Chat, Message } from "../../types/chat";
-import { MessageRole } from "../../types/chat";
+import { ContentBlockType, MessageRole, StreamingState } from "../../types/chat";
 import type { ChatUpdate } from "../../types/streaming";
 
 vi.mock("../../api/client", () => ({
@@ -223,6 +223,129 @@ describe("chatStore LRU eviction", () => {
     // Selecting a new chat after reset should work fine (no stale LRU)
     selectAndPopulate("chat-new");
     expect(useChatStore.getState().messages["chat-new"]).toBeDefined();
+  });
+
+  it("preserves message attachments from incremental stream updates", () => {
+    const chatId = "chat-attachments-incremental";
+    const messageId = "msg-with-attachment";
+
+    useChatStore.setState((state) => ({
+      chats: new Map(state.chats).set(chatId, buildTestChat(chatId)),
+      chatOrder: [chatId],
+      activeChatId: chatId,
+      messages: { ...state.messages, [chatId]: [] },
+    }));
+
+    const updates: ChatUpdate[] = [
+      {
+        update_type: "message",
+        message: {
+          id: messageId,
+          chatId,
+          role: MessageRole.USER,
+          ordinal: BigInt(1),
+          thread: chatId,
+          streamingState: StreamingState.COMPLETE,
+          contentBlocks: [
+            {
+              id: "block-1",
+              index: 0,
+              type: ContentBlockType.TEXT,
+              content: "see attached image",
+            },
+          ],
+          attachments: [
+            {
+              id: "att-1",
+              filename: "screenshot.png",
+              size: "123",
+              mime_type: "image/png",
+              url: "/api/attachments/att-1",
+            },
+          ],
+          createdAt: "2024-01-01T00:00:00.000Z",
+          updatedAt: "2024-01-01T00:00:00.000Z",
+          sequenceNumber: BigInt(1),
+        },
+      },
+    ] as ChatUpdate[];
+
+    useChatStore.getState().processChatStreamUpdates(chatId, updates, false);
+
+    const storedMessage = useChatStore
+      .getState()
+      .messages[chatId]?.find((message) => message.id === messageId);
+
+    expect(storedMessage?.attachments).toHaveLength(1);
+    expect(storedMessage?.attachments?.[0]).toEqual(
+      expect.objectContaining({
+        id: "att-1",
+        filename: "screenshot.png",
+        size: BigInt(123),
+        mimeType: "image/png",
+      }),
+    );
+  });
+
+  it("preserves message attachments from chat snapshots", () => {
+    const chatId = "chat-attachments-snapshot";
+    const messageId = "msg-with-snapshot-attachment";
+
+    useChatStore.setState((state) => ({
+      chats: new Map(state.chats).set(chatId, buildTestChat(chatId)),
+      chatOrder: [chatId],
+      activeChatId: chatId,
+      messages: { ...state.messages, [chatId]: [] },
+    }));
+
+    const updates: ChatUpdate[] = [
+      {
+        update_type: "message",
+        message: {
+          id: messageId,
+          chatId,
+          role: MessageRole.USER,
+          ordinal: BigInt(1),
+          thread: chatId,
+          streamingState: StreamingState.COMPLETE,
+          contentBlocks: [
+            {
+              id: "block-1",
+              index: 0,
+              type: ContentBlockType.TEXT,
+              content: "see attached image after reload",
+            },
+          ],
+          attachments: [
+            {
+              id: "att-1",
+              filename: "screenshot.png",
+              size: BigInt(123),
+              mimeType: "image/png",
+              url: "/api/attachments/att-1",
+            },
+          ],
+          createdAt: "2024-01-01T00:00:00.000Z",
+          updatedAt: "2024-01-01T00:00:00.000Z",
+          sequenceNumber: BigInt(1),
+        },
+      },
+    ] as ChatUpdate[];
+
+    useChatStore.getState().processChatStreamUpdates(chatId, updates, true);
+
+    const storedMessage = useChatStore.getState().messages[chatId]?.[0];
+
+    expect(storedMessage?.id).toBe(messageId);
+    expect(storedMessage?.attachments).toHaveLength(1);
+    expect(storedMessage?.attachments?.[0]).toEqual(
+      expect.objectContaining({
+        id: "att-1",
+        filename: "screenshot.png",
+        size: BigInt(123),
+        mimeType: "image/png",
+      }),
+    );
   });
 
   it("snapshot resets event arrays instead of accumulating", () => {
