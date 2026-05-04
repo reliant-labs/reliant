@@ -660,32 +660,24 @@ function ChatMessageComponent({
                 >
                   {/* Text Content - show exactly as sent */}
                   {parsed.text && (
-                    <div className="message-bubble relative">
-                      <div
-                        ref={contentRef}
-                        className="overflow-hidden text-sm leading-relaxed text-foreground"
-                        style={{
-                          maxHeight: isExpanded ? "none" : "3rem",
-                          transition: "max-height 0.2s ease-in-out",
-                        }}
-                      >
-                        <div className="whitespace-pre-wrap break-words">
-                          {renderTextWithContextPills(parsed.text, chatWorktreeId)}
-                        </div>
+                    <div
+                      ref={contentRef}
+                      className="overflow-hidden text-sm leading-relaxed text-foreground"
+                      style={{
+                        maxHeight: isExpanded ? "none" : "3rem",
+                        transition: "max-height 0.2s ease-in-out",
+                      }}
+                    >
+                      <div className="whitespace-pre-wrap break-words">
+                        {renderTextWithContextPills(parsed.text, chatWorktreeId)}
                       </div>
-                      {/* Gradient fade overlay for truncated content */}
-                      {!isExpanded && isOverflowing && (
-                        <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-6 rounded-b-2xl bg-gradient-to-t from-primary/15 to-transparent" />
-                      )}
                     </div>
                   )}
 
                   {/* Expand button - styled like diff expand button */}
                   {!isExpanded && isOverflowing && (
-                    <div className="flex justify-center border-t border-border/60">
-                      <div
-                        className="flex w-full items-center justify-center gap-1 px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-                      >
+                    <div className="mt-1 flex justify-center border-t border-primary/15 pt-1">
+                      <div className="flex w-full items-center justify-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground">
                         <ChevronDown className="w-3 h-3" />
                         Show more
                       </div>
