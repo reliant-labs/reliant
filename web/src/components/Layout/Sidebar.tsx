@@ -24,8 +24,8 @@ import {
   LayoutList,
   LayoutGrid,
   Clock,
-  CalendarPlus,
-  CalendarMinus,
+  ArrowDownWideNarrow,
+  ArrowUpWideNarrow,
   SortAsc,
   SortDesc,
   Bell,
@@ -71,12 +71,12 @@ const SORT_OPTIONS: {
   {
     value: "newest_first",
     label: "Newest First",
-    icon: <CalendarPlus className="w-3.5 h-3.5" />,
+    icon: <ArrowDownWideNarrow className="w-3.5 h-3.5" />,
   },
   {
     value: "oldest_first",
     label: "Oldest First",
-    icon: <CalendarMinus className="w-3.5 h-3.5" />,
+    icon: <ArrowUpWideNarrow className="w-3.5 h-3.5" />,
   },
   {
     value: "alphabetical_asc",
