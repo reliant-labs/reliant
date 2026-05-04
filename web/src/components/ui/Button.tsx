@@ -15,37 +15,37 @@ const buttonVariants = {
   default: `
     bg-primary text-primary-foreground hover:bg-primary/90
     border border-primary/20
-    elevation-1 hover:elevation-2
+    shadow-sm shadow-primary/20 hover:shadow-md hover:shadow-primary/25
     focus:ring-2 focus:ring-primary/50 focus:ring-offset-2
-    active:scale-[0.98] active:elevation-1 transition-all duration-150 ease-out
+    active:scale-[0.98] active:shadow-sm transition-all duration-150 ease-out
   `,
   primary: `
     bg-primary text-primary-foreground hover:bg-primary/90
     border border-primary/20
-    elevation-1 hover:elevation-2
+    shadow-sm shadow-primary/20 hover:shadow-md hover:shadow-primary/25
     focus:ring-2 focus:ring-primary/50 focus:ring-offset-2
-    active:scale-[0.98] active:elevation-1 transition-all duration-150 ease-out
+    active:scale-[0.98] active:shadow-sm transition-all duration-150 ease-out
   `,
   secondary: `
     bg-secondary text-secondary-foreground hover:bg-secondary/80
     border border-border/50
-    elevation-1 hover:elevation-2
+    shadow-sm hover:shadow-md
     focus:ring-2 focus:ring-border focus:ring-offset-2
-    active:scale-[0.98] active:elevation-1 transition-all duration-150 ease-out
+    active:scale-[0.98] active:shadow-sm transition-all duration-150 ease-out
   `,
   accent: `
     bg-accent text-accent-foreground hover:bg-accent/80
     border border-accent/20
-    elevation-1 hover:elevation-2
+    shadow-sm shadow-accent/20 hover:shadow-md hover:shadow-accent/25
     focus:ring-2 focus:ring-accent/50 focus:ring-offset-2
-    active:scale-[0.98] active:elevation-1 transition-all duration-150 ease-out
+    active:scale-[0.98] active:shadow-sm transition-all duration-150 ease-out
   `,
   destructive: `
     bg-destructive/10 text-destructive hover:bg-destructive/20
     border border-destructive/20
-    elevation-1 hover:elevation-2
+    shadow-sm shadow-destructive/10 hover:shadow-md hover:shadow-destructive/15
     focus:ring-2 focus:ring-destructive/50 focus:ring-offset-2
-    active:scale-[0.98] active:elevation-1 transition-all duration-150 ease-out
+    active:scale-[0.98] active:shadow-sm transition-all duration-150 ease-out
   `,
   ghost: `
     hover:bg-accent hover:text-accent-foreground
@@ -64,9 +64,9 @@ const buttonVariants = {
     bg-gradient-to-r from-primary to-primary hover:from-primary/90 hover:to-primary/90
     text-primary-foreground
     border border-primary/20
-    elevation-2 hover:elevation-3
+    shadow-md shadow-primary/25 hover:shadow-lg hover:shadow-primary/30
     focus:ring-2 focus:ring-primary/50 focus:ring-offset-2
-    active:scale-[0.98] active:elevation-1 transition-all duration-150 ease-out
+    active:scale-[0.98] active:shadow-sm transition-all duration-150 ease-out
   `,
 };
 
