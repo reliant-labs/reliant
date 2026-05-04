@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
-import { MCPSettings } from "../MCPSettings";
-import { ConfigScope, type MCPServer, type RecommendedServer } from "../../../api/mcp-grpc";
+import { MCPSettings, resetMCPSettingsCacheForTests } from "../MCPSettings";
+import {
+  ConfigScope,
+  type MCPServer,
+  type RecommendedServer,
+} from "../../../api/mcp-grpc";
 
 const listServersMock = vi.fn();
 const listRecommendedMock = vi.fn();
@@ -28,8 +32,9 @@ vi.mock("../../../api/mcp-grpc", () => ({
 }));
 
 vi.mock("../../../store/projectStore", () => ({
-  useProjectStore: (selector: (state: { currentProject: { id: string } | null }) => unknown) =>
-    selector({ currentProject: { id: "project-test" } }),
+  useProjectStore: (
+    selector: (state: { currentProject: { id: string } | null }) => unknown,
+  ) => selector({ currentProject: { id: "project-test" } }),
 }));
 
 vi.mock("../../../store/preferencesStore", () => ({
@@ -60,7 +65,6 @@ const baseRecommended: RecommendedServer[] = [
     description: "GitHub tools",
     category: "dev",
     setupRequired: false,
-    setupFields: [],
     config: {
       command: "npx",
       args: ["-y", "@modelcontextprotocol/server-github"],
@@ -71,8 +75,6 @@ const baseRecommended: RecommendedServer[] = [
     },
     docsUrl: "",
     installed: false,
-    connected: false,
-    enabled: true,
   },
 ];
 
@@ -104,6 +106,7 @@ const buildInstalledServer = (overrides?: Partial<MCPServer>): MCPServer => ({
 describe("MCPSettings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    resetMCPSettingsCacheForTests();
   });
 
   it("defaults to Discover tab when no MCP servers are installed", async () => {
@@ -134,5 +137,26 @@ describe("MCPSettings", () => {
     });
 
     expect(screen.getByRole("button", { name: "1 tools" })).toBeInTheDocument();
+  });
+
+  it("reuses cached MCP data on repeat visits", async () => {
+    listServersMock.mockResolvedValue({ servers: [buildInstalledServer()] });
+    listRecommendedMock.mockResolvedValue({ recommended: baseRecommended });
+
+    const { unmount } = render(<MCPSettings />);
+
+    expect(
+      await screen.findByRole("button", { name: "1 tools" }),
+    ).toBeInTheDocument();
+    unmount();
+
+    render(<MCPSettings />);
+
+    expect(
+      screen.getByRole("button", { name: "1 tools" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(listServersMock).toHaveBeenCalledTimes(1);
+    expect(listRecommendedMock).toHaveBeenCalledTimes(1);
   });
 });
