@@ -11,11 +11,29 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/sdk/client"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	workflowpkg "github.com/reliant-labs/reliant/internal/workflow"
 )
+
+type mockTemporalSignalClient struct {
+	client.Client
+
+	signalCalls      int
+	signalWorkflowID string
+	signalName       string
+	signalArg        interface{}
+}
+
+func (m *mockTemporalSignalClient) SignalWorkflow(_ context.Context, workflowID, _ string, signalName string, signalArg interface{}) error {
+	m.signalCalls++
+	m.signalWorkflowID = workflowID
+	m.signalName = signalName
+	m.signalArg = signalArg
+	return nil
+}
 
 // setupTestApprovalService creates an in-memory database and approval service for testing.
 func setupTestApprovalService(t *testing.T) (*ApprovalService, *db.Repo, *sql.DB) {

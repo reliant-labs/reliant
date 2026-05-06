@@ -6,12 +6,25 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"golang.org/x/net/http2"
 
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
 )
+
+// LocalhostDialContext returns a DialContext function that resolves *.localhost
+// hostnames to 127.0.0.1. macOS does not resolve subdomain.localhost via DNS,
+// so this is needed for dev multi-worktree setups where services are addressed
+// as e.g. nw-wf.localhost:19090.
+func LocalhostDialContext(ctx context.Context, network, addr string) (net.Conn, error) {
+	host, port, err := net.SplitHostPort(addr)
+	if err == nil && strings.HasSuffix(host, ".localhost") {
+		addr = net.JoinHostPort("127.0.0.1", port)
+	}
+	return (&net.Dialer{}).DialContext(ctx, network, addr)
+}
 
 const daemonAuthorizationHeader = "Authorization"
 
@@ -44,7 +57,7 @@ func NewDaemonHTTPClient(cfg bootstrap.DaemonBootstrapConfig) (*http.Client, str
 			ReadIdleTimeout: 60 * time.Second,
 			PingTimeout:     15 * time.Second,
 			DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
-				return (&net.Dialer{}).DialContext(ctx, network, addr)
+				return LocalhostDialContext(ctx, network, addr)
 			},
 		}
 		return wrap(tr), cfg.GRPCURL, nil

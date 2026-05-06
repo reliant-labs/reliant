@@ -1157,7 +1157,7 @@ export const CopyWorkflowResponseSchema: GenMessage<CopyWorkflowResponse> = /*@_
  */
 export type SimulatedEvent = Message<"reliant.v1.SimulatedEvent"> & {
   /**
-   * Node targets a specific node (supports qualified IDs for inner loop nodes).
+   * Node targets a specific node (supports qualified IDs for inner loops and workflows).
    * Use dot-notation: "loop_id.inner_node_id" or "outer.inner.node_id".
    * If omitted, events are applied sequentially.
    *

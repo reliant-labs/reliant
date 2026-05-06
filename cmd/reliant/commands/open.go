@@ -81,7 +81,7 @@ This is the "reliant ." command.`,
 
 			if !noDaemon {
 				// Ensure we have a PAT for daemon auth (reuse existing or create new)
-				creds, credErr := ensureDaemonCredentials(cmd, serverURL, resolveGatewayURL())
+				creds, credErr := ensureDaemonCredentials(ctx, cmd, serverURL, resolveGatewayURL())
 				if credErr != nil {
 					return fmt.Errorf("daemon credential setup failed: %w", credErr)
 				}

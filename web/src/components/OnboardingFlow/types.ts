@@ -1,52 +1,62 @@
 export type OnboardingIntent =
-  | 'build_app'
-  | 'existing_codebase'
-  | 'landing_page'
-  | 'pitch_deck'
-  | 'blog_post'
-  | 'explore';
+  | "build_app"
+  | "existing_codebase"
+  | "landing_page"
+  | "pitch_deck"
+  | "blog_post"
+  | "explore";
 
 export type ComputeChoice =
-  | 'cloud_free_trial'
-  | 'cloud_paid'
-  | 'local_daemon'
-  | 'undecided';
+  | "cloud_free_trial"
+  | "cloud_paid"
+  | "local_daemon"
+  | "undecided";
+
+export type DaemonLocation = "reliant_cloud" | "self_hosted";
 
 export type CodeSource =
-  | 'new_project'
-  | 'github_repo'
-  | 'local_folder'
-  | 'sample_project';
+  | "new_project"
+  | "github_repo"
+  | "local_folder"
+  | "sample_project";
 
 export type ModelProvider =
-  | 'reliant_credits'
-  | 'openai'
-  | 'anthropic'
-  | 'openrouter'
-  | 'other'
-  | 'not_configured';
+  | "reliant_credits"
+  | "openai"
+  | "anthropic"
+  | "openrouter"
+  | "other"
+  | "not_configured";
 
 export interface LaunchPlan {
   intent: OnboardingIntent;
   compute: ComputeChoice;
+  daemonLocation?: DaemonLocation;
   codeSource: CodeSource;
   repo?: {
-    provider: 'github' | 'gitlab' | 'bitbucket';
+    provider: "github" | "gitlab" | "bitbucket";
     url: string;
     branch?: string;
   };
   localPath?: string;
+  projectName?: string;
   workflowId: string;
   presetId?: string;
   useForge?: boolean;
   modelProvider: ModelProvider;
+  workflowParams?: Record<string, unknown>;
+  selectedPresets?: Record<string, string | null>;
+  initialPrompt?: string;
+  launchTour?: boolean;
+  daemonProvisioning?: boolean;
+  daemonPreConnected?: boolean;
 }
 
 export interface StepConfig {
   id: string;
-  category: 'goal' | 'workspace' | 'compute' | 'start';
+  label: string;
+  category: string;
   component: React.ComponentType<StepProps>;
-  shouldShow: (plan: Partial<LaunchPlan>) => boolean;
   order: number;
 }
 
@@ -55,7 +65,6 @@ export interface StepProps {
   updatePlan: (updates: Partial<LaunchPlan>) => void;
   onNext: () => void;
   onBack: () => void;
-  onSkip?: () => void;
 }
 
-export type OnboardingState = 'not_started' | 'in_progress' | 'completed' | 'skipped';
+export type OnboardingState = "not_started" | "in_progress" | "completed";

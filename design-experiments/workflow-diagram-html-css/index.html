@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Reliant Workflow Value Diagram</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="poster" aria-labelledby="diagram-title">
+      <section class="hero" aria-describedby="diagram-summary">
+        <div class="eyebrow">Reliant workflow value diagram</div>
+        <div class="hero-grid">
+          <div>
+            <h1 id="diagram-title">One chat becomes an adaptive production pipeline.</h1>
+            <p id="diagram-summary">
+              A single request expands into planning, parallelizable work packets, custom agent loops,
+              structured review, targeted retries, rethink paths, and a final answer that carries the
+              evidence of the workflow behind it.
+            </p>
+          </div>
+          <aside class="hero-card" aria-label="Workflow capability summary">
+            <span class="stat">1 chat</span>
+            <span class="divider"></span>
+            <span>Planning</span>
+            <span>Parallel agents</span>
+            <span>Retries</span>
+            <span>Rethink</span>
+            <span>Final synthesis</span>
+          </aside>
+        </div>
+      </section>
+
+      <section class="diagram" aria-label="Adaptive workflow diagram">
+        <div class="backplane" aria-hidden="true"></div>
+
+        <article class="node start">
+          <p class="label">Input</p>
+          <h2>One chat request</h2>
+          <p>The user asks once. Reliant keeps the conversation intact while the workflow expands.</p>
+        </article>
+
+        <div class="connector start-to-plan" aria-hidden="true"></div>
+
+        <article class="node plan">
+          <p class="label">Agent A</p>
+          <h2>Plans the route</h2>
+          <p>Defines success criteria, decomposes the work, and chooses what should run together.</p>
+          <ol class="mini-list">
+            <li>Scope</li>
+            <li>Dependencies</li>
+            <li>Validation path</li>
+          </ol>
+        </article>
+
+        <div class="connector plan-to-fan" aria-hidden="true"></div>
+
+        <article class="node fanout">
+          <p class="label">Parallelizable output</p>
+          <h2>Work packets fan out</h2>
+          <p>Tasks become independent lanes with explicit contracts, context, and expected artifacts.</p>
+        </article>
+
+        <div class="lane lane-one" aria-hidden="true"></div>
+        <div class="lane lane-two" aria-hidden="true"></div>
+        <div class="lane lane-three" aria-hidden="true"></div>
+
+        <section class="agent-lanes" aria-label="Parallel agent loops">
+          <article class="agent-card research">
+            <span class="agent-tag">Agent B</span>
+            <h3>Research loop</h3>
+            <p>Investigates constraints, gathers internal context, and returns focused findings.</p>
+            <div class="loop-track" aria-hidden="true"><span></span></div>
+          </article>
+          <article class="agent-card build">
+            <span class="agent-tag">Agent C</span>
+            <h3>Build loop</h3>
+            <p>Implements the agreed slice, responds to feedback, and preserves workspace state.</p>
+            <div class="loop-track" aria-hidden="true"><span></span></div>
+          </article>
+          <article class="agent-card test">
+            <span class="agent-tag">Agent D</span>
+            <h3>Test loop</h3>
+            <p>Exercises changed behavior, isolates failures, and reports confidence or blockers.</p>
+            <div class="loop-track" aria-hidden="true"><span></span></div>
+          </article>
+        </section>
+
+        <div class="connector agents-to-review" aria-hidden="true"></div>
+
+        <article class="node review">
+          <p class="label">Structured review</p>
+          <h2>Gate every result</h2>
+          <div class="review-grid">
+            <div class="review-pass">Pass</div>
+            <div class="review-fail">Fail</div>
+          </div>
+          <p>Each artifact is checked against requirements, risk, and completeness before synthesis.</p>
+        </article>
+
+        <div class="connector review-to-final" aria-hidden="true"></div>
+
+        <article class="node final">
+          <p class="label">Answer</p>
+          <h2>Final response</h2>
+          <p>Only reviewed work reaches the user: concise, actionable, and backed by the pipeline.</p>
+        </article>
+
+        <aside class="retry-panel" aria-label="Retry and rethink paths">
+          <div class="retry-header">
+            <span>Fail path</span>
+            <strong>Feedback loop</strong>
+          </div>
+          <div class="retry-stack">
+            <div class="retry-step">Retry 1 with reviewer notes</div>
+            <div class="retry-step">Retry 2 with narrowed target</div>
+            <div class="retry-step">Retry 3 with explicit acceptance checks</div>
+          </div>
+          <div class="rethink">
+            <span>If retries exceed 3</span>
+            <strong>Rethink the plan</strong>
+            <p>Agent A revises decomposition, dependencies, or success criteria before work continues.</p>
+          </div>
+        </aside>
+
+        <div class="return-arc retry-arc" aria-hidden="true"></div>
+        <div class="return-arc rethink-arc" aria-hidden="true"></div>
+      </section>
+
+      <section class="legend" aria-label="Diagram legend">
+        <article>
+          <span class="legend-dot planning"></span>
+          <h3>Planning creates leverage</h3>
+          <p>Decomposition makes one chat behave like an orchestrated workflow.</p>
+        </article>
+        <article>
+          <span class="legend-dot parallel"></span>
+          <h3>Parallel loops increase throughput</h3>
+          <p>Agents work independently while still reporting into a shared structure.</p>
+        </article>
+        <article>
+          <span class="legend-dot review-dot"></span>
+          <h3>Review controls quality</h3>
+          <p>Pass, fail, retry, and rethink paths make the system adaptive instead of linear.</p>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

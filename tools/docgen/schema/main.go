@@ -281,5 +281,23 @@ Regenerate: make generate-schema
 		sb.WriteString("---\n\n")
 	}
 
+	// Syntax sugar section — these are YAML-only conveniences that desugar at parse time,
+	// so they don't appear in the auto-generated proto schema above.
+	sb.WriteString(`## Syntax Sugar (YAML-only)
+
+These fields are not part of the proto schema — they are YAML convenience features that desugar to standard nodes, edges, and entry at parse time.
+
+### ` + "`sequence:`" + `
+
+Top-level workflow field. Replaces ` + "`entry:`" + ` + ` + "`nodes:`" + ` + sequential ` + "`edges:`" + ` for linear chains. Cannot coexist with ` + "`entry:`" + `.
+
+### ` + "`type: parallel`" + ` (node type)
+
+A node with ` + "`type: parallel`" + ` and ` + "`branches:`" + ` expands into branch nodes + a join node + fan-out/fan-in edges. The parallel node's ` + "`id`" + ` becomes the join node's id.
+
+See workflow documentation for full examples and usage patterns.
+
+`)
+
 	return sb.String()
 }

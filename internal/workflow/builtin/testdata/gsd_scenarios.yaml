@@ -1,17 +1,17 @@
 # Test scenarios for gsd.yaml workflow
 #
-# GSD workflow structure:
-#   discuss → research → plan → implement → [verify_lint, verify_test, verify_build] → verify_join → verify_report → complete
+# GSD workflow structure (using sequence: + type: parallel sugar):
+#   discuss → research → plan → implement → verify{verify_lint, verify_test, verify_build} → verify_report → complete
 #
 # Node types:
 #   - discuss      type: workflow, ref: builtin://agent (BLACK BOX) — quick discussion
 #   - research     type: workflow, ref: builtin://agent (BLACK BOX) — codebase research
 #   - plan         type: workflow, ref: builtin://agent (BLACK BOX) — atomic task breakdown
 #   - implement    type: workflow, ref: builtin://agent (BLACK BOX) — execute the plan
-#   - verify_lint  type: run — lint command
-#   - verify_test  type: run — test command
-#   - verify_build type: run — build command
-#   - verify_join  type: join — wait for all verifications
+#   - verify_lint  type: run — lint command (branch of parallel node "verify")
+#   - verify_test  type: run — test command (branch of parallel node "verify")
+#   - verify_build type: run — build command (branch of parallel node "verify")
+#   - verify       type: join — desugared from type: parallel, waits for all branches
 #   - verify_report type: save_message — report verification results
 #   - complete     type: save_message — final summary
 #
@@ -70,7 +70,7 @@ expect:
     - verify_lint
     - verify_test
     - verify_build
-    - verify_join
+    - verify
     - verify_report
     - complete
 
@@ -124,6 +124,6 @@ expect:
     - verify_lint
     - verify_test
     - verify_build
-    - verify_join
+    - verify
     - verify_report
     - complete

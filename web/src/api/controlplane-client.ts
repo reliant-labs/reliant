@@ -26,24 +26,62 @@ async function cpFetch(method: string, body: Record<string, unknown> = {}) {
   return resp.json()
 }
 
-export async function saveGitCredential(provider: string, accessToken: string, scopes: string) {
-  return cpFetch('SaveGitCredential', { provider, access_token: accessToken, scopes })
+export interface GitAccount {
+  provider: string
+  account_login: string
+  scopes: string
+  created_at?: string
+  updated_at?: string
 }
 
-export async function getGitCredential(provider: string): Promise<{
+export async function saveGitCredential(
+  provider: string,
+  accessToken: string,
+  scopes: string,
+  accountLogin?: string,
+): Promise<{ account_login: string }> {
+  return cpFetch('SaveGitCredential', {
+    provider,
+    access_token: accessToken,
+    scopes,
+    account_login: accountLogin ?? '',
+  })
+}
+
+export async function getGitCredential(
+  provider: string,
+  accountLogin?: string,
+): Promise<{
   provider: string
   scopes: string
   has_token: boolean
+  account_login?: string
   created_at?: string
   updated_at?: string
 }> {
-  return cpFetch('GetGitCredential', { provider })
+  return cpFetch('GetGitCredential', { provider, account_login: accountLogin ?? '' })
 }
 
-export async function deleteGitCredential(provider: string) {
-  return cpFetch('DeleteGitCredential', { provider })
+export async function listGitCredentials(provider?: string): Promise<{ accounts: GitAccount[] }> {
+  return cpFetch('ListGitCredentials', { provider: provider ?? '' })
 }
 
-export async function cloneRepo(daemonName: string, gitRepo: string, gitBranch: string, path: string): Promise<{ cloned_path: string }> {
-  return cpFetch('CloneRepo', { daemon_name: daemonName, git_repo: gitRepo, git_branch: gitBranch, path })
+export async function deleteGitCredential(provider: string, accountLogin: string) {
+  return cpFetch('DeleteGitCredential', { provider, account_login: accountLogin })
+}
+
+export async function cloneRepo(
+  daemonName: string,
+  gitRepo: string,
+  gitBranch: string,
+  path: string,
+  accountLogin?: string,
+): Promise<{ cloned_path: string }> {
+  return cpFetch('CloneRepo', {
+    daemon_name: daemonName,
+    git_repo: gitRepo,
+    git_branch: gitBranch,
+    path,
+    account_login: accountLogin ?? '',
+  })
 }

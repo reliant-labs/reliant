@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc" data-audit="forge-logo-svg-primary-mark">
+  <title id="title">Forge mesh anvil mark</title>
+  <desc id="desc">A futuristic Forge logo: an anvil built from blueprint mesh, graph nodes, and support struts to represent production-ready AI scaffolding.</desc>
+  <defs>
+    <linearGradient id="tile" x1="92" y1="54" x2="432" y2="468" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#111A27"/>
+      <stop offset="0.54" stop-color="#0A111B"/>
+      <stop offset="1" stop-color="#05070B"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="50%" cy="36%" r="58%">
+      <stop offset="0" stop-color="#5A9CFF" stop-opacity="0.34"/>
+      <stop offset="0.48" stop-color="#5A9CFF" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#5A9CFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="meshStroke" x1="132" y1="120" x2="378" y2="368" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#BFE7FF"/>
+      <stop offset="0.52" stop-color="#5A9CFF"/>
+      <stop offset="1" stop-color="#325DFF"/>
+    </linearGradient>
+    <linearGradient id="steel" x1="166" y1="132" x2="338" y2="348" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.58" stop-color="#E8EEF8"/>
+      <stop offset="1" stop-color="#91A3BD"/>
+    </linearGradient>
+    <linearGradient id="ember" x1="184" y1="370" x2="328" y2="394" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFBE66" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#FF6A3D"/>
+      <stop offset="1" stop-color="#FFBE66" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect x="32" y="32" width="448" height="448" rx="104" fill="url(#tile)"/>
+  <rect x="32" y="32" width="448" height="448" rx="104" fill="url(#halo)"/>
+
+  <g data-audit="blueprint-field" opacity="0.34" stroke="#263D59" stroke-width="2">
+    <path d="M112 148H400M112 220H400M112 292H400M112 364H400"/>
+    <path d="M148 112V400M220 112V400M292 112V400M364 112V400"/>
+    <path d="M132 380L380 132M132 132L380 380" opacity="0.35"/>
+  </g>
+
+  <g data-audit="precision-frame" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <g stroke="#486583" stroke-width="4" opacity="0.74">
+      <path d="M104 164V124H144"/>
+      <path d="M408 164V124H368"/>
+      <path d="M104 348V388H144"/>
+      <path d="M408 348V388H368"/>
+    </g>
+    <path d="M154 356L206 304M358 356L306 304M190 158L224 126M322 158L354 126" stroke="#5A9CFF" stroke-width="8" opacity="0.55"/>
+  </g>
+
+  <g data-audit="mesh-anvil" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M138 220L184 154H358L390 184L348 220H296L276 254H194Z" fill="#0D1724" stroke="#6285AE" stroke-width="12"/>
+    <path d="M194 254H276L300 340H170Z" fill="#0F1B2A" stroke="#6285AE" stroke-width="12"/>
+    <path d="M140 354H372L344 410H168Z" fill="#111D2D" stroke="#6285AE" stroke-width="12"/>
+    <path d="M138 220L184 154L232 218L194 254L276 254L296 220L358 154L348 220L390 184" stroke="url(#meshStroke)" stroke-width="7" filter="url(#softGlow)"/>
+    <path d="M184 154L234 154L232 218L296 220L308 154M234 154L296 220M232 218L276 254M194 254L170 340M276 254L300 340M170 340L236 312L300 340M236 312L276 254" stroke="url(#meshStroke)" stroke-width="5" opacity="0.86"/>
+    <path d="M170 340H300M140 354L236 312L372 354M168 410L236 354L344 410" stroke="url(#meshStroke)" stroke-width="5" opacity="0.72"/>
+  </g>
+
+  <g data-audit="production-nodes" fill="#E8EEF8" stroke="#07101A" stroke-width="5">
+    <circle cx="184" cy="154" r="13"/>
+    <circle cx="234" cy="154" r="10"/>
+    <circle cx="308" cy="154" r="10"/>
+    <circle cx="358" cy="154" r="13"/>
+    <circle cx="138" cy="220" r="12"/>
+    <circle cx="232" cy="218" r="14"/>
+    <circle cx="296" cy="220" r="14"/>
+    <circle cx="348" cy="220" r="11"/>
+    <circle cx="194" cy="254" r="11"/>
+    <circle cx="276" cy="254" r="11"/>
+    <circle cx="170" cy="340" r="12"/>
+    <circle cx="236" cy="312" r="12"/>
+    <circle cx="300" cy="340" r="12"/>
+    <circle cx="140" cy="354" r="9"/>
+    <circle cx="372" cy="354" r="9"/>
+  </g>
+
+  <g data-audit="harness-readiness" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M154 356H358" stroke="#AAB8CC" stroke-width="8" opacity="0.58"/>
+    <path d="M188 382H324" stroke="url(#ember)" stroke-width="13" filter="url(#softGlow)"/>
+    <path d="M206 382H306" stroke="#FFBE66" stroke-width="4" opacity="0.88"/>
+  </g>
+</svg>

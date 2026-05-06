@@ -181,6 +181,7 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
         logger.error("Error sending message:", error);
         // Show error toast to user
         toast.error(error);
+        throw error;
       }
     },
     [currentChat, currentWorktreeId, chatId, connectionStatus],

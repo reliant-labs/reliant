@@ -7,6 +7,7 @@ import { useAttachmentStore } from "../../store/attachmentStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { useApiKeySetupStore } from "../../store/apiKeySetupStore";
 import { useChatParamsStore } from "../../store/chatParamsStore";
+import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { ChatInput } from "./ChatInput";
 import { ReliantIcon } from "../icons/ReliantIcon";
 import { CreateWorktreeModal } from "../Worktrees/CreateWorktreeModal";
@@ -23,6 +24,7 @@ import {
   Code2,
   ArrowRightLeft,
   FolderPlus,
+  Activity,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "../../lib/utils";
@@ -137,6 +139,8 @@ export function NewChatView({
   const ensureApiKeyOrShowModal = useApiKeySetupStore(
     (state) => state.ensureApiKeyOrShowModal
   );
+  const { activeDaemon, loading: daemonLoading } = useDaemonStatus();
+  const daemonConnected = Boolean(activeDaemon);
 
   // Find the main worktree for this project
   const mainWorktree = worktrees.find((w) => w.is_main === true);
@@ -258,6 +262,12 @@ export function NewChatView({
     workflow?: string | null,
     workflowParams?: Record<string, unknown>
   ) => {
+    if (!daemonConnected) {
+      toast.error("No daemon connected", {
+        description: "Start a daemon to begin chatting.",
+      });
+      return;
+    }
     if ((!content.trim() && !attachmentIds?.length) || isCreating) return;
 
     setIsCreating(true);
@@ -296,6 +306,7 @@ export function NewChatView({
       toast.error("Failed to create chat", {
         description: errorMessage,
       });
+      throw error;
     } finally {
       setIsCreating(false);
     }
@@ -546,12 +557,18 @@ export function NewChatView({
       </div>
 
       {/* Message Input - Collapsible when not focused */}
+      {!daemonConnected && !daemonLoading && (
+        <div className="flex items-center justify-center gap-2 border-t border-yellow-500/20 bg-yellow-500/5 px-4 py-2.5 text-sm text-yellow-600 dark:text-yellow-400">
+          <Activity className="h-4 w-4" />
+          <span>No daemon connected. Start a daemon to begin chatting.</span>
+        </div>
+      )}
       {isFocused ? (
         <div className="flex-shrink-0">
           <ChatInput
             ref={chatInputRef}
             onSend={handleCreateAndSend}
-            disabled={isCreating}
+            disabled={isCreating || !daemonConnected}
             worktreeId={selectedWorkspaceId || mainWorktree?.id}
           />
         </div>

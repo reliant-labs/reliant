@@ -35,11 +35,24 @@ interface CutoutRect {
   rx: number;
 }
 
+interface ElementSize {
+  width: number;
+  height: number;
+}
+
 interface ResolvedTarget {
   target: SpotlightTarget;
   elementRect: TargetRect;
   cutout: CutoutRect;
-  labelPosition: "right" | "left" | "above";
+}
+
+const DEFAULT_LABEL_SIZE: ElementSize = { width: 192, height: 56 };
+const LABEL_GAP = 14;
+const VIEWPORT_PADDING = 16;
+const NAV_BAR_CLEARANCE = 176;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(value, Math.max(min, max)));
 }
 
 /**
@@ -92,13 +105,32 @@ function computeCutout(
 }
 
 /**
- * Determine which side to place a label based on the target's position on screen.
+ * Determine which side to place a label based on available space around the target.
  */
-function determineLabelPosition(rect: TargetRect): "right" | "left" | "above" {
-  const vw = window.innerWidth;
-  if (rect.left < vw * 0.3) return "right";
-  if (rect.left + rect.width > vw * 0.7) return "left";
-  return "above";
+function determineLabelPosition(
+  cutout: CutoutRect,
+  labelSize: ElementSize = DEFAULT_LABEL_SIZE
+): "right" | "left" | "above" | "below" {
+  const viewportWidth = window.innerWidth;
+  const effectiveViewportBottom = Math.max(
+    VIEWPORT_PADDING,
+    window.innerHeight - NAV_BAR_CLEARANCE
+  );
+  const spaces = {
+    right: viewportWidth - (cutout.x + cutout.width) - VIEWPORT_PADDING,
+    left: cutout.x - VIEWPORT_PADDING,
+    above: cutout.y - VIEWPORT_PADDING,
+    below: effectiveViewportBottom - (cutout.y + cutout.height),
+  };
+
+  if (spaces.right >= labelSize.width + LABEL_GAP) return "right";
+  if (spaces.left >= labelSize.width + LABEL_GAP) return "left";
+  if (spaces.above >= labelSize.height + LABEL_GAP) return "above";
+  if (spaces.below >= labelSize.height + LABEL_GAP) return "below";
+
+  return Object.entries(spaces).reduce((best, [position, space]) =>
+    space > best.space ? { position: position as keyof typeof spaces, space } : best
+  , { position: "above" as keyof typeof spaces, space: -Infinity }).position;
 }
 
 /**
@@ -106,32 +138,42 @@ function determineLabelPosition(rect: TargetRect): "right" | "left" | "above" {
  */
 function calculateLabelStyle(
   cutout: CutoutRect,
-  position: "right" | "left" | "above",
-  labelRef: HTMLDivElement | null
+  position: "right" | "left" | "above" | "below",
+  labelSize: ElementSize = DEFAULT_LABEL_SIZE
 ): React.CSSProperties {
-  const gap = 14;
-
-  // Get actual label dimensions if the ref is available
-  const labelWidth = labelRef?.offsetWidth ?? 192;
-  const labelHeight = labelRef?.offsetHeight ?? 48;
+  const viewportWidth = window.innerWidth;
+  const effectiveViewportBottom = Math.max(
+    VIEWPORT_PADDING,
+    window.innerHeight - NAV_BAR_CLEARANCE
+  );
+  const labelWidth = labelSize.width;
+  const labelHeight = labelSize.height;
+  let top = 0;
+  let left = 0;
 
   switch (position) {
     case "right":
-      return {
-        top: cutout.y + cutout.height / 2 - labelHeight / 2,
-        left: cutout.x + cutout.width + gap,
-      };
+      top = cutout.y + cutout.height / 2 - labelHeight / 2;
+      left = cutout.x + cutout.width + LABEL_GAP;
+      break;
     case "left":
-      return {
-        top: cutout.y + cutout.height / 2 - labelHeight / 2,
-        left: cutout.x - labelWidth - gap,
-      };
+      top = cutout.y + cutout.height / 2 - labelHeight / 2;
+      left = cutout.x - labelWidth - LABEL_GAP;
+      break;
     case "above":
-      return {
-        top: cutout.y - labelHeight - gap,
-        left: cutout.x + cutout.width / 2 - labelWidth / 2,
-      };
+      top = cutout.y - labelHeight - LABEL_GAP;
+      left = cutout.x + cutout.width / 2 - labelWidth / 2;
+      break;
+    case "below":
+      top = cutout.y + cutout.height + LABEL_GAP;
+      left = cutout.x + cutout.width / 2 - labelWidth / 2;
+      break;
   }
+
+  return {
+    top: clamp(top, VIEWPORT_PADDING, effectiveViewportBottom - labelHeight - VIEWPORT_PADDING),
+    left: clamp(left, VIEWPORT_PADDING, viewportWidth - labelWidth - VIEWPORT_PADDING),
+  };
 }
 
 export function OnboardingMultiSpotlight({
@@ -148,6 +190,7 @@ export function OnboardingMultiSpotlight({
   const [resolved, setResolved] = useState<ResolvedTarget[]>([]);
   const [isVisible, setIsVisible] = useState(false);
   const [highlightVisible, setHighlightVisible] = useState(false);
+  const [labelSizes, setLabelSizes] = useState<Record<number, ElementSize>>({});
   const labelRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
   // Unique mask ID to avoid collisions if multiple instances exist
@@ -179,9 +222,8 @@ export function OnboardingMultiSpotlight({
       }
 
       const cutout = computeCutout(elementRect, borderRadius, target.spotlightConfig);
-      const labelPosition = determineLabelPosition(elementRect);
 
-      results.push({ target, elementRect, cutout, labelPosition });
+      results.push({ target, elementRect, cutout });
     }
 
     setResolved(results);
@@ -242,14 +284,43 @@ export function OnboardingMultiSpotlight({
     };
   }, [updatePositions, targets]);
 
-  // Recalculate label positions after first render so we have real dimensions
+  // Recalculate label positions after first render so we have real dimensions.
   useEffect(() => {
-    if (resolved.length > 0 && isVisible) {
-      // Force a re-render after refs are attached so label positions use real widths
-      const frame = requestAnimationFrame(() => updatePositions());
-      return () => cancelAnimationFrame(frame);
-    }
-  }, [resolved.length, isVisible, updatePositions]);
+    if (resolved.length === 0 || !isVisible) return;
+
+    const frame = requestAnimationFrame(() => {
+      const measuredSizes: Record<number, ElementSize> = {};
+
+      labelRefs.current.forEach((label, index) => {
+        const rect = label.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return;
+
+        measuredSizes[index] = {
+          width: Math.ceil(rect.width),
+          height: Math.ceil(rect.height),
+        };
+      });
+
+      setLabelSizes((currentSizes) => {
+        let changed = false;
+        for (const [index, measuredSize] of Object.entries(measuredSizes)) {
+          const currentSize = currentSizes[Number(index)];
+          if (
+            !currentSize ||
+            Math.abs(currentSize.width - measuredSize.width) >= 1 ||
+            Math.abs(currentSize.height - measuredSize.height) >= 1
+          ) {
+            changed = true;
+            break;
+          }
+        }
+
+        return changed ? measuredSizes : currentSizes;
+      });
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [resolved.length, isVisible]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -331,28 +402,35 @@ export function OnboardingMultiSpotlight({
       ))}
 
       {/* Label tooltips — one per target */}
-      {resolved.map((r, i) => (
-        <div
-          key={`label-${i}`}
-          ref={(el) => {
-            if (el) {
-              labelRefs.current.set(i, el);
-            } else {
-              labelRefs.current.delete(i);
-            }
-          }}
-          className={cn(
-            "absolute max-w-48 pointer-events-none rounded-lg border border-border bg-popover px-3.5 py-2.5 text-popover-foreground shadow-xl transition-opacity duration-300",
-            highlightVisible ? "opacity-100" : "opacity-0"
-          )}
-          style={calculateLabelStyle(r.cutout, r.labelPosition, labelRefs.current.get(i) ?? null)}
-        >
-          <p className="text-sm font-semibold text-foreground">{r.target.label}</p>
-          {r.target.description && (
-            <p className="text-xs text-muted-foreground mt-0.5">{r.target.description}</p>
-          )}
-        </div>
-      ))}
+      {resolved.map((r, i) => {
+        const labelPosition = determineLabelPosition(r.cutout, labelSizes[i]);
+
+        return (
+          <div
+            key={`label-${i}`}
+            ref={(el) => {
+              if (el) {
+                labelRefs.current.set(i, el);
+              } else {
+                labelRefs.current.delete(i);
+              }
+            }}
+            className={cn(
+              "absolute max-w-48 pointer-events-none rounded-lg border border-border bg-popover px-3.5 py-2.5 text-popover-foreground shadow-xl transition-opacity duration-300",
+              highlightVisible ? "opacity-100" : "opacity-0"
+            )}
+            style={{
+              ...calculateLabelStyle(r.cutout, labelPosition, labelSizes[i]),
+              maxWidth: "min(12rem, calc(100vw - 2rem))",
+            }}
+          >
+            <p className="text-sm font-semibold text-foreground">{r.target.label}</p>
+            {r.target.description && (
+              <p className="text-xs text-muted-foreground mt-0.5">{r.target.description}</p>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 

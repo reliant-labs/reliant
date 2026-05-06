@@ -346,7 +346,7 @@ service ScenarioService {
 // The output_json contains the mock output that will be returned by the node,
 // matching the activity's output structure directly (no translation needed).
 message SimulatedEvent {
-  // Node targets a specific node (supports qualified IDs for inner loop nodes).
+  // Node targets a specific node (supports qualified IDs for inner loops and workflows).
   // Use dot-notation: "loop_id.inner_node_id" or "outer.inner.node_id".
   // If omitted, events are applied sequentially.
   string node = 1;
@@ -524,4 +524,3 @@ message AssociateChatWithWorkflowDraftRequest {
 message AssociateChatWithWorkflowDraftResponse {
   // Empty response - success indicated by lack of error
 }
-

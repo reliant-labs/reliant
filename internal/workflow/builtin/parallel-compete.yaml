@@ -110,123 +110,64 @@ nodes:
 
         {{nodes.improve_prompt.message.text}}
 
-  # workflow.id in name ensures unique worktrees per workflow execution
-  - id: create_worktree_1
-    type: create_worktree
-    args:
-      name: compete-impl-1-{{workflow.id}}
-      base_branch: "{{workflow.branch != '' ? workflow.branch : 'main'}}"
-      copy_files:
-        - .env
-        - .env.local
-      force: true
+  # Parallel loop: create worktree + run implementation for each candidate
+  # items expression maps [1,2,3] into objects carrying the prompt text so inner
+  # nodes can reference it via iter.item.prompt (inner scope can't see parent nodes).
+  - id: implementations
+    type: loop
+    parallel: true
+    items: "{{[1, 2, 3].map(n, {'num': n, 'prompt': nodes.improve_prompt.message.text})}}"
+    key: "{{string(iter.item.num)}}"
+    on_failure: continue
+    inline:
+      entry: [create_wt]
+      outputs:
+        worktree_path: "{{nodes.create_wt.path}}"
+        worktree_branch: "{{nodes.create_wt.branch}}"
+        response_text: "{{has(nodes.impl) && has(nodes.impl.response_text) ? nodes.impl.response_text : ''}}"
+      nodes:
+        - id: create_wt
+          type: create_worktree
+          args:
+            name: compete-impl-{{iter.item.num}}-{{workflow.id}}
+            base_branch: "{{workflow.branch != '' ? workflow.branch : 'main'}}"
+            copy_files:
+              - .env
+              - .env.local
+            force: true
 
-  - id: create_worktree_2
-    type: create_worktree
-    args:
-      name: compete-impl-2-{{workflow.id}}
-      base_branch: "{{workflow.branch != '' ? workflow.branch : 'main'}}"
-      copy_files:
-        - .env
-        - .env.local
-      force: true
+        # mode: new = isolated thread (not fork/inherit which would share/copy context)
+        # project.path = working dir for sub-workflow tools
+        - id: impl
+          type: workflow
+          ref: builtin://agent
+          thread:
+            mode: new
+            inject:
+              role: user
+              content: |
+                You are Implementation Candidate #{{iter.item.num}}.
 
-  - id: create_worktree_3
-    type: create_worktree
-    args:
-      name: compete-impl-3-{{workflow.id}}
-      base_branch: "{{workflow.branch != '' ? workflow.branch : 'main'}}"
-      copy_files:
-        - .env
-        - .env.local
-      force: true
+                ## Task
+                {{iter.item.prompt}}
+          project:
+            path: "{{nodes.create_wt.path}}"
+          presets:
+            default: general
+          args:
+            mode: "{{inputs.mode}}"
+            model: "{{inputs.implementer.model != '' ? inputs.implementer.model : inputs.model}}"
+            temperature: "{{inputs.implementer.temperature}}"
+            compaction_threshold: "{{inputs.implementer.compaction_threshold}}"
+            max_turns: "{{inputs.implementer.max_turns}}"
+            tools: "{{inputs.implementer.tools}}"
+            system_prompt: "{{inputs.implementer.system_prompt}}"
+            thinking_level: "{{inputs.implementer.thinking_level}}"
+            spawn_presets: "{{inputs.implementer.spawn_presets}}"
 
-  # mode: new = isolated thread (not fork/inherit which would share/copy context)
-  # project.path = working dir for sub-workflow tools
-  - id: impl_1
-    type: workflow
-    ref: builtin://agent
-    thread:
-      mode: new
-      inject:
-        role: user
-        content: |
-          You are Implementation Candidate #1.
-
-          ## Task
-          {{nodes.improve_prompt.message.text}}
-    project:
-      path: "{{nodes.create_worktree_1.path}}"
-    presets:
-      default: general
-    args:
-      mode: "{{inputs.mode}}"
-      model: "{{inputs.implementer.model != '' ? inputs.implementer.model : inputs.model}}"
-      temperature: "{{inputs.implementer.temperature}}"
-      compaction_threshold: "{{inputs.implementer.compaction_threshold}}"
-      max_turns: "{{inputs.implementer.max_turns}}"
-      tools: "{{inputs.implementer.tools}}"
-      system_prompt: "{{inputs.implementer.system_prompt}}"
-      thinking_level: "{{inputs.implementer.thinking_level}}"
-      spawn_presets: "{{inputs.implementer.spawn_presets}}"
-
-  - id: impl_2
-    type: workflow
-    ref: builtin://agent
-    thread:
-      mode: new
-      inject:
-        role: user
-        content: |
-          You are Implementation Candidate #2.
-
-          ## Task
-          {{nodes.improve_prompt.message.text}}
-    project:
-      path: "{{nodes.create_worktree_2.path}}"
-    presets:
-      default: general
-    args:
-      mode: "{{inputs.mode}}"
-      model: "{{inputs.implementer.model != '' ? inputs.implementer.model : inputs.model}}"
-      temperature: "{{inputs.implementer.temperature}}"
-      compaction_threshold: "{{inputs.implementer.compaction_threshold}}"
-      max_turns: "{{inputs.implementer.max_turns}}"
-      tools: "{{inputs.implementer.tools}}"
-      system_prompt: "{{inputs.implementer.system_prompt}}"
-      thinking_level: "{{inputs.implementer.thinking_level}}"
-      spawn_presets: "{{inputs.implementer.spawn_presets}}"
-
-  - id: impl_3
-    type: workflow
-    ref: builtin://agent
-    thread:
-      mode: new
-      inject:
-        role: user
-        content: |
-          You are Implementation Candidate #3.
-
-          ## Task
-          {{nodes.improve_prompt.message.text}}
-    project:
-      path: "{{nodes.create_worktree_3.path}}"
-    presets:
-      default: general
-    args:
-      mode: "{{inputs.mode}}"
-      model: "{{inputs.implementer.model != '' ? inputs.implementer.model : inputs.model}}"
-      temperature: "{{inputs.implementer.temperature}}"
-      compaction_threshold: "{{inputs.implementer.compaction_threshold}}"
-      max_turns: "{{inputs.implementer.max_turns}}"
-      tools: "{{inputs.implementer.tools}}"
-      system_prompt: "{{inputs.implementer.system_prompt}}"
-      thinking_level: "{{inputs.implementer.thinking_level}}"
-      spawn_presets: "{{inputs.implementer.spawn_presets}}"
-
-  - id: implementations_done
-    type: join
-    condition: "all"
+      edges:
+        - from: create_wt
+          default: impl
 
   # Fork: reviewer needs parent context. Uses response tool for structured decision.
   - id: review
@@ -244,9 +185,9 @@ nodes:
           {{nodes.improve_prompt.message.text}}
 
           IMPLEMENTATION LOCATIONS:
-          - Candidate 1: {{nodes.create_worktree_1.path}}
-          - Candidate 2: {{nodes.create_worktree_2.path}}
-          - Candidate 3: {{nodes.create_worktree_3.path}}
+          - Candidate 1: {{nodes.implementations._results["1"].worktree_path}}
+          - Candidate 2: {{nodes.implementations._results["2"].worktree_path}}
+          - Candidate 3: {{nodes.implementations._results["3"].worktree_path}}
 
           REVIEW INSTRUCTIONS:
           1. Use your tools to browse each worktree and examine the code
@@ -354,7 +295,7 @@ nodes:
     type: run
     command: |
       rsync -av --delete --exclude='.git' --exclude='node_modules' --exclude='.env.ports' --exclude='data' --exclude='.env.local' \
-        "{{nodes.review.response.winner == 1 ? nodes.create_worktree_1.path : (nodes.review.response.winner == 2 ? nodes.create_worktree_2.path : nodes.create_worktree_3.path)}}/" \
+        "{{nodes.implementations._results[string(nodes.review.response.winner)].worktree_path}}/" \
         "{{workflow.path}}/"
 
   - id: synthesizer
@@ -377,9 +318,9 @@ nodes:
           {{nodes.improve_prompt.message.text}}
 
           **Implementation Locations:**
-          - Candidate 1: {{nodes.create_worktree_1.path}}
-          - Candidate 2: {{nodes.create_worktree_2.path}}
-          - Candidate 3: {{nodes.create_worktree_3.path}}
+          - Candidate 1: {{nodes.implementations._results["1"].worktree_path}}
+          - Candidate 2: {{nodes.implementations._results["2"].worktree_path}}
+          - Candidate 3: {{nodes.implementations._results["3"].worktree_path}}
 
           **Base Implementation:** Candidate {{nodes.review.response.winner}}
 
@@ -433,9 +374,9 @@ nodes:
         ```
 
         **Candidate Worktrees (for reference):**
-        - Candidate 1: {{nodes.create_worktree_1.path}}
-        - Candidate 2: {{nodes.create_worktree_2.path}}
-        - Candidate 3: {{nodes.create_worktree_3.path}}
+        - Candidate 1: {{nodes.implementations._results["1"].worktree_path}}
+        - Candidate 2: {{nodes.implementations._results["2"].worktree_path}}
+        - Candidate 3: {{nodes.implementations._results["3"].worktree_path}}
 
         **Next Steps:**
         ```bash
@@ -452,30 +393,10 @@ edges:
   - from: improve_prompt
     default: save_improved_prompt
 
-  # PARALLEL EDGES - create worktrees simultaneously
   - from: save_improved_prompt
-    default: create_worktree_1
-  - from: save_improved_prompt
-    default: create_worktree_2
-  - from: save_improved_prompt
-    default: create_worktree_3
+    default: implementations
 
-  # Each worktree creation goes directly to its implementation
-  - from: create_worktree_1
-    default: impl_1
-  - from: create_worktree_2
-    default: impl_2
-  - from: create_worktree_3
-    default: impl_3
-
-  - from: impl_1
-    default: implementations_done
-  - from: impl_2
-    default: implementations_done
-  - from: impl_3
-    default: implementations_done
-
-  - from: implementations_done
+  - from: implementations
     default: review
 
   - from: review
@@ -492,41 +413,23 @@ edges:
 
 ui:
   positions:
-    create_worktree_1:
+    implementations:
       x: 1506
-      y: 112
-    create_worktree_2:
-      x: 1498
-      y: 281
-    create_worktree_3:
-      x: 1501
-      y: 430
-    impl_1:
-      x: 2571
-      y: 8
-    impl_2:
-      x: 2569
-      y: 258
-    impl_3:
-      x: 2571
-      y: 508
-    implementations_done:
-      x: 2981
-      y: 262
+      y: 270
     improve_prompt:
       x: 476
       y: 273
     review:
-      x: 3387
+      x: 2571
       y: 254
     apply_winner:
-      x: 3800
+      x: 3000
       y: 150
     synthesizer:
-      x: 3800
+      x: 3000
       y: 358
     complete:
-      x: 4200
+      x: 3400
       y: 254
     save_improved_prompt:
       x: 797
