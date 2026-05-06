@@ -1,21 +1,12 @@
 # High Confidence Synthesize: Detailed synthesis combining auth system components
 #
 # Tests a high-confidence synthesize decision with specific, detailed
-# synthesis instructions. This exercises the full synthesize path where
-# the reviewer provides comprehensive merging guidance.
-#
-# Key aspects tested:
-# - Synthesize condition routes to synthesizer (not apply_winner)
-# - Winner field indicates the base implementation
-# - Synthesis instructions provide detailed merge guidance
-# - Synthesizer agent (black-box workflow) produces a final result
-# - High confidence value (10/10) is passed through correctly
+# synthesis instructions.
 
 name: high_confidence_synthesize
 description: Reviewer has high confidence in synthesis approach with detailed merge instructions
 
 events:
-  # Prompt improvement
   - node: improve_prompt
     output:
       message:
@@ -24,58 +15,22 @@ events:
       response_text: "Build a comprehensive authentication system with OAuth, password auth, and JWT"
       tool_calls: []
 
-  # Create worktrees
-  - node: create_worktree_1
+  - node: implementations
     output:
-      id: "wt1"
-      name: "b1"
-      path: "/wt/1"
-      branch: "b1"
-      base_branch: "main"
-      repo_id: "test"
-      status: "created"
-  - node: create_worktree_2
-    output:
-      id: "wt2"
-      name: "b2"
-      path: "/wt/2"
-      branch: "b2"
-      base_branch: "main"
-      repo_id: "test"
-      status: "created"
-  - node: create_worktree_3
-    output:
-      id: "wt3"
-      name: "b3"
-      path: "/wt/3"
-      branch: "b3"
-      base_branch: "main"
-      repo_id: "test"
-      status: "created"
-
-  # Each implementation specializes in one area
-  - node: impl_1
-    output:
-      message:
-        role: assistant
-        text: "OAuth provider integration complete with Google, GitHub, and Apple support"
+      worktree_path: "/wt/1"
+      worktree_branch: "b1"
       response_text: "OAuth provider integration complete with Google, GitHub, and Apple support"
-
-  - node: impl_2
+  - node: implementations
     output:
-      message:
-        role: assistant
-        text: "Password auth with bcrypt hashing, rate limiting, and account lockout"
+      worktree_path: "/wt/2"
+      worktree_branch: "b2"
       response_text: "Password auth with bcrypt hashing, rate limiting, and account lockout"
-
-  - node: impl_3
+  - node: implementations
     output:
-      message:
-        role: assistant
-        text: "JWT token generation, validation, refresh flow, and session management"
+      worktree_path: "/wt/3"
+      worktree_branch: "b3"
       response_text: "JWT token generation, validation, refresh flow, and session management"
 
-  # High confidence synthesis decision
   - node: review
     output:
       message:
@@ -95,7 +50,6 @@ events:
           5. Merge test files from all three candidates
       completed: true
 
-  # Synthesizer combines the implementations
   - node: synthesizer
     output:
       message:
@@ -108,12 +62,7 @@ expect:
   reached:
     - improve_prompt
     - save_improved_prompt
-    - create_worktree_1
-    - create_worktree_2
-    - create_worktree_3
-    - impl_1
-    - impl_2
-    - impl_3
+    - implementations
     - review
     - synthesizer
     - complete

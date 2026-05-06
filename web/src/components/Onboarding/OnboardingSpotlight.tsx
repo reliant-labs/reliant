@@ -5,7 +5,7 @@
  * Uses SVG masks to create a "cutout" effect around the target element.
  */
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "../../lib/utils";
 import type { SpotlightConfig } from "./types";
@@ -47,6 +47,11 @@ interface SpotlightRect extends TargetRect {
   borderRadius: number;
 }
 
+interface ElementSize {
+  width: number;
+  height: number;
+}
+
 /**
  * Detect the border-radius of an element from its computed styles
  */
@@ -65,37 +70,50 @@ function detectBorderRadius(element: Element): number {
   return Math.round(nonZero.reduce((a, b) => a + b, 0) / nonZero.length);
 }
 
+const DEFAULT_TOOLTIP_SIZE: ElementSize = { width: 320, height: 200 };
+const VIEWPORT_PADDING = 16;
 // Height reserved for the OnboardingNavBar at the bottom of the screen
-const NAV_BAR_CLEARANCE = 80;
+const NAV_BAR_CLEARANCE = 176;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(value, Math.max(min, max)));
+}
 
 function calculateTooltipPosition(
   rect: TargetRect,
   position: "top" | "bottom" | "left" | "right" | "auto",
-  tooltipWidth: number = 320,
-  tooltipHeight: number = 200,
-  padding: number = 16
+  tooltipSize: ElementSize = DEFAULT_TOOLTIP_SIZE,
+  targetGap: number = 16
 ): Position & { actualPosition: "top" | "bottom" | "left" | "right" } {
   const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
-  // Effective viewport height accounting for nav bar
-  const effectiveViewportHeight = viewportHeight - NAV_BAR_CLEARANCE;
+  const effectiveViewportBottom = Math.max(
+    VIEWPORT_PADDING,
+    window.innerHeight - NAV_BAR_CLEARANCE
+  );
+  const tooltipWidth = tooltipSize.width;
+  const tooltipHeight = tooltipSize.height;
 
   // Auto-detect best position
   let actualPosition: "top" | "bottom" | "left" | "right" = position === "auto" ? "bottom" : position;
   if (position === "auto") {
-    const spaceAbove = rect.top;
-    const spaceBelow = effectiveViewportHeight - (rect.top + rect.height);
-    const spaceRight = viewportWidth - (rect.left + rect.width);
+    const spaceAbove = rect.top - VIEWPORT_PADDING;
+    const spaceBelow = effectiveViewportBottom - (rect.top + rect.height);
+    const spaceRight = viewportWidth - (rect.left + rect.width) - VIEWPORT_PADDING;
+    const spaceLeft = rect.left - VIEWPORT_PADDING;
 
-    // Prefer below, then above, then right, then left
-    if (spaceBelow >= tooltipHeight + padding) {
+    // Prefer below, then above, then right, then left when there is enough room.
+    if (spaceBelow >= tooltipHeight + targetGap) {
       actualPosition = "bottom";
-    } else if (spaceAbove >= tooltipHeight + padding) {
+    } else if (spaceAbove >= tooltipHeight + targetGap) {
       actualPosition = "top";
-    } else if (spaceRight >= tooltipWidth + padding) {
+    } else if (spaceRight >= tooltipWidth + targetGap) {
       actualPosition = "right";
-    } else {
+    } else if (spaceLeft >= tooltipWidth + targetGap) {
       actualPosition = "left";
+    } else if (Math.max(spaceBelow, spaceAbove) >= Math.max(spaceRight, spaceLeft)) {
+      actualPosition = spaceBelow >= spaceAbove ? "bottom" : "top";
+    } else {
+      actualPosition = spaceRight >= spaceLeft ? "right" : "left";
     }
   }
 
@@ -104,26 +122,26 @@ function calculateTooltipPosition(
 
   switch (actualPosition) {
     case "top":
-      top = rect.top - tooltipHeight - padding;
+      top = rect.top - tooltipHeight - targetGap;
       left = rect.left + rect.width / 2 - tooltipWidth / 2;
       break;
     case "bottom":
-      top = rect.top + rect.height + padding;
+      top = rect.top + rect.height + targetGap;
       left = rect.left + rect.width / 2 - tooltipWidth / 2;
       break;
     case "left":
       top = rect.top + rect.height / 2 - tooltipHeight / 2;
-      left = rect.left - tooltipWidth - padding;
+      left = rect.left - tooltipWidth - targetGap;
       break;
     case "right":
       top = rect.top + rect.height / 2 - tooltipHeight / 2;
-      left = rect.left + rect.width + padding;
+      left = rect.left + rect.width + targetGap;
       break;
   }
 
-  // Clamp to viewport, reserving space at bottom for nav bar
-  left = Math.max(padding, Math.min(left, viewportWidth - tooltipWidth - padding));
-  top = Math.max(padding, Math.min(top, effectiveViewportHeight - tooltipHeight - padding));
+  // Clamp to viewport, reserving space at bottom for nav bar.
+  left = clamp(left, VIEWPORT_PADDING, viewportWidth - tooltipWidth - VIEWPORT_PADDING);
+  top = clamp(top, VIEWPORT_PADDING, effectiveViewportBottom - tooltipHeight - VIEWPORT_PADDING);
 
   return { top, left, actualPosition };
 }
@@ -147,6 +165,8 @@ export function OnboardingSpotlight({
   void _stepNumber;
   void _totalSteps;
   const [spotlightRect, setSpotlightRect] = useState<SpotlightRect | null>(null);
+  const tooltipRef = useRef<HTMLDivElement | null>(null);
+  const [tooltipSize, setTooltipSize] = useState<ElementSize>(DEFAULT_TOOLTIP_SIZE);
   // Initialize from last position for smooth tooltip transition between steps
   const [tooltipPos, setTooltipPos] = useState<Position & { actualPosition: string }>(() => ({
     top: lastTooltipPosition?.top ?? window.innerHeight / 2,
@@ -168,6 +188,29 @@ export function OnboardingSpotlight({
       lastTooltipPosition = { top: tooltipPos.top, left: tooltipPos.left };
     };
   }, [tooltipPos]);
+
+  const measureTooltip = useCallback(() => {
+    const tooltip = tooltipRef.current;
+    if (!tooltip) return;
+
+    const rect = tooltip.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    const nextSize = {
+      width: Math.ceil(rect.width),
+      height: Math.ceil(rect.height),
+    };
+
+    setTooltipSize((currentSize) => {
+      if (
+        Math.abs(currentSize.width - nextSize.width) < 1 &&
+        Math.abs(currentSize.height - nextSize.height) < 1
+      ) {
+        return currentSize;
+      }
+      return nextSize;
+    });
+  }, []);
 
   const updatePosition = useCallback(() => {
     const target = document.querySelector(targetSelector);
@@ -198,10 +241,19 @@ export function OnboardingSpotlight({
       borderRadius,
     };
     setSpotlightRect(newRect);
-    setTooltipPos(calculateTooltipPosition(newRect, tooltipPosition, 320, 200, tooltipPadding));
     // Fade in the highlight after a brief delay
     setTimeout(() => setHighlightVisible(true), 50);
-  }, [targetSelector, tooltipPosition, tooltipPadding, spotlightConfig, shouldDetectBorderRadius]);
+  }, [targetSelector, spotlightConfig, shouldDetectBorderRadius]);
+
+  useEffect(() => {
+    if (!spotlightRect) return;
+    setTooltipPos(calculateTooltipPosition(spotlightRect, tooltipPosition, tooltipSize, tooltipPadding));
+  }, [spotlightRect, tooltipPosition, tooltipSize, tooltipPadding]);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(measureTooltip);
+    return () => cancelAnimationFrame(frame);
+  });
 
   useEffect(() => {
     // Initial position update with retry logic for elements that appear after navigation
@@ -379,12 +431,17 @@ export function OnboardingSpotlight({
 
       {/* Tooltip content - shows and animates from last position */}
       <div
+        ref={tooltipRef}
         className={cn(
           "absolute rounded-xl border border-border bg-popover text-popover-foreground shadow-2xl",
-          "w-80 transition-all duration-500 ease-out",
+          "transition-all duration-500 ease-out",
           isVisible ? "opacity-100 scale-100" : "opacity-0 scale-95"
         )}
-        style={{ top: tooltipPos.top, left: tooltipPos.left }}
+        style={{
+          top: tooltipPos.top,
+          left: tooltipPos.left,
+          width: "min(20rem, calc(100vw - 2rem))",
+        }}
       >
         <div className="p-5">
           {/* Title & Description */}

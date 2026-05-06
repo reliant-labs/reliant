@@ -1,0 +1,30 @@
+[
+  {
+    "key": "scope",
+    "selector": "[data-audit=\"workflow-diagram-react-flow\"]",
+    "role": "",
+    "auditId": "",
+    "tagName": "div",
+    "text": "React Flow canvasBranching, loops, and recovery paths are rendered as connected nodes and edges.emits parallelizable workparallel launchsubmit evidencepassfail with reasonsresubmit corrected outputtar",
+    "rect": {
+      "x": 69,
+      "y": 355.89,
+      "width": 1302,
+      "height": 760,
+      "top": 355.89,
+      "right": 1371,
+      "bottom": 1115.89,
+      "left": 69
+    },
+    "scrollWidth": 1300,
+    "scrollHeight": 758,
+    "clientWidth": 1300,
+    "clientHeight": 758,
+    "overflowX": "hidden",
+    "overflowY": "hidden",
+    "lineCount": 64,
+    "fontSize": "16px",
+    "display": "block",
+    "position": "relative"
+  }
+]

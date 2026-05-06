@@ -1,0 +1,243 @@
+{
+  "status": "passed",
+  "url": "http://127.0.0.1:4173/?mesh=2",
+  "profile": "generic",
+  "checks": [
+    "no-overflow",
+    "max-text-lines",
+    "no-overlap",
+    "min-size"
+  ],
+  "scope": "[data-audit=\"forge-logo-html-css\"]",
+  "viewports": [
+    {
+      "name": "desktop",
+      "width": 1440,
+      "height": 900,
+      "status": "passed",
+      "checks": [
+        "no-overflow",
+        "max-text-lines",
+        "no-overlap",
+        "min-size"
+      ],
+      "findings": [],
+      "measurements": [
+        {
+          "key": "scope",
+          "selector": "[data-audit=\"forge-logo-html-css\"]",
+          "role": "",
+          "auditId": "",
+          "tagName": "div",
+          "text": "",
+          "rect": {
+            "x": 160,
+            "y": 109,
+            "width": 420,
+            "height": 420,
+            "top": 109,
+            "right": 580,
+            "bottom": 529,
+            "left": 160
+          },
+          "scrollWidth": 493,
+          "scrollHeight": 418,
+          "clientWidth": 418,
+          "clientHeight": 418,
+          "overflowX": "hidden",
+          "overflowY": "hidden",
+          "lineCount": 1,
+          "fontSize": "16px",
+          "display": "grid",
+          "position": "relative"
+        },
+        {
+          "key": "mesh-anvil-primary",
+          "selector": "[data-audit-key='mesh-anvil-primary']",
+          "role": "",
+          "auditId": "",
+          "tagName": "div",
+          "text": "",
+          "rect": {
+            "x": 240,
+            "y": 189,
+            "width": 260,
+            "height": 260,
+            "top": 189,
+            "right": 500,
+            "bottom": 449,
+            "left": 240
+          },
+          "scrollWidth": 260,
+          "scrollHeight": 260,
+          "clientWidth": 260,
+          "clientHeight": 260,
+          "overflowX": "visible",
+          "overflowY": "visible",
+          "lineCount": 33,
+          "fontSize": "16px",
+          "display": "block",
+          "position": "relative"
+        }
+      ],
+      "artifacts": {
+        "screenshot": "/Users/user/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit/desktop.png",
+        "annotatedScreenshot": "/Users/user/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit/desktop.annotated.png",
+        "dom": "/Users/user/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit/desktop.dom.json"
+      }
+    },
+    {
+      "name": "tablet",
+      "width": 1024,
+      "height": 768,
+      "status": "passed",
+      "checks": [
+        "no-overflow",
+        "max-text-lines",
+        "no-overlap",
+        "min-size"
+      ],
+      "findings": [],
+      "measurements": [
+        {
+          "key": "scope",
+          "selector": "[data-audit=\"forge-logo-html-css\"]",
+          "role": "",
+          "auditId": "",
+          "tagName": "div",
+          "text": "",
+          "rect": {
+            "x": 51.19,
+            "y": 51.19,
+            "width": 420,
+            "height": 420,
+            "top": 51.19,
+            "right": 471.19,
+            "bottom": 471.19,
+            "left": 51.19
+          },
+          "scrollWidth": 493,
+          "scrollHeight": 418,
+          "clientWidth": 418,
+          "clientHeight": 418,
+          "overflowX": "hidden",
+          "overflowY": "hidden",
+          "lineCount": 1,
+          "fontSize": "16px",
+          "display": "grid",
+          "position": "relative"
+        },
+        {
+          "key": "mesh-anvil-primary",
+          "selector": "[data-audit-key='mesh-anvil-primary']",
+          "role": "",
+          "auditId": "",
+          "tagName": "div",
+          "text": "",
+          "rect": {
+            "x": 131.19,
+            "y": 131.19,
+            "width": 260,
+            "height": 260,
+            "top": 131.19,
+            "right": 391.19,
+            "bottom": 391.19,
+            "left": 131.19
+          },
+          "scrollWidth": 260,
+          "scrollHeight": 260,
+          "clientWidth": 260,
+          "clientHeight": 260,
+          "overflowX": "visible",
+          "overflowY": "visible",
+          "lineCount": 33,
+          "fontSize": "16px",
+          "display": "block",
+          "position": "relative"
+        }
+      ],
+      "artifacts": {
+        "screenshot": "/Users/user/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit/tablet.png",
+        "annotatedScreenshot": "/Users/user/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit/tablet.annotated.png",
+        "dom": "/Users/user/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit/tablet.dom.json"
+      }
+    },
+    {
+      "name": "mobile",
+      "width": 390,
+      "height": 844,
+      "status": "passed",
+      "checks": [
+        "no-overflow",
+        "max-text-lines",
+        "no-overlap",
+        "min-size"
+      ],
+      "findings": [],
+      "measurements": [
+        {
+          "key": "scope",
+          "selector": "[data-audit=\"forge-logo-html-css\"]",
+          "role": "",
+          "auditId": "",
+          "tagName": "div",
+          "text": "",
+          "rect": {
+            "x": 22,
+            "y": 22,
+            "width": 346,
+            "height": 346,
+            "top": 22,
+            "right": 368,
+            "bottom": 368,
+            "left": 22
+          },
+          "scrollWidth": 406,
+          "scrollHeight": 344,
+          "clientWidth": 344,
+          "clientHeight": 344,
+          "overflowX": "hidden",
+          "overflowY": "hidden",
+          "lineCount": 1,
+          "fontSize": "16px",
+          "display": "grid",
+          "position": "relative"
+        },
+        {
+          "key": "mesh-anvil-primary",
+          "selector": "[data-audit-key='mesh-anvil-primary']",
+          "role": "",
+          "auditId": "",
+          "tagName": "div",
+          "text": "",
+          "rect": {
+            "x": 90,
+            "y": 90,
+            "width": 210,
+            "height": 210,
+            "top": 90,
+            "right": 300,
+            "bottom": 300,
+            "left": 90
+          },
+          "scrollWidth": 210,
+          "scrollHeight": 210,
+          "clientWidth": 210,
+          "clientHeight": 210,
+          "overflowX": "visible",
+          "overflowY": "visible",
+          "lineCount": 33,
+          "fontSize": "16px",
+          "display": "block",
+          "position": "relative"
+        }
+      ],
+      "artifacts": {
+        "screenshot": "/Users/user/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit/mobile.png",
+        "annotatedScreenshot": "/Users/user/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit/mobile.annotated.png",
+        "dom": "/Users/user/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit/mobile.dom.json"
+      }
+    }
+  ],
+  "artifactsDir": "/Users/user/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit"
+}

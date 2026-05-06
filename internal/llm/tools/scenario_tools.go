@@ -8,11 +8,15 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	cfg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
+	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/rctx"
+	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/simulator"
+	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 	"gopkg.in/yaml.v3"
 )
 
@@ -28,10 +32,10 @@ import (
 // The Output field contains the mock output that will be returned by the node,
 // matching the activity's output structure directly (no translation needed).
 type SimulatedEventParam struct {
-	// Node targets a specific node (supports qualified IDs for inner loop nodes).
+	// Node targets a specific node (supports qualified IDs for inner loops and workflows).
 	// Use dot-notation: "loop_id.inner_node_id" or "outer.inner.node_id".
 	// If omitted, events are applied sequentially.
-	Node string `json:"node,omitempty" yaml:"node,omitempty" jsonschema:"description=Target specific node. Use dot-notation for inner loop nodes: loop_id.inner_node_id. If omitted events are applied sequentially."`
+	Node string `json:"node,omitempty" yaml:"node,omitempty" jsonschema:"description=Target specific node. Use dot-notation for inner loops and workflows: loop_id.inner_node_id. If omitted events are applied sequentially."`
 
 	// Output is the mock output returned by the node.
 	// This should match the activity's output structure directly:
@@ -673,7 +677,8 @@ func runScenarioByName(ctx *rctx.ToolContext, repo db.Repository, draft *db.Work
 	}
 
 	// Run the simulation
-	engine := simulator.NewEngine(wf)
+	workflowLoader := createScenarioWorkflowLoader(ctx, repo)
+	engine := simulator.NewEngineWithLoader(wf, workflowLoader)
 	result := engine.RunScenario(simScenario)
 
 	// Update the result in the database
@@ -685,6 +690,118 @@ func runScenarioByName(ctx *rctx.ToolContext, repo db.Repository, draft *db.Work
 	}
 
 	return NewTextResponse(formatScenarioResultInternal(result)), nil
+}
+
+func createScenarioWorkflowLoader(ctx *rctx.ToolContext, repo db.Repository) func(string) (*reliantv1.Workflow, error) {
+	projectID := ""
+	if ctx != nil && ctx.Project != nil {
+		projectID = ctx.Project.ID
+	}
+
+	userID := ""
+	if ctx != nil && ctx.ChatID != "" {
+		chat, err := repo.GetChat(ctx, ctx.ChatID)
+		if err == nil && chat != nil {
+			userID = chat.UserID
+			if projectID == "" {
+				projectID = chat.ProjectID
+			}
+		} else if err != nil {
+			logging.Warn("Failed to load chat for scenario workflow loader", "error", err, "chat_id", ctx.ChatID)
+		}
+	}
+
+	return func(ref string) (*reliantv1.Workflow, error) {
+		workflowRef := strings.TrimSpace(ref)
+		if workflowRef == "" {
+			return nil, fmt.Errorf("workflow ref is empty")
+		}
+
+		if strings.HasPrefix(workflowRef, "builtin://") {
+			return loadScenarioBuiltinWorkflow(workflowRef)
+		}
+
+		if strings.HasPrefix(workflowRef, "project://") {
+			workflowRef = strings.TrimPrefix(workflowRef, "project://")
+		}
+
+		if userID != "" {
+			slug := cfg.NormalizeSlug(workflowRef)
+			if slug != "" {
+				draft, err := repo.GetUsableWorkflowBySlug(ctx, userID, slug)
+				if err != nil {
+					return nil, fmt.Errorf("failed to look up workflow %q: %w", ref, err)
+				}
+				if draft != nil {
+					wf, err := wfyaml.ParseWorkflow([]byte(draft.Definition))
+					if err != nil {
+						return nil, fmt.Errorf("failed to parse workflow %q: %w", ref, err)
+					}
+					return wf, nil
+				}
+			}
+		}
+
+		if projectID != "" {
+			wf, err := loadScenarioProjectWorkflow(ctx, repo, projectID, workflowRef)
+			if err != nil {
+				return nil, err
+			}
+			if wf != nil {
+				return wf, nil
+			}
+		}
+
+		return nil, fmt.Errorf("workflow not found: %s", ref)
+	}
+}
+
+func loadScenarioBuiltinWorkflow(ref string) (*reliantv1.Workflow, error) {
+	name := strings.TrimPrefix(ref, "builtin://")
+	if yamlData := builtin.GetInternalWorkflowYAML(name); yamlData != nil {
+		wf, err := wfyaml.ParseWorkflow(yamlData)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse internal workflow %q: %w", ref, err)
+		}
+		return wf, nil
+	}
+
+	data, err := builtin.BuiltinWorkflowsFS.ReadFile(name + ".yaml")
+	if err != nil {
+		return nil, fmt.Errorf("builtin workflow not found: %s", ref)
+	}
+	wf, err := wfyaml.ParseWorkflow(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse builtin workflow %q: %w", ref, err)
+	}
+	return wf, nil
+}
+
+func loadScenarioProjectWorkflow(ctx *rctx.ToolContext, repo db.Repository, projectID, workflowRef string) (*reliantv1.Workflow, error) {
+	record, err := repo.GetProjectConfigRecord(ctx, projectID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to load project config for workflow %q: %w", workflowRef, err)
+	}
+
+	workflows, err := cfg.ParseStoredWorkflows(record.ProjectWorkflowsJSON)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse stored project workflows: %w", err)
+	}
+
+	slug := cfg.NormalizeSlug(workflowRef)
+	storedWorkflow := cfg.FindStoredWorkflowBySlug(workflows, slug)
+	if storedWorkflow == nil {
+		return nil, nil
+	}
+
+	wf, err := wfyaml.ParseWorkflow([]byte(storedWorkflow.YAMLContent))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse project workflow %q: %w", workflowRef, err)
+	}
+	return wf, nil
 }
 
 // dbScenarioToSimulatorInternal converts a database scenario to simulator types

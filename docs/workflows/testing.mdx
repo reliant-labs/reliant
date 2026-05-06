@@ -200,7 +200,7 @@ For **inline workflow nodes** with `type: workflow` and `inline:`, the simulator
 3. Executes inner nodes using qualified IDs like `workflow_id.inner_node_id`
 4. Evaluates the sub-workflow's `outputs:` expressions if declared
 
-For **referenced** loops or workflows with `ref:` to an external workflow, the simulator mocks the entire node as a black box using the ref name as the mock ID, since external workflows cannot be loaded in the simulator.
+For **referenced** loops or workflows with `ref:`, the simulator uses black-box mocking with the ref name by default. When the scenario targets qualified inner nodes and the runner can resolve the referenced workflow, it executes that referenced workflow internally instead.
 
 ### Expectations
 

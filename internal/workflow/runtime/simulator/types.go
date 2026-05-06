@@ -44,8 +44,8 @@ import (
 //     content: "Custom response"
 type SimulatedEvent struct {
 	// Node targets a specific node using dot-notation for qualified IDs.
-	// Use dot-notation to target nodes inside loops: "loop_id.inner_node"
-	// For deeply nested loops: "outer.middle.inner_node"
+	// Use dot-notation to target nodes inside loops or workflows: "loop_id.inner_node"
+	// For deeply nested structures: "outer.middle.inner_node"
 	// Events without a node field are consumed sequentially in order.
 	Node string `json:"node,omitempty" yaml:"node,omitempty"`
 
@@ -125,7 +125,7 @@ const (
 // Expectation defines what to verify after a scenario runs.
 //
 // All fields are optional - specify only what you want to assert.
-// Node references support qualified IDs for inner loop nodes.
+// Node references support qualified IDs for inner loop and workflow nodes.
 //
 // Example - Assert completion and reached nodes:
 //
@@ -155,7 +155,7 @@ type Expectation struct {
 	Outcome ExpectedOutcome `json:"outcome,omitempty" yaml:"outcome,omitempty"`
 
 	// Reached lists nodes that must be scheduled during the scenario (completed, skipped, or errored).
-	// Use qualified IDs for inner loop nodes: "loop_id.inner_node"
+	// Use qualified IDs for inner loop or workflow nodes: "loop_id.inner_node"
 	Reached []string `json:"reached,omitempty" yaml:"reached,omitempty"`
 
 	// NotReached lists nodes that must NOT be scheduled during the scenario.

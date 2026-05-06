@@ -80,7 +80,7 @@ function DaemonConnectionInstructions() {
         </h3>
       </div>
       <p className="text-sm text-muted-foreground mb-5">
-        To continue, you'll need to connect our tools daemon to your code so Reliant can access your files and run commands.
+        To open an existing project in the browser, connect the tools daemon so Reliant can access that folder and run commands.
       </p>
 
       <div className="space-y-4">
@@ -116,9 +116,6 @@ function DaemonConnectionInstructions() {
               Open your project
             </p>
             <CopyableCommand command="cd /your/project && reliant open ." />
-            <p className="text-xs text-muted-foreground mt-1.5">
-              This will sign you in, start the daemon, and connect your project.
-            </p>
           </div>
         </div>
       </div>
@@ -232,7 +229,7 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
             handleProjectClick(existing);
             return;
           }
-          // Project might not be in our loaded list yet — reload and try again
+          // Project might not be in our loaded list yet; reload and try again
           await loadProjects();
           const refreshed = useProjectStore.getState().projects;
           const found = refreshed.find((p) => p.path === selectedPath);

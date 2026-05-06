@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Reliant Workflow Diagram SVG Experiment</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --page: #050815;
+        --panel: rgba(10, 18, 32, 0.82);
+        --stroke: rgba(137, 181, 255, 0.22);
+        --text: #edf6ff;
+        --muted: #9fb2d7;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 28px;
+        background:
+          radial-gradient(circle at 22% 12%, rgba(76, 201, 240, 0.16), transparent 34rem),
+          radial-gradient(circle at 82% 78%, rgba(167, 139, 250, 0.14), transparent 34rem),
+          var(--page);
+        color: var(--text);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      main {
+        width: min(100%, 1560px);
+      }
+
+      .frame {
+        border: 1px solid var(--stroke);
+        border-radius: 30px;
+        padding: clamp(10px, 1.5vw, 22px);
+        background: var(--panel);
+        box-shadow: 0 32px 90px rgba(0, 0, 0, 0.42);
+      }
+
+      img {
+        display: block;
+        width: 100%;
+        height: auto;
+        border-radius: 22px;
+      }
+
+      .caption {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        margin: 14px 8px 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .caption strong {
+        color: var(--text);
+        font-weight: 700;
+      }
+
+      @media (max-width: 720px) {
+        body {
+          padding: 12px;
+        }
+
+        .caption {
+          flex-direction: column;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="frame" aria-label="Reliant workflow diagram">
+        <img src="workflow-diagram.svg" alt="Reliant workflow value diagram showing one chat becoming an adaptive pipeline with planning, parallel agent loops, review, retries, rethink, and final answer." />
+        <div class="caption">
+          <span><strong>Technique:</strong> SVG-only primary artifact</span>
+          <span><strong>Design experiment:</strong> content-rich adaptive workflow value diagram</span>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

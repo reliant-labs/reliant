@@ -7,12 +7,11 @@
 
 import { Search, Code2 } from "lucide-react";
 import { OnboardingModal } from "../OnboardingModal";
-import { useOnboardingChecklistStore } from "../../../store/onboardingChecklistStore";
+import {
+  suppressNextOnboardingChatLaunch,
+  useOnboardingChecklistStore,
+} from "../../../store/onboardingChecklistStore";
 import { useViewerStore } from "../../../store/viewerStore";
-import { useChatStore } from "../../../store/chatStore";
-import { useWorktreeStore } from "../../../store/worktreeStore";
-import { useChatParamsStore } from "../../../store/chatParamsStore";
-import { useAttachmentStore } from "../../../store/attachmentStore";
 import type { StepProps } from "../types";
 
 export function CompletionStep({
@@ -22,22 +21,8 @@ export function CompletionStep({
 }: StepProps) {
   const projectHasCode = useOnboardingChecklistStore((s) => s.projectHasCode);
 
-  const handleQuickStart = async (prompt: string) => {
-    // Complete onboarding first
+  const handleQuickStart = () => {
     onComplete();
-    // Small delay to let onboarding close
-    setTimeout(async () => {
-      try {
-        const worktreeId = useWorktreeStore.getState().currentWorktree?.id;
-        if (!worktreeId) return;
-        const chat = await useChatStore.getState().createChat(worktreeId, prompt);
-        useChatParamsStore.getState().transferTempToChat(chat.id);
-        useChatStore.getState().selectChat(chat);
-        useAttachmentStore.getState().clearAttachments("temp");
-      } catch (error) {
-        console.error("Failed to create quick-start chat:", error);
-      }
-    }, 300);
   };
 
   return (
@@ -59,13 +44,7 @@ export function CompletionStep({
           </p>
           <button
             type="button"
-            onClick={() =>
-              handleQuickStart(
-                projectHasCode !== false
-                  ? "Search for refactoring opportunities in this codebase"
-                  : "Write me a Python hello world HTTP server"
-              )
-            }
+            onClick={handleQuickStart}
             className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
           >
             {projectHasCode !== false ? (
@@ -90,6 +69,7 @@ export function CompletionStep({
           <button
             type="button"
             onClick={() => {
+              suppressNextOnboardingChatLaunch();
               onComplete();
               setTimeout(() => {
                 useViewerStore.getState().setWorkflowMode(true);

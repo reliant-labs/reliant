@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/reliant-labs/reliant/internal/builddefaults"
 	"github.com/spf13/cobra"
 )
 
@@ -32,10 +33,13 @@ Reliant server components.`,
 		SilenceErrors: true,
 	}
 
+	defaultServerURL := builddefaults.Value("RELIANT_SERVER_URL", builddefaults.ServerURL, builddefaults.ProductionServerURL)
+	defaultGatewayURL := builddefaults.Value("RELIANT_GATEWAY_URL", builddefaults.GatewayURL, "")
+
 	// Global persistent flags available to all subcommands
 	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
-	root.PersistentFlags().StringVar(&serverURL, "server", envOrDefault("RELIANT_SERVER_URL", "https://reliantapi.com"), "Cloud API server URL")
-	root.PersistentFlags().StringVar(&gatewayURL, "gateway", envOrDefault("RELIANT_GATEWAY_URL", ""), "Daemon gateway URL (defaults to gateway subdomain of --server)")
+	root.PersistentFlags().StringVar(&serverURL, "server", defaultServerURL, "Cloud API server URL")
+	root.PersistentFlags().StringVar(&gatewayURL, "gateway", defaultGatewayURL, "Daemon gateway URL (defaults to gateway subdomain of --server)")
 
 	// Register subcommand groups
 	root.AddCommand(newMonolithCmd())

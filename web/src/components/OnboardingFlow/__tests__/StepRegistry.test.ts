@@ -1,99 +1,99 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import type { StepConfig, LaunchPlan } from "../types";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { StepConfig } from "../types";
 
-// We need a fresh registry for each test. The module exports a singleton,
-// so we re-import it fresh via vi.resetModules().
 let stepRegistry: typeof import("../StepRegistry")["stepRegistry"];
 
 function makeStep(overrides: Partial<StepConfig> & { id: string }): StepConfig {
   return {
-    category: "goal",
-    component: (() => null) as unknown as StepConfig["component"],
-    shouldShow: () => true,
-    order: 0,
-    ...overrides,
+    id: overrides.id,
+    label: overrides.label ?? overrides.id,
+    category: overrides.category ?? "test",
+    component: (() => null) as StepConfig["component"],
+    order: overrides.order ?? 0,
   };
 }
 
 beforeEach(async () => {
-  // Get a fresh module (and therefore a fresh Map inside the class)
   vi.resetModules();
   const mod = await import("../StepRegistry");
   stepRegistry = mod.stepRegistry;
+  stepRegistry.clear();
 });
 
 describe("StepRegistry", () => {
-  it("register() adds a step", () => {
-    stepRegistry.register(makeStep({ id: "a" }));
-    const visible = stepRegistry.getVisibleSteps({});
-    expect(visible).toHaveLength(1);
-    expect(visible[0].id).toBe("a");
+  it("registers and retrieves a step by id", () => {
+    stepRegistry.register(makeStep({ id: "goal" }));
+
+    const step = stepRegistry.getStep("goal");
+
+    expect(step).toBeDefined();
+    expect(step!.id).toBe("goal");
   });
 
-  it("registerMany() adds multiple steps", () => {
+  it("returns undefined for unknown step id", () => {
+    expect(stepRegistry.getStep("nonexistent")).toBeUndefined();
+  });
+
+  it("registers many steps", () => {
     stepRegistry.registerMany([
-      makeStep({ id: "a" }),
-      makeStep({ id: "b" }),
-      makeStep({ id: "c" }),
+      makeStep({ id: "goal" }),
+      makeStep({ id: "compute" }),
+      makeStep({ id: "model" }),
     ]);
-    expect(stepRegistry.getVisibleSteps({})).toHaveLength(3);
+
+    expect(stepRegistry.getStep("goal")).toBeDefined();
+    expect(stepRegistry.getStep("compute")).toBeDefined();
+    expect(stepRegistry.getStep("model")).toBeDefined();
   });
 
-  it("register() with same id overrides existing step", () => {
-    stepRegistry.register(makeStep({ id: "a", order: 0 }));
-    stepRegistry.register(makeStep({ id: "a", order: 5 }));
+  it("overrides duplicate ids", () => {
+    stepRegistry.register(makeStep({ id: "goal", label: "Old", order: 0 }));
+    stepRegistry.register(makeStep({ id: "goal", label: "New", order: 10 }));
 
-    const visible = stepRegistry.getVisibleSteps({});
-    expect(visible).toHaveLength(1);
-    expect(visible[0].order).toBe(5);
+    const step = stepRegistry.getStep("goal");
+    expect(step!.label).toBe("New");
+    expect(step!.order).toBe(10);
   });
 
-  it("getVisibleSteps() filters by shouldShow", () => {
+  it("getStepsForPath returns steps in path order", () => {
     stepRegistry.registerMany([
-      makeStep({ id: "shown", shouldShow: () => true }),
-      makeStep({ id: "hidden", shouldShow: () => false }),
+      makeStep({ id: "model", order: 60 }),
+      makeStep({ id: "goal", order: 0 }),
+      makeStep({ id: "compute", order: 10 }),
     ]);
-    const visible = stepRegistry.getVisibleSteps({});
-    expect(visible).toHaveLength(1);
-    expect(visible[0].id).toBe("shown");
+
+    const steps = stepRegistry.getStepsForPath(["goal", "compute", "model"]);
+
+    expect(steps.map((s) => s.id)).toEqual(["goal", "compute", "model"]);
   });
 
-  it("getVisibleSteps() passes the plan to shouldShow", () => {
-    stepRegistry.register(
-      makeStep({
-        id: "conditional",
-        shouldShow: (plan: Partial<LaunchPlan>) => plan.intent === "build_app",
-      }),
-    );
-
-    expect(stepRegistry.getVisibleSteps({})).toHaveLength(0);
-    expect(
-      stepRegistry.getVisibleSteps({ intent: "build_app" }),
-    ).toHaveLength(1);
-  });
-
-  it("getVisibleSteps() sorts by category order (goal→workspace→compute→start) then by order", () => {
+  it("getStepsForPath skips unregistered step ids", () => {
     stepRegistry.registerMany([
-      makeStep({ id: "start-1", category: "start", order: 0 }),
-      makeStep({ id: "goal-1", category: "goal", order: 1 }),
-      makeStep({ id: "workspace-2", category: "workspace", order: 2 }),
-      makeStep({ id: "workspace-1", category: "workspace", order: 0 }),
-      makeStep({ id: "goal-0", category: "goal", order: 0 }),
-      makeStep({ id: "compute-0", category: "compute", order: 0 }),
+      makeStep({ id: "goal" }),
+      makeStep({ id: "model" }),
     ]);
 
-    const ids = stepRegistry.getVisibleSteps({}).map((s) => s.id);
-    expect(ids).toEqual([
-      "goal-0",
-      "goal-1",
-      "workspace-1",
-      "workspace-2",
-      "compute-0",
-      "start-1",
-    ]);
+    const steps = stepRegistry.getStepsForPath(["goal", "unknown-step", "model"]);
+
+    expect(steps.map((s) => s.id)).toEqual(["goal", "model"]);
   });
 
-  it("empty registry returns empty array", () => {
-    expect(stepRegistry.getVisibleSteps({})).toEqual([]);
+  it("getStepsForPath returns empty array for empty path", () => {
+    stepRegistry.register(makeStep({ id: "goal" }));
+
+    expect(stepRegistry.getStepsForPath([])).toEqual([]);
+  });
+
+  it("clear removes all steps", () => {
+    stepRegistry.registerMany([
+      makeStep({ id: "goal" }),
+      makeStep({ id: "compute" }),
+    ]);
+
+    stepRegistry.clear();
+
+    expect(stepRegistry.getStep("goal")).toBeUndefined();
+    expect(stepRegistry.getStep("compute")).toBeUndefined();
+    expect(stepRegistry.getStepsForPath(["goal", "compute"])).toEqual([]);
   });
 });

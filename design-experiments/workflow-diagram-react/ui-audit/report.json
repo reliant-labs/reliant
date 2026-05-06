@@ -1,0 +1,295 @@
+{
+  "status": "passed",
+  "url": "http://127.0.0.1:4179/?v=3",
+  "profile": "diagram",
+  "checks": [
+    "no-overflow",
+    "max-text-lines",
+    "no-overlap",
+    "min-size",
+    "inside-viewport"
+  ],
+  "scope": "[data-audit=\"workflow-diagram-react-flow\"]",
+  "viewports": [
+    {
+      "name": "desktop",
+      "width": 1440,
+      "height": 900,
+      "status": "passed",
+      "checks": [
+        "no-overflow",
+        "max-text-lines",
+        "no-overlap",
+        "min-size",
+        "inside-viewport"
+      ],
+      "findings": [
+        {
+          "severity": "warning",
+          "check": "max-text-lines",
+          "key": "scope",
+          "selector": "[data-audit=\"workflow-diagram-react-flow\"]",
+          "message": "scope uses 64 rendered text lines",
+          "expected": {
+            "maxLines": 5
+          },
+          "actual": {
+            "lineCount": 64,
+            "text": "React Flow canvasBranching, loops, and recovery paths are rendered as connected nodes and edges.emits parallelizable workparallel launchsubmit evidencepassfail with reasonsresubmit corrected outputtar"
+          }
+        },
+        {
+          "severity": "warning",
+          "check": "inside-viewport",
+          "key": "scope",
+          "selector": "[data-audit=\"workflow-diagram-react-flow\"]",
+          "message": "scope extends outside the initial viewport",
+          "actual": {
+            "rect": {
+              "x": 69,
+              "y": 355.89,
+              "width": 1302,
+              "height": 760,
+              "top": 355.89,
+              "right": 1371,
+              "bottom": 1115.89,
+              "left": 69
+            },
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "top": 0,
+              "left": 0,
+              "right": 1440,
+              "bottom": 900,
+              "width": 1440,
+              "height": 900
+            }
+          }
+        }
+      ],
+      "measurements": [
+        {
+          "key": "scope",
+          "selector": "[data-audit=\"workflow-diagram-react-flow\"]",
+          "role": "",
+          "auditId": "",
+          "tagName": "div",
+          "text": "React Flow canvasBranching, loops, and recovery paths are rendered as connected nodes and edges.emits parallelizable workparallel launchsubmit evidencepassfail with reasonsresubmit corrected outputtar",
+          "rect": {
+            "x": 69,
+            "y": 355.89,
+            "width": 1302,
+            "height": 760,
+            "top": 355.89,
+            "right": 1371,
+            "bottom": 1115.89,
+            "left": 69
+          },
+          "scrollWidth": 1300,
+          "scrollHeight": 758,
+          "clientWidth": 1300,
+          "clientHeight": 758,
+          "overflowX": "hidden",
+          "overflowY": "hidden",
+          "lineCount": 64,
+          "fontSize": "16px",
+          "display": "block",
+          "position": "relative"
+        }
+      ],
+      "artifacts": {
+        "screenshot": "/Users/user/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/workflow-diagram-react/ui-audit/desktop.png",
+        "annotatedScreenshot": "/Users/user/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/workflow-diagram-react/ui-audit/desktop.annotated.png",
+        "dom": "/Users/user/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/workflow-diagram-react/ui-audit/desktop.dom.json"
+      }
+    },
+    {
+      "name": "tablet",
+      "width": 1024,
+      "height": 768,
+      "status": "passed",
+      "checks": [
+        "no-overflow",
+        "max-text-lines",
+        "no-overlap",
+        "min-size",
+        "inside-viewport"
+      ],
+      "findings": [
+        {
+          "severity": "warning",
+          "check": "max-text-lines",
+          "key": "scope",
+          "selector": "[data-audit=\"workflow-diagram-react-flow\"]",
+          "message": "scope uses 64 rendered text lines",
+          "expected": {
+            "maxLines": 5
+          },
+          "actual": {
+            "lineCount": 64,
+            "text": "React Flow canvasBranching, loops, and recovery paths are rendered as connected nodes and edges.emits parallelizable workparallel launchsubmit evidencepassfail with reasonsresubmit corrected outputtar"
+          }
+        },
+        {
+          "severity": "warning",
+          "check": "inside-viewport",
+          "key": "scope",
+          "selector": "[data-audit=\"workflow-diagram-react-flow\"]",
+          "message": "scope extends outside the initial viewport",
+          "actual": {
+            "rect": {
+              "x": 47,
+              "y": 301.94,
+              "width": 1026,
+              "height": 720,
+              "top": 301.94,
+              "right": 1073,
+              "bottom": 1021.94,
+              "left": 47
+            },
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "top": 0,
+              "left": 0,
+              "right": 1024,
+              "bottom": 768,
+              "width": 1024,
+              "height": 768
+            }
+          }
+        }
+      ],
+      "measurements": [
+        {
+          "key": "scope",
+          "selector": "[data-audit=\"workflow-diagram-react-flow\"]",
+          "role": "",
+          "auditId": "",
+          "tagName": "div",
+          "text": "React Flow canvasBranching, loops, and recovery paths are rendered as connected nodes and edges.emits parallelizable workparallel launchsubmit evidencepassfail with reasonsresubmit corrected outputtar",
+          "rect": {
+            "x": 47,
+            "y": 301.94,
+            "width": 1026,
+            "height": 720,
+            "top": 301.94,
+            "right": 1073,
+            "bottom": 1021.94,
+            "left": 47
+          },
+          "scrollWidth": 1024,
+          "scrollHeight": 718,
+          "clientWidth": 1024,
+          "clientHeight": 718,
+          "overflowX": "hidden",
+          "overflowY": "hidden",
+          "lineCount": 64,
+          "fontSize": "16px",
+          "display": "block",
+          "position": "relative"
+        }
+      ],
+      "artifacts": {
+        "screenshot": "/Users/user/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/workflow-diagram-react/ui-audit/tablet.png",
+        "annotatedScreenshot": "/Users/user/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/workflow-diagram-react/ui-audit/tablet.annotated.png",
+        "dom": "/Users/user/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/workflow-diagram-react/ui-audit/tablet.dom.json"
+      }
+    },
+    {
+      "name": "mobile",
+      "width": 390,
+      "height": 844,
+      "status": "passed",
+      "checks": [
+        "no-overflow",
+        "max-text-lines",
+        "no-overlap",
+        "min-size",
+        "inside-viewport"
+      ],
+      "findings": [
+        {
+          "severity": "warning",
+          "check": "max-text-lines",
+          "key": "scope",
+          "selector": "[data-audit=\"workflow-diagram-react-flow\"]",
+          "message": "scope uses 64 rendered text lines",
+          "expected": {
+            "maxLines": 5
+          },
+          "actual": {
+            "lineCount": 64,
+            "text": "React Flow canvasBranching, loops, and recovery paths are rendered as connected nodes and edges.emits parallelizable workparallel launchsubmit evidencepassfail with reasonsresubmit corrected outputtar"
+          }
+        },
+        {
+          "severity": "warning",
+          "check": "inside-viewport",
+          "key": "scope",
+          "selector": "[data-audit=\"workflow-diagram-react-flow\"]",
+          "message": "scope extends outside the initial viewport",
+          "actual": {
+            "rect": {
+              "x": 47,
+              "y": 290.34,
+              "width": 1026,
+              "height": 720,
+              "top": 290.34,
+              "right": 1073,
+              "bottom": 1010.34,
+              "left": 47
+            },
+            "viewport": {
+              "x": 0,
+              "y": 0,
+              "top": 0,
+              "left": 0,
+              "right": 390,
+              "bottom": 844,
+              "width": 390,
+              "height": 844
+            }
+          }
+        }
+      ],
+      "measurements": [
+        {
+          "key": "scope",
+          "selector": "[data-audit=\"workflow-diagram-react-flow\"]",
+          "role": "",
+          "auditId": "",
+          "tagName": "div",
+          "text": "React Flow canvasBranching, loops, and recovery paths are rendered as connected nodes and edges.emits parallelizable workparallel launchsubmit evidencepassfail with reasonsresubmit corrected outputtar",
+          "rect": {
+            "x": 47,
+            "y": 290.34,
+            "width": 1026,
+            "height": 720,
+            "top": 290.34,
+            "right": 1073,
+            "bottom": 1010.34,
+            "left": 47
+          },
+          "scrollWidth": 1024,
+          "scrollHeight": 718,
+          "clientWidth": 1024,
+          "clientHeight": 718,
+          "overflowX": "hidden",
+          "overflowY": "hidden",
+          "lineCount": 64,
+          "fontSize": "16px",
+          "display": "block",
+          "position": "relative"
+        }
+      ],
+      "artifacts": {
+        "screenshot": "/Users/user/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/workflow-diagram-react/ui-audit/mobile.png",
+        "annotatedScreenshot": "/Users/user/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/workflow-diagram-react/ui-audit/mobile.annotated.png",
+        "dom": "/Users/user/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/workflow-diagram-react/ui-audit/mobile.dom.json"
+      }
+    }
+  ],
+  "artifactsDir": "/Users/user/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/workflow-diagram-react/ui-audit"
+}

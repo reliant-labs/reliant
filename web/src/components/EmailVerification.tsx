@@ -166,7 +166,7 @@ export function EmailVerification({ autoSend = true, email }: EmailVerificationP
   const handleSignOut = async () => {
     try {
       await signOut()
-      navigate({ to: '/auth' })
+      navigate({ to: '/auth', search: { redirect: undefined } })
     } catch (err) {
       console.error('Sign out error:', err)
     }

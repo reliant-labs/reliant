@@ -96,7 +96,7 @@ export function OAuthCallback() {
               <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
             </div>
             <button
-              onClick={() => navigate({ to: '/auth' })}
+              onClick={() => navigate({ to: '/auth', search: { redirect: undefined } })}
               className="w-full flex justify-center py-2.5 px-4 border border-border rounded-lg text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 transition-colors"
             >
               Back to Sign In

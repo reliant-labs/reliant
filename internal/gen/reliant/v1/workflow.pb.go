@@ -1918,7 +1918,7 @@ func (x *CopyWorkflowResponse) GetId() string {
 // matching the activity's output structure directly (no translation needed).
 type SimulatedEvent struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Node targets a specific node (supports qualified IDs for inner loop nodes).
+	// Node targets a specific node (supports qualified IDs for inner loops and workflows).
 	// Use dot-notation: "loop_id.inner_node_id" or "outer.inner.node_id".
 	// If omitted, events are applied sequentially.
 	Node string `protobuf:"bytes,1,opt,name=node,proto3" json:"node,omitempty"`

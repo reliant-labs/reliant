@@ -2,8 +2,10 @@
 package simulator
 
 import (
+	"fmt"
 	"testing"
 
+	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -924,6 +926,39 @@ func TestEngine_RunScenario_NestedLoops(t *testing.T) {
 	})
 }
 
+// Workflow with a referenced workflow node.
+const workflowWithRefWorkflow = `
+name: test-ref-workflow
+apiVersion: "1.0"
+entry: [child]
+nodes:
+  - id: child
+    type: workflow
+    ref: project://child-flow
+  - id: done
+    type: save_message
+    args:
+      role: "assistant"
+      content: "Done"
+edges:
+  - from: child
+    default: done
+`
+
+const childWorkflowYAML = `
+name: child-flow
+apiVersion: "1.0"
+entry: [draft]
+nodes:
+  - id: draft
+    type: call_llm
+    args:
+      model: mock
+outputs:
+  response_text: "{{nodes.draft.response_text}}"
+edges: []
+`
+
 // Workflow with ref loop (should still work with black-box mocking)
 const workflowWithRefLoop = `
 name: test-ref-loop
@@ -943,6 +978,37 @@ edges:
   - from: my_loop
     default: done
 `
+
+func TestEngine_RunScenario_RefWorkflowInternalsWithCustomLoader(t *testing.T) {
+	parentWorkflow, err := ParseWorkflowYAML([]byte(workflowWithRefWorkflow))
+	require.NoError(t, err)
+	childWorkflow, err := ParseWorkflowYAML([]byte(childWorkflowYAML))
+	require.NoError(t, err)
+
+	engine := NewEngineWithLoader(parentWorkflow, func(ref string) (*reliantv1.Workflow, error) {
+		if ref == "project://child-flow" {
+			return childWorkflow, nil
+		}
+		return nil, fmt.Errorf("unexpected workflow ref: %s", ref)
+	})
+
+	scenario := &Scenario{
+		Name: "ref_workflow_internal_node",
+		Events: []SimulatedEvent{
+			{Node: "child.draft", Output: llmOutput("child done")},
+		},
+		Expect: &Expectation{
+			Outcome: OutcomeCompleted,
+			Reached: []string{"child", "child.draft", "done"},
+			NodeOutputs: map[string]map[string]interface{}{
+				"child": {"response_text": "child done"},
+			},
+		},
+	}
+
+	result := engine.RunScenario(scenario)
+	assert.Equal(t, StatusPassed, result.Status, "mismatches: %v", result.Mismatches)
+}
 
 func TestEngine_RunScenario_RefLoopBlackBox(t *testing.T) {
 	engine, err := NewEngineFromYAML(workflowWithRefLoop)

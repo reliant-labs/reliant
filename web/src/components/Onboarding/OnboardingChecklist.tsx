@@ -31,6 +31,9 @@ function executeItemAction(item: ChecklistItem) {
     case "create-workflow":
       useViewerStore.getState().setWorkflowMode(true);
       break;
+    case "take-product-tour":
+      void useOnboardingChecklistStore.getState().startWizard();
+      break;
     case "create-workspace":
       window.dispatchEvent(new CustomEvent("open-create-worktree-modal"));
       break;

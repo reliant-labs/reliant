@@ -78,6 +78,7 @@ export type ChecklistItemId =
   | "start-chat"
   | "use-custom-workflow"
   | "create-workflow"
+  | "take-product-tour"
   | "create-workspace"
   | "create-preset"
   | "install-mcp"

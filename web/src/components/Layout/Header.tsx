@@ -25,6 +25,7 @@ import { useProjectStore, type Project } from "../../store/projectStore";
 import { useShortcutsStore } from "../../store/shortcutsStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { ConfigHealthIndicator } from "./ConfigHealthIndicator";
+import { DaemonStatusDot } from "./DaemonStatusDot";
 import { getAdminURL, isDev } from "../../lib/constants";
 import { openExternalLink } from "../../lib/open-link";
 
@@ -408,7 +409,8 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
               </Tooltip>
             )}
 
-            {/* Config Health Indicator */}
+            {/* Daemon and Config Health Indicators */}
+            {!projectPickerMode && <DaemonStatusDot />}
             {!projectPickerMode && <ConfigHealthIndicator />}
 
             {/* Settings button */}

@@ -236,17 +236,20 @@ db-driver-audit:
 	@./scripts/db-driver-audit.sh
 
 ## sqlc: Generate database code with sqlc
-sqlc:
-	@echo "$(YELLOW)Generating database code with sqlc...$(NC)"
-	@if command -v sqlc >/dev/null 2>&1; then \
-		sqlc generate; \
-	elif [ -f "$(HOME)/go/bin/sqlc" ]; then \
-		$(HOME)/go/bin/sqlc generate; \
-	else \
-		echo "$(RED)sqlc not found. Installing...$(NC)"; \
-		$(GOCMD) install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0; \
-		$(HOME)/go/bin/sqlc generate; \
-	fi
+# Pinned to v1.30.0 — newer versions infer SELECT EXISTS(...) for SQLite as
+# bool instead of int64, which breaks the store wrappers (e.g. `exists != 0`).
+SQLC_VERSION := v1.30.0
+SQLC_BIN := $(HOME)/go/bin/sqlc-$(SQLC_VERSION)
+
+$(SQLC_BIN):
+	@echo "$(YELLOW)Installing sqlc $(SQLC_VERSION) → $(SQLC_BIN)...$(NC)"
+	@tmp=$$(mktemp -d) && \
+		GOBIN=$$tmp $(GOCMD) install github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION) && \
+		mv "$$tmp/sqlc" "$(SQLC_BIN)" && rmdir "$$tmp"
+
+sqlc: $(SQLC_BIN)
+	@echo "$(YELLOW)Generating database code with sqlc $(SQLC_VERSION)...$(NC)"
+	@$(SQLC_BIN) generate
 	@echo "$(GREEN)✅ Database code generated$(NC)"
 
 ## db-regenerate: Regenerate schema.sql and sqlc code (run after migration changes)
@@ -593,13 +596,13 @@ changelog-draft:
 	@./scripts/changelog-draft.sh $(VERSION) $(SINCE_TAG)
 
 # Docker-based testing
-docker-build: ## Build Docker images for testing
+docker-test-build: ## Build Docker images for the test compose stack
 	docker compose -f docker-compose.test.yml build
 
-docker-test: docker-build ## Run all tests in Docker
+docker-test: docker-test-build ## Run all tests in Docker
 	docker compose -f docker-compose.test.yml up --abort-on-container-exit --exit-code-from test-runner
 
-docker-e2e: docker-build ## Run e2e tests in Docker
+docker-e2e: docker-test-build ## Run e2e tests in Docker
 	docker compose -f docker-compose.test.yml up -d api web
 	@echo "Waiting for services to be ready..."
 	@sleep 10
