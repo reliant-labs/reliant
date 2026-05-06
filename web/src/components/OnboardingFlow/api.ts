@@ -83,6 +83,9 @@ export interface GitRepo {
   private: boolean;
   language: string;
   updatedAt: string;
+  // Which connected account this repo was sourced from, when ListGitRepos
+  // aggregates across multiple accounts.
+  accountLogin?: string;
 }
 
 export interface ListGitReposResponse {
@@ -94,25 +97,42 @@ export interface SaveGitCredentialRequest {
   provider: string;
   accessToken: string;
   scopes: string;
+  // Optional. Server derives from the access token if empty.
+  accountLogin?: string;
 }
 
-export async function saveGitCredential(req: SaveGitCredentialRequest): Promise<void> {
-  await callRPC<Record<string, unknown>, void>(GIT_CREDENTIAL_SERVICE, "SaveGitCredential", {
-    provider: req.provider,
-    accessToken: req.accessToken,
-    scopes: req.scopes,
-  });
+export async function saveGitCredential(req: SaveGitCredentialRequest): Promise<{ accountLogin: string }> {
+  const res = await callRPC<Record<string, unknown>, { account_login?: string; accountLogin?: string }>(
+    GIT_CREDENTIAL_SERVICE,
+    "SaveGitCredential",
+    {
+      provider: req.provider,
+      accessToken: req.accessToken,
+      scopes: req.scopes,
+      accountLogin: req.accountLogin ?? "",
+      account_login: req.accountLogin ?? "",
+    },
+  );
+  return { accountLogin: res.accountLogin ?? res.account_login ?? "" };
 }
 
 export async function listGitRepos(
   page = 1,
   perPage = 20,
   sort = "updated",
+  accountLogin?: string,
 ): Promise<{ repos: GitRepo[]; hasMore: boolean }> {
   const res = await callRPC<Record<string, unknown>, ListGitReposResponse>(
     GIT_CREDENTIAL_SERVICE,
     "ListGitRepos",
-    { provider: "github", page, perPage, sort },
+    {
+      provider: "github",
+      page,
+      perPage,
+      sort,
+      accountLogin: accountLogin ?? "",
+      account_login: accountLogin ?? "",
+    },
   );
   return { repos: res.repos ?? [], hasMore: res.hasMore ?? false };
 }
@@ -122,6 +142,7 @@ export async function cloneRepo(req: {
   gitRepo: string;
   gitBranch: string;
   path: string;
+  accountLogin?: string;
 }): Promise<{ clonedPath: string }> {
   const res = await callRPC<Record<string, unknown>, { cloned_path?: string; clonedPath?: string }>(
     GIT_CREDENTIAL_SERVICE,
@@ -134,6 +155,8 @@ export async function cloneRepo(req: {
       gitBranch: req.gitBranch,
       git_branch: req.gitBranch,
       path: req.path,
+      accountLogin: req.accountLogin ?? "",
+      account_login: req.accountLogin ?? "",
     },
   );
   return { clonedPath: res.clonedPath ?? res.cloned_path ?? req.path };

@@ -82,12 +82,6 @@ func envOrDefaultInt(key string, defaultVal int) int {
 	return defaultVal
 }
 
-// resolveWebURL returns the Reliant web UI URL for browser-based auth.
-// Resolution order: RELIANT_WEB_URL env > compiled WebURL default > production URL.
-func resolveWebURL() string {
-	return builddefaults.Value("RELIANT_WEB_URL", builddefaults.WebURL, builddefaults.ProductionWebURL)
-}
-
 // resolveGatewayURL returns the gateway URL, deriving it from the server URL if not set.
 // e.g. https://staging.reliantapi.com -> https://gateway-staging.reliantapi.com
 //

@@ -59,17 +59,22 @@ export function OnboardingOverlay() {
   const hasProjects = projects.length > 0 || Boolean(currentProject);
   const showSignIn = authInitialized && !authLoading && !authUser && !authSession;
 
-  // Pre-set compute when a daemon is already connected
+  // Sync daemonPreConnected with the live daemon status. If a daemon is
+  // already active, drop daemon-connect from the path and pre-pick the
+  // local-daemon compute choice when the user hasn't picked yet.
   useEffect(() => {
-    if (activeDaemon && !plan.compute) {
+    if (!activeDaemon) return;
+    if (!plan.compute) {
       updatePlan({
         compute: "local_daemon",
         daemonLocation: "self_hosted",
         daemonProvisioning: false,
         daemonPreConnected: true,
       });
+    } else if (plan.compute === "local_daemon" && !plan.daemonPreConnected) {
+      updatePlan({ daemonPreConnected: true });
     }
-  }, [activeDaemon, plan.compute, updatePlan]);
+  }, [activeDaemon, plan.compute, plan.daemonPreConnected, updatePlan]);
 
   // On mount: check for dev reset param, then hydrate from backend.
   useEffect(() => {

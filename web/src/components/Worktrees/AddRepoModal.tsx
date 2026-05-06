@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from "react";
 import { GitBranch, FolderOpen, Link, Loader2, CheckCircle2, Github } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
-import { getGitCredential, cloneRepo } from "../../api/controlplane-client";
+import { cloneRepo, listGitCredentials } from "../../api/controlplane-client";
+import type { GitAccount } from "../../api/controlplane-client";
 import { useAuthStore } from "../../store/authStore";
 
 interface AddRepoModalProps {
@@ -16,8 +17,9 @@ type ModalState = "idle" | "loading" | "success" | "error";
 export function AddRepoModal({ isOpen, onClose, daemonName }: AddRepoModalProps) {
   const linkGithubAccount = useAuthStore((state) => state.linkGithubAccount);
 
-  const [gitHubConnected, setGitHubConnected] = useState<boolean | null>(null);
+  const [accounts, setAccounts] = useState<GitAccount[]>([]);
   const [checkingGitHub, setCheckingGitHub] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState<string>("");
 
   const [repoUrl, setRepoUrl] = useState("");
   const [branch, setBranch] = useState("main");
@@ -25,6 +27,8 @@ export function AddRepoModal({ isOpen, onClose, daemonName }: AddRepoModalProps)
   const [modalState, setModalState] = useState<ModalState>("idle");
   const [error, setError] = useState<string | null>(null);
   const [clonedPath, setClonedPath] = useState<string | null>(null);
+
+  const gitHubConnected = accounts.length > 0;
 
   // Extract repo name from URL and auto-populate path
   const extractRepoName = useCallback((url: string): string => {
@@ -55,28 +59,30 @@ export function AddRepoModal({ isOpen, onClose, daemonName }: AddRepoModalProps)
     setError(null);
     setClonedPath(null);
 
-    const checkGitHub = async () => {
+    const refreshAccounts = async () => {
       setCheckingGitHub(true);
       try {
-        const cred = await getGitCredential("github");
-        setGitHubConnected(cred.has_token);
+        const res = await listGitCredentials("github");
+        setAccounts(res.accounts ?? []);
+        if (res.accounts?.length === 1) {
+          setSelectedAccount(res.accounts[0].account_login);
+        }
       } catch {
-        // If the call fails, assume not connected
-        setGitHubConnected(false);
+        setAccounts([]);
       } finally {
         setCheckingGitHub(false);
       }
     };
 
-    checkGitHub();
+    refreshAccounts();
   }, [isOpen]);
 
   const handleConnectGitHub = async () => {
     try {
       await linkGithubAccount();
       // Re-check after linking
-      const cred = await getGitCredential("github");
-      setGitHubConnected(cred.has_token);
+      const res = await listGitCredentials("github");
+      setAccounts(res.accounts ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to connect GitHub");
     }
@@ -94,7 +100,7 @@ export function AddRepoModal({ isOpen, onClose, daemonName }: AddRepoModalProps)
     setError(null);
 
     try {
-      const result = await cloneRepo(daemonName, repoUrl, branch, path);
+      const result = await cloneRepo(daemonName, repoUrl, branch, path, selectedAccount || undefined);
       setClonedPath(result.cloned_path);
       setModalState("success");
 
@@ -133,7 +139,7 @@ export function AddRepoModal({ isOpen, onClose, daemonName }: AddRepoModalProps)
       )}
 
       {/* GitHub not connected */}
-      {!checkingGitHub && gitHubConnected === false && (
+      {!checkingGitHub && !gitHubConnected && (
         <div className="space-y-6">
           <div className="flex flex-col items-center justify-center py-6 text-center">
             <div className="p-4 rounded-full bg-muted ring-1 ring-border mb-4">
@@ -169,8 +175,47 @@ export function AddRepoModal({ isOpen, onClose, daemonName }: AddRepoModalProps)
       )}
 
       {/* Clone form */}
-      {!checkingGitHub && gitHubConnected !== false && (
+      {!checkingGitHub && gitHubConnected && (
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Account picker — only render when more than one account is connected */}
+          {accounts.length > 1 && (
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-foreground">
+                GitHub account
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedAccount("")}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                    selectedAccount === ""
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:border-primary/50"
+                  }`}
+                >
+                  Auto (match repo owner)
+                </button>
+                {accounts.map((acct) => (
+                  <button
+                    key={acct.account_login}
+                    type="button"
+                    onClick={() => setSelectedAccount(acct.account_login)}
+                    className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                      selectedAccount === acct.account_login
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border text-muted-foreground hover:border-primary/50"
+                    }`}
+                  >
+                    @{acct.account_login}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Pick which connected account to authenticate with. "Auto"
+                picks the account whose login matches the repo owner.
+              </p>
+            </div>
+          )}
           {error && (
             <div className="p-4 bg-destructive/10 border border-destructive/30 text-destructive rounded-lg text-sm">
               <div className="flex items-start gap-2">

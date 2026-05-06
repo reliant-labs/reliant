@@ -4,7 +4,6 @@ import "os"
 
 const (
 	ProductionServerURL = "https://reliantapi.com"
-	ProductionWebURL    = "https://app.reliantlabs.io"
 )
 
 var (
@@ -12,7 +11,6 @@ var (
 	GatewayURL string
 	AuthURL    string
 	AuthKey    string
-	WebURL     string
 )
 
 func Value(envKey, compiledDefault, fallback string) string {

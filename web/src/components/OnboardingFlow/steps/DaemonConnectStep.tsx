@@ -133,10 +133,10 @@ export function DaemonConnectStep({ onNext }: StepProps) {
       {!connected && (
         <div className="rounded-lg border border-border/40 bg-background p-3 space-y-1.5">
           <span className="block text-xs text-muted-foreground">
-            Run this command in your terminal:
+            Paste this in your terminal (with the token from the previous step):
           </span>
           <code className="block select-all font-mono text-xs text-foreground">
-            reliant daemon start
+            echo "&lt;token&gt;" | reliant daemon start --token
           </code>
         </div>
       )}

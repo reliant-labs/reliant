@@ -210,6 +210,7 @@ export function GitHubConnectStep({ plan, updatePlan, onNext, onBack }: StepProp
         gitRepo: selectedRepo.cloneUrl,
         gitBranch: selectedBranch,
         path: projectPath,
+        accountLogin: selectedRepo.accountLogin,
       });
       const clonedPath = result.clonedPath;
       const loadingToast = toast.loading(`Opening project "${projectName}"...`);
@@ -405,6 +406,11 @@ export function GitHubConnectStep({ plan, updatePlan, onNext, onBack }: StepProp
                       </p>
                     )}
                     <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground/70">
+                      {repo.accountLogin && (
+                        <span className="rounded bg-muted/50 px-1.5 py-0.5 font-medium">
+                          @{repo.accountLogin}
+                        </span>
+                      )}
                       {repo.language && <span>{repo.language}</span>}
                       {repo.defaultBranch && (
                         <span className="flex items-center gap-0.5">
