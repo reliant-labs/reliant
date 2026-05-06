@@ -26,6 +26,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonruntime"
+	"github.com/reliant-labs/reliant/internal/toolexec/transport"
 	"github.com/spf13/cobra"
 )
 
@@ -227,14 +228,16 @@ func (t *bearerAuthTransport) RoundTrip(req *http.Request) (*http.Response, erro
 // It injects the bearer token and, for localhost or when RELIANT_SKIP_TLS_VERIFY=1
 // is set, skips TLS certificate verification (self-signed dev certs).
 func newRegistrationHTTPClient(token, serverURL string) *http.Client {
-	var base http.RoundTripper
+	tr := &http.Transport{
+		// Resolve *.localhost → 127.0.0.1 for dev multi-worktree setups
+		// where macOS can't resolve subdomain.localhost via DNS.
+		DialContext: transport.LocalhostDialContext,
+	}
 	if shouldSkipTLSVerify(serverURL) {
-		base = &http.Transport{
-			TLSClientConfig: &crypto_tls.Config{InsecureSkipVerify: true}, //nolint:gosec // dev only
-		}
+		tr.TLSClientConfig = &crypto_tls.Config{InsecureSkipVerify: true} //nolint:gosec // dev only
 	}
 	return &http.Client{
-		Transport: &bearerAuthTransport{token: token, base: base},
+		Transport: &bearerAuthTransport{token: token, base: tr},
 	}
 }
 

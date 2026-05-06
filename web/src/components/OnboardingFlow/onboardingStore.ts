@@ -73,7 +73,7 @@ export const useOnboardingFlowStore = create<OnboardingStore>()(
 
       requireOnboarding: () => {
         const { state } = get();
-        if (state === "completed") {
+        if (state !== "not_started" && state !== "in_progress" && state !== "completed") {
           set({ state: "not_started", currentStepIndex: 0 });
         }
       },

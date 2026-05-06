@@ -41,13 +41,13 @@ const providerColors: Record<string, string> = {
   openrouter: "#f0ad4e",
 };
 
-const THINKING_LEVELS = [
+const ALL_THINKING_LEVELS = [
   { value: "", label: "Auto" },
   { value: "low", label: "Low" },
   { value: "medium", label: "Medium" },
   { value: "high", label: "High" },
   { value: "xhigh", label: "X-High" },
-] as const;
+];
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -179,10 +179,18 @@ export function ModelSettingsPage({
   const modelDefaultThinking = useMemo(() => {
     const levels = selectedModel?.supportedThinkingLevels;
     if (!levels || levels.length === 0) return null;
-    // Convention: the highest supported level is typically the default
-    // Or if "high" is present, that's the common default
     if (levels.includes("high")) return "high";
     return levels[levels.length - 1];
+  }, [selectedModel]);
+
+  // Build the thinking levels available for the current model
+  // Always include Auto (""), plus only the levels the model supports
+  const availableThinkingLevels = useMemo(() => {
+    const supported = selectedModel?.supportedThinkingLevels;
+    if (!supported || supported.length === 0) return ALL_THINKING_LEVELS.slice(0, 1); // Auto only
+    return ALL_THINKING_LEVELS.filter(
+      (l) => l.value === "" || supported.includes(l.value)
+    );
   }, [selectedModel]);
 
   // Build override object (only non-default/non-auto values)
@@ -195,11 +203,24 @@ export function ModelSettingsPage({
 
   // Handler: change base selection
   const handleSelectTag = (tag: string) => {
-    onChange(buildModelValue({ tags: [tag] }, currentOverrides));
+    const resolvedModel = tagResolvedModels[tag];
+    const supportedLevels = resolvedModel?.supportedThinkingLevels ?? [];
+    const newOverrides = { ...currentOverrides };
+    if (newOverrides.thinking_level && !supportedLevels.includes(newOverrides.thinking_level as string)) {
+      delete newOverrides.thinking_level;
+    }
+    onChange(buildModelValue({ tags: [tag] }, newOverrides));
   };
 
   const handleSelectModel = (modelId: string) => {
-    onChange(buildModelValue({ id: modelId }, currentOverrides));
+    const newModel = models.find((m) => m.id === modelId) ?? models.find((m) => m.id.split("@")[0] === modelId);
+    const newLevels = newModel?.supportedThinkingLevels ?? [];
+    // Clear thinking_level if the new model doesn't support the current level
+    const newOverrides = { ...currentOverrides };
+    if (newOverrides.thinking_level && !newLevels.includes(newOverrides.thinking_level as string)) {
+      delete newOverrides.thinking_level;
+    }
+    onChange(buildModelValue({ id: modelId }, newOverrides));
   };
 
   // Handler: change overrides
@@ -424,7 +445,7 @@ export function ModelSettingsPage({
             }
             className="px-2 py-1 bg-muted border border-border rounded text-foreground text-xs cursor-pointer outline-none hover:border-border/80"
           >
-            {THINKING_LEVELS.map((level) => (
+            {availableThinkingLevels.map((level) => (
               <option key={level.value} value={level.value}>
                 {level.label}
               </option>

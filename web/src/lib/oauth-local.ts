@@ -4,7 +4,7 @@
  */
 
 export const OAUTH_LOCAL_SERVER_PORT = 19284
-export const OAUTH_LOCAL_SERVER_URL = `http://localhost:${OAUTH_LOCAL_SERVER_PORT}`
+export const OAUTH_LOCAL_SERVER_URL = `http://127.0.0.1:${OAUTH_LOCAL_SERVER_PORT}`
 
 /** Shape matching the daemon's StartOAuthFlowResponse (camelCase). */
 export interface OAuthStartResult {

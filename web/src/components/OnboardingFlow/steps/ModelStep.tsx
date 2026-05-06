@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CheckCircle2, ExternalLink, Eye, EyeOff, Gift, KeyRound, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, ExternalLink, Eye, EyeOff, KeyRound, Loader2, XCircle } from "lucide-react";
 import { api } from "@/api/client";
 import { cn } from "@/lib/utils";
 import { getIsDev } from "@/lib/constants";
@@ -13,12 +13,22 @@ import { useOnboardingFlowStore } from "../onboardingStore";
 
 const PROVIDERS = [
   {
+    id: "reliant" as const,
+    modelProvider: "reliant_credits" as ModelProvider,
+    name: "Reliant",
+    docsUrl: "",
+    keyFormat: "",
+    usesOAuth: false as const,
+    builtIn: true as const,
+  },
+  {
     id: "claude" as const,
     modelProvider: "anthropic" as ModelProvider,
     name: "Claude Code",
     docsUrl: "https://claude.ai",
     keyFormat: "",
     usesOAuth: "claude" as const,
+    builtIn: false as const,
   },
   {
     id: "codex" as const,
@@ -27,6 +37,7 @@ const PROVIDERS = [
     docsUrl: "https://github.com/openai/codex",
     keyFormat: "",
     usesOAuth: "codex" as const,
+    builtIn: false as const,
   },
   {
     id: "anthropic" as const,
@@ -35,6 +46,7 @@ const PROVIDERS = [
     docsUrl: "https://console.anthropic.com/settings/keys",
     keyFormat: "sk-ant-...",
     usesOAuth: false as const,
+    builtIn: false as const,
   },
   {
     id: "openai" as const,
@@ -43,6 +55,7 @@ const PROVIDERS = [
     docsUrl: "https://platform.openai.com/api-keys",
     keyFormat: "sk-...",
     usesOAuth: false as const,
+    builtIn: false as const,
   },
   {
     id: "openrouter" as const,
@@ -51,6 +64,7 @@ const PROVIDERS = [
     docsUrl: "https://openrouter.ai/keys",
     keyFormat: "sk-or-...",
     usesOAuth: false as const,
+    builtIn: false as const,
   },
 ];
 
@@ -90,7 +104,7 @@ export function ModelStep({ plan, updatePlan }: StepProps) {
   const oauthAvailability = useOAuthAvailability();
 
   const [eligibility, setEligibility] = useState<EligibilityState>(() => getForcedEligibility() ?? "loading");
-  const [selectedProvider, setSelectedProvider] = useState<ProviderId>("claude");
+  const [selectedProvider, setSelectedProvider] = useState<ProviderId>("reliant");
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -247,52 +261,6 @@ export function ModelStep({ plan, updatePlan }: StepProps) {
       </div>
 
       <div className="space-y-3">
-        {eligibility === "loading" && (
-          <div className="flex items-center justify-center gap-2 rounded-lg border border-border/50 bg-muted/30 p-4 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Checking Reliant credit availability...
-          </div>
-        )}
-
-        {creditsAvailable && (
-          <button
-            type="button"
-            onClick={() => finishOnboarding("reliant_credits")}
-            disabled={saving}
-            className={cn(
-              "flex w-full items-start gap-4 rounded-xl border-2 p-5 text-left transition-all",
-              saving ? "cursor-wait opacity-80" : "hover:border-primary/50 hover:bg-primary/10",
-              plan.modelProvider === "reliant_credits"
-                ? "border-primary bg-primary/10"
-                : "border-primary/30 bg-primary/5",
-            )}
-          >
-            <div className="rounded-lg bg-primary/15 p-2.5 text-primary">
-              {saving ? <Loader2 className="h-6 w-6 animate-spin" /> : <Gift className="h-6 w-6" />}
-            </div>
-            <div className="space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-semibold text-foreground">$20 free on Reliant</span>
-                <span className="rounded bg-primary/20 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">
-                  Available
-                </span>
-              </div>
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                Start now without bringing a key. If capacity changes before claim, you can still use your own provider.
-              </p>
-            </div>
-          </button>
-        )}
-
-        {creditsUnavailable && (
-          <div className="rounded-xl border border-border/50 bg-muted/30 p-4">
-            <p className="text-sm font-medium text-foreground">Bring your own model access</p>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Reliant credits are not available for this session yet, so the setup continues with your own key or OAuth login.
-            </p>
-          </div>
-        )}
-
         <div className="space-y-4 rounded-xl border border-border/50 bg-muted/30 p-4">
           <div className="flex items-start gap-3">
             <KeyRound className="mt-0.5 h-4 w-4 text-primary" />
@@ -326,7 +294,39 @@ export function ModelStep({ plan, updatePlan }: StepProps) {
             ))}
           </div>
 
-          {provider.usesOAuth ? (
+          {provider.builtIn ? (
+            <div className="space-y-3 rounded-lg border border-border/40 bg-background/70 p-4">
+              <p className="text-sm font-medium text-foreground">Use Reliant&apos;s model routing</p>
+              {eligibility === "loading" ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Checking credit availability...
+                </div>
+              ) : creditsAvailable ? (
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  $20 free credit included &mdash; no API key needed.
+                </p>
+              ) : (
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  No API key needed. Reliant routes to the best available model automatically.
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={() => finishOnboarding("reliant_credits")}
+                disabled={saving}
+                className={cn(
+                  "inline-flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition-colors",
+                  !saving
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                    : "cursor-not-allowed bg-muted text-muted-foreground",
+                )}
+              >
+                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                Start with Reliant
+              </button>
+            </div>
+          ) : provider.usesOAuth ? (
             <div className="space-y-3 rounded-lg border border-border/40 bg-background/70 p-4">
               <p className="text-sm font-medium text-foreground">Authenticate via {provider.name}</p>
               <p className="text-xs leading-relaxed text-muted-foreground">

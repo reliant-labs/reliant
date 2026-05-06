@@ -899,8 +899,12 @@ function App() {
         setIsBackendReady(true);
       } catch (err) {
         logger.error("Failed to initialize app:", err);
-        // Don't mark as ready if we couldn't connect
-        // The user will see the loading spinner until the backend is ready
+        // Still mark as ready so the UI renders — the app can handle
+        // a missing daemon connection gracefully (daemon status dot,
+        // chat gating, etc.)
+        if (mounted) {
+          setIsBackendReady(true);
+        }
       }
     };
 

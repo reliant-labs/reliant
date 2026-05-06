@@ -563,13 +563,14 @@ export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
 
           <div className="space-y-1.5">
             <span className="block text-xs font-medium text-foreground">
-              2. Paste this in your terminal
+              2. Start the daemon
             </span>
             <code className="block select-all rounded border border-border/40 bg-background px-3 py-2 font-mono text-xs text-foreground">
-              {pat
-                ? `echo "${pat}" | reliant daemon start --token`
-                : `echo "<token>" | reliant daemon start --token`}
+              reliant daemon start --token
             </code>
+            <p className="text-[11px] text-muted-foreground">
+              The command will prompt you to paste the token.
+            </p>
           </div>
 
           <button

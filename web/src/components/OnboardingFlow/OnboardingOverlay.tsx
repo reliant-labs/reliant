@@ -103,6 +103,11 @@ export function OnboardingOverlay() {
     return null;
   }
 
+  // Hide once onboarding completes (unless dev override is active).
+  if (state === "completed" && !devForceShow) {
+    return null;
+  }
+
   // No-project users must complete required setup before entering the app.
   const shouldShow =
     !projectsLoading &&

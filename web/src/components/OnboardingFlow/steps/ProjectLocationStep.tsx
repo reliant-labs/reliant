@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ConnectError, Code } from "@connectrpc/connect";
 import { FolderOpen, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -81,13 +81,7 @@ export function ProjectLocationStep({ plan, updatePlan, onNext }: StepProps) {
     }
   }, [isCloud]);
 
-  useEffect(() => {
-    if (!isCloud || !usesGeneratedWorkspace || plan.localPath) return;
-    updatePlan({
-      localPath: cloudPath,
-      projectName: suggestedName,
-    });
-  }, [cloudPath, isCloud, plan.localPath, suggestedName, updatePlan, usesGeneratedWorkspace]);
+  const autoAdvancedRef = useRef(false);
 
   const createAndContinue = async (path: string) => {
     if (!path.trim()) return;
@@ -144,7 +138,37 @@ export function ProjectLocationStep({ plan, updatePlan, onNext }: StepProps) {
     }
   };
 
+  useEffect(() => {
+    if (!isCloud || !usesGeneratedWorkspace) return;
+
+    // Always set the plan values for cloud + generated workspace
+    if (!plan.localPath) {
+      updatePlan({
+        localPath: cloudPath,
+        projectName: suggestedName,
+      });
+    }
+
+    // Auto-advance unless devForceShow is on
+    if (autoAdvancedRef.current) return;
+    if (useOnboardingFlowStore.getState().devForceShow) return;
+    autoAdvancedRef.current = true;
+    void createAndContinue(cloudPath);
+  }, [cloudPath, isCloud, plan.localPath, suggestedName, updatePlan, usesGeneratedWorkspace]);
+
   if (isCloud && usesGeneratedWorkspace) {
+    // When not force-showing, render a minimal spinner while the useEffect auto-advances
+    if (!useOnboardingFlowStore.getState().devForceShow) {
+      return (
+        <div className="flex flex-col items-center justify-center py-12 space-y-3">
+          <Loader2 className="w-6 h-6 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Setting up hosted project&hellip;</p>
+          {error && <p className="text-xs text-destructive text-center">{error}</p>}
+        </div>
+      );
+    }
+
+    // devForceShow: render the full hosted project UI for debugging
     return (
       <div className="space-y-6">
         <div className="text-center space-y-2">
@@ -158,7 +182,7 @@ export function ProjectLocationStep({ plan, updatePlan, onNext }: StepProps) {
 
         {plan.daemonProvisioning && (
           <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-3 text-xs leading-relaxed text-sky-700 dark:text-sky-200">
-            Your cloud daemon is provisioning. We'll save this project target now and create/open it as soon as the daemon is ready.
+            Your cloud daemon is provisioning. We&apos;ll save this project target now and create/open it as soon as the daemon is ready.
           </div>
         )}
 
