@@ -13,7 +13,7 @@ export function ResetPasswordScreen() {
 
   const handleSuccess = () => {
     // Navigate back to auth screen (login mode)
-    navigate({ to: '/auth' })
+    navigate({ to: '/auth', search: { redirect: undefined } })
   }
 
   return (

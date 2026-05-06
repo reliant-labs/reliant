@@ -53,6 +53,7 @@ import { getInputDefault, getInputNestedInputs, getInputPresetConfig, getInputUI
 import { parseAskUserMetadata } from "./askUserUtils";
 import { QuestionPrompt } from "./QuestionPrompt";
 import { loadTagModelConfigs } from "../Settings/ModelPreferences";
+import { useGlobalDataStore } from "../../store/globalDataStore";
 
 /** Extract WorkflowInputs schema from a proto Workflow's inputs.
  *  Returns { inputs, groupTags, groupUIs } for use with WorkflowParamsPanel. */
@@ -101,7 +102,7 @@ interface ChatInputProps {
     workflowParams?: Record<string, unknown>,
     targetThread?: string | null,
     selectedPresets?: Record<string, string | null>
-  ) => void;
+  ) => void | Promise<void>;
   onStop?: () => void;
   disabled?: boolean;
   isStreaming?: boolean;
@@ -648,8 +649,15 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
         const merged = { ...currentModel };
         let changed = false;
         if (tagConfig.model_id && !merged.id) {
-          merged.id = tagConfig.model_id;
-          changed = true;
+          // Only apply saved model_id if it's still available in the catalog
+          const availableModels = useGlobalDataStore.getState().models;
+          const modelAvailable = availableModels.some(
+            (m) => m.id === tagConfig.model_id || m.id.split("@")[0] === tagConfig.model_id
+          );
+          if (modelAvailable) {
+            merged.id = tagConfig.model_id;
+            changed = true;
+          }
         }
         if (tagConfig.thinking_level && !merged.thinking_level) {
           merged.thinking_level = tagConfig.thinking_level;
@@ -1220,7 +1228,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
           {} as Record<string, string>
         );
 
-        onSend(
+        await onSend(
           messageWithContexts,
           allAttachmentIds.length > 0 ? allAttachmentIds : undefined,
           workflowToSend,

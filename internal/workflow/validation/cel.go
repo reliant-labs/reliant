@@ -718,6 +718,10 @@ func getProtoNodeOutputFields(node *reliantv1.Node, loader WorkflowLoader) []str
 		return nil
 	case model.NodeTypeLoop:
 		fields := []string{"_iterations", "_completed", "_failed"}
+		// Parallel loops additionally produce _results (keyed map) and _parallel (bool)
+		if loopArgs := node.GetLoop(); loopArgs != nil && model.CelBoolValue(loopArgs.GetParallel()) {
+			fields = append(fields, "_results", "_parallel")
+		}
 		if loopArgs := node.GetLoop(); loopArgs != nil && loopArgs.GetInline() != nil {
 			for key := range loopArgs.GetInline().GetOutputs() {
 				fields = append(fields, key)

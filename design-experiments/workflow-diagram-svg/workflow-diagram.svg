@@ -1,0 +1,305 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" role="img" aria-labelledby="title desc">
+  <title id="title">Reliant workflow value diagram</title>
+  <desc id="desc">A content-rich diagram showing how one chat becomes an adaptive workflow: Agent A plans, emits parallelizable work, parallel agents run loops, structured review passes or fails, failed work retries with feedback, repeated failures trigger a rethink, and passing work reaches the final answer.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07111f"/>
+      <stop offset="0.45" stop-color="#111a32"/>
+      <stop offset="1" stop-color="#050815"/>
+    </linearGradient>
+    <radialGradient id="glowA" cx="45%" cy="22%" r="58%">
+      <stop offset="0" stop-color="#4cc9f0" stop-opacity="0.32"/>
+      <stop offset="0.52" stop-color="#4cc9f0" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#4cc9f0" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowB" cx="80%" cy="72%" r="48%">
+      <stop offset="0" stop-color="#a78bfa" stop-opacity="0.28"/>
+      <stop offset="0.55" stop-color="#a78bfa" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#a78bfa" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#182842" stop-opacity="0.96"/>
+      <stop offset="1" stop-color="#0d1527" stop-opacity="0.96"/>
+    </linearGradient>
+    <linearGradient id="planner" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3ec7ff"/>
+      <stop offset="1" stop-color="#7668ff"/>
+    </linearGradient>
+    <linearGradient id="work" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22d3ee"/>
+      <stop offset="1" stop-color="#2dd4bf"/>
+    </linearGradient>
+    <linearGradient id="agent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#60a5fa"/>
+      <stop offset="1" stop-color="#34d399"/>
+    </linearGradient>
+    <linearGradient id="review" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8d66d"/>
+      <stop offset="1" stop-color="#f59e0b"/>
+    </linearGradient>
+    <linearGradient id="final" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#b4fce6"/>
+      <stop offset="1" stop-color="#6ee7b7"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000712" flood-opacity="0.34"/>
+    </filter>
+    <filter id="smallShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="9" flood-color="#000712" flood-opacity="0.32"/>
+    </filter>
+    <filter id="lineGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <marker id="arrowCyan" markerWidth="16" markerHeight="16" refX="12" refY="8" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L14,8 L2,14 Z" fill="#63e6ff"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="16" markerHeight="16" refX="12" refY="8" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L14,8 L2,14 Z" fill="#6ee7b7"/>
+    </marker>
+    <marker id="arrowAmber" markerWidth="16" markerHeight="16" refX="12" refY="8" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L14,8 L2,14 Z" fill="#fbbf24"/>
+    </marker>
+    <marker id="arrowRed" markerWidth="16" markerHeight="16" refX="12" refY="8" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L14,8 L2,14 Z" fill="#fb7185"/>
+    </marker>
+    <style>
+      svg { background: #07111f; }
+      .font { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .title { font-size: 54px; font-weight: 780; letter-spacing: -1.7px; fill: #f8fbff; }
+      .subtitle { font-size: 20px; font-weight: 500; fill: #9fb2d7; }
+      .eyebrow { font-size: 14px; font-weight: 760; letter-spacing: 2.8px; text-transform: uppercase; fill: #80eaff; }
+      .nodeTitle { font-size: 23px; font-weight: 780; fill: #f8fbff; }
+      .nodeText { font-size: 15px; font-weight: 520; fill: #bad0f4; }
+      .smallText { font-size: 13px; font-weight: 560; fill: #9fb2d7; }
+      .micro { font-size: 11px; font-weight: 760; letter-spacing: 1.6px; fill: #dbeafe; text-transform: uppercase; }
+      .micro.darkMicro { fill: #05242d; }
+      .micro.reviewDark { fill: #2d1600; }
+      .nodeTitle.darkTitle { fill: #06271d; }
+      .nodeText.darkBody { fill: #0d4738; }
+      .label { font-size: 13px; font-weight: 740; fill: #eaf6ff; }
+      .panelLabel { font-size: 16px; font-weight: 760; fill: #cbd9f8; letter-spacing: 0.6px; }
+      .cardStroke { stroke: #30466d; stroke-width: 1.3; }
+      .thinStroke { stroke: #375175; stroke-width: 1; }
+      .dashed { stroke-dasharray: 9 9; }
+      .flow { fill: none; stroke-linecap: round; stroke-linejoin: round; filter: url(#lineGlow); }
+      .flowCyan { stroke: #63e6ff; stroke-width: 4; marker-end: url(#arrowCyan); }
+      .flowGreen { stroke: #6ee7b7; stroke-width: 4; marker-end: url(#arrowGreen); }
+      .flowAmber { stroke: #fbbf24; stroke-width: 4; marker-end: url(#arrowAmber); }
+      .flowRed { stroke: #fb7185; stroke-width: 4; marker-end: url(#arrowRed); }
+      .mutedLine { fill: none; stroke: #52698f; stroke-width: 2; stroke-linecap: round; stroke-dasharray: 4 8; }
+      .pulseCyan { animation: dashCyan 7s linear infinite; stroke-dasharray: 18 18; }
+      .pulseAmber { animation: dashAmber 8s linear infinite; stroke-dasharray: 16 18; }
+      .pulseRed { animation: dashRed 9s linear infinite; stroke-dasharray: 14 20; }
+      .floatA { animation: floatA 7s ease-in-out infinite; }
+      .floatB { animation: floatB 8s ease-in-out infinite; }
+      .floatC { animation: floatC 7.5s ease-in-out infinite; }
+      @keyframes dashCyan { to { stroke-dashoffset: -72; } }
+      @keyframes dashAmber { to { stroke-dashoffset: -68; } }
+      @keyframes dashRed { to { stroke-dashoffset: -68; } }
+      @keyframes floatA { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+      @keyframes floatB { 0%,100% { transform: translateY(0); } 50% { transform: translateY(6px); } }
+      @keyframes floatC { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+      @media (prefers-reduced-motion: reduce) {
+        .pulseCyan, .pulseAmber, .pulseRed, .floatA, .floatB, .floatC { animation: none; }
+      }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1000" fill="url(#bg)"/>
+  <rect width="1600" height="1000" fill="url(#glowA)"/>
+  <rect width="1600" height="1000" fill="url(#glowB)"/>
+
+  <g opacity="0.32">
+    <path d="M0 158H1600 M0 310H1600 M0 462H1600 M0 614H1600 M0 766H1600 M0 918H1600" stroke="#1f3152" stroke-width="1"/>
+    <path d="M120 0V1000 M320 0V1000 M520 0V1000 M720 0V1000 M920 0V1000 M1120 0V1000 M1320 0V1000 M1520 0V1000" stroke="#1a2b49" stroke-width="1"/>
+  </g>
+
+  <g class="font">
+    <text x="80" y="78" class="eyebrow">Reliant-style workflow value</text>
+    <text x="80" y="136" class="title">One chat becomes an adaptive pipeline</text>
+    <text x="82" y="176" class="subtitle">Planning, parallel agents, custom loops, structured review, bounded retries, rethink paths, and a final answer in one visible system.</text>
+
+    <g transform="translate(1235 68)">
+      <rect x="0" y="0" width="282" height="112" rx="24" fill="#091425" stroke="#31486d"/>
+      <text x="24" y="33" class="micro" fill="#8ee8ff">Diagram key</text>
+      <circle cx="28" cy="58" r="6" fill="#63e6ff"/><text x="45" y="63" class="smallText">primary work flow</text>
+      <circle cx="28" cy="84" r="6" fill="#fbbf24"/><text x="45" y="89" class="smallText">review feedback</text>
+      <circle cx="166" cy="58" r="6" fill="#fb7185"/><text x="183" y="63" class="smallText">rethink path</text>
+      <circle cx="166" cy="84" r="6" fill="#6ee7b7"/><text x="183" y="89" class="smallText">pass to final</text>
+    </g>
+  </g>
+
+  <g class="font" transform="translate(75 245)">
+    <rect x="0" y="0" width="1448" height="610" rx="38" fill="#081322" fill-opacity="0.74" stroke="#263d62"/>
+    <text x="34" y="42" class="panelLabel">Adaptive execution graph</text>
+    <text x="1110" y="42" class="smallText">retry ceiling: 3 attempts before plan rethink</text>
+  </g>
+
+  <!-- Primary flow lines behind nodes -->
+  <g>
+    <path class="flow flowCyan pulseCyan" d="M230 460 C290 460 314 402 376 402"/>
+    <path class="flow flowCyan pulseCyan" d="M598 402 C660 402 681 430 734 430"/>
+    <path class="flow flowCyan pulseCyan" d="M598 402 C657 402 681 565 734 565"/>
+    <path class="flow flowCyan pulseCyan" d="M598 402 C660 402 681 700 734 700"/>
+    <path class="flow flowCyan pulseCyan" d="M1024 430 C1088 430 1122 498 1174 545"/>
+    <path class="flow flowCyan pulseCyan" d="M1024 565 C1088 565 1122 560 1174 575"/>
+    <path class="flow flowCyan pulseCyan" d="M1024 700 C1088 700 1122 640 1174 608"/>
+    <path class="flow flowGreen pulseCyan" d="M1324 575 C1370 575 1380 575 1426 575"/>
+    <path class="flow flowAmber pulseAmber" d="M1246 660 C1234 770 1048 820 864 810 C696 801 611 760 532 698"/>
+    <path class="flow flowRed pulseRed" d="M1210 676 C1110 908 698 930 452 822 C312 760 265 640 274 528"/>
+  </g>
+
+  <!-- One chat entry -->
+  <g class="font floatA" transform="translate(92 388)" filter="url(#softShadow)">
+    <rect x="0" y="0" width="150" height="144" rx="30" fill="url(#card)" class="cardStroke"/>
+    <circle cx="42" cy="42" r="18" fill="#101d33" stroke="#56d8ff" stroke-width="2"/>
+    <path d="M34 40 h16 M34 48 h27" stroke="#9befff" stroke-width="3" stroke-linecap="round"/>
+    <text x="30" y="84" class="nodeTitle">One chat</text>
+    <text x="30" y="111" class="nodeText">intent, files,</text>
+    <text x="30" y="132" class="nodeText">constraints</text>
+  </g>
+
+  <!-- Planner -->
+  <g class="font" transform="translate(376 318)" filter="url(#softShadow)">
+    <rect x="0" y="0" width="222" height="168" rx="32" fill="url(#card)" class="cardStroke"/>
+    <rect x="18" y="18" width="78" height="34" rx="17" fill="url(#planner)"/>
+    <text x="34" y="41" class="micro">Agent A</text>
+    <text x="24" y="83" class="nodeTitle">Plan</text>
+    <text x="24" y="112" class="nodeText">breaks intent into</text>
+    <text x="24" y="134" class="nodeText">ordered tasks, checks,</text>
+    <text x="24" y="156" class="nodeText">and exit criteria</text>
+    <g transform="translate(130 28)">
+      <path d="M0 18 h48 M0 38 h70 M0 58 h38" stroke="#8fb9ff" stroke-width="5" stroke-linecap="round" opacity="0.74"/>
+      <circle cx="-11" cy="18" r="5" fill="#63e6ff"/>
+      <circle cx="-11" cy="38" r="5" fill="#63e6ff"/>
+      <circle cx="-11" cy="58" r="5" fill="#63e6ff"/>
+    </g>
+  </g>
+
+  <!-- Work queue -->
+  <g class="font" transform="translate(408 570)" filter="url(#softShadow)">
+    <rect x="0" y="0" width="176" height="156" rx="28" fill="url(#card)" class="cardStroke"/>
+    <rect x="22" y="18" width="132" height="32" rx="16" fill="url(#work)"/>
+    <text x="38" y="40" class="micro darkMicro">Work graph</text>
+    <text x="24" y="79" class="nodeTitle">Emits</text>
+    <text x="24" y="107" class="nodeText">parallelizable</text>
+    <text x="24" y="129" class="nodeText">outputs with</text>
+    <text x="24" y="151" class="nodeText">dependencies</text>
+  </g>
+
+  <!-- Parallel lane frame -->
+  <g class="font" transform="translate(684 320)">
+    <rect x="0" y="0" width="394" height="470" rx="34" fill="#0b1728" fill-opacity="0.74" stroke="#2c4368"/>
+    <text x="28" y="42" class="panelLabel">Parallel custom loops</text>
+    <text x="240" y="42" class="smallText">run together</text>
+    <path d="M24 72H366" stroke="#2c4368"/>
+  </g>
+
+  <!-- Agent loops -->
+  <g class="font floatB" transform="translate(734 365)" filter="url(#smallShadow)">
+    <rect x="0" y="0" width="290" height="104" rx="24" fill="url(#card)" class="cardStroke"/>
+    <rect x="18" y="17" width="66" height="28" rx="14" fill="url(#agent)"/>
+    <text x="32" y="36" class="micro darkMicro">Agent B</text>
+    <text x="100" y="37" class="label">Implementation loop</text>
+    <text x="22" y="68" class="nodeText">build task, self-check, emit diff</text>
+    <path d="M219 73 C250 51 267 74 244 91 C221 107 188 95 194 66" fill="none" stroke="#6ee7b7" stroke-width="3" marker-end="url(#arrowGreen)"/>
+  </g>
+
+  <g class="font floatC" transform="translate(734 500)" filter="url(#smallShadow)">
+    <rect x="0" y="0" width="290" height="104" rx="24" fill="url(#card)" class="cardStroke"/>
+    <rect x="18" y="17" width="66" height="28" rx="14" fill="#8b5cf6"/>
+    <text x="32" y="36" class="micro">Agent C</text>
+    <text x="100" y="37" class="label">Validation loop</text>
+    <text x="22" y="68" class="nodeText">test, inspect, isolate failures</text>
+    <path d="M219 73 C250 51 267 74 244 91 C221 107 188 95 194 66" fill="none" stroke="#a78bfa" stroke-width="3" marker-end="url(#arrowCyan)"/>
+  </g>
+
+  <g class="font floatA" transform="translate(734 635)" filter="url(#smallShadow)">
+    <rect x="0" y="0" width="290" height="104" rx="24" fill="url(#card)" class="cardStroke"/>
+    <rect x="18" y="17" width="66" height="28" rx="14" fill="#38bdf8"/>
+    <text x="32" y="36" class="micro darkMicro">Agent D</text>
+    <text x="100" y="37" class="label">Docs or UX loop</text>
+    <text x="22" y="68" class="nodeText">polish narrative and edges</text>
+    <path d="M219 73 C250 51 267 74 244 91 C221 107 188 95 194 66" fill="none" stroke="#38bdf8" stroke-width="3" marker-end="url(#arrowCyan)"/>
+  </g>
+
+  <!-- Review gate -->
+  <g class="font" transform="translate(1174 487)" filter="url(#softShadow)">
+    <rect x="0" y="0" width="150" height="206" rx="28" fill="url(#card)" class="cardStroke"/>
+    <path d="M75 24 L124 72 L75 120 L26 72 Z" fill="url(#review)"/>
+    <text x="55" y="76" class="micro reviewDark">Review</text>
+    <text x="25" y="141" class="nodeTitle">Gate</text>
+    <text x="25" y="164" class="nodeText">rubric returns</text>
+    <text x="25" y="185" class="nodeText">pass or fail</text>
+  </g>
+
+  <!-- Final -->
+  <g class="font floatC" transform="translate(1426 496)" filter="url(#softShadow)">
+    <rect x="0" y="0" width="120" height="158" rx="30" fill="url(#final)"/>
+    <path d="M36 46 l17 17 l34 -39" fill="none" stroke="#06271d" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="24" y="96" class="nodeTitle darkTitle">Final</text>
+    <text x="24" y="122" class="nodeText darkBody">answer</text>
+    <text x="24" y="145" class="nodeText darkBody">with trace</text>
+  </g>
+
+  <!-- Feedback labels -->
+  <g class="font">
+    <g transform="translate(1110 757)">
+      <rect x="0" y="0" width="236" height="58" rx="18" fill="#241b0a" stroke="#9a6b12"/>
+      <text x="20" y="25" class="label" fill="#ffe5a3">Fail: retry with feedback</text>
+      <text x="20" y="46" class="smallText" fill="#f6c96e">targeted comments return to loops</text>
+    </g>
+    <g transform="translate(260 800)">
+      <rect x="0" y="0" width="286" height="70" rx="20" fill="#2a101a" stroke="#a43e52"/>
+      <text x="22" y="28" class="label" fill="#ffc4d0">Retries exceed 3</text>
+      <text x="22" y="50" class="smallText" fill="#f7a6b6">rethink scope, dependencies, or plan</text>
+    </g>
+    <g transform="translate(1330 528)">
+      <rect x="0" y="0" width="74" height="32" rx="16" fill="#09261d" stroke="#3fd7a5"/>
+      <text x="19" y="21" class="label" fill="#bdf7e5">Pass</text>
+    </g>
+  </g>
+
+  <!-- Capability rail -->
+  <g class="font" transform="translate(112 884)">
+    <rect x="0" y="0" width="1376" height="58" rx="29" fill="#081322" stroke="#283f65"/>
+    <text x="32" y="37" class="micro" fill="#7dd3fc">Capability depth</text>
+    <g transform="translate(210 16)">
+      <rect x="0" y="0" width="150" height="27" rx="14" fill="#10243b" stroke="#2d5682"/>
+      <text x="18" y="19" class="smallText">planning state</text>
+    </g>
+    <g transform="translate(382 16)">
+      <rect x="0" y="0" width="190" height="27" rx="14" fill="#10243b" stroke="#2d5682"/>
+      <text x="18" y="19" class="smallText">parallelizable outputs</text>
+    </g>
+    <g transform="translate(594 16)">
+      <rect x="0" y="0" width="166" height="27" rx="14" fill="#10243b" stroke="#2d5682"/>
+      <text x="18" y="19" class="smallText">multiple agents</text>
+    </g>
+    <g transform="translate(782 16)">
+      <rect x="0" y="0" width="172" height="27" rx="14" fill="#10243b" stroke="#2d5682"/>
+      <text x="18" y="19" class="smallText">structured review</text>
+    </g>
+    <g transform="translate(976 16)">
+      <rect x="0" y="0" width="122" height="27" rx="14" fill="#10243b" stroke="#2d5682"/>
+      <text x="18" y="19" class="smallText">retry paths</text>
+    </g>
+    <g transform="translate(1120 16)">
+      <rect x="0" y="0" width="136" height="27" rx="14" fill="#10243b" stroke="#2d5682"/>
+      <text x="18" y="19" class="smallText">rethink paths</text>
+    </g>
+  </g>
+
+  <!-- Stage numbers -->
+  <g class="font" fill="#07111f">
+    <g transform="translate(204 372)"><circle r="15" fill="#80eaff"/><text x="-4" y="5" font-size="14" font-weight="800">1</text></g>
+    <g transform="translate(586 302)"><circle r="15" fill="#80eaff"/><text x="-4" y="5" font-size="14" font-weight="800">2</text></g>
+    <g transform="translate(1062 350)"><circle r="15" fill="#80eaff"/><text x="-4" y="5" font-size="14" font-weight="800">3</text></g>
+    <g transform="translate(1308 480)"><circle r="15" fill="#fcd34d"/><text x="-4" y="5" font-size="14" font-weight="800">4</text></g>
+    <g transform="translate(1390 646)"><circle r="15" fill="#86efac"/><text x="-4" y="5" font-size="14" font-weight="800">5</text></g>
+  </g>
+</svg>

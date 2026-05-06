@@ -18,13 +18,25 @@ import (
 
 // Engine runs workflow simulations with mocked events
 type Engine struct {
-	workflow *reliantv1.Workflow
+	workflow       *reliantv1.Workflow
+	workflowLoader v2.SimWorkflowLoader
 }
 
-// NewEngine creates a new simulation engine for a workflow
+// NewEngine creates a new simulation engine for a workflow.
 func NewEngine(workflow *reliantv1.Workflow) *Engine {
+	return NewEngineWithLoader(workflow, loadBuiltinWorkflow)
+}
+
+// NewEngineWithLoader creates a simulation engine with a custom workflow loader.
+// Referenced workflow nodes are still mocked as black boxes unless a scenario targets
+// internal nodes with qualified IDs, in which case the loader resolves the ref.
+func NewEngineWithLoader(workflow *reliantv1.Workflow, workflowLoader v2.SimWorkflowLoader) *Engine {
+	if workflowLoader == nil {
+		workflowLoader = loadBuiltinWorkflow
+	}
 	return &Engine{
-		workflow: workflow,
+		workflow:       workflow,
+		workflowLoader: workflowLoader,
 	}
 }
 
@@ -90,7 +102,7 @@ func (e *Engine) RunScenario(scenario *Scenario) *ScenarioResult {
 		StartAt:           scenario.StartAt,
 		InitialState:      scenario.State,
 		HasInternalEvents: hasInternalEvents,
-		WorkflowLoader:    loadBuiltinWorkflow,
+		WorkflowLoader:    e.workflowLoader,
 	}
 
 	// Create the simulator

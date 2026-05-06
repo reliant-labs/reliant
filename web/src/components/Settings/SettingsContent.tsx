@@ -10,6 +10,7 @@ import { MCPSettings } from "./MCPSettings";
 import { WorkspacesSection } from "./WorkspacesSection";
 import { BrowserSettings } from "./BrowserSettings";
 import { TokenSettings } from "./TokenSettings";
+import { GitConnectionsSettings } from "./GitConnectionsSettings";
 import type { SettingsSection } from "./SettingsNavigation";
 import { useEffect, useState } from "react";
 import { PromptsSettings } from "./PromptsSettings";
@@ -86,6 +87,9 @@ export function SettingsContent({
     }
     if (activeSection === "tokens") {
       return <TokenSettings />;
+    }
+    if (activeSection === "git-connections") {
+      return <GitConnectionsSettings />;
     }
     if (activeSection === "developer") {
       return <DeveloperSettings />;

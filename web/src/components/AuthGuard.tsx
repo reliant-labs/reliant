@@ -4,6 +4,8 @@ import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useAuthMode } from '@/hooks/useAuthMode'
 import { ApiKeyLogin } from './ApiKeyLogin'
 
+const allowAnonymousAutoSignIn = import.meta.env.VITE_AUTO_ANON_SIGN_IN === 'true'
+
 interface AuthGuardProps {
   children: React.ReactNode
   requireAuth?: boolean
@@ -38,19 +40,16 @@ export function AuthGuard({
       // For apikey mode, don't navigate — AuthGuard renders ApiKeyLogin inline
       if (authMode === 'apikey') return
 
-      // For supabase mode, auto sign in anonymously instead of redirecting to /auth
-      if (authMode === 'supabase' && !anonSignInAttempted.current) {
+      // Optional zero-friction onboarding: sign in anonymously when explicitly enabled.
+      if (authMode === 'supabase' && allowAnonymousAutoSignIn && !anonSignInAttempted.current) {
         anonSignInAttempted.current = true
         signInAnonymously().catch(() => {
-          navigate({ to: '/auth' })
+          navigate({ to: '/auth', search: { redirect: undefined } })
         })
         return
       }
 
-      // For dev mode or if anonymous sign-in already failed, redirect to /auth
-      if (authMode !== 'supabase') {
-        navigate({ to: '/auth' })
-      }
+      navigate({ to: '/auth', search: { redirect: undefined } })
       return
     }
     

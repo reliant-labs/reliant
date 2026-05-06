@@ -2,16 +2,13 @@
 #
 # Tests the most common successful path through parallel-compete:
 # 1. improve_prompt refines the task spec
-# 2. Three worktrees are created in parallel
-# 3. Three implementation agents run in parallel (black-box workflows)
-# 4. implementations_done join waits for all three
-# 5. Reviewer picks candidate 2 with use_winner strategy
-# 6. apply_winner runs rsync to copy winning implementation
-# 7. complete saves final summary
+# 2. Parallel loop creates 3 worktrees and runs 3 implementation agents
+# 3. Reviewer picks candidate 2 with use_winner strategy
+# 4. apply_winner runs rsync to copy winning implementation
+# 5. complete saves final summary
 #
-# This verifies the use_winner branch: when the reviewer decides one
-# implementation is clearly best, it gets applied directly via rsync.
-# The synthesizer node should be skipped entirely.
+# The implementations node is a parallel loop with inline sub-workflow.
+# Provide one mock per iteration — the simulator assembles them into _results.
 
 name: happy_path
 description: All 3 implementations complete, reviewer selects candidate 2 via use_winner strategy
@@ -34,58 +31,24 @@ events:
         - Write unit tests for all auth flows
       tool_calls: []
 
-  # Step 2: Create worktrees (parallel)
-  - node: create_worktree_1
+  # Step 2: Per-iteration mocks for the parallel loop (one per candidate)
+  - node: implementations
     output:
-      id: "wt1"
-      name: "compete-impl-1"
-      path: "/tmp/worktrees/compete-impl-1"
-      branch: "compete-impl-1"
-      base_branch: "main"
-      repo_id: "test-repo"
-      status: "created"
-  - node: create_worktree_2
-    output:
-      id: "wt2"
-      name: "compete-impl-2"
-      path: "/tmp/worktrees/compete-impl-2"
-      branch: "compete-impl-2"
-      base_branch: "main"
-      repo_id: "test-repo"
-      status: "created"
-  - node: create_worktree_3
-    output:
-      id: "wt3"
-      name: "compete-impl-3"
-      path: "/tmp/worktrees/compete-impl-3"
-      branch: "compete-impl-3"
-      base_branch: "main"
-      repo_id: "test-repo"
-      status: "created"
-
-  # Step 3: Parallel implementations (workflow nodes - BLACK BOX outputs)
-  - node: impl_1
-    output:
-      message:
-        role: assistant
-        text: "Candidate 1: Basic password auth only, no OAuth."
+      worktree_path: "/tmp/worktrees/compete-impl-1"
+      worktree_branch: "compete-impl-1"
       response_text: "Candidate 1: Basic password auth only, no OAuth."
-
-  - node: impl_2
+  - node: implementations
     output:
-      message:
-        role: assistant
-        text: "Candidate 2: Full OAuth + password auth with comprehensive test suite."
+      worktree_path: "/tmp/worktrees/compete-impl-2"
+      worktree_branch: "compete-impl-2"
       response_text: "Candidate 2: Full OAuth + password auth with comprehensive test suite."
-
-  - node: impl_3
+  - node: implementations
     output:
-      message:
-        role: assistant
-        text: "Candidate 3: OAuth only, minimal tests."
+      worktree_path: "/tmp/worktrees/compete-impl-3"
+      worktree_branch: "compete-impl-3"
       response_text: "Candidate 3: OAuth only, minimal tests."
 
-  # Step 4: Review (structured-agent workflow - BLACK BOX)
+  # Step 3: Review (structured-agent workflow — BLACK BOX)
   - node: review
     output:
       message:
@@ -108,7 +71,7 @@ events:
         synthesis_instructions: ""
       completed: true
 
-  # Step 5: apply_winner rsync
+  # Step 4: apply_winner rsync
   - node: apply_winner
     output:
       exit_code: 0
@@ -120,12 +83,7 @@ expect:
   reached:
     - improve_prompt
     - save_improved_prompt
-    - create_worktree_1
-    - create_worktree_2
-    - create_worktree_3
-    - impl_1
-    - impl_2
-    - impl_3
+    - implementations
     - review
     - apply_winner
     - complete

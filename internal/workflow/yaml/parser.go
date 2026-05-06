@@ -52,6 +52,12 @@ func unmarshalWorkflow(node *yaml.Node) (*reliantv1.Workflow, error) {
 	}
 
 	wf := &reliantv1.Workflow{}
+
+	// Track sugar fields for post-processing
+	var sequenceNode *yaml.Node
+	var nodesNode *yaml.Node
+	var hasEntry bool
+
 	for i := 0; i < len(node.Content); i += 2 {
 		key := node.Content[i].Value
 		val := node.Content[i+1]
@@ -70,6 +76,7 @@ func unmarshalWorkflow(node *yaml.Node) (*reliantv1.Workflow, error) {
 
 		case "entry":
 			wf.Entry, err = unmarshalStringOrStringSlice(val)
+			hasEntry = true
 
 		case "presets":
 			wf.Presets, err = unmarshalPresetsConfig(val)
@@ -81,7 +88,7 @@ func unmarshalWorkflow(node *yaml.Node) (*reliantv1.Workflow, error) {
 			wf.Outputs, err = unmarshalOutputMap(val)
 
 		case "nodes":
-			wf.Nodes, err = unmarshalNodeList(val)
+			nodesNode = val // defer parsing — need to check for parallel sugar
 
 		case "edges":
 			wf.Edges, err = unmarshalEdgeList(val)
@@ -92,6 +99,11 @@ func unmarshalWorkflow(node *yaml.Node) (*reliantv1.Workflow, error) {
 		case "daemon":
 			wf.Daemon, err = unmarshalCelDaemonSelector(val)
 
+		// Syntactic sugar: sequence: is a shorthand for entry + nodes + edges
+		// for linear chains. See sugar.go for documentation.
+		case "sequence":
+			sequenceNode = val
+
 		default:
 			return nil, fmt.Errorf("unknown workflow field: %q", key)
 		}
@@ -100,6 +112,42 @@ func unmarshalWorkflow(node *yaml.Node) (*reliantv1.Workflow, error) {
 			return nil, fmt.Errorf("workflow.%s: %w", key, err)
 		}
 	}
+
+	// --- Desugar sequence: ---
+	if sequenceNode != nil {
+		if hasEntry {
+			return nil, fmt.Errorf("workflow: cannot use both 'sequence' and 'entry' (sequence implies entry)")
+		}
+		seqNodes, seqEdges, seqEntry, err := desugarSequence(sequenceNode)
+		if err != nil {
+			return nil, fmt.Errorf("workflow.%s", err)
+		}
+		wf.Entry = seqEntry
+		// Prepend sequence nodes (so they appear first)
+		wf.Nodes = append(seqNodes, wf.Nodes...)
+		// Prepend sequence edges (so sequential flow comes first)
+		wf.Edges = append(seqEdges, wf.Edges...)
+	}
+
+	// --- Parse nodes: with parallel sugar expansion ---
+	if nodesNode != nil {
+		expandedNodes, parallelEdges, parallelFanout, err := expandParallelNodes(nodesNode)
+		if err != nil {
+			return nil, fmt.Errorf("workflow.nodes: %w", err)
+		}
+		wf.Nodes = append(wf.Nodes, expandedNodes...)
+
+		// Rewrite existing edges and entry that target parallel nodes.
+		// This must happen BEFORE appending branch→join edges, since those
+		// edges target the join node (which shares the parallel node's ID)
+		// and should NOT be rewritten.
+		if len(parallelFanout) > 0 {
+			wf.Edges = rewriteEdgesForParallel(wf.Edges, parallelFanout)
+			wf.Entry = rewriteEntryForParallel(wf.Entry, parallelFanout)
+		}
+		wf.Edges = append(wf.Edges, parallelEdges...)
+	}
+
 	return wf, nil
 }
 

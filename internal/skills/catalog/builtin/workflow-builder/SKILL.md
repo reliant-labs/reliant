@@ -73,6 +73,102 @@ Key rules:
 - All cases require a `condition` — use `default` for the fallback
 - For parallelism: create multiple edges from the same source node, OR use `default: [node-a, node-b]`
 
+## Syntactic sugar
+
+These shorthands compile to standard nodes/edges at parse time. They are **not** in the proto — purely YAML convenience.
+
+### `sequence:` sugar
+
+A top-level workflow field (alongside `name:`, `nodes:`, `edges:`) that replaces the combination of `entry:`, `nodes:`, and sequential `edges:` for linear chains.
+
+Rules:
+- Cannot coexist with `entry:` (it implies entry from the first node)
+- CAN coexist with `nodes:` and `edges:` for mixed patterns (e.g., linear main flow with extra branches)
+- Compiles to standard `entry:` + `nodes:` + `edges:` at parse time
+
+Before (explicit):
+```yaml
+entry: [research]
+nodes:
+  - id: research
+    type: workflow
+    ref: builtin://agent
+  - id: implement
+    type: workflow
+    ref: builtin://agent
+  - id: review
+    type: workflow
+    ref: builtin://structured-agent
+edges:
+  - from: research
+    default: implement
+  - from: implement
+    default: review
+```
+
+After (sugar):
+```yaml
+sequence:
+  - id: research
+    type: workflow
+    ref: builtin://agent
+  - id: implement
+    type: workflow
+    ref: builtin://agent
+  - id: review
+    type: workflow
+    ref: builtin://structured-agent
+```
+
+### `type: parallel` sugar
+
+A node type used inside `nodes:` that desugars into branch nodes + a join node + fan-out/fan-in edges.
+
+Rules:
+- Must have `id:` and `branches:` fields
+- `branches:` is a list of regular node definitions
+- The parallel node's `id` becomes the join node's id (so downstream edges referencing it still work)
+- Join uses `condition: all` (all branches must complete)
+- Incoming edges targeting the parallel node get rewritten to fan-out to all branches
+
+Before (explicit):
+```yaml
+nodes:
+  - id: research
+    type: workflow
+    ref: builtin://agent
+  - id: design
+    type: workflow
+    ref: builtin://agent
+  - id: explore
+    type: join
+    condition: all
+edges:
+  - from: trigger
+    default: [research, design]
+  - from: research
+    default: explore
+  - from: design
+    default: explore
+```
+
+After (sugar):
+```yaml
+nodes:
+  - id: explore
+    type: parallel
+    branches:
+      - id: research
+        type: workflow
+        ref: builtin://agent
+      - id: design
+        type: workflow
+        ref: builtin://agent
+edges:
+  - from: trigger
+    default: explore
+```
+
 ## Important rules
 
 ### Parameters

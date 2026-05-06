@@ -246,6 +246,15 @@ export const CHECKLIST_ITEMS: ChecklistItem[] = [
     actionTarget: "workflow-builder",
     actionLabel: "Open builder",
   },
+  {
+    id: "take-product-tour",
+    title: "Take the product tour",
+    description: "Walk through Reliant's chat, workspace, and workflow basics",
+    category: "required",
+    action: "navigate",
+    actionTarget: "product-tour",
+    actionLabel: "Start tour",
+  },
 
   // Bonus items (deeper engagement)
   {

@@ -236,6 +236,10 @@ response_tool:
 
 Sequential multi-node workflows where each node builds on previous results.
 
+<Tip>
+For simple linear chains, consider using `sequence:` syntax sugar instead of writing explicit edges. See [Syntax Sugar](/workflows/custom-workflows#syntax-sugar).
+</Tip>
+
 ### Running Steps After Agent Completes
 
 Use edges to route from an agent's completion to the next node:
@@ -397,6 +401,10 @@ edges:
 The `join: all` node waits until all incoming edges complete. Use worktrees for isolated working directories.
 
 **When to use:** Competitive implementations, exploring multiple approaches, reducing wall-clock time.
+
+<Tip>
+You can simplify the parallel fan-out/join pattern with `type: parallel` syntax sugar. See [Syntax Sugar](/workflows/custom-workflows#syntax-sugar) for the compact form.
+</Tip>
 
 ### Parallel Loops
 

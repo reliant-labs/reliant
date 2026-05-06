@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useChatStore } from "../../store/chatStore";
+import { useChatParamsStore } from "../../store/chatParamsStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
@@ -62,6 +63,12 @@ export function useChatInputState({
       if (chatObj?.workflowName && chatObj.workflowName !== defaultWf) {
         return chatObj.workflowName;
       }
+    }
+    // For new chats, check if onboarding set a one-time workflow selection
+    const tempWorkflow = useChatParamsStore.getState().tempNewChatParams
+      .__selectedWorkflow as string | undefined;
+    if (tempWorkflow) {
+      return tempWorkflow;
     }
     return null;
   });

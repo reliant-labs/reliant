@@ -19,8 +19,6 @@ description: |
     implement forks with memo — accumulates context, sees review feedback via inject.
     review forks with memo — builds on prior analysis, gets fresh review instructions via inject.
 
-entry: [attempt]
-
 inputs:
   model:
     type: model
@@ -61,7 +59,7 @@ inputs:
     default: medium
     description: Extended thinking level
 
-nodes:
+sequence:
   - id: attempt
     type: loop
     while: >
@@ -69,14 +67,12 @@ nodes:
       && iter.iteration < inputs.max_iterations
     ask: "inputs.ask"
     inline:
-      entry: [implement]
-
       outputs:
         review_verdict: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null ? nodes.review.response.verdict : 'pass'}}"
         review_issues: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null ? nodes.review.response.issues : []}}"
         review_summary: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null ? nodes.review.response.summary : ''}}"
 
-      nodes:
+      sequence:
         - id: implement
           type: workflow
           ref: builtin://agent
@@ -179,10 +175,6 @@ nodes:
               ## Review (Attempt {{iter.iteration + 1}}): {{has(output.response) && output.response != null ? output.response.verdict : 'N/A'}}
               {{has(output.response) && output.response != null ? output.response.summary : ''}}
 
-      edges:
-        - from: implement
-          default: [review]
-
   - id: complete
     type: save_message
     args:
@@ -200,7 +192,3 @@ outputs:
   issues: "{{nodes.attempt.review_issues}}"
   summary: "{{nodes.attempt.review_summary}}"
   iterations: "{{nodes.attempt._iterations}}"
-
-edges:
-  - from: attempt
-    default: [complete]

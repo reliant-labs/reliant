@@ -5,7 +5,7 @@
 INSERT INTO item_defaults (id, item_type, slug, is_hidden, reason)
 VALUES (
     'default-preset-ux-reviewer',
-    'preset',
+    2,
     'ux_reviewer',
     true,
     'Specialist preset spawned by code_reviewer'
@@ -24,7 +24,7 @@ DELETE FROM item_defaults WHERE id = 'default-preset-ux-reviewer';
 INSERT INTO item_defaults (id, item_type, slug, is_hidden, reason)
 VALUES (
     'default-preset-conflict-resolver',
-    'preset',
+    2,
     'conflict-resolver',
     true,
     'Specialist preset spawned by git preset'

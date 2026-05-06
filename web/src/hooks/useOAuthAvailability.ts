@@ -14,7 +14,7 @@ export interface UseOAuthAvailabilityReturn {
  * Determines whether OAuth flows (Claude/Codex) can run.
  *
  * - **Electron**: always available immediately (daemon handles it).
- * - **Web**: pings `http://localhost:19284/health` to see if `reliant auth serve` is running.
+ * - **Web**: pings `http://127.0.0.1:19284/health` to see if `reliant auth serve` is running.
  */
 export function useOAuthAvailability(): UseOAuthAvailabilityReturn {
   const isElectron = !!window.electronAPI
