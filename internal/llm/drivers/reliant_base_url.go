@@ -26,7 +26,7 @@ func ResolveReliantBaseURL(_ string) string {
 
 func ResolveReliantAPIKey(apiKey, baseURL string) (string, map[string]string) {
 	trimmedKey := strings.TrimSpace(apiKey)
-	if trimmedKey == "" || !isManagedReliantKey(trimmedKey) || !isLoopbackBaseURL(baseURL) {
+	if trimmedKey == "" || !isManagedReliantKey(trimmedKey) || !isLocalLiteLLMBaseURL(baseURL) {
 		return trimmedKey, nil
 	}
 
@@ -46,7 +46,7 @@ func isManagedReliantKey(apiKey string) bool {
 	return strings.HasPrefix(trimmedKey, "rly_") || strings.HasPrefix(trimmedKey, "rlnt_")
 }
 
-func isLoopbackBaseURL(rawURL string) bool {
+func isLocalLiteLLMBaseURL(rawURL string) bool {
 	parsedURL, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil {
 		return false
@@ -62,5 +62,15 @@ func isLoopbackBaseURL(rawURL string) bool {
 	}
 
 	parsedIP := net.ParseIP(hostname)
-	return parsedIP != nil && parsedIP.IsLoopback()
+	if parsedIP != nil {
+		return parsedIP.IsLoopback()
+	}
+
+	normalizedHostname := strings.TrimSuffix(strings.ToLower(hostname), ".")
+	if normalizedHostname == "litellm" {
+		return true
+	}
+
+	labels := strings.Split(normalizedHostname, ".")
+	return len(labels) >= 3 && labels[0] == "litellm" && labels[2] == "svc"
 }

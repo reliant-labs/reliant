@@ -22,7 +22,6 @@ type Client interface {
 	ReserveManagedReliantUsage(ctx context.Context, managedKey string, request ManagedReliantReservationRequest) (*controlplanev1.ReserveManagedReliantUsageResponse, error)
 	FinalizeManagedReliantUsage(ctx context.Context, managedKey string, request ManagedReliantFinalizeRequest) (*controlplanev1.FinalizeManagedReliantUsageResponse, error)
 	ReleaseManagedReliantUsageReservation(ctx context.Context, managedKey, reservationID string) (*controlplanev1.ReleaseManagedReliantUsageReservationResponse, error)
-	RecordManagedReliantUsage(ctx context.Context, managedKey string, usage ManagedReliantUsage) (*controlplanev1.RecordManagedReliantUsageResponse, error)
 }
 
 type ManagedReliantAffordabilityRequest struct {
@@ -46,16 +45,6 @@ type ManagedReliantFinalizeRequest struct {
 	ReservationID     string
 	SpendUSD          float64
 	Model             string
-	CanonicalModelID  string
-	InputTokens       int64
-	OutputTokens      int64
-	CachedInputTokens int64
-	ObservedCostUSD   *float64
-}
-
-type ManagedReliantUsage struct {
-	LegacySpendUSD    float64
-	LegacyModel       string
 	CanonicalModelID  string
 	InputTokens       int64
 	OutputTokens      int64
@@ -182,26 +171,6 @@ func (c *connectClient) FinalizeManagedReliantUsage(ctx context.Context, managed
 
 func (c *connectClient) ReleaseManagedReliantUsageReservation(ctx context.Context, managedKey, reservationID string) (*controlplanev1.ReleaseManagedReliantUsageReservationResponse, error) {
 	resp, err := c.billingClient().ReleaseManagedReliantUsageReservation(ctx, connect.NewRequest(&controlplanev1.ReleaseManagedReliantUsageReservationRequest{ManagedKey: strings.TrimSpace(managedKey), ReservationId: strings.TrimSpace(reservationID)}))
-	if err != nil {
-		return nil, err
-	}
-	return resp.Msg, nil
-}
-
-func (c *connectClient) RecordManagedReliantUsage(ctx context.Context, managedKey string, usage ManagedReliantUsage) (*controlplanev1.RecordManagedReliantUsageResponse, error) {
-	msg := &controlplanev1.RecordManagedReliantUsageRequest{
-		ManagedKey:        strings.TrimSpace(managedKey),
-		SpendUsd:          usage.LegacySpendUSD,
-		Model:             strings.TrimSpace(usage.LegacyModel),
-		CanonicalModelId:  strings.TrimSpace(usage.CanonicalModelID),
-		InputTokens:       usage.InputTokens,
-		OutputTokens:      usage.OutputTokens,
-		CachedInputTokens: usage.CachedInputTokens,
-	}
-	if usage.ObservedCostUSD != nil {
-		msg.ObservedCostUsd = usage.ObservedCostUSD
-	}
-	resp, err := c.billingClient().RecordManagedReliantUsage(ctx, connect.NewRequest(msg))
 	if err != nil {
 		return nil, err
 	}

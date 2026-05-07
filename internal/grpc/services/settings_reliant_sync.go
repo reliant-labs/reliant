@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -49,6 +51,18 @@ func maskProviderKey(raw string) string {
 		return "***"
 	}
 	return ""
+}
+
+func (s *SettingsService) getExistingReliantProviderKey(ctx context.Context, userID string) (string, bool, error) {
+	key, err := s.database.GetProviderAPIKey(ctx, userID, reliantProviderID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	trimmed := strings.TrimSpace(key)
+	return trimmed, trimmed != "", nil
 }
 
 func (s *SettingsService) isReliantSyncInitialized(ctx context.Context, userID string) (bool, error) {
@@ -107,15 +121,29 @@ func (s *SettingsService) SyncReliantProvider(ctx context.Context, req *connect.
 		managedAccess = repairResp.GetManagedAccess()
 	}
 
-	rotateResp, err := client.RotateCurrentUserReliantAccess(ctx, authHeader, reliantKeyRotationGracePeriod)
+	existingKey, hasExistingKey, err := s.getExistingReliantProviderKey(ctx, userID)
 	if err != nil {
-		logging.Error("Failed to rotate managed Reliant access", "error", err)
-		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("failed to rotate Reliant key"))
+		logging.Error("Failed to load existing Reliant provider key before sync", "error", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load Reliant key"))
 	}
 
-	plaintextKey := strings.TrimSpace(rotateResp.GetPlaintextKey())
-	if plaintextKey == "" {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("no Reliant plaintext key available to sync"))
+	shouldRotate := req.Msg.GetForceRotate() || !hasExistingKey || needsRepair
+	plaintextKey := existingKey
+	createdKey := !hasExistingKey
+	rotatedKey := false
+	if shouldRotate {
+		rotateResp, err := client.RotateCurrentUserReliantAccess(ctx, authHeader, reliantKeyRotationGracePeriod)
+		if err != nil {
+			logging.Error("Failed to rotate managed Reliant access", "error", err)
+			return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("failed to rotate Reliant key"))
+		}
+
+		plaintextKey = strings.TrimSpace(rotateResp.GetPlaintextKey())
+		if plaintextKey == "" {
+			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("no Reliant plaintext key available to sync"))
+		}
+		createdKey = !hasExistingKey || rotateResp.GetReplaced()
+		rotatedKey = rotateResp.GetRotated()
 	}
 
 	if err := s.database.SetProviderAPIKey(ctx, userID, reliantProviderID, plaintextKey); err != nil {
@@ -131,7 +159,7 @@ func (s *SettingsService) SyncReliantProvider(ctx context.Context, req *connect.
 
 	analyticsClient := analytics.GetClientForUser(ctx, userID)
 	action := "updated"
-	if rotateResp.GetReplaced() {
+	if createdKey {
 		action = "connected"
 	}
 	analyticsClient.TrackProviderSettingsUpdated(analytics.ProviderSettingsUpdatedMetrics{
@@ -166,8 +194,8 @@ func (s *SettingsService) SyncReliantProvider(ctx context.Context, req *connect.
 		Message:    "Reliant provider synced",
 		Synced:     true,
 		CreatedOrg: false,
-		CreatedKey: rotateResp.GetReplaced(),
-		RotatedKey: rotateResp.GetRotated(),
+		CreatedKey: createdKey,
+		RotatedKey: rotatedKey,
 		Provider:   makeReliantProviderStatus(true, masked),
 	}), nil
 }

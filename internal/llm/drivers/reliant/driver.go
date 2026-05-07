@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -45,11 +46,74 @@ func getReliantAPIModel(modelID models.ModelID) (string, error) {
 	return "", fmt.Errorf("model %s has no reliant provider", modelID)
 }
 
+func apiKeyPrefixForLog(apiKey string) string {
+	trimmedKey := strings.TrimSpace(apiKey)
+	if trimmedKey == "" {
+		return "none"
+	}
+	if strings.HasPrefix(trimmedKey, "rlnt_") {
+		return "rlnt_"
+	}
+	if strings.HasPrefix(trimmedKey, "rly_") {
+		return "rly_"
+	}
+	if strings.HasPrefix(trimmedKey, "sk-") {
+		return "sk-"
+	}
+	return "other"
+}
+
+func apiKeyTypeForLog(apiKey string) string {
+	trimmedKey := strings.TrimSpace(apiKey)
+	if trimmedKey == "" {
+		return "empty"
+	}
+	if strings.HasPrefix(trimmedKey, "rlnt_") || strings.HasPrefix(trimmedKey, "rly_") {
+		return "managed_reliant"
+	}
+	if strings.HasPrefix(trimmedKey, "sk-") {
+		return "openai_compatible"
+	}
+	return "unknown"
+}
+
+func hasExtraHeader(headers map[string]string, targetKey string) bool {
+	for key := range headers {
+		if strings.EqualFold(key, targetKey) {
+			return true
+		}
+	}
+	return false
+}
+
+func extraHeaderKeysForLog(headers map[string]string) []string {
+	if len(headers) == 0 {
+		return nil
+	}
+
+	keys := make([]string, 0, len(headers))
+	for key := range headers {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 func NewClient(opts llm.DriverOptions) *ReliantClient {
 	// Look up the correct Reliant API model from the registry
 	if apiModel, err := getReliantAPIModel(opts.Model.ID); err == nil {
 		opts.Model.APIModel = apiModel
 	}
+
+	logging.Info("Reliant driver client configured",
+		"base_url", opts.BaseURL,
+		"api_key_prefix", apiKeyPrefixForLog(opts.ApiKey),
+		"api_key_type", apiKeyTypeForLog(opts.ApiKey),
+		"has_x_reliant_managed_key", hasExtraHeader(opts.ExtraHeaders, "X-Reliant-Managed-Key"),
+		"extra_header_keys", extraHeaderKeysForLog(opts.ExtraHeaders),
+		"model", opts.Model.ID,
+		"api_model", opts.Model.APIModel,
+	)
 
 	clientOptions := []option.RequestOption{}
 	if opts.ApiKey != "" {

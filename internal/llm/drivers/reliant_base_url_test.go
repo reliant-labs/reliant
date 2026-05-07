@@ -42,6 +42,15 @@ func TestResolveReliantAPIKey_UsesLoopbackMasterKeyForManagedKey(t *testing.T) {
 	assert.Equal(t, map[string]string{reliantManagedKeyForwardHeader: "rlnt_managed_key"}, headers)
 }
 
+func TestResolveReliantAPIKey_UsesInClusterLiteLLMMasterKeyForManagedKey(t *testing.T) {
+	t.Setenv("LITELLM_MASTER_KEY", "sk-local-master")
+
+	resolvedKey, headers := ResolveReliantAPIKey("rlnt_managed_key", "http://litellm:4000/v1")
+
+	assert.Equal(t, "sk-local-master", resolvedKey)
+	assert.Equal(t, map[string]string{reliantManagedKeyForwardHeader: "rlnt_managed_key"}, headers)
+}
+
 func TestResolveReliantAPIKey_FallsBackToDefaultLocalMasterKey(t *testing.T) {
 	t.Setenv("LITELLM_MASTER_KEY", "")
 
@@ -85,6 +94,26 @@ func TestBuildAvailableDrivers_ReliantManagedKeyUsesLoopbackMasterKey(t *testing
 	assert.Equal(t, map[string]string{reliantManagedKeyForwardHeader: "rlnt_managed_key"}, cfg.ExtraHeaders)
 }
 
+func TestBuildAvailableDrivers_ReliantManagedKeyUsesInClusterLiteLLMMasterKey(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	userID := "test-user"
+	t.Setenv("RELIANT_API_BASE_URL", "http://litellm:4000/v1")
+	t.Setenv("LITELLM_MASTER_KEY", "sk-local-master")
+	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "reliant", "rlnt_managed_key"))
+
+	availableDrivers, err := BuildAvailableDrivers(ctx, repo, userID)
+	require.NoError(t, err)
+
+	cfg, ok := availableDrivers.Drivers["reliant"]
+	require.True(t, ok)
+	assert.Equal(t, "http://litellm:4000/v1", cfg.BaseURL)
+	assert.Equal(t, "sk-local-master", cfg.APIKey)
+	assert.Equal(t, map[string]string{reliantManagedKeyForwardHeader: "rlnt_managed_key"}, cfg.ExtraHeaders)
+}
+
 func TestBuildAvailableDrivers_ReliantManualKeyKeepsLoopbackOverride(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
@@ -104,7 +133,7 @@ func TestBuildAvailableDrivers_ReliantManualKeyKeepsLoopbackOverride(t *testing.
 	assert.Nil(t, cfg.ExtraHeaders)
 }
 
-func TestIsLoopbackBaseURL(t *testing.T) {
+func TestIsLocalLiteLLMBaseURL(t *testing.T) {
 	tests := []struct {
 		name     string
 		rawURL   string
@@ -113,13 +142,17 @@ func TestIsLoopbackBaseURL(t *testing.T) {
 		{name: "localhost", rawURL: "http://localhost:4000/v1", expected: true},
 		{name: "ipv4 loopback", rawURL: "http://127.0.0.1:4000/v1", expected: true},
 		{name: "ipv6 loopback", rawURL: "http://[::1]:4000/v1", expected: true},
+		{name: "in-cluster service", rawURL: "http://litellm:4000/v1", expected: true},
+		{name: "in-cluster svc domain", rawURL: "http://litellm.reliant-dev-reliant-provider.svc:4000/v1", expected: true},
+		{name: "in-cluster cluster-local svc domain", rawURL: "http://litellm.reliant-dev-reliant-provider.svc.cluster.local:4000/v1", expected: true},
 		{name: "remote host", rawURL: "https://proxy.example.com/v1", expected: false},
+		{name: "remote litellm subdomain", rawURL: "https://litellm.example.com/v1", expected: false},
 		{name: "invalid", rawURL: "://bad", expected: false},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			assert.Equal(t, test.expected, isLoopbackBaseURL(test.rawURL))
+			assert.Equal(t, test.expected, isLocalLiteLLMBaseURL(test.rawURL))
 		})
 	}
 }

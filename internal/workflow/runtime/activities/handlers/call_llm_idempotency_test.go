@@ -65,6 +65,25 @@ func mockLLMDriverResolver() drivers.DriverResolver {
 	}
 }
 
+type capturedDriverOptions struct {
+	Preferences     models.Preferences
+	ReasoningEffort string
+}
+
+func captureDriverOptionsResolver(captured *capturedDriverOptions) drivers.DriverResolver {
+	return func(ctx context.Context, userID string, prefs models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) {
+		captured.Preferences = append(models.Preferences(nil), prefs...)
+
+		driverOpts := llm.DriverOptions{}
+		for _, opt := range opts {
+			opt(&driverOpts)
+		}
+		captured.ReasoningEffort = driverOpts.ReasoningEffort
+
+		return &mockLLMDriverForIdempotency{}, nil
+	}
+}
+
 // callLLMInput is a helper that builds an ActivityInput for call_llm with the given model ID.
 func callLLMInput(chatID, threadID, modelID string) ActivityInput {
 	return ActivityInput{

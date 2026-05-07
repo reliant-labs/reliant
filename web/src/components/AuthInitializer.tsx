@@ -116,25 +116,36 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
         logger.info("[AuthInitializer] Session check before prefetch:", {
           hasSession: !!currentSession,
           hasAccessToken: !!currentSession?.access_token,
-          tokenLength: currentSession?.access_token?.length,
+          hasAuthStoreSession: !!session,
+          hasAuthStoreAccessToken: !!session?.access_token,
+          tokenLength: (currentSession?.access_token ?? session?.access_token)?.length,
           isElectron: !!window.electronAPI,
         });
 
-        if (!currentSession?.access_token && window.electronAPI) {
+        let accessToken = currentSession?.access_token ?? session?.access_token;
+        if (!accessToken && window.electronAPI) {
           logger.warn("[AuthInitializer] No access token available yet, waiting longer...");
           await new Promise((resolve) => setTimeout(resolve, 500));
+          const {
+            data: { session: retrySession },
+          } = await supabase.auth.getSession();
+          accessToken = retrySession?.access_token ?? useAuthStore.getState().session?.access_token;
         }
 
-        try {
-          const syncResult = await api.settings.syncReliantProvider();
-          logger.info("[AuthInitializer] Reliant provider sync completed", {
-            synced: syncResult.synced,
-            createdOrg: syncResult.created_org,
-            createdKey: syncResult.created_key,
-            rotatedKey: syncResult.rotated_key,
-          });
-        } catch (error) {
-          logger.warn("[AuthInitializer] Reliant provider sync failed:", error);
+        if (accessToken) {
+          try {
+            const syncResult = await api.settings.syncReliantProvider();
+            logger.info("[AuthInitializer] Reliant provider sync completed", {
+              synced: syncResult.synced,
+              createdOrg: syncResult.created_org,
+              createdKey: syncResult.created_key,
+              rotatedKey: syncResult.rotated_key,
+            });
+          } catch (error) {
+            logger.warn("[AuthInitializer] Reliant provider sync failed:", error);
+          }
+        } else {
+          logger.info("[AuthInitializer] Skipping Reliant provider sync without access token");
         }
 
         const start = performance.now();

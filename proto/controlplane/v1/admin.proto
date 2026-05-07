@@ -109,7 +109,6 @@ service BillingService {
   rpc ReserveManagedReliantUsage(ReserveManagedReliantUsageRequest) returns (ReserveManagedReliantUsageResponse) {}
   rpc FinalizeManagedReliantUsage(FinalizeManagedReliantUsageRequest) returns (FinalizeManagedReliantUsageResponse) {}
   rpc ReleaseManagedReliantUsageReservation(ReleaseManagedReliantUsageReservationRequest) returns (ReleaseManagedReliantUsageReservationResponse) {}
-  rpc RecordManagedReliantUsage(RecordManagedReliantUsageRequest) returns (RecordManagedReliantUsageResponse) {}
 }
 
 message GetCurrentUserReliantStateRequest {}
@@ -190,21 +189,6 @@ message ReleaseManagedReliantUsageReservationRequest {
 }
 
 message ReleaseManagedReliantUsageReservationResponse {}
-
-message RecordManagedReliantUsageRequest {
-  string managed_key = 1;
-  double spend_usd = 2;
-  string model = 3;
-  string canonical_model_id = 4;
-  int64 input_tokens = 5;
-  int64 output_tokens = 6;
-  int64 cached_input_tokens = 7;
-  optional double observed_cost_usd = 8;
-}
-
-message RecordManagedReliantUsageResponse {
-  double total_spend_usd = 1;
-}
 
 service LLMGatewayService {
   rpc CreateLLMKey(CreateLLMKeyRequest) returns (CreateLLMKeyResponse) {}

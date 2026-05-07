@@ -28,6 +28,7 @@ vi.mock('@/store/globalDataStore', () => ({
       refetchModels: mocks.refetchModels,
     }),
   },
+  useModels: () => ({ models: [], loading: false, error: null }),
 }))
 
 vi.mock('@/store/apiKeySetupStore', () => ({

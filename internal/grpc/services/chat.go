@@ -3615,11 +3615,6 @@ func (s *ChatService) buildWorkflowInputs(
 	for key, value := range userParams {
 		v := value.AsInterface()
 
-		if shouldSkipEmptyPresetOverride(key, v) {
-			logging.Info("[buildWorkflowInputs] Skipping empty override", "key", key)
-			continue
-		}
-
 		if key == "tools" {
 			logging.Info("[buildWorkflowInputs] User param tools override", "value", v, "type", fmt.Sprintf("%T", v))
 		}
@@ -3628,20 +3623,10 @@ func (s *ChatService) buildWorkflowInputs(
 		if mapVal, ok := v.(map[string]interface{}); ok {
 			if existing, ok := initialData[key].(map[string]interface{}); ok {
 				for nestedKey, nestedValue := range mapVal {
-					if shouldSkipEmptyPresetOverride(nestedKey, nestedValue) {
-						continue
-					}
 					existing[nestedKey] = nestedValue
 				}
 			} else {
-				filteredMap := make(map[string]interface{}, len(mapVal))
-				for nestedKey, nestedValue := range mapVal {
-					if shouldSkipEmptyPresetOverride(nestedKey, nestedValue) {
-						continue
-					}
-					filteredMap[nestedKey] = nestedValue
-				}
-				initialData[key] = filteredMap
+				initialData[key] = mapVal
 			}
 		} else {
 			initialData[key] = v
@@ -3678,16 +3663,6 @@ func (s *ChatService) buildWorkflowInputs(
 
 // loadWorkflowForBuild loads the workflow definition for buildWorkflowInputs (defaults application).
 // Uses same order as chat validation: DB by slug, then project files. Returns nil if not found.
-
-func shouldSkipEmptyPresetOverride(paramKey string, value interface{}) bool {
-	switch paramKey {
-	case "tools", "spawn_presets":
-		listValue, ok := value.([]interface{})
-		return ok && len(listValue) == 0
-	default:
-		return false
-	}
-}
 
 func (s *ChatService) buildStateUpdateForActiveWorkflow(
 	ctx context.Context,

@@ -531,7 +531,6 @@ models:
         api_model: anthropic/claude-haiku-4.5
       - driver: reliant
         api_model: claude-haiku-4-5
-    default_thinking_level: low
     default_temperature: 1.0
     default_compaction_threshold: 185000
 
@@ -590,7 +589,6 @@ models:
         api_model: google/gemini-3-flash-preview
       - driver: reliant
         api_model: gemini-3-flash-preview
-    default_thinking_level: low
     default_temperature: 1.0
     default_compaction_threshold: 900000
 
@@ -636,7 +634,6 @@ models:
         api_model: google/gemini-2.5-flash
       - driver: reliant
         api_model: gemini-2.5-flash
-    default_thinking_level: low
     default_temperature: 1.0
     default_compaction_threshold: 900000
 
@@ -668,7 +665,6 @@ models:
         api_model: google/gemini-2.5-flash-lite
       - driver: reliant
         api_model: gemini-2.5-flash-lite
-    default_thinking_level: low
     default_temperature: 1.0
     default_compaction_threshold: 900000
 
@@ -690,7 +686,6 @@ models:
     providers:
       - driver: xai
         api_model: grok-3-mini-beta
-    default_thinking_level: low
     default_temperature: 1.0
     default_compaction_threshold: 115000
 
@@ -768,7 +763,6 @@ models:
     providers:
       - driver: vertexai
         api_model: claude-haiku-4-5@20250512
-    default_thinking_level: low
     default_temperature: 1.0
     default_compaction_threshold: 185000
 
@@ -815,7 +809,6 @@ models:
     providers:
       - driver: vertexai
         api_model: gemini-2.5-flash
-    default_thinking_level: low
     default_temperature: 1.0
     default_compaction_threshold: 900000
 
@@ -842,7 +835,6 @@ models:
     providers:
       - driver: mock
         api_model: mock-model
-    default_thinking_level: low
     default_temperature: 1.0
     default_compaction_threshold: 115000
 
@@ -864,7 +856,6 @@ models:
     providers:
       - driver: mock
         api_model: tiny-context
-    default_thinking_level: low
     default_temperature: 1.0
     default_compaction_threshold: 900
 
@@ -886,6 +877,5 @@ models:
     providers:
       - driver: mock
         api_model: small-context
-    default_thinking_level: low
     default_temperature: 1.0
     default_compaction_threshold: 3600

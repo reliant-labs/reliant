@@ -35,8 +35,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/skills/suggest"
 
 	"github.com/reliant-labs/reliant/internal/streaming"
-	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/tokens"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
@@ -65,9 +65,10 @@ type streamProcessingState struct {
 }
 
 type ManagedReliantReservation struct {
-	ManagedKey    string
-	ReservationID string
-	ModelID       string
+	ManagedKey       string
+	ReservationID    string
+	ModelID          string
+	CanonicalModelID string
 }
 
 // ============================================================================
@@ -281,6 +282,16 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	var modelIDWithDriver string
 	var effectiveTemperature *float64
 	var effectiveThinkingLevel string
+	var canonicalModelID string
+	requestedCanonicalModelID := ""
+	protoModel := model.CelModelSelectorValue(args.GetModel())
+	modelSelector := models.ModelSelector{}
+	if protoModel != nil {
+		modelSelector.ID = protoModel.GetId()
+		modelSelector.Tags = protoModel.GetTags()
+		modelSelector.Providers = protoModel.GetProviders()
+		requestedCanonicalModelID = protoModel.GetId()
+	}
 
 	if a.driverResolver != nil {
 		// Probe the injected resolver for its model
@@ -290,6 +301,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		}
 		legacyModel = probeDriver.Model()
 		modelIDWithDriver = string(legacyModel.ID)
+		canonicalModelID = managedReliantCanonicalModelID(string(legacyModel.ID), requestedCanonicalModelID)
 		// For injected resolvers, use arg values directly (no model defaults available)
 		effectiveTemperature = celDoubleValuePtr(args.GetTemperature())
 		if model.CelStringIsSet(args.GetThinkingLevel()) && !model.CelStringIsExpr(args.GetThinkingLevel()) {
@@ -308,15 +320,6 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			if driverConfig.IsConfigured() {
 				availableProviders = append(availableProviders, string(driverID))
 			}
-		}
-
-		// Convert proto model selector to models.ModelSelector
-		protoModel := model.CelModelSelectorValue(args.GetModel())
-		modelSelector := models.ModelSelector{}
-		if protoModel != nil {
-			modelSelector.ID = protoModel.GetId()
-			modelSelector.Tags = protoModel.GetTags()
-			modelSelector.Providers = protoModel.GetProviders()
 		}
 
 		// Resolve model using the new registry
@@ -342,30 +345,26 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			effectiveTemperature = resolvedDef.DefaultTemperature
 		}
 
-		// Determine effective thinking level: empty string means "not set, use model default"
+		// Determine effective thinking level: explicit values win, otherwise use the
+		// model default. Then reconcile through the canonical model capability policy
+		// so stale defaults on non-reasoning models disable thinking instead of
+		// failing before a request can be made.
 		if model.CelStringIsSet(args.GetThinkingLevel()) && !model.CelStringIsExpr(args.GetThinkingLevel()) && model.CelStringValue(args.GetThinkingLevel()) != "" {
 			effectiveThinkingLevel = model.CelStringValue(args.GetThinkingLevel())
 		} else if resolvedDef.DefaultThinkingLevel != "" {
 			effectiveThinkingLevel = resolvedDef.DefaultThinkingLevel
 		}
 
-		// Validate effective thinking level against model capabilities
 		if effectiveThinkingLevel != "" {
 			tl := ThinkingLevel(effectiveThinkingLevel)
 			if !tl.IsValid() {
 				return nil, fmt.Errorf("invalid thinking_level: %s (must be one of: low, medium, high, xhigh)", tl)
 			}
-			if !models.SupportsThinkingLevelForCaps(resolved.Definition.Capabilities, effectiveThinkingLevel) {
-				supported := models.SupportedThinkingLevels(resolved.Definition.Capabilities)
-				return nil, fmt.Errorf(
-					"thinking_level '%s' is not supported for model '%s' on driver '%s' (supported: %s)",
-					effectiveThinkingLevel,
-					resolved.Definition.ID,
-					resolved.Provider.Driver,
-					strings.Join(supported, ", "),
-				)
-			}
 		}
+		effectiveThinkingLevel = models.ReconcileThinkingLevel(
+			models.ResolveThinkingCapability(resolved.Definition.Capabilities),
+			effectiveThinkingLevel,
+		)
 
 		// Build the model ID string with driver suffix for the driver system
 		modelIDWithDriver = resolved.Definition.ID
@@ -375,7 +374,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 
 		// Convert the resolved model definition to a legacy Model for the driver system
 		legacyModel = resolved.Definition.ToModel()
-		resolvedProviderDriver = resolved.Provider.Driver
+		canonicalModelID = managedReliantCanonicalModelID(resolved.Definition.ID, requestedCanonicalModelID, string(legacyModel.ID))
 	}
 
 	// Build preferences for driver selection
@@ -699,7 +698,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		}
 	}
 
-	reservation, err := a.reserveManagedReliantUsage(ctx, chat, driver, history, systemPrompts)
+	reservation, err := a.reserveManagedReliantUsage(ctx, chat, driver, history, systemPrompts, canonicalModelID)
 	if err != nil {
 		return nil, err
 	}
@@ -1547,7 +1546,7 @@ func (a *CallLLMActivity) ReserveManagedReliantUsageForChat(ctx context.Context,
 	if controlPlaneClient != nil {
 		clone.controlPlaneClient = controlPlaneClient
 	}
-	return clone.reserveManagedReliantUsage(ctx, chat, driver, history, systemPrompts)
+	return clone.reserveManagedReliantUsage(ctx, chat, driver, history, systemPrompts, string(driver.Model().ID))
 }
 
 func (a *CallLLMActivity) CompleteManagedReliantReservationForChat(ctx context.Context, chat *db.Chat, driver llm.Driver, usage llm.TokenUsage, streamErr error, reservation *ManagedReliantReservation, controlPlaneClient controlplane.Client) {
@@ -1558,11 +1557,12 @@ func (a *CallLLMActivity) CompleteManagedReliantReservationForChat(ctx context.C
 	clone.completeManagedReliantReservation(ctx, chat, driver, usage, streamErr, reservation)
 }
 
-func (a *CallLLMActivity) reserveManagedReliantUsage(ctx context.Context, chat *db.Chat, driver llm.Driver, history []message.Message, systemPrompts []string) (*ManagedReliantReservation, error) {
+func (a *CallLLMActivity) reserveManagedReliantUsage(ctx context.Context, chat *db.Chat, driver llm.Driver, history []message.Message, systemPrompts []string, canonicalModelID string) (*ManagedReliantReservation, error) {
 	managedKey, modelID, ok := a.managedReliantKey(ctx, chat, driver, "managed reservation")
 	if !ok {
 		return nil, nil
 	}
+	canonicalModelID = managedReliantCanonicalModelID(canonicalModelID, modelID)
 
 	estimatedInputTokens, estimatedOutputTokens := estimateManagedReliantRequestTokens(driver.Model(), history, systemPrompts)
 	estimatedSpendUSD := estimateManagedReliantSpendUSD(driver.Model(), llm.TokenUsage{InputTokens: estimatedInputTokens, OutputTokens: estimatedOutputTokens})
@@ -1571,9 +1571,10 @@ func (a *CallLLMActivity) reserveManagedReliantUsage(ctx context.Context, chat *
 	}
 
 	reservation := &ManagedReliantReservation{
-		ManagedKey:    managedKey,
-		ReservationID: uuid.NewString(),
-		ModelID:       modelID,
+		ManagedKey:       managedKey,
+		ReservationID:    uuid.NewString(),
+		ModelID:          modelID,
+		CanonicalModelID: canonicalModelID,
 	}
 	reserveCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
@@ -1581,7 +1582,7 @@ func (a *CallLLMActivity) reserveManagedReliantUsage(ctx context.Context, chat *
 		ReservationID:         reservation.ReservationID,
 		EstimatedSpendUSD:     estimatedSpendUSD,
 		Model:                 modelID,
-		CanonicalModelID:      modelID,
+		CanonicalModelID:      reservation.CanonicalModelID,
 		EstimatedInputTokens:  estimatedInputTokens,
 		EstimatedOutputTokens: estimatedOutputTokens,
 	})
@@ -1614,11 +1615,13 @@ func (a *CallLLMActivity) completeManagedReliantReservation(ctx context.Context,
 		return
 	}
 
+	canonicalModelID := managedReliantCanonicalModelID(reservation.CanonicalModelID, reservation.ModelID)
+
 	_, err := a.controlPlaneClient.FinalizeManagedReliantUsage(settleCtx, reservation.ManagedKey, controlplane.ManagedReliantFinalizeRequest{
 		ReservationID:     reservation.ReservationID,
 		SpendUSD:          spendUSD,
 		Model:             reservation.ModelID,
-		CanonicalModelID:  reservation.ModelID,
+		CanonicalModelID:  canonicalModelID,
 		InputTokens:       usage.InputTokens,
 		OutputTokens:      usage.OutputTokens,
 		CachedInputTokens: usage.CachedInputTokens,
@@ -1648,7 +1651,27 @@ func (a *CallLLMActivity) managedReliantKey(ctx context.Context, chat *db.Chat, 
 	if !strings.HasPrefix(managedKey, "rlnt_") && !strings.HasPrefix(managedKey, "rly_") {
 		return "", "", false
 	}
-	return managedKey, string(driver.Model().ID), true
+	return managedKey, managedReliantCanonicalModelID(string(driver.Model().ID), string(driver.Model().ID)), true
+}
+
+func managedReliantCanonicalModelID(candidate string, fallbacks ...string) string {
+	for _, raw := range append([]string{candidate}, fallbacks...) {
+		canonicalModelID := strings.TrimSpace(raw)
+		if canonicalModelID == "" {
+			continue
+		}
+		if idx := strings.LastIndex(canonicalModelID, "@"); idx > 0 {
+			canonicalModelID = canonicalModelID[:idx]
+		}
+		canonicalModelID = strings.TrimSpace(canonicalModelID)
+		canonicalModelID = strings.TrimPrefix(canonicalModelID, "anthropic/")
+		canonicalModelID = strings.TrimPrefix(canonicalModelID, "google/")
+		canonicalModelID = strings.TrimPrefix(canonicalModelID, "openai/")
+		if canonicalModelID != "" {
+			return canonicalModelID
+		}
+	}
+	return ""
 }
 
 func chatID(chat *db.Chat) string {

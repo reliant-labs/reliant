@@ -83,10 +83,6 @@ func (f *fakeControlPlaneClient) ReleaseManagedReliantUsageReservation(_ context
 	return &controlplanev1.ReleaseManagedReliantUsageReservationResponse{}, nil
 }
 
-func (f *fakeControlPlaneClient) RecordManagedReliantUsage(_ context.Context, managedKey string, usage controlplane.ManagedReliantUsage) (*controlplanev1.RecordManagedReliantUsageResponse, error) {
-	return &controlplanev1.RecordManagedReliantUsageResponse{TotalSpendUsd: usage.LegacySpendUSD}, nil
-}
-
 func newReliantSyncTestContext() context.Context {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 	ctx = context.WithValue(ctx, auth.UserEmailContextKey, "test.user@example.com")
@@ -140,7 +136,7 @@ func TestSettingsService_SyncReliantProviderRepairsMissingManagedAccessThenRotat
 	assert.Equal(t, "true", marker.Value)
 }
 
-func TestSettingsService_SyncReliantProviderRotatesExistingManagedAccess(t *testing.T) {
+func TestSettingsService_SyncReliantProviderKeepsExistingHealthyManagedAccess(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 	ctx := newReliantSyncTestContext()
@@ -155,11 +151,6 @@ func TestSettingsService_SyncReliantProviderRotatesExistingManagedAccess(t *test
 				ActiveLlmKeyId: "key-1",
 			},
 		},
-		rotateCurrentUserReliantAccessResp: &controlplanev1.RotateCurrentUserReliantAccessResponse{
-			Rotated:      true,
-			Replaced:     false,
-			PlaintextKey: "rlnt_rotated_key",
-		},
 	}
 	svc.controlPlaneClient = cp
 
@@ -169,13 +160,13 @@ func TestSettingsService_SyncReliantProviderRotatesExistingManagedAccess(t *test
 	require.NoError(t, err)
 	assert.True(t, resp.Msg.Success)
 	assert.Equal(t, 0, cp.repairCalls)
-	assert.Equal(t, 1, cp.rotateCalls)
+	assert.Equal(t, 0, cp.rotateCalls)
 	assert.False(t, resp.Msg.CreatedKey)
-	assert.True(t, resp.Msg.RotatedKey)
+	assert.False(t, resp.Msg.RotatedKey)
 
 	stored, err := repo.GetProviderAPIKey(ctx, "test-user", "reliant")
 	require.NoError(t, err)
-	assert.Equal(t, "rlnt_rotated_key", stored)
+	assert.Equal(t, "existing-local-key", stored)
 }
 
 func TestSettingsService_SyncReliantProviderForceRotateSkipsRepair(t *testing.T) {

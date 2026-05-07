@@ -37,7 +37,7 @@ func groupInput(inputs map[string]*reliantv1.Input) *reliantv1.Input {
 	}
 }
 
-func TestBuildWorkflowInputs_EmptyToolsDoesNotOverridePreset(t *testing.T) {
+func TestBuildWorkflowInputs_EmptyToolsOverridesPreset(t *testing.T) {
 	service := &ChatService{}
 	projectPath := t.TempDir()
 
@@ -70,10 +70,10 @@ func TestBuildWorkflowInputs_EmptyToolsDoesNotOverridePreset(t *testing.T) {
 	require.True(t, exists)
 	tools, ok := toolsRaw.([]interface{})
 	require.True(t, ok)
-	require.Equal(t, expectedTools, tools)
+	require.Empty(t, tools)
 }
 
-func TestBuildWorkflowInputs_EmptySpawnPresetsDoesNotOverridePreset(t *testing.T) {
+func TestBuildWorkflowInputs_EmptySpawnPresetsOverridesPreset(t *testing.T) {
 	service := &ChatService{}
 	projectPath := t.TempDir()
 
@@ -106,7 +106,7 @@ func TestBuildWorkflowInputs_EmptySpawnPresetsDoesNotOverridePreset(t *testing.T
 	require.True(t, exists)
 	spawnPresets, ok := spawnPresetsRaw.([]interface{})
 	require.True(t, ok)
-	require.Equal(t, expectedSpawnPresets, spawnPresets)
+	require.Empty(t, spawnPresets)
 }
 
 func TestBuildWorkflowInputs_NonEmptyToolsStillOverridePreset(t *testing.T) {
@@ -191,7 +191,7 @@ func TestValidateWorkflowInputs_WorkflowBuilderModelThinkingShape(t *testing.T) 
 	require.Contains(t, validationErrors[0].Error(), "unknown input(s): thinking_level")
 }
 
-func TestBuildStateUpdateForActiveWorkflow_AppliesSelectedPresetAndSkipsEmptyToolOverrides(t *testing.T) {
+func TestBuildStateUpdateForActiveWorkflow_AppliesSelectedPresetAndEmptyToolOverride(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -237,7 +237,7 @@ func TestBuildStateUpdateForActiveWorkflow_AppliesSelectedPresetAndSkipsEmptyToo
 	require.True(t, exists)
 	tools, ok := toolsRaw.([]interface{})
 	require.True(t, ok)
-	require.NotEmpty(t, tools)
+	require.Empty(t, tools)
 }
 
 func TestBuildStateUpdateForActiveWorkflow_UsesNewPresetSelection(t *testing.T) {
@@ -467,45 +467,30 @@ func TestNormalizeModelInputs_ConvertsLegacyModelProviderString(t *testing.T) {
 	require.Equal(t, []interface{}{"codex"}, modelValue["providers"])
 }
 
-func TestShouldSkipEmptyPresetOverride(t *testing.T) {
-	tests := []struct {
-		name     string
-		key      string
-		value    interface{}
-		expected bool
-	}{
-		{
-			name:     "empty tools list",
-			key:      "tools",
-			value:    []interface{}{},
-			expected: true,
-		},
-		{
-			name:     "empty spawn presets list",
-			key:      "spawn_presets",
-			value:    []interface{}{},
-			expected: true,
-		},
-		{
-			name:     "non-empty tools list",
-			key:      "tools",
-			value:    []interface{}{"a"},
-			expected: false,
-		},
-		{
-			name:     "other empty list key",
-			key:      "something_else",
-			value:    []interface{}{},
-			expected: false,
-		},
-	}
+func TestBuildWorkflowInputs_EmptyNestedListsOverridePresetGroupValues(t *testing.T) {
+	service := &ChatService{}
+	projectPath := t.TempDir()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := shouldSkipEmptyPresetOverride(tt.key, tt.value)
-			require.Equal(t, tt.expected, result)
-		})
-	}
+	userParamsValue, err := structpb.NewValue(map[string]interface{}{
+		"tools":         []interface{}{},
+		"spawn_presets": []interface{}{},
+	})
+	require.NoError(t, err)
+
+	initialInputs := service.buildWorkflowInputs(
+		context.Background(),
+		"user-1",
+		projectPath,
+		"",
+		"builtin://agent",
+		map[string]string{"default": "general"},
+		map[string]*structpb.Value{"default": userParamsValue},
+	)
+
+	defaultGroup, ok := initialInputs["default"].(map[string]interface{})
+	require.True(t, ok)
+	require.Empty(t, defaultGroup["tools"])
+	require.Empty(t, defaultGroup["spawn_presets"])
 }
 
 func TestValidateWorkflowParamStructure_AcceptsNestedKeys(t *testing.T) {

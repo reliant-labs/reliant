@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   checkApiKeys: vi.fn(),
   reset: vi.fn(),
   getSession: vi.fn(),
+  authStoreSession: { current: { access_token: 'token-123' } as { access_token: string } | null },
 }))
 
 vi.mock('@/store/authStore', () => ({
@@ -29,7 +30,7 @@ vi.mock('@/store/authStore', () => ({
         user: { id: 'user-1', email: 'user@example.com' },
         loading: false,
         initialized: true,
-        session: { access_token: 'token-123' },
+        session: mocks.authStoreSession.current,
       }
       return selector ? selector(state) : state
     },
@@ -113,6 +114,7 @@ describe('AuthInitializer Reliant sync', () => {
     })
     mocks.prefetch.mockResolvedValue(undefined)
     mocks.checkApiKeys.mockResolvedValue(undefined)
+    mocks.authStoreSession.current = { access_token: 'token-123' }
     mocks.getSession.mockResolvedValue({
       data: { session: { access_token: 'token-123' } },
     })
@@ -154,5 +156,48 @@ describe('AuthInitializer Reliant sync', () => {
     expect(mocks.initSentry.mock.invocationCallOrder[0]).toBeLessThan(mocks.syncReliantProvider.mock.invocationCallOrder[0])
     expect(mocks.syncReliantProvider.mock.invocationCallOrder[0]).toBeLessThan(mocks.prefetch.mock.invocationCallOrder[0])
     expect(mocks.prefetch.mock.invocationCallOrder[0]).toBeLessThan(mocks.checkApiKeys.mock.invocationCallOrder[0])
+  })
+
+  it('syncs Reliant provider using the auth store token when Supabase has no session', async () => {
+    mocks.getSession.mockResolvedValue({ data: { session: null } })
+    const { AuthInitializer } = await import('@/components/AuthInitializer')
+
+    render(
+      <AuthInitializer>
+        <div>child</div>
+      </AuthInitializer>
+    )
+
+    await act(async () => {
+      await vi.runAllTimersAsync()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(mocks.syncReliantProvider).toHaveBeenCalledTimes(1)
+    expect(mocks.prefetch).toHaveBeenCalledTimes(1)
+    expect(mocks.checkApiKeys).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips Reliant sync until an access token is available', async () => {
+    mocks.authStoreSession.current = null
+    mocks.getSession.mockResolvedValue({ data: { session: null } })
+    const { AuthInitializer } = await import('@/components/AuthInitializer')
+
+    render(
+      <AuthInitializer>
+        <div>child</div>
+      </AuthInitializer>
+    )
+
+    await act(async () => {
+      await vi.runAllTimersAsync()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(mocks.syncReliantProvider).not.toHaveBeenCalled()
+    expect(mocks.prefetch).toHaveBeenCalledTimes(1)
+    expect(mocks.checkApiKeys).toHaveBeenCalledTimes(1)
   })
 })
