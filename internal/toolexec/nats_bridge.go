@@ -306,7 +306,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 
 		respData, _ := json.Marshal(map[string]interface{}{
 			"success":       resp.Success,
-			"payload":       json.RawMessage(resp.Payload),
+			"payload":       resp.Payload,
 			"error_message": resp.ErrorMessage,
 		})
 		_ = msg.Respond(respData)

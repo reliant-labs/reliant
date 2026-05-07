@@ -167,7 +167,7 @@ func (s *workflowCatalogStore) WorkflowSlugExists(ctx context.Context, userID, s
 	if err != nil {
 		return false, err
 	}
-	return exists != 0, nil
+	return exists, nil
 }
 
 func (s *workflowCatalogStore) CountWorkflowDraftsByUser(ctx context.Context, userID string) (int64, error) {
