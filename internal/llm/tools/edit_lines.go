@@ -16,6 +16,7 @@ type EditLinesParams struct {
 	EndLine    int    `json:"end_line,omitempty" jsonschema:"description=The 1-indexed line number to end the operation (inclusive). For insert operations leave empty or set to 0"`
 	NewContent string `json:"new_content,omitempty" jsonschema:"description=The new content to insert or replace with. For delete operations leave empty"`
 	Operation  string `json:"operation" jsonschema:"required,enum=replace|insert_before|insert_after|delete,description=The operation to perform: replace (replace lines start_line to end_line), insert_before (insert before start_line), insert_after (insert after start_line), delete (delete lines start_line to end_line)"`
+	Repo       string `json:"repo,omitempty" jsonschema:"description=Multi-repo only. Which repo the path is relative to: 'root' for the project root\\, or a repo name (e.g. 'api'\\, 'web'). Used as the base for relative paths. Omit in single-repo projects or when path is absolute."`
 }
 
 type EditLinesResponseMetadata struct {
@@ -146,8 +147,11 @@ func (e *editLinesTool) Execute(rctx *rctx.ToolContext, params EditLinesParams) 
 		return NewTextErrorResponse(fmt.Sprintf("new_content is required for %s operation", params.Operation)), nil
 	}
 
-	wd, err := GetWorkingDirectory(rctx)
+	wd, err := ResolveRepoPath(rctx, params.Repo)
 	if err != nil {
+		return NewTextErrorResponse(err.Error()), nil
+	}
+	if wd == "" {
 		return NewTextErrorResponse("No project working directory available"), nil
 	}
 

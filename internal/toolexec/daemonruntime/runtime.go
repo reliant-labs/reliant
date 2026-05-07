@@ -969,10 +969,17 @@ func buildProjectSnapshot(projectPath string) (*reliantv1.ProjectConfigSnapshot,
 // (project-local, project, claude, codex, agents, global, claude/codex global, builtin)
 // and returns them as IndexedSkill protos. The body is included so the server-side
 // skill tool can render the full skill without additional round trips.
+//
+// Skill discovery is recursive across nested repos: each discovered repo's
+// .reliant/skills, .claude/skills, etc. are scanned in addition to the project
+// root's. Each skill carries a Source field identifying which repo it came from
+// ("" for project root) so the LLM can disambiguate same-named skills.
 func indexSkills(projectPath string) ([]*reliantv1.IndexedSkill, []byte) {
+	repoSources := discoverRepoSources(context.Background(), projectPath)
 	snapshot := catalog.DiscoverAll(catalog.DiscoverInput{
 		ProjectPath:         projectPath,
 		LoadFullDefinitions: true,
+		RepoSources:         repoSources,
 	})
 
 	results := make([]*reliantv1.IndexedSkill, 0, len(snapshot.Definitions))
@@ -1020,6 +1027,7 @@ func indexSkills(projectPath string) ([]*reliantv1.IndexedSkill, []byte) {
 			UserInvocable:          userInvocable,
 			ArgumentHint:           def.ArgumentHint,
 			Paths:                  def.Paths,
+			Source:                 def.Source,
 		})
 
 		acc.WriteString(def.SkillPath)

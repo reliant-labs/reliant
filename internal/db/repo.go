@@ -87,6 +87,7 @@ type Repo struct {
 	approvals       core.ApprovalStore
 	projects        core.ProjectStore
 	worktrees       core.WorktreeStore
+	repos           core.RepoStore
 	settings        core.SettingStore
 	attachments     core.AttachmentStore
 	workflows       core.WorkflowStore
@@ -118,6 +119,7 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) *Repo {
 	var approvals core.ApprovalStore
 	var projects core.ProjectStore
 	var worktrees core.WorktreeStore
+	var repos core.RepoStore
 	var settings core.SettingStore
 	var attachments core.AttachmentStore
 	var workflows core.WorkflowStore
@@ -131,6 +133,7 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) *Repo {
 		approvals = postgresstore.NewApprovalStore(pgQueries)
 		projects = postgresstore.NewProjectStore(pgQueries)
 		worktrees = postgresstore.NewWorktreeStore(pgQueries)
+		repos = postgresstore.NewRepoStore(pgQueries)
 		settings = postgresstore.NewSettingStore(pgQueries, q, func(query string) string {
 			return (&Repo{driver: DriverPostgres}).bindQuery(query)
 		})
@@ -146,6 +149,7 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) *Repo {
 		approvals = sqlitestore.NewApprovalStore(sqliteQueries)
 		projects = sqlitestore.NewProjectStore(sqliteQueries)
 		worktrees = sqlitestore.NewWorktreeStore(sqliteQueries)
+		repos = sqlitestore.NewRepoStore(sqliteQueries)
 		settings = sqlitestore.NewSettingStore(sqliteQueries, q, func(query string) string {
 			return (&Repo{driver: DriverSQLite}).bindQuery(query)
 		})
@@ -169,6 +173,7 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) *Repo {
 		approvals:       approvals,
 		projects:        projects,
 		worktrees:       worktrees,
+		repos:           repos,
 		settings:        settings,
 		attachments:     attachments,
 		workflows:       workflows,

@@ -109,21 +109,47 @@ type worktreeStore struct{ q pgdb.Querier }
 func NewWorktreeStore(q pgdb.Querier) core.WorktreeStore { return &worktreeStore{q: q} }
 
 func (s *worktreeStore) CreateWorktree(ctx context.Context, worktree *core.Worktree) error {
+	baseBranchesJSON, _ := encodeBaseBranches(worktree.BaseBranches)
 	return s.q.CreateWorktree(ctx, pgdb.CreateWorktreeParams{
-		ID:         worktree.ID,
-		Name:       worktree.Name,
-		Path:       worktree.Path,
-		Branch:     worktree.Branch,
-		BaseBranch: worktree.BaseBranch,
-		ProjectID:  worktree.ProjectID,
-		ChatID:     ptrToNullString(worktree.ChatID),
-		Status:     worktree.Status,
-		IsMain:     worktree.IsMain,
-		CreatedAt:  worktree.CreatedAt,
-		UpdatedAt:  worktree.UpdatedAt,
-		LastActive: worktree.LastActive,
-		DeletedAt:  projectPtrToNullTime(worktree.DeletedAt),
+		ID:           worktree.ID,
+		Name:         worktree.Name,
+		Path:         worktree.Path,
+		Branch:       worktree.Branch,
+		BaseBranch:   worktree.BaseBranch,
+		BaseBranches: baseBranchesJSON,
+		ProjectID:    worktree.ProjectID,
+		ChatID:       ptrToNullString(worktree.ChatID),
+		Status:       worktree.Status,
+		IsMain:       worktree.IsMain,
+		CreatedAt:    worktree.CreatedAt,
+		UpdatedAt:    worktree.UpdatedAt,
+		LastActive:   worktree.LastActive,
+		DeletedAt:    projectPtrToNullTime(worktree.DeletedAt),
 	})
+}
+
+// encodeBaseBranches marshals a per-repo base-branch map for storage.
+// nil/empty map -> NULL column.
+func encodeBaseBranches(m map[string]string) (sql.NullString, error) {
+	if len(m) == 0 {
+		return sql.NullString{}, nil
+	}
+	encoded, err := json.Marshal(m)
+	if err != nil {
+		return sql.NullString{}, fmt.Errorf("failed to marshal base_branches: %w", err)
+	}
+	return sql.NullString{String: string(encoded), Valid: true}, nil
+}
+
+func decodeBaseBranches(ns sql.NullString) map[string]string {
+	if !ns.Valid || ns.String == "" {
+		return nil
+	}
+	var parsed map[string]string
+	if err := json.Unmarshal([]byte(ns.String), &parsed); err != nil {
+		return nil
+	}
+	return parsed
 }
 
 func (s *worktreeStore) GetWorktree(ctx context.Context, id string) (*core.Worktree, error) {
@@ -183,13 +209,18 @@ func (s *worktreeStore) ListWorktrees(ctx context.Context, filters core.Worktree
 }
 
 func (s *worktreeStore) UpdateWorktree(ctx context.Context, worktree *core.Worktree) error {
+	baseBranchesJSON, err := encodeBaseBranches(worktree.BaseBranches)
+	if err != nil {
+		return err
+	}
 	return s.q.UpdateWorktree(ctx, pgdb.UpdateWorktreeParams{
-		ID:         worktree.ID,
-		Name:       worktree.Name,
-		Branch:     worktree.Branch,
-		Status:     worktree.Status,
-		BaseBranch: worktree.BaseBranch,
-		LastActive: worktree.LastActive,
+		ID:           worktree.ID,
+		Name:         worktree.Name,
+		Branch:       worktree.Branch,
+		Status:       worktree.Status,
+		BaseBranch:   worktree.BaseBranch,
+		BaseBranches: baseBranchesJSON,
+		LastActive:   worktree.LastActive,
 	})
 }
 
@@ -254,6 +285,7 @@ func worktreeFromPG(row pgdb.Worktree) *core.Worktree {
 		Path:            row.Path,
 		Branch:          row.Branch,
 		BaseBranch:      row.BaseBranch,
+		BaseBranches:    decodeBaseBranches(row.BaseBranches),
 		ProjectID:       row.ProjectID,
 		ChatID:          nullStringToPtr(row.ChatID),
 		Status:          row.Status,

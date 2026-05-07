@@ -25,13 +25,38 @@ type CleanupMetadata struct {
 	BranchDeleted    bool `json:"branch_deleted"`
 }
 
-// Worktree represents a git worktree.
+// Worktree represents a workspace-level git worktree.
+//
+// In the multi-repo model, a Worktree spans the entire project workspace, not
+// a single nested repo. Path points at a workspace directory (e.g.
+// ~/.reliant/worktrees/<id>/) that contains N nested git-worktree checkouts —
+// one per Repo, at <Path>/<repo.relative_path>/. There is intentionally no
+// RepoID column: a chat operates at workspace root and uses the per-tool
+// `repo` param to scope tool calls to a specific nested repo. The `repos`
+// table tracks which repos belong to a project; the worktree row is the
+// per-feature workspace identity.
+//
+// Branch is the creation-time branch — useful as a label for display and for
+// archive cleanup, but NOT a source of truth for write operations. The user
+// may check out a different branch in any nested repo via plain git, and a
+// single Worktree row cannot represent N divergent branches anyway. All
+// write paths (push, pull, create-PR) resolve the branch from HEAD on the
+// resolved checkout dir at op time.
+//
+// BaseBranch is the legacy single base branch (single-repo projects use it as
+// canonical). BaseBranches overrides on a per-repo basis for multi-repo
+// workspaces, where repo A may default to `main` and repo B to
+// `master`/`develop`. Lookup order at PR creation time:
+//
+//	worktree.BaseBranches[repo_id] -> worktree.BaseBranch -> daemon
+//	auto-detect (gh -> git remote show -> main/master probe).
 type Worktree struct {
 	ID              string
 	Name            string
 	Path            string
 	Branch          string
 	BaseBranch      string
+	BaseBranches    map[string]string
 	ProjectID       string
 	ChatID          *string
 	Status          int32
@@ -41,6 +66,21 @@ type Worktree struct {
 	LastActive      time.Time
 	DeletedAt       *time.Time
 	CleanupMetadata *CleanupMetadata `json:"cleanup_metadata,omitempty"`
+}
+
+// Repo is a git repository nested inside a project.
+//
+// A project that is itself a git repo has one Repo with RelativePath == "".
+// A project that contains N sibling repos has one Repo per sibling with
+// RelativePath set to the sibling's path relative to the project root.
+type Repo struct {
+	ID           string    `json:"id"`
+	ProjectID    string    `json:"project_id"`
+	Name         string    `json:"name"`
+	RelativePath string    `json:"relative_path"`
+	RemoteURL    *string   `json:"remote_url,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 // ProjectFilters contains options for filtering projects.
@@ -83,4 +123,14 @@ type WorktreeStore interface {
 	DeleteWorktree(ctx context.Context, id string) error
 	ArchiveWorktree(ctx context.Context, id string) error
 	UnarchiveWorktree(ctx context.Context, id string) error
+}
+
+// RepoStore is the shared contract for nested-repo persistence across drivers.
+type RepoStore interface {
+	CreateRepo(ctx context.Context, repo *Repo) error
+	GetRepo(ctx context.Context, id string) (*Repo, error)
+	GetRepoByProjectAndPath(ctx context.Context, projectID, relativePath string) (*Repo, error)
+	ListReposByProject(ctx context.Context, projectID string) ([]*Repo, error)
+	UpdateRepo(ctx context.Context, repo *Repo) error
+	DeleteRepo(ctx context.Context, id string) error
 }

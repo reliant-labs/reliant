@@ -26,6 +26,7 @@ type GrepParams struct {
 	WordBoundary   bool   `json:"word_boundary,omitempty" jsonschema:"description=Only match whole words (rg -w). Useful for matching variable names without partial matches."`
 	FixedStrings   bool   `json:"fixed_strings,omitempty" jsonschema:"description=Treat pattern as literal string not regex (rg -F). Useful when searching for special characters like braces or brackets without escaping."`
 	IncludeIgnored bool   `json:"include_ignored,omitempty" jsonschema:"description=Include commonly ignored directories in results. Excluded by default: node_modules vendor dist build target .git .reliant __pycache__ coverage tmp temp logs bin obj out generated bower_components jspm_packages. Default: false."`
+	Repo           string `json:"repo,omitempty" jsonschema:"description=Multi-repo only. Which repo to search in: 'root' for the project root\\, or a repo name (e.g. 'api'\\, 'web'). Used as the search base when 'path' is empty. Omit in single-repo projects."`
 }
 
 type GrepResponseMetadata struct {
@@ -120,9 +121,12 @@ func (g *grepTool) Execute(rctx *rctx.ToolContext, params GrepParams) (ToolRespo
 		return NewTextErrorResponse("pattern is required"), nil
 	}
 
-	wd, err := GetWorkingDirectory(rctx)
+	wd, err := ResolveRepoPath(rctx, params.Repo)
 	if err != nil {
-		return NewTextErrorResponse(fmt.Sprintf("couldn't determine working directory: %v", err)), nil
+		return NewTextErrorResponse(err.Error()), nil
+	}
+	if wd == "" {
+		return NewTextErrorResponse("couldn't determine working directory"), nil
 	}
 
 	searchPath := params.Path

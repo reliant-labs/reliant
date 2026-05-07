@@ -171,9 +171,14 @@ message UpdateProjectMetadataResponse {
   Project project = 1;
 }
 
-// GetProjectGitInfoRequest retrieves git info for a project
+// GetProjectGitInfoRequest retrieves git info for a project.
+// repo_id targets one nested repo. Empty is allowed only when the project
+// has at most one repo (legacy single-repo behavior). For multi-repo
+// projects, prefer RepoService.GetRepoGitInfo or the worktree-level
+// aggregator (ListWorktreeRepoStatuses).
 message GetProjectGitInfoRequest {
   string project_id = 1;
+  string repo_id = 2;
 }
 
 // GetProjectGitInfoResponse returns git repository information
@@ -205,9 +210,12 @@ message GitBranch {
   string commit_sha = 7;
 }
 
-// GetProjectGitBranchesRequest retrieves git branches for a project
+// GetProjectGitBranchesRequest retrieves git branches for a project.
+// repo_id targets one nested repo. Empty is allowed only when the project
+// has at most one repo (legacy single-repo behavior).
 message GetProjectGitBranchesRequest {
   string project_id = 1;
+  string repo_id = 2;
 }
 
 // GetProjectGitBranchesResponse returns git branches
@@ -250,9 +258,12 @@ message FileChange {
   bool is_new = 6;
 }
 
-// GetProjectChangesRequest retrieves recent changes for a project
+// GetProjectChangesRequest retrieves recent changes for a project.
+// repo_id targets one nested repo. Empty is allowed only when the project
+// has at most one repo (legacy single-repo behavior).
 message GetProjectChangesRequest {
   string project_id = 1;
+  string repo_id = 2;
 }
 
 // GetProjectChangesResponse returns recent changes

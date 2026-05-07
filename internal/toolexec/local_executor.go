@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/rctx"
@@ -144,6 +145,23 @@ func (e *LocalToolExecutor) executeTool(
 
 	// Create tool context with worktree info
 	toolContext := rctx.NewToolContext(ctx, chatID, thread, project, worktreeInfo)
+
+	// Decode the project's nested repos so tools with a `repo` param can
+	// resolve it to a workspace-relative path. Absent when single-repo.
+	if reposRaw, ok := contextMap["repos"].([]interface{}); ok {
+		repos := make([]*core.Repo, 0, len(reposRaw))
+		for _, item := range reposRaw {
+			obj, ok := item.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			id, _ := obj["id"].(string)
+			name, _ := obj["name"].(string)
+			rel, _ := obj["relative_path"].(string)
+			repos = append(repos, &core.Repo{ID: id, Name: name, RelativePath: rel})
+		}
+		toolContext.Repos = repos
+	}
 	if daemonClient != nil {
 		toolContext = toolContext.WithDaemon(daemonClient)
 	}

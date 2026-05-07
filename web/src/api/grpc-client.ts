@@ -7,6 +7,7 @@ import { PlanService } from "../gen/reliant/v1/plan_pb";
 import { TaskService } from "../gen/reliant/v1/task_pb";
 import { CatalogService } from "../gen/reliant/v1/catalog_pb";
 import { ProjectService } from "../gen/reliant/v1/project_pb";
+import { RepoService } from "../gen/reliant/v1/repo_pb";
 import { WorktreeService } from "../gen/reliant/v1/worktree_pb";
 import { ApprovalService } from "../gen/reliant/v1/approval_pb";
 import { ChatService } from "../gen/reliant/v1/chat_pb";
@@ -356,6 +357,7 @@ const clearClientCache = () => {
   _taskClient = null;
   _catalogClient = null;
   _projectClient = null;
+  _repoClient = null;
   _worktreeClient = null;
   _approvalClient = null;
   _chatClient = null;
@@ -450,6 +452,10 @@ export const createWorktreeClient = (): Client<typeof WorktreeService> => {
   return createClient(WorktreeService, getTransport());
 };
 
+export const createRepoClient = (): Client<typeof RepoService> => {
+  return createClient(RepoService, getTransport());
+};
+
 export const createApprovalClient = (): Client<typeof ApprovalService> => {
   return createClient(ApprovalService, getTransport());
 };
@@ -528,6 +534,7 @@ let _planClient: Client<typeof PlanService> | null = null;
 let _taskClient: Client<typeof TaskService> | null = null;
 let _catalogClient: Client<typeof CatalogService> | null = null;
 let _projectClient: Client<typeof ProjectService> | null = null;
+let _repoClient: Client<typeof RepoService> | null = null;
 let _worktreeClient: Client<typeof WorktreeService> | null = null;
 let _approvalClient: Client<typeof ApprovalService> | null = null;
 let _chatClient: Client<typeof ChatService> | null = null;
@@ -588,6 +595,13 @@ export const getWorktreeClient = (): Client<typeof WorktreeService> => {
     _worktreeClient = createWorktreeClient();
   }
   return _worktreeClient;
+};
+
+export const getRepoClient = (): Client<typeof RepoService> => {
+  if (!_repoClient) {
+    _repoClient = createRepoClient();
+  }
+  return _repoClient;
 };
 
 export const getApprovalClient = (): Client<typeof ApprovalService> => {
@@ -724,6 +738,7 @@ export const grpcClient = {
   task: () => getTaskClient(),
   catalog: () => getCatalogClient(),
   project: () => getProjectClient(),
+  repo: () => getRepoClient(),
   worktree: () => getWorktreeClient(),
   approval: () => getApprovalClient(),
   chat: () => getChatClient(),

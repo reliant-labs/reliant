@@ -18,6 +18,11 @@ type Definition struct {
 	SkillDir      string
 	SkillPath     string // Hierarchical path relative to discovery root, e.g. "go/error-handling"
 	HasChildren   bool   // True if this skill has sub-skills in subdirectories
+	// Source is the repo relative path the skill was discovered in. "" means
+	// project root scope; non-empty means a nested repo (e.g. "api"). Skills
+	// with non-empty Source get their NormalizedKey prefixed with Source/ to
+	// avoid collisions across repos.
+	Source string
 
 	// Claude-compatible fields
 	ArgumentHint           string

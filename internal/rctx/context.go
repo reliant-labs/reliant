@@ -7,6 +7,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/mcp"
 )
 
@@ -14,6 +15,15 @@ import (
 type WorktreeInfo struct {
 	ID   string
 	Path string
+	// RepoID identifies which nested repo this worktree belongs to.
+	// Empty for legacy single-repo projects whose worktrees pre-date the
+	// multi-repo migration.
+	RepoID string
+	// RepoPath is the absolute on-disk path of the repo's git root.
+	// For legacy single-repo projects this equals the project path.
+	// Tools that run git commands should use this, not Project.Path,
+	// so they target the correct nested repo.
+	RepoPath string
 }
 
 // ToolContext is a minimal context for tool execution in V2
@@ -29,6 +39,13 @@ type ToolContext struct {
 	// Execution context
 	Project  *db.Project   // V2 Project for file operations
 	Worktree *WorktreeInfo // Worktree for working directory
+
+	// Repos is the list of nested repos in the project. Each repo's nested
+	// path (relative to the workspace root, i.e. worktree.Path or project.Path)
+	// is the on-disk location of that repo's checkout for this chat. Tools
+	// resolve a `repo` param to workspaceRoot/repo.relative_path. Empty for
+	// legacy single-repo projects.
+	Repos []*core.Repo
 
 	// Daemon provides filesystem and execution primitives on the user's machine.
 	// Nil when no daemon is available (tools that need it should check and return an error).
@@ -81,6 +98,17 @@ func (tc *ToolContext) WorkingDir() string {
 		return tc.Project.Path
 	}
 	return ""
+}
+
+// GitDir returns the absolute path of the underlying git repo for this
+// execution context — the directory that should be the cwd for git
+// commands targeting the parent repo (worktree add/list/prune, etc.).
+// Falls back to WorkingDir for legacy contexts predating multi-repo.
+func (tc *ToolContext) GitDir() string {
+	if tc.Worktree != nil && tc.Worktree.RepoPath != "" {
+		return tc.Worktree.RepoPath
+	}
+	return tc.WorkingDir()
 }
 
 // WithCancel returns a copy with a new Done channel

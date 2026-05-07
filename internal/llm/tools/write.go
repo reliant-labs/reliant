@@ -13,6 +13,7 @@ import (
 type WriteParams struct {
 	FilePath string `json:"file_path" jsonschema:"required,description=The path to the file to write"`
 	Content  string `json:"content" jsonschema:"required,description=The content to write to the file"`
+	Repo     string `json:"repo,omitempty" jsonschema:"description=Multi-repo only. Which repo the path is relative to: 'root' for the project root\\, or a repo name (e.g. 'api'\\, 'web'). Used as the base for relative paths. Omit in single-repo projects or when path is absolute."`
 }
 
 type WritePermissionsParams struct {
@@ -90,7 +91,7 @@ func (w *writeTool) Execute(rctx *rctx.ToolContext, params WriteParams) (ToolRes
 		return NewTextErrorResponse("content is required"), nil
 	}
 
-	workingDir, err := GetWorkingDirectory(rctx)
+	workingDir, err := ResolveRepoPath(rctx, params.Repo)
 	if err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("couldn't determine working directory: %v", err)), nil
 	}

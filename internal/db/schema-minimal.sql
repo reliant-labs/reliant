@@ -5,6 +5,19 @@ CREATE TABLE goose_db_version (
 		tstamp TIMESTAMP DEFAULT (datetime('now'))
 	);
 CREATE TABLE sqlite_sequence(name,seq);
+CREATE TABLE repos (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    relative_path TEXT NOT NULL DEFAULT '',
+    remote_url TEXT,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+    UNIQUE(project_id, relative_path)
+);
+CREATE INDEX idx_repos_project ON repos(project_id);
 CREATE TABLE worktrees (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -17,7 +30,7 @@ CREATE TABLE worktrees (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_active DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at DATETIME, is_main BOOLEAN NOT NULL DEFAULT FALSE, cleanup_metadata TEXT,
+    deleted_at DATETIME, is_main BOOLEAN NOT NULL DEFAULT FALSE, cleanup_metadata TEXT, base_branches TEXT,
 
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE SET NULL,
