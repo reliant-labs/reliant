@@ -22,6 +22,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
+const worktreeDaemonCommandTimeoutMs int32 = 120_000
+
 // WorktreeService implements the WorktreeService RPC handlers
 type WorktreeService struct {
 	reliantv1connect.UnimplementedWorktreeServiceHandler
@@ -41,7 +43,7 @@ func (s *WorktreeService) sendWorktreeDaemonCommand(ctx context.Context, userID,
 	if err != nil {
 		return fmt.Errorf("marshal payload: %w", err)
 	}
-	respBytes, err := s.daemonRouter.SendDaemonCommand(ctx, userID, commandType, payloadBytes, 30_000)
+	respBytes, err := s.daemonRouter.SendDaemonCommand(ctx, userID, commandType, payloadBytes, worktreeDaemonCommandTimeoutMs)
 	if err != nil {
 		return fmt.Errorf("daemon command %s: %w", commandType, err)
 	}
