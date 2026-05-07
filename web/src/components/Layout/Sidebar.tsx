@@ -52,6 +52,11 @@ import { Dropdown } from "../ui/Dropdown";
 import { ActivityDot, type ChatActivityState } from "../ui/ActivityDot";
 import { useActivityStore, activityToDotState, ChatActivity } from "../../store/activityStore";
 
+const CHAT_HEADER_ACTION_BUTTON_CLASS =
+  "flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-ring/40";
+const CHAT_HEADER_ACTION_ICON_CLASS = "h-4 w-4 shrink-0";
+const CHAT_HEADER_ACTION_TOOLTIP_CLASS = "flex shrink-0";
+
 // Sort options configuration
 const SORT_OPTIONS: {
   value: ChatSortOption;
@@ -61,32 +66,32 @@ const SORT_OPTIONS: {
   {
     value: "recent_activity",
     label: "Recent Activity",
-    icon: <Clock className="w-3.5 h-3.5" />,
+    icon: <Clock className={CHAT_HEADER_ACTION_ICON_CLASS} />,
   },
   {
     value: "needs_attention_first",
     label: "Needs Attention",
-    icon: <Bell className="w-3.5 h-3.5" />,
+    icon: <Bell className={CHAT_HEADER_ACTION_ICON_CLASS} />,
   },
   {
     value: "newest_first",
     label: "Newest First",
-    icon: <ArrowDownWideNarrow className="w-3.5 h-3.5" />,
+    icon: <ArrowDownWideNarrow className={CHAT_HEADER_ACTION_ICON_CLASS} />,
   },
   {
     value: "oldest_first",
     label: "Oldest First",
-    icon: <ArrowUpWideNarrow className="w-3.5 h-3.5" />,
+    icon: <ArrowUpWideNarrow className={CHAT_HEADER_ACTION_ICON_CLASS} />,
   },
   {
     value: "alphabetical_asc",
     label: "A → Z",
-    icon: <SortAsc className="w-3.5 h-3.5" />,
+    icon: <SortAsc className={CHAT_HEADER_ACTION_ICON_CLASS} />,
   },
   {
     value: "alphabetical_desc",
     label: "Z → A",
-    icon: <SortDesc className="w-3.5 h-3.5" />,
+    icon: <SortDesc className={CHAT_HEADER_ACTION_ICON_CLASS} />,
   },
 ];
 
@@ -311,8 +316,7 @@ const ArchivedChatItem = memo(function ArchivedChatItem({ chat, activeChatId }: 
 
   const handleRestore = async () => {
     try {
-      const { api } = await import("../../api/client");
-      await api.chatsV2.unarchive(chatId);
+      await useChatStore.getState().unarchiveChat(chatId);
     } catch (error) {
       console.error("Failed to restore chat:", error);
     }
@@ -1109,8 +1113,7 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
         label: "Undo",
         onClick: async () => {
           try {
-            const { api } = await import("../../api/client");
-            await api.chatsV2.unarchive(chatId);
+            await useChatStore.getState().unarchiveChat(chatId);
           } catch (error) {
             console.error("Failed to restore chat:", error);
           }
@@ -1266,9 +1269,8 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
       // Handlers for worktree actions
       const handleNewChat = isNoWorktree
         ? undefined
-        : async () => {
-            const chatStore = useChatStore.getState();
-            chatStore.clearCurrentChat(group.worktreeId);
+        : () => {
+            void handleSwitchToWorktreeNewChat(group.worktreeId);
           };
 
       const handleArchiveWorktree = (isNoWorktree || group.isMain)
@@ -1451,16 +1453,22 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
             onOpenChange={setIsSortMenuOpen}
             align="right"
             trigger={
-              <Tooltip content={`Sort: ${currentSortOption.label}`} placement="bottom" delay={300}>
+              <Tooltip
+                content={`Sort: ${currentSortOption.label}`}
+                placement="bottom"
+                delay={300}
+                wrapperClassName={CHAT_HEADER_ACTION_TOOLTIP_CLASS}
+              >
                 <button
                   type="button"
                   onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring/40"
+                  className={cn(
+                    CHAT_HEADER_ACTION_BUTTON_CLASS,
+                    "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                  )}
                   aria-label="Sort chats"
                 >
-                  <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
-                    {currentSortOption.icon}
-                  </span>
+                  {currentSortOption.icon}
                 </button>
               </Tooltip>
             }
@@ -1494,17 +1502,25 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
             onOpenChange={setIsViewMenuOpen}
             align="right"
             trigger={
-              <Tooltip content="View options" placement="bottom" delay={300}>
+              <Tooltip
+                content="View options"
+                placement="bottom"
+                delay={300}
+                wrapperClassName={CHAT_HEADER_ACTION_TOOLTIP_CLASS}
+              >
                 <button
                   type="button"
                   onClick={() => setIsViewMenuOpen(!isViewMenuOpen)}
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring/40"
+                  className={cn(
+                    CHAT_HEADER_ACTION_BUTTON_CLASS,
+                    "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                  )}
                   aria-label="View options"
                 >
                   {viewMode === "grouped" ? (
-                    <LayoutGrid className="h-3.5 w-3.5" />
+                    <LayoutGrid className={CHAT_HEADER_ACTION_ICON_CLASS} />
                   ) : (
-                    <LayoutList className="h-3.5 w-3.5" />
+                    <LayoutList className={CHAT_HEADER_ACTION_ICON_CLASS} />
                   )}
                 </button>
               </Tooltip>
@@ -1544,15 +1560,23 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
             </div>
           </Dropdown>
 
-          <Tooltip content="New chat" placement="bottom" delay={300}>
+          <Tooltip
+            content="New chat"
+            placement="bottom"
+            delay={300}
+            wrapperClassName={CHAT_HEADER_ACTION_TOOLTIP_CLASS}
+          >
             <button
               type="button"
               onClick={handleNewChat}
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring/40"
+              className={cn(
+                CHAT_HEADER_ACTION_BUTTON_CLASS,
+                "bg-primary text-primary-foreground hover:bg-primary/90"
+              )}
               aria-label="New chat"
               data-testid="create-chat-button"
             >
-              <Plus className="h-3.5 w-3.5" />
+              <Plus className={CHAT_HEADER_ACTION_ICON_CLASS} />
             </button>
           </Tooltip>
         </div>

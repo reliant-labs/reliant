@@ -506,18 +506,20 @@ function ToolExecutionComponent({
           className={cn(headerClassName, "gap-2")}
           onClick={() => hasExpandedContent && setIsExpanded(!isExpanded)} role={hasExpandedContent ? "button" : undefined} tabIndex={hasExpandedContent ? 0 : undefined} onKeyDown={(e) => hasExpandedContent && (e.key === "Enter" || e.key === " ") && (e.preventDefault(), setIsExpanded(!isExpanded))} aria-expanded={hasExpandedContent ? isExpanded : undefined} aria-label={hasExpandedContent ? `Toggle task details for ${displayTitle}` : undefined}
         >
-          {isPreparing ? (
-            <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin" />
-          ) : isExecuting ? (
-            <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />
-          ) : hasFailed ? (
-            <AlertCircle className="w-3.5 h-3.5 text-warning" />
-          ) : (
-            <style.icon className={cn("w-3.5 h-3.5", style.color)} />
-          )}
+          <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+            {isPreparing ? (
+              <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin" />
+            ) : isExecuting ? (
+              <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />
+            ) : hasFailed ? (
+              <AlertCircle className="w-3.5 h-3.5 text-warning" />
+            ) : (
+              <style.icon className={cn("w-3.5 h-3.5", style.color)} />
+            )}
+          </span>
           
-          <span className="text-xs text-muted-foreground font-mono">task()</span>
-          <span className="flex-1 text-xs font-medium truncate">{displayTitle}</span>
+          <span className="shrink-0 text-xs text-muted-foreground font-mono">task()</span>
+          <span className="min-w-0 flex-1 text-xs font-medium truncate">{displayTitle}</span>
           
           {hasExpandedContent && (
             isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
@@ -564,8 +566,10 @@ function ToolExecutionComponent({
         aria-label={isExpandable ? `Toggle tool details for ${toolCall.name}` : undefined}
       >
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            {getStatusIcon()}
-            <span className="text-xs truncate">
+            <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+              {getStatusIcon()}
+            </span>
+            <span className="min-w-0 text-xs truncate">
               {formatToolCallDisplay(toolCall.name, toolCall.input)}
             </span>
             <span className={cn(

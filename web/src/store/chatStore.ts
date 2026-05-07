@@ -732,6 +732,7 @@ interface ChatStoreState {
   loadArchivedChats: (projectId?: string) => Promise<void>;
   addArchivedChat: (chat: Chat) => void;
   removeArchivedChat: (chatId: string) => Chat | null;
+  unarchiveChat: (chatId: string) => Promise<void>;
 
   // Connection management
   onConnectionRestored: () => void;
@@ -3674,6 +3675,50 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       ),
     });
     return chat;
+  },
+
+  unarchiveChat: async (chatId: string) => {
+    const archivedChat = get().removeArchivedChat(chatId);
+    const restoredChat = archivedChat
+      ? { ...archivedChat, state: ChatState.IDLE }
+      : null;
+
+    if (restoredChat) {
+      set((state) => {
+        const newChats = new Map(state.chats);
+        newChats.set(chatId, restoredChat);
+        const chatOrder = state.chatOrder.includes(chatId)
+          ? state.chatOrder
+          : [...state.chatOrder, chatId];
+        return { chats: newChats, chatOrder };
+      });
+    }
+
+    try {
+      await api.chatsV2.unarchive(chatId);
+
+      const projectId = useProjectStore.getState().currentProject?.id;
+      if (projectId) {
+        await useWorktreeStore.getState().loadWorktrees(projectId);
+        await get().loadChats(projectId);
+      }
+    } catch (error) {
+      logger.error("Failed to unarchive chat:", error);
+
+      if (restoredChat) {
+        set((state) => {
+          const newChats = new Map(state.chats);
+          newChats.delete(chatId);
+          return {
+            chats: newChats,
+            chatOrder: state.chatOrder.filter((id) => id !== chatId),
+            archivedChats: [...state.archivedChats, { ...restoredChat, state: ChatState.ARCHIVED }],
+          };
+        });
+      }
+
+      throw error;
+    }
   },
 
   // Connection restored - streaming is managed by globalUpdatesStore
