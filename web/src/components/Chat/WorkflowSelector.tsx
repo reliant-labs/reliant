@@ -151,7 +151,7 @@ export function WorkflowSelector({
           onClick={() => canInteract && setIsOpen(!isOpen)}
           disabled={!canInteract}
           className={cn(
-            "flex items-center gap-1.5 rounded transition-colors text-[10px] font-medium h-6",
+            "flex items-center gap-1.5 rounded-full transition-colors text-[10px] font-medium h-6",
             canInteract
               ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
               : "cursor-default opacity-60",
@@ -160,7 +160,7 @@ export function WorkflowSelector({
               : isStreaming
               ? "bg-[var(--chat-button-bg-streaming)] text-[var(--chat-button-text-streaming)]"
               : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]",
-            compact ? "px-1.5 gap-0.5" : "px-2 gap-1"
+            compact ? "px-1.5 gap-0.5" : "px-2.5 gap-1"
           )}
         >
           {workflowsLoading ? (

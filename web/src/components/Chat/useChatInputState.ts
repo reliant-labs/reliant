@@ -40,9 +40,7 @@ export function useChatInputState({
     );
     return worktreeState.chatDrafts?.[draftKey] || "";
   });
-  const [selectedPrompts, setSelectedPrompts] = useState("");
-  const [forceStreaming, setForceStreaming] = useState(false);
-  
+
   // Ref for debounce timer
   const draftSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -66,9 +64,6 @@ export function useChatInputState({
     return null;
   });
 
-  // Store hooks
-  const currentProject = useProjectStore((state) => state.currentProject);
-  
   // Computed values
   const currentChat = useChatStore((state) =>
     chatId ? state.chats.get(chatId) || null : null
@@ -235,18 +230,11 @@ export function useChatInputState({
     // State
     input,
     setInput,
-    selectedPrompts,
-    setSelectedPrompts,
-    forceStreaming,
-    setForceStreaming,
 
     // Workflow selection
     selectedWorkflow,
     setSelectedWorkflow: handleSetSelectedWorkflow,
     isPendingChat,
-
-    // Computed
-    currentProject,
 
     // Handlers
     handleClearInput,

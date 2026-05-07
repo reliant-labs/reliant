@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CornerDownLeft, Sparkles, Square, Paperclip, GitBranch, Minimize2, MessageCircle } from "lucide-react";
+import { ArrowUp, Paperclip, MessageCircle } from "lucide-react";
 import { ChatButton } from "./ChatButton";
 
 interface UseChatButtonsProps {
@@ -13,20 +13,6 @@ interface UseChatButtonsProps {
   // File actions
   onAttach: () => void;
   uploading: boolean;
-
-  // Recent changes
-  onToggleRecentChanges?: () => void;
-  isRecentChangesOpen?: boolean;
-  hasWorktree?: boolean;
-
-  // Compact
-  onCompact?: () => void;
-  isCompacting?: boolean;
-
-  // Dev mode
-  isDev?: boolean;
-  forceStreaming?: boolean;
-  onToggleForceStreaming?: () => void;
 
   // Discuss
   isDiscussMode?: boolean;
@@ -45,20 +31,12 @@ export function useChatButtons({
   disabled,
   onAttach,
   uploading,
-  onToggleRecentChanges,
-  isRecentChangesOpen = false,
-  hasWorktree = false,
-  onCompact,
-  isCompacting = false,
-  isDev = false,
-  forceStreaming = false,
-  onToggleForceStreaming,
   isDiscussMode = false,
   onToggleDiscuss,
   isPaused = false,
   compact = false,
 }: UseChatButtonsProps) {
-  const effectiveStreaming = isStreaming || forceStreaming;
+  const effectiveStreaming = isStreaming;
   const safeOnStop = onStop ?? (() => {});
 
 
@@ -79,70 +57,6 @@ export function useChatButtons({
 
   // Individual button definitions
   const buttons = {
-    recentChanges: onToggleRecentChanges && hasWorktree ? (
-      <ChatButton
-        key="recentChanges"
-        onClick={onToggleRecentChanges}
-        tooltip={
-          isRecentChangesOpen
-            ? "Close recent changes"
-            : "View recent file changes"
-        }
-        compact={compact}
-        className={`${
-          isRecentChangesOpen
-            ? "bg-[var(--chat-button-hover)] text-[var(--chat-button-text)]"
-            : stableStreaming
-            ? "bg-[var(--chat-button-bg-streaming)] text-[var(--chat-button-text-streaming)] hover:bg-[var(--chat-button-hover-streaming)]"
-            : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] hover:bg-[var(--chat-button-hover)]"
-        }`}
-      >
-        <GitBranch className={compact ? "w-2.5 h-2.5" : "w-3 h-3"} />
-      </ChatButton>
-    ) : null,
-
-    compact: onCompact ? (
-      <ChatButton
-        key="compact"
-        onClick={onCompact}
-        disabled={disabled || stableStreaming || isCompacting}
-        tooltip={
-          isCompacting
-            ? "Compacting context..."
-            : stableStreaming
-            ? "Cannot compact while running"
-            : "Compact context (summarize conversation)"
-        }
-        compact={compact}
-        className={`${
-          isCompacting
-            ? "bg-primary/20 text-primary border-primary/30 animate-pulse"
-            : stableStreaming
-            ? "bg-[var(--chat-button-bg-streaming)] text-[var(--chat-button-text-streaming)] opacity-50 cursor-not-allowed"
-            : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] hover:bg-[var(--chat-button-hover)]"
-        }`}
-      >
-        <Minimize2 className={compact ? "w-2.5 h-2.5" : "w-3 h-3"} />
-      </ChatButton>
-    ) : null,
-
-    devTool:
-      isDev && onToggleForceStreaming ? (
-        <ChatButton
-          key="devTool"
-          onClick={onToggleForceStreaming}
-          tooltip={`Streaming UI: ${forceStreaming ? "ON" : "OFF"} (Test mode)`}
-          compact={compact}
-          className={
-            forceStreaming
-              ? "bg-[var(--chat-button-hover)] text-[var(--chat-button-text)]"
-              : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] hover:bg-[var(--chat-button-hover)]"
-          }
-        >
-          <Sparkles className={compact ? "w-2.5 h-2.5" : "w-3 h-3"} />
-        </ChatButton>
-      ) : null,
-
     attach: (
       <ChatButton
         key="attach"
@@ -192,37 +106,19 @@ export function useChatButtons({
           tooltip={effectiveStreaming ? "Stop generation (Esc)" : "Send message (Enter)"}
           testId={effectiveStreaming ? undefined : "send-button"}
           compact={compact}
-          className={`${
+          className={`h-7 w-7 p-0 rounded-full border transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
             stableStreaming
-              ? forceStreaming
-                ? "bg-primary/20 text-primary border-primary/30 hover:bg-primary/30"
-                : "bg-destructive/10 text-destructive border-destructive/20 hover:bg-destructive/20"
-              : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] border-[var(--chat-border)] hover:bg-[var(--chat-button-hover)]"
+              ? "bg-[var(--chat-button-bg)] text-destructive border-[var(--chat-border)] hover:bg-[var(--chat-button-hover)] hover:border-destructive/30"
+              : canSend && !disabled
+              ? "bg-[var(--chat-button-bg)] text-primary border-[var(--chat-border)] hover:bg-[var(--chat-button-hover)] hover:border-primary/30"
+              : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] border-[var(--chat-border)] opacity-60"
           }`}
         >
-          <span className={compact ? "" : "inline-flex items-center justify-center"} style={compact ? {} : { width: '46px' }}>
+          <span className="inline-flex items-center justify-center">
             {effectiveStreaming ? (
-              <>
-                {compact ? (
-                  <Square className="w-3 h-3" />
-                ) : (
-                  <>
-                    <Square className="w-3.5 h-3.5" />
-                    <span className="ml-1 text-[10px]">Esc</span>
-                  </>
-                )}
-              </>
+              <span className="h-2.5 w-2.5 rounded-[2px] bg-current" />
             ) : (
-              <>
-                {compact ? (
-                  <CornerDownLeft className="w-3.5 h-3.5" />
-                ) : (
-                  <>
-                    <span className="text-[10px]">Send</span>
-                    <CornerDownLeft className="w-3 h-3 ml-0.5" />
-                  </>
-                )}
-              </>
+              <ArrowUp className="h-4 w-4" />
             )}
           </span>
         </ChatButton>

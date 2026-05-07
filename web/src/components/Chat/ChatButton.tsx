@@ -25,10 +25,10 @@ export function ChatButton({
       <button
         onClick={onClick}
         disabled={disabled}
-        className={`chat-button flex items-center justify-center rounded text-[10px] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+        className={`chat-button flex items-center justify-center rounded-full text-[10px] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
           compact
             ? "p-1 h-6 w-6"
-            : "px-2 py-1 h-6 gap-1"
+            : "p-1 h-6 w-6 gap-1"
         } ${className}`}
         data-testid={testId}
       >

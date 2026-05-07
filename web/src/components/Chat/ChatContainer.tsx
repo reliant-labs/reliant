@@ -22,9 +22,7 @@ import {
 } from "../../store/chatStoreHooks";
 import { useGlobalUpdatesStore } from "../../store/globalUpdatesStore";
 import { useIsChatRunning } from "../../store/activityStore";
-import { useChatCurrentActivity } from "../../store/threadActivityStore";
 import { useChatStore } from "../../store/chatStore";
-import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useWorkflowExecutions } from "../../hooks/useWorkflowExecutions";
@@ -88,7 +86,6 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
   const pendingApprovals = usePendingApprovals(chatId);
   const isDiscussMode = useDiscussMode(chatId);
   const pendingQuestion = usePendingQuestion(chatId);
-  const currentActivity = useChatCurrentActivity(chatId);
 
   // Process messages: sort by ordinal and filter out agent messages
   const processedMessages = useMemo(() => {
@@ -208,18 +205,6 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
     }
   }, [chatId, currentChat?.id]);
 
-  // Get UI state from navigation store
-  const showRecentChanges = useChatNavigationStore((state) =>
-    chatId ? state.showRecentChanges[chatId] || false : false,
-  );
-
-  // Toggle handlers
-  const handleToggleRecentChanges = useCallback(() => {
-    if (chatId) {
-      useChatNavigationStore.getState().toggleRecentChanges(chatId);
-    }
-  }, [chatId]);
-
   const handleToggleDiscuss = useCallback(() => {
     if (!chatId) return;
     const store = useChatStore.getState();
@@ -263,7 +248,6 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
       isChatBusy={isChatBusy}
       pendingApprovals={pendingApprovals}
       connectionStatus={connectionStatus}
-      currentActivity={currentActivity ?? undefined}
       worktreeId={currentChat?.worktreeId ?? undefined}
       projectId={currentProjectId ?? undefined}
       needsRecovery={currentChat?.needsRecovery}
@@ -271,8 +255,6 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
       onSendMessage={handleSendMessage}
       onStopStreaming={handleStopStreaming}
       isFocused={isFocused}
-      isRecentChangesOpen={showRecentChanges}
-      onToggleRecentChanges={handleToggleRecentChanges}
       workflowExecution={workflowExecution}
       isDiscussMode={isDiscussMode}
       onToggleDiscuss={handleToggleDiscuss}

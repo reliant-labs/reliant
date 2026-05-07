@@ -108,7 +108,7 @@ export function InlinePresetPicker({
           onClick={handleTriggerClick}
           disabled={!canInteract}
           className={cn(
-            "flex items-center gap-1 rounded transition-colors text-[10px] font-medium h-6 px-2",
+            "flex items-center gap-1 rounded-full transition-colors text-[10px] font-medium h-6 px-2.5",
             canInteract
               ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
               : "cursor-default opacity-60",
