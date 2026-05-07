@@ -326,6 +326,13 @@ Credential resolution order:
 			ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 			defer cancel()
 
+			// Write PID file for `daemon stop`
+			pidFile := filepath.Join(dataDir, "daemon.pid")
+			if err := os.WriteFile(pidFile, []byte(strconv.Itoa(os.Getpid())), 0644); err != nil {
+				return fmt.Errorf("writing PID file: %w", err)
+			}
+			defer os.Remove(pidFile)
+
 			// Clean up background processes on shutdown.
 			defer shell.GetBackgroundManager().KillAllRunning()
 			defer shell.GetProcessMonitor().Stop()
