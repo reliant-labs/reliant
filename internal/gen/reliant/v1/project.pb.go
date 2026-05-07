@@ -1012,10 +1012,15 @@ func (x *UpdateProjectMetadataResponse) GetProject() *Project {
 	return nil
 }
 
-// GetProjectGitInfoRequest retrieves git info for a project
+// GetProjectGitInfoRequest retrieves git info for a project.
+// repo_id targets one nested repo. Empty is allowed only when the project
+// has at most one repo (legacy single-repo behavior). For multi-repo
+// projects, prefer RepoService.GetRepoGitInfo or the worktree-level
+// aggregator (ListWorktreeRepoStatuses).
 type GetProjectGitInfoRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	RepoId        string                 `protobuf:"bytes,2,opt,name=repo_id,json=repoId,proto3" json:"repo_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1053,6 +1058,13 @@ func (*GetProjectGitInfoRequest) Descriptor() ([]byte, []int) {
 func (x *GetProjectGitInfoRequest) GetProjectId() string {
 	if x != nil {
 		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *GetProjectGitInfoRequest) GetRepoId() string {
+	if x != nil {
+		return x.RepoId
 	}
 	return ""
 }
@@ -1285,10 +1297,13 @@ func (x *GitBranch) GetCommitSha() string {
 	return ""
 }
 
-// GetProjectGitBranchesRequest retrieves git branches for a project
+// GetProjectGitBranchesRequest retrieves git branches for a project.
+// repo_id targets one nested repo. Empty is allowed only when the project
+// has at most one repo (legacy single-repo behavior).
 type GetProjectGitBranchesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	RepoId        string                 `protobuf:"bytes,2,opt,name=repo_id,json=repoId,proto3" json:"repo_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1326,6 +1341,13 @@ func (*GetProjectGitBranchesRequest) Descriptor() ([]byte, []int) {
 func (x *GetProjectGitBranchesRequest) GetProjectId() string {
 	if x != nil {
 		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *GetProjectGitBranchesRequest) GetRepoId() string {
+	if x != nil {
+		return x.RepoId
 	}
 	return ""
 }
@@ -1680,10 +1702,13 @@ func (x *FileChange) GetIsNew() bool {
 	return false
 }
 
-// GetProjectChangesRequest retrieves recent changes for a project
+// GetProjectChangesRequest retrieves recent changes for a project.
+// repo_id targets one nested repo. Empty is allowed only when the project
+// has at most one repo (legacy single-repo behavior).
 type GetProjectChangesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	RepoId        string                 `protobuf:"bytes,2,opt,name=repo_id,json=repoId,proto3" json:"repo_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1721,6 +1746,13 @@ func (*GetProjectChangesRequest) Descriptor() ([]byte, []int) {
 func (x *GetProjectChangesRequest) GetProjectId() string {
 	if x != nil {
 		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *GetProjectChangesRequest) GetRepoId() string {
+	if x != nil {
+		return x.RepoId
 	}
 	return ""
 }
@@ -2296,10 +2328,11 @@ const file_reliant_v1_project_proto_rawDesc = "" +
 	"\vdescription\x18\x02 \x01(\tH\x00R\vdescription\x88\x01\x01B\x0e\n" +
 	"\f_description\"N\n" +
 	"\x1dUpdateProjectMetadataResponse\x12-\n" +
-	"\aproject\x18\x01 \x01(\v2\x13.reliant.v1.ProjectR\aproject\"9\n" +
+	"\aproject\x18\x01 \x01(\v2\x13.reliant.v1.ProjectR\aproject\"R\n" +
 	"\x18GetProjectGitInfoRequest\x12\x1d\n" +
 	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\"\x94\x03\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x17\n" +
+	"\arepo_id\x18\x02 \x01(\tR\x06repoId\"\x94\x03\n" +
 	"\x19GetProjectGitInfoResponse\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1e\n" +
@@ -2327,10 +2360,11 @@ const file_reliant_v1_project_proto_rawDesc = "" +
 	"\vis_detached\x18\x06 \x01(\bR\n" +
 	"isDetached\x12\x1d\n" +
 	"\n" +
-	"commit_sha\x18\a \x01(\tR\tcommitSha\"=\n" +
+	"commit_sha\x18\a \x01(\tR\tcommitSha\"V\n" +
 	"\x1cGetProjectGitBranchesRequest\x12\x1d\n" +
 	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\"R\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x17\n" +
+	"\arepo_id\x18\x02 \x01(\tR\x06repoId\"R\n" +
 	"\x1dGetProjectGitBranchesResponse\x121\n" +
 	"\bbranches\x18\x01 \x03(\v2\x15.reliant.v1.GitBranchR\bbranches\"<\n" +
 	"\x1bGetProjectInitStatusRequest\x12\x1d\n" +
@@ -2357,10 +2391,11 @@ const file_reliant_v1_project_proto_rawDesc = "" +
 	"\x04diff\x18\x03 \x01(\tR\x04diff\x12\x18\n" +
 	"\acontent\x18\x04 \x01(\tR\acontent\x12)\n" +
 	"\x10original_content\x18\x05 \x01(\tR\x0foriginalContent\x12\x15\n" +
-	"\x06is_new\x18\x06 \x01(\bR\x05isNew\"9\n" +
+	"\x06is_new\x18\x06 \x01(\bR\x05isNew\"R\n" +
 	"\x18GetProjectChangesRequest\x12\x1d\n" +
 	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\"\x82\x01\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x17\n" +
+	"\arepo_id\x18\x02 \x01(\tR\x06repoId\"\x82\x01\n" +
 	"\x19GetProjectChangesResponse\x12\x16\n" +
 	"\x06branch\x18\x01 \x01(\tR\x06branch\x12,\n" +
 	"\x05files\x18\x02 \x03(\v2\x16.reliant.v1.FileChangeR\x05files\x12\x1f\n" +

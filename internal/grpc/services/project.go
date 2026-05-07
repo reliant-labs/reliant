@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/configadapter"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -67,6 +68,42 @@ func (s *ProjectService) sendProjectDaemonCommand(ctx context.Context, userID, c
 		}
 	}
 	return nil
+}
+
+// resolveProjectRepoPath resolves a per-RPC repo_id selector against the
+// project's repo set and returns the absolute git checkout path. Rules
+// match WorktreeService.resolveRepoPath:
+//
+//   - empty repoID + project has 0 or 1 repos -> use project.Path as-is
+//     (legacy single-repo behavior).
+//   - empty repoID + project has 2+ repos -> InvalidArgument; multi-repo
+//     callers must specify which repo they're acting on.
+//   - non-empty repoID -> look up the repo, ensure it belongs to this
+//     project, and return <project.Path>/<repo.relative_path>.
+//   - repoID not in the project's repo set -> NotFound.
+func (s *ProjectService) resolveProjectRepoPath(ctx context.Context, project *db.Project, repoID string) (string, *core.Repo, error) {
+	repos, err := s.database.ListReposByProject(ctx, project.ID)
+	if err != nil {
+		return "", nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list repos for project"))
+	}
+
+	if repoID == "" {
+		if len(repos) > 1 {
+			return "", nil, connect.NewError(connect.CodeInvalidArgument,
+				fmt.Errorf("repo_id required in multi-repo projects"))
+		}
+		if len(repos) == 1 {
+			return filepath.Join(project.Path, repos[0].RelativePath), repos[0], nil
+		}
+		return project.Path, nil, nil
+	}
+
+	for _, r := range repos {
+		if r.ID == repoID {
+			return filepath.Join(project.Path, r.RelativePath), r, nil
+		}
+	}
+	return "", nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("repo not in project"))
 }
 
 // projectBelongsToUser checks if a project belongs to a user
@@ -123,14 +160,23 @@ func (s *ProjectService) CreateProject(
 		return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("a project already exists at this path"))
 	}
 
-	// Auto-detect if path is a git repository via daemon
-	var checkGitResp struct {
-		IsGitRepo bool `json:"is_git_repo"`
+	// Discover nested git repos under the project path. A project may
+	// contain 0..N repos (a docs folder is a valid project with zero).
+	// IsGitRepo is derived from "any repos discovered". If the daemon is
+	// unreachable, project creation still succeeds with zero repos —
+	// repos can be added later via AddRepo.
+	type discoveredRepo struct {
+		RelativePath string `json:"relative_path"`
+		Name         string `json:"name"`
+		RemoteURL    string `json:"remote_url,omitempty"`
 	}
-	if err := s.sendProjectDaemonCommand(ctx, userID, "project.check_git", map[string]string{"path": req.Msg.Path}, &checkGitResp); err != nil {
-		logging.Warn("Failed to check git status via daemon, defaulting to false", "error", err, "path", req.Msg.Path)
+	var discoverResp struct {
+		Discovered []discoveredRepo `json:"discovered"`
 	}
-	isGitRepo := checkGitResp.IsGitRepo
+	if err := s.sendProjectDaemonCommand(ctx, userID, "repo.discover", map[string]interface{}{"path": req.Msg.Path}, &discoverResp); err != nil {
+		logging.Warn("Failed to discover repos via daemon, project will start with zero repos", "error", err, "path", req.Msg.Path)
+	}
+	isGitRepo := len(discoverResp.Discovered) > 0
 
 	// Set defaults
 	defaultBranch := "main"
@@ -155,6 +201,36 @@ func (s *ProjectService) CreateProject(
 	if err := s.database.CreateProject(ctx, project); err != nil {
 		logging.Error("Failed to create project", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create project"))
+	}
+
+	// Persist discovered repos. Failures here are logged but don't fail
+	// project creation — the project is still usable, repos can be added
+	// later, and re-running discovery will pick them up.
+	for _, found := range discoverResp.Discovered {
+		repoName := found.Name
+		if repoName == "" {
+			repoName = filepath.Base(found.RelativePath)
+			if repoName == "" || repoName == "." {
+				repoName = req.Msg.Name
+			}
+		}
+		var remoteURL *string
+		if found.RemoteURL != "" {
+			rurl := found.RemoteURL
+			remoteURL = &rurl
+		}
+		repoRecord := &core.Repo{
+			ID:           uuid.New().String(),
+			ProjectID:    project.ID,
+			Name:         repoName,
+			RelativePath: found.RelativePath,
+			RemoteURL:    remoteURL,
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		}
+		if err := s.database.CreateRepo(ctx, repoRecord); err != nil {
+			logging.Warn("Failed to persist discovered repo", "error", err, "project_id", project.ID, "relative_path", found.RelativePath)
+		}
 	}
 
 	// Create reliant.md with default instructions if it doesn't exist (via daemon)
@@ -189,6 +265,30 @@ Use ` + "`skill list`" + ` to see all available skills. Key skills:
 		logging.Warn("Failed to initialize project files via daemon", "error", err, "path", req.Msg.Path)
 	} else if initFilesResp.Error != "" {
 		logging.Warn("Failed to initialize project files", "error", initFilesResp.Error, "path", req.Msg.Path)
+	}
+
+	// In multi-repo projects, also init .reliant/ in each nested repo so
+	// downstream config loaders find the standard layout. Repo-level
+	// reliant.md is intentionally not created (opt-in via skip_reliant_md).
+	// The repo at RelativePath == "" shares the project-root .reliant/.
+	for _, found := range discoverResp.Discovered {
+		rel := strings.TrimSpace(found.RelativePath)
+		if rel == "" || rel == "." {
+			continue
+		}
+		repoPath := filepath.Join(req.Msg.Path, rel)
+		var repoInitResp struct {
+			Error string `json:"error,omitempty"`
+		}
+		repoInitPayload := map[string]interface{}{
+			"path":            repoPath,
+			"skip_reliant_md": true,
+		}
+		if err := s.sendProjectDaemonCommand(ctx, userID, "project.init_files", repoInitPayload, &repoInitResp); err != nil {
+			logging.Warn("Failed to initialize repo files via daemon", "error", err, "path", repoPath)
+		} else if repoInitResp.Error != "" {
+			logging.Warn("Failed to initialize repo files", "error", repoInitResp.Error, "path", repoPath)
+		}
 	}
 
 	// Create main worktree for this project
@@ -521,6 +621,11 @@ func (s *ProjectService) GetProjectGitInfo(
 		}), nil
 	}
 
+	repoPath, _, err := s.resolveProjectRepoPath(ctx, project, req.Msg.RepoId)
+	if err != nil {
+		return nil, err
+	}
+
 	// Route all git operations through daemon
 	var gitInfo struct {
 		CurrentBranch  string   `json:"current_branch"`
@@ -533,7 +638,7 @@ func (s *ProjectService) GetProjectGitInfo(
 		Ahead          int32    `json:"ahead"`
 		Behind         int32    `json:"behind"`
 	}
-	if err := s.sendProjectDaemonCommand(ctx, userID, "project.git_info", map[string]string{"path": project.Path}, &gitInfo); err != nil {
+	if err := s.sendProjectDaemonCommand(ctx, userID, "project.git_info", map[string]string{"path": repoPath}, &gitInfo); err != nil {
 		logging.Error("Failed to get git info via daemon", "error", err, "projectID", project.ID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get git info"))
 	}
@@ -576,6 +681,11 @@ func (s *ProjectService) GetProjectGitBranches(
 		}), nil
 	}
 
+	repoPath, _, err := s.resolveProjectRepoPath(ctx, project, req.Msg.RepoId)
+	if err != nil {
+		return nil, err
+	}
+
 	// Route branch listing through daemon
 	type daemonBranch struct {
 		Name          string `json:"name"`
@@ -589,7 +699,7 @@ func (s *ProjectService) GetProjectGitBranches(
 	var branchResp struct {
 		Branches []daemonBranch `json:"branches"`
 	}
-	if err := s.sendProjectDaemonCommand(ctx, userID, "project.git_branches", map[string]string{"path": project.Path}, &branchResp); err != nil {
+	if err := s.sendProjectDaemonCommand(ctx, userID, "project.git_branches", map[string]string{"path": repoPath}, &branchResp); err != nil {
 		logging.Error("Failed to get git branches via daemon", "error", err, "projectID", project.ID)
 		return connect.NewResponse(&reliantv1.GetProjectGitBranchesResponse{
 			Branches: []*reliantv1.GitBranch{},
@@ -710,6 +820,11 @@ func (s *ProjectService) GetProjectChanges(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project has no path configured"))
 	}
 
+	repoPath, _, err := s.resolveProjectRepoPath(ctx, project, req.Msg.RepoId)
+	if err != nil {
+		return nil, err
+	}
+
 	// Route git changes through daemon
 	type daemonFileChange struct {
 		Path            string `json:"path"`
@@ -724,7 +839,7 @@ func (s *ProjectService) GetProjectChanges(
 		Files      []daemonFileChange `json:"files"`
 		TotalFiles int32              `json:"total_files"`
 	}
-	if err := s.sendProjectDaemonCommand(ctx, userID, "project.git_changes", map[string]string{"path": project.Path}, &changesResp); err != nil {
+	if err := s.sendProjectDaemonCommand(ctx, userID, "project.git_changes", map[string]string{"path": repoPath}, &changesResp); err != nil {
 		logging.Error("Failed to get git changes via daemon", "error", err, "projectID", req.Msg.ProjectId, "path", project.Path)
 		return connect.NewResponse(&reliantv1.GetProjectChangesResponse{
 			Branch:     "",

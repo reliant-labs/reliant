@@ -2,8 +2,11 @@ package daemonruntime
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/config"
@@ -39,7 +42,7 @@ type storedScenario struct {
 	ContentHash  string `json:"content_hash"`
 }
 
-func (f *filesystemConfigStore) GetProjectConfigRecord(_ context.Context, projectPath string) (*config.StoredProjectConfigRecord, error) {
+func (f *filesystemConfigStore) GetProjectConfigRecord(ctx context.Context, projectPath string) (*config.StoredProjectConfigRecord, error) {
 	projectPath = strings.TrimSpace(projectPath)
 	if projectPath != "" {
 		if abs, err := filepath.Abs(projectPath); err == nil {
@@ -62,7 +65,30 @@ func (f *filesystemConfigStore) GetProjectConfigRecord(_ context.Context, projec
 	projectMCP, _ := readOptionalFile(filepath.Join(projectPath, ".reliant", "mcp.json"))
 	localMCP, _ := readOptionalFile(filepath.Join(projectPath, ".reliant.local", "mcp.json"))
 
-	mcpConfigs := flattenMCPConfigBytes(userMCP, projectMCP, localMCP)
+	// Walk nested repos and pull in their per-repo mcp.json + .reliant.local/mcp.json
+	// files. Each contributes to the "project" scope (and "local" for the
+	// .reliant.local variant). Two repos that declare a server with the same
+	// (command, args, env) tuple collapse into one entry — a monorepo with
+	// shared tooling typically does this.
+	repoSources := discoverRepoSources(ctx, projectPath)
+	repoProjectMCPs := make([][]byte, 0, len(repoSources))
+	repoLocalMCPs := make([][]byte, 0, len(repoSources))
+	for _, rel := range repoSources {
+		if rel == "" {
+			continue
+		}
+		if b, _ := readOptionalFile(filepath.Join(projectPath, rel, ".reliant", "mcp.json")); len(b) > 0 {
+			repoProjectMCPs = append(repoProjectMCPs, b)
+		}
+		if b, _ := readOptionalFile(filepath.Join(projectPath, rel, ".reliant.local", "mcp.json")); len(b) > 0 {
+			repoLocalMCPs = append(repoLocalMCPs, b)
+		}
+	}
+
+	mergedProjectMCP := mergeMCPDocsDedup(append([][]byte{projectMCP}, repoProjectMCPs...)...)
+	mergedLocalMCP := mergeMCPDocsDedup(append([][]byte{localMCP}, repoLocalMCPs...)...)
+
+	mcpConfigs := flattenMCPConfigBytes(userMCP, mergedProjectMCP, mergedLocalMCP)
 
 	workflows, _ := indexWorkflows(projectPath)
 	presets, _ := indexPresets(projectPath)
@@ -96,6 +122,123 @@ func bytesToStringPtr(b []byte) *string {
 	}
 	s := string(b)
 	return &s
+}
+
+// mergeMCPDocsDedup merges N raw mcp.json byte blobs into a single
+// {"mcpServers": {...}} document. Servers are deduped by the canonical JSON
+// hash of (command, args, env). When two scopes/repos define semantically
+// identical servers under different display names, the alphabetically-first
+// name wins; the second is dropped silently. When multiple servers in a
+// single doc share the same name, last-wins (standard map override).
+//
+// Returns nil when no input contains any servers.
+func mergeMCPDocsDedup(docs ...[]byte) []byte {
+	type serverEntry struct {
+		name string
+		raw  map[string]interface{}
+	}
+	// nameToServer keeps the canonical entry per server name.
+	nameToServer := map[string]map[string]interface{}{}
+	// hashToName maps the (command,args,env) hash to the first-claimed display
+	// name so we can collapse duplicates across docs.
+	hashToName := map[string]string{}
+	// Order servers alphabetically by name so the "first" winner is stable.
+	var allEntries []serverEntry
+
+	for _, doc := range docs {
+		if len(doc) == 0 {
+			continue
+		}
+		var parsed map[string]interface{}
+		if err := json.Unmarshal(doc, &parsed); err != nil {
+			continue
+		}
+		serversRaw, _ := parsed["mcpServers"].(map[string]interface{})
+		if serversRaw == nil {
+			continue
+		}
+		for name, cfg := range serversRaw {
+			cfgMap, ok := cfg.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			allEntries = append(allEntries, serverEntry{name: name, raw: cfgMap})
+		}
+	}
+
+	// Sort by name so alphabetical-first wins on hash collision deterministically.
+	sort.Slice(allEntries, func(i, j int) bool {
+		return allEntries[i].name < allEntries[j].name
+	})
+
+	for _, e := range allEntries {
+		h := canonicalServerHash(e.raw)
+		if existingName, ok := hashToName[h]; ok && existingName != e.name {
+			// Duplicate config under a different name — drop.
+			continue
+		}
+		hashToName[h] = e.name
+		nameToServer[e.name] = e.raw
+	}
+
+	if len(nameToServer) == 0 {
+		return nil
+	}
+	out := map[string]interface{}{"mcpServers": nameToServer}
+	encoded, err := json.Marshal(out)
+	if err != nil {
+		return nil
+	}
+	return encoded
+}
+
+// canonicalServerHash hashes (command, args, env) of an mcp server config so
+// equal servers under different names collapse to one entry. The hash is
+// stable across runs because we marshal a fixed-key, fixed-order struct.
+func canonicalServerHash(cfg map[string]interface{}) string {
+	type canonical struct {
+		Command string            `json:"command"`
+		Args    []string          `json:"args"`
+		Env     map[string]string `json:"env"`
+	}
+	c := canonical{Env: map[string]string{}}
+	if v, ok := cfg["command"].(string); ok {
+		c.Command = v
+	}
+	if argsRaw, ok := cfg["args"].([]interface{}); ok {
+		for _, a := range argsRaw {
+			if s, ok := a.(string); ok {
+				c.Args = append(c.Args, s)
+			}
+		}
+	}
+	if envRaw, ok := cfg["env"].(map[string]interface{}); ok {
+		for k, v := range envRaw {
+			if s, ok := v.(string); ok {
+				c.Env[k] = s
+			}
+		}
+	}
+	// Sort env keys before marshaling so the JSON encoding is deterministic.
+	envKeys := make([]string, 0, len(c.Env))
+	for k := range c.Env {
+		envKeys = append(envKeys, k)
+	}
+	sort.Strings(envKeys)
+	sortedEnv := make(map[string]string, len(c.Env))
+	// json.Marshal of a map sorts keys for us — but only with the std lib's
+	// reflect-based encoder, which currently does sort. Use that.
+	for _, k := range envKeys {
+		sortedEnv[k] = c.Env[k]
+	}
+	c.Env = sortedEnv
+
+	encoded, err := json.Marshal(c)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(encoded)
+	return hex.EncodeToString(sum[:])
 }
 
 // flattenMCPConfigBytes produces the JSON object {"user":"...","project":"...","local":"..."}
@@ -219,6 +362,7 @@ func flattenSkills(skills []*reliantv1.IndexedSkill) *string {
 			ArgumentHint:           s.ArgumentHint,
 			Paths:                  s.Paths,
 			ContentHash:            s.ContentHash,
+			Source:                 s.Source,
 		})
 	}
 	if len(items) == 0 {

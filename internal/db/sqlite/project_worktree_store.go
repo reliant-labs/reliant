@@ -163,14 +163,45 @@ func (s *worktreeStore) ListWorktrees(ctx context.Context, filters core.Worktree
 }
 
 func (s *worktreeStore) UpdateWorktree(ctx context.Context, worktree *core.Worktree) error {
+	baseBranchesJSON, err := encodeBaseBranches(worktree.BaseBranches)
+	if err != nil {
+		return err
+	}
 	return s.q.UpdateWorktree(ctx, sqlitedb.UpdateWorktreeParams{
-		ID:         worktree.ID,
-		Name:       worktree.Name,
-		Branch:     worktree.Branch,
-		Status:     int64(worktree.Status),
-		BaseBranch: worktree.BaseBranch,
-		LastActive: worktree.LastActive,
+		ID:           worktree.ID,
+		Name:         worktree.Name,
+		Branch:       worktree.Branch,
+		Status:       int64(worktree.Status),
+		BaseBranch:   worktree.BaseBranch,
+		BaseBranches: baseBranchesJSON,
+		LastActive:   worktree.LastActive,
 	})
+}
+
+// encodeBaseBranches marshals a per-repo base-branch map for storage.
+// nil/empty map -> NULL column (legacy single-repo worktrees stay clean).
+func encodeBaseBranches(m map[string]string) (sql.NullString, error) {
+	if len(m) == 0 {
+		return sql.NullString{}, nil
+	}
+	encoded, err := json.Marshal(m)
+	if err != nil {
+		return sql.NullString{}, fmt.Errorf("failed to marshal base_branches: %w", err)
+	}
+	return sql.NullString{String: string(encoded), Valid: true}, nil
+}
+
+// decodeBaseBranches unmarshals the JSON map column. Invalid JSON is treated
+// as no map (best-effort; callers fall back to BaseBranch).
+func decodeBaseBranches(ns sql.NullString) map[string]string {
+	if !ns.Valid || ns.String == "" {
+		return nil
+	}
+	var parsed map[string]string
+	if err := json.Unmarshal([]byte(ns.String), &parsed); err != nil {
+		return nil
+	}
+	return parsed
 }
 
 func (s *worktreeStore) UpdateWorktreeCleanupMetadata(ctx context.Context, id string, metadata *core.CleanupMetadata) error {
@@ -250,6 +281,7 @@ func worktreeFromSQLc(sw sqlitedb.Worktree) *core.Worktree {
 		Path:            sw.Path,
 		Branch:          sw.Branch,
 		BaseBranch:      sw.BaseBranch,
+		BaseBranches:    decodeBaseBranches(sw.BaseBranches),
 		ProjectID:       sw.ProjectID,
 		ChatID:          nullStringToPtr(sw.ChatID),
 		Status:          int32(sw.Status),
@@ -271,20 +303,26 @@ func worktreesFromSQLc(rows []sqlitedb.Worktree) []*core.Worktree {
 }
 
 func worktreeToCreateParams(worktree *core.Worktree) sqlitedb.CreateWorktreeParams {
+	// Encode errors only happen on real type-system corruption; for a
+	// map[string]string we treat marshal errors as "no entries persisted"
+	// rather than failing the whole create. The PR-creation lookup falls
+	// back to BaseBranch in that case.
+	baseBranchesJSON, _ := encodeBaseBranches(worktree.BaseBranches)
 	return sqlitedb.CreateWorktreeParams{
-		ID:         worktree.ID,
-		Name:       worktree.Name,
-		Path:       worktree.Path,
-		Branch:     worktree.Branch,
-		BaseBranch: worktree.BaseBranch,
-		ProjectID:  worktree.ProjectID,
-		ChatID:     ptrToNullString(worktree.ChatID),
-		Status:     int64(worktree.Status),
-		IsMain:     worktree.IsMain,
-		CreatedAt:  worktree.CreatedAt,
-		UpdatedAt:  worktree.UpdatedAt,
-		LastActive: worktree.LastActive,
-		DeletedAt:  projectPtrToNullTime(worktree.DeletedAt),
+		ID:           worktree.ID,
+		Name:         worktree.Name,
+		Path:         worktree.Path,
+		Branch:       worktree.Branch,
+		BaseBranch:   worktree.BaseBranch,
+		BaseBranches: baseBranchesJSON,
+		ProjectID:    worktree.ProjectID,
+		ChatID:       ptrToNullString(worktree.ChatID),
+		Status:       int64(worktree.Status),
+		IsMain:       worktree.IsMain,
+		CreatedAt:    worktree.CreatedAt,
+		UpdatedAt:    worktree.UpdatedAt,
+		LastActive:   worktree.LastActive,
+		DeletedAt:    projectPtrToNullTime(worktree.DeletedAt),
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -117,15 +119,86 @@ func worktreeToProto(w *db.Worktree) *reliantv1.Worktree {
 	return proto
 }
 
-// generateRepoID generates a unique ID for a git repository via daemon
-func (s *WorktreeService) generateRepoID(ctx context.Context, userID, projectPath string) (string, error) {
-	var resp struct {
-		RepoID string `json:"repo_id"`
+// listProjectRepos returns the project's nested repos, rejecting projects with
+// none. Empty list is a precondition failure rather than success-with-zero so
+// callers can rely on at least one fan-out target.
+func (s *WorktreeService) listProjectRepos(ctx context.Context, project *db.Project) ([]*core.Repo, error) {
+	repos, err := s.database.ListReposByProject(ctx, project.ID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list repos for project"))
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.generate_repo_id", map[string]string{"project_path": projectPath}, &resp); err != nil {
-		return "", fmt.Errorf("failed to generate repo ID: %w", err)
+	if len(repos) == 0 {
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("project has no git repos; initialize one or add a nested repo before creating worktrees"))
 	}
-	return resp.RepoID, nil
+	return repos, nil
+}
+
+// resolveRepoPath resolves a per-RPC repo_id selector against the worktree's
+// project repo set and returns the absolute git checkout path inside the
+// workspace. The rules:
+//
+//   - empty repoID + project has 0 or 1 repos -> use worktree.Path as-is
+//     (legacy single-repo behavior; works for both "project root is a repo"
+//     and "no repos yet but daemon-side path is still a git checkout").
+//   - empty repoID + project has 2+ repos -> InvalidArgument; multi-repo
+//     callers must specify which repo they're acting on.
+//   - non-empty repoID -> look up the repo, ensure it belongs to this
+//     worktree's project, and return <worktree.Path>/<repo.relative_path>.
+//   - repoID not in the project's repo set -> NotFound.
+//
+// Returns the resolved absolute path and the resolved repo (nil when falling
+// through to legacy single-repo behavior with no Repo rows).
+func (s *WorktreeService) resolveRepoPath(ctx context.Context, worktree *db.Worktree, repoID string) (string, *core.Repo, error) {
+	repos, err := s.database.ListReposByProject(ctx, worktree.ProjectID)
+	if err != nil {
+		return "", nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list repos for project"))
+	}
+
+	if repoID == "" {
+		if len(repos) > 1 {
+			return "", nil, connect.NewError(connect.CodeInvalidArgument,
+				fmt.Errorf("repo_id required in multi-repo projects"))
+		}
+		// 0 repos: fall through to worktree path (e.g. project initialized
+		// before nested-repo migration). 1 repo: prefer the registered repo's
+		// relative_path so multi-repo workspace layouts still work for the
+		// single-repo case (relative_path is "" for a project-root repo, so
+		// this reduces to worktree.Path).
+		if len(repos) == 1 {
+			return filepath.Join(worktree.Path, repos[0].RelativePath), repos[0], nil
+		}
+		return worktree.Path, nil, nil
+	}
+
+	for _, r := range repos {
+		if r.ID == repoID {
+			return filepath.Join(worktree.Path, r.RelativePath), r, nil
+		}
+	}
+	return "", nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("repo not in project"))
+}
+
+// resolveRepoBaseBranch picks the right base branch for a per-repo write
+// operation (e.g. CreatePR). Lookup order:
+//
+//  1. worktree.BaseBranches[repo.ID] — the per-repo override captured at
+//     create time (set when multi-repo workspaces have heterogeneous
+//     defaults like main/master/develop).
+//  2. worktree.BaseBranch — the legacy single value, canonical for
+//     single-repo and a sane fallback when the per-repo map is empty/missing
+//     this entry.
+//  3. "" — let the daemon auto-detect via gh / git remote show.
+//
+// repo may be nil when the project has no Repo rows registered (legacy
+// pre-migration shape); we fall through to the legacy single value.
+func (s *WorktreeService) resolveRepoBaseBranch(worktree *db.Worktree, repo *core.Repo) string {
+	if repo != nil {
+		if b, ok := worktree.BaseBranches[repo.ID]; ok && b != "" {
+			return b
+		}
+	}
+	return worktree.BaseBranch
 }
 
 // validateWorktreeForGitOps validates that a worktree is suitable for git operations
@@ -155,7 +228,16 @@ func (s *WorktreeService) validateWorktreeForGitOps(ctx context.Context, userID 
 // CRUD Operations
 // =============================================================================
 
-// CreateWorktree creates a new worktree
+// CreateWorktree creates a workspace-level worktree spanning all of the
+// project's nested repos. Steps:
+//  1. Validate inputs and resolve the project + its nested repos.
+//  2. Generate a workspace UUID. Instruct the daemon to create one git
+//     worktree per repo, all under the same workspace dir
+//     (<HOME>/.reliant/worktrees/<workspace_id>/<repo.relative_path>).
+//  3. On full success, persist a single Worktree row whose Path is the
+//     workspace root and return it.
+//  4. On partial failure, best-effort rollback (delete created git worktrees)
+//     and return an error.
 func (s *WorktreeService) CreateWorktree(
 	ctx context.Context,
 	req *connect.Request[reliantv1.CreateWorktreeRequest],
@@ -172,122 +254,194 @@ func (s *WorktreeService) CreateWorktree(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
 	}
 
-	// Check project permission
 	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
 		return nil, err
 	}
 
-	// Get the project
 	project, err := s.database.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
 		logging.Error("Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
 	}
 
-	if !project.IsGitRepo {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("project must be a git repository to create worktrees; please initialize git for this project first"))
-	}
-
-	baseBranch := "main"
-	if req.Msg.BaseBranch != nil && *req.Msg.BaseBranch != "" {
-		baseBranch = *req.Msg.BaseBranch
-	}
-
-	// Generate repo ID for centralized worktree location
-	repoID, err := s.generateRepoID(ctx, userID, project.Path)
+	repos, err := s.listProjectRepos(ctx, project)
 	if err != nil {
-		logging.Error("Failed to generate repo ID", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to generate repo ID"))
+		return nil, err
 	}
 
-	// Handle force mode - clean up existing worktree via daemon + database
-	if req.Msg.Force {
-		if err := s.handleForceCreate(ctx, userID, project.Path, req.Msg.Name, req.Msg.Branch, req.Msg.ProjectId); err != nil {
-			return nil, err
-		}
+	globalBase := ""
+	if req.Msg.BaseBranch != nil {
+		globalBase = *req.Msg.BaseBranch
 	}
 
-	// Determine source path for file copying
-	sourcePath := project.Path
+	// Resolve a source workspace if specified. Each repo's file-copy source
+	// becomes <source_workspace>/<repo.relative_path>; falls back to live
+	// project repo dirs when unset.
+	var sourceWorkspace string
 	if req.Msg.SourceWorktreeId != nil && *req.Msg.SourceWorktreeId != "" {
-		// Verify user owns the source worktree before using it
 		if err := s.worktreeBelongsToUser(ctx, *req.Msg.SourceWorktreeId, userID); err != nil {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("source worktree not found"))
 		}
 		sourceWorktree, err := s.database.GetWorktree(ctx, *req.Msg.SourceWorktreeId)
 		if err != nil {
-			logging.Warn("Source worktree not found, falling back to project path", "sourceWorktreeId", *req.Msg.SourceWorktreeId, "error", err)
+			logging.Warn("Source worktree not found, falling back to project paths",
+				"sourceWorktreeId", *req.Msg.SourceWorktreeId, "error", err)
 		} else {
-			sourcePath = sourceWorktree.Path
+			sourceWorkspace = sourceWorktree.Path
 		}
 	}
 
-	// Create the worktree via daemon (handles mkdir, branch check, git worktree add, file copy)
-	type createReq struct {
-		ProjectPath string   `json:"project_path"`
-		RepoID      string   `json:"repo_id"`
-		Name        string   `json:"name"`
-		Branch      string   `json:"branch"`
-		BaseBranch  string   `json:"base_branch"`
-		Force       bool     `json:"force"`
-		CopyFiles   []string `json:"copy_files,omitempty"`
-		SourcePath  string   `json:"source_path,omitempty"`
-	}
-	var createResp struct {
-		Success      bool   `json:"success"`
-		WorktreePath string `json:"worktree_path"`
-		Error        string `json:"error,omitempty"`
-	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.create", createReq{
-		ProjectPath: project.Path,
-		RepoID:      repoID,
-		Name:        req.Msg.Name,
-		Branch:      req.Msg.Branch,
-		BaseBranch:  baseBranch,
-		Force:       req.Msg.Force,
-		CopyFiles:   req.Msg.CopyFiles,
-		SourcePath:  sourcePath,
-	}, &createResp); err != nil {
-		logging.Error("Failed to create git worktree via daemon", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create worktree"))
-	}
-	if !createResp.Success {
-		logging.Error("Failed to create git worktree", "error", createResp.Error)
-		return nil, s.parseGitWorktreeError(createResp.Error, createResp.WorktreePath, req.Msg.Branch, baseBranch)
-	}
-	worktreePath := createResp.WorktreePath
+	workspaceID := uuid.New().String()
 
-	// Create worktree record
+	type repoCreateResult struct {
+		repo         *core.Repo
+		worktreePath string
+		baseBranch   string
+	}
+	successes := make([]repoCreateResult, 0, len(repos))
+
+	rollback := func(reason error) error {
+		for _, s2 := range successes {
+			repoPath := filepath.Join(project.Path, s2.repo.RelativePath)
+			_ = s.sendWorktreeDaemonCommand(ctx, userID, "worktree.delete_directory", map[string]string{
+				"project_path":  repoPath,
+				"worktree_path": s2.worktreePath,
+			}, nil)
+		}
+		return reason
+	}
+
+	var workspaceRoot string
+	for _, repo := range repos {
+		repoPath := filepath.Join(project.Path, repo.RelativePath)
+
+		// Per-repo override > global > daemon auto-detect (empty).
+		repoBase := globalBase
+		if v, ok := req.Msg.BaseBranches[repo.ID]; ok && v != "" {
+			repoBase = v
+		}
+
+		// Source path for file copy: <source_workspace>/<repo.rel>, or live
+		// repo dir when no source workspace was given.
+		sourcePath := repoPath
+		if sourceWorkspace != "" {
+			sourcePath = filepath.Join(sourceWorkspace, repo.RelativePath)
+		}
+
+		if req.Msg.Force {
+			// Stale-branch cleanup; the workspace dir itself is fresh per UUID.
+			_ = s.sendWorktreeDaemonCommand(ctx, userID, "worktree.force_cleanup", map[string]string{
+				"project_path":  repoPath,
+				"worktree_path": "",
+				"branch":        req.Msg.Branch,
+			}, nil)
+		}
+
+		type createReq struct {
+			ProjectPath string   `json:"project_path"`
+			WorkspaceID string   `json:"workspace_id"`
+			SubPath     string   `json:"sub_path"`
+			Name        string   `json:"name"`
+			Branch      string   `json:"branch"`
+			BaseBranch  string   `json:"base_branch"`
+			Force       bool     `json:"force"`
+			CopyFiles   []string `json:"copy_files,omitempty"`
+			SourcePath  string   `json:"source_path,omitempty"`
+		}
+		var createResp struct {
+			Success      bool   `json:"success"`
+			WorktreePath string `json:"worktree_path"`
+			BaseBranch   string `json:"base_branch,omitempty"`
+			Error        string `json:"error,omitempty"`
+		}
+
+		err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.create", createReq{
+			ProjectPath: repoPath,
+			WorkspaceID: workspaceID,
+			SubPath:     repo.RelativePath,
+			Name:        req.Msg.Name,
+			Branch:      req.Msg.Branch,
+			BaseBranch:  repoBase,
+			Force:       req.Msg.Force,
+			CopyFiles:   req.Msg.CopyFiles,
+			SourcePath:  sourcePath,
+		}, &createResp)
+		if err != nil {
+			logging.Error("Failed to create git worktree via daemon", "error", err, "repo", repo.ID)
+			return nil, rollback(connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create worktree for repo %s: %w", repo.Name, err)))
+		}
+		if !createResp.Success {
+			logging.Error("Failed to create git worktree", "error", createResp.Error, "repo", repo.ID)
+			return nil, rollback(s.parseGitWorktreeError(createResp.Error, createResp.WorktreePath, req.Msg.Branch, repoBase))
+		}
+
+		// First successful create gives us the absolute workspace root.
+		// daemon returned <HOME>/.reliant/worktrees/<workspace_id>[/<repo.rel>];
+		// strip the trailing repo.RelativePath to get the workspace root.
+		if workspaceRoot == "" {
+			if repo.RelativePath == "" {
+				workspaceRoot = createResp.WorktreePath
+			} else {
+				workspaceRoot = strings.TrimSuffix(createResp.WorktreePath,
+					string(filepath.Separator)+repo.RelativePath)
+				if workspaceRoot == createResp.WorktreePath {
+					workspaceRoot = filepath.Dir(createResp.WorktreePath)
+				}
+			}
+		}
+
+		successes = append(successes, repoCreateResult{
+			repo:         repo,
+			worktreePath: createResp.WorktreePath,
+			baseBranch:   firstNonEmpty(createResp.BaseBranch, repoBase),
+		})
+	}
+
+	// Persist one Worktree row representing the workspace. BaseBranch is
+	// recorded as the resolved value of the first repo for display.
+	// BaseBranches captures the per-repo resolved value for every successful
+	// create — this is what CreatePR consults at op time so e.g. a repo whose
+	// default is `master` doesn't get a PR opened against `main`.
+	displayBase := ""
+	baseBranches := make(map[string]string, len(successes))
+	if len(successes) > 0 {
+		displayBase = successes[0].baseBranch
+	}
+	for _, s := range successes {
+		if s.baseBranch != "" {
+			baseBranches[s.repo.ID] = s.baseBranch
+		}
+	}
+	// Single-repo legacy: BaseBranch alone is canonical, BaseBranches stays
+	// nil so the column is NULL and writers don't have to special-case the
+	// "one entry" map.
+	if len(baseBranches) <= 1 {
+		baseBranches = nil
+	}
+
 	worktreeID := uuid.New().String()
 	now := time.Now().UTC()
-
 	var chatID *string
 	if req.Msg.ChatId != nil && *req.Msg.ChatId != "" {
 		chatID = req.Msg.ChatId
 	}
-
 	worktree := &db.Worktree{
-		ID:         worktreeID,
-		Name:       req.Msg.Name,
-		Path:       worktreePath,
-		Branch:     req.Msg.Branch,
-		BaseBranch: baseBranch,
-		ProjectID:  req.Msg.ProjectId,
-		ChatID:     chatID,
-		Status:     int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE),
-		CreatedAt:  now,
-		UpdatedAt:  now,
-		LastActive: now,
+		ID:           worktreeID,
+		Name:         req.Msg.Name,
+		Path:         workspaceRoot,
+		Branch:       req.Msg.Branch,
+		BaseBranch:   displayBase,
+		BaseBranches: baseBranches,
+		ProjectID:    project.ID,
+		ChatID:       chatID,
+		Status:       int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE),
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		LastActive:   now,
 	}
-
 	if err := s.database.CreateWorktree(ctx, worktree); err != nil {
-		logging.Error("Failed to create worktree in database", "error", err)
-		// Clean up git worktree via daemon
-		_ = s.sendWorktreeDaemonCommand(ctx, userID, "worktree.delete_directory", map[string]string{
-			"project_path":  project.Path,
-			"worktree_path": worktreePath,
-		}, nil)
-
+		logging.Error("Failed to create worktree row", "error", err)
+		_ = rollback(nil)
 		if strings.Contains(err.Error(), "UNIQUE constraint") {
 			return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("worktree with name '%s' already exists in this project; enable force to override", req.Msg.Name))
 		}
@@ -299,40 +453,13 @@ func (s *WorktreeService) CreateWorktree(
 	}), nil
 }
 
-// handleForceCreate handles cleanup for force create mode
-func (s *WorktreeService) handleForceCreate(ctx context.Context, userID, projectPath, name, branch, projectID string) error {
-	// Check if worktree exists in database and delete it
-	existingWorktrees, err := s.database.ListWorktrees(ctx, db.WorktreeFilters{
-		ProjectID: &projectID,
-		Limit:     1000,
-	})
-	if err == nil {
-		for _, wt := range existingWorktrees {
-			if wt.Name == name {
-				if err := s.database.DeleteWorktree(ctx, wt.ID); err != nil {
-					logging.Warn("Force mode: failed to delete existing worktree from database", "error", err)
-				}
-				if wt.Path != "" {
-					_ = s.sendWorktreeDaemonCommand(ctx, userID, "worktree.delete_directory", map[string]string{
-						"project_path":  projectPath,
-						"worktree_path": wt.Path,
-					}, nil)
-				}
-				break
-			}
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
 		}
 	}
-
-	// Send force cleanup command to daemon (handles worktree remove, prune, branch delete)
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.force_cleanup", map[string]string{
-		"project_path":  projectPath,
-		"worktree_path": "", // Path will be constructed by daemon during create
-		"branch":        branch,
-	}, nil); err != nil {
-		logging.Warn("Force mode: daemon cleanup failed", "error", err)
-	}
-
-	return nil
+	return ""
 }
 
 // parseGitWorktreeError parses git worktree errors into user-friendly messages
@@ -553,7 +680,7 @@ func (s *WorktreeService) DeleteWorktree(
 	deletedBranch := false
 
 	if req.Msg.DeleteLocalDirectory && project != nil && worktree.Path != "" {
-		deletedDir = s.cleanupWorktreeDirectory(ctx, userID, project.Path, worktree.Path)
+		deletedDir = s.cleanupWorktreeDirectory(ctx, userID, project.ID, project.Path, worktree.Path)
 	}
 
 	if req.Msg.DeleteGitBranch && project != nil && worktree.Branch != "" {
@@ -634,7 +761,7 @@ func (s *WorktreeService) ArchiveWorktree(
 	deletedBranch := false
 
 	if req.Msg.DeleteLocalDirectory && project != nil && worktree.Path != "" {
-		deletedDir = s.cleanupWorktreeDirectory(ctx, userID, project.Path, worktree.Path)
+		deletedDir = s.cleanupWorktreeDirectory(ctx, userID, project.ID, project.Path, worktree.Path)
 	}
 
 	if req.Msg.DeleteGitBranch && project != nil && worktree.Branch != "" {
@@ -702,7 +829,78 @@ func (s *WorktreeService) UnarchiveWorktree(
 // Cleanup Helpers
 // =============================================================================
 
-func (s *WorktreeService) cleanupWorktreeDirectory(ctx context.Context, userID, projectPath, worktreePath string) bool {
+// cleanupWorktreeDirectory removes the workspace's nested git checkouts and
+// the workspace root itself. In multi-repo mode it fans out one daemon
+// `worktree.delete_directory` per nested repo (each `git worktree remove`s
+// its checkout from the parent repo), then asks the daemon to wipe the
+// workspace root. In single-repo / legacy projects (one repo with empty
+// RelativePath) it collapses to one daemon call. Best-effort: individual
+// per-repo failures are logged and skipped — a leaked worktree registration
+// is recoverable via `git worktree prune` and shouldn't block teardown.
+//
+// projectID is used to enumerate nested repos; projectPath is the on-disk
+// project root used to derive each parent-repo's git dir.
+func (s *WorktreeService) cleanupWorktreeDirectory(ctx context.Context, userID, projectID, projectPath, worktreePath string) bool {
+	repos, err := s.database.ListReposByProject(ctx, projectID)
+	if err != nil {
+		logging.Warn("Failed to list repos for worktree cleanup; falling back to single-step delete",
+			"error", err, "projectID", projectID)
+		return s.cleanupWorktreeDirectorySingle(ctx, userID, projectPath, worktreePath)
+	}
+
+	// Legacy single-repo (or pre-migration) project: one repo at the project
+	// root, or no Repo rows at all. The worktree path is itself the git
+	// checkout, so a single delete_directory call is correct.
+	if len(repos) <= 1 && (len(repos) == 0 || repos[0].RelativePath == "") {
+		return s.cleanupWorktreeDirectorySingle(ctx, userID, projectPath, worktreePath)
+	}
+
+	// Multi-repo: per-repo `git worktree remove`, then wipe the workspace dir.
+	allDeleted := true
+	for _, repo := range repos {
+		repoPath := filepath.Join(projectPath, repo.RelativePath)
+		checkoutPath := filepath.Join(worktreePath, repo.RelativePath)
+		var resp struct {
+			Deleted bool `json:"deleted"`
+		}
+		if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.delete_directory", map[string]string{
+			"project_path":  repoPath,
+			"worktree_path": checkoutPath,
+		}, &resp); err != nil {
+			logging.Warn("Per-repo worktree delete failed (continuing)",
+				"error", err, "repo", repo.ID, "checkout", checkoutPath)
+			allDeleted = false
+			continue
+		}
+		if !resp.Deleted {
+			logging.Warn("Per-repo worktree delete reported not deleted (continuing)",
+				"repo", repo.ID, "checkout", checkoutPath)
+			allDeleted = false
+		}
+	}
+
+	var wsResp struct {
+		Deleted bool   `json:"deleted"`
+		Error   string `json:"error,omitempty"`
+	}
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.remove_workspace_dir", map[string]string{
+		"workspace_path": worktreePath,
+	}, &wsResp); err != nil {
+		logging.Warn("Workspace dir removal failed (continuing)",
+			"error", err, "workspace", worktreePath)
+		return false
+	}
+	if !wsResp.Deleted {
+		if wsResp.Error != "" {
+			logging.Warn("Workspace dir removal reported error",
+				"workspace", worktreePath, "error", wsResp.Error)
+		}
+		return false
+	}
+	return allDeleted
+}
+
+func (s *WorktreeService) cleanupWorktreeDirectorySingle(ctx context.Context, userID, projectPath, worktreePath string) bool {
 	var resp struct {
 		Deleted bool `json:"deleted"`
 	}
@@ -1104,6 +1302,11 @@ func (s *WorktreeService) GetWorktreeChanges(
 		return nil, err
 	}
 
+	repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.Msg.RepoId)
+	if err != nil {
+		return nil, err
+	}
+
 	// Get changes via daemon
 	type fileChangeEntry struct {
 		Path     string `json:"path"`
@@ -1122,7 +1325,7 @@ func (s *WorktreeService) GetWorktreeChanges(
 		Error         string            `json:"error,omitempty"`
 	}
 	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.git_changes", map[string]string{
-		"worktree_path": worktree.Path,
+		"worktree_path": repoPath,
 		"branch":        worktree.Branch,
 		"base_branch":   worktree.BaseBranch,
 	}, &changesResp); err != nil {
@@ -1191,6 +1394,11 @@ func (s *WorktreeService) GetWorktreeGitStatus(
 		return nil, err
 	}
 
+	repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.Msg.RepoId)
+	if err != nil {
+		return nil, err
+	}
+
 	// Get git status via daemon
 	var statusResp struct {
 		Branch         string   `json:"branch"`
@@ -1203,7 +1411,7 @@ func (s *WorktreeService) GetWorktreeGitStatus(
 		Behind         int32    `json:"behind"`
 	}
 	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.git_status", map[string]string{
-		"worktree_path": worktree.Path,
+		"worktree_path": repoPath,
 		"branch":        worktree.Branch,
 	}, &statusResp); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get git status: %w", err))
@@ -1211,7 +1419,7 @@ func (s *WorktreeService) GetWorktreeGitStatus(
 
 	return connect.NewResponse(&reliantv1.GetWorktreeGitStatusResponse{
 		WorktreeId:     worktree.ID,
-		Path:           worktree.Path,
+		Path:           repoPath,
 		Branch:         statusResp.Branch,
 		Clean:          statusResp.Status == "clean",
 		HasChanges:     statusResp.HasChanges,
@@ -1246,6 +1454,11 @@ func (s *WorktreeService) GetWorktreeCommits(
 
 	// Validate worktree is suitable for git operations
 	if err := s.validateWorktreeForGitOps(ctx, userID, worktree); err != nil {
+		return nil, err
+	}
+
+	repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.Msg.RepoId)
+	if err != nil {
 		return nil, err
 	}
 
@@ -1286,7 +1499,7 @@ func (s *WorktreeService) GetWorktreeCommits(
 		Limit        int32  `json:"limit"`
 	}
 	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.git_commits", commitsReq{
-		WorktreePath: worktree.Path,
+		WorktreePath: repoPath,
 		Branch:       worktree.Branch,
 		BaseBranch:   baseBranch,
 		Limit:        limit,
@@ -1350,6 +1563,11 @@ func (s *WorktreeService) StageFiles(
 		return nil, err
 	}
 
+	repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.Msg.RepoId)
+	if err != nil {
+		return nil, err
+	}
+
 	// Stage files via daemon
 	type stageReq struct {
 		WorktreePath string   `json:"worktree_path"`
@@ -1360,7 +1578,7 @@ func (s *WorktreeService) StageFiles(
 		Error   string `json:"error,omitempty"`
 	}
 	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.stage", stageReq{
-		WorktreePath: worktree.Path,
+		WorktreePath: repoPath,
 		Files:        req.Msg.Files,
 	}, &stageResp); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to stage files: %w", err))
@@ -1400,6 +1618,11 @@ func (s *WorktreeService) UnstageFiles(
 		return nil, err
 	}
 
+	repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.Msg.RepoId)
+	if err != nil {
+		return nil, err
+	}
+
 	// Unstage files via daemon
 	type unstageReq struct {
 		WorktreePath string   `json:"worktree_path"`
@@ -1410,7 +1633,7 @@ func (s *WorktreeService) UnstageFiles(
 		Error   string `json:"error,omitempty"`
 	}
 	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.unstage", unstageReq{
-		WorktreePath: worktree.Path,
+		WorktreePath: repoPath,
 		Files:        req.Msg.Files,
 	}, &unstageResp); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to unstage files: %w", err))
@@ -1454,14 +1677,19 @@ func (s *WorktreeService) CommitWorktree(
 		return nil, err
 	}
 
+	repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.Msg.RepoId)
+	if err != nil {
+		return nil, err
+	}
+
 	// Commit via daemon
-	output, err := s.commitViaDaemon(ctx, userID, worktree.Path, req.Msg.Message)
+	output, err := s.commitViaDaemon(ctx, userID, repoPath, req.Msg.Message)
 	if err != nil {
 		errStr := err.Error()
 		if strings.Contains(errStr, "nothing to commit") || strings.Contains(errStr, "nothing added to commit") {
 			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("no staged changes to commit; stage files first"))
 		}
-		logging.Error("Failed to commit changes", "error", err, "path", worktree.Path)
+		logging.Error("Failed to commit changes", "error", err, "path", repoPath)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to commit: %s", errStr))
 	}
 
@@ -1496,8 +1724,15 @@ func (s *WorktreeService) PushWorktree(
 		return nil, err
 	}
 
-	// Push via daemon
-	output, err := s.pushViaDaemon(ctx, userID, worktree.Path, worktree.Branch)
+	repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.Msg.RepoId)
+	if err != nil {
+		return nil, err
+	}
+
+	// Push via daemon. Branch is resolved daemon-side from HEAD, not from
+	// worktree.Branch — the user may have checked out a different branch in
+	// this repo since creation.
+	output, err := s.pushViaDaemon(ctx, userID, repoPath)
 	if err != nil {
 		logging.Error("Failed to push changes", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to push: %s", err.Error()))
@@ -1534,8 +1769,13 @@ func (s *WorktreeService) PullWorktree(
 		return nil, err
 	}
 
-	// Pull via daemon
-	output, err := s.pullViaDaemon(ctx, userID, worktree.Path, worktree.Branch)
+	repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.Msg.RepoId)
+	if err != nil {
+		return nil, err
+	}
+
+	// Pull via daemon. Branch resolved daemon-side from HEAD.
+	output, err := s.pullViaDaemon(ctx, userID, repoPath)
 	if err != nil {
 		logging.Error("Failed to pull changes", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to pull: %s", err.Error()))
@@ -1572,6 +1812,11 @@ func (s *WorktreeService) GetWorktreePR(
 		return nil, err
 	}
 
+	repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.Msg.RepoId)
+	if err != nil {
+		return nil, err
+	}
+
 	// Get PR info via daemon
 	var prResp struct {
 		Exists     bool   `json:"exists"`
@@ -1582,9 +1827,9 @@ func (s *WorktreeService) GetWorktreePR(
 		LocalHead  string `json:"local_head,omitempty"`
 		HeadRefOid string `json:"head_ref_oid,omitempty"`
 	}
+	// Branch is resolved daemon-side from HEAD, not from worktree.Branch.
 	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.get_pr", map[string]string{
-		"worktree_path": worktree.Path,
-		"branch":        worktree.Branch,
+		"worktree_path": repoPath,
 	}, &prResp); err != nil {
 		logging.Warn("Failed to check PR via daemon", "error", err)
 		return connect.NewResponse(&reliantv1.GetWorktreePRResponse{Exists: false}), nil
@@ -1640,11 +1885,23 @@ func (s *WorktreeService) CreateWorktreePR(
 		return nil, err
 	}
 
-	// Route entire create-PR flow through daemon (stage, commit, push, create PR)
+	repoPath, repo, err := s.resolveRepoPath(ctx, worktree, req.Msg.RepoId)
+	if err != nil {
+		return nil, err
+	}
+
+	// Route entire create-PR flow through daemon (stage, commit, push, create PR).
+	// The daemon resolves the source branch from HEAD on repoPath — worktree.Branch
+	// is the creation-time branch and may diverge per-repo after the user checks
+	// out something else. We *do* still pass base_branch: it's persisted at
+	// create time per-repo (worktree.BaseBranches[repo_id]) so we can honor
+	// non-default bases like master/develop/release.
 	body := ""
 	if req.Msg.Body != nil && *req.Msg.Body != "" {
 		body = *req.Msg.Body
 	}
+
+	baseBranch := s.resolveRepoBaseBranch(worktree, repo)
 
 	var prResp struct {
 		Success       bool   `json:"success"`
@@ -1655,10 +1912,10 @@ func (s *WorktreeService) CreateWorktreePR(
 		Error         string `json:"error,omitempty"`
 	}
 	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.create_pr", map[string]string{
-		"worktree_path": worktree.Path,
-		"branch":        worktree.Branch,
+		"worktree_path": repoPath,
 		"title":         req.Msg.Title,
 		"body":          body,
+		"base_branch":   baseBranch,
 	}, &prResp); err != nil {
 		logging.Error("Failed to create PR via daemon", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create PR: %w", err))
@@ -1720,6 +1977,11 @@ func (s *WorktreeService) RevertFiles(
 		return nil, err
 	}
 
+	repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.Msg.RepoId)
+	if err != nil {
+		return nil, err
+	}
+
 	// Route revert through daemon
 	type revertResult struct {
 		File    string `json:"file"`
@@ -1731,7 +1993,7 @@ func (s *WorktreeService) RevertFiles(
 		Error   string         `json:"error,omitempty"`
 	}
 	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.revert", map[string]interface{}{
-		"worktree_path": worktree.Path,
+		"worktree_path": repoPath,
 		"files":         req.Msg.Files,
 	}, &revertResp); err != nil {
 		logging.Error("Failed to revert files via daemon", "error", err)
@@ -1764,5 +2026,95 @@ func (s *WorktreeService) RevertFiles(
 	return connect.NewResponse(&reliantv1.RevertFilesResponse{
 		Message: message,
 		Files:   revertedFiles,
+	}), nil
+}
+
+// ListWorktreeRepoStatuses returns per-repo git status across every nested
+// repo in the worktree's project. Drives the right-sidebar grouped view.
+//
+// This fans worktree.git_status N times (one per repo) under the workspace
+// root. Per-repo failures don't abort the response; the row carries an
+// error string so the UI can render "couldn't read this one." Single-repo
+// and zero-repo projects collapse to a single-element (or empty) response.
+func (s *WorktreeService) ListWorktreeRepoStatuses(
+	ctx context.Context,
+	req *connect.Request[reliantv1.ListWorktreeRepoStatusesRequest],
+) (*connect.Response[reliantv1.ListWorktreeRepoStatusesResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+
+	if req.Msg.WorktreeId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("worktree_id is required"))
+	}
+
+	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
+		return nil, err
+	}
+
+	worktree, err := s.database.GetWorktree(ctx, req.Msg.WorktreeId)
+	if err != nil {
+		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
+	}
+
+	if err := s.validateWorktreeForGitOps(ctx, userID, worktree); err != nil {
+		return nil, err
+	}
+
+	repos, err := s.database.ListReposByProject(ctx, worktree.ProjectID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list repos for project"))
+	}
+
+	// 0-repo project: empty response. The UI treats this as "nothing to show
+	// in the sidebar" rather than an error so newly-created projects without
+	// any nested repo registered yet still render cleanly.
+	if len(repos) == 0 {
+		return connect.NewResponse(&reliantv1.ListWorktreeRepoStatusesResponse{
+			Statuses: []*reliantv1.WorktreeRepoStatus{},
+		}), nil
+	}
+
+	statuses := make([]*reliantv1.WorktreeRepoStatus, 0, len(repos))
+	for _, r := range repos {
+		repoPath := filepath.Join(worktree.Path, r.RelativePath)
+		row := &reliantv1.WorktreeRepoStatus{
+			RepoId:           r.ID,
+			RepoName:         r.Name,
+			RepoRelativePath: r.RelativePath,
+		}
+
+		var statusResp struct {
+			Branch         string   `json:"branch"`
+			HasChanges     bool     `json:"has_changes"`
+			Status         string   `json:"status"`
+			StagedFiles    []string `json:"staged_files"`
+			UnstagedFiles  []string `json:"unstaged_files"`
+			UntrackedFiles []string `json:"untracked_files"`
+			Ahead          int32    `json:"ahead"`
+			Behind         int32    `json:"behind"`
+			Error          string   `json:"error,omitempty"`
+		}
+		if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.git_status", map[string]string{
+			"worktree_path": repoPath,
+			"branch":        worktree.Branch,
+		}, &statusResp); err != nil {
+			row.Error = err.Error()
+			statuses = append(statuses, row)
+			continue
+		}
+
+		row.CurrentBranch = statusResp.Branch
+		row.HasChanges = statusResp.HasChanges
+		row.Ahead = statusResp.Ahead
+		row.Behind = statusResp.Behind
+		row.ChangedFiles = int32(len(statusResp.StagedFiles) + len(statusResp.UnstagedFiles) + len(statusResp.UntrackedFiles))
+		if statusResp.Error != "" {
+			row.Error = statusResp.Error
+		}
+		statuses = append(statuses, row)
+	}
+
+	return connect.NewResponse(&reliantv1.ListWorktreeRepoStatusesResponse{
+		Statuses: statuses,
 	}), nil
 }

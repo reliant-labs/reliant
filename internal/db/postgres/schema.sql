@@ -12,6 +12,19 @@ CREATE TABLE projects (
     UNIQUE (user_id, path)
 );
 
+CREATE TABLE repos (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    relative_path TEXT NOT NULL DEFAULT '',
+    remote_url TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (project_id, relative_path)
+);
+
+CREATE INDEX idx_repos_project ON repos(project_id);
+
 CREATE TABLE worktrees (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -27,6 +40,7 @@ CREATE TABLE worktrees (
     deleted_at TIMESTAMP,
     is_main BOOLEAN NOT NULL DEFAULT FALSE,
     cleanup_metadata TEXT,
+    base_branches TEXT,
     UNIQUE (project_id, name)
 );
 

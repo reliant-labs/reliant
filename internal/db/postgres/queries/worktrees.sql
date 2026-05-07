@@ -1,8 +1,9 @@
 -- name: CreateWorktree :exec
 INSERT INTO worktrees (
     id, name, path, branch, base_branch, project_id, chat_id,
-    status, is_main, created_at, updated_at, last_active, deleted_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
+    status, is_main, created_at, updated_at, last_active, deleted_at,
+    base_branches
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14);
 
 -- name: GetWorktree :one
 SELECT * FROM worktrees WHERE id = $1;
@@ -26,9 +27,10 @@ UPDATE worktrees SET
     branch = $2,
     status = $3,
     base_branch = $4,
-    last_active = $5,
+    base_branches = $5,
+    last_active = $6,
     updated_at = NOW()
-WHERE id = $6;
+WHERE id = $7;
 
 -- name: DeleteWorktree :exec
 DELETE FROM worktrees WHERE id = $1;

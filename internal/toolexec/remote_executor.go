@@ -160,6 +160,20 @@ func (e *RemoteExecutor) executeOnServer(ctx context.Context, req *ToolRequest, 
 			"path": req.WorktreePath,
 		}
 	}
+	if len(req.Repos) > 0 {
+		repos := make([]map[string]interface{}, 0, len(req.Repos))
+		for _, r := range req.Repos {
+			if r == nil {
+				continue
+			}
+			repos = append(repos, map[string]interface{}{
+				"id":            r.ID,
+				"name":          r.Name,
+				"relative_path": r.RelativePath,
+			})
+		}
+		contextMap["repos"] = repos
+	}
 
 	// Create a per-request daemon client via the factory (thread-safe).
 	// Falls back to the executor's default daemon when no factory is set.
@@ -207,6 +221,20 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 			"id":   req.WorktreeID,
 			"path": req.WorktreePath,
 		}
+	}
+	if len(req.Repos) > 0 {
+		repos := make([]map[string]interface{}, 0, len(req.Repos))
+		for _, r := range req.Repos {
+			if r == nil {
+				continue
+			}
+			repos = append(repos, map[string]interface{}{
+				"id":            r.ID,
+				"name":          r.Name,
+				"relative_path": r.RelativePath,
+			})
+		}
+		contextMap["repos"] = repos
 	}
 
 	timeoutMs := 0
