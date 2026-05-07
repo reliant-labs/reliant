@@ -23,6 +23,7 @@ type ShellParams struct {
 	Env             map[string]string `json:"env,omitempty" jsonschema:"description=Environment variables to set for this command execution"`
 	MaxOutput       int               `json:"max_output,omitempty" jsonschema:"description=Maximum bytes of output to collect (default: 16000)"`
 	TailLines       int               `json:"tail_lines,omitempty" jsonschema:"description=Only return last N lines of output"`
+	Repo            string            `json:"repo,omitempty" jsonschema:"description=Multi-repo only. Which repo to run the command in: 'root' for the project root\\, or a repo name (e.g. 'api'\\, 'web'). Omit in single-repo projects. The system prompt lists available repos when this matters."`
 }
 
 // ShellPermissionsParams is used for permission checking
@@ -186,8 +187,11 @@ func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolRes
 		return ToolResponse{}, fmt.Errorf("chat ID is required")
 	}
 
-	workingDir, err := GetWorkingDirectory(rctx)
+	workingDir, err := ResolveRepoPath(rctx, params.Repo)
 	if err != nil {
+		return NewTextErrorResponse(err.Error()), nil
+	}
+	if workingDir == "" {
 		return NewTextErrorResponse("No project working directory available - ensure you're working within a project"), nil
 	}
 	startTime := time.Now()

@@ -190,7 +190,7 @@ func TestComponentLibraryInstall(t *testing.T) {
 			WithDaemon(daemon.NewLocalClient())
 
 		destPath := filepath.Join("components", "layouts", "sidebar_left.tsx")
-		resp, err := tool.install(ctx, "sidebar_left", destPath)
+		resp, err := tool.install(ctx, "sidebar_left", destPath, "")
 		if err != nil {
 			t.Fatalf("install sidebar_left: %v", err)
 		}
@@ -261,7 +261,7 @@ func TestComponentLibraryInstall(t *testing.T) {
 		ctx := rctx.NewToolContext(context.Background(), "test-chat", "0", nil, worktree).
 			WithDaemon(daemon.NewLocalClient())
 
-		resp, err := tool.install(ctx, "nonexistent_component", "out.tsx")
+		resp, err := tool.install(ctx, "nonexistent_component", "out.tsx", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

@@ -1939,6 +1939,10 @@ type IndexedSkill struct {
 	UserInvocable string `protobuf:"bytes,13,opt,name=user_invocable,json=userInvocable,proto3" json:"user_invocable,omitempty"` // "", "true", "false"
 	ArgumentHint  string `protobuf:"bytes,14,opt,name=argument_hint,json=argumentHint,proto3" json:"argument_hint,omitempty"`
 	Paths         string `protobuf:"bytes,15,opt,name=paths,proto3" json:"paths,omitempty"`
+	// source identifies which nested repo the skill was discovered in. "" means
+	// the project root scope; otherwise it's the repo's relative path
+	// (e.g. "api", "web"). Used to disambiguate same-named skills across repos.
+	Source        string `protobuf:"bytes,16,opt,name=source,proto3" json:"source,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2074,6 +2078,13 @@ func (x *IndexedSkill) GetArgumentHint() string {
 func (x *IndexedSkill) GetPaths() string {
 	if x != nil {
 		return x.Paths
+	}
+	return ""
+}
+
+func (x *IndexedSkill) GetSource() string {
+	if x != nil {
+		return x.Source
 	}
 	return ""
 }
@@ -4071,7 +4082,7 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\rrelative_path\x18\x03 \x01(\tR\frelativePath\x12!\n" +
 	"\fcontent_hash\x18\x04 \x01(\tR\vcontentHash\x12\"\n" +
 	"\rmtime_unix_ms\x18\x05 \x01(\x03R\vmtimeUnixMs\x12!\n" +
-	"\fyaml_content\x18\x06 \x01(\fR\vyamlContent\"\xde\x04\n" +
+	"\fyaml_content\x18\x06 \x01(\fR\vyamlContent\"\xf6\x04\n" +
 	"\fIndexedSkill\x12\x1d\n" +
 	"\n" +
 	"skill_path\x18\x01 \x01(\tR\tskillPath\x12\x12\n" +
@@ -4089,7 +4100,8 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\x18disable_model_invocation\x18\f \x01(\bR\x16disableModelInvocation\x12%\n" +
 	"\x0euser_invocable\x18\r \x01(\tR\ruserInvocable\x12#\n" +
 	"\rargument_hint\x18\x0e \x01(\tR\fargumentHint\x12\x14\n" +
-	"\x05paths\x18\x0f \x01(\tR\x05paths\x1a;\n" +
+	"\x05paths\x18\x0f \x01(\tR\x05paths\x12\x16\n" +
+	"\x06source\x18\x10 \x01(\tR\x06source\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"M\n" +

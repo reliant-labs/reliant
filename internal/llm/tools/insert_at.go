@@ -16,6 +16,7 @@ type InsertAtParams struct {
 	Position     string `json:"position" jsonschema:"required,enum=before|after|replace,description=Where to insert relative to anchor: before (insert before the line containing anchor), after (insert after the line containing anchor), replace (replace the line containing anchor)"`
 	Content      string `json:"content" jsonschema:"required,description=The content to insert or replace with"`
 	AnchorOffset int    `json:"anchor_offset,omitempty" jsonschema:"description=Number of lines to offset from the anchor line. Positive = down, negative = up. Default is 0."`
+	Repo         string `json:"repo,omitempty" jsonschema:"description=Multi-repo only. Which repo the path is relative to: 'root' for the project root\\, or a repo name (e.g. 'api'\\, 'web'). Used as the base for relative paths. Omit in single-repo projects or when path is absolute."`
 }
 
 type InsertAtResponseMetadata struct {
@@ -139,8 +140,11 @@ func (i *insertAtTool) Execute(rctx *rctx.ToolContext, params InsertAtParams) (T
 		return NewTextErrorResponse(fmt.Sprintf("invalid position '%s'. Must be one of: before, after, replace", params.Position)), nil
 	}
 
-	wd, err := GetWorkingDirectory(rctx)
+	wd, err := ResolveRepoPath(rctx, params.Repo)
 	if err != nil {
+		return NewTextErrorResponse(err.Error()), nil
+	}
+	if wd == "" {
 		return NewTextErrorResponse("No project working directory available"), nil
 	}
 

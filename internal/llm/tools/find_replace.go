@@ -17,6 +17,7 @@ type FindAndReplaceParams struct {
 	IgnoreCase  bool   `json:"ignore_case,omitempty" jsonschema:"description=Whether to perform case-insensitive matching (default: false)"`
 	UseRegex    bool   `json:"use_regex,omitempty" jsonschema:"description=Whether find_pattern is a regular expression (default: false)"`
 	Preview     bool   `json:"preview,omitempty" jsonschema:"description=Preview mode: show what changes would be made without applying them. Use this first to verify the pattern and scope before committing changes."`
+	Repo        string `json:"repo,omitempty" jsonschema:"description=Multi-repo only. Which repo to search in: 'root' for the project root\\, or a repo name (e.g. 'api'\\, 'web'). Used as the search base directory. Omit in single-repo projects."`
 }
 
 type FindAndReplaceResponseMetadata struct {
@@ -133,8 +134,11 @@ func (f *findAndReplaceTool) Execute(rctx *rctx.ToolContext, params FindAndRepla
 		return NewTextErrorResponse("find_pattern is required"), nil
 	}
 
-	wd, err := GetWorkingDirectory(rctx)
+	wd, err := ResolveRepoPath(rctx, params.Repo)
 	if err != nil {
+		return NewTextErrorResponse(err.Error()), nil
+	}
+	if wd == "" {
 		return NewTextErrorResponse("No project working directory available - ensure you're working within a project"), nil
 	}
 

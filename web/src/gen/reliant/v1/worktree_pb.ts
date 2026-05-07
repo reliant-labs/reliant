@@ -15,10 +15,12 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/worktree.proto.
  */
 export const file_reliant_v1_worktree: GenFile = /*@__PURE__*/
-  fileDesc("ChlyZWxpYW50L3YxL3dvcmt0cmVlLnByb3RvEgpyZWxpYW50LnYxIoADCghXb3JrdHJlZRIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEgwKBHBhdGgYAyABKAkSDgoGYnJhbmNoGAQgASgJEhMKC2Jhc2VfYnJhbmNoGAUgASgJEhIKCnByb2plY3RfaWQYBiABKAkSFAoHY2hhdF9pZBgHIAEoCUgAiAEBEioKBnN0YXR1cxgIIAEoDjIaLnJlbGlhbnQudjEuV29ya3RyZWVTdGF0dXMSDwoHaXNfbWFpbhgJIAEoCBISCgpjcmVhdGVkX2F0GAogASgJEhIKCnVwZGF0ZWRfYXQYCyABKAkSEwoLbGFzdF9hY3RpdmUYDCABKAkSFwoKZGVsZXRlZF9hdBgNIAEoCUgBiAEBEjoKEGNsZWFudXBfbWV0YWRhdGEYDiABKAsyGy5yZWxpYW50LnYxLkNsZWFudXBNZXRhZGF0YUgCiAEBQgoKCF9jaGF0X2lkQg0KC19kZWxldGVkX2F0QhMKEV9jbGVhbnVwX21ldGFkYXRhIkQKD0NsZWFudXBNZXRhZGF0YRIZChFkaXJlY3RvcnlfZGVsZXRlZBgBIAEoCBIWCg5icmFuY2hfZGVsZXRlZBgCIAEoCCKUAQoSRGlzY292ZXJlZFdvcmt0cmVlEgwKBHBhdGgYASABKAkSDAoEbmFtZRgCIAEoCRIOCgZicmFuY2gYAyABKAkSEwoLaXNfaW1wb3J0ZWQYBCABKAgSEwoLaXNfcHJ1bmFibGUYBSABKAgSGAoLaW1wb3J0ZWRfaWQYBiABKAlIAIgBAUIOCgxfaW1wb3J0ZWRfaWQiawoJR2l0Q29tbWl0EgwKBGhhc2gYASABKAkSEgoKc2hvcnRfaGFzaBgCIAEoCRIOCgZhdXRob3IYAyABKAkSDQoFZW1haWwYBCABKAkSDAoEZGF0ZRgFIAEoCRIPCgdtZXNzYWdlGAYgASgJIoEBChJXb3JrdHJlZUZpbGVDaGFuZ2USDAoEcGF0aBgBIAEoCRIsCgZzdGF0dXMYAiABKA4yHC5yZWxpYW50LnYxLkZpbGVDaGFuZ2VTdGF0dXMSDgoGaXNfbmV3GAMgASgIEgwKBGRpZmYYBCABKAkSEQoJaXNfYmluYXJ5GAUgASgIIvABChVDcmVhdGVXb3JrdHJlZVJlcXVlc3QSDAoEbmFtZRgBIAEoCRIOCgZicmFuY2gYAiABKAkSEgoKcHJvamVjdF9pZBgDIAEoCRIYCgtiYXNlX2JyYW5jaBgEIAEoCUgAiAEBEhQKB2NoYXRfaWQYBSABKAlIAYgBARISCgpjb3B5X2ZpbGVzGAYgAygJEg0KBWZvcmNlGAcgASgIEh8KEnNvdXJjZV93b3JrdHJlZV9pZBgIIAEoCUgCiAEBQg4KDF9iYXNlX2JyYW5jaEIKCghfY2hhdF9pZEIVChNfc291cmNlX3dvcmt0cmVlX2lkIkAKFkNyZWF0ZVdvcmt0cmVlUmVzcG9uc2USJgoId29ya3RyZWUYASABKAsyFC5yZWxpYW50LnYxLldvcmt0cmVlInUKFExpc3RXb3JrdHJlZXNSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSFAoHY2hhdF9pZBgCIAEoCUgAiAEBEg0KBWxpbWl0GAMgASgFEhgKEGluY2x1ZGVfYXJjaGl2ZWQYBCABKAhCCgoIX2NoYXRfaWQiTwoVTGlzdFdvcmt0cmVlc1Jlc3BvbnNlEicKCXdvcmt0cmVlcxgBIAMoCzIULnJlbGlhbnQudjEuV29ya3RyZWUSDQoFdG90YWwYAiABKAUiKQoSR2V0V29ya3RyZWVSZXF1ZXN0EhMKC3dvcmt0cmVlX2lkGAEgASgJIj0KE0dldFdvcmt0cmVlUmVzcG9uc2USJgoId29ya3RyZWUYASABKAsyFC5yZWxpYW50LnYxLldvcmt0cmVlIq4BChVVcGRhdGVXb3JrdHJlZVJlcXVlc3QSEwoLd29ya3RyZWVfaWQYASABKAkSEQoEbmFtZRgCIAEoCUgAiAEBEi8KBnN0YXR1cxgDIAEoDjIaLnJlbGlhbnQudjEuV29ya3RyZWVTdGF0dXNIAYgBARIYCgtiYXNlX2JyYW5jaBgEIAEoCUgCiAEBQgcKBV9uYW1lQgkKB19zdGF0dXNCDgoMX2Jhc2VfYnJhbmNoIkAKFlVwZGF0ZVdvcmt0cmVlUmVzcG9uc2USJgoId29ya3RyZWUYASABKAsyFC5yZWxpYW50LnYxLldvcmt0cmVlImcKFURlbGV0ZVdvcmt0cmVlUmVxdWVzdBITCgt3b3JrdHJlZV9pZBgBIAEoCRIeChZkZWxldGVfbG9jYWxfZGlyZWN0b3J5GAIgASgIEhkKEWRlbGV0ZV9naXRfYnJhbmNoGAMgASgIInkKFkRlbGV0ZVdvcmt0cmVlUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCRIZChFkZWxldGVkX2RpcmVjdG9yeRgCIAEoCBIWCg5kZWxldGVkX2JyYW5jaBgDIAEoCBIbChNpc19wZXJtYW5lbnRfZGVsZXRlGAQgASgIImgKFkFyY2hpdmVXb3JrdHJlZVJlcXVlc3QSEwoLd29ya3RyZWVfaWQYASABKAkSHgoWZGVsZXRlX2xvY2FsX2RpcmVjdG9yeRgCIAEoCBIZChFkZWxldGVfZ2l0X2JyYW5jaBgDIAEoCCJdChdBcmNoaXZlV29ya3RyZWVSZXNwb25zZRIPCgdtZXNzYWdlGAEgASgJEhkKEWRlbGV0ZWRfZGlyZWN0b3J5GAIgASgIEhYKDmRlbGV0ZWRfYnJhbmNoGAMgASgIIi8KGFVuYXJjaGl2ZVdvcmt0cmVlUmVxdWVzdBITCgt3b3JrdHJlZV9pZBgBIAEoCSIsChlVbmFyY2hpdmVXb3JrdHJlZVJlc3BvbnNlEg8KB21lc3NhZ2UYASABKAkidwoVSW1wb3J0V29ya3RyZWVSZXF1ZXN0EgwKBHBhdGgYASABKAkSEgoKcHJvamVjdF9pZBgCIAEoCRIRCgRuYW1lGAMgASgJSACIAQESFAoHY2hhdF9pZBgEIAEoCUgBiAEBQgcKBV9uYW1lQgoKCF9jaGF0X2lkIkAKFkltcG9ydFdvcmt0cmVlUmVzcG9uc2USJgoId29ya3RyZWUYASABKAsyFC5yZWxpYW50LnYxLldvcmt0cmVlIi4KGERpc2NvdmVyV29ya3RyZWVzUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJIl4KGURpc2NvdmVyV29ya3RyZWVzUmVzcG9uc2USMgoKZGlzY292ZXJlZBgBIAMoCzIeLnJlbGlhbnQudjEuRGlzY292ZXJlZFdvcmt0cmVlEg0KBXRvdGFsGAIgASgFIi4KF1JlY3JlYXRlV29ya3RyZWVSZXF1ZXN0EhMKC3dvcmt0cmVlX2lkGAEgASgJIkkKGFJlY3JlYXRlV29ya3RyZWVSZXNwb25zZRIPCgdtZXNzYWdlGAEgASgJEgwKBHBhdGgYAiABKAkSDgoGYnJhbmNoGAMgASgJIjAKGUdldFdvcmt0cmVlQ2hhbmdlc1JlcXVlc3QSEwoLd29ya3RyZWVfaWQYASABKAkipwEKGkdldFdvcmt0cmVlQ2hhbmdlc1Jlc3BvbnNlEg4KBmJyYW5jaBgBIAEoCRItCgVmaWxlcxgCIAMoCzIeLnJlbGlhbnQudjEuV29ya3RyZWVGaWxlQ2hhbmdlEhMKC3RvdGFsX2ZpbGVzGAMgASgFEg0KBWFoZWFkGAQgASgFEg4KBmJlaGluZBgFIAEoBRIWCg5kZWZhdWx0X2JyYW5jaBgGIAEoCSIyChtHZXRXb3JrdHJlZUdpdFN0YXR1c1JlcXVlc3QSEwoLd29ya3RyZWVfaWQYASABKAki2wEKHEdldFdvcmt0cmVlR2l0U3RhdHVzUmVzcG9uc2USEwoLd29ya3RyZWVfaWQYASABKAkSDAoEcGF0aBgCIAEoCRIOCgZicmFuY2gYAyABKAkSDQoFY2xlYW4YBCABKAgSEwoLaGFzX2NoYW5nZXMYBSABKAgSFAoMc3RhZ2VkX2ZpbGVzGAYgAygJEhYKDm1vZGlmaWVkX2ZpbGVzGAcgAygJEhcKD3VudHJhY2tlZF9maWxlcxgIIAMoCRINCgVhaGVhZBgJIAEoBRIOCgZiZWhpbmQYCiABKAUiPwoZR2V0V29ya3RyZWVDb21taXRzUmVxdWVzdBITCgt3b3JrdHJlZV9pZBgBIAEoCRINCgVsaW1pdBgCIAEoBSLBAQoaR2V0V29ya3RyZWVDb21taXRzUmVzcG9uc2USJgoHY29tbWl0cxgBIAMoCzIVLnJlbGlhbnQudjEuR2l0Q29tbWl0Eg0KBXRvdGFsGAIgASgFEg4KBmJyYW5jaBgDIAEoCRITCgtiYXNlX2JyYW5jaBgEIAEoCRIXCg9jb21wYXJpc29uX21vZGUYBSABKAgSFgoOY29tcGFyaXNvbl9yZWYYBiABKAkSFgoOY3VycmVudF9icmFuY2gYByABKAkiNwoRU3RhZ2VGaWxlc1JlcXVlc3QSEwoLd29ya3RyZWVfaWQYASABKAkSDQoFZmlsZXMYAiADKAkiNAoSU3RhZ2VGaWxlc1Jlc3BvbnNlEg8KB21lc3NhZ2UYASABKAkSDQoFZmlsZXMYAiADKAkiOQoTVW5zdGFnZUZpbGVzUmVxdWVzdBITCgt3b3JrdHJlZV9pZBgBIAEoCRINCgVmaWxlcxgCIAMoCSI2ChRVbnN0YWdlRmlsZXNSZXNwb25zZRIPCgdtZXNzYWdlGAEgASgJEg0KBWZpbGVzGAIgAygJIjgKElJldmVydEZpbGVzUmVxdWVzdBITCgt3b3JrdHJlZV9pZBgBIAEoCRINCgVmaWxlcxgCIAMoCSI1ChNSZXZlcnRGaWxlc1Jlc3BvbnNlEg8KB21lc3NhZ2UYASABKAkSDQoFZmlsZXMYAiADKAkiPQoVQ29tbWl0V29ya3RyZWVSZXF1ZXN0EhMKC3dvcmt0cmVlX2lkGAEgASgJEg8KB21lc3NhZ2UYAiABKAkiOQoWQ29tbWl0V29ya3RyZWVSZXNwb25zZRIPCgdtZXNzYWdlGAEgASgJEg4KBm91dHB1dBgCIAEoCSIqChNQdXNoV29ya3RyZWVSZXF1ZXN0EhMKC3dvcmt0cmVlX2lkGAEgASgJIjcKFFB1c2hXb3JrdHJlZVJlc3BvbnNlEg8KB21lc3NhZ2UYASABKAkSDgoGb3V0cHV0GAIgASgJIioKE1B1bGxXb3JrdHJlZVJlcXVlc3QSEwoLd29ya3RyZWVfaWQYASABKAkiNwoUUHVsbFdvcmt0cmVlUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCRIOCgZvdXRwdXQYAiABKAkiKwoUR2V0V29ya3RyZWVQUlJlcXVlc3QSEwoLd29ya3RyZWVfaWQYASABKAkinQEKFUdldFdvcmt0cmVlUFJSZXNwb25zZRIOCgZleGlzdHMYASABKAgSEAoDdXJsGAIgASgJSACIAQESEwoGbnVtYmVyGAMgASgFSAGIAQESEgoFdGl0bGUYBCABKAlIAogBARISCgVzdGF0ZRgFIAEoCUgDiAEBQgYKBF91cmxCCQoHX251bWJlckIICgZfdGl0bGVCCAoGX3N0YXRlIlkKF0NyZWF0ZVdvcmt0cmVlUFJSZXF1ZXN0EhMKC3dvcmt0cmVlX2lkGAEgASgJEg0KBXRpdGxlGAIgASgJEhEKBGJvZHkYAyABKAlIAIgBAUIHCgVfYm9keSJ4ChhDcmVhdGVXb3JrdHJlZVBSUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCRIOCgZwcl91cmwYAiABKAkSDgoGb3V0cHV0GAMgASgJEhYKDmF1dG9fY29tbWl0dGVkGAQgASgIEhMKC2F1dG9fcHVzaGVkGAUgASgIKqgBCg5Xb3JrdHJlZVN0YXR1cxIfChtXT1JLVFJFRV9TVEFUVVNfVU5TUEVDSUZJRUQQABIaChZXT1JLVFJFRV9TVEFUVVNfQUNUSVZFEAESHQoZV09SS1RSRUVfU1RBVFVTX0NPTVBMRVRFRBACEh0KGVdPUktUUkVFX1NUQVRVU19BQkFORE9ORUQQAxIbChdXT1JLVFJFRV9TVEFUVVNfTUVSR0lORxAEMp0PCg9Xb3JrdHJlZVNlcnZpY2USWQoOQ3JlYXRlV29ya3RyZWUSIS5yZWxpYW50LnYxLkNyZWF0ZVdvcmt0cmVlUmVxdWVzdBoiLnJlbGlhbnQudjEuQ3JlYXRlV29ya3RyZWVSZXNwb25zZSIAElYKDUxpc3RXb3JrdHJlZXMSIC5yZWxpYW50LnYxLkxpc3RXb3JrdHJlZXNSZXF1ZXN0GiEucmVsaWFudC52MS5MaXN0V29ya3RyZWVzUmVzcG9uc2UiABJQCgtHZXRXb3JrdHJlZRIeLnJlbGlhbnQudjEuR2V0V29ya3RyZWVSZXF1ZXN0Gh8ucmVsaWFudC52MS5HZXRXb3JrdHJlZVJlc3BvbnNlIgASWQoOVXBkYXRlV29ya3RyZWUSIS5yZWxpYW50LnYxLlVwZGF0ZVdvcmt0cmVlUmVxdWVzdBoiLnJlbGlhbnQudjEuVXBkYXRlV29ya3RyZWVSZXNwb25zZSIAElkKDkRlbGV0ZVdvcmt0cmVlEiEucmVsaWFudC52MS5EZWxldGVXb3JrdHJlZVJlcXVlc3QaIi5yZWxpYW50LnYxLkRlbGV0ZVdvcmt0cmVlUmVzcG9uc2UiABJcCg9BcmNoaXZlV29ya3RyZWUSIi5yZWxpYW50LnYxLkFyY2hpdmVXb3JrdHJlZVJlcXVlc3QaIy5yZWxpYW50LnYxLkFyY2hpdmVXb3JrdHJlZVJlc3BvbnNlIgASYgoRVW5hcmNoaXZlV29ya3RyZWUSJC5yZWxpYW50LnYxLlVuYXJjaGl2ZVdvcmt0cmVlUmVxdWVzdBolLnJlbGlhbnQudjEuVW5hcmNoaXZlV29ya3RyZWVSZXNwb25zZSIAElkKDkltcG9ydFdvcmt0cmVlEiEucmVsaWFudC52MS5JbXBvcnRXb3JrdHJlZVJlcXVlc3QaIi5yZWxpYW50LnYxLkltcG9ydFdvcmt0cmVlUmVzcG9uc2UiABJiChFEaXNjb3Zlcldvcmt0cmVlcxIkLnJlbGlhbnQudjEuRGlzY292ZXJXb3JrdHJlZXNSZXF1ZXN0GiUucmVsaWFudC52MS5EaXNjb3Zlcldvcmt0cmVlc1Jlc3BvbnNlIgASXwoQUmVjcmVhdGVXb3JrdHJlZRIjLnJlbGlhbnQudjEuUmVjcmVhdGVXb3JrdHJlZVJlcXVlc3QaJC5yZWxpYW50LnYxLlJlY3JlYXRlV29ya3RyZWVSZXNwb25zZSIAEmUKEkdldFdvcmt0cmVlQ2hhbmdlcxIlLnJlbGlhbnQudjEuR2V0V29ya3RyZWVDaGFuZ2VzUmVxdWVzdBomLnJlbGlhbnQudjEuR2V0V29ya3RyZWVDaGFuZ2VzUmVzcG9uc2UiABJrChRHZXRXb3JrdHJlZUdpdFN0YXR1cxInLnJlbGlhbnQudjEuR2V0V29ya3RyZWVHaXRTdGF0dXNSZXF1ZXN0GigucmVsaWFudC52MS5HZXRXb3JrdHJlZUdpdFN0YXR1c1Jlc3BvbnNlIgASZQoSR2V0V29ya3RyZWVDb21taXRzEiUucmVsaWFudC52MS5HZXRXb3JrdHJlZUNvbW1pdHNSZXF1ZXN0GiYucmVsaWFudC52MS5HZXRXb3JrdHJlZUNvbW1pdHNSZXNwb25zZSIAEk0KClN0YWdlRmlsZXMSHS5yZWxpYW50LnYxLlN0YWdlRmlsZXNSZXF1ZXN0Gh4ucmVsaWFudC52MS5TdGFnZUZpbGVzUmVzcG9uc2UiABJTCgxVbnN0YWdlRmlsZXMSHy5yZWxpYW50LnYxLlVuc3RhZ2VGaWxlc1JlcXVlc3QaIC5yZWxpYW50LnYxLlVuc3RhZ2VGaWxlc1Jlc3BvbnNlIgASUAoLUmV2ZXJ0RmlsZXMSHi5yZWxpYW50LnYxLlJldmVydEZpbGVzUmVxdWVzdBofLnJlbGlhbnQudjEuUmV2ZXJ0RmlsZXNSZXNwb25zZSIAElkKDkNvbW1pdFdvcmt0cmVlEiEucmVsaWFudC52MS5Db21taXRXb3JrdHJlZVJlcXVlc3QaIi5yZWxpYW50LnYxLkNvbW1pdFdvcmt0cmVlUmVzcG9uc2UiABJTCgxQdXNoV29ya3RyZWUSHy5yZWxpYW50LnYxLlB1c2hXb3JrdHJlZVJlcXVlc3QaIC5yZWxpYW50LnYxLlB1c2hXb3JrdHJlZVJlc3BvbnNlIgASUwoMUHVsbFdvcmt0cmVlEh8ucmVsaWFudC52MS5QdWxsV29ya3RyZWVSZXF1ZXN0GiAucmVsaWFudC52MS5QdWxsV29ya3RyZWVSZXNwb25zZSIAElYKDUdldFdvcmt0cmVlUFISIC5yZWxpYW50LnYxLkdldFdvcmt0cmVlUFJSZXF1ZXN0GiEucmVsaWFudC52MS5HZXRXb3JrdHJlZVBSUmVzcG9uc2UiABJfChBDcmVhdGVXb3JrdHJlZVBSEiMucmVsaWFudC52MS5DcmVhdGVXb3JrdHJlZVBSUmVxdWVzdBokLnJlbGlhbnQudjEuQ3JlYXRlV29ya3RyZWVQUlJlc3BvbnNlIgBCQ1pBZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9pbnRlcm5hbC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_reliant_v1_common]);
+  fileDesc("ChlyZWxpYW50L3YxL3dvcmt0cmVlLnByb3RvEgpyZWxpYW50LnYxIoADCghXb3JrdHJlZRIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEgwKBHBhdGgYAyABKAkSDgoGYnJhbmNoGAQgASgJEhMKC2Jhc2VfYnJhbmNoGAUgASgJEhIKCnByb2plY3RfaWQYBiABKAkSFAoHY2hhdF9pZBgHIAEoCUgAiAEBEioKBnN0YXR1cxgIIAEoDjIaLnJlbGlhbnQudjEuV29ya3RyZWVTdGF0dXMSDwoHaXNfbWFpbhgJIAEoCBISCgpjcmVhdGVkX2F0GAogASgJEhIKCnVwZGF0ZWRfYXQYCyABKAkSEwoLbGFzdF9hY3RpdmUYDCABKAkSFwoKZGVsZXRlZF9hdBgNIAEoCUgBiAEBEjoKEGNsZWFudXBfbWV0YWRhdGEYDiABKAsyGy5yZWxpYW50LnYxLkNsZWFudXBNZXRhZGF0YUgCiAEBQgoKCF9jaGF0X2lkQg0KC19kZWxldGVkX2F0QhMKEV9jbGVhbnVwX21ldGFkYXRhIkQKD0NsZWFudXBNZXRhZGF0YRIZChFkaXJlY3RvcnlfZGVsZXRlZBgBIAEoCBIWCg5icmFuY2hfZGVsZXRlZBgCIAEoCCKUAQoSRGlzY292ZXJlZFdvcmt0cmVlEgwKBHBhdGgYASABKAkSDAoEbmFtZRgCIAEoCRIOCgZicmFuY2gYAyABKAkSEwoLaXNfaW1wb3J0ZWQYBCABKAgSEwoLaXNfcHJ1bmFibGUYBSABKAgSGAoLaW1wb3J0ZWRfaWQYBiABKAlIAIgBAUIOCgxfaW1wb3J0ZWRfaWQiawoJR2l0Q29tbWl0EgwKBGhhc2gYASABKAkSEgoKc2hvcnRfaGFzaBgCIAEoCRIOCgZhdXRob3IYAyABKAkSDQoFZW1haWwYBCABKAkSDAoEZGF0ZRgFIAEoCRIPCgdtZXNzYWdlGAYgASgJIoEBChJXb3JrdHJlZUZpbGVDaGFuZ2USDAoEcGF0aBgBIAEoCRIsCgZzdGF0dXMYAiABKA4yHC5yZWxpYW50LnYxLkZpbGVDaGFuZ2VTdGF0dXMSDgoGaXNfbmV3GAMgASgIEgwKBGRpZmYYBCABKAkSEQoJaXNfYmluYXJ5GAUgASgIIvECChVDcmVhdGVXb3JrdHJlZVJlcXVlc3QSDAoEbmFtZRgBIAEoCRIOCgZicmFuY2gYAiABKAkSEgoKcHJvamVjdF9pZBgDIAEoCRIYCgtiYXNlX2JyYW5jaBgEIAEoCUgAiAEBEhQKB2NoYXRfaWQYBSABKAlIAYgBARISCgpjb3B5X2ZpbGVzGAYgAygJEg0KBWZvcmNlGAcgASgIEh8KEnNvdXJjZV93b3JrdHJlZV9pZBgIIAEoCUgCiAEBEkoKDWJhc2VfYnJhbmNoZXMYCSADKAsyMy5yZWxpYW50LnYxLkNyZWF0ZVdvcmt0cmVlUmVxdWVzdC5CYXNlQnJhbmNoZXNFbnRyeRozChFCYXNlQnJhbmNoZXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBQg4KDF9iYXNlX2JyYW5jaEIKCghfY2hhdF9pZEIVChNfc291cmNlX3dvcmt0cmVlX2lkIkAKFkNyZWF0ZVdvcmt0cmVlUmVzcG9uc2USJgoId29ya3RyZWUYASABKAsyFC5yZWxpYW50LnYxLldvcmt0cmVlInUKFExpc3RXb3JrdHJlZXNSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSFAoHY2hhdF9pZBgCIAEoCUgAiAEBEg0KBWxpbWl0GAMgASgFEhgKEGluY2x1ZGVfYXJjaGl2ZWQYBCABKAhCCgoIX2NoYXRfaWQiTwoVTGlzdFdvcmt0cmVlc1Jlc3BvbnNlEicKCXdvcmt0cmVlcxgBIAMoCzIULnJlbGlhbnQudjEuV29ya3RyZWUSDQoFdG90YWwYAiABKAUiKQoSR2V0V29ya3RyZWVSZXF1ZXN0EhMKC3dvcmt0cmVlX2lkGAEgASgJIj0KE0dldFdvcmt0cmVlUmVzcG9uc2USJgoId29ya3RyZWUYASABKAsyFC5yZWxpYW50LnYxLldvcmt0cmVlIq4BChVVcGRhdGVXb3JrdHJlZVJlcXVlc3QSEwoLd29ya3RyZWVfaWQYASABKAkSEQoEbmFtZRgCIAEoCUgAiAEBEi8KBnN0YXR1cxgDIAEoDjIaLnJlbGlhbnQudjEuV29ya3RyZWVTdGF0dXNIAYgBARIYCgtiYXNlX2JyYW5jaBgEIAEoCUgCiAEBQgcKBV9uYW1lQgkKB19zdGF0dXNCDgoMX2Jhc2VfYnJhbmNoIkAKFlVwZGF0ZVdvcmt0cmVlUmVzcG9uc2USJgoId29ya3RyZWUYASABKAsyFC5yZWxpYW50LnYxLldvcmt0cmVlImcKFURlbGV0ZVdvcmt0cmVlUmVxdWVzdBITCgt3b3JrdHJlZV9pZBgBIAEoCRIeChZkZWxldGVfbG9jYWxfZGlyZWN0b3J5GAIgASgIEhkKEWRlbGV0ZV9naXRfYnJhbmNoGAMgASgIInkKFkRlbGV0ZVdvcmt0cmVlUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCRIZChFkZWxldGVkX2RpcmVjdG9yeRgCIAEoCBIWCg5kZWxldGVkX2JyYW5jaBgDIAEoCBIbChNpc19wZXJtYW5lbnRfZGVsZXRlGAQgASgIImgKFkFyY2hpdmVXb3JrdHJlZVJlcXVlc3QSEwoLd29ya3RyZWVfaWQYASABKAkSHgoWZGVsZXRlX2xvY2FsX2RpcmVjdG9yeRgCIAEoCBIZChFkZWxldGVfZ2l0X2JyYW5jaBgDIAEoCCJdChdBcmNoaXZlV29ya3RyZWVSZXNwb25zZRIPCgdtZXNzYWdlGAEgASgJEhkKEWRlbGV0ZWRfZGlyZWN0b3J5GAIgASgIEhYKDmRlbGV0ZWRfYnJhbmNoGAMgASgIIi8KGFVuYXJjaGl2ZVdvcmt0cmVlUmVxdWVzdBITCgt3b3JrdHJlZV9pZBgBIAEoCSIsChlVbmFyY2hpdmVXb3JrdHJlZVJlc3BvbnNlEg8KB21lc3NhZ2UYASABKAkidwoVSW1wb3J0V29ya3RyZWVSZXF1ZXN0EgwKBHBhdGgYASABKAkSEgoKcHJvamVjdF9pZBgCIAEoCRIRCgRuYW1lGAMgASgJSACIAQESFAoHY2hhdF9pZBgEIAEoCUgBiAEBQgcKBV9uYW1lQgoKCF9jaGF0X2lkIkAKFkltcG9ydFdvcmt0cmVlUmVzcG9uc2USJgoId29ya3RyZWUYASABKAsyFC5yZWxpYW50LnYxLldvcmt0cmVlIi4KGERpc2NvdmVyV29ya3RyZWVzUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJIl4KGURpc2NvdmVyV29ya3RyZWVzUmVzcG9uc2USMgoKZGlzY292ZXJlZBgBIAMoCzIeLnJlbGlhbnQudjEuRGlzY292ZXJlZFdvcmt0cmVlEg0KBXRvdGFsGAIgASgFIi4KF1JlY3JlYXRlV29ya3RyZWVSZXF1ZXN0EhMKC3dvcmt0cmVlX2lkGAEgASgJIkkKGFJlY3JlYXRlV29ya3RyZWVSZXNwb25zZRIPCgdtZXNzYWdlGAEgASgJEgwKBHBhdGgYAiABKAkSDgoGYnJhbmNoGAMgASgJIkEKGUdldFdvcmt0cmVlQ2hhbmdlc1JlcXVlc3QSEwoLd29ya3RyZWVfaWQYASABKAkSDwoHcmVwb19pZBgCIAEoCSKnAQoaR2V0V29ya3RyZWVDaGFuZ2VzUmVzcG9uc2USDgoGYnJhbmNoGAEgASgJEi0KBWZpbGVzGAIgAygLMh4ucmVsaWFudC52MS5Xb3JrdHJlZUZpbGVDaGFuZ2USEwoLdG90YWxfZmlsZXMYAyABKAUSDQoFYWhlYWQYBCABKAUSDgoGYmVoaW5kGAUgASgFEhYKDmRlZmF1bHRfYnJhbmNoGAYgASgJIkMKG0dldFdvcmt0cmVlR2l0U3RhdHVzUmVxdWVzdBITCgt3b3JrdHJlZV9pZBgBIAEoCRIPCgdyZXBvX2lkGAIgASgJItsBChxHZXRXb3JrdHJlZUdpdFN0YXR1c1Jlc3BvbnNlEhMKC3dvcmt0cmVlX2lkGAEgASgJEgwKBHBhdGgYAiABKAkSDgoGYnJhbmNoGAMgASgJEg0KBWNsZWFuGAQgASgIEhMKC2hhc19jaGFuZ2VzGAUgASgIEhQKDHN0YWdlZF9maWxlcxgGIAMoCRIWCg5tb2RpZmllZF9maWxlcxgHIAMoCRIXCg91bnRyYWNrZWRfZmlsZXMYCCADKAkSDQoFYWhlYWQYCSABKAUSDgoGYmVoaW5kGAogASgFIlAKGUdldFdvcmt0cmVlQ29tbWl0c1JlcXVlc3QSEwoLd29ya3RyZWVfaWQYASABKAkSDQoFbGltaXQYAiABKAUSDwoHcmVwb19pZBgDIAEoCSI2Ch9MaXN0V29ya3RyZWVSZXBvU3RhdHVzZXNSZXF1ZXN0EhMKC3dvcmt0cmVlX2lkGAEgASgJIsYBChJXb3JrdHJlZVJlcG9TdGF0dXMSDwoHcmVwb19pZBgBIAEoCRIRCglyZXBvX25hbWUYAiABKAkSGgoScmVwb19yZWxhdGl2ZV9wYXRoGAMgASgJEhYKDmN1cnJlbnRfYnJhbmNoGAQgASgJEhMKC2hhc19jaGFuZ2VzGAUgASgIEg0KBWFoZWFkGAYgASgFEg4KBmJlaGluZBgHIAEoBRIVCg1jaGFuZ2VkX2ZpbGVzGAggASgFEg0KBWVycm9yGAkgASgJIlQKIExpc3RXb3JrdHJlZVJlcG9TdGF0dXNlc1Jlc3BvbnNlEjAKCHN0YXR1c2VzGAEgAygLMh4ucmVsaWFudC52MS5Xb3JrdHJlZVJlcG9TdGF0dXMiwQEKGkdldFdvcmt0cmVlQ29tbWl0c1Jlc3BvbnNlEiYKB2NvbW1pdHMYASADKAsyFS5yZWxpYW50LnYxLkdpdENvbW1pdBINCgV0b3RhbBgCIAEoBRIOCgZicmFuY2gYAyABKAkSEwoLYmFzZV9icmFuY2gYBCABKAkSFwoPY29tcGFyaXNvbl9tb2RlGAUgASgIEhYKDmNvbXBhcmlzb25fcmVmGAYgASgJEhYKDmN1cnJlbnRfYnJhbmNoGAcgASgJIkgKEVN0YWdlRmlsZXNSZXF1ZXN0EhMKC3dvcmt0cmVlX2lkGAEgASgJEg0KBWZpbGVzGAIgAygJEg8KB3JlcG9faWQYAyABKAkiNAoSU3RhZ2VGaWxlc1Jlc3BvbnNlEg8KB21lc3NhZ2UYASABKAkSDQoFZmlsZXMYAiADKAkiSgoTVW5zdGFnZUZpbGVzUmVxdWVzdBITCgt3b3JrdHJlZV9pZBgBIAEoCRINCgVmaWxlcxgCIAMoCRIPCgdyZXBvX2lkGAMgASgJIjYKFFVuc3RhZ2VGaWxlc1Jlc3BvbnNlEg8KB21lc3NhZ2UYASABKAkSDQoFZmlsZXMYAiADKAkiSQoSUmV2ZXJ0RmlsZXNSZXF1ZXN0EhMKC3dvcmt0cmVlX2lkGAEgASgJEg0KBWZpbGVzGAIgAygJEg8KB3JlcG9faWQYAyABKAkiNQoTUmV2ZXJ0RmlsZXNSZXNwb25zZRIPCgdtZXNzYWdlGAEgASgJEg0KBWZpbGVzGAIgAygJIk4KFUNvbW1pdFdvcmt0cmVlUmVxdWVzdBITCgt3b3JrdHJlZV9pZBgBIAEoCRIPCgdtZXNzYWdlGAIgASgJEg8KB3JlcG9faWQYAyABKAkiOQoWQ29tbWl0V29ya3RyZWVSZXNwb25zZRIPCgdtZXNzYWdlGAEgASgJEg4KBm91dHB1dBgCIAEoCSI7ChNQdXNoV29ya3RyZWVSZXF1ZXN0EhMKC3dvcmt0cmVlX2lkGAEgASgJEg8KB3JlcG9faWQYAiABKAkiNwoUUHVzaFdvcmt0cmVlUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCRIOCgZvdXRwdXQYAiABKAkiOwoTUHVsbFdvcmt0cmVlUmVxdWVzdBITCgt3b3JrdHJlZV9pZBgBIAEoCRIPCgdyZXBvX2lkGAIgASgJIjcKFFB1bGxXb3JrdHJlZVJlc3BvbnNlEg8KB21lc3NhZ2UYASABKAkSDgoGb3V0cHV0GAIgASgJIjwKFEdldFdvcmt0cmVlUFJSZXF1ZXN0EhMKC3dvcmt0cmVlX2lkGAEgASgJEg8KB3JlcG9faWQYAiABKAkinQEKFUdldFdvcmt0cmVlUFJSZXNwb25zZRIOCgZleGlzdHMYASABKAgSEAoDdXJsGAIgASgJSACIAQESEwoGbnVtYmVyGAMgASgFSAGIAQESEgoFdGl0bGUYBCABKAlIAogBARISCgVzdGF0ZRgFIAEoCUgDiAEBQgYKBF91cmxCCQoHX251bWJlckIICgZfdGl0bGVCCAoGX3N0YXRlImoKF0NyZWF0ZVdvcmt0cmVlUFJSZXF1ZXN0EhMKC3dvcmt0cmVlX2lkGAEgASgJEg0KBXRpdGxlGAIgASgJEhEKBGJvZHkYAyABKAlIAIgBARIPCgdyZXBvX2lkGAQgASgJQgcKBV9ib2R5IngKGENyZWF0ZVdvcmt0cmVlUFJSZXNwb25zZRIPCgdtZXNzYWdlGAEgASgJEg4KBnByX3VybBgCIAEoCRIOCgZvdXRwdXQYAyABKAkSFgoOYXV0b19jb21taXR0ZWQYBCABKAgSEwoLYXV0b19wdXNoZWQYBSABKAgqqAEKDldvcmt0cmVlU3RhdHVzEh8KG1dPUktUUkVFX1NUQVRVU19VTlNQRUNJRklFRBAAEhoKFldPUktUUkVFX1NUQVRVU19BQ1RJVkUQARIdChlXT1JLVFJFRV9TVEFUVVNfQ09NUExFVEVEEAISHQoZV09SS1RSRUVfU1RBVFVTX0FCQU5ET05FRBADEhsKF1dPUktUUkVFX1NUQVRVU19NRVJHSU5HEAQylhAKD1dvcmt0cmVlU2VydmljZRJZCg5DcmVhdGVXb3JrdHJlZRIhLnJlbGlhbnQudjEuQ3JlYXRlV29ya3RyZWVSZXF1ZXN0GiIucmVsaWFudC52MS5DcmVhdGVXb3JrdHJlZVJlc3BvbnNlIgASVgoNTGlzdFdvcmt0cmVlcxIgLnJlbGlhbnQudjEuTGlzdFdvcmt0cmVlc1JlcXVlc3QaIS5yZWxpYW50LnYxLkxpc3RXb3JrdHJlZXNSZXNwb25zZSIAElAKC0dldFdvcmt0cmVlEh4ucmVsaWFudC52MS5HZXRXb3JrdHJlZVJlcXVlc3QaHy5yZWxpYW50LnYxLkdldFdvcmt0cmVlUmVzcG9uc2UiABJZCg5VcGRhdGVXb3JrdHJlZRIhLnJlbGlhbnQudjEuVXBkYXRlV29ya3RyZWVSZXF1ZXN0GiIucmVsaWFudC52MS5VcGRhdGVXb3JrdHJlZVJlc3BvbnNlIgASWQoORGVsZXRlV29ya3RyZWUSIS5yZWxpYW50LnYxLkRlbGV0ZVdvcmt0cmVlUmVxdWVzdBoiLnJlbGlhbnQudjEuRGVsZXRlV29ya3RyZWVSZXNwb25zZSIAElwKD0FyY2hpdmVXb3JrdHJlZRIiLnJlbGlhbnQudjEuQXJjaGl2ZVdvcmt0cmVlUmVxdWVzdBojLnJlbGlhbnQudjEuQXJjaGl2ZVdvcmt0cmVlUmVzcG9uc2UiABJiChFVbmFyY2hpdmVXb3JrdHJlZRIkLnJlbGlhbnQudjEuVW5hcmNoaXZlV29ya3RyZWVSZXF1ZXN0GiUucmVsaWFudC52MS5VbmFyY2hpdmVXb3JrdHJlZVJlc3BvbnNlIgASWQoOSW1wb3J0V29ya3RyZWUSIS5yZWxpYW50LnYxLkltcG9ydFdvcmt0cmVlUmVxdWVzdBoiLnJlbGlhbnQudjEuSW1wb3J0V29ya3RyZWVSZXNwb25zZSIAEmIKEURpc2NvdmVyV29ya3RyZWVzEiQucmVsaWFudC52MS5EaXNjb3Zlcldvcmt0cmVlc1JlcXVlc3QaJS5yZWxpYW50LnYxLkRpc2NvdmVyV29ya3RyZWVzUmVzcG9uc2UiABJfChBSZWNyZWF0ZVdvcmt0cmVlEiMucmVsaWFudC52MS5SZWNyZWF0ZVdvcmt0cmVlUmVxdWVzdBokLnJlbGlhbnQudjEuUmVjcmVhdGVXb3JrdHJlZVJlc3BvbnNlIgASZQoSR2V0V29ya3RyZWVDaGFuZ2VzEiUucmVsaWFudC52MS5HZXRXb3JrdHJlZUNoYW5nZXNSZXF1ZXN0GiYucmVsaWFudC52MS5HZXRXb3JrdHJlZUNoYW5nZXNSZXNwb25zZSIAEmsKFEdldFdvcmt0cmVlR2l0U3RhdHVzEicucmVsaWFudC52MS5HZXRXb3JrdHJlZUdpdFN0YXR1c1JlcXVlc3QaKC5yZWxpYW50LnYxLkdldFdvcmt0cmVlR2l0U3RhdHVzUmVzcG9uc2UiABJlChJHZXRXb3JrdHJlZUNvbW1pdHMSJS5yZWxpYW50LnYxLkdldFdvcmt0cmVlQ29tbWl0c1JlcXVlc3QaJi5yZWxpYW50LnYxLkdldFdvcmt0cmVlQ29tbWl0c1Jlc3BvbnNlIgASdwoYTGlzdFdvcmt0cmVlUmVwb1N0YXR1c2VzEisucmVsaWFudC52MS5MaXN0V29ya3RyZWVSZXBvU3RhdHVzZXNSZXF1ZXN0GiwucmVsaWFudC52MS5MaXN0V29ya3RyZWVSZXBvU3RhdHVzZXNSZXNwb25zZSIAEk0KClN0YWdlRmlsZXMSHS5yZWxpYW50LnYxLlN0YWdlRmlsZXNSZXF1ZXN0Gh4ucmVsaWFudC52MS5TdGFnZUZpbGVzUmVzcG9uc2UiABJTCgxVbnN0YWdlRmlsZXMSHy5yZWxpYW50LnYxLlVuc3RhZ2VGaWxlc1JlcXVlc3QaIC5yZWxpYW50LnYxLlVuc3RhZ2VGaWxlc1Jlc3BvbnNlIgASUAoLUmV2ZXJ0RmlsZXMSHi5yZWxpYW50LnYxLlJldmVydEZpbGVzUmVxdWVzdBofLnJlbGlhbnQudjEuUmV2ZXJ0RmlsZXNSZXNwb25zZSIAElkKDkNvbW1pdFdvcmt0cmVlEiEucmVsaWFudC52MS5Db21taXRXb3JrdHJlZVJlcXVlc3QaIi5yZWxpYW50LnYxLkNvbW1pdFdvcmt0cmVlUmVzcG9uc2UiABJTCgxQdXNoV29ya3RyZWUSHy5yZWxpYW50LnYxLlB1c2hXb3JrdHJlZVJlcXVlc3QaIC5yZWxpYW50LnYxLlB1c2hXb3JrdHJlZVJlc3BvbnNlIgASUwoMUHVsbFdvcmt0cmVlEh8ucmVsaWFudC52MS5QdWxsV29ya3RyZWVSZXF1ZXN0GiAucmVsaWFudC52MS5QdWxsV29ya3RyZWVSZXNwb25zZSIAElYKDUdldFdvcmt0cmVlUFISIC5yZWxpYW50LnYxLkdldFdvcmt0cmVlUFJSZXF1ZXN0GiEucmVsaWFudC52MS5HZXRXb3JrdHJlZVBSUmVzcG9uc2UiABJfChBDcmVhdGVXb3JrdHJlZVBSEiMucmVsaWFudC52MS5DcmVhdGVXb3JrdHJlZVBSUmVxdWVzdBokLnJlbGlhbnQudjEuQ3JlYXRlV29ya3RyZWVQUlJlc3BvbnNlIgBCQ1pBZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9pbnRlcm5hbC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_reliant_v1_common]);
 
 /**
- * Worktree represents a git worktree in the system
+ * Worktree represents a workspace-level git worktree in the system. Path
+ * points at a workspace dir containing N nested checkouts (one per Repo) at
+ * <Path>/<repo.relative_path>/.
  *
  * @generated from message reliant.v1.Worktree
  */
@@ -257,7 +259,10 @@ export const WorktreeFileChangeSchema: GenMessage<WorktreeFileChange> = /*@__PUR
   messageDesc(file_reliant_v1_worktree, 4);
 
 /**
- * CreateWorktreeRequest creates a new worktree
+ * CreateWorktreeRequest creates a workspace-level worktree spanning all of
+ * the project's nested repos. Each repo gets its own git-worktree checkout at
+ * <workspace_dir>/<repo.relative_path>/, sharing name + branch. All-or-nothing:
+ * any per-repo failure rolls back the whole workspace.
  *
  * @generated from message reliant.v1.CreateWorktreeRequest
  */
@@ -278,6 +283,10 @@ export type CreateWorktreeRequest = Message<"reliant.v1.CreateWorktreeRequest"> 
   projectId: string;
 
   /**
+   * base_branch is the global fallback when a repo has no entry in
+   * base_branches. Empty falls through to per-repo default-branch detection
+   * (gh -> git remote show -> main/master probe).
+   *
    * @generated from field: optional string base_branch = 4;
    */
   baseBranch?: string | undefined;
@@ -288,7 +297,8 @@ export type CreateWorktreeRequest = Message<"reliant.v1.CreateWorktreeRequest"> 
   chatId?: string | undefined;
 
   /**
-   * Files to copy (searches recursively in all directories)
+   * copy_files are searched recursively in each repo source dir and copied
+   * to the same relative location in the corresponding worktree checkout.
    *
    * @generated from field: repeated string copy_files = 6;
    */
@@ -300,11 +310,21 @@ export type CreateWorktreeRequest = Message<"reliant.v1.CreateWorktreeRequest"> 
   force: boolean;
 
   /**
-   * Source worktree to copy files from (if not set, copies from project path)
+   * source_worktree_id, when set, is used as the file-copy source instead of
+   * the live project repo dirs. The corresponding nested checkout inside that
+   * workspace is used per repo.
    *
    * @generated from field: optional string source_worktree_id = 8;
    */
   sourceWorktreeId?: string | undefined;
+
+  /**
+   * base_branches overrides base_branch on a per-repo basis. Key is repo_id.
+   * Missing/empty entry -> fall back to base_branch -> fall back to repo default.
+   *
+   * @generated from field: map<string, string> base_branches = 9;
+   */
+  baseBranches: { [key: string]: string };
 };
 
 /**
@@ -315,7 +335,7 @@ export const CreateWorktreeRequestSchema: GenMessage<CreateWorktreeRequest> = /*
   messageDesc(file_reliant_v1_worktree, 5);
 
 /**
- * CreateWorktreeResponse returns the created worktree
+ * CreateWorktreeResponse returns the created workspace-level worktree.
  *
  * @generated from message reliant.v1.CreateWorktreeResponse
  */
@@ -788,7 +808,9 @@ export const RecreateWorktreeResponseSchema: GenMessage<RecreateWorktreeResponse
   messageDesc(file_reliant_v1_worktree, 24);
 
 /**
- * GetWorktreeChangesRequest gets file changes for a worktree
+ * GetWorktreeChangesRequest gets file changes for a worktree.
+ * repo_id targets one nested repo. Empty is allowed only when the project
+ * has at most one repo (legacy single-repo behavior).
  *
  * @generated from message reliant.v1.GetWorktreeChangesRequest
  */
@@ -797,6 +819,11 @@ export type GetWorktreeChangesRequest = Message<"reliant.v1.GetWorktreeChangesRe
    * @generated from field: string worktree_id = 1;
    */
   worktreeId: string;
+
+  /**
+   * @generated from field: string repo_id = 2;
+   */
+  repoId: string;
 };
 
 /**
@@ -853,7 +880,9 @@ export const GetWorktreeChangesResponseSchema: GenMessage<GetWorktreeChangesResp
   messageDesc(file_reliant_v1_worktree, 26);
 
 /**
- * GetWorktreeGitStatusRequest gets git status for a worktree
+ * GetWorktreeGitStatusRequest gets git status for a worktree.
+ * repo_id targets one nested repo. Empty is allowed only when the project
+ * has at most one repo (legacy single-repo behavior).
  *
  * @generated from message reliant.v1.GetWorktreeGitStatusRequest
  */
@@ -862,6 +891,11 @@ export type GetWorktreeGitStatusRequest = Message<"reliant.v1.GetWorktreeGitStat
    * @generated from field: string worktree_id = 1;
    */
   worktreeId: string;
+
+  /**
+   * @generated from field: string repo_id = 2;
+   */
+  repoId: string;
 };
 
 /**
@@ -936,7 +970,9 @@ export const GetWorktreeGitStatusResponseSchema: GenMessage<GetWorktreeGitStatus
   messageDesc(file_reliant_v1_worktree, 28);
 
 /**
- * GetWorktreeCommitsRequest gets commit history for a worktree
+ * GetWorktreeCommitsRequest gets commit history for a worktree.
+ * repo_id targets one nested repo. Empty is allowed only when the project
+ * has at most one repo (legacy single-repo behavior).
  *
  * @generated from message reliant.v1.GetWorktreeCommitsRequest
  */
@@ -952,6 +988,11 @@ export type GetWorktreeCommitsRequest = Message<"reliant.v1.GetWorktreeCommitsRe
    * @generated from field: int32 limit = 2;
    */
   limit: number;
+
+  /**
+   * @generated from field: string repo_id = 3;
+   */
+  repoId: string;
 };
 
 /**
@@ -960,6 +1001,110 @@ export type GetWorktreeCommitsRequest = Message<"reliant.v1.GetWorktreeCommitsRe
  */
 export const GetWorktreeCommitsRequestSchema: GenMessage<GetWorktreeCommitsRequest> = /*@__PURE__*/
   messageDesc(file_reliant_v1_worktree, 29);
+
+/**
+ * ListWorktreeRepoStatusesRequest fans the per-repo git status across every
+ * nested repo in the worktree's project.
+ *
+ * @generated from message reliant.v1.ListWorktreeRepoStatusesRequest
+ */
+export type ListWorktreeRepoStatusesRequest = Message<"reliant.v1.ListWorktreeRepoStatusesRequest"> & {
+  /**
+   * @generated from field: string worktree_id = 1;
+   */
+  worktreeId: string;
+};
+
+/**
+ * Describes the message reliant.v1.ListWorktreeRepoStatusesRequest.
+ * Use `create(ListWorktreeRepoStatusesRequestSchema)` to create a new message.
+ */
+export const ListWorktreeRepoStatusesRequestSchema: GenMessage<ListWorktreeRepoStatusesRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_worktree, 30);
+
+/**
+ * WorktreeRepoStatus is the per-repo status row inside the aggregator
+ * response. Mirrors the bits the right-sidebar needs to render a grouped
+ * "this repo has N changes, ahead X behind Y" header.
+ *
+ * @generated from message reliant.v1.WorktreeRepoStatus
+ */
+export type WorktreeRepoStatus = Message<"reliant.v1.WorktreeRepoStatus"> & {
+  /**
+   * @generated from field: string repo_id = 1;
+   */
+  repoId: string;
+
+  /**
+   * @generated from field: string repo_name = 2;
+   */
+  repoName: string;
+
+  /**
+   * @generated from field: string repo_relative_path = 3;
+   */
+  repoRelativePath: string;
+
+  /**
+   * @generated from field: string current_branch = 4;
+   */
+  currentBranch: string;
+
+  /**
+   * @generated from field: bool has_changes = 5;
+   */
+  hasChanges: boolean;
+
+  /**
+   * @generated from field: int32 ahead = 6;
+   */
+  ahead: number;
+
+  /**
+   * @generated from field: int32 behind = 7;
+   */
+  behind: number;
+
+  /**
+   * @generated from field: int32 changed_files = 8;
+   */
+  changedFiles: number;
+
+  /**
+   * error is set when this repo's status read failed; the row is still
+   * returned so the UI can show "couldn't read this one" without blowing up
+   * the whole list.
+   *
+   * @generated from field: string error = 9;
+   */
+  error: string;
+};
+
+/**
+ * Describes the message reliant.v1.WorktreeRepoStatus.
+ * Use `create(WorktreeRepoStatusSchema)` to create a new message.
+ */
+export const WorktreeRepoStatusSchema: GenMessage<WorktreeRepoStatus> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_worktree, 31);
+
+/**
+ * ListWorktreeRepoStatusesResponse fans status across nested repos.
+ *
+ * @generated from message reliant.v1.ListWorktreeRepoStatusesResponse
+ */
+export type ListWorktreeRepoStatusesResponse = Message<"reliant.v1.ListWorktreeRepoStatusesResponse"> & {
+  /**
+   * @generated from field: repeated reliant.v1.WorktreeRepoStatus statuses = 1;
+   */
+  statuses: WorktreeRepoStatus[];
+};
+
+/**
+ * Describes the message reliant.v1.ListWorktreeRepoStatusesResponse.
+ * Use `create(ListWorktreeRepoStatusesResponseSchema)` to create a new message.
+ */
+export const ListWorktreeRepoStatusesResponseSchema: GenMessage<ListWorktreeRepoStatusesResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_worktree, 32);
 
 /**
  * GetWorktreeCommitsResponse returns commit history
@@ -1008,10 +1153,12 @@ export type GetWorktreeCommitsResponse = Message<"reliant.v1.GetWorktreeCommitsR
  * Use `create(GetWorktreeCommitsResponseSchema)` to create a new message.
  */
 export const GetWorktreeCommitsResponseSchema: GenMessage<GetWorktreeCommitsResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 30);
+  messageDesc(file_reliant_v1_worktree, 33);
 
 /**
- * StageFilesRequest stages files in a worktree
+ * StageFilesRequest stages files in a worktree.
+ * repo_id targets one nested repo. Empty is allowed only when the project
+ * has at most one repo. Files are paths relative to the targeted repo.
  *
  * @generated from message reliant.v1.StageFilesRequest
  */
@@ -1027,6 +1174,11 @@ export type StageFilesRequest = Message<"reliant.v1.StageFilesRequest"> & {
    * @generated from field: repeated string files = 2;
    */
   files: string[];
+
+  /**
+   * @generated from field: string repo_id = 3;
+   */
+  repoId: string;
 };
 
 /**
@@ -1034,7 +1186,7 @@ export type StageFilesRequest = Message<"reliant.v1.StageFilesRequest"> & {
  * Use `create(StageFilesRequestSchema)` to create a new message.
  */
 export const StageFilesRequestSchema: GenMessage<StageFilesRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 31);
+  messageDesc(file_reliant_v1_worktree, 34);
 
 /**
  * StageFilesResponse confirms staging
@@ -1058,10 +1210,12 @@ export type StageFilesResponse = Message<"reliant.v1.StageFilesResponse"> & {
  * Use `create(StageFilesResponseSchema)` to create a new message.
  */
 export const StageFilesResponseSchema: GenMessage<StageFilesResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 32);
+  messageDesc(file_reliant_v1_worktree, 35);
 
 /**
- * UnstageFilesRequest unstages files in a worktree
+ * UnstageFilesRequest unstages files in a worktree.
+ * repo_id targets one nested repo. Empty is allowed only when the project
+ * has at most one repo. Files are paths relative to the targeted repo.
  *
  * @generated from message reliant.v1.UnstageFilesRequest
  */
@@ -1077,6 +1231,11 @@ export type UnstageFilesRequest = Message<"reliant.v1.UnstageFilesRequest"> & {
    * @generated from field: repeated string files = 2;
    */
   files: string[];
+
+  /**
+   * @generated from field: string repo_id = 3;
+   */
+  repoId: string;
 };
 
 /**
@@ -1084,7 +1243,7 @@ export type UnstageFilesRequest = Message<"reliant.v1.UnstageFilesRequest"> & {
  * Use `create(UnstageFilesRequestSchema)` to create a new message.
  */
 export const UnstageFilesRequestSchema: GenMessage<UnstageFilesRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 33);
+  messageDesc(file_reliant_v1_worktree, 36);
 
 /**
  * UnstageFilesResponse confirms unstaging
@@ -1108,7 +1267,7 @@ export type UnstageFilesResponse = Message<"reliant.v1.UnstageFilesResponse"> & 
  * Use `create(UnstageFilesResponseSchema)` to create a new message.
  */
 export const UnstageFilesResponseSchema: GenMessage<UnstageFilesResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 34);
+  messageDesc(file_reliant_v1_worktree, 37);
 
 /**
  * RevertFilesRequest reverts/discards file changes
@@ -1130,6 +1289,11 @@ export type RevertFilesRequest = Message<"reliant.v1.RevertFilesRequest"> & {
    * @generated from field: repeated string files = 2;
    */
   files: string[];
+
+  /**
+   * @generated from field: string repo_id = 3;
+   */
+  repoId: string;
 };
 
 /**
@@ -1137,7 +1301,7 @@ export type RevertFilesRequest = Message<"reliant.v1.RevertFilesRequest"> & {
  * Use `create(RevertFilesRequestSchema)` to create a new message.
  */
 export const RevertFilesRequestSchema: GenMessage<RevertFilesRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 35);
+  messageDesc(file_reliant_v1_worktree, 38);
 
 /**
  * RevertFilesResponse confirms revert
@@ -1161,10 +1325,12 @@ export type RevertFilesResponse = Message<"reliant.v1.RevertFilesResponse"> & {
  * Use `create(RevertFilesResponseSchema)` to create a new message.
  */
 export const RevertFilesResponseSchema: GenMessage<RevertFilesResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 36);
+  messageDesc(file_reliant_v1_worktree, 39);
 
 /**
- * CommitWorktreeRequest commits staged changes
+ * CommitWorktreeRequest commits staged changes.
+ * repo_id targets one nested repo. Empty is allowed only when the project
+ * has at most one repo. Commits are intrinsically per-repo.
  *
  * @generated from message reliant.v1.CommitWorktreeRequest
  */
@@ -1178,6 +1344,11 @@ export type CommitWorktreeRequest = Message<"reliant.v1.CommitWorktreeRequest"> 
    * @generated from field: string message = 2;
    */
   message: string;
+
+  /**
+   * @generated from field: string repo_id = 3;
+   */
+  repoId: string;
 };
 
 /**
@@ -1185,7 +1356,7 @@ export type CommitWorktreeRequest = Message<"reliant.v1.CommitWorktreeRequest"> 
  * Use `create(CommitWorktreeRequestSchema)` to create a new message.
  */
 export const CommitWorktreeRequestSchema: GenMessage<CommitWorktreeRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 37);
+  messageDesc(file_reliant_v1_worktree, 40);
 
 /**
  * CommitWorktreeResponse confirms commit
@@ -1209,10 +1380,12 @@ export type CommitWorktreeResponse = Message<"reliant.v1.CommitWorktreeResponse"
  * Use `create(CommitWorktreeResponseSchema)` to create a new message.
  */
 export const CommitWorktreeResponseSchema: GenMessage<CommitWorktreeResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 38);
+  messageDesc(file_reliant_v1_worktree, 41);
 
 /**
- * PushWorktreeRequest pushes commits to remote
+ * PushWorktreeRequest pushes commits to remote.
+ * repo_id targets one nested repo. Empty is allowed only when the project
+ * has at most one repo. Push is per-repo (each repo has its own remote).
  *
  * @generated from message reliant.v1.PushWorktreeRequest
  */
@@ -1221,6 +1394,11 @@ export type PushWorktreeRequest = Message<"reliant.v1.PushWorktreeRequest"> & {
    * @generated from field: string worktree_id = 1;
    */
   worktreeId: string;
+
+  /**
+   * @generated from field: string repo_id = 2;
+   */
+  repoId: string;
 };
 
 /**
@@ -1228,7 +1406,7 @@ export type PushWorktreeRequest = Message<"reliant.v1.PushWorktreeRequest"> & {
  * Use `create(PushWorktreeRequestSchema)` to create a new message.
  */
 export const PushWorktreeRequestSchema: GenMessage<PushWorktreeRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 39);
+  messageDesc(file_reliant_v1_worktree, 42);
 
 /**
  * PushWorktreeResponse confirms push
@@ -1252,10 +1430,12 @@ export type PushWorktreeResponse = Message<"reliant.v1.PushWorktreeResponse"> & 
  * Use `create(PushWorktreeResponseSchema)` to create a new message.
  */
 export const PushWorktreeResponseSchema: GenMessage<PushWorktreeResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 40);
+  messageDesc(file_reliant_v1_worktree, 43);
 
 /**
- * PullWorktreeRequest pulls changes from remote
+ * PullWorktreeRequest pulls changes from remote.
+ * repo_id targets one nested repo. Empty is allowed only when the project
+ * has at most one repo. Pull is per-repo (each repo has its own remote).
  *
  * @generated from message reliant.v1.PullWorktreeRequest
  */
@@ -1264,6 +1444,11 @@ export type PullWorktreeRequest = Message<"reliant.v1.PullWorktreeRequest"> & {
    * @generated from field: string worktree_id = 1;
    */
   worktreeId: string;
+
+  /**
+   * @generated from field: string repo_id = 2;
+   */
+  repoId: string;
 };
 
 /**
@@ -1271,7 +1456,7 @@ export type PullWorktreeRequest = Message<"reliant.v1.PullWorktreeRequest"> & {
  * Use `create(PullWorktreeRequestSchema)` to create a new message.
  */
 export const PullWorktreeRequestSchema: GenMessage<PullWorktreeRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 41);
+  messageDesc(file_reliant_v1_worktree, 44);
 
 /**
  * PullWorktreeResponse confirms pull
@@ -1295,10 +1480,12 @@ export type PullWorktreeResponse = Message<"reliant.v1.PullWorktreeResponse"> & 
  * Use `create(PullWorktreeResponseSchema)` to create a new message.
  */
 export const PullWorktreeResponseSchema: GenMessage<PullWorktreeResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 42);
+  messageDesc(file_reliant_v1_worktree, 45);
 
 /**
- * GetWorktreePRRequest checks for existing PR
+ * GetWorktreePRRequest checks for existing PR.
+ * repo_id targets one nested repo. Empty is allowed only when the project
+ * has at most one repo. PRs are intrinsically per-repo.
  *
  * @generated from message reliant.v1.GetWorktreePRRequest
  */
@@ -1307,6 +1494,11 @@ export type GetWorktreePRRequest = Message<"reliant.v1.GetWorktreePRRequest"> & 
    * @generated from field: string worktree_id = 1;
    */
   worktreeId: string;
+
+  /**
+   * @generated from field: string repo_id = 2;
+   */
+  repoId: string;
 };
 
 /**
@@ -1314,7 +1506,7 @@ export type GetWorktreePRRequest = Message<"reliant.v1.GetWorktreePRRequest"> & 
  * Use `create(GetWorktreePRRequestSchema)` to create a new message.
  */
 export const GetWorktreePRRequestSchema: GenMessage<GetWorktreePRRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 43);
+  messageDesc(file_reliant_v1_worktree, 46);
 
 /**
  * GetWorktreePRResponse returns PR info if exists
@@ -1355,10 +1547,12 @@ export type GetWorktreePRResponse = Message<"reliant.v1.GetWorktreePRResponse"> 
  * Use `create(GetWorktreePRResponseSchema)` to create a new message.
  */
 export const GetWorktreePRResponseSchema: GenMessage<GetWorktreePRResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 44);
+  messageDesc(file_reliant_v1_worktree, 47);
 
 /**
- * CreateWorktreePRRequest creates a pull request
+ * CreateWorktreePRRequest creates a pull request.
+ * repo_id targets one nested repo. Empty is allowed only when the project
+ * has at most one repo. PR creation is intrinsically per-repo.
  *
  * @generated from message reliant.v1.CreateWorktreePRRequest
  */
@@ -1377,6 +1571,11 @@ export type CreateWorktreePRRequest = Message<"reliant.v1.CreateWorktreePRReques
    * @generated from field: optional string body = 3;
    */
   body?: string | undefined;
+
+  /**
+   * @generated from field: string repo_id = 4;
+   */
+  repoId: string;
 };
 
 /**
@@ -1384,7 +1583,7 @@ export type CreateWorktreePRRequest = Message<"reliant.v1.CreateWorktreePRReques
  * Use `create(CreateWorktreePRRequestSchema)` to create a new message.
  */
 export const CreateWorktreePRRequestSchema: GenMessage<CreateWorktreePRRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 45);
+  messageDesc(file_reliant_v1_worktree, 48);
 
 /**
  * CreateWorktreePRResponse confirms PR creation
@@ -1423,7 +1622,7 @@ export type CreateWorktreePRResponse = Message<"reliant.v1.CreateWorktreePRRespo
  * Use `create(CreateWorktreePRResponseSchema)` to create a new message.
  */
 export const CreateWorktreePRResponseSchema: GenMessage<CreateWorktreePRResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_worktree, 46);
+  messageDesc(file_reliant_v1_worktree, 49);
 
 /**
  * WorktreeStatus tracks the lifecycle of a worktree
@@ -1471,6 +1670,11 @@ export const WorktreeStatusSchema: GenEnum<WorktreeStatus> = /*@__PURE__*/
 export const WorktreeService: GenService<{
   /**
    * CRUD Operations
+   * CreateWorktree creates ONE workspace-level worktree for the project.
+   * The daemon enumerates the project's nested repos and fans out N
+   * git-worktree creations into <workspace_dir>/<repo.relative_path>/. The
+   * returned Worktree row spans the whole workspace; tools scope to a nested
+   * repo via the per-call `repo` param, not via per-repo worktree rows.
    *
    * @generated from rpc reliant.v1.WorktreeService.CreateWorktree
    */
@@ -1578,6 +1782,19 @@ export const WorktreeService: GenService<{
     methodKind: "unary";
     input: typeof GetWorktreeCommitsRequestSchema;
     output: typeof GetWorktreeCommitsResponseSchema;
+  },
+  /**
+   * ListWorktreeRepoStatuses returns per-repo git status for every nested
+   * repo in the worktree's project. Drives the right-sidebar grouped view.
+   * Single-repo and zero-repo projects collapse to a single-element (or empty)
+   * response so callers don't need a special case.
+   *
+   * @generated from rpc reliant.v1.WorktreeService.ListWorktreeRepoStatuses
+   */
+  listWorktreeRepoStatuses: {
+    methodKind: "unary";
+    input: typeof ListWorktreeRepoStatusesRequestSchema;
+    output: typeof ListWorktreeRepoStatusesResponseSchema;
   },
   /**
    * Git Write Operations

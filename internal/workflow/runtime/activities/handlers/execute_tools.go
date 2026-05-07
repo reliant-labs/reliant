@@ -10,6 +10,7 @@ import (
 
 	gojsonschema "github.com/google/jsonschema-go/jsonschema"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
@@ -39,6 +40,11 @@ type toolExecutionContext struct {
 	chat     *db.Chat
 	project  *db.Project
 	worktree *rctx.WorktreeInfo
+
+	// repos lists the project's nested repos. Threaded into ToolRequest so
+	// tools with a `repo` param can resolve it without a DB call. Empty for
+	// single-repo / legacy projects.
+	repos []*core.Repo
 
 	// Tool execution parameters (from input, no DB lookup needed)
 	chatID     string
@@ -95,6 +101,12 @@ func (a *ExecuteToolsActivity) loadToolExecutionContext(
 	// Load worktree (defaults to project path if not set or not found)
 	tec.worktree = a.loadWorktreeInfo(ctx, chat, project)
 
+	// Load nested repos. Failures degrade gracefully: tools fall back to
+	// single-repo behavior when repos is empty.
+	if repos, err := a.repo.ListReposByProject(ctx, project.ID); err == nil {
+		tec.repos = repos
+	}
+
 	return tec, ""
 }
 
@@ -138,6 +150,7 @@ func (tec *toolExecutionContext) buildToolRequest() *toolexec.ToolRequest {
 		WorktreePath:   effectiveWorktreePath, // Uses override if set
 		Timeout:        5 * time.Minute,
 		DaemonSelector: tec.daemonSelector,
+		Repos:          tec.repos,
 	}
 }
 

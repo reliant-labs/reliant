@@ -22,6 +22,7 @@ type ComponentLibraryParams struct {
 	Category        string `json:"category,omitempty" jsonschema:"enum=layouts,enum=charts,enum=diagrams,enum=deck,enum=ui,description=Filter by category (for 'search' or 'list' actions)"`
 	Path            string `json:"path,omitempty" jsonschema:"description=Full file path including filename where the component should be written (required for 'install' action). Example: src/components/layouts/sidebar_left.tsx"`
 	ForgeIntegrated bool   `json:"forge_integrated,omitempty" jsonschema:"description=When true, returned components include forge system integration notes (useUiStore, useEventBus, useAuth). When false (default), components are standalone. Set to true when working in a forge-generated project with EventBusProvider and Zustand stores set up."`
+	Repo            string `json:"repo,omitempty" jsonschema:"description=Multi-repo only. Which repo the install path is relative to: 'root' for the project root\\, or a repo name (e.g. 'api'\\, 'web'). Used as the base for relative paths. Omit in single-repo projects or when path is absolute."`
 }
 
 // ── Tool implementation ──────────────────────────────────────────────────
@@ -85,7 +86,7 @@ func (t *componentLibraryTool) Execute(rctx *rctx.ToolContext, params ComponentL
 		if params.Path == "" {
 			return NewTextErrorResponse("'path' is required when action is 'install'"), nil
 		}
-		return t.install(rctx, params.Name, params.Path)
+		return t.install(rctx, params.Name, params.Path, params.Repo)
 	case "list":
 		return t.list(params.Tag, params.Category)
 	default:
@@ -157,7 +158,7 @@ func (t *componentLibraryTool) get(name string, forgeIntegrated bool) (ToolRespo
 	}), nil
 }
 
-func (t *componentLibraryTool) install(rctx *rctx.ToolContext, name, path string) (ToolResponse, error) {
+func (t *componentLibraryTool) install(rctx *rctx.ToolContext, name, path, repo string) (ToolResponse, error) {
 	entry, exists := componentLib.GetEntry(name)
 	if !exists {
 		suggestions := componentLib.FindSimilar(name)
@@ -178,7 +179,7 @@ func (t *componentLibraryTool) install(rctx *rctx.ToolContext, name, path string
 
 	filePath := path
 	if !filepath.IsAbs(filePath) {
-		workingDir, err := GetWorkingDirectory(rctx)
+		workingDir, err := ResolveRepoPath(rctx, repo)
 		if err != nil {
 			return NewTextErrorResponse(fmt.Sprintf("couldn't determine working directory: %v", err)), nil
 		}

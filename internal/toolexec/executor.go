@@ -5,6 +5,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/models/message"
 )
 
@@ -48,6 +49,11 @@ type ToolRequest struct {
 	// Daemon targeting - specifies which daemon should execute this request.
 	// nil means use default daemon resolution (local → cloud → wake).
 	DaemonSelector *DaemonSelector // Target daemon selector (optional)
+
+	// Repos lists every repo in the project. Tools with a `repo` param resolve
+	// it to workspaceRoot/repo.relative_path. Empty for legacy single-repo /
+	// projects.
+	Repos []*core.Repo
 }
 
 // ToolResult represents the result of tool execution.

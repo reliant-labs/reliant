@@ -41,13 +41,16 @@ export interface ExistingPRResponse {
 }
 
 /**
- * Stage files in a worktree
+ * Stage files in a worktree.
+ * repoId scopes to a nested repo (single-repo callers omit). File paths
+ * must be relative to that repo.
  */
 export async function stageFiles(
   worktreeId: string,
-  files: string[]
+  files: string[],
+  repoId?: string
 ): Promise<GitOperationResponse> {
-  const result = await worktreeGrpc.stageFiles(worktreeId, files);
+  const result = await worktreeGrpc.stageFiles(worktreeId, files, repoId);
   // Trigger immediate refresh after staging
   const projectId = getProjectIdFromWorktree(worktreeId);
   if (projectId) triggerImmediateGitStatusRefresh(worktreeId, projectId);
@@ -58,13 +61,15 @@ export async function stageFiles(
 }
 
 /**
- * Unstage files in a worktree
+ * Unstage files in a worktree.
+ * repoId scopes to a nested repo (single-repo callers omit).
  */
 export async function unstageFiles(
   worktreeId: string,
-  files: string[]
+  files: string[],
+  repoId?: string
 ): Promise<GitOperationResponse> {
-  const result = await worktreeGrpc.unstageFiles(worktreeId, files);
+  const result = await worktreeGrpc.unstageFiles(worktreeId, files, repoId);
   // Trigger immediate refresh after unstaging
   const projectId = getProjectIdFromWorktree(worktreeId);
   if (projectId) triggerImmediateGitStatusRefresh(worktreeId, projectId);
@@ -75,13 +80,15 @@ export async function unstageFiles(
 }
 
 /**
- * Commit staged changes in a worktree
+ * Commit staged changes in a worktree.
+ * repoId scopes to a nested repo (single-repo callers omit).
  */
 export async function commitChanges(
   worktreeId: string,
-  message: string
+  message: string,
+  repoId?: string
 ): Promise<GitOperationResponse> {
-  const result = await worktreeGrpc.commit(worktreeId, message);
+  const result = await worktreeGrpc.commit(worktreeId, message, repoId);
   // Trigger immediate refresh after commit
   const projectId = getProjectIdFromWorktree(worktreeId);
   if (projectId) triggerImmediateGitStatusRefresh(worktreeId, projectId);
@@ -92,12 +99,14 @@ export async function commitChanges(
 }
 
 /**
- * Push commits to remote
+ * Push commits to remote.
+ * repoId scopes to a nested repo (each repo has its own remote).
  */
 export async function pushChanges(
-  worktreeId: string
+  worktreeId: string,
+  repoId?: string
 ): Promise<GitOperationResponse> {
-  const result = await worktreeGrpc.push(worktreeId);
+  const result = await worktreeGrpc.push(worktreeId, repoId);
   return {
     message: result.message,
     output: result.output,
@@ -105,12 +114,14 @@ export async function pushChanges(
 }
 
 /**
- * Pull changes from remote
+ * Pull changes from remote.
+ * repoId scopes to a nested repo (each repo has its own remote).
  */
 export async function pullChanges(
-  worktreeId: string
+  worktreeId: string,
+  repoId?: string
 ): Promise<GitOperationResponse> {
-  const result = await worktreeGrpc.pull(worktreeId);
+  const result = await worktreeGrpc.pull(worktreeId, repoId);
   // Trigger immediate refresh after pull
   const projectId = getProjectIdFromWorktree(worktreeId);
   if (projectId) triggerImmediateGitStatusRefresh(worktreeId, projectId);
@@ -121,12 +132,14 @@ export async function pullChanges(
 }
 
 /**
- * Check if a PR already exists for this worktree's branch
+ * Check if a PR already exists for this worktree's branch.
+ * repoId scopes to a nested repo (PRs are per-repo).
  */
 export async function getExistingPR(
-  worktreeId: string
+  worktreeId: string,
+  repoId?: string
 ): Promise<ExistingPRResponse> {
-  const result = await worktreeGrpc.getPR(worktreeId);
+  const result = await worktreeGrpc.getPR(worktreeId, repoId);
   return {
     exists: result.exists,
     url: result.url,
@@ -137,14 +150,16 @@ export async function getExistingPR(
 }
 
 /**
- * Create a pull request
+ * Create a pull request.
+ * repoId scopes to a nested repo (PRs are per-repo).
  */
 export async function createPullRequest(
   worktreeId: string,
   title: string,
-  body?: string
+  body?: string,
+  repoId?: string
 ): Promise<GitOperationResponse> {
-  const result = await worktreeGrpc.createPR(worktreeId, title, body);
+  const result = await worktreeGrpc.createPR(worktreeId, title, body, repoId);
   return {
     message: result.message,
     pr_url: result.pr_url,
@@ -157,12 +172,14 @@ export async function createPullRequest(
  * For staged files: unstages and discards changes
  * For modified files: discards working tree changes
  * For untracked files: deletes the file
+ * repoId scopes to a nested repo (single-repo callers omit).
  */
 export async function revertFiles(
   worktreeId: string,
-  files: string[]
+  files: string[],
+  repoId?: string
 ): Promise<GitOperationResponse> {
-  const result = await worktreeGrpc.revertFiles(worktreeId, files);
+  const result = await worktreeGrpc.revertFiles(worktreeId, files, repoId);
   // Trigger immediate refresh after revert
   const projectId = getProjectIdFromWorktree(worktreeId);
   if (projectId) triggerImmediateGitStatusRefresh(worktreeId, projectId);

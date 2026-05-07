@@ -510,7 +510,7 @@ The `node` field on events targets specific nodes by ID:
 - **Nested structures**: `node: "outer.inner.node_id"`
 
 For inline loops and inline workflow nodes, the simulator executes each inner node individually, evaluates conditions, and tracks skipped nodes with their qualified IDs.
-For ref-based nodes (external workflow reference), the node is mocked as a black box using the ref name.
+For ref-based nodes, the default is black-box mocking with the ref name. If the runner can resolve the reference and the scenario targets qualified inner nodes, the simulator executes the referenced workflow internally instead.
 
 **Event matching:**
 - Events with a `node` field are matched to that specific node

@@ -1194,6 +1194,7 @@ func flattenIndexedSkills(skills []*reliantv1.IndexedSkill) *string {
 			ArgumentHint:           s.ArgumentHint,
 			Paths:                  s.Paths,
 			ContentHash:            s.ContentHash,
+			Source:                 s.Source,
 		})
 	}
 	if len(items) == 0 {
