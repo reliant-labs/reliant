@@ -16,6 +16,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/telemetry"
 )
 
+const worktreeOperationTimeout = 120 * time.Second
+
 // sessionTracker tracks active user sessions to avoid duplicate session_start events
 type sessionTracker struct {
 	sessions map[string]time.Time // userID -> last seen time
@@ -344,26 +346,26 @@ func NewTimeoutInterceptor() *TimeoutInterceptor {
 			// Provider API key validation - Gemini requires minimum 10s deadline
 			"/reliant.v1.SettingsService/ValidateProviderAPIKey": 20 * time.Second,
 			"/reliant.v1.SettingsService/UpdateProviderAPIKey":   20 * time.Second,
-			// Worktree operations - involve git commands that can take 10-30s
-			"/reliant.v1.WorktreeService/CreateWorktree":           30 * time.Second,
-			"/reliant.v1.WorktreeService/DeleteWorktree":           30 * time.Second,
-			"/reliant.v1.WorktreeService/ArchiveWorktree":          30 * time.Second,
-			"/reliant.v1.WorktreeService/UnarchiveWorktree":        30 * time.Second,
-			"/reliant.v1.WorktreeService/ImportWorktree":           30 * time.Second,
-			"/reliant.v1.WorktreeService/DiscoverWorktrees":        30 * time.Second,
-			"/reliant.v1.WorktreeService/RecreateWorktree":         30 * time.Second,
-			"/reliant.v1.WorktreeService/GetWorktreeChanges":       30 * time.Second,
-			"/reliant.v1.WorktreeService/GetWorktreeGitStatus":     30 * time.Second,
-			"/reliant.v1.WorktreeService/GetWorktreeCommits":       30 * time.Second,
-			"/reliant.v1.WorktreeService/ListWorktreeRepoStatuses": 60 * time.Second,
-			"/reliant.v1.WorktreeService/StageFiles":               30 * time.Second,
-			"/reliant.v1.WorktreeService/UnstageFiles":             30 * time.Second,
-			"/reliant.v1.WorktreeService/CommitWorktree":           30 * time.Second,
-			"/reliant.v1.WorktreeService/PushWorktree":             30 * time.Second,
-			"/reliant.v1.WorktreeService/PullWorktree":             30 * time.Second,
-			"/reliant.v1.WorktreeService/GetWorktreePR":            30 * time.Second,
-			"/reliant.v1.WorktreeService/CreateWorktreePR":         30 * time.Second,
-			"/reliant.v1.WorktreeService/RevertFiles":              30 * time.Second,
+			// Worktree operations can involve git worktree add/remove, diffing, and file copying.
+			"/reliant.v1.WorktreeService/CreateWorktree":           worktreeOperationTimeout,
+			"/reliant.v1.WorktreeService/DeleteWorktree":           worktreeOperationTimeout,
+			"/reliant.v1.WorktreeService/ArchiveWorktree":          worktreeOperationTimeout,
+			"/reliant.v1.WorktreeService/UnarchiveWorktree":        worktreeOperationTimeout,
+			"/reliant.v1.WorktreeService/ImportWorktree":           worktreeOperationTimeout,
+			"/reliant.v1.WorktreeService/DiscoverWorktrees":        worktreeOperationTimeout,
+			"/reliant.v1.WorktreeService/RecreateWorktree":         worktreeOperationTimeout,
+			"/reliant.v1.WorktreeService/GetWorktreeChanges":       worktreeOperationTimeout,
+			"/reliant.v1.WorktreeService/GetWorktreeGitStatus":     worktreeOperationTimeout,
+			"/reliant.v1.WorktreeService/GetWorktreeCommits":       worktreeOperationTimeout,
+			"/reliant.v1.WorktreeService/ListWorktreeRepoStatuses": worktreeOperationTimeout,
+			"/reliant.v1.WorktreeService/StageFiles":               worktreeOperationTimeout,
+			"/reliant.v1.WorktreeService/UnstageFiles":             worktreeOperationTimeout,
+			"/reliant.v1.WorktreeService/CommitWorktree":           worktreeOperationTimeout,
+			"/reliant.v1.WorktreeService/PushWorktree":             worktreeOperationTimeout,
+			"/reliant.v1.WorktreeService/PullWorktree":             worktreeOperationTimeout,
+			"/reliant.v1.WorktreeService/GetWorktreePR":            worktreeOperationTimeout,
+			"/reliant.v1.WorktreeService/CreateWorktreePR":         worktreeOperationTimeout,
+			"/reliant.v1.WorktreeService/RevertFiles":              worktreeOperationTimeout,
 			// MCP operations - external process management can be slow
 			"/reliant.v1.MCPService/InstallServer":      60 * time.Second,
 			"/reliant.v1.MCPService/RestartServer":      60 * time.Second,

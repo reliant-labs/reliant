@@ -26,6 +26,30 @@ import (
 // worktreeTestDaemonRouter implements toolexec.DaemonRouter for worktree tests.
 type worktreeTestDaemonRouter struct{}
 
+type recordingWorktreeDaemonRouter struct {
+	worktreeTestDaemonRouter
+	timeouts map[string]int32
+}
+
+func (r *recordingWorktreeDaemonRouter) SendDaemonCommand(ctx context.Context, userID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	if r.timeouts == nil {
+		r.timeouts = make(map[string]int32)
+	}
+	r.timeouts[commandType] = timeoutMs
+
+	switch commandType {
+	case "worktree.generate_repo_id":
+		return json.Marshal(map[string]string{"repo_id": "test-repo-id"})
+	case "worktree.create":
+		return json.Marshal(map[string]interface{}{
+			"success":       true,
+			"worktree_path": filepath.Join(os.TempDir(), "reliant-test-worktree"),
+		})
+	}
+
+	return r.worktreeTestDaemonRouter.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
+}
+
 func (r *worktreeTestDaemonRouter) IsDaemonOnline(_ context.Context, _ string) (bool, error) {
 	return true, nil
 }
@@ -148,6 +172,43 @@ func setupTestGitRepoWithRemote(t *testing.T, defaultBranch string) (repoDir str
 	}
 
 	return repoDir, remoteDir
+}
+
+func TestCreateWorktreeUsesExtendedDaemonTimeout(t *testing.T) {
+	sqlDB, err := sql.Open("sqlite3", ":memory:")
+	require.NoError(t, err)
+	defer sqlDB.Close()
+	require.NoError(t, db.RunMigrations(sqlDB))
+
+	repo := db.NewRepo(sqlDB)
+	router := &recordingWorktreeDaemonRouter{}
+	svc := NewWorktreeService(repo, nil, router)
+
+	userID := uuid.New().String()
+	projectID := uuid.New().String()
+	now := time.Now().UTC()
+	require.NoError(t, repo.CreateProject(context.Background(), &db.Project{
+		ID:         projectID,
+		UserID:     userID,
+		Name:       "Test Project",
+		Path:       t.TempDir(),
+		IsGitRepo:  true,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		LastActive: now,
+	}))
+
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
+	resp, err := svc.CreateWorktree(ctx, connect.NewRequest(&reliantv1.CreateWorktreeRequest{
+		ProjectId: projectID,
+		Name:      "slow-worktree",
+		Branch:    "slow-worktree",
+	}))
+	require.NoError(t, err)
+	require.NotNil(t, resp.Msg.Worktree)
+
+	assert.Equal(t, worktreeDaemonCommandTimeoutMs, router.timeouts["worktree.create"])
+	assert.Greater(t, router.timeouts["worktree.create"], int32(30_000))
 }
 
 func setupTestWorktreeServiceForRevert(t *testing.T) (*WorktreeService, *sql.DB, string, string) {
