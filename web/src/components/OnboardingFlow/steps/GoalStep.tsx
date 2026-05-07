@@ -14,6 +14,7 @@ import type {
   OnboardingIntent,
   StepProps,
 } from "../types";
+import { useOnboardingFlowStore } from "../onboardingStore";
 
 type LaunchOption = {
   intent: OnboardingIntent;
@@ -145,7 +146,9 @@ const LAUNCH_OPTIONS: LaunchOption[] = [
   },
 ];
 
-export function GoalStep({ plan, updatePlan, onNext }: StepProps) {
+export function GoalStep({ plan }: StepProps) {
+  const updatePlanAndAdvance = useOnboardingFlowStore((s) => s.updatePlanAndAdvance);
+
   const handleSelect = (option: LaunchOption) => {
     const codeSource =
       option.intent === "existing_codebase" && plan.compute === "cloud_free_trial"
@@ -157,7 +160,7 @@ export function GoalStep({ plan, updatePlan, onNext }: StepProps) {
       repo: undefined,
     };
 
-    updatePlan({
+    updatePlanAndAdvance({
       ...resetProjectContext,
       intent: option.intent,
       workflowId: option.workflowId,
@@ -170,7 +173,6 @@ export function GoalStep({ plan, updatePlan, onNext }: StepProps) {
       initialPrompt: option.initialPrompt,
       launchTour: option.launchTour ?? true,
     });
-    onNext();
   };
 
   return (

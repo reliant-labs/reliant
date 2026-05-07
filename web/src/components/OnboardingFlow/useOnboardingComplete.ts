@@ -18,6 +18,55 @@ export function registerOnboardingCompleteHandler(handler: OnboardingCompleteHan
 }
 
 /**
+ * Ensure a project exists and is selected. Some onboarding paths (e.g. cloud
+ * with daemonProvisioning, or github-connect when daemon isn't ready) skip
+ * ProjectLocationStep's project creation. Without a project the main UI never
+ * renders because hasProjects stays false.
+ */
+async function ensureProject(plan: LaunchPlan): Promise<string> {
+  const { useProjectStore } = await import("@/store/projectStore");
+  const store = useProjectStore.getState();
+
+  // If a project is already selected, we're good
+  if (store.currentProject) {
+    return store.currentProject.id;
+  }
+
+  // Try to find an existing project matching the plan path
+  if (plan.localPath) {
+    await store.loadProjects();
+    const existing = useProjectStore.getState().projects.find(
+      (p) => p.path === plan.localPath,
+    );
+    if (existing) {
+      await useProjectStore.getState().selectProject(existing);
+      return existing.id;
+    }
+  }
+
+  // Create a new project with plan data or sensible defaults
+  const projectPath = plan.localPath || "/home/workspace/projects/reliant-project";
+  const projectName = plan.projectName || "Reliant Project";
+
+  logger.info("[OnboardingComplete] Creating project since none exists", {
+    projectName,
+    projectPath,
+  });
+
+  const created = await store.createProject({
+    name: projectName,
+    path: projectPath,
+    description: "",
+    is_git_repo: Boolean(plan.repo),
+    default_branch: plan.repo?.branch || "main",
+  });
+
+  // createProject already sets currentProject, but ensure selection is complete
+  await useProjectStore.getState().selectProject(created);
+  return created.id;
+}
+
+/**
  * Hook that handles what happens when onboarding finishes.
  * Runs registered handlers, then applies the selected launch defaults.
  */
@@ -33,6 +82,10 @@ export function useOnboardingComplete() {
           throw err;
         }
       }
+
+      // Ensure a project exists and is selected before proceeding.
+      // This covers cloud paths that skip ProjectLocationStep or defer creation.
+      const projectId = await ensureProject(plan);
 
       // Set workflow + params for the FIRST chat only (not as the user's global default).
       // These temp params are consumed by transferTempToChat() and cleared afterwards.
@@ -50,17 +103,11 @@ export function useOnboardingComplete() {
         useChatParamsStore.getState().setTempNewChatParams(launchParams);
       }
 
-      if (plan.initialPrompt) {
-        const { useProjectStore } = await import("@/store/projectStore");
-        const projectId = useProjectStore.getState().currentProject?.id;
-        if (projectId) {
-          const { useWorkspaceStateStore } = await import("@/store/workspaceStateStore");
-          useWorkspaceStateStore
-            .getState()
-            .setNewChatDraft(projectId, plan.initialPrompt);
-        } else {
-          logger.warn("[OnboardingComplete] No current project for initial prompt draft");
-        }
+      if (plan.initialPrompt && projectId) {
+        const { useWorkspaceStateStore } = await import("@/store/workspaceStateStore");
+        useWorkspaceStateStore
+          .getState()
+          .setNewChatDraft(projectId, plan.initialPrompt);
       }
 
       if (plan.launchTour) {

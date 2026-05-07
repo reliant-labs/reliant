@@ -238,7 +238,7 @@ db-driver-audit:
 ## sqlc: Generate database code with sqlc
 # Pinned to v1.30.0 — newer versions infer SELECT EXISTS(...) for SQLite as
 # bool instead of int64, which breaks the store wrappers (e.g. `exists != 0`).
-SQLC_VERSION := v1.30.0
+SQLC_VERSION := v1.31.1
 SQLC_BIN := $(HOME)/go/bin/sqlc-$(SQLC_VERSION)
 
 $(SQLC_BIN):
