@@ -17,6 +17,7 @@ type ViewParams struct {
 	FilePath string `json:"file_path" jsonschema:"required,description=the file to view"`
 	Offset   int    `json:"offset,omitempty" jsonschema:"description=The line to start reading from, default is 0"`
 	Limit    int    `json:"limit,omitempty" jsonschema:"description=The amount of lines to read, maximum is 256000, and the default (if empty), is 300. Only set the limit for large files."`
+	Repo     string `json:"repo,omitempty" jsonschema:"description=Multi-repo only. Which repo the path is relative to: 'root' for the project root\\, or a repo name (e.g. 'api'\\, 'web'). Used as the base for relative paths. Omit in single-repo projects or when path is absolute."`
 }
 
 type viewTool struct{}
@@ -97,7 +98,7 @@ func (v *viewTool) Execute(rctx *rctx.ToolContext, params ViewParams) (ToolRespo
 	}
 
 	// Handle relative paths
-	workingDir, err := GetWorkingDirectory(rctx)
+	workingDir, err := ResolveRepoPath(rctx, params.Repo)
 	if err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("failed to resolve working directory: %v", err)), nil
 	}

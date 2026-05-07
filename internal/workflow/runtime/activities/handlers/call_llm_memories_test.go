@@ -10,7 +10,7 @@ import (
 
 func TestGetSystemPrompts_ContainsBasePrompt(t *testing.T) {
 	activity := &CallLLMActivity{}
-	prompts := activity.getSystemPrompts(nil, "/tmp/project", "", nil, nil)
+	prompts := activity.getSystemPrompts(nil, "/tmp/project", "", nil, nil, nil)
 	require.NotEmpty(t, prompts)
 	prompt := prompts[0]
 
@@ -24,7 +24,7 @@ func TestGetSystemPrompts_DoesNotContainMemories(t *testing.T) {
 		ProjectMemoryMD: "project memory",
 	}
 
-	prompts := activity.getSystemPrompts(nil, "/tmp/project", "", cfg, nil)
+	prompts := activity.getSystemPrompts(nil, "/tmp/project", "", cfg, nil, nil)
 	require.NotEmpty(t, prompts)
 	prompt := prompts[0]
 

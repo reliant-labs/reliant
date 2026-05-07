@@ -40,11 +40,9 @@ CREATE TABLE worktrees (
     deleted_at TIMESTAMP,
     is_main BOOLEAN NOT NULL DEFAULT FALSE,
     cleanup_metadata TEXT,
-    repo_id TEXT REFERENCES repos(id) ON DELETE CASCADE,
+    base_branches TEXT,
     UNIQUE (project_id, name)
 );
-
-CREATE INDEX idx_worktrees_repo ON worktrees(repo_id);
 
 CREATE TABLE plans (
     id TEXT PRIMARY KEY,

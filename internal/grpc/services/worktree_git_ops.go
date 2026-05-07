@@ -28,7 +28,11 @@ func (s *WorktreeService) commitViaDaemon(ctx context.Context, userID, worktreeP
 	return resp.Output, nil
 }
 
-func (s *WorktreeService) pushViaDaemon(ctx context.Context, userID, worktreePath, branch string) (string, error) {
+// pushViaDaemon pushes the current branch (resolved by the daemon from HEAD).
+// The service no longer passes a branch — the daemon's worktree.push reads
+// HEAD on the resolved checkout dir, ensuring writes target whatever the user
+// has actually checked out (which can diverge per-repo from worktree.Branch).
+func (s *WorktreeService) pushViaDaemon(ctx context.Context, userID, worktreePath string) (string, error) {
 	var resp struct {
 		Success bool   `json:"success"`
 		Output  string `json:"output,omitempty"`
@@ -36,7 +40,6 @@ func (s *WorktreeService) pushViaDaemon(ctx context.Context, userID, worktreePat
 	}
 	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.push", map[string]string{
 		"worktree_path": worktreePath,
-		"branch":        branch,
 	}, &resp); err != nil {
 		return "", fmt.Errorf("daemon push: %w", err)
 	}
@@ -46,7 +49,9 @@ func (s *WorktreeService) pushViaDaemon(ctx context.Context, userID, worktreePat
 	return resp.Output, nil
 }
 
-func (s *WorktreeService) pullViaDaemon(ctx context.Context, userID, worktreePath, branch string) (string, error) {
+// pullViaDaemon pulls the current branch (resolved by the daemon from HEAD).
+// See pushViaDaemon for rationale.
+func (s *WorktreeService) pullViaDaemon(ctx context.Context, userID, worktreePath string) (string, error) {
 	var resp struct {
 		Success bool   `json:"success"`
 		Output  string `json:"output,omitempty"`
@@ -54,7 +59,6 @@ func (s *WorktreeService) pullViaDaemon(ctx context.Context, userID, worktreePat
 	}
 	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.pull", map[string]string{
 		"worktree_path": worktreePath,
-		"branch":        branch,
 	}, &resp); err != nil {
 		return "", fmt.Errorf("daemon pull: %w", err)
 	}

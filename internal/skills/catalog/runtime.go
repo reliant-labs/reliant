@@ -20,11 +20,19 @@ type DiscoverInput struct {
 	ProjectPath               string
 	DisabledDefinitionPathSet map[string]struct{}
 	LoadFullDefinitions       bool
+	// RepoSources lists the relative paths of nested repos to scan in addition
+	// to the project root. Each entry is a path relative to ProjectPath; empty
+	// or "." entries are treated as the project root and ignored (the project
+	// root is always scanned). Nil/empty means single-repo legacy behavior.
+	RepoSources []string
 }
 
 type root struct {
 	Path  string
 	Scope skillscore.Scope
+	// Source is the repo relative path this root belongs to ("" = project root).
+	// Propagated to every Definition discovered under this root.
+	Source string
 }
 
 type skillDefinition struct {
@@ -409,7 +417,7 @@ func discoverAll(input DiscoverInput) Snapshot {
 		ShadowedFrom: make(map[string]string),
 	}
 
-	roots := discoveryRoots(input.ProjectPath)
+	roots := discoveryRoots(input.ProjectPath, input.RepoSources)
 	for _, r := range roots {
 		defs := listSkillDefinitions(r.Path)
 		for _, def := range defs {
@@ -445,6 +453,14 @@ func discoverAll(input DiscoverInput) Snapshot {
 			if skillPath != "" {
 				definition.SkillPath = skillPath
 				definition.NormalizedKey = skillPath
+			}
+
+			// Stamp the source repo and prefix the NormalizedKey so skills with
+			// the same name in different repos don't shadow each other. Project
+			// root (Source == "") keeps its bare key for backwards compatibility.
+			definition.Source = r.Source
+			if r.Source != "" && definition.NormalizedKey != "" {
+				definition.NormalizedKey = r.Source + "/" + definition.NormalizedKey
 			}
 
 			// Detect sub-skills.
@@ -631,17 +647,33 @@ func mergeDefinition(result *Snapshot, definition Definition) {
 	result.ByName[definition.NormalizedKey] = definition
 }
 
-func discoveryRoots(projectPath string) []root {
+// scopedRoots returns the standard skill discovery roots scoped to a single
+// directory. source is the repo relative path stamped onto each emitted root
+// ("" = project root).
+func scopedRoots(base, source string) []root {
+	return []root{
+		{Path: filepath.Join(base, ".reliant.local", "skills"), Scope: skillscore.ScopeProjectLocal, Source: source},
+		{Path: filepath.Join(base, ".reliant", "skills"), Scope: skillscore.ScopeProject, Source: source},
+		{Path: filepath.Join(base, ".claude", "skills"), Scope: skillscore.ScopeClaude, Source: source},
+		{Path: filepath.Join(base, ".codex", "skills"), Scope: skillscore.ScopeCodexProject, Source: source},
+		{Path: filepath.Join(base, ".agents", "skills"), Scope: skillscore.ScopeCodexAgents, Source: source},
+	}
+}
+
+func discoveryRoots(projectPath string, repoSources []string) []root {
 	homeDir, _ := os.UserHomeDir()
-	roots := []root{
-		// Reliant paths (highest priority)
-		{Path: filepath.Join(projectPath, ".reliant.local", "skills"), Scope: skillscore.ScopeProjectLocal},
-		{Path: filepath.Join(projectPath, ".reliant", "skills"), Scope: skillscore.ScopeProject},
-		// Claude paths
-		{Path: filepath.Join(projectPath, ".claude", "skills"), Scope: skillscore.ScopeClaude},
-		// Codex paths
-		{Path: filepath.Join(projectPath, ".codex", "skills"), Scope: skillscore.ScopeCodexProject},
-		{Path: filepath.Join(projectPath, ".agents", "skills"), Scope: skillscore.ScopeCodexAgents},
+
+	// Project-root scope is always scanned. Nested repos are added via
+	// repoSources; "." or "" entries collapse into the project root and are
+	// skipped to avoid duplicate scans.
+	roots := scopedRoots(projectPath, "")
+
+	for _, src := range repoSources {
+		src = strings.TrimSpace(src)
+		if src == "" || src == "." {
+			continue
+		}
+		roots = append(roots, scopedRoots(filepath.Join(projectPath, src), src)...)
 	}
 
 	if homeDir != "" {
@@ -652,7 +684,7 @@ func discoveryRoots(projectPath string) []root {
 		)
 	}
 	for _, r := range roots {
-		slog.Debug("[Skills] discoveryRoot", "path", r.Path, "scope", r.Scope, "projectPath", projectPath)
+		slog.Debug("[Skills] discoveryRoot", "path", r.Path, "scope", r.Scope, "source", r.Source, "projectPath", projectPath)
 	}
 	return roots
 }

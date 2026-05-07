@@ -25,17 +25,39 @@ type CleanupMetadata struct {
 	BranchDeleted    bool `json:"branch_deleted"`
 }
 
-// Worktree represents a git worktree.
+// Worktree represents a workspace-level git worktree.
+//
+// In the multi-repo model, a Worktree spans the entire project workspace, not
+// a single nested repo. Path points at a workspace directory (e.g.
+// ~/.reliant/worktrees/<id>/) that contains N nested git-worktree checkouts —
+// one per Repo, at <Path>/<repo.relative_path>/. There is intentionally no
+// RepoID column: a chat operates at workspace root and uses the per-tool
+// `repo` param to scope tool calls to a specific nested repo. The `repos`
+// table tracks which repos belong to a project; the worktree row is the
+// per-feature workspace identity.
+//
+// Branch is the creation-time branch — useful as a label for display and for
+// archive cleanup, but NOT a source of truth for write operations. The user
+// may check out a different branch in any nested repo via plain git, and a
+// single Worktree row cannot represent N divergent branches anyway. All
+// write paths (push, pull, create-PR) resolve the branch from HEAD on the
+// resolved checkout dir at op time.
+//
+// BaseBranch is the legacy single base branch (single-repo projects use it as
+// canonical). BaseBranches overrides on a per-repo basis for multi-repo
+// workspaces, where repo A may default to `main` and repo B to
+// `master`/`develop`. Lookup order at PR creation time:
+//
+//	worktree.BaseBranches[repo_id] -> worktree.BaseBranch -> daemon
+//	auto-detect (gh -> git remote show -> main/master probe).
 type Worktree struct {
-	ID         string
-	Name       string
-	Path       string
-	Branch     string
-	BaseBranch string
-	ProjectID  string
-	// RepoID identifies which nested repo this worktree belongs to. Optional
-	// during the multi-repo migration; required once backfill completes.
-	RepoID          *string
+	ID              string
+	Name            string
+	Path            string
+	Branch          string
+	BaseBranch      string
+	BaseBranches    map[string]string
+	ProjectID       string
 	ChatID          *string
 	Status          int32
 	IsMain          bool

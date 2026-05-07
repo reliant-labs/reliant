@@ -38,9 +38,6 @@ const (
 	// WorktreeServiceCreateWorktreeProcedure is the fully-qualified name of the WorktreeService's
 	// CreateWorktree RPC.
 	WorktreeServiceCreateWorktreeProcedure = "/reliant.v1.WorktreeService/CreateWorktree"
-	// WorktreeServiceBatchCreateWorktreesProcedure is the fully-qualified name of the WorktreeService's
-	// BatchCreateWorktrees RPC.
-	WorktreeServiceBatchCreateWorktreesProcedure = "/reliant.v1.WorktreeService/BatchCreateWorktrees"
 	// WorktreeServiceListWorktreesProcedure is the fully-qualified name of the WorktreeService's
 	// ListWorktrees RPC.
 	WorktreeServiceListWorktreesProcedure = "/reliant.v1.WorktreeService/ListWorktrees"
@@ -77,6 +74,9 @@ const (
 	// WorktreeServiceGetWorktreeCommitsProcedure is the fully-qualified name of the WorktreeService's
 	// GetWorktreeCommits RPC.
 	WorktreeServiceGetWorktreeCommitsProcedure = "/reliant.v1.WorktreeService/GetWorktreeCommits"
+	// WorktreeServiceListWorktreeRepoStatusesProcedure is the fully-qualified name of the
+	// WorktreeService's ListWorktreeRepoStatuses RPC.
+	WorktreeServiceListWorktreeRepoStatusesProcedure = "/reliant.v1.WorktreeService/ListWorktreeRepoStatuses"
 	// WorktreeServiceStageFilesProcedure is the fully-qualified name of the WorktreeService's
 	// StageFiles RPC.
 	WorktreeServiceStageFilesProcedure = "/reliant.v1.WorktreeService/StageFiles"
@@ -106,11 +106,12 @@ const (
 // WorktreeServiceClient is a client for the reliant.v1.WorktreeService service.
 type WorktreeServiceClient interface {
 	// CRUD Operations
+	// CreateWorktree creates ONE workspace-level worktree for the project.
+	// The daemon enumerates the project's nested repos and fans out N
+	// git-worktree creations into <workspace_dir>/<repo.relative_path>/. The
+	// returned Worktree row spans the whole workspace; tools scope to a nested
+	// repo via the per-call `repo` param, not via per-repo worktree rows.
 	CreateWorktree(context.Context, *connect.Request[v1.CreateWorktreeRequest]) (*connect.Response[v1.CreateWorktreeResponse], error)
-	// BatchCreateWorktrees creates a worktree (sharing name + branch) in each
-	// listed repo of a project. All-or-nothing: any failure rolls back already-
-	// created worktrees so the caller never has to clean up partial state.
-	BatchCreateWorktrees(context.Context, *connect.Request[v1.BatchCreateWorktreesRequest]) (*connect.Response[v1.BatchCreateWorktreesResponse], error)
 	ListWorktrees(context.Context, *connect.Request[v1.ListWorktreesRequest]) (*connect.Response[v1.ListWorktreesResponse], error)
 	GetWorktree(context.Context, *connect.Request[v1.GetWorktreeRequest]) (*connect.Response[v1.GetWorktreeResponse], error)
 	UpdateWorktree(context.Context, *connect.Request[v1.UpdateWorktreeRequest]) (*connect.Response[v1.UpdateWorktreeResponse], error)
@@ -125,6 +126,11 @@ type WorktreeServiceClient interface {
 	GetWorktreeChanges(context.Context, *connect.Request[v1.GetWorktreeChangesRequest]) (*connect.Response[v1.GetWorktreeChangesResponse], error)
 	GetWorktreeGitStatus(context.Context, *connect.Request[v1.GetWorktreeGitStatusRequest]) (*connect.Response[v1.GetWorktreeGitStatusResponse], error)
 	GetWorktreeCommits(context.Context, *connect.Request[v1.GetWorktreeCommitsRequest]) (*connect.Response[v1.GetWorktreeCommitsResponse], error)
+	// ListWorktreeRepoStatuses returns per-repo git status for every nested
+	// repo in the worktree's project. Drives the right-sidebar grouped view.
+	// Single-repo and zero-repo projects collapse to a single-element (or empty)
+	// response so callers don't need a special case.
+	ListWorktreeRepoStatuses(context.Context, *connect.Request[v1.ListWorktreeRepoStatusesRequest]) (*connect.Response[v1.ListWorktreeRepoStatusesResponse], error)
 	// Git Write Operations
 	StageFiles(context.Context, *connect.Request[v1.StageFilesRequest]) (*connect.Response[v1.StageFilesResponse], error)
 	UnstageFiles(context.Context, *connect.Request[v1.UnstageFilesRequest]) (*connect.Response[v1.UnstageFilesResponse], error)
@@ -151,12 +157,6 @@ func NewWorktreeServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+WorktreeServiceCreateWorktreeProcedure,
 			connect.WithSchema(worktreeServiceMethods.ByName("CreateWorktree")),
-			connect.WithClientOptions(opts...),
-		),
-		batchCreateWorktrees: connect.NewClient[v1.BatchCreateWorktreesRequest, v1.BatchCreateWorktreesResponse](
-			httpClient,
-			baseURL+WorktreeServiceBatchCreateWorktreesProcedure,
-			connect.WithSchema(worktreeServiceMethods.ByName("BatchCreateWorktrees")),
 			connect.WithClientOptions(opts...),
 		),
 		listWorktrees: connect.NewClient[v1.ListWorktreesRequest, v1.ListWorktreesResponse](
@@ -231,6 +231,12 @@ func NewWorktreeServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(worktreeServiceMethods.ByName("GetWorktreeCommits")),
 			connect.WithClientOptions(opts...),
 		),
+		listWorktreeRepoStatuses: connect.NewClient[v1.ListWorktreeRepoStatusesRequest, v1.ListWorktreeRepoStatusesResponse](
+			httpClient,
+			baseURL+WorktreeServiceListWorktreeRepoStatusesProcedure,
+			connect.WithSchema(worktreeServiceMethods.ByName("ListWorktreeRepoStatuses")),
+			connect.WithClientOptions(opts...),
+		),
 		stageFiles: connect.NewClient[v1.StageFilesRequest, v1.StageFilesResponse](
 			httpClient,
 			baseURL+WorktreeServiceStageFilesProcedure,
@@ -284,38 +290,33 @@ func NewWorktreeServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 
 // worktreeServiceClient implements WorktreeServiceClient.
 type worktreeServiceClient struct {
-	createWorktree       *connect.Client[v1.CreateWorktreeRequest, v1.CreateWorktreeResponse]
-	batchCreateWorktrees *connect.Client[v1.BatchCreateWorktreesRequest, v1.BatchCreateWorktreesResponse]
-	listWorktrees        *connect.Client[v1.ListWorktreesRequest, v1.ListWorktreesResponse]
-	getWorktree          *connect.Client[v1.GetWorktreeRequest, v1.GetWorktreeResponse]
-	updateWorktree       *connect.Client[v1.UpdateWorktreeRequest, v1.UpdateWorktreeResponse]
-	deleteWorktree       *connect.Client[v1.DeleteWorktreeRequest, v1.DeleteWorktreeResponse]
-	archiveWorktree      *connect.Client[v1.ArchiveWorktreeRequest, v1.ArchiveWorktreeResponse]
-	unarchiveWorktree    *connect.Client[v1.UnarchiveWorktreeRequest, v1.UnarchiveWorktreeResponse]
-	importWorktree       *connect.Client[v1.ImportWorktreeRequest, v1.ImportWorktreeResponse]
-	discoverWorktrees    *connect.Client[v1.DiscoverWorktreesRequest, v1.DiscoverWorktreesResponse]
-	recreateWorktree     *connect.Client[v1.RecreateWorktreeRequest, v1.RecreateWorktreeResponse]
-	getWorktreeChanges   *connect.Client[v1.GetWorktreeChangesRequest, v1.GetWorktreeChangesResponse]
-	getWorktreeGitStatus *connect.Client[v1.GetWorktreeGitStatusRequest, v1.GetWorktreeGitStatusResponse]
-	getWorktreeCommits   *connect.Client[v1.GetWorktreeCommitsRequest, v1.GetWorktreeCommitsResponse]
-	stageFiles           *connect.Client[v1.StageFilesRequest, v1.StageFilesResponse]
-	unstageFiles         *connect.Client[v1.UnstageFilesRequest, v1.UnstageFilesResponse]
-	revertFiles          *connect.Client[v1.RevertFilesRequest, v1.RevertFilesResponse]
-	commitWorktree       *connect.Client[v1.CommitWorktreeRequest, v1.CommitWorktreeResponse]
-	pushWorktree         *connect.Client[v1.PushWorktreeRequest, v1.PushWorktreeResponse]
-	pullWorktree         *connect.Client[v1.PullWorktreeRequest, v1.PullWorktreeResponse]
-	getWorktreePR        *connect.Client[v1.GetWorktreePRRequest, v1.GetWorktreePRResponse]
-	createWorktreePR     *connect.Client[v1.CreateWorktreePRRequest, v1.CreateWorktreePRResponse]
+	createWorktree           *connect.Client[v1.CreateWorktreeRequest, v1.CreateWorktreeResponse]
+	listWorktrees            *connect.Client[v1.ListWorktreesRequest, v1.ListWorktreesResponse]
+	getWorktree              *connect.Client[v1.GetWorktreeRequest, v1.GetWorktreeResponse]
+	updateWorktree           *connect.Client[v1.UpdateWorktreeRequest, v1.UpdateWorktreeResponse]
+	deleteWorktree           *connect.Client[v1.DeleteWorktreeRequest, v1.DeleteWorktreeResponse]
+	archiveWorktree          *connect.Client[v1.ArchiveWorktreeRequest, v1.ArchiveWorktreeResponse]
+	unarchiveWorktree        *connect.Client[v1.UnarchiveWorktreeRequest, v1.UnarchiveWorktreeResponse]
+	importWorktree           *connect.Client[v1.ImportWorktreeRequest, v1.ImportWorktreeResponse]
+	discoverWorktrees        *connect.Client[v1.DiscoverWorktreesRequest, v1.DiscoverWorktreesResponse]
+	recreateWorktree         *connect.Client[v1.RecreateWorktreeRequest, v1.RecreateWorktreeResponse]
+	getWorktreeChanges       *connect.Client[v1.GetWorktreeChangesRequest, v1.GetWorktreeChangesResponse]
+	getWorktreeGitStatus     *connect.Client[v1.GetWorktreeGitStatusRequest, v1.GetWorktreeGitStatusResponse]
+	getWorktreeCommits       *connect.Client[v1.GetWorktreeCommitsRequest, v1.GetWorktreeCommitsResponse]
+	listWorktreeRepoStatuses *connect.Client[v1.ListWorktreeRepoStatusesRequest, v1.ListWorktreeRepoStatusesResponse]
+	stageFiles               *connect.Client[v1.StageFilesRequest, v1.StageFilesResponse]
+	unstageFiles             *connect.Client[v1.UnstageFilesRequest, v1.UnstageFilesResponse]
+	revertFiles              *connect.Client[v1.RevertFilesRequest, v1.RevertFilesResponse]
+	commitWorktree           *connect.Client[v1.CommitWorktreeRequest, v1.CommitWorktreeResponse]
+	pushWorktree             *connect.Client[v1.PushWorktreeRequest, v1.PushWorktreeResponse]
+	pullWorktree             *connect.Client[v1.PullWorktreeRequest, v1.PullWorktreeResponse]
+	getWorktreePR            *connect.Client[v1.GetWorktreePRRequest, v1.GetWorktreePRResponse]
+	createWorktreePR         *connect.Client[v1.CreateWorktreePRRequest, v1.CreateWorktreePRResponse]
 }
 
 // CreateWorktree calls reliant.v1.WorktreeService.CreateWorktree.
 func (c *worktreeServiceClient) CreateWorktree(ctx context.Context, req *connect.Request[v1.CreateWorktreeRequest]) (*connect.Response[v1.CreateWorktreeResponse], error) {
 	return c.createWorktree.CallUnary(ctx, req)
-}
-
-// BatchCreateWorktrees calls reliant.v1.WorktreeService.BatchCreateWorktrees.
-func (c *worktreeServiceClient) BatchCreateWorktrees(ctx context.Context, req *connect.Request[v1.BatchCreateWorktreesRequest]) (*connect.Response[v1.BatchCreateWorktreesResponse], error) {
-	return c.batchCreateWorktrees.CallUnary(ctx, req)
 }
 
 // ListWorktrees calls reliant.v1.WorktreeService.ListWorktrees.
@@ -378,6 +379,11 @@ func (c *worktreeServiceClient) GetWorktreeCommits(ctx context.Context, req *con
 	return c.getWorktreeCommits.CallUnary(ctx, req)
 }
 
+// ListWorktreeRepoStatuses calls reliant.v1.WorktreeService.ListWorktreeRepoStatuses.
+func (c *worktreeServiceClient) ListWorktreeRepoStatuses(ctx context.Context, req *connect.Request[v1.ListWorktreeRepoStatusesRequest]) (*connect.Response[v1.ListWorktreeRepoStatusesResponse], error) {
+	return c.listWorktreeRepoStatuses.CallUnary(ctx, req)
+}
+
 // StageFiles calls reliant.v1.WorktreeService.StageFiles.
 func (c *worktreeServiceClient) StageFiles(ctx context.Context, req *connect.Request[v1.StageFilesRequest]) (*connect.Response[v1.StageFilesResponse], error) {
 	return c.stageFiles.CallUnary(ctx, req)
@@ -421,11 +427,12 @@ func (c *worktreeServiceClient) CreateWorktreePR(ctx context.Context, req *conne
 // WorktreeServiceHandler is an implementation of the reliant.v1.WorktreeService service.
 type WorktreeServiceHandler interface {
 	// CRUD Operations
+	// CreateWorktree creates ONE workspace-level worktree for the project.
+	// The daemon enumerates the project's nested repos and fans out N
+	// git-worktree creations into <workspace_dir>/<repo.relative_path>/. The
+	// returned Worktree row spans the whole workspace; tools scope to a nested
+	// repo via the per-call `repo` param, not via per-repo worktree rows.
 	CreateWorktree(context.Context, *connect.Request[v1.CreateWorktreeRequest]) (*connect.Response[v1.CreateWorktreeResponse], error)
-	// BatchCreateWorktrees creates a worktree (sharing name + branch) in each
-	// listed repo of a project. All-or-nothing: any failure rolls back already-
-	// created worktrees so the caller never has to clean up partial state.
-	BatchCreateWorktrees(context.Context, *connect.Request[v1.BatchCreateWorktreesRequest]) (*connect.Response[v1.BatchCreateWorktreesResponse], error)
 	ListWorktrees(context.Context, *connect.Request[v1.ListWorktreesRequest]) (*connect.Response[v1.ListWorktreesResponse], error)
 	GetWorktree(context.Context, *connect.Request[v1.GetWorktreeRequest]) (*connect.Response[v1.GetWorktreeResponse], error)
 	UpdateWorktree(context.Context, *connect.Request[v1.UpdateWorktreeRequest]) (*connect.Response[v1.UpdateWorktreeResponse], error)
@@ -440,6 +447,11 @@ type WorktreeServiceHandler interface {
 	GetWorktreeChanges(context.Context, *connect.Request[v1.GetWorktreeChangesRequest]) (*connect.Response[v1.GetWorktreeChangesResponse], error)
 	GetWorktreeGitStatus(context.Context, *connect.Request[v1.GetWorktreeGitStatusRequest]) (*connect.Response[v1.GetWorktreeGitStatusResponse], error)
 	GetWorktreeCommits(context.Context, *connect.Request[v1.GetWorktreeCommitsRequest]) (*connect.Response[v1.GetWorktreeCommitsResponse], error)
+	// ListWorktreeRepoStatuses returns per-repo git status for every nested
+	// repo in the worktree's project. Drives the right-sidebar grouped view.
+	// Single-repo and zero-repo projects collapse to a single-element (or empty)
+	// response so callers don't need a special case.
+	ListWorktreeRepoStatuses(context.Context, *connect.Request[v1.ListWorktreeRepoStatusesRequest]) (*connect.Response[v1.ListWorktreeRepoStatusesResponse], error)
 	// Git Write Operations
 	StageFiles(context.Context, *connect.Request[v1.StageFilesRequest]) (*connect.Response[v1.StageFilesResponse], error)
 	UnstageFiles(context.Context, *connect.Request[v1.UnstageFilesRequest]) (*connect.Response[v1.UnstageFilesResponse], error)
@@ -462,12 +474,6 @@ func NewWorktreeServiceHandler(svc WorktreeServiceHandler, opts ...connect.Handl
 		WorktreeServiceCreateWorktreeProcedure,
 		svc.CreateWorktree,
 		connect.WithSchema(worktreeServiceMethods.ByName("CreateWorktree")),
-		connect.WithHandlerOptions(opts...),
-	)
-	worktreeServiceBatchCreateWorktreesHandler := connect.NewUnaryHandler(
-		WorktreeServiceBatchCreateWorktreesProcedure,
-		svc.BatchCreateWorktrees,
-		connect.WithSchema(worktreeServiceMethods.ByName("BatchCreateWorktrees")),
 		connect.WithHandlerOptions(opts...),
 	)
 	worktreeServiceListWorktreesHandler := connect.NewUnaryHandler(
@@ -542,6 +548,12 @@ func NewWorktreeServiceHandler(svc WorktreeServiceHandler, opts ...connect.Handl
 		connect.WithSchema(worktreeServiceMethods.ByName("GetWorktreeCommits")),
 		connect.WithHandlerOptions(opts...),
 	)
+	worktreeServiceListWorktreeRepoStatusesHandler := connect.NewUnaryHandler(
+		WorktreeServiceListWorktreeRepoStatusesProcedure,
+		svc.ListWorktreeRepoStatuses,
+		connect.WithSchema(worktreeServiceMethods.ByName("ListWorktreeRepoStatuses")),
+		connect.WithHandlerOptions(opts...),
+	)
 	worktreeServiceStageFilesHandler := connect.NewUnaryHandler(
 		WorktreeServiceStageFilesProcedure,
 		svc.StageFiles,
@@ -594,8 +606,6 @@ func NewWorktreeServiceHandler(svc WorktreeServiceHandler, opts ...connect.Handl
 		switch r.URL.Path {
 		case WorktreeServiceCreateWorktreeProcedure:
 			worktreeServiceCreateWorktreeHandler.ServeHTTP(w, r)
-		case WorktreeServiceBatchCreateWorktreesProcedure:
-			worktreeServiceBatchCreateWorktreesHandler.ServeHTTP(w, r)
 		case WorktreeServiceListWorktreesProcedure:
 			worktreeServiceListWorktreesHandler.ServeHTTP(w, r)
 		case WorktreeServiceGetWorktreeProcedure:
@@ -620,6 +630,8 @@ func NewWorktreeServiceHandler(svc WorktreeServiceHandler, opts ...connect.Handl
 			worktreeServiceGetWorktreeGitStatusHandler.ServeHTTP(w, r)
 		case WorktreeServiceGetWorktreeCommitsProcedure:
 			worktreeServiceGetWorktreeCommitsHandler.ServeHTTP(w, r)
+		case WorktreeServiceListWorktreeRepoStatusesProcedure:
+			worktreeServiceListWorktreeRepoStatusesHandler.ServeHTTP(w, r)
 		case WorktreeServiceStageFilesProcedure:
 			worktreeServiceStageFilesHandler.ServeHTTP(w, r)
 		case WorktreeServiceUnstageFilesProcedure:
@@ -647,10 +659,6 @@ type UnimplementedWorktreeServiceHandler struct{}
 
 func (UnimplementedWorktreeServiceHandler) CreateWorktree(context.Context, *connect.Request[v1.CreateWorktreeRequest]) (*connect.Response[v1.CreateWorktreeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.CreateWorktree is not implemented"))
-}
-
-func (UnimplementedWorktreeServiceHandler) BatchCreateWorktrees(context.Context, *connect.Request[v1.BatchCreateWorktreesRequest]) (*connect.Response[v1.BatchCreateWorktreesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.BatchCreateWorktrees is not implemented"))
 }
 
 func (UnimplementedWorktreeServiceHandler) ListWorktrees(context.Context, *connect.Request[v1.ListWorktreesRequest]) (*connect.Response[v1.ListWorktreesResponse], error) {
@@ -699,6 +707,10 @@ func (UnimplementedWorktreeServiceHandler) GetWorktreeGitStatus(context.Context,
 
 func (UnimplementedWorktreeServiceHandler) GetWorktreeCommits(context.Context, *connect.Request[v1.GetWorktreeCommitsRequest]) (*connect.Response[v1.GetWorktreeCommitsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.GetWorktreeCommits is not implemented"))
+}
+
+func (UnimplementedWorktreeServiceHandler) ListWorktreeRepoStatuses(context.Context, *connect.Request[v1.ListWorktreeRepoStatusesRequest]) (*connect.Response[v1.ListWorktreeRepoStatusesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.ListWorktreeRepoStatuses is not implemented"))
 }
 
 func (UnimplementedWorktreeServiceHandler) StageFiles(context.Context, *connect.Request[v1.StageFilesRequest]) (*connect.Response[v1.StageFilesResponse], error) {

@@ -37,6 +37,7 @@ type GlobParams struct {
 	Path           string `json:"path,omitempty" jsonschema:"description=The directory to search in. If not specified the current working directory will be used. IMPORTANT: Omit this field to use the default directory. DO NOT enter \"undefined\" or \"null\" - simply omit it for the default behavior. Must be a valid directory path if provided."`
 	HeadLimit      int    `json:"head_limit,omitempty" jsonschema:"description=Limit output to first N files. When unspecified defaults to 200 results."`
 	IncludeIgnored bool   `json:"include_ignored,omitempty" jsonschema:"description=Include commonly ignored directories in results. Excluded by default: node_modules vendor dist build target .git .reliant __pycache__ coverage tmp temp logs bin obj out generated bower_components jspm_packages. Default: false."`
+	Repo           string `json:"repo,omitempty" jsonschema:"description=Multi-repo only. Which repo to glob in: 'root' for the project root\\, or a repo name (e.g. 'api'\\, 'web'). Used as the base when 'path' is empty or relative. Omit in single-repo projects."`
 }
 
 type GlobResponseMetadata struct {
@@ -72,9 +73,12 @@ func (g *globTool) Execute(rctx *rctx.ToolContext, params GlobParams) (ToolRespo
 		return NewTextErrorResponse("pattern is required"), nil
 	}
 
-	wd, err := GetWorkingDirectory(rctx)
+	wd, err := ResolveRepoPath(rctx, params.Repo)
 	if err != nil {
-		return NewTextErrorResponse(fmt.Sprintf("couldn't determine working directory: %v", err)), nil
+		return NewTextErrorResponse(err.Error()), nil
+	}
+	if wd == "" {
+		return NewTextErrorResponse("couldn't determine working directory"), nil
 	}
 
 	searchPath := params.Path

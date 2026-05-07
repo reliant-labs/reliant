@@ -47,6 +47,10 @@ type StoredSkill struct {
 	ArgumentHint           string            `json:"argument_hint,omitempty"`
 	Paths                  string            `json:"paths,omitempty"`
 	ContentHash            string            `json:"content_hash,omitempty"`
+	// Source is the repo relative path the skill was discovered in. "" means
+	// project-root scope; non-empty means a nested repo (e.g. "api"). LLMs
+	// disambiguate same-named skills across repos by source.
+	Source string `json:"source,omitempty"`
 }
 
 // ParseStoredWorkflows deserializes the project_workflows_json column.

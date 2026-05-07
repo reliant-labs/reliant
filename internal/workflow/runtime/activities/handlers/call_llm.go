@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -16,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llm"
@@ -499,11 +502,16 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// Generate system prompts
 	// Always include base prompts for the driver (claude-code requires specific prompts for sk-ant-oat keys)
 
+	// Repos drive the multi-repo hint in the system prompt. Failures here are
+	// non-fatal — the prompt just omits the hint.
+	repos, _ := a.repo.ListReposByProject(ctx, project.ID)
+
 	systemPrompts := a.getSystemPrompts(
 		chat,
 		projectPath,
 		worktreePath,
 		projectCfg,
+		repos,
 		celStringValuePtr(args.GetSystemPrompt()),
 	)
 
@@ -568,6 +576,16 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			Role:  message.System,
 			Parts: []message.ContentPart{message.TextContent{Text: memoryContent}},
 		})
+	}
+	// Per-repo memory: one system slot per nested repo seen in tool-call
+	// history. Prefix-stable (first-seen ordering) and idempotent (each repo
+	// gets at most one slot per turn). Cache miss happens only on the first
+	// turn a new repo is touched; subsequent turns hit cache.
+	if len(repos) > 1 {
+		touched := collectReposFromHistory(history)
+		if memMsgs := loadRepoMemoryMessages(project.Path, repos, touched); len(memMsgs) > 0 {
+			prefix = append(prefix, memMsgs...)
+		}
 	}
 	if skillMsgs := a.loadRecommendedSkillMessages(ctx, chat, projectCfg); len(skillMsgs) > 0 {
 		prefix = append(prefix, skillMsgs...)
@@ -1124,6 +1142,7 @@ func (a *CallLLMActivity) getSystemPrompts(
 	projectPath string,
 	worktreePath string,
 	projectCfg *cfgpkg.Config,
+	repos []*core.Repo,
 	systemPrompt *string,
 ) []string {
 	// Add project context
@@ -1137,6 +1156,28 @@ func (a *CallLLMActivity) getSystemPrompts(
 	if workingDir != "" {
 		bb.WriteString("\n\nIMPORTANT: You are working in a git worktree at: ")
 		bb.WriteString(workingDir)
+	}
+
+	// Multi-repo hint. When the project has more than one repo, every fs/process
+	// tool accepts a `repo` param to scope the operation. Naming the available
+	// repos here keeps the LLM aware that the choice exists without a separate
+	// tool call to discover them.
+	if len(repos) > 1 {
+		bb.WriteString("\n\nThis project has multiple nested repos. Tools that take a `repo` parameter accept these values:")
+		bb.WriteString("\n- root (project root)")
+		for _, r := range repos {
+			if r == nil || r.Name == "" {
+				continue
+			}
+			bb.WriteString("\n- ")
+			bb.WriteString(r.Name)
+			if r.RelativePath != "" && r.RelativePath != r.Name {
+				bb.WriteString(" (")
+				bb.WriteString(r.RelativePath)
+				bb.WriteString(")")
+			}
+		}
+		bb.WriteString("\nOmit `repo` to inherit the chat's bound worktree.")
 	}
 
 	// Append skill announcement if any skills are available. Skills are
@@ -1627,6 +1668,74 @@ func formatStoredMemories(projectCfg *cfgpkg.Config) string {
 	preamble := "# User defined rules, memories, and context\n\nYou must adhere to the user's defined rules and context below at all times.\n\n"
 	memories = append([]string{preamble}, memories...)
 	return strings.Join(memories, "\n\n")
+}
+
+// collectReposFromHistory walks tool calls in conversation history, decodes
+// their JSON inputs, and returns the distinct non-empty `repo` values seen.
+// Used to figure out which per-repo memory files need to be in scope for the
+// current turn. Order is stable (first-seen wins) so prefix slots stay in the
+// same positions across turns — preserves prefix caching.
+func collectReposFromHistory(history []message.Message) []string {
+	seen := make(map[string]bool)
+	var ordered []string
+	for _, msg := range history {
+		for _, part := range msg.Parts {
+			tc, ok := part.(message.ToolCall)
+			if !ok {
+				continue
+			}
+			var input map[string]interface{}
+			if err := json.Unmarshal([]byte(tc.Input), &input); err != nil {
+				continue
+			}
+			repo, _ := input["repo"].(string)
+			repo = strings.TrimSpace(repo)
+			if repo == "" || repo == "root" || repo == "." {
+				continue
+			}
+			if !seen[repo] {
+				seen[repo] = true
+				ordered = append(ordered, repo)
+			}
+		}
+	}
+	return ordered
+}
+
+// loadRepoMemoryMessages reads each touched repo's reliant.md and returns one
+// system message per repo, marker-wrapped so future turns can detect "already
+// injected" by scanning the conversation. Repos with no reliant.md are
+// silently skipped.
+func loadRepoMemoryMessages(projectPath string, repos []*core.Repo, touched []string) []message.Message {
+	if projectPath == "" || len(repos) == 0 || len(touched) == 0 {
+		return nil
+	}
+	byName := make(map[string]*core.Repo, len(repos))
+	for _, r := range repos {
+		if r == nil {
+			continue
+		}
+		byName[r.Name] = r
+		byName[r.RelativePath] = r
+	}
+	var msgs []message.Message
+	for _, name := range touched {
+		r, ok := byName[name]
+		if !ok || r == nil {
+			continue
+		}
+		path := filepath.Join(projectPath, r.RelativePath, "reliant.md")
+		content, err := os.ReadFile(path)
+		if err != nil || len(strings.TrimSpace(string(content))) == 0 {
+			continue
+		}
+		body := fmt.Sprintf("<system-memory repo=%s>\n%s\n</system-memory>", r.Name, string(content))
+		msgs = append(msgs, message.Message{
+			Role:  message.System,
+			Parts: []message.ContentPart{message.TextContent{Text: body}},
+		})
+	}
+	return msgs
 }
 
 // loadRecommendedSkillMessages loads skill bodies for the recommended_skills

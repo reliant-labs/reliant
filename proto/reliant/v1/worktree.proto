@@ -19,11 +19,12 @@ enum WorktreeStatus {
 // WorktreeService handles worktree-related operations
 service WorktreeService {
   // CRUD Operations
+  // CreateWorktree creates ONE workspace-level worktree for the project.
+  // The daemon enumerates the project's nested repos and fans out N
+  // git-worktree creations into <workspace_dir>/<repo.relative_path>/. The
+  // returned Worktree row spans the whole workspace; tools scope to a nested
+  // repo via the per-call `repo` param, not via per-repo worktree rows.
   rpc CreateWorktree(CreateWorktreeRequest) returns (CreateWorktreeResponse) {}
-  // BatchCreateWorktrees creates a worktree (sharing name + branch) in each
-  // listed repo of a project. All-or-nothing: any failure rolls back already-
-  // created worktrees so the caller never has to clean up partial state.
-  rpc BatchCreateWorktrees(BatchCreateWorktreesRequest) returns (BatchCreateWorktreesResponse) {}
   rpc ListWorktrees(ListWorktreesRequest) returns (ListWorktreesResponse) {}
   rpc GetWorktree(GetWorktreeRequest) returns (GetWorktreeResponse) {}
   rpc UpdateWorktree(UpdateWorktreeRequest) returns (UpdateWorktreeResponse) {}
@@ -40,7 +41,12 @@ service WorktreeService {
   rpc GetWorktreeChanges(GetWorktreeChangesRequest) returns (GetWorktreeChangesResponse) {}
   rpc GetWorktreeGitStatus(GetWorktreeGitStatusRequest) returns (GetWorktreeGitStatusResponse) {}
   rpc GetWorktreeCommits(GetWorktreeCommitsRequest) returns (GetWorktreeCommitsResponse) {}
-  
+  // ListWorktreeRepoStatuses returns per-repo git status for every nested
+  // repo in the worktree's project. Drives the right-sidebar grouped view.
+  // Single-repo and zero-repo projects collapse to a single-element (or empty)
+  // response so callers don't need a special case.
+  rpc ListWorktreeRepoStatuses(ListWorktreeRepoStatusesRequest) returns (ListWorktreeRepoStatusesResponse) {}
+
   // Git Write Operations
   rpc StageFiles(StageFilesRequest) returns (StageFilesResponse) {}
   rpc UnstageFiles(UnstageFilesRequest) returns (UnstageFilesResponse) {}
@@ -56,7 +62,9 @@ service WorktreeService {
 // Core Message Types
 // =============================================================================
 
-// Worktree represents a git worktree in the system
+// Worktree represents a workspace-level git worktree in the system. Path
+// points at a workspace dir containing N nested checkouts (one per Repo) at
+// <Path>/<repo.relative_path>/.
 message Worktree {
   string id = 1;
   string name = 2;
@@ -72,10 +80,6 @@ message Worktree {
   string last_active = 12;
   optional string deleted_at = 13;  // Archive timestamp
   optional CleanupMetadata cleanup_metadata = 14;
-  // repo_id identifies which nested repo this worktree belongs to. For
-  // single-repo projects this is the project's root-level repo. Optional
-  // during the multi-repo migration; required once backfill completes.
-  optional string repo_id = 15;
 }
 
 // CleanupMetadata tracks what was cleaned up during archive
@@ -117,58 +121,35 @@ message WorktreeFileChange {
 // CRUD Request/Response Messages
 // =============================================================================
 
-// CreateWorktreeRequest creates a new worktree
+// CreateWorktreeRequest creates a workspace-level worktree spanning all of
+// the project's nested repos. Each repo gets its own git-worktree checkout at
+// <workspace_dir>/<repo.relative_path>/, sharing name + branch. All-or-nothing:
+// any per-repo failure rolls back the whole workspace.
 message CreateWorktreeRequest {
   string name = 1;
   string branch = 2;
   string project_id = 3;
+  // base_branch is the global fallback when a repo has no entry in
+  // base_branches. Empty falls through to per-repo default-branch detection
+  // (gh -> git remote show -> main/master probe).
   optional string base_branch = 4;
   optional string chat_id = 5;
-  repeated string copy_files = 6;  // Files to copy (searches recursively in all directories)
+  // copy_files are searched recursively in each repo source dir and copied
+  // to the same relative location in the corresponding worktree checkout.
+  repeated string copy_files = 6;
   bool force = 7;
-  optional string source_worktree_id = 8; // Source worktree to copy files from (if not set, copies from project path)
-  // repo_id selects which nested repo to create the worktree from. Required
-  // when the project has multiple repos. Optional when the project has a
-  // single root-level repo (defaults to that one).
-  optional string repo_id = 9;
+  // source_worktree_id, when set, is used as the file-copy source instead of
+  // the live project repo dirs. The corresponding nested checkout inside that
+  // workspace is used per repo.
+  optional string source_worktree_id = 8;
+  // base_branches overrides base_branch on a per-repo basis. Key is repo_id.
+  // Missing/empty entry -> fall back to base_branch -> fall back to repo default.
+  map<string, string> base_branches = 9;
 }
 
-// CreateWorktreeResponse returns the created worktree
+// CreateWorktreeResponse returns the created workspace-level worktree.
 message CreateWorktreeResponse {
   Worktree worktree = 1;
-}
-
-// BatchCreateWorktreesRequest creates a worktree in each listed repo.
-// name + branch are shared across all repos so the resulting worktrees form
-// a coherent sibling set the user can open as one project context.
-message BatchCreateWorktreesRequest {
-  string project_id = 1;
-  // repo_ids selects which nested repos to create the worktree in. All must
-  // belong to project_id. Empty is rejected.
-  repeated string repo_ids = 2;
-  string name = 3;
-  string branch = 4;
-  optional string base_branch = 5;
-  optional string chat_id = 6;
-  repeated string copy_files = 7;
-  bool force = 8;
-}
-
-// BatchCreateWorktreeResult is the per-repo outcome of a batch create.
-// On success worktree is set; on failure (or rollback) error is set.
-message BatchCreateWorktreeResult {
-  string repo_id = 1;
-  optional Worktree worktree = 2;
-  optional string error = 3;
-}
-
-// BatchCreateWorktreesResponse reports the outcome per repo. all_succeeded
-// is true only when every repo got a worktree. rolled_back is true if we
-// rolled back partial successes after a downstream failure.
-message BatchCreateWorktreesResponse {
-  repeated BatchCreateWorktreeResult results = 1;
-  bool all_succeeded = 2;
-  bool rolled_back = 3;
 }
 
 // ListWorktreesRequest lists worktrees with filters
@@ -291,9 +272,12 @@ message RecreateWorktreeResponse {
 // Git Read Operations Request/Response Messages
 // =============================================================================
 
-// GetWorktreeChangesRequest gets file changes for a worktree
+// GetWorktreeChangesRequest gets file changes for a worktree.
+// repo_id targets one nested repo. Empty is allowed only when the project
+// has at most one repo (legacy single-repo behavior).
 message GetWorktreeChangesRequest {
   string worktree_id = 1;
+  string repo_id = 2;
 }
 
 // GetWorktreeChangesResponse returns file changes
@@ -306,9 +290,12 @@ message GetWorktreeChangesResponse {
   string default_branch = 6;  // Repository's default branch (for PR targeting)
 }
 
-// GetWorktreeGitStatusRequest gets git status for a worktree
+// GetWorktreeGitStatusRequest gets git status for a worktree.
+// repo_id targets one nested repo. Empty is allowed only when the project
+// has at most one repo (legacy single-repo behavior).
 message GetWorktreeGitStatusRequest {
   string worktree_id = 1;
+  string repo_id = 2;
 }
 
 // GetWorktreeGitStatusResponse returns git status
@@ -325,10 +312,42 @@ message GetWorktreeGitStatusResponse {
   int32 behind = 10;
 }
 
-// GetWorktreeCommitsRequest gets commit history for a worktree
+// GetWorktreeCommitsRequest gets commit history for a worktree.
+// repo_id targets one nested repo. Empty is allowed only when the project
+// has at most one repo (legacy single-repo behavior).
 message GetWorktreeCommitsRequest {
   string worktree_id = 1;
   int32 limit = 2;  // Default 20, max 100
+  string repo_id = 3;
+}
+
+// ListWorktreeRepoStatusesRequest fans the per-repo git status across every
+// nested repo in the worktree's project.
+message ListWorktreeRepoStatusesRequest {
+  string worktree_id = 1;
+}
+
+// WorktreeRepoStatus is the per-repo status row inside the aggregator
+// response. Mirrors the bits the right-sidebar needs to render a grouped
+// "this repo has N changes, ahead X behind Y" header.
+message WorktreeRepoStatus {
+  string repo_id = 1;
+  string repo_name = 2;
+  string repo_relative_path = 3;
+  string current_branch = 4;
+  bool has_changes = 5;
+  int32 ahead = 6;
+  int32 behind = 7;
+  int32 changed_files = 8;
+  // error is set when this repo's status read failed; the row is still
+  // returned so the UI can show "couldn't read this one" without blowing up
+  // the whole list.
+  string error = 9;
+}
+
+// ListWorktreeRepoStatusesResponse fans status across nested repos.
+message ListWorktreeRepoStatusesResponse {
+  repeated WorktreeRepoStatus statuses = 1;
 }
 
 // GetWorktreeCommitsResponse returns commit history
@@ -346,10 +365,13 @@ message GetWorktreeCommitsResponse {
 // Git Write Operations Request/Response Messages
 // =============================================================================
 
-// StageFilesRequest stages files in a worktree
+// StageFilesRequest stages files in a worktree.
+// repo_id targets one nested repo. Empty is allowed only when the project
+// has at most one repo. Files are paths relative to the targeted repo.
 message StageFilesRequest {
   string worktree_id = 1;
   repeated string files = 2;  // Empty or ["."] means stage all
+  string repo_id = 3;
 }
 
 // StageFilesResponse confirms staging
@@ -358,10 +380,13 @@ message StageFilesResponse {
   repeated string files = 2;
 }
 
-// UnstageFilesRequest unstages files in a worktree
+// UnstageFilesRequest unstages files in a worktree.
+// repo_id targets one nested repo. Empty is allowed only when the project
+// has at most one repo. Files are paths relative to the targeted repo.
 message UnstageFilesRequest {
   string worktree_id = 1;
   repeated string files = 2;  // Empty or ["."] means unstage all
+  string repo_id = 3;
 }
 
 // UnstageFilesResponse confirms unstaging
@@ -377,6 +402,7 @@ message UnstageFilesResponse {
 message RevertFilesRequest {
   string worktree_id = 1;
   repeated string files = 2;  // File paths to revert
+  string repo_id = 3;
 }
 
 // RevertFilesResponse confirms revert
@@ -385,10 +411,13 @@ message RevertFilesResponse {
   repeated string files = 2;
 }
 
-// CommitWorktreeRequest commits staged changes
+// CommitWorktreeRequest commits staged changes.
+// repo_id targets one nested repo. Empty is allowed only when the project
+// has at most one repo. Commits are intrinsically per-repo.
 message CommitWorktreeRequest {
   string worktree_id = 1;
   string message = 2;
+  string repo_id = 3;
 }
 
 // CommitWorktreeResponse confirms commit
@@ -397,9 +426,12 @@ message CommitWorktreeResponse {
   string output = 2;
 }
 
-// PushWorktreeRequest pushes commits to remote
+// PushWorktreeRequest pushes commits to remote.
+// repo_id targets one nested repo. Empty is allowed only when the project
+// has at most one repo. Push is per-repo (each repo has its own remote).
 message PushWorktreeRequest {
   string worktree_id = 1;
+  string repo_id = 2;
 }
 
 // PushWorktreeResponse confirms push
@@ -408,9 +440,12 @@ message PushWorktreeResponse {
   string output = 2;
 }
 
-// PullWorktreeRequest pulls changes from remote
+// PullWorktreeRequest pulls changes from remote.
+// repo_id targets one nested repo. Empty is allowed only when the project
+// has at most one repo. Pull is per-repo (each repo has its own remote).
 message PullWorktreeRequest {
   string worktree_id = 1;
+  string repo_id = 2;
 }
 
 // PullWorktreeResponse confirms pull
@@ -419,9 +454,12 @@ message PullWorktreeResponse {
   string output = 2;
 }
 
-// GetWorktreePRRequest checks for existing PR
+// GetWorktreePRRequest checks for existing PR.
+// repo_id targets one nested repo. Empty is allowed only when the project
+// has at most one repo. PRs are intrinsically per-repo.
 message GetWorktreePRRequest {
   string worktree_id = 1;
+  string repo_id = 2;
 }
 
 // GetWorktreePRResponse returns PR info if exists
@@ -433,11 +471,14 @@ message GetWorktreePRResponse {
   optional string state = 5;  // "OPEN", "CLOSED", "MERGED"
 }
 
-// CreateWorktreePRRequest creates a pull request
+// CreateWorktreePRRequest creates a pull request.
+// repo_id targets one nested repo. Empty is allowed only when the project
+// has at most one repo. PR creation is intrinsically per-repo.
 message CreateWorktreePRRequest {
   string worktree_id = 1;
   string title = 2;
   optional string body = 3;
+  string repo_id = 4;
 }
 
 // CreateWorktreePRResponse confirms PR creation

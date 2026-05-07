@@ -7,6 +7,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/mcp"
 )
 
@@ -38,6 +39,13 @@ type ToolContext struct {
 	// Execution context
 	Project  *db.Project   // V2 Project for file operations
 	Worktree *WorktreeInfo // Worktree for working directory
+
+	// Repos is the list of nested repos in the project. Each repo's nested
+	// path (relative to the workspace root, i.e. worktree.Path or project.Path)
+	// is the on-disk location of that repo's checkout for this chat. Tools
+	// resolve a `repo` param to workspaceRoot/repo.relative_path. Empty for
+	// legacy single-repo projects.
+	Repos []*core.Repo
 
 	// Daemon provides filesystem and execution primitives on the user's machine.
 	// Nil when no daemon is available (tools that need it should check and return an error).

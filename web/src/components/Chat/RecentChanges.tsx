@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { X, File, Plus, Minus, Loader2, Undo2, Check, GitPullRequest, ArrowUp, ArrowDown } from "lucide-react";
-import { worktreeGrpc } from "../../api/worktree-grpc";
+import { X, File, Plus, Minus, Loader2, Undo2, Check, GitPullRequest, ArrowUp, ArrowDown, ChevronDown, ChevronRight, AlertCircle } from "lucide-react";
+import { worktreeGrpc, type WorktreeRepoStatus } from "../../api/worktree-grpc";
 import { projectGrpc, type FileChange as GrpcFileChange } from "../../api/project-grpc";
 import { FileIcon } from "../ui/FileIcon";
 import { useViewerStore } from "../../store/viewerStore";
@@ -45,40 +45,44 @@ interface RecentChangesProps {
   onFileSelect?: (file: FileChange | null) => void;
 }
 
-// Cache for git status data to prevent unnecessary reloads
+// Cache for git status data to prevent unnecessary reloads.
+// Key is keyed by (worktreeId|projectId, repoId) so multi-repo panels
+// don't stomp on each other's cache.
 const gitStatusCache = new Map<string, { data: RecentChangesData; timestamp: number }>();
 const CACHE_TTL = 5000; // 5 second cache TTL
 
-function getCacheKey(worktreeId: string | undefined, projectId: string): string {
-  return worktreeId ? `worktree:${worktreeId}` : `project:${projectId}`;
+function getCacheKey(worktreeId: string | undefined, projectId: string, repoId?: string): string {
+  const base = worktreeId ? `worktree:${worktreeId}` : `project:${projectId}`;
+  return repoId ? `${base}|repo:${repoId}` : base;
 }
 
-function getCachedData(worktreeId: string | undefined, projectId: string): RecentChangesData | null {
-  const key = getCacheKey(worktreeId, projectId);
+function getCachedData(worktreeId: string | undefined, projectId: string, repoId?: string): RecentChangesData | null {
+  const key = getCacheKey(worktreeId, projectId, repoId);
   const cached = gitStatusCache.get(key);
   if (!cached) return null;
-  
+
   // Check if cache is still valid
   const age = Date.now() - cached.timestamp;
   if (age > CACHE_TTL) {
     gitStatusCache.delete(key);
     return null;
   }
-  
+
   return cached.data;
 }
 
-function setCachedData(worktreeId: string | undefined, projectId: string, data: RecentChangesData): void {
-  const key = getCacheKey(worktreeId, projectId);
+function setCachedData(worktreeId: string | undefined, projectId: string, data: RecentChangesData, repoId?: string): void {
+  const key = getCacheKey(worktreeId, projectId, repoId);
   gitStatusCache.set(key, { data, timestamp: Date.now() });
 }
 
-function invalidateCache(worktreeId: string | undefined, projectId: string): void {
-  const key = getCacheKey(worktreeId, projectId);
+function invalidateCache(worktreeId: string | undefined, projectId: string, repoId?: string): void {
+  const key = getCacheKey(worktreeId, projectId, repoId);
   gitStatusCache.delete(key);
 }
 
-// Preload function that can be called from outside the component
+// Preload function that can be called from outside the component.
+// (Single-repo / legacy preload — multi-repo projects load on-demand.)
 export async function preloadGitStatus(worktreeId: string | undefined, projectId: string, isGitRepo: boolean): Promise<void> {
   if (!isGitRepo || (!worktreeId && !projectId)) {
     return;
@@ -92,7 +96,7 @@ export async function preloadGitStatus(worktreeId: string | undefined, projectId
 
   try {
     let changesData: RecentChangesData;
-    
+
     if (worktreeId) {
       const grpcData = await worktreeGrpc.getChanges(worktreeId);
       changesData = {
@@ -127,7 +131,7 @@ export async function preloadGitStatus(worktreeId: string | undefined, projectId
         default_branch: currentProject?.default_branch ?? "",
       };
     }
-    
+
     // Store in cache
     setCachedData(worktreeId, projectId, changesData);
     logger.debug("[RecentChanges] Preloaded git status", { worktreeId, projectId, fileCount: changesData.total_files });
@@ -137,13 +141,51 @@ export async function preloadGitStatus(worktreeId: string | undefined, projectId
   }
 }
 
-export function RecentChanges({ worktreeId, projectId, onClose, inline = false, onFileSelect }: RecentChangesProps) {
+// =============================================================================
+// RepoChangesPanel — the per-repo (or legacy single-repo) body of the
+// right-sidebar. Contains the file list, commit input, and PR button. When
+// repoId is set, all git ops are scoped to that nested repo. When undefined
+// it's the legacy single-repo path (server applies legacy behavior).
+//
+// Visual contract: in `mode === "single"` the rendered DOM matches the
+// pre-multi-repo sidebar exactly. `mode === "multi-section"` skips the outer
+// chrome (handled by the parent grouped layout) and goes straight to the
+// commit input + file list.
+// =============================================================================
+
+interface RepoChangesPanelProps {
+  worktreeId?: string;
+  projectId: string;
+  /** When set, scopes all git ops to that nested repo. */
+  repoId?: string;
+  inline: boolean;
+  onClose: () => void;
+  onFileSelect?: (file: FileChange | null) => void;
+  /** "single" preserves legacy chrome. "multi-section" omits the outer
+   *  card/header — the parent handles that. */
+  mode: "single" | "multi-section";
+  /** When true, skip rendering and disable interactions (e.g. listRepoStatuses
+   *  reported an error for this repo). The parent renders the error banner. */
+  disabled?: boolean;
+}
+
+function RepoChangesPanel({
+  worktreeId,
+  projectId,
+  repoId,
+  inline,
+  onClose,
+  onFileSelect,
+  mode,
+  disabled = false,
+}: RepoChangesPanelProps) {
   const [data, setData] = useState<RecentChangesData | null>(null);
   const [loading, setLoading] = useState(true);
-  
+
   // Track previous props to detect workspace changes
   const prevWorktreeIdRef = useRef<string | undefined>(worktreeId);
   const prevProjectIdRef = useRef<string>(projectId);
+  const prevRepoIdRef = useRef<string | undefined>(repoId);
   const [error, setError] = useState<string | null>(null);
   const openDiffViewer = useViewerStore((state) => state.openDiffViewer);
   const currentProject = useProjectStore((state) => state.currentProject);
@@ -164,7 +206,7 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
   const selectedFileRef = useRef<HTMLDivElement>(null);
   const loadRequestIdRef = useRef(0);
   const prRequestIdRef = useRef(0);
-  const scopeKeyRef = useRef(`${worktreeId ?? "project"}:${projectId}`);
+  const scopeKeyRef = useRef(`${worktreeId ?? "project"}:${projectId}:${repoId ?? ""}`);
 
   // Commit-related state
   const [commitMessage, setCommitMessage] = useState("");
@@ -175,7 +217,7 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
   const [isSyncing, setIsSyncing] = useState(false);
 
   const isDefaultBranch = !!data?.default_branch && data?.branch === data.default_branch;
-  const prDisabled = isSyncing || isCommitting || ghCliMissing || isDefaultBranch;
+  const prDisabled = isSyncing || isCommitting || ghCliMissing || isDefaultBranch || disabled;
   const prTooltip = ghCliMissing
     ? "GitHub CLI (gh) not installed. Install from cli.github.com"
     : isDefaultBranch
@@ -185,11 +227,9 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
   // Check if project is a git repo
   const isGitRepo = currentProject?.is_git_repo ?? true; // Default to true to avoid flicker
 
-
-
   // Check for existing PR when worktree changes
   useEffect(() => {
-    if (!worktreeId) {
+    if (!worktreeId || disabled) {
       prRequestIdRef.current += 1;
       setExistingPR(null);
       setGhCliMissing(false);
@@ -199,21 +239,22 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
 
     const requestId = ++prRequestIdRef.current;
     const currentWorktreeId = worktreeId;
+    const currentRepoId = repoId;
 
     const checkExistingPR = async () => {
       setIsCheckingPR(true);
       setGhCliMissing(false);
       try {
-        const prInfo = await gitApi.getExistingPR(currentWorktreeId);
-        if (prRequestIdRef.current !== requestId || worktreeId !== currentWorktreeId) {
+        const prInfo = await gitApi.getExistingPR(currentWorktreeId, currentRepoId);
+        if (prRequestIdRef.current !== requestId || worktreeId !== currentWorktreeId || repoId !== currentRepoId) {
           return;
         }
         setExistingPR(prInfo);
         if (prInfo.exists) {
-          logger.info("Found existing PR for worktree", { url: prInfo.url, state: prInfo.state });
+          logger.info("Found existing PR for worktree", { url: prInfo.url, state: prInfo.state, repoId: currentRepoId });
         }
       } catch (err) {
-        if (prRequestIdRef.current !== requestId || worktreeId !== currentWorktreeId) {
+        if (prRequestIdRef.current !== requestId || worktreeId !== currentWorktreeId || repoId !== currentRepoId) {
           return;
         }
         const errorMessage = err instanceof Error ? err.message : String(err);
@@ -225,27 +266,30 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
         }
         setExistingPR(null);
       } finally {
-        if (prRequestIdRef.current === requestId && worktreeId === currentWorktreeId) {
+        if (prRequestIdRef.current === requestId && worktreeId === currentWorktreeId && repoId === currentRepoId) {
           setIsCheckingPR(false);
         }
       }
     };
 
     void checkExistingPR();
-  }, [worktreeId, prRefreshTrigger]);
+  }, [worktreeId, repoId, prRefreshTrigger, disabled]);
 
-  // Handle workspace changes - immediately reset state when worktreeId or projectId changes
+  // Handle workspace changes - immediately reset state when worktreeId/projectId/repoId changes
   useEffect(() => {
     const worktreeChanged = prevWorktreeIdRef.current !== worktreeId;
     const projectChanged = prevProjectIdRef.current !== projectId;
-    const nextScopeKey = `${worktreeId ?? "project"}:${projectId}`;
+    const repoChanged = prevRepoIdRef.current !== repoId;
+    const nextScopeKey = `${worktreeId ?? "project"}:${projectId}:${repoId ?? ""}`;
 
-    if (worktreeChanged || projectChanged) {
+    if (worktreeChanged || projectChanged || repoChanged) {
       logger.debug("[RecentChanges] Workspace changed", {
         prevWorktree: prevWorktreeIdRef.current,
         newWorktree: worktreeId,
         prevProject: prevProjectIdRef.current,
         newProject: projectId,
+        prevRepo: prevRepoIdRef.current,
+        newRepo: repoId,
       });
 
       loadRequestIdRef.current += 1;
@@ -269,18 +313,19 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
       // Update refs
       prevWorktreeIdRef.current = worktreeId;
       prevProjectIdRef.current = projectId;
+      prevRepoIdRef.current = repoId;
     }
-  }, [worktreeId, projectId]);
+  }, [worktreeId, projectId, repoId]);
 
   useEffect(() => {
-    // Don't load changes if not a git repo
-    if (!isGitRepo) {
+    // Don't load changes if not a git repo or this panel is disabled
+    if (!isGitRepo || disabled) {
       setLoading(false);
       return;
     }
 
     // Check if we have cached data first (for same workspace)
-    const cached = getCachedData(worktreeId, projectId);
+    const cached = getCachedData(worktreeId, projectId, repoId);
     if (cached) {
       // Use cached data immediately - no loading state
       setData(cached);
@@ -319,13 +364,14 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
       if (debounceTimer) clearTimeout(debounceTimer);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [worktreeId, projectId, isGitRepo]);
+  }, [worktreeId, projectId, repoId, isGitRepo, disabled]);
 
   const loadChanges = async (isInitial: boolean = false) => {
     const requestId = ++loadRequestIdRef.current;
     const currentWorktreeId = worktreeId;
     const currentProjectId = projectId;
-    const currentScopeKey = `${currentWorktreeId ?? "project"}:${currentProjectId}`;
+    const currentRepoId = repoId;
+    const currentScopeKey = `${currentWorktreeId ?? "project"}:${currentProjectId}:${currentRepoId ?? ""}`;
     const projectDefaultBranch = currentProject?.default_branch ?? "";
 
     try {
@@ -335,12 +381,12 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
         setLoading(true);
       }
 
-      // If worktreeId is provided, use gRPC for worktree changes
-      // Otherwise use gRPC for project changes
+      // If worktreeId is provided, use gRPC for worktree changes (optionally
+      // scoped to a nested repo). Otherwise use gRPC for project changes.
       let changesData: RecentChangesData;
 
       if (currentWorktreeId) {
-        const grpcData = await worktreeGrpc.getChanges(currentWorktreeId);
+        const grpcData = await worktreeGrpc.getChanges(currentWorktreeId, currentRepoId);
         // Convert gRPC response to RecentChangesData format
         changesData = {
           branch: grpcData.branch,
@@ -379,7 +425,8 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
         loadRequestIdRef.current !== requestId ||
         scopeKeyRef.current !== currentScopeKey ||
         worktreeId !== currentWorktreeId ||
-        projectId !== currentProjectId
+        projectId !== currentProjectId ||
+        repoId !== currentRepoId
       ) {
         logger.debug("[RecentChanges] Ignoring stale changes response", {
           requestId,
@@ -392,13 +439,14 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
 
       // Update state and cache
       setData(changesData);
-      setCachedData(currentWorktreeId, currentProjectId, changesData);
+      setCachedData(currentWorktreeId, currentProjectId, changesData, currentRepoId);
     } catch (err) {
       if (
         loadRequestIdRef.current !== requestId ||
         scopeKeyRef.current !== currentScopeKey ||
         worktreeId !== currentWorktreeId ||
-        projectId !== currentProjectId
+        projectId !== currentProjectId ||
+        repoId !== currentRepoId
       ) {
         return;
       }
@@ -408,6 +456,7 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
         message: errorMessage,
         projectId: currentProjectId,
         worktreeId: currentWorktreeId,
+        repoId: currentRepoId,
       });
       setError(errorMessage);
     } finally {
@@ -415,7 +464,8 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
         loadRequestIdRef.current === requestId &&
         scopeKeyRef.current === currentScopeKey &&
         worktreeId === currentWorktreeId &&
-        projectId === currentProjectId
+        projectId === currentProjectId &&
+        repoId === currentRepoId
       ) {
         // Always clear loading state for the active request
         setLoading(false);
@@ -442,9 +492,9 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
     setError(null);
 
     try {
-      await gitApi.commitChanges(worktreeId, commitMessage.trim());
+      await gitApi.commitChanges(worktreeId, commitMessage.trim(), repoId);
       setCommitMessage("");
-      invalidateCache(worktreeId, projectId);
+      invalidateCache(worktreeId, projectId, repoId);
       await loadChanges(false);
       logger.info("Changes committed successfully");
     } catch (err) {
@@ -463,8 +513,8 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
     setError(null);
 
     try {
-      await gitApi.pushChanges(worktreeId);
-      invalidateCache(worktreeId, projectId);
+      await gitApi.pushChanges(worktreeId, repoId);
+      invalidateCache(worktreeId, projectId, repoId);
       await loadChanges(false);
       logger.info("Changes pushed successfully");
     } catch (err) {
@@ -483,8 +533,8 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
     setError(null);
 
     try {
-      await gitApi.pullChanges(worktreeId);
-      invalidateCache(worktreeId, projectId);
+      await gitApi.pullChanges(worktreeId, repoId);
+      invalidateCache(worktreeId, projectId, repoId);
       await loadChanges(false);
       logger.info("Changes pulled successfully");
     } catch (err) {
@@ -502,8 +552,8 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
 
     setStagingFiles((prev) => new Set(prev).add(filePath));
     try {
-      await gitApi.stageFiles(worktreeId, [filePath]);
-      invalidateCache(worktreeId, projectId);
+      await gitApi.stageFiles(worktreeId, [filePath], repoId);
+      invalidateCache(worktreeId, projectId, repoId);
       await loadChanges(false);
       logger.info("File staged successfully:", filePath);
     } catch (err) {
@@ -523,8 +573,8 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
 
     setStagingFiles((prev) => new Set(prev).add(filePath));
     try {
-      await gitApi.unstageFiles(worktreeId, [filePath]);
-      invalidateCache(worktreeId, projectId);
+      await gitApi.unstageFiles(worktreeId, [filePath], repoId);
+      invalidateCache(worktreeId, projectId, repoId);
       await loadChanges(false);
       logger.info("File unstaged successfully:", filePath);
     } catch (err) {
@@ -556,7 +606,7 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
     setError(null);
     setRevertingFiles((prev) => new Set(prev).add(filePath));
     try {
-      const result = await gitApi.revertFiles(worktreeId, [filePath]);
+      const result = await gitApi.revertFiles(worktreeId, [filePath], repoId);
       if (result.message?.includes("error(s):")) {
         setError(result.message);
         logger.warn("File revert completed with errors:", { filePath, message: result.message });
@@ -564,7 +614,7 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
         setError(null);
         logger.info("File reverted successfully:", filePath);
       }
-      invalidateCache(worktreeId, projectId);
+      invalidateCache(worktreeId, projectId, repoId);
       await loadChanges(false);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to revert file";
@@ -587,8 +637,8 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
     filePaths.forEach((path) => setStagingFiles((prev) => new Set(prev).add(path)));
 
     try {
-      await gitApi.stageFiles(worktreeId, filePaths);
-      invalidateCache(worktreeId, projectId);
+      await gitApi.stageFiles(worktreeId, filePaths, repoId);
+      invalidateCache(worktreeId, projectId, repoId);
       await loadChanges(false);
       logger.info("All files staged successfully");
     } catch (err) {
@@ -612,8 +662,8 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
     filePaths.forEach((path) => setStagingFiles((prev) => new Set(prev).add(path)));
 
     try {
-      await gitApi.unstageFiles(worktreeId, filePaths);
-      invalidateCache(worktreeId, projectId);
+      await gitApi.unstageFiles(worktreeId, filePaths, repoId);
+      invalidateCache(worktreeId, projectId, repoId);
       await loadChanges(false);
       logger.info("All files unstaged successfully");
     } catch (err) {
@@ -650,7 +700,7 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
     filePaths.forEach((path) => setRevertingFiles((prev) => new Set(prev).add(path)));
 
     try {
-      const result = await gitApi.revertFiles(worktreeId, filePaths);
+      const result = await gitApi.revertFiles(worktreeId, filePaths, repoId);
       if (result.message?.includes("error(s):")) {
         setError(result.message);
         logger.warn("Discard all completed with errors", { message: result.message, files: filePaths });
@@ -658,7 +708,7 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
         setError(null);
         logger.info("All changes discarded successfully");
       }
-      invalidateCache(worktreeId, projectId);
+      invalidateCache(worktreeId, projectId, repoId);
       await loadChanges(false);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Failed to discard all changes";
@@ -698,8 +748,8 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
 
     filePaths.forEach((path) => setStagingFiles((prev) => new Set(prev).add(path)));
     try {
-      await gitApi.stageFiles(worktreeId, filePaths);
-      invalidateCache(worktreeId, projectId);
+      await gitApi.stageFiles(worktreeId, filePaths, repoId);
+      invalidateCache(worktreeId, projectId, repoId);
       await loadChanges(false);
       setSelectedIndices(new Set());
       logger.info("Selected files staged successfully");
@@ -732,8 +782,8 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
 
     filePaths.forEach((path) => setStagingFiles((prev) => new Set(prev).add(path)));
     try {
-      await gitApi.unstageFiles(worktreeId, filePaths);
-      invalidateCache(worktreeId, projectId);
+      await gitApi.unstageFiles(worktreeId, filePaths, repoId);
+      invalidateCache(worktreeId, projectId, repoId);
       await loadChanges(false);
       setSelectedIndices(new Set());
       logger.info("Selected files unstaged successfully");
@@ -779,7 +829,7 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
     setError(null);
     filePaths.forEach((path) => setRevertingFiles((prev) => new Set(prev).add(path)));
     try {
-      const result = await gitApi.revertFiles(worktreeId, filePaths);
+      const result = await gitApi.revertFiles(worktreeId, filePaths, repoId);
       if (result.message?.includes("error(s):")) {
         setError(result.message);
         logger.warn("Discard selected completed with errors", { message: result.message, files: filePaths });
@@ -787,7 +837,7 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
         setError(null);
         logger.info("Selected files discarded successfully");
       }
-      invalidateCache(worktreeId, projectId);
+      invalidateCache(worktreeId, projectId, repoId);
       await loadChanges(false);
       setSelectedIndices(new Set());
     } catch (err) {
@@ -906,7 +956,7 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
         if (next !== prev) {
           const { file, status } = visibleFiles[next];
           setSelectedFile({ path: file.path, status });
-          
+
           if (isShiftPressed) {
             // Extend selection
             const anchor = anchorIndex >= 0 ? anchorIndex : prev;
@@ -927,7 +977,7 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
         if (next !== prev) {
           const { file, status } = visibleFiles[next];
           setSelectedFile({ path: file.path, status });
-          
+
           if (isShiftPressed) {
             // Extend selection
             const anchor = anchorIndex >= 0 ? anchorIndex : prev;
@@ -943,9 +993,9 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
       });
     } else if (e.key === "Enter") {
       // Open all selected files (or just the current one if none selected)
-      const indicesToOpen = selectedIndices.size > 0 ? Array.from(selectedIndices) : 
+      const indicesToOpen = selectedIndices.size > 0 ? Array.from(selectedIndices) :
                            (selectedIndex >= 0 ? [selectedIndex] : []);
-      
+
       if (indicesToOpen.length > 0) {
         e.preventDefault();
         indicesToOpen.forEach((idx) => {
@@ -1267,10 +1317,9 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
     );
   };
 
-  // Note: Inline file viewer removed - files now open in tabbed viewer panel
-
-  // Show git initialization prompt if project is not a git repo
-  if (!isGitRepo && currentProject) {
+  // Show git initialization prompt if project is not a git repo (only in
+  // legacy single-mode — multi-repo projects always have git repos).
+  if (!isGitRepo && currentProject && mode === "single") {
     return (
       <div className={cn(
         "flex flex-col",
@@ -1301,8 +1350,9 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
     );
   }
 
-
-  if (error) {
+  // Error fallback (only in legacy single-mode — multi-repo error states are
+  // rendered by the parent's per-repo error banner).
+  if (error && mode === "single") {
     return (
       <div className={cn(
         "flex flex-col",
@@ -1326,6 +1376,243 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
     );
   }
 
+  // The commit input + push/pull/commit + PR button cluster. Used by both
+  // the single-repo inline header and each multi-repo section body.
+  const renderCommitArea = () => {
+    if (!worktreeId) return null;
+    return (
+      <div className="flex flex-col gap-2 p-2 bg-background/95 border-b border-border">
+        {/* Error Display */}
+        {error && (
+          <div className="text-xs text-destructive bg-destructive/10 px-2 py-1 rounded border border-destructive/20">
+            {error}
+          </div>
+        )}
+
+        {/* Commit Input - full width */}
+        <SidebarInput
+          placeholder={`Message (⌘⏎ to commit on "${data?.branch || 'main'}")`}
+          value={commitMessage}
+          onChange={(value) => {
+            setCommitMessage(value);
+            setError(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              if (stagedFiles.length > 0) {
+                handleCommit();
+              }
+            }
+          }}
+          showClear={false}
+          rightContent={
+            commitMessage ? (
+              <span className="text-xs text-muted-foreground">
+                {commitMessage.length}
+              </span>
+            ) : undefined
+          }
+          disabled={isCommitting || isSyncing || disabled}
+          wrapperClassName="w-full"
+        />
+
+        {/* Determine button state */}
+        {(() => {
+          const hasAnyChanges = stagedFiles.length > 0 || modifiedFiles.length > 0 || untrackedFiles.length > 0;
+          const showPushMode = !hasAnyChanges && (data?.ahead ?? 0) > 0;
+          const showPullMode = !hasAnyChanges && (data?.behind ?? 0) > 0 && (data?.ahead ?? 0) === 0;
+
+          let buttonState;
+          if (showPullMode) {
+            buttonState = {
+              label: `Pull (${data?.behind ?? 0})`,
+              icon: ArrowDown,
+              onClick: handlePull,
+              disabled: isSyncing || (data?.behind ?? 0) === 0 || disabled,
+              loading: isSyncing,
+              title: `Pull ${data?.behind ?? 0} commit${(data?.behind ?? 0) === 1 ? '' : 's'}`,
+            };
+          } else if (showPushMode) {
+            buttonState = {
+              label: "Push",
+              icon: ArrowUp,
+              onClick: handlePush,
+              disabled: isSyncing || (data?.ahead ?? 0) === 0 || disabled,
+              loading: isSyncing,
+              title: `Push ${data?.ahead ?? 0} commit${(data?.ahead ?? 0) === 1 ? '' : 's'}`,
+            };
+          } else {
+            buttonState = {
+              label: "Commit",
+              icon: Check,
+              onClick: handleCommit,
+              disabled: !commitMessage.trim() || stagedFiles.length === 0 || isCommitting || disabled,
+              loading: isCommitting,
+              title: `Commit ${stagedFiles.length} ${stagedFiles.length === 1 ? 'file' : 'files'} (⌘+Enter)`,
+            };
+          }
+
+          const ButtonIcon = buttonState.icon;
+
+          return (
+            <div className="flex flex-col gap-2 w-full">
+              {/* Main Action Button - Commit/Push/Pull */}
+              <Tooltip content={buttonState.title}>
+                <button
+                  onClick={buttonState.onClick}
+                  disabled={buttonState.disabled}
+                  style={{
+                    backgroundColor: 'hsl(var(--primary))',
+                    color: 'hsl(var(--primary-foreground))',
+                    borderColor: 'hsl(var(--primary) / 0.2)',
+                  }}
+                  className={cn(
+                    "w-full h-9 px-3 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-1.5",
+                    "border hover:opacity-90 hover:brightness-95",
+                    "disabled:opacity-50 disabled:cursor-not-allowed",
+                    buttonState.loading && "opacity-70"
+                  )}
+                >
+                  {buttonState.loading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>{buttonState.label === "Commit" ? "Committing" : buttonState.label === "Push" ? "Pushing" : "Pulling"}...</span>
+                    </>
+                  ) : (
+                    <>
+                      <ButtonIcon className="w-4 h-4" />
+                      <span>{buttonState.label}</span>
+                    </>
+                  )}
+                </button>
+              </Tooltip>
+
+              {/* PR button - full width below */}
+              {existingPR?.exists && existingPR.url ? (
+                <Tooltip content={`View PR #${existingPR.number}: ${existingPR.title}`}>
+                  <a
+                    href={existingPR.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={cn(
+                      "w-full h-9 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-1.5",
+                      "border border-primary/40 bg-primary/10 hover:bg-primary/20 text-primary"
+                    )}
+                  >
+                    <GitPullRequest className="w-3.5 h-3.5" />
+                    <span className="truncate">PR #{existingPR.number}</span>
+                  </a>
+                </Tooltip>
+              ) : (
+                <Tooltip content={prTooltip}>
+                  <button
+                    onClick={prDisabled ? undefined : () => setIsPRDialogOpen(true)}
+                    disabled={prDisabled}
+                    className={cn(
+                      "w-full h-9 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-1.5",
+                      "border border-border bg-background btn-hover-bg-muted hover:border-primary/40 text-foreground",
+                      prDisabled && "opacity-50 cursor-not-allowed"
+                    )}
+                  >
+                    <GitPullRequest className="w-3.5 h-3.5" />
+                    <span>Create PR</span>
+                  </button>
+                </Tooltip>
+              )}
+            </div>
+          );
+        })()}
+      </div>
+    );
+  };
+
+  const renderFileListArea = () => (
+    <div
+      className="flex-1 overflow-y-auto"
+      ref={fileListRef}
+      onKeyDown={handleKeyDown}
+      tabIndex={0}
+    >
+      <div className="p-2">
+        {loading && !data ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <>
+            <div className="mb-2 rounded-[10px] border border-border bg-card/95 p-3 shadow-sm">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground/80">
+                    Working Tree
+                  </div>
+                  <div className="truncate text-xs text-muted-foreground">
+                    {data?.branch || "Current branch"}
+                  </div>
+                </div>
+                <div className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
+                  {data?.total_files || 0} files
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
+                <div className="rounded-md bg-muted/40 px-2 py-1.5">
+                  <div className="font-semibold text-foreground">{stagedFiles.length}</div>
+                  <div className="text-muted-foreground">Staged</div>
+                </div>
+                <div className="rounded-md bg-muted/40 px-2 py-1.5">
+                  <div className="font-semibold text-foreground">{modifiedFiles.length}</div>
+                  <div className="text-muted-foreground">Changed</div>
+                </div>
+                <div className="rounded-md bg-muted/40 px-2 py-1.5">
+                  <div className="font-semibold text-foreground">{untrackedFiles.length}</div>
+                  <div className="text-muted-foreground">New</div>
+                </div>
+              </div>
+            </div>
+
+            {renderFileList(stagedFiles, "staged")}
+            {renderFileList(modifiedFiles, "modified")}
+            {renderFileList(untrackedFiles, "untracked")}
+
+            {data?.total_files === 0 && (
+              <SidebarEmptyState
+                icon={File}
+                title="No changes"
+                description="Working tree is clean"
+              />
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+
+  const prDialog = worktreeId ? (
+    <PRDialog
+      isOpen={isPRDialogOpen}
+      onClose={() => setIsPRDialogOpen(false)}
+      onPRCreated={() => setPrRefreshTrigger(prev => prev + 1)}
+      worktreeId={worktreeId}
+      defaultBranch={data?.default_branch}
+      currentBranch={data?.branch}
+    />
+  ) : null;
+
+  // mode === "multi-section": parent provides chrome (collapsible header,
+  // outer card, etc.). Render only the body.
+  if (mode === "multi-section") {
+    return (
+      <div className="flex flex-col">
+        {inline && renderCommitArea()}
+        {renderFileListArea()}
+        {prDialog}
+      </div>
+    );
+  }
+
+  // mode === "single": legacy chrome (outer card, header, X-button, etc.).
+  // This is the byte-for-byte original layout.
   return (
     <div className={cn(
       "flex flex-col h-full",
@@ -1357,151 +1644,7 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
       )}
 
       {/* Inline header with commit input and actions - full width design */}
-      {inline && worktreeId && (
-        <div className="flex flex-col gap-2 p-2 bg-background/95 border-b border-border">
-          {/* Error Display */}
-          {error && (
-            <div className="text-xs text-destructive bg-destructive/10 px-2 py-1 rounded border border-destructive/20">
-              {error}
-            </div>
-          )}
-
-          {/* Commit Input - full width */}
-          <SidebarInput
-            placeholder={`Message (⌘⏎ to commit on "${data?.branch || 'main'}")`}
-            value={commitMessage}
-            onChange={(value) => {
-              setCommitMessage(value);
-              setError(null);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
-                if (stagedFiles.length > 0) {
-                  handleCommit();
-                }
-              }
-            }}
-            showClear={false}
-            rightContent={
-              commitMessage ? (
-                <span className="text-xs text-muted-foreground">
-                  {commitMessage.length}
-                </span>
-              ) : undefined
-            }
-            disabled={isCommitting || isSyncing}
-            wrapperClassName="w-full"
-          />
-
-          {/* Determine button state */}
-          {(() => {
-            const hasAnyChanges = stagedFiles.length > 0 || modifiedFiles.length > 0 || untrackedFiles.length > 0;
-            const showPushMode = !hasAnyChanges && (data?.ahead ?? 0) > 0;
-            const showPullMode = !hasAnyChanges && (data?.behind ?? 0) > 0 && (data?.ahead ?? 0) === 0;
-
-            let buttonState;
-            if (showPullMode) {
-              buttonState = {
-                label: `Pull (${data?.behind ?? 0})`,
-                icon: ArrowDown,
-                onClick: handlePull,
-                disabled: isSyncing || (data?.behind ?? 0) === 0,
-                loading: isSyncing,
-                title: `Pull ${data?.behind ?? 0} commit${(data?.behind ?? 0) === 1 ? '' : 's'}`,
-              };
-            } else if (showPushMode) {
-              buttonState = {
-                label: "Push",
-                icon: ArrowUp,
-                onClick: handlePush,
-                disabled: isSyncing || (data?.ahead ?? 0) === 0,
-                loading: isSyncing,
-                title: `Push ${data?.ahead ?? 0} commit${(data?.ahead ?? 0) === 1 ? '' : 's'}`,
-              };
-            } else {
-              buttonState = {
-                label: "Commit",
-                icon: Check,
-                onClick: handleCommit,
-                disabled: !commitMessage.trim() || stagedFiles.length === 0 || isCommitting,
-                loading: isCommitting,
-                title: `Commit ${stagedFiles.length} ${stagedFiles.length === 1 ? 'file' : 'files'} (⌘+Enter)`,
-              };
-            }
-
-            const ButtonIcon = buttonState.icon;
-
-            return (
-              <div className="flex flex-col gap-2 w-full">
-                {/* Main Action Button - Commit/Push/Pull */}
-                <Tooltip content={buttonState.title}>
-                  <button
-                    onClick={buttonState.onClick}
-                    disabled={buttonState.disabled}
-                    style={{
-                      backgroundColor: 'hsl(var(--primary))',
-                      color: 'hsl(var(--primary-foreground))',
-                      borderColor: 'hsl(var(--primary) / 0.2)',
-                    }}
-                    className={cn(
-                      "w-full h-9 px-3 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-1.5",
-                      "border hover:opacity-90 hover:brightness-95",
-                      "disabled:opacity-50 disabled:cursor-not-allowed",
-                      buttonState.loading && "opacity-70"
-                    )}
-                  >
-                    {buttonState.loading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>{buttonState.label === "Commit" ? "Committing" : buttonState.label === "Push" ? "Pushing" : "Pulling"}...</span>
-                      </>
-                    ) : (
-                      <>
-                        <ButtonIcon className="w-4 h-4" />
-                        <span>{buttonState.label}</span>
-                      </>
-                    )}
-                  </button>
-                </Tooltip>
-
-                {/* PR button - full width below */}
-                {existingPR?.exists && existingPR.url ? (
-                  <Tooltip content={`View PR #${existingPR.number}: ${existingPR.title}`}>
-                    <a
-                      href={existingPR.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={cn(
-                        "w-full h-9 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-1.5",
-                        "border border-primary/40 bg-primary/10 hover:bg-primary/20 text-primary"
-                      )}
-                    >
-                      <GitPullRequest className="w-3.5 h-3.5" />
-                      <span className="truncate">PR #{existingPR.number}</span>
-                    </a>
-                  </Tooltip>
-                ) : (
-                  <Tooltip content={prTooltip}>
-                    <button
-                      onClick={prDisabled ? undefined : () => setIsPRDialogOpen(true)}
-                      disabled={prDisabled}
-                      className={cn(
-                        "w-full h-9 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-1.5",
-                        "border border-border bg-background hover:bg-muted hover:border-primary/40 text-foreground",
-                        prDisabled && "opacity-50 cursor-not-allowed"
-                      )}
-                    >
-                      <GitPullRequest className="w-3.5 h-3.5" />
-                      <span>Create PR</span>
-                    </button>
-                  </Tooltip>
-                )}
-              </div>
-            );
-          })()}
-        </div>
-      )}
+      {inline && renderCommitArea()}
 
       {/* Error display for inline mode */}
       {inline && error && (
@@ -1511,76 +1654,258 @@ export function RecentChanges({ worktreeId, projectId, onClose, inline = false, 
       )}
 
       {/* Content - File list only, files open in tabbed viewer */}
-      <div 
-        className="flex-1 overflow-y-auto"
-        ref={fileListRef}
-        onKeyDown={handleKeyDown}
-        tabIndex={0}
+      {renderFileListArea()}
+
+      {prDialog}
+    </div>
+  );
+}
+
+// =============================================================================
+// MultiRepoSection — collapsible header + RepoChangesPanel for one nested repo.
+// =============================================================================
+
+interface MultiRepoSectionProps {
+  status: WorktreeRepoStatus;
+  worktreeId: string;
+  projectId: string;
+  defaultExpanded: boolean;
+  inline: boolean;
+  onClose: () => void;
+  onFileSelect?: (file: FileChange | null) => void;
+}
+
+function MultiRepoSection({
+  status,
+  worktreeId,
+  projectId,
+  defaultExpanded,
+  inline,
+  onClose,
+  onFileSelect,
+}: MultiRepoSectionProps) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const hasError = !!status.error;
+
+  return (
+    <div className="border-b border-border">
+      <button
+        onClick={() => setExpanded((e) => !e)}
+        className={cn(
+          "w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/50 transition-colors",
+          hasError && "bg-destructive/5",
+        )}
       >
-        <div className="p-2">
-          {loading && !data ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            <>
-              <div className="mb-2 rounded-[10px] border border-border bg-card/95 p-3 shadow-sm">
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground/80">
-                      Working Tree
-                    </div>
-                    <div className="truncate text-xs text-muted-foreground">
-                      {data?.branch || "Current branch"}
-                    </div>
-                  </div>
-                  <div className="rounded-full bg-primary/10 px-2 py-1 text-xs font-semibold text-primary">
-                    {data?.total_files || 0} files
-                  </div>
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
-                  <div className="rounded-md bg-muted/40 px-2 py-1.5">
-                    <div className="font-semibold text-foreground">{stagedFiles.length}</div>
-                    <div className="text-muted-foreground">Staged</div>
-                  </div>
-                  <div className="rounded-md bg-muted/40 px-2 py-1.5">
-                    <div className="font-semibold text-foreground">{modifiedFiles.length}</div>
-                    <div className="text-muted-foreground">Changed</div>
-                  </div>
-                  <div className="rounded-md bg-muted/40 px-2 py-1.5">
-                    <div className="font-semibold text-foreground">{untrackedFiles.length}</div>
-                    <div className="text-muted-foreground">New</div>
-                  </div>
-                </div>
-              </div>
-
-              {renderFileList(stagedFiles, "staged")}
-              {renderFileList(modifiedFiles, "modified")}
-              {renderFileList(untrackedFiles, "untracked")}
-
-              {data?.total_files === 0 && (
-                <SidebarEmptyState
-                  icon={File}
-                  title="No changes"
-                  description="Working tree is clean"
-                />
+        {expanded ? (
+          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+        ) : (
+          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+        )}
+        {hasError ? (
+          <AlertCircle className="w-3.5 h-3.5 text-destructive flex-shrink-0" />
+        ) : null}
+        <span className="text-sm font-medium truncate">
+          {status.repo_name || status.repo_relative_path || status.repo_id}
+        </span>
+        {!hasError && (
+          <span className="text-xs text-muted-foreground font-mono truncate">
+            {status.current_branch}
+          </span>
+        )}
+        <div className="ml-auto flex items-center gap-2 flex-shrink-0">
+          {!hasError && (status.ahead > 0 || status.behind > 0) && (
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
+              {status.ahead > 0 && (
+                <span className="flex items-center">
+                  <ArrowUp className="w-3 h-3" />
+                  {status.ahead}
+                </span>
               )}
-            </>
+              {status.behind > 0 && (
+                <span className="flex items-center">
+                  <ArrowDown className="w-3 h-3" />
+                  {status.behind}
+                </span>
+              )}
+            </span>
+          )}
+          {!hasError && (
+            <span className="text-xs text-muted-foreground">
+              {status.changed_files === 1
+                ? "1 changed file"
+                : `${status.changed_files} changed files`}
+            </span>
           )}
         </div>
-      </div>
+      </button>
 
-      {/* PR Dialog */}
-      {worktreeId && (
-        <PRDialog
-          isOpen={isPRDialogOpen}
-          onClose={() => setIsPRDialogOpen(false)}
-          onPRCreated={() => setPrRefreshTrigger(prev => prev + 1)}
-          worktreeId={worktreeId}
-          defaultBranch={data?.default_branch}
-          currentBranch={data?.branch}
-        />
+      {expanded && (
+        <>
+          {hasError ? (
+            <div className="px-3 py-2 text-xs text-destructive bg-destructive/10 border-t border-destructive/20">
+              {status.error}
+            </div>
+          ) : (
+            <RepoChangesPanel
+              worktreeId={worktreeId}
+              projectId={projectId}
+              repoId={status.repo_id}
+              inline={inline}
+              onClose={onClose}
+              onFileSelect={onFileSelect}
+              mode="multi-section"
+            />
+          )}
+        </>
       )}
     </div>
+  );
+}
+
+// =============================================================================
+// RecentChanges — public entry point. Routes to legacy single-repo UI or new
+// per-repo grouped UI based on the worktree's repo count. Single-repo / legacy
+// projects (and any case where we can't fetch the repo list, e.g. older
+// daemons or test mocks) fall through to the legacy UI unchanged.
+// =============================================================================
+
+export function RecentChanges(props: RecentChangesProps) {
+  const { worktreeId, projectId, onClose, inline = false, onFileSelect } = props;
+  const [repoStatuses, setRepoStatuses] = useState<WorktreeRepoStatus[] | null>(null);
+  const [statusesLoaded, setStatusesLoaded] = useState(false);
+
+  // Fetch the per-repo status list. Empty / single → legacy UI. Errors are
+  // treated as "legacy mode" (older daemons or stubbed test envs).
+  useEffect(() => {
+    if (!worktreeId) {
+      setRepoStatuses(null);
+      setStatusesLoaded(true);
+      return;
+    }
+    let cancelled = false;
+    setStatusesLoaded(false);
+    const load = async () => {
+      try {
+        const fn = (worktreeGrpc as { listRepoStatuses?: typeof worktreeGrpc.listRepoStatuses }).listRepoStatuses;
+        if (typeof fn !== "function") {
+          if (!cancelled) {
+            setRepoStatuses(null);
+            setStatusesLoaded(true);
+          }
+          return;
+        }
+        const statuses = await worktreeGrpc.listRepoStatuses(worktreeId);
+        if (!cancelled) {
+          setRepoStatuses(statuses);
+          setStatusesLoaded(true);
+        }
+      } catch (err) {
+        // Older daemon, transient error, or any other failure: fall back to
+        // the legacy single-repo UI rather than blocking the whole sidebar.
+        logger.debug("[RecentChanges] listRepoStatuses unavailable, falling back to legacy single-repo UI", err);
+        if (!cancelled) {
+          setRepoStatuses(null);
+          setStatusesLoaded(true);
+        }
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [worktreeId]);
+
+  // Refetch repo statuses when the backend signals a worktree change.
+  useEffect(() => {
+    if (!worktreeId) return;
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    const unsubscribe = subscribeToRefetch("worktree_changes", (event) => {
+      if (!matchesRefetchScope(event, { worktreeId, projectId })) return;
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(async () => {
+        debounceTimer = null;
+        try {
+          const fn = (worktreeGrpc as { listRepoStatuses?: typeof worktreeGrpc.listRepoStatuses }).listRepoStatuses;
+          if (typeof fn !== "function") return;
+          const statuses = await worktreeGrpc.listRepoStatuses(worktreeId);
+          setRepoStatuses(statuses);
+        } catch (err) {
+          logger.debug("[RecentChanges] failed to refetch repo statuses", err);
+        }
+      }, 500);
+    });
+    return () => {
+      unsubscribe();
+      if (debounceTimer) clearTimeout(debounceTimer);
+    };
+  }, [worktreeId, projectId]);
+
+  // Multi-repo mode: 2+ nested repos.
+  if (statusesLoaded && repoStatuses && repoStatuses.length >= 2 && worktreeId) {
+    // Default expansion: first repo with changes is expanded, others collapsed.
+    // If no repo has changes, leave them all collapsed.
+    const firstWithChanges = repoStatuses.findIndex((s) => s.has_changes && !s.error);
+
+    const totalChanges = repoStatuses.reduce((acc, s) => acc + (s.error ? 0 : s.changed_files), 0);
+    const reposWithErrors = repoStatuses.filter((s) => !!s.error).length;
+
+    return (
+      <div className={cn(
+        "flex flex-col h-full",
+        !inline && "bg-card border-l border-border"
+      )}>
+        {!inline && (
+          <div className="flex items-center justify-between p-4 border-b border-border">
+            <div>
+              <h3 className="text-sm font-semibold">Recent Changes</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {repoStatuses.length} repos • {totalChanges} files changed
+                {reposWithErrors > 0 && ` • ${reposWithErrors} with errors`}
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-1 hover:bg-muted rounded transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+        <div className="flex-1 overflow-y-auto">
+          {repoStatuses.map((status, idx) => (
+            <MultiRepoSection
+              key={status.repo_id || `${status.repo_relative_path}-${idx}`}
+              status={status}
+              worktreeId={worktreeId}
+              projectId={projectId}
+              defaultExpanded={
+                firstWithChanges >= 0
+                  ? idx === firstWithChanges
+                  : idx === 0 // No changes anywhere — open the first one so the panel isn't a wall of headers.
+              }
+              inline={inline}
+              onClose={onClose}
+              onFileSelect={onFileSelect}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Single-repo / legacy / loading / 0-repos case → render the legacy panel
+  // exactly as before with repoId=undefined. The backend accepts empty
+  // repo_id for 0/1-repo projects (legacy single-repo behavior), so leaving
+  // repoId out preserves the byte-for-byte original behavior and avoids any
+  // re-fetch flicker when listRepoStatuses resolves.
+  return (
+    <RepoChangesPanel
+      worktreeId={worktreeId}
+      projectId={projectId}
+      inline={inline}
+      onClose={onClose}
+      onFileSelect={onFileSelect}
+      mode="single"
+    />
   );
 }

@@ -1,6 +1,11 @@
 -- +goose Up
 -- Add Repo entity: a project may contain N nested git repos.
 -- Single-repo projects get one repo row with relative_path = ''.
+--
+-- A Worktree is a workspace-level entity (one row per feature, regardless of
+-- repo count). It does NOT carry a repo_id — its Path points at a workspace
+-- directory that contains N nested checkouts, one per repo. See
+-- internal/db/core/project_worktree.go for the rationale.
 
 CREATE TABLE IF NOT EXISTS repos (
     id TEXT PRIMARY KEY,
@@ -15,10 +20,6 @@ CREATE TABLE IF NOT EXISTS repos (
 
 CREATE INDEX IF NOT EXISTS idx_repos_project ON repos(project_id);
 
-ALTER TABLE worktrees ADD COLUMN IF NOT EXISTS repo_id TEXT REFERENCES repos(id) ON DELETE CASCADE;
-
-CREATE INDEX IF NOT EXISTS idx_worktrees_repo ON worktrees(repo_id);
-
 -- Backfill: one root-level repo per existing git project.
 INSERT INTO repos (id, project_id, name, relative_path, created_at, updated_at)
 SELECT
@@ -32,14 +33,6 @@ FROM projects p
 WHERE p.is_git_repo = TRUE
   AND NOT EXISTS (SELECT 1 FROM repos r WHERE r.project_id = p.id);
 
-UPDATE worktrees w
-SET repo_id = r.id
-FROM repos r
-WHERE r.project_id = w.project_id
-  AND w.repo_id IS NULL;
-
 -- +goose Down
-DROP INDEX IF EXISTS idx_worktrees_repo;
-ALTER TABLE worktrees DROP COLUMN IF EXISTS repo_id;
 DROP INDEX IF EXISTS idx_repos_project;
 DROP TABLE IF EXISTS repos;

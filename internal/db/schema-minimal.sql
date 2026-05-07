@@ -30,8 +30,7 @@ CREATE TABLE worktrees (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_active DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at DATETIME, is_main BOOLEAN NOT NULL DEFAULT FALSE, cleanup_metadata TEXT,
-    repo_id TEXT REFERENCES repos(id) ON DELETE CASCADE,
+    deleted_at DATETIME, is_main BOOLEAN NOT NULL DEFAULT FALSE, cleanup_metadata TEXT, base_branches TEXT,
 
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE SET NULL,
@@ -40,7 +39,6 @@ CREATE TABLE worktrees (
 CREATE INDEX idx_worktrees_project ON worktrees(project_id);
 CREATE INDEX idx_worktrees_chat ON worktrees(chat_id);
 CREATE INDEX idx_worktrees_status ON worktrees(status);
-CREATE INDEX idx_worktrees_repo ON worktrees(repo_id);
 CREATE TABLE plans (
     id TEXT PRIMARY KEY,
     thread_id TEXT NOT NULL,

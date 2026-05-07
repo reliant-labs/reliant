@@ -262,6 +262,10 @@ message IndexedSkill {
   string user_invocable = 13; // "", "true", "false"
   string argument_hint = 14;
   string paths = 15;
+  // source identifies which nested repo the skill was discovered in. "" means
+  // the project root scope; otherwise it's the repo's relative path
+  // (e.g. "api", "web"). Used to disambiguate same-named skills across repos.
+  string source = 16;
 }
 
 // ProjectDiscovery reports projects discovered by the daemon.

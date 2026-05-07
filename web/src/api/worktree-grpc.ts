@@ -28,6 +28,7 @@ import {
   GetWorktreeChangesRequestSchema,
   GetWorktreeGitStatusRequestSchema,
   GetWorktreeCommitsRequestSchema,
+  ListWorktreeRepoStatusesRequestSchema,
   StageFilesRequestSchema,
   UnstageFilesRequestSchema,
   RevertFilesRequestSchema,
@@ -52,6 +53,7 @@ export interface Worktree {
   branch: string;
   base_branch: string;
   project_id: string;
+  repo_id?: string;
   chat_id?: string;
   session_id?: string;
   status: WorktreeStatus;
@@ -138,6 +140,20 @@ export interface BatchCreateResult {
   rolled_back: boolean;
 }
 
+// Per-repo summary row used by the right-sidebar grouped view.
+// Mirrors reliant.v1.WorktreeRepoStatus.
+export interface WorktreeRepoStatus {
+  repo_id: string;
+  repo_name: string;
+  repo_relative_path: string;
+  current_branch: string;
+  has_changes: boolean;
+  ahead: number;
+  behind: number;
+  changed_files: number;
+  error: string;
+}
+
 // Convert proto Worktree to frontend Worktree
 function protoToFrontend(proto: ProtoWorktree): Worktree {
   return {
@@ -147,6 +163,7 @@ function protoToFrontend(proto: ProtoWorktree): Worktree {
     branch: proto.branch,
     base_branch: proto.baseBranch,
     project_id: proto.projectId,
+    repo_id: proto.repoId || undefined,
     chat_id: proto.chatId || undefined,
     status: proto.status,
     is_main: proto.isMain,
@@ -237,6 +254,9 @@ export const worktreeGrpc = {
   },
 
   // Create worktrees in multiple repos atomically (all-or-nothing).
+  // baseBranches lets the caller pin a specific base branch per repo (key =
+  // repo_id). Repos missing from the map fall back to baseBranch, then to
+  // per-repo default-branch detection on the daemon.
   async batchCreate(
     projectId: string,
     repoIds: string[],
@@ -244,6 +264,7 @@ export const worktreeGrpc = {
     branch: string,
     options?: {
       baseBranch?: string;
+      baseBranches?: Record<string, string>;
       chatId?: string;
       copyFiles?: string[];
       force?: boolean;
@@ -256,6 +277,7 @@ export const worktreeGrpc = {
       name,
       branch,
       baseBranch: options?.baseBranch,
+      baseBranches: options?.baseBranches || {},
       chatId: options?.chatId,
       copyFiles: options?.copyFiles || [],
       force: options?.force || false,
@@ -413,10 +435,15 @@ export const worktreeGrpc = {
   // Git Read Operations
   // =============================================================================
 
-  // Get file changes for a worktree
-  async getChanges(worktreeId: string): Promise<WorktreeChanges> {
+  // Get file changes for a worktree.
+  // repoId scopes to a nested repo. Empty/undefined uses legacy single-repo
+  // behavior (server returns InvalidArgument if the project has 2+ repos).
+  async getChanges(worktreeId: string, repoId?: string): Promise<WorktreeChanges> {
     const client = grpcClient.worktree();
-    const request = create(GetWorktreeChangesRequestSchema, { worktreeId });
+    const request = create(GetWorktreeChangesRequestSchema, {
+      worktreeId,
+      repoId: repoId ?? "",
+    });
     const response = await client.getWorktreeChanges(request);
     return {
       files: response.files.map(protoFileChangeToFrontend),
@@ -428,10 +455,14 @@ export const worktreeGrpc = {
     };
   },
 
-  // Get git status for a worktree
-  async getGitStatus(worktreeId: string): Promise<WorktreeGitStatus> {
+  // Get git status for a worktree.
+  // repoId scopes to a nested repo (see getChanges for legacy semantics).
+  async getGitStatus(worktreeId: string, repoId?: string): Promise<WorktreeGitStatus> {
     const client = grpcClient.worktree();
-    const request = create(GetWorktreeGitStatusRequestSchema, { worktreeId });
+    const request = create(GetWorktreeGitStatusRequestSchema, {
+      worktreeId,
+      repoId: repoId ?? "",
+    });
     const response = await client.getWorktreeGitStatus(request);
     return {
       is_clean: response.clean,
@@ -445,12 +476,14 @@ export const worktreeGrpc = {
     };
   },
 
-  // Get commit history for a worktree
-  async getCommits(worktreeId: string, limit?: number): Promise<WorktreeCommits> {
+  // Get commit history for a worktree.
+  // repoId scopes to a nested repo (see getChanges for legacy semantics).
+  async getCommits(worktreeId: string, limit?: number, repoId?: string): Promise<WorktreeCommits> {
     const client = grpcClient.worktree();
     const request = create(GetWorktreeCommitsRequestSchema, {
       worktreeId,
       limit: limit || 20,
+      repoId: repoId ?? "",
     });
     const response = await client.getWorktreeCommits(request);
     return {
@@ -464,16 +497,38 @@ export const worktreeGrpc = {
     };
   },
 
+  // List per-repo git status rows for every nested repo in the worktree's
+  // project. Drives the multi-repo right-sidebar. Single-repo / zero-repo
+  // projects collapse to a one- or zero-element response.
+  async listRepoStatuses(worktreeId: string): Promise<WorktreeRepoStatus[]> {
+    const client = grpcClient.worktree();
+    const request = create(ListWorktreeRepoStatusesRequestSchema, { worktreeId });
+    const response = await client.listWorktreeRepoStatuses(request);
+    return response.statuses.map((s) => ({
+      repo_id: s.repoId,
+      repo_name: s.repoName,
+      repo_relative_path: s.repoRelativePath,
+      current_branch: s.currentBranch,
+      has_changes: s.hasChanges,
+      ahead: s.ahead,
+      behind: s.behind,
+      changed_files: s.changedFiles,
+      error: s.error,
+    }));
+  },
+
   // =============================================================================
   // Git Write Operations
   // =============================================================================
 
-  // Stage files in a worktree
-  async stageFiles(worktreeId: string, files: string[]): Promise<{ message: string; files: string[] }> {
+  // Stage files in a worktree.
+  // repoId scopes to a nested repo; file paths must be relative to that repo.
+  async stageFiles(worktreeId: string, files: string[], repoId?: string): Promise<{ message: string; files: string[] }> {
     const client = grpcClient.worktree();
     const request = create(StageFilesRequestSchema, {
       worktreeId,
       files,
+      repoId: repoId ?? "",
     });
     const response = await client.stageFiles(request);
     return {
@@ -482,12 +537,14 @@ export const worktreeGrpc = {
     };
   },
 
-  // Unstage files in a worktree
-  async unstageFiles(worktreeId: string, files: string[]): Promise<{ message: string; files: string[] }> {
+  // Unstage files in a worktree.
+  // repoId scopes to a nested repo; file paths must be relative to that repo.
+  async unstageFiles(worktreeId: string, files: string[], repoId?: string): Promise<{ message: string; files: string[] }> {
     const client = grpcClient.worktree();
     const request = create(UnstageFilesRequestSchema, {
       worktreeId,
       files,
+      repoId: repoId ?? "",
     });
     const response = await client.unstageFiles(request);
     return {
@@ -500,11 +557,13 @@ export const worktreeGrpc = {
   // For staged files: unstages and discards changes
   // For modified files: discards working tree changes
   // For untracked files: deletes the file
-  async revertFiles(worktreeId: string, files: string[]): Promise<{ message: string; files: string[] }> {
+  // repoId scopes to a nested repo; file paths must be relative to that repo.
+  async revertFiles(worktreeId: string, files: string[], repoId?: string): Promise<{ message: string; files: string[] }> {
     const client = grpcClient.worktree();
     const request = create(RevertFilesRequestSchema, {
       worktreeId,
       files,
+      repoId: repoId ?? "",
     });
     const response = await client.revertFiles(request);
     return {
@@ -513,12 +572,14 @@ export const worktreeGrpc = {
     };
   },
 
-  // Commit staged changes in a worktree
-  async commit(worktreeId: string, message: string): Promise<{ message: string; output: string }> {
+  // Commit staged changes in a worktree.
+  // repoId scopes to a nested repo. Commits are intrinsically per-repo.
+  async commit(worktreeId: string, message: string, repoId?: string): Promise<{ message: string; output: string }> {
     const client = grpcClient.worktree();
     const request = create(CommitWorktreeRequestSchema, {
       worktreeId,
       message,
+      repoId: repoId ?? "",
     });
     const response = await client.commitWorktree(request);
     return {
@@ -527,10 +588,14 @@ export const worktreeGrpc = {
     };
   },
 
-  // Push changes from a worktree to remote
-  async push(worktreeId: string): Promise<{ message: string; output: string }> {
+  // Push changes from a worktree to remote.
+  // repoId scopes to a nested repo (each repo has its own remote).
+  async push(worktreeId: string, repoId?: string): Promise<{ message: string; output: string }> {
     const client = grpcClient.worktree();
-    const request = create(PushWorktreeRequestSchema, { worktreeId });
+    const request = create(PushWorktreeRequestSchema, {
+      worktreeId,
+      repoId: repoId ?? "",
+    });
     const response = await client.pushWorktree(request);
     return {
       message: response.message,
@@ -538,10 +603,14 @@ export const worktreeGrpc = {
     };
   },
 
-  // Pull changes from remote to a worktree
-  async pull(worktreeId: string): Promise<{ message: string; output: string }> {
+  // Pull changes from remote to a worktree.
+  // repoId scopes to a nested repo (each repo has its own remote).
+  async pull(worktreeId: string, repoId?: string): Promise<{ message: string; output: string }> {
     const client = grpcClient.worktree();
-    const request = create(PullWorktreeRequestSchema, { worktreeId });
+    const request = create(PullWorktreeRequestSchema, {
+      worktreeId,
+      repoId: repoId ?? "",
+    });
     const response = await client.pullWorktree(request);
     return {
       message: response.message,
@@ -549,10 +618,14 @@ export const worktreeGrpc = {
     };
   },
 
-  // Get PR info for a worktree's branch
-  async getPR(worktreeId: string): Promise<PRInfo> {
+  // Get PR info for a worktree's branch.
+  // repoId scopes to a nested repo (PRs are intrinsically per-repo).
+  async getPR(worktreeId: string, repoId?: string): Promise<PRInfo> {
     const client = grpcClient.worktree();
-    const request = create(GetWorktreePRRequestSchema, { worktreeId });
+    const request = create(GetWorktreePRRequestSchema, {
+      worktreeId,
+      repoId: repoId ?? "",
+    });
     const response = await client.getWorktreePR(request);
     return {
       exists: response.exists,
@@ -563,17 +636,20 @@ export const worktreeGrpc = {
     };
   },
 
-  // Create a PR for a worktree
+  // Create a PR for a worktree.
+  // repoId scopes to a nested repo (PRs are intrinsically per-repo).
   async createPR(
     worktreeId: string,
     title: string,
-    body?: string
+    body?: string,
+    repoId?: string
   ): Promise<{ message: string; pr_url: string; output: string; auto_committed: boolean; auto_pushed: boolean }> {
     const client = grpcClient.worktree();
     const request = create(CreateWorktreePRRequestSchema, {
       worktreeId,
       title,
       body,
+      repoId: repoId ?? "",
     });
     const response = await client.createWorktreePR(request);
     return {

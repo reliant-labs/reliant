@@ -21,6 +21,7 @@ type EditOperation struct {
 
 type EditParams struct {
 	Edits []EditOperation `json:"edits" jsonschema:"required,description=Array of edit operations to perform. All edits must be provided in this array."`
+	Repo  string          `json:"repo,omitempty" jsonschema:"description=Multi-repo only. Which repo the path is relative to: 'root' for the project root\\, or a repo name (e.g. 'api'\\, 'web'). Used as the base for relative paths. Omit in single-repo projects or when path is absolute."`
 }
 
 type EditPermissionsParams struct {
@@ -196,8 +197,11 @@ func (e *editTool) Execute(rctx *rctx.ToolContext, params EditParams) (ToolRespo
 		return NewTextErrorResponse("at least one edit operation is required"), nil
 	}
 
-	wd, err := GetWorkingDirectory(rctx)
+	wd, err := ResolveRepoPath(rctx, params.Repo)
 	if err != nil {
+		return NewTextErrorResponse(err.Error()), nil
+	}
+	if wd == "" {
 		return NewTextErrorResponse("No project working directory available - ensure you're working within a project"), nil
 	}
 

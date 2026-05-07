@@ -29,7 +29,12 @@ Skills provide detailed guidance on how to perform particular operations.
 Use 'list' to see available skills, 'load' to load a skill's instructions,
 or 'search' to find skills by keyword.
 When you load a skill, its instructions become available in the conversation.
-Skills may suggest tools to load — use the load_tool tool if suggested tools are needed.`
+Skills may suggest tools to load — use the load_tool tool if suggested tools are needed.
+
+In multi-repo projects, skills are discovered recursively across all nested
+repos. Each skill's source repo is shown in brackets after its description
+(e.g. "[source: api]") and is reflected as a prefix on its path
+(e.g. "api/deploy" vs "web/deploy"). Use the prefixed path with 'load'.`
 
 func NewSkillTool(skills []config.StoredSkill) Tool {
 	tool := &skillTool{skills: skills}
@@ -167,6 +172,9 @@ func (t *skillTool) listSkills(filterPath string) (ToolResponse, error) {
 		}
 		if def.Scope != "" {
 			sb.WriteString(fmt.Sprintf(" [%s]", def.Scope))
+		}
+		if def.Source != "" {
+			sb.WriteString(fmt.Sprintf(" [source: %s]", def.Source))
 		}
 		sb.WriteString("\n")
 	}

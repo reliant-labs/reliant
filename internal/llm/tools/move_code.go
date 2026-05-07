@@ -17,6 +17,7 @@ type MoveCodeParams struct {
 	TargetFile  string `json:"target_file" jsonschema:"required,description=The path to the target file where code will be placed. Can be same as source_file."`
 	TargetLine  int    `json:"target_line" jsonschema:"required,description=The 1-indexed line number in the target file AFTER which the code will be inserted. Use 0 to insert at the beginning."`
 	Operation   string `json:"operation,omitempty" jsonschema:"enum=move,enum=copy,description=Whether to move (delete from source) or copy (keep in source). Default is move."`
+	Repo        string `json:"repo,omitempty" jsonschema:"description=Multi-repo only. Which repo source_file and target_file are relative to: 'root' for the project root\\, or a repo name (e.g. 'api'\\, 'web'). Applies to both paths uniformly; for cross-repo moves use absolute paths instead. Omit in single-repo projects or when paths are absolute."`
 }
 
 type MoveCodeResponseMetadata struct {
@@ -142,8 +143,11 @@ func (m *moveCodeTool) Execute(rctx *rctx.ToolContext, params MoveCodeParams) (T
 		return NewTextErrorResponse(fmt.Sprintf("invalid operation '%s'. Must be 'move' or 'copy'", params.Operation)), nil
 	}
 
-	wd, err := GetWorkingDirectory(rctx)
+	wd, err := ResolveRepoPath(rctx, params.Repo)
 	if err != nil {
+		return NewTextErrorResponse(err.Error()), nil
+	}
+	if wd == "" {
 		return NewTextErrorResponse("No project working directory available"), nil
 	}
 

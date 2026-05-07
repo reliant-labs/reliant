@@ -23,6 +23,7 @@ func init() {
 	RegisterCommand("worktree.create", handleWorktreeCreate)
 	RegisterCommand("worktree.force_cleanup", handleWorktreeForceCleanup)
 	RegisterCommand("worktree.delete_directory", handleWorktreeDeleteDirectory)
+	RegisterCommand("worktree.remove_workspace_dir", handleWorktreeRemoveWorkspaceDir)
 	RegisterCommand("worktree.delete_branch", handleWorktreeDeleteBranch)
 	RegisterCommand("worktree.import_validate", handleWorktreeImportValidate)
 	RegisterCommand("worktree.discover", handleWorktreeDiscover)
@@ -120,19 +121,32 @@ func handleValidatePath(_ context.Context, payload []byte) ([]byte, error) {
 // =============================================================================
 
 type worktreeCreateRequest struct {
-	ProjectPath string   `json:"project_path"`
-	RepoID      string   `json:"repo_id"`
-	Name        string   `json:"name"`
-	Branch      string   `json:"branch"`
-	BaseBranch  string   `json:"base_branch"`
-	Force       bool     `json:"force"`
-	CopyFiles   []string `json:"copy_files,omitempty"`
-	SourcePath  string   `json:"source_path,omitempty"`
+	ProjectPath string `json:"project_path"`
+	// RepoID is a daemon-side hash used to construct the legacy default
+	// worktree path when WorkspaceID is not provided. Kept for callers that
+	// still rely on the old <HOME>/.reliant/worktrees/<repo_id>/<name> layout.
+	RepoID string `json:"repo_id"`
+	Name   string `json:"name"`
+	Branch string `json:"branch"`
+	// WorkspaceID, when set, switches to the multi-repo layout:
+	//   <HOME>/.reliant/worktrees/<workspace_id>/<sub_path>
+	// where sub_path is the nested repo's relative path within the project
+	// (or just <name> for single-repo workspaces). This is how the workspace
+	// service fans N repos into one workspace dir.
+	WorkspaceID string `json:"workspace_id,omitempty"`
+	// SubPath is the path component under the workspace dir for this repo's
+	// checkout. Empty means the workspace root itself (single-repo project).
+	SubPath    string   `json:"sub_path,omitempty"`
+	BaseBranch string   `json:"base_branch"`
+	Force      bool     `json:"force"`
+	CopyFiles  []string `json:"copy_files,omitempty"`
+	SourcePath string   `json:"source_path,omitempty"`
 }
 
 type worktreeCreateResponse struct {
 	Success      bool   `json:"success"`
 	WorktreePath string `json:"worktree_path,omitempty"`
+	BaseBranch   string `json:"base_branch,omitempty"` // actually resolved base branch (after auto-detect)
 	Output       string `json:"output,omitempty"`
 	Error        string `json:"error,omitempty"`
 }
@@ -148,28 +162,45 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		req.Branch = fmt.Sprintf("worktree/%s-%d", req.Name, time.Now().Unix())
 	}
 
-	// Default base branch if not provided
+	// Default base branch if not provided. Detect per-repo so projects with
+	// repos on master/develop/etc. don't fail with "invalid reference 'main'".
 	if req.BaseBranch == "" {
-		defBranchCmd := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD")
-		defBranchCmd.Dir = req.ProjectPath
-		if out, err := defBranchCmd.Output(); err == nil {
-			req.BaseBranch = strings.TrimSpace(string(out))
-		} else {
-			req.BaseBranch = "main"
-		}
+		req.BaseBranch = getRepositoryDefaultBranch(ctx, req.ProjectPath)
 	}
 
-	// Construct worktree path from home dir + repoID + name
+	// Resolve the on-disk worktree path.
+	//
+	// Multi-repo (workspace) layout: WorkspaceID set →
+	//   <HOME>/.reliant/worktrees/<workspace_id>/<sub_path>
+	// Legacy single-repo layout: WorkspaceID empty →
+	//   <HOME>/.reliant/worktrees/<repo_id>/<name>
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return json.Marshal(worktreeCreateResponse{Error: fmt.Sprintf("failed to get home directory: %v", err)})
 	}
-	worktreePath := filepath.Join(homeDir, ".reliant", "worktrees", req.RepoID, req.Name)
+	var worktreePath string
+	if req.WorkspaceID != "" {
+		// Sub-path may be empty for single-repo workspaces — checkout lands
+		// at the workspace root itself.
+		if req.SubPath == "" {
+			worktreePath = filepath.Join(homeDir, ".reliant", "worktrees", req.WorkspaceID)
+		} else {
+			worktreePath = filepath.Join(homeDir, ".reliant", "worktrees", req.WorkspaceID, req.SubPath)
+		}
+	} else {
+		worktreePath = filepath.Join(homeDir, ".reliant", "worktrees", req.RepoID, req.Name)
+	}
 
 	// Ensure parent directory exists
 	if err := os.MkdirAll(filepath.Dir(worktreePath), 0755); err != nil {
 		return json.Marshal(worktreeCreateResponse{Error: fmt.Sprintf("failed to create worktree directory: %v", err)})
 	}
+
+	// Sanity check for the multi-repo workspace layout: the SAME workspace_id
+	// shared across N daemon calls is by design (each call targets a different
+	// sub_path). Two calls with the same (workspace_id, sub_path) WOULD
+	// collide — git worktree add into a non-empty dir errors out. Force=true
+	// wipes via -B so we don't pre-empt.
 
 	// Check if branch exists
 	branchCheckCmd := exec.CommandContext(ctx, "git", "rev-parse", "--verify", req.Branch)
@@ -200,7 +231,7 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		copyFilesToWorktree(sourcePath, worktreePath, req.CopyFiles)
 	}
 
-	return json.Marshal(worktreeCreateResponse{Success: true, WorktreePath: worktreePath})
+	return json.Marshal(worktreeCreateResponse{Success: true, WorktreePath: worktreePath, BaseBranch: req.BaseBranch})
 }
 
 // =============================================================================
@@ -276,6 +307,39 @@ func handleWorktreeDeleteDirectory(ctx context.Context, payload []byte) ([]byte,
 	}
 
 	return json.Marshal(worktreeDeleteDirectoryResponse{Deleted: true})
+}
+
+// =============================================================================
+// worktree.remove_workspace_dir
+// =============================================================================
+//
+// Removes the workspace root directory itself after all per-repo
+// `worktree.delete_directory` calls have unregistered the nested checkouts
+// from their parent repos. Pure os.RemoveAll — no git interaction.
+
+type worktreeRemoveWorkspaceDirRequest struct {
+	WorkspacePath string `json:"workspace_path"`
+}
+
+type worktreeRemoveWorkspaceDirResponse struct {
+	Deleted bool   `json:"deleted"`
+	Error   string `json:"error,omitempty"`
+}
+
+func handleWorktreeRemoveWorkspaceDir(_ context.Context, payload []byte) ([]byte, error) {
+	var req worktreeRemoveWorkspaceDirRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return nil, fmt.Errorf("invalid payload: %w", err)
+	}
+
+	if req.WorkspacePath == "" {
+		return json.Marshal(worktreeRemoveWorkspaceDirResponse{Deleted: false, Error: "workspace_path is required"})
+	}
+
+	if err := os.RemoveAll(req.WorkspacePath); err != nil {
+		return json.Marshal(worktreeRemoveWorkspaceDirResponse{Deleted: false, Error: err.Error()})
+	}
+	return json.Marshal(worktreeRemoveWorkspaceDirResponse{Deleted: true})
 }
 
 // =============================================================================
@@ -895,7 +959,6 @@ func handleWorktreeCommit(ctx context.Context, payload []byte) ([]byte, error) {
 
 type worktreePushRequest struct {
 	WorktreePath string `json:"worktree_path"`
-	Branch       string `json:"branch"`
 }
 
 type worktreePushResponse struct {
@@ -910,7 +973,12 @@ func handleWorktreePush(ctx context.Context, payload []byte) ([]byte, error) {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
 
-	pushCmd := exec.CommandContext(ctx, "git", "push", "--set-upstream", "origin", req.Branch)
+	branch, err := resolveCurrentBranch(ctx, req.WorktreePath)
+	if err != nil {
+		return json.Marshal(worktreePushResponse{Error: err.Error()})
+	}
+
+	pushCmd := exec.CommandContext(ctx, "git", "push", "--set-upstream", "origin", branch)
 	pushCmd.Dir = req.WorktreePath
 	output, err := pushCmd.CombinedOutput()
 	if err != nil {
@@ -932,7 +1000,6 @@ func handleWorktreePush(ctx context.Context, payload []byte) ([]byte, error) {
 
 type worktreePullRequest struct {
 	WorktreePath string `json:"worktree_path"`
-	Branch       string `json:"branch"`
 }
 
 type worktreePullResponse struct {
@@ -947,7 +1014,12 @@ func handleWorktreePull(ctx context.Context, payload []byte) ([]byte, error) {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
 
-	pullCmd := exec.CommandContext(ctx, "git", "pull", "origin", req.Branch)
+	branch, err := resolveCurrentBranch(ctx, req.WorktreePath)
+	if err != nil {
+		return json.Marshal(worktreePullResponse{Error: err.Error()})
+	}
+
+	pullCmd := exec.CommandContext(ctx, "git", "pull", "origin", branch)
 	pullCmd.Dir = req.WorktreePath
 	output, err := pullCmd.CombinedOutput()
 	if err != nil {
@@ -969,7 +1041,6 @@ func handleWorktreePull(ctx context.Context, payload []byte) ([]byte, error) {
 
 type worktreeGetPRRequest struct {
 	WorktreePath string `json:"worktree_path"`
-	Branch       string `json:"branch"`
 }
 
 type worktreeGetPRResponse struct {
@@ -991,8 +1062,15 @@ func handleWorktreeGetPR(ctx context.Context, payload []byte) ([]byte, error) {
 
 	resp := worktreeGetPRResponse{}
 
+	branch, err := resolveCurrentBranch(ctx, req.WorktreePath)
+	if err != nil {
+		// No detected branch -> no PR (mirrors original "no PR exists" path).
+		resp.Error = err.Error()
+		return json.Marshal(resp)
+	}
+
 	// Use gh pr view to check if a PR exists
-	prCmd := exec.CommandContext(ctx, "gh", "pr", "view", req.Branch, "--json", "url,number,title,state,headRefOid")
+	prCmd := exec.CommandContext(ctx, "gh", "pr", "view", branch, "--json", "url,number,title,state,headRefOid")
 	prCmd.Dir = req.WorktreePath
 	output, err := prCmd.Output()
 	if err != nil {
@@ -1034,9 +1112,12 @@ func handleWorktreeGetPR(ctx context.Context, payload []byte) ([]byte, error) {
 
 type worktreeCreatePRRequest struct {
 	WorktreePath string `json:"worktree_path"`
-	Branch       string `json:"branch"`
 	Title        string `json:"title"`
 	Body         string `json:"body,omitempty"`
+	// BaseBranch overrides the auto-detected default branch when set
+	// (e.g. per-repo override looked up from worktree.BaseBranches[repo_id]).
+	// Empty falls back to repo default-branch detection.
+	BaseBranch string `json:"base_branch,omitempty"`
 }
 
 type worktreeCreatePRResponse struct {
@@ -1055,6 +1136,12 @@ func handleWorktreeCreatePR(ctx context.Context, payload []byte) ([]byte, error)
 	}
 
 	resp := worktreeCreatePRResponse{}
+
+	branch, err := resolveCurrentBranch(ctx, req.WorktreePath)
+	if err != nil {
+		resp.Error = err.Error()
+		return json.Marshal(resp)
+	}
 
 	// Step 1: Check for uncommitted changes and auto-commit if needed
 	hasChanges := false
@@ -1100,7 +1187,7 @@ func handleWorktreeCreatePR(ctx context.Context, payload []byte) ([]byte, error)
 
 	// Step 2: Check if branch needs push
 	needsPush := false
-	remoteRef := fmt.Sprintf("origin/%s", req.Branch)
+	remoteRef := fmt.Sprintf("origin/%s", branch)
 	checkRemoteCmd := exec.CommandContext(ctx, "git", "rev-parse", "--verify", remoteRef)
 	checkRemoteCmd.Dir = req.WorktreePath
 	if err := checkRemoteCmd.Run(); err != nil {
@@ -1116,7 +1203,7 @@ func handleWorktreeCreatePR(ctx context.Context, payload []byte) ([]byte, error)
 	}
 
 	if needsPush {
-		pushCmd := exec.CommandContext(ctx, "git", "push", "--set-upstream", "origin", req.Branch)
+		pushCmd := exec.CommandContext(ctx, "git", "push", "--set-upstream", "origin", branch)
 		pushCmd.Dir = req.WorktreePath
 		if output, err := pushCmd.CombinedOutput(); err != nil {
 			resp.Error = fmt.Sprintf("failed to push branch: %s", strings.TrimSpace(string(output)))
@@ -1125,9 +1212,14 @@ func handleWorktreeCreatePR(ctx context.Context, payload []byte) ([]byte, error)
 		resp.AutoPushed = true
 	}
 
-	// Step 3: Detect default branch
-	baseBranch := getRepositoryDefaultBranch(ctx, req.WorktreePath)
-	if req.Branch == baseBranch {
+	// Step 3: Resolve the PR base branch. Honor the caller-provided override
+	// (per-repo base from worktree.BaseBranches[repo_id]) when present;
+	// otherwise auto-detect the repo default branch.
+	baseBranch := req.BaseBranch
+	if baseBranch == "" {
+		baseBranch = getRepositoryDefaultBranch(ctx, req.WorktreePath)
+	}
+	if branch == baseBranch {
 		resp.Error = "cannot create a pull request from the default branch"
 		return json.Marshal(resp)
 	}
@@ -1137,7 +1229,7 @@ func handleWorktreeCreatePR(ctx context.Context, payload []byte) ([]byte, error)
 		"pr", "create",
 		"--title", req.Title,
 		"--base", baseBranch,
-		"--head", req.Branch,
+		"--head", branch,
 	}
 
 	body := " "
@@ -1336,6 +1428,26 @@ func getAheadBehind(ctx context.Context, repoPath, branch string) (ahead, behind
 		}
 	}
 	return
+}
+
+// resolveCurrentBranch returns the current branch name from HEAD in repoPath.
+// Errors out if HEAD is detached (rev-parse returns "HEAD") — pushing,
+// pulling, or creating a PR from a detached HEAD is a footgun, not a feature.
+func resolveCurrentBranch(ctx context.Context, repoPath string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--abbrev-ref", "HEAD")
+	cmd.Dir = repoPath
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve current branch: %w", err)
+	}
+	branch := strings.TrimSpace(string(output))
+	if branch == "" {
+		return "", fmt.Errorf("failed to resolve current branch: empty result from git rev-parse")
+	}
+	if branch == "HEAD" {
+		return "", fmt.Errorf("HEAD is detached; check out a branch before performing this operation")
+	}
+	return branch, nil
 }
 
 func getRepositoryDefaultBranch(ctx context.Context, repoPath string) string {

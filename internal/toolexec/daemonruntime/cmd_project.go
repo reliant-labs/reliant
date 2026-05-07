@@ -65,12 +65,18 @@ func handleCheckGit(_ context.Context, payload []byte) ([]byte, error) {
 type initFilesRequest struct {
 	Path           string `json:"path"`
 	DefaultContent string `json:"default_content"`
+	// SkipReliantMD is set by per-repo inits in multi-repo projects:
+	// repo-level reliant.md is opt-in (the user creates it if they want
+	// repo-scoped memory), while the project root always gets a templated one.
+	SkipReliantMD bool `json:"skip_reliant_md"`
 }
 
 type initFilesResponse struct {
-	CreatedReliantMD  bool   `json:"created_reliant_md"`
-	CreatedReliantDir bool   `json:"created_reliant_dir"`
-	Error             string `json:"error,omitempty"`
+	CreatedReliantMD    bool   `json:"created_reliant_md"`
+	CreatedReliantDir   bool   `json:"created_reliant_dir"`
+	CreatedSkillsDir    bool   `json:"created_skills_dir"`
+	CreatedWorkflowsDir bool   `json:"created_workflows_dir"`
+	Error               string `json:"error,omitempty"`
 }
 
 func handleInitFiles(_ context.Context, payload []byte) ([]byte, error) {
@@ -81,17 +87,17 @@ func handleInitFiles(_ context.Context, payload []byte) ([]byte, error) {
 
 	resp := initFilesResponse{}
 
-	// Create reliant.md with default content if it doesn't exist
-	reliantMDPath := filepath.Join(req.Path, "reliant.md")
-	if _, err := os.Stat(reliantMDPath); os.IsNotExist(err) {
-		if err := os.WriteFile(reliantMDPath, []byte(req.DefaultContent), 0644); err != nil {
-			resp.Error = err.Error()
-			return json.Marshal(resp)
+	if !req.SkipReliantMD && req.DefaultContent != "" {
+		reliantMDPath := filepath.Join(req.Path, "reliant.md")
+		if _, err := os.Stat(reliantMDPath); os.IsNotExist(err) {
+			if err := os.WriteFile(reliantMDPath, []byte(req.DefaultContent), 0644); err != nil {
+				resp.Error = err.Error()
+				return json.Marshal(resp)
+			}
+			resp.CreatedReliantMD = true
 		}
-		resp.CreatedReliantMD = true
 	}
 
-	// Create .reliant/ directory if it doesn't exist
 	reliantDir := filepath.Join(req.Path, ".reliant")
 	if _, err := os.Stat(reliantDir); os.IsNotExist(err) {
 		if err := os.MkdirAll(reliantDir, 0755); err != nil {
@@ -99,6 +105,26 @@ func handleInitFiles(_ context.Context, payload []byte) ([]byte, error) {
 			return json.Marshal(resp)
 		}
 		resp.CreatedReliantDir = true
+	}
+
+	// Always ensure the standard subdirs exist so downstream loaders can
+	// scan them without distinguishing ENOENT from "empty directory."
+	skillsDir := filepath.Join(reliantDir, "skills")
+	if _, err := os.Stat(skillsDir); os.IsNotExist(err) {
+		if err := os.MkdirAll(skillsDir, 0755); err != nil {
+			resp.Error = err.Error()
+			return json.Marshal(resp)
+		}
+		resp.CreatedSkillsDir = true
+	}
+
+	workflowsDir := filepath.Join(reliantDir, "workflows")
+	if _, err := os.Stat(workflowsDir); os.IsNotExist(err) {
+		if err := os.MkdirAll(workflowsDir, 0755); err != nil {
+			resp.Error = err.Error()
+			return json.Marshal(resp)
+		}
+		resp.CreatedWorkflowsDir = true
 	}
 
 	return json.Marshal(resp)
