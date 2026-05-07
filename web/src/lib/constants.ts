@@ -142,8 +142,8 @@ export const MCP_OPERATION_TIMEOUT_MS = 60000;
  */
 export const UPLOAD_TIMEOUT_MS = 60000;
 
-// Worktree operations timeout - git commands can take 10-30s
-export const WORKTREE_OPERATION_TIMEOUT_MS = 30000;
+// Worktree operations timeout - git commands and copied files can exceed 30s on larger repos.
+export const WORKTREE_OPERATION_TIMEOUT_MS = 120000;
 
 /**
  * OAuth flows have no fixed timeout — the user can take as long as needed to

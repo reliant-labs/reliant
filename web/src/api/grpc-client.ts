@@ -161,7 +161,7 @@ const LONG_TIMEOUT_METHODS: Record<string, number> = {
   "CallTool": MCP_OPERATION_TIMEOUT_MS,
   // Attachment uploads - depends on file size
   "Upload": UPLOAD_TIMEOUT_MS,
-  // Worktree operations - involve git commands that can take 10-30s
+  // Worktree operations - involve git commands and copied files that can exceed 30s
   "CreateWorktree": WORKTREE_OPERATION_TIMEOUT_MS,
   "DeleteWorktree": WORKTREE_OPERATION_TIMEOUT_MS,
   "ArchiveWorktree": WORKTREE_OPERATION_TIMEOUT_MS,

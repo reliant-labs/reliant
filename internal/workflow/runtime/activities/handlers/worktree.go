@@ -20,6 +20,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 )
 
+const worktreeCreateDaemonTimeoutMs int32 = 120_000
+
 // ============================================================================
 // TYPES (strongly typed inputs/outputs)
 // ============================================================================
@@ -179,7 +181,7 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 				BaseBranch:  baseBranch,
 				Force:       force,
 				CopyFiles:   copyFiles,
-			}, 60_000,
+			}, worktreeCreateDaemonTimeoutMs,
 		)
 		if err != nil {
 			logging.Error("Failed to create git worktree via daemon", "error", err, "repo", repo.ID)
