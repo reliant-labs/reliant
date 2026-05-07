@@ -890,7 +890,11 @@ function App() {
         // Safety net: if they haven't loaded yet (e.g. Root.tsx load failed), retry here.
         const projectStore = useProjectStore.getState();
         if (projectStore.projects.length === 0 && !projectStore.isLoading) {
-          await loadProjects();
+          // Timeout prevents hanging when no daemon/backend is available (browser-only users)
+          await Promise.race([
+            loadProjects(),
+            new Promise((resolve) => setTimeout(resolve, 3000)),
+          ]);
         }
 
         if (!mounted) return;

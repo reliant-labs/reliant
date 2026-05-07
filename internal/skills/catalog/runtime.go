@@ -96,11 +96,13 @@ var builtinSkillPaths = []string{
 	// refactor parent + sub-skills
 	"refactor/SKILL.md",
 	"refactor/migration-guidance/SKILL.md",
+	"pivot-on-friction/SKILL.md",
+	"validation-harness/SKILL.md",
 }
 
 // BuiltinSkillsFS is exported for test use.
 //
-//go:embed builtin/reliant-config/SKILL.md builtin/workflow-builder/SKILL.md builtin/conflict-resolver/SKILL.md builtin/simplification-assessment/SKILL.md builtin/research-methodology/SKILL.md builtin/testing-methodology/SKILL.md builtin/git-operations/SKILL.md builtin/planning-methodology/SKILL.md builtin/documentation-writing/SKILL.md builtin/ux-design/SKILL.md builtin/general-agent/SKILL.md builtin/forge-methodology/SKILL.md builtin/code-review/SKILL.md builtin/code-review/code-hygiene-review/SKILL.md builtin/code-review/performance-review/SKILL.md builtin/code-review/security-review/SKILL.md builtin/code-review/architecture-review/SKILL.md builtin/code-review/ux-review-methodology/SKILL.md builtin/debug/SKILL.md builtin/debug/reproduction-methodology/SKILL.md builtin/refactor/SKILL.md builtin/refactor/migration-guidance/SKILL.md
+//go:embed builtin/reliant-config/SKILL.md builtin/workflow-builder/SKILL.md builtin/conflict-resolver/SKILL.md builtin/simplification-assessment/SKILL.md builtin/research-methodology/SKILL.md builtin/testing-methodology/SKILL.md builtin/git-operations/SKILL.md builtin/planning-methodology/SKILL.md builtin/documentation-writing/SKILL.md builtin/ux-design/SKILL.md builtin/general-agent/SKILL.md builtin/forge-methodology/SKILL.md builtin/code-review/SKILL.md builtin/code-review/code-hygiene-review/SKILL.md builtin/code-review/performance-review/SKILL.md builtin/code-review/security-review/SKILL.md builtin/code-review/architecture-review/SKILL.md builtin/code-review/ux-review-methodology/SKILL.md builtin/debug/SKILL.md builtin/debug/reproduction-methodology/SKILL.md builtin/refactor/SKILL.md builtin/refactor/migration-guidance/SKILL.md builtin/pivot-on-friction/SKILL.md builtin/validation-harness/SKILL.md
 var BuiltinSkillsFS embed.FS
 
 func ParseSkillMarkdown(path string, scope skillscore.Scope, data []byte) (Definition, error) {

@@ -19,6 +19,7 @@ interface OnboardingStore {
   devForceShow: boolean;
 
   updatePlan: (updates: Partial<LaunchPlan>) => void;
+  updatePlanAndAdvance: (updates: Partial<LaunchPlan>) => void;
   nextStep: () => void;
   prevStep: () => void;
   completeOnboarding: () => void;
@@ -49,6 +50,19 @@ export const useOnboardingFlowStore = create<OnboardingStore>()(
           nextState.state = "in_progress";
         }
         set(nextState);
+      },
+
+      updatePlanAndAdvance: (updates) => {
+        const current = get();
+        const newPlan = { ...current.plan, ...updates };
+        const path = derivePath(newPlan);
+        const steps = stepRegistry.getStepsForPath(path);
+        const nextIndex = Math.min(current.currentStepIndex + 1, steps.length - 1);
+        set({
+          plan: newPlan,
+          currentStepIndex: nextIndex,
+          state: "in_progress",
+        });
       },
 
       nextStep: () => {
@@ -131,6 +145,17 @@ export const useOnboardingFlowStore = create<OnboardingStore>()(
         plan: s.plan,
         currentStepIndex: s.currentStepIndex,
       }),
+      onRehydrate: (_state) => {
+        // Return a post-hydration callback that clamps the step index
+        return (state, error) => {
+          if (error || !state) return;
+          const path = derivePath(state.plan);
+          const steps = stepRegistry.getStepsForPath(path);
+          if (state.currentStepIndex >= steps.length) {
+            state.currentStepIndex = Math.max(0, steps.length - 1);
+          }
+        };
+      },
     },
   ),
 );
