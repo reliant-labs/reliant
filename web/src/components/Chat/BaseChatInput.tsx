@@ -14,7 +14,7 @@ import {
   useImperativeHandle,
   type ReactNode,
 } from "react";
-import { CornerDownLeft, Square } from "lucide-react";
+import { ArrowUp } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { ChatTextArea } from "./ChatTextArea";
 import { ChatButton } from "./ChatButton";
@@ -112,23 +112,20 @@ export const BaseChatInput = forwardRef<HTMLDivElement, BaseChatInputProps>(
         disabled={isLoading ? false : !canSend}
         tooltip={isLoading ? "Stop generation (Esc)" : "Send message (Enter)"}
         testId={isLoading ? undefined : "send-button"}
-        className={
+        className={cn(
+          "h-7 w-7 p-0 rounded-full border transition-colors duration-150",
           stableStreaming
-            ? "border bg-destructive/10 text-destructive border-destructive/20 hover:bg-destructive/20"
-            : "border bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] border-[var(--chat-border)] hover:bg-[var(--chat-button-hover)]"
-        }
+            ? "bg-[var(--chat-button-bg)] text-destructive border-[var(--chat-border)] hover:bg-[var(--chat-button-hover)] hover:border-destructive/30"
+            : canSend
+            ? "bg-[var(--chat-button-bg)] text-primary border-[var(--chat-border)] hover:bg-[var(--chat-button-hover)] hover:border-primary/30"
+            : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] border-[var(--chat-border)] opacity-60"
+        )}
       >
-        <span className="inline-flex items-center justify-center" style={{ width: '46px' }}>
+        <span className="inline-flex items-center justify-center">
           {isLoading ? (
-            <>
-              <Square className="w-3.5 h-3.5" />
-              <span className="ml-1 text-[10px]">Esc</span>
-            </>
+            <span className="h-2.5 w-2.5 rounded-[2px] bg-current" />
           ) : (
-            <>
-              <span className="text-[10px]">Send</span>
-              <CornerDownLeft className="w-3 h-3 ml-0.5" />
-            </>
+            <ArrowUp className="h-4 w-4" />
           )}
         </span>
       </ChatButton>

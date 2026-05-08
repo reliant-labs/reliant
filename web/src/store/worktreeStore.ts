@@ -123,6 +123,51 @@ function getCurrentLoadOptions(): { includeArchived: boolean } {
   return { includeArchived: useWorktreeStore.getState().lastLoadIncludedArchived };
 }
 
+type ArchivedWorktreeActiveChatSnapshot = {
+  activeChatId: string | null;
+  activeChatWasInWorktree: boolean;
+};
+
+function getArchivedWorktreeActiveChatSnapshot(worktreeId: string): ArchivedWorktreeActiveChatSnapshot {
+  const chatStore = useChatStore.getState();
+  const activeChatId = chatStore.activeChatId;
+  const activeChat = activeChatId ? chatStore.chats.get(activeChatId) : null;
+
+  return {
+    activeChatId,
+    activeChatWasInWorktree: activeChat?.worktreeId === worktreeId,
+  };
+}
+
+async function clearArchivedWorktreeActiveChat(
+  worktreeId: string,
+  snapshot: ArchivedWorktreeActiveChatSnapshot,
+  options?: { clearMissingChat?: boolean }
+): Promise<void> {
+  const { activeChatId, activeChatWasInWorktree } = snapshot;
+  if (!activeChatId) return;
+
+  const chatStore = useChatStore.getState();
+  if (chatStore.activeChatId !== activeChatId) return;
+
+  const activeChat = chatStore.chats.get(activeChatId);
+  const shouldClearActiveChat =
+    activeChatWasInWorktree ||
+    activeChat?.worktreeId === worktreeId ||
+    (options?.clearMissingChat && !activeChat);
+
+  if (!shouldClearActiveChat) return;
+
+  logger.info('[WorktreeStore] Active chat was archived, clearing it', {
+    activeChatId,
+    worktreeId,
+    activeChatStillLoaded: Boolean(activeChat),
+  });
+
+  chatStore.clearCurrentChat(worktreeId);
+  await useChatNavigationStore.getState().removeFromQueue(activeChatId);
+}
+
 export const useWorktreeStore = create<WorktreeStore>((set) => ({
   worktrees: [],
   currentWorktree: null,
@@ -265,33 +310,23 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
       const worktree = useWorktreeStore.getState().worktrees.find(w => w.id === id);
       const worktreeName = worktree?.name || 'Workspace';
       const wasCurrentWorktree = useWorktreeStore.getState().currentWorktree?.id === id;
+      const activeChatSnapshot = getArchivedWorktreeActiveChatSnapshot(id);
 
       await worktreeGrpc.archive(id, {
         deleteGitBranch: options?.deleteGitBranch,
         deleteLocalDirectory: options?.deleteLocalDirectory,
       });
 
+      await clearArchivedWorktreeActiveChat(id, activeChatSnapshot);
+
       // Reload worktrees to get updated state
       const currentProject = worktree?.project_id;
       if (currentProject) {
-        // Get active chat ID before reloading to check if we need to remove it from queue
-        const activeChatId = useChatStore.getState().activeChatId;
-
         await useWorktreeStore.getState().loadWorktrees(currentProject, getCurrentLoadOptions());
         // Reload chats to remove archived ones from the list
         await useChatStore.getState().loadChats();
 
-        // If the active chat was archived (no longer in list), clear it and remove from queue
-        if (activeChatId) {
-          const chatStillExists = useChatStore.getState().chats.has(activeChatId);
-          if (!chatStillExists) {
-            logger.info('[WorktreeStore] Active chat was archived, clearing it', { activeChatId });
-            // Clear the active chat in the store
-            useChatStore.getState().clearCurrentChat();
-            // Remove from navigation queue
-            await useChatNavigationStore.getState().removeFromQueue(activeChatId);
-          }
-        }
+        await clearArchivedWorktreeActiveChat(id, activeChatSnapshot, { clearMissingChat: true });
         
         // Clean up workspace state for this worktree
         useWorkspaceStateStore.getState().removeWorktreeState(currentProject, id);
@@ -308,8 +343,9 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
             logger.info('[WorktreeStore] Switching to main worktree after archiving current', {
               archivedWorktreeId: id,
               mainWorktreeId: mainWorktree.id,
+              openFreshNewChat: true,
             });
-            await useWorktreeStore.getState().switchWorktreeContext(currentProject, mainWorktree);
+            await useWorktreeStore.getState().switchWorktreeContext(currentProject, mainWorktree, { openFreshNewChat: true });
           } else {
             // No main worktree found, just clear selection
             set({ currentWorktree: null });
@@ -350,11 +386,16 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
       const worktreeName = worktree?.name || 'Workspace';
       const wasCurrentWorktree = useWorktreeStore.getState().currentWorktree?.id === id;
       const currentProject = worktree?.project_id;
+      const activeChatSnapshot = getArchivedWorktreeActiveChatSnapshot(id);
 
       await worktreeGrpc.delete(id, {
         deleteGitBranch: options?.deleteGitBranch,
         deleteLocalDirectory: options?.deleteLocalDirectory,
       });
+
+      if (!isPermanentDelete) {
+        await clearArchivedWorktreeActiveChat(id, activeChatSnapshot);
+      }
 
       set(state => ({
         // If permanent delete, remove from list; otherwise reload to get updated deleted_at
@@ -394,25 +435,11 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
       // If it was an archive (not permanent delete), reload worktrees and chats to get updated state
       if (!isPermanentDelete) {
         if (currentProject) {
-          // Get active chat ID before reloading to check if we need to remove it from queue
-          const activeChatId = useChatStore.getState().activeChatId;
-
           await useWorktreeStore.getState().loadWorktrees(currentProject, getCurrentLoadOptions());
           // Reload chats to remove archived ones from the list
           await useChatStore.getState().loadChats();
 
-          // If the active chat was archived, remove it from navigation queue
-          // If the active chat was archived (no longer in list), clear it and remove from queue
-          if (activeChatId) {
-            const chatStillExists = useChatStore.getState().chats.has(activeChatId);
-            if (!chatStillExists) {
-              logger.info('[WorktreeStore] Active chat was archived, clearing it', { activeChatId });
-              // Clear the active chat in the store
-              useChatStore.getState().clearCurrentChat();
-              // Remove from navigation queue
-              await useChatNavigationStore.getState().removeFromQueue(activeChatId);
-            }
-          }
+          await clearArchivedWorktreeActiveChat(id, activeChatSnapshot, { clearMissingChat: true });
         }
       }
 
@@ -421,12 +448,14 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
         const worktrees = useWorktreeStore.getState().worktrees;
         const mainWorktree = worktrees.find(w => w.is_main && w.project_id === currentProject);
         if (mainWorktree) {
+          const openFreshNewChat = !isPermanentDelete;
           logger.info('[WorktreeStore] Switching to main worktree after deleting current', {
             deletedWorktreeId: id,
             mainWorktreeId: mainWorktree.id,
             isPermanentDelete,
+            openFreshNewChat,
           });
-          await useWorktreeStore.getState().switchWorktreeContext(currentProject, mainWorktree);
+          await useWorktreeStore.getState().switchWorktreeContext(currentProject, mainWorktree, { openFreshNewChat });
         } else {
           // No main worktree found, just clear selection
           set({ currentWorktree: null });
@@ -619,6 +648,7 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
     if (newWorktreeId === currentWorktreeId) {
       if (options?.openFreshNewChat) {
         useChatStore.getState().clearCurrentChat(newWorktreeId);
+        useWorkspaceStateStore.getState().setActiveChatId(projectId, newWorktreeId, null);
       }
       return;
     }
@@ -637,6 +667,7 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
 
     if (options?.openFreshNewChat) {
       useChatStore.getState().clearCurrentChat(newWorktreeId);
+      useWorkspaceStateStore.getState().setActiveChatId(projectId, newWorktreeId, null);
     } else {
       // Restore chat navigation state for new worktree
       useChatNavigationStore.getState().restoreFromWorkspaceState(projectId, newWorktreeId);

@@ -1,5 +1,4 @@
 import { logger } from "../../lib/logger";
-import { isDev } from "../../lib/constants";
 import {
   memo,
   useRef,
@@ -10,7 +9,7 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import { Settings2, RefreshCw, X, ChevronDown } from "lucide-react";
+import { Settings2, RefreshCw, ChevronDown } from "lucide-react";
 import { useAttachmentStore } from "../../store/attachmentStore";
 import { useChatParamsStore } from "../../store/chatParamsStore";
 import { useActiveChatId } from "../../store/chatStoreHooks";
@@ -20,7 +19,6 @@ import {
   type Preset,
 } from "../../store/globalDataStore";
 import { useChatNavigationStore } from "../../store/chatNavigationStore";
-import { PromptsSelector } from "./PromptsSelector";
 import { AttachmentPreview } from "./AttachmentPreview";
 import { WorkflowSelector } from "./WorkflowSelector";
 import { ChatTextArea } from "./ChatTextArea";
@@ -111,10 +109,6 @@ interface ChatInputProps {
   chatId?: string;
   connectionStatus?: ConnectionStatus;
   isChatBusy?: boolean;
-  onToggleRecentChanges?: () => void;
-  isRecentChangesOpen?: boolean;
-  currentActivity?: string;
-  messageCount?: number;
   // Command center mode
   paneId?: string;
   // Thread-specific params
@@ -133,12 +127,6 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
       disabled = false,
       isStreaming = false,
       chatId,
-      projectId,
-      worktreeId,
-      onToggleRecentChanges,
-      isRecentChangesOpen = false,
-      currentActivity,
-      messageCount = 0,
       isChatBusy = false,
       paneId,
       selectedThreadId,
@@ -234,11 +222,6 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
     const {
       input,
       setInput,
-      selectedPrompts,
-      setSelectedPrompts,
-      forceStreaming,
-      setForceStreaming,
-      currentProject,
       selectedWorkflow,
       setSelectedWorkflow,
       isPendingChat,
@@ -1046,7 +1029,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
     }, [selectedThreadId, workflowExecution, activeThreadsForName]);
 
     // In discuss mode or when a question is pending, treat as not-streaming so the input stays enabled
-    const effectiveStreaming = isDiscussMode ? false : (hasPendingQuestion ? false : (forceStreaming || isStreaming));
+    const effectiveStreaming = isDiscussMode ? false : (hasPendingQuestion ? false : isStreaming);
 
     // Allow messaging at all times - users can type while workflow is running
     const isMessagingAllowed = true;
@@ -1056,12 +1039,11 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
     useEffect(() => {
       logger.info("[ChatInput] Streaming state:", {
         isStreaming,
-        forceStreaming,
         effectiveStreaming,
         isChatBusy,
         chatId: chatId?.slice(0, 8),
       });
-    }, [isStreaming, forceStreaming, effectiveStreaming, isChatBusy, chatId]);
+    }, [isStreaming, effectiveStreaming, isChatBusy, chatId]);
 
     // Drag and drop functionality
     const handleFileDrop = async (files: File[]) => {
@@ -1123,7 +1105,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
     }, [chatId, pendingQuestion]);
 
     const handleSend = async () => {
-      const hasContent = input.trim().length > 0 || selectedPrompts.length > 0;
+      const hasContent = input.trim().length > 0;
       const hasAttachments = attachments.length > 0;
       
       // Parse markers from input text
@@ -1146,14 +1128,11 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
       if ((hasContent || hasAttachments || hasCodeContexts) && !effectiveStreaming && isMessagingAllowed) {
         // Keep markers in the message text so it displays as the user typed it
         const messageText = input.trim();
-        const fullMessage = selectedPrompts
-          ? `${messageText}\n\n${selectedPrompts}`
-          : messageText;
         const attachmentIds = attachments.map((a) => a.id);
         
         // Format code contexts as part of the message
         // Read file content and include it directly in the message text
-        let messageWithContexts = fullMessage;
+        let messageWithContexts = messageText;
         
         if (markers.length > 0) {
           // Read file content for each marker and format it in the message
@@ -1197,12 +1176,12 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
             // Append context sections to the message
             if (contextSections.length > 0) {
               const contextText = '\n\n' + contextSections.join('\n\n');
-              messageWithContexts = fullMessage + contextText;
+              messageWithContexts = messageText + contextText;
             }
           } catch (error) {
             console.warn('Failed to import fileSystem:', error);
             // Fallback: just use the original message
-            messageWithContexts = fullMessage;
+            messageWithContexts = messageText;
           }
         }
         
@@ -1288,58 +1267,6 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
       }
     }, [onStop, isStreaming]);
 
-
-    // Handle compaction
-    const [isCompacting, setIsCompacting] = useState(false);
-    const canCompact =
-      chatId && messageCount > 0 && !isCompacting && !effectiveStreaming;
-
-    const handleCompact = useCallback(async () => {
-      if (!canCompact) {
-        logger.warn("⚠️ Cannot compact", {
-          chatId,
-          messageCount,
-          isCompacting,
-          effectiveStreaming,
-        });
-        return;
-      }
-
-      // Get the thread ID from chat data (workflow_id is the thread)
-      const chatObj = useChatStore.getState().chats.get(chatId);
-      const threadId = chatObj?.workflowId;
-      if (!threadId) {
-        logger.error("❌ Cannot compact: no thread ID found", { chatId });
-        alert("Cannot compact: no active thread found");
-        return;
-      }
-
-      try {
-        setIsCompacting(true);
-        logger.info("🗜️ Starting context compaction", { chatId, threadId, messageCount });
-        const result = await api.chatsV2.compact(chatId, threadId);
-        logger.info("✅ Context compaction initiated", { chatId, threadId, result });
-      } catch (error: any) {
-        logger.error("[ChatInput] Failed to compact context", { chatId, threadId, error });
-        // Show error to user
-        alert(`Failed to start compaction: ${error?.message || error}`);
-        setIsCompacting(false);
-      } finally {
-        // Keep the compacting state while the activity is running
-        // It will be cleared when currentActivity changes
-      }
-    }, [chatId, canCompact, messageCount, isCompacting, effectiveStreaming]);
-
-    // Track compaction activity state
-    useEffect(() => {
-      if (currentActivity === "Compact") {
-        setIsCompacting(true);
-      } else if (isCompacting) {
-        // Clear compacting state when activity changes
-        setIsCompacting(false);
-      }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentActivity]);
 
     // Note: Global ESC key handling is done in ModernApp.tsx with proper priority checks
     // (checks for open modals, workflow builder, etc. before pausing chat)
@@ -1616,7 +1543,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                           <div className="relative">
                             <button
                               className={cn(
-                                "flex items-center gap-1 rounded transition-colors text-[10px] font-medium h-6 px-2",
+                                "flex items-center gap-1 rounded-full transition-colors text-[10px] font-medium h-6 px-2.5",
                                 settingsPage === 'model'
                                   ? "bg-primary/20 text-primary hover:bg-primary/30"
                                   : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] hover:bg-[var(--chat-button-hover)]"
@@ -1651,7 +1578,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                               }
                               disabled={disabled || !isMessagingAllowed}
                               className={cn(
-                                "relative flex items-center justify-center rounded transition-colors h-6 w-6",
+                                "relative flex items-center justify-center rounded-full transition-colors h-6 w-6",
                                 !disabled
                                   ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
                                   : "cursor-default opacity-60",
@@ -1680,7 +1607,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                             onClick={isViewingThreadParams ? handleSyncThreadParams : handleSyncParams}
                             disabled={disabled || isSyncing}
                             className={cn(
-                              "flex items-center justify-center rounded transition-colors h-6 px-2 gap-1",
+                              "flex items-center justify-center rounded-full transition-colors h-6 px-2.5 gap-1",
                               "text-[10px] font-medium",
                               !disabled && !isSyncing
                                 ? "cursor-pointer hover:bg-primary/30"
@@ -1708,7 +1635,6 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                         onStop={handleStop}
                         canSend={
                           input.trim().length > 0 ||
-                          selectedPrompts.length > 0 ||
                           attachments.length > 0
                         }
                         isStreaming={effectiveStreaming}
@@ -1716,25 +1642,6 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
 
                         onAttach={handleAttachClick}
                         uploading={uploading}
-                        onToggleRecentChanges={onToggleRecentChanges}
-                        isRecentChangesOpen={isRecentChangesOpen}
-                        hasWorktree={!!worktreeId}
-                        onCompact={canCompact ? handleCompact : undefined}
-                        isCompacting={isCompacting}
-                        isDev={isDev}
-                        forceStreaming={forceStreaming}
-                        onToggleForceStreaming={() =>
-                          setForceStreaming(!forceStreaming)
-                        }
-                        promptsElement={
-                          <PromptsSelector
-                            key="prompts-selector"
-                            projectId={projectId || currentProject?.id}
-                            onPromptsChange={setSelectedPrompts}
-                            compact={true}
-                            iconOnly={isCompact}
-                          />
-                        }
                         isDiscussMode={isDiscussMode}
                         onToggleDiscuss={onToggleDiscuss}
                         isPaused={isPaused}

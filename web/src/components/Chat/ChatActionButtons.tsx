@@ -1,5 +1,4 @@
 import { useChatButtons } from "./useChatButtons";
-import { CollapsibleButtonGroup } from "./CollapsibleButtonGroup";
 
 interface ChatActionButtonsProps {
   // Send/Stop
@@ -13,27 +12,10 @@ interface ChatActionButtonsProps {
   onAttach: () => void;
   uploading: boolean;
 
-  // Recent changes
-  onToggleRecentChanges?: () => void;
-  isRecentChangesOpen?: boolean;
-  hasWorktree?: boolean;
-
-  // Compact
-  onCompact?: () => void;
-  isCompacting?: boolean;
-
-  // Dev mode
-  isDev?: boolean;
-  forceStreaming?: boolean;
-  onToggleForceStreaming?: () => void;
-
   // Discuss
   isDiscussMode?: boolean;
   onToggleDiscuss?: () => void;
   isPaused?: boolean;
-
-  // Prompts element (passed as ReactNode)
-  promptsElement?: React.ReactNode;
 
   // Responsiveness
   compact?: boolean;
@@ -44,9 +26,8 @@ interface ButtonLayoutProps extends ChatActionButtonsProps {
 }
 
 export function ChatActionButtons(props: ChatActionButtonsProps) {
-  // Minimal layout - only attach, more menu (with everything else), and send
   const defaultLayout = [
-    "attach", "prompts", "recentChanges", "compact", "devTool", "discuss", "sendStop"
+    "attach", "discuss", "sendStop"
   ];
 
   return <ButtonLayout {...props} layout={defaultLayout} />;
@@ -54,7 +35,7 @@ export function ChatActionButtons(props: ChatActionButtonsProps) {
 
 // Flexible layout component that you can use with custom arrangements
 export function ButtonLayout({
-  layout = ["tasks", "plans", "devTool", "attach", "sendStop"],
+  layout = ["tasks", "plans", "attach", "sendStop"],
   ...props
 }: ButtonLayoutProps) {
   const { buttons } = useChatButtons(props);
@@ -63,49 +44,34 @@ export function ButtonLayout({
   const sendButtonNames = ["sendStop", "send", "stop"];
   const sendButton = layout.find(name => sendButtonNames.includes(name));
 
-  // Keep only attach always visible (not in collapsible group)
   const alwaysVisibleNames = ["attach"];
-  const rightOfMenuNames = ["discuss"];
+  const trailingActionNames = ["discuss"];
   const alwaysVisibleButtons = layout.filter(name => alwaysVisibleNames.includes(name) && !sendButtonNames.includes(name));
-  const collapsibleButtons = layout.filter(name => !alwaysVisibleNames.includes(name) && !sendButtonNames.includes(name) && !rightOfMenuNames.includes(name));
+  const inlineActionButtons = layout.filter(name => !alwaysVisibleNames.includes(name) && !sendButtonNames.includes(name) && !trailingActionNames.includes(name));
 
-  // Define priority for collapsible buttons (higher priority = shown first when collapsing)
   const buttonPriority = {
-    prompts: 7,      // High priority - prompts selector
-    recentChanges: 6, // Medium-high priority - recent changes
-    compact: 5,      // Medium priority - compact context
-    devTool: 4,      // Medium priority - dev only
-    divider: 1,      // Lowest priority
+    divider: 1,
   };
 
-  // Sort collapsible buttons by priority while maintaining relative order for same priority
-  const sortedCollapsibleButtons = [...collapsibleButtons].sort((a, b) => {
+  const sortedInlineActionButtons = [...inlineActionButtons].sort((a, b) => {
     const aPriority = buttonPriority[a as keyof typeof buttonPriority] || 0;
     const bPriority = buttonPriority[b as keyof typeof buttonPriority] || 0;
     if (aPriority !== bPriority) {
-      return bPriority - aPriority; // High priority first
+      return bPriority - aPriority;
     }
-    return collapsibleButtons.indexOf(a) - collapsibleButtons.indexOf(b); // Maintain original order for same priority
+    return inlineActionButtons.indexOf(a) - inlineActionButtons.indexOf(b);
   });
 
   const alwaysVisibleElements = alwaysVisibleButtons.map((buttonName) => buttons[buttonName]).filter(Boolean);
-  const collapsibleElements = sortedCollapsibleButtons.map((buttonName) => {
-    // Handle prompts as a special case - render the provided element
-    if (buttonName === "prompts" && props.promptsElement) {
-      return props.promptsElement;
-    }
-    return buttons[buttonName];
-  }).filter(Boolean) as React.ReactElement[];
-  const rightOfMenuElements = rightOfMenuNames.map((buttonName) => buttons[buttonName]).filter(Boolean);
+  const inlineActionElements = sortedInlineActionButtons.map((buttonName) => buttons[buttonName]).filter(Boolean) as React.ReactElement[];
+  const trailingActionElements = trailingActionNames.map((buttonName) => buttons[buttonName]).filter(Boolean);
   const sendButtonElement = sendButton ? buttons[sendButton] : null;
 
   return (
     <div className="flex items-center gap-1.5 flex-shrink-0">
       {alwaysVisibleElements}
-      <CollapsibleButtonGroup maxVisibleButtons={0} compact={props.compact}>
-        {collapsibleElements}
-      </CollapsibleButtonGroup>
-      {rightOfMenuElements}
+      {inlineActionElements}
+      {trailingActionElements}
       {sendButtonElement}
     </div>
   );
