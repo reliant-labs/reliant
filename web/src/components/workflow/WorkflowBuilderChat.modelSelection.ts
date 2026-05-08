@@ -4,6 +4,33 @@ interface CatalogModelLike {
   id: string;
 }
 
+export const WORKFLOW_BUILDER_PRESET = "workflow_builder";
+
+export function buildWorkflowBuilderParams(
+  thinkingLevel: string,
+  selectedModelId?: string,
+): Record<string, unknown> {
+  return {
+    mode: "auto",
+    ...(selectedModelId && {
+      model: {
+        id: selectedModelId,
+        ...(thinkingLevel && { thinking_level: thinkingLevel }),
+      },
+    }),
+  };
+}
+
+export function formatWorkflowBuilderChatError(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+  if (typeof error === "string" && error.trim()) {
+    return error;
+  }
+  return "Unable to send message. Check your provider settings and try again.";
+}
+
 export interface BuilderModelSelection {
   selectedModelId?: string;
   hasSelectedModelInCatalog: boolean;

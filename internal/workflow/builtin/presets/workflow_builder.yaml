@@ -3,7 +3,8 @@ description: Specialized assistant for building and modifying Reliant workflows
 tag: agent
 params:
     model:
-        id: claude-4.6-opus
+        tags:
+            - flagship
         temperature: 1
         thinking_level: high
     spawn_presets: []
