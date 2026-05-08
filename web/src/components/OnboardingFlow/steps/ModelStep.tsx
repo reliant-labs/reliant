@@ -209,6 +209,14 @@ export function ModelStep({ plan, updatePlan }: StepProps) {
           ...(finalPlan.presetId && { presetId: finalPlan.presetId }),
           ...(finalPlan.useForge !== undefined && { useForge: finalPlan.useForge }),
         });
+
+        // Provision the Reliant managed API key in the background
+        if (modelProvider === "reliant_credits") {
+          api.settings.syncReliantProvider().then(
+            (result) => logger.info("[OnboardingModelStep] Reliant provider synced", { synced: result.synced }),
+            (err) => logger.warn("[OnboardingModelStep] Reliant provider sync failed", err),
+          );
+        }
       }
 
       // Apply temp chat params (workflow, presets, initial prompt)

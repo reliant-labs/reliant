@@ -1,10 +1,10 @@
 /**
  * Onboarding Constants
  *
- * Step definitions for the 9-step guided tour, checklist items for the
+ * Step definitions for the 8-step guided tour, checklist items for the
  * achievement-based system, and shared settings keys.
  *
- * Flow: Welcome → Tour (7 spotlight steps) → Completion → Checklist
+ * Flow: Tour (7 spotlight steps) → Completion → Checklist
  */
 
 import type {
@@ -17,13 +17,6 @@ import type {
 // ─── Tour Steps ──────────────────────────────────────────────────────────────
 
 export const ONBOARDING_STEPS: OnboardingStep[] = [
-  {
-    id: "welcome",
-    type: "modal",
-    title: "Welcome to Reliant",
-    description: "AI-powered development workflows",
-    skippable: true,
-  },
   {
     id: "chat-and-sidebars",
     type: "multi-spotlight",
@@ -182,7 +175,6 @@ export const CHAT_MODE_STEPS: OnboardingStepId[] = [
 ];
 
 export const MODAL_STEPS: OnboardingStepId[] = [
-  "welcome",
   "presets-and-params",
   "completion",
 ];
