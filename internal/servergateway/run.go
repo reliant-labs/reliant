@@ -176,6 +176,7 @@ func Run(ctx context.Context, opts Options) error {
 	// NATS tool bridge: per-user subscriptions created/destroyed on daemon connect/disconnect
 	toolBridge := toolexec.NewNATSToolBridge(nc, toolsDaemonService)
 	toolsDaemonService.AddConnectionListener(toolBridge)
+	toolsDaemonService.AddConnectionListener(toolexec.NewDaemonLifecyclePublisher(nc))
 	if err := toolBridge.Start(); err != nil {
 		return fmt.Errorf("failed to start NATS tool bridge: %w", err)
 	}

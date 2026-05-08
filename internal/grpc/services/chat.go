@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfg "github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/gen/reliant/v1/reliantv1connect"
@@ -44,13 +45,14 @@ import (
 // ChatService implements the ChatService RPC handlers
 type ChatService struct {
 	reliantv1connect.UnimplementedChatServiceHandler
-	database     db.Repository
-	tempClient   client.Client
-	pauseService *workflow.PauseService
-	threads      *threads.Service
-	taskQueue    string
-	streamingHub streaming.StreamingHub
-	discussLocks sync.Map // per-chat lock to prevent concurrent discuss calls
+	database           db.Repository
+	tempClient         client.Client
+	pauseService       *workflow.PauseService
+	threads            *threads.Service
+	taskQueue          string
+	streamingHub       streaming.StreamingHub
+	controlPlaneClient controlplane.Client
+	discussLocks       sync.Map // per-chat lock to prevent concurrent discuss calls
 }
 
 // NewChatService creates a new ChatService
@@ -60,12 +62,13 @@ func NewChatService(database db.Repository, tempClient client.Client, pauseServi
 	}
 
 	return &ChatService{
-		database:     database,
-		tempClient:   tempClient,
-		pauseService: pauseService,
-		threads:      threads.NewService(database),
-		taskQueue:    taskQueue,
-		streamingHub: hub,
+		database:           database,
+		tempClient:         tempClient,
+		pauseService:       pauseService,
+		threads:            threads.NewService(database),
+		taskQueue:          taskQueue,
+		streamingHub:       hub,
+		controlPlaneClient: controlplane.NewClient(""),
 	}
 }
 
@@ -3612,11 +3615,6 @@ func (s *ChatService) buildWorkflowInputs(
 	for key, value := range userParams {
 		v := value.AsInterface()
 
-		if shouldSkipEmptyPresetOverride(key, v) {
-			logging.Info("[buildWorkflowInputs] Skipping empty override", "key", key)
-			continue
-		}
-
 		if key == "tools" {
 			logging.Info("[buildWorkflowInputs] User param tools override", "value", v, "type", fmt.Sprintf("%T", v))
 		}
@@ -3625,20 +3623,10 @@ func (s *ChatService) buildWorkflowInputs(
 		if mapVal, ok := v.(map[string]interface{}); ok {
 			if existing, ok := initialData[key].(map[string]interface{}); ok {
 				for nestedKey, nestedValue := range mapVal {
-					if shouldSkipEmptyPresetOverride(nestedKey, nestedValue) {
-						continue
-					}
 					existing[nestedKey] = nestedValue
 				}
 			} else {
-				filteredMap := make(map[string]interface{}, len(mapVal))
-				for nestedKey, nestedValue := range mapVal {
-					if shouldSkipEmptyPresetOverride(nestedKey, nestedValue) {
-						continue
-					}
-					filteredMap[nestedKey] = nestedValue
-				}
-				initialData[key] = filteredMap
+				initialData[key] = mapVal
 			}
 		} else {
 			initialData[key] = v
@@ -3675,16 +3663,6 @@ func (s *ChatService) buildWorkflowInputs(
 
 // loadWorkflowForBuild loads the workflow definition for buildWorkflowInputs (defaults application).
 // Uses same order as chat validation: DB by slug, then project files. Returns nil if not found.
-
-func shouldSkipEmptyPresetOverride(paramKey string, value interface{}) bool {
-	switch paramKey {
-	case "tools", "spawn_presets":
-		listValue, ok := value.([]interface{})
-		return ok && len(listValue) == 0
-	default:
-		return false
-	}
-}
 
 func (s *ChatService) buildStateUpdateForActiveWorkflow(
 	ctx context.Context,
@@ -4207,12 +4185,19 @@ func (s *ChatService) handleDiscussMode(
 			"Keep your responses concise and helpful.",
 	}
 
+	activity := handlers.NewCallLLMActivity(s.database, s.streamingHub, nil, nil, nil, nil)
+	reservation, err := activity.ReserveManagedReliantUsageForChat(ctx, chat, driver, history, prompts, s.controlPlaneClient)
+	if err != nil {
+		return nil, err
+	}
+
 	eventCh := driver.StreamResponse(ctx, prompts, history, []tools.Tool{})
 
 	var fullContent string
 	blockIndex := 0
 	blockStarted := false
 	var streamErr error
+	var usage llm.TokenUsage
 
 	for event := range eventCh {
 		switch event.Type {
@@ -4254,8 +4239,11 @@ func (s *ChatService) handleDiscussMode(
 			blockStarted = false
 
 		case llm.EventComplete:
-			if event.Response != nil && event.Response.Content != "" && fullContent == "" {
-				fullContent = event.Response.Content
+			if event.Response != nil {
+				usage = event.Response.Usage
+				if event.Response.Content != "" && fullContent == "" {
+					fullContent = event.Response.Content
+				}
 			}
 
 		case llm.EventError:
@@ -4265,6 +4253,8 @@ func (s *ChatService) handleDiscussMode(
 			}
 		}
 	}
+
+	activity.CompleteManagedReliantReservationForChat(ctx, chat, driver, usage, streamErr, reservation, s.controlPlaneClient)
 
 	// Emit stream_cancelled delta on error so the frontend knows streaming ended
 	if streamErr != nil && s.streamingHub != nil {

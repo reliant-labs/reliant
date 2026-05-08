@@ -52,6 +52,8 @@ const PROVIDERS = [
   },
 ];
 
+const AUTO_MANAGED_PROVIDER_NAME = "Reliant";
+
 type ProviderId = (typeof PROVIDERS)[number]["id"];
 
 function parseErrorMessage(errorText: string, provider: string): string {
@@ -258,8 +260,7 @@ export function ApiKeySetupModal() {
     >
       <div className="space-y-5">
         <p className="text-sm text-muted-foreground">
-          Reliant needs an LLM provider API key to run workflows. Add one now to
-          continue.
+          Reliant can sync your {AUTO_MANAGED_PROVIDER_NAME} access automatically after sign-in, or you can add another provider key to continue.
         </p>
 
         <div className="space-y-2">
