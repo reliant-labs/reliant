@@ -7,7 +7,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { X, Maximize2, RotateCcw } from "lucide-react";
+import { X, Maximize2, RotateCcw, AlertCircle } from "lucide-react";
 import { ReliantIcon } from "../icons/ReliantIcon";
 import { cn } from "../../lib/utils";
 import type { Workflow } from "../../types/workflow";
@@ -34,6 +34,9 @@ import { api } from "../../api/client";
 import { logger } from "../../lib/logger";
 import { resolveThinkingCapabilityForModel, reconcileThinkingLevel } from "../../hooks/useThinkingCapability";
 import {
+  WORKFLOW_BUILDER_PRESET,
+  buildWorkflowBuilderParams,
+  formatWorkflowBuilderChatError,
   getThinkingSelectorDisplayState,
   isThinkingSelectorDisabled as getIsThinkingSelectorDisabled,
   reconcileThinkingForBuilder,
@@ -88,7 +91,6 @@ interface WorkflowBuilderChatProps {
 // The workflow_builder preset tells the agent to load the workflow-builder skill.
 // The skill is auto-generated from repo-local generated docs during build (see: make generate-workflow-builder-skill).
 // Source: tools/docgen/assembler/main.go -> internal/skills/catalog/builtin/workflow-builder/SKILL.md
-const WORKFLOW_BUILDER_PRESET = "workflow_builder";
 
 /**
  * Get storage key for a workflow's chat
@@ -160,6 +162,7 @@ export function WorkflowBuilderChat({
   // Don't initialize from localStorage - validate it first in useEffect
   const [chatId, setChatId] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const [isValidatingChat, setIsValidatingChat] = useState(true);
   // Track if current chat was restored from persistence (workflow likely complete)
   const isRestoredChatRef = useRef(false);
@@ -188,18 +191,6 @@ export function WorkflowBuilderChat({
     }
     return (state.tempNewChatParams.thinking_level as string) ?? "medium";
   });
-
-  const setThinkingLevel = useCallback((level: string) => {
-    if (chatId) {
-      useChatParamsStore.getState().updateChatParams(chatId, { thinking_level: level });
-      // Sync to running workflow immediately
-      api.chatsV2.updateWorkflowParams(chatId, { thinking_level: level }).catch(() => {
-        // Silent fail - UI state is already updated
-      });
-    } else {
-      useChatParamsStore.getState().updateTempNewChatParams({ thinking_level: level });
-    }
-  }, [chatId]);
 
   // Get models for selected model lookup and default model fallback
   const { models, loading: modelsLoading, error: modelsError } = useModels();
@@ -234,6 +225,21 @@ export function WorkflowBuilderChat({
       ),
     [selectedModelParamId, defaultModel, models],
   );
+
+  const setThinkingLevel = useCallback((level: string) => {
+    if (chatId) {
+      useChatParamsStore.getState().updateChatParams(chatId, { thinking_level: level });
+      // Sync to running workflow immediately using the root agent workflow's model input shape.
+      api.chatsV2.updateWorkflowParams(
+        chatId,
+        buildWorkflowBuilderParams(level, selectedModelId),
+      ).catch(() => {
+        // Silent fail - UI state is already updated
+      });
+    } else {
+      useChatParamsStore.getState().updateTempNewChatParams({ thinking_level: level });
+    }
+  }, [chatId, selectedModelId]);
 
   // Catalog loading/availability state for model-aware UX and reconciliation gating.
   const isCatalogLoading =
@@ -552,6 +558,7 @@ export function WorkflowBuilderChat({
       : null;
 
     setInputValue("");
+    setSendError(null);
     setIsSending(true);
 
     try {
@@ -569,11 +576,7 @@ export function WorkflowBuilderChat({
           messages,
           workflow: "builtin://agent",
           selected_presets: { "": WORKFLOW_BUILDER_PRESET },
-          workflow_params: {
-            mode: "auto",
-            thinking_level: thinkingLevel,
-            ...(selectedModelId && { model: { id: selectedModelId } }),
-          },
+          workflow_params: buildWorkflowBuilderParams(thinkingLevel, selectedModelId),
         });
 
         const newChatId = result.chat.id;
@@ -611,16 +614,15 @@ export function WorkflowBuilderChat({
         // Note: mode is passed as workflow param for auto-approve behavior
         await sendMessage(chatId, userContent, undefined, {
           selectedPresets: { "": WORKFLOW_BUILDER_PRESET },
-          workflowParams: {
-            mode: "auto",
-            thinking_level: thinkingLevel,
-            ...(selectedModelId && { model: { id: selectedModelId } }),
-          },
+          workflowParams: buildWorkflowBuilderParams(thinkingLevel, selectedModelId),
           // Pass system message separately for proper handling (hidden from UI)
           ...(systemStoreMessage && { systemMessages: [systemStoreMessage] }),
         });
       }
     } catch (error) {
+      const message = formatWorkflowBuilderChatError(error);
+      setSendError(message);
+      setInputValue(userContent);
       logger.error("[WorkflowBuilderChat] Chat error:", error);
     } finally {
       setIsSending(false);
@@ -677,6 +679,7 @@ export function WorkflowBuilderChat({
     clearPersistedChatId(projectId, persistenceKeyRef.current);
     // Reset local state
     setChatId(null);
+    setSendError(null);
     isRestoredChatRef.current = false;
     lastProcessedOrdinalRef.current = -1;
     hasAppliedRestoredWorkflowRef.current = false;
@@ -877,6 +880,15 @@ export function WorkflowBuilderChat({
 
       {/* Input */}
       <div className="p-3 border-t border-border">
+        {sendError && (
+          <div
+            role="alert"
+            className="mb-2 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+          >
+            <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+            <span>{sendError}</span>
+          </div>
+        )}
         <BaseChatInput
           ref={inputRef}
           value={inputValue}

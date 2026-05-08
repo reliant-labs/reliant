@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  WORKFLOW_BUILDER_PRESET,
+  buildWorkflowBuilderParams,
+  formatWorkflowBuilderChatError,
   getThinkingSelectorDisplayState,
   isThinkingSelectorDisabled,
   reconcileThinkingForBuilder,
@@ -38,11 +41,54 @@ describe("WorkflowBuilderChat model selection helpers", () => {
     expect(result.canResolveThinkingCapability).toBe(true);
   });
 
+  it("preserves provider-qualified catalog IDs for backend provider routing", () => {
+    const result = resolveBuilderSelectedModel(
+      undefined,
+      "gpt-5.3-codex@codex",
+      [{ id: "gpt-5.3-codex@codex" }],
+    );
+
+    expect(result.selectedModelId).toBe("gpt-5.3-codex@codex");
+  });
+
   it("cannot resolve thinking capability when no selected/default model exists", () => {
     const result = resolveBuilderSelectedModel(undefined, undefined, []);
 
     expect(result.selectedModelId).toBeUndefined();
     expect(result.canResolveThinkingCapability).toBe(false);
+  });
+});
+
+describe("WorkflowBuilderChat workflow params", () => {
+  it("uses the workflow builder preset slug", () => {
+    expect(WORKFLOW_BUILDER_PRESET).toBe("workflow_builder");
+  });
+
+  it("preserves provider-qualified selected model IDs with thinking on the model selector", () => {
+    expect(buildWorkflowBuilderParams("high", "gpt-5.3-codex@codex")).toEqual({
+      mode: "auto",
+      model: { id: "gpt-5.3-codex@codex", thinking_level: "high" },
+    });
+  });
+
+  it("omits model override and thinking when catalog has no selected model", () => {
+    expect(buildWorkflowBuilderParams("medium", undefined)).toEqual({
+      mode: "auto",
+    });
+  });
+});
+
+describe("WorkflowBuilderChat error formatting", () => {
+  it("preserves backend validation messages", () => {
+    expect(
+      formatWorkflowBuilderChatError(
+        new Error("workflow input validation failed: model unavailable"),
+      ),
+    ).toBe("workflow input validation failed: model unavailable");
+  });
+
+  it("falls back for unknown errors", () => {
+    expect(formatWorkflowBuilderChatError(null)).toContain("Unable to send message");
   });
 });
 
