@@ -22,6 +22,7 @@ import (
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/openai"
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/openrouter"
+	_ "github.com/reliant-labs/reliant/internal/llm/drivers/reliant"
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/vertexai"
 )
 
@@ -217,6 +218,9 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 		// Add base URL if specified for this driver
 		if driverConfig.BaseURL != "" {
 			driverOpts = append(driverOpts, llm.WithBaseURL(driverConfig.BaseURL))
+		}
+		if len(driverConfig.ExtraHeaders) > 0 {
+			driverOpts = append(driverOpts, llm.WithExtraHeaders(driverConfig.ExtraHeaders))
 		}
 
 		// Pass Claude OAuth account metadata and token refresh if available

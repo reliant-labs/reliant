@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-
 	"sort"
 	"strconv"
 	"strings"
@@ -39,15 +38,17 @@ import (
 // SettingsService implements the SettingsService RPC handlers
 type SettingsService struct {
 	reliantv1connect.UnimplementedSettingsServiceHandler
-	database     db.Repository
-	daemonRouter toolexec.DaemonRouter
+	database           db.Repository
+	daemonRouter       toolexec.DaemonRouter
+	controlPlaneClient controlPlaneClient
 }
 
 // NewSettingsService creates a new SettingsService
 func NewSettingsService(database db.Repository, daemonRouter toolexec.DaemonRouter) *SettingsService {
 	return &SettingsService{
-		database:     database,
-		daemonRouter: daemonRouter,
+		database:           database,
+		daemonRouter:       daemonRouter,
+		controlPlaneClient: newControlPlaneClient(""),
 	}
 }
 
@@ -139,10 +140,21 @@ func (s *SettingsService) validateAPIKey(ctx context.Context, provider models.Fa
 	}
 	testModel := providerDefs[0].ToModel()
 
-	driver, err := drivers.GetDriverForModel(testModel, provider,
-		llm.WithAPIKey(apiKey),
+	resolvedAPIKey := apiKey
+	driverOpts := []llm.DriverOption{
 		llm.WithMaxTokens(100),
-	)
+	}
+	if provider == "reliant" {
+		baseURL := drivers.ResolveReliantBaseURL(apiKey)
+		var extraHeaders map[string]string
+		resolvedAPIKey, extraHeaders = drivers.ResolveReliantAPIKey(apiKey, baseURL)
+		driverOpts = append(driverOpts, llm.WithBaseURL(baseURL))
+		if len(extraHeaders) > 0 {
+			driverOpts = append(driverOpts, llm.WithExtraHeaders(extraHeaders))
+		}
+	}
+	driverOpts = append(driverOpts, llm.WithAPIKey(resolvedAPIKey))
+	driver, err := drivers.GetDriverForModel(testModel, provider, driverOpts...)
 	if err != nil {
 		logging.Error("Failed to create driver for validation", "provider", provider, "error", err)
 		return false, fmt.Sprintf("Failed to initialize provider: %v", err)
@@ -892,6 +904,7 @@ func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.
 	providers := []models.Family{
 		"claude",
 		"codex",
+		"reliant",
 		"openrouter",
 		"anthropic",
 		"openai",
@@ -901,6 +914,7 @@ func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.
 	providerDisplayNames := map[models.Family]string{
 		"claude":     "Claude Code",
 		"codex":      "Codex (ChatGPT)",
+		"reliant":    "Reliant",
 		"openrouter": "OpenRouter",
 		"anthropic":  "Anthropic",
 		"openai":     "OpenAI",
@@ -1002,6 +1016,7 @@ func (s *SettingsService) UpdateProviderAPIKey(ctx context.Context, req *connect
 	validProviders := map[string]bool{
 		"claude":     true,
 		"codex":      true,
+		"reliant":    true,
 		"anthropic":  true,
 		"openai":     true,
 		"gemini":     true,

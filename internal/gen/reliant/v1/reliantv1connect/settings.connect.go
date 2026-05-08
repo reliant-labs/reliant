@@ -80,6 +80,9 @@ const (
 	// SettingsServiceValidateProviderAPIKeyProcedure is the fully-qualified name of the
 	// SettingsService's ValidateProviderAPIKey RPC.
 	SettingsServiceValidateProviderAPIKeyProcedure = "/reliant.v1.SettingsService/ValidateProviderAPIKey"
+	// SettingsServiceSyncReliantProviderProcedure is the fully-qualified name of the SettingsService's
+	// SyncReliantProvider RPC.
+	SettingsServiceSyncReliantProviderProcedure = "/reliant.v1.SettingsService/SyncReliantProvider"
 	// SettingsServiceCompleteCodexOAuthProcedure is the fully-qualified name of the SettingsService's
 	// CompleteCodexOAuth RPC.
 	SettingsServiceCompleteCodexOAuthProcedure = "/reliant.v1.SettingsService/CompleteCodexOAuth"
@@ -153,6 +156,8 @@ type SettingsServiceClient interface {
 	UpdateProviderAPIKey(context.Context, *connect.Request[v1.UpdateProviderAPIKeyRequest]) (*connect.Response[v1.UpdateProviderAPIKeyResponse], error)
 	// ValidateProviderAPIKey validates an API key for a provider
 	ValidateProviderAPIKey(context.Context, *connect.Request[v1.ValidateProviderAPIKeyRequest]) (*connect.Response[v1.ValidateProviderAPIKeyResponse], error)
+	// SyncReliantProvider hydrates the Reliant provider API key from authenticated control-plane state.
+	SyncReliantProvider(context.Context, *connect.Request[v1.SyncReliantProviderRequest]) (*connect.Response[v1.SyncReliantProviderResponse], error)
 	// CompleteCodexOAuth exchanges an OAuth authorization code + PKCE verifier
 	// and marks Codex as connected for the current user.
 	CompleteCodexOAuth(context.Context, *connect.Request[v1.CompleteCodexOAuthRequest]) (*connect.Response[v1.CompleteCodexOAuthResponse], error)
@@ -284,6 +289,12 @@ func NewSettingsServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(settingsServiceMethods.ByName("ValidateProviderAPIKey")),
 			connect.WithClientOptions(opts...),
 		),
+		syncReliantProvider: connect.NewClient[v1.SyncReliantProviderRequest, v1.SyncReliantProviderResponse](
+			httpClient,
+			baseURL+SettingsServiceSyncReliantProviderProcedure,
+			connect.WithSchema(settingsServiceMethods.ByName("SyncReliantProvider")),
+			connect.WithClientOptions(opts...),
+		),
 		completeCodexOAuth: connect.NewClient[v1.CompleteCodexOAuthRequest, v1.CompleteCodexOAuthResponse](
 			httpClient,
 			baseURL+SettingsServiceCompleteCodexOAuthProcedure,
@@ -382,6 +393,7 @@ type settingsServiceClient struct {
 	getProviderStatuses         *connect.Client[v1.GetProviderStatusesRequest, v1.GetProviderStatusesResponse]
 	updateProviderAPIKey        *connect.Client[v1.UpdateProviderAPIKeyRequest, v1.UpdateProviderAPIKeyResponse]
 	validateProviderAPIKey      *connect.Client[v1.ValidateProviderAPIKeyRequest, v1.ValidateProviderAPIKeyResponse]
+	syncReliantProvider         *connect.Client[v1.SyncReliantProviderRequest, v1.SyncReliantProviderResponse]
 	completeCodexOAuth          *connect.Client[v1.CompleteCodexOAuthRequest, v1.CompleteCodexOAuthResponse]
 	completeClaudeOAuth         *connect.Client[v1.CompleteClaudeOAuthRequest, v1.CompleteClaudeOAuthResponse]
 	getPrivacySettings          *connect.Client[v1.GetPrivacySettingsRequest, v1.GetPrivacySettingsResponse]
@@ -470,6 +482,11 @@ func (c *settingsServiceClient) UpdateProviderAPIKey(ctx context.Context, req *c
 // ValidateProviderAPIKey calls reliant.v1.SettingsService.ValidateProviderAPIKey.
 func (c *settingsServiceClient) ValidateProviderAPIKey(ctx context.Context, req *connect.Request[v1.ValidateProviderAPIKeyRequest]) (*connect.Response[v1.ValidateProviderAPIKeyResponse], error) {
 	return c.validateProviderAPIKey.CallUnary(ctx, req)
+}
+
+// SyncReliantProvider calls reliant.v1.SettingsService.SyncReliantProvider.
+func (c *settingsServiceClient) SyncReliantProvider(ctx context.Context, req *connect.Request[v1.SyncReliantProviderRequest]) (*connect.Response[v1.SyncReliantProviderResponse], error) {
+	return c.syncReliantProvider.CallUnary(ctx, req)
 }
 
 // CompleteCodexOAuth calls reliant.v1.SettingsService.CompleteCodexOAuth.
@@ -569,6 +586,8 @@ type SettingsServiceHandler interface {
 	UpdateProviderAPIKey(context.Context, *connect.Request[v1.UpdateProviderAPIKeyRequest]) (*connect.Response[v1.UpdateProviderAPIKeyResponse], error)
 	// ValidateProviderAPIKey validates an API key for a provider
 	ValidateProviderAPIKey(context.Context, *connect.Request[v1.ValidateProviderAPIKeyRequest]) (*connect.Response[v1.ValidateProviderAPIKeyResponse], error)
+	// SyncReliantProvider hydrates the Reliant provider API key from authenticated control-plane state.
+	SyncReliantProvider(context.Context, *connect.Request[v1.SyncReliantProviderRequest]) (*connect.Response[v1.SyncReliantProviderResponse], error)
 	// CompleteCodexOAuth exchanges an OAuth authorization code + PKCE verifier
 	// and marks Codex as connected for the current user.
 	CompleteCodexOAuth(context.Context, *connect.Request[v1.CompleteCodexOAuthRequest]) (*connect.Response[v1.CompleteCodexOAuthResponse], error)
@@ -696,6 +715,12 @@ func NewSettingsServiceHandler(svc SettingsServiceHandler, opts ...connect.Handl
 		connect.WithSchema(settingsServiceMethods.ByName("ValidateProviderAPIKey")),
 		connect.WithHandlerOptions(opts...),
 	)
+	settingsServiceSyncReliantProviderHandler := connect.NewUnaryHandler(
+		SettingsServiceSyncReliantProviderProcedure,
+		svc.SyncReliantProvider,
+		connect.WithSchema(settingsServiceMethods.ByName("SyncReliantProvider")),
+		connect.WithHandlerOptions(opts...),
+	)
 	settingsServiceCompleteCodexOAuthHandler := connect.NewUnaryHandler(
 		SettingsServiceCompleteCodexOAuthProcedure,
 		svc.CompleteCodexOAuth,
@@ -806,6 +831,8 @@ func NewSettingsServiceHandler(svc SettingsServiceHandler, opts ...connect.Handl
 			settingsServiceUpdateProviderAPIKeyHandler.ServeHTTP(w, r)
 		case SettingsServiceValidateProviderAPIKeyProcedure:
 			settingsServiceValidateProviderAPIKeyHandler.ServeHTTP(w, r)
+		case SettingsServiceSyncReliantProviderProcedure:
+			settingsServiceSyncReliantProviderHandler.ServeHTTP(w, r)
 		case SettingsServiceCompleteCodexOAuthProcedure:
 			settingsServiceCompleteCodexOAuthHandler.ServeHTTP(w, r)
 		case SettingsServiceCompleteClaudeOAuthProcedure:
@@ -899,6 +926,10 @@ func (UnimplementedSettingsServiceHandler) UpdateProviderAPIKey(context.Context,
 
 func (UnimplementedSettingsServiceHandler) ValidateProviderAPIKey(context.Context, *connect.Request[v1.ValidateProviderAPIKeyRequest]) (*connect.Response[v1.ValidateProviderAPIKeyResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.ValidateProviderAPIKey is not implemented"))
+}
+
+func (UnimplementedSettingsServiceHandler) SyncReliantProvider(context.Context, *connect.Request[v1.SyncReliantProviderRequest]) (*connect.Response[v1.SyncReliantProviderResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.SyncReliantProvider is not implemented"))
 }
 
 func (UnimplementedSettingsServiceHandler) CompleteCodexOAuth(context.Context, *connect.Request[v1.CompleteCodexOAuthRequest]) (*connect.Response[v1.CompleteCodexOAuthResponse], error) {

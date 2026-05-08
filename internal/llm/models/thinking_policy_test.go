@@ -80,6 +80,14 @@ func TestReconcileThinkingLevel(t *testing.T) {
 		t.Fatalf("invalid should reconcile to medium, got=%q", got)
 	}
 
+	lowHigh := ResolveThinkingCapability(ModelCapabilities{
+		CanReason:      true,
+		ThinkingLevels: []string{"low", "high"},
+	})
+	if got := ReconcileThinkingLevel(lowHigh, "medium"); got != "high" {
+		t.Fatalf("unsupported medium should reconcile to high, got=%q", got)
+	}
+
 	none := ResolveThinkingCapability(ModelCapabilities{CanReason: false})
 	if got := ReconcileThinkingLevel(none, "high"); got != "" {
 		t.Fatalf("non-reasoning should reconcile to empty, got=%q", got)

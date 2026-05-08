@@ -32,6 +32,8 @@ models:
         api_model: claude-opus-4-6
       - driver: openrouter
         api_model: anthropic/claude-opus-4.6
+      - driver: reliant
+        api_model: claude-opus-4-6
     default_thinking_level: high
     default_temperature: 1.0
     default_compaction_threshold: 185000
@@ -59,6 +61,8 @@ models:
         api_model: claude-opus-4-5-20251101
       - driver: openrouter
         api_model: anthropic/claude-opus-4.5
+      - driver: reliant
+        api_model: claude-opus-4-5
     default_thinking_level: high
     default_temperature: 1.0
     default_compaction_threshold: 185000
@@ -269,6 +273,8 @@ models:
         api_model: gemini-3.1-pro-preview
       - driver: openrouter
         api_model: google/gemini-3.1-pro-preview
+      - driver: reliant
+        api_model: gemini-3.1-pro-preview
     default_thinking_level: high
     default_temperature: 1.0
     default_compaction_threshold: 900000
@@ -374,6 +380,8 @@ models:
         api_model: claude-sonnet-4-6
       - driver: openrouter
         api_model: anthropic/claude-sonnet-4.6
+      - driver: reliant
+        api_model: claude-sonnet-4-6
     default_thinking_level: medium
     default_temperature: 1.0
     default_compaction_threshold: 185000
@@ -401,6 +409,8 @@ models:
         api_model: claude-sonnet-4-5-20250929
       - driver: openrouter
         api_model: anthropic/claude-sonnet-4.5
+      - driver: reliant
+        api_model: claude-sonnet-4-5
     default_thinking_level: medium
     default_temperature: 1.0
     default_compaction_threshold: 185000
@@ -487,6 +497,8 @@ models:
         api_model: gemini-2.5-pro
       - driver: openrouter
         api_model: google/gemini-2.5-pro
+      - driver: reliant
+        api_model: gemini-2.5-pro
     default_thinking_level: high
     default_temperature: 1.0
     default_compaction_threshold: 900000
@@ -517,7 +529,8 @@ models:
         api_model: claude-haiku-4-5-20251001
       - driver: openrouter
         api_model: anthropic/claude-haiku-4.5
-    default_thinking_level: low
+      - driver: reliant
+        api_model: claude-haiku-4-5
     default_temperature: 1.0
     default_compaction_threshold: 185000
 
@@ -574,9 +587,29 @@ models:
         api_model: gemini-3-flash-preview
       - driver: openrouter
         api_model: google/gemini-3-flash-preview
-    default_thinking_level: low
+      - driver: reliant
+        api_model: gemini-3-flash-preview
     default_temperature: 1.0
     default_compaction_threshold: 900000
+
+  - id: gemini-3.1-flash-lite-preview
+    name: Gemini 3.1 Flash-Lite Preview
+    tags: [cheap, fast]
+    visibility: user
+    capabilities:
+      can_reason: false
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: false
+      max_context_window: 1048576
+      max_output_tokens: 65536
+    cost:
+      input_per_1m: 0.25
+      output_per_1m: 1.5
+    providers:
+      - driver: gemini
+        api_model: gemini-3.1-flash-lite-preview
 
   - id: gemini-2.5-flash
     name: Gemini 2.5 Flash
@@ -599,7 +632,8 @@ models:
         api_model: gemini-2.5-flash
       - driver: openrouter
         api_model: google/gemini-2.5-flash
-    default_thinking_level: low
+      - driver: reliant
+        api_model: gemini-2.5-flash
     default_temperature: 1.0
     default_compaction_threshold: 900000
 
@@ -610,8 +644,8 @@ models:
 
   - id: gemini-2.5-flash-lite
     name: Gemini 2.5 Flash Lite
-    tags: [cheap, meta]
-    visibility: meta
+    tags: [cheap, fast]
+    visibility: user
     capabilities:
       can_reason: false
       supports_tools: true
@@ -629,7 +663,8 @@ models:
         api_model: gemini-2.5-flash-lite
       - driver: openrouter
         api_model: google/gemini-2.5-flash-lite
-    default_thinking_level: low
+      - driver: reliant
+        api_model: gemini-2.5-flash-lite
     default_temperature: 1.0
     default_compaction_threshold: 900000
 
@@ -651,7 +686,6 @@ models:
     providers:
       - driver: xai
         api_model: grok-3-mini-beta
-    default_thinking_level: low
     default_temperature: 1.0
     default_compaction_threshold: 115000
 
@@ -729,7 +763,6 @@ models:
     providers:
       - driver: vertexai
         api_model: claude-haiku-4-5@20250512
-    default_thinking_level: low
     default_temperature: 1.0
     default_compaction_threshold: 185000
 
@@ -776,7 +809,6 @@ models:
     providers:
       - driver: vertexai
         api_model: gemini-2.5-flash
-    default_thinking_level: low
     default_temperature: 1.0
     default_compaction_threshold: 900000
 
@@ -803,7 +835,6 @@ models:
     providers:
       - driver: mock
         api_model: mock-model
-    default_thinking_level: low
     default_temperature: 1.0
     default_compaction_threshold: 115000
 
@@ -825,7 +856,6 @@ models:
     providers:
       - driver: mock
         api_model: tiny-context
-    default_thinking_level: low
     default_temperature: 1.0
     default_compaction_threshold: 900
 
@@ -847,6 +877,5 @@ models:
     providers:
       - driver: mock
         api_model: small-context
-    default_thinking_level: low
     default_temperature: 1.0
     default_compaction_threshold: 3600

@@ -21,8 +21,13 @@ CREATE INDEX IF NOT EXISTS idx_questions_chat_id ON questions(chat_id);
 CREATE INDEX IF NOT EXISTS idx_questions_workflow_id ON questions(workflow_id);
 CREATE INDEX IF NOT EXISTS idx_questions_status ON questions(status);
 
--- Recreate chats_with_activity view replacing yields with questions before dropping yields.
+-- Drop dependent view before dropping yields
 DROP VIEW IF EXISTS chats_with_activity;
+
+-- Drop yields table
+DROP TABLE IF EXISTS yields;
+
+-- Recreate chats_with_activity view replacing yields with questions
 CREATE VIEW chats_with_activity AS
 SELECT
     c.*,
@@ -55,9 +60,6 @@ SELECT
         ELSE 0  -- IDLE
     END as activity
 FROM chats c;
-
--- Drop yields table after removing dependent view references.
-DROP TABLE IF EXISTS yields;
 
 -- +goose Down
 DROP INDEX IF EXISTS idx_questions_status;

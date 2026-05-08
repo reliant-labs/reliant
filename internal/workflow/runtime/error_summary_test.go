@@ -51,6 +51,11 @@ func TestExtractLLMErrorSummary(t *testing.T) {
 			expected: "AI provider error: Something new",
 		},
 		{
+			name:     "local gcloud reauthentication guidance",
+			errMsg:   "failed to stream LLM response: LLM streaming error: litellm.APIConnectionError: Reauthentication is needed. Please run gcloud auth application-default login to reauthenticate.",
+			expected: "Local Google Cloud auth expired. Run `gcloud auth application-default login` and retry",
+		},
+		{
 			name:     "pattern match: timeout without JSON",
 			errMsg:   "context deadline exceeded: timeout waiting for LLM response",
 			expected: "Request to the AI provider timed out",
