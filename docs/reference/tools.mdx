@@ -620,6 +620,11 @@ or 'search' to find skills by keyword.
 When you load a skill, its instructions become available in the conversation.
 Skills may suggest tools to load — use the load_tool tool if suggested tools are needed.
 
+In multi-repo projects, skills are discovered recursively across all nested
+repos. Each skill's source repo is shown in brackets after its description
+(e.g. "[source: api]") and is reflected as a prefix on its path
+(e.g. "api/deploy" vs "web/deploy"). Use the prefixed path with 'load'.
+
 ---
 
 ### sourcegraph
