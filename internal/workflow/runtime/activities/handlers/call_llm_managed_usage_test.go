@@ -169,8 +169,8 @@ func TestReserveManagedReliantUsage_SendsManagedReliantEstimate(t *testing.T) {
 	if cp.reservation.EstimatedSpendUSD <= 0 {
 		t.Fatalf("estimated spend usd = %v, want > 0", cp.reservation.EstimatedSpendUSD)
 	}
-	if cp.reservation.CanonicalModelID != "anthropic/claude-sonnet-4-5" {
-		t.Fatalf("canonical model id = %q, want anthropic/claude-sonnet-4-5", cp.reservation.CanonicalModelID)
+	if cp.reservation.CanonicalModelID != "claude-sonnet-4-5" {
+		t.Fatalf("canonical model id = %q, want claude-sonnet-4-5", cp.reservation.CanonicalModelID)
 	}
 }
 
@@ -222,8 +222,8 @@ func TestCompleteManagedReliantReservation_FinalizesManagedSpend(t *testing.T) {
 	if cp.finalize.InputTokens != 1000 || cp.finalize.OutputTokens != 2000 || cp.finalize.CachedInputTokens != 150 {
 		t.Fatalf("unexpected token usage payload: %+v", cp.finalize)
 	}
-	if cp.finalize.CanonicalModelID != "anthropic/claude-sonnet-4-5" {
-		t.Fatalf("canonical model id = %q, want anthropic/claude-sonnet-4-5", cp.finalize.CanonicalModelID)
+	if cp.finalize.CanonicalModelID != "claude-sonnet-4-5" {
+		t.Fatalf("canonical model id = %q, want claude-sonnet-4-5", cp.finalize.CanonicalModelID)
 	}
 }
 
@@ -315,8 +315,8 @@ func TestCompleteManagedReliantReservationForChat_UsesOverrideClient(t *testing.
 	if cp.finalizeCalls != 1 {
 		t.Fatalf("finalize calls = %d, want 1", cp.finalizeCalls)
 	}
-	if cp.finalize.CanonicalModelID != "anthropic/claude-sonnet-4-5" {
-		t.Fatalf("canonical model id = %q, want anthropic/claude-sonnet-4-5", cp.finalize.CanonicalModelID)
+	if cp.finalize.CanonicalModelID != "claude-sonnet-4-5" {
+		t.Fatalf("canonical model id = %q, want claude-sonnet-4-5", cp.finalize.CanonicalModelID)
 	}
 }
 

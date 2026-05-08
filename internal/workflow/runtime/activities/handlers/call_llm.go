@@ -302,11 +302,17 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		legacyModel = probeDriver.Model()
 		modelIDWithDriver = string(legacyModel.ID)
 		canonicalModelID = managedReliantCanonicalModelID(string(legacyModel.ID), requestedCanonicalModelID)
-		// For injected resolvers, use arg values directly (no model defaults available)
+		// For injected resolvers, use arg values directly (no model defaults available).
+		// Still reconcile against the probed model capabilities so non-reasoning
+		// injected drivers don't receive unsupported reasoning options.
 		effectiveTemperature = celDoubleValuePtr(args.GetTemperature())
 		if model.CelStringIsSet(args.GetThinkingLevel()) && !model.CelStringIsExpr(args.GetThinkingLevel()) {
 			effectiveThinkingLevel = model.CelStringValue(args.GetThinkingLevel())
 		}
+		effectiveThinkingLevel = models.ReconcileThinkingLevel(
+			models.ResolveThinkingCapability(models.ModelCapabilities{CanReason: legacyModel.CanReason}),
+			effectiveThinkingLevel,
+		)
 		activity.GetLogger(ctx).Info("[CallLLM] Using injected driver resolver",
 			"modelID", legacyModel.ID)
 	} else {
