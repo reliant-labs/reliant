@@ -14,8 +14,6 @@ import type {
   OnboardingIntent,
   StepProps,
 } from "../types";
-import { useOnboardingFlowStore } from "../onboardingStore";
-
 type LaunchOption = {
   intent: OnboardingIntent;
   icon: LucideIcon;
@@ -49,7 +47,7 @@ const LAUNCH_OPTIONS: LaunchOption[] = [
     },
     initialPrompt:
       "Help me scope a new Forge app. Ask the key product and design questions, then create the initial plan.",
-    launchTour: true,
+    launchTour: false,
     badge: "Recommended",
   },
   {
@@ -66,7 +64,7 @@ const LAUNCH_OPTIONS: LaunchOption[] = [
     },
     initialPrompt:
       "Explore this codebase and summarize the architecture, key files, and the safest first improvements.",
-    launchTour: true,
+    launchTour: false,
   },
   {
     intent: "landing_page",
@@ -89,7 +87,7 @@ const LAUNCH_OPTIONS: LaunchOption[] = [
     },
     initialPrompt:
       "Create a polished landing page. Ask for the product, audience, and visual direction if missing, then implement it end-to-end.",
-    launchTour: true,
+    launchTour: false,
   },
   {
     intent: "pitch_deck",
@@ -106,7 +104,7 @@ const LAUNCH_OPTIONS: LaunchOption[] = [
     },
     initialPrompt:
       "Help me create an investor pitch deck. Ask for the company URL and any missing context before starting.",
-    launchTour: true,
+    launchTour: false,
   },
   {
     intent: "blog_post",
@@ -127,7 +125,7 @@ const LAUNCH_OPTIONS: LaunchOption[] = [
     },
     initialPrompt:
       "Help me draft a high-quality technical article or documentation page. Ask for topic, audience, and source material if missing.",
-    launchTour: true,
+    launchTour: false,
   },
   {
     intent: "explore",
@@ -146,9 +144,7 @@ const LAUNCH_OPTIONS: LaunchOption[] = [
   },
 ];
 
-export function GoalStep({ plan }: StepProps) {
-  const updatePlanAndAdvance = useOnboardingFlowStore((s) => s.updatePlanAndAdvance);
-
+export function GoalStep({ plan, updatePlan, onNext }: StepProps) {
   const handleSelect = (option: LaunchOption) => {
     const codeSource =
       option.intent === "existing_codebase" && plan.compute === "cloud_free_trial"
@@ -160,7 +156,7 @@ export function GoalStep({ plan }: StepProps) {
       repo: undefined,
     };
 
-    updatePlanAndAdvance({
+    updatePlan({
       ...resetProjectContext,
       intent: option.intent,
       workflowId: option.workflowId,
@@ -171,8 +167,9 @@ export function GoalStep({ plan }: StepProps) {
       workflowParams: option.workflowParams,
       selectedPresets: option.selectedPresets,
       initialPrompt: option.initialPrompt,
-      launchTour: option.launchTour ?? true,
+      launchTour: option.launchTour ?? false,
     });
+    onNext();
   };
 
   return (

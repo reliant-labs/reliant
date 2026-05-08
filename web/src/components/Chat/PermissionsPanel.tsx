@@ -1,23 +1,22 @@
-import { useChatStore } from '../../store/chatStore';
 import { useCallback } from 'react';
 import { Shield } from 'lucide-react';
 import { ApprovalActions } from './ApprovalActions';
-import type { ToolApprovalRequest } from '../../api/client';
-
-// Stable empty array to prevent re-renders
-const EMPTY_ARRAY: ToolApprovalRequest[] = [];
+import { useActiveChatId } from '../../store/chatStoreHooks';
+import { usePendingApprovals, useBatchApprove, useBatchDeny } from '../../hooks/approval-queries';
 
 interface PermissionsPanelProps {
   chatId?: string; // Allow passing chatId for command center mode
 }
 
 export function PermissionsPanel({ chatId: propsChatId }: PermissionsPanelProps = {}) {
-  const activeChatId = useChatStore((state) => state.activeChatId);
-  const approveAllPending = useChatStore((state) => state.approveAllPending);
-  const denyAllPending = useChatStore((state) => state.denyAllPending);
-
-  // Use props chatId if provided (command center mode), otherwise use activeChatId
+  const activeChatId = useActiveChatId();
   const chatId = propsChatId || activeChatId;
+
+  const pendingApprovalsQuery = usePendingApprovals(chatId ?? undefined);
+  const pendingApprovals = pendingApprovalsQuery.data ?? [];
+
+  const batchApproveMutation = useBatchApprove();
+  const batchDenyMutation = useBatchDeny();
   
   // Detect platform for keyboard shortcut hint
   const isMac = typeof window !== 'undefined' && 
@@ -25,25 +24,21 @@ export function PermissionsPanel({ chatId: propsChatId }: PermissionsPanelProps 
      window.navigator.userAgent.toUpperCase().includes('MAC'));
   const shortcutKey = isMac ? '⌘' : 'Ctrl';
 
-  // Use memoized selector to ensure Zustand properly tracks state changes
-  const pendingApprovalsSelector = useCallback(
-    (state: ReturnType<typeof useChatStore.getState>) =>
-      (chatId ? state.pendingApprovals[chatId] : undefined) || EMPTY_ARRAY,
-    [chatId]
-  );
-  const pendingApprovals = useChatStore(pendingApprovalsSelector);
-
   const handleApprove = useCallback(() => {
-    if (chatId) {
-      approveAllPending(chatId);
+    if (chatId && pendingApprovals.length > 0) {
+      batchApproveMutation.mutate({
+        requestIds: pendingApprovals.map((a) => a.id),
+      });
     }
-  }, [chatId, approveAllPending]);
+  }, [chatId, pendingApprovals, batchApproveMutation]);
 
   const handleDeny = useCallback(() => {
-    if (chatId) {
-      denyAllPending(chatId);
+    if (chatId && pendingApprovals.length > 0) {
+      batchDenyMutation.mutate({
+        requestIds: pendingApprovals.map((a) => a.id),
+      });
     }
-  }, [chatId, denyAllPending]);
+  }, [chatId, pendingApprovals, batchDenyMutation]);
 
   // Only show permissions panel if there are pending approvals
   // The backend determines whether approvals are created based on workflow params

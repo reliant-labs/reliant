@@ -26,7 +26,7 @@ import { Workflow, Sparkles, Settings2 } from "lucide-react";
 import { useOnboardingChecklistStore } from "../../store/onboardingChecklistStore";
 import { useViewerStore } from "../../store/viewerStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
-import { useOnboardingFlowStore } from "../OnboardingFlow/onboardingStore";
+
 import {
   ONBOARDING_STEPS,
   getStepById,
@@ -324,9 +324,6 @@ export function OnboardingWizard() {
 
   const isWorkflowMode = useViewerStore((s) => s.isWorkflowMode);
   const isSettingsMode = useViewerStore((s) => s.isSettingsMode);
-  const onboardingFlowState = useOnboardingFlowStore((s) => s.state);
-  const onboardingSetupComplete = onboardingFlowState === "completed";
-
   // Load state on mount
   useEffect(() => {
     if (!isInitialized) {
@@ -444,7 +441,6 @@ export function OnboardingWizard() {
 
   // Phase 2: Show checklist after setup if not dismissed (only on main chat page)
   if (
-    onboardingSetupComplete &&
     panelState !== "dismissed" &&
     !isWorkflowMode &&
     !isSettingsMode

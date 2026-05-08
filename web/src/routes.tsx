@@ -71,6 +71,10 @@ const verifyEmailRoute = createRoute({
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
+  validateSearch: (search: Record<string, unknown>) => ({
+    step: (search.step as string) || undefined,
+    'reset-onboarding': search['reset-onboarding'] !== undefined ? true : undefined,
+  }),
   component: () => (
     <AuthGuard requireAuth={true} requireEmailVerification={true}>
       <App />

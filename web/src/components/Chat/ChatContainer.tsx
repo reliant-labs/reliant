@@ -11,15 +11,17 @@ import { ChatPresenter } from "./ChatPresenter";
 import {
   useChat,
   useChatMessages,
-  useChatApprovals,
   useErrorEvents,
   useInfoEvents,
   useRunOutputs,
-  usePendingApprovals,
-  usePendingQuestion,
   useStreamingMessages,
   useDiscussMode,
 } from "../../store/chatStoreHooks";
+import {
+  usePendingApprovals,
+  useApprovals,
+  usePendingQuestion,
+} from "../../hooks/approval-queries";
 import { useGlobalUpdatesStore } from "../../store/globalUpdatesStore";
 import { useIsChatRunning } from "../../store/activityStore";
 import { useChatStore } from "../../store/chatStore";
@@ -76,16 +78,17 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
     return msgs;
   }, [storeMessages, streamingMessages]);
 
-  const approvals = useChatApprovals(chatId);
+  const { data: approvals = [] } = useApprovals(chatId);
   const errorEvents = useErrorEvents(chatId);
   const infoEvents = useInfoEvents(chatId);
   const runOutputs = useRunOutputs(chatId);
   const currentChat = useChat(chatId);
   const connectionStatus = useGlobalUpdatesStore((s) => s.connectionStatus);
   const isChatBusy = useIsChatRunning(chatId);
-  const pendingApprovals = usePendingApprovals(chatId);
+  const { data: pendingApprovals = [] } = usePendingApprovals(chatId);
   const isDiscussMode = useDiscussMode(chatId);
-  const pendingQuestion = usePendingQuestion(chatId);
+  const { data: pendingQuestion } = usePendingQuestion(chatId);
+  const currentActivity = useChatCurrentActivity(chatId);
 
   // Process messages: sort by ordinal and filter out agent messages
   const processedMessages = useMemo(() => {
@@ -192,8 +195,6 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
     if (currentChatId) {
       logger.info("🛑 Calling pauseChat API...");
       try {
-        // Stop streaming immediately for UI responsiveness
-        useChatStore.getState().stopStreaming(currentChatId);
         await useChatStore.getState().pauseChat(currentChatId);
         logger.info("✅ pauseChat API call completed");
       } catch (error) {

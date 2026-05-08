@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { create } from "@bufbuild/protobuf";
 import { Check, Cloud, Copy, Download, Loader2, Monitor } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -6,15 +6,21 @@ import { getIsDev } from "@/lib/constants";
 import { grpcClient } from "@/api/grpc-client";
 import { CreateDaemonTokenRequestSchema } from "@/gen/reliant/v1/tools_daemon_pb";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
+import { useEventBus } from "@/lib/event-context";
+import {
+  useCloudEligibility,
+  useDaemonList,
+  useCreateDaemon,
+  useResumeDaemon,
+} from "@/hooks/useOnboardingQueries";
+import { hasActiveDaemon, getFirstDaemonId } from "../api";
 import type { CodeSource, ComputeChoice, OnboardingIntent, StepProps } from "../types";
-import { createDaemon, getCurrentUser, getFirstDaemonId, hasActiveDaemon, hasReliantCreditEligibility, listDaemons, resumeDaemon } from "../api";
 import { DaemonConnectionDiagrams } from "../DaemonConnectionDiagrams";
 
 const DOWNLOAD_BASE =
   import.meta.env.VITE_DOWNLOAD_BASE_URL || "https://downloads.reliantlabs.io";
-const HAS_CLOUD_WORKSPACES = Boolean(
-  import.meta.env.VITE_CONTROL_PLANE_API_URL,
-);
+import { hasControlPlane } from "../api";
+const HAS_CLOUD_WORKSPACES = hasControlPlane;
 const DAEMON_TYPE_MANAGED = 1;
 const DAEMON_SIZE_SMALL = 1;
 
@@ -102,49 +108,27 @@ export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
     plan.compute === "local_daemon",
   );
   const [showOtherPlatforms, setShowOtherPlatforms] = useState(false);
-  const [startingCloud, setStartingCloud] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pat, setPat] = useState<string | null>(null);
   const [generatingPat, setGeneratingPat] = useState(false);
   const [patCopied, setPatCopied] = useState(false);
   const { activeDaemon } = useDaemonStatus();
-  const [cloudStatus, setCloudStatus] = useState<{
-    eligible: boolean;
-    reason: string | null;
-    loading: boolean;
-  }>({ eligible: HAS_CLOUD_WORKSPACES, reason: null, loading: HAS_CLOUD_WORKSPACES });
+  const events = useEventBus();
 
-  useEffect(() => {
-    if (!HAS_CLOUD_WORKSPACES) return;
-    if (getIsDev()) {
-      setCloudStatus({ eligible: true, reason: null, loading: false });
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const { user } = await getCurrentUser();
-        if (cancelled) return;
-        if (!user) {
-          setCloudStatus({ eligible: false, reason: "Sign up required to use cloud daemons.", loading: false });
-        } else if (user.ipRestricted === true || user.ipAllowed === false) {
-          setCloudStatus({ eligible: false, reason: "Cloud daemons are not available from your current network.", loading: false });
-        } else if (user.globalBudgetAvailable === false || user.budgetAvailable === false) {
-          setCloudStatus({ eligible: false, reason: "Your plan's cloud budget has been reached.", loading: false });
-        } else if (!hasReliantCreditEligibility(user)) {
-          setCloudStatus({ eligible: false, reason: "No cloud credits available. Upgrade your plan to continue.", loading: false });
-        } else {
-          setCloudStatus({ eligible: true, reason: null, loading: false });
-        }
-      } catch {
-        if (!cancelled) {
-          // Can't reach control plane — allow attempt anyway
-          setCloudStatus({ eligible: true, reason: null, loading: false });
-        }
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+  // Cloud eligibility via React Query
+  const isDev = getIsDev();
+  const {
+    eligible: cloudEligible,
+    reason: cloudReason,
+    isLoading: cloudLoading,
+  } = useCloudEligibility();
+  const eligible = isDev ? true : cloudEligible;
+  const reason = isDev ? null : cloudReason;
+  const loading = isDev ? false : cloudLoading;
+
+  // Daemon mutations via React Query
+  const createDaemonMutation = useCreateDaemon();
+  const resumeDaemonMutation = useResumeDaemon();
 
   const detectedOS = useMemo(() => getOS(), []);
   const primaryDownload = useMemo(
@@ -156,14 +140,25 @@ export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
     [primaryDownload],
   );
 
+  const startingCloud = createDaemonMutation.isPending || resumeDaemonMutation.isPending;
+
   const handleCloud = async () => {
     if (!HAS_CLOUD_WORKSPACES) return;
 
-    setStartingCloud(true);
     setError(null);
     try {
-      const existing = await listDaemons();
-      const daemons = existing.daemons;
+      // Fetch daemons inline — we need fresh data for the decision tree
+      const { queryClient } = await import("@/lib/query-client");
+      const { listDaemons } = await import("../api");
+      const existing = await queryClient.fetchQuery({
+        queryKey: ["onboarding", "daemons"],
+        queryFn: async () => {
+          const { daemons } = await listDaemons();
+          return daemons;
+        },
+        staleTime: 0,
+      });
+      const daemons = existing;
 
       if (hasActiveDaemon(daemons)) {
         // Active daemon already exists — reuse it, skip creation
@@ -186,7 +181,7 @@ export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
           throw new Error("Found existing daemon but could not determine its ID. Please try again.");
         }
         try {
-          await resumeDaemon(daemonId);
+          await resumeDaemonMutation.mutateAsync(daemonId);
         } catch (resumeErr) {
           console.warn("resumeDaemon failed, proceeding with provisioning state:", resumeErr);
         }
@@ -204,7 +199,7 @@ export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
 
       // No daemons at all — create a new one
       try {
-        await createDaemon({
+        await createDaemonMutation.mutateAsync({
           name: "onboarding-workspace",
           daemonType: DAEMON_TYPE_MANAGED,
           size: DAEMON_SIZE_SMALL,
@@ -215,11 +210,12 @@ export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
         const message = err instanceof Error ? err.message.toLowerCase() : "";
         if (message.includes("plan limit") || message.includes("already") || message.includes("exists")) {
           // Plan limit or already exists — try to find and resume existing daemon
-          const fallback = await listDaemons();
+          const { listDaemons: listDaemonsFallback } = await import("../api");
+          const fallback = await listDaemonsFallback();
           const fallbackId = getFirstDaemonId(fallback.daemons);
           if (fallbackId) {
             try {
-              await resumeDaemon(fallbackId);
+              await resumeDaemonMutation.mutateAsync(fallbackId);
             } catch (resumeErr) {
               console.warn("Fallback resumeDaemon failed, proceeding:", resumeErr);
             }
@@ -239,11 +235,9 @@ export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
       });
       onNext();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to start hosted daemon",
-      );
-    } finally {
-      setStartingCloud(false);
+      const msg = err instanceof Error ? err.message : "Failed to start hosted daemon";
+      setError(msg);
+      events.emit("toast:show", { message: msg, variant: "error" });
     }
   };
 
@@ -280,9 +274,9 @@ export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
         );
       setPat(res.token);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Failed to generate access token",
-      );
+      const msg = err instanceof Error ? err.message : "Failed to generate access token";
+      setError(msg);
+      events.emit("toast:show", { message: msg, variant: "error" });
     } finally {
       setGeneratingPat(false);
     }
@@ -347,25 +341,25 @@ export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
           <button
             type="button"
             onClick={handleCloud}
-            disabled={startingCloud || !HAS_CLOUD_WORKSPACES || !cloudStatus.eligible || cloudStatus.loading}
+            disabled={startingCloud || !HAS_CLOUD_WORKSPACES || !eligible || loading}
             className={cn(
               "inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors",
-              startingCloud || !HAS_CLOUD_WORKSPACES || !cloudStatus.eligible || cloudStatus.loading
+              startingCloud || !HAS_CLOUD_WORKSPACES || !eligible || loading
                 ? "cursor-not-allowed bg-muted text-muted-foreground"
                 : "bg-sky-600 text-white shadow-sm shadow-sky-600/20 hover:bg-sky-500",
             )}
           >
-            {(startingCloud || cloudStatus.loading) && <Loader2 className="h-4 w-4 animate-spin" />}
-            {startingCloud ? "Requesting daemon..." : cloudStatus.loading ? "Checking availability..." : "Start cloud daemon"}
+            {(startingCloud || loading) && <Loader2 className="h-4 w-4 animate-spin" />}
+            {startingCloud ? "Requesting daemon..." : loading ? "Checking availability..." : "Start cloud daemon"}
           </button>
-          {(!HAS_CLOUD_WORKSPACES || (!cloudStatus.eligible && cloudStatus.reason)) && (
+          {(!HAS_CLOUD_WORKSPACES || (!eligible && reason)) && (
             <div className="space-y-1.5">
               <p className="text-xs leading-relaxed text-muted-foreground">
                 {!HAS_CLOUD_WORKSPACES
                   ? 'Cloud daemons are unavailable because this environment is not configured for cloud mode. Choose "I\'ll connect my own" to continue.'
-                  : cloudStatus.reason}
+                  : reason}
               </p>
-              {HAS_CLOUD_WORKSPACES && !cloudStatus.eligible && (
+              {HAS_CLOUD_WORKSPACES && !eligible && (
                 <a
                   href="https://reliantlabs.io/pricing"
                   target="_blank"

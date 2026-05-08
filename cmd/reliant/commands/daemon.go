@@ -328,6 +328,9 @@ Credential resolution order:
 
 			// Write PID file for `daemon stop`
 			pidFile := filepath.Join(dataDir, "daemon.pid")
+			if err := os.MkdirAll(filepath.Dir(pidFile), 0755); err != nil {
+				return fmt.Errorf("creating PID file directory: %w", err)
+			}
 			if err := os.WriteFile(pidFile, []byte(strconv.Itoa(os.Getpid())), 0644); err != nil {
 				return fmt.Errorf("writing PID file: %w", err)
 			}
@@ -456,7 +459,7 @@ Credential resolution order:
 	cmd.Flags().BoolVar(&background, "background", false, "Run daemon in background (detached)")
 	cmd.Flags().StringVar(&tlsCert, "tls-cert", envOrDefault("TLS_CERT_FILE", ""), "TLS certificate file path")
 	cmd.Flags().StringVar(&tlsKey, "tls-key", envOrDefault("TLS_KEY_FILE", ""), "TLS key file path")
-	cmd.Flags().StringVar(&tlsMode, "tls-mode", envOrDefault("DAEMON_TLS_MODE", ""), "TLS mode (tls, insecure_tls_skip_verify, or h2c)")
+	cmd.Flags().StringVar(&tlsMode, "tls-mode", envOrDefault("DAEMON_TLS_MODE", ""), "TLS mode (tls, insecure_tls_skip_verify, h2c, or disabled)")
 	cmd.Flags().BoolVar(&useToken, "token", false, "Read a PAT from stdin and use it as the daemon credential")
 	cmd.Flags().StringVar(&daemonName, "name", "", "Human-friendly daemon name (default: hostname)")
 	cmd.Flags().BoolVar(&serverMode, "server-mode", envOrDefault("DAEMON_SERVER_MODE", "") == "true", "Listen for incoming gateway connections instead of dialing out")

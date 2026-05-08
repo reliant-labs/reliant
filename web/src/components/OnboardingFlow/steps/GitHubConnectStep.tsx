@@ -1,23 +1,22 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { Github, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProjectStore } from "@/store/projectStore";
 import type { Project } from "@/store/projectStore";
+// TODO: migrate to useAuth() once AuthUser exposes `identities` and identity-linking methods (linkGithubAccount, signInWithGithub)
 import { useAuthStore } from "@/store/authStore";
-import { toast } from "@/lib/toast-manager";
+import { useEventBus } from "@/lib/event-context";
+import { useGitRepos, useCloneRepo } from "@/hooks/useOnboardingQueries";
 import type { StepProps } from "../types";
 import {
-  cloneRepo,
   getActiveDaemonName,
   listDaemons,
-  listGitRepos,
 } from "../api";
 import type { GitRepo } from "../api";
 
 type Phase = "connect" | "picker" | "confirm";
 
-const PER_PAGE = 20;
 const CLOUD_PROJECT_ROOT = "/home/workspace/projects";
 
 function slugify(value: string): string {
@@ -67,8 +66,12 @@ export function GitHubConnectStep({ plan, updatePlan, onNext, onBack }: StepProp
   const loadProjects = useProjectStore((state) => state.loadProjects);
   const projects = useProjectStore((state) => state.projects);
 
+  // TODO: migrate to useAuth() once AuthUser exposes `identities` and identity-linking methods
   const user = useAuthStore((state) => state.user);
   const linkGithubAccount = useAuthStore((state) => state.linkGithubAccount);
+  const signInWithGithub = useAuthStore((state) => state.signInWithGithub);
+
+  const eventBus = useEventBus();
 
   const hasGithub = useMemo(
     () => user?.identities?.some((i) => i.provider === "github") ?? false,
@@ -79,18 +82,24 @@ export function GitHubConnectStep({ plan, updatePlan, onNext, onBack }: StepProp
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState("");
 
-  // Repo picker state
-  const [repos, setRepos] = useState<GitRepo[]>([]);
-  const [reposLoading, setReposLoading] = useState(false);
-  const [reposError, setReposError] = useState("");
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(false);
+  // Repo picker state (via React Query)
+  const {
+    data: reposData,
+    isLoading: reposLoading,
+    error: reposQueryError,
+    refetch: fetchRepos,
+  } = useGitRepos();
+  const repos = reposData?.repos ?? [];
+  const reposError = reposQueryError instanceof Error ? reposQueryError.message : "";
+
   const [search, setSearch] = useState("");
   const [selectedRepo, setSelectedRepo] = useState<GitRepo | null>(null);
 
   // Confirmation state
   const [branch, setBranch] = useState("");
-  const [cloning, setCloning] = useState(false);
+
+  // Clone mutation (via React Query)
+  const cloneRepoMutation = useCloneRepo();
 
   // When GitHub identity appears (after OAuth callback), transition to picker
   useEffect(() => {
@@ -98,8 +107,6 @@ export function GitHubConnectStep({ plan, updatePlan, onNext, onBack }: StepProp
       setPhase("picker");
     }
   }, [hasGithub, phase]);
-
-  const signInWithGithub = useAuthStore((state) => state.signInWithGithub);
 
   const handleConnect = async () => {
     setConnecting(true);
@@ -130,26 +137,10 @@ export function GitHubConnectStep({ plan, updatePlan, onNext, onBack }: StepProp
     }
   };
 
-  const fetchRepos = useCallback(async (pageNum: number, append: boolean) => {
-    setReposLoading(true);
-    setReposError("");
-    try {
-      const res = await listGitRepos(pageNum, PER_PAGE, "updated");
-      setRepos(prev => append ? [...prev, ...res.repos] : res.repos);
-      setHasMore(res.hasMore);
-      setPage(pageNum);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to load repos";
-      setReposError(msg);
-    } finally {
-      setReposLoading(false);
-    }
-  }, []);
-
   // Load repos when entering picker phase
   useEffect(() => {
     if (phase === "picker" && repos.length === 0 && !reposLoading) {
-      fetchRepos(1, false);
+      fetchRepos();
     }
   }, [phase, repos.length, reposLoading, fetchRepos]);
 
@@ -182,7 +173,6 @@ export function GitHubConnectStep({ plan, updatePlan, onNext, onBack }: StepProp
     const selectedBranch = branch.trim() || selectedRepo.defaultBranch || "main";
     const projectPath = cloudPathForRepo(selectedRepo);
     const projectName = repoNameFromUrl(selectedRepo.cloneUrl) || selectedRepo.fullName;
-    setCloning(true);
     setError("");
 
     try {
@@ -205,7 +195,7 @@ export function GitHubConnectStep({ plan, updatePlan, onNext, onBack }: StepProp
         throw new Error("Hosted workspace is still starting. Try again in a moment.");
       }
 
-      const result = await cloneRepo({
+      const result = await cloneRepoMutation.mutateAsync({
         daemonName,
         gitRepo: selectedRepo.cloneUrl,
         gitBranch: selectedBranch,
@@ -213,7 +203,10 @@ export function GitHubConnectStep({ plan, updatePlan, onNext, onBack }: StepProp
         accountLogin: selectedRepo.accountLogin,
       });
       const clonedPath = result.clonedPath;
-      const loadingToast = toast.loading(`Opening project "${projectName}"...`);
+      eventBus.emit("toast:show", {
+        message: `Opening project "${projectName}"...`,
+        variant: "info",
+      });
 
       try {
         const createdProject = await createProject({
@@ -223,11 +216,9 @@ export function GitHubConnectStep({ plan, updatePlan, onNext, onBack }: StepProp
           is_git_repo: true,
           default_branch: selectedBranch,
         });
-        toast.dismiss(loadingToast);
         await loadProjects();
         await useProjectStore.getState().selectProject(createdProject);
       } catch (projectError) {
-        toast.dismiss(loadingToast);
         if (!isAlreadyExistsError(projectError)) {
           throw projectError;
         }
@@ -253,10 +244,10 @@ export function GitHubConnectStep({ plan, updatePlan, onNext, onBack }: StepProp
       onNext();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to clone repository");
-    } finally {
-      setCloning(false);
     }
   };
+
+  const cloning = cloneRepoMutation.isPending;
 
   // -- Phase: Connect GitHub via OAuth --
 
@@ -440,17 +431,6 @@ export function GitHubConnectStep({ plan, updatePlan, onNext, onBack }: StepProp
               </div>
             )}
           </div>
-
-          {/* Load more */}
-          {hasMore && !reposLoading && (
-            <button
-              type="button"
-              onClick={() => fetchRepos(page + 1, true)}
-              className="w-full rounded-lg border border-border/40 py-2 text-center text-sm font-medium text-muted-foreground hover:bg-muted/50 transition-colors"
-            >
-              Load more
-            </button>
-          )}
         </div>
 
         <button

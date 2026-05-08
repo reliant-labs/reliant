@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { Archive, RefreshCw, Loader2, RotateCcw, Calendar, FolderGit2, Trash2 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useWorktreeStore, type Worktree } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
-import { useChatStore } from "../../store/chatStore";
+import { useChatList } from "../../hooks/chat-queries";
 import { Button } from "../ui/Button";
 import { DeleteWorktreeModal } from "./DeleteWorktreeModal";
 import { workspaceButton } from "./workspaceStyles";
@@ -20,8 +20,7 @@ export function ArchivedWorktreesPanel({ paddingClass = "" }: ArchivedWorktreesP
   const unarchiveWorktree = useWorktreeStore((state) => state.unarchiveWorktree);
   const isLoading = useWorktreeStore((state) => state.isLoading);
   const currentProject = useProjectStore((state) => state.currentProject);
-  const chatsMap = useChatStore((state) => state.chats);
-  const chats = useMemo(() => Array.from(chatsMap.values()), [chatsMap]);
+  const { data: chats = [] } = useChatList(currentProject?.id);
   const [unarchivingId, setUnarchivingId] = useState<string | null>(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [worktreeToDelete, setWorktreeToDelete] = useState<Worktree | null>(null);

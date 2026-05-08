@@ -348,6 +348,13 @@ function initializeStatsig() {
   });
 
   // Initialize Statsig client for analytics
+  // Disable in non-production environments
+  const nodeEnv = process.env.NODE_ENV || "production";
+  if (nodeEnv !== "production") {
+    log.info("[Statsig] Disabled in non-production environment", { NODE_ENV: nodeEnv });
+    return;
+  }
+
   if (analyticsEnabled) {
     // Get user ID from stored auth session
     let userID = 'anonymous';

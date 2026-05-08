@@ -1,19 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Copy, FileX, FolderGit2, FolderX, Info, Trash2 } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { useSettingsStore, type WorktreeArchiveMode } from "../../store/settingsStore";
+import { usePreferences, useUpdatePreferences, useUpdateWorktreePreferences, type WorktreeArchiveMode } from "../../hooks/settings-queries";
 import { Toggle } from "../ui/Toggle";
 
 export function WorktreeSettings() {
-  const preferences = useSettingsStore((state) => state.preferences);
-  const updateWorktreePreferences = useSettingsStore((state) => state.updateWorktreePreferences);
-  const updatePreferences = useSettingsStore((state) => state.updatePreferences);
-  const loadPreferences = useSettingsStore((state) => state.loadPreferences);
+  const { data: preferences } = usePreferences();
+  const updateWorktreePrefs = useUpdateWorktreePreferences();
+  const updatePrefs = useUpdatePreferences();
   const [isSaving, setIsSaving] = useState(false);
-
-  useEffect(() => {
-    loadPreferences();
-  }, [loadPreferences]);
 
   const updateSafely = async (update: () => Promise<void>) => {
     setIsSaving(true);
@@ -25,7 +20,7 @@ export function WorktreeSettings() {
   };
 
   const handleModeChange = (mode: WorktreeArchiveMode) => {
-    updateSafely(() => updateWorktreePreferences({ archiveMode: mode }));
+    updateSafely(() => updateWorktreePrefs.mutateAsync({ archiveMode: mode }));
   };
 
   const modes: Array<{
@@ -74,7 +69,7 @@ export function WorktreeSettings() {
 
         <div className="grid gap-2 sm:grid-cols-3">
           {modes.map((mode) => {
-            const isSelected = preferences.worktree.archiveMode === mode.value;
+            const isSelected = preferences?.worktree.archiveMode === mode.value;
 
             return (
               <label
@@ -113,18 +108,18 @@ export function WorktreeSettings() {
           })}
         </div>
 
-        {preferences.worktree.archiveMode === "always_cleanup" && (
+        {preferences?.worktree.archiveMode === "always_cleanup" && (
           <div className="mt-4 space-y-2 rounded-xl border border-border/60 bg-background p-3">
             <PreferenceToggleRow
               icon={<FolderX className="h-4 w-4" />}
               title="Delete workspace directory"
               description="Remove files from ~/.reliant/worktrees when archiving."
-              checked={preferences.worktree.defaultDeleteDirectory}
+              checked={preferences?.worktree.defaultDeleteDirectory ?? true}
               disabled={isSaving}
               onChange={() =>
                 updateSafely(() =>
-                  updateWorktreePreferences({
-                    defaultDeleteDirectory: !preferences.worktree.defaultDeleteDirectory,
+                  updateWorktreePrefs.mutateAsync({
+                    defaultDeleteDirectory: !preferences?.worktree.defaultDeleteDirectory,
                   })
                 )
               }
@@ -133,13 +128,13 @@ export function WorktreeSettings() {
               icon={<Trash2 className="h-4 w-4" />}
               title="Delete git branch"
               description="Permanently remove the branch when cleanup runs."
-              checked={preferences.worktree.defaultDeleteBranch}
+              checked={preferences?.worktree.defaultDeleteBranch ?? false}
               disabled={isSaving}
-              warning={preferences.worktree.defaultDeleteBranch ? "Only enable this when branches are merged elsewhere." : undefined}
+              warning={preferences?.worktree.defaultDeleteBranch ? "Only enable this when branches are merged elsewhere." : undefined}
               onChange={() =>
                 updateSafely(() =>
-                  updateWorktreePreferences({
-                    defaultDeleteBranch: !preferences.worktree.defaultDeleteBranch,
+                  updateWorktreePrefs.mutateAsync({
+                    defaultDeleteBranch: !preferences?.worktree.defaultDeleteBranch,
                   })
                 )
               }
@@ -154,12 +149,12 @@ export function WorktreeSettings() {
             icon={<Copy className="h-4 w-4" />}
             title="Copy uncommitted files to new workspaces"
             description="Use this default when branching to a new workspace from local changes."
-            checked={preferences.worktree.branchCopyUncommittedFilesDefault}
+            checked={preferences?.worktree.branchCopyUncommittedFilesDefault ?? false}
             disabled={isSaving}
             onChange={() =>
               updateSafely(() =>
-                updateWorktreePreferences({
-                  branchCopyUncommittedFilesDefault: !preferences.worktree.branchCopyUncommittedFilesDefault,
+                updateWorktreePrefs.mutateAsync({
+                  branchCopyUncommittedFilesDefault: !preferences?.worktree.branchCopyUncommittedFilesDefault,
                 })
               )
             }
@@ -168,12 +163,12 @@ export function WorktreeSettings() {
             icon={<FileX className="h-4 w-4" />}
             title="Skip file delete confirmation"
             description="Delete files immediately. Undo is still available with Cmd+Z where supported."
-            checked={preferences.skipDeleteConfirmation}
+            checked={preferences?.skipDeleteConfirmation ?? false}
             disabled={isSaving}
             onChange={() =>
               updateSafely(() =>
-                updatePreferences({
-                  skipDeleteConfirmation: !preferences.skipDeleteConfirmation,
+                updatePrefs.mutateAsync({
+                  skipDeleteConfirmation: !preferences?.skipDeleteConfirmation,
                 })
               )
             }
