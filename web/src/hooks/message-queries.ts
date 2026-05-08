@@ -5,7 +5,6 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { api } from "../api/client";
-import type { Message } from "../types/chat";
 import { getEventBus } from "../lib/events";
 import { chatKeys } from "./chat-queries";
 
@@ -89,7 +88,7 @@ export function useCancelChat() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (chatId: string) => api.chatsV2.cancel(chatId),
-    onSuccess: (_data, chatId) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: chatKeys.all });
     },
   });
@@ -117,7 +116,7 @@ export function useBranchChat() {
       worktreeId,
     }: {
       chatId: string;
-      messageId?: string;
+      messageId: string;
       title?: string;
       worktreeId?: string;
     }) => api.chatsV2.branch(chatId, { messageId, title, worktreeId }),

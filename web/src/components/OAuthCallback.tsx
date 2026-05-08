@@ -71,7 +71,7 @@ export function OAuthCallback() {
           })
         }
 
-        navigate({ to: '/' })
+        navigate({ to: '/', search: {} })
       } catch (err) {
         logger.error('[OAuthCallback] Unexpected callback error', err)
         setError(err instanceof Error ? err.message : 'Authentication failed')

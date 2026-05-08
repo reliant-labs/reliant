@@ -7,7 +7,6 @@ import { hasControlPlane } from "../api";
 import { cn } from "@/lib/utils";
 import { getIsDev } from "@/lib/constants";
 import { logger } from "@/lib/logger";
-import { getEventBus } from "@/lib/events";
 import { useCodexOAuth, useClaudeOAuth, useOAuthAvailability } from "@/hooks";
 import { useCloudEligibility, useCompleteOnboarding } from "@/hooks/useOnboardingQueries";
 // TODO: Remove this store import once the ApiKeySetupModal is converted to event-driven
@@ -223,7 +222,7 @@ export function ModelStep({ plan, updatePlan }: StepProps) {
       }
 
       // Navigate to main app (server marks onboarding complete via RPC)
-      navigate({ to: "/", search: {} });
+      navigate({ to: "/", search: { step: undefined, "reset-onboarding": undefined } });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to finish onboarding");
     }

@@ -36,13 +36,13 @@ export function OnboardingPage() {
     const idx = latestSteps.indexOf(actualStep);
     const si = idx >= 0 ? idx : 0;
     if (si < latestSteps.length - 1) {
-      navigate({ search: { step: latestSteps[si + 1] } });
+      navigate({ to: '/', search: { step: latestSteps[si + 1] } });
     }
   };
 
   const onBack = () => {
     if (safeIndex > 0) {
-      navigate({ search: { step: steps[safeIndex - 1] } });
+      navigate({ to: '/', search: { step: steps[safeIndex - 1] } });
     }
   };
 

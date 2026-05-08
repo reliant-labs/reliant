@@ -559,9 +559,10 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
   const deleteChatMutation = useDeleteChat();
   const renameChatMutation = useRenameChat();
   const markUnreadMutation = useMarkUnread();
+  const unarchiveMutation = useUnarchiveChat();
   const activities = useActivityStore((state) => state.activities);
   // Archived chats from React Query (auto-fetches)
-  const { data: archivedChats = [], isFetched: archivedChatsLoaded } = useArchivedChats();
+  const { data: archivedChats = [] } = useArchivedChats();
   
   const worktrees = useWorktreeStore((state) => state.worktrees);
   const switchWorktreeContext = useWorktreeStore((state) => state.switchWorktreeContext);
@@ -1091,16 +1092,12 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
     toast.notify("Chat archived", {
       action: {
         label: "Undo",
-        onClick: async () => {
-          try {
-            await useChatStore.getState().unarchiveChat(chatId);
-          } catch (error) {
-            console.error("Failed to restore chat:", error);
-          }
+        onClick: () => {
+          unarchiveMutation.mutate(chatId);
         },
       },
     });
-  }, [deleteChatMutation]);
+  }, [deleteChatMutation, unarchiveMutation]);
 
   // Scroll active chat into view when it changes (e.g., via keyboard navigation)
   // NOTE: Only trigger when activeChatId changes, NOT when chats list changes

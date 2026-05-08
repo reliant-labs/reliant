@@ -137,7 +137,6 @@ export function useWorkspaceRestore(
       const projectStore = useProjectStore.getState();
       const worktreeStore = useWorktreeStore.getState();
       const viewerStore = useViewerStore.getState();
-      const chatStore = useChatStore.getState();
       const chatNavStore = useChatNavigationStore.getState();
       const workspaceState = useWorkspaceStateStore.getState();
 

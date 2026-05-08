@@ -10,7 +10,7 @@ export function WorktreeSettings() {
   const updatePrefs = useUpdatePreferences();
   const [isSaving, setIsSaving] = useState(false);
 
-  const updateSafely = async (update: () => Promise<void>) => {
+  const updateSafely = async (update: () => Promise<unknown>) => {
     setIsSaving(true);
     try {
       await update();

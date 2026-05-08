@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { planGrpc, type Plan } from "../api/plan-grpc";
+import { planGrpc } from "../api/plan-grpc";
 import {
   taskGrpc,
   type Task as V2Task,

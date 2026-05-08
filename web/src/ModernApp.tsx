@@ -85,8 +85,6 @@ function App() {
   const chatError = useChatStore((state) => state.error);
   const activeChatId = useChatStore((state) => state.activeChatId);
   const currentProject = useProjectStore((state) => state.currentProject);
-  const projects = useProjectStore((state) => state.projects);
-  const projectsLoading = useProjectStore((state) => state.isLoading);
   const selectProject = useProjectStore((state) => state.selectProject);
   const loadProjects = useProjectStore((state) => state.loadProjects);
   const { step: onboardingStep, 'reset-onboarding': resetOnboarding } = useSearch({ from: '/' });
@@ -1431,7 +1429,7 @@ function App() {
   // Handle ?reset-onboarding=true: clear plan state and enter onboarding
   if (resetOnboarding) {
     localStorage.removeItem('reliant-onboarding-plan');
-    navigate({ search: { step: 'goal' } });
+    navigate({ to: '/', search: { step: 'goal', 'reset-onboarding': undefined } });
     return <LoadingSpinner />;
   }
 
@@ -1449,7 +1447,7 @@ function App() {
   // Also redirect when currentUser is null (API unreachable) — a new user with
   // no server record should see onboarding, not the project picker.
   if (!currentUser || !currentUser.onboardingCompleted) {
-    navigate({ search: { step: 'goal' } });
+    navigate({ to: '/', search: { step: 'goal' } });
     return <LoadingSpinner />;
   }
 

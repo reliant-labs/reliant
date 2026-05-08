@@ -9,7 +9,6 @@ import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { useEventBus } from "@/lib/event-context";
 import {
   useCloudEligibility,
-  useDaemonList,
   useCreateDaemon,
   useResumeDaemon,
 } from "@/hooks/useOnboardingQueries";

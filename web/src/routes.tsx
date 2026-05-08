@@ -11,7 +11,7 @@ import App from './App'
 
 const rootRoute = createRootRoute({
   component: () => <Outlet />,
-  notFoundComponent: () => <Navigate to="/" />,
+  notFoundComponent: () => <Navigate to="/" search={{}} />,
   errorComponent: ({ error }) => (
     <ErrorFallbackUI
       error={error}
@@ -68,13 +68,20 @@ const verifyEmailRoute = createRoute({
   ),
 })
 
+type IndexSearch = {
+  step?: string;
+  'reset-onboarding'?: boolean;
+};
+
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
-  validateSearch: (search: Record<string, unknown>) => ({
-    step: (search.step as string) || undefined,
-    'reset-onboarding': search['reset-onboarding'] !== undefined ? true : undefined,
-  }),
+  validateSearch: (search: Record<string, unknown>): IndexSearch => {
+    const result: IndexSearch = {};
+    if (search.step) result.step = search.step as string;
+    if (search['reset-onboarding'] !== undefined) result['reset-onboarding'] = true;
+    return result;
+  },
   component: () => (
     <AuthGuard requireAuth={true} requireEmailVerification={true}>
       <App />

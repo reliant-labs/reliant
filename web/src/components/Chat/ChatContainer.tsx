@@ -88,7 +88,6 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
   const { data: pendingApprovals = [] } = usePendingApprovals(chatId);
   const isDiscussMode = useDiscussMode(chatId);
   const { data: pendingQuestion } = usePendingQuestion(chatId);
-  const currentActivity = useChatCurrentActivity(chatId);
 
   // Process messages: sort by ordinal and filter out agent messages
   const processedMessages = useMemo(() => {

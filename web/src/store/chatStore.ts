@@ -179,20 +179,6 @@ function clearStreamingBuffer(
   streamingBuffers.delete(key);
 }
 
-// Clear all buffers for a chat (all threads)
-function clearAllStreamingBuffers(chatId: string): void {
-  const prefix = `${chatId}:`;
-  for (const key of streamingBuffers.keys()) {
-    if (key.startsWith(prefix)) {
-      const buffer = streamingBuffers.get(key);
-      if (buffer?.flushTimeoutId) {
-        clearTimeout(buffer.flushTimeoutId);
-      }
-      streamingBuffers.delete(key);
-    }
-  }
-}
-
 // Buffer streaming deltas and flush on newlines
 // Returns deltas that should be processed immediately
 // Thread-aware: groups deltas by thread and buffers each separately
