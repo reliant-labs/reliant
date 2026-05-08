@@ -3,6 +3,7 @@ import { GitPullRequest, Loader2, Check, ArrowUp, ArrowDown } from "lucide-react
 import { cn } from "../../lib/utils";
 import * as gitApi from "../../api/git";
 import { logger } from "../../lib/logger";
+import { toast } from "../../lib/toast-manager";
 import { SidebarInput } from "../RightSidebar/shared";
 import { Tooltip } from "../ui/Tooltip";
 
@@ -38,7 +39,6 @@ export function SourceControlPanel({
   const [commitMessage, setCommitMessage] = useState("");
   const [isCommitting, setIsCommitting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [existingPR, setExistingPR] = useState<gitApi.ExistingPRResponse | null>(null);
   const [_isCheckingPR, setIsCheckingPR] = useState(false);
   const [ghCliMissing, setGhCliMissing] = useState(false);
@@ -90,17 +90,16 @@ export function SourceControlPanel({
 
   const handleCommit = async () => {
     if (!commitMessage.trim()) {
-      setError("Commit message is required");
+      toast.error("Commit message is required");
       return;
     }
 
     if (stagedFilesCount === 0) {
-      setError("No files staged for commit");
+      toast.error("No files staged for commit");
       return;
     }
 
     setIsCommitting(true);
-    setError(null);
 
     try {
       await gitApi.commitChanges(worktreeId, commitMessage.trim());
@@ -108,8 +107,7 @@ export function SourceControlPanel({
       onCommitSuccess?.();
       logger.info("Changes committed successfully");
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to commit changes";
-      setError(errorMessage);
+      toast.error(err instanceof Error ? err : "Failed to commit changes");
       logger.error("Failed to commit changes", err);
     } finally {
       setIsCommitting(false);
@@ -118,15 +116,13 @@ export function SourceControlPanel({
 
   const handlePush = async () => {
     setIsSyncing(true);
-    setError(null);
 
     try {
       await gitApi.pushChanges(worktreeId);
       onPushSuccess?.();
       logger.info("Changes pushed successfully");
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to push changes";
-      setError(errorMessage);
+      toast.error(err instanceof Error ? err : "Failed to push changes");
       logger.error("Failed to push changes", err);
     } finally {
       setIsSyncing(false);
@@ -135,15 +131,13 @@ export function SourceControlPanel({
 
   const handlePull = async () => {
     setIsSyncing(true);
-    setError(null);
 
     try {
       await gitApi.pullChanges(worktreeId);
       onPushSuccess?.(); // Refresh the view
       logger.info("Changes pulled successfully");
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Failed to pull changes";
-      setError(errorMessage);
+      toast.error(err instanceof Error ? err : "Failed to pull changes");
       logger.error("Failed to pull changes", err);
     } finally {
       setIsSyncing(false);
@@ -200,21 +194,11 @@ export function SourceControlPanel({
 
   return (
     <div className={cn("flex flex-col gap-2 p-2 bg-background/95", className)}>
-      {/* Error Display */}
-      {error && (
-        <div className="text-xs text-destructive bg-destructive/10 px-2 py-1 rounded border border-destructive/20">
-          {error}
-        </div>
-      )}
-
       {/* Commit Input - full width */}
       <SidebarInput
         placeholder={`Message (⌘⏎ to commit on "${branch}")`}
         value={commitMessage}
-        onChange={(value) => {
-          setCommitMessage(value);
-          setError(null);
-        }}
+        onChange={setCommitMessage}
         onKeyDown={handleKeyDown}
         showClear={false}
         rightContent={

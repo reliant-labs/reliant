@@ -43,7 +43,6 @@ interface ChatPresenterProps {
   isChatBusy: boolean;
   pendingApprovals: ToolApprovalRequest[];
   connectionStatus: string;
-  currentActivity?: string;
 
   // Chat metadata
   worktreeId?: string | null;
@@ -67,8 +66,6 @@ interface ChatPresenterProps {
   // UI state
   isFocused?: boolean;
   paneId?: string;
-  isRecentChangesOpen?: boolean;
-  onToggleRecentChanges?: () => void;
 
   // Workflow execution sidebar
   workflowExecution?: WorkflowExecution;
@@ -91,7 +88,6 @@ export const ChatPresenter = memo(function ChatPresenter({
   isChatBusy,
   pendingApprovals,
   connectionStatus,
-  currentActivity,
   worktreeId,
   projectId,
   needsRecovery,
@@ -100,8 +96,6 @@ export const ChatPresenter = memo(function ChatPresenter({
   onStopStreaming,
   isFocused = true,
   paneId,
-  isRecentChangesOpen,
-  onToggleRecentChanges,
   workflowExecution,
   isDiscussMode,
   onToggleDiscuss,
@@ -536,10 +530,6 @@ export const ChatPresenter = memo(function ChatPresenter({
                 connectionStatus as ConnectionStatus | undefined
               }
               isChatBusy={isChatBusy}
-              currentActivity={currentActivity}
-              messageCount={messages.length}
-              onToggleRecentChanges={onToggleRecentChanges}
-              isRecentChangesOpen={isRecentChangesOpen}
               projectId={projectId ?? undefined}
               paneId={paneId}
               selectedThreadId={selectedThreadId}
