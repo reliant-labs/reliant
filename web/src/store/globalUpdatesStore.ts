@@ -385,6 +385,20 @@ function handleChatStateChange(update: UserUpdate) {
   const isBeingRestored =
     previousState === ChatState.ARCHIVED && nextState !== ChatState.ARCHIVED;
 
+  const refreshAfterChatRestore = () => {
+    const projectId = update.project_id || useProjectStore.getState().currentProject?.id;
+    if (!projectId) return;
+
+    void (async () => {
+      try {
+        await useWorktreeStore.getState().loadWorktrees(projectId);
+        await useChatStore.getState().loadChats(projectId);
+      } catch (error) {
+        logger.warn(`${LOG_PREFIX} Failed to refresh after chat restore`, { error, chatId: chat_id?.slice(0, 8) });
+      }
+    })();
+  };
+
   // Handle archive transition: move chat from active list to archived list
   if (isBecomingArchived) {
     // Chat is being archived — remove its activity entry
@@ -479,6 +493,7 @@ function handleChatStateChange(update: UserUpdate) {
       });
       
       logger.info(`${LOG_PREFIX} Chat restored and moved to active list: ${chat_id.slice(0, 8)}`);
+      refreshAfterChatRestore();
     } else {
       // Chat wasn't in archived list (maybe it was already optimistically restored)
       // Check if it already exists in active list
@@ -513,6 +528,7 @@ function handleChatStateChange(update: UserUpdate) {
       } else {
         logger.debug(`${LOG_PREFIX} Chat already in active list, skipping restore: ${chat_id.slice(0, 8)}`);
       }
+      refreshAfterChatRestore();
     }
     return; // Don't continue with normal state update
   }

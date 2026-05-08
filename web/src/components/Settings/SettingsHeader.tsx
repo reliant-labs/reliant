@@ -1,4 +1,4 @@
-import { X, Activity, Settings } from "lucide-react";
+import { X, Activity } from "lucide-react";
 import { Tooltip } from "../ui/Tooltip";
 import { useState, useEffect } from "react";
 import { isDev } from "../../lib/constants";
@@ -48,21 +48,11 @@ export function SettingsHeader({ onClose }: SettingsHeaderProps) {
         } as React.CSSProperties
       }
     >
-      {/* Left side - Worktree Dev Indicator */}
+      {/* Left side - draggable space */}
       <div
-        className="flex flex-1 items-center gap-2 transition-[padding] duration-200 ease-in-out"
+        className="flex flex-1 transition-[padding] duration-200 ease-in-out"
         style={{ paddingLeft: !isFullscreen && isMac ? "80px" : "12px" }}
-      >
-        <div className="flex h-7 w-7 items-center justify-center rounded-md border border-border/50 bg-background/70 text-muted-foreground">
-          <Settings className="h-3.5 w-3.5" />
-        </div>
-        <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-foreground">Settings</div>
-          <div className="truncate text-[11px] text-muted-foreground">
-            Preferences and system configuration
-          </div>
-        </div>
-      </div>
+      />
 
       {/* Right side - controls */}
       <div className="flex flex-1 items-center justify-end">

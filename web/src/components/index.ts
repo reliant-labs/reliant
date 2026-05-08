@@ -11,7 +11,6 @@ export { ChatInput } from "./Chat/ChatInput";
 export { ToolExecution } from "./Chat/ToolExecution";
 export { NewChatView } from "./Chat/NewChatView";
 export { ErrorMessage } from "./Chat/ErrorMessage";
-export { PromptsSelector } from "./Chat/PromptsSelector";
 export { WorktreeSelector } from "./Chat/WorktreeSelector";
 export { PermissionPrompt } from "./Chat/PermissionPrompt";
 export { MarkdownRenderer } from "./Chat/MarkdownRenderer";
