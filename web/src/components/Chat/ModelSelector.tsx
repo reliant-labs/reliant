@@ -63,6 +63,7 @@ function ModelSelectorComponent({
       xai: "#6b7280", // gray-500
       deepseek: "#ef4444", // red-500
       groq: "#facc15", // yellow-500
+      reliant: "#2563eb", // blue-600 (Reliant brand blue)
       openrouter: "#8b5cf6", // violet-500
       azure: "#0ea5e9", // sky-500
       bedrock: "#f59e0b", // amber-500

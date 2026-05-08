@@ -75,14 +75,14 @@ DELETE FROM workflows WHERE id = ?;
 -- name: DeleteWorkflowsByChat :exec
 DELETE FROM workflows WHERE chat_id = ?;
 
--- name: GetRootWorkflowStatusForChats :many
--- Get effective workflow status for multiple chats
--- Returns 'running' if ANY real workflow (root or child) is running
--- Returns 'paused' if ANY real workflow is paused (and none running)
--- Otherwise returns the most recent root workflow's status
+-- name: GetRootWorkflowStatusForChat :one
+-- Get effective workflow status for a single chat.
+-- Returns 'running' if ANY real workflow (root or child) is running.
+-- Returns 'paused' if ANY real workflow is paused (and none running).
+-- Otherwise returns the most recent root workflow's status.
 -- NOTE: Excludes thread metadata records ("thread:*" and "fork:*") - these track
 -- thread lifecycle, not workflow execution. They complete when their owning workflow completes.
-SELECT DISTINCT
+SELECT
     w.chat_id,
     CASE
         WHEN EXISTS (
@@ -100,16 +100,12 @@ SELECT DISTINCT
               AND w4.workflow_name NOT LIKE 'fork:%'
         ) THEN 6
         ELSE w.status
-    END as status
+    END AS status
 FROM workflows w
 WHERE w.parent_id IS NULL
-  AND w.chat_id IN (/*SLICE:chat_ids*/sqlc.slice('chat_ids'))
-  AND w.created_at = (
-    SELECT MAX(w2.created_at)
-    FROM workflows w2
-    WHERE w2.chat_id = w.chat_id AND w2.parent_id IS NULL
-  )
-ORDER BY w.chat_id;
+  AND w.chat_id = ?
+ORDER BY w.created_at DESC
+LIMIT 1;
 
 -- name: CompleteRunningChildWorkflows :exec
 -- Complete running child workflow records owned by a parent workflow.

@@ -99,6 +99,9 @@ func BuildAvailableDrivers(ctx context.Context, repo db.Repository, userID strin
 			switch driverID {
 			case "openrouter":
 				config.BaseURL = "https://openrouter.ai/api/v1"
+			case "reliant":
+				config.BaseURL = ResolveReliantBaseURL(apiKey)
+				config.APIKey, config.ExtraHeaders = ResolveReliantAPIKey(apiKey, config.BaseURL)
 				// case "groq":
 				// 	config.BaseURL = "https://api.groq.com/openai/v1"
 				// case "xai":

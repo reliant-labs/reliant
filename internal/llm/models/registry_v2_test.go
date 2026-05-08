@@ -592,6 +592,50 @@ func TestResolve_CodexModerateUsesGPT55(t *testing.T) {
 	assert.Equal(t, flagship.Provider.Driver, moderate.Provider.Driver)
 }
 
+func TestResolve_ReliantThinkingPolicyRegressionModels(t *testing.T) {
+	reg := MustGetRegistry()
+
+	tests := []struct {
+		name                string
+		modelID             string
+		thinkingLevel       string
+		wantReasoningEffort string
+		wantCanReason       bool
+	}{
+		{
+			name:          "claude haiku reliant disables explicit thinking",
+			modelID:       "claude-4.5-haiku@reliant",
+			thinkingLevel: "low",
+		},
+		{
+			name:                "claude sonnet reliant keeps supported thinking",
+			modelID:             "claude-4.5-sonnet@reliant",
+			thinkingLevel:       "low",
+			wantReasoningEffort: "low",
+			wantCanReason:       true,
+		},
+		{
+			name:                "gemini pro unsupported level falls back to supported default",
+			modelID:             "gemini-3.1-pro-preview@reliant",
+			thinkingLevel:       "medium",
+			wantReasoningEffort: "high",
+			wantCanReason:       true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resolved, err := reg.Resolve(ModelSelector{ID: tt.modelID}, []string{"reliant"})
+			require.NoError(t, err)
+			assert.Equal(t, "reliant", resolved.Provider.Driver)
+			assert.Equal(t, tt.wantCanReason, resolved.Definition.Capabilities.CanReason)
+
+			capability := ResolveThinkingCapability(resolved.Definition.Capabilities)
+			assert.Equal(t, tt.wantReasoningEffort, ReconcileThinkingLevel(capability, tt.thinkingLevel))
+		})
+	}
+}
+
 func TestResolve_WithDriverSuffix(t *testing.T) {
 	reg := createTestRegistry(t)
 
@@ -1651,6 +1695,9 @@ func TestParseRegistry_EmbeddedYAML(t *testing.T) {
 		}
 		if model.Visibility == "" {
 			t.Errorf("model %s has empty visibility", model.ID)
+		}
+		if !model.Capabilities.CanReason && model.DefaultThinkingLevel != "" {
+			t.Errorf("model %s has default_thinking_level %q but does not support thinking", model.ID, model.DefaultThinkingLevel)
 		}
 	}
 }

@@ -62,6 +62,10 @@ func (s *CatalogService) ListModels(
 	for _, model := range allModels {
 		// For each provider the model supports, check if user has that provider configured
 		for _, provider := range model.Providers {
+			if provider.Driver == "reliant" && !models.CanDriverUseModel("reliant", models.ModelID(model.ID)) {
+				continue
+			}
+
 			// Local models don't need API keys - they're available if they exist in the registry
 			isLocalDriver := provider.Driver == "local"
 			if isLocalDriver {
@@ -140,6 +144,7 @@ func getDriverDisplayName(driverID string) string {
 		"openai":     "OpenAI",
 		"codex":      "Codex",
 		"gemini":     "Google AI",
+		"reliant":    "Reliant",
 		"openrouter": "OpenRouter",
 		"local":      "Local",
 	}
@@ -154,12 +159,13 @@ func getDriverDisplayName(driverID string) string {
 func sortModelsByProvider(modelList []*reliantv1.ModelInfo) {
 	// Provider display order
 	providerOrder := map[string]int{
-		"Anthropic":  1,
-		"OpenAI":     2,
-		"Codex":      3,
-		"Google AI":  4,
-		"OpenRouter": 5,
-		"Local":      6,
+		"Reliant":    1,
+		"Anthropic":  2,
+		"OpenAI":     3,
+		"Codex":      4,
+		"Google AI":  5,
+		"OpenRouter": 6,
+		"Local":      7,
 	}
 
 	reg := models.MustGetRegistry()
@@ -228,6 +234,15 @@ func (s *CatalogService) ListModelsByProvider(
 	// Get all models for the provider from the registry
 	registry := models.MustGetRegistry()
 	providerModels := registry.ListModelsByProvider(provider)
+	if provider == "reliant" {
+		filtered := make([]models.ModelDefinition, 0, len(providerModels))
+		for _, def := range providerModels {
+			if models.CanDriverUseModel("reliant", models.ModelID(def.ID)) {
+				filtered = append(filtered, def)
+			}
+		}
+		providerModels = filtered
+	}
 
 	// Convert to response format
 	modelInfos := make([]*reliantv1.ModelInfo, 0, len(providerModels))

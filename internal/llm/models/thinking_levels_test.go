@@ -56,3 +56,10 @@ func TestSupportsThinkingLevelForCaps(t *testing.T) {
 		t.Fatal("expected empty level to be accepted")
 	}
 }
+
+func TestReconcileThinkingLevelDisablesUnsupportedNonReasoningModels(t *testing.T) {
+	cap := ResolveThinkingCapability(ModelCapabilities{CanReason: false})
+	if got := ReconcileThinkingLevel(cap, "medium"); got != "" {
+		t.Fatalf("non-reasoning model reconciled medium to %q, want disabled", got)
+	}
+}

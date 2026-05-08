@@ -123,6 +123,9 @@ func autoClassify(err error) error {
 		"cannot be nil",
 		"unknown model",
 		"unsupported",
+		"reauthentication is needed",
+		"application-default login",
+		"refresherror",
 		// User hasn't configured an API key for any matching provider
 		"no available provider",
 		// CEL errors are deterministic — retrying won't help
@@ -226,6 +229,15 @@ func CategorizeError(err error) ErrorCategory {
 
 	if strings.Contains(errStr, "rate limit") || strings.Contains(errStr, "too many requests") {
 		return ErrorCategoryRateLimit
+	}
+
+	if strings.Contains(errStr, "reauthentication is needed") ||
+		strings.Contains(errStr, "application-default login") ||
+		strings.Contains(errStr, "refresherror") ||
+		strings.Contains(errStr, "unauthorized") ||
+		strings.Contains(errStr, "forbidden") ||
+		strings.Contains(errStr, "permission denied") {
+		return ErrorCategoryTerminal
 	}
 
 	if strings.Contains(errStr, "timeout") || strings.Contains(errStr, "network") ||

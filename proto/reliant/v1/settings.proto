@@ -70,6 +70,9 @@ service SettingsService {
   // ValidateProviderAPIKey validates an API key for a provider
   rpc ValidateProviderAPIKey(ValidateProviderAPIKeyRequest) returns (ValidateProviderAPIKeyResponse) {}
 
+  // SyncReliantProvider hydrates the Reliant provider API key from authenticated control-plane state.
+  rpc SyncReliantProvider(SyncReliantProviderRequest) returns (SyncReliantProviderResponse) {}
+
   // CompleteCodexOAuth exchanges an OAuth authorization code + PKCE verifier
   // and marks Codex as connected for the current user.
   rpc CompleteCodexOAuth(CompleteCodexOAuthRequest) returns (CompleteCodexOAuthResponse) {}
@@ -400,6 +403,20 @@ message ValidateProviderAPIKeyRequest {
 message ValidateProviderAPIKeyResponse {
   bool valid = 1;
   string message = 2;
+}
+
+message SyncReliantProviderRequest {
+  bool force_rotate = 1;
+}
+
+message SyncReliantProviderResponse {
+  bool success = 1;
+  string message = 2;
+  bool synced = 3;
+  bool created_org = 4;
+  bool created_key = 5;
+  bool rotated_key = 6;
+  ProviderStatus provider = 7;
 }
 
 message CompleteCodexOAuthRequest {

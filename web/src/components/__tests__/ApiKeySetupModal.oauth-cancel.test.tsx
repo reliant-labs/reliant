@@ -1,4 +1,4 @@
-import { act, render } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const codexCancelMock = vi.fn()
@@ -45,5 +45,12 @@ describe('ApiKeySetupModal OAuth cancellation', () => {
 
     expect(codexCancelMock).toHaveBeenCalled()
     expect(claudeCancelMock).toHaveBeenCalled()
+  })
+
+  it('does not offer manual Reliant entry in the modal', () => {
+    render(<ApiKeySetupModal />)
+
+    expect(screen.queryByText('Reliant')).not.toBeInTheDocument()
+    expect(screen.getByText(/sync your Reliant access automatically/i)).toBeInTheDocument()
   })
 })

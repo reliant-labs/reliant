@@ -416,6 +416,10 @@ export const api = {
       return settingsGrpc.validateProviderAPIKey(provider, apiKey);
     },
 
+    syncReliantProvider: async (forceRotate = false) => {
+      return settingsGrpc.syncReliantProvider(forceRotate);
+    },
+
     completeCodexOAuth: async (code: string, codeVerifier: string, redirectURI: string) => {
       return settingsGrpc.completeCodexOAuth(code, codeVerifier, redirectURI);
     },
