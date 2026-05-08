@@ -335,31 +335,36 @@ func TestAffectedPresetsResolveForCodex(t *testing.T) {
 	presets := loadAllPresets(t)
 	registry := models.MustGetRegistry()
 
-	affectedPresets := []string{
-		"documentation.yaml",
-		"refactor.yaml",
-		"tester.yaml",
+	testCases := []struct {
+		presetName string
+		wantTag    string
+	}{
+		{presetName: "documentation.yaml", wantTag: models.TagModerate},
+		{presetName: "refactor.yaml", wantTag: models.TagModerate},
+		{presetName: "tester.yaml", wantTag: models.TagModerate},
+		{presetName: "workflow_builder.yaml", wantTag: models.TagFlagship},
 	}
 
-	for _, presetName := range affectedPresets {
-		preset, ok := presets[presetName]
-		require.True(t, ok, "expected preset %q to exist", presetName)
+	for _, tc := range testCases {
+		preset, ok := presets[tc.presetName]
+		require.True(t, ok, "expected preset %q to exist", tc.presetName)
 
-		t.Run(presetName, func(t *testing.T) {
+		t.Run(tc.presetName, func(t *testing.T) {
 			model, ok := preset.Params["model"].(map[string]interface{})
-			require.True(t, ok, "preset %q should define a model selector", presetName)
+			require.True(t, ok, "preset %q should define a model selector", tc.presetName)
+			assert.NotContains(t, model, "id", "preset %q should not hardcode a provider-specific model", tc.presetName)
 
 			tagsRaw, ok := model["tags"].([]interface{})
-			require.True(t, ok, "preset %q should define model tags", presetName)
-			require.Len(t, tagsRaw, 1, "preset %q should define exactly one model tag", presetName)
+			require.True(t, ok, "preset %q should define model tags", tc.presetName)
+			require.Len(t, tagsRaw, 1, "preset %q should define exactly one model tag", tc.presetName)
 
 			tag, ok := tagsRaw[0].(string)
-			require.True(t, ok, "preset %q has non-string tag %T", presetName, tagsRaw[0])
-			assert.Equal(t, models.TagModerate, tag, "preset %q should preserve its moderate model intent", presetName)
+			require.True(t, ok, "preset %q has non-string tag %T", tc.presetName, tagsRaw[0])
+			assert.Equal(t, tc.wantTag, tag, "preset %q should preserve its model intent", tc.presetName)
 
 			resolved, err := registry.Resolve(models.ModelSelector{Tags: []string{tag}}, []string{"codex"})
-			require.NoError(t, err, "preset %q should resolve for Codex", presetName)
-			assert.NotEmpty(t, resolved.Definition.ID, "preset %q should resolve to a concrete model for Codex", presetName)
+			require.NoError(t, err, "preset %q should resolve for Codex", tc.presetName)
+			assert.NotEmpty(t, resolved.Definition.ID, "preset %q should resolve to a concrete model for Codex", tc.presetName)
 		})
 	}
 }

@@ -9,7 +9,9 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/stretchr/testify/require"
@@ -134,6 +136,61 @@ func TestBuildWorkflowInputs_NonEmptyToolsStillOverridePreset(t *testing.T) {
 	require.Equal(t, []interface{}{"mcp__search"}, tools)
 }
 
+func TestBuildWorkflowInputs_WorkflowBuilderPresetUsesProviderNeutralFlagshipModel(t *testing.T) {
+	service := &ChatService{}
+	projectPath := t.TempDir()
+
+	initialInputs := service.buildWorkflowInputs(
+		context.Background(),
+		"user-1",
+		projectPath,
+		"",
+		"builtin://agent",
+		map[string]string{"": "workflow_builder"},
+		nil,
+	)
+
+	modelRaw, exists := initialInputs["model"]
+	require.True(t, exists)
+	modelMap, ok := modelRaw.(map[string]interface{})
+	require.True(t, ok)
+	require.NotContains(t, modelMap, "id")
+	require.Equal(t, []interface{}{models.TagFlagship}, modelMap["tags"])
+
+	_, err := models.MustGetRegistry().Resolve(
+		models.ModelSelector{Tags: []string{models.TagFlagship}},
+		[]string{"codex"},
+	)
+	require.NoError(t, err, "workflow_builder flagship selector should resolve for Codex-only users")
+}
+
+func TestValidateWorkflowInputs_WorkflowBuilderModelThinkingShape(t *testing.T) {
+	service := &ChatService{}
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "user-1")
+
+	validInputs := map[string]interface{}{
+		"mode": "auto",
+		"model": map[string]interface{}{
+			"id":             "mock",
+			"thinking_level": "high",
+		},
+	}
+
+	require.Empty(t, service.validateWorkflowInputs(ctx, "builtin://agent", "project-1", validInputs))
+
+	invalidInputs := map[string]interface{}{
+		"mode":           "auto",
+		"thinking_level": "high",
+		"model": map[string]interface{}{
+			"id": "mock",
+		},
+	}
+
+	validationErrors := service.validateWorkflowInputs(ctx, "builtin://agent", "project-1", invalidInputs)
+	require.NotEmpty(t, validationErrors)
+	require.Contains(t, validationErrors[0].Error(), "unknown input(s): thinking_level")
+}
+
 func TestBuildStateUpdateForActiveWorkflow_AppliesSelectedPresetAndSkipsEmptyToolOverrides(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
@@ -225,6 +282,59 @@ func TestBuildStateUpdateForActiveWorkflow_UsesNewPresetSelection(t *testing.T) 
 	_, hasSpawnPresets := stateUpdate["spawn_presets"]
 	require.True(t, hasTools)
 	require.True(t, hasSpawnPresets)
+}
+
+func TestBuildStateUpdateForActiveWorkflow_AcceptsThinkingInModelSelector(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "user-3")
+	service := &ChatService{database: repo}
+
+	now := time.Now().UTC()
+	err := repo.CreateProject(ctx, &db.Project{
+		ID:         "project-3",
+		UserID:     "user-3",
+		Name:       "Project 3",
+		Path:       t.TempDir(),
+		IsGitRepo:  false,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		LastActive: now,
+	})
+	require.NoError(t, err)
+
+	chat := &db.Chat{
+		ID:              "chat-3",
+		UserID:          "user-3",
+		ProjectID:       "project-3",
+		WorkflowName:    ptr.Of("builtin://agent"),
+		SelectedPresets: map[string]string{"": "workflow_builder"},
+	}
+
+	params := map[string]*structpb.Value{
+		"mode": structpb.NewStringValue("auto"),
+		"model": structpb.NewStructValue(&structpb.Struct{Fields: map[string]*structpb.Value{
+			"id":             structpb.NewStringValue("mock"),
+			"thinking_level": structpb.NewStringValue("high"),
+		}}),
+	}
+
+	stateUpdate := service.buildStateUpdateForActiveWorkflow(
+		ctx,
+		"user-3",
+		chat,
+		"builtin://agent",
+		map[string]string{"": "workflow_builder"},
+		params,
+	)
+
+	require.NotContains(t, stateUpdate, "thinking_level")
+	modelMap, ok := stateUpdate["model"].(map[string]interface{})
+	require.True(t, ok)
+	require.Equal(t, "mock", modelMap["id"])
+	require.Equal(t, "high", modelMap["thinking_level"])
+	require.Empty(t, service.validateWorkflowInputs(ctx, "builtin://agent", "project-3", stateUpdate))
 }
 
 func TestBuildWorkflowInputs_LoadsUserPresetToolsFromDatabase(t *testing.T) {
