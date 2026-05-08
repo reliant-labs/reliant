@@ -15,7 +15,6 @@ import { FileChangeStatus } from "../gen/reliant/v1/common_pb";
 export { WorktreeStatus };
 import {
   CreateWorktreeRequestSchema,
-  BatchCreateWorktreesRequestSchema,
   ListWorktreesRequestSchema,
   GetWorktreeRequestSchema,
   UpdateWorktreeRequestSchema,
@@ -163,7 +162,7 @@ function protoToFrontend(proto: ProtoWorktree): Worktree {
     branch: proto.branch,
     base_branch: proto.baseBranch,
     project_id: proto.projectId,
-    repo_id: proto.repoId || undefined,
+    repo_id: undefined,
     chat_id: proto.chatId || undefined,
     status: proto.status,
     is_main: proto.isMain,
@@ -271,9 +270,8 @@ export const worktreeGrpc = {
     }
   ): Promise<BatchCreateResult> {
     const client = grpcClient.worktree();
-    const request = create(BatchCreateWorktreesRequestSchema, {
+    const request = create(CreateWorktreeRequestSchema, {
       projectId,
-      repoIds,
       name,
       branch,
       baseBranch: options?.baseBranch,
@@ -282,15 +280,17 @@ export const worktreeGrpc = {
       copyFiles: options?.copyFiles || [],
       force: options?.force || false,
     });
-    const response = await client.batchCreateWorktrees(request);
+    const response = await client.createWorktree(request);
+    if (!response.worktree) throw new Error("No worktree in response");
+
+    const worktree = protoToFrontend(response.worktree);
     return {
-      results: response.results.map((r) => ({
-        repo_id: r.repoId,
-        worktree: r.worktree ? protoToFrontend(r.worktree) : undefined,
-        error: r.error,
+      results: repoIds.map((repoId) => ({
+        repo_id: repoId,
+        worktree,
       })),
-      all_succeeded: response.allSucceeded,
-      rolled_back: response.rolledBack,
+      all_succeeded: true,
+      rolled_back: false,
     };
   },
 
