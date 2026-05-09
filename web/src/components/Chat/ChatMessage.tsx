@@ -533,7 +533,7 @@ function ChatMessageComponent({
 
   // Task processing moved to chatStore.ts for better performance
   // - Real-time updates: handled in WebSocket handler
-  // - Loaded messages: handled in loadMessages/loadMoreMessages
+  // - Loaded messages: handled in loadMessages
   // This eliminates 300+ redundant useEffect calls when loading a chat
 
   // PERFORMANCE: Track when message finishes rendering

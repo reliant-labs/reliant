@@ -113,7 +113,7 @@ describe("derivePath", () => {
   it("cloud new app includes forge-style step", () => {
     const path = STEP_PATHS.cloud_new_app;
     expect(path).toContain("forge-style");
-    expect(path).toContain("cloud-project-location");
+    expect(path).not.toContain("cloud-project-location");
   });
 
   it("local new app includes daemon-connect and forge-style", () => {

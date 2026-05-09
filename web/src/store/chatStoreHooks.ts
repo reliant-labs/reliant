@@ -21,14 +21,12 @@ import { useActivityStore, ChatActivity } from "./activityStore";
 import type {
   Chat,
   Message,
-  ToolApprovalRequest,
 } from "../api/client";
 import type { ProcessedMessage } from "../lib/messageProcessor";
 import type {
   ErrorUpdate,
   InfoUpdate,
   RunOutputUpdate,
-  NodeExecutionUpdate,
 } from "../types/streaming";
 
 // Stable empty references to prevent unnecessary re-renders
@@ -72,23 +70,6 @@ export function useIsChatActive(chatId: string): boolean {
 // ============================================================================
 // CHAT LIST SELECTORS
 // ============================================================================
-
-/**
- * Get the chats Map reference (stable per mutation cycle).
- * Use useChatsList() if you need an array.
- */
-export function useChatsMap(): Map<string, Chat> {
-  return useChatStore((state) => state.chats);
-}
-
-/**
- * Get all chats as an array — safe for rendering.
- * Uses useMemo so the array reference is stable when the Map hasn't changed.
- */
-export function useChats(): Chat[] {
-  const chatsMap = useChatStore((state) => state.chats);
-  return useMemo(() => Array.from(chatsMap.values()), [chatsMap]);
-}
 
 /**
  * Get a specific chat by ID
@@ -142,21 +123,12 @@ export function useStreamingMessage(chatId: string, thread?: string): Message | 
 }
 
 /**
- * Get the raw streaming messages record for a chat.
- * Returns the object mapping threadKey -> Message | null.
- * This is a stable reference that only changes when the underlying state changes.
- */
-export function useStreamingMessagesRecord(chatId: string): Record<string, Message | null> | null {
-  return useChatStore((state) => state.streamingMessages[chatId] ?? null);
-}
-
-/**
  * Get all currently streaming messages for a chat (across all threads).
  * Useful for "All" threads view where you want to show all active streams.
  * Uses useMemo internally to avoid creating new arrays on every render.
  */
 export function useStreamingMessages(chatId: string): Message[] {
-  const streamingRecord = useStreamingMessagesRecord(chatId);
+  const streamingRecord = useChatStore((state) => state.streamingMessages[chatId] ?? null);
 
   return useMemo(() => {
     if (!streamingRecord) return EMPTY_ARRAY as Message[];
@@ -165,46 +137,6 @@ export function useStreamingMessages(chatId: string): Message[] {
   }, [streamingRecord]);
 }
 
-/**
- * Get message pagination state for a chat
- */
-export function useMessagePagination(chatId: string) {
-  return useChatStore((state) => state.messagePagination[chatId]);
-}
-
-// ============================================================================
-// APPROVAL SELECTORS
-// ============================================================================
-
-/**
- * Get pending approvals for a chat
- */
-export function usePendingApprovals(chatId: string): ToolApprovalRequest[] {
-  return useChatStore(
-    (state) =>
-      state.pendingApprovals[chatId] || (EMPTY_ARRAY as ToolApprovalRequest[])
-  );
-}
-
-/**
- * Get all approvals (pending + completed) for a chat
- */
-export function useChatApprovals(chatId: string): ToolApprovalRequest[] {
-  return useChatStore(
-    (state) => state.approvals[chatId] || (EMPTY_ARRAY as ToolApprovalRequest[])
-  );
-}
-
-// ============================================================================
-// QUESTION SELECTORS
-// ============================================================================
-
-/**
- * Get the pending question for a chat (if any)
- */
-export function usePendingQuestion(chatId: string) {
-  return useChatStore((state) => state.pendingQuestions[chatId] ?? null);
-}
 
 // ============================================================================
 // WORKFLOW & STATUS SELECTORS
@@ -234,16 +166,6 @@ export function useInfoEvents(chatId: string): InfoUpdate[] {
 export function useRunOutputs(chatId: string): RunOutputUpdate[] {
   return useChatStore(
     (state) => state.runOutputs[chatId] || (EMPTY_ARRAY as RunOutputUpdate[])
-  );
-}
-
-/**
- * Get node execution events for a chat (workflow activity lifecycle events)
- */
-export function useNodeExecutions(chatId: string): NodeExecutionUpdate[] {
-  return useChatStore(
-    (state) =>
-      state.nodeExecutions[chatId] || (EMPTY_ARRAY as NodeExecutionUpdate[])
   );
 }
 
@@ -296,119 +218,6 @@ export function useToolCallStates(chatId: string) {
 export function useDiscussMode(chatId: string): boolean {
   return useChatStore((state) => state.discussMode[chatId] ?? false);
 }
-
-// ============================================================================
-// PLANNING MODE & AUTO-APPROVE SELECTORS
-// Now using chatParamsStore for mode
-// ============================================================================
-
-// ============================================================================
-// WEBSOCKET & CONNECTION SELECTORS
-// ============================================================================
-
-
-// ============================================================================
-// LOADING & ERROR SELECTORS
-// ============================================================================
-
-/**
- * Check if store is loading
- */
-export function useIsStoreLoading(): boolean {
-  return useChatStore((state) => state.isLoading);
-}
-
-/**
- * Get global store error
- */
-export function useStoreError(): string | null {
-  return useChatStore((state) => state.error);
-}
-
-// ============================================================================
-// ACTION HOOKS (methods that don't require selectors)
-// ============================================================================
-
-/**
- * Get chat store actions (methods that modify state)
- *
- * IMPORTANT: This does NOT subscribe to state - it just returns the action methods.
- * Actions are stable references on the store, so we memoize them to prevent
- * creating a new object on every render (which would cause infinite loops).
- */
-export function useChatStoreActions() {
-  // Memoize the actions object to prevent re-creating it on every render
-  // Store methods are stable, so empty dependency array is safe
-  return useMemo(() => {
-    const store = useChatStore.getState();
-    return {
-      // Chat management
-      loadChats: store.loadChats,
-      createChat: store.createChat,
-      deleteChat: store.deleteChat,
-      renameChat: store.renameChat,
-
-      // Active chat
-      selectChat: store.selectChat,
-      clearCurrentChat: store.clearCurrentChat,
-
-      // Messages
-      sendMessage: store.sendMessage,
-      loadMessages: store.loadMessages,
-      loadMoreMessages: store.loadMoreMessages,
-      branchChat: store.branchChat,
-      branchChatToWorktree: store.branchChatToWorktree,
-
-      // Approvals
-      approveToolRequest: store.approveToolRequest,
-      denyToolRequest: store.denyToolRequest,
-      approveAllPending: store.approveAllPending,
-      denyAllPending: store.denyAllPending,
-
-      // Tool calls
-      cancelToolCall: store.cancelToolCall,
-      convertToBackground: store.convertToBackground,
-
-      // Chat control
-      stopStreaming: store.stopStreaming,
-      cancelChat: store.cancelChat,
-      retryConnection: store.retryConnection,
-
-      // Error handling
-      clearError: store.clearError,
-    };
-  }, []); // Empty deps - store methods are stable
-}
-
-/**
- * Get the selectChat action directly
- *
- * This is the CORRECT way to change the active chat.
- * Do NOT set activeChatId directly!
- */
-export function useSelectChat() {
-  return useChatStore((state) => state.selectChat);
-}
-
-/**
- * Get the sendMessage action directly
- */
-export function useSendMessage() {
-  return useChatStore((state) => state.sendMessage);
-}
-
-// ============================================================================
-// WORKTREE CONTEXT SELECTORS
-// ============================================================================
-
-/**
- * Get the pending worktree ID for new chats
- *
- * When the user navigates to a new chat page without sending a message yet,
- * this holds the worktree ID that would be used for that chat.
- * Returns null if on main workspace or no pending worktree selected.
- */
-
 
 // ============================================================================
 // WORKFLOW ACTIVITY SELECTORS (for WorkflowHub)

@@ -74,7 +74,8 @@ func InitializeFeatureFlagsWithSettings(ctx context.Context, settings types.Sett
 	}
 
 	// Initialize Statsig provider if configured (highest priority)
-	if statsigKey != "" {
+	// Statsig is disabled in non-production environments to avoid polluting experiments
+	if statsigKey != "" && config.IsProductionEnvironment() {
 		statsigProvider := providers.NewStatsigProvider(900)
 
 		// Determine if it's a client key

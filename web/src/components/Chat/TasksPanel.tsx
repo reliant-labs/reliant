@@ -1,7 +1,7 @@
 import { memo, useMemo, useState } from "react";
 import { CheckCircle2, Circle, CircleDashed, AlertOctagon, Zap, Ban, ListTodo } from "lucide-react";
-import { useTasksStore, type TaskItem } from "../../store/tasksStore";
-import { useChatStore } from "../../store/chatStore";
+import { useTasksForChat, type TaskItem } from "../../hooks/task-queries";
+import { useActiveChatId } from "../../store/chatStoreHooks";
 import { cn } from "../../lib/utils";
 import { SidebarSection, SidebarEmptyState } from "../RightSidebar/shared";
 
@@ -30,15 +30,11 @@ interface TasksPanelProps {
 
 function TasksPanelComponent({ chatId: propChatId }: TasksPanelProps) {
   // Use provided chatId or fall back to active chat
-  const activeChatId = useChatStore((state) => state.activeChatId);
+  const activeChatId = useActiveChatId();
   const chatId = propChatId ?? activeChatId;
 
-  // Subscribe to the tasks object for this chatId
-  const tasksByChat = useTasksStore((state) => state.tasksByChat);
-  const tasks = useMemo(
-    () => (chatId && tasksByChat[chatId] ? Object.values(tasksByChat[chatId]) : []),
-    [chatId, tasksByChat]
-  );
+  // Fetch tasks via React Query
+  const { data: tasks = [] } = useTasksForChat(chatId);
 
   // Calculate stats from tasks
   const total = tasks.length;

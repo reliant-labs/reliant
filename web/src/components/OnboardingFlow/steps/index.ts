@@ -1,5 +1,5 @@
-import { stepRegistry } from "../StepRegistry";
-import type { LaunchPlan, StepConfig } from "../types";
+import { registerStepComponents } from "../stepConfig";
+import type { LaunchPlan } from "../types";
 import { ComputeStep } from "./ComputeStep";
 import { DaemonConnectStep } from "./DaemonConnectStep";
 import { ForgeStep } from "./ForgeStep";
@@ -8,77 +8,26 @@ import { GoalStep } from "./GoalStep";
 import { ModelStep } from "./ModelStep";
 import { ProjectLocationStep } from "./ProjectLocationStep";
 
-const steps: StepConfig[] = [
-  {
-    id: "goal",
-    label: "Goal",
-    category: "intent",
-    component: GoalStep,
-    order: 0,
-  },
-  {
-    id: "compute",
-    label: "Daemon",
-    category: "connect",
-    component: ComputeStep,
-    order: 10,
-  },
-  {
-    id: "daemon-connect",
-    label: "Connect",
-    category: "connect",
-    component: DaemonConnectStep,
-    order: 20,
-  },
-  {
-    id: "github-connect",
-    label: "Repository",
-    category: "workspace",
-    component: GitHubConnectStep,
-    order: 30,
-  },
-  {
-    id: "local-project-location",
-    label: "Directory",
-    category: "workspace",
-    component: ProjectLocationStep,
-    order: 40,
-  },
-  {
-    id: "cloud-project-location",
-    label: "Project",
-    category: "workspace",
-    component: ProjectLocationStep,
-    order: 45,
-  },
-  {
-    id: "forge-style",
-    label: "Style",
-    category: "workspace",
-    component: ForgeStep,
-    order: 50,
-  },
-  {
-    id: "model",
-    label: "Model",
-    category: "model",
-    component: ModelStep,
-    order: 60,
-  },
-];
-
-stepRegistry.registerMany(steps);
+registerStepComponents({
+  'goal': GoalStep,
+  'compute': ComputeStep,
+  'daemon-connect': DaemonConnectStep,
+  'github-connect': GitHubConnectStep,
+  'local-project-location': ProjectLocationStep,
+  'forge-style': ForgeStep,
+  'model': ModelStep,
+});
 
 // ── Fixed step paths ────────────────────────────────────────
 
 export const STEP_PATHS: Record<string, string[]> = {
   // Cloud paths
-  cloud_new_app: ["goal", "compute", "cloud-project-location", "forge-style", "model"],
+  cloud_new_app: ["goal", "compute", "forge-style", "model"],
   cloud_existing: ["goal", "compute", "github-connect", "model"],
-  cloud_explore: ["goal", "compute", "cloud-project-location", "model"],
-  cloud_landing_page: ["goal", "compute", "cloud-project-location", "model"],
-  cloud_pitch_deck: ["goal", "compute", "cloud-project-location", "model"],
-  cloud_blog_post: ["goal", "compute", "cloud-project-location", "model"],
+  cloud_explore: ["goal", "compute", "model"],
+  cloud_landing_page: ["goal", "compute", "model"],
+  cloud_pitch_deck: ["goal", "compute", "model"],
+  cloud_blog_post: ["goal", "compute", "model"],
 
   // Local paths
   local_new_app: ["goal", "compute", "daemon-connect", "local-project-location", "forge-style", "model"],

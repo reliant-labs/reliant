@@ -10,9 +10,8 @@
 import { create } from "zustand";
 // Phase 12: Use gRPC streaming service instead of WebSocket
 import { UserStreamingService } from "../api/streaming-grpc";
-import type { UserUpdate, ChatUpdate, ConnectionStatus, MessagePaginationInfo, ContextUsageInfo } from "../types/streaming";
+import type { UserUpdate, ChatUpdate, ConnectionStatus, ContextUsageInfo } from "../types/streaming";
 import { useChatStore, initGlobalUpdatesStoreRef } from "./chatStore";
-import type { Chat } from "../api/client";
 import { ChatState } from "../gen/reliant/v1/chat_pb";
 import { useActivityStore, ChatActivity } from "./activityStore";
 import { useThreadActivityStore } from "./threadActivityStore";
@@ -26,6 +25,10 @@ import { useProjectStore } from "./projectStore";
 import { useChatNavigationStore } from "./chatNavigationStore";
 import type { BackgroundProcess } from "../api/background-grpc";
 import { logger } from "../lib/logger";
+import { getEventBus } from "../lib/events";
+import { queryClient } from "../lib/query-client";
+import { chatKeys } from "../hooks/chat-queries";
+import { approvalKeys } from "../hooks/approval-queries";
 import { showWorkflowCompletionNotification, showApprovalRequiredNotification, getNotificationPermission } from "../lib/notifications";
 import { getNotificationSoundOptions, useNotificationStore } from "./notificationStore";
 import { triggerRefetch, type RefetchType } from "./refetchStore";
@@ -35,18 +38,6 @@ const LOG_PREFIX = "[🌐 GlobalUpdates]";
 
 // Timestamp when the app started - only notify for events after this
 const appStartTime = Date.now();
-
-/**
- * Trigger archived chats load through the store, which has its own singleflight
- * and archivedChatsLoaded guard. This replaces the old approach of calling
- * api.chatsV2.listArchived() directly, which bypassed deduplication and caused
- * redundant 1.1 MB fetches racing with the Sidebar's initial load.
- */
-function scheduleArchivedChatHydration(_chatId: string): void {
-  // Route through the store — it will no-op if already loaded, and uses
-  // singleflight to deduplicate concurrent calls.
-  void useChatStore.getState().loadArchivedChats();
-}
 
 interface GlobalUpdatesState {
   // Connection state
@@ -73,7 +64,6 @@ interface GlobalUpdatesState {
   handleUpdate: (updates: UserUpdate[]) => void;
   handleChatUpdate: (updates: ChatUpdate[]) => void;
   handleChatSnapshot: (updates: ChatUpdate[]) => void;
-  handleChatPaginationInfo: (pagination: MessagePaginationInfo) => void;
   handleChatContextUsage: (contextUsage: ContextUsageInfo) => void;
   handleStatusChange: (status: ConnectionStatus) => void;
   handleSync: (lastSequence: number) => void;
@@ -123,7 +113,6 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
       // Per-chat detail event callbacks
       onChatUpdate: (updates) => get().handleChatUpdate(updates),
       onChatSnapshot: (updates) => get().handleChatSnapshot(updates),
-      onChatPaginationInfo: (pagination) => get().handleChatPaginationInfo(pagination),
       onChatContextUsage: (contextUsage) => get().handleChatContextUsage(contextUsage),
     });
 
@@ -245,6 +234,7 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
             set({ daemonLastSeen: ts });
             setDaemonLastSeen(ts);
           }
+          try { getEventBus().emit("daemon:heartbeat"); } catch { /* bus not ready */ }
           break;
         }
         default:
@@ -265,6 +255,7 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
       useChatStore.getState().loadChats().catch((err) => {
         logger.warn(`${LOG_PREFIX} Failed to refresh chats on reconnect`, { error: err });
       });
+      try { queryClient.invalidateQueries({ queryKey: chatKeys.all }); } catch { /* bus not ready */ }
     }
   },
 
@@ -299,22 +290,7 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
     useChatStore.getState().processChatStreamUpdates(chatId, updates, true);
   },
 
-  handleChatPaginationInfo: (pagination) => {
-    const chatId = get().subscribedChatId;
-    if (!chatId) return;
 
-    useChatStore.setState((state) => ({
-      messagePagination: {
-        ...state.messagePagination,
-        [chatId]: {
-          ...state.messagePagination[chatId],
-          total: pagination.total,
-          hasMore: pagination.hasMore,
-          oldestOrdinal: pagination.oldestOrdinal,
-        },
-      },
-    }));
-  },
 
   handleChatContextUsage: (contextUsage) => {
     const chatId = get().subscribedChatId;
@@ -377,7 +353,6 @@ function handleChatStateChange(update: UserUpdate) {
     reason: data.reason,
   });
 
-  const chatStore = useChatStore.getState();
   const nextState = parseChatState(data.state);
   const previousState = parseChatState(data.previous_state);
   const isBecomingArchived =
@@ -385,152 +360,19 @@ function handleChatStateChange(update: UserUpdate) {
   const isBeingRestored =
     previousState === ChatState.ARCHIVED && nextState !== ChatState.ARCHIVED;
 
-  const refreshAfterChatRestore = () => {
-    const projectId = update.project_id || useProjectStore.getState().currentProject?.id;
-    if (!projectId) return;
-
-    void (async () => {
-      try {
-        await useWorktreeStore.getState().loadWorktrees(projectId);
-        await useChatStore.getState().loadChats(projectId);
-      } catch (error) {
-        logger.warn(`${LOG_PREFIX} Failed to refresh after chat restore`, { error, chatId: chat_id?.slice(0, 8) });
-      }
-    })();
-  };
-
-  // Handle archive transition: move chat from active list to archived list
+  // Handle archive transition
   if (isBecomingArchived) {
-    // Chat is being archived — remove its activity entry
     useActivityStore.getState().removeActivity(chat_id);
-
-    // Find the chat in the active list
-    const chatToArchive = chatStore.chats.get(chat_id);
-    
-    if (chatToArchive) {
-      // Remove from active chats list (with fresh state)
-      useChatStore.setState((state) => {
-        const newChats = new Map(state.chats);
-        newChats.delete(chat_id);
-        return {
-          chats: newChats,
-          chatOrder: state.chatOrder.filter((cid) => cid !== chat_id),
-        };
-      });
-      
-      // Add to archived chats list (optimistic). Resolve worktree_name from worktree store
-      // so the sidebar shows the correct name immediately instead of "Unknown Workspace".
-      const worktreeName = chatToArchive.worktreeId
-        ? useWorktreeStore.getState().worktrees.find(w => w.id === chatToArchive.worktreeId)?.name
-        : undefined;
-      useChatStore.getState().addArchivedChat({
-        ...chatToArchive,
-        state: nextState,
-        worktreeName: worktreeName,
-      });
-
-      // Hydrate archived metadata (worktree_name/worktree_deleted_at) from backend.
-      // This is necessary because archived chat metadata is only available via
-      // ListArchivedChats (not via the state-change update).
-      // Debounced to batch multiple archive events into a single fetch.
-      scheduleArchivedChatHydration(chat_id);
-      
-      logger.info(`${LOG_PREFIX} Chat archived and moved to archived list: ${chat_id.slice(0, 8)}`);
-    } else {
-      // Chat was already optimistically removed from active list (e.g., by deleteChat).
-      // Still need to add to archived list if not already there.
-      // Construct a minimal chat object from the update data.
-      const existsInArchived = useChatStore.getState().archivedChats.some(
-        (c) => c.id === chat_id
-      );
-      
-      if (!existsInArchived) {
-        // Resolve worktree_name from worktree store for immediate display
-        const worktreeName = update.worktree_id
-          ? useWorktreeStore.getState().worktrees.find(w => w.id === update.worktree_id)?.name
-          : undefined;
-        const minimalChat: Chat = {
-          id: chat_id,
-          userId: '',
-          title: data.title || 'Archived Chat',
-          projectId: update.project_id || '',
-          worktreeId: update.worktree_id,
-          worktreeName: worktreeName,
-          state: nextState,
-          createdAt: update.created_at,
-          updatedAt: update.created_at,
-          lastActive: update.created_at,
-          selectedPresets: {},
-          needsRecovery: false,
-          activity: 0,
-          unread: false,
-        };
-        useChatStore.getState().addArchivedChat(minimalChat);
-        logger.info(`${LOG_PREFIX} Chat archived (optimistic removal handled): ${chat_id.slice(0, 8)}`);
-
-        // Same hydration logic as above, but for the minimal chat object path.
-        // Debounced to batch multiple archive events into a single fetch.
-        scheduleArchivedChatHydration(chat_id);
-      }
-    }
-    return; // Don't continue with normal state update
+    logger.info(`${LOG_PREFIX} Chat archived: ${chat_id.slice(0, 8)}`);
+    try { getEventBus().emit("chat:archived", { chatId: chat_id }); queryClient.invalidateQueries({ queryKey: chatKeys.all }); } catch { /* bus not ready */ }
+    return;
   }
 
-  // Handle restore transition: move chat from archived list to active list
+  // Handle restore transition
   if (isBeingRestored) {
-    // Remove from archived list and get the chat data
-    const restoredChat = useChatStore.getState().removeArchivedChat(chat_id);
-    
-    if (restoredChat) {
-      // Add back to active chats list with new state
-      useChatStore.setState((state) => {
-        const newChats = new Map(state.chats);
-        newChats.set(chat_id, { ...restoredChat, state: nextState });
-        return {
-          chats: newChats,
-          chatOrder: [...state.chatOrder, chat_id],
-        };
-      });
-      
-      logger.info(`${LOG_PREFIX} Chat restored and moved to active list: ${chat_id.slice(0, 8)}`);
-      refreshAfterChatRestore();
-    } else {
-      // Chat wasn't in archived list (maybe it was already optimistically restored)
-      // Check if it already exists in active list
-      const existsInActive = useChatStore.getState().chats.has(chat_id);
-      
-      if (!existsInActive) {
-        // Construct a minimal chat object from the update data
-        const minimalChat: Chat = {
-          id: chat_id,
-          userId: '',
-          title: data.title || 'Restored Chat',
-          projectId: update.project_id || '',
-          worktreeId: update.worktree_id,
-          state: nextState,
-          createdAt: update.created_at,
-          updatedAt: update.created_at,
-          lastActive: update.created_at,
-          selectedPresets: {},
-          needsRecovery: false,
-          activity: 0,
-          unread: false,
-        };
-        useChatStore.setState((state) => {
-          const newChats = new Map(state.chats);
-          newChats.set(chat_id, minimalChat);
-          return {
-            chats: newChats,
-            chatOrder: [...state.chatOrder, chat_id],
-          };
-        });
-        logger.info(`${LOG_PREFIX} Chat restored (optimistic restore handled): ${chat_id.slice(0, 8)}`);
-      } else {
-        logger.debug(`${LOG_PREFIX} Chat already in active list, skipping restore: ${chat_id.slice(0, 8)}`);
-      }
-      refreshAfterChatRestore();
-    }
-    return; // Don't continue with normal state update
+    logger.info(`${LOG_PREFIX} Chat restored: ${chat_id.slice(0, 8)}`);
+    try { getEventBus().emit("chat:restored", { chatId: chat_id }); queryClient.invalidateQueries({ queryKey: chatKeys.all }); } catch { /* bus not ready */ }
+    return;
   }
 
   // Normal state change (not archive/restore): update chat.state in place
@@ -544,6 +386,7 @@ function handleChatStateChange(update: UserUpdate) {
     newChats.set(chat_id, { ...existing, state: nextState });
     return { chats: newChats };
   });
+  try { getEventBus().emit("chat:stateChanged", { chatId: chat_id, state: String(nextState) }); queryClient.invalidateQueries({ queryKey: chatKeys.detail(chat_id) }); } catch { /* bus not ready */ }
 
   // Handle unread flag from the update payload
   const unread = (data as { unread?: boolean }).unread;
@@ -556,6 +399,7 @@ function handleChatStateChange(update: UserUpdate) {
       newChats.set(chat_id, { ...existing, unread });
       return { chats: newChats };
     });
+    try { queryClient.invalidateQueries({ queryKey: chatKeys.detail(chat_id) }); } catch { /* not ready */ }
 
     // If unread=true and user is viewing this chat, auto-dismiss (fire-and-forget)
     const isViewingThisChat = useChatStore.getState().activeChatId === chat_id;
@@ -724,7 +568,6 @@ function handleChatConfigChanged(update: UserUpdate) {
   const { chat_id } = update;
   if (!chat_id) return;
 
-  // NOTE: model, temperature, max_tokens, agent, auto_approve are workflow params now
   const data = update.data as {
     workflow_name?: string | null;
     state?: string;
@@ -737,22 +580,7 @@ function handleChatConfigChanged(update: UserUpdate) {
     workflow_name: data.workflow_name,
   });
 
-  // Build partial update - only include fields that are defined
-  const partialUpdate: Partial<Chat> = {
-    updatedAt: data.updated_at,
-  };
-  if (data.workflow_name !== undefined) partialUpdate.workflowName = data.workflow_name ?? undefined;
-  if (data.state !== undefined) partialUpdate.state = parseChatState(data.state);
-  if (data.title !== undefined) partialUpdate.title = data.title;
-
-  // Update chats Map in a single setState
-  useChatStore.setState((state) => {
-    const existing = state.chats.get(chat_id);
-    if (!existing) return state;
-    const newChats = new Map(state.chats);
-    newChats.set(chat_id, { ...existing, ...partialUpdate });
-    return { chats: newChats };
-  });
+  try { getEventBus().emit("chat:configChanged", { chatId: chat_id }); queryClient.invalidateQueries({ queryKey: chatKeys.detail(chat_id) }); } catch { /* bus not ready */ }
 }
 
 function handleChatCreated(update: UserUpdate) {
@@ -768,25 +596,7 @@ function handleChatCreated(update: UserUpdate) {
     title: data.title,
   });
 
-  const chatStore = useChatStore.getState();
-  
-  // Check if the chat already exists in the list (added by createChat optimistically)
-  // This prevents duplicates when the chat_created event arrives after/during createChat
-  const chatExists = chatStore.chats.has(data.chat_id);
-  
-  if (chatExists) {
-    logger.debug(`${LOG_PREFIX} Chat already exists in store, skipping reload`, {
-      chatId: data.chat_id?.slice(0, 8),
-    });
-    return;
-  }
-  
-  // Only reload if the chat doesn't exist - this handles the case where
-  // the chat was created from another browser window/tab
-  logger.debug(`${LOG_PREFIX} Chat not in store, reloading chats`, {
-    chatId: data.chat_id?.slice(0, 8),
-  });
-  chatStore.loadChats();
+  try { getEventBus().emit("chat:created", { chatId: data.chat_id }); queryClient.invalidateQueries({ queryKey: chatKeys.lists() }); } catch { /* bus not ready */ }
 }
 
 function handleChatTitleChanged(update: UserUpdate) {
@@ -803,14 +613,7 @@ function handleChatTitleChanged(update: UserUpdate) {
     title: data.title,
   });
 
-  // Update chats Map in a single setState
-  useChatStore.setState((state) => {
-    const existing = state.chats.get(chat_id);
-    if (!existing) return state;
-    const newChats = new Map(state.chats);
-    newChats.set(chat_id, { ...existing, title: data.title });
-    return { chats: newChats };
-  });
+  try { getEventBus().emit("chat:titleChanged", { chatId: chat_id, title: data.title }); queryClient.invalidateQueries({ queryKey: chatKeys.detail(chat_id) }); } catch { /* bus not ready */ }
 }
 
 function handleChatDeleted(update: UserUpdate) {
@@ -821,21 +624,9 @@ function handleChatDeleted(update: UserUpdate) {
     chatId: chat_id.slice(0, 8),
   });
 
-  // Remove from active chats list in a single setState with fresh state
-  useChatStore.setState((state) => {
-    const newChats = new Map(state.chats);
-    newChats.delete(chat_id);
-    return {
-      chats: newChats,
-      chatOrder: state.chatOrder.filter((cid) => cid !== chat_id),
-    };
-  });
-
-  // Remove from archived chats list (in case it was archived)
-  useChatStore.getState().removeArchivedChat(chat_id);
-
   // Remove stale activity entry
   useActivityStore.getState().removeActivity(chat_id);
+  try { getEventBus().emit("chat:deleted", { chatId: chat_id }); queryClient.invalidateQueries({ queryKey: chatKeys.all }); } catch { /* bus not ready */ }
 }
 
 // ============================================
@@ -857,14 +648,14 @@ function handleChatActivityChanged(update: UserUpdate) {
 
   // Single source of truth: update the activity store
   useActivityStore.getState().setActivity(chat_id, activity);
+  try { getEventBus().emit("chat:activityChanged", { chatId: chat_id, activity: String(activity) }); } catch { /* bus not ready */ }
 
   // Clear pending approvals when activity goes idle.
   // NOTE: Thread activity is intentionally NOT cleared here. Thread metadata
   // (thread_title, router_decision, spawned_by_node_id) must persist across
   // pause/resume so the timeline can display thread names and routing decisions.
   // The useIsThreadActive hook returns false when the chat is not RUNNING,
-  // so threads won't appear as active. Thread data is cleared in
-  // cleanupChatState/evictChatData when the chat is fully torn down.
+  // so threads won't appear as active.
   if (activity === ChatActivity.IDLE) {
     useChatStore.setState((state) => ({
       pendingApprovals: {
@@ -872,6 +663,7 @@ function handleChatActivityChanged(update: UserUpdate) {
         [chat_id]: [],
       },
     }));
+    queryClient.invalidateQueries({ queryKey: approvalKeys.list(chat_id) });
   }
 
   // Clear discuss mode when workflow resumes (activity becomes RUNNING)
@@ -933,6 +725,8 @@ function handleProcessStarted(update: UserUpdate) {
       start_time: data.start_time,
     });
   }
+
+  try { getEventBus().emit("process:updated", { processId: data.process_id, status: "running" }); } catch {}
 }
 
 function handleProcessCompleted(update: UserUpdate) {
@@ -957,6 +751,8 @@ function handleProcessCompleted(update: UserUpdate) {
   });
 
   updateProcessStatus(update, data, BackgroundProcessStatus.COMPLETED);
+
+  try { getEventBus().emit("process:updated", { processId: data.process_id, status: "completed" }); } catch {}
 }
 
 function handleProcessFailed(update: UserUpdate) {
@@ -987,6 +783,8 @@ function handleProcessFailed(update: UserUpdate) {
       ? BackgroundProcessStatus.KILLED
       : BackgroundProcessStatus.FAILED;
   updateProcessStatus(update, data, status);
+
+  try { getEventBus().emit("process:updated", { processId: data.process_id, status: data.status === "killed" ? "killed" : "failed" }); } catch {}
 }
 
 function handleProcessPortChanged(update: UserUpdate) {
@@ -1008,6 +806,8 @@ function handleProcessPortChanged(update: UserUpdate) {
         : p
     ),
   });
+
+  try { getEventBus().emit("process:updated", { processId: data.process_id, status: "port_changed" }); } catch {}
 }
 
 function updateProcessStatus(
@@ -1108,7 +908,23 @@ function handleRefetch(update: UserUpdate) {
     logger.warn(`${LOG_PREFIX} Received refetch event with no type`, { data: update.data });
     return;
   }
+  // Keep existing refetchStore call for backwards compat
   triggerRefetch(refetchType, update.entity_id);
+
+  // Also emit via event bus
+  try {
+    const eventMap: Record<string, keyof import("../lib/events").EventMap> = {
+      worktree_changes: "refetch:worktreeChanges",
+      workflow_executions: "refetch:workflowExecutions",
+      config_health: "refetch:configHealth",
+      plan_tasks: "refetch:planTasks",
+      file_tree: "refetch:fileTree",
+    };
+    const eventName = eventMap[refetchType];
+    if (eventName) {
+      getEventBus().emit(eventName, { entityId: update.entity_id });
+    }
+  } catch {}
 }
 
 // Break the circular dependency: chatStore needs to call globalUpdatesStore

@@ -4,6 +4,7 @@ import { useProjectStore } from "../../store/projectStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useChatStore } from "../../store/chatStore";
 import { useChatNavigationStore } from "../../store/chatNavigationStore";
+import { useChatList } from "../../hooks/chat-queries";
 import { cn } from "../../lib/utils";
 import { logger } from "../../lib/logger";
 import { projectGrpc, type GitInfo as GrpcGitInfo } from "../../api/project-grpc";
@@ -32,8 +33,7 @@ export function ProjectPanel({ onNavigateToProjectPicker, onNavigateToChats }: P
   const worktrees = useWorktreeStore((state) => state.worktrees);
   const loadWorktrees = useWorktreeStore((state) => state.loadWorktrees);
   const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
-  const chatsMap = useChatStore((state) => state.chats);
-  const chats = useMemo(() => Array.from(chatsMap.values()), [chatsMap]);
+  const { data: chats = [] } = useChatList(currentProject?.id);
   const selectChat = useChatStore((state) => state.selectChat);
   const navigateToChat = useChatNavigationStore((state) => state.navigateToChat);
   const switchWorktreeContext = useWorktreeStore((state) => state.switchWorktreeContext);

@@ -8,10 +8,10 @@
  */
 
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
-import { useChat, useChatMessages, useContextUsage, useContextUsageByThread } from "../../store/chatStoreHooks";
+import { useContextUsage, useContextUsageByThread } from "../../store/chatStoreHooks";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useTerminalStore } from "../../store/terminalStore";
-import { useTasksStore } from "../../store/tasksStore";
+import { useTaskStats } from "../../hooks/task-queries";
 import { useProcessStore } from "../../store/processStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useWorkspaceStateStore, type RightSidebarTab } from "../../store/workspaceStateStore";
@@ -30,7 +30,8 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { useChatStore } from "../../store/chatStore";
+import { useChat, useDeleteChat, useRenameChat } from "../../hooks/chat-queries";
+import { useMessages } from "../../hooks/message-queries";
 import { useWorktreeChanges } from "../../hooks/useWorktreeChanges";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
 import { Tooltip } from "../ui/Tooltip";
@@ -82,13 +83,15 @@ export function ChatHeader({
   workflowViewerMode: _workflowViewerMode,
   onToggleWorkflowViewerMode,
 }: ChatHeaderProps) {
-  const chat = useChat(chatId || "");
-  const messages = useChatMessages(chatId || "");
+  const chatQuery = useChat(chatId || undefined);
+  const chat = chatQuery.data;
+  const messagesQuery = useMessages(chatId || undefined);
+  const messages = messagesQuery.data?.messages ?? [];
   const worktrees = useWorktreeStore((state) => state.worktrees);
   const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
   const currentProject = useProjectStore((state) => state.currentProject);
-  const deleteChat = useChatStore((state) => state.deleteChat);
-  const renameChat = useChatStore((state) => state.renameChat);
+  const deleteMutation = useDeleteChat();
+  const renameMutation = useRenameChat();
   const createTerminalSession = useTerminalStore((state) => state.createSession);
   const showTerminal = useTerminalStore((state) => state.showTerminal);
   const setActiveSession = useTerminalStore((state) => state.setActiveSession);
@@ -102,19 +105,8 @@ export function ChatHeader({
   const threads = useThreads(messages, chatId || "", workflowExecution);
   const hasMultipleThreads = threads.length > 1;
   
-  // Task stats - only subscribe to tasks for this specific chat
-  const chatTasks = useTasksStore((state) => 
-    chatId ? state.tasksByChat[chatId] : undefined
-  );
-  const taskStats = useMemo(() => {
-    if (!chatTasks) return { total: 0, completed: 0, pending: 0, percent: 0 };
-    const tasks = Object.values(chatTasks);
-    const total = tasks.length;
-    const completed = tasks.filter((t) => t.status === "completed").length;
-    const pending = tasks.filter((t) => t.status === "pending").length;
-    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
-    return { total, completed, pending, percent };
-  }, [chatTasks]);
+  // Task stats from React Query
+  const taskStats = useTaskStats(chatId);
   
   // Process stats - get running processes for the worktree
   const effectiveWorktreeId = propWorktreeId || chat?.worktreeId;
@@ -218,7 +210,7 @@ export function ChatHeader({
     }
 
     try {
-      await renameChat(chatId, editedTitle.trim());
+      await renameMutation.mutateAsync({ chatId, title: editedTitle.trim() });
       setIsEditingTitle(false);
       setEditedTitle("");
     } catch (err) {
@@ -247,7 +239,7 @@ export function ChatHeader({
     if (!chatId || !confirm('Are you sure you want to delete this chat?')) return;
     setIsMenuOpen(false);
     try {
-      await deleteChat(chatId);
+      await deleteMutation.mutateAsync(chatId);
     } catch (err) {
       console.error('Failed to delete chat:', err);
     }

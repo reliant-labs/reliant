@@ -13,6 +13,7 @@ const (
 	TLSModeTLS                   TLSMode = "tls"
 	TLSModeInsecureTLSSkipVerify TLSMode = "insecure_tls_skip_verify"
 	TLSModeH2C                   TLSMode = "h2c"
+	TLSModeDisabled              TLSMode = "disabled" // alias for h2c
 )
 
 // DaemonBootstrapConfig is the explicit launcher-provided config for tools-daemon.
@@ -46,7 +47,7 @@ func (c DaemonBootstrapConfig) Validate() error {
 		}
 	}
 	switch c.TLSMode {
-	case TLSModeTLS, TLSModeInsecureTLSSkipVerify, TLSModeH2C:
+	case TLSModeTLS, TLSModeInsecureTLSSkipVerify, TLSModeH2C, TLSModeDisabled:
 		return nil
 	case "":
 		if c.ServerMode {

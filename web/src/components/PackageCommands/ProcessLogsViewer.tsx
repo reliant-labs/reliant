@@ -6,14 +6,13 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import { usePackageCommandsStore } from "../../store/packageCommandsStore";
+import { usePackageProcesses, useKillProcess, type ProcessLogsResponse } from "../../hooks/package-queries";
 import { TerminalOutput, type ProcessInfo } from "../shared/TerminalOutput";
 import { cn } from "../../lib/utils";
 import {
   ProcessOutputStreamingService,
   type OutputLine,
 } from "../../api/process-output-streaming";
-import type { ProcessLogsResponse } from "../../api/package-commands-grpc";
 import { logger } from "../../lib/logger";
 import { BackgroundProcessStatus } from "../../api/background-grpc";
 
@@ -34,7 +33,8 @@ export function ProcessLogsViewer({
   onOpenPort,
   className,
 }: ProcessLogsViewerProps) {
-  const { processes, killProcess } = usePackageCommandsStore();
+  const { data: processes = [] } = usePackageProcesses();
+  const killProcessMutation = useKillProcess();
 
   // Local state for streamed output
   const [logs, setLogs] = useState<ProcessLogsResponse | null>(null);
@@ -207,7 +207,7 @@ export function ProcessLogsViewer({
       onRefresh={handleRefresh}
       onKill={
         process.status === BackgroundProcessStatus.RUNNING
-          ? () => killProcess(processId)
+          ? () => killProcessMutation.mutate(processId)
           : undefined
       }
       onOpenPort={onOpenPort}

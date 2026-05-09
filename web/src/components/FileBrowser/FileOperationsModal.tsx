@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Modal } from "../ui/Modal";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
-import { useSettingsStore } from "../../store/settingsStore";
+import { useUpdatePreferences } from "../../hooks/settings-queries";
 
 interface FileOperationsModalProps {
   isOpen: boolean;
@@ -24,7 +24,7 @@ export function FileOperationsModal({
   const [inputValue, setInputValue] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [dontAskAgain, setDontAskAgain] = useState(false);
-  const updatePreferences = useSettingsStore((state) => state.updatePreferences);
+  const updatePreferences = useUpdatePreferences();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -92,7 +92,7 @@ export function FileOperationsModal({
     // If "don't ask again" is checked, update the preference
     if (dontAskAgain) {
       try {
-        await updatePreferences({ skipDeleteConfirmation: true });
+        await updatePreferences.mutateAsync({ skipDeleteConfirmation: true });
       } catch (error) {
         console.error("Failed to update preferences:", error);
       }

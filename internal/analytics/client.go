@@ -99,6 +99,12 @@ func NewClientFromSettings(ctx context.Context, userID string, analyticsEnabled 
 		return NewNoopClient()
 	}
 
+	// Disable Statsig analytics in non-production environments
+	if !config.IsProductionEnvironment() {
+		logging.Info("[Analytics] Statsig analytics disabled in non-production environment", "env", config.GetEnvironment())
+		return NewNoopClient()
+	}
+
 	if !analyticsEnabled {
 		logging.Info("[Analytics] Analytics disabled by user privacy settings")
 		return NewNoopClient()

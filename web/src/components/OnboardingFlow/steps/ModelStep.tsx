@@ -1,15 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { useMutation } from "@tanstack/react-query";
 import { CheckCircle2, ExternalLink, Eye, EyeOff, KeyRound, Loader2, XCircle } from "lucide-react";
 import { api } from "@/api/client";
+import { hasControlPlane } from "../api";
 import { cn } from "@/lib/utils";
 import { getIsDev } from "@/lib/constants";
 import { logger } from "@/lib/logger";
 import { useCodexOAuth, useClaudeOAuth, useOAuthAvailability } from "@/hooks";
+import { useCloudEligibility, useCompleteOnboarding } from "@/hooks/useOnboardingQueries";
+// TODO: Remove this store import once the ApiKeySetupModal is converted to event-driven
 import { useApiKeySetupStore } from "@/store/apiKeySetupStore";
+import { ensureProject } from "../useOnboardingComplete";
 import type { LaunchPlan, ModelProvider, StepProps } from "../types";
-import { getCurrentUser, hasReliantCreditEligibility } from "../api";
-import { useOnboardingComplete } from "../useOnboardingComplete";
-import { useOnboardingFlowStore } from "../onboardingStore";
 
 const PROVIDERS = [
   {
@@ -69,7 +72,6 @@ const PROVIDERS = [
 ];
 
 type ProviderId = (typeof PROVIDERS)[number]["id"];
-type EligibilityState = "loading" | "eligible" | "ineligible" | "unknown";
 
 function parseErrorMessage(errorText: string, provider: string): string {
   const lowerError = (errorText || "").toLowerCase();
@@ -89,7 +91,7 @@ function parseErrorMessage(errorText: string, provider: string): string {
   return errorText || "Validation failed. Please check your API key.";
 }
 
-function getForcedEligibility(): EligibilityState | null {
+function getForcedEligibility(): "eligible" | "ineligible" | null {
   if (typeof window === "undefined") return null;
   const value = new URLSearchParams(window.location.search).get("onboarding-credits");
   if (value === "eligible") return "eligible";
@@ -97,18 +99,43 @@ function getForcedEligibility(): EligibilityState | null {
   return null;
 }
 
+async function applyTempChatParams(plan: Partial<LaunchPlan>) {
+  if (plan.workflowId || plan.workflowParams || plan.selectedPresets) {
+    const { useChatParamsStore } = await import("@/store/chatParamsStore");
+    const launchParams: Record<string, unknown> = {
+      ...(plan.workflowParams ?? {}),
+      ...(plan.workflowId ? { __selectedWorkflow: plan.workflowId } : {}),
+      ...(plan.selectedPresets ? { __selectedPresets: plan.selectedPresets } : {}),
+    };
+    useChatParamsStore.getState().setTempNewChatParams(launchParams);
+  }
+
+  if (plan.initialPrompt) {
+    const { useProjectStore } = await import("@/store/projectStore");
+    const projectId = useProjectStore.getState().currentProject?.id;
+    if (projectId) {
+      const { useWorkspaceStateStore } = await import("@/store/workspaceStateStore");
+      useWorkspaceStateStore.getState().setNewChatDraft(projectId, plan.initialPrompt);
+    }
+  }
+}
+
 export function ModelStep({ plan, updatePlan }: StepProps) {
-  const { completeOnboarding } = useOnboardingComplete();
+  const navigate = useNavigate();
+  const completeOnboardingMutation = useCompleteOnboarding();
   const codexOAuth = useCodexOAuth();
   const claudeOAuth = useClaudeOAuth();
   const oauthAvailability = useOAuthAvailability();
+  const cloudEligibility = useCloudEligibility();
 
-  const [eligibility, setEligibility] = useState<EligibilityState>(() => getForcedEligibility() ?? "loading");
+  const forcedEligibility = getForcedEligibility();
+  const isEligible = forcedEligibility === "eligible"
+    || (forcedEligibility == null && (getIsDev() || cloudEligibility.eligible));
+  const eligibilityLoading = forcedEligibility == null && !getIsDev() && cloudEligibility.isLoading;
+
   const [selectedProvider, setSelectedProvider] = useState<ProviderId>("reliant");
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [validating, setValidating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [validationResult, setValidationResult] = useState<{ valid: boolean; message: string } | null>(null);
 
@@ -117,44 +144,27 @@ export function ModelStep({ plan, updatePlan }: StepProps) {
     [selectedProvider],
   );
 
-  useEffect(() => {
-    const forced = getForcedEligibility();
-    if (forced) {
-      setEligibility(forced);
-      return;
-    }
+  const validateKeyMutation = useMutation({
+    mutationFn: ({ providerId, key }: { providerId: string; key: string }) =>
+      api.settings.validateProviderAPIKey(providerId, key),
+  });
 
-    if (getIsDev()) {
-      setEligibility("eligible");
-      return;
-    }
+  const saveKeyMutation = useMutation({
+    mutationFn: ({ providerId, key }: { providerId: string; key: string }) =>
+      api.settings.updateProvider(providerId, key),
+  });
 
-    if (!import.meta.env.VITE_CONTROL_PLANE_API_URL) {
-      setEligibility("unknown");
-      return;
-    }
-
-    let cancelled = false;
-    void getCurrentUser()
-      .then((response) => {
-        if (cancelled) return;
-        setEligibility(hasReliantCreditEligibility(response.user) ? "eligible" : "ineligible");
-      })
-      .catch(() => {
-        if (!cancelled) setEligibility("unknown");
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const saving = saveKeyMutation.isPending || completeOnboardingMutation.isPending;
+  const validating = validateKeyMutation.isPending;
 
   const finishOnboarding = useCallback(async (modelProvider: ModelProvider) => {
     if (!plan.intent || !plan.workflowId || !plan.codeSource || !plan.compute) {
       setError("Choose what you are building before finishing setup.");
       return;
     }
+    const isCloud = plan.compute === "cloud_free_trial";
     if (
+      !isCloud &&
       (plan.codeSource === "local_folder" ||
         plan.codeSource === "new_project" ||
         plan.codeSource === "sample_project") &&
@@ -172,26 +182,62 @@ export function ModelStep({ plan, updatePlan }: StepProps) {
       return;
     }
 
-    setSaving(true);
     setError(null);
     try {
-      const finalPlan = {
-        ...plan,
-        modelProvider,
-      };
+      const finalPlan: Partial<LaunchPlan> = { ...plan, modelProvider };
       updatePlan({ modelProvider });
-      await completeOnboarding(finalPlan as LaunchPlan);
-      useOnboardingFlowStore.getState().completeOnboarding();
+
+      // Ensure a project exists before navigating
+      await ensureProject(finalPlan);
+
+      // Call cloud RPC if control-plane is configured
+      if (hasControlPlane) {
+        await completeOnboardingMutation.mutateAsync({
+          intent: finalPlan.intent,
+          compute: finalPlan.compute,
+          codeSource: finalPlan.codeSource,
+          workflowId: finalPlan.workflowId,
+          modelProvider: finalPlan.modelProvider,
+          ...(finalPlan.repo && {
+            repo: {
+              provider: finalPlan.repo.provider,
+              url: finalPlan.repo.url,
+              branch: finalPlan.repo.branch,
+            },
+          }),
+          ...(finalPlan.localPath && { localPath: finalPlan.localPath }),
+          ...(finalPlan.presetId && { presetId: finalPlan.presetId }),
+          ...(finalPlan.useForge !== undefined && { useForge: finalPlan.useForge }),
+        });
+
+        // Provision the Reliant managed API key in the background
+        if (modelProvider === "reliant_credits") {
+          api.settings.syncReliantProvider().then(
+            (result) => logger.info("[OnboardingModelStep] Reliant provider synced", { synced: result.synced }),
+            (err) => logger.warn("[OnboardingModelStep] Reliant provider sync failed", err),
+          );
+        }
+      }
+
+      // Apply temp chat params (workflow, presets, initial prompt)
+      await applyTempChatParams(finalPlan);
+
+      if (finalPlan.launchTour) {
+        const { useOnboardingChecklistStore } = await import(
+          "@/store/onboardingChecklistStore"
+        );
+        await useOnboardingChecklistStore.getState().startWizard();
+      }
+
+      // Navigate to main app (server marks onboarding complete via RPC)
+      navigate({ to: "/", search: { step: undefined, "reset-onboarding": undefined } });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to finish onboarding");
-    } finally {
-      setSaving(false);
     }
-  }, [completeOnboarding, plan, updatePlan]);
+  }, [completeOnboardingMutation, navigate, plan, updatePlan]);
 
   const handleConnectOAuth = useCallback(async () => {
     if (!provider.usesOAuth) return;
-    setValidating(true);
     setError(null);
     setValidationResult(null);
 
@@ -203,6 +249,7 @@ export function ModelStep({ plan, updatePlan }: StepProps) {
         return;
       }
 
+      // TODO: Remove once ApiKeySetupModal is event-driven
       useApiKeySetupStore.setState({ hasApiKey: true, showModal: false, hasChecked: true });
       const { useGlobalDataStore } = await import("@/store/globalDataStore");
       await useGlobalDataStore.getState().refetchModels();
@@ -210,19 +257,19 @@ export function ModelStep({ plan, updatePlan }: StepProps) {
       await finishOnboarding(provider.modelProvider);
     } catch (err) {
       setValidationResult({ valid: false, message: err instanceof Error ? err.message : String(err) });
-    } finally {
-      setValidating(false);
     }
   }, [claudeOAuth, codexOAuth, finishOnboarding, provider]);
 
   const handleSaveKey = useCallback(async () => {
     if (!apiKey.trim() || provider.usesOAuth) return;
-    setSaving(true);
     setError(null);
     setValidationResult(null);
 
     try {
-      const validation = await api.settings.validateProviderAPIKey(selectedProvider, apiKey.trim());
+      const validation = await validateKeyMutation.mutateAsync({
+        providerId: selectedProvider,
+        key: apiKey.trim(),
+      });
       if (!validation.valid) {
         setValidationResult({
           valid: false,
@@ -231,7 +278,12 @@ export function ModelStep({ plan, updatePlan }: StepProps) {
         return;
       }
 
-      await api.settings.updateProvider(selectedProvider, apiKey.trim());
+      await saveKeyMutation.mutateAsync({
+        providerId: selectedProvider,
+        key: apiKey.trim(),
+      });
+
+      // TODO: Remove once ApiKeySetupModal is event-driven
       useApiKeySetupStore.setState({ hasApiKey: true, showModal: false, hasChecked: true });
       const { useGlobalDataStore } = await import("@/store/globalDataStore");
       await useGlobalDataStore.getState().refetchModels();
@@ -241,13 +293,11 @@ export function ModelStep({ plan, updatePlan }: StepProps) {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setValidationResult({ valid: false, message: parseErrorMessage(message, selectedProvider) });
-    } finally {
-      setSaving(false);
     }
-  }, [apiKey, finishOnboarding, provider, selectedProvider]);
+  }, [apiKey, finishOnboarding, provider, saveKeyMutation, selectedProvider, validateKeyMutation]);
 
-  const creditsAvailable = eligibility === "eligible";
-  const creditsUnavailable = eligibility === "ineligible" || eligibility === "unknown";
+  const creditsAvailable = isEligible;
+
 
   return (
     <div className="space-y-6">
@@ -297,7 +347,7 @@ export function ModelStep({ plan, updatePlan }: StepProps) {
           {provider.builtIn ? (
             <div className="space-y-3 rounded-lg border border-border/40 bg-background/70 p-4">
               <p className="text-sm font-medium text-foreground">Use Reliant&apos;s model routing</p>
-              {eligibility === "loading" ? (
+              {eligibilityLoading ? (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   Checking credit availability...

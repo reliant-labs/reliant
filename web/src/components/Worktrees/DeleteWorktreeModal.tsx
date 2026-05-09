@@ -3,7 +3,7 @@ import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 import { AlertTriangle, FolderX, Check, Settings, FolderGit2 } from "lucide-react";
 import type { Worktree } from "../../store/worktreeStore";
-import { useSettingsStore } from "../../store/settingsStore";
+import { usePreferences } from "../../hooks/settings-queries";
 import { useViewerStore } from "../../store/viewerStore";
 
 interface DeleteWorktreeModalProps {
@@ -21,7 +21,7 @@ export function DeleteWorktreeModal({
   onConfirmDelete,
   chatCount = 0,
 }: DeleteWorktreeModalProps) {
-  const preferences = useSettingsStore((state) => state.preferences);
+  const { data: preferences } = usePreferences();
   const setSettingsMode = useViewerStore((state) => state.setSettingsMode);
   const [isDeleting, setIsDeleting] = useState(false);
   
@@ -30,10 +30,10 @@ export function DeleteWorktreeModal({
   const [deleteGitBranch, setDeleteGitBranch] = useState(
     // When permanently deleting (already archived), default to true to clean up the branch
     // When archiving, use the user's preference
-    isArchived ? true : preferences.worktree.defaultDeleteBranch
+    isArchived ? true : (preferences?.worktree.defaultDeleteBranch ?? false)
   );
   const [deleteLocalDirectory, setDeleteLocalDirectory] = useState(
-    isArchived ? true : preferences.worktree.defaultDeleteDirectory
+    isArchived ? true : (preferences?.worktree.defaultDeleteDirectory ?? true)
   );
 
   if (!worktree) return null;
@@ -79,8 +79,8 @@ export function DeleteWorktreeModal({
       });
       onClose();
       // Reset checkboxes to preference defaults
-      setDeleteGitBranch(preferences.worktree.defaultDeleteBranch);
-      setDeleteLocalDirectory(preferences.worktree.defaultDeleteDirectory);
+      setDeleteGitBranch(preferences?.worktree.defaultDeleteBranch ?? false);
+      setDeleteLocalDirectory(preferences?.worktree.defaultDeleteDirectory ?? true);
     } catch (error) {
       console.error("Failed to delete worktree:", error);
     } finally {
