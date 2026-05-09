@@ -24,6 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/pat"
+	"github.com/reliant-labs/reliant/internal/patauth"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/transport"
@@ -239,7 +240,17 @@ func NewServer(cfg *Config) (*Server, error) {
 	// Daemon registry APIs remain on the app gRPC server.
 	// The ToolsDaemonService streaming endpoint itself is hosted on the dedicated
 	// daemon listener (see daemon_server.go).
-	daemonRegistryPath, daemonRegistryHandler := reliantv1connect.NewDaemonRegistryServiceHandler(daemonRegistryService, opts...)
+	// DaemonRegistryService uses PAT auth (CLI uses PATs, not JWTs).
+	var daemonRegistryAuthInterceptor *interceptors.DaemonAuthInterceptor
+	if !cfg.LocalMode {
+		var err error
+		daemonRegistryAuthInterceptor, err = interceptors.NewDaemonAuthInterceptor(patauth.NewDBPATValidator(database))
+		if err != nil {
+			return nil, fmt.Errorf("daemon registry auth interceptor required in cloud mode: %w", err)
+		}
+	}
+	daemonRegistryOpts := newHandlerOptions(interceptors.NewTimeoutInterceptor().Interceptor(), daemonRegistryAuthInterceptor)
+	daemonRegistryPath, daemonRegistryHandler := reliantv1connect.NewDaemonRegistryServiceHandler(daemonRegistryService, daemonRegistryOpts...)
 	daemonPath, daemonHandler := reliantv1connect.NewDaemonServiceHandler(daemonProxyService, opts...)
 
 	mux.Handle(systemPath, systemHandler)

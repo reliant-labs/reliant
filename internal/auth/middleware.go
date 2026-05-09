@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	"github.com/reliant-labs/reliant/internal/analytics"
-	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 )
@@ -39,12 +38,8 @@ func devUserID() string {
 
 // GetAuthMode returns the configured auth mode from the AUTH_MODE env var.
 // Recognized values: "dev", "apikey", "supabase". Defaults to "supabase"
-// when unset. When config.IsDevelopmentEnvironment() is true the mode is
-// always "dev" regardless of the env var.
+// when unset.
 func GetAuthMode() string {
-	if config.IsDevelopmentEnvironment() {
-		return "dev"
-	}
 	mode := strings.ToLower(os.Getenv("AUTH_MODE"))
 	switch mode {
 	case "dev", "apikey":

@@ -1,9 +1,9 @@
 import { useEffect, useState, useMemo } from "react";
 import { ChevronDown, ChevronRight, Copy, FileText, Settings2 } from "lucide-react";
 import { CreateWorktreeModal } from "../Worktrees/CreateWorktreeModal";
-import { useChatStore } from "../../store/chatStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
-import { useSettingsStore } from "../../store/settingsStore";
+import { useBranchChat } from "../../hooks/message-queries";
+import { usePreferences, useUpdateWorktreePreferences } from "../../hooks/settings-queries";
 import { worktreeGrpc } from "../../api/worktree-grpc";
 import { logger } from "../../lib/logger";
 import { cn } from "../../lib/utils";
@@ -27,15 +27,12 @@ export function BranchToWorktreeModal({
   projectId,
   sourceWorktreeId,
 }: BranchToWorktreeModalProps) {
-  const branchChatToWorktree = useChatStore((state) => state.branchChatToWorktree);
+  const branchChat = useBranchChat();
   const switchWorktreeContext = useWorktreeStore((state) => state.switchWorktreeContext);
   const worktrees = useWorktreeStore((state) => state.worktrees);
-  const branchCopyUncommittedFilesDefault = useSettingsStore(
-    (state) => state.preferences.worktree.branchCopyUncommittedFilesDefault
-  );
-  const updateWorktreePreferences = useSettingsStore(
-    (state) => state.updateWorktreePreferences
-  );
+  const { data: preferences } = usePreferences();
+  const branchCopyUncommittedFilesDefault = preferences?.worktree.branchCopyUncommittedFilesDefault ?? false;
+  const updateWorktreePrefs = useUpdateWorktreePreferences();
   
   // Track the current branch of the source worktree (from git status)
   const [currentBranch, setCurrentBranch] = useState<string | undefined>();
@@ -57,7 +54,7 @@ export function BranchToWorktreeModal({
   // Handle setting current choice as new default
   const handleSetAsDefault = async () => {
     try {
-      await updateWorktreePreferences({
+      await updateWorktreePrefs.mutateAsync({
         branchCopyUncommittedFilesDefault: copyUncommittedFiles,
       });
     } catch (error) {
@@ -128,11 +125,10 @@ export function BranchToWorktreeModal({
       logger.info("Worktree created, branching chat:", { worktreeId, chatId, messageId });
       
       // Branch the chat to the new worktree with workspace context
-      // This creates a system message explaining the workspace branch
-      await branchChatToWorktree(chatId, messageId, worktreeId, {
-        sourceWorktreeId: sourceWorktree?.id,
-        filesCopied: copyUncommittedFiles ? changedFiles : [],
-        copyFilesEnabled: copyUncommittedFiles,
+      await branchChat.mutateAsync({
+        chatId,
+        messageId,
+        worktreeId,
       });
       
       // Select the new worktree

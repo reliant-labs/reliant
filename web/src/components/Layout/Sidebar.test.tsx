@@ -1,4 +1,5 @@
 import { render } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -38,8 +39,33 @@ vi.mock("../../hooks/useDebounce", () => ({
   useDebounce: <T,>(value: T) => value,
 }));
 
+const mockChatListData = [
+  {
+    id: "chat-1",
+    title: "Selected chat",
+    createdAt: "2024-01-01T00:00:00.000Z",
+    updatedAt: "2024-01-01T00:00:00.000Z",
+    lastMessageAt: "2024-01-01T00:00:00.000Z",
+    unread: false,
+    state: ChatState.ACTIVE,
+    worktreeId: "worktree-1",
+    projectId: "project-1",
+  },
+];
+
+vi.mock("../../hooks/chat-queries", () => ({
+  useChatList: () => ({ data: mockChatListData, isLoading: false }),
+  useArchivedChats: () => ({ data: [], isFetched: true }),
+  useDeleteChat: () => ({ mutateAsync: vi.fn() }),
+  useRenameChat: () => ({ mutateAsync: vi.fn() }),
+  useUnarchiveChat: () => ({ mutateAsync: vi.fn() }),
+}));
+
+vi.mock("../../hooks/message-queries", () => ({
+  useMarkUnread: () => ({ mutateAsync: vi.fn() }),
+}));
+
 describe("Sidebar selected chat scroll", () => {
-  const loadArchivedChats = vi.fn(async () => undefined);
   const fetchProcesses = vi.fn();
   const switchWorktreeContext = vi.fn(async () => undefined);
   const scrollIntoViewMock = vi.fn();
@@ -71,13 +97,7 @@ describe("Sidebar selected chat scroll", () => {
         ],
       ]),
       activeChatId: "chat-1",
-      archivedChats: [],
-      archivedChatsLoaded: true,
-      loadArchivedChats,
       selectChat: vi.fn(),
-      deleteChat: vi.fn(async () => undefined),
-      renameChat: vi.fn(async () => undefined),
-      markUnread: vi.fn(async () => undefined),
     } as Partial<ReturnType<typeof useChatStore.getState>>);
 
     useActivityStore.setState({
@@ -136,7 +156,14 @@ describe("Sidebar selected chat scroll", () => {
   it("scrolls the selected chat into view with auto behavior", async () => {
     vi.useFakeTimers();
 
-    render(<Sidebar />);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar />
+      </QueryClientProvider>
+    );
 
     vi.advanceTimersByTime(100);
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useChatStore } from "../../store/chatStore";
+import { useChat } from "../../hooks/chat-queries";
 import { useChatParamsStore } from "../../store/chatParamsStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
@@ -52,16 +53,6 @@ export function useChatInputState({
   // Workflow selection state - tracks which workflow is selected
   // null means use user's default workflow (from preferences)
   const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(() => {
-    // For existing chats, load workflow from chat data
-    if (chatId) {
-      const chatObj = useChatStore.getState().chats.get(chatId);
-      const prefs = usePreferencesStore.getState().preferences;
-      const defaultWf = prefs?.defaultWorkflow ?? DEFAULT_WORKFLOW;
-      // Only set non-null if workflow differs from user's default
-      if (chatObj?.workflowName && chatObj.workflowName !== defaultWf) {
-        return chatObj.workflowName;
-      }
-    }
     // For new chats, check if onboarding set a one-time workflow selection
     const tempWorkflow = useChatParamsStore.getState().tempNewChatParams
       .__selectedWorkflow as string | undefined;
@@ -71,10 +62,9 @@ export function useChatInputState({
     return null;
   });
 
-  // Computed values
-  const currentChat = useChatStore((state) =>
-    chatId ? state.chats.get(chatId) || null : null
-  );
+  // Computed values — read chat from React Query cache
+  const { data: currentChat } = useChat(chatId);
+
   // Debounced draft save - wraps setInput to persist drafts
   const setInput = useCallback((value: string | ((prev: string) => string)) => {
     setInputRaw((prev) => {

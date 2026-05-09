@@ -7,7 +7,6 @@
 // ─── Tour Step Types ─────────────────────────────────────────────────────────
 
 export type OnboardingStepId =
-  | "welcome"
   | "chat-and-sidebars"
   | "workspaces"
   | "workflow-intro"

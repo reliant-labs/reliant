@@ -1,11 +1,12 @@
 // ChatSearch - Search chat history and within current chat (Cmd+Shift+C)
 import { MessageRole, ContentBlockType } from "../../gen/reliant/v1/chat_pb";
-import { useState, useRef, useEffect, forwardRef, useImperativeHandle, useCallback, useMemo } from "react";
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Search, MessageSquare, Loader2, Clock, ArrowRight } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useChatStore } from "../../store/chatStore";
 import { useProjectStore } from "../../store/projectStore";
+import { useChatList } from "../../hooks/chat-queries";
 import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { api, type Message } from "../../api/client";
@@ -64,11 +65,10 @@ export const ChatSearch = forwardRef<ChatSearchRef, ChatSearchProps>(({ isOpen: 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const chatsMap = useChatStore((state) => state.chats);
-  const chats = useMemo(() => Array.from(chatsMap.values()), [chatsMap]);
+  const currentProject = useProjectStore((state) => state.currentProject);
+  const { data: chats = [] } = useChatList(currentProject?.id);
   const activeChatId = useChatStore((state) => state.activeChatId);
   const selectChat = useChatStore((state) => state.selectChat);
-  const currentProject = useProjectStore((state) => state.currentProject);
   const navigateToChat = useChatNavigationStore((state) => state.navigateToChat);
   const switchWorktreeContext = useWorktreeStore((state) => state.switchWorktreeContext);
   const worktrees = useWorktreeStore((state) => state.worktrees);

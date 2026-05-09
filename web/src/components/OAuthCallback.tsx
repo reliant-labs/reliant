@@ -71,7 +71,9 @@ export function OAuthCallback() {
           })
         }
 
-        navigate({ to: '/' })
+        const returnStep = localStorage.getItem('onboarding-return-step')
+        localStorage.removeItem('onboarding-return-step')
+        navigate({ to: '/', search: returnStep ? { step: returnStep } : {} })
       } catch (err) {
         logger.error('[OAuthCallback] Unexpected callback error', err)
         setError(err instanceof Error ? err.message : 'Authentication failed')

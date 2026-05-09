@@ -18,8 +18,8 @@ import { cn } from "../../lib/utils";
 import { useWorktreeStore, type Worktree } from "../../store/worktreeStore";
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
 import { useProjectStore } from "../../store/projectStore";
-import { useChatStore } from "../../store/chatStore";
-import { useSettingsStore } from "../../store/settingsStore";
+import { useChatList } from "../../hooks/chat-queries";
+import { usePreferences } from "../../hooks/settings-queries";
 import { useWindowContext } from "../../hooks/useWindowContext";
 import { GitStatus } from "../Git/GitStatus";
 import { CommitHistory } from "../Git/CommitHistory";
@@ -33,19 +33,13 @@ export function WorktreeDetailView() {
   const deletingId = useWorktreeStore((state) => state.deletingId);
   const updateWorktreeStatus = useWorktreeStore((state) => state.updateWorktreeStatus);
   const currentProject = useProjectStore((state) => state.currentProject);
-  const chatsMap = useChatStore((state) => state.chats);
-  const chats = useMemo(() => Array.from(chatsMap.values()), [chatsMap]);
-  const preferences = useSettingsStore((state) => state.preferences);
-  const loadPreferences = useSettingsStore((state) => state.loadPreferences);
+  const { data: chats = [] } = useChatList(currentProject?.id);
+  const { data: preferences } = usePreferences();
   const { isElectron, openInNewWindow } = useWindowContext();
   const [copiedPath, setCopiedPath] = useState(false);
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    loadPreferences();
-  }, [loadPreferences]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -158,7 +152,7 @@ export function WorktreeDetailView() {
   };
 
   const handleArchive = () => {
-    const mode = preferences.worktree.archiveMode;
+    const mode = preferences?.worktree.archiveMode ?? "ask_me";
     if (mode === "ask_me") {
       setDeleteModalOpen(true);
       return;
@@ -167,8 +161,8 @@ export function WorktreeDetailView() {
     const options =
       mode === "always_cleanup"
         ? {
-            deleteGitBranch: preferences.worktree.defaultDeleteBranch,
-            deleteLocalDirectory: preferences.worktree.defaultDeleteDirectory,
+            deleteGitBranch: preferences?.worktree.defaultDeleteBranch ?? false,
+            deleteLocalDirectory: preferences?.worktree.defaultDeleteDirectory ?? true,
           }
         : {
             deleteGitBranch: false,

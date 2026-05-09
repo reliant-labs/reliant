@@ -101,7 +101,7 @@ export function EmailVerification({ autoSend = true, email }: EmailVerificationP
       await verifyEmailOTP(code, emailToShow)
       // User state will be refreshed by verifyEmailOTP
       // AuthGuard will handle navigation to main app
-      navigate({ to: '/' })
+      navigate({ to: '/', search: {} })
     } catch (err) {
       console.error('Verify OTP error:', err)
 
@@ -112,7 +112,7 @@ export function EmailVerification({ autoSend = true, email }: EmailVerificationP
           setError('Invalid verification code. Please check and try again.')
         } else if (err.message.includes('already verified')) {
           // Email already verified, just navigate
-          navigate({ to: '/' })
+          navigate({ to: '/', search: {} })
         } else {
           setError(err.message || 'Failed to verify code. Please try again.')
         }
@@ -151,7 +151,7 @@ export function EmailVerification({ autoSend = true, email }: EmailVerificationP
           setError('')
         } else if (err.message.includes('already verified')) {
           // Email already verified, just navigate
-          navigate({ to: '/' })
+          navigate({ to: '/', search: {} })
         } else {
           setError(err.message || 'Failed to resend code. Please try again.')
         }

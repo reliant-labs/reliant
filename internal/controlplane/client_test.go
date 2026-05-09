@@ -305,4 +305,3 @@ func TestClient_CheckManagedReliantAffordability_PropagatesErrors(t *testing.T) 
 		t.Fatalf("code = %v, want %v", connect.CodeOf(err), connect.CodeResourceExhausted)
 	}
 }
-

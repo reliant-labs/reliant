@@ -173,8 +173,15 @@ func Run(ctx context.Context, opts Options) error {
 	// RemoteExecutor is used by DaemonServer to wire the local daemon router
 	remoteExecutor := toolexec.NewRemoteExecutor(nil)
 
+	// JetStream context — shared by the tool bridge (pending command drain)
+	// and the daemon lifecycle event publisher.
+	js, err := jetstream.New(nc)
+	if err != nil {
+		return fmt.Errorf("failed to create JetStream context: %w", err)
+	}
+
 	// NATS tool bridge: per-user subscriptions created/destroyed on daemon connect/disconnect
-	toolBridge := toolexec.NewNATSToolBridge(nc, toolsDaemonService)
+	toolBridge := toolexec.NewNATSToolBridge(nc, js, toolsDaemonService)
 	toolsDaemonService.AddConnectionListener(toolBridge)
 	toolsDaemonService.AddConnectionListener(toolexec.NewDaemonLifecyclePublisher(nc))
 	if err := toolBridge.Start(); err != nil {
@@ -186,10 +193,6 @@ func Run(ctx context.Context, opts Options) error {
 	// Daemon lifecycle event publisher: forwards connect/disconnect to the
 	// control-plane admin-server via the DAEMON_EVENTS JetStream stream so
 	// `controlplane.daemons.status` stays in sync with reality.
-	js, err := jetstream.New(nc)
-	if err != nil {
-		return fmt.Errorf("failed to create JetStream context for daemon events: %w", err)
-	}
 	eventStreamCtx, eventStreamCancel := context.WithTimeout(ctx, 10*time.Second)
 	if err := daemonevents.EnsureStream(eventStreamCtx, js); err != nil {
 		eventStreamCancel()

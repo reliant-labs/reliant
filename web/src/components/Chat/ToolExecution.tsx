@@ -34,7 +34,7 @@ import { formatToolParams, type ToolInput, isViewOnlyTool, isTaskTool, isReadToo
 import { parseFilePath } from "../../lib/filePath";
 import { openFile, classifyPath } from "../../lib/fileOpener";
 import { toast } from "../../lib/toast-manager";
-import { useTasksStore } from "../../store/tasksStore";
+import { useTasksForChat, type TaskItem } from "../../hooks/task-queries";
 import { shouldToolBeCollapsed } from "../Settings/ToolCallSettings";
 import { ApprovalStatus } from "../../gen/reliant/v1/approval_pb";
 import { useActivityStore, ChatActivity } from "../../store/activityStore";
@@ -186,16 +186,21 @@ function ToolExecutionComponent({
   const shouldShowApprovalUI = needsApproval;
 
   // Task tool state
+  const { data: chatTasks } = useTasksForChat(isTaskToolFlag ? chatId : null);
+  const tasksById = useMemo(() => {
+    if (!chatTasks) return undefined;
+    const map: Record<string, TaskItem> = {};
+    for (const t of chatTasks) map[t.id] = t;
+    return map;
+  }, [chatTasks]);
+
   const taskIdForStore = useMemo(() => {
     if (toolNameLower !== 'update_task' || !chatId) return null;
     const input = toolCall.input as Record<string, unknown> | undefined;
     return (input?.task_id as string) || null;
   }, [toolNameLower, chatId, toolCall.input]);
 
-  const allTasksForChat = useTasksStore((state) => 
-    chatId ? state.tasksByChat[chatId] : undefined
-  );
-  const storedTask = taskIdForStore && allTasksForChat ? allTasksForChat[taskIdForStore] : null;
+  const storedTask = taskIdForStore && tasksById ? tasksById[taskIdForStore] : null;
 
   const taskTitle = useMemo(() => {
     if (!isTaskToolFlag || !chatId) return null;
@@ -209,9 +214,8 @@ function ToolExecutionComponent({
     const taskId = input.task_id as string | undefined;
     if (!taskId) return null;
     
-    const tasks = useTasksStore.getState().tasksByChat[chatId];
-    return tasks?.[taskId]?.title || null;
-  }, [isTaskToolFlag, chatId, toolCall.input, toolNameLower]);
+    return tasksById?.[taskId]?.title || null;
+  }, [isTaskToolFlag, chatId, toolCall.input, toolNameLower, tasksById]);
 
   const taskTargetStatus = useMemo(() => {
     if (toolNameLower !== 'update_task') return null;

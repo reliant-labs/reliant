@@ -1,4 +1,5 @@
 // ModernApp - Main application component
+import { useSearch, useNavigate } from '@tanstack/react-router';
 import { ChatState } from "./gen/reliant/v1/chat_pb";
 import type { Chat } from "./api/client";
 import { logger } from "./lib/logger";
@@ -27,6 +28,7 @@ import { CommandPalette } from "./components/Layout/CommandPalette";
 import { ChatSearch } from "./components/Layout/ChatSearch";
 import { NewChatView } from "./components/Chat/NewChatView";
 import { WorkflowBuilderPage } from "./components/workflow/WorkflowBuilderPage";
+import { useCurrentUser } from "@/hooks/useOnboardingQueries";
 
 // Wrapper to handle key-based remount for hub view reset
 function WorkflowBuilderPageWithKey() {
@@ -37,8 +39,7 @@ import { WorkflowHeader } from "./components/workflow/WorkflowHeader";
 import { SettingsPage } from "./components/Settings/SettingsPage";
 import { SettingsHeader } from "./components/Settings/SettingsHeader";
 import { ContextualTipsLayer, OnboardingWizard } from "./components/Onboarding";
-import { OnboardingOverlay, useOnboardingFlowStore } from "./components/OnboardingFlow";
-import { DaemonConnectionDiagrams } from "./components/OnboardingFlow/DaemonConnectionDiagrams";
+import { OnboardingPage } from "./components/OnboardingFlow/OnboardingPage";
 
 
 import { Header, type HeaderRef } from "./components/Layout/Header";
@@ -84,14 +85,11 @@ function App() {
   const chatError = useChatStore((state) => state.error);
   const activeChatId = useChatStore((state) => state.activeChatId);
   const currentProject = useProjectStore((state) => state.currentProject);
-  const projects = useProjectStore((state) => state.projects);
-  const projectsLoading = useProjectStore((state) => state.isLoading);
   const selectProject = useProjectStore((state) => state.selectProject);
   const loadProjects = useProjectStore((state) => state.loadProjects);
-  const devForceShowOnboarding = useOnboardingFlowStore(
-    (state) => state.devForceShow
-  );
-  const onboardingFlowState = useOnboardingFlowStore((state) => state.state);
+  const { step: onboardingStep, 'reset-onboarding': resetOnboarding } = useSearch({ from: '/' });
+  const navigate = useNavigate();
+  const { data: currentUser, isLoading: isUserLoading } = useCurrentUser();
 
   const isTerminalOpen = useTerminalStore((state) => state.isOpen);
   const toggleTerminal = useTerminalStore((state) => state.toggleTerminal);
@@ -492,7 +490,7 @@ function App() {
 
         // Priority 4: Find the active chat and pause it
         if (activeChatId) {
-          const { stopStreaming, pauseChat } =
+          const { pauseChat } =
             useChatStore.getState();
           const activity = useActivityStore.getState().activities.get(activeChatId);
           const isBusy = activity !== undefined && activity >= ChatActivity.RUNNING;
@@ -503,9 +501,6 @@ function App() {
               "🛑 ESC pressed - pausing chat for:",
               activeChatId
             );
-
-            // Stop streaming immediately for UI
-            stopStreaming(activeChatId);
 
             // Pause the backend workflow (keeps it resumable)
             pauseChat(activeChatId).catch((error) => {
@@ -1423,55 +1418,37 @@ function App() {
     return <LoadingSpinner />;
   }
 
-  // Show loading spinner while workspace is restoring
-  // This prevents the "jitter" where project picker flashes before restoration completes
-  if (isWorkspaceRestoring) {
+  // Show loading spinner while workspace is restoring or user is loading
+  if (isWorkspaceRestoring || isUserLoading) {
     return <LoadingSpinner />;
   }
 
-  const hasProjects = projects.length > 0 || Boolean(currentProject);
-  const forceOnboardingFromUrl =
-    typeof window !== "undefined" &&
-    new URLSearchParams(window.location.search).has("reset-onboarding");
-  const shouldMountOnboardingOverlay =
-    (!projectsLoading && !hasProjects) ||
-    onboardingFlowState === "in_progress" ||
-    forceOnboardingFromUrl ||
-    devForceShowOnboarding;
-  const searchParams =
-    typeof window !== "undefined"
-      ? new URLSearchParams(window.location.search)
-      : null;
-  const showDaemonDiagramPreview = searchParams?.has("preview-daemon-diagrams") ?? false;
-  if (showDaemonDiagramPreview) {
+  // Clean up old onboarding localStorage key
+  localStorage.removeItem('reliant-onboarding');
+
+  // Handle ?reset-onboarding=true: clear plan state and enter onboarding
+  if (resetOnboarding) {
+    localStorage.removeItem('reliant-onboarding-plan');
+    navigate({ to: '/', search: { step: 'goal', 'reset-onboarding': undefined } });
+    return <LoadingSpinner />;
+  }
+
+  // URL-driven onboarding: if ?step= is present, show OnboardingPage
+  if (onboardingStep) {
     return (
-      <div className="min-h-screen overflow-y-auto bg-background px-6 py-12 font-sans">
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
-          <div className="space-y-2 text-center">
-            <p className="text-xs font-medium uppercase tracking-[0.24em] text-primary">
-              Temporary Preview
-            </p>
-            <h1 className="text-2xl font-semibold text-foreground">
-              Daemon Connection Diagrams
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Remove the query param to return to the app.
-            </p>
-          </div>
-          <DaemonConnectionDiagrams />
-        </div>
+      <div className="flex h-screen flex-col overflow-hidden bg-background">
+        <OnboardingPage />
+        <Toaster />
       </div>
     );
   }
 
-  // If this account has no projects, onboarding owns project creation/selection.
-  if (!hasProjects && !projectsLoading) {
-    return (
-      <div className="flex h-screen flex-col overflow-hidden bg-background">
-        <OnboardingOverlay />
-        <Toaster />
-      </div>
-    );
+  // Server-driven gate: if user hasn't completed onboarding, redirect to onboarding.
+  // Also redirect when currentUser is null (API unreachable) — a new user with
+  // no server record should see onboarding, not the project picker.
+  if (!currentUser || !currentUser.onboardingCompleted) {
+    navigate({ to: '/', search: { step: 'goal' } });
+    return <LoadingSpinner />;
   }
 
   // Show project picker only after the account has projects but none is selected.
@@ -1520,7 +1497,6 @@ function App() {
             selectProject(fullProject);
           }}
         />
-        {shouldMountOnboardingOverlay && <OnboardingOverlay />}
       </div>
     );
   }
@@ -1538,8 +1514,6 @@ function App() {
         </div>
         {/* Toast Notifications */}
         <Toaster />
-        {/* Onboarding wizard must render in all layout modes */}
-        {shouldMountOnboardingOverlay && <OnboardingOverlay />}
         <OnboardingWizard />
         <ContextualTipsLayer />
       </div>
@@ -1565,8 +1539,6 @@ function App() {
         </div>
         {/* Toast Notifications */}
         <Toaster />
-        {/* Onboarding wizard must render in all layout modes */}
-        {shouldMountOnboardingOverlay && <OnboardingOverlay />}
         <OnboardingWizard />
         <ContextualTipsLayer />
       </div>
@@ -1752,8 +1724,6 @@ function App() {
       {/* Global Update Handler - shows update modal when updates are available */}
       <GlobalUpdateHandler />
 
-      {/* Onboarding - welcome modal + floating checklist */}
-      {shouldMountOnboardingOverlay && <OnboardingOverlay />}
       <OnboardingWizard />
       <ContextualTipsLayer />
     </div>

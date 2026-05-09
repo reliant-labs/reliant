@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Files, GitBranch, ListTodo, Check, Terminal, Globe } from "lucide-react";
 import { FileTree, type FileTreeHandle } from "./FileTree";
 import { FileTreeToolbar } from "./FileTreeToolbar";
@@ -12,7 +12,7 @@ import { RecentChanges } from "../Chat/RecentChanges";
 import { TasksPanel } from "../Chat/TasksPanel";
 import { CommandsViewerTab } from "../PackageCommands/CommandsViewerTab";
 import { BrowserSidebarContent } from "../Browser/BrowserSidebarContent";
-import { useTasksStore } from "../../store/tasksStore";
+import { useTaskStats } from "../../hooks/task-queries";
 import { useActiveChatId } from "../../store/chatStoreHooks";
 import { useCurrentWorktreeState, useWorkspaceStateStore, type RightSidebarTab } from "../../store/workspaceStateStore";
 import { useFileClipboardStore } from "../../store/fileClipboardStore";
@@ -90,21 +90,8 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
 
   const activeChatId = useActiveChatId();
 
-  // Get task stats for the current chat - use activeChatId directly from chatStore for consistency
-  // Subscribe to the entire tasksByChat object to ensure re-renders on any task updates
-  // Then derive tasks for the specific chatId (same pattern as TasksPanel)
-  const tasksByChat = useTasksStore((state) => state.tasksByChat);
-  const taskStats = useMemo(() => {
-    const tasks = activeChatId && tasksByChat[activeChatId] 
-      ? Object.values(tasksByChat[activeChatId]) 
-      : [];
-    return {
-      total: tasks.length,
-      completed: tasks.filter((t) => t.status === "completed").length,
-      inProgress: tasks.filter((t) => t.status === "in_progress").length,
-      pending: tasks.filter((t) => t.status === "pending").length,
-    };
-  }, [activeChatId, tasksByChat]);
+  // Task stats from React Query
+  const taskStats = useTaskStats(activeChatId);
 
   // Detect when Files tab becomes active to auto-focus
   useEffect(() => {

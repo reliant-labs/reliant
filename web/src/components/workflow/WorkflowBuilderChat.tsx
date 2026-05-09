@@ -19,11 +19,11 @@ import { useChatStore } from "../../store/chatStore";
 import {
   useChatMessages,
   useStreamingMessages,
-  useChatApprovals,
   useErrorEvents,
   useInfoEvents,
   useRunOutputs,
 } from "../../store/chatStoreHooks";
+import { useApprovals } from "../../hooks/approval-queries";
 import { useIsChatRunning, useActivityStore, ChatActivity } from "../../store/activityStore";
 import { useGlobalUpdatesStore } from "../../store/globalUpdatesStore";
 import { chatGrpc } from "../../api/chat-grpc";
@@ -179,7 +179,7 @@ export function WorkflowBuilderChat({
   const storeMessages = useChatMessages(chatId ?? undefined);
   const isChatBusy = useIsChatRunning(chatId ?? "");
   const streamingMessages = useStreamingMessages(chatId ?? "");
-  const approvals = useChatApprovals(chatId ?? "");
+  const { data: approvals = [] } = useApprovals(chatId ?? undefined);
   const errorEvents = useErrorEvents(chatId ?? "");
   const infoEvents = useInfoEvents(chatId ?? "");
   const runOutputs = useRunOutputs(chatId ?? "");

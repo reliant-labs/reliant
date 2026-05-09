@@ -69,6 +69,8 @@ import { useAttachmentStore } from "./attachmentStore";
 import type { Attachment } from "../api/client";
 import { logger } from "../lib/logger";
 import { singleflight } from "../lib/singleflight";
+import { queryClient } from "../lib/query-client";
+import { approvalKeys, questionKeys } from "../hooks/approval-queries";
 import { DEFAULT_WORKFLOW } from "./preferencesStore";
 import { tabSwitchProfiler } from "../lib/tabSwitchProfiler";
 import {
@@ -177,20 +179,6 @@ function clearStreamingBuffer(
   streamingBuffers.delete(key);
 }
 
-// Clear all buffers for a chat (all threads)
-function clearAllStreamingBuffers(chatId: string): void {
-  const prefix = `${chatId}:`;
-  for (const key of streamingBuffers.keys()) {
-    if (key.startsWith(prefix)) {
-      const buffer = streamingBuffers.get(key);
-      if (buffer?.flushTimeoutId) {
-        clearTimeout(buffer.flushTimeoutId);
-      }
-      streamingBuffers.delete(key);
-    }
-  }
-}
-
 // Buffer streaming deltas and flush on newlines
 // Returns deltas that should be processed immediately
 // Thread-aware: groups deltas by thread and buffers each separately
@@ -273,13 +261,6 @@ function bufferStreamingDeltas(
   return immediateDeltas;
 }
 
-// Helper to trim messages array to prevent memory bloat
-// NOTE: Trimming is disabled until proper "load more" UI is implemented.
-// The pagination infrastructure exists (loadMoreMessages) but no UI calls it,
-// so trimming would cause users to lose access to older messages.
-function trimMessages(messages: Message[]): Message[] {
-  return messages;
-}
 
 type AttachmentMetadataInput = {
   id?: unknown;
@@ -386,118 +367,7 @@ function getAttachmentsFromStore(attachmentIds: string[]): Attachment[] {
 // to prevent duplicate API calls when messages are reprocessed (cross-matching, streaming updates)
 const processedTaskToolCallIds = new Set<string>();
 
-// ============================================================================
-// LRU Cache for Per-Chat Data
-// ============================================================================
-// Keeps the last N chats' heavy data (messages, processedMessages, etc.) in memory.
-// When a user switches to chat N+1, the least-recently-used chat's data is evicted.
-// Chat metadata (chats Map, chatOrder) is always retained for sidebar rendering.
-// Evicted chats reload their data via subscribeToChatDetails on re-select.
 
-const LRU_MAX_SIZE = 5;
-const recentChatIds: string[] = []; // [most recent, ..., oldest]
-
-// Evict heavy per-chat data while preserving Chat metadata and chatOrder.
-// This is similar to cleanupChatState but does NOT remove from chats Map or chatOrder.
-function evictChatData(chatId: string, store: { get: () => ChatStoreState; set: (partial: Partial<ChatStoreState>) => void }): void {
-  const state = store.get();
-
-  clearAllStreamingBuffers(chatId);
-  useThreadActivityStore.getState().clearThreads(chatId);
-
-  const newMessages = { ...state.messages };
-  const newProcessedMessages = { ...state.processedMessages };
-  const newApprovals = { ...state.approvals };
-  const newPendingApprovals = { ...state.pendingApprovals };
-  const newDiscussMode = { ...state.discussMode };
-  const newPendingQuestions = { ...state.pendingQuestions };
-  const newErrorEvents = { ...state.errorEvents };
-  const newInfoEvents = { ...state.infoEvents };
-  const newRunOutputs = { ...state.runOutputs };
-  const newNodeExecutions = { ...state.nodeExecutions };
-  const newToolCallStates = { ...state.toolCallStates };
-  const newStreamingMessages = { ...state.streamingMessages };
-  const newContextUsage = { ...state.contextUsage };
-  const newMessagePagination = { ...state.messagePagination };
-  const newPendingStatusFetches = { ...state.pendingStatusFetches };
-
-  delete newMessages[chatId];
-  delete newProcessedMessages[chatId];
-  delete newApprovals[chatId];
-  delete newPendingApprovals[chatId];
-  delete newDiscussMode[chatId];
-  delete newPendingQuestions[chatId];
-  delete newErrorEvents[chatId];
-  delete newInfoEvents[chatId];
-  delete newRunOutputs[chatId];
-  delete newNodeExecutions[chatId];
-  delete newToolCallStates[chatId];
-  delete newStreamingMessages[chatId];
-  delete newContextUsage[chatId];
-  delete newMessagePagination[chatId];
-  delete newPendingStatusFetches[chatId];
-
-  store.set({
-    messages: newMessages,
-    processedMessages: newProcessedMessages,
-    approvals: newApprovals,
-    pendingApprovals: newPendingApprovals,
-    discussMode: newDiscussMode,
-    pendingQuestions: newPendingQuestions,
-    errorEvents: newErrorEvents,
-    infoEvents: newInfoEvents,
-    runOutputs: newRunOutputs,
-    nodeExecutions: newNodeExecutions,
-    toolCallStates: newToolCallStates,
-    streamingMessages: newStreamingMessages,
-    contextUsage: newContextUsage,
-    messagePagination: newMessagePagination,
-    pendingStatusFetches: newPendingStatusFetches,
-  });
-
-  // Clear processed task tool call IDs — re-processing is idempotent so this is safe.
-  // This prevents the module-level Set from growing unboundedly across evictions.
-  processedTaskToolCallIds.clear();
-
-  logger.info("[LRU] Evicted chat data", { chatId: chatId.slice(0, 8) });
-}
-
-// Touch a chatId in the LRU — moves it to front, evicts oldest if over capacity.
-// Must be called AFTER activeChatId is set so we never evict the active chat.
-function touchLRU(chatId: string, store: { get: () => ChatStoreState; set: (partial: Partial<ChatStoreState>) => void }): void {
-  // Remove if already present
-  const idx = recentChatIds.indexOf(chatId);
-  if (idx !== -1) {
-    recentChatIds.splice(idx, 1);
-  }
-
-  // Add to front (most recent)
-  recentChatIds.unshift(chatId);
-
-  // Evict oldest entries beyond LRU_MAX_SIZE
-  while (recentChatIds.length > LRU_MAX_SIZE) {
-    const evictId = recentChatIds.pop()!;
-    // Never evict the active chat (safety check)
-    if (evictId === store.get().activeChatId) {
-      recentChatIds.unshift(evictId);
-      continue;
-    }
-    evictChatData(evictId, store);
-  }
-}
-
-// Remove a chatId from the LRU tracking (e.g., on chat deletion)
-function removeFromLRU(chatId: string): void {
-  const idx = recentChatIds.indexOf(chatId);
-  if (idx !== -1) {
-    recentChatIds.splice(idx, 1);
-  }
-}
-
-// Clear the LRU tracking entirely (e.g., on reset/logout)
-function clearLRU(): void {
-  recentChatIds.length = 0;
-}
 
 // Helper to check if content blocks indicate a streaming (incomplete) message
 function isMessageBlocksStreaming(contentBlocks: ContentBlock[]): boolean {
@@ -577,8 +447,6 @@ interface ToolCallState {
 interface ChatStoreState {
   // Single source of truth for all chat objects — O(1) lookup by ID
   chats: Map<string, Chat>;
-  // Explicit ordering for sidebar rendering (list of chat IDs)
-  chatOrder: string[];
   messages: Record<string, Message[]>;
   approvals: Record<string, ToolApprovalRequest[]>;
   pendingApprovals: Record<string, ToolApprovalRequest[]>;
@@ -605,16 +473,6 @@ interface ChatStoreState {
     >
   >;
 
-  // Pagination state for lazy loading messages
-  messagePagination: Record<
-    string,
-    {
-      total: number;
-      hasMore: boolean;
-      oldestOrdinal: number;
-      isLoadingMore: boolean;
-    }
-  >;
 
   // Pre-processed message data for fast rendering (indexed by chatId -> messageId)
   // This cache stores parsed message content to avoid re-parsing on every render/tab switch
@@ -624,7 +482,6 @@ interface ChatStoreState {
   activeChatId: string | null;
 
   // Global loading/error states
-  isLoading: boolean;
   hasLoaded: boolean;
   error: string | null;
 
@@ -633,10 +490,6 @@ interface ChatStoreState {
 
   // Track pending status fetches to prevent duplicate API calls
   pendingStatusFetches: Record<string, Promise<unknown>>;
-
-  // Archived chats (loaded once, updated via gRPC stream)
-  archivedChats: Chat[];
-  archivedChatsLoaded: boolean;
 
   // Methods for chat management
   loadChats: (projectId?: string) => Promise<void>;
@@ -648,11 +501,8 @@ interface ChatStoreState {
     workflow?: string | null,
     selectedPresets?: Record<string, string>,
   ) => Promise<Chat>;
-  deleteChat: (id: string) => Promise<void>;
-  renameChat: (id: string, newTitle: string) => Promise<void>;
   // Methods for chat state management
   initChatState: (chat: Chat) => void;
-  cleanupChatState: (chatId: string) => void;
 
   // Methods for active chat
   setActiveChat: (chatId: string | null) => void;
@@ -674,7 +524,6 @@ interface ChatStoreState {
     },
   ) => Promise<void>;
   loadMessages: (chatId: string) => Promise<void>;
-  loadMoreMessages: (chatId: string) => Promise<void>;
 
   // Stream methods (chat detail events are delivered via the unified global stream)
   processChatStreamUpdates: (chatId: string, updates: ChatUpdate[], isSnapshot?: boolean) => void;
@@ -687,12 +536,9 @@ interface ChatStoreState {
 
   resolveQuestion: (chatId: string, questionId: string, action: string, responseData?: string) => Promise<void>;
   refreshChat: (chatId: string) => Promise<void>;
-  forceRecalculateBusyState: (chatId: string) => void;
   forceResetChatToIdle: (chatId: string) => void;
   checkChatStatus: (chatId: string) => Promise<void>;
-  stopStreaming: (chatId: string) => void;
   dismissChat: (chatId: string) => Promise<void>;
-  markUnread: (chatId: string) => Promise<void>;
 
   // Tool approval methods
   addPendingApproval: (chatId: string, approval: ToolApprovalRequest) => void;
@@ -727,12 +573,6 @@ interface ChatStoreState {
       copyFilesEnabled?: boolean;
     },
   ) => Promise<void>;
-
-  // Archived chats management (loaded once, updated via gRPC stream)
-  loadArchivedChats: (projectId?: string) => Promise<void>;
-  addArchivedChat: (chat: Chat) => void;
-  removeArchivedChat: (chatId: string) => Chat | null;
-  unarchiveChat: (chatId: string) => Promise<void>;
 
   // Connection management
   onConnectionRestored: () => void;
@@ -821,7 +661,6 @@ interface ChatStoreState {
 export const useChatStore = create<ChatStoreState>((set, get) => ({
   // Initial state
   chats: new Map<string, Chat>(),
-  chatOrder: [],
   messages: {},
   approvals: {},
   pendingApprovals: {},
@@ -835,28 +674,24 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   streamingMessages: {}, // Currently streaming messages per chat+thread
   contextUsage: {}, // Context usage tracking for compaction indicator
   processedMessages: {}, // Pre-processed message data for fast rendering
-  messagePagination: {}, // Pagination state for lazy loading messages
   activeChatId: null,
-  isLoading: false,
   hasLoaded: false,
   error: null,
   deletingChatIds: new Set(),
   pendingStatusFetches: {},
-  archivedChats: [],
-  archivedChatsLoaded: false,
 
   // Load all chats (with singleflight deduplication to prevent parallel API calls)
   loadChats: async () => {
     const projectId = useProjectStore.getState().currentProject?.id;
     if (!projectId) {
-      set({ chats: new Map(), chatOrder: [], isLoading: false });
+      set({ chats: new Map() });
       return;
     }
 
     // Use singleflight to ensure only one load per project runs at a time
     // The key includes projectId to allow different projects to load simultaneously
     return singleflight(`loadChats:${projectId}`, async () => {
-      set({ isLoading: true, error: null });
+      set({ error: null });
       try {
         const response = await api.chatsV2.list(projectId);
         const chatList = response.chats;
@@ -892,21 +727,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           }
         }
 
-        // Build chatOrder from API response order, then append optimistic chats
-        const chatOrder: string[] = [];
-        for (const chat of apiChatMap.values()) {
-          chatOrder.push(chat.id);
-        }
-        for (const [id] of freshChats) {
-          if (!apiChatMap.has(id)) {
-            chatOrder.push(id);
-          }
-        }
-
         set({
           chats: mergedChats,
-          chatOrder,
-          isLoading: false,
           hasLoaded: true,
         });
 
@@ -951,7 +773,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         }
       } catch (error) {
         logger.error("Failed to load chats:", error);
-        set({ error: "Failed to load chats", isLoading: false, hasLoaded: true });
+        set({ error: "Failed to load chats", hasLoaded: true });
       }
     });
   },
@@ -1004,7 +826,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       newChats.set(chatId, chat);
       return {
         chats: newChats,
-        chatOrder: [...state.chatOrder, chatId],
       };
     });
 
@@ -1048,138 +869,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     return chat;
   },
 
-  // Delete a chat (archive on first delete, permanent on second)
-  deleteChat: async (id: string) => {
-    const projectId = useProjectStore.getState().currentProject?.id;
-    if (!projectId) {
-      throw new Error("No project selected");
-    }
-
-    // Prevent duplicate delete operations
-    const state = get();
-    if (state.deletingChatIds.has(id)) {
-      logger.warn(
-        `Chat ${id} is already being deleted, ignoring duplicate delete request`,
-      );
-      return;
-    }
-
-    // Check if chat exists
-    const chatToDelete = state.chats.get(id);
-    if (!chatToDelete) {
-      logger.warn(`Chat ${id} does not exist, ignoring delete request`);
-      return;
-    }
-
-    // Save chat data before removing from active list (for archive scenario)
-    const savedChatData = { ...chatToDelete };
-
-    // Mark chat as being deleted
-    const newDeletingIds = new Set(state.deletingChatIds);
-    newDeletingIds.add(id);
-    set({ deletingChatIds: newDeletingIds, isLoading: true, error: null });
-
-    // Optimistically remove chat from active list immediately
-    set((state) => {
-      const newChats = new Map(state.chats);
-      newChats.delete(id);
-      return {
-        chats: newChats,
-        chatOrder: state.chatOrder.filter((cid) => cid !== id),
-        activeChatId: state.activeChatId === id ? null : state.activeChatId,
-      };
-    });
-
-    try {
-      const result = await api.chatsV2.delete(id);
-
-      // Remove from navigation queue
-      const { removeFromQueue } = useChatNavigationStore.getState();
-      removeFromQueue(id);
-
-      // If archived (not permanently deleted), add to archived list
-      if (!result.permanently_deleted) {
-        // Add to archived chats list with state = 'archived'
-        get().addArchivedChat({ ...savedChatData, state: ChatState.ARCHIVED });
-        logger.info(
-          `Chat ${id.slice(0, 8)} archived and added to archived list`,
-        );
-      } else {
-        logger.info(`Chat ${id.slice(0, 8)} permanently deleted`);
-      }
-
-      // Clean up chat state
-      get().cleanupChatState(id);
-
-      // Remove from deletingChatIds
-      const finalState = get();
-      const finalDeletingIds = new Set(finalState.deletingChatIds);
-      finalDeletingIds.delete(id);
-      set({ deletingChatIds: finalDeletingIds, isLoading: false });
-    } catch (error) {
-      logger.error("Failed to delete chat:", error);
-
-      // On error, restore the chat to the active list
-      set((state) => {
-        const newChats = new Map(state.chats);
-        newChats.set(id, savedChatData);
-        return {
-          chats: newChats,
-          chatOrder: [...state.chatOrder, id],
-        };
-      });
-
-      // Remove from deletingChatIds
-      const errorState = get();
-      const errorDeletingIds = new Set(errorState.deletingChatIds);
-      errorDeletingIds.delete(id);
-      set({
-        deletingChatIds: errorDeletingIds,
-        error: "Failed to delete chat",
-        isLoading: false,
-      });
-    }
-  },
-
-  // Rename a chat
-  renameChat: async (id: string, newTitle: string) => {
-    const projectId = useProjectStore.getState().currentProject?.id;
-    if (!projectId) {
-      throw new Error("No project selected");
-    }
-
-    // Optimistically update the title in local state
-    set((state) => {
-      const existing = state.chats.get(id);
-      if (!existing) return state;
-      const newChats = new Map(state.chats);
-      newChats.set(id, { ...existing, title: newTitle });
-      return { chats: newChats };
-    });
-
-    try {
-      // Update the chat on the backend
-      const updatedChat = await api.chatsV2.update(id, { title: newTitle });
-
-      // Update local state with the response from backend
-      set((state) => {
-        const newChats = new Map(state.chats);
-        newChats.set(id, updatedChat);
-        return { chats: newChats };
-      });
-
-      logger.info(`Chat ${id} renamed to "${newTitle}"`);
-    } catch (error) {
-      logger.error("Failed to rename chat:", error);
-
-      // On error, revert the optimistic update
-      // We need to fetch the original title from the backend or keep a backup
-      await get().loadChats(projectId);
-
-      throw new Error("Failed to rename chat");
-    }
-  },
-
   // Initialize state for a chat
   initChatState: (chat: Chat) => {
     const chatId = chat.id;
@@ -1198,7 +887,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
       return {
         chats: newChats,
-        chatOrder: state.chatOrder.includes(chatId) ? state.chatOrder : [...state.chatOrder, chatId],
         messages: { ...state.messages, [chatId]: [] },
         approvals: { ...state.approvals, [chatId]: [] },
         pendingApprovals: { ...state.pendingApprovals, [chatId]: [] },
@@ -1213,77 +901,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // 3. Optimistic updates from user actions (cancel/pause/resume/create)
     // Writing activity from a potentially stale chat object would overwrite
     // correct real-time values.
-  },
-
-  // Clean up state for a chat (full removal — called on chat deletion)
-  cleanupChatState: (chatId: string) => {
-    const state = get();
-
-    clearAllStreamingBuffers(chatId);
-
-    // Clear thread activity for this chat
-    useThreadActivityStore.getState().clearThreads(chatId);
-
-    // Remove stale activity entry
-    useActivityStore.getState().removeActivity(chatId);
-
-    // Remove from LRU tracking
-    removeFromLRU(chatId);
-
-    // Remove from all normalized records (including metadata)
-    const newChats = new Map(state.chats);
-    newChats.delete(chatId);
-    const newMessages = { ...state.messages };
-    const newApprovals = { ...state.approvals };
-    const newPendingApprovals = { ...state.pendingApprovals };
-    const newDiscussMode = { ...state.discussMode };
-    const newPendingQuestions = { ...state.pendingQuestions };
-    const newToolCallStates = { ...state.toolCallStates };
-    const newProcessedMessages = { ...state.processedMessages };
-    const newErrorEvents = { ...state.errorEvents };
-    const newInfoEvents = { ...state.infoEvents };
-    const newRunOutputs = { ...state.runOutputs };
-    const newNodeExecutions = { ...state.nodeExecutions };
-    const newStreamingMessages = { ...state.streamingMessages };
-    const newContextUsage = { ...state.contextUsage };
-    const newMessagePagination = { ...state.messagePagination };
-    const newPendingStatusFetches = { ...state.pendingStatusFetches };
-
-    delete newMessages[chatId];
-    delete newApprovals[chatId];
-    delete newPendingApprovals[chatId];
-    delete newDiscussMode[chatId];
-    delete newPendingQuestions[chatId];
-    delete newToolCallStates[chatId];
-    delete newProcessedMessages[chatId];
-    delete newErrorEvents[chatId];
-    delete newInfoEvents[chatId];
-    delete newRunOutputs[chatId];
-    delete newNodeExecutions[chatId];
-    delete newStreamingMessages[chatId];
-    delete newContextUsage[chatId];
-    delete newMessagePagination[chatId];
-    delete newPendingStatusFetches[chatId];
-
-    set({
-      chats: newChats,
-      chatOrder: state.chatOrder.filter((cid) => cid !== chatId),
-      messages: newMessages,
-      approvals: newApprovals,
-      pendingApprovals: newPendingApprovals,
-      discussMode: newDiscussMode,
-      pendingQuestions: newPendingQuestions,
-      toolCallStates: newToolCallStates,
-      processedMessages: newProcessedMessages,
-      errorEvents: newErrorEvents,
-      infoEvents: newInfoEvents,
-      runOutputs: newRunOutputs,
-      nodeExecutions: newNodeExecutions,
-      streamingMessages: newStreamingMessages,
-      contextUsage: newContextUsage,
-      messagePagination: newMessagePagination,
-      pendingStatusFetches: newPendingStatusFetches,
-    });
   },
 
   // Set the active chat
@@ -1347,9 +964,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       activeChatId: chat.id,
     });
 
-    // Update LRU — must be after activeChatId is set so the active chat is protected
-    touchLRU(chat.id, { get, set });
-
     // NOTE: viewerStore no longer has its own worktreeId state
     // The worktree context is managed by worktreeStore (single source of truth)
     // Browser viewers are filtered based on worktreeStore.currentWorktree?.id
@@ -1370,19 +984,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         .addToChatQueue(projectId, currentWorktreeId, chat.id);
     }
 
-    // Reset state for new chats or chats whose data was evicted by LRU.
-    // An evicted chat is an existing chat (in chats Map) but with no messages data.
-    const state = get();
-    const chatId = chat.id;
-    const isEvicted = !isNewChat && !(chatId in state.messages);
-
-    if (isNewChat || isEvicted) {
-      // Initialize with empty state — data will be populated by subscribeToChatDetails
-      if (isEvicted) {
-        logger.info("[LRU] Re-selecting evicted chat, will reload via subscription", {
-          chatId: chatId.slice(0, 8),
-        });
-      }
+    // Initialize state for new chats that don't have message data yet.
+    if (isNewChat) {
+      const state = get();
+      const chatId = chat.id;
       set({
         messages: { ...state.messages, [chatId]: [] },
         approvals: { ...state.approvals, [chatId]: [] },
@@ -1393,6 +998,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // Activity state is managed by activityStore (populated by server events)
       // They will be refreshed by the async loads below
       if (tabSwitchProfiler.isEnabled()) {
+        const chatId = chat.id;
+        const state = get();
         tabSwitchProfiler.mark("existing-chat-reuse-state", {
           messagesCount: state.messages[chatId]?.length || 0,
           processedCount: state.processedMessages[chatId]?.size || 0,
@@ -1710,7 +1317,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       });
 
       const state = get();
-      const trimmedMessages = trimMessages(messages);
 
       // PERFORMANCE: Pre-process all messages for fast rendering on tab switches
       // This is critical - without this, each ChatMessage parses JSON on every render
@@ -1721,7 +1327,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
       // Process each message that isn't already processed
       // Use processMessage directly (matching WebSocket handler)
-      for (const message of trimmedMessages) {
+      for (const message of messages) {
         if (!newProcessedMessages.has(message.id)) {
           const processed = processMessage(message, approvals);
           newProcessedMessages.set(message.id, processed);
@@ -1732,25 +1338,16 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         `[ChatStore] Pre-processed ${newProcessedMessages.size} messages for fast rendering`,
         {
           chatId: chatId.slice(0, 8),
-          loadedCount: trimmedMessages.length,
+          loadedCount: messages.length,
           processedCount: newProcessedMessages.size,
         },
       );
 
       set({
-        messages: { ...state.messages, [chatId]: trimmedMessages },
+        messages: { ...state.messages, [chatId]: messages },
         processedMessages: {
           ...state.processedMessages,
           [chatId]: newProcessedMessages,
-        },
-        messagePagination: {
-          ...state.messagePagination,
-          [chatId]: {
-            total: response.total,
-            hasMore: response.hasMore,
-            oldestOrdinal: response.oldestOrdinal,
-            isLoadingMore: false,
-          },
         },
       });
     } catch (error) {
@@ -1763,107 +1360,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     }
   },
 
-  // Load more (older) messages for a chat using pagination
-  loadMoreMessages: async (chatId: string) => {
-    const state = get();
-    const pagination = state.messagePagination?.[chatId];
-
-    logger.log("[ChatStore] loadMoreMessages called:", {
-      chatId: chatId.slice(0, 8),
-      pagination,
-    });
-
-    // Don't load if no pagination info, no more messages, or already loading
-    if (!pagination?.hasMore || pagination.isLoadingMore) {
-      logger.log("[ChatStore] loadMoreMessages skipped:", {
-        hasMore: pagination?.hasMore,
-        isLoadingMore: pagination?.isLoadingMore,
-      });
-      return;
-    }
-
-    const projectId = useProjectStore.getState().currentProject?.id;
-    if (!projectId) return;
-
-    // Mark as loading
-    set({
-      messagePagination: {
-        ...state.messagePagination,
-        [chatId]: {
-          ...pagination,
-          isLoadingMore: true,
-        },
-      },
-    });
-
-    try {
-      // Load 100 more messages before the oldest we have via gRPC
-      const response = await api.chatsV2.listMessages(chatId, {
-        recent: 100,
-        beforeOrdinal: pagination.oldestOrdinal,
-      });
-      const olderMessages = (response.messages || []).map(normalizeMessageAttachmentFields);
-
-      // Prepend older messages to existing messages
-      const currentState = get();
-      const existingMessages = currentState.messages[chatId] || [];
-
-      // PERFORMANCE: Pre-process older messages for fast rendering
-      const approvals = currentState.approvals[chatId] || [];
-      const existingProcessed =
-        currentState.processedMessages[chatId] || new Map();
-      const newProcessedMessages = new Map(existingProcessed);
-
-      for (const message of olderMessages) {
-        if (!newProcessedMessages.has(message.id)) {
-          const processed = processMessage(message, approvals);
-          newProcessedMessages.set(message.id, processed);
-        }
-      }
-
-      set({
-        messages: {
-          ...currentState.messages,
-          [chatId]: [...olderMessages, ...existingMessages],
-        },
-        processedMessages: {
-          ...currentState.processedMessages,
-          [chatId]: newProcessedMessages,
-        },
-        messagePagination: {
-          ...currentState.messagePagination,
-          [chatId]: {
-            total: response.total,
-            hasMore: response.hasMore,
-            oldestOrdinal: response.oldestOrdinal,
-            isLoadingMore: false,
-          },
-        },
-      });
-
-      logger.info("[ChatStore] Loaded more messages:", {
-        chatId: chatId.slice(0, 8),
-        loaded: olderMessages.length,
-        total: existingMessages.length + olderMessages.length,
-        processedCount: newProcessedMessages.size,
-        hasMore: response.hasMore,
-      });
-    } catch (error) {
-      logger.error("[ChatStore] Failed to load more messages:", error);
-
-      // Reset loading state on error
-      const currentState = get();
-      set({
-        messagePagination: {
-          ...currentState.messagePagination,
-          [chatId]: {
-            ...currentState.messagePagination[chatId],
-            isLoadingMore: false,
-          },
-        },
-      });
-    }
-  },
 
   // Process chat detail events from the unified global stream.
   // Called by globalUpdatesStore when per-chat events arrive.
@@ -2997,7 +2493,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
               [chatId]: updatedToolCallStates,
             },
             // Include chats Map if it was modified (uninitialized chat case)
-            ...(chatsMap !== state.chats ? { chats: chatsMap, chatOrder: state.chatOrder.includes(chatId) ? state.chatOrder : [...state.chatOrder, chatId] } : {}),
+            ...(chatsMap !== state.chats ? { chats: chatsMap } : {}),
             // NOTE: chat activity is NOT updated here.
             // It is handled by handleChatActivityChanged() in globalUpdatesStore.ts
             // via the global user update stream, which populates activityStore.
@@ -3032,6 +2528,13 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           return newState;
         });
 
+        // Invalidate React Query caches so RQ-based hooks stay in sync
+        if (allApprovals.length > 0) {
+          queryClient.invalidateQueries({ queryKey: approvalKeys.list(chatId) });
+        }
+        if (questionUpdates.length > 0) {
+          queryClient.invalidateQueries({ queryKey: questionKeys.pending(chatId) });
+        }
 
         // CRITICAL FIX: Clear streaming buffers when complete messages arrive
         // This prevents buffer flush timeouts from firing after complete messages
@@ -3201,6 +2704,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     set((state) => ({
       pendingQuestions: { ...state.pendingQuestions, [chatId]: null },
     }));
+    queryClient.invalidateQueries({ queryKey: questionKeys.pending(chatId) });
   },
 
   // Refresh chat - reconnects the unified stream to re-fetch data
@@ -3210,9 +2714,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     getGlobalUpdatesStore()?.subscribeToChatDetails(chatId);
   },
 
-  // Force recalculate activity state - NO-OP since activity is now computed on-demand
-  // Kept for API compatibility
-  forceRecalculateBusyState: () => {},
 
   // Force reset a stuck chat to idle state
   // This is a recovery function for chats that are stuck in busy state
@@ -3250,6 +2751,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
     // Also update activityStore so sidebar dot reflects change immediately
     useActivityStore.getState().setActivity(chatId, ChatActivity.IDLE);
+    queryClient.invalidateQueries({ queryKey: approvalKeys.list(chatId) });
 
     logger.info("✅ Chat reset to idle state", {
       chatId: chatId.slice(0, 8),
@@ -3289,15 +2791,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     }
   },
 
-  // Stop streaming - NO-OP since activity is managed by activityStore
-  stopStreaming: (chatId: string) => {
-    logger.debug(
-      "[stopStreaming] Called (no-op - activity computed on-demand)",
-      {
-        chatId: chatId.slice(0, 8),
-      },
-    );
-  },
 
   // Add pending approval
   addPendingApproval: (chatId: string, approval: ToolApprovalRequest) => {
@@ -3522,7 +3015,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         newChats.set(newChat.id, newChat);
         return {
           chats: newChats,
-          chatOrder: [...state.chatOrder, newChat.id],
+          
         };
       });
 
@@ -3587,7 +3080,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         newChats.set(newChat.id, newChat);
         return {
           chats: newChats,
-          chatOrder: [...state.chatOrder, newChat.id],
+          
         };
       });
 
@@ -3609,114 +3102,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       get()._navigateToBranchedChat(newChat, worktreeId);
     } catch (error) {
       logger.error("Failed to branch chat to worktree:", error);
-      throw error;
-    }
-  },
-
-  // Archived chats management - loaded once on mount, updated via gRPC stream
-  // (with singleflight deduplication to prevent parallel API calls)
-  loadArchivedChats: async (projectId?: string) => {
-    const resolvedProjectId =
-      projectId || useProjectStore.getState().currentProject?.id;
-    if (!resolvedProjectId) {
-      return;
-    }
-
-    // Skip if already loaded (subsequent updates come through gRPC stream)
-    if (get().archivedChatsLoaded) {
-      return;
-    }
-
-    // Use singleflight to ensure only one load per project runs at a time
-    return singleflight(`loadArchivedChats:${resolvedProjectId}`, async () => {
-      // Double-check inside singleflight in case another call completed while we waited
-      if (get().archivedChatsLoaded) {
-        return;
-      }
-
-      try {
-        const allArchived = await api.chatsV2.listArchived();
-        // Filter by current project
-        const projectChats = allArchived.filter(
-          (c) => c.projectId === resolvedProjectId,
-        );
-        set({
-          archivedChats: projectChats,
-          archivedChatsLoaded: true,
-        });
-      } catch (error) {
-        logger.error("Failed to load archived chats:", error);
-      }
-    });
-  },
-
-  addArchivedChat: (chat: Chat) => {
-    const { archivedChats } = get();
-    // Check if chat already exists to avoid duplicates
-    if (
-      archivedChats.some(
-        (c) => c.id === chat.id,
-      )
-    ) {
-      return;
-    }
-    set({ archivedChats: [...archivedChats, chat] });
-  },
-
-  removeArchivedChat: (chatId: string) => {
-    const { archivedChats } = get();
-    const chat = archivedChats.find(
-      (c) => c.id === chatId,
-    );
-    if (!chat) return null;
-    set({
-      archivedChats: archivedChats.filter(
-        (c) => c.id !== chatId,
-      ),
-    });
-    return chat;
-  },
-
-  unarchiveChat: async (chatId: string) => {
-    const archivedChat = get().removeArchivedChat(chatId);
-    const restoredChat = archivedChat
-      ? { ...archivedChat, state: ChatState.IDLE }
-      : null;
-
-    if (restoredChat) {
-      set((state) => {
-        const newChats = new Map(state.chats);
-        newChats.set(chatId, restoredChat);
-        const chatOrder = state.chatOrder.includes(chatId)
-          ? state.chatOrder
-          : [...state.chatOrder, chatId];
-        return { chats: newChats, chatOrder };
-      });
-    }
-
-    try {
-      await api.chatsV2.unarchive(chatId);
-
-      const projectId = useProjectStore.getState().currentProject?.id;
-      if (projectId) {
-        await useWorktreeStore.getState().loadWorktrees(projectId);
-        await get().loadChats(projectId);
-      }
-    } catch (error) {
-      logger.error("Failed to unarchive chat:", error);
-
-      if (restoredChat) {
-        set((state) => {
-          const newChats = new Map(state.chats);
-          newChats.delete(chatId);
-          return {
-            chats: newChats,
-            chatOrder: state.chatOrder.filter((id) => id !== chatId),
-            archivedChats: [...state.archivedChats, { ...restoredChat, state: ChatState.ARCHIVED }],
-          };
-        });
-      }
-
       throw error;
     }
   },
@@ -3899,30 +3284,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     }
   },
 
-  // Mark chat as unread
-  // This is fire-and-forget - the global WebSocket will update our state
-  markUnread: async (chatId: string) => {
-    try {
-      const result = await api.chatsV2.markUnread(chatId);
-
-      // If state actually changed, update local state immediately for responsiveness
-      // (global WebSocket will also deliver this update)
-      if (result.changed) {
-        set((state) => {
-          const existing = state.chats.get(chatId);
-          if (!existing) return state;
-          const newChats = new Map(state.chats);
-          newChats.set(chatId, { ...existing, unread: true });
-          return { chats: newChats };
-        });
-        logger.debug("[ChatStore] Marked chat as unread", { chatId });
-      }
-    } catch (error) {
-      // Non-blocking - just log the error
-      logger.warn("[ChatStore] Failed to mark chat as unread:", error);
-    }
-  },
-
   // Get computed busy state for a chat (delegates to activityStore as single source of truth)
   getIsChatBusy: (chatId: string) => {
     const activity = useActivityStore.getState().activities.get(chatId);
@@ -3954,13 +3315,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // Clear module-scoped set that tracks processed task tool calls
     processedTaskToolCallIds.clear();
 
-    // Clear LRU tracking
-    clearLRU();
-
     // Reset to initial state
     set({
       chats: new Map<string, Chat>(),
-      chatOrder: [],
       messages: {},
       approvals: {},
       pendingApprovals: {},
@@ -3973,16 +3330,12 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       streamingMessages: {},
       contextUsage: {},
       processedMessages: {},
-      messagePagination: {},
       toolCallStates: {},
       activeChatId: null,
-      isLoading: false,
       hasLoaded: false,
       error: null,
       deletingChatIds: new Set(),
       pendingStatusFetches: {},
-      archivedChats: [],
-      archivedChatsLoaded: false,
     });
   },
 }));

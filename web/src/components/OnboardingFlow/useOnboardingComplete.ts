@@ -1,21 +1,12 @@
-import { useCallback } from "react";
-import type { LaunchPlan } from "./types";
-import { logger } from "@/lib/logger";
-
-type OnboardingCompleteHandler = (plan: LaunchPlan) => Promise<void>;
-type LaunchTempParams = Record<string, unknown> & {
-  __selectedPresets?: Record<string, string | null>;
-};
-
-const handlers: OnboardingCompleteHandler[] = [];
-
 /**
- * Register a handler that runs when onboarding completes.
- * Cloud-specific actions (e.g. CompleteOnboarding RPC) register via this.
+ * Shared helpers for onboarding completion.
+ *
+ * The actual completion logic lives in ModelStep.tsx — this module
+ * exports reusable helpers that ModelStep (or other consumers) call directly.
  */
-export function registerOnboardingCompleteHandler(handler: OnboardingCompleteHandler) {
-  handlers.push(handler);
-}
+
+import { logger } from "@/lib/logger";
+import type { LaunchPlan } from "./types";
 
 /**
  * Ensure a project exists and is selected. Some onboarding paths (e.g. cloud
@@ -23,7 +14,7 @@ export function registerOnboardingCompleteHandler(handler: OnboardingCompleteHan
  * ProjectLocationStep's project creation. Without a project the main UI never
  * renders because hasProjects stays false.
  */
-async function ensureProject(plan: LaunchPlan): Promise<string> {
+export async function ensureProject(plan: Partial<LaunchPlan>): Promise<string> {
   const { useProjectStore } = await import("@/store/projectStore");
   const store = useProjectStore.getState();
 
@@ -63,62 +54,9 @@ async function ensureProject(plan: LaunchPlan): Promise<string> {
 
   // createProject already sets currentProject, but ensure selection is complete
   await useProjectStore.getState().selectProject(created);
+
+  // Refresh project list so hasProjects becomes true in ModernApp
+  await store.loadProjects();
+
   return created.id;
-}
-
-/**
- * Hook that handles what happens when onboarding finishes.
- * Runs registered handlers, then applies the selected launch defaults.
- */
-export function useOnboardingComplete() {
-  const completeOnboarding = useCallback(
-    async (plan: LaunchPlan) => {
-      // Run all registered handlers (cloud steps register theirs)
-      for (const handler of handlers) {
-        try {
-          await handler(plan);
-        } catch (err) {
-          logger.error("[OnboardingComplete] Handler failed", err);
-          throw err;
-        }
-      }
-
-      // Ensure a project exists and is selected before proceeding.
-      // This covers cloud paths that skip ProjectLocationStep or defer creation.
-      const projectId = await ensureProject(plan);
-
-      // Set workflow + params for the FIRST chat only (not as the user's global default).
-      // These temp params are consumed by transferTempToChat() and cleared afterwards.
-      if (plan.workflowId || plan.workflowParams || plan.selectedPresets) {
-        const { useChatParamsStore } = await import("@/store/chatParamsStore");
-        const launchParams: LaunchTempParams = {
-          ...(plan.workflowParams ?? {}),
-          ...(plan.workflowId
-            ? { __selectedWorkflow: plan.workflowId }
-            : {}),
-          ...(plan.selectedPresets
-            ? { __selectedPresets: plan.selectedPresets }
-            : {}),
-        };
-        useChatParamsStore.getState().setTempNewChatParams(launchParams);
-      }
-
-      if (plan.initialPrompt && projectId) {
-        const { useWorkspaceStateStore } = await import("@/store/workspaceStateStore");
-        useWorkspaceStateStore
-          .getState()
-          .setNewChatDraft(projectId, plan.initialPrompt);
-      }
-
-      if (plan.launchTour) {
-        const { useOnboardingChecklistStore } = await import(
-          "@/store/onboardingChecklistStore"
-        );
-        await useOnboardingChecklistStore.getState().startWizard();
-      }
-    },
-    [],
-  );
-
-  return { completeOnboarding };
 }

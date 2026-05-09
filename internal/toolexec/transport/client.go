@@ -51,7 +51,7 @@ func NewDaemonHTTPClient(cfg bootstrap.DaemonBootstrapConfig) (*http.Client, str
 	}
 
 	switch cfg.TLSMode {
-	case bootstrap.TLSModeH2C:
+	case bootstrap.TLSModeH2C, bootstrap.TLSModeDisabled:
 		tr := &http2.Transport{
 			AllowHTTP:       true,
 			ReadIdleTimeout: 60 * time.Second,

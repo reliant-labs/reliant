@@ -101,6 +101,25 @@ export function useWorkspaceRestore(
 
     setState((prev) => ({ ...prev, isRestoring: true, error: null }));
 
+    // Safety timeout: if restoration hangs (e.g. daemon unreachable), force-complete after 10s
+    const timeoutId = setTimeout(() => {
+      if (!hasRestoredRef.current) {
+        logger.warn("[WorkspaceRestore] Timed out after 10s — forcing completion");
+        hasRestoredRef.current = true;
+        const result: WorkspaceRestoreResult = {
+          isRestoring: false,
+          isComplete: true,
+          isSuccess: false,
+          error: "Restoration timed out",
+          warnings,
+          restoredProject,
+          restoredWorktree,
+        };
+        setState(result);
+        onCompleteRef.current?.(result);
+      }
+    }, 10_000);
+
     try {
       // Wait for workspace state to be hydrated from localStorage.
       // Zustand persist hydrates synchronously for localStorage, so hasHydrated()
@@ -118,7 +137,6 @@ export function useWorkspaceRestore(
       const projectStore = useProjectStore.getState();
       const worktreeStore = useWorktreeStore.getState();
       const viewerStore = useViewerStore.getState();
-      const chatStore = useChatStore.getState();
       const chatNavStore = useChatNavigationStore.getState();
       const workspaceState = useWorkspaceStateStore.getState();
 
@@ -317,6 +335,8 @@ export function useWorkspaceRestore(
 
       setState(result);
       onCompleteRef.current?.(result);
+    } finally {
+      clearTimeout(timeoutId);
     }
   }, [skipProjectRestore]);
 

@@ -5,20 +5,19 @@
  * Renders the appropriate step component based on current state.
  *
  * 3-phase flow:
- * 1. Tour not completed + wizard active: Show guided spotlight tour steps (9 steps)
+ * 1. Tour not completed + wizard active: Show guided spotlight tour steps (8 steps)
  * 2. Tour completed + checklist not dismissed: Show floating OnboardingChecklist
  * 3. Tour completed + checklist dismissed: Render nothing
  *
- * 9-step tour:
- * 1. Welcome (modal) - value pitch
- * 2. Chat & Sidebars (multi-spotlight) - development environment overview
- * 3. Workspaces (spotlight) - isolated branches
- * 4. Workflow Intro (spotlight) - what workflows are
- * 5. Workflow Hub (spotlight) - browse templates
- * 6. Workflow Builder (spotlight) - visual builder canvas
- * 7. Workflow Builder Chat (spotlight) - builder AI assistant
- * 8. Presets & Params (spotlight) - customization
- * 9. Completion (modal) - quick-start actions
+ * 8-step tour:
+ * 1. Chat & Sidebars (multi-spotlight) - development environment overview
+ * 2. Workspaces (spotlight) - isolated branches
+ * 3. Workflow Intro (spotlight) - what workflows are
+ * 4. Workflow Hub (spotlight) - browse templates
+ * 5. Workflow Builder (spotlight) - visual builder canvas
+ * 6. Workflow Builder Chat (spotlight) - builder AI assistant
+ * 7. Presets & Params (spotlight) - customization
+ * 8. Completion (modal) - quick-start actions
  */
 
 import { useEffect } from "react";
@@ -26,7 +25,7 @@ import { Workflow, Sparkles, Settings2 } from "lucide-react";
 import { useOnboardingChecklistStore } from "../../store/onboardingChecklistStore";
 import { useViewerStore } from "../../store/viewerStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
-import { useOnboardingFlowStore } from "../OnboardingFlow/onboardingStore";
+
 import {
   ONBOARDING_STEPS,
   getStepById,
@@ -41,7 +40,7 @@ import { OnboardingModal } from "./OnboardingModal";
 import { OnboardingNavBar } from "./OnboardingNavBar";
 import { OnboardingChecklist } from "./OnboardingChecklist";
 import type { OnboardingStepId, StepProps } from "./types";
-import { WelcomeStep, CompletionStep } from "./steps";
+import { CompletionStep } from "./steps";
 
 // ─── Spotlight Step Wrappers ─────────────────────────────────────────────────
 
@@ -293,7 +292,6 @@ function PresetsAndParamsStep({ onComplete: _onComplete, stepNumber, totalSteps 
 // ─── Step Component Map ──────────────────────────────────────────────────────
 
 const STEP_COMPONENTS: Record<OnboardingStepId, React.ComponentType<StepProps>> = {
-  "welcome": WelcomeStep,
   "chat-and-sidebars": ChatAndSidebarsStep,
   "workspaces": WorkspacesStep,
   "workflow-intro": WorkflowIntroStep,
@@ -324,9 +322,6 @@ export function OnboardingWizard() {
 
   const isWorkflowMode = useViewerStore((s) => s.isWorkflowMode);
   const isSettingsMode = useViewerStore((s) => s.isSettingsMode);
-  const onboardingFlowState = useOnboardingFlowStore((s) => s.state);
-  const onboardingSetupComplete = onboardingFlowState === "completed";
-
   // Load state on mount
   useEffect(() => {
     if (!isInitialized) {
@@ -444,7 +439,6 @@ export function OnboardingWizard() {
 
   // Phase 2: Show checklist after setup if not dismissed (only on main chat page)
   if (
-    onboardingSetupComplete &&
     panelState !== "dismissed" &&
     !isWorkflowMode &&
     !isSettingsMode

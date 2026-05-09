@@ -172,7 +172,7 @@ const getStorage = (): SupportedStorage => {
   if (isElectron) {
     return electronStorage
   }
-  if (getIsDev()) {
+  if (getIsDev() && import.meta.env.VITE_AUTH_MODE !== 'cloud') {
     // In browser dev mode, use gRPC storage to access global auth file on backend
     // (falls back to localStorage if DevAuth endpoints aren't available)
     return grpcStorage

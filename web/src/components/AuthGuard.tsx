@@ -58,7 +58,7 @@ export function AuthGuard({
       if (search?.redirect) {
         window.location.href = search.redirect
       } else {
-        navigate({ to: '/' })
+        navigate({ to: '/', search: {} })
       }
       return
     }
