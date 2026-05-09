@@ -4,10 +4,13 @@ package toolexec
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
@@ -19,6 +22,7 @@ import (
 // This runs on the daemon-gateway in distributed mode.
 type NATSToolBridge struct {
 	nc  *nats.Conn
+	js  jetstream.JetStream
 	mgr DaemonConnectionManager // The local ToolsDaemonService
 
 	// Per-daemon NATS subscriptions, keyed by daemonID.
@@ -36,10 +40,11 @@ type NATSToolBridge struct {
 }
 
 // NewNATSToolBridge creates a new bridge.
-func NewNATSToolBridge(nc *nats.Conn, mgr DaemonConnectionManager) *NATSToolBridge {
+func NewNATSToolBridge(nc *nats.Conn, js jetstream.JetStream, mgr DaemonConnectionManager) *NATSToolBridge {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &NATSToolBridge{
 		nc:            nc,
+		js:            js,
 		mgr:           mgr,
 		daemonSubs:    make(map[string][]*nats.Subscription),
 		daemonCancels: make(map[string]context.CancelFunc),
@@ -354,6 +359,11 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 
 	logging.Info("[NATSToolBridge] Subscribing to daemon subjects",
 		"userID", userID, "daemonID", daemonID, "count", len(subs))
+
+	// Drain any pending commands queued before this daemon was online.
+	// The control-plane publishes to daemon.pending.{daemonID} via JetStream
+	// when a clone/command is requested but the daemon isn't connected yet.
+	go b.drainPendingCommands(daemonCtx, userID, daemonID)
 }
 
 // OnDaemonDisconnected implements DaemonConnectionListener. It unsubscribes
@@ -478,6 +488,106 @@ func (b *NATSToolBridge) startProcessOutputForwarder(userCtx context.Context, us
 			}
 		}
 	}()
+}
+
+// drainPendingCommands creates an ephemeral ordered consumer on the
+// DAEMON_PENDING_COMMANDS stream, drains any messages queued for this
+// daemon while it was offline, dispatches them, and returns.
+func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemonID string) {
+	if b.js == nil {
+		return
+	}
+
+	subject := "daemon.pending." + daemonID
+
+	// Look up the stream — if it doesn't exist yet, skip gracefully.
+	stream, err := b.js.Stream(ctx, "DAEMON_PENDING_COMMANDS")
+	if err != nil {
+		if errors.Is(err, jetstream.ErrStreamNotFound) {
+			logging.Debug("[NATSToolBridge] DAEMON_PENDING_COMMANDS stream not found, skipping drain",
+				"daemonID", daemonID)
+			return
+		}
+		logging.Warn("[NATSToolBridge] Failed to look up DAEMON_PENDING_COMMANDS stream",
+			"daemonID", daemonID, "error", err)
+		return
+	}
+
+	// Create an ephemeral ordered consumer filtered to this daemon's subject.
+	consumer, err := stream.OrderedConsumer(ctx, jetstream.OrderedConsumerConfig{
+		FilterSubjects: []string{subject},
+	})
+	if err != nil {
+		logging.Warn("[NATSToolBridge] Failed to create pending commands consumer",
+			"daemonID", daemonID, "error", err)
+		return
+	}
+
+	// Fetch available messages with a short timeout — we only want to drain
+	// what's already queued, not block waiting for new messages.
+	fetchCtx, fetchCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer fetchCancel()
+
+	var dispatched int
+	for {
+		msgs, err := consumer.Fetch(100, jetstream.FetchMaxWait(2*time.Second))
+		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				break
+			}
+			logging.Warn("[NATSToolBridge] Error fetching pending commands",
+				"daemonID", daemonID, "error", err)
+			break
+		}
+
+		gotMessages := false
+		for msg := range msgs.Messages() {
+			gotMessages = true
+
+			var envelope struct {
+				RequestID   string          `json:"request_id"`
+				CommandType string          `json:"command_type"`
+				Payload     json.RawMessage `json:"payload"`
+				TimeoutMs   int32           `json:"timeout_ms"`
+			}
+			if err := json.Unmarshal(msg.Data(), &envelope); err != nil {
+				logging.Warn("[NATSToolBridge] Failed to unmarshal pending command",
+					"daemonID", daemonID, "error", err)
+				_ = msg.Ack()
+				continue
+			}
+
+			protoReq := &reliantv1.DaemonCommandRequest{
+				RequestId:   envelope.RequestID,
+				CommandType: envelope.CommandType,
+				Payload:     envelope.Payload,
+				TimeoutMs:   envelope.TimeoutMs,
+			}
+
+			if _, err := b.mgr.SendDaemonCommand(fetchCtx, userID, protoReq); err != nil {
+				logging.Warn("[NATSToolBridge] Failed to dispatch pending command",
+					"daemonID", daemonID, "commandType", envelope.CommandType,
+					"requestID", envelope.RequestID, "error", err)
+				// Still ack — WorkQueue retention means retry isn't possible,
+				// and leaving it un-acked would just block the consumer.
+			}
+			_ = msg.Ack()
+			dispatched++
+		}
+
+		if msgs.Error() != nil {
+			// ErrMsgIteratorClosed or timeout — we're done draining.
+			break
+		}
+		if !gotMessages {
+			break
+		}
+	}
+
+	if dispatched > 0 {
+		logging.Info("[NATSToolBridge] Drained pending commands",
+			"daemonID", daemonID, "count", dispatched)
+	}
 }
 
 // Close cancels the bridge context, waits for goroutines, and unsubscribes everything.
