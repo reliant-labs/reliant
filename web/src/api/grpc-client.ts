@@ -39,7 +39,6 @@ import {
   OAUTH_TIMEOUT_MS,
   OAUTH_EXCHANGE_TIMEOUT_MS,
   PROVIDER_VALIDATION_TIMEOUT_MS,
-  getIsDev,
 } from "../lib/constants";
 
 // Detect if running in Electron and get gRPC URL
@@ -96,8 +95,6 @@ const daemonLastSeenInterceptor: Interceptor = (next) => async (req) => {
 
 // Auth interceptor to add JWT token to requests
 const authInterceptor: Interceptor = (next) => async (req) => {
-  const isDev = getIsDev();
-
   // Check for API key auth first (stored by ApiKeyLogin)
   const apiKey = localStorage.getItem('reliant-api-key');
   if (apiKey) {
@@ -118,12 +115,6 @@ const authInterceptor: Interceptor = (next) => async (req) => {
       logger.info("[gRPC Client] Auth token set for request:", {
         method: req.method.name,
         tokenLength: session.access_token.length,
-        isDev,
-      });
-    } else if (isDev) {
-      logger.info("[gRPC Client] Dev mode - no auth token available, relying on backend DevUser:", {
-        method: req.method.name,
-        hasSession: !!session,
       });
     } else {
       logger.warn("[gRPC Client] No auth token available for request:", {
@@ -133,17 +124,10 @@ const authInterceptor: Interceptor = (next) => async (req) => {
       });
     }
   } catch (error) {
-    if (isDev) {
-      logger.warn("[gRPC Client] Dev mode - failed to read session, relying on backend DevUser:", {
-        method: req.method.name,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    } else {
-      logger.error("[gRPC Client] Error getting session in interceptor:", {
-        method: req.method.name,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+    logger.error("[gRPC Client] Error getting session in interceptor:", {
+      method: req.method.name,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 
   return await next(req);
@@ -354,6 +338,80 @@ const errorInterceptor: Interceptor = (next) => async (req) => {
   }
 };
 
+// Auto-sign-out on 401 with an active session.
+//
+// When the backend rejects a stored token (most often because the token was
+// issued by a different Supabase project, or the user was deleted server-side,
+// or signing keys rotated), we clear the local session and redirect to /auth.
+// Without this, users get stuck on a loading screen with no recourse.
+//
+// Safety guards:
+// - Only fires when a session/API key is currently set (no sign-in→sign-out loops).
+// - Single-flight: a burst of parallel 401s triggers exactly one sign-out.
+// - Skipped on /auth so a 401 there doesn't trigger a redirect to itself.
+let _signOutInFlight = false;
+const unauthInterceptor: Interceptor = (next) => async (req) => {
+  try {
+    return await next(req);
+  } catch (error) {
+    if (
+      !(error instanceof ConnectError) ||
+      error.code !== Code.Unauthenticated ||
+      _signOutInFlight
+    ) {
+      throw error;
+    }
+
+    let hasSession = !!localStorage.getItem("reliant-api-key");
+    if (!hasSession) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        hasSession = !!session?.access_token;
+      } catch {
+        // Fall through with hasSession=false; nothing to clear.
+      }
+    }
+    if (!hasSession) throw error;
+
+    _signOutInFlight = true;
+    logger.warn(
+      "[gRPC Client] 401 with active session — token rejected by backend; signing out",
+      {
+        service: req.service.typeName,
+        method: req.method.name,
+        message: error.message,
+      },
+    );
+    Sentry.captureMessage("Auto sign-out on 401 with active session", {
+      level: "warning",
+      tags: {
+        grpc_service: req.service.typeName,
+        grpc_method: req.method.name,
+      },
+    });
+
+    try {
+      const { useAuthStore } = await import("../store/authStore");
+      await useAuthStore.getState().signOut();
+    } catch (signOutErr) {
+      logger.error("[gRPC Client] Auto sign-out failed", signOutErr);
+    }
+
+    // Hard redirect clears React Query caches and any in-flight retries that
+    // would otherwise keep firing 401s against the dead session.
+    if (
+      typeof window !== "undefined" &&
+      !window.location.pathname.startsWith("/auth")
+    ) {
+      window.location.href = "/auth";
+    } else {
+      _signOutInFlight = false;
+    }
+
+    throw error;
+  }
+};
+
 // Create the Connect transport
 let _transport: ReturnType<typeof createConnectTransport> | null = null;
 let _currentBaseURL: string | null = null;
@@ -418,7 +476,7 @@ export const getTransport = () => {
       baseUrl: currentBaseURL,
       // Order: timeout -> auth -> error logging
       // Timeout is outermost so it applies to the full request lifecycle
-      interceptors: [timeoutInterceptor, authInterceptor, daemonLastSeenInterceptor, tracingInterceptor, errorInterceptor],
+      interceptors: [timeoutInterceptor, authInterceptor, daemonLastSeenInterceptor, tracingInterceptor, errorInterceptor, unauthInterceptor],
       // Use JSON for easier debugging during migration
       // Can switch to binary later for performance
       useBinaryFormat: false,

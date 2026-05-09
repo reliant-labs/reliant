@@ -317,23 +317,21 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
     const { presets, loading: presetsLoading } = usePresetsForWorkflow(
       workflowName
     );
-    // Track selected preset per group (group name -> preset name)
-    // Initialize from backend data for existing chats, empty for new chats
+    // Track selected preset per group (group name -> preset name).
+    // For existing chats, prefer the chat record (backend source of truth);
+    // fall back to the chatParamsStore preset cache for offline restoration.
+    // For new chats, restore any pending preset selection from onboarding.
     const [selectedPresets, setSelectedPresets] = useState<
       Record<string, string | null>
     >(() => {
-      // For existing chats, prefer backend data over localStorage
       if (chatId) {
         const chatObj = useChatStore.getState().chats.get(chatId);
         if (chatObj?.selectedPresets && Object.keys(chatObj.selectedPresets).length > 0) {
           return chatObj.selectedPresets as Record<string, string | null>;
         }
-        // Fall back to chatParamsStore for existing chats
-        const persistedParams = useChatParamsStore.getState().getChatParams(chatId);
-        return (persistedParams.__selectedPresets as Record<string, string | null>) || {};
+        return useChatParamsStore.getState().getChatPresets(chatId);
       }
-      // New chats start fresh - default preset will be loaded via loadDefaultPreset
-      return {};
+      return useChatParamsStore.getState().tempNewChatPresets;
     });
 
     // Load workflow inputs when selection changes
@@ -476,31 +474,33 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
           if (chatObj?.selectedPresets && Object.keys(chatObj.selectedPresets).length > 0) {
             persistedPresets = chatObj.selectedPresets as Record<string, string | null>;
           } else {
-            persistedPresets = (persistedParams.__selectedPresets as Record<string, string | null>) || {};
+            persistedPresets = useChatParamsStore.getState().getChatPresets(chatId);
           }
         }
         // If workflow doesn't match, persistedPresets stays empty - fresh start for new workflow
       } else {
-        // New chat (no chatId): only clear temp params when the workflow actually changes.
+        // New chat (no chatId): only clear temp state when the workflow actually changes.
         // This preserves user-set params (e.g. model) across re-renders and effect re-runs
         // while still clearing stale params when switching workflows.
         const workflowActuallyChanged = prevWorkflowNameRef.current !== undefined && prevWorkflowNameRef.current !== workflowName;
         if (workflowActuallyChanged) {
-          logger.debug("[ChatInput] Workflow changed for new chat, clearing temp params", {
+          logger.debug("[ChatInput] Workflow changed for new chat, clearing temp state", {
             from: prevWorkflowNameRef.current,
             to: workflowName,
           });
           useChatParamsStore.getState().clearTempNewChatParams();
         } else {
-          // Same workflow (or initial mount) — restore any existing temp params
-          // so user selections (model, etc.) survive re-renders
-          const tempParams = useChatParamsStore.getState().tempNewChatParams;
-          if (Object.keys(tempParams).length > 0) {
-            persistedParams = { ...tempParams };
-            persistedPresets = (tempParams.__selectedPresets as Record<string, string | null>) || {};
+          // Same workflow (or initial mount) — restore any existing temp state
+          // so user selections (model, presets, etc.) survive re-renders.
+          const tempState = useChatParamsStore.getState();
+          if (Object.keys(tempState.tempNewChatParams).length > 0) {
+            persistedParams = { ...tempState.tempNewChatParams };
             logger.debug("[ChatInput] Restoring temp params for new chat", {
-              keys: Object.keys(tempParams),
+              keys: Object.keys(tempState.tempNewChatParams),
             });
+          }
+          if (Object.keys(tempState.tempNewChatPresets).length > 0) {
+            persistedPresets = tempState.tempNewChatPresets;
           }
         }
       }
@@ -529,23 +529,12 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
         }
 
         // Skip if user has explicitly set any workflow params (including model)
-        // This prevents overwriting user's manual selections
+        // — don't overwrite manual selections with workflow defaults.
         if (Object.keys(persistedParams).length > 0) {
-          // Check if any of the persisted params are user-set (not just defaults)
-          // If user has set a model or other params, don't load default presets
-          const hasUserSetParams = Object.keys(persistedParams).some(key => {
-            // Skip metadata keys
-            if (key === "__selectedPresets") return false;
-            // If param exists in persistedParams, user has set it
-            return true;
+          logger.debug("[ChatInput] Skipping default presets - user has manually set params", {
+            persistedParams: Object.keys(persistedParams)
           });
-
-          if (hasUserSetParams) {
-            logger.debug("[ChatInput] Skipping default presets - user has manually set params", {
-              persistedParams: Object.keys(persistedParams)
-            });
-            return;
-          }
+          return;
         }
 
         // Get all default presets for this workflow (one RPC)
@@ -584,15 +573,16 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
           return;
         }
 
-        newValues.__selectedPresets = newSelectedPresets;
         setSelectedPresets(newSelectedPresets);
         setWorkflowParams(newValues);
 
-        // Persist to chatParamsStore
+        // Persist params and preset selections separately.
         if (chatId) {
           useChatParamsStore.getState().setChatParams(chatId, newValues);
+          useChatParamsStore.getState().setChatPresets(chatId, newSelectedPresets);
         } else {
           useChatParamsStore.getState().setTempNewChatParams(newValues);
+          useChatParamsStore.getState().setTempNewChatPresets(newSelectedPresets);
         }
       };
 
@@ -687,11 +677,9 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
         };
         setSelectedPresets(newSelectedPresets);
 
-        // Build new values including preset params and the preset selection itself
-        const newValues: Record<string, unknown> = { ...workflowParams, __selectedPresets: newSelectedPresets };
-
+        // Merge preset params with current workflow inputs (preset overrides).
+        const newValues: Record<string, unknown> = { ...workflowParams };
         if (preset) {
-          // Merge preset params with current values (preset overrides)
           for (const [key, value] of Object.entries(preset.params)) {
             // For groups, prefix with group name; for workflow, use as-is
             const fullKey = targetName ? `${targetName}.${key}` : key;
@@ -706,11 +694,13 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
 
         setWorkflowParams(newValues);
 
-        // Persist to chatParamsStore (includes __selectedPresets)
+        // Persist params and preset selections separately.
         if (chatId) {
           useChatParamsStore.getState().setChatParams(chatId, newValues);
+          useChatParamsStore.getState().setChatPresets(chatId, newSelectedPresets);
         } else {
           useChatParamsStore.getState().setTempNewChatParams(newValues);
+          useChatParamsStore.getState().setTempNewChatPresets(newSelectedPresets);
         }
       },
       [workflowParams, chatId, selectedPresets]
@@ -870,9 +860,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
       if (!chatId) return false; // No chat = nothing to sync
       if (!isChatBusy) return false; // No active workflow = can't sync (params applied on next send)
 
-      // Compare current params to synced params (excluding UI-only metadata)
       for (const [key, value] of Object.entries(workflowParams)) {
-        if (key === "__selectedPresets") continue; // Skip UI-only metadata
         if (syncedParams[key] !== value) {
           return true;
         }
@@ -884,10 +872,8 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
     const handleSyncParams = useCallback(async () => {
       if (!chatId || isSyncing) return;
 
-      // Get all changed params (excluding __selectedPresets which is UI-only)
       const changedParams: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(workflowParams)) {
-        if (key === "__selectedPresets") continue; // Skip UI-only metadata
         if (syncedParams[key] !== value) {
           changedParams[key] = value;
         }
@@ -930,7 +916,6 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
 
       const baseline = threadParamsOverride.values;
       for (const [key, value] of Object.entries(threadParamValues)) {
-        if (key === "__selectedPresets") continue;
         // Compare against last-synced value if available, otherwise against fetched baseline
         const reference = key in threadSyncedParams ? threadSyncedParams[key] : baseline[key];
         if (reference !== value) return true;
@@ -945,7 +930,6 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
       const baseline = threadParamsOverride?.values ?? {};
       const changedParams: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(threadParamValues)) {
-        if (key === "__selectedPresets") continue;
         const reference = key in threadSyncedParams ? threadSyncedParams[key] : baseline[key];
         if (reference !== value) {
           changedParams[key] = value;
@@ -1195,12 +1179,8 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
         // Relying on backend defaults here is brittle (and has caused fallbacks to Agent).
         const workflowToSend = selectedWorkflow ?? workflowName;
 
-        // Get workflow params (only include non-empty values)
-        // Filter out __selectedPresets which is only used for UI state persistence
-        const { __selectedPresets: _, ...paramsWithoutMeta } = workflowParams;
-
         const paramsToSend =
-          Object.keys(paramsWithoutMeta).length > 0 ? paramsWithoutMeta : undefined;
+          Object.keys(workflowParams).length > 0 ? workflowParams : undefined;
 
         // Filter selectedPresets to only include valid targets for current workflow
         // This prevents stale presets from a different workflow from being sent

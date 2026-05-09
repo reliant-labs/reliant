@@ -182,13 +182,12 @@ function getLaunchPrompt(projectHasCode: boolean | null): string {
     : "Write me a Python hello world HTTP server";
 }
 
-function selectedPresetsFromTemp(value: unknown): Record<string, string> | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const selectedPresets: Record<string, string> = {};
-  for (const [target, preset] of Object.entries(value as Record<string, string | null>)) {
-    if (preset) selectedPresets[target] = preset;
+function dropNullPresets(presets: Record<string, string | null>): Record<string, string> | undefined {
+  const filtered: Record<string, string> = {};
+  for (const [target, preset] of Object.entries(presets)) {
+    if (preset) filtered[target] = preset;
   }
-  return Object.keys(selectedPresets).length > 0 ? selectedPresets : undefined;
+  return Object.keys(filtered).length > 0 ? filtered : undefined;
 }
 
 async function launchConfiguredOnboardingChat(projectHasCode: boolean | null): Promise<boolean> {
@@ -198,16 +197,17 @@ async function launchConfiguredOnboardingChat(projectHasCode: boolean | null): P
     worktreeStore.worktrees.find((worktree) => worktree.is_main && !worktree.deleted_at)?.id;
   if (!worktreeId) return false;
 
-  const tempParams = useChatParamsStore.getState().tempNewChatParams;
-  if (Object.keys(tempParams).length === 0) return false;
+  const chatParamsState = useChatParamsStore.getState();
+  const workflowParams = chatParamsState.tempNewChatParams;
+  const workflow = chatParamsState.tempNewChatWorkflow ?? undefined;
+  const selectedPresets = dropNullPresets(chatParamsState.tempNewChatPresets);
 
-  const {
-    __selectedWorkflow,
-    __selectedPresets,
-    ...workflowParams
-  } = tempParams;
-  const workflow = typeof __selectedWorkflow === "string" ? __selectedWorkflow : undefined;
-  const selectedPresets = selectedPresetsFromTemp(__selectedPresets);
+  const hasAnyTemp =
+    Object.keys(workflowParams).length > 0 ||
+    workflow !== undefined ||
+    selectedPresets !== undefined;
+  if (!hasAnyTemp) return false;
+
   const prompt = getLaunchPrompt(projectHasCode);
 
   const chat = await useChatStore

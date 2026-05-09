@@ -1,22 +1,19 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  getCurrentUser,
   listDaemons,
   createDaemon,
   resumeDaemon,
   listGitRepos,
   cloneRepo,
-  completeOnboardingRPC,
   hasReliantCreditEligibility,
+  type ControlPlaneUser,
 } from '@/components/OnboardingFlow/api';
+import { onboardingService } from '@/services/controlPlane/onboarding';
 
 export function useCurrentUser() {
-  return useQuery({
+  return useQuery<ControlPlaneUser | null>({
     queryKey: ['onboarding', 'currentUser'],
-    queryFn: async () => {
-      const { user } = await getCurrentUser();
-      return user ?? null;
-    },
+    queryFn: () => onboardingService.getCurrentUser(),
     staleTime: 30_000,
   });
 }
@@ -78,12 +75,14 @@ export function useCloneRepo() {
 export function useCompleteOnboarding() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: completeOnboardingRPC,
+    mutationFn: (data: Record<string, unknown>) =>
+      onboardingService.completeOnboarding(data),
     onSuccess: () => {
       // Optimistically mark onboarding complete so ModernApp doesn't redirect
-      // back to ?step=goal before the refetch completes
-      queryClient.setQueryData(['onboarding', 'currentUser'], (old: Record<string, unknown> | null) =>
-        old ? { ...old, onboardingCompleted: true } : old,
+      // back to ?step=goal before the refetch completes.
+      queryClient.setQueryData<ControlPlaneUser | null>(
+        ['onboarding', 'currentUser'],
+        (old) => ({ ...(old ?? {}), onboardingCompleted: true }),
       );
       queryClient.invalidateQueries({ queryKey: ['onboarding', 'currentUser'] });
     },
