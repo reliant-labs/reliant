@@ -59,13 +59,14 @@ export function WorktreeSelector({
     setIsOpen(false);
   };
 
-  const handleWorktreeCreated = (worktreeId: string) => {
+  const handleWorktreeCreated = async (worktreeId: string) => {
     setShowCreateModal(false);
-    // Select the newly created worktree
-    handleWorktreeSelect(worktreeId);
+    // Reload worktrees first so the new one is in the list
     if (currentProject) {
-      loadWorktrees(currentProject.id);
+      await loadWorktrees(currentProject.id);
     }
+    // Then select the newly created worktree
+    handleWorktreeSelect(worktreeId);
   };
 
   // Close dropdown when clicking outside - STANDARD PATTERN

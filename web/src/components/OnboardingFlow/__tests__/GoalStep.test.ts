@@ -47,6 +47,11 @@ describe("derivePath", () => {
     expect(derivePath(plan)).toEqual(STEP_PATHS.cloud_blog_post);
   });
 
+  it("cloud + custom_workflow → cloud_custom_workflow", () => {
+    const plan: Partial<LaunchPlan> = { intent: "custom_workflow", compute: "cloud_free_trial" };
+    expect(derivePath(plan)).toEqual(STEP_PATHS.cloud_custom_workflow);
+  });
+
   // Local paths
   it("local + build_app → local_new_app", () => {
     const plan: Partial<LaunchPlan> = { intent: "build_app", compute: "local_daemon" };
@@ -78,6 +83,11 @@ describe("derivePath", () => {
     expect(derivePath(plan)).toEqual(STEP_PATHS.local_blog_post);
   });
 
+  it("local + custom_workflow → local_custom_workflow", () => {
+    const plan: Partial<LaunchPlan> = { intent: "custom_workflow", compute: "local_daemon" };
+    expect(derivePath(plan)).toEqual(STEP_PATHS.local_custom_workflow);
+  });
+
   // Pre-connected daemon paths
   it("preconnected + build_app → preconnected_new_app", () => {
     const plan: Partial<LaunchPlan> = { intent: "build_app", compute: "local_daemon", daemonPreConnected: true };
@@ -107,6 +117,11 @@ describe("derivePath", () => {
   it("preconnected + blog_post → preconnected_blog_post", () => {
     const plan: Partial<LaunchPlan> = { intent: "blog_post", compute: "local_daemon", daemonPreConnected: true };
     expect(derivePath(plan)).toEqual(STEP_PATHS.preconnected_blog_post);
+  });
+
+  it("preconnected + custom_workflow → preconnected_custom_workflow", () => {
+    const plan: Partial<LaunchPlan> = { intent: "custom_workflow", compute: "local_daemon", daemonPreConnected: true };
+    expect(derivePath(plan)).toEqual(STEP_PATHS.preconnected_custom_workflow);
   });
 
   // Path structure verification

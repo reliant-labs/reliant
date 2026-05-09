@@ -11,17 +11,19 @@ description: |
     4. refactor — (conditional) Undo the problematic work. Does NOT reimplement —
        the next implement iteration handles that.
 
-  Context management:
-    Review feedback AND implementation summaries are saved to the parent thread.
-    The reviewer accumulates context across iterations (memo: true) so it can
-    build on its own prior analysis. Implementation forks are still fresh each
-    iteration, but the agent sees accumulated review feedback + implementation
-    summaries from the parent thread.
+  Context management (controlled by context_bridge input):
+    - feedback_only (default): Review feedback AND implementation summaries are saved to the
+      parent thread. The reviewer accumulates context across iterations (memo: true) so it can
+      build on its own prior analysis. Implementation forks are still fresh each iteration,
+      but the agent sees accumulated review feedback + implementation summaries from the parent thread.
+    - full: Both implement and review use memo:true, accumulating full conversation across iterations.
+    - none: Both implement and review fork fresh each time. No context bridge — relies on
+      sampling diversity. (Brute force — similar to ralph-wiggum.)
 
   Thread architecture:
     attempt loop inherits main thread (parent thread = original user message + review/impl feedback).
-    implement forks — fresh each iteration. Sees original request + accumulated review feedback + implementation summaries.
-    review forks — memo'd across iterations. Builds on its own prior analysis + check results via inject.
+    implement forks — fresh by default (memo controlled by context_bridge).
+    review forks — memo'd by default (memo controlled by context_bridge).
     refactor forks — gets review feedback via inject (node references).
 
 entry: [attempt]
@@ -32,6 +34,16 @@ inputs:
     description: LLM model to use for all phases
     default:
       tags: [flagship]
+
+  context_bridge:
+    type: enum
+    default: feedback_only
+    description: |
+      How much context flows between loop iterations.
+      - feedback_only: Review feedback saved to parent thread. Implement forks fresh each time but sees accumulated feedback. (Default, current behavior)
+      - full: Both implement and review use memo:true, accumulating full conversation across iterations.
+      - none: Both implement and review fork fresh each time. No context bridge — relies on sampling diversity. (Brute force)
+    enum: [feedback_only, full, none]
 
   max_retries:
     type: integer
@@ -149,7 +161,7 @@ nodes:
             mode: "{{inputs.mode}}"
           thread:
             mode: fork
-            memo: false
+            memo: "{{inputs.context_bridge == 'full'}}"
             inject:
               role: user
               content: |
@@ -157,9 +169,8 @@ nodes:
 
                 Implement the requested changes. Start by investigating the relevant code, then make your changes and run tests to verify them.
 
-                The review feedback and implementation summaries from previous attempts (if any) are in the conversation above. Use them to guide your implementation.
-                If previous checks failed, the error details and log file paths are in the messages above.
-                Read the log files FIRST before making changes — they contain the actual error output as JSON with working_dir, stdout, and stderr.
+                {{inputs.context_bridge != 'none' ? 'The review feedback and implementation summaries from previous attempts (if any) are in the conversation above. Use them to guide your implementation.' : 'You have no context from prior attempts — implement from scratch.'}}
+                {{inputs.context_bridge != 'none' ? 'If previous checks failed, the error details and log file paths are in the messages above.\nRead the log files FIRST before making changes — they contain the actual error output as JSON with working_dir, stdout, and stderr.' : ''}}
 
                 After finishing, summarize:
                 1. What you changed and why
@@ -167,6 +178,7 @@ nodes:
                 3. What surprised you about the codebase
                 4. What you're uncertain about
           save_message:
+            condition: "inputs.context_bridge != 'none'"
             role: assistant
             content: |
               ## Implementation Notes (Attempt {{iter.iteration + 1}})
@@ -274,7 +286,7 @@ nodes:
                     - What specific improvements should the next attempt make
           thread:
             mode: fork
-            memo: true
+            memo: "{{inputs.context_bridge != 'none'}}"
             inject:
               role: user
               content: |
@@ -289,6 +301,7 @@ nodes:
 
                 {{has(inputs.review_instructions) && inputs.review_instructions != '' ? inputs.review_instructions : 'Analyze the implementation attempt. Your prior reviews (if any) are in this thread — use them to track progress across attempts.\n\nYour job:\n1. Is the implementation correct and complete? Grade it.\n2. Decide the strategy: pass, continue, or refactor.\n3. Write detailed feedback for the next attempt.\n\n**Your feedback is the primary bridge to the next attempt.**\nThe next implement agent starts with a fresh fork but sees your accumulated review feedback and implementation summaries on the parent thread.\nBe thorough: describe what worked, what didn\'t, what patterns in the codebase matter, and what approach should be taken.\n\n**Strategy guidance:**\n- **pass**: implementation is correct and complete. Break the loop.\n- **continue**: incomplete but approach is sound. Loop back, skip refactor.\n- **refactor**: fundamentally wrong. Refactor agent will UNDO the work, next attempt starts fresh with your feedback.\n\n**Bias toward refactoring** for complex changes that fight the codebase\'s patterns.\nFor trivial changes (CSS, spacing, config): bias toward `pass`.'}}
           save_message:
+            condition: "inputs.context_bridge != 'none'"
             role: assistant
             content: |
               ## Review (Attempt {{iter.iteration + 1}}): {{has(output.response) && output.response != null ? output.response.strategy : 'N/A'}}

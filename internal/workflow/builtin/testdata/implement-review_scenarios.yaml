@@ -89,17 +89,17 @@ expect:
 ---
 # Max Iterations Reached: Review keeps failing until limit hit
 #
-# Tests the max_iterations boundary:
+# Tests the max_retries boundary:
 # 1. Each iteration: implement runs, review says verdict="fail"
-# 2. After max_iterations, loop exits with verdict still "fail"
+# 2. After max_retries, loop exits with verdict still "fail"
 #
-# Uses state to set max_iterations=2 for a quick test.
+# Uses state to set max_retries=2 for a quick test.
 
-name: max_iterations_reached
+name: max_retries_reached
 description: Review keeps failing until max iterations exhausted
 
 inputs:
-  max_iterations: 2
+  max_retries: 2
 
 events:
   # Iteration 0

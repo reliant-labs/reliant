@@ -92,10 +92,8 @@ nodes:
     ref: builtin://agent
     presets:
       default: general
+    passthrough: [model, mode, ask]
     args:
-      model: "{{inputs.model}}"
-      mode: "{{inputs.mode}}"
-      ask: "{{inputs.ask}}"
       temperature: "{{inputs.temperature}}"
       thinking_level: "{{inputs.thinking_level}}"
       system_prompt: |
@@ -148,10 +146,8 @@ nodes:
     ref: builtin://agent
     presets:
       default: general
+    passthrough: [model, mode, ask]
     args:
-      model: "{{inputs.model}}"
-      mode: "{{inputs.mode}}"
-      ask: "{{inputs.ask}}"
       temperature: "{{inputs.temperature}}"
       thinking_level: "{{inputs.thinking_level}}"
       system_prompt: |
@@ -203,10 +199,8 @@ nodes:
     ref: builtin://agent
     presets:
       default: planner
+    passthrough: [model, mode, ask]
     args:
-      model: "{{inputs.model}}"
-      mode: "{{inputs.mode}}"
-      ask: "{{inputs.ask}}"
       temperature: "{{inputs.temperature}}"
       thinking_level: "{{inputs.thinking_level}}"
       system_prompt: |
@@ -260,10 +254,8 @@ nodes:
     ref: builtin://agent
     presets:
       default: general
+    passthrough: [model, mode, ask]
     args:
-      model: "{{inputs.model}}"
-      mode: "{{inputs.mode}}"
-      ask: "{{inputs.ask}}"
       temperature: "{{inputs.temperature}}"
       thinking_level: "{{inputs.thinking_level}}"
       system_prompt: |

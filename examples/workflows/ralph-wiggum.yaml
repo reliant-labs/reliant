@@ -34,7 +34,7 @@ inputs:
     default:
       tags: [flagship]
 
-  max_iterations:
+  max_retries:
     type: integer
     default: 3
     min: 1
@@ -72,7 +72,7 @@ nodes:
     type: loop
     while: >
       (has(outputs.review_strategy) && outputs.review_strategy != "pass")
-      && iter.iteration < inputs.max_iterations
+      && iter.iteration < inputs.max_retries
     ask: "inputs.ask"
     inline:
       outputs:
@@ -96,7 +96,7 @@ nodes:
             inject:
               role: user
               content: |
-                ## Ralph Wiggum — Attempt {{iter.iteration + 1}} of {{inputs.max_iterations}}
+                ## Ralph Wiggum — Attempt {{iter.iteration + 1}} of {{inputs.max_retries}}
 
                 Implement the requested changes. Start by investigating the relevant code, then make your changes.
                 You have no context from prior attempts — implement from scratch.

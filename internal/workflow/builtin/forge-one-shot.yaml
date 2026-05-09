@@ -56,98 +56,79 @@ nodes:
 
   - id: scope_conversation
     type: workflow
-    ref: builtin://agent
-    presets:
-      default: general
+    ref: builtin://scope-conversation
     passthrough: [model, mode, ask]
     args:
-      tools: ["tag:default", "ask_user"]
+      working_directory: "{{inputs.working_directory}}"
+      question_areas: |
+        **Functionality & Data:**
+        - What entities/data models? (what fields, what relationships?)
+        - What operations beyond basic CRUD?
+        - What pages/UI flows matter most?
+        - Any integrations? (Stripe, email, auth providers, etc.)
+
+        **Branding & Visual Style:**
+        - Do you have an existing website or brand guidelines we should match?
+        - Are there any websites or apps whose visual style you like? (share URLs if possible)
+        - What kind of look and feel are you going for? (e.g. minimal/clean, bold/colorful, corporate/professional, playful/friendly)
+        - Do you have brand colors, fonts, or a logo?
+
+        If the user's initial message already covers branding/style preferences (e.g. they shared
+        reference sites, color palettes, or described a visual direction), do NOT re-ask those questions.
+        Use your own judgement to fill in gaps — these are suggestions, not a checklist.
+      plan_filename: "FORGE_PLAN.md"
+      plan_template: |
+        - All features organized by priority (HIGH / MEDIUM / LOW)
+        - Which features are MVP (HIGH) vs later
+        - Key architectural decisions
+        - Entity list with fields and relationships
+        - Branding & style direction (if discussed — colors, fonts, reference sites, visual tone)
+
+        Example:
+        ```markdown
+        # Forge Plan
+
+        ## Branding & Style
+        - **Visual tone:** Clean and modern, inspired by Linear/Vercel
+        - **Colors:** Primary #2563EB (blue), neutral grays, white backgrounds
+        - **Typography:** Inter or system font stack
+        - **Reference sites:** linear.app, vercel.com
+
+        ## Entities
+        - **Patient** — id, org_id, name, species, breed, owner_name, owner_email, repeated string allergies
+        - **Appointment** — id, org_id, patient_id, veterinarian_id, scheduled_at, status, reason
+
+        ## Features
+        | # | Feature | Priority | Notes |
+        |---|---------|----------|-------|
+        | 1 | Patient CRUD | HIGH | Core entity |
+        | 2 | Appointment scheduling | HIGH | Custom RPC |
+        | 3 | Email notifications | MEDIUM | SendGrid integration |
+
+        ## Decisions
+        - Using org_id as tenant key for all entities
+        - Appointments link to patients via patient_id
+        ```
+
+        After writing FORGE_PLAN.md, tell the user the plan is ready and you'll scaffold next.
+      max_questions: 10
+      max_turns: 3
+      context_prompt: |
+        **IMPORTANT: This is a brand new project — no users, no legacy code. Do NOT add fallbacks or backwards compatibility. Fix root causes, delete unused code, use clean implementations.**
+
+        ## Scope a Forge App
+
+        You are a senior architect helping the user plan a production app built with Forge.
+        Forge scaffolds Go + Next.js monorepos with batteries included — Connect RPC, middleware,
+        ORM, migrations, frontend hooks, CRUD pages — all generated from proto files.
+
+        ## What Forge Gives You for Free (DO NOT ask about these)
+        HTTP server with Connect RPC, JWT auth, RBAC, CORS, logging, tracing,
+        PostgreSQL + ORM, OpenTelemetry, Docker, CI/CD, Next.js frontend with
+        TypeScript client + Tailwind, workers, webhooks, K8s manifests, code generation,
+        dependency injection, test harness, mocks.
     thread:
       mode: inherit
-      inject:
-        role: user
-        content: |
-          **IMPORTANT: This is a brand new project — no users, no legacy code. Do NOT add fallbacks or backwards compatibility. Fix root causes, delete unused code, use clean implementations.**
-
-          ## Scope a Forge App
-
-          You are a senior architect helping the user plan a production app built with Forge.
-          Forge scaffolds Go + Next.js monorepos with batteries included — Connect RPC, middleware,
-          ORM, migrations, frontend hooks, CRUD pages — all generated from proto files.
-
-          ## Your Job: Have a Conversation
-
-          Use the `ask_user` tool to ask 2-4 focused questions to understand what they
-          want to build. Call `ask_user` for each question and wait for the response.
-
-          Below are suggested question areas — use your judgement on which to ask based on
-          what the user has already provided. Skip any that are already answered or irrelevant:
-
-          **Functionality & Data:**
-          - What entities/data models? (what fields, what relationships?)
-          - What operations beyond basic CRUD?
-          - What pages/UI flows matter most?
-          - Any integrations? (Stripe, email, auth providers, etc.)
-
-          **Branding & Visual Style:**
-          - Do you have an existing website or brand guidelines we should match?
-          - Are there any websites or apps whose visual style you like? (share URLs if possible)
-          - What kind of look and feel are you going for? (e.g. minimal/clean, bold/colorful, corporate/professional, playful/friendly)
-          - Do you have brand colors, fonts, or a logo?
-
-          If the user's initial message already covers branding/style preferences (e.g. they shared
-          reference sites, color palettes, or described a visual direction), do NOT re-ask those questions.
-          Use your own judgement to fill in gaps — these are suggestions, not a checklist.
-
-          You MUST use `ask_user` at least once before writing FORGE_PLAN.md. You can and should ask multiple questions in each turn.
-          Do NOT skip the conversation — ask your questions, read the answers, then write the plan.
-          Scale question count to complexity of the request, but cap it to 10 questions, over a max of 3 turns.
-          Infer reasonable defaults for things the user doesn't mention.
-
-          ## When You Have Enough Info
-
-          Write `FORGE_PLAN.md` in `{{inputs.working_directory}}` with:
-          - All features organized by priority (HIGH / MEDIUM / LOW)
-          - Which features are MVP (HIGH) vs later
-          - Key architectural decisions
-          - Entity list with fields and relationships
-          - Branding & style direction (if discussed — colors, fonts, reference sites, visual tone)
-
-          Example:
-          ```markdown
-          # Forge Plan
-
-          ## Branding & Style
-          - **Visual tone:** Clean and modern, inspired by Linear/Vercel
-          - **Colors:** Primary #2563EB (blue), neutral grays, white backgrounds
-          - **Typography:** Inter or system font stack
-          - **Reference sites:** linear.app, vercel.com
-
-          ## Entities
-          - **Patient** — id, org_id, name, species, breed, owner_name, owner_email, repeated string allergies
-          - **Appointment** — id, org_id, patient_id, veterinarian_id, scheduled_at, status, reason
-
-          ## Features
-          | # | Feature | Priority | Notes |
-          |---|---------|----------|-------|
-          | 1 | Patient CRUD | HIGH | Core entity |
-          | 2 | Appointment scheduling | HIGH | Custom RPC |
-          | 3 | Email notifications | MEDIUM | SendGrid integration |
-
-          ## Decisions
-          - Using org_id as tenant key for all entities
-          - Appointments link to patients via patient_id
-          ```
-
-          After writing FORGE_PLAN.md, tell the user the plan is ready and you'll scaffold next.
-
-          ## What Forge Gives You for Free (DO NOT ask about these)
-          HTTP server with Connect RPC, JWT auth, RBAC, CORS, logging, tracing,
-          PostgreSQL + ORM, OpenTelemetry, Docker, CI/CD, Next.js frontend with
-          TypeScript client + Tailwind, workers, webhooks, K8s manifests, code generation,
-          dependency injection, test harness, mocks.
-
-          Work in `{{inputs.working_directory}}`.
 
   # ─── Phase 1b: Scaffold & Verify ──────────────────────────────────
   #

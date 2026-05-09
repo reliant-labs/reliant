@@ -4,6 +4,7 @@ export type OnboardingIntent =
   | "landing_page"
   | "pitch_deck"
   | "blog_post"
+  | "custom_workflow"
   | "explore";
 
 export type ComputeChoice =

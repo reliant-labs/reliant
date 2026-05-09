@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { ChevronDown, ChevronRight, Copy, FileText, Settings2 } from "lucide-react";
 import { CreateWorktreeModal } from "../Worktrees/CreateWorktreeModal";
 import { useWorktreeStore } from "../../store/worktreeStore";
+import { useChatStore } from "../../store/chatStore";
 import { useBranchChat } from "../../hooks/message-queries";
 import { usePreferences, useUpdateWorktreePreferences } from "../../hooks/settings-queries";
 import { worktreeGrpc } from "../../api/worktree-grpc";
@@ -125,7 +126,7 @@ export function BranchToWorktreeModal({
       logger.info("Worktree created, branching chat:", { worktreeId, chatId, messageId });
       
       // Branch the chat to the new worktree with workspace context
-      await branchChat.mutateAsync({
+      const { chat: newChat } = await branchChat.mutateAsync({
         chatId,
         messageId,
         worktreeId,
@@ -136,6 +137,9 @@ export function BranchToWorktreeModal({
       if (newWorktree) {
         await switchWorktreeContext(projectId, newWorktree);
       }
+
+      // Navigate to the branched chat
+      useChatStore.getState().selectChat(newChat);
       
       onClose();
     } catch (error) {

@@ -1,0 +1,339 @@
+name: build-workflow
+apiVersion: "0.0.5"
+description: |
+  Build Workflow — create a custom Reliant workflow from a conversation.
+
+  Guides the user through scoping, building integrations, and assembling a workflow.
+
+  Phase 1: SCOPE — Conversational discovery. What are you automating? What integrations
+           do you need? What tools, scripts, APIs? What does the flow look like?
+           Writes WORKFLOW_PLAN.md when scoping is done.
+  Phase 2: INTEGRATIONS — Build and test any custom code needed by the workflow:
+           scripts, MCP server wrappers, mini integration SDKs, shell utilities.
+           Uses get-it-right so each integration is verified before moving on.
+           Skipped if the plan has no custom integrations.
+  Phase 3: WORKFLOW — Build the actual workflow YAML using the workflow_builder preset,
+           with a get-it-right loop that validates via scenarios.
+
+  Context flows via:
+  - WORKFLOW_PLAN.md — written by phase 1, read by phases 2 and 3.
+  - The integrations built in phase 2 are available for phase 3 to reference in run nodes.
+
+entry: [scope_conversation]
+
+inputs:
+  model:
+    type: model
+    description: Model for all phases
+    default:
+      tags: [flagship]
+
+  mode:
+    type: enum
+    ui: toolbar
+    default: auto
+    description: Execution mode for agent steps
+    enum: [manual, auto]
+
+  ask:
+    type: boolean
+    ui: toolbar
+    default: true
+    description: Pause for user review between phases
+
+  working_directory:
+    type: string
+    default: "."
+    description: Working directory for workflow output
+
+nodes:
+  # ─── Phase 1: Scope Conversation ──────────────────────────────────
+  #
+  # Natural conversation to understand what the user wants to automate.
+  # Outputs WORKFLOW_PLAN.md with full spec including integration inventory.
+
+  - id: scope_conversation
+    type: workflow
+    ref: builtin://scope-conversation
+    passthrough: [model, mode, ask]
+    args:
+      working_directory: "{{inputs.working_directory}}"
+      question_areas: |
+        **Use Case & Flow:**
+        - What process are you trying to automate? (e.g. code review, content pipeline, deployment, research, data processing)
+        - What are the main steps? What order do they happen in?
+        - Are any steps conditional or repeated? (e.g. retry until tests pass, branch based on result)
+        - What does "done" look like? What's the final output?
+
+        **Integrations & Tools:**
+        - What external tools or services does this need to interact with? (e.g. GitHub, Slack, databases, APIs, CI/CD)
+        - Do you need any MCP servers? Which ones are off-the-shelf vs need custom work?
+        - Are there existing commands or scripts the workflow should run? (lint, test, build, deploy)
+        - Do any integrations need authentication, API keys, or custom SDK wrappers?
+        - Are there any webhook endpoints, polling loops, or event-driven triggers?
+
+        **Agent Roles & Quality:**
+        - How many distinct "roles" are there? (e.g. researcher, implementer, reviewer)
+        - Should there be a review/validation step? What constitutes quality?
+        - Should the user be asked for approval between phases?
+
+        **Context & Scope:**
+        - Will this run against an existing codebase or start fresh?
+        - How much autonomy should the agents have? (fully auto, checkpoints, manual approval)
+        - Any existing workflows to reference or extend?
+      plan_filename: "WORKFLOW_PLAN.md"
+      plan_template: |
+        ```markdown
+        # Workflow Plan
+
+        ## Overview
+        One-paragraph summary of what this workflow does.
+
+        ## Phases
+        | # | Phase | Type | Purpose |
+        |---|-------|------|---------|
+        | 1 | Research | agent | Gather context |
+        | 2 | Implement | agent (get-it-right) | Build with validation |
+
+        ## Nodes & Flow
+        Describe the DAG structure — what nodes exist, how they connect,
+        what conditions govern edges, where loops occur.
+
+        ## Integrations
+        Categorize each integration:
+
+        ### Off-the-shelf (no custom code needed)
+        - e.g. "GitHub MCP server — already available"
+
+        ### Custom (needs code written in Phase 2)
+        - e.g. "Slack notification script — POST to webhook URL"
+        - e.g. "Data transform utility — parse CSV, output JSON"
+        - e.g. "API client wrapper — authenticate + call vendor API"
+
+        For each custom integration, note:
+        - What it does (input → output)
+        - Language/runtime (bash script, Python, Node, Go, etc.)
+        - How to test it (expected input/output, edge cases)
+
+        ## Inputs
+        What user-configurable inputs the workflow should expose.
+
+        ## Quality Gates
+        How the workflow validates its own output (scenarios, checks, review steps).
+
+        ## Threading Strategy
+        Which nodes inherit, fork, or create new threads and why.
+        ```
+
+        After writing WORKFLOW_PLAN.md, tell the user the plan is ready.
+        If there are custom integrations, mention those will be built first before the workflow itself.
+      max_questions: 8
+      max_turns: 3
+      context_prompt: |
+        ## Scope a Custom Workflow
+
+        You are a workflow architect helping the user design a Reliant workflow.
+        Reliant workflows orchestrate multi-agent pipelines — they chain LLM agents,
+        run shell commands, branch on conditions, loop with validation, and coordinate
+        parallel work.
+    thread:
+      mode: inherit
+    save_message:
+      role: assistant
+      content: |
+        ## Scope Complete
+        {{output.response_text}}
+
+  # ─── Router: Skip integrations if none needed ────────────────────
+  #
+  # Checks whether the scoping phase identified custom integrations.
+  # Routes directly to build_workflow if none are needed.
+
+  - id: integration_router
+    type: router
+    model:
+      tags: [fast, smart]
+    system_prompt: |
+      Determine whether the workflow plan requires custom integrations to be built.
+      Look at the conversation — specifically the scoping phase output.
+      If the plan mentions custom integrations that need code written (scripts, SDK wrappers,
+      API clients, utilities), route to build_integrations.
+      If the plan has NO custom integrations (only off-the-shelf tools, built-in MCP servers,
+      or explicitly states no custom code needed), route directly to build_workflow.
+    nodes:
+      - id: build_integrations
+        description: "Custom integrations need to be built — scripts, SDK wrappers, API clients, or utilities identified in the plan."
+      - id: build_workflow
+        description: "No custom integrations needed — skip directly to building the workflow YAML."
+    fallback: build_integrations
+
+  # ─── Phase 2: Build Integrations ──────────────────────────────────
+  #
+  # Build and test any custom code the workflow needs: scripts, SDK wrappers,
+  # MCP server configs, shell utilities. Each piece is verified with a
+  # get-it-right loop before moving on.
+  #
+  # Skipped if WORKFLOW_PLAN.md has no custom integrations.
+
+  - id: build_integrations
+    type: workflow
+    ref: builtin://get-it-right
+    passthrough: [model, mode, ask]
+    args:
+      implementer_preset: general
+      max_retries: 5
+      review_instructions: |
+        You are reviewing custom integration code for a workflow.
+
+        **Pass if:**
+        - All custom integrations listed in WORKFLOW_PLAN.md are implemented
+        - Each integration has a clear entry point (script, function, or command)
+        - Each integration is tested — either a test script, example invocation, or inline validation
+        - Code handles errors gracefully (non-zero exit codes, error messages)
+        - Any required configuration (API keys, URLs) is parameterized, not hardcoded
+
+        **Do NOT fail because:**
+        - Code style isn't perfect
+        - Edge cases beyond what the plan specifies aren't handled
+        - There's no extensive test suite (a smoke test is sufficient)
+
+        **Only fail if:**
+        - An integration from the plan is missing
+        - Code doesn't run or has obvious bugs
+        - No tests or verification exist for any integration
+        - Secrets/credentials are hardcoded
+    thread:
+      mode: inherit
+      inject:
+        role: user
+        content: |
+          ## Build Custom Integrations
+
+          Read `WORKFLOW_PLAN.md` in `{{inputs.working_directory}}` — look at the **Integrations** section,
+          specifically the "Custom (needs code written)" items.
+
+          For each custom integration listed, you need to:
+          1. Create the script/module/utility in a sensible location (e.g. `scripts/`, `integrations/`, or `lib/`)
+          2. Make it executable and self-contained
+          3. Write a test or verification (e.g. a test script that runs it with sample input)
+          4. Document usage in a brief comment or README
+
+          **Guidelines:**
+          - Keep integrations minimal and focused — each does one thing well
+          - Use environment variables for secrets/config (never hardcode)
+          - Scripts should exit non-zero on failure with a useful error message
+          - Prefer simple tools: bash scripts, Python scripts, or small Node utilities
+          - If an integration wraps an API, include basic retry/error handling
+          - Test with realistic sample data where possible
+
+          **Directory structure suggestion:**
+          ```
+          integrations/
+            slack-notify.sh      # Webhook notification
+            transform-data.py   # Data processing utility
+            api-client/          # More complex integration
+              client.py
+              test_client.py
+          ```
+
+          After building all integrations, run the tests to confirm they work.
+          If WORKFLOW_PLAN.md has NO custom integrations, just confirm that and finish immediately.
+
+          Work in `{{inputs.working_directory}}`.
+    save_message:
+      role: assistant
+      content: |
+        ## Integrations Built
+        Strategy: {{has(output.eval_strategy) ? output.eval_strategy : 'N/A'}}
+        Grade: {{has(output.review_grade) ? output.review_grade : 'N/A'}}
+        Iterations: {{has(output.iterations) ? output.iterations : 'N/A'}}
+
+  # ─── Phase 3: Build Workflow ──────────────────────────────────────
+  #
+  # Uses get-it-right with the workflow_builder preset to create the
+  # actual workflow YAML. The integrations from phase 2 are available
+  # to reference in run nodes and agent prompts.
+  #
+  # Validation happens via scenario tests.
+
+  - id: build_workflow
+    type: workflow
+    ref: builtin://get-it-right
+    passthrough: [model, mode, ask]
+    args:
+      implementer_preset: workflow_builder
+      max_retries: 5
+      review_instructions: |
+        You are reviewing a workflow that was just built or modified.
+
+        **Pass if:**
+        - The workflow YAML is valid and matches WORKFLOW_PLAN.md
+        - All phases described in the plan are implemented as nodes
+        - Threading strategy is correct (no parallel agents on same thread)
+        - Edge conditions use proper CEL syntax
+        - Custom integrations from phase 2 are correctly referenced (run nodes, script paths)
+        - Scenarios exist (at least 2) and cover the happy path + a failure/retry case
+        - Inputs are properly defined with types and defaults
+
+        **Do NOT fail because:**
+        - The workflow doesn't handle every conceivable edge case
+        - The prompts could be marginally better
+        - Scenarios don't cover every branch
+
+        **Only fail if:**
+        - The workflow structure doesn't match the plan
+        - CEL expressions have syntax errors
+        - Threading would cause parallel writes to the same thread
+        - No scenarios exist
+        - Required inputs are missing
+        - Custom integrations are referenced but with wrong paths or commands
+        - Nodes reference undefined variables or missing nodes
+    thread:
+      mode: inherit
+      inject:
+        role: user
+        content: |
+          ## Build the Workflow
+
+          Read `WORKFLOW_PLAN.md` in `{{inputs.working_directory}}` — it has the full spec.
+          The custom integrations (if any) have already been built in the `integrations/` or `scripts/` directory.
+
+          **Your job:**
+          1. Load the `workflow-builder` skill for comprehensive reference on syntax and patterns.
+          2. Call `get_workflow` to see the current draft (if any).
+          3. Use `list_workflows` to find similar patterns in existing workflows.
+          4. Build the workflow using `write_workflow` (for initial creation) or `edit_workflow` (for modifications).
+          5. Reference the custom integrations in `type: run` nodes where applicable.
+          6. Write at least 2-3 scenario tests using the scenario tools to validate the workflow.
+          7. Run the scenarios to verify they pass.
+
+          **Key principles:**
+          - Follow the DAG structure from WORKFLOW_PLAN.md
+          - Use `builtin://agent` for general agent nodes, `builtin://structured-agent` for nodes needing structured output
+          - Use `builtin://get-it-right` for implementation loops with quality gates
+          - Use `type: run` for shell commands and integration scripts
+          - Use `type: loop` with `while` conditions for retry logic
+          - Use `fork` threading for disposable work, `inherit` for user-facing conversation
+          - Write clear `inject` prompts that tell each agent exactly what to do
+          - Include `save_message` on important nodes to propagate summaries
+          - Reference integration scripts by their actual path (e.g. `./integrations/slack-notify.sh`)
+
+          **Scenarios should cover:**
+          - Happy path (all nodes succeed, workflow completes)
+          - At least one failure/retry path (a check fails, loop retries)
+          - Edge cases from the plan (conditional branches, parallel fan-out)
+
+          Work in `{{inputs.working_directory}}`.
+    save_message:
+      role: assistant
+      content: |
+        ## Workflow Built
+        Strategy: {{has(output.eval_strategy) ? output.eval_strategy : 'N/A'}}
+        Grade: {{has(output.review_grade) ? output.review_grade : 'N/A'}}
+        Iterations: {{has(output.iterations) ? output.iterations : 'N/A'}}
+
+edges:
+  - from: scope_conversation
+    default: integration_router
+  - from: build_integrations
+    default: build_workflow

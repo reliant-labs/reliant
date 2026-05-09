@@ -58,6 +58,13 @@ inputs:
       - build       # Enable building in the implementation loop
       - start_app   # Start dev server for UX review during implementation
 
+  refine_prompt:
+    type: boolean
+    default: false
+    description: |
+      When true, refines the user's request into a clear, unambiguous specification
+      before planning begins. Helps prevent wasted iterations from misinterpretation.
+
   ask:
     type: boolean
     ui: toolbar
@@ -124,6 +131,16 @@ inputs:
     default: 5173
     description: Port the application runs on (for UX reviewer to connect to).
 
+  context_bridge:
+    type: enum
+    default: feedback_only
+    description: |
+      How much context flows between implementation loop iterations (passed to get-it-right).
+      - feedback_only: Review feedback saved to parent thread. Implement forks fresh each time but sees accumulated feedback.
+      - full: Both implement and review use memo:true, accumulating full conversation.
+      - none: Both fork fresh each time. Relies on sampling diversity.
+    enum: [feedback_only, full, none]
+
 # Thread design:
 # - Planning forks from main thread (gets user msg). Each sub-step forks again.
 #   Only the final plan is saved to main. Research/criticism stays in forks.
@@ -144,13 +161,39 @@ nodes:
       Classify the user's request to determine the best starting phase.
       Consider the complexity, clarity, and nature of the task.
     nodes:
-      - id: planning
+      - id: refine_prompt
         description: "Complex task that needs research, planning, and design before implementation. Use for multi-step features, architectural changes, or tasks requiring investigation."
       - id: write_tests
         description: "Clear task where TDD approach is appropriate. Use when requirements are well-defined and tests should be written first."
       - id: impl_loop
         description: "Simple, well-defined task that can go straight to implementation. Use for bug fixes, small changes, or tasks with clear specifications."
-    fallback: planning
+    fallback: refine_prompt
+
+  # ── Prompt refinement (optional) ─────────────────────────────────────────────
+  #
+  # When refine_prompt is true, refines the user's request into a clear spec
+  # before planning begins. Saves the improved prompt to the thread.
+
+  - id: refine_prompt
+    type: call_llm
+    condition: "inputs.refine_prompt"
+    args:
+      model: "{{inputs.model}}"
+      system_prompt: |
+        You are a prompt engineer. Your job is to take the task description and improve it into a clear, detailed specification that a developer could implement unambiguously.
+
+        Include:
+        - Clear acceptance criteria
+        - Edge cases to handle
+        - Any constraints or requirements
+        - Expected behavior
+
+        Output ONLY the improved prompt, no preamble.
+    save_message:
+      role: assistant
+      content: |
+        ## Refined Specification
+        {{output.message.text}}
 
   # ── Planning phase (sub-workflow, runs once) ────────────────────────────────
   #
@@ -357,6 +400,7 @@ nodes:
       ask: "{{inputs.ask}}"
       temperature: "{{inputs.temperature}}"
       thinking_level: "{{inputs.thinking_level}}"
+      context_bridge: "{{inputs.context_bridge}}"
       lint_command: "{{'lint' in inputs.steps ? inputs.lint_command : ''}}"
       lint_log: "{{inputs.lint_log}}"
       test_command: "{{'test' in inputs.steps ? inputs.test_command : ''}}"
@@ -416,6 +460,8 @@ outputs:
   iterations: "{{has(nodes.impl_loop) && has(nodes.impl_loop.iterations) ? nodes.impl_loop.iterations : 0}}"
 
 edges:
+  - from: refine_prompt
+    default: planning
   - from: planning
     default: write_tests
   - from: write_tests
@@ -434,6 +480,9 @@ ui:
       y: 830
     classify:
       x: 200
+      y: 820
+    refine_prompt:
+      x: 375
       y: 820
     planning:
       x: 550
