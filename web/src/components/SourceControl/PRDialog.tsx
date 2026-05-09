@@ -14,6 +14,7 @@ interface PRDialogProps {
   worktreeId: string;
   defaultBranch?: string;
   currentBranch?: string;
+  repoId?: string;
 }
 
 export function PRDialog({
@@ -23,6 +24,7 @@ export function PRDialog({
   worktreeId,
   defaultBranch,
   currentBranch,
+  repoId,
 }: PRDialogProps) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -60,7 +62,8 @@ export function PRDialog({
       const response = await gitApi.createPullRequest(
         worktreeId,
         title.trim(),
-        body.trim()
+        body.trim(),
+        repoId
       );
       
       logger.info("Pull request created successfully", { url: response.pr_url });
@@ -80,7 +83,7 @@ export function PRDialog({
     } finally {
       setIsCreating(false);
     }
-  }, [title, body, worktreeId, onPRCreated, onClose, isDefaultBranch]);
+  }, [title, body, worktreeId, repoId, onPRCreated, onClose, isDefaultBranch]);
 
   // Global keyboard shortcut handler for Cmd/Ctrl + Enter
   const canCreate = title.trim().length > 0 && !isCreating && !prUrl && !isDefaultBranch;

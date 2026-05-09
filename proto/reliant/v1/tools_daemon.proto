@@ -191,6 +191,11 @@ message ProjectConfigSnapshot {
   bytes project_memory_md = 12; // {project_path}/reliant.md
 
   repeated IndexedSkill skills = 13;
+
+  // Per-repo memory: maps repo relative path (e.g. "api", "forge") to the
+  // concatenated content of {repo}/reliant.md + {repo}/reliant.local.md.
+  // Populated eagerly by the daemon so cloud workers don't need filesystem access.
+  map<string, bytes> repo_memories_md = 14;
 }
 
 message ProjectConfigDelta {
