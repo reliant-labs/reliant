@@ -63,7 +63,7 @@ export function AuthScreen() {
         if (redirectParam) {
           window.location.href = redirectParam
         } else {
-          navigate({ to: '/' })
+          navigate({ to: '/', search: {} })
         }
       } else {
         const { session } = await signUp(email, password)
@@ -79,7 +79,7 @@ export function AuthScreen() {
         if (redirectParam) {
           window.location.href = redirectParam
         } else {
-          navigate({ to: '/' })
+          navigate({ to: '/', search: {} })
         }
       }
     } catch (err: unknown) {
@@ -344,7 +344,7 @@ export function AuthScreen() {
                 setError(null)
                 try {
                   await signInAnonymously()
-                  navigate({ to: '/' })
+                  navigate({ to: '/', search: {} })
                 } catch (err: unknown) {
                   let errorMessage = 'Failed to continue as guest'
                   if (err instanceof Error) {

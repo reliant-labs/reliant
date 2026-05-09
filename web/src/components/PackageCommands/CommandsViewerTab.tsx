@@ -3,7 +3,7 @@ import { packageCommandsGrpc } from "../../api/package-commands-grpc";
 import { Play, Square, ChevronDown, ChevronRight, RefreshCw, Terminal, Loader2, CheckCircle, XCircle, ExternalLink, Hammer, Package, Zap, Clock, Activity, RotateCw, Star, X, Globe, Layers } from "lucide-react";
 import { useContainerWidth } from "../../hooks/useContainerWidth";
 import { useUnifiedProcessCounts } from "../../hooks/useUnifiedProcesses";
-import { usePackageCommandsStore } from "../../store/packageCommandsStore";
+import { usePackageCommands, usePackageProcesses, useRunCommand, useKillProcess, type PackageCommand, type PackageType, type PackageProcess } from "../../hooks/package-queries";
 import { useProcessStore, type BackgroundProcess } from "../../store/processStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useBrowserStore } from "../../store/browserStore";
@@ -14,7 +14,6 @@ import { TerminalOutput, type ProcessInfo } from "../shared/TerminalOutput";
 import { PortsDisplay } from "../shared/PortsDisplay";
 import { toast } from "sonner";
 import { cn } from "../../lib/utils";
-import type { PackageCommand, PackageType, PackageProcess } from "../../api/package-commands-grpc";
 import { BackgroundProcessStatus } from "../../api/background-grpc";
 import { processMatchesCommand, findCommandForProcess as findCommandForProcessUtil } from "./commandMatching";
 import {
@@ -348,19 +347,6 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
     isCompact: width > 0 && width < 320, // Compact mode for narrow containers
   }), [width]);
 
-  const {
-    commands,
-    detectedTypes,
-    processes: packageProcesses,
-    isLoadingCommands,
-    isLoadingProcesses: isLoadingPackageProcesses,
-    error: packageError,
-    loadCommands,
-    runCommand,
-    killProcess: killPackageProcess,
-    loadProcesses: loadPackageProcesses,
-  } = usePackageCommandsStore();
-
   // Background processes
   const backgroundProcesses = useProcessStore((state) => state.processes);
   const isLoadingBackground = useProcessStore((state) => state.isLoading);
@@ -386,6 +372,22 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
   const mainWorktree = worktrees.find(w => w.is_main);
   const effectiveWorktreeId = worktreeId || mainWorktree?.id;
   const currentWorktree = effectiveWorktreeId ? worktrees.find(w => w.id === effectiveWorktreeId) : null;
+
+  // Package commands via React Query (needs effectiveWorktreeId/projectPath)
+  const commandsQuery = usePackageCommands(effectiveWorktreeId, projectPath);
+  const commands = commandsQuery.data?.commands ?? ({} as Record<PackageType, PackageCommand[]>);
+  const detectedTypes = commandsQuery.data?.detected_types ?? [];
+  const isLoadingCommands = commandsQuery.isLoading;
+  const packageError = commandsQuery.error?.message ?? null;
+
+  // Package processes via React Query
+  const processesQuery = usePackageProcesses();
+  const packageProcesses = processesQuery.data ?? [];
+  const isLoadingPackageProcesses = processesQuery.isLoading;
+
+  // Mutations
+  const runCommandMutation = useRunCommand();
+  const killProcessMutation = useKillProcess();
 
   const [selectedProcessId, setSelectedProcessId] = useState<string | null>(initialProcessId || null);
   const [selectedProcessSource, setSelectedProcessSource] = useState<"package" | "background" | null>(null);
@@ -468,7 +470,7 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
   }, [worktrees, currentWorktree]);
 
   const isLoading = isLoadingCommands || isLoadingPackageProcesses || isLoadingBackground;
-  const error = packageError || backgroundError;
+  const error = packageError || backgroundError || null;
 
   // Merge and deduplicate processes
   const allProcesses = useMemo(() => {
@@ -537,20 +539,11 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
     return map;
   }, [commands, detectedTypes, allProcesses]);
 
-  // Load commands and processes on mount
-  // IMPORTANT: Always fetch ALL processes (no worktree filter) so we can:
-  // 1. Show accurate "other workspaces have running processes" indicator
-  // 2. Display is filtered by worktree, but stores contain all data
+  // Load background processes on mount
+  // Package commands and processes are auto-fetched by React Query hooks above
   useEffect(() => {
-    if (effectiveWorktreeId) {
-      loadCommands({ worktreeId: effectiveWorktreeId });
-    } else if (projectPath) {
-      loadCommands({ path: projectPath });
-    }
-    // Always fetch ALL processes - filtering happens at display time
-    loadPackageProcesses(undefined);
     fetchBackgroundProcesses(undefined, false);
-  }, [loadCommands, loadPackageProcesses, fetchBackgroundProcesses, effectiveWorktreeId, projectPath]);
+  }, [fetchBackgroundProcesses]);
 
   // Load command favorites from backend when project changes
   useEffect(() => {
@@ -604,16 +597,22 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
     setRunningCommandKey(key);
     try {
       // Pass the command's working_dir so it runs from the correct directory
-      const processId = await runCommand(cmd.name, cmd.package_type, cmd.working_dir);
+      const result = await runCommandMutation.mutateAsync({
+        worktreeId: effectiveWorktreeId,
+        path: projectPath,
+        commandName: cmd.name,
+        packageType: cmd.package_type,
+        workingDir: cmd.working_dir,
+      });
       
-      if (processId) {
+      if (result.process_id) {
         const displayName = cmd.relative_path ? `${cmd.relative_path}/${cmd.name}` : cmd.name;
         toast.success(`Started: ${displayName}`, {
           duration: 4000,
           action: {
             label: "View Logs",
             onClick: () => {
-              setSelectedProcessId(processId);
+              setSelectedProcessId(result.process_id);
               setSelectedProcessSource("package");
             },
           },
@@ -622,11 +621,11 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
     } finally {
       setRunningCommandKey(null);
     }
-  }, [runCommand]);
+  }, [runCommandMutation, effectiveWorktreeId, projectPath]);
 
   const handleKillProcess = useCallback(async (processId: string, source: "package" | "background", processWorktreeId?: string) => {
     if (source === "package") {
-      await killPackageProcess(processId);
+      await killProcessMutation.mutateAsync(processId);
     } else {
       // Use the process's own worktree_id, falling back to effectiveWorktreeId
       const wtId = processWorktreeId || effectiveWorktreeId;
@@ -636,7 +635,7 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
         toast.error('Cannot stop process: unknown workspace');
       }
     }
-  }, [killPackageProcess, killBackgroundProcess, effectiveWorktreeId]);
+  }, [killProcessMutation, killBackgroundProcess, effectiveWorktreeId]);
 
   const handleSelectProcess = useCallback((process: UnifiedProcess) => {
     setSelectedProcessId(process.id);
@@ -727,9 +726,8 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
   };
 
   const handleRefresh = useCallback(async () => {
-    loadCommands({ worktreeId: effectiveWorktreeId });
-    // Always fetch ALL processes - filtering happens at display time
-    loadPackageProcesses(undefined);
+    commandsQuery.refetch();
+    processesQuery.refetch();
     fetchBackgroundProcesses(undefined, false);
     // Reload favorites from backend
     const projectId = currentProject?.id;
@@ -741,7 +739,7 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
         console.error('Failed to refresh command favorites:', err);
       }
     }
-  }, [loadCommands, loadPackageProcesses, fetchBackgroundProcesses, effectiveWorktreeId, currentProject?.id]);
+  }, [commandsQuery, processesQuery, fetchBackgroundProcesses, currentProject?.id]);
 
   const toggleFavorite = useCallback(async (commandKey: string) => {
     const projectId = currentProject?.id;

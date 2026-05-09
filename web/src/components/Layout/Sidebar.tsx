@@ -33,6 +33,8 @@ import {
   Check,
 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
+import { useChatList, useArchivedChats, useDeleteChat, useRenameChat, useUnarchiveChat } from "../../hooks/chat-queries";
+import { useMarkUnread } from "../../hooks/message-queries";
 import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProcessStore } from "../../store/processStore";
@@ -292,6 +294,8 @@ const ArchivedChatItem = memo(function ArchivedChatItem({ chat, activeChatId }: 
   const chatTitle = chat.title || "New chat";
   const isActive = activeChatId === chatId;
   const relativeTime = getRelativeTime(chat.updatedAt || chat.createdAt);
+  const deleteChatMutation = useDeleteChat();
+  const unarchiveMutation = useUnarchiveChat();
 
   const handleViewChat = async () => {
     const currentProject = useProjectStore.getState().currentProject;
@@ -314,23 +318,12 @@ const ArchivedChatItem = memo(function ArchivedChatItem({ chat, activeChatId }: 
     navigateToChat(chatId);
   };
 
-  const handleRestore = async () => {
-    try {
-      await useChatStore.getState().unarchiveChat(chatId);
-    } catch (error) {
-      console.error("Failed to restore chat:", error);
-    }
+  const handleRestore = () => {
+    unarchiveMutation.mutate(chatId);
   };
 
-  const handleDelete = async () => {
-    try {
-      const { api } = await import("../../api/client");
-      await api.chatsV2.delete(chatId);
-      const chatStore = useChatStore.getState();
-      chatStore.removeArchivedChat(chatId);
-    } catch (error) {
-      console.error("Failed to delete archived chat:", error);
-    }
+  const handleDelete = () => {
+    deleteChatMutation.mutate(chatId);
   };
 
   return (
@@ -559,26 +552,23 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
 });
 
 function SidebarComponent({ paddingClass = "" }: SidebarProps) {
-  const chatsMap = useChatStore((state) => state.chats);
-  const chats = useMemo(() => Array.from(chatsMap.values()), [chatsMap]);
+  const currentProject = useProjectStore((state) => state.currentProject);
+  const { data: chats = [] } = useChatList(currentProject?.id);
   // Activity from activityStore (SINGLE SOURCE OF TRUTH)
   const selectChat = useChatStore((state) => state.selectChat);
-  const deleteChat = useChatStore((state) => state.deleteChat);
-  const renameChat = useChatStore((state) => state.renameChat);
-  const markUnread = useChatStore((state) => state.markUnread);
+  const deleteChatMutation = useDeleteChat();
+  const renameChatMutation = useRenameChat();
+  const markUnreadMutation = useMarkUnread();
+  const unarchiveMutation = useUnarchiveChat();
   const activities = useActivityStore((state) => state.activities);
-  // pendingTimestampUpdates removed - no longer used
-  // Archived chats from store (loaded once, updated via gRPC stream)
-  const archivedChats = useChatStore((state) => state.archivedChats);
-  const archivedChatsLoaded = useChatStore((state) => state.archivedChatsLoaded);
-  const loadArchivedChats = useChatStore((state) => state.loadArchivedChats);
+  // Archived chats from React Query (auto-fetches)
+  const { data: archivedChats = [] } = useArchivedChats();
   
   const worktrees = useWorktreeStore((state) => state.worktrees);
   const switchWorktreeContext = useWorktreeStore((state) => state.switchWorktreeContext);
   const fetchProcesses = useProcessStore(
     (state) => state.fetchProcesses
   );
-  const currentProject = useProjectStore((state) => state.currentProject);
 
   // Get active chat from navigation store
   const activeChatId = useChatStore((state) => state.activeChatId);
@@ -623,15 +613,7 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
   // Ref for scroll container
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // Load archived chats once on mount - subsequent updates come through gRPC stream
-  // (chat_state_change events in globalUpdatesStore handle archive/restore transitions)
-  useEffect(() => {
-    if (currentProject && !archivedChatsLoaded) {
-      loadArchivedChats(currentProject.id);
-    }
-  }, [currentProject, archivedChatsLoaded, loadArchivedChats]);
-
-  // Filter archived chats by current project (store holds all projects' archived chats)
+  // Filter archived chats by current project
   const projectArchivedChats = useMemo(() => {
     if (!currentProject) return [];
     return archivedChats.filter((c) => c.projectId === currentProject.id);
@@ -936,11 +918,10 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
   const handleNewChat = async () => {
     // Clear active chat to show new chat view
     // Preserve current worktree context from active chat or current worktree store
-    const chatStore = useChatStore.getState();
     const worktreeStore = useWorktreeStore.getState();
-    const activeChat = activeChatId ? chatStore.chats.get(activeChatId) ?? null : null;
+    const activeChat = activeChatId ? chats.find(c => c.id === activeChatId) ?? null : null;
     const currentWorktreeId = activeChat?.worktreeId || worktreeStore.currentWorktree?.id || null;
-    chatStore.clearCurrentChat(currentWorktreeId);
+    useChatStore.getState().clearCurrentChat(currentWorktreeId);
   };
 
   const handleSwitchToWorktreeNewChat = useCallback(
@@ -1027,7 +1008,7 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
 
     if (newTitle && newTitle !== currentTitle) {
       try {
-        await renameChat(chatId, newTitle);
+        await renameChatMutation.mutateAsync({ chatId, title: newTitle });
       } catch (error) {
         console.error("Failed to rename chat:", error);
         alert("Failed to rename chat. Please try again.");
@@ -1036,7 +1017,7 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
 
     setEditingChatId(null);
     setEditingTitle("");
-  }, [chats, editingTitle, renameChat]);
+  }, [chats, editingTitle, renameChatMutation]);
 
   const handleCancelRename = useCallback(() => {
     setEditingChatId(null);
@@ -1076,7 +1057,7 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
       menuItems.push({
         label: "Mark Unread",
         icon: <Mail className="w-4 h-4" />,
-        onClick: () => markUnread(chatId),
+        onClick: () => markUnreadMutation.mutate(chatId),
       });
     }
 
@@ -1085,7 +1066,7 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
       {
         label: "Delete",
         icon: <Trash2 className="w-4 h-4" />,
-        onClick: () => deleteChat(chatId),
+        onClick: () => deleteChatMutation.mutate(chatId),
         danger: true,
       }
     );
@@ -1107,20 +1088,16 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
   };
 
   const handleArchiveChat = useCallback(async (chatId: string) => {
-    await deleteChat(chatId);
+    await deleteChatMutation.mutateAsync(chatId);
     toast.notify("Chat archived", {
       action: {
         label: "Undo",
-        onClick: async () => {
-          try {
-            await useChatStore.getState().unarchiveChat(chatId);
-          } catch (error) {
-            console.error("Failed to restore chat:", error);
-          }
+        onClick: () => {
+          unarchiveMutation.mutate(chatId);
         },
       },
     });
-  }, [deleteChat]);
+  }, [deleteChatMutation, unarchiveMutation]);
 
   // Scroll active chat into view when it changes (e.g., via keyboard navigation)
   // NOTE: Only trigger when activeChatId changes, NOT when chats list changes

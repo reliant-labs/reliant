@@ -2,7 +2,6 @@ import { create } from 'zustand'
 import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import { logger } from '@/lib/logger'
-import { getIsDev } from '@/lib/constants'
 import { setSentryUser } from '@/lib/sentry'
 import { devAuthGrpc } from '@/api/grpc-unauth'
 import { persistProviderToken } from '@/lib/persist-provider-token'
@@ -370,7 +369,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'github',
         options: {
-          scopes: 'repo',
+          scopes: 'user:email repo',
           redirectTo,
           skipBrowserRedirect: true,
         },
@@ -551,7 +550,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const { data, error } = await supabase.auth.linkIdentity({
         provider: 'github',
         options: {
-          scopes: 'repo',
+          scopes: 'user:email repo',
           redirectTo,
           skipBrowserRedirect: true,
         },
@@ -854,30 +853,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     // Always register OAuth callback listener in Electron, including dev mode.
     setupElectronOAuthCallbackListener(set)
-
-    // Dev mode: skip auth and use dev user (backend uses DevUser)
-    // Use runtime check so Electron packaged apps always follow RELIANT_CONFIG.isDev
-    if (getIsDev()) {
-      // Read user ID from VITE_DEV_USER_ID env var, fallback to a default
-      const devUserId = import.meta.env.VITE_DEV_USER_ID || 'dev-user-id';
-      logger.info('[AuthStore] Dev mode - using dev user', { userId: devUserId })
-      set({
-        // Use configured user ID from .env so developers can use their own data
-        // Include email_confirmed_at to bypass email verification requirement
-        user: {
-          id: devUserId,
-          email: 'dev@localhost',
-          email_confirmed_at: new Date().toISOString(),
-          is_anonymous: false,
-        } as User,
-        session: { access_token: 'dev-token' } as Session,
-        loading: false,
-        initialized: true,
-      })
-      return
-    }
-
-    logger.info('[AuthStore] Production mode - using real auth')
 
     // Restore API key session from localStorage
     const storedApiKey = localStorage.getItem('reliant-api-key')

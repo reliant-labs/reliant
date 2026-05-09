@@ -42,7 +42,8 @@ import { chatGrpc } from "../../api/chat-grpc";
 import { useProjectStore } from "../../store/projectStore";
 import { usePreferencesStore, DEFAULT_WORKFLOW } from "../../store/preferencesStore";
 import { useChatStore } from "../../store/chatStore";
-import { useChat, usePendingQuestion } from "../../store/chatStoreHooks";
+import { useChat } from "../../hooks/chat-queries";
+import { usePendingQuestion } from "../../hooks/approval-queries";
 import { ChatWorkflowStatus } from "../../gen/reliant/v1/chat_pb";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads } from "./thread-views/threadUtils";
@@ -232,7 +233,8 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
     });
 
     // Question (ask_user) state
-    const pendingQuestion = usePendingQuestion(chatId || "");
+    const pendingQuestionQuery = usePendingQuestion(chatId || undefined);
+    const pendingQuestion = pendingQuestionQuery.data ?? null;
     const hasPendingQuestion = !!pendingQuestion;
     const askUserQuestion = useMemo(
       () => parseAskUserMetadata(pendingQuestion?.metadata),
@@ -998,7 +1000,8 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
     );
 
     // Check if workflow is paused (for discuss mode button)
-    const chatForStatus = useChat(chatId || "");
+    const chatForStatusQuery = useChat(chatId || undefined);
+    const chatForStatus = chatForStatusQuery.data;
     const isPaused = chatForStatus?.workflowStatus === ChatWorkflowStatus.PAUSED;
 
     // Thread color for border - non-main threads get their color

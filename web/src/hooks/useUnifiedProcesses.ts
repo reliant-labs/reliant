@@ -8,7 +8,7 @@
 
 import { useMemo } from "react";
 import { useProcessStore } from "../store/processStore";
-import { usePackageCommandsStore } from "../store/packageCommandsStore";
+import { usePackageProcesses } from "./package-queries";
 import { BackgroundProcessStatus } from "../api/background-grpc";
 
 // Unified process type that works with both stores
@@ -44,7 +44,7 @@ interface UnifiedProcessCounts {
 export function useUnifiedProcessCounts(currentWorktreeId?: string): UnifiedProcessCounts {
   // Get processes from both stores
   const backgroundProcesses = useProcessStore((state) => state.processes);
-  const packageProcesses = usePackageCommandsStore((state) => state.processes);
+  const { data: packageProcesses = [] } = usePackageProcesses();
 
   return useMemo(() => {
     // Merge and deduplicate processes

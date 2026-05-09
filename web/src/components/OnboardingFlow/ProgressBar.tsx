@@ -1,9 +1,13 @@
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { StepConfig } from "./types";
+
+interface ProgressBarStep {
+  id: string;
+  label: string;
+}
 
 interface ProgressBarProps {
-  steps: StepConfig[];
+  steps: ProgressBarStep[];
   currentStepIndex: number;
 }
 

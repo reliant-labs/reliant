@@ -27,7 +27,6 @@ import { DaemonRegistryService } from "../gen/reliant/v1/tools_daemon_pb";
 import { QuestionService } from "../gen/reliant/v1/question_pb";
 import { supabase } from "../lib/supabase";
 import { logger } from "../lib/logger";
-import { getIsDev } from "../lib/constants";
 import * as Sentry from "@sentry/react";
 import { buildLocalhostUrl } from "../lib/protocol";
 import {
@@ -40,6 +39,7 @@ import {
   OAUTH_TIMEOUT_MS,
   OAUTH_EXCHANGE_TIMEOUT_MS,
   PROVIDER_VALIDATION_TIMEOUT_MS,
+  getIsDev,
 } from "../lib/constants";
 
 // Detect if running in Electron and get gRPC URL

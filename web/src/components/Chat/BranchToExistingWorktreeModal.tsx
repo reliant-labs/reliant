@@ -1,8 +1,8 @@
 import { useState, useMemo } from "react";
 import { AlertTriangle, FolderSync, FolderGit2 } from "lucide-react";
 import { Modal } from "../ui/Modal";
-import { useChatStore } from "../../store/chatStore";
 import { useWorktreeStore, type Worktree } from "../../store/worktreeStore";
+import { useBranchChat } from "../../hooks/message-queries";
 import { logger } from "../../lib/logger";
 import { cn } from "../../lib/utils";
 
@@ -23,7 +23,7 @@ export function BranchToExistingWorktreeModal({
   projectId,
   sourceWorktreeId,
 }: BranchToExistingWorktreeModalProps) {
-  const branchChatToWorktree = useChatStore((state) => state.branchChatToWorktree);
+  const branchChat = useBranchChat();
   const switchWorktreeContext = useWorktreeStore((state) => state.switchWorktreeContext);
   const worktrees = useWorktreeStore((state) => state.worktrees);
   
@@ -67,12 +67,11 @@ export function BranchToExistingWorktreeModal({
         worktreeId: selectedWorktreeId 
       });
       
-      // Branch the chat to the selected worktree with workspace context
-      // No files are copied when branching to existing workspace
-      await branchChatToWorktree(chatId, messageId, selectedWorktreeId, {
-        sourceWorktreeId: sourceWorktreeId,
-        filesCopied: [],
-        copyFilesEnabled: false,
+      // Branch the chat to the selected worktree
+      await branchChat.mutateAsync({
+        chatId,
+        messageId,
+        worktreeId: selectedWorktreeId,
       });
       
       // Switch to the workspace

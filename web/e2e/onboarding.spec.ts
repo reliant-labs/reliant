@@ -88,10 +88,10 @@ async function mockGrpcRoutes(page: Page) {
     }),
   );
 
-  // OAuth availability check
+  // OAuth availability check — only intercept fetch/XHR, not JS modules or documents
   await page.route('**/auth/**', (route: Route) => {
-    // Let the page's own /auth path through if it's a navigation
-    if (route.request().resourceType() === 'document') {
+    const resourceType = route.request().resourceType();
+    if (resourceType !== 'fetch' && resourceType !== 'xhr') {
       return route.fallback();
     }
     return route.fulfill({
@@ -103,13 +103,13 @@ async function mockGrpcRoutes(page: Page) {
   });
 }
 
-/** Navigate to the app with onboarding forced via query param. */
+/** Navigate to the onboarding flow via URL. Clears localStorage first. */
 async function gotoWithOnboarding(page: Page) {
-  // Clear localStorage to simulate a fresh user
   await page.addInitScript(() => {
-    localStorage.clear();
+    localStorage.removeItem('reliant-onboarding');
+    localStorage.removeItem('reliant-onboarding-plan');
   });
-  await page.goto('/?reset-onboarding');
+  await page.goto('/?step=goal');
   // Wait for the onboarding dialog to appear
   await page.getByRole('dialog', { name: 'Onboarding setup' }).waitFor({ timeout: 10_000 });
 }
@@ -130,6 +130,7 @@ test.describe('Onboarding Flow', () => {
 
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
     await expect(dialog).toBeVisible();
+    await expect(page).toHaveURL(/step=goal/);
 
     // The first step is the Goal step – verify the heading is visible
     await expect(dialog.getByText('What are you building?')).toBeVisible();
@@ -145,7 +146,8 @@ test.describe('Onboarding Flow', () => {
     // Click "Build something new"
     await dialog.getByRole('button', { name: /Build something new/i }).click();
 
-    // Should advance to the Compute step
+    // Should advance to the Compute step — verify URL and content
+    await expect(page).toHaveURL(/step=compute/, { timeout: 5_000 });
     await expect(
       dialog.getByText('Where should Reliant run your daemon?'),
     ).toBeVisible({ timeout: 5_000 });
@@ -176,14 +178,14 @@ test.describe('Onboarding Flow', () => {
 
     // Goal: "Explore Reliant" (doesn't need local folder)
     await dialog.getByRole('button', { name: /Explore Reliant/i }).click();
+    await expect(page).toHaveURL(/step=compute/, { timeout: 5_000 });
     await expect(dialog.getByText('Where should Reliant run your daemon?')).toBeVisible({ timeout: 5_000 });
 
     // Compute: choose cloud
     await dialog.getByRole('button', { name: /Start cloud daemon/i }).click();
 
-    // Should eventually land on a step beyond compute (project location or model).
-    // For "explore" cloud path: goal → compute → cloud-project-location → model
-    // Wait for the step to advance past compute
+    // Should eventually land on a step beyond compute
+    await expect(page).not.toHaveURL(/step=compute/, { timeout: 10_000 });
     await expect(
       dialog.getByText('Where should Reliant run your daemon?'),
     ).not.toBeVisible({ timeout: 10_000 });
@@ -212,13 +214,14 @@ test.describe('Onboarding Flow', () => {
 
     // Goal: "Work on an existing project"
     await dialog.getByRole('button', { name: /Work on an existing project/i }).click();
+    await expect(page).toHaveURL(/step=compute/, { timeout: 5_000 });
     await expect(dialog.getByText('Where should Reliant run your daemon?')).toBeVisible({ timeout: 5_000 });
 
     // Compute: choose cloud
     await dialog.getByRole('button', { name: /Start cloud daemon/i }).click();
 
     // For cloud + existing: goal → compute → github-connect → model
-    // Should show the GitHub connect step
+    await expect(page).toHaveURL(/step=github-connect/, { timeout: 10_000 });
     await expect(
       dialog.getByText(/Connect your GitHub repos/i),
     ).toBeVisible({ timeout: 10_000 });
@@ -228,8 +231,6 @@ test.describe('Onboarding Flow', () => {
 
   test('Completing onboarding transitions to main app (no blank screen)', async ({ page }) => {
     // Simulate a user who has already completed onboarding AND has a project.
-    // The key: onboarding is "completed" in localStorage AND ListProjects returns
-    // a project, so the overlay stays hidden and the main app renders.
     await page.addInitScript(() => {
       localStorage.setItem(
         'reliant-onboarding',
@@ -268,6 +269,9 @@ test.describe('Onboarding Flow', () => {
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
 
+    // Should NOT redirect to onboarding
+    await expect(page).not.toHaveURL(/step=/, { timeout: 10_000 });
+
     // Onboarding dialog should NOT be visible
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
     await expect(dialog).not.toBeVisible({ timeout: 10_000 });
@@ -287,6 +291,7 @@ test.describe('Onboarding Flow', () => {
 
     // Start on Goal step
     await expect(dialog.getByText('What are you building?')).toBeVisible();
+    await expect(page).toHaveURL(/step=goal/);
 
     // Back button should NOT be visible on the first step
     const backButton = dialog.getByRole('button', { name: /Back/i });
@@ -294,6 +299,7 @@ test.describe('Onboarding Flow', () => {
 
     // Advance to Compute step
     await dialog.getByRole('button', { name: /Build something new/i }).click();
+    await expect(page).toHaveURL(/step=compute/, { timeout: 5_000 });
     await expect(dialog.getByText('Where should Reliant run your daemon?')).toBeVisible({ timeout: 5_000 });
 
     // Now Back button should be visible in the footer
@@ -302,47 +308,97 @@ test.describe('Onboarding Flow', () => {
 
     // Click Back → should return to Goal step
     await footerBack.click();
+    await expect(page).toHaveURL(/step=goal/, { timeout: 5_000 });
     await expect(dialog.getByText('What are you building?')).toBeVisible({ timeout: 5_000 });
   });
 
   // ── Fresh state: isBackendReady resolves within timeout ────
 
-  test('Incognito/fresh state: isBackendReady resolves within timeout', async ({ page }) => {
+  test('Incognito/fresh state: shows onboarding not project picker', async ({ page }) => {
+    await mockGrpcRoutes(page);
+
     // Simulate truly fresh state: clear everything before navigating
     await page.addInitScript(() => {
       localStorage.clear();
       sessionStorage.clear();
     });
 
-    // Navigate without the reset param — just a clean slate
+    // Navigate without the step param — just a clean slate
     await page.goto('/');
 
     // The page should load within a reasonable time without hanging
     await page.waitForLoadState('domcontentloaded', { timeout: 15_000 });
 
-    // Either onboarding shows (because no projects) or the main app loads
-    // — the key assertion is that the page is not blank/stuck
-    const root = page.locator('#root');
-    await expect(root).toBeAttached({ timeout: 10_000 });
-    const childCount = await root.evaluate((el) => el.childNodes.length);
-    expect(childCount).toBeGreaterThan(0);
+    // App should auto-redirect to /?step=goal for new user with no projects
+    await expect(page).toHaveURL(/step=goal/, { timeout: 15_000 });
 
-    // Verify no critical JavaScript errors
-    const errors: string[] = [];
-    page.on('pageerror', (error) => errors.push(error.message));
+    // Must show onboarding dialog
+    const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
+    await expect(dialog).toBeVisible({ timeout: 15_000 });
+    await expect(dialog.getByText('What are you building?')).toBeVisible();
 
-    // Give it a moment for any async errors
-    await page.waitForTimeout(2_000);
+    // Project picker should NOT be visible
+    const projectPicker = page.getByText(/Select a project/i);
+    await expect(projectPicker).not.toBeVisible();
+  });
 
-    // Filter out expected non-critical errors (network mocks may cause some)
-    const criticalErrors = errors.filter(
-      (msg) =>
-        !msg.includes('fetch') &&
-        !msg.includes('network') &&
-        !msg.includes('Failed to fetch') &&
-        !msg.includes('ERR_CONNECTION_REFUSED'),
-    );
-    expect(criticalErrors).toHaveLength(0);
+  // ── Browser back button navigates to previous step ──────────
+
+  test('Browser back button navigates to previous step', async ({ page }) => {
+    await gotoWithOnboarding(page);
+    const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
+
+    // Start on Goal step
+    await expect(page).toHaveURL(/step=goal/);
+    await expect(dialog.getByText('What are you building?')).toBeVisible();
+
+    // Advance to Compute step
+    await dialog.getByRole('button', { name: /Build something new/i }).click();
+    await expect(page).toHaveURL(/step=compute/, { timeout: 5_000 });
+    await expect(dialog.getByText('Where should Reliant run your daemon?')).toBeVisible({ timeout: 5_000 });
+
+    // Use browser back button
+    await page.goBack();
+    await expect(page).toHaveURL(/step=goal/, { timeout: 5_000 });
+    await expect(dialog.getByText('What are you building?')).toBeVisible({ timeout: 5_000 });
+  });
+
+  // ── Direct URL navigation to a step works ──────────────────
+
+  test('Direct URL navigation to a step works', async ({ page }) => {
+    // Set up plan state so model step is reachable
+    await page.addInitScript(() => {
+      localStorage.removeItem('reliant-onboarding');
+      localStorage.setItem(
+        'reliant-onboarding-plan',
+        JSON.stringify({ intent: 'explore', compute: 'cloud_free_trial' }),
+      );
+    });
+
+    await page.goto('/?step=model');
+    await page.waitForLoadState('domcontentloaded');
+
+    const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    await expect(page).toHaveURL(/step=model/);
+    await expect(dialog.getByText(/Choose model access/i)).toBeVisible({ timeout: 5_000 });
+  });
+
+  // ── Invalid step param falls back to first step ────────────
+
+  test('Invalid step param falls back to first step', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.removeItem('reliant-onboarding');
+      localStorage.removeItem('reliant-onboarding-plan');
+    });
+
+    await page.goto('/?step=nonexistent');
+    await page.waitForLoadState('domcontentloaded');
+
+    const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
+    await expect(dialog).toBeVisible({ timeout: 10_000 });
+    // Invalid step should fall back to the first step (goal)
+    await expect(dialog.getByText('What are you building?')).toBeVisible({ timeout: 5_000 });
   });
 });
 
@@ -352,14 +408,17 @@ test.describe('Onboarding Flow', () => {
 
 test.describe('Onboarding – Failure Scenarios', () => {
   test('gRPC backend unreachable: still shows onboarding', async ({ page }) => {
-    // Mock ALL routes to return 500
+    // Mock ALL API routes to return 500 — only intercept fetch/XHR, not JS modules
     await page.route('**/*', (route: Route) => {
+      const resourceType = route.request().resourceType();
+      if (resourceType !== 'fetch' && resourceType !== 'xhr') {
+        return route.fallback();
+      }
       const url = route.request().url();
       if (
         url.includes('reliant.v1.') ||
         url.includes('/api/v1/') ||
-        url.includes('/api/settings/') ||
-        url.includes('/auth/')
+        url.includes('/api/settings/')
       ) {
         return route.fulfill({ status: 500, body: 'Internal Server Error' });
       }
@@ -369,7 +428,7 @@ test.describe('Onboarding – Failure Scenarios', () => {
     await page.addInitScript(() => {
       localStorage.clear();
     });
-    await page.goto('/?reset-onboarding');
+    await page.goto('/?step=goal');
     await page.waitForLoadState('domcontentloaded');
 
     // Page should NOT be blank — either onboarding or main app renders
@@ -403,6 +462,7 @@ test.describe('Onboarding – Failure Scenarios', () => {
 
     // Goal → Explore
     await dialog.getByRole('button', { name: /Explore Reliant/i }).click();
+    await expect(page).toHaveURL(/step=compute/, { timeout: 5_000 });
     await expect(dialog.getByText('Where should Reliant run your daemon?')).toBeVisible({ timeout: 5_000 });
 
     // Click cloud — should fail
@@ -449,6 +509,7 @@ test.describe('Onboarding – Failure Scenarios', () => {
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
 
     await dialog.getByRole('button', { name: /Explore Reliant/i }).click();
+    await expect(page).toHaveURL(/step=compute/, { timeout: 5_000 });
     await expect(dialog.getByText('Where should Reliant run your daemon?')).toBeVisible({ timeout: 5_000 });
 
     await dialog.getByRole('button', { name: /Start cloud daemon/i }).click();
@@ -505,12 +566,12 @@ test.describe('Onboarding – Goal × Compute Permutations', () => {
   // ── Cloud paths ──────────────────────────────────────────────
 
   const GOAL_CLOUD_EXPECTATIONS: Array<{ goal: string; label: string; expectSteps: string[] }> = [
-    { goal: 'build_app', label: 'Build something new', expectSteps: ['cloud-project-location', 'forge-style'] },
+    { goal: 'build_app', label: 'Build something new', expectSteps: ['forge-style'] },
     { goal: 'existing_codebase', label: 'Work on an existing project', expectSteps: ['github-connect'] },
-    { goal: 'explore', label: 'Explore Reliant', expectSteps: ['cloud-project-location'] },
-    { goal: 'landing_page', label: 'Create a landing page', expectSteps: ['cloud-project-location'] },
-    { goal: 'pitch_deck', label: 'Create a pitch deck', expectSteps: ['cloud-project-location'] },
-    { goal: 'blog_post', label: 'Write docs or a blog post', expectSteps: ['cloud-project-location'] },
+    { goal: 'explore', label: 'Explore Reliant', expectSteps: ['model'] },
+    { goal: 'landing_page', label: 'Create a landing page', expectSteps: ['model'] },
+    { goal: 'pitch_deck', label: 'Create a pitch deck', expectSteps: ['model'] },
+    { goal: 'blog_post', label: 'Write docs or a blog post', expectSteps: ['model'] },
   ];
 
   for (const { goal, label, expectSteps } of GOAL_CLOUD_EXPECTATIONS) {
@@ -538,6 +599,7 @@ test.describe('Onboarding – Goal × Compute Permutations', () => {
 
       // Step 1: Goal
       await dialog.getByRole('button', { name: new RegExp(label, 'i') }).click();
+      await expect(page).toHaveURL(/step=compute/, { timeout: 5_000 });
       await expect(dialog.getByText('Where should Reliant run your daemon?')).toBeVisible({ timeout: 5_000 });
 
       // Step 2: Compute → cloud
@@ -549,6 +611,8 @@ test.describe('Onboarding – Goal × Compute Permutations', () => {
       if (heading) {
         await expect(dialog.getByText(heading)).toBeVisible({ timeout: 10_000 });
       }
+      // Verify URL changed to the expected step
+      await expect(page).toHaveURL(new RegExp(`step=${firstExpected}`), { timeout: 10_000 });
     });
   }
 
@@ -571,22 +635,18 @@ test.describe('Onboarding – Goal × Compute Permutations', () => {
 
       // Step 1: Goal
       await dialog.getByRole('button', { name: new RegExp(label, 'i') }).click();
+      await expect(page).toHaveURL(/step=compute/, { timeout: 5_000 });
       await expect(dialog.getByText('Where should Reliant run your daemon?')).toBeVisible({ timeout: 5_000 });
 
       // Step 2: Compute → local ("I'll connect my own")
+      // Clicking local shows the daemon setup panel inline on the compute step
+      // (it does NOT navigate to a separate daemon-connect step)
       await dialog.getByRole('button', { name: /I.*ll connect my own/i }).click();
 
-      // Verify the first expected step identifier
-      const firstExpected = expectSteps[0];
-      const heading = STEP_HEADING[firstExpected];
-      if (heading) {
-        // For daemon-connect, clicking local shows the local panel inline
-        // but advancing to the next step requires the daemon or clicking continue.
-        // Verify the local panel shows the daemon setup content.
-        await expect(
-          dialog.getByText(/Install Reliant Daemon|Daemon already connected|Connect your daemon/i),
-        ).toBeVisible({ timeout: 5_000 });
-      }
+      // Verify the local panel shows the daemon setup content inline
+      await expect(
+        dialog.getByText(/Install Reliant Daemon|Daemon already connected|Connect your daemon/i),
+      ).toBeVisible({ timeout: 5_000 });
     });
   }
 });
@@ -609,6 +669,7 @@ test.describe('Onboarding – Navigation Edge Cases', () => {
     await goalButton.dblclick();
 
     // Should be on the Compute step, NOT beyond it
+    await expect(page).toHaveURL(/step=compute/, { timeout: 5_000 });
     await expect(
       dialog.getByText('Where should Reliant run your daemon?'),
     ).toBeVisible({ timeout: 5_000 });
@@ -630,7 +691,7 @@ test.describe('Onboarding – Navigation Edge Cases', () => {
       );
     });
 
-    await page.goto('/?reset-onboarding');
+    await page.goto('/?step=goal');
     await page.waitForLoadState('domcontentloaded');
 
     // Page should not crash — root should have content
@@ -662,23 +723,23 @@ test.describe('Onboarding – Navigation Edge Cases', () => {
 
     // Goal → Explore
     await dialog.getByRole('button', { name: /Explore Reliant/i }).click();
+    await expect(page).toHaveURL(/step=compute/, { timeout: 5_000 });
     await expect(dialog.getByText('Where should Reliant run your daemon?')).toBeVisible({ timeout: 5_000 });
 
     // Choose cloud → advances past compute
     await dialog.getByRole('button', { name: /Start cloud daemon/i }).click();
-    await expect(
-      dialog.getByText('Where should Reliant run your daemon?'),
-    ).not.toBeVisible({ timeout: 10_000 });
+    await expect(page).not.toHaveURL(/step=compute/, { timeout: 10_000 });
 
     // Hit Back to get back to compute
     const backButton = dialog.getByRole('button', { name: /Back/i });
     await backButton.click();
+    await expect(page).toHaveURL(/step=compute/, { timeout: 5_000 });
     await expect(dialog.getByText('Where should Reliant run your daemon?')).toBeVisible({ timeout: 5_000 });
 
-    // Now choose local
+    // Now choose local — this shows the local setup panel inline on compute step
     await dialog.getByRole('button', { name: /I.*ll connect my own/i }).click();
 
-    // Verify local panel content appears (daemon setup instructions)
+    // Verify local panel content appears inline (URL stays on compute)
     await expect(
       dialog.getByText(/Install Reliant Daemon|Daemon already connected|Connect your daemon/i),
     ).toBeVisible({ timeout: 5_000 });

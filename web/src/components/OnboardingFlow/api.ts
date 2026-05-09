@@ -8,10 +8,18 @@
  */
 
 import { supabase } from "@/lib/supabase";
+import { buildLocalhostUrl } from "@/lib/protocol";
 
-// Control-plane API URL — set via env var when cloud mode is active
+// Control-plane API URL — prefers explicit env var, falls back to the same
+// gRPC URL the rest of the app uses so it works in all dev configurations.
 const CONTROL_PLANE_API_URL =
-  import.meta.env.VITE_CONTROL_PLANE_API_URL || "";
+  import.meta.env.VITE_CONTROL_PLANE_API_URL ||
+  import.meta.env.VITE_GRPC_URL ||
+  import.meta.env.VITE_API_URL ||
+  buildLocalhostUrl(import.meta.env.VITE_GRPC_PORT || "9090");
+
+/** Whether a control-plane backend is configured (any API URL resolved). */
+export const hasControlPlane = Boolean(CONTROL_PLANE_API_URL);
 
 let _baseUrl = CONTROL_PLANE_API_URL;
 let _tokenGetter: () => Promise<string | null> = async () => {
@@ -235,6 +243,7 @@ export async function completeOnboardingRPC(
   onboardingData: Record<string, unknown>,
 ): Promise<void> {
   await callRPC(USER_SERVICE, "CompleteOnboarding", { onboardingData });
+  _userPromise = null; // Clear cache so next fetch gets fresh data
 }
 
 // ── Daemon Service ──────────────────────────────────────────
