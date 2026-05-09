@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Activity } from 'lucide-react';
 import { GradientBackground } from '../GradientBackground';
 import { Tooltip } from '../ui/Tooltip';
@@ -5,8 +6,31 @@ import { isDev } from '../../lib/constants';
 import { openExternalLink } from '../../lib/open-link';
 import { BrandMark } from '../icons/BrandMark';
 
+const STUCK_THRESHOLD_MS = 5000;
+
 export function LoadingSpinner() {
   const isMac = window.electronAPI?.platform === 'darwin';
+  const [stuck, setStuck] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setStuck(true), STUCK_THRESHOLD_MS);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Escape hatch when initialization stalls (e.g. backend 401s on a stale token).
+  // Imports authStore lazily to keep this component decoupled from auth.
+  const handleSignOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      const { useAuthStore } = await import('../../store/authStore');
+      await useAuthStore.getState().signOut();
+    } catch {
+      // ignore — we'll force-redirect below either way
+    }
+    window.location.href = '/auth';
+  };
 
   return (
     <div className="fixed inset-0 bg-background flex flex-col">
@@ -53,11 +77,11 @@ export function LoadingSpinner() {
       </div>
 
       {/* Loading content */}
-      <div className="flex-1 flex items-center justify-center relative z-10">
+      <div className="flex-1 flex flex-col items-center justify-center relative z-10 gap-6">
         <div className="relative w-32 h-32 flex items-center justify-center">
-          <svg 
-            className="absolute inset-0 w-full h-full" 
-            viewBox="0 0 100 100" 
+          <svg
+            className="absolute inset-0 w-full h-full"
+            viewBox="0 0 100 100"
             style={{ animation: "spin 1.5s linear infinite" }}
             aria-hidden="true"
             focusable="false"
@@ -81,6 +105,18 @@ export function LoadingSpinner() {
           </svg>
           <BrandMark className="w-16 h-16" />
         </div>
+        {stuck && (
+          <div className="text-center text-sm text-muted-foreground flex flex-col items-center gap-2">
+            <p>Loading is taking longer than expected.</p>
+            <button
+              onClick={handleSignOut}
+              disabled={signingOut}
+              className="text-foreground underline underline-offset-4 hover:no-underline disabled:opacity-50"
+            >
+              {signingOut ? 'Signing out…' : 'Sign out'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

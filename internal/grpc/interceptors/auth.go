@@ -77,55 +77,27 @@ func (t *sessionTracker) cleanup() {
 	}
 }
 
-// DevUser is the hardcoded user for development mode auth bypass
-// Sub is read from DEV_USER_ID env var, defaulting to the original dev UUID
-var DevUser = &auth.JWTClaims{
-	Sub:   devUserID(),
-	Role:  "authenticated",
-	Email: "dev@localhost",
-}
-
-func devUserID() string {
-	if id := os.Getenv("DEV_USER_ID"); id != "" {
-		return id
-	}
-	return "530eb7d2-1f6a-4305-890e-c05becebcf03"
-}
-
 // AuthInterceptor provides JWT authentication for gRPC requests
 type AuthInterceptor struct {
 	validator      auth.TokenValidator
 	sessionTracker *sessionTracker
 	publicMethods  map[string]bool // Methods that don't require auth
-	devMode        bool            // If true, bypass auth with dev user
+	onFirstAuth    func(userID string)
 }
 
 // NewAuthInterceptor creates a new auth interceptor.
 // The auth mode is determined by auth.GetAuthMode():
-//   - "dev":      bypass auth entirely with a hardcoded dev user
 //   - "apikey":   validate bearer tokens against AUTH_API_KEY env var
 //   - "supabase": validate JWTs using publicKeyPEM or jwksURL (default)
 func NewAuthInterceptor(publicKeyPEM string, jwksURL string, publicMethods []string) (*AuthInterceptor, error) {
 	mode := auth.GetAuthMode()
 
-	// Build public methods map for fast lookup
 	publicMethodsMap := make(map[string]bool)
 	for _, method := range publicMethods {
 		publicMethodsMap[method] = true
 	}
 
 	switch mode {
-	case "dev":
-		logging.Info("[gRPC Auth] Development mode detected - auth bypass enabled",
-			"dev_user_id", DevUser.Sub,
-			"dev_user_email", DevUser.Email)
-		return &AuthInterceptor{
-			validator:      nil,
-			sessionTracker: newSessionTracker(),
-			publicMethods:  publicMethodsMap,
-			devMode:        true,
-		}, nil
-
 	case "apikey":
 		apiKey := os.Getenv("AUTH_API_KEY")
 		if apiKey == "" {
@@ -140,7 +112,6 @@ func NewAuthInterceptor(publicKeyPEM string, jwksURL string, publicMethods []str
 			validator:      validator,
 			sessionTracker: newSessionTracker(),
 			publicMethods:  publicMethodsMap,
-			devMode:        false,
 		}, nil
 
 	default: // "supabase"
@@ -166,9 +137,15 @@ func NewAuthInterceptor(publicKeyPEM string, jwksURL string, publicMethods []str
 			validator:      validator,
 			sessionTracker: newSessionTracker(),
 			publicMethods:  publicMethodsMap,
-			devMode:        false,
 		}, nil
 	}
+}
+
+// SetOnFirstAuth registers a callback fired exactly once per userID per process
+// lifetime, the first time that user successfully authenticates. Used in monolith
+// mode to lazy-start the in-process daemon under the authenticated user's ID.
+func (i *AuthInterceptor) SetOnFirstAuth(fn func(userID string)) {
+	i.onFirstAuth = fn
 }
 
 // authenticateRequest validates the auth token and returns the authenticated context, claims, and raw token.
@@ -177,19 +154,6 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 	// Check if this method is public
 	if i.publicMethods[procedure] {
 		return ctx, nil, "", nil
-	}
-
-	// Dev mode bypass - use hardcoded dev user
-	if i.devMode {
-		ctx = context.WithValue(ctx, auth.UserIDContextKey, DevUser.Sub)
-		ctx = context.WithValue(ctx, auth.UserRoleContextKey, DevUser.Role)
-		ctx = context.WithValue(ctx, auth.UserEmailContextKey, DevUser.Email)
-
-		logging.Debug("[gRPC Auth] Dev mode - using dev user",
-			"user_id", DevUser.Sub,
-			"procedure", procedure)
-
-		return ctx, DevUser, "", nil
 	}
 
 	// Extract token from Authorization header
@@ -246,6 +210,9 @@ func (i *AuthInterceptor) trackSession(ctx context.Context, claims *auth.JWTClai
 		logging.Info("[Analytics] User authenticated, updated analytics client",
 			"userID", claims.Sub,
 			"email", claims.Email)
+		if i.onFirstAuth != nil {
+			i.onFirstAuth(claims.Sub)
+		}
 	}
 
 	// Always update the JWT (it refreshes on each request)

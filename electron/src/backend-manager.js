@@ -7,8 +7,6 @@ const { app } = require('electron');
 const findFreePort = require('find-free-port');
 const log = require('./logger');
 const dotenv = require('dotenv');
-const authStorage = require('./auth-storage');
-const { applyDaemonIdentityEnv } = require('./backend-auth');
 
 class BackendManager {
   constructor() {
@@ -854,12 +852,6 @@ class BackendManager {
         // In packaged apps, NODE_ENV is not set automatically, causing the backend to default to dev mode
         RELIANT_ENV: this.isDevelopment ? 'dev' : 'prod',
       };
-
-      const storedSession = authStorage.loadStoredAuth();
-      backendEnv = applyDaemonIdentityEnv(backendEnv, storedSession);
-      log.info('[BackendManager] Backend auth principal for daemon identity', {
-        daemonUserId: backendEnv.RELIANT_DAEMON_USER_ID || '(anonymous)'
-      });
 
       // Keep backend database env deterministic from the already-normalized process env.
       // This prevents stale inherited DATABASE_URL/PG* values from leaking into spawned backend.

@@ -2,7 +2,6 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  applyDaemonIdentityEnv,
   describeAuthPrincipalChange,
   getAuthPrincipal,
   getSessionUserId,
@@ -55,21 +54,6 @@ test('shouldRestartBackendForAuthChange only restarts for production principal c
     shouldRestartBackendForAuthChange(nextSession, { user: { id: 'user-1' } }),
     false
   );
-});
-
-test('applyDaemonIdentityEnv injects and clears RELIANT_DAEMON_USER_ID deterministically', () => {
-  const baseEnv = {
-    PATH: '/usr/bin',
-    RELIANT_DAEMON_USER_ID: 'stale-user',
-  };
-
-  const authedEnv = applyDaemonIdentityEnv(baseEnv, { user: { id: 'user-42' } });
-  assert.equal(authedEnv.RELIANT_DAEMON_USER_ID, 'user-42');
-  assert.equal(authedEnv.PATH, '/usr/bin');
-
-  const anonymousEnv = applyDaemonIdentityEnv(baseEnv, null);
-  assert.equal(Object.prototype.hasOwnProperty.call(anonymousEnv, 'RELIANT_DAEMON_USER_ID'), false);
-  assert.equal(anonymousEnv.PATH, '/usr/bin');
 });
 
 test('getAuthPrincipal falls back to anonymous without a user id', () => {

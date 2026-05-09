@@ -38,21 +38,7 @@ function shouldRestartBackendForAuthChange(previousSession, nextSession, options
   return true;
 }
 
-function applyDaemonIdentityEnv(baseEnv = {}, session) {
-  const env = { ...baseEnv };
-  const userId = getSessionUserId(session);
-
-  if (userId) {
-    env.RELIANT_DAEMON_USER_ID = userId;
-  } else {
-    delete env.RELIANT_DAEMON_USER_ID;
-  }
-
-  return env;
-}
-
 module.exports = {
-  applyDaemonIdentityEnv,
   describeAuthPrincipalChange,
   getAuthPrincipal,
   getSessionUserId,
