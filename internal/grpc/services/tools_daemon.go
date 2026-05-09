@@ -927,6 +927,7 @@ func (s *ToolsDaemonService) persistProjectConfigSnapshot(ctx context.Context, c
 		return err
 	}
 	if project == nil {
+		logging.Warn("[ToolsDaemon] persistProjectConfigSnapshot: project not found for path", "projectPath", projectPath, "daemonID", conn.daemonID)
 		return nil
 	}
 
@@ -953,6 +954,7 @@ func (s *ToolsDaemonService) persistProjectConfigSnapshot(ctx context.Context, c
 		ProjectPresetsJSON:   flattenIndexedPresets(snapshot.Presets),
 		ProjectScenariosJSON: flattenIndexedScenarios(snapshot.Scenarios),
 		ProjectSkillsJSON:    flattenIndexedSkills(snapshot.Skills),
+		RepoMemoriesJSON:     flattenRepoMemories(snapshot.RepoMemoriesMd),
 		PushedAt:             daemonTimestampToTime(snapshot.DaemonTimestampUnixMs),
 	}
 
@@ -1206,6 +1208,24 @@ func flattenIndexedSkills(skills []*reliantv1.IndexedSkill) *string {
 	}
 	value := string(encoded)
 	return &value
+}
+
+// flattenRepoMemories converts the proto repo memories map into a JSON string
+// for DB storage.
+func flattenRepoMemories(memories map[string][]byte) *string {
+	if len(memories) == 0 {
+		return nil
+	}
+	strMap := make(map[string]string, len(memories))
+	for k, v := range memories {
+		strMap[k] = string(v)
+	}
+	encoded, err := json.Marshal(strMap)
+	if err != nil {
+		return nil
+	}
+	s := string(encoded)
+	return &s
 }
 
 func (s *ToolsDaemonService) sendLoadAndWatchProjectConfig(ctx context.Context, conn *daemonConnection, projectPath string, includeInitial bool) error {

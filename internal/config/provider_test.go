@@ -49,6 +49,58 @@ func TestStoredConfigProvider_MergesMemoryAndMCPConfigs(t *testing.T) {
 	require.Contains(t, cfg.MCPServers, "l")
 }
 
+func TestStoredConfigProvider_ParsesRepoMemories(t *testing.T) {
+	repoMem := `{"api":"api context","forge":"forge context"}`
+	provider := NewStoredConfigProvider(&staticStore{record: &StoredProjectConfigRecord{
+		ProjectID:        "p1",
+		RepoMemoriesJSON: &repoMem,
+	}})
+
+	cfg, err := provider.GetProjectConfig(context.Background(), ProjectRef{ProjectID: "p1"})
+	require.NoError(t, err)
+	require.Len(t, cfg.RepoMemories, 2)
+	require.Equal(t, "api context", cfg.RepoMemories["api"])
+	require.Equal(t, "forge context", cfg.RepoMemories["forge"])
+}
+
+func TestStoredConfigProvider_NilRepoMemories(t *testing.T) {
+	provider := NewStoredConfigProvider(&staticStore{record: &StoredProjectConfigRecord{
+		ProjectID: "p1",
+	}})
+
+	cfg, err := provider.GetProjectConfig(context.Background(), ProjectRef{ProjectID: "p1"})
+	require.NoError(t, err)
+	require.Nil(t, cfg.RepoMemories)
+}
+
+func TestParseRepoMemories(t *testing.T) {
+	t.Run("nil", func(t *testing.T) {
+		result, err := ParseRepoMemories(nil)
+		require.NoError(t, err)
+		require.Nil(t, result)
+	})
+
+	t.Run("empty string", func(t *testing.T) {
+		s := ""
+		result, err := ParseRepoMemories(&s)
+		require.NoError(t, err)
+		require.Nil(t, result)
+	})
+
+	t.Run("valid", func(t *testing.T) {
+		s := `{"api":"api rules","web":"web rules"}`
+		result, err := ParseRepoMemories(&s)
+		require.NoError(t, err)
+		require.Equal(t, map[string]string{"api": "api rules", "web": "web rules"}, result)
+	})
+
+	t.Run("invalid json", func(t *testing.T) {
+		s := "not json"
+		_, err := ParseRepoMemories(&s)
+		require.Error(t, err)
+	})
+}
+
 func TestStoredConfigProvider_MissingStoredRecordReturnsDefaultConfig(t *testing.T) {
 	provider := NewStoredConfigProvider(&staticStore{err: sql.ErrNoRows})
 	cfg, err := provider.GetProjectConfig(context.Background(), ProjectRef{ProjectID: "missing"})

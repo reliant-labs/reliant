@@ -52,6 +52,7 @@ type ProjectConfigRecord struct {
 	ProjectPresetsJSON   *string
 	ProjectScenariosJSON *string
 	ProjectSkillsJSON    *string
+	RepoMemoriesJSON     *string
 	PushedAt             time.Time
 	CreatedAt            time.Time
 	UpdatedAt            time.Time

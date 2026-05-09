@@ -94,11 +94,13 @@ func (f *filesystemConfigStore) GetProjectConfigRecord(ctx context.Context, proj
 	presets, _ := indexPresets(projectPath)
 	scenarios, _ := indexScenarios(projectPath)
 	skills, _ := indexSkills(projectPath)
+	repoMemories, _ := collectRepoMemories(projectPath)
 
 	workflowsJSON := flattenWorkflows(workflows)
 	presetsJSON := flattenPresets(presets)
 	scenariosJSON := flattenScenarios(scenarios)
 	skillsJSON := flattenSkills(skills)
+	repoMemoriesJSON := flattenRepoMemories(repoMemories)
 
 	return &config.StoredProjectConfigRecord{
 		ProjectID:            projectPath,
@@ -112,6 +114,7 @@ func (f *filesystemConfigStore) GetProjectConfigRecord(ctx context.Context, proj
 		ProjectPresetsJSON:   presetsJSON,
 		ProjectScenariosJSON: scenariosJSON,
 		ProjectSkillsJSON:    skillsJSON,
+		RepoMemoriesJSON:     repoMemoriesJSON,
 	}, nil
 }
 
@@ -330,6 +333,24 @@ func flattenScenarios(scenarios []*reliantv1.IndexedScenario) *string {
 // flattenSkills converts the proto skills snapshot into the JSON blob that
 // StoredConfigProvider parses into config.StoredSkill. The shape matches the
 // server-side flattenIndexedSkills in tools_daemon.go exactly.
+// flattenRepoMemories converts the proto repo memories map into a JSON object
+// suitable for the StoredProjectConfigRecord. Maps repo relative path -> content string.
+func flattenRepoMemories(memories map[string][]byte) *string {
+	if len(memories) == 0 {
+		return nil
+	}
+	strMap := make(map[string]string, len(memories))
+	for k, v := range memories {
+		strMap[k] = string(v)
+	}
+	encoded, err := json.Marshal(strMap)
+	if err != nil {
+		return nil
+	}
+	s := string(encoded)
+	return &s
+}
+
 func flattenSkills(skills []*reliantv1.IndexedSkill) *string {
 	if len(skills) == 0 {
 		return nil

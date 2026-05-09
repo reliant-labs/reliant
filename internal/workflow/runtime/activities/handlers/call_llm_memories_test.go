@@ -66,3 +66,31 @@ func TestFormatStoredMemories_ProducesSystemMessage(t *testing.T) {
 	require.Equal(t, message.System, msg.Role)
 	require.Contains(t, msg.Content().Text, "test memory")
 }
+
+func TestFormatRepoMemoryMessages_Empty(t *testing.T) {
+	require.Nil(t, formatRepoMemoryMessages(nil))
+	require.Nil(t, formatRepoMemoryMessages(map[string]string{}))
+	require.Nil(t, formatRepoMemoryMessages(map[string]string{"api": "", "web": "  "}))
+}
+
+func TestFormatRepoMemoryMessages_SortedByName(t *testing.T) {
+	msgs := formatRepoMemoryMessages(map[string]string{
+		"forge":         "forge context",
+		"api":           "api context",
+		"control-plane": "cp context",
+	})
+	require.Len(t, msgs, 3)
+
+	// Verify sorted order: api, control-plane, forge
+	require.Contains(t, msgs[0].Content().Text, "<system-memory repo=api>")
+	require.Contains(t, msgs[0].Content().Text, "api context")
+	require.Contains(t, msgs[1].Content().Text, "<system-memory repo=control-plane>")
+	require.Contains(t, msgs[1].Content().Text, "cp context")
+	require.Contains(t, msgs[2].Content().Text, "<system-memory repo=forge>")
+	require.Contains(t, msgs[2].Content().Text, "forge context")
+
+	// All should be system role
+	for _, msg := range msgs {
+		require.Equal(t, message.System, msg.Role)
+	}
+}

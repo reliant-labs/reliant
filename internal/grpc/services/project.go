@@ -344,6 +344,17 @@ Use ` + "`skill list`" + ` to see all available skills. Key skills:
 				"path", req.Msg.Path,
 			)
 		}
+		// Set up a watcher so config changes are pushed continuously.
+		// Without this, projects created after daemon startup never receive
+		// config snapshots — only the one-shot load above fires (and may
+		// silently fail if the daemon hasn't indexed the path yet).
+		if err := s.daemonRouter.SendWatchProjectConfigs(ctx, userID, req.Msg.Path, true); err != nil {
+			logging.Warn("Failed to request daemon config watch for new project",
+				"error", err,
+				"project_id", project.ID,
+				"path", req.Msg.Path,
+			)
+		}
 	}
 
 	return connect.NewResponse(&reliantv1.CreateProjectResponse{

@@ -63,15 +63,7 @@ func Discover(ctx context.Context, projectPath string, maxDepth int) ([]Found, e
 		return nil, fmt.Errorf("project path is not a directory: %s", abs)
 	}
 
-	// Project root itself a git repo? If so, return just that — we don't
-	// recurse into a checkout looking for sub-checkouts.
-	if isGitDir(abs) {
-		return []Found{{
-			RelativePath: "",
-			Name:         filepath.Base(abs),
-			RemoteURL:    readRemoteURL(ctx, abs),
-		}}, nil
-	}
+	rootIsGit := isGitDir(abs)
 
 	var found []Found
 	rootDepth := strings.Count(abs, string(filepath.Separator))
@@ -101,6 +93,11 @@ func Discover(ctx context.Context, projectPath string, maxDepth int) ([]Found, e
 			}
 		}
 
+		// Skip the root itself — we handle it after the walk.
+		if path == abs {
+			return nil
+		}
+
 		if isGitDir(path) {
 			rel, err := filepath.Rel(abs, path)
 			if err != nil {
@@ -120,6 +117,19 @@ func Discover(ctx context.Context, projectPath string, maxDepth int) ([]Found, e
 	if walkErr != nil {
 		return nil, fmt.Errorf("scan project: %w", walkErr)
 	}
+
+	// If the root is a git repo and no nested repos were found, treat it as
+	// a single-repo project (the common case). If nested repos were found,
+	// this is a multi-repo project where the root may also be a git repo
+	// (e.g. tracking shared config with children gitignored).
+	if rootIsGit && len(found) == 0 {
+		return []Found{{
+			RelativePath: "",
+			Name:         filepath.Base(abs),
+			RemoteURL:    readRemoteURL(ctx, abs),
+		}}, nil
+	}
+
 	return found, nil
 }
 
