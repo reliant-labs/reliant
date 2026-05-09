@@ -8,18 +8,7 @@
  */
 
 import { supabase } from "@/lib/supabase";
-import { buildLocalhostUrl } from "@/lib/protocol";
-
-// Control-plane API URL — prefers explicit env var, falls back to the same
-// gRPC URL the rest of the app uses so it works in all dev configurations.
-const CONTROL_PLANE_API_URL =
-  import.meta.env.VITE_CONTROL_PLANE_API_URL ||
-  import.meta.env.VITE_GRPC_URL ||
-  import.meta.env.VITE_API_URL ||
-  buildLocalhostUrl(import.meta.env.VITE_GRPC_PORT || "9090");
-
-/** Whether a control-plane backend is configured (any API URL resolved). */
-export const hasControlPlane = Boolean(CONTROL_PLANE_API_URL);
+import { CONTROL_PLANE_API_URL } from "@/services/controlPlane/config";
 
 let _baseUrl = CONTROL_PLANE_API_URL;
 let _tokenGetter: () => Promise<string | null> = async () => {

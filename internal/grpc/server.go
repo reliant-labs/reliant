@@ -24,7 +24,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/pat"
-	"github.com/reliant-labs/reliant/internal/patauth"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/transport"
@@ -72,6 +71,11 @@ type Config struct {
 	NATSChecker func() bool // Optional: returns true if NATS is connected; nil means NATS not in use
 	LocalMode   bool        // true in monolith mode, false in cloud/distributed mode
 
+	// OnFirstAuth is called once per userID per process, the first time that
+	// user authenticates successfully. Used in monolith mode to lazy-start the
+	// in-process daemon under the authenticated user's identity.
+	OnFirstAuth func(userID string)
+
 	// TLS configuration for HTTP/2 support
 	TLSCertFile string // Path to TLS certificate file
 	TLSKeyFile  string // Path to TLS private key file
@@ -99,10 +103,10 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	authInterceptor, err := interceptors.NewAuthInterceptor(cfg.JWTPublicKey, cfg.JWKSURL, publicMethods)
 	if err != nil {
-		if !cfg.LocalMode {
-			return nil, fmt.Errorf("auth interceptor required in cloud mode: %w", err)
-		}
-		logging.Warn("Auth interceptor disabled in local mode", "error", err)
+		return nil, fmt.Errorf("auth interceptor setup failed: %w", err)
+	}
+	if cfg.OnFirstAuth != nil {
+		authInterceptor.SetOnFirstAuth(cfg.OnFirstAuth)
 	}
 
 	domainWhitelistInterceptor := interceptors.NewDomainWhitelistInterceptor(cfg.AllowedEmailDomains)
@@ -239,18 +243,8 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	// Daemon registry APIs remain on the app gRPC server.
 	// The ToolsDaemonService streaming endpoint itself is hosted on the dedicated
-	// daemon listener (see daemon_server.go).
-	// DaemonRegistryService uses PAT auth (CLI uses PATs, not JWTs).
-	var daemonRegistryAuthInterceptor *interceptors.DaemonAuthInterceptor
-	if !cfg.LocalMode {
-		var err error
-		daemonRegistryAuthInterceptor, err = interceptors.NewDaemonAuthInterceptor(patauth.NewDBPATValidator(database))
-		if err != nil {
-			return nil, fmt.Errorf("daemon registry auth interceptor required in cloud mode: %w", err)
-		}
-	}
-	daemonRegistryOpts := newHandlerOptions(interceptors.NewTimeoutInterceptor().Interceptor(), daemonRegistryAuthInterceptor)
-	daemonRegistryPath, daemonRegistryHandler := reliantv1connect.NewDaemonRegistryServiceHandler(daemonRegistryService, daemonRegistryOpts...)
+	// daemon listener (see daemon_server.go) and is the only surface that uses PAT auth.
+	daemonRegistryPath, daemonRegistryHandler := reliantv1connect.NewDaemonRegistryServiceHandler(daemonRegistryService, opts...)
 	daemonPath, daemonHandler := reliantv1connect.NewDaemonServiceHandler(daemonProxyService, opts...)
 
 	mux.Handle(systemPath, systemHandler)

@@ -1413,6 +1413,24 @@ function App() {
     );
   };
 
+  // Drive both onboarding redirects from an effect — calling navigate() during
+  // render schedules a setState on the router's Transitioner mid-render, which
+  // React rejects with a "Cannot update a component while rendering a different
+  // component" warning and can wedge the app in a redirect loop.
+  const needsOnboardingRedirect =
+    !onboardingStep && !isUserLoading && (!currentUser || !currentUser.onboardingCompleted);
+  useEffect(() => {
+    if (!isBackendReady || isWorkspaceRestoring || isUserLoading) return;
+    if (resetOnboarding) {
+      localStorage.removeItem('reliant-onboarding-plan');
+      navigate({ to: '/', search: { step: 'goal', 'reset-onboarding': undefined } });
+      return;
+    }
+    if (needsOnboardingRedirect) {
+      navigate({ to: '/', search: { step: 'goal' } });
+    }
+  }, [isBackendReady, isWorkspaceRestoring, isUserLoading, resetOnboarding, needsOnboardingRedirect, navigate]);
+
   // Show loading spinner until backend is ready
   if (!isBackendReady) {
     return <LoadingSpinner />;
@@ -1426,10 +1444,8 @@ function App() {
   // Clean up old onboarding localStorage key
   localStorage.removeItem('reliant-onboarding');
 
-  // Handle ?reset-onboarding=true: clear plan state and enter onboarding
-  if (resetOnboarding) {
-    localStorage.removeItem('reliant-onboarding-plan');
-    navigate({ to: '/', search: { step: 'goal', 'reset-onboarding': undefined } });
+  // While the redirect effect runs, keep the spinner up.
+  if (resetOnboarding || needsOnboardingRedirect) {
     return <LoadingSpinner />;
   }
 
@@ -1441,14 +1457,6 @@ function App() {
         <Toaster />
       </div>
     );
-  }
-
-  // Server-driven gate: if user hasn't completed onboarding, redirect to onboarding.
-  // Also redirect when currentUser is null (API unreachable) — a new user with
-  // no server record should see onboarding, not the project picker.
-  if (!currentUser || !currentUser.onboardingCompleted) {
-    navigate({ to: '/', search: { step: 'goal' } });
-    return <LoadingSpinner />;
   }
 
   // Show project picker only after the account has projects but none is selected.

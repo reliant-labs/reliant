@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   createConnectTransport: vi.fn((options) => options),
   getSession: vi.fn(),
-  getIsDev: vi.fn(),
   logger: {
     info: vi.fn(),
     warn: vi.fn(),
@@ -25,7 +24,6 @@ vi.mock('@/lib/supabase', () => ({
 }))
 
 vi.mock('@/lib/constants', () => ({
-  getIsDev: mocks.getIsDev,
   DEFAULT_GRPC_TIMEOUT_MS: 10000,
   FILE_OPERATION_TIMEOUT_MS: 30000,
   CHAT_OPERATION_TIMEOUT_MS: 30000,
@@ -55,12 +53,18 @@ describe('grpc-client auth interceptor', () => {
     vi.resetModules()
     vi.clearAllMocks()
     mocks.createConnectTransport.mockImplementation((options) => options)
-    mocks.getIsDev.mockReturnValue(false)
     mocks.getSession.mockResolvedValue({ data: { session: null } })
+    // jsdom in this vitest setup doesn't expose a real Storage on globalThis;
+    // the auth interceptor reads localStorage first, so stub a minimal shim.
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn(() => null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+    })
   })
 
-  it('forwards a Supabase bearer token in dev when one exists', async () => {
-    mocks.getIsDev.mockReturnValue(true)
+  it('forwards a Supabase bearer token when one exists', async () => {
     mocks.getSession.mockResolvedValue({
       data: { session: { access_token: 'token-123' } },
     })
@@ -80,13 +84,11 @@ describe('grpc-client auth interceptor', () => {
       expect.objectContaining({
         method: 'SyncReliantProvider',
         tokenLength: 9,
-        isDev: true,
       })
     )
   })
 
-  it('preserves dev fallback when no Supabase session exists', async () => {
-    mocks.getIsDev.mockReturnValue(true)
+  it('warns and continues when no Supabase session exists', async () => {
     mocks.getSession.mockResolvedValue({ data: { session: null } })
 
     const { getTransport } = await import('../grpc-client')
@@ -99,8 +101,8 @@ describe('grpc-client auth interceptor', () => {
 
     expect(req.header.get('Authorization')).toBeNull()
     expect(next).toHaveBeenCalledTimes(1)
-    expect(mocks.logger.info).toHaveBeenCalledWith(
-      '[gRPC Client] Dev mode - no auth token available, relying on backend DevUser:',
+    expect(mocks.logger.warn).toHaveBeenCalledWith(
+      '[gRPC Client] No auth token available for request:',
       expect.objectContaining({
         method: 'SyncReliantProvider',
         hasSession: false,

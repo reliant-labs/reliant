@@ -24,7 +24,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/envutil"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
-	grpcinterceptors "github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/integration"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
@@ -298,6 +297,22 @@ func runMonolith(_ *cobra.Command, _ []string, dataDir *string) error {
 		},
 	)
 
+	daemonStarter := monolith.NewLazyDaemonStarter(monolith.LazyDaemonStarterConfig{
+		Repo:                 server.Database(),
+		SharedToolsDaemonSvc: sharedToolsDaemonService,
+		RemoteToolExecutor:   remoteToolExecutor,
+		TLSCertFile:          tlsCertFile,
+		TLSKeyFile:           tlsKeyFile,
+		ToolsDaemonPort:      toolsDaemonPort,
+		DataDir:              *dataDir,
+	})
+
+	// Register the lazy starter with the LocalDaemonRouter so daemon commands
+	// trigger startup on first authenticated request that needs the daemon.
+	if localRouter, ok := server.DaemonRouter().(*toolexec.LocalDaemonRouter); ok {
+		localRouter.SetLazyStarter(daemonStarter.EnsureStarted)
+	}
+
 	grpcSrv, err := grpcserver.NewServer(&grpcserver.Config{
 		Port:                grpcPort,
 		BindAddress:         bindAddress,
@@ -320,42 +335,20 @@ func runMonolith(_ *cobra.Command, _ []string, dataDir *string) error {
 		TLSCertFile:         tlsCertFile,
 		TLSKeyFile:          tlsKeyFile,
 		LocalMode:           true,
+		OnFirstAuth: func(userID string) {
+			if _, err := daemonStarter.EnsureStarted(userID); err != nil {
+				logging.Error("Failed to start in-process daemon for authenticated user", "userID", userID, "error", err)
+			}
+		},
 	})
 	if err != nil {
-		logging.Warn("gRPC server auth setup issue (local mode, non-fatal)", "error", err)
+		return fmt.Errorf("failed to construct gRPC server: %w", err)
 	}
 	if err := grpcSrv.Start(); err != nil {
 		return fmt.Errorf("failed to start gRPC server: %w", err)
 	}
 
-	daemonUserID, err := resolveDaemonUserID(server.Database())
-	if err != nil {
-		return fmt.Errorf("failed to resolve in-process daemon identity: %w", err)
-	}
-
-	daemonStarter := monolith.NewLazyDaemonStarter(monolith.LazyDaemonStarterConfig{
-		Repo:                 server.Database(),
-		SharedToolsDaemonSvc: sharedToolsDaemonService,
-		RemoteToolExecutor:   remoteToolExecutor,
-		TLSCertFile:          tlsCertFile,
-		TLSKeyFile:           tlsKeyFile,
-		ToolsDaemonPort:      toolsDaemonPort,
-		DataDir:              *dataDir,
-	})
-
-	// Register the lazy starter with the LocalDaemonRouter so that daemon
-	// commands can trigger daemon startup on first authenticated request.
-	if localRouter, ok := server.DaemonRouter().(*toolexec.LocalDaemonRouter); ok {
-		localRouter.SetLazyStarter(daemonStarter.EnsureStarted)
-	}
-
-	if daemonUserID != "" {
-		if _, err := daemonStarter.EnsureStarted(daemonUserID); err != nil {
-			return fmt.Errorf("failed to start in-process daemon at boot: %w", err)
-		}
-	} else {
-		logging.Info("Starting in signed-out mode: in-process daemon will start on first authenticated request")
-	}
+	logging.Info("In-process daemon will start on first authenticated request")
 
 	logging.Info("✓ gRPC/Connect server started (HTTPS/HTTP2)", "duration", time.Since(grpcStartTime))
 
@@ -490,32 +483,6 @@ func runMonolith(_ *cobra.Command, _ []string, dataDir *string) error {
 	os.Stderr.Sync() //nolint:errcheck
 
 	return nil
-}
-
-// resolveDaemonUserID determines the user ID for the in-process daemon.
-func resolveDaemonUserID(repo db.Repository) (string, error) {
-	_ = repo // kept for future use; current resolution uses env + auth file
-
-	if explicit := os.Getenv("RELIANT_DAEMON_USER_ID"); explicit != "" {
-		return explicit, nil
-	}
-
-	// Keep daemon and request routing aligned with dev-mode auth bypass semantics.
-	if config.IsDevelopmentEnvironment() {
-		return grpcinterceptors.DevUser.Sub, nil
-	}
-
-	userID, err := auth.ReadUserIDFromAuthFile()
-	if err != nil {
-		logging.Warn("Failed reading auth session for daemon identity; starting without in-process daemon", "error", err)
-		return "", nil
-	}
-	if userID == "" {
-		logging.Info("No signed-in user found for daemon identity; starting without in-process daemon")
-		return "", nil
-	}
-
-	return userID, nil
 }
 
 // initializeSentry sets up Sentry error reporting.
