@@ -6,7 +6,9 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/stretchr/testify/assert"
@@ -14,13 +16,13 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// Stubs for DaemonConnectionManager (only the methods drainPendingCommands uses)
+// Stubs for DaemonConnectionManager
 // ---------------------------------------------------------------------------
 
 type recordingDaemonMgr struct {
 	mu       sync.Mutex
 	commands []*reliantv1.DaemonCommandRequest
-	err      error // error to return from SendDaemonCommand
+	err      error
 }
 
 func (m *recordingDaemonMgr) SendDaemonCommand(_ context.Context, _ string, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error) {
@@ -33,67 +35,65 @@ func (m *recordingDaemonMgr) SendDaemonCommand(_ context.Context, _ string, req 
 	return &reliantv1.DaemonCommandResponse{Success: true}, nil
 }
 
-// Unused methods — satisfy DaemonConnectionManager interface.
-func (m *recordingDaemonMgr) IsDaemonOnline(_ context.Context, _ string) bool { return true }
-func (m *recordingDaemonMgr) ListConnectedDaemons(_ string) []DaemonInfo      { return nil }
-func (m *recordingDaemonMgr) SendToolRequest(_ context.Context, _ string, _ *ToolExecutionRequest) error {
+func (m *recordingDaemonMgr) IsDaemonOnline(context.Context, string) bool { return true }
+func (m *recordingDaemonMgr) ListConnectedDaemons(string) []DaemonInfo    { return nil }
+func (m *recordingDaemonMgr) SendToolRequest(context.Context, string, *ToolExecutionRequest) error {
 	return nil
 }
-func (m *recordingDaemonMgr) SendToolRequestSync(_ context.Context, _ string, _ *ToolExecutionRequest) (*ToolExecutionResponse, error) {
+func (m *recordingDaemonMgr) SendToolRequestSync(context.Context, string, *ToolExecutionRequest) (*ToolExecutionResponse, error) {
 	return nil, nil
 }
-func (m *recordingDaemonMgr) SendToolExecutionCancel(_ context.Context, _, _, _ string) error {
+func (m *recordingDaemonMgr) SendToolExecutionCancel(context.Context, string, string, string) error {
 	return nil
 }
-func (m *recordingDaemonMgr) SendKillProcess(_, _ string) error { return nil }
-func (m *recordingDaemonMgr) SendLoadProjectConfigs(_ context.Context, _, _, _ string) error {
+func (m *recordingDaemonMgr) SendKillProcess(string, string) error { return nil }
+func (m *recordingDaemonMgr) SendLoadProjectConfigs(context.Context, string, string, string) error {
 	return nil
 }
-func (m *recordingDaemonMgr) SendWatchProjectConfigs(_ context.Context, _, _ string, _ bool) error {
+func (m *recordingDaemonMgr) SendWatchProjectConfigs(context.Context, string, string, bool) error {
 	return nil
 }
-func (m *recordingDaemonMgr) SendTerminalInput(_, _ string, _ []byte) error { return nil }
-func (m *recordingDaemonMgr) SendTerminalResize(_, _ string, _, _ uint32) error {
+func (m *recordingDaemonMgr) SendTerminalInput(string, string, []byte) error { return nil }
+func (m *recordingDaemonMgr) SendTerminalResize(string, string, uint32, uint32) error {
 	return nil
 }
-func (m *recordingDaemonMgr) SubscribeTerminalOutput(_, _ string) (<-chan *TerminalOutputEvent, func(), error) {
+func (m *recordingDaemonMgr) SubscribeTerminalOutput(string, string) (<-chan *TerminalOutputEvent, func(), error) {
 	return nil, func() {}, nil
 }
-func (m *recordingDaemonMgr) SubscribeProcessOutput(_, _ string, _ bool) (<-chan *ProcessOutputEvent, func(), error) {
+func (m *recordingDaemonMgr) SubscribeProcessOutput(string, string, bool) (<-chan *ProcessOutputEvent, func(), error) {
 	return nil, func() {}, nil
 }
 
 // ---------------------------------------------------------------------------
-// Minimal JetStream stubs
+// Minimal JetStream stubs — only the methods used by drainPendingCommands
+// are implemented; the rest panic.
 // ---------------------------------------------------------------------------
 
-// stubMsg implements jetstream.Msg for testing.
+// stubMsg implements jetstream.Msg.
 type stubMsg struct {
-	data   []byte
-	acked  bool
-	mu     sync.Mutex
-	header map[string][]string
+	data  []byte
+	mu    sync.Mutex
+	acked bool
 }
 
 func (m *stubMsg) Data() []byte    { return m.data }
 func (m *stubMsg) Subject() string { return "" }
 func (m *stubMsg) Reply() string   { return "" }
-func (m *stubMsg) Headers() jetstream.MsgMetadata {
-	return jetstream.MsgMetadata{}
+func (m *stubMsg) Headers() nats.Header {
+	return nats.Header{}
 }
-
 func (m *stubMsg) Ack() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.acked = true
 	return nil
 }
-func (m *stubMsg) DoubleAck(_ context.Context) error { return nil }
-func (m *stubMsg) Nak() error                        { return nil }
-func (m *stubMsg) NakWithDelay(_ interface{}) error  { return nil }
-func (m *stubMsg) InProgress() error                 { return nil }
-func (m *stubMsg) Term() error                       { return nil }
-func (m *stubMsg) TermWithReason(_ string) error     { return nil }
+func (m *stubMsg) DoubleAck(context.Context) error  { return nil }
+func (m *stubMsg) Nak() error                       { return nil }
+func (m *stubMsg) NakWithDelay(time.Duration) error { return nil }
+func (m *stubMsg) InProgress() error                { return nil }
+func (m *stubMsg) Term() error                      { return nil }
+func (m *stubMsg) TermWithReason(string) error      { return nil }
 func (m *stubMsg) Metadata() (*jetstream.MsgMetadata, error) {
 	return &jetstream.MsgMetadata{}, nil
 }
@@ -124,15 +124,14 @@ func (b *stubMessageBatch) Error() error { return b.err }
 // stubConsumer implements jetstream.Consumer — only Fetch is used.
 type stubConsumer struct {
 	batches []jetstream.MessageBatch
-	callIdx int
 	mu      sync.Mutex
+	callIdx int
 }
 
-func (c *stubConsumer) Fetch(batch int, opts ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
+func (c *stubConsumer) Fetch(_ int, _ ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.callIdx >= len(c.batches) {
-		// No more batches — return empty batch with iterator-closed error.
 		return &stubMessageBatch{err: jetstream.ErrMsgIteratorClosed}, nil
 	}
 	b := c.batches[c.callIdx]
@@ -140,25 +139,21 @@ func (c *stubConsumer) Fetch(batch int, opts ...jetstream.FetchOpt) (jetstream.M
 	return b, nil
 }
 
-func (c *stubConsumer) FetchBytes(maxBytes int, opts ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
-	return nil, errors.New("not implemented")
+func (c *stubConsumer) FetchBytes(int, ...jetstream.FetchOpt) (jetstream.MessageBatch, error) {
+	panic("not implemented")
 }
-func (c *stubConsumer) FetchNoWait(batch int) (jetstream.MessageBatch, error) {
-	return nil, errors.New("not implemented")
+func (c *stubConsumer) FetchNoWait(int) (jetstream.MessageBatch, error) { panic("not implemented") }
+func (c *stubConsumer) Consume(jetstream.MessageHandler, ...jetstream.PullConsumeOpt) (jetstream.ConsumeContext, error) {
+	panic("not implemented")
 }
-func (c *stubConsumer) Consume(handler jetstream.MessageHandler, opts ...jetstream.PullConsumeOpt) (jetstream.ConsumeContext, error) {
-	return nil, errors.New("not implemented")
+func (c *stubConsumer) Messages(...jetstream.PullMessagesOpt) (jetstream.MessagesContext, error) {
+	panic("not implemented")
 }
-func (c *stubConsumer) Messages(opts ...jetstream.PullMessagesOpt) (jetstream.MessagesContext, error) {
-	return nil, errors.New("not implemented")
+func (c *stubConsumer) Next(...jetstream.FetchOpt) (jetstream.Msg, error) { panic("not implemented") }
+func (c *stubConsumer) Info(context.Context) (*jetstream.ConsumerInfo, error) {
+	panic("not implemented")
 }
-func (c *stubConsumer) Next(opts ...jetstream.FetchOpt) (jetstream.Msg, error) {
-	return nil, errors.New("not implemented")
-}
-func (c *stubConsumer) Info(ctx context.Context) (*jetstream.ConsumerInfo, error) {
-	return nil, errors.New("not implemented")
-}
-func (c *stubConsumer) CachedInfo() *jetstream.ConsumerInfo { return nil }
+func (c *stubConsumer) CachedInfo() *jetstream.ConsumerInfo { panic("not implemented") }
 
 // stubStream implements jetstream.Stream — only OrderedConsumer is used.
 type stubStream struct {
@@ -169,43 +164,59 @@ func (s *stubStream) OrderedConsumer(_ context.Context, _ jetstream.OrderedConsu
 	return s.consumer, nil
 }
 
-// Unused Stream methods.
-func (s *stubStream) CreateOrUpdateConsumer(_ context.Context, _ jetstream.ConsumerConfig) (jetstream.Consumer, error) {
-	return nil, errors.New("not implemented")
+func (s *stubStream) CreateOrUpdateConsumer(context.Context, jetstream.ConsumerConfig) (jetstream.Consumer, error) {
+	panic("not implemented")
 }
-func (s *stubStream) CreateConsumer(_ context.Context, _ jetstream.ConsumerConfig) (jetstream.Consumer, error) {
-	return nil, errors.New("not implemented")
+func (s *stubStream) CreateConsumer(context.Context, jetstream.ConsumerConfig) (jetstream.Consumer, error) {
+	panic("not implemented")
 }
-func (s *stubStream) UpdateConsumer(_ context.Context, _ jetstream.ConsumerConfig) (jetstream.Consumer, error) {
-	return nil, errors.New("not implemented")
+func (s *stubStream) UpdateConsumer(context.Context, jetstream.ConsumerConfig) (jetstream.Consumer, error) {
+	panic("not implemented")
 }
-func (s *stubStream) Consumer(_ context.Context, _ string) (jetstream.Consumer, error) {
-	return nil, errors.New("not implemented")
+func (s *stubStream) Consumer(context.Context, string) (jetstream.Consumer, error) {
+	panic("not implemented")
 }
-func (s *stubStream) DeleteConsumer(_ context.Context, _ string) error {
-	return errors.New("not implemented")
+func (s *stubStream) DeleteConsumer(context.Context, string) error { panic("not implemented") }
+func (s *stubStream) PauseConsumer(context.Context, string, time.Time) (*jetstream.ConsumerPauseResponse, error) {
+	panic("not implemented")
 }
-func (s *stubStream) Info(_ context.Context, _ ...jetstream.StreamInfoOpt) (*jetstream.StreamInfo, error) {
-	return nil, errors.New("not implemented")
+func (s *stubStream) ResumeConsumer(context.Context, string) (*jetstream.ConsumerPauseResponse, error) {
+	panic("not implemented")
 }
-func (s *stubStream) CachedInfo() *jetstream.StreamInfo { return nil }
-func (s *stubStream) Purge(_ context.Context, _ ...jetstream.StreamPurgeOpt) error {
-	return errors.New("not implemented")
+func (s *stubStream) ListConsumers(context.Context) jetstream.ConsumerInfoLister {
+	panic("not implemented")
 }
-func (s *stubStream) GetMsg(_ context.Context, _ uint64) (*jetstream.RawStreamMsg, error) {
-	return nil, errors.New("not implemented")
+func (s *stubStream) ConsumerNames(context.Context) jetstream.ConsumerNameLister {
+	panic("not implemented")
 }
-func (s *stubStream) GetLastMsgForSubject(_ context.Context, _ string) (*jetstream.RawStreamMsg, error) {
-	return nil, errors.New("not implemented")
+func (s *stubStream) UnpinConsumer(context.Context, string, string) error { panic("not implemented") }
+func (s *stubStream) CreateOrUpdatePushConsumer(context.Context, jetstream.ConsumerConfig) (jetstream.PushConsumer, error) {
+	panic("not implemented")
 }
-func (s *stubStream) DeleteMsg(_ context.Context, _ uint64) error {
-	return errors.New("not implemented")
+func (s *stubStream) CreatePushConsumer(context.Context, jetstream.ConsumerConfig) (jetstream.PushConsumer, error) {
+	panic("not implemented")
 }
-func (s *stubStream) SecureDeleteMsg(_ context.Context, _ uint64) error {
-	return errors.New("not implemented")
+func (s *stubStream) UpdatePushConsumer(context.Context, jetstream.ConsumerConfig) (jetstream.PushConsumer, error) {
+	panic("not implemented")
 }
-func (s *stubStream) ListConsumers(_ context.Context) jetstream.ConsumerInfoLister { return nil }
-func (s *stubStream) ConsumerNames(_ context.Context) jetstream.ConsumerNameLister { return nil }
+func (s *stubStream) PushConsumer(context.Context, string) (jetstream.PushConsumer, error) {
+	panic("not implemented")
+}
+func (s *stubStream) Info(context.Context, ...jetstream.StreamInfoOpt) (*jetstream.StreamInfo, error) {
+	panic("not implemented")
+}
+func (s *stubStream) CachedInfo() *jetstream.StreamInfo { panic("not implemented") }
+func (s *stubStream) Purge(context.Context, ...jetstream.StreamPurgeOpt) error {
+	panic("not implemented")
+}
+func (s *stubStream) GetMsg(context.Context, uint64, ...jetstream.GetMsgOpt) (*jetstream.RawStreamMsg, error) {
+	panic("not implemented")
+}
+func (s *stubStream) GetLastMsgForSubject(context.Context, string) (*jetstream.RawStreamMsg, error) {
+	panic("not implemented")
+}
+func (s *stubStream) DeleteMsg(context.Context, uint64) error       { panic("not implemented") }
+func (s *stubStream) SecureDeleteMsg(context.Context, uint64) error { panic("not implemented") }
 
 // stubJetStream implements jetstream.JetStream — only Stream is used.
 type stubJetStream struct {
@@ -220,68 +231,128 @@ func (js *stubJetStream) Stream(_ context.Context, _ string) (jetstream.Stream, 
 	return js.stream, nil
 }
 
-// Unused JetStream methods.
-func (js *stubJetStream) CreateStream(_ context.Context, _ jetstream.StreamConfig) (jetstream.Stream, error) {
-	return nil, errors.New("not implemented")
+func (js *stubJetStream) AccountInfo(context.Context) (*jetstream.AccountInfo, error) {
+	panic("not implemented")
 }
-func (js *stubJetStream) UpdateStream(_ context.Context, _ jetstream.StreamConfig) (jetstream.Stream, error) {
-	return nil, errors.New("not implemented")
+func (js *stubJetStream) Conn() *nats.Conn                    { panic("not implemented") }
+func (js *stubJetStream) Options() jetstream.JetStreamOptions { panic("not implemented") }
+func (js *stubJetStream) CreateStream(context.Context, jetstream.StreamConfig) (jetstream.Stream, error) {
+	panic("not implemented")
 }
-func (js *stubJetStream) CreateOrUpdateStream(_ context.Context, _ jetstream.StreamConfig) (jetstream.Stream, error) {
-	return nil, errors.New("not implemented")
+func (js *stubJetStream) UpdateStream(context.Context, jetstream.StreamConfig) (jetstream.Stream, error) {
+	panic("not implemented")
 }
-func (js *stubJetStream) DeleteStream(_ context.Context, _ string) error {
-	return errors.New("not implemented")
+func (js *stubJetStream) CreateOrUpdateStream(context.Context, jetstream.StreamConfig) (jetstream.Stream, error) {
+	panic("not implemented")
 }
-func (js *stubJetStream) ListStreams(_ context.Context) jetstream.StreamInfoLister { return nil }
-func (js *stubJetStream) StreamNames(_ context.Context) jetstream.StreamNameLister { return nil }
-func (js *stubJetStream) AccountInfo(_ context.Context) (*jetstream.AccountInfo, error) {
-	return nil, errors.New("not implemented")
+func (js *stubJetStream) DeleteStream(context.Context, string) error { panic("not implemented") }
+func (js *stubJetStream) ListStreams(context.Context, ...jetstream.StreamListOpt) jetstream.StreamInfoLister {
+	panic("not implemented")
 }
-func (js *stubJetStream) Publish(_ context.Context, _ string, _ []byte, _ ...jetstream.PublishOpt) (*jetstream.PubAck, error) {
-	return nil, errors.New("not implemented")
+func (js *stubJetStream) StreamNames(context.Context, ...jetstream.StreamListOpt) jetstream.StreamNameLister {
+	panic("not implemented")
 }
-func (js *stubJetStream) PublishMsg(_ context.Context, _ *nats.Msg, _ ...jetstream.PublishOpt) (*jetstream.PubAck, error) {
-	return nil, errors.New("not implemented")
+func (js *stubJetStream) StreamNameBySubject(context.Context, string) (string, error) {
+	panic("not implemented")
 }
-func (js *stubJetStream) PublishAsync(_ string, _ []byte, _ ...jetstream.PublishOpt) (jetstream.PubAckFuture, error) {
-	return nil, errors.New("not implemented")
+func (js *stubJetStream) CreateOrUpdateConsumer(context.Context, string, jetstream.ConsumerConfig) (jetstream.Consumer, error) {
+	panic("not implemented")
 }
-func (js *stubJetStream) PublishMsgAsync(_ *nats.Msg, _ ...jetstream.PublishOpt) (jetstream.PubAckFuture, error) {
-	return nil, errors.New("not implemented")
+func (js *stubJetStream) CreateConsumer(context.Context, string, jetstream.ConsumerConfig) (jetstream.Consumer, error) {
+	panic("not implemented")
+}
+func (js *stubJetStream) UpdateConsumer(context.Context, string, jetstream.ConsumerConfig) (jetstream.Consumer, error) {
+	panic("not implemented")
+}
+func (js *stubJetStream) OrderedConsumer(context.Context, string, jetstream.OrderedConsumerConfig) (jetstream.Consumer, error) {
+	panic("not implemented")
+}
+func (js *stubJetStream) Consumer(context.Context, string, string) (jetstream.Consumer, error) {
+	panic("not implemented")
+}
+func (js *stubJetStream) DeleteConsumer(context.Context, string, string) error {
+	panic("not implemented")
+}
+func (js *stubJetStream) PauseConsumer(context.Context, string, string, time.Time) (*jetstream.ConsumerPauseResponse, error) {
+	panic("not implemented")
+}
+func (js *stubJetStream) ResumeConsumer(context.Context, string, string) (*jetstream.ConsumerPauseResponse, error) {
+	panic("not implemented")
+}
+func (js *stubJetStream) CreateOrUpdatePushConsumer(context.Context, string, jetstream.ConsumerConfig) (jetstream.PushConsumer, error) {
+	panic("not implemented")
+}
+func (js *stubJetStream) CreatePushConsumer(context.Context, string, jetstream.ConsumerConfig) (jetstream.PushConsumer, error) {
+	panic("not implemented")
+}
+func (js *stubJetStream) UpdatePushConsumer(context.Context, string, jetstream.ConsumerConfig) (jetstream.PushConsumer, error) {
+	panic("not implemented")
+}
+func (js *stubJetStream) PushConsumer(context.Context, string, string) (jetstream.PushConsumer, error) {
+	panic("not implemented")
+}
+func (js *stubJetStream) Publish(context.Context, string, []byte, ...jetstream.PublishOpt) (*jetstream.PubAck, error) {
+	panic("not implemented")
+}
+func (js *stubJetStream) PublishMsg(context.Context, *nats.Msg, ...jetstream.PublishOpt) (*jetstream.PubAck, error) {
+	panic("not implemented")
+}
+func (js *stubJetStream) PublishAsync(string, []byte, ...jetstream.PublishOpt) (jetstream.PubAckFuture, error) {
+	panic("not implemented")
+}
+func (js *stubJetStream) PublishMsgAsync(*nats.Msg, ...jetstream.PublishOpt) (jetstream.PubAckFuture, error) {
+	panic("not implemented")
 }
 func (js *stubJetStream) PublishAsyncPending() int              { return 0 }
 func (js *stubJetStream) PublishAsyncComplete() <-chan struct{} { return nil }
-func (js *stubJetStream) KeyValue(_ context.Context, _ string) (jetstream.KeyValue, error) {
-	return nil, errors.New("not implemented")
+func (js *stubJetStream) CleanupPublisher()                     {}
+func (js *stubJetStream) KeyValue(context.Context, string) (jetstream.KeyValue, error) {
+	panic("not implemented")
 }
-func (js *stubJetStream) CreateKeyValue(_ context.Context, _ jetstream.KeyValueConfig) (jetstream.KeyValue, error) {
-	return nil, errors.New("not implemented")
+func (js *stubJetStream) CreateKeyValue(context.Context, jetstream.KeyValueConfig) (jetstream.KeyValue, error) {
+	panic("not implemented")
 }
-func (js *stubJetStream) DeleteKeyValue(_ context.Context, _ string) error {
-	return errors.New("not implemented")
+func (js *stubJetStream) UpdateKeyValue(context.Context, jetstream.KeyValueConfig) (jetstream.KeyValue, error) {
+	panic("not implemented")
 }
-func (js *stubJetStream) ObjectStore(_ context.Context, _ string) (jetstream.ObjectStore, error) {
-	return nil, errors.New("not implemented")
+func (js *stubJetStream) CreateOrUpdateKeyValue(context.Context, jetstream.KeyValueConfig) (jetstream.KeyValue, error) {
+	panic("not implemented")
 }
-func (js *stubJetStream) CreateObjectStore(_ context.Context, _ jetstream.ObjectStoreConfig) (jetstream.ObjectStore, error) {
-	return nil, errors.New("not implemented")
+func (js *stubJetStream) DeleteKeyValue(context.Context, string) error { panic("not implemented") }
+func (js *stubJetStream) KeyValueStoreNames(context.Context) jetstream.KeyValueNamesLister {
+	panic("not implemented")
 }
-func (js *stubJetStream) DeleteObjectStore(_ context.Context, _ string) error {
-	return errors.New("not implemented")
+func (js *stubJetStream) KeyValueStores(context.Context) jetstream.KeyValueLister {
+	panic("not implemented")
 }
-func (js *stubJetStream) StreamNameBySubject(_ context.Context, _ string) (string, error) {
-	return "", errors.New("not implemented")
+func (js *stubJetStream) ObjectStore(context.Context, string) (jetstream.ObjectStore, error) {
+	panic("not implemented")
+}
+func (js *stubJetStream) CreateObjectStore(context.Context, jetstream.ObjectStoreConfig) (jetstream.ObjectStore, error) {
+	panic("not implemented")
+}
+func (js *stubJetStream) UpdateObjectStore(context.Context, jetstream.ObjectStoreConfig) (jetstream.ObjectStore, error) {
+	panic("not implemented")
+}
+func (js *stubJetStream) CreateOrUpdateObjectStore(context.Context, jetstream.ObjectStoreConfig) (jetstream.ObjectStore, error) {
+	panic("not implemented")
+}
+func (js *stubJetStream) DeleteObjectStore(context.Context, string) error { panic("not implemented") }
+func (js *stubJetStream) ObjectStoreNames(context.Context) jetstream.ObjectStoreNamesLister {
+	panic("not implemented")
+}
+func (js *stubJetStream) ObjectStores(context.Context) jetstream.ObjectStoresLister {
+	panic("not implemented")
 }
 
 // ---------------------------------------------------------------------------
-// Helper to create a NATSToolBridge wired with stubs (no real NATS conn)
+// Helper
 // ---------------------------------------------------------------------------
 
 func newTestBridge(js jetstream.JetStream, mgr DaemonConnectionManager) *NATSToolBridge {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &NATSToolBridge{
-		nc:            nil, // not needed for drainPendingCommands
+		nc:            nil,
 		js:            js,
 		mgr:           mgr,
 		daemonSubs:    make(map[string][]*nats.Subscription),
@@ -291,7 +362,6 @@ func newTestBridge(js jetstream.JetStream, mgr DaemonConnectionManager) *NATSToo
 	}
 }
 
-// makePendingMsg creates a stubMsg with a JSON-encoded command envelope.
 func makePendingMsg(t *testing.T, requestID, commandType string, payload json.RawMessage, timeoutMs int32) *stubMsg {
 	t.Helper()
 	data, err := json.Marshal(struct {
@@ -299,12 +369,7 @@ func makePendingMsg(t *testing.T, requestID, commandType string, payload json.Ra
 		CommandType string          `json:"command_type"`
 		Payload     json.RawMessage `json:"payload"`
 		TimeoutMs   int32           `json:"timeout_ms"`
-	}{
-		RequestID:   requestID,
-		CommandType: commandType,
-		Payload:     payload,
-		TimeoutMs:   timeoutMs,
-	})
+	}{requestID, commandType, payload, timeoutMs})
 	require.NoError(t, err)
 	return &stubMsg{data: data}
 }
@@ -318,7 +383,6 @@ func TestDrainPendingCommands_NilJetStream(t *testing.T) {
 	bridge := newTestBridge(nil, mgr)
 	defer bridge.cancel()
 
-	// Should return immediately without panic or error.
 	bridge.drainPendingCommands(context.Background(), "user-1", "daemon-1")
 
 	mgr.mu.Lock()
@@ -332,7 +396,6 @@ func TestDrainPendingCommands_StreamNotFound(t *testing.T) {
 	bridge := newTestBridge(js, mgr)
 	defer bridge.cancel()
 
-	// Should log and return gracefully — no crash.
 	bridge.drainPendingCommands(context.Background(), "user-1", "daemon-1")
 
 	mgr.mu.Lock()
@@ -346,7 +409,6 @@ func TestDrainPendingCommands_StreamLookupError(t *testing.T) {
 	bridge := newTestBridge(js, mgr)
 	defer bridge.cancel()
 
-	// Non-ErrStreamNotFound errors should also be handled gracefully.
 	bridge.drainPendingCommands(context.Background(), "user-1", "daemon-1")
 
 	mgr.mu.Lock()
@@ -358,7 +420,6 @@ func TestDrainPendingCommands_NoPendingMessages(t *testing.T) {
 	mgr := &recordingDaemonMgr{}
 	consumer := &stubConsumer{
 		batches: []jetstream.MessageBatch{
-			// First fetch returns empty batch with iterator-closed.
 			&stubMessageBatch{err: jetstream.ErrMsgIteratorClosed},
 		},
 	}
@@ -384,7 +445,7 @@ func TestDrainPendingCommands_DispatchesPendingMessages(t *testing.T) {
 		batches: []jetstream.MessageBatch{
 			&stubMessageBatch{
 				msgs: []jetstream.Msg{msg1, msg2},
-				err:  jetstream.ErrMsgIteratorClosed, // signals end of batch
+				err:  jetstream.ErrMsgIteratorClosed,
 			},
 		},
 	}
@@ -454,7 +515,6 @@ func TestDrainPendingCommands_AcksEvenOnDispatchError(t *testing.T) {
 
 	bridge.drainPendingCommands(context.Background(), "user-1", "daemon-1")
 
-	// Message should still be acked even though dispatch failed.
 	assert.True(t, msg1.wasAcked(), "msg should be acked even on dispatch error")
 }
 
@@ -479,7 +539,6 @@ func TestDrainPendingCommands_InvalidPayloadAcksAndContinues(t *testing.T) {
 
 	bridge.drainPendingCommands(context.Background(), "user-1", "daemon-1")
 
-	// Bad message acked, good message dispatched and acked.
 	assert.True(t, badMsg.wasAcked(), "invalid msg should be acked")
 	assert.True(t, goodMsg.wasAcked(), "valid msg should be acked")
 
@@ -497,9 +556,7 @@ func TestDrainPendingCommands_MultipleFetchBatches(t *testing.T) {
 
 	consumer := &stubConsumer{
 		batches: []jetstream.MessageBatch{
-			// First batch has one message, no terminal error.
 			&stubMessageBatch{msgs: []jetstream.Msg{msg1}},
-			// Second batch has another message, then signals done.
 			&stubMessageBatch{
 				msgs: []jetstream.Msg{msg2},
 				err:  jetstream.ErrMsgIteratorClosed,
