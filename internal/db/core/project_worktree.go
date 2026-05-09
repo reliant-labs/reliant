@@ -105,6 +105,7 @@ type ProjectStore interface {
 	CreateProject(ctx context.Context, project *Project) error
 	GetProject(ctx context.Context, id string) (*Project, error)
 	GetProjectByPath(ctx context.Context, path string) (*Project, error)
+	GetProjectByPathAndUser(ctx context.Context, path, userID string) (*Project, error)
 	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*Project, error)
 	ListProjects(ctx context.Context, filters ProjectFilters) ([]*Project, error)
 	UpdateProject(ctx context.Context, project *Project, userID string) error

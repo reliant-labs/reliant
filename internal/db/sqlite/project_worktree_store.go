@@ -42,6 +42,17 @@ func (s *projectStore) GetProjectByPath(ctx context.Context, path string) (*core
 	return projectFromSQLc(sqlcProject), nil
 }
 
+func (s *projectStore) GetProjectByPathAndUser(ctx context.Context, path, userID string) (*core.Project, error) {
+	sqlcProject, err := s.q.GetProjectByPathAndUser(ctx, sqlitedb.GetProjectByPathAndUserParams{Path: path, UserID: userID})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("project not found: %s", path)
+		}
+		return nil, fmt.Errorf("failed to get project by path and user: %w", err)
+	}
+	return projectFromSQLc(sqlcProject), nil
+}
+
 func (s *projectStore) GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*core.Project, error) {
 	sqlcProject, err := s.q.GetProjectWithUserCheck(ctx, sqlitedb.GetProjectWithUserCheckParams{ID: id, UserID: userID})
 	if err != nil {
