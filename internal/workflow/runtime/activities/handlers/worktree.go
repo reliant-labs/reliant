@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
+	"github.com/reliant-labs/reliant/internal/worktreepath"
 )
 
 const worktreeCreateDaemonTimeoutMs int32 = 120_000
@@ -131,7 +132,10 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 		branch = fmt.Sprintf("worktree/%s-%d", name, time.Now().Unix())
 	}
 
-	workspaceID := uuid.New().String()
+	// Human-readable workspace dir name; matches the convention used by the
+	// CreateWorktree gRPC handler so disk paths look the same regardless of
+	// where the worktree was kicked off.
+	workspaceID := worktreepath.WorkspaceDirName(project.Name, name)
 
 	type repoCreateResult struct {
 		repo         *core.Repo

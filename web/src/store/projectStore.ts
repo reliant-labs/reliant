@@ -1,5 +1,6 @@
 import { logger } from "../lib/logger";
 import { create } from "zustand";
+import { ConnectError, Code } from "@connectrpc/connect";
 
 import { projectGrpc, type Project as GrpcProject } from "../api/project-grpc";
 import { toast } from "../lib/toast-manager";
@@ -276,7 +277,14 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         error: errorMessage,
         isLoading: false,
       });
-      // Error toast will be shown by error handler
+      // Surface unexpected failures as a toast so the user sees something.
+      // AlreadyExists is a normal "open existing project" path that callers
+      // handle themselves — don't double-notify there.
+      const isAlreadyExists =
+        error instanceof ConnectError && error.code === Code.AlreadyExists;
+      if (!isAlreadyExists) {
+        toast.error(error);
+      }
       throw error;
     }
   },

@@ -53,6 +53,17 @@ func (s *projectStore) GetProjectByPath(ctx context.Context, path string) (*core
 	return projectFromPG(row), nil
 }
 
+func (s *projectStore) GetProjectByPathAndUser(ctx context.Context, path, userID string) (*core.Project, error) {
+	row, err := s.q.GetProjectByPathAndUser(ctx, pgdb.GetProjectByPathAndUserParams{Path: path, UserID: userID})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("project not found: %s", path)
+		}
+		return nil, fmt.Errorf("failed to get project by path and user: %w", err)
+	}
+	return projectFromPG(row), nil
+}
+
 func (s *projectStore) GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*core.Project, error) {
 	row, err := s.q.GetProjectWithUserCheck(ctx, pgdb.GetProjectWithUserCheckParams{ID: id, UserID: userID})
 	if err != nil {
