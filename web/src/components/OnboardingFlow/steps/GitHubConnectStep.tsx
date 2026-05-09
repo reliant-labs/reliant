@@ -11,6 +11,7 @@ import { useGitRepos, useCloneRepo } from "@/hooks/useOnboardingQueries";
 import type { StepProps } from "../types";
 import {
   getActiveDaemonName,
+  getFirstDaemonId,
   listDaemons,
 } from "../api";
 import type { GitRepo } from "../api";
@@ -178,32 +179,29 @@ export function GitHubConnectStep({ plan, updatePlan, onNext, onBack }: StepProp
 
     try {
       const { daemons } = await listDaemons();
-      const daemonName = getActiveDaemonName(daemons);
-      if (!daemonName && plan.daemonProvisioning) {
-        updatePlan({
-          repo: {
-            provider: "github",
-            url: selectedRepo.cloneUrl,
-            branch: selectedBranch,
-          },
-          localPath: projectPath,
-          projectName,
-        });
-        onNext();
-        return;
-      }
+      // Prefer active daemon name; fall back to first daemon ID (covers provisioning daemons)
+      const daemonName = getActiveDaemonName(daemons) || getFirstDaemonId(daemons);
       if (!daemonName) {
         throw new Error("Hosted workspace is still starting. Try again in a moment.");
       }
 
-      const result = await cloneRepoMutation.mutateAsync({
-        daemonName,
-        gitRepo: selectedRepo.cloneUrl,
-        gitBranch: selectedBranch,
-        path: projectPath,
-        accountLogin: selectedRepo.accountLogin,
-      });
-      const clonedPath = result.clonedPath;
+      // Always attempt clone — CloneRepo queues via JetStream when daemon is offline
+      let clonedPath = projectPath;
+      try {
+        const result = await cloneRepoMutation.mutateAsync({
+          daemonName,
+          gitRepo: selectedRepo.cloneUrl,
+          gitBranch: selectedBranch,
+          path: projectPath,
+          accountLogin: selectedRepo.accountLogin,
+        });
+        clonedPath = result.clonedPath;
+      } catch (cloneErr) {
+        // Clone may fail for transient reasons; warn but don't block — the clone
+        // will be retried when the daemon comes online via the queued message.
+        console.warn("CloneRepo failed (will retry when daemon is online):", cloneErr);
+      }
+
       eventBus.emit("toast:show", {
         message: `Opening project "${projectName}"...`,
         variant: "info",
