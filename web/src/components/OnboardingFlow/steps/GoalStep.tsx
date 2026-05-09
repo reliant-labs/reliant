@@ -5,6 +5,7 @@ import {
   Palette,
   Search,
   Sparkles,
+  Workflow,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -125,6 +126,23 @@ const LAUNCH_OPTIONS: LaunchOption[] = [
     },
     initialPrompt:
       "Help me draft a high-quality technical article or documentation page. Ask for topic, audience, and source material if missing.",
+    launchTour: false,
+  },
+  {
+    intent: "custom_workflow",
+    icon: Workflow,
+    label: "Create a custom workflow",
+    description: "Design and build a multi-agent pipeline tailored to your process.",
+    workflowId: "builtin://build-workflow",
+    codeSource: "new_project",
+    modelProvider: "not_configured",
+    useForge: false,
+    workflowParams: {
+      mode: "auto",
+      ask: true,
+    },
+    initialPrompt:
+      "Help me design and build a custom workflow. Ask about my use case, integrations, and quality requirements, then create it.",
     launchTour: false,
   },
   {

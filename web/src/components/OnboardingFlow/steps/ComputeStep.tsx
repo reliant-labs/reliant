@@ -246,6 +246,7 @@ export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
       compute: "local_daemon",
       daemonLocation: "self_hosted",
       daemonProvisioning: false,
+      daemonPreConnected: Boolean(activeDaemon),
       codeSource: codeSourceForCompute(plan.codeSource, "local_daemon", plan.intent),
       localPath: undefined,
       projectName: undefined,

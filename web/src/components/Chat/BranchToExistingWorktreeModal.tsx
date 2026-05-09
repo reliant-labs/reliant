@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { AlertTriangle, FolderSync, FolderGit2 } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { useWorktreeStore, type Worktree } from "../../store/worktreeStore";
+import { useChatStore } from "../../store/chatStore";
 import { useBranchChat } from "../../hooks/message-queries";
 import { logger } from "../../lib/logger";
 import { cn } from "../../lib/utils";
@@ -68,7 +69,7 @@ export function BranchToExistingWorktreeModal({
       });
       
       // Branch the chat to the selected worktree
-      await branchChat.mutateAsync({
+      const { chat: newChat } = await branchChat.mutateAsync({
         chatId,
         messageId,
         worktreeId: selectedWorktreeId,
@@ -79,6 +80,9 @@ export function BranchToExistingWorktreeModal({
       if (targetWorktree) {
         await switchWorktreeContext(projectId, targetWorktree);
       }
+
+      // Navigate to the branched chat
+      useChatStore.getState().selectChat(newChat);
       
       onClose();
     } catch (err) {

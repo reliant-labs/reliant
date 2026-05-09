@@ -53,8 +53,8 @@ export function DaemonConnectStep({ onNext }: StepProps) {
   useEffect(() => {
     if (connected) {
       setManualFeedback(null);
-      const timer = setTimeout(advanceOnce, 800);
-      return () => clearTimeout(timer);
+      // No delay - advance immediately if already connected
+      advanceOnce();
     }
   }, [advanceOnce, connected]);
 

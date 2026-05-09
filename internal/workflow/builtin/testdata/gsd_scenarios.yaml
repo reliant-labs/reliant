@@ -35,6 +35,12 @@ events:
     output:
       response_text: "Found the router in src/routes/index.ts, existing endpoint patterns in src/routes/users.ts, and validation middleware in src/middleware/validate.ts. Tests follow the pattern in tests/routes/."
 
+  - node: compress_research
+    output:
+      message:
+        role: assistant
+        text: "Files: src/routes/index.ts (router), src/routes/users.ts (pattern). Patterns: REST endpoints in routes/, validation in middleware/. Constraints: follow existing test patterns in tests/routes/."
+
   - node: plan
     output:
       response_text: |
@@ -65,6 +71,7 @@ expect:
   reached:
     - discuss
     - research
+    - compress_research
     - plan
     - implement
     - verify_lint
@@ -88,6 +95,12 @@ events:
   - node: research
     output:
       response_text: "Auth module at src/auth/session.ts. Token utilities in src/utils/token.ts. 12 files import the session module. Test coverage is sparse."
+
+  - node: compress_research
+    output:
+      message:
+        role: assistant
+        text: "Files: src/auth/session.ts (replace), src/utils/token.ts (extend), 12 importers. Patterns: session-based auth. Constraints: sparse test coverage, 12 files need import updates."
 
   - node: plan
     output:
@@ -119,6 +132,7 @@ expect:
   reached:
     - discuss
     - research
+    - compress_research
     - plan
     - implement
     - verify_lint

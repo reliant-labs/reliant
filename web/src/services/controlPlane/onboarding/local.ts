@@ -11,7 +11,16 @@ const ONBOARDING_COMPLETED_KEY = "reliant-local-onboarding-completed";
 
 function readCompleted(): boolean {
   try {
-    return localStorage.getItem(ONBOARDING_COMPLETED_KEY) === "true";
+    if (localStorage.getItem(ONBOARDING_COMPLETED_KEY) === "true") return true;
+    // Legacy: older versions stored onboarding state under a different key
+    const legacy = localStorage.getItem('reliant-onboarding');
+    if (legacy) {
+      try {
+        const parsed = JSON.parse(legacy);
+        if (parsed?.state?.state === 'completed') return true;
+      } catch { /* ignore */ }
+    }
+    return false;
   } catch {
     // localStorage unavailable (private mode, sandboxed iframe). Treat as
     // not-yet-completed so the user is sent through the onboarding flow.
@@ -36,6 +45,8 @@ export async function completeOnboarding(
   _data: Record<string, unknown>,
 ): Promise<void> {
   writeCompleted(true);
+  // Clean up legacy key
+  try { localStorage.removeItem('reliant-onboarding'); } catch { /* no-op */ }
 }
 
 export async function provisionManagedKey(): Promise<{ synced: boolean }> {

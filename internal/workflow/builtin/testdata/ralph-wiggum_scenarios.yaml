@@ -1,131 +1,82 @@
 # Test scenarios for ralph-wiggum.yaml workflow
 #
-# Ralph Wiggum workflow structure:
-#   Top-level node: attempt (loop)
+# Ralph Wiggum is a thin wrapper around get-it-right with context_bridge: none.
 #
-#   attempt (type: loop, brute-force):
-#     While: has(outputs.review_strategy) && outputs.review_strategy != "pass"
-#            && iter.iteration < inputs.max_iterations
-#     Inner nodes: implement → review
-#     - implement  type: workflow ref: builtin://agent (BLACK BOX) — fresh each iteration, no context carried
-#     - review     type: workflow ref: builtin://structured-agent
-#       response_schema: { strategy, feedback }
-#       strategy enum: ["pass", "retry"]
-#     - Loop outputs:
-#         review_strategy: from review.response.strategy
-#         review_feedback: from review.response.feedback
+# Workflow structure:
+#   get_it_right (type: workflow, ref: builtin://get-it-right, BLACK BOX)
 #
-# Key difference from get-it-right: NO context is shared between attempts.
-# Each implement agent starts completely fresh (memo: false, no bridge).
-#
-# NOTE: For loop scenarios, provide events for EACH iteration in order.
-#       The simulator consumes events sequentially per node name.
+# The get_it_right node is treated as a black box since it references an external workflow.
+# The simulator mocks its output directly. The outputs mapped back are:
+#   review_strategy ← get_it_right.eval_strategy
+#   review_feedback ← get_it_right.review_feedback
+#   iterations      ← get_it_right.iterations
 
 ---
 name: happy_path_first_try
 description: >
-  First implementation succeeds. Review says strategy="pass" on iteration 0.
-  Loop exits after 1 iteration — no retry needed.
+  First implementation succeeds. get-it-right returns eval_strategy="pass"
+  on the first iteration. No retry needed.
 
 events:
-  - node: attempt.implement
+  - node: get_it_right
     output:
-      response_text: "Investigated the codebase and implemented the requested feature. All tests pass."
-
-  - node: attempt.review
-    output:
-      response:
-        strategy: "pass"
-        feedback: "Implementation is correct and complete. Code follows existing patterns."
+      eval_strategy: "pass"
+      review_grade: "pass"
+      review_feedback: "Implementation is correct and complete. Code follows existing patterns."
+      iterations: 1
 
 expect:
   outcome: completed
   reached:
-    - attempt
-    - attempt.implement
-    - attempt.review
+    - get_it_right
   node_outputs:
-    attempt:
-      review_strategy: "pass"
+    get_it_right:
+      eval_strategy: "pass"
 
 ---
 name: retry_then_pass
 description: >
-  First attempt fails review (strategy="retry"). Second attempt succeeds
-  (strategy="pass"). Loop runs 2 iterations. Note: the second implement
-  agent has zero context from the first attempt — pure brute force.
+  get-it-right runs 2 iterations internally (brute force, no context bridge)
+  before succeeding. Returns eval_strategy="pass" with iterations=2.
 
 events:
-  # Iteration 0
-  - node: attempt.implement
+  - node: get_it_right
     output:
-      response_text: "Built the feature but took the wrong approach — used direct DB queries instead of the repository layer."
-
-  - node: attempt.review
-    output:
-      response:
-        strategy: "retry"
-        feedback: "Implementation uses raw SQL instead of the repository pattern. The approach is fundamentally wrong for this codebase."
-
-  # Iteration 1
-  - node: attempt.implement
-    output:
-      response_text: "Investigated the codebase and found the repository layer. Built the feature using existing patterns. All tests pass."
-
-  - node: attempt.review
-    output:
-      response:
-        strategy: "pass"
-        feedback: "Implementation is correct. Repository layer usage follows codebase conventions."
+      eval_strategy: "pass"
+      review_grade: "pass"
+      review_feedback: "Implementation is correct. Repository layer usage follows codebase conventions."
+      iterations: 2
 
 expect:
   outcome: completed
   reached:
-    - attempt
-    - attempt.implement
-    - attempt.review
+    - get_it_right
   node_outputs:
-    attempt:
-      review_strategy: "pass"
+    get_it_right:
+      eval_strategy: "pass"
 
 ---
 name: max_iterations_exhausted
 description: >
-  max_iterations=2. Both attempts get strategy="retry". Loop exits at max
-  because iter.iteration reaches max_iterations. Final review_strategy is "retry".
+  get-it-right exhausts all retries without passing review.
+  Returns eval_strategy="continue" (the last review strategy) with iterations
+  equal to max_retries.
 
 inputs:
-  max_iterations: 2
+  max_retries: 2
 
 events:
-  # Iteration 0
-  - node: attempt.implement
+  - node: get_it_right
     output:
-      response_text: "First attempt. Tried to refactor the auth module but the coupling is too deep."
-
-  - node: attempt.review
-    output:
-      response:
-        strategy: "retry"
-        feedback: "Auth module changes broke session handling. The coupling between auth, sessions, and websockets needs to be addressed first."
-
-  # Iteration 1
-  - node: attempt.implement
-    output:
-      response_text: "Second attempt from scratch. Tried a different angle but still hit coupling issues with websocket state management."
-
-  - node: attempt.review
-    output:
-      response:
-        strategy: "retry"
-        feedback: "Still incomplete. The websocket layer maintains its own auth state that conflicts with the changes. All three systems need simultaneous refactoring."
+      eval_strategy: "continue"
+      review_grade: "fail"
+      review_feedback: "Still incomplete. The websocket layer maintains its own auth state that conflicts with the changes."
+      iterations: 2
 
 expect:
   outcome: completed
   reached:
-    - attempt
-    - attempt.implement
-    - attempt.review
+    - get_it_right
   node_outputs:
-    attempt:
-      review_strategy: "retry"
+    get_it_right:
+      eval_strategy: "continue"
