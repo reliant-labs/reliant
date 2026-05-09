@@ -828,6 +828,17 @@ func (r *Repo) GetProjectByPath(ctx context.Context, path string) (*Project, err
 	return r.projects.GetProjectByPath(ctx, path)
 }
 
+func (r *Repo) GetProjectByPathAndUser(ctx context.Context, path, userID string) (*Project, error) {
+	if path == "" {
+		return nil, fmt.Errorf("project path cannot be empty")
+	}
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+
+	return r.projects.GetProjectByPathAndUser(ctx, path, userID)
+}
+
 func (r *Repo) GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*Project, error) {
 	if id == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
