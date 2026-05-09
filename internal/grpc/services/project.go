@@ -154,9 +154,10 @@ func (s *ProjectService) CreateProject(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project path must be absolute, got: %q", req.Msg.Path))
 	}
 
-	// Check if project already exists for this user and path
-	existingProject, err := s.database.GetProjectByPath(ctx, req.Msg.Path)
-	if err == nil && existingProject != nil && existingProject.UserID == userID {
+	// Check if project already exists for this user and path. Path-only
+	// lookups are nondeterministic in multi-user setups (the projects table
+	// allows the same path under different user_ids), so scope the check.
+	if existing, err := s.database.GetProjectByPathAndUser(ctx, req.Msg.Path, userID); err == nil && existing != nil {
 		return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("a project already exists at this path"))
 	}
 
@@ -199,6 +200,14 @@ func (s *ProjectService) CreateProject(
 	}
 
 	if err := s.database.CreateProject(ctx, project); err != nil {
+		// Race-window safety: if a concurrent request inserted the same
+		// (user_id, path) pair after our check above, the DB rejects with a
+		// UNIQUE violation. Surface that as AlreadyExists so the client can
+		// open the existing project instead of seeing an opaque Internal.
+		if strings.Contains(err.Error(), "UNIQUE constraint") || strings.Contains(err.Error(), "duplicate key") {
+			logging.Info("Project already exists at path (unique constraint)", "userID", userID, "path", req.Msg.Path)
+			return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("a project already exists at this path"))
+		}
 		logging.Error("Failed to create project", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create project"))
 	}

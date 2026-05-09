@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/worktreepath"
 )
 
 const worktreeDaemonCommandTimeoutMs int32 = 120_000
@@ -293,7 +294,10 @@ func (s *WorktreeService) CreateWorktree(
 		}
 	}
 
-	workspaceID := uuid.New().String()
+	// Build a human-readable workspace directory name (e.g.
+	// `myproject/feature-branch-a3f1b2c8`) instead of a bare UUID. Disk path
+	// becomes <HOME>/.reliant/worktrees/<workspaceID>[/<sub_path>].
+	workspaceID := worktreepath.WorkspaceDirName(project.Name, req.Msg.Name)
 
 	type repoCreateResult struct {
 		repo         *core.Repo
