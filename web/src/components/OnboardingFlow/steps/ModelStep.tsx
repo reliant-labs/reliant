@@ -3,7 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
 import { CheckCircle2, ExternalLink, Eye, EyeOff, KeyRound, Loader2, XCircle } from "lucide-react";
 import { api } from "@/api/client";
-import { hasControlPlane } from "../api";
+import { onboardingService } from "@/services/controlPlane/onboarding";
 import { cn } from "@/lib/utils";
 import { getIsDev } from "@/lib/constants";
 import { logger } from "@/lib/logger";
@@ -102,12 +102,10 @@ function getForcedEligibility(): "eligible" | "ineligible" | null {
 async function applyTempChatParams(plan: Partial<LaunchPlan>) {
   if (plan.workflowId || plan.workflowParams || plan.selectedPresets) {
     const { useChatParamsStore } = await import("@/store/chatParamsStore");
-    const launchParams: Record<string, unknown> = {
-      ...(plan.workflowParams ?? {}),
-      ...(plan.workflowId ? { __selectedWorkflow: plan.workflowId } : {}),
-      ...(plan.selectedPresets ? { __selectedPresets: plan.selectedPresets } : {}),
-    };
-    useChatParamsStore.getState().setTempNewChatParams(launchParams);
+    const store = useChatParamsStore.getState();
+    if (plan.workflowParams) store.setTempNewChatParams(plan.workflowParams);
+    if (plan.workflowId) store.setTempNewChatWorkflow(plan.workflowId);
+    if (plan.selectedPresets) store.setTempNewChatPresets(plan.selectedPresets);
   }
 
   if (plan.initialPrompt) {
@@ -190,33 +188,34 @@ export function ModelStep({ plan, updatePlan }: StepProps) {
       // Ensure a project exists before navigating
       await ensureProject(finalPlan);
 
-      // Call cloud RPC if control-plane is configured
-      if (hasControlPlane) {
-        await completeOnboardingMutation.mutateAsync({
-          intent: finalPlan.intent,
-          compute: finalPlan.compute,
-          codeSource: finalPlan.codeSource,
-          workflowId: finalPlan.workflowId,
-          modelProvider: finalPlan.modelProvider,
-          ...(finalPlan.repo && {
-            repo: {
-              provider: finalPlan.repo.provider,
-              url: finalPlan.repo.url,
-              branch: finalPlan.repo.branch,
-            },
-          }),
-          ...(finalPlan.localPath && { localPath: finalPlan.localPath }),
-          ...(finalPlan.presetId && { presetId: finalPlan.presetId }),
-          ...(finalPlan.useForge !== undefined && { useForge: finalPlan.useForge }),
-        });
+      // Mark onboarding complete. The mutation persists a local flag and
+      // calls the control-plane RPC if it's configured.
+      await completeOnboardingMutation.mutateAsync({
+        intent: finalPlan.intent,
+        compute: finalPlan.compute,
+        codeSource: finalPlan.codeSource,
+        workflowId: finalPlan.workflowId,
+        modelProvider: finalPlan.modelProvider,
+        ...(finalPlan.repo && {
+          repo: {
+            provider: finalPlan.repo.provider,
+            url: finalPlan.repo.url,
+            branch: finalPlan.repo.branch,
+          },
+        }),
+        ...(finalPlan.localPath && { localPath: finalPlan.localPath }),
+        ...(finalPlan.presetId && { presetId: finalPlan.presetId }),
+        ...(finalPlan.useForge !== undefined && { useForge: finalPlan.useForge }),
+      });
 
-        // Provision the Reliant managed API key in the background
-        if (modelProvider === "reliant_credits") {
-          api.settings.syncReliantProvider().then(
-            (result) => logger.info("[OnboardingModelStep] Reliant provider synced", { synced: result.synced }),
-            (err) => logger.warn("[OnboardingModelStep] Reliant provider sync failed", err),
-          );
-        }
+      // Provision the Reliant managed API key in the background. The service
+      // is a no-op in local-only mode; in cloud mode it talks to the local
+      // Reliant SettingsService which in turn calls the control plane.
+      if (modelProvider === "reliant_credits") {
+        onboardingService.provisionManagedKey().then(
+          (result) => logger.info("[OnboardingModelStep] Reliant provider synced", { synced: result.synced }),
+          (err) => logger.warn("[OnboardingModelStep] Reliant provider sync failed", err),
+        );
       }
 
       // Apply temp chat params (workflow, presets, initial prompt)

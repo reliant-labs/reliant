@@ -45,15 +45,13 @@ type wsResizeMessage struct {
 // proxies terminal I/O through the DaemonRouter interface.
 //
 // Query parameters:
-//   - token:      JWT token (used for auth when not in dev mode)
+//   - token:      JWT token used for auth
 //   - workingDir: directory to start the shell in
 //   - worktreeId: (optional) worktree identifier
 //
 // The handler works identically with NATSDaemonRouter (daemon-gateway) and
 // LocalDaemonRouter (monolith).
 func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidator) http.HandlerFunc {
-	devMode := auth.GetAuthMode() == "dev"
-
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		token := q.Get("token")
@@ -61,27 +59,21 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 		worktreeID := q.Get("worktreeId")
 
 		// --- Authenticate ---
-		var userID string
-		if devMode {
-			userID = auth.DevUser.Sub
-			logging.Debug("[TerminalWS] Dev mode — using dev user", "user_id", userID)
-		} else {
-			if validator == nil {
-				http.Error(w, "auth not configured", http.StatusInternalServerError)
-				return
-			}
-			if token == "" {
-				http.Error(w, "missing token query parameter", http.StatusUnauthorized)
-				return
-			}
-			claims, err := validator.ValidateToken(token)
-			if err != nil {
-				logging.Warn("[TerminalWS] Invalid token", "error", err)
-				http.Error(w, "invalid or expired token", http.StatusUnauthorized)
-				return
-			}
-			userID = claims.Sub
+		if validator == nil {
+			http.Error(w, "auth not configured", http.StatusInternalServerError)
+			return
 		}
+		if token == "" {
+			http.Error(w, "missing token query parameter", http.StatusUnauthorized)
+			return
+		}
+		claims, err := validator.ValidateToken(token)
+		if err != nil {
+			logging.Warn("[TerminalWS] Invalid token", "error", err)
+			http.Error(w, "invalid or expired token", http.StatusUnauthorized)
+			return
+		}
+		userID := claims.Sub
 
 		// --- Upgrade to WebSocket ---
 		conn, err := wsUpgrader.Upgrade(w, r, nil)

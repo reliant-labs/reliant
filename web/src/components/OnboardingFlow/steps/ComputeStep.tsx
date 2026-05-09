@@ -18,8 +18,8 @@ import { DaemonConnectionDiagrams } from "../DaemonConnectionDiagrams";
 
 const DOWNLOAD_BASE =
   import.meta.env.VITE_DOWNLOAD_BASE_URL || "https://downloads.reliantlabs.io";
-import { hasControlPlane } from "../api";
-const HAS_CLOUD_WORKSPACES = hasControlPlane;
+import { capabilities } from "@/services/controlPlane/capabilities";
+const HAS_CLOUD_WORKSPACES = capabilities.cloudWorkspaces;
 const DAEMON_TYPE_MANAGED = 1;
 const DAEMON_SIZE_SMALL = 1;
 

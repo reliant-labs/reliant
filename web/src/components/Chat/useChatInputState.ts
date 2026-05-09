@@ -50,17 +50,13 @@ export function useChatInputState({
   const userDefaultWorkflow = usePreferencesStore((state) => state.preferences?.defaultWorkflow);
   const effectiveDefaultWorkflow = userDefaultWorkflow ?? DEFAULT_WORKFLOW;
 
-  // Workflow selection state - tracks which workflow is selected
-  // null means use user's default workflow (from preferences)
-  const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(() => {
-    // For new chats, check if onboarding set a one-time workflow selection
-    const tempWorkflow = useChatParamsStore.getState().tempNewChatParams
-      .__selectedWorkflow as string | undefined;
-    if (tempWorkflow) {
-      return tempWorkflow;
-    }
-    return null;
-  });
+  // Workflow selection state - tracks which workflow is selected.
+  // null means use user's default workflow (from preferences).
+  // For new chats, onboarding can hint a one-time selection via
+  // chatParamsStore.tempNewChatWorkflow.
+  const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(
+    () => useChatParamsStore.getState().tempNewChatWorkflow,
+  );
 
   // Computed values — read chat from React Query cache
   const { data: currentChat } = useChat(chatId);

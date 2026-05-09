@@ -21,28 +21,12 @@ type TokenValidator interface {
 	ValidateToken(token string) (*JWTClaims, error)
 }
 
-// DevUser is the hardcoded user for development mode auth bypass
-// Sub is read from DEV_USER_ID env var, defaulting to the original dev UUID
-var DevUser = &JWTClaims{
-	Sub:   devUserID(),
-	Role:  "authenticated",
-	Email: "dev@localhost",
-}
-
-func devUserID() string {
-	if id := os.Getenv("DEV_USER_ID"); id != "" {
-		return id
-	}
-	return "530eb7d2-1f6a-4305-890e-c05becebcf03"
-}
-
 // GetAuthMode returns the configured auth mode from the AUTH_MODE env var.
-// Recognized values: "dev", "apikey", "supabase". Defaults to "supabase"
-// when unset.
+// Recognized values: "apikey", "supabase". Defaults to "supabase" when unset.
 func GetAuthMode() string {
 	mode := strings.ToLower(os.Getenv("AUTH_MODE"))
 	switch mode {
-	case "dev", "apikey":
+	case "apikey":
 		return mode
 	default:
 		return "supabase"
@@ -53,7 +37,6 @@ func GetAuthMode() string {
 type Middleware struct {
 	validator        TokenValidator
 	firstSeenTracker *firstSeenTracker
-	devMode          bool
 }
 
 // firstSeenTracker tracks which users have been seen to avoid redundant SetUserID calls
@@ -82,23 +65,12 @@ func (t *firstSeenTracker) isFirstTimeSeen(userID string) bool {
 
 // NewMiddleware creates a new auth middleware.
 // The auth mode is determined by GetAuthMode():
-//   - "dev":      bypass auth entirely with a hardcoded dev user
 //   - "apikey":   validate bearer tokens against AUTH_API_KEY env var
 //   - "supabase": validate JWTs using publicKeyPEM or jwksURL (default)
 func NewMiddleware(publicKeyPEM string, jwksURL string) (*Middleware, error) {
 	mode := GetAuthMode()
 
 	switch mode {
-	case "dev":
-		logging.Info("[HTTP Auth] Development mode detected - auth bypass enabled",
-			"dev_user_id", DevUser.Sub,
-			"dev_user_email", DevUser.Email)
-		return &Middleware{
-			validator:        nil,
-			firstSeenTracker: newFirstSeenTracker(),
-			devMode:          true,
-		}, nil
-
 	case "apikey":
 		apiKey := os.Getenv("AUTH_API_KEY")
 		if apiKey == "" {
@@ -113,7 +85,6 @@ func NewMiddleware(publicKeyPEM string, jwksURL string) (*Middleware, error) {
 		return &Middleware{
 			validator:        validator,
 			firstSeenTracker: newFirstSeenTracker(),
-			devMode:          false,
 		}, nil
 
 	default: // "supabase"
@@ -138,7 +109,6 @@ func NewMiddleware(publicKeyPEM string, jwksURL string) (*Middleware, error) {
 		return &Middleware{
 			validator:        validator,
 			firstSeenTracker: newFirstSeenTracker(),
-			devMode:          false,
 		}, nil
 	}
 }
@@ -146,17 +116,6 @@ func NewMiddleware(publicKeyPEM string, jwksURL string) (*Middleware, error) {
 // RequireAuth is a middleware that requires authentication
 func (m *Middleware) RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Dev mode bypass - use hardcoded dev user
-		if m.devMode {
-			ctx := r.Context()
-			ctx = context.WithValue(ctx, UserIDContextKey, DevUser.Sub)
-			ctx = context.WithValue(ctx, UserRoleContextKey, DevUser.Role)
-			ctx = context.WithValue(ctx, UserEmailContextKey, DevUser.Email)
-
-			next.ServeHTTP(w, r.WithContext(ctx))
-			return
-		}
-
 		// Get token from Authorization header first
 		var tokenString string
 		authHeader := r.Header.Get("Authorization")
@@ -260,16 +219,6 @@ func isWebSocketUpgrade(r *http.Request) bool {
 // OptionalAuth is a middleware that extracts auth if present but doesn't require it
 func (m *Middleware) OptionalAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Dev mode bypass - use hardcoded dev user
-		if m.devMode {
-			ctx := r.Context()
-			ctx = context.WithValue(ctx, UserIDContextKey, DevUser.Sub)
-			ctx = context.WithValue(ctx, UserRoleContextKey, DevUser.Role)
-			ctx = context.WithValue(ctx, UserEmailContextKey, DevUser.Email)
-			next.ServeHTTP(w, r.WithContext(ctx))
-			return
-		}
-
 		// Get token from Authorization header first
 		var tokenString string
 		authHeader := r.Header.Get("Authorization")

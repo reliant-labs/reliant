@@ -17,6 +17,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/stretchr/testify/assert"
@@ -196,6 +197,15 @@ func TestCreateWorktreeUsesExtendedDaemonTimeout(t *testing.T) {
 		CreatedAt:  now,
 		UpdatedAt:  now,
 		LastActive: now,
+	}))
+	// CreateWorktree requires the project to have at least one nested repo.
+	require.NoError(t, repo.CreateRepo(context.Background(), &core.Repo{
+		ID:           uuid.New().String(),
+		ProjectID:    projectID,
+		Name:         "root",
+		RelativePath: ".",
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}))
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
