@@ -112,6 +112,7 @@ export function GitHubConnectStep({ plan, updatePlan, onNext, onBack }: StepProp
     setConnecting(true);
     setError("");
     try {
+      localStorage.setItem('onboarding-return-step', 'github-connect');
       await linkGithubAccount();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to connect GitHub";
