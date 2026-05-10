@@ -35,6 +35,7 @@ type StoredProjectConfigRecord struct {
 	ProjectPresetsJSON   *string // JSON array of stored presets
 	ProjectScenariosJSON *string // JSON array of stored scenarios
 	ProjectSkillsJSON    *string // JSON array of stored skills (SKILL.md)
+	RepoMemoriesJSON     *string // JSON object: repo relative path -> memory content
 }
 
 // StoredConfigStore reads stored project config records.
@@ -118,6 +119,12 @@ func mergeStoredConfigRecord(record *StoredProjectConfigRecord) (*Config, error)
 		return nil, err
 	} else {
 		cfg.Skills = skills
+	}
+
+	if repoMems, err := ParseRepoMemories(record.RepoMemoriesJSON); err != nil {
+		return nil, err
+	} else if len(repoMems) > 0 {
+		cfg.RepoMemories = repoMems
 	}
 
 	if record.MCPConfigs != nil && *record.MCPConfigs != "" {

@@ -8,8 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -590,13 +588,10 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			Parts: []message.ContentPart{message.TextContent{Text: memoryContent}},
 		})
 	}
-	// Per-repo memory: one system slot per nested repo seen in tool-call
-	// history. Prefix-stable (first-seen ordering) and idempotent (each repo
-	// gets at most one slot per turn). Cache miss happens only on the first
-	// turn a new repo is touched; subsequent turns hit cache.
-	if len(repos) > 1 {
-		touched := collectReposFromHistory(history)
-		if memMsgs := loadRepoMemoryMessages(project.Path, repos, touched); len(memMsgs) > 0 {
+	// Per-repo memory: eagerly inject all sub-repo reliant.md content from
+	// the config snapshot. Sorted by repo name for prefix-cache stability.
+	if projectCfg != nil && len(projectCfg.RepoMemories) > 0 {
+		if memMsgs := formatRepoMemoryMessages(projectCfg.RepoMemories); len(memMsgs) > 0 {
 			prefix = append(prefix, memMsgs...)
 		}
 	}
@@ -1889,66 +1884,28 @@ func formatStoredMemories(projectCfg *cfgpkg.Config) string {
 	return strings.Join(memories, "\n\n")
 }
 
-// collectReposFromHistory walks tool calls in conversation history, decodes
-// their JSON inputs, and returns the distinct non-empty `repo` values seen.
-// Used to figure out which per-repo memory files need to be in scope for the
-// current turn. Order is stable (first-seen wins) so prefix slots stay in the
-// same positions across turns — preserves prefix caching.
-func collectReposFromHistory(history []message.Message) []string {
-	seen := make(map[string]bool)
-	var ordered []string
-	for _, msg := range history {
-		for _, part := range msg.Parts {
-			tc, ok := part.(message.ToolCall)
-			if !ok {
-				continue
-			}
-			var input map[string]interface{}
-			if err := json.Unmarshal([]byte(tc.Input), &input); err != nil {
-				continue
-			}
-			repo, _ := input["repo"].(string)
-			repo = strings.TrimSpace(repo)
-			if repo == "" || repo == "root" || repo == "." {
-				continue
-			}
-			if !seen[repo] {
-				seen[repo] = true
-				ordered = append(ordered, repo)
-			}
-		}
-	}
-	return ordered
-}
-
-// loadRepoMemoryMessages reads each touched repo's reliant.md and returns one
-// system message per repo, marker-wrapped so future turns can detect "already
-// injected" by scanning the conversation. Repos with no reliant.md are
-// silently skipped.
-func loadRepoMemoryMessages(projectPath string, repos []*core.Repo, touched []string) []message.Message {
-	if projectPath == "" || len(repos) == 0 || len(touched) == 0 {
+// formatRepoMemoryMessages converts the config's repo memories map into
+// system messages, one per repo. Sorted by repo name for prefix-cache
+// stability across turns.
+func formatRepoMemoryMessages(repoMemories map[string]string) []message.Message {
+	if len(repoMemories) == 0 {
 		return nil
 	}
-	byName := make(map[string]*core.Repo, len(repos))
-	for _, r := range repos {
-		if r == nil {
-			continue
-		}
-		byName[r.Name] = r
-		byName[r.RelativePath] = r
+
+	// Sort keys for deterministic ordering (prefix-cache stability).
+	keys := make([]string, 0, len(repoMemories))
+	for k := range repoMemories {
+		keys = append(keys, k)
 	}
+	sort.Strings(keys)
+
 	var msgs []message.Message
-	for _, name := range touched {
-		r, ok := byName[name]
-		if !ok || r == nil {
+	for _, repo := range keys {
+		content := strings.TrimSpace(repoMemories[repo])
+		if content == "" {
 			continue
 		}
-		path := filepath.Join(projectPath, r.RelativePath, "reliant.md")
-		content, err := os.ReadFile(path)
-		if err != nil || len(strings.TrimSpace(string(content))) == 0 {
-			continue
-		}
-		body := fmt.Sprintf("<system-memory repo=%s>\n%s\n</system-memory>", r.Name, string(content))
+		body := fmt.Sprintf("<system-memory repo=%s>\n%s\n</system-memory>", repo, content)
 		msgs = append(msgs, message.Message{
 			Role:  message.System,
 			Parts: []message.ContentPart{message.TextContent{Text: body}},

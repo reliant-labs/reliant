@@ -1358,8 +1358,12 @@ type ProjectConfigSnapshot struct {
 	GlobalMemoryMd  []byte          `protobuf:"bytes,11,opt,name=global_memory_md,json=globalMemoryMd,proto3" json:"global_memory_md,omitempty"`    // ~/.reliant/reliant.md
 	ProjectMemoryMd []byte          `protobuf:"bytes,12,opt,name=project_memory_md,json=projectMemoryMd,proto3" json:"project_memory_md,omitempty"` // {project_path}/reliant.md
 	Skills          []*IndexedSkill `protobuf:"bytes,13,rep,name=skills,proto3" json:"skills,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Per-repo memory: maps repo relative path (e.g. "api", "forge") to the
+	// concatenated content of {repo}/reliant.md + {repo}/reliant.local.md.
+	// Populated eagerly by the daemon so cloud workers don't need filesystem access.
+	RepoMemoriesMd map[string][]byte `protobuf:"bytes,14,rep,name=repo_memories_md,json=repoMemoriesMd,proto3" json:"repo_memories_md,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ProjectConfigSnapshot) Reset() {
@@ -1479,6 +1483,13 @@ func (x *ProjectConfigSnapshot) GetProjectMemoryMd() []byte {
 func (x *ProjectConfigSnapshot) GetSkills() []*IndexedSkill {
 	if x != nil {
 		return x.Skills
+	}
+	return nil
+}
+
+func (x *ProjectConfigSnapshot) GetRepoMemoriesMd() map[string][]byte {
+	if x != nil {
+		return x.RepoMemoriesMd
 	}
 	return nil
 }
@@ -4029,7 +4040,7 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\fproject_path\x18\x01 \x01(\tR\vprojectPath\x12'\n" +
 	"\x0finclude_initial\x18\x02 \x01(\bR\x0eincludeInitial\"A\n" +
 	"\x1cUnwatchProjectConfigsRequest\x12!\n" +
-	"\fproject_path\x18\x01 \x01(\tR\vprojectPath\"\xe6\x05\n" +
+	"\fproject_path\x18\x01 \x01(\tR\vprojectPath\"\x8a\a\n" +
 	"\x15ProjectConfigSnapshot\x12!\n" +
 	"\fproject_path\x18\x01 \x01(\tR\vprojectPath\x12%\n" +
 	"\x0econfig_version\x18\x02 \x01(\tR\rconfigVersion\x127\n" +
@@ -4045,8 +4056,12 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	" \x03(\v2\x1b.reliant.v1.IndexedScenarioR\tscenarios\x12(\n" +
 	"\x10global_memory_md\x18\v \x01(\fR\x0eglobalMemoryMd\x12*\n" +
 	"\x11project_memory_md\x18\f \x01(\fR\x0fprojectMemoryMd\x120\n" +
-	"\x06skills\x18\r \x03(\v2\x18.reliant.v1.IndexedSkillR\x06skills\x1a=\n" +
+	"\x06skills\x18\r \x03(\v2\x18.reliant.v1.IndexedSkillR\x06skills\x12_\n" +
+	"\x10repo_memories_md\x18\x0e \x03(\v25.reliant.v1.ProjectConfigSnapshot.RepoMemoriesMdEntryR\x0erepoMemoriesMd\x1a=\n" +
 	"\x0fMcpConfigsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\fR\x05value:\x028\x01\x1aA\n" +
+	"\x13RepoMemoriesMdEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\fR\x05value:\x028\x01\"\xac\x02\n" +
 	"\x12ProjectConfigDelta\x12!\n" +
@@ -4290,7 +4305,7 @@ func file_reliant_v1_tools_daemon_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_tools_daemon_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_reliant_v1_tools_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 56)
+var file_reliant_v1_tools_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 57)
 var file_reliant_v1_tools_daemon_proto_goTypes = []any{
 	(FileChangeType)(0),                     // 0: reliant.v1.FileChangeType
 	(DaemonStatus)(0),                       // 1: reliant.v1.DaemonStatus
@@ -4349,9 +4364,10 @@ var file_reliant_v1_tools_daemon_proto_goTypes = []any{
 	(*ProcessOutputChunkMessage)(nil),       // 54: reliant.v1.ProcessOutputChunkMessage
 	nil,                                     // 55: reliant.v1.DaemonRegister.LabelsEntry
 	nil,                                     // 56: reliant.v1.ProjectConfigSnapshot.McpConfigsEntry
-	nil,                                     // 57: reliant.v1.IndexedSkill.MetadataEntry
-	nil,                                     // 58: reliant.v1.ResolveDaemonRequest.LabelsEntry
-	(*timestamppb.Timestamp)(nil),           // 59: google.protobuf.Timestamp
+	nil,                                     // 57: reliant.v1.ProjectConfigSnapshot.RepoMemoriesMdEntry
+	nil,                                     // 58: reliant.v1.IndexedSkill.MetadataEntry
+	nil,                                     // 59: reliant.v1.ResolveDaemonRequest.LabelsEntry
+	(*timestamppb.Timestamp)(nil),           // 60: google.protobuf.Timestamp
 }
 var file_reliant_v1_tools_daemon_proto_depIdxs = []int32{
 	4,  // 0: reliant.v1.DaemonMessage.register:type_name -> reliant.v1.DaemonRegister
@@ -4386,46 +4402,47 @@ var file_reliant_v1_tools_daemon_proto_depIdxs = []int32{
 	20, // 29: reliant.v1.ProjectConfigSnapshot.presets:type_name -> reliant.v1.IndexedPreset
 	21, // 30: reliant.v1.ProjectConfigSnapshot.scenarios:type_name -> reliant.v1.IndexedScenario
 	22, // 31: reliant.v1.ProjectConfigSnapshot.skills:type_name -> reliant.v1.IndexedSkill
-	17, // 32: reliant.v1.ProjectConfigDelta.changed_files:type_name -> reliant.v1.ChangedFile
-	15, // 33: reliant.v1.ProjectConfigDelta.snapshot_if_compacted:type_name -> reliant.v1.ProjectConfigSnapshot
-	0,  // 34: reliant.v1.ChangedFile.change_type:type_name -> reliant.v1.FileChangeType
-	57, // 35: reliant.v1.IndexedSkill.metadata:type_name -> reliant.v1.IndexedSkill.MetadataEntry
-	24, // 36: reliant.v1.ProjectDiscovery.projects:type_name -> reliant.v1.DiscoveredProject
-	47, // 37: reliant.v1.ListDaemonsResponse.daemons:type_name -> reliant.v1.DaemonInfo
-	47, // 38: reliant.v1.GetDaemonResponse.daemon:type_name -> reliant.v1.DaemonInfo
-	40, // 39: reliant.v1.ListDaemonTokensResponse.tokens:type_name -> reliant.v1.DaemonTokenInfo
-	58, // 40: reliant.v1.ResolveDaemonRequest.labels:type_name -> reliant.v1.ResolveDaemonRequest.LabelsEntry
-	47, // 41: reliant.v1.ResolveDaemonResponse.daemon:type_name -> reliant.v1.DaemonInfo
-	1,  // 42: reliant.v1.DaemonInfo.status:type_name -> reliant.v1.DaemonStatus
-	24, // 43: reliant.v1.DaemonInfo.projects:type_name -> reliant.v1.DiscoveredProject
-	59, // 44: reliant.v1.DaemonInfo.connected_at:type_name -> google.protobuf.Timestamp
-	59, // 45: reliant.v1.DaemonInfo.last_heartbeat:type_name -> google.protobuf.Timestamp
-	2,  // 46: reliant.v1.TerminalSessionEvent.event_type:type_name -> reliant.v1.TerminalSessionEvent.EventType
-	3,  // 47: reliant.v1.ToolsDaemonService.ConnectDaemon:input_type -> reliant.v1.DaemonMessage
-	7,  // 48: reliant.v1.ToolsDaemonService.ConnectGateway:input_type -> reliant.v1.ServerMessage
-	26, // 49: reliant.v1.ToolsDaemonService.ReportToolResult:input_type -> reliant.v1.ReportToolResultRequest
-	32, // 50: reliant.v1.DaemonRegistryService.ListDaemons:input_type -> reliant.v1.ListDaemonsRequest
-	34, // 51: reliant.v1.DaemonRegistryService.GetDaemon:input_type -> reliant.v1.GetDaemonRequest
-	36, // 52: reliant.v1.DaemonRegistryService.CreateDaemonToken:input_type -> reliant.v1.CreateDaemonTokenRequest
-	38, // 53: reliant.v1.DaemonRegistryService.ListDaemonTokens:input_type -> reliant.v1.ListDaemonTokensRequest
-	41, // 54: reliant.v1.DaemonRegistryService.RevokeDaemonToken:input_type -> reliant.v1.RevokeDaemonTokenRequest
-	43, // 55: reliant.v1.DaemonRegistryService.ResolveDaemon:input_type -> reliant.v1.ResolveDaemonRequest
-	45, // 56: reliant.v1.DaemonRegistryService.ResumeDaemon:input_type -> reliant.v1.ResumeDaemonRequest
-	7,  // 57: reliant.v1.ToolsDaemonService.ConnectDaemon:output_type -> reliant.v1.ServerMessage
-	3,  // 58: reliant.v1.ToolsDaemonService.ConnectGateway:output_type -> reliant.v1.DaemonMessage
-	27, // 59: reliant.v1.ToolsDaemonService.ReportToolResult:output_type -> reliant.v1.ReportToolResultResponse
-	33, // 60: reliant.v1.DaemonRegistryService.ListDaemons:output_type -> reliant.v1.ListDaemonsResponse
-	35, // 61: reliant.v1.DaemonRegistryService.GetDaemon:output_type -> reliant.v1.GetDaemonResponse
-	37, // 62: reliant.v1.DaemonRegistryService.CreateDaemonToken:output_type -> reliant.v1.CreateDaemonTokenResponse
-	39, // 63: reliant.v1.DaemonRegistryService.ListDaemonTokens:output_type -> reliant.v1.ListDaemonTokensResponse
-	42, // 64: reliant.v1.DaemonRegistryService.RevokeDaemonToken:output_type -> reliant.v1.RevokeDaemonTokenResponse
-	44, // 65: reliant.v1.DaemonRegistryService.ResolveDaemon:output_type -> reliant.v1.ResolveDaemonResponse
-	46, // 66: reliant.v1.DaemonRegistryService.ResumeDaemon:output_type -> reliant.v1.ResumeDaemonResponse
-	57, // [57:67] is the sub-list for method output_type
-	47, // [47:57] is the sub-list for method input_type
-	47, // [47:47] is the sub-list for extension type_name
-	47, // [47:47] is the sub-list for extension extendee
-	0,  // [0:47] is the sub-list for field type_name
+	57, // 32: reliant.v1.ProjectConfigSnapshot.repo_memories_md:type_name -> reliant.v1.ProjectConfigSnapshot.RepoMemoriesMdEntry
+	17, // 33: reliant.v1.ProjectConfigDelta.changed_files:type_name -> reliant.v1.ChangedFile
+	15, // 34: reliant.v1.ProjectConfigDelta.snapshot_if_compacted:type_name -> reliant.v1.ProjectConfigSnapshot
+	0,  // 35: reliant.v1.ChangedFile.change_type:type_name -> reliant.v1.FileChangeType
+	58, // 36: reliant.v1.IndexedSkill.metadata:type_name -> reliant.v1.IndexedSkill.MetadataEntry
+	24, // 37: reliant.v1.ProjectDiscovery.projects:type_name -> reliant.v1.DiscoveredProject
+	47, // 38: reliant.v1.ListDaemonsResponse.daemons:type_name -> reliant.v1.DaemonInfo
+	47, // 39: reliant.v1.GetDaemonResponse.daemon:type_name -> reliant.v1.DaemonInfo
+	40, // 40: reliant.v1.ListDaemonTokensResponse.tokens:type_name -> reliant.v1.DaemonTokenInfo
+	59, // 41: reliant.v1.ResolveDaemonRequest.labels:type_name -> reliant.v1.ResolveDaemonRequest.LabelsEntry
+	47, // 42: reliant.v1.ResolveDaemonResponse.daemon:type_name -> reliant.v1.DaemonInfo
+	1,  // 43: reliant.v1.DaemonInfo.status:type_name -> reliant.v1.DaemonStatus
+	24, // 44: reliant.v1.DaemonInfo.projects:type_name -> reliant.v1.DiscoveredProject
+	60, // 45: reliant.v1.DaemonInfo.connected_at:type_name -> google.protobuf.Timestamp
+	60, // 46: reliant.v1.DaemonInfo.last_heartbeat:type_name -> google.protobuf.Timestamp
+	2,  // 47: reliant.v1.TerminalSessionEvent.event_type:type_name -> reliant.v1.TerminalSessionEvent.EventType
+	3,  // 48: reliant.v1.ToolsDaemonService.ConnectDaemon:input_type -> reliant.v1.DaemonMessage
+	7,  // 49: reliant.v1.ToolsDaemonService.ConnectGateway:input_type -> reliant.v1.ServerMessage
+	26, // 50: reliant.v1.ToolsDaemonService.ReportToolResult:input_type -> reliant.v1.ReportToolResultRequest
+	32, // 51: reliant.v1.DaemonRegistryService.ListDaemons:input_type -> reliant.v1.ListDaemonsRequest
+	34, // 52: reliant.v1.DaemonRegistryService.GetDaemon:input_type -> reliant.v1.GetDaemonRequest
+	36, // 53: reliant.v1.DaemonRegistryService.CreateDaemonToken:input_type -> reliant.v1.CreateDaemonTokenRequest
+	38, // 54: reliant.v1.DaemonRegistryService.ListDaemonTokens:input_type -> reliant.v1.ListDaemonTokensRequest
+	41, // 55: reliant.v1.DaemonRegistryService.RevokeDaemonToken:input_type -> reliant.v1.RevokeDaemonTokenRequest
+	43, // 56: reliant.v1.DaemonRegistryService.ResolveDaemon:input_type -> reliant.v1.ResolveDaemonRequest
+	45, // 57: reliant.v1.DaemonRegistryService.ResumeDaemon:input_type -> reliant.v1.ResumeDaemonRequest
+	7,  // 58: reliant.v1.ToolsDaemonService.ConnectDaemon:output_type -> reliant.v1.ServerMessage
+	3,  // 59: reliant.v1.ToolsDaemonService.ConnectGateway:output_type -> reliant.v1.DaemonMessage
+	27, // 60: reliant.v1.ToolsDaemonService.ReportToolResult:output_type -> reliant.v1.ReportToolResultResponse
+	33, // 61: reliant.v1.DaemonRegistryService.ListDaemons:output_type -> reliant.v1.ListDaemonsResponse
+	35, // 62: reliant.v1.DaemonRegistryService.GetDaemon:output_type -> reliant.v1.GetDaemonResponse
+	37, // 63: reliant.v1.DaemonRegistryService.CreateDaemonToken:output_type -> reliant.v1.CreateDaemonTokenResponse
+	39, // 64: reliant.v1.DaemonRegistryService.ListDaemonTokens:output_type -> reliant.v1.ListDaemonTokensResponse
+	42, // 65: reliant.v1.DaemonRegistryService.RevokeDaemonToken:output_type -> reliant.v1.RevokeDaemonTokenResponse
+	44, // 66: reliant.v1.DaemonRegistryService.ResolveDaemon:output_type -> reliant.v1.ResolveDaemonResponse
+	46, // 67: reliant.v1.DaemonRegistryService.ResumeDaemon:output_type -> reliant.v1.ResumeDaemonResponse
+	58, // [58:68] is the sub-list for method output_type
+	48, // [48:58] is the sub-list for method input_type
+	48, // [48:48] is the sub-list for extension type_name
+	48, // [48:48] is the sub-list for extension extendee
+	0,  // [0:48] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_tools_daemon_proto_init() }
@@ -4468,7 +4485,7 @@ func file_reliant_v1_tools_daemon_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_tools_daemon_proto_rawDesc), len(file_reliant_v1_tools_daemon_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   56,
+			NumMessages:   57,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

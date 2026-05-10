@@ -1596,6 +1596,7 @@ function RepoChangesPanel({
       worktreeId={worktreeId}
       defaultBranch={data?.default_branch}
       currentBranch={data?.branch}
+      repoId={repoId}
     />
   ) : null;
 

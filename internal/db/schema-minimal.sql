@@ -630,6 +630,7 @@ CREATE TABLE project_configs (
     global_memory_md TEXT,
     project_memory_md TEXT,
     mcp_configs TEXT, -- JSON object: scope -> mcp.json content
+    repo_memories_json TEXT,
     pushed_at DATETIME NOT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

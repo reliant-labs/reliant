@@ -928,6 +928,7 @@ func buildProjectSnapshot(projectPath string) (*reliantv1.ProjectConfigSnapshot,
 	presets, presetBytes := indexPresets(projectPath)
 	scenarios, scenarioBytes := indexScenarios(projectPath)
 	skills, skillBytes := indexSkills(projectPath)
+	repoMemories, repoMemoriesBytes := collectRepoMemories(projectPath)
 
 	version := hashBytes(
 		userConfigYAML,
@@ -942,6 +943,7 @@ func buildProjectSnapshot(projectPath string) (*reliantv1.ProjectConfigSnapshot,
 		presetBytes,
 		scenarioBytes,
 		skillBytes,
+		repoMemoriesBytes,
 	)
 
 	return &reliantv1.ProjectConfigSnapshot{
@@ -962,7 +964,49 @@ func buildProjectSnapshot(projectPath string) (*reliantv1.ProjectConfigSnapshot,
 		Skills:          skills,
 		GlobalMemoryMd:  globalMemory,
 		ProjectMemoryMd: projectMemory,
+		RepoMemoriesMd:  repoMemories,
 	}, nil
+}
+
+// collectRepoMemories reads reliant.md and reliant.local.md for each nested
+// repo and returns a map[repoRelPath]->content suitable for the proto snapshot.
+// The second return value is a deterministic byte summary for version hashing.
+func collectRepoMemories(projectPath string) (map[string][]byte, []byte) {
+	repoSources := discoverRepoSources(context.Background(), projectPath)
+	if len(repoSources) == 0 {
+		return nil, nil
+	}
+
+	result := make(map[string][]byte, len(repoSources))
+	acc := strings.Builder{}
+
+	for _, rel := range repoSources {
+		if rel == "" {
+			continue
+		}
+		repoDir := filepath.Join(projectPath, rel)
+		var parts []string
+		if md, _ := readOptionalFile(filepath.Join(repoDir, "reliant.md")); len(md) > 0 {
+			parts = append(parts, string(md))
+		}
+		if local, _ := readOptionalFile(filepath.Join(repoDir, "reliant.local.md")); len(local) > 0 {
+			parts = append(parts, string(local))
+		}
+		if len(parts) == 0 {
+			continue
+		}
+		content := strings.Join(parts, "\n\n")
+		result[rel] = []byte(content)
+		acc.WriteString(rel)
+		acc.WriteString(":")
+		acc.WriteString(hashBytes([]byte(content)))
+		acc.WriteString(";")
+	}
+
+	if len(result) == 0 {
+		return nil, nil
+	}
+	return result, []byte(acc.String())
 }
 
 // indexSkills discovers all SKILL.md files across the standard roots
