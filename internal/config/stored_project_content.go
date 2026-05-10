@@ -101,6 +101,19 @@ func ParseStoredSkills(jsonStr *string) ([]StoredSkill, error) {
 	return NormalizeStoredSkills(items), nil
 }
 
+// ParseRepoMemories deserializes the repo_memories_json column into a
+// map[repoRelPath]->content.
+func ParseRepoMemories(jsonStr *string) (map[string]string, error) {
+	if jsonStr == nil || *jsonStr == "" {
+		return nil, nil
+	}
+	var result map[string]string
+	if err := json.Unmarshal([]byte(*jsonStr), &result); err != nil {
+		return nil, fmt.Errorf("failed to parse repo memories JSON: %w", err)
+	}
+	return result, nil
+}
+
 // NormalizeStoredSkills ensures stored skill records always carry the canonical
 // path used by skill list/load/search, including builtin records from producers
 // that only populate the normalized skill name.

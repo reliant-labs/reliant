@@ -1319,10 +1319,11 @@ func (r *Repo) UpsertProjectConfigRecord(ctx context.Context, record *ProjectCon
 			project_presets_json,
 			project_scenarios_json,
 			project_skills_json,
+			repo_memories_json,
 			pushed_at,
 			created_at,
 			updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(project_id) DO UPDATE SET
 			daemon_id = excluded.daemon_id,
 			user_config_yaml = excluded.user_config_yaml,
@@ -1335,6 +1336,7 @@ func (r *Repo) UpsertProjectConfigRecord(ctx context.Context, record *ProjectCon
 			project_presets_json = excluded.project_presets_json,
 			project_scenarios_json = excluded.project_scenarios_json,
 			project_skills_json = excluded.project_skills_json,
+			repo_memories_json = excluded.repo_memories_json,
 			pushed_at = excluded.pushed_at,
 			updated_at = excluded.updated_at
 	`
@@ -1354,6 +1356,7 @@ func (r *Repo) UpsertProjectConfigRecord(ctx context.Context, record *ProjectCon
 		record.ProjectPresetsJSON,
 		record.ProjectScenariosJSON,
 		record.ProjectSkillsJSON,
+		record.RepoMemoriesJSON,
 		pushedAt,
 		createdAt,
 		now,
@@ -1385,6 +1388,7 @@ func (r *Repo) GetProjectConfigRecord(ctx context.Context, projectID string) (*P
 			project_presets_json,
 			project_scenarios_json,
 			project_skills_json,
+			repo_memories_json,
 			pushed_at,
 			created_at,
 			updated_at
@@ -1409,6 +1413,7 @@ func (r *Repo) GetProjectConfigRecord(ctx context.Context, projectID string) (*P
 		&record.ProjectPresetsJSON,
 		&record.ProjectScenariosJSON,
 		&record.ProjectSkillsJSON,
+		&record.RepoMemoriesJSON,
 		&record.PushedAt,
 		&record.CreatedAt,
 		&record.UpdatedAt,
