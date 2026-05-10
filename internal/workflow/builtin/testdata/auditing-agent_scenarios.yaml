@@ -353,7 +353,7 @@ expect:
 ---
 # Audit check without tool calls - goes directly to save_approved_response
 name: audit_no_response_tool
-description: Audit check responds without calling the audit tool
+description: Audit check responds without calling the audit tool — fail-closed (no approval)
 events:
   - node: audited_loop.main_agent
     output:
@@ -376,9 +376,9 @@ expect:
     - audited_loop
     - audited_loop.main_agent
     - audited_loop.audit_check
-    - audited_loop.save_approved_response
   not_reached:
     - audited_loop.execute_audit
+    - audited_loop.save_approved_response
 
 ---
 # Multiple tool calls in sequence

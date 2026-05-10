@@ -4,6 +4,14 @@ description: |
   Generic implement → review loop. Implements changes then reviews them in a structured
   cycle until the reviewer approves or max iterations are reached.
 
+  Relationship to get-it-right:
+    Conceptually similar to get-it-right with context_bridge: full, but differs in:
+    - Review schema: uses verdict/issues/summary (vs get-it-right's grade/strategy/feedback)
+    - No check phases (lint/test/build) — review is the only quality gate
+    - No refactor step — just loops back to implement on failure
+    Not implemented as a thin wrapper because the different review schema and output
+    interface (review_verdict, review_issues) would break existing consumers.
+
   Loop: implement → review → done?
     1. implement — Make the requested changes. Spawns specialists as needed.
     2. review — Evaluate the implementation. Spawns appropriate reviewers (code, UX,
@@ -19,6 +27,12 @@ description: |
     implement forks with memo — accumulates context, sees review feedback via inject.
     review forks with memo — builds on prior analysis, gets fresh review instructions via inject.
 
+  Stuck-state handling:
+    If the reviewer determines the issue is environmental (wrong tools, missing deps,
+    broken infrastructure), it can output verdict="stuck" which pauses the workflow
+    and escalates to the user via ask_question. User feedback is then available for
+    the next iteration.
+
 inputs:
   model:
     type: model
@@ -26,7 +40,7 @@ inputs:
     default:
       tags: [flagship]
 
-  max_iterations:
+  max_retries:
     type: integer
     default: 10
     min: 1
@@ -63,16 +77,21 @@ sequence:
   - id: attempt
     type: loop
     while: >
-      (has(outputs.review_verdict) && outputs.review_verdict != "pass")
-      && iter.iteration < inputs.max_iterations
+      ((has(outputs.review_verdict) && outputs.review_verdict != "pass"
+        && !(outputs.review_verdict == "stuck" && !outputs.has_feedback))
+      && iter.iteration < inputs.max_retries)
+      || outputs.has_feedback == true
     ask: "inputs.ask"
     inline:
+      entry: [implement]
+
       outputs:
         review_verdict: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null ? nodes.review.response.verdict : 'pass'}}"
         review_issues: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null ? nodes.review.response.issues : []}}"
         review_summary: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null ? nodes.review.response.summary : ''}}"
+        has_feedback: "{{has(nodes.stuck_checkpoint) && has(nodes.stuck_checkpoint.has_feedback) ? nodes.stuck_checkpoint.has_feedback : false}}"
 
-      sequence:
+      nodes:
         - id: implement
           type: workflow
           ref: builtin://agent
@@ -89,11 +108,13 @@ sequence:
             inject:
               role: user
               content: |
-                ## Implement — Attempt {{iter.iteration + 1}} of {{inputs.max_iterations}}
+                ## Implement — Attempt {{iter.iteration + 1}} of {{inputs.max_retries}}
 
                 Implement the requested changes. The original request and any prior context are in the conversation above.
 
                 {{has(outputs.review_verdict) && outputs.review_verdict == 'fail' ? '### Review Feedback from Previous Attempt\n\n**Verdict:** FAIL\n\n**Summary:** ' + outputs.review_summary + '\n\n**Issues to fix:**\n' + outputs.review_issues.map(i, '- ' + i).join('\n') : ''}}
+
+                {{has(outputs.review_verdict) && outputs.review_verdict == 'stuck' && has(outputs.has_feedback) && outputs.has_feedback ? '### User Guidance (after stuck escalation)\n\nThe workflow was paused because of an environmental/tooling issue. The user has provided guidance — check the conversation above for their instructions.\n' : ''}}
 
                 Spawn specialists as needed for the task at hand. After finishing, summarize:
                 1. What you changed and why
@@ -116,7 +137,7 @@ sequence:
             temperature: "{{inputs.temperature}}"
             thinking_level: "{{inputs.thinking_level}}"
             response_tool_name: submit_review
-            response_tool_description: "Submit your review verdict — pass if the implementation meets requirements, fail if issues remain"
+            response_tool_description: "Submit your review verdict — pass if the implementation meets requirements, fail if issues remain, stuck if the problem is environmental"
             response_schema:
               type: object
               required:
@@ -126,10 +147,15 @@ sequence:
               properties:
                 verdict:
                   type: string
-                  enum: ["pass", "fail"]
+                  enum: ["pass", "fail", "stuck"]
                   description: |
                     "pass" — the implementation is correct and complete. Break the loop.
                     "fail" — there are issues that need to be fixed. Loop back to implement.
+                    "stuck" — LAST RESORT. Use ONLY when the issue is NOT a coding problem —
+                      it's a tooling failure, environment issue, missing dependency, broken CLI
+                      command, or something else outside the user's code. "stuck" pauses the
+                      workflow and escalates to the user for help.
+                    Do NOT use "stuck" for normal implementation difficulties — use "fail" first.
                 issues:
                   type: array
                   items:
@@ -142,6 +168,7 @@ sequence:
                   description: |
                     Overall assessment. When passing, summarize what works well.
                     When failing, summarize the most critical problems.
+                    When stuck, describe the environmental/tooling issue that requires user intervention.
           thread:
             mode: fork
             memo: true
@@ -158,7 +185,7 @@ sequence:
 
                 Your job:
                 1. Assess correctness and completeness against the original request
-                2. Decide: **pass** (done) or **fail** (needs fixes)
+                2. Decide: **pass** (done), **fail** (needs fixes), or **stuck** (environmental issue)
                 3. Write specific, actionable issues for the next attempt if failing
 
                 **Your issues list is the primary bridge to the next attempt.**
@@ -169,11 +196,28 @@ sequence:
                   Minor suggestions can be noted in the summary but should not block passing.
                 - **fail**: Functional problems, correctness bugs, missing requirements, or
                   the implementation doesn't match what was requested.
+                - **stuck**: The problem is NOT in the code — it's a tooling failure, environment
+                  issue, missing dependency, or infrastructure problem that requires user intervention.
+                  Only use after "fail" hasn't resolved the issue.
           save_message:
             role: assistant
             content: |
               ## Review (Attempt {{iter.iteration + 1}}): {{has(output.response) && output.response != null ? output.response.verdict : 'N/A'}}
               {{has(output.response) && output.response != null ? output.response.summary : ''}}
+
+        - id: stuck_checkpoint
+          type: ask_question
+          args:
+            metadata: '{"type":"ask_user","questions":[{"question":"The workflow is stuck on a problem that appears to be outside the codebase (tooling, environment, or infrastructure issue). Human intervention is needed.","options":[{"label":"I fixed it, continue","description":"I resolved the external issue — retry the implementation"},{"label":"Provide guidance","description":"Give specific instructions on how to work around this"},{"label":"Stop","description":"End the workflow here"}]}]}'
+
+      edges:
+        - from: implement
+          default: [review]
+        - from: review
+          cases:
+            - condition: "has(nodes.review.response) && nodes.review.response != null && nodes.review.response.verdict == 'stuck'"
+              to: [stuck_checkpoint]
+          default: []
 
   - id: complete
     type: save_message

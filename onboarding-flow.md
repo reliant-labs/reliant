@@ -66,6 +66,7 @@ Six intent cards pre-wire launch defaults but no longer finish onboarding direct
 | **Create a landing page**    | `get-it-right`             | `new_project`                                              | Preset `ux`, review instructions for visual quality.                                                |
 | **Create a pitch deck**      | `pitch-deck`               | `new_project`                                              | `ask: false`, auto-start pipeline.                                                                  |
 | **Write docs / blog post**   | `blog-content-pipeline`    | `new_project`                                              | Preset `documentation`.                                                                             |
+| **Create a custom workflow** | `build-workflow`           | `new_project`                                              | Scopes the workflow, builds/tests custom integrations, then builds the workflow with scenario validation. |
 | **Explore Reliant**          | `agent`                    | `sample_project`                                           | Creates/selects a sample workspace and starts the guided spotlight tour after onboarding completes. |
 
 ### Step 4 - GitHubConnectStep (hosted existing project only)
