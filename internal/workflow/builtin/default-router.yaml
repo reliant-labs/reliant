@@ -43,6 +43,7 @@ nodes:
       tags: [fast, smart]
     thread:
       mode: new
+    fallback: agent
     workflows:
       - ref: builtin://agent
         presets:

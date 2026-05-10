@@ -28,6 +28,7 @@ export const STEP_PATHS: Record<string, string[]> = {
   cloud_landing_page: ["goal", "compute", "model"],
   cloud_pitch_deck: ["goal", "compute", "model"],
   cloud_blog_post: ["goal", "compute", "model"],
+  cloud_custom_workflow: ["goal", "compute", "model"],
 
   // Local paths
   local_new_app: ["goal", "compute", "daemon-connect", "local-project-location", "forge-style", "model"],
@@ -36,6 +37,7 @@ export const STEP_PATHS: Record<string, string[]> = {
   local_landing_page: ["goal", "compute", "daemon-connect", "local-project-location", "model"],
   local_pitch_deck: ["goal", "compute", "daemon-connect", "local-project-location", "model"],
   local_blog_post: ["goal", "compute", "daemon-connect", "local-project-location", "model"],
+  local_custom_workflow: ["goal", "compute", "daemon-connect", "local-project-location", "model"],
 
   // Pre-connected daemon paths (daemon already running, skip connect)
   preconnected_new_app: ["goal", "compute", "local-project-location", "forge-style", "model"],
@@ -44,6 +46,7 @@ export const STEP_PATHS: Record<string, string[]> = {
   preconnected_landing_page: ["goal", "compute", "local-project-location", "model"],
   preconnected_pitch_deck: ["goal", "compute", "local-project-location", "model"],
   preconnected_blog_post: ["goal", "compute", "local-project-location", "model"],
+  preconnected_custom_workflow: ["goal", "compute", "local-project-location", "model"],
 };
 
 export const INITIAL_PATH = ["goal"];

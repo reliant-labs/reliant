@@ -1,0 +1,105 @@
+name: scope-conversation
+apiVersion: "0.0.5"
+description: |
+  Reusable scoping conversation sub-workflow.
+
+  Has a natural conversation with the user to understand what they want to build/automate,
+  then writes a plan file. Configurable question areas, plan template, and conversation limits.
+
+  Used by forge-one-shot and build-workflow as their first phase.
+
+entry: [conversation]
+
+inputs:
+  model:
+    type: model
+    description: Model to use
+    default:
+      tags: [flagship]
+
+  mode:
+    type: enum
+    ui: toolbar
+    default: auto
+    description: Execution mode
+    enum: [manual, auto]
+
+  ask:
+    type: boolean
+    ui: toolbar
+    default: true
+    description: Pause for user review
+
+  working_directory:
+    type: string
+    default: "."
+    description: Where to write the plan file
+
+  question_areas:
+    type: string
+    default: ""
+    description: The question areas text to inject (workflow-specific questions)
+
+  plan_filename:
+    type: string
+    default: "PLAN.md"
+    description: What to name the output plan file
+
+  plan_template:
+    type: string
+    default: ""
+    description: The template/sections the plan should contain
+
+  max_questions:
+    type: integer
+    default: 8
+    description: Cap on total questions to ask
+
+  max_turns:
+    type: integer
+    default: 3
+    description: Cap on conversation turns
+
+  context_prompt:
+    type: string
+    default: ""
+    description: Additional context to inject (e.g. what the framework gives for free)
+
+nodes:
+  - id: conversation
+    type: workflow
+    ref: builtin://agent
+    presets:
+      default: general
+    passthrough: [model, mode, ask]
+    args:
+      tools: ["tag:default", "ask_user"]
+    thread:
+      mode: inherit
+      inject:
+        role: user
+        content: |
+          {{inputs.context_prompt}}
+
+          ## Your Job: Have a Conversation
+
+          Use the `ask_user` tool to ask focused questions to understand what they
+          want to build. Call `ask_user` for each question and wait for the response.
+
+          Below are suggested question areas — use your judgement on which to ask based on
+          what the user has already provided. Skip any that are already answered or irrelevant:
+
+          {{inputs.question_areas}}
+
+          You MUST use `ask_user` at least once before writing {{inputs.plan_filename}}.
+          Scale question count to complexity of the request, but cap it to {{inputs.max_questions}} questions, over a max of {{inputs.max_turns}} turns.
+          Infer reasonable defaults for things the user doesn't mention.
+
+          ## When You Have Enough Info
+
+          Write `{{inputs.plan_filename}}` in `{{inputs.working_directory}}` with:
+          {{inputs.plan_template}}
+
+          After writing {{inputs.plan_filename}}, tell the user the plan is ready.
+
+          Work in `{{inputs.working_directory}}`.

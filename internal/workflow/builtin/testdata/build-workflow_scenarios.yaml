@@ -1,0 +1,174 @@
+# Test scenarios for build-workflow.yaml
+#
+# Build Workflow structure:
+#   scope_conversation (agent) → integration_router (router) → build_integrations (get-it-right) → build_workflow (get-it-right)
+#                                                            ↘ build_workflow (skip when no custom integrations)
+#
+# Node types:
+#   - scope_conversation    type: workflow, ref: builtin://agent (BLACK BOX)
+#   - integration_router    type: router — routes based on whether custom integrations are needed
+#   - build_integrations    type: workflow, ref: builtin://get-it-right (BLACK BOX)
+#   - build_workflow        type: workflow, ref: builtin://get-it-right (BLACK BOX)
+#
+# All workflow nodes are treated as black boxes since they reference external workflows.
+# The simulator mocks each node's output directly (same pattern as forge-one-shot).
+
+---
+name: happy_path
+description: >
+  All three phases succeed on first attempt.
+  Scoping writes a plan with one custom integration.
+  Router sends to build_integrations.
+  Integration is built and passes review.
+  Workflow is built and passes review.
+
+events:
+  - node: scope_conversation
+    output:
+      response_text: |
+        I've written WORKFLOW_PLAN.md. The workflow automates a deploy pipeline
+        with a Slack notification integration (custom script) and a standard
+        GitHub MCP server (off-the-shelf).
+
+  - node: integration_router
+    output:
+      selected_node: build_integrations
+      reasoning: "Plan includes a custom Slack notification script that needs to be built."
+
+  - node: build_integrations
+    output:
+      strategy: "pass"
+      eval_strategy: "pass"
+      review_grade: "pass"
+      review_feedback: "Slack notification script works. Parameterized webhook URL via env var. Test passes."
+      iterations: 1
+
+  - node: build_workflow
+    output:
+      strategy: "pass"
+      eval_strategy: "pass"
+      review_grade: "pass"
+      review_feedback: "Workflow matches plan. Integration script correctly referenced. Scenarios cover happy and failure paths."
+      iterations: 1
+
+expect:
+  outcome: completed
+  reached:
+    - scope_conversation
+    - integration_router
+    - build_integrations
+    - build_workflow
+
+---
+name: no_custom_integrations
+description: >
+  Scoping determines no custom integrations are needed.
+  Router skips build_integrations and goes directly to build_workflow.
+  Workflow is built and passes review.
+
+events:
+  - node: scope_conversation
+    output:
+      response_text: |
+        I've written WORKFLOW_PLAN.md. Simple workflow with no custom integrations —
+        just agents and built-in tools for a code review pipeline.
+        All integrations are off-the-shelf (GitHub MCP server, standard tools).
+
+  - node: integration_router
+    output:
+      selected_node: build_workflow
+      reasoning: "No custom integrations identified in the plan. Only off-the-shelf tools needed."
+
+  - node: build_workflow
+    output:
+      strategy: "pass"
+      eval_strategy: "pass"
+      review_grade: "pass"
+      review_feedback: "Workflow is complete. Scenarios cover the main paths. Threading is correct."
+      iterations: 1
+
+expect:
+  outcome: completed
+  reached:
+    - scope_conversation
+    - integration_router
+    - build_workflow
+  not_reached:
+    - build_integrations
+
+---
+name: integration_needs_retry
+description: >
+  Scoping succeeds. Router sends to integrations. Integration build needs a retry
+  (first attempt fails review). Second attempt passes. Workflow build passes on first try.
+
+events:
+  - node: scope_conversation
+    output:
+      response_text: |
+        I've written WORKFLOW_PLAN.md. The workflow needs a custom Python script
+        that transforms CSV data into JSON for a downstream API call.
+
+  - node: integration_router
+    output:
+      selected_node: build_integrations
+      reasoning: "Plan requires a custom CSV-to-JSON transform script."
+
+  - node: build_integrations
+    output:
+      strategy: "pass"
+      eval_strategy: "pass"
+      review_grade: "pass"
+      review_feedback: "Script handles headers, edge cases covered by tests. Good to go."
+      iterations: 2
+
+  - node: build_workflow
+    output:
+      strategy: "pass"
+      eval_strategy: "pass"
+      review_grade: "pass"
+      review_feedback: "Workflow correctly references the transform script. Scenarios cover success and transform-failure paths."
+      iterations: 1
+
+expect:
+  outcome: completed
+  reached:
+    - scope_conversation
+    - integration_router
+    - build_integrations
+    - build_workflow
+
+---
+name: workflow_needs_retry
+description: >
+  Scoping passes, no custom integrations (router skips Phase 2).
+  Workflow build takes two iterations (first attempt missing scenarios, second adds them).
+
+events:
+  - node: scope_conversation
+    output:
+      response_text: |
+        I've written WORKFLOW_PLAN.md. Simple workflow with no custom integrations —
+        just agents and built-in tools for a code review pipeline.
+
+  - node: integration_router
+    output:
+      selected_node: build_workflow
+      reasoning: "No custom integrations needed per the plan."
+
+  - node: build_workflow
+    output:
+      strategy: "pass"
+      eval_strategy: "pass"
+      review_grade: "pass"
+      review_feedback: "Workflow is complete. Scenarios cover the main paths. Threading is correct."
+      iterations: 2
+
+expect:
+  outcome: completed
+  reached:
+    - scope_conversation
+    - integration_router
+    - build_workflow
+  not_reached:
+    - build_integrations

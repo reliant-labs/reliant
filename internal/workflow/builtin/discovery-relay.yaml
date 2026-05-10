@@ -97,9 +97,8 @@ nodes:
           ref: builtin://agent
           presets:
             default: general
+          passthrough: [model, mode]
           args:
-            model: "{{inputs.model}}"
-            mode: "{{inputs.mode}}"
             temperature: "{{inputs.temperature}}"
             thinking_level: "{{inputs.thinking_level}}"
           thread:
@@ -137,9 +136,9 @@ nodes:
         - id: debrief
           type: workflow
           ref: builtin://structured-agent
+          passthrough: [mode]
           args:
             model: "{{inputs.debrief_model}}"
-            mode: "{{inputs.mode}}"
             temperature: "{{inputs.temperature}}"
             thinking_level: "{{inputs.thinking_level}}"
             response_tool_name: submit_debrief

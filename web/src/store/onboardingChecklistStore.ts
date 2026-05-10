@@ -165,6 +165,8 @@ function deserializeItems(json: string): Set<ChecklistItemId> {
 /** After tour ends, show API key modal if none configured (same path as setup guide). */
 async function promptApiKeyIfNeededAfterOnboarding(): Promise<void> {
   const { useApiKeySetupStore } = await import("./apiKeySetupStore");
+  // If onboarding already confirmed the user has a key, don't re-check
+  if (useApiKeySetupStore.getState().hasApiKey === true) return;
   // Reset hasChecked so the check actually re-runs (it may have been set during app startup)
   useApiKeySetupStore.setState({ hasChecked: false });
   await useApiKeySetupStore.getState().ensureApiKeyOrShowModal();
@@ -262,7 +264,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
   (set, get) => ({
     completedItems: new Set(),
     welcomeShown: false,
-    panelState: "expanded",
+    panelState: "collapsed",
     isInitialized: false,
     isLoading: false,
 
@@ -329,7 +331,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
         : new Set<ChecklistItemId>();
 
       const panelState =
-        (panelSetting?.value as ChecklistPanelState) || "expanded";
+        (panelSetting?.value as ChecklistPanelState) || "collapsed";
 
       const hasCompletedOnboarding = tourCompletedSetting?.value === "true";
 

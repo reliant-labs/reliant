@@ -199,7 +199,6 @@ nodes:
             - to: execute_audit
               condition: nodes.audit_check.tool_calls != null && size(nodes.audit_check.tool_calls) > 0
               label: execute_audit_tool
-          default: save_approved_response
         - from: execute_audit
           cases:
             - to: save_approved_response

@@ -12,6 +12,8 @@ outputs:
   winner: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null ? nodes.review.response.winner : 0}}"
   confidence: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null ? nodes.review.response.confidence : 0}}"
   rationale: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null ? nodes.review.response.rationale : ''}}"
+  test_exit: "{{has(nodes.verify_test) && has(nodes.verify_test.exit_code) ? nodes.verify_test.exit_code : -1}}"
+  build_exit: "{{has(nodes.verify_build) && has(nodes.verify_build.exit_code) ? nodes.verify_build.exit_code : -1}}"
 
 inputs:
   mode:
@@ -24,6 +26,16 @@ inputs:
     default:
       tags: ["flagship"]
     description: Default LLM model for all agents (can be overridden per group)
+
+  test_command:
+    type: string
+    default: npm test
+    description: Command to run tests after applying the result.
+
+  build_command:
+    type: string
+    default: npm run build
+    description: Command to run build after applying the result.
 
   implementer:
     type: group
@@ -358,6 +370,17 @@ nodes:
         - Test that the combined code is coherent
         - Work in your current directory (the main worktree)
 
+  # Verify the applied result actually builds and passes tests
+  - id: verify
+    type: parallel
+    branches:
+      - id: verify_test
+        type: run
+        command: "{{inputs.test_command}}"
+      - id: verify_build
+        type: run
+        command: "{{inputs.build_command}}"
+
   - id: complete
     type: save_message
     args:
@@ -367,6 +390,10 @@ nodes:
 
         **Strategy Used:** {{nodes.review.response.strategy == 'use_winner' ? 'Applied Winner (Candidate ' + string(nodes.review.response.winner) + ')' : 'Synthesized from multiple candidates (base: Candidate ' + string(nodes.review.response.winner) + ')'}}
         **Confidence:** {{nodes.review.response.confidence}}/10
+
+        **Verification:**
+        - Test: {{has(nodes.verify_test) && has(nodes.verify_test.exit_code) ? (nodes.verify_test.exit_code == 0 ? 'passed' : 'FAILED (exit ' + string(nodes.verify_test.exit_code) + ')') : 'unknown'}}
+        - Build: {{has(nodes.verify_build) && has(nodes.verify_build.exit_code) ? (nodes.verify_build.exit_code == 0 ? 'passed' : 'FAILED (exit ' + string(nodes.verify_build.exit_code) + ')') : 'unknown'}}
 
         **Result Directory:**
         ```
@@ -407,8 +434,10 @@ edges:
         condition: "has(nodes.review.response) && nodes.review.response != null && nodes.review.response.strategy == 'synthesize'"
 
   - from: apply_winner
-    default: complete
+    default: verify
   - from: synthesizer
+    default: verify
+  - from: verify
     default: complete
 
 ui:
@@ -428,8 +457,11 @@ ui:
     synthesizer:
       x: 3000
       y: 358
-    complete:
+    verify:
       x: 3400
+      y: 254
+    complete:
+      x: 3800
       y: 254
     save_improved_prompt:
       x: 797

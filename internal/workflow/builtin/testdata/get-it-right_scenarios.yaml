@@ -330,3 +330,99 @@ expect:
     attempt:
       eval_strategy: "pass"
       review_grade: "pass"
+
+---
+name: context_bridge_full_mode
+description: >
+  Tests context_bridge=full. Both implement and review accumulate context (memo:true).
+  First attempt has issues (strategy="continue"), second succeeds.
+  This mode is similar to implement-review's context management.
+
+inputs:
+  context_bridge: full
+  max_retries: 2
+
+events:
+  - node: attempt.implement
+    output:
+      response_text: "First attempt using the full context bridge. Made changes but missed a critical pattern."
+
+  - node: attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "continue"
+        feedback: "Implementation missed the service layer pattern. The next attempt should use the existing service abstractions."
+
+  - node: attempt.implement
+    output:
+      response_text: "Second attempt with accumulated context. Used the service layer as suggested. All tests pass."
+
+  - node: attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Implementation correctly uses the service layer. Clean and follows codebase conventions."
+
+expect:
+  outcome: completed
+  reached:
+    - attempt
+    - attempt.implement
+    - attempt.join_checks
+    - attempt.review
+  not_reached:
+    - attempt.refactor
+  node_outputs:
+    attempt:
+      eval_strategy: "pass"
+      review_grade: "pass"
+
+---
+name: context_bridge_none_mode
+description: >
+  Tests context_bridge=none (brute force). Both implement and review fork fresh
+  each iteration. No save_messages to parent thread. First attempt fails,
+  second attempt succeeds purely through sampling diversity.
+
+inputs:
+  context_bridge: none
+  max_retries: 2
+
+events:
+  - node: attempt.implement
+    output:
+      response_text: "First brute force attempt. Took wrong approach — used raw SQL."
+
+  - node: attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "continue"
+        feedback: "Wrong approach. Should use repository pattern."
+
+  - node: attempt.implement
+    output:
+      response_text: "Second brute force attempt from scratch. Found the repository layer and used it. Tests pass."
+
+  - node: attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Implementation is correct. Repository pattern used properly."
+
+expect:
+  outcome: completed
+  reached:
+    - attempt
+    - attempt.implement
+    - attempt.join_checks
+    - attempt.review
+  not_reached:
+    - attempt.refactor
+  node_outputs:
+    attempt:
+      eval_strategy: "pass"
+      review_grade: "pass"
