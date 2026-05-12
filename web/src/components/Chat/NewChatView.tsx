@@ -1,5 +1,6 @@
 import { logger } from "../../lib/logger";
 import { useState, useEffect, useRef } from "react";
+import { ConnectDaemonModal } from "../Layout/ConnectDaemonModal";
 import { useChatStore } from "../../store/chatStore"; // For getState() and setState() only
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
@@ -52,6 +53,7 @@ export function NewChatView({
   onChatCreated,
 }: NewChatViewProps) {
   const [isCreating, setIsCreating] = useState(false);
+  const [showConnectDaemonModal, setShowConnectDaemonModal] = useState(false);
   const [showCreateWorktreeModal, setShowCreateWorktreeModal] = useState(false);
   const [showDiscoverWorktreeModal, setShowDiscoverWorktreeModal] = useState(false);
   const [showWorkspaceDropdown, setShowWorkspaceDropdown] = useState(false);
@@ -461,7 +463,17 @@ export function NewChatView({
       {!daemonConnected && !daemonLoading && (
         <div className="flex items-center justify-center gap-2 border-t border-yellow-500/20 bg-yellow-500/5 px-4 py-2.5 text-sm text-yellow-600 dark:text-yellow-400">
           <Activity className="h-4 w-4" />
-          <span>No daemon connected. Start a daemon to begin chatting.</span>
+          <span>
+            No daemon connected.{" "}
+            <button
+              type="button"
+              onClick={() => setShowConnectDaemonModal(true)}
+              className="font-medium underline underline-offset-2 hover:text-yellow-700 dark:hover:text-yellow-300"
+            >
+              Start a cloud daemon or run one locally
+            </button>{" "}
+            to begin chatting.
+          </span>
         </div>
       )}
       {isFocused ? (
@@ -496,6 +508,11 @@ export function NewChatView({
           />
         </>
       )}
+
+      <ConnectDaemonModal
+        isOpen={showConnectDaemonModal}
+        onClose={() => setShowConnectDaemonModal(false)}
+      />
     </div>
   );
 }

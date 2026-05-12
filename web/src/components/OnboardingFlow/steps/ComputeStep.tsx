@@ -103,7 +103,7 @@ function codeSourceForCompute(
   return "new_project";
 }
 
-export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
+export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps & { hideHeader?: boolean }) {
   const [showLocal, setShowLocal] = useState(
     plan.compute === "local_daemon",
   );
@@ -292,15 +292,17 @@ export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-2 text-center">
-        <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-          Where should Reliant run your daemon?
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          The daemon runs next to your code so agents can read files, run
-          commands, and keep work moving.
-        </p>
-      </div>
+      {!hideHeader && (
+        <div className="space-y-2 text-center">
+          <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+            Where should Reliant run your daemon?
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            The daemon runs next to your code so agents can read files, run
+            commands, and keep work moving.
+          </p>
+        </div>
+      )}
 
       {!showLocal && <DaemonConnectionDiagrams />}
 

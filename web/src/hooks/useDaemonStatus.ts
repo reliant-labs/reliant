@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { create } from "@bufbuild/protobuf";
 import { grpcClient } from "../api/grpc-client";
 import { DaemonStatus, ListDaemonsRequestSchema } from "../gen/reliant/v1/tools_daemon_pb";
@@ -7,25 +7,26 @@ import type { DaemonInfo } from "../gen/reliant/v1/tools_daemon_pb";
 export function useDaemonStatus() {
   const [daemons, setDaemons] = useState<DaemonInfo[]>([]);
   const [loading, setLoading] = useState(true);
+  const cancelledRef = useRef(false);
+
+  const check = useCallback(async () => {
+    try {
+      const resp = await grpcClient.daemonRegistry().listDaemons(create(ListDaemonsRequestSchema));
+      if (!cancelledRef.current) {
+        setDaemons(resp.daemons);
+        setLoading(false);
+      }
+    } catch {
+      if (!cancelledRef.current) {
+        setDaemons([]);
+        setLoading(false);
+      }
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
+    cancelledRef.current = false;
     let intervalId: ReturnType<typeof setInterval> | null = null;
-
-    const check = async () => {
-      try {
-        const resp = await grpcClient.daemonRegistry().listDaemons(create(ListDaemonsRequestSchema));
-        if (!cancelled) {
-          setDaemons(resp.daemons);
-          setLoading(false);
-        }
-      } catch {
-        if (!cancelled) {
-          setDaemons([]);
-          setLoading(false);
-        }
-      }
-    };
 
     const startPolling = () => {
       if (!intervalId) {
@@ -54,12 +55,12 @@ export function useDaemonStatus() {
     document.addEventListener("visibilitychange", handleVisibility);
 
     return () => {
-      cancelled = true;
+      cancelledRef.current = true;
       stopPolling();
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, []);
+  }, [check]);
 
   const activeDaemon = daemons.find((d) => d.status === DaemonStatus.ACTIVE);
-  return { daemons, activeDaemon, loading };
+  return { daemons, activeDaemon, loading, refresh: check };
 }
