@@ -77,6 +77,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
     const [isMaximized, setIsMaximized] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
 
+    const isElectron = Boolean(window.electronAPI);
     const isMac = window.electronAPI?.platform === "darwin";
 
 
@@ -414,8 +415,8 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
               </Tooltip>
             )}
 
-            {/* Window controls for non-Mac platforms */}
-            {!isMac && (
+            {/* Window controls for non-Mac Electron only — browsers can't drive these */}
+            {isElectron && !isMac && (
               <>
                 <div className="h-4 w-px bg-border mx-1" />
                 <button
