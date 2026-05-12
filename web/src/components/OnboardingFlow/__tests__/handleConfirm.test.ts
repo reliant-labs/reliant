@@ -136,22 +136,22 @@ describe("GitHubConnectStep confirm — clone orchestration", () => {
 
   it("falls back to first daemon ID when no active daemon (provisioning)", async () => {
     mockListDaemons.mockResolvedValue({
-      daemons: [{ name: "daemons/onboarding-workspace", status: 0 }],
+      daemons: [{ name: "daemons/onboarding-daemon", status: 0 }],
     });
     mockGetActiveDaemonName.mockReturnValue(""); // No active daemon
-    mockGetFirstDaemonId.mockReturnValue("daemons/onboarding-workspace");
+    mockGetFirstDaemonId.mockReturnValue("daemons/onboarding-daemon");
     mockCloneRepo.mockResolvedValue({ clonedPath: projectPath });
 
     const result = await confirmCloneLogic(testRepo, "develop", projectPath);
 
     expect(mockCloneRepo).toHaveBeenCalledWith(
       expect.objectContaining({
-        daemonName: "daemons/onboarding-workspace",
+        daemonName: "daemons/onboarding-daemon",
         gitRepo: "https://github.com/user/my-app.git",
         gitBranch: "develop",
       }),
     );
-    expect(result.daemonName).toBe("daemons/onboarding-workspace");
+    expect(result.daemonName).toBe("daemons/onboarding-daemon");
     expect(result.cloneSucceeded).toBe(true);
   });
 

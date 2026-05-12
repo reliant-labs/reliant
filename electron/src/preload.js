@@ -257,72 +257,67 @@ const injectReliantConfig = async () => {
   log('info', 'injectReliantConfig called');
 
   try {
-    log('info', 'Getting backend port via IPC...');
-    const [grpcPort, appInfo, backendStatus] = await Promise.all([
+    log('info', 'Getting daemon status via IPC...');
+    const [daemonPort, appInfo, backendStatus] = await Promise.all([
       ipcRenderer.invoke('get-backend-port'),
       ipcRenderer.invoke('get-app-info'),
       ipcRenderer.invoke('get-backend-status')
     ]);
 
-    log('info', 'gRPC port received:', grpcPort, 'type:', typeof grpcPort);
+    log('info', 'Daemon port received:', daemonPort, 'type:', typeof daemonPort);
     log('info', 'App info received:', appInfo);
     log('info', 'Backend status received:', backendStatus);
 
-    // Check if we have a valid port number
-    if (typeof grpcPort === 'number' && grpcPort > 0) {
-      // Determine protocol based on TLS status (default to https if not specified)
-      const protocol = backendStatus?.useTLS === false ? 'http' : 'https';
-      
-      // Backend is ready, store config in preload context
-      reliantConfig = {
-        grpcPort: grpcPort,
-        grpcUrl: `${protocol}://localhost:${grpcPort}`,
-        temporalUIPort: backendStatus?.temporalUIPort,
-        useTLS: backendStatus?.useTLS !== false,
+    /**
+     * Build the reliantConfig from backend status.
+     * The frontend connects to the hosted API URL (not localhost) since
+     * the Electron app now runs a local daemon that bridges to the cloud.
+     */
+    const buildConfig = (status, info) => {
+      // The API URL comes from the daemon's configuration (hosted API)
+      const apiUrl = status?.apiUrl || 'https://reliantapi.com';
+      return {
+        grpcUrl: apiUrl,
+        apiUrl: apiUrl,
+        gatewayUrl: status?.gatewayUrl || '',
+        daemonPort: status?.daemonPort || null,
         isElectron: true,
-        platform: appInfo.platform,
-        isDev: !appInfo.isPackaged
+        platform: info.platform,
+        isDev: !info.isPackaged
       };
+    };
+
+    // Check if the daemon is running (has a valid port)
+    if (typeof daemonPort === 'number' && daemonPort > 0) {
+      // Daemon is ready, store config in preload context
+      reliantConfig = buildConfig(backendStatus, appInfo);
 
       // Notify renderer that config is ready via postMessage (works with context isolation)
       window.postMessage({ type: 'reliant-config-ready', config: reliantConfig }, '*');
       log('info', 'Config ready message posted');
 
-      // Listen for backend port changes
-      ipcRenderer.on('backend-port', (event, newPort) => {
-        const protocol = reliantConfig.useTLS ? 'https' : 'http';
-        reliantConfig.grpcPort = newPort;
-        reliantConfig.grpcUrl = `${protocol}://localhost:${newPort}`;
+      // Listen for daemon restart events
+      ipcRenderer.on('backend-port', async (event, newPort) => {
+        const latestStatus = await ipcRenderer.invoke('get-backend-status');
+        reliantConfig = buildConfig(latestStatus, appInfo);
+        reliantConfig.daemonPort = newPort;
 
-        // Notify renderer of port change via postMessage
+        // Notify renderer of config change via postMessage
         window.postMessage({ type: 'backend-port-changed', port: newPort }, '*');
       });
     } else {
-      log('info', 'Backend not ready yet (port:', grpcPort, '), waiting for backend-port event...');
-      // Backend not ready, wait for it via event
-      // Set up a listener for when the backend port becomes available
+      log('info', 'Daemon not ready yet (port:', daemonPort, '), waiting for backend-port event...');
+      // Daemon not ready, wait for it via event
       ipcRenderer.once('backend-port', async (event, port) => {
         log('info', 'Received backend-port event with port:', port);
-        // Only inject config if we have a valid port
         if (typeof port === 'number' && port > 0) {
-          // Get app info and backend status from main process
-          const [appInfo, backendStatus] = await Promise.all([
+          const [latestAppInfo, latestStatus] = await Promise.all([
             ipcRenderer.invoke('get-app-info'),
             ipcRenderer.invoke('get-backend-status')
           ]);
 
-          // Determine protocol based on TLS status
-          const protocol = backendStatus?.useTLS === false ? 'http' : 'https';
-          
-          reliantConfig = {
-            grpcPort: port,
-            grpcUrl: `${protocol}://localhost:${port}`,
-            temporalUIPort: backendStatus?.temporalUIPort,
-            useTLS: backendStatus?.useTLS !== false,
-            isElectron: true,
-            platform: appInfo.platform,
-            isDev: !appInfo.isPackaged
-          };
+          reliantConfig = buildConfig(latestStatus, latestAppInfo);
+          reliantConfig.daemonPort = port;
 
           log('info', 'Config stored from event:', reliantConfig);
 
@@ -333,11 +328,11 @@ const injectReliantConfig = async () => {
           log('error', 'Invalid port received from backend-port event:', port);
         }
 
-        // Set up ongoing listener for port changes
-        ipcRenderer.on('backend-port', (event, newPort) => {
-          const protocol = reliantConfig?.useTLS ? 'https' : 'http';
-          reliantConfig.grpcPort = newPort;
-          reliantConfig.grpcUrl = `${protocol}://localhost:${newPort}`;
+        // Set up ongoing listener for daemon restarts
+        ipcRenderer.on('backend-port', async (event, newPort) => {
+          const latestStatus = await ipcRenderer.invoke('get-backend-status');
+          reliantConfig = buildConfig(latestStatus, appInfo);
+          reliantConfig.daemonPort = newPort;
 
           window.dispatchEvent(new CustomEvent('backend-port-changed', {
             detail: { port: newPort }
@@ -353,20 +348,17 @@ const injectReliantConfig = async () => {
     log('info', 'Setting up fallback listener for backend-port event...');
     ipcRenderer.once('backend-port', async (event, port) => {
       log('info', 'Fallback: Received backend-port event with port:', port);
-      // Get app info and backend status from main process
       const [appInfo, backendStatus] = await Promise.all([
         ipcRenderer.invoke('get-app-info'),
         ipcRenderer.invoke('get-backend-status')
       ]);
 
-      // Determine protocol based on TLS status
-      const protocol = backendStatus?.useTLS === false ? 'http' : 'https';
-      
+      const apiUrl = backendStatus?.apiUrl || 'https://reliantapi.com';
       reliantConfig = {
-        grpcPort: port,
-        grpcUrl: `${protocol}://localhost:${port}`,
-        temporalUIPort: backendStatus?.temporalUIPort,
-        useTLS: backendStatus?.useTLS !== false,
+        grpcUrl: apiUrl,
+        apiUrl: apiUrl,
+        gatewayUrl: backendStatus?.gatewayUrl || '',
+        daemonPort: port,
         isElectron: true,
         platform: appInfo.platform,
         isDev: !appInfo.isPackaged

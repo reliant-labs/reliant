@@ -5,7 +5,7 @@ package daemon
 // instead of calling os.*/exec directly, enabling both local and remote execution.
 //
 // Two implementations:
-//   - LocalClient: direct os.*/exec calls (monolith mode or running on daemon itself)
+//   - LocalClient: direct os.*/exec calls (running on daemon itself)
 //   - RemoteClient: proxies via DaemonRouter.SendDaemonCommand (cloud/distributed mode)
 type Client interface {
 	FileSystem

@@ -67,7 +67,7 @@ async function handleCloudLogic(): Promise<HandleCloudResult> {
   // Path 3: No daemons → create
   try {
     await createDaemon({
-      name: "onboarding-workspace",
+      name: "onboarding-daemon",
       daemonType: 1,
       size: 1,
       gitRepo: "",
@@ -167,7 +167,7 @@ describe("handleCloud orchestration", () => {
 
     expect(result.provisioning).toBe(true);
     expect(mockCreateDaemon).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "onboarding-workspace" }),
+      expect.objectContaining({ name: "onboarding-daemon" }),
     );
     expect(mockResumeDaemon).not.toHaveBeenCalled();
   });

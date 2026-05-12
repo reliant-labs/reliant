@@ -25,6 +25,7 @@ import { Workflow, Sparkles, Settings2 } from "lucide-react";
 import { useOnboardingChecklistStore } from "../../store/onboardingChecklistStore";
 import { useViewerStore } from "../../store/viewerStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
+import { trackEvent } from "../../lib/analytics";
 
 import {
   ONBOARDING_STEPS,
@@ -329,6 +330,15 @@ export function OnboardingWizard() {
     }
   }, [isInitialized, loadState]);
 
+  // Track onboarding_started when wizard becomes active
+  useEffect(() => {
+    if (isWizardActive && currentStepId) {
+      trackEvent("onboarding_started", { totalSteps: ONBOARDING_STEPS.length });
+    }
+    // Only fire when wizard activates, not on every step change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isWizardActive]);
+
   // The guided tour is started explicitly from onboarding launch choices or the setup guide.
 
   // Handle view context based on current step
@@ -396,6 +406,12 @@ export function OnboardingWizard() {
         const vs = useViewerStore.getState();
         if (vs.isSettingsMode) vs.setSettingsMode(false);
       }
+      trackEvent("onboarding_step_completed", {
+        stepId: currentStepId,
+        stepName: currentStep.title,
+        stepsCompleted: stepIndex + 1,
+        totalSteps: ONBOARDING_STEPS.length,
+      });
       await completeStep(currentStepId);
       nextStep();
     };
@@ -405,6 +421,12 @@ export function OnboardingWizard() {
       const vs = useViewerStore.getState();
       if (vs.isWorkflowMode) vs.setWorkflowMode(false);
       if (vs.isSettingsMode) vs.setSettingsMode(false);
+      trackEvent("onboarding_step_skipped", {
+        stepId: currentStepId,
+        stepName: currentStep.title,
+        stepsCompleted: stepIndex,
+        totalSteps: ONBOARDING_STEPS.length,
+      });
       await skipAll();
     };
 

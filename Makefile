@@ -279,19 +279,18 @@ migration:
 	fi
 	@echo "$(YELLOW)Creating migration: $(NAME)$(NC)"
 	@TIMESTAMP=$$(( $$(date +%s) * 1000000 )); \
-	LATEST=$$(ls -1 internal/db/migrations/sqlite/*.sql 2>/dev/null | xargs -I{} basename {} | grep -oE '^[0-9]+' | sort -rn | head -1 || echo "0"); \
+	LATEST=$$(ls -1 internal/db/migrations/postgres/*.sql 2>/dev/null | xargs -I{} basename {} | grep -oE '^[0-9]+' | sort -rn | head -1 || echo "0"); \
 	if [ "$$TIMESTAMP" -le "$$LATEST" ]; then \
 		TIMESTAMP=$$((LATEST + 1)); \
 		echo "$(YELLOW)⚠️  Timestamp collision detected, bumped to $$TIMESTAMP$(NC)"; \
 	fi; \
-	FILE="internal/db/migrations/sqlite/$${TIMESTAMP}_$(NAME).sql"; \
+	FILE="internal/db/migrations/postgres/$${TIMESTAMP}_$(NAME).sql"; \
 	printf -- '-- +goose Up\n\n-- +goose Down\n' > "$$FILE"; \
 	echo "$(GREEN)✅ Migration created: $$FILE$(NC)"
 	@echo "$(YELLOW)Next steps:$(NC)"
 	@echo "  1. Edit the migration file"
-	@echo "  2. If schema changes affect Postgres, add matching migration in internal/db/migrations/postgres/"
-	@echo "  3. Run: make db-regenerate"
-	@echo "  4. Write your Go code using the new types"
+	@echo "  2. Run: make db-regenerate"
+	@echo "  3. Write your Go code using the new types"
 
 ## postgres-up: Start local Postgres container for DATABASE_DRIVER=postgres dev
 postgres-up:

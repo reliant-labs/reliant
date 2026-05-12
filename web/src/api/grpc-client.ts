@@ -179,7 +179,7 @@ const LONG_TIMEOUT_METHODS: Record<string, number> = {
   // Provider API key validation - external network call
   "ValidateProviderAPIKey": PROVIDER_VALIDATION_TIMEOUT_MS,
   "UpdateProviderAPIKey": PROVIDER_VALIDATION_TIMEOUT_MS,
-  "SyncReliantProvider": PROVIDER_VALIDATION_TIMEOUT_MS,
+
   // Streaming methods should not have client-side timeout
   // These are server-streaming RPCs that manage their own lifecycle via AbortController
   "StreamUserUpdates": 0,

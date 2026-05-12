@@ -3,6 +3,7 @@ package auth
 
 import (
 	"context"
+	"sync"
 )
 
 type contextKey string
@@ -13,6 +14,30 @@ const (
 	UserEmailContextKey contextKey = "user_email"
 	DaemonIDContextKey  contextKey = "daemon_id"
 )
+
+// userJWTs stores the latest JWT for each authenticated user.
+// Updated on every gRPC request by the auth interceptor so that
+// subsystems (e.g. the Reliant LLM driver) can forward the token
+// without requiring the original request context.
+var (
+	userJWTs   = make(map[string]string)
+	userJWTsMu sync.RWMutex
+)
+
+// SetUserJWT stores the latest JWT for the given user.
+func SetUserJWT(userID, token string) {
+	userJWTsMu.Lock()
+	userJWTs[userID] = token
+	userJWTsMu.Unlock()
+}
+
+// GetUserJWT returns the latest JWT for the given user.
+func GetUserJWT(userID string) (string, bool) {
+	userJWTsMu.RLock()
+	token, ok := userJWTs[userID]
+	userJWTsMu.RUnlock()
+	return token, ok
+}
 
 // GetUserIDFromContext extracts the user ID from the context
 func GetUserIDFromContext(ctx context.Context) (string, bool) {

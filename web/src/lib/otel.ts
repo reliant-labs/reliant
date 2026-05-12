@@ -4,6 +4,8 @@ import { resourceFromAttributes } from '@opentelemetry/resources';
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
 import { ZoneContextManager } from '@opentelemetry/context-zone';
 import { W3CTraceContextPropagator } from '@opentelemetry/core';
+import { registerInstrumentations } from '@opentelemetry/instrumentation';
+import { getWebAutoInstrumentations } from '@opentelemetry/auto-instrumentations-web';
 import { trace, propagation } from '@opentelemetry/api';
 
 let initialized = false;
@@ -38,6 +40,20 @@ export function initOTelTracing() {
   // Use ZoneContextManager for async context propagation in browser
   provider.register({
     contextManager: new ZoneContextManager(),
+  });
+
+  // Auto-instrument fetch, XMLHttpRequest, document load
+  registerInstrumentations({
+    instrumentations: [
+      getWebAutoInstrumentations({
+        '@opentelemetry/instrumentation-fetch': {
+          propagateTraceHeaderCorsUrls: [/.*/],
+        },
+        '@opentelemetry/instrumentation-xml-http-request': {
+          propagateTraceHeaderCorsUrls: [/.*/],
+        },
+      }),
+    ],
   });
 
   initialized = true;

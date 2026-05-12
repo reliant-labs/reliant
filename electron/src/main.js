@@ -950,9 +950,8 @@ async function createWindow(options = {}) {
   let windowTitle = "Reliant";
   if (!app.isPackaged && process.cwd()) {
     const basename = path.basename(process.cwd());
-    const grpcPort = process.env.GRPC_PORT || "9090";
     const frontendPort = process.env.FRONTEND_PORT || "5173";
-    windowTitle = `Reliant [${basename}] - gRPC:${grpcPort} Frontend:${frontendPort}`;
+    windowTitle = `Reliant [${basename}] - Frontend:${frontendPort}`;
   }
 
   mainWindow = new BrowserWindow({
@@ -1979,7 +1978,7 @@ ipcMain.handle("set-mock-driver-config", async (event, config) => {
 
     // Store in backend manager for next restart
     if (backendManager) {
-      backendManager.mockDriverConfig = config;
+      // mockDriverConfig removed — daemon mode doesn't support mock drivers
     }
 
     return true;
@@ -2087,8 +2086,8 @@ ipcMain.handle("update-privacy-settings", async (event, settings) => {
   // For now, keep file-based storage for backwards compatibility
   writePrivacySettings(settings);
 
-  // TODO: Call backend API to update database and dynamically switch clients
-  // Example: POST http://localhost:${grpcPort}/api/v2/settings/privacy
+  // TODO: Call hosted API to update database and dynamically switch clients
+  // Example: POST ${apiUrl}/api/v2/settings/privacy
   // This will allow no-restart privacy changes
 
   // Update environment variable for backend (temporary until DB integration)

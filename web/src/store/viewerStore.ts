@@ -6,6 +6,7 @@ import { useWorkspaceStateStore, type SerializedViewer } from "./workspaceStateS
 import { useWorktreeStore } from "./worktreeStore";
 import { logger } from "../lib/logger";
 import { api } from "../api/client";
+import { trackEvent } from "../lib/analytics";
 import { FileChangeStatus } from "../gen/reliant/v1/common_pb";
 
 export type ViewerType = "diff" | "file" | "worktrees" | "projects" | "agents" | "commands" | "browser" | "workflow";
@@ -360,8 +361,10 @@ export const useViewerStore = create<ViewerState>()((set, get) => ({
         if (open) {
           const pageName = workflowName ? 'workflow_builder' : 'workflow_hub';
           api.settings.trackPageVisited(pageName, previousMode);
+          trackEvent("page_visited", { pageName, previousPage: previousMode });
         } else {
           api.settings.trackPageVisited('chat', previousMode);
+          trackEvent("page_visited", { pageName: "chat", previousPage: previousMode });
         }
 
         // Persist to workspace state
@@ -397,6 +400,7 @@ export const useViewerStore = create<ViewerState>()((set, get) => ({
           });
           // Track page visit
           api.settings.trackPageVisited('settings', previousMode);
+          trackEvent("page_visited", { pageName: "settings", previousPage: previousMode });
         } else {
           // When closing settings, return to workflow mode if that's where we came from
           const { returnToWorkflow } = get();

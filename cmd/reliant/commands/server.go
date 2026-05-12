@@ -17,7 +17,7 @@ func newServerCmd() *cobra.Command {
 		Use:   "server",
 		Short: "Run cloud server components",
 		Long: `Run Reliant cloud server components. Each subcommand starts a specific
-server role for split-deployment mode (as opposed to 'monolith' mode).`,
+server role for split-deployment mode.`,
 	}
 
 	cmd.AddCommand(newServerAPICmd())
@@ -92,9 +92,9 @@ Designed to run as N replicas behind a load balancer.`,
 	cmd.Flags().IntVar(&opts.HealthPort, "health-port", serverEnvOrDefaultInt("HEALTH_PORT", 8081), "Health/readiness HTTP endpoint port")
 
 	// Database
-	cmd.Flags().StringVar(&opts.DatabaseDriver, "db-driver", serverEnvOrDefault("DATABASE_DRIVER", "postgres"), "Database driver (sqlite or postgres)")
-	cmd.Flags().StringVar(&opts.DatabaseURL, "db-url", serverEnvOrDefault("DATABASE_URL", ""), "Database connection URL (required for postgres)")
-	cmd.Flags().StringVar(&opts.DataDir, "data-dir", serverEnvOrDefault("DATA_DIR", "./data"), "Data directory for logs, certs, and sqlite")
+	cmd.Flags().StringVar(&opts.DatabaseDriver, "db-driver", serverEnvOrDefault("DATABASE_DRIVER", "postgres"), "Database driver (postgres)")
+	cmd.Flags().StringVar(&opts.DatabaseURL, "db-url", serverEnvOrDefault("DATABASE_URL", ""), "Database connection URL (required)")
+	cmd.Flags().StringVar(&opts.DataDir, "data-dir", serverEnvOrDefault("DATA_DIR", "./data"), "Data directory for logs and certs")
 
 	// Temporal
 	cmd.Flags().StringVar(&opts.TemporalHost, "temporal-host", serverEnvOrDefault("TEMPORAL_HOST", "localhost"), "Temporal server host")
@@ -139,9 +139,9 @@ Designed to run as N replicas for horizontal scaling.`,
 	}
 
 	// Database
-	cmd.Flags().StringVar(&opts.DatabaseDriver, "db-driver", serverEnvOrDefault("DATABASE_DRIVER", "postgres"), "Database driver (sqlite or postgres)")
-	cmd.Flags().StringVar(&opts.DatabaseURL, "db-url", serverEnvOrDefault("DATABASE_URL", ""), "Database connection URL (required for postgres)")
-	cmd.Flags().StringVar(&opts.DataDir, "data-dir", serverEnvOrDefault("DATA_DIR", "./data"), "Data directory for logs and sqlite")
+	cmd.Flags().StringVar(&opts.DatabaseDriver, "db-driver", serverEnvOrDefault("DATABASE_DRIVER", "postgres"), "Database driver (postgres)")
+	cmd.Flags().StringVar(&opts.DatabaseURL, "db-url", serverEnvOrDefault("DATABASE_URL", ""), "Database connection URL (required)")
+	cmd.Flags().StringVar(&opts.DataDir, "data-dir", serverEnvOrDefault("DATA_DIR", "./data"), "Data directory for logs")
 
 	// Temporal
 	cmd.Flags().StringVar(&opts.TemporalHost, "temporal-host", serverEnvOrDefault("TEMPORAL_HOST", "localhost"), "Temporal server host")
@@ -180,9 +180,9 @@ Designed to run as few stateful replicas.`,
 	cmd.Flags().StringVar(&opts.BindAddress, "bind-address", serverEnvOrDefault("BIND_ADDRESS", "0.0.0.0"), "Network address to bind to")
 
 	// Database
-	cmd.Flags().StringVar(&opts.DatabaseDriver, "db-driver", serverEnvOrDefault("DATABASE_DRIVER", "postgres"), "Database driver (sqlite or postgres)")
-	cmd.Flags().StringVar(&opts.DatabaseURL, "db-url", serverEnvOrDefault("DATABASE_URL", ""), "Database connection URL (required for postgres)")
-	cmd.Flags().StringVar(&opts.DataDir, "data-dir", serverEnvOrDefault("DATA_DIR", "./data"), "Data directory for logs, certs, and sqlite")
+	cmd.Flags().StringVar(&opts.DatabaseDriver, "db-driver", serverEnvOrDefault("DATABASE_DRIVER", "postgres"), "Database driver (postgres)")
+	cmd.Flags().StringVar(&opts.DatabaseURL, "db-url", serverEnvOrDefault("DATABASE_URL", ""), "Database connection URL (required)")
+	cmd.Flags().StringVar(&opts.DataDir, "data-dir", serverEnvOrDefault("DATA_DIR", "./data"), "Data directory for logs and certs")
 
 	// NATS
 	cmd.Flags().StringVar(&opts.NATSURL, "nats-url", serverEnvOrDefault("NATS_URL", ""), "NATS server URL (required)")

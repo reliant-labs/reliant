@@ -87,7 +87,6 @@ type knownViolation struct {
 var knownViolations = []knownViolation{
 	// grpc/services
 	{File: "internal/grpc/services/mcp.go", Reason: "TODO: route through daemon — reads/writes MCP config, stat checks"},
-	{File: "internal/grpc/services/system.go", Reason: "desktop-only DevAuth endpoints — guarded by localMode flag, unavailable in cloud mode"},
 	// skills
 
 	// config

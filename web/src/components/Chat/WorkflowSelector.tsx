@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { Workflow, ChevronDown, Check, Star } from "lucide-react";
 import { cn } from "../../lib/utils";
+import { toast } from "sonner";
 import { Tooltip } from "../ui/Tooltip";
 import { useWorkflows } from "../../store/globalDataStore";
 import { usePreferencesStore, DEFAULT_WORKFLOW } from "../../store/preferencesStore";
@@ -125,7 +126,18 @@ export function WorkflowSelector({
   const handleSelect = useCallback((workflowName: string | null) => {
     onChange?.(workflowName);
     setIsOpen(false);
-  }, [onChange]);
+
+    // Show workflow info toast
+    const effectiveName = workflowName || userDefaultWorkflow;
+    const workflow = sortedWorkflows.find(w => w.name === effectiveName);
+    if (workflow?.description && typeof workflow.description === 'string') {
+      const displayName = getWorkflowDisplayName(workflow.name, true);
+      toast.info(displayName, {
+        description: workflow.description,
+        duration: 4000,
+      });
+    }
+  }, [onChange, sortedWorkflows, userDefaultWorkflow]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent, workflowName: string) => {
     e.preventDefault();

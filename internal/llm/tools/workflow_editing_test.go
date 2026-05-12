@@ -19,11 +19,10 @@ import (
 func setupTestDB(t *testing.T) (db.Repository, func()) {
 	t.Helper()
 
-	repo, err := db.NewInMemoryRepo()
-	require.NoError(t, err)
+	repo := db.NewTestRepo(t)
 
 	// Create test project
-	err = repo.CreateProject(context.Background(), &db.Project{
+	err := repo.CreateProject(context.Background(), &db.Project{
 		ID:        "test-project",
 		Name:      "Test Project",
 		Path:      "/tmp/test",

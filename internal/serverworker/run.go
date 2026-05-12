@@ -60,8 +60,8 @@ func Run(ctx context.Context, opts Options) error {
 	// -----------------------------------------------------------------
 	// 1. Validate required config
 	// -----------------------------------------------------------------
-	if opts.DatabaseDriver == "postgres" && opts.DatabaseURL == "" {
-		return fmt.Errorf("DATABASE_URL is required when DATABASE_DRIVER=postgres")
+	if opts.DatabaseURL == "" {
+		return fmt.Errorf("DATABASE_URL is required")
 	}
 	if opts.NATSURL == "" {
 		return fmt.Errorf("NATS_URL is required (tool routing and streaming go through NATS)")
@@ -167,12 +167,6 @@ func Run(ctx context.Context, opts Options) error {
 	streamingDriver, err := streaming.ParseStreamingDriver(opts.StreamingDriver)
 	if err != nil {
 		return fmt.Errorf("invalid STREAMING_DRIVER %q: %w", opts.StreamingDriver, err)
-	}
-
-	// Worker is always multi-process — force NATS
-	if streamingDriver == streaming.DriverMemory {
-		streamingDriver = streaming.DriverNATS
-		logging.Info("temporal-worker: forcing STREAMING_DRIVER to nats")
 	}
 
 	streamingHub, err := streaming.NewStreamingHub(streaming.StreamingConfig{

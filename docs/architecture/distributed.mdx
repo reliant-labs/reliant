@@ -5,9 +5,9 @@ description: "Running Reliant as separate cloud-scalable server components"
 
 ## Overview
 
-Distributed mode splits Reliant into three independently deployable server types: an **API server**, a **Temporal worker**, and a **daemon gateway**. Each runs as a separate process, communicates through shared infrastructure, and can be scaled according to its workload characteristics.
+Reliant runs as three independently deployable server types: an **API server**, a **Temporal worker**, and a **daemon gateway**. Each runs as a separate process, communicates through shared infrastructure, and can be scaled according to its workload characteristics.
 
-This mode replaces the monolith's embedded services with external infrastructure. Instead of an embedded Temporal server and in-memory streaming, distributed mode requires a Postgres database, an external Temporal cluster (self-hosted or Temporal Cloud), and a NATS message broker. Tool execution, which runs in-process in monolith mode, moves to a separate client-side daemon that connects through the gateway.
+The deployment requires a Postgres database, an external Temporal cluster (self-hosted or Temporal Cloud), and a NATS message broker. Tool execution runs on a separate client-side daemon that connects through the gateway.
 
 The three server types are started via `reliant server` subcommands:
 
@@ -239,22 +239,6 @@ API servers and workers scale linearly with load. Adding more API server replica
 
 Gateways scale differently because each daemon maintains a single persistent connection to one gateway. The gateway's capacity is bounded by the number of concurrent daemon connections it can manage, which is typically large (thousands of gRPC streams per instance). Deploy multiple gateways for availability rather than throughput—if a gateway goes down, its daemons reconnect to a surviving instance.
 
-## Comparison with Monolith Mode
-
-Distributed mode replaces the monolith's embedded components with external infrastructure:
-
-| Concern | Monolith | Distributed |
-|---------|----------|-------------|
-| Database | SQLite (local file) | Postgres (external) |
-| Temporal | Embedded Temporal server (`temporalite`) | External Temporal cluster |
-| Event streaming | `MemoryUpdateHub` (in-process) | `NATSUpdateHub` (cross-process via NATS) |
-| Daemon routing | `LocalDaemonRouter` (direct function calls) | `NATSDaemonRouter` + `NATSToolBridge` (via NATS) |
-| Tool execution | In-process daemon, auto-started on first request | Separate `reliant daemon` process, connected through gateway |
-| Deployment | Single `reliant monolith` process | Three server types + external infrastructure |
-
-The monolith is designed for local development and single-user scenarios. Distributed mode is designed for multi-user cloud deployments where each component needs independent scaling, monitoring, and fault isolation.
-
 ## Related Topics
 
 - [Architecture Overview](/architecture/overview) — High-level architecture and component relationships
-- [Monolith Mode](/architecture/monolith) — Single-process deployment for local development

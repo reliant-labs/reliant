@@ -42,7 +42,7 @@ func (s *DaemonRegistryService) ListDaemons(
 		return nil, connect.NewError(connect.CodeUnauthenticated, nil)
 	}
 
-	// Trigger lazy daemon start (monolith) and wait briefly for it to register
+	// Trigger daemon connection check and wait briefly for it to register
 	// before querying the DB. No-op in cloud mode where the daemon is external.
 	if s.router != nil {
 		_, _ = s.router.IsDaemonOnline(ctx, userID)

@@ -57,10 +57,6 @@ func NewDaemonServer(cfg *DaemonConfig) *DaemonServer {
 		panic("grpc daemon server requires a non-nil ToolsDaemonService")
 	}
 
-	if cfg.ToolExecutor != nil {
-		cfg.ToolExecutor.SetDaemonRouter(toolexec.NewLocalDaemonRouter(toolsDaemonService))
-	}
-
 	daemonAuthInterceptor, err := interceptors.NewDaemonAuthInterceptor(cfg.PATValidator)
 	if err != nil {
 		panic(fmt.Sprintf("grpc daemon server auth interceptor setup failed: %v", err))

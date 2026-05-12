@@ -14,6 +14,7 @@ import { useApiKeySetupStore } from "../../store/apiKeySetupStore";
 import { useViewerStore } from "../../store/viewerStore";
 import { REQUIRED_ITEMS, BONUS_ITEMS, CHECKLIST_ITEMS } from "./constants";
 import type { ChecklistItem, ChecklistItemId } from "./types";
+import { trackEvent } from "../../lib/analytics";
 
 // ─── Action Handlers ──────────────────────────────────────────────────────────
 
@@ -147,6 +148,12 @@ function ChecklistItemRow({
         <button
           onClick={(e) => {
             e.stopPropagation();
+            trackEvent("onboarding_step_completed", {
+              stepId: item.id,
+              stepName: item.title,
+              stepsCompleted: 0,
+              totalSteps: CHECKLIST_ITEMS.length,
+            });
             executeItemAction(item);
           }}
           className="shrink-0 mt-0.5 text-xs font-medium px-2.5 py-1 rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"

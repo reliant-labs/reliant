@@ -50,7 +50,7 @@ type wsResizeMessage struct {
 //   - worktreeId: (optional) worktree identifier
 //
 // The handler works identically with NATSDaemonRouter (daemon-gateway) and
-// LocalDaemonRouter (monolith).
+// LocalDaemonRouter.
 func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidator) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()

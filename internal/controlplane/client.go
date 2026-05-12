@@ -15,9 +15,6 @@ import (
 const defaultBaseURL = "http://localhost:8090"
 
 type Client interface {
-	GetCurrentUserReliantState(ctx context.Context, authHeader string) (*controlplanev1.GetCurrentUserReliantStateResponse, error)
-	RepairCurrentUserReliantAccess(ctx context.Context, authHeader string) (*controlplanev1.RepairCurrentUserReliantAccessResponse, error)
-	RotateCurrentUserReliantAccess(ctx context.Context, authHeader, gracePeriod string) (*controlplanev1.RotateCurrentUserReliantAccessResponse, error)
 	CheckManagedReliantAffordability(ctx context.Context, managedKey string, request ManagedReliantAffordabilityRequest) (*controlplanev1.CheckManagedReliantAffordabilityResponse, error)
 	ReserveManagedReliantUsage(ctx context.Context, managedKey string, request ManagedReliantReservationRequest) (*controlplanev1.ReserveManagedReliantUsageResponse, error)
 	FinalizeManagedReliantUsage(ctx context.Context, managedKey string, request ManagedReliantFinalizeRequest) (*controlplanev1.FinalizeManagedReliantUsageResponse, error)
@@ -81,40 +78,6 @@ func (c *connectClient) billingClient() controlplanev1connect.BillingServiceClie
 	return controlplanev1connect.NewBillingServiceClient(c.httpClient, c.baseURL)
 }
 
-func (c *connectClient) GetCurrentUserReliantState(ctx context.Context, authHeader string) (*controlplanev1.GetCurrentUserReliantStateResponse, error) {
-	req := connect.NewRequest(&controlplanev1.GetCurrentUserReliantStateRequest{})
-	attachAuthorization(req, authHeader)
-	resp, err := c.billingClient().GetCurrentUserReliantState(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	return resp.Msg, nil
-}
-
-func (c *connectClient) RepairCurrentUserReliantAccess(ctx context.Context, authHeader string) (*controlplanev1.RepairCurrentUserReliantAccessResponse, error) {
-	req := connect.NewRequest(&controlplanev1.RepairCurrentUserReliantAccessRequest{})
-	attachAuthorization(req, authHeader)
-	resp, err := c.billingClient().RepairCurrentUserReliantAccess(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	return resp.Msg, nil
-}
-
-func (c *connectClient) RotateCurrentUserReliantAccess(ctx context.Context, authHeader, gracePeriod string) (*controlplanev1.RotateCurrentUserReliantAccessResponse, error) {
-	msg := &controlplanev1.RotateCurrentUserReliantAccessRequest{}
-	if trimmed := strings.TrimSpace(gracePeriod); trimmed != "" {
-		msg.GracePeriod = &trimmed
-	}
-	req := connect.NewRequest(msg)
-	attachAuthorization(req, authHeader)
-	resp, err := c.billingClient().RotateCurrentUserReliantAccess(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-	return resp.Msg, nil
-}
-
 func (c *connectClient) CheckManagedReliantAffordability(ctx context.Context, managedKey string, request ManagedReliantAffordabilityRequest) (*controlplanev1.CheckManagedReliantAffordabilityResponse, error) {
 	msg := &controlplanev1.CheckManagedReliantAffordabilityRequest{
 		ManagedKey:            strings.TrimSpace(managedKey),
@@ -124,7 +87,9 @@ func (c *connectClient) CheckManagedReliantAffordability(ctx context.Context, ma
 		EstimatedInputTokens:  request.EstimatedInputTokens,
 		EstimatedOutputTokens: request.EstimatedOutputTokens,
 	}
-	resp, err := c.billingClient().CheckManagedReliantAffordability(ctx, connect.NewRequest(msg))
+	req := connect.NewRequest(msg)
+	attachAuthorization(req, "Bearer "+strings.TrimSpace(managedKey))
+	resp, err := c.billingClient().CheckManagedReliantAffordability(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +106,9 @@ func (c *connectClient) ReserveManagedReliantUsage(ctx context.Context, managedK
 		EstimatedInputTokens:  request.EstimatedInputTokens,
 		EstimatedOutputTokens: request.EstimatedOutputTokens,
 	}
-	resp, err := c.billingClient().ReserveManagedReliantUsage(ctx, connect.NewRequest(msg))
+	req := connect.NewRequest(msg)
+	attachAuthorization(req, "Bearer "+strings.TrimSpace(managedKey))
+	resp, err := c.billingClient().ReserveManagedReliantUsage(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +129,9 @@ func (c *connectClient) FinalizeManagedReliantUsage(ctx context.Context, managed
 	if request.ObservedCostUSD != nil {
 		msg.ObservedCostUsd = request.ObservedCostUSD
 	}
-	resp, err := c.billingClient().FinalizeManagedReliantUsage(ctx, connect.NewRequest(msg))
+	req := connect.NewRequest(msg)
+	attachAuthorization(req, "Bearer "+strings.TrimSpace(managedKey))
+	resp, err := c.billingClient().FinalizeManagedReliantUsage(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +139,9 @@ func (c *connectClient) FinalizeManagedReliantUsage(ctx context.Context, managed
 }
 
 func (c *connectClient) ReleaseManagedReliantUsageReservation(ctx context.Context, managedKey, reservationID string) (*controlplanev1.ReleaseManagedReliantUsageReservationResponse, error) {
-	resp, err := c.billingClient().ReleaseManagedReliantUsageReservation(ctx, connect.NewRequest(&controlplanev1.ReleaseManagedReliantUsageReservationRequest{ManagedKey: strings.TrimSpace(managedKey), ReservationId: strings.TrimSpace(reservationID)}))
+	req := connect.NewRequest(&controlplanev1.ReleaseManagedReliantUsageReservationRequest{ManagedKey: strings.TrimSpace(managedKey), ReservationId: strings.TrimSpace(reservationID)})
+	attachAuthorization(req, "Bearer "+strings.TrimSpace(managedKey))
+	resp, err := c.billingClient().ReleaseManagedReliantUsageReservation(ctx, req)
 	if err != nil {
 		return nil, err
 	}

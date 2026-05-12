@@ -3,7 +3,6 @@ package services
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 	"time"
 
@@ -35,60 +34,64 @@ func (m *mockTemporalSignalClient) SignalWorkflow(_ context.Context, workflowID,
 	return nil
 }
 
-// setupTestApprovalService creates an in-memory database and approval service for testing.
-func setupTestApprovalService(t *testing.T) (*ApprovalService, *db.Repo, *sql.DB) {
+// setupTestApprovalService creates a database and approval service for testing.
+func setupTestApprovalService(t *testing.T) (*ApprovalService, *db.Repo) {
 	t.Helper()
 
-	sqlDB, err := sql.Open("sqlite3", ":memory:")
-	require.NoError(t, err)
-
-	err = db.RunMigrations(sqlDB)
-	require.NoError(t, err)
-
-	repo := db.NewRepo(sqlDB)
+	repo := db.NewTestRepo(t)
 	service := NewApprovalService(repo, nil)
-	return service, repo, sqlDB
+	return service, repo
 }
 
 // setupTestApprovalServiceWithMockClient creates an approval service wired to a mock Temporal client
 // so we can verify signal routing.
-func setupTestApprovalServiceWithMockClient(t *testing.T) (*ApprovalService, *db.Repo, *sql.DB, *mockTemporalSignalClient) {
+func setupTestApprovalServiceWithMockClient(t *testing.T) (*ApprovalService, *db.Repo, *mockTemporalSignalClient) {
 	t.Helper()
 
-	sqlDB, err := sql.Open("sqlite3", ":memory:")
-	require.NoError(t, err)
-
-	err = db.RunMigrations(sqlDB)
-	require.NoError(t, err)
-
-	repo := db.NewRepo(sqlDB)
+	repo := db.NewTestRepo(t)
 	mockClient := &mockTemporalSignalClient{}
 	pauseService := workflowpkg.NewPauseService(mockClient, repo)
 	service := NewApprovalService(repo, pauseService)
-	return service, repo, sqlDB, mockClient
+	return service, repo, mockClient
 }
 
 // createApprovalTestData creates the prerequisite project, chat, and workflow for approval tests.
-func createApprovalTestData(t *testing.T, sqlDB *sql.DB) (chatID, workflowID string) {
+func createApprovalTestData(t *testing.T, repo *db.Repo) (chatID, workflowID string) {
 	t.Helper()
 
 	projectID := uuid.New().String()
 	chatID = uuid.New().String()
 	workflowID = uuid.New().String()
+	now := time.Now().UTC()
 
-	_, err := sqlDB.Exec(
-		`INSERT INTO projects (id, user_id, name, path, created_at, updated_at) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))`,
-		projectID, "test-user", "Test Project", "/tmp/test")
+	err := repo.CreateProject(context.Background(), &db.Project{
+		ID:         projectID,
+		UserID:     "test-user",
+		Name:       "Test Project",
+		Path:       "/tmp/test",
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		LastActive: now,
+	})
 	require.NoError(t, err)
 
-	_, err = sqlDB.Exec(
-		`INSERT INTO chats (id, title, project_id, user_id, created_at, updated_at, last_active) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'), datetime('now'))`,
-		chatID, "Test Chat", projectID, "test-user")
+	err = repo.CreateChat(context.Background(), &db.Chat{
+		ID:        chatID,
+		Title:     "Test Chat",
+		ProjectID: projectID,
+		UserID:    "test-user",
+		CreatedAt: now,
+		UpdatedAt: now,
+	})
 	require.NoError(t, err)
 
-	_, err = sqlDB.Exec(
-		`INSERT INTO workflows (id, chat_id, workflow_name, thread, status, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))`,
-		workflowID, chatID, "test-workflow", "/test", "running")
+	err = repo.CreateWorkflow(context.Background(), &db.Workflow{
+		ID:           workflowID,
+		ChatID:       chatID,
+		WorkflowName: "test-workflow",
+		Thread:       "/test",
+		Status:       db.WorkflowStatusRunning,
+	})
 	require.NoError(t, err)
 
 	return chatID, workflowID
@@ -130,10 +133,9 @@ func createTestApproval(t *testing.T, repo *db.Repo, chatID, workflowID string, 
 // pauseService.SignalWithRecovery with signal name "signal.approval.<id>"
 // and data containing status "approved".
 func TestApprovalService_Approve_SignalsApproval(t *testing.T) {
-	service, repo, sqlDB, mockClient := setupTestApprovalServiceWithMockClient(t)
-	defer sqlDB.Close()
+	service, repo, mockClient := setupTestApprovalServiceWithMockClient(t)
 
-	chatID, workflowID := createApprovalTestData(t, sqlDB)
+	chatID, workflowID := createApprovalTestData(t, repo)
 	approvalID := createTestApproval(t, repo, chatID, workflowID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING))
 
 	resp, err := service.Approve(context.Background(), connect.NewRequest(&reliantv1.ApproveRequest{
@@ -164,10 +166,9 @@ func TestApprovalService_Approve_SignalsApproval(t *testing.T) {
 // pauseService.SignalWithRecovery with signal name "signal.approval.<id>"
 // and data containing status "denied". It does NOT cancel the workflow.
 func TestApprovalService_Deny_SignalsDenial(t *testing.T) {
-	service, repo, sqlDB, mockClient := setupTestApprovalServiceWithMockClient(t)
-	defer sqlDB.Close()
+	service, repo, mockClient := setupTestApprovalServiceWithMockClient(t)
 
-	chatID, workflowID := createApprovalTestData(t, sqlDB)
+	chatID, workflowID := createApprovalTestData(t, repo)
 	approvalID := createTestApproval(t, repo, chatID, workflowID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING))
 
 	denialReason := "Not ready for production"
@@ -200,10 +201,9 @@ func TestApprovalService_Deny_SignalsDenial(t *testing.T) {
 // TestApprovalService_Approve_AlreadyProcessed returns FailedPrecondition for
 // an approval that was already resolved.
 func TestApprovalService_Approve_AlreadyProcessed(t *testing.T) {
-	service, repo, sqlDB := setupTestApprovalService(t)
-	defer sqlDB.Close()
+	service, repo := setupTestApprovalService(t)
 
-	chatID, workflowID := createApprovalTestData(t, sqlDB)
+	chatID, workflowID := createApprovalTestData(t, repo)
 	approvalID := createTestApproval(t, repo, chatID, workflowID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED))
 
 	_, err := service.Approve(context.Background(), connect.NewRequest(&reliantv1.ApproveRequest{
@@ -219,10 +219,9 @@ func TestApprovalService_Approve_AlreadyProcessed(t *testing.T) {
 // TestApprovalService_Deny_AlreadyProcessed returns FailedPrecondition for
 // an approval that was already resolved.
 func TestApprovalService_Deny_AlreadyProcessed(t *testing.T) {
-	service, repo, sqlDB := setupTestApprovalService(t)
-	defer sqlDB.Close()
+	service, repo := setupTestApprovalService(t)
 
-	chatID, workflowID := createApprovalTestData(t, sqlDB)
+	chatID, workflowID := createApprovalTestData(t, repo)
 	approvalID := createTestApproval(t, repo, chatID, workflowID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED))
 
 	_, err := service.Deny(context.Background(), connect.NewRequest(&reliantv1.DenyRequest{
@@ -237,8 +236,7 @@ func TestApprovalService_Deny_AlreadyProcessed(t *testing.T) {
 
 // TestApprovalService_Approve_NotFound returns NotFound for unknown approval IDs.
 func TestApprovalService_Approve_NotFound(t *testing.T) {
-	service, _, sqlDB := setupTestApprovalService(t)
-	defer sqlDB.Close()
+	service, _ := setupTestApprovalService(t)
 
 	_, err := service.Approve(context.Background(), connect.NewRequest(&reliantv1.ApproveRequest{
 		RequestId: "nonexistent-approval-id",
@@ -252,8 +250,7 @@ func TestApprovalService_Approve_NotFound(t *testing.T) {
 
 // TestApprovalService_Approve_MissingRequestID returns InvalidArgument when request_id is empty.
 func TestApprovalService_Approve_MissingRequestID(t *testing.T) {
-	service, _, sqlDB := setupTestApprovalService(t)
-	defer sqlDB.Close()
+	service, _ := setupTestApprovalService(t)
 
 	_, err := service.Approve(context.Background(), connect.NewRequest(&reliantv1.ApproveRequest{
 		RequestId: "",

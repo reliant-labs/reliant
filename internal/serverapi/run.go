@@ -84,8 +84,8 @@ func Run(ctx context.Context, opts Options) error {
 	// -----------------------------------------------------------------
 	// 1. Validate required config
 	// -----------------------------------------------------------------
-	if opts.DatabaseDriver == "postgres" && opts.DatabaseURL == "" {
-		return fmt.Errorf("DATABASE_URL is required when DATABASE_DRIVER=postgres")
+	if opts.DatabaseURL == "" {
+		return fmt.Errorf("DATABASE_URL is required")
 	}
 	if opts.NATSURL == "" {
 		return fmt.Errorf("NATS_URL is required (daemon routing goes through NATS)")
@@ -94,12 +94,6 @@ func Run(ctx context.Context, opts Options) error {
 	streamingDriver, err := streaming.ParseStreamingDriver(opts.StreamingDriver)
 	if err != nil {
 		return fmt.Errorf("invalid STREAMING_DRIVER %q: %w", opts.StreamingDriver, err)
-	}
-
-	// api-server is always stateless — force NATS for cross-process events
-	if streamingDriver == streaming.DriverMemory {
-		streamingDriver = streaming.DriverNATS
-		logging.Info("api-server: forcing STREAMING_DRIVER to nats (memory driver cannot receive cross-process events)")
 	}
 
 	// JWT public key: explicit value > file > env var
@@ -231,15 +225,9 @@ func Run(ctx context.Context, opts Options) error {
 		chatUpdateHub streaming.UpdateHub[db.ChatUpdate]
 	)
 
-	if streamingDriver == streaming.DriverNATS && opts.NATSURL != "" {
-		userUpdateHub = streaming.NewNATSUpdateHub[db.UserUpdate](nc, "user.updates", "UserUpdate")
-		chatUpdateHub = streaming.NewNATSUpdateHub[db.ChatUpdate](nc, "chat.updates", "ChatUpdate")
-		logging.Info("Update hubs initialized (NATS)")
-	} else {
-		userUpdateHub = streaming.NewMemoryUpdateHub[db.UserUpdate]("UserUpdate")
-		chatUpdateHub = streaming.NewMemoryUpdateHub[db.ChatUpdate]("ChatUpdate")
-		logging.Info("Update hubs initialized (memory)")
-	}
+	userUpdateHub = streaming.NewNATSUpdateHub[db.UserUpdate](nc, "user.updates", "UserUpdate")
+	chatUpdateHub = streaming.NewNATSUpdateHub[db.ChatUpdate](nc, "chat.updates", "ChatUpdate")
+	logging.Info("Update hubs initialized (NATS)")
 	defer func() { _ = userUpdateHub.Close() }()
 	defer func() { _ = chatUpdateHub.Close() }()
 

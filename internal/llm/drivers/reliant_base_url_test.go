@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -74,15 +75,16 @@ func TestResolveReliantAPIKey_PreservesManagedKeyForRemoteBaseURL(t *testing.T) 
 	assert.Nil(t, headers)
 }
 
-func TestBuildAvailableDrivers_ReliantManagedKeyUsesLoopbackMasterKey(t *testing.T) {
+func TestBuildAvailableDrivers_ReliantJWTUsesLoopbackMasterKey(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
 	ctx := context.Background()
-	userID := "test-user"
+	userID := "test-user-jwt-loopback"
+	jwt := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.dGVzdA"
 	t.Setenv("RELIANT_API_BASE_URL", "http://localhost:4000/v1")
 	t.Setenv("LITELLM_MASTER_KEY", "sk-local-master")
-	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "reliant", "rlnt_managed_key"))
+	auth.SetUserJWT(userID, jwt)
 
 	availableDrivers, err := BuildAvailableDrivers(ctx, repo, userID)
 	require.NoError(t, err)
@@ -91,18 +93,19 @@ func TestBuildAvailableDrivers_ReliantManagedKeyUsesLoopbackMasterKey(t *testing
 	require.True(t, ok)
 	assert.Equal(t, "http://localhost:4000/v1", cfg.BaseURL)
 	assert.Equal(t, "sk-local-master", cfg.APIKey)
-	assert.Equal(t, map[string]string{reliantManagedKeyForwardHeader: "rlnt_managed_key"}, cfg.ExtraHeaders)
+	assert.Equal(t, map[string]string{"X-Reliant-JWT": jwt}, cfg.ExtraHeaders)
 }
 
-func TestBuildAvailableDrivers_ReliantManagedKeyUsesInClusterLiteLLMMasterKey(t *testing.T) {
+func TestBuildAvailableDrivers_ReliantJWTUsesInClusterLiteLLMMasterKey(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
 	ctx := context.Background()
-	userID := "test-user"
+	userID := "test-user-jwt-cluster"
+	jwt := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.dGVzdA"
 	t.Setenv("RELIANT_API_BASE_URL", "http://litellm:4000/v1")
 	t.Setenv("LITELLM_MASTER_KEY", "sk-local-master")
-	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "reliant", "rlnt_managed_key"))
+	auth.SetUserJWT(userID, jwt)
 
 	availableDrivers, err := BuildAvailableDrivers(ctx, repo, userID)
 	require.NoError(t, err)
@@ -111,25 +114,26 @@ func TestBuildAvailableDrivers_ReliantManagedKeyUsesInClusterLiteLLMMasterKey(t 
 	require.True(t, ok)
 	assert.Equal(t, "http://litellm:4000/v1", cfg.BaseURL)
 	assert.Equal(t, "sk-local-master", cfg.APIKey)
-	assert.Equal(t, map[string]string{reliantManagedKeyForwardHeader: "rlnt_managed_key"}, cfg.ExtraHeaders)
+	assert.Equal(t, map[string]string{"X-Reliant-JWT": jwt}, cfg.ExtraHeaders)
 }
 
-func TestBuildAvailableDrivers_ReliantManualKeyKeepsLoopbackOverride(t *testing.T) {
+func TestBuildAvailableDrivers_ReliantJWTUsesDirectBearerForProduction(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
 	ctx := context.Background()
-	userID := "test-user"
-	t.Setenv("RELIANT_API_BASE_URL", "http://localhost:4000/v1")
-	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "reliant", "sk-litellm-test"))
+	userID := "test-user-jwt-prod"
+	jwt := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.dGVzdA"
+	t.Setenv("RELIANT_API_BASE_URL", "") // uses default production URL
+	auth.SetUserJWT(userID, jwt)
 
 	availableDrivers, err := BuildAvailableDrivers(ctx, repo, userID)
 	require.NoError(t, err)
 
 	cfg, ok := availableDrivers.Drivers["reliant"]
 	require.True(t, ok)
-	assert.Equal(t, "http://localhost:4000/v1", cfg.BaseURL)
-	assert.Equal(t, "sk-litellm-test", cfg.APIKey)
+	assert.Equal(t, "https://api.reliant.dev/v1", cfg.BaseURL)
+	assert.Equal(t, jwt, cfg.APIKey)
 	assert.Nil(t, cfg.ExtraHeaders)
 }
 
