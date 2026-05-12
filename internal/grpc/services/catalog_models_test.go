@@ -32,7 +32,8 @@ func TestCatalogService_ListModels_ReliantOnlyExposesCuratedAllowlist(t *testing
 
 	llmdrivers.InitializeAPIKeyProvider(repo)
 	ctx := newCatalogServiceTestContext()
-	require.NoError(t, repo.SetProviderAPIKey(ctx, "test-user", "reliant", "rlnt_test_key"))
+	// Reliant driver now uses JWT auth, not a stored API key.
+	auth.SetUserJWT("test-user", "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0LXVzZXIifQ.test")
 
 	svc := NewCatalogService(nil)
 	resp, err := svc.ListModels(ctx, connect.NewRequest(&reliantv1.ListModelsRequest{}))

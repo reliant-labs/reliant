@@ -9,7 +9,6 @@ import {
   completeOnboardingRPC,
   type ControlPlaneUser,
 } from "@/components/OnboardingFlow/api";
-import { api } from "@/api/client";
 
 export async function getCurrentUser(): Promise<ControlPlaneUser | null> {
   const { user } = await fetchCurrentUser();
@@ -23,6 +22,6 @@ export async function completeOnboarding(
 }
 
 export async function provisionManagedKey(): Promise<{ synced: boolean }> {
-  const result = await api.settings.syncReliantProvider();
-  return { synced: result.synced };
+  // Reliant provider now uses JWT auth directly — no key provisioning needed.
+  return { synced: true };
 }

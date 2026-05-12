@@ -42,7 +42,6 @@ Reliant server components.`,
 	root.PersistentFlags().StringVar(&gatewayURL, "gateway", defaultGatewayURL, "Daemon gateway URL (defaults to gateway subdomain of --server)")
 
 	// Register subcommand groups
-	root.AddCommand(newMonolithCmd())
 	root.AddCommand(newServerCmd())
 	root.AddCommand(newDaemonCmd())
 	root.AddCommand(newAuthCmd())

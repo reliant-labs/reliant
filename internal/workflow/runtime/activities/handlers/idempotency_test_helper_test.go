@@ -25,37 +25,20 @@ type IdempotencyTestHelper struct {
 	cleanup func()
 }
 
-// NewIdempotencyTestHelper creates a new test helper with in-memory SQLite database
+// NewIdempotencyTestHelper creates a new test helper with a Postgres database
 func NewIdempotencyTestHelper(t *testing.T) *IdempotencyTestHelper {
-	// Create in-memory SQLite database
-	sqlDB, err := sql.Open("sqlite3", ":memory:")
-	require.NoError(t, err)
-
-	// CRITICAL: Limit to single connection for concurrent goroutine access
-	// SQLite's :memory: database is per-connection, so multiple connections would see different databases
-	// By limiting to 1 connection, all goroutines share the same in-memory database
-	// SQLite handles internal locking, making this safe for concurrent access
-	sqlDB.SetMaxOpenConns(1)
-
-	// Run migrations to set up schema
-	err = db.RunMigrations(sqlDB)
-	require.NoError(t, err)
-
-	// Create repository
-	repo := db.NewRepo(sqlDB)
+	repo, sqlDB, cleanup := db.SetupTestDBWithRawDB(t)
 
 	// Create Temporal test environment
 	suite := &testsuite.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 
 	return &IdempotencyTestHelper{
-		t:     t,
-		env:   env,
-		repo:  repo,
-		sqlDB: sqlDB,
-		cleanup: func() {
-			sqlDB.Close()
-		},
+		t:       t,
+		env:     env,
+		repo:    repo,
+		sqlDB:   sqlDB,
+		cleanup: cleanup,
 	}
 }
 
@@ -273,11 +256,20 @@ func (h *IdempotencyTestHelper) CreateTestThreadAndContextWindow(ctx context.Con
 		Sequence: 0,
 	})
 	// Ignore unique constraint errors - context window may already exist
-	if err != nil && !strings.Contains(err.Error(), "UNIQUE constraint") {
+	if err != nil && !isUniqueViolation(err) {
 		require.NoError(h.t, err)
 	}
 
 	return contextWindowID
+}
+
+// isUniqueViolation checks if an error is a unique constraint violation (Postgres)
+func isUniqueViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "duplicate key") || strings.Contains(s, "unique_violation")
 }
 
 // CreateTestUserMessage inserts a minimal user message with a text content block

@@ -1,5 +1,5 @@
 import { logger } from "../../lib/logger";
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useChatStore } from "../../store/chatStore"; // For getState() and setState() only
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
@@ -18,10 +18,6 @@ import {
   ChevronDown,
   Check,
   Search,
-  Compass,
-  Bug,
-  Wrench,
-  Code2,
   ArrowRightLeft,
   FolderPlus,
   Activity,
@@ -49,69 +45,6 @@ const migrationDetectionTargets = [
   ".windsurfrules",
   ".mcp.json",
 ];
-
-const starterPrompts = [
-  {
-    label: "Build",
-    hint: "Build something new",
-    icon: Wrench,
-    prompt: `Help me implement a new feature end-to-end.
-
-Please:
-1) clarify requirements and edge cases
-2) propose a technical approach aligned with existing patterns
-3) break implementation into ordered tasks
-4) list files to change and why
-5) include testing/validation steps and rollout notes
-
-Keep it practical and production-oriented.`,
-  },
-  {
-    label: "Explain",
-    hint: "Map this codebase",
-    icon: Compass,
-    prompt: `Explain this codebase.
-
-Please cover:
-1) overall architecture and data flow
-2) key folders/files and what they’re responsible for
-3) how a user request moves through the app (frontend → backend → DB)
-4) where configuration, environment variables, and feature flags live
-5) top 5 places I should read first to become productive quickly
-
-End with a “First 60 minutes” onboarding checklist.`,
-  },
-  {
-    label: "Debug",
-    hint: "Find and fix bugs",
-    icon: Bug,
-    prompt: `Help me debug an issue in this project.
-
-I want you to:
-1) ask clarifying questions if needed
-2) form likely root-cause hypotheses
-3) identify the exact files/components to inspect first
-4) propose a step-by-step debugging plan with quick validation checks
-5) suggest the smallest safe fix and how to verify it
-
-Please prioritize likely causes first and keep the plan actionable.`,
-  },
-  {
-    label: "Refactor",
-    hint: "Find refactors",
-    icon: Code2,
-    prompt: `Search this codebase for useful refactor opportunities.
-
-Please:
-1) inspect the repository for duplication, large/complex files, dead code, and inconsistent patterns
-2) identify high-value refactor opportunities with exact file paths and why each matters
-3) prioritize opportunities by impact, effort, and risk
-4) propose concrete implementation steps for the top 3 opportunities
-5) include validation steps (tests/checks) for each proposed refactor
-
-Focus on practical, low-risk improvements that improve maintainability and readability.`,
-  },
-] as const;
 
 export function NewChatView({
   tabId: _tabId,
@@ -344,15 +277,6 @@ export function NewChatView({
     setShowWorkspaceDropdown(false);
   };
 
-  const handleSuggestionClick = useCallback((text: string) => {
-    const el = chatInputRef.current;
-    if (!el) return;
-    el.focus();
-    // Select all existing content first, then replace with the new text
-    document.execCommand("selectAll", false);
-    document.execCommand("insertText", false, text);
-  }, []);
-
   const handleMigrationClick = async () => {
     await handleCreateAndSend(
       "Help me migrate useful configuration from Claude Code, Cursor, Codex, or Windsurf into Reliant.",
@@ -507,8 +431,8 @@ export function NewChatView({
             </div>
           </div>
 
-          {/* Prompt suggestions - short labels, richer inserted prompts */}
-          <div className="w-full max-w-2xl mx-auto pb-4 md:pb-5 space-y-3">
+          {/* Migration prompt */}
+          <div className="w-full max-w-2xl mx-auto pb-4 md:pb-5">
             {shouldShowMigrationPrompt && (
               <button
                 onClick={() => void handleMigrationClick()}
@@ -529,29 +453,6 @@ export function NewChatView({
                 </div>
               </button>
             )}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-1.5 md:gap-2">
-              {starterPrompts.map((starter) => {
-                const Icon = starter.icon;
-                return (
-                  <button
-                    key={starter.label}
-                    onClick={() => handleSuggestionClick(starter.prompt)}
-                    className="group rounded-lg border border-border/50 bg-card/70 px-3 py-2 text-left transition-colors hover:border-primary/50 hover:bg-card"
-                  >
-                    <div className="flex items-start gap-2">
-                      <Icon className="mt-0.5 h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium leading-4 text-foreground">{starter.label}</p>
-                        <p className="mt-0.5 text-[10px] leading-4 text-muted-foreground truncate">
-                          {starter.hint}
-                        </p>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
           </div>
         </div>
       </div>

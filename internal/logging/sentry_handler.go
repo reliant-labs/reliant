@@ -77,7 +77,6 @@ var sentrySilentPatterns = []string{
 // sentryWarnPatterns are errors that should NOT go to Sentry but should still
 // be logged as warnings for operational visibility.
 var sentryWarnPatterns = []string{
-	"sqlite3: interrupted",
 	"exit status 128",
 	"signal: killed",
 }

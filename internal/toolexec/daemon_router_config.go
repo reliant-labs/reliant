@@ -14,19 +14,16 @@ import (
 type RouterDriver string
 
 const (
-	RouterDriverLocal RouterDriver = "local" // In-process (monolith)
-	RouterDriverNATS  RouterDriver = "nats"  // NATS pub/sub (distributed)
+	RouterDriverNATS RouterDriver = "nats" // NATS pub/sub (distributed)
 )
 
 // ParseRouterDriver parses a raw string into a RouterDriver.
 func ParseRouterDriver(raw string) (RouterDriver, error) {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "", string(RouterDriverLocal):
-		return RouterDriverLocal, nil
-	case string(RouterDriverNATS):
+	case "", string(RouterDriverNATS):
 		return RouterDriverNATS, nil
 	default:
-		return "", fmt.Errorf("invalid TRACKER_DRIVER %q (expected local or nats)", raw)
+		return "", fmt.Errorf("invalid TRACKER_DRIVER %q (expected nats)", raw)
 	}
 }
 
@@ -34,7 +31,6 @@ func ParseRouterDriver(raw string) (RouterDriver, error) {
 type RouterConfig struct {
 	Driver             RouterDriver
 	NATSConn           *nats.Conn                                   // Required when Driver == RouterDriverNATS
-	Local              DaemonConnectionManager                      // Required when Driver == RouterDriverLocal
 	DB                 db.Repository                                // Optional: enables fast DB-based daemon online check for NATS router
 	ControlPlaneClient reliantv1connect.DaemonRegistryServiceClient // Optional: gRPC client for control plane daemon resolution
 }
@@ -42,12 +38,7 @@ type RouterConfig struct {
 // NewDaemonRouter creates a DaemonRouter based on config.
 func NewDaemonRouter(cfg RouterConfig) (DaemonRouter, error) {
 	switch cfg.Driver {
-	case RouterDriverLocal, "":
-		if cfg.Local == nil {
-			return nil, fmt.Errorf("local DaemonConnectionManager required for local router driver")
-		}
-		return NewLocalDaemonRouter(cfg.Local), nil
-	case RouterDriverNATS:
+	case RouterDriverNATS, "":
 		if cfg.NATSConn == nil {
 			return nil, fmt.Errorf("NATS connection required for nats router driver")
 		}

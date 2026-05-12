@@ -47,7 +47,6 @@ export interface LaunchPlan {
   modelProvider: ModelProvider;
   workflowParams?: Record<string, unknown>;
   selectedPresets?: Record<string, string | null>;
-  initialPrompt?: string;
   launchTour?: boolean;
   daemonProvisioning?: boolean;
   daemonPreConnected?: boolean;

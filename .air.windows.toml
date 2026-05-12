@@ -3,7 +3,7 @@ testdata_dir = "testdata"
 tmp_dir = "tmp"
 
 [build]
-  args_bin = ["monolith"]
+  args_bin = ["server", "api"]
   bin = "dist/reliant.exe"
   # Windows version: Build to temp file then rename using move command
   # Using cmd /c to properly chain commands on Windows

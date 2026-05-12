@@ -10,6 +10,7 @@ import { useWorkspaceStateStore } from "./workspaceStateStore";
 import { useViewerStore } from "./viewerStore";
 import { useChatNavigationStore } from "./chatNavigationStore";
 import { useGlobalDataStore } from "./globalDataStore";
+import { trackEvent } from "../lib/analytics";
 
 export interface Project {
   id: string;
@@ -107,7 +108,12 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     }
 
     set({ currentProject: project });
-    
+
+    trackEvent("project_opened", {
+      projectId: project.id,
+      isGitRepo: project.is_git_repo,
+    });
+
     // Notify electron of the project change for window state persistence
     if (window.electronAPI?.setWindowProject) {
       window.electronAPI.setWindowProject({

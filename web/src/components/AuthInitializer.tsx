@@ -8,6 +8,7 @@ import { api } from "@/api/client";
 import { logger } from "@/lib/logger";
 import { supabase } from "@/lib/supabase";
 import { initSentry } from "@/lib/sentry";
+import { identifyUser, resetUser } from "@/lib/analytics";
 import { settingsSync } from "@/services/settingsSync";
 
 // NOTE: OAuth callback handling is done in authStore.initialize() to avoid duplicate listeners
@@ -43,6 +44,7 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
       if (hasInitializedAuthenticatedStartup.current) {
         logger.info("[AuthInitializer] User logged out, clearing authenticated startup state");
         hasInitializedAuthenticatedStartup.current = false;
+        void resetUser();
       }
     }
   }, [user, resetApiKeyCheck]);
@@ -85,6 +87,9 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
       } catch (error) {
         logger.warn("[AuthInitializer] Sentry initialization failed:", error);
       }
+
+      // Identify user for analytics
+      void identifyUser(user.id, user.email ?? undefined);
     };
 
     void initializeAuthenticatedStartup();
@@ -121,32 +126,6 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
           tokenLength: (currentSession?.access_token ?? session?.access_token)?.length,
           isElectron: !!window.electronAPI,
         });
-
-        let accessToken = currentSession?.access_token ?? session?.access_token;
-        if (!accessToken && window.electronAPI) {
-          logger.warn("[AuthInitializer] No access token available yet, waiting longer...");
-          await new Promise((resolve) => setTimeout(resolve, 500));
-          const {
-            data: { session: retrySession },
-          } = await supabase.auth.getSession();
-          accessToken = retrySession?.access_token ?? useAuthStore.getState().session?.access_token;
-        }
-
-        if (accessToken) {
-          try {
-            const syncResult = await api.settings.syncReliantProvider();
-            logger.info("[AuthInitializer] Reliant provider sync completed", {
-              synced: syncResult.synced,
-              createdOrg: syncResult.created_org,
-              createdKey: syncResult.created_key,
-              rotatedKey: syncResult.rotated_key,
-            });
-          } catch (error) {
-            logger.warn("[AuthInitializer] Reliant provider sync failed:", error);
-          }
-        } else {
-          logger.info("[AuthInitializer] Skipping Reliant provider sync without access token");
-        }
 
         const start = performance.now();
 

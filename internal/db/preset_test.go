@@ -6,29 +6,23 @@ import (
 	"database/sql"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/ptr"
 )
 
-// setupPresetTestDB creates an in-memory database with migrations for preset testing
-func setupPresetTestDB(t *testing.T) *sql.DB {
+// setupPresetTestDB creates a database with migrations for preset testing.
+// Returns a Repo and a cleanup function.
+func setupPresetTestRepo(t *testing.T) (*Repo, func()) {
 	t.Helper()
-	db, err := sql.Open("sqlite3", ":memory:")
-	if err != nil {
-		t.Fatalf("failed to open in-memory database: %v", err)
-	}
-	if err := RunMigrations(db); err != nil {
-		t.Fatalf("failed to run migrations: %v", err)
-	}
-	return db
+	return SetupTestDB(t)
 }
 
 func TestPresetCRUD(t *testing.T) {
-	db := setupPresetTestDB(t)
-	defer db.Close()
+	repo, cleanup := setupPresetTestRepo(t)
+	defer cleanup()
 
-	repo := NewRepo(db)
 	ctx := context.Background()
 	userID := uuid.New().String()
 
@@ -328,17 +322,24 @@ func TestPresetCRUD(t *testing.T) {
 }
 
 func TestPresetProjectScope(t *testing.T) {
-	db := setupPresetTestDB(t)
-	defer db.Close()
+	repo, cleanup := setupPresetTestRepo(t)
+	defer cleanup()
 
-	repo := NewRepo(db)
 	ctx := context.Background()
 	userID := uuid.New().String()
 	projectID := uuid.New().String()
 
-	// Create a project for project-scoped tests (no user FK, just project_id FK on presets)
-	_, err := db.Exec(`INSERT INTO projects (id, user_id, name, path, created_at, updated_at) VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))`,
-		projectID, userID, "Test Project", "/tmp/test-project")
+	// Create a project for project-scoped tests
+	now := time.Now().UTC()
+	err := repo.CreateProject(ctx, &Project{
+		ID:         projectID,
+		UserID:     userID,
+		Name:       "Test Project",
+		Path:       "/tmp/test-project",
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		LastActive: now,
+	})
 	if err != nil {
 		t.Fatalf("failed to create test project: %v", err)
 	}

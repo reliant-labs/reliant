@@ -150,9 +150,11 @@ export function useChatInputState({
 
   // Reset state when chatId or tabId changes
   useEffect(() => {
-    // Reset workflow selection for new chats
+    // Reset workflow selection for new chats, but preserve any
+    // one-time workflow hint set by onboarding (tempNewChatWorkflow).
     if (!chatId) {
-      setSelectedWorkflow(null);
+      const temp = useChatParamsStore.getState().tempNewChatWorkflow;
+      setSelectedWorkflow(temp ?? null);
     }
   }, [chatId, tabId]);
 

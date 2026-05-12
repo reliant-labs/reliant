@@ -76,6 +76,7 @@ import { tabSwitchProfiler } from "../lib/tabSwitchProfiler";
 import {
   STREAMING_FLUSH_TIMEOUT_MS,
 } from "../lib/constants";
+import { trackEvent } from "../lib/analytics";
 
 // Lazy getter to avoid circular dependency with globalUpdatesStore.
 // Uses a cached dynamic import instead of synchronous require() which
@@ -866,6 +867,13 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // The backend will confirm via CHAT_ACTIVITY_CHANGED event shortly
     useActivityStore.getState().setActivity(chatId, ChatActivity.RUNNING);
 
+    trackEvent("message_sent", {
+      chatId,
+      contentLength: firstMessage.length,
+      hasAttachments: (attachmentIds?.length ?? 0) > 0,
+      isFirstInChat: true,
+    });
+
     return chat;
   },
 
@@ -1237,6 +1245,17 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       );
 
       logger.log("Message sent successfully:", response);
+
+      const existingMessages = get().messages[chatId] || [];
+      const isFirstInChat = existingMessages.filter(
+        (m) => m.role === MessageRole.USER && !m.id.startsWith("optimistic-"),
+      ).length === 0;
+      trackEvent("message_sent", {
+        chatId,
+        contentLength: content.length,
+        hasAttachments: (attachmentIds?.length ?? 0) > 0,
+        isFirstInChat,
+      });
 
       // Note: Optimistic user message will be replaced when the real message arrives via WebSocket
       // The hasRealUserMessage check in the WebSocket handler handles this automatically

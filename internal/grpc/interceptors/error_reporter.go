@@ -95,7 +95,6 @@ func shouldSkipReporting(code connect.Code, err error) bool {
 		"broken pipe",
 		"client disconnected",
 		"exit status 128",
-		"sqlite3: interrupted",
 		"streaming cancelled by user",
 		"signal: killed",
 	}

@@ -6,7 +6,6 @@
 #   docker run reliant server worker
 #   docker run reliant server gateway
 #   docker run reliant daemon start
-#   docker run reliant monolith
 #
 # Ports and configuration are set via environment variables or flags.
 # For tools-daemon (needs root for FS access), override the user at

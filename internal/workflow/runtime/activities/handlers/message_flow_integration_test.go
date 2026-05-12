@@ -75,13 +75,12 @@ func TestMessageFlowIntegration(t *testing.T) {
 	// ========================================================================
 	ctx := context.Background()
 
-	// Create in-memory SQLite database using NewInMemoryRepo which properly
+	// Create test database which properly
 	// configures shared cache mode. Without this, each connection in Go's
 	// connection pool gets a separate :memory: database, causing
 	// "no such table" errors when background goroutines use different
 	// connections than the one that ran migrations.
-	repo, err := db.NewInMemoryRepo()
-	require.NoError(t, err)
+	repo := db.NewTestRepo(t)
 	defer repo.Close()
 
 	// Create Temporal test environment
@@ -101,7 +100,7 @@ func TestMessageFlowIntegration(t *testing.T) {
 		Name:   "Test Project",
 		Path:   "/tmp/test-project",
 	}
-	err = repo.CreateProject(ctx, project)
+	err := repo.CreateProject(ctx, project)
 	require.NoError(t, err)
 
 	chat := &db.Chat{
@@ -589,10 +588,9 @@ func TestMessageFlowIntegration_ErrorHandling(t *testing.T) {
 	// Setup (similar to main test)
 	ctx := context.Background()
 
-	// Create in-memory SQLite database using NewInMemoryRepo which properly
+	// Create test database which properly
 	// configures shared cache mode to avoid "no such table" errors.
-	repo, err := db.NewInMemoryRepo()
-	require.NoError(t, err)
+	repo := db.NewTestRepo(t)
 	defer repo.Close()
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestActivityEnvironment()
@@ -608,7 +606,7 @@ func TestMessageFlowIntegration_ErrorHandling(t *testing.T) {
 		Name:   "Test Project",
 		Path:   "/tmp/test-project",
 	}
-	err = repo.CreateProject(ctx, project)
+	err := repo.CreateProject(ctx, project)
 	require.NoError(t, err)
 
 	chat := &db.Chat{

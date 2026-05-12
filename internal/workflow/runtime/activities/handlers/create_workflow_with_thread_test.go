@@ -16,13 +16,12 @@ import (
 
 func TestCreateWorkflowWithThread_NewThread(t *testing.T) {
 	ctx := context.Background()
-	repo, err := db.NewInMemoryRepo()
-	require.NoError(t, err)
+	repo := db.NewTestRepo(t)
 	defer repo.Close()
 
 	// Setup: Create a project and chat
 	projectID := "test-project"
-	err = repo.CreateProject(ctx, &db.Project{
+	err := repo.CreateProject(ctx, &db.Project{
 		ID:        projectID,
 		Name:      "Test Project",
 		Path:      "/tmp/test",
@@ -94,13 +93,12 @@ func TestCreateWorkflowWithThread_NewThread(t *testing.T) {
 
 func TestCreateWorkflowWithThread_ForkedThread(t *testing.T) {
 	ctx := context.Background()
-	repo, err := db.NewInMemoryRepo()
-	require.NoError(t, err)
+	repo := db.NewTestRepo(t)
 	defer repo.Close()
 
 	// Setup: Create a project, chat, and parent thread with context window
 	projectID := "test-project"
-	err = repo.CreateProject(ctx, &db.Project{
+	err := repo.CreateProject(ctx, &db.Project{
 		ID:        projectID,
 		Name:      "Test Project",
 		Path:      "/tmp/test",
@@ -173,13 +171,12 @@ func TestCreateWorkflowWithThread_ForkedThread(t *testing.T) {
 
 func TestCreateWorkflowWithThread_ChildWorkflow(t *testing.T) {
 	ctx := context.Background()
-	repo, err := db.NewInMemoryRepo()
-	require.NoError(t, err)
+	repo := db.NewTestRepo(t)
 	defer repo.Close()
 
 	// Setup: Create a project and chat
 	projectID := "test-project"
-	err = repo.CreateProject(ctx, &db.Project{
+	err := repo.CreateProject(ctx, &db.Project{
 		ID:        projectID,
 		Name:      "Test Project",
 		Path:      "/tmp/test",
@@ -261,8 +258,7 @@ func TestCreateWorkflowWithThread_ChildWorkflow(t *testing.T) {
 }
 
 func TestCreateWorkflowWithThread_MissingWorkflowID(t *testing.T) {
-	repo, err := db.NewInMemoryRepo()
-	require.NoError(t, err)
+	repo := db.NewTestRepo(t)
 	defer repo.Close()
 
 	threadsService := threads.NewService(repo)
@@ -273,7 +269,7 @@ func TestCreateWorkflowWithThread_MissingWorkflowID(t *testing.T) {
 	env.RegisterActivity(activity.Execute)
 
 	// Execute with missing workflow_id
-	_, err = env.ExecuteActivity(activity.Execute, CreateWorkflowWithThreadInput{
+	_, err := env.ExecuteActivity(activity.Execute, CreateWorkflowWithThreadInput{
 		WorkflowName: "builtin://agent",
 		ChatID:       "test-chat",
 		ThreadID:     "test-thread",
@@ -284,8 +280,7 @@ func TestCreateWorkflowWithThread_MissingWorkflowID(t *testing.T) {
 }
 
 func TestCreateWorkflowWithThread_MissingWorkflowName(t *testing.T) {
-	repo, err := db.NewInMemoryRepo()
-	require.NoError(t, err)
+	repo := db.NewTestRepo(t)
 	defer repo.Close()
 
 	threadsService := threads.NewService(repo)
@@ -296,7 +291,7 @@ func TestCreateWorkflowWithThread_MissingWorkflowName(t *testing.T) {
 	env.RegisterActivity(activity.Execute)
 
 	// Execute with missing workflow_name
-	_, err = env.ExecuteActivity(activity.Execute, CreateWorkflowWithThreadInput{
+	_, err := env.ExecuteActivity(activity.Execute, CreateWorkflowWithThreadInput{
 		WorkflowID: "test-workflow",
 		ChatID:     "test-chat",
 		ThreadID:   "test-thread",
@@ -307,8 +302,7 @@ func TestCreateWorkflowWithThread_MissingWorkflowName(t *testing.T) {
 }
 
 func TestCreateWorkflowWithThread_MissingChatID(t *testing.T) {
-	repo, err := db.NewInMemoryRepo()
-	require.NoError(t, err)
+	repo := db.NewTestRepo(t)
 	defer repo.Close()
 
 	threadsService := threads.NewService(repo)
@@ -319,7 +313,7 @@ func TestCreateWorkflowWithThread_MissingChatID(t *testing.T) {
 	env.RegisterActivity(activity.Execute)
 
 	// Execute with missing chat_id
-	_, err = env.ExecuteActivity(activity.Execute, CreateWorkflowWithThreadInput{
+	_, err := env.ExecuteActivity(activity.Execute, CreateWorkflowWithThreadInput{
 		WorkflowID:   "test-workflow",
 		WorkflowName: "builtin://agent",
 		ThreadID:     "test-thread",
@@ -331,13 +325,12 @@ func TestCreateWorkflowWithThread_MissingChatID(t *testing.T) {
 
 func TestCreateWorkflowWithThread_DefaultThreadID(t *testing.T) {
 	ctx := context.Background()
-	repo, err := db.NewInMemoryRepo()
-	require.NoError(t, err)
+	repo := db.NewTestRepo(t)
 	defer repo.Close()
 
 	// Setup: Create a project and chat
 	projectID := "test-project"
-	err = repo.CreateProject(ctx, &db.Project{
+	err := repo.CreateProject(ctx, &db.Project{
 		ID:        projectID,
 		Name:      "Test Project",
 		Path:      "/tmp/test",

@@ -11,16 +11,11 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 
-	"github.com/google/uuid"
 	core "github.com/reliant-labs/reliant/internal/db/core"
 	postgresstore "github.com/reliant-labs/reliant/internal/db/postgres"
 	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
-	sqlitestore "github.com/reliant-labs/reliant/internal/db/sqlite"
-	sqlitedb "github.com/reliant-labs/reliant/internal/db/sqlite/generated"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
@@ -41,22 +36,14 @@ const (
 	defaultDBTimeout = 10 * time.Second
 )
 
-// Global metrics for monitoring write queue depth
-// These help diagnose lock-up issues caused by write contention
-var (
-	pendingWrites     int64 // Current number of goroutines waiting for write lock
-	peakPendingWrites int64 // High water mark for pending writes
-)
-
 // ============================================================================
 // TRANSACTION HELPER TYPES
 // ============================================================================
 
 // txMetrics holds timing and retry data for transaction monitoring
 type txMetrics struct {
-	txStartTime      time.Time
-	lockWaitDuration time.Duration
-	totalRetries     int
+	txStartTime  time.Time
+	totalRetries int
 }
 
 // txResult represents the outcome of a transaction attempt
@@ -79,8 +66,6 @@ type ChatUpdateNotifier func(chatID string, seqNum int64, update ChatUpdate)
 type Repo struct {
 	DB              *WrappedDBTX
 	driver          DatabaseDriver
-	serializeWrites bool
-	writeMu         sync.Mutex // Global mutex to serialize SQLite write transactions
 	planTasks       core.PlanTaskStore
 	chats           core.ChatStore
 	messages        core.MessageStore
@@ -104,82 +89,35 @@ type Repo struct {
 
 // NewRepo creates a new Repo with the given database
 func NewRepo(db *sql.DB) *Repo {
-	return NewRepoWithDriver(db, DriverSQLite)
+	return NewRepoWithDriver(db, DriverPostgres)
 }
 
 func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) *Repo {
 	q := &WrappedDBTX{db: db}
-	sqliteQueries := sqlitedb.New(q)
 	pgQueries := pgdb.New(q)
-	serializeWrites := driver == DriverSQLite
 
-	var planTasks core.PlanTaskStore
-	var chats core.ChatStore
-	var messages core.MessageStore
-	var approvals core.ApprovalStore
-	var projects core.ProjectStore
-	var worktrees core.WorktreeStore
-	var repos core.RepoStore
-	var settings core.SettingStore
-	var attachments core.AttachmentStore
-	var workflows core.WorkflowStore
-	var threads core.ThreadStore
-	var contextWindows core.ContextWindowStore
-	var workflowCatalog core.WorkflowCatalogStore
-	if driver == DriverPostgres {
-		planTasks = postgresstore.NewPlanTaskStore(pgQueries)
-		chats = postgresstore.NewChatStore(pgQueries, q)
-		messages = postgresstore.NewMessageStore(pgQueries, q)
-		approvals = postgresstore.NewApprovalStore(pgQueries)
-		projects = postgresstore.NewProjectStore(pgQueries)
-		worktrees = postgresstore.NewWorktreeStore(pgQueries)
-		repos = postgresstore.NewRepoStore(pgQueries)
-		settings = postgresstore.NewSettingStore(pgQueries, q, func(query string) string {
-			return (&Repo{driver: DriverPostgres}).bindQuery(query)
-		})
-		attachments = postgresstore.NewAttachmentStore(pgQueries, q)
-		workflows = postgresstore.NewWorkflowStore(pgQueries)
-		threads = postgresstore.NewThreadStore(pgQueries)
-		contextWindows = postgresstore.NewContextWindowStore(pgQueries)
-		workflowCatalog = postgresstore.NewWorkflowCatalogStore(pgQueries)
-	} else {
-		planTasks = sqlitestore.NewPlanTaskStore(sqliteQueries)
-		chats = sqlitestore.NewChatStore(sqliteQueries, q)
-		messages = sqlitestore.NewMessageStore(sqliteQueries)
-		approvals = sqlitestore.NewApprovalStore(sqliteQueries)
-		projects = sqlitestore.NewProjectStore(sqliteQueries)
-		worktrees = sqlitestore.NewWorktreeStore(sqliteQueries)
-		repos = sqlitestore.NewRepoStore(sqliteQueries)
-		settings = sqlitestore.NewSettingStore(sqliteQueries, q, func(query string) string {
-			return (&Repo{driver: DriverSQLite}).bindQuery(query)
-		})
-		attachments = sqlitestore.NewAttachmentStore(sqliteQueries)
-		workflows = sqlitestore.NewWorkflowStore(sqliteQueries)
-		threads = sqlitestore.NewThreadStore(sqliteQueries)
-		contextWindows = sqlitestore.NewContextWindowStore(sqliteQueries)
-		workflowCatalog = sqlitestore.NewWorkflowCatalogStore(sqliteQueries)
-	}
 	tokenCounts := newSQLTokenCountStore(q, func(query string) string {
 		return (&Repo{driver: driver}).bindQuery(query)
 	})
 
 	return &Repo{
-		DB:              q,
-		driver:          driver,
-		serializeWrites: serializeWrites,
-		planTasks:       planTasks,
-		chats:           chats,
-		messages:        messages,
-		approvals:       approvals,
-		projects:        projects,
-		worktrees:       worktrees,
-		repos:           repos,
-		settings:        settings,
-		attachments:     attachments,
-		workflows:       workflows,
-		threads:         threads,
-		contextWindows:  contextWindows,
-		workflowCatalog: workflowCatalog,
+		DB:        q,
+		driver:    driver,
+		planTasks: postgresstore.NewPlanTaskStore(pgQueries),
+		chats:     postgresstore.NewChatStore(pgQueries, q),
+		messages:  postgresstore.NewMessageStore(pgQueries, q),
+		approvals: postgresstore.NewApprovalStore(pgQueries),
+		projects:  postgresstore.NewProjectStore(pgQueries),
+		worktrees: postgresstore.NewWorktreeStore(pgQueries),
+		repos:     postgresstore.NewRepoStore(pgQueries),
+		settings: postgresstore.NewSettingStore(pgQueries, q, func(query string) string {
+			return (&Repo{driver: DriverPostgres}).bindQuery(query)
+		}),
+		attachments:     postgresstore.NewAttachmentStore(pgQueries, q),
+		workflows:       postgresstore.NewWorkflowStore(pgQueries),
+		threads:         postgresstore.NewThreadStore(pgQueries),
+		contextWindows:  postgresstore.NewContextWindowStore(pgQueries),
+		workflowCatalog: postgresstore.NewWorkflowCatalogStore(pgQueries),
 		tokenCounts:     tokenCounts,
 	}
 }
@@ -239,36 +177,10 @@ func NewRepoFromConfig(cfg DatabaseConfig) (*Repo, error) {
 	return NewRepoWithDriver(db, cfg.Driver), nil
 }
 
-func NewInMemoryRepo() (*Repo, error) {
-	// Use a unique named in-memory database with shared cache.
-	// This ensures all connections from this sql.DB share the same database,
-	// while different calls to NewInMemoryRepo() get isolated databases.
-	// Without this, each connection in Go's connection pool would get a
-	// separate :memory: database, causing "no such table" errors when
-	// background goroutines use different connections than the one that
-	// ran migrations.
-	dbName := fmt.Sprintf("file:memdb_%s?mode=memory&cache=shared", uuid.New().String())
-	db, err := sql.Open("sqlite3", dbName)
-	if err != nil {
-		return nil, err
-	}
-
-	// Force single connection to ensure all queries use the same connection
-	// and see the same in-memory database state.
-	db.SetMaxOpenConns(1)
-
-	err = RunMigrations(db, DriverSQLite)
-	if err != nil {
-		return nil, err
-	}
-
-	return NewRepo(db), nil
-}
-
 func DatabaseDriverFromEnv() DatabaseDriver {
 	driver, err := ParseDatabaseDriver(os.Getenv("DATABASE_DRIVER"))
 	if err != nil {
-		return DriverSQLite
+		return DriverPostgres
 	}
 	return driver
 }
@@ -288,20 +200,6 @@ func isRetryableError(err error) bool {
 	}
 
 	errMsg := strings.ToLower(err.Error())
-
-	// SQLite busy/locked errors
-	if strings.Contains(errMsg, "database is locked") ||
-		strings.Contains(errMsg, "database table is locked") ||
-		strings.Contains(errMsg, "database schema is locked") ||
-		strings.Contains(errMsg, "busy") {
-		return true
-	}
-
-	// SQLite specific error codes for busy/locked
-	if strings.Contains(errMsg, "sqlite_busy") ||
-		strings.Contains(errMsg, "sqlite_locked") {
-		return true
-	}
 
 	// Generic transaction/concurrency errors
 	if strings.Contains(errMsg, "concurrent update") ||
@@ -342,56 +240,18 @@ func calculateBackoff(attempt int) time.Duration {
 	return delay + jitter - delay/4
 }
 
-// GetPendingWrites returns the current number of goroutines waiting for write lock
-// Useful for monitoring and debugging lock contention
-func GetPendingWrites() int64 {
-	return atomic.LoadInt64(&pendingWrites)
-}
+// GetPendingWrites returns 0 — write serialization has been removed (Postgres only).
+func GetPendingWrites() int64 { return 0 }
 
-// GetPeakPendingWrites returns the high water mark for pending writes
-func GetPeakPendingWrites() int64 {
-	return atomic.LoadInt64(&peakPendingWrites)
-}
+// GetPeakPendingWrites returns 0 — write serialization has been removed (Postgres only).
+func GetPeakPendingWrites() int64 { return 0 }
 
-// ResetPeakPendingWrites resets the high water mark (useful after investigating an issue)
-func ResetPeakPendingWrites() {
-	atomic.StoreInt64(&peakPendingWrites, 0)
-}
+// ResetPeakPendingWrites is a no-op — write serialization has been removed (Postgres only).
+func ResetPeakPendingWrites() {}
 
 // ============================================================================
 // TRANSACTION EXECUTION HELPERS
 // ============================================================================
-
-// trackWriteQueueDepth increments pending writes counter and updates peak if needed.
-// IMPORTANT: Caller MUST call `defer atomic.AddInt64(&pendingWrites, -1)` to decrement.
-// This function only increments; decrement is the caller's responsibility for proper
-// cleanup even on panics.
-// Returns the current queue depth after increment.
-func trackWriteQueueDepth() int64 {
-	current := atomic.AddInt64(&pendingWrites, 1)
-	observability.DBPendingWrites.Set(float64(current))
-
-	// Update peak if this is a new high (CAS loop)
-	for {
-		peak := atomic.LoadInt64(&peakPendingWrites)
-		if current <= peak {
-			break
-		}
-		if atomic.CompareAndSwapInt64(&peakPendingWrites, peak, current) {
-			observability.DBPeakPendingWrites.Set(float64(current))
-			break
-		}
-	}
-
-	// Warn if queue depth is getting high
-	if current > 5 {
-		logging.Warn("High write queue depth - potential bottleneck",
-			"pending", current,
-			"peak", atomic.LoadInt64(&peakPendingWrites))
-	}
-
-	return current
-}
 
 // executeTransaction executes a function within a transaction and handles commit/rollback.
 // The returned txResult always has execDuration and commitDuration set; beginDuration
@@ -438,7 +298,6 @@ func logTransactionTiming(metrics *txMetrics, result *txResult) {
 	if totalDuration > 1*time.Second {
 		logging.Warn("Slow transaction detected",
 			"totalDuration", totalDuration,
-			"lockWait", metrics.lockWaitDuration,
 			"begin", result.beginDuration,
 			"exec", result.execDuration,
 			"commit", result.commitDuration,
@@ -446,7 +305,6 @@ func logTransactionTiming(metrics *txMetrics, result *txResult) {
 	} else if totalDuration > 100*time.Millisecond {
 		logging.Debug("Transaction timing",
 			"totalDuration", totalDuration,
-			"lockWait", metrics.lockWaitDuration,
 			"begin", result.beginDuration,
 			"exec", result.execDuration,
 			"commit", result.commitDuration,
@@ -463,31 +321,12 @@ func (r *Repo) RunTx(ctx context.Context, f func(ctx context.Context) error) err
 
 	// Check if we're already in a transaction - if so, just execute the function
 	// This prevents nested transactions
-	if _, ok := ctx.Value(txKey).(sqlitedb.DBTX); ok {
+	if _, ok := ctx.Value(txKey).(pgdb.DBTX); ok {
 		return f(ctx)
 	}
 
 	// Initialize metrics
 	metrics := &txMetrics{txStartTime: time.Now()}
-
-	// Track pending writes for monitoring
-	if r.serializeWrites {
-		trackWriteQueueDepth()
-		defer func() {
-			newVal := atomic.AddInt64(&pendingWrites, -1)
-			observability.DBPendingWrites.Set(float64(newVal))
-		}()
-
-		// Acquire write mutex to serialize write transactions for SQLite.
-		r.writeMu.Lock()
-		metrics.lockWaitDuration = time.Since(metrics.txStartTime)
-		if metrics.lockWaitDuration > 100*time.Millisecond {
-			logging.Warn("Transaction lock wait exceeded 100ms",
-				"waitDuration", metrics.lockWaitDuration,
-				"pendingWrites", atomic.LoadInt64(&pendingWrites))
-		}
-		defer r.writeMu.Unlock()
-	}
 
 	err := r.runTxWithRetries(ctx, f, metrics)
 	duration := time.Since(metrics.txStartTime).Seconds()
@@ -571,8 +410,8 @@ type WrappedDBTX struct {
 	db *sql.DB
 }
 
-func (w *WrappedDBTX) DB(ctx context.Context) sqlitedb.DBTX {
-	tx, ok := ctx.Value(txKey).(sqlitedb.DBTX)
+func (w *WrappedDBTX) DB(ctx context.Context) pgdb.DBTX {
+	tx, ok := ctx.Value(txKey).(pgdb.DBTX)
 	if ok && tx != nil {
 		return tx
 	}
@@ -580,11 +419,8 @@ func (w *WrappedDBTX) DB(ctx context.Context) sqlitedb.DBTX {
 	return w.db
 }
 
-// BeginImmediate starts a transaction in IMMEDIATE mode
-// This acquires a write lock immediately, preventing deadlocks
+// BeginImmediate starts a transaction with Serializable isolation.
 func (w *WrappedDBTX) BeginImmediate(ctx context.Context) (*sql.Tx, error) {
-	// For SQLite, use Serializable isolation level which maps to IMMEDIATE mode
-	// This acquires the write lock immediately instead of waiting until first write
 	return w.db.BeginTx(ctx, &sql.TxOptions{
 		Isolation: sql.LevelSerializable,
 		ReadOnly:  false,
@@ -621,7 +457,7 @@ func (w *WrappedDBTX) QueryRowContext(ctx context.Context, query string, args ..
 // Transaction-level retries in RunTx handle recovery instead.
 func (w *WrappedDBTX) execContextWithRetry(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	// Skip statement-level retries when inside a transaction
-	if _, inTx := ctx.Value(txKey).(sqlitedb.DBTX); inTx {
+	if _, inTx := ctx.Value(txKey).(pgdb.DBTX); inTx {
 		return w.DB(ctx).ExecContext(ctx, query, args...)
 	}
 
@@ -659,7 +495,7 @@ func (w *WrappedDBTX) execContextWithRetry(ctx context.Context, query string, ar
 // Transaction-level retries in RunTx handle recovery instead.
 func (w *WrappedDBTX) queryContextWithRetry(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	// Skip statement-level retries when inside a transaction
-	if _, inTx := ctx.Value(txKey).(sqlitedb.DBTX); inTx {
+	if _, inTx := ctx.Value(txKey).(pgdb.DBTX); inTx {
 		return w.DB(ctx).QueryContext(ctx, query, args...)
 	}
 
@@ -1135,7 +971,7 @@ func (r *Repo) GetNextUserSequenceNumber(ctx context.Context, userID string) (in
 //
 // This mirrors CreateChatUpdate semantics:
 // 1) sequence allocation and insert are atomic in a transaction
-// 2) SQLite writes go through RunTx serialization to avoid lock contention
+// 2) writes go through RunTx with retry logic for transient errors
 // 3) nested transaction calls (ctx already carrying txKey) are supported
 func (r *Repo) CreateUserUpdate(ctx context.Context, update *UserUpdate) error {
 	err := r.RunTx(ctx, func(txCtx context.Context) error {

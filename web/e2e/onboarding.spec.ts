@@ -162,7 +162,7 @@ test.describe('Onboarding Flow', () => {
         return route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({ daemon: { id: 'daemon_1', name: 'onboarding-workspace', status: 'running' } }),
+          body: JSON.stringify({ daemon: { id: 'daemon_1', name: 'onboarding-daemon', status: 'running' } }),
         });
       }
       // GET → list daemons
@@ -199,7 +199,7 @@ test.describe('Onboarding Flow', () => {
         return route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({ daemon: { id: 'daemon_1', name: 'onboarding-workspace', status: 'running' } }),
+          body: JSON.stringify({ daemon: { id: 'daemon_1', name: 'onboarding-daemon', status: 'running' } }),
         });
       }
       return route.fulfill({
@@ -485,7 +485,7 @@ test.describe('Onboarding – Failure Scenarios', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           daemons: listCallCount > 1
-            ? [{ daemonId: 'daemon_1', name: 'onboarding-workspace', status: 3 }]
+            ? [{ daemonId: 'daemon_1', name: 'onboarding-daemon', status: 3 }]
             : [],
         }),
       });

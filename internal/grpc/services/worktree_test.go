@@ -3,7 +3,6 @@ package services
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -176,12 +175,8 @@ func setupTestGitRepoWithRemote(t *testing.T, defaultBranch string) (repoDir str
 }
 
 func TestCreateWorktreeUsesExtendedDaemonTimeout(t *testing.T) {
-	sqlDB, err := sql.Open("sqlite3", ":memory:")
-	require.NoError(t, err)
-	defer sqlDB.Close()
-	require.NoError(t, db.RunMigrations(sqlDB))
+	repo := db.NewTestRepo(t)
 
-	repo := db.NewRepo(sqlDB)
 	router := &recordingWorktreeDaemonRouter{}
 	svc := NewWorktreeService(repo, nil, router)
 
@@ -221,14 +216,10 @@ func TestCreateWorktreeUsesExtendedDaemonTimeout(t *testing.T) {
 	assert.Greater(t, router.timeouts["worktree.create"], int32(30_000))
 }
 
-func setupTestWorktreeServiceForRevert(t *testing.T) (*WorktreeService, *sql.DB, string, string) {
+func setupTestWorktreeServiceForRevert(t *testing.T) (*WorktreeService, string, string) {
 	t.Helper()
 
-	sqlDB, err := sql.Open("sqlite3", ":memory:")
-	require.NoError(t, err)
-	require.NoError(t, db.RunMigrations(sqlDB))
-
-	repo := db.NewRepo(sqlDB)
+	repo := db.NewTestRepo(t)
 	svc := NewWorktreeService(repo, nil, &worktreeTestDaemonRouter{})
 
 	userID := uuid.New().String()
@@ -237,7 +228,7 @@ func setupTestWorktreeServiceForRevert(t *testing.T) (*WorktreeService, *sql.DB,
 	repoDir, _ := setupTestGitRepoWithRemote(t, "main")
 	now := time.Now().UTC()
 
-	err = repo.CreateProject(context.Background(), &db.Project{
+	err := repo.CreateProject(context.Background(), &db.Project{
 		ID:            projectID,
 		UserID:        userID,
 		Name:          "Test Project",
@@ -265,12 +256,11 @@ func setupTestWorktreeServiceForRevert(t *testing.T) (*WorktreeService, *sql.DB,
 	})
 	require.NoError(t, err)
 
-	return svc, sqlDB, userID, worktreeID
+	return svc, userID, worktreeID
 }
 
 func TestRevertFiles_DeletesNestedUntrackedFile(t *testing.T) {
-	svc, sqlDB, userID, worktreeID := setupTestWorktreeServiceForRevert(t)
-	defer sqlDB.Close()
+	svc, userID, worktreeID := setupTestWorktreeServiceForRevert(t)
 
 	nestedRelPath := filepath.Join("tmp-untracked", "nested", "file.txt")
 	nestedAbsPath := filepath.Join((func() string {
@@ -295,8 +285,7 @@ func TestRevertFiles_DeletesNestedUntrackedFile(t *testing.T) {
 }
 
 func TestRevertFiles_ReturnsFailedPreconditionWhenAllRequestedFilesFail(t *testing.T) {
-	svc, sqlDB, userID, worktreeID := setupTestWorktreeServiceForRevert(t)
-	defer sqlDB.Close()
+	svc, userID, worktreeID := setupTestWorktreeServiceForRevert(t)
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 	_, err := svc.RevertFiles(ctx, connect.NewRequest(&reliantv1.RevertFilesRequest{

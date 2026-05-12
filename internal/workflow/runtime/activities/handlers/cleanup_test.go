@@ -15,8 +15,7 @@ import (
 
 // setupTestRepo creates an in-memory test database
 func setupTestRepo(t *testing.T) db.Repository {
-	repo, err := db.NewInMemoryRepo()
-	require.NoError(t, err)
+	repo := db.NewTestRepo(t)
 	return repo
 }
 

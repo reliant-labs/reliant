@@ -41,7 +41,7 @@ vi.mock('@/lib/logger', () => ({
 
 function buildRequest() {
   return {
-    method: { name: 'SyncReliantProvider' },
+    method: { name: 'GetProviderStatuses' },
     service: { typeName: 'reliant.v1.SettingsService' },
     header: new Headers(),
     signal: new AbortController().signal,
@@ -82,7 +82,7 @@ describe('grpc-client auth interceptor', () => {
     expect(mocks.logger.info).toHaveBeenCalledWith(
       '[gRPC Client] Auth token set for request:',
       expect.objectContaining({
-        method: 'SyncReliantProvider',
+        method: 'GetProviderStatuses',
         tokenLength: 9,
       })
     )
@@ -104,7 +104,7 @@ describe('grpc-client auth interceptor', () => {
     expect(mocks.logger.warn).toHaveBeenCalledWith(
       '[gRPC Client] No auth token available for request:',
       expect.objectContaining({
-        method: 'SyncReliantProvider',
+        method: 'GetProviderStatuses',
         hasSession: false,
       })
     )

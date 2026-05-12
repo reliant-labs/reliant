@@ -3,5 +3,5 @@ package db
 
 import "embed"
 
-//go:embed migrations/sqlite/*.sql migrations/postgres/*.sql
+//go:embed migrations/postgres/*.sql
 var FS embed.FS

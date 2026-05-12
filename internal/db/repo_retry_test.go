@@ -39,16 +39,6 @@ func TestIsRetryableError(t *testing.T) {
 			expected: true,
 		},
 		{
-			name:     "sqlite_busy error code",
-			err:      errors.New("SQLITE_BUSY: cannot commit"),
-			expected: true,
-		},
-		{
-			name:     "sqlite_locked error code",
-			err:      errors.New("SQLITE_LOCKED: table locked"),
-			expected: true,
-		},
-		{
 			name:     "concurrent update",
 			err:      errors.New("concurrent update detected"),
 			expected: true,
@@ -230,17 +220,16 @@ func TestRetryLogicConstants(t *testing.T) {
 }
 
 func TestRetryErrorMessages(t *testing.T) {
-	// Test that various SQLite error message formats are recognized
-	sqliteErrors := []string{
-		"Error 5: database is locked",
-		"sqlite3: database is locked",
-		"SQLITE_BUSY (5)",
+	// Test that various Postgres error message formats are recognized as retryable
+	retryableErrors := []string{
+		"database is locked",
 		"database table is locked: users",
 		"database schema is locked",
-		"(5) database is locked",
+		"could not serialize access due to concurrent update",
+		"deadlock detected",
 	}
 
-	for _, errMsg := range sqliteErrors {
+	for _, errMsg := range retryableErrors {
 		t.Run(errMsg, func(t *testing.T) {
 			err := errors.New(errMsg)
 			if !isRetryableError(err) {
@@ -252,8 +241,6 @@ func TestRetryErrorMessages(t *testing.T) {
 
 func TestNonRetryableErrors(t *testing.T) {
 	// Test that common non-retryable errors are correctly identified
-	// Note: Constraint violations ARE now considered retryable to handle
-	// parallel operations where another transaction may have succeeded.
 	nonRetryableErrors := []string{
 		"no such table: users",
 		"no such column: invalid_column",

@@ -29,7 +29,6 @@ interface CapturedPlan {
   useForge?: boolean;
   workflowParams?: Record<string, unknown>;
   selectedPresets?: Record<string, string | null>;
-  initialPrompt?: string;
   launchTour?: boolean;
 }
 
@@ -194,23 +193,7 @@ describe("GoalStep LAUNCH_OPTIONS contract", () => {
     });
   });
 
-  // ── 5. All options have initialPrompt defined ─────────────
-
-  it.each([
-    "build_app",
-    "existing_codebase",
-    "landing_page",
-    "pitch_deck",
-    "blog_post",
-    "explore",
-  ] as OnboardingIntent[])("%s has a non-empty initialPrompt", (intent) => {
-    const prompt = plans.get(intent)!.initialPrompt;
-    expect(prompt).toBeDefined();
-    expect(typeof prompt).toBe("string");
-    expect(prompt!.length).toBeGreaterThan(0);
-  });
-
-  // ── 6. Explore has launchTour ─────────────────────────────
+  // ── 5. Explore has launchTour ─────────────────────────────
 
   it("explore has launchTour = true", () => {
     expect(plans.get("explore")!.launchTour).toBe(true);

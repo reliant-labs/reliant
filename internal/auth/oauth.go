@@ -315,6 +315,11 @@ func buildAuthURL(serverURL, redirectURI, challenge, provider string) (string, e
 	q.Set("redirect_to", redirectURI)
 	q.Set("code_challenge", challenge)
 	q.Set("code_challenge_method", "S256")
+	// Request repo scope for GitHub so the provider_token can be used
+	// for git operations (clone, push) without a separate OAuth flow.
+	if provider == "github" {
+		q.Set("scopes", "user:email repo")
+	}
 	u.RawQuery = q.Encode()
 	return u.String(), nil
 }

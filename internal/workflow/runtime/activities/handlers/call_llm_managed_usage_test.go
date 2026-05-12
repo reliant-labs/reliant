@@ -27,18 +27,6 @@ type fakeManagedUsageControlPlaneClient struct {
 	err           error
 }
 
-func (f *fakeManagedUsageControlPlaneClient) GetCurrentUserReliantState(context.Context, string) (*controlplanev1.GetCurrentUserReliantStateResponse, error) {
-	panic("unexpected call")
-}
-
-func (f *fakeManagedUsageControlPlaneClient) RepairCurrentUserReliantAccess(context.Context, string) (*controlplanev1.RepairCurrentUserReliantAccessResponse, error) {
-	panic("unexpected call")
-}
-
-func (f *fakeManagedUsageControlPlaneClient) RotateCurrentUserReliantAccess(context.Context, string, string) (*controlplanev1.RotateCurrentUserReliantAccessResponse, error) {
-	panic("unexpected call")
-}
-
 func (f *fakeManagedUsageControlPlaneClient) CheckManagedReliantAffordability(context.Context, string, controlplane.ManagedReliantAffordabilityRequest) (*controlplanev1.CheckManagedReliantAffordabilityResponse, error) {
 	panic("unexpected call")
 }
@@ -130,7 +118,7 @@ func TestReserveManagedReliantUsage_SendsManagedReliantEstimate(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "user-1")
-	requireNoError(t, repo.SetProviderAPIKey(ctx, "user-1", "reliant", "rlnt_managed_key"))
+	auth.SetUserJWT("user-1", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEifQ.dGVzdA")
 
 	cp := &fakeManagedUsageControlPlaneClient{}
 	activity := &CallLLMActivity{repo: repo, controlPlaneClient: cp}
@@ -151,8 +139,8 @@ func TestReserveManagedReliantUsage_SendsManagedReliantEstimate(t *testing.T) {
 	if cp.reserveCalls != 1 {
 		t.Fatalf("reserve calls = %d, want 1", cp.reserveCalls)
 	}
-	if cp.managedKey != "rlnt_managed_key" {
-		t.Fatalf("managed key = %q, want rlnt_managed_key", cp.managedKey)
+	if cp.managedKey != "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEifQ.dGVzdA" {
+		t.Fatalf("managed key = %q, want JWT", cp.managedKey)
 	}
 	if cp.ctxUserID != "user-1" {
 		t.Fatalf("ctx user ID = %q, want user-1", cp.ctxUserID)
@@ -178,7 +166,7 @@ func TestReserveManagedReliantUsage_PropagatesErrors(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "user-1")
-	requireNoError(t, repo.SetProviderAPIKey(ctx, "user-1", "reliant", "rlnt_managed_key"))
+	auth.SetUserJWT("user-1", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEifQ.dGVzdA")
 	cp := &fakeManagedUsageControlPlaneClient{err: errors.New("boom")}
 	activity := &CallLLMActivity{repo: repo, controlPlaneClient: cp}
 	driver := fakeManagedUsageDriver{name: "reliant", model: models.Model{ID: models.ModelID("claude-sonnet-4-5"), CostPer1MIn: 2, CostPer1MOut: 8, DefaultMaxTokens: 4096}}
@@ -193,7 +181,7 @@ func TestCompleteManagedReliantReservation_FinalizesManagedSpend(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "user-1")
-	requireNoError(t, repo.SetProviderAPIKey(ctx, "user-1", "reliant", "rlnt_managed_key"))
+	auth.SetUserJWT("user-1", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEifQ.dGVzdA")
 
 	cp := &fakeManagedUsageControlPlaneClient{}
 	activity := &CallLLMActivity{repo: repo, controlPlaneClient: cp}
@@ -202,7 +190,7 @@ func TestCompleteManagedReliantReservation_FinalizesManagedSpend(t *testing.T) {
 		model: models.Model{ID: models.ModelID("claude-sonnet-4-5"), CostPer1MIn: 2, CostPer1MOut: 8},
 	}
 	usage := llm.TokenUsage{InputTokens: 1000, OutputTokens: 2000, CachedInputTokens: 150}
-	reservation := &ManagedReliantReservation{ManagedKey: "rlnt_managed_key", ReservationID: "res-123", ModelID: "claude-sonnet-4-5", CanonicalModelID: "anthropic/claude-sonnet-4-5"}
+	reservation := &ManagedReliantReservation{ManagedKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEifQ.dGVzdA", ReservationID: "res-123", ModelID: "claude-sonnet-4-5", CanonicalModelID: "anthropic/claude-sonnet-4-5"}
 
 	activity.completeManagedReliantReservation(ctx, &db.Chat{ID: "chat-1", UserID: "user-1"}, driver, usage, nil, reservation)
 
@@ -230,10 +218,10 @@ func TestCompleteManagedReliantReservation_FinalizesManagedSpend(t *testing.T) {
 func TestCompleteManagedReliantReservation_ReleasesOnFailure(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
-	requireNoError(t, repo.SetProviderAPIKey(context.Background(), "user-1", "reliant", "rlnt_managed_key"))
+	auth.SetUserJWT("user-1", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEifQ.dGVzdA")
 	cp := &fakeManagedUsageControlPlaneClient{}
 	activity := &CallLLMActivity{repo: repo, controlPlaneClient: cp}
-	reservation := &ManagedReliantReservation{ManagedKey: "rlnt_managed_key", ReservationID: "res-err", ModelID: "claude-sonnet-4-5", CanonicalModelID: "anthropic/claude-sonnet-4-5"}
+	reservation := &ManagedReliantReservation{ManagedKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEifQ.dGVzdA", ReservationID: "res-err", ModelID: "claude-sonnet-4-5", CanonicalModelID: "anthropic/claude-sonnet-4-5"}
 	activity.completeManagedReliantReservation(context.Background(), &db.Chat{ID: "chat-1", UserID: "user-1"}, fakeManagedUsageDriver{name: "reliant", model: models.Model{ID: models.ModelID("claude-sonnet-4-5")}}, llm.TokenUsage{Cost: 1}, errors.New("boom"), reservation)
 	if cp.releaseCalls != 1 {
 		t.Fatalf("release calls = %d, want 1", cp.releaseCalls)
@@ -246,10 +234,10 @@ func TestCompleteManagedReliantReservation_ReleasesOnFailure(t *testing.T) {
 func TestCompleteManagedReliantReservation_ReleasesZeroSpend(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
-	requireNoError(t, repo.SetProviderAPIKey(context.Background(), "user-1", "reliant", "rlnt_managed_key"))
+	auth.SetUserJWT("user-1", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEifQ.dGVzdA")
 	cp := &fakeManagedUsageControlPlaneClient{}
 	activity := &CallLLMActivity{repo: repo, controlPlaneClient: cp}
-	reservation := &ManagedReliantReservation{ManagedKey: "rlnt_managed_key", ReservationID: "res-zero", ModelID: "claude-sonnet-4-5", CanonicalModelID: "anthropic/claude-sonnet-4-5"}
+	reservation := &ManagedReliantReservation{ManagedKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEifQ.dGVzdA", ReservationID: "res-zero", ModelID: "claude-sonnet-4-5", CanonicalModelID: "anthropic/claude-sonnet-4-5"}
 	activity.completeManagedReliantReservation(context.Background(), &db.Chat{ID: "chat-1", UserID: "user-1"}, fakeManagedUsageDriver{name: "reliant", model: models.Model{ID: models.ModelID("claude-sonnet-4-5")}}, llm.TokenUsage{}, nil, reservation)
 	if cp.releaseCalls != 1 {
 		t.Fatalf("release calls = %d, want 1", cp.releaseCalls)
@@ -260,7 +248,7 @@ func TestReserveManagedReliantUsage_SkipsNonManagedInputs(t *testing.T) {
 	t.Run("non reliant driver", func(t *testing.T) {
 		repo, cleanup := db.SetupTestDB(t)
 		defer cleanup()
-		requireNoError(t, repo.SetProviderAPIKey(context.Background(), "user-1", "reliant", "rlnt_managed_key"))
+		auth.SetUserJWT("user-1", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEifQ.dGVzdA")
 		cp := &fakeManagedUsageControlPlaneClient{}
 		activity := &CallLLMActivity{repo: repo, controlPlaneClient: cp}
 		reservation, err := activity.reserveManagedReliantUsage(context.Background(), &db.Chat{ID: "chat-1", UserID: "user-1"}, fakeManagedUsageDriver{name: "openai"}, nil, nil, "")
@@ -292,7 +280,7 @@ func TestReserveManagedReliantUsageForChat_UsesOverrideClient(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "user-1")
-	requireNoError(t, repo.SetProviderAPIKey(ctx, "user-1", "reliant", "rlnt_managed_key"))
+	auth.SetUserJWT("user-1", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEifQ.dGVzdA")
 	activity := &CallLLMActivity{repo: repo}
 	cp := &fakeManagedUsageControlPlaneClient{}
 	driver := fakeManagedUsageDriver{name: "reliant", model: models.Model{ID: models.ModelID("claude-sonnet-4-5"), CostPer1MIn: 2, CostPer1MOut: 8, DefaultMaxTokens: 4096}}
@@ -311,7 +299,7 @@ func TestReserveManagedReliantUsageForChat_UsesOverrideClient(t *testing.T) {
 func TestCompleteManagedReliantReservationForChat_UsesOverrideClient(t *testing.T) {
 	cp := &fakeManagedUsageControlPlaneClient{}
 	activity := &CallLLMActivity{}
-	activity.CompleteManagedReliantReservationForChat(context.Background(), &db.Chat{ID: "chat-1", UserID: "user-1"}, fakeManagedUsageDriver{name: "reliant", model: models.Model{ID: models.ModelID("claude-sonnet-4-5"), CostPer1MIn: 2, CostPer1MOut: 8}}, llm.TokenUsage{InputTokens: 1000, OutputTokens: 2000}, nil, &ManagedReliantReservation{ManagedKey: "rlnt_managed_key", ReservationID: "res-123", ModelID: "claude-sonnet-4-5", CanonicalModelID: "anthropic/claude-sonnet-4-5"}, cp)
+	activity.CompleteManagedReliantReservationForChat(context.Background(), &db.Chat{ID: "chat-1", UserID: "user-1"}, fakeManagedUsageDriver{name: "reliant", model: models.Model{ID: models.ModelID("claude-sonnet-4-5"), CostPer1MIn: 2, CostPer1MOut: 8}}, llm.TokenUsage{InputTokens: 1000, OutputTokens: 2000}, nil, &ManagedReliantReservation{ManagedKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEifQ.dGVzdA", ReservationID: "res-123", ModelID: "claude-sonnet-4-5", CanonicalModelID: "anthropic/claude-sonnet-4-5"}, cp)
 	if cp.finalizeCalls != 1 {
 		t.Fatalf("finalize calls = %d, want 1", cp.finalizeCalls)
 	}
@@ -323,10 +311,10 @@ func TestCompleteManagedReliantReservationForChat_UsesOverrideClient(t *testing.
 func TestCompleteManagedReliantReservation_FallsBackToLegacyModelIDForCanonicalModel(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
-	requireNoError(t, repo.SetProviderAPIKey(context.Background(), "user-1", "reliant", "rlnt_managed_key"))
+	auth.SetUserJWT("user-1", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEifQ.dGVzdA")
 	cp := &fakeManagedUsageControlPlaneClient{}
 	activity := &CallLLMActivity{repo: repo, controlPlaneClient: cp}
-	reservation := &ManagedReliantReservation{ManagedKey: "rlnt_managed_key", ReservationID: "res-fallback", ModelID: "claude-sonnet-4-5"}
+	reservation := &ManagedReliantReservation{ManagedKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEifQ.dGVzdA", ReservationID: "res-fallback", ModelID: "claude-sonnet-4-5"}
 	activity.completeManagedReliantReservation(context.Background(), &db.Chat{ID: "chat-1", UserID: "user-1"}, fakeManagedUsageDriver{name: "reliant", model: models.Model{ID: models.ModelID("claude-sonnet-4-5"), CostPer1MIn: 2, CostPer1MOut: 8}}, llm.TokenUsage{InputTokens: 1, OutputTokens: 1}, nil, reservation)
 	if cp.finalizeCalls != 1 {
 		t.Fatalf("finalize calls = %d, want 1", cp.finalizeCalls)
@@ -361,7 +349,7 @@ func TestReserveManagedReliantUsage_FallsBackToDriverModelWithoutSuffix(t *testi
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "user-1")
-	requireNoError(t, repo.SetProviderAPIKey(ctx, "user-1", "reliant", "rlnt_managed_key"))
+	auth.SetUserJWT("user-1", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEifQ.dGVzdA")
 	cp := &fakeManagedUsageControlPlaneClient{}
 	activity := &CallLLMActivity{repo: repo, controlPlaneClient: cp}
 	driver := fakeManagedUsageDriver{

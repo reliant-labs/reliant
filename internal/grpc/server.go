@@ -12,6 +12,8 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/go-chi/cors"
+	"github.com/reliant-labs/forge/pkg/observe"
+	"go.opentelemetry.io/otel"
 	"go.temporal.io/sdk/client"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -64,17 +66,11 @@ type Config struct {
 
 	ToolExecutor       *toolexec.RemoteExecutor     // Optional remote tool executor to bind to daemon service
 	ToolsDaemonService *services.ToolsDaemonService // Optional pre-created daemon service to share across startup wiring
-	DaemonRouter       toolexec.DaemonRouter        // Optional pre-created daemon router; built from ToolsDaemonService if nil
+	DaemonRouter       toolexec.DaemonRouter        // Optional pre-created daemon router for transport-agnostic daemon access
 
 	BackgroundProvider services.BackgroundProcessProvider // Provider for background process state
 
 	NATSChecker func() bool // Optional: returns true if NATS is connected; nil means NATS not in use
-	LocalMode   bool        // true in monolith mode, false in cloud/distributed mode
-
-	// OnFirstAuth is called once per userID per process, the first time that
-	// user authenticates successfully. Used in monolith mode to lazy-start the
-	// in-process daemon under the authenticated user's identity.
-	OnFirstAuth func(userID string)
 
 	// TLS configuration for HTTP/2 support
 	TLSCertFile string // Path to TLS certificate file
@@ -82,7 +78,7 @@ type Config struct {
 }
 
 // NewServer creates a new Connect/gRPC server.
-// Returns an error if the auth interceptor fails to initialize in cloud mode (LocalMode=false).
+// Returns an error if the auth interceptor fails to initialize.
 func NewServer(cfg *Config) (*Server, error) {
 	mux := http.NewServeMux()
 	database := cfg.Database
@@ -105,10 +101,6 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("auth interceptor setup failed: %w", err)
 	}
-	if cfg.OnFirstAuth != nil {
-		authInterceptor.SetOnFirstAuth(cfg.OnFirstAuth)
-	}
-
 	domainWhitelistInterceptor := interceptors.NewDomainWhitelistInterceptor(cfg.AllowedEmailDomains)
 
 	// Order matters: recovery (outermost) -> error reporter -> timeout -> auth -> domain whitelist (innermost).
@@ -118,11 +110,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	// because other services depend on it for config loading)
 	toolsDaemonService := cfg.ToolsDaemonService
 	if toolsDaemonService == nil {
-		if cfg.LocalMode {
-			toolsDaemonService = services.NewToolsDaemonService(database)
-		} else {
-			toolsDaemonService = services.NewToolsDaemonServiceWithoutMonitor(database)
-		}
+		toolsDaemonService = services.NewToolsDaemonServiceWithoutMonitor(database)
 	}
 
 	// Wire the user update hub so daemon heartbeats can be pushed to the frontend.
@@ -132,12 +120,9 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	// Build a DaemonRouter for services that need transport-agnostic daemon access.
 	router := cfg.DaemonRouter
-	if router == nil {
-		router = toolexec.NewLocalDaemonRouter(toolsDaemonService)
-	}
 
 	// Create services
-	systemService := services.NewSystemService(database, cfg.TemporalClient, cfg.NATSChecker, cfg.StreamingHub, cfg.LocalMode)
+	systemService := services.NewSystemService(database, cfg.TemporalClient, cfg.NATSChecker, cfg.StreamingHub)
 	planService := services.NewPlanService(database)
 	taskService := services.NewTaskService(database)
 	catalogService := services.NewCatalogService(cfg.ToolsFactory)
@@ -189,9 +174,8 @@ func NewServer(cfg *Config) (*Server, error) {
 	attachmentPath, attachmentHandler := reliantv1connect.NewAttachmentServiceHandler(attachmentService, opts...)
 	presetPath, presetHandler := reliantv1connect.NewPresetServiceHandler(presetService, opts...)
 
-	// FileSystem, Background, and Terminal services: in local/monolith mode with a
-	// daemon router, use proxy services that forward requests through the daemon so
-	// the browser can connect through the monolith's gRPC port for everything.
+	// FileSystem, Background, and Terminal services: when a daemon router is
+	// available, use proxy services that forward requests through the daemon.
 	// Otherwise fall back to the DB-backed / provider-backed implementations.
 	var filesystemPath string
 	var filesystemHandler http.Handler
@@ -202,7 +186,7 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	if router != nil {
 		// Proxy services route browser requests through the daemon router (NATS in
-		// distributed mode, in-process in monolith mode) to the connected daemon.
+		// distributed mode) to the connected daemon.
 		logging.Info("Registering daemon proxy services (FileSystem, Background, Terminal)")
 
 		fsProxy := services.NewFileSystemProxyService(router, database)
@@ -448,7 +432,7 @@ func (s *Server) Mux() *http.ServeMux {
 }
 
 // newHandlerOptions builds the standard Connect handler options with the shared
-// interceptor ordering: recovery -> error reporter -> timeout -> auth.
+// interceptor chain.
 func newHandlerOptions(timeoutInterceptor connect.Interceptor, authInterceptors ...connect.Interceptor) []connect.HandlerOption {
 	all := newInterceptors(timeoutInterceptor, authInterceptors...)
 	opts := make([]connect.HandlerOption, 0, len(all))
@@ -459,10 +443,13 @@ func newHandlerOptions(timeoutInterceptor connect.Interceptor, authInterceptors 
 }
 
 // newInterceptors returns the ordered interceptor slice used by both main and daemon servers.
+// The canonical chain is provided by forge's observe.DefaultMiddlewares:
+//
+//	Recovery → RequestID → Logging → Tracing → Metrics → Extras
+//
+// Reliant-specific interceptors (error reporter, timeout, auth) are passed as Extras.
 func newInterceptors(timeoutInterceptor connect.Interceptor, authInterceptors ...connect.Interceptor) []connect.Interceptor {
-	out := []connect.Interceptor{
-		interceptors.NewObservabilityInterceptor(), // outermost: metrics + tracing
-		interceptors.NewRecoveryInterceptor(),
+	extras := []connect.Interceptor{
 		interceptors.NewErrorReporterInterceptor(),
 		timeoutInterceptor,
 	}
@@ -470,9 +457,12 @@ func newInterceptors(timeoutInterceptor connect.Interceptor, authInterceptors ..
 		if isNilInterceptor(ai) {
 			continue
 		}
-		out = append(out, ai)
+		extras = append(extras, ai)
 	}
-	return out
+	return observe.DefaultMiddlewares(observe.DefaultMiddlewareDeps{
+		Tracer: otel.Tracer("reliant.grpc"),
+		Extras: extras,
+	})
 }
 
 func isNilInterceptor(i connect.Interceptor) bool {

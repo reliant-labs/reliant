@@ -28,7 +28,6 @@ type LaunchOption = {
   launchTour?: boolean;
   workflowParams?: Record<string, unknown>;
   selectedPresets?: Record<string, string | null>;
-  initialPrompt?: string;
   badge?: string;
 };
 
@@ -46,8 +45,6 @@ const LAUNCH_OPTIONS: LaunchOption[] = [
       mode: "auto",
       ask: true,
     },
-    initialPrompt:
-      "Help me scope a new Forge app. Ask the key product and design questions, then create the initial plan.",
     launchTour: false,
     badge: "Recommended",
   },
@@ -63,8 +60,6 @@ const LAUNCH_OPTIONS: LaunchOption[] = [
     workflowParams: {
       mode: "auto",
     },
-    initialPrompt:
-      "Explore this codebase and summarize the architecture, key files, and the safest first improvements.",
     launchTour: false,
   },
   {
@@ -86,8 +81,6 @@ const LAUNCH_OPTIONS: LaunchOption[] = [
     selectedPresets: {
       default: "ux",
     },
-    initialPrompt:
-      "Create a polished landing page. Ask for the product, audience, and visual direction if missing, then implement it end-to-end.",
     launchTour: false,
   },
   {
@@ -103,8 +96,6 @@ const LAUNCH_OPTIONS: LaunchOption[] = [
       mode: "auto",
       ask: false,
     },
-    initialPrompt:
-      "Help me create an investor pitch deck. Ask for the company URL and any missing context before starting.",
     launchTour: false,
   },
   {
@@ -124,8 +115,6 @@ const LAUNCH_OPTIONS: LaunchOption[] = [
     selectedPresets: {
       default: "documentation",
     },
-    initialPrompt:
-      "Help me draft a high-quality technical article or documentation page. Ask for topic, audience, and source material if missing.",
     launchTour: false,
   },
   {
@@ -141,8 +130,6 @@ const LAUNCH_OPTIONS: LaunchOption[] = [
       mode: "auto",
       ask: true,
     },
-    initialPrompt:
-      "Help me design and build a custom workflow. Ask about my use case, integrations, and quality requirements, then create it.",
     launchTour: false,
   },
   {
@@ -158,7 +145,7 @@ const LAUNCH_OPTIONS: LaunchOption[] = [
     workflowParams: {
       mode: "plan",
     },
-    initialPrompt: "Show me what Reliant can do and suggest a first workflow to try.",
+
   },
 ];
 
@@ -184,7 +171,7 @@ export function GoalStep({ plan, updatePlan, onNext }: StepProps) {
       useForge: option.useForge,
       workflowParams: option.workflowParams,
       selectedPresets: option.selectedPresets,
-      initialPrompt: option.initialPrompt,
+
       launchTour: option.launchTour ?? false,
     });
     onNext();

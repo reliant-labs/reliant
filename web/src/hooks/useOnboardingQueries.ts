@@ -3,11 +3,13 @@ import {
   listDaemons,
   createDaemon,
   resumeDaemon,
-  listGitRepos,
   cloneRepo,
-  hasReliantCreditEligibility,
+  listGitRepos,
+  getReliantEntitlement,
+  isCloudEligible,
   type ControlPlaneUser,
 } from '@/components/OnboardingFlow/api';
+
 import { onboardingService } from '@/services/controlPlane/onboarding';
 
 export function useCurrentUser() {
@@ -19,13 +21,23 @@ export function useCurrentUser() {
 }
 
 export function useCloudEligibility() {
-  const { data: user, isLoading } = useCurrentUser();
-  const eligible = !isLoading && user ? hasReliantCreditEligibility(user) : false;
+  const { data: user, isLoading: userLoading } = useCurrentUser();
+  const { data: entitlementResp, isLoading: entitlementLoading } = useQuery({
+    queryKey: ['onboarding', 'reliantEntitlement'],
+    queryFn: () => getReliantEntitlement(),
+    staleTime: 30_000,
+  });
+
+  const isLoading = userLoading || entitlementLoading;
+  const entitlement = entitlementResp?.entitlement;
+  const eligible = !isLoading && isCloudEligible(entitlement);
+
   const reason = !user ? 'Sign up required'
     : user.ipRestricted ? 'Cloud daemons not available from your network'
     : (user.globalBudgetAvailable === false || user.budgetAvailable === false) ? 'Cloud budget reached'
-    : !hasReliantCreditEligibility(user) ? 'No cloud credits available'
+    : !isCloudEligible(entitlement) ? 'No cloud credits available'
     : null;
+
   return { eligible, reason, isLoading };
 }
 

@@ -39,9 +39,8 @@ type ToolExecutionResponse struct {
 }
 
 // DaemonRouter abstracts all daemon-bound operations behind a transport-agnostic interface.
-// Implementations:
-//   - LocalDaemonRouter: routes directly to in-process ToolsDaemonService (monolith/daemon mode)
-//   - NATSDaemonRouter: routes via NATS request-reply to the api-server holding the connection (distributed mode)
+// Implementation:
+//   - NATSDaemonRouter: routes via NATS request-reply to the api-server holding the connection
 type DaemonRouter interface {
 	// IsDaemonOnline checks if a daemon is connected for the given user.
 	// Returns (online, nil) for definitive results, or (false, err) for infrastructure failures.
@@ -99,8 +98,8 @@ type DaemonConnectionListener interface {
 	OnDaemonDisconnected(userID, daemonID string)
 }
 
-// DaemonConnectionManager is the subset of ToolsDaemonService needed by LocalDaemonRouter
-// and NATSToolBridge. This avoids importing the services package from toolexec.
+// DaemonConnectionManager is the subset of ToolsDaemonService needed by NATSToolBridge.
+// This avoids importing the services package from toolexec.
 //
 // All methods that accept userID route to the user's default daemon (prefer
 // local, then most recently connected). For explicit daemon targeting, use

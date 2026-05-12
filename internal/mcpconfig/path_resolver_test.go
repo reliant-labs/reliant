@@ -12,8 +12,7 @@ import (
 )
 
 func TestResolveProjectForMCPPath_ProjectPath(t *testing.T) {
-	repo, err := db.NewInMemoryRepo()
-	require.NoError(t, err)
+	repo := db.NewTestRepo(t)
 	t.Cleanup(func() {
 		_ = repo.Close()
 	})
@@ -27,8 +26,7 @@ func TestResolveProjectForMCPPath_ProjectPath(t *testing.T) {
 }
 
 func TestResolveProjectForMCPPath_WorktreePathResolvesOwningProject(t *testing.T) {
-	repo, err := db.NewInMemoryRepo()
-	require.NoError(t, err)
+	repo := db.NewTestRepo(t)
 	t.Cleanup(func() {
 		_ = repo.Close()
 	})
@@ -43,8 +41,7 @@ func TestResolveProjectForMCPPath_WorktreePathResolvesOwningProject(t *testing.T
 }
 
 func TestResolveProjectForMCPPath_NotFound(t *testing.T) {
-	repo, err := db.NewInMemoryRepo()
-	require.NoError(t, err)
+	repo := db.NewTestRepo(t)
 	t.Cleanup(func() {
 		_ = repo.Close()
 	})
@@ -56,8 +53,7 @@ func TestResolveProjectForMCPPath_NotFound(t *testing.T) {
 }
 
 func TestResolveProjectForMCPPath_EmptyPath(t *testing.T) {
-	repo, err := db.NewInMemoryRepo()
-	require.NoError(t, err)
+	repo := db.NewTestRepo(t)
 	t.Cleanup(func() {
 		_ = repo.Close()
 	})

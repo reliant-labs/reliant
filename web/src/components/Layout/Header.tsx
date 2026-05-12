@@ -10,7 +10,6 @@ import {
   Workflow,
   FolderOpen,
   FolderGit2,
-  Shield,
   MessageSquarePlus,
 } from "lucide-react";
 import {
@@ -26,7 +25,7 @@ import { useShortcutsStore } from "../../store/shortcutsStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { ConfigHealthIndicator } from "./ConfigHealthIndicator";
 import { DaemonStatusDot } from "./DaemonStatusDot";
-import { getAdminURL, isDev } from "../../lib/constants";
+import { isDev } from "../../lib/constants";
 import { openExternalLink } from "../../lib/open-link";
 
 interface HeaderProps {
@@ -79,7 +78,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
     const [isFullscreen, setIsFullscreen] = useState(false);
 
     const isMac = window.electronAPI?.platform === "darwin";
-    const adminURL = getAdminURL();
+
 
     // Track fullscreen state - use both resize listener AND Electron API
     // Query Electron API on every resize to catch Fill modes immediately
@@ -386,25 +385,6 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
                   aria-label="Workspaces"
                 >
                   <FolderGit2 className="w-4 h-4" />
-                </button>
-              </Tooltip>
-            )}
-
-            {/* Admin button */}
-            {adminURL && (
-              <Tooltip
-                content="Open Admin"
-                placement="bottom"
-                delay={300}
-              >
-                <button
-                  onClick={() => {
-                    void openExternalLink(adminURL);
-                  }}
-                  className="header-icon-btn p-1.5 rounded text-xs transition-colors"
-                  aria-label="Open Admin"
-                >
-                  <Shield className="w-4 h-4" />
                 </button>
               </Tooltip>
             )}

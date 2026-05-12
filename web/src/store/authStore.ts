@@ -4,7 +4,6 @@ import { supabase } from '@/lib/supabase'
 import { logger } from '@/lib/logger'
 import { setSentryUser } from '@/lib/sentry'
 import { devAuthGrpc } from '@/api/grpc-unauth'
-import { persistProviderToken } from '@/lib/persist-provider-token'
 
 const isElectron = !!window.electronAPI
 const getOAuthRedirectUrl = async (): Promise<string> => {
@@ -114,8 +113,8 @@ const setupElectronOAuthCallbackListener = (setState: (state: Partial<AuthState>
         // Capture GitHub provider_token if available (only emitted once at sign-in)
         if (data.session?.provider_token) {
           try {
-            const { saveGitCredential } = await import('@/api/controlplane-client')
-            await saveGitCredential('github', data.session.provider_token, 'repo')
+            const { gitService } = await import('@/services/controlPlane/git')
+            await gitService.saveCredential('github', data.session.provider_token, 'repo')
           } catch (err) {
             console.warn('Failed to save git credential:', err)
           }
@@ -345,8 +344,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         // Save GitHub provider token as git credential if available
         if (oauthSession.providerToken) {
           try {
-            const { saveGitCredential } = await import('@/api/controlplane-client')
-            await saveGitCredential('github', oauthSession.providerToken, 'repo')
+            const { gitService } = await import('@/services/controlPlane/git')
+            await gitService.saveCredential('github', oauthSession.providerToken, 'repo')
           } catch (err) {
             console.warn('Failed to save git credential:', err)
           }
@@ -916,9 +915,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           const provider = session.user?.app_metadata?.provider
           if (provider === 'github') {
             try {
-              await persistProviderToken(session.provider_token, 'github', 'repo')
+              const { gitService } = await import('@/services/controlPlane/git')
+              await gitService.saveCredential('github', session.provider_token, 'repo')
             } catch (err) {
-              logger.warn('[AuthStore] Failed to persist provider token', err)
+              logger.warn('[AuthStore] Failed to save git credential', err)
             }
           }
         }
