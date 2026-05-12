@@ -28,11 +28,10 @@ type testEnv struct {
 
 func newTestEnv(t *testing.T) *testEnv {
 	t.Helper()
-	repo, err := db.NewInMemoryRepo()
-	require.NoError(t, err)
+	repo := db.NewTestRepo(t)
 
 	// Create test project
-	err = repo.CreateProject(context.Background(), &db.Project{
+	err := repo.CreateProject(context.Background(), &db.Project{
 		ID:        "test-project",
 		Name:      "Test Project",
 		Path:      "/tmp/test",

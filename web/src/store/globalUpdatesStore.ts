@@ -613,7 +613,7 @@ function handleChatTitleChanged(update: UserUpdate) {
     title: data.title,
   });
 
-  try { getEventBus().emit("chat:titleChanged", { chatId: chat_id, title: data.title }); queryClient.invalidateQueries({ queryKey: chatKeys.detail(chat_id) }); } catch { /* bus not ready */ }
+  try { getEventBus().emit("chat:titleChanged", { chatId: chat_id, title: data.title }); queryClient.invalidateQueries({ queryKey: chatKeys.lists() }); queryClient.invalidateQueries({ queryKey: chatKeys.detail(chat_id) }); } catch { /* bus not ready */ }
 }
 
 function handleChatDeleted(update: UserUpdate) {

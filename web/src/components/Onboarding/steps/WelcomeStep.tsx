@@ -4,6 +4,7 @@
  * Introduction to the onboarding wizard.
  */
 
+import { useEffect } from "react";
 import {
   Sparkles,
   GitBranch,
@@ -15,8 +16,13 @@ import {
 import { OnboardingModal } from "../OnboardingModal";
 import { ReliantIcon } from "../../icons/ReliantIcon";
 import type { StepProps } from "../types";
+import { trackEvent } from "../../../lib/analytics";
 
 export function WelcomeStep({ stepNumber, totalSteps }: StepProps) {
+  useEffect(() => {
+    trackEvent("page_visited", { pageName: "onboarding_welcome" });
+  }, []);
+
   return (
     <OnboardingModal
       isOpen={true}

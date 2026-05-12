@@ -1,6 +1,8 @@
 package daemonruntime
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -10,6 +12,46 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestPathLooksLikeGitRepo(t *testing.T) {
+	t.Run("empty path", func(t *testing.T) {
+		assert.False(t, pathLooksLikeGitRepo(""))
+	})
+
+	t.Run("single repo with .git dir", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.Mkdir(filepath.Join(dir, ".git"), 0o755))
+		assert.True(t, pathLooksLikeGitRepo(dir))
+	})
+
+	t.Run("single repo with .git file (worktree)", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, ".git"), []byte("gitdir: /somewhere\n"), 0o644))
+		assert.True(t, pathLooksLikeGitRepo(dir))
+	})
+
+	t.Run("multi-repo root without .git but children have .git", func(t *testing.T) {
+		dir := t.TempDir()
+		// Create two child repos
+		for _, child := range []string{"repo-a", "repo-b"} {
+			childDir := filepath.Join(dir, child)
+			require.NoError(t, os.Mkdir(childDir, 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(childDir, ".git"), []byte("gitdir: /somewhere\n"), 0o644))
+		}
+		assert.True(t, pathLooksLikeGitRepo(dir))
+	})
+
+	t.Run("non-git directory", func(t *testing.T) {
+		dir := t.TempDir()
+		assert.False(t, pathLooksLikeGitRepo(dir))
+	})
+
+	t.Run("directory with only files, no child dirs", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("hello"), 0o644))
+		assert.False(t, pathLooksLikeGitRepo(dir))
+	})
+}
 
 func TestUTF8Sanitization(t *testing.T) {
 	tests := []struct {

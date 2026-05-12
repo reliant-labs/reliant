@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback } from "react";
 import { GitBranch, FolderOpen, Link, Loader2, CheckCircle2, Github } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
-import { cloneRepo, listGitCredentials } from "../../api/controlplane-client";
-import type { GitAccount } from "../../api/controlplane-client";
+import { gitService } from "../../services/controlPlane/git";
+import type { GitAccount } from "../../services/controlPlane/git";
 import { useAuthStore } from "../../store/authStore";
 
 interface AddRepoModalProps {
@@ -62,7 +62,7 @@ export function AddRepoModal({ isOpen, onClose, daemonName }: AddRepoModalProps)
     const refreshAccounts = async () => {
       setCheckingGitHub(true);
       try {
-        const res = await listGitCredentials("github");
+        const res = await gitService.listCredentials("github");
         setAccounts(res.accounts ?? []);
         if (res.accounts?.length === 1) {
           setSelectedAccount(res.accounts[0].account_login);
@@ -100,8 +100,8 @@ export function AddRepoModal({ isOpen, onClose, daemonName }: AddRepoModalProps)
     setError(null);
 
     try {
-      const result = await cloneRepo(daemonName, repoUrl, branch, path, selectedAccount || undefined);
-      setClonedPath(result.cloned_path);
+      const result = await gitService.cloneRepo(daemonName, repoUrl, branch, path, selectedAccount || undefined);
+      setClonedPath(result.clonedPath);
       setModalState("success");
 
       // Auto-close after brief delay on success

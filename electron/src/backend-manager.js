@@ -1,32 +1,33 @@
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-const http = require('http');
-const https = require('https');
 const { app } = require('electron');
-const findFreePort = require('find-free-port');
 const log = require('./logger');
 const dotenv = require('dotenv');
+
+// Default hosted API URLs (production)
+const DEFAULT_API_URL = 'https://reliantapi.com';
+const DEFAULT_GATEWAY_URL = ''; // Empty means the daemon will derive from the API URL
 
 class BackendManager {
   constructor() {
     this.process = null;
-    this.grpcPort = null;
-    this.toolsDaemonPort = null;
-    this.temporalFrontendPort = null;
-    this.temporalUIPort = null;
+    this.daemonPort = null;
     this.useTLS = process.env.DISABLE_TLS !== 'true'; // TLS enabled by default unless DISABLE_TLS=true
     this.isRunning = false;
     this.isShuttingDown = false;
-    this.startupTimeout = 60000; // 60 seconds - Temporal initialization can be slow on first run
+    this.startupTimeout = 30000; // 30 seconds - daemon startup is simpler than monolith
     this.shutdownTimeout = 25000; // 25 seconds - must be longer than Go's total shutdown (15s)
     this.isDevelopment = process.env.NODE_ENV === 'development'; // Added for development mode
     this.restartAttempts = 0;
     this.maxRestartAttempts = 5;
     this.restartDelay = 1000; // Start with 1 second delay
     this.intentionalShutdown = false; // Track if shutdown was intentional
-    this.mockDriverConfig = null; // Store mock driver configuration
     this.instanceId = null; // Unique identifier for this instance (used in dev mode for process identification)
+
+    // Hosted API configuration
+    this.apiUrl = process.env.RELIANT_API_URL || DEFAULT_API_URL;
+    this.gatewayUrl = process.env.RELIANT_GATEWAY_URL || DEFAULT_GATEWAY_URL;
 
     // Load environment variables on initialization
     this.loadEnvironment();
@@ -82,26 +83,9 @@ class BackendManager {
       process.env[key] = parsedPorts[key];
     });
 
-    const dbUrl = process.env.DATABASE_URL || '';
-    let dbHost = '(unset)';
-    let dbPort = '(unset)';
-    try {
-      if (dbUrl) {
-        const u = new URL(dbUrl);
-        dbHost = u.hostname || dbHost;
-        dbPort = u.port || dbPort;
-      }
-    } catch (e) {
-      // Ignore URL parse errors; we still log raw driver/port vars below.
-    }
-
     log.info('[BackendManager] Applied .env.ports overrides', {
       path: portsPath,
       keys,
-      databaseDriver: process.env.DATABASE_DRIVER || '(unset)',
-      pgHost: process.env.PGHOST || dbHost,
-      pgPort: process.env.PGPORT || dbPort,
-      grpcPort: process.env.GRPC_PORT || '(unset)',
       toolsDaemonPort: process.env.TOOLS_DAEMON_PORT || '(unset)'
     });
   }
@@ -147,19 +131,38 @@ class BackendManager {
     // Normalize runtime env from generated worktree-specific ports/db file.
     // This avoids stale inherited shell env causing random cross-worktree DB drift.
     this.applyPortsEnvironment();
+
+    // Re-read API/gateway URLs after environment is loaded (env files may set them)
+    this.apiUrl = process.env.RELIANT_API_URL || DEFAULT_API_URL;
+    this.gatewayUrl = process.env.RELIANT_GATEWAY_URL || DEFAULT_GATEWAY_URL;
   }
 
-  loadMockDriverConfig() {
-    try {
-      const configPath = path.join(app.getPath('userData'), 'mock-driver-config.json');
-      if (fs.existsSync(configPath)) {
-        const data = fs.readFileSync(configPath, 'utf8');
-        this.mockDriverConfig = JSON.parse(data);
-        log.info('[BackendManager] Loaded mock driver config:', this.mockDriverConfig);
-      }
-    } catch (error) {
-      log.error('[BackendManager] Failed to load mock driver config:', error);
+  /**
+   * Build the daemon start args array with --server and --gateway flags.
+   */
+  buildDaemonArgs() {
+    const args = ['daemon', 'start'];
+
+    // Pass hosted API URL
+    args.push('--server', this.apiUrl);
+
+    // Pass gateway URL if explicitly configured
+    if (this.gatewayUrl) {
+      args.push('--gateway', this.gatewayUrl);
     }
+
+    // Pass the daemon port
+    if (this.daemonPort) {
+      args.push('--port', this.daemonPort.toString());
+    }
+
+    // Pass data directory
+    const dataDir = this.isDevelopment
+      ? './data'
+      : path.join(app.getPath('userData'), 'data');
+    args.push('--data-dir', dataDir);
+
+    return args;
   }
 
   /**
@@ -332,7 +335,6 @@ class BackendManager {
       }
       
       // Also check the PID lock file for any orphaned process
-      // The Go backend writes its PID to this file when it acquires the lock
       await this.cleanupFromLockFile();
       
     } catch (error) {
@@ -353,85 +355,90 @@ class BackendManager {
       ? './data'
       : path.join(app.getPath('userData'), 'data');
     
-    const lockFilePath = path.join(dataDir, '.reliant-backend.lock');
+    // Check both the old backend lock file and the daemon PID file
+    const lockFiles = [
+      path.join(dataDir, '.reliant-backend.lock'),
+      path.join(dataDir, 'daemon.pid'),
+    ];
     
-    try {
-      if (!fs.existsSync(lockFilePath)) {
-        log.debug('[BackendManager] No lock file found at:', lockFilePath);
-        return;
-      }
-      
-      // Read PID from lock file
-      const content = fs.readFileSync(lockFilePath, 'utf8').trim();
-      const pid = parseInt(content, 10);
-      
-      if (isNaN(pid) || pid <= 0) {
-        log.debug('[BackendManager] Invalid PID in lock file:', content);
-        // Remove invalid lock file
-        try { fs.unlinkSync(lockFilePath); } catch (e) { /* ignore */ }
-        return;
-      }
-      
-      // Skip if it's our own process
-      if (pid === process.pid || pid === this.process?.pid) {
-        log.debug('[BackendManager] Lock file PID is our own process, skipping');
-        return;
-      }
-      
-      // Check if process is running
-      if (process.platform === 'win32') {
-        try {
-          execSync(`tasklist /FI "PID eq ${pid}" /NH`, { encoding: 'utf8', timeout: 5000 });
-          log.warn(`[BackendManager] Found orphaned process from lock file: PID ${pid}`);
-          execSync(`taskkill /PID ${pid} /F`, { timeout: 5000 });
-          log.info(`[BackendManager] Killed orphaned process ${pid} from lock file`);
-        } catch (e) {
-          // Process not found or already dead
-          log.debug('[BackendManager] Lock file process not running:', pid);
-        }
-      } else {
-        // Unix: check if process exists
-        try {
-          execSync(`kill -0 ${pid}`, { timeout: 1000 });
-          // Process exists - kill it
-          log.warn(`[BackendManager] Found orphaned process from lock file: PID ${pid}`);
-          
-          try {
-            execSync(`kill -TERM ${pid}`, { timeout: 1000 });
-            // Wait for graceful shutdown
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            
-            // Check if still running
-            try {
-              execSync(`kill -0 ${pid}`, { timeout: 1000 });
-              // Still running - force kill
-              log.warn(`[BackendManager] Force killing orphaned process ${pid}`);
-              execSync(`kill -9 ${pid}`, { timeout: 1000 });
-            } catch (e) {
-              // Process exited gracefully
-            }
-          } catch (e) {
-            // SIGTERM failed, try SIGKILL
-            try { execSync(`kill -9 ${pid}`, { timeout: 1000 }); } catch (e2) { /* ignore */ }
-          }
-          
-          log.info(`[BackendManager] Killed orphaned process ${pid} from lock file`);
-        } catch (e) {
-          // Process doesn't exist - stale lock file
-          log.debug('[BackendManager] Lock file process not running:', pid);
-        }
-      }
-      
-      // Remove the stale lock file so the new process can start fresh
+    for (const lockFilePath of lockFiles) {
       try {
-        fs.unlinkSync(lockFilePath);
-        log.info('[BackendManager] Removed stale lock file');
-      } catch (e) {
-        log.debug('[BackendManager] Could not remove lock file:', e.message);
+        if (!fs.existsSync(lockFilePath)) {
+          continue;
+        }
+        
+        // Read PID from lock file
+        const content = fs.readFileSync(lockFilePath, 'utf8').trim();
+        const pid = parseInt(content, 10);
+        
+        if (isNaN(pid) || pid <= 0) {
+          log.debug('[BackendManager] Invalid PID in lock file:', content);
+          // Remove invalid lock file
+          try { fs.unlinkSync(lockFilePath); } catch (e) { /* ignore */ }
+          continue;
+        }
+        
+        // Skip if it's our own process
+        if (pid === process.pid || pid === this.process?.pid) {
+          log.debug('[BackendManager] Lock file PID is our own process, skipping');
+          continue;
+        }
+        
+        // Check if process is running
+        if (process.platform === 'win32') {
+          try {
+            execSync(`tasklist /FI "PID eq ${pid}" /NH`, { encoding: 'utf8', timeout: 5000 });
+            log.warn(`[BackendManager] Found orphaned process from lock file: PID ${pid}`);
+            execSync(`taskkill /PID ${pid} /F`, { timeout: 5000 });
+            log.info(`[BackendManager] Killed orphaned process ${pid} from lock file`);
+          } catch (e) {
+            // Process not found or already dead
+            log.debug('[BackendManager] Lock file process not running:', pid);
+          }
+        } else {
+          // Unix: check if process exists
+          try {
+            execSync(`kill -0 ${pid}`, { timeout: 1000 });
+            // Process exists - kill it
+            log.warn(`[BackendManager] Found orphaned process from lock file: PID ${pid}`);
+            
+            try {
+              execSync(`kill -TERM ${pid}`, { timeout: 1000 });
+              // Wait for graceful shutdown
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              
+              // Check if still running
+              try {
+                execSync(`kill -0 ${pid}`, { timeout: 1000 });
+                // Still running - force kill
+                log.warn(`[BackendManager] Force killing orphaned process ${pid}`);
+                execSync(`kill -9 ${pid}`, { timeout: 1000 });
+              } catch (e) {
+                // Process exited gracefully
+              }
+            } catch (e) {
+              // SIGTERM failed, try SIGKILL
+              try { execSync(`kill -9 ${pid}`, { timeout: 1000 }); } catch (e2) { /* ignore */ }
+            }
+            
+            log.info(`[BackendManager] Killed orphaned process ${pid} from lock file`);
+          } catch (e) {
+            // Process doesn't exist - stale lock file
+            log.debug('[BackendManager] Lock file process not running:', pid);
+          }
+        }
+        
+        // Remove the stale lock file so the new process can start fresh
+        try {
+          fs.unlinkSync(lockFilePath);
+          log.info('[BackendManager] Removed stale lock file');
+        } catch (e) {
+          log.debug('[BackendManager] Could not remove lock file:', e.message);
+        }
+        
+      } catch (error) {
+        log.debug('[BackendManager] Error checking lock file:', error.message);
       }
-      
-    } catch (error) {
-      log.debug('[BackendManager] Error checking lock file:', error.message);
     }
   }
 
@@ -486,16 +493,16 @@ class BackendManager {
         log.warn(`[BackendManager] Could not create symlink, using original binary: ${error.message}`);
         return {
           command: devBinaryPath,
-          args: ['monolith']
+          args: this.buildDaemonArgs()
         };
       }
 
-      log.info('[BackendManager] Starting backend with command:', symlinkPath);
+      log.info('[BackendManager] Starting daemon with command:', symlinkPath);
       log.info('[BackendManager] Instance ID:', this.instanceId);
 
       return {
         command: symlinkPath,
-        args: ['monolith']
+        args: this.buildDaemonArgs()
       };
     } else {
       // In production, use embedded binary
@@ -531,17 +538,9 @@ class BackendManager {
           log.warn('Could not set binary permissions:', error.message);
         }
 
-        const args = ['monolith'];
-
-        // Add mock driver flags if configured
-        if (this.mockDriverConfig?.enabled && this.mockDriverConfig?.mode === 'replay' && this.mockDriverConfig?.replayFile) {
-          args.push('--replay', this.mockDriverConfig.replayFile);
-          log.info('[BackendManager] Mock driver enabled with replay file:', this.mockDriverConfig.replayFile);
-        }
-
         return {
           command: binaryPath,
-          args: args
+          args: this.buildDaemonArgs()
         };
       } else if (platform === 'win32') {
         // Windows: use win32-amd64 or win32-arm64 based on architecture
@@ -554,17 +553,9 @@ class BackendManager {
           throw new Error(`Windows backend binary not found: ${binaryPath}. Ensure the binary was built for platform ${platform}-${goArch}`);
         }
 
-        const args = ['monolith'];
-
-        // Add mock driver flags if configured
-        if (this.mockDriverConfig?.enabled && this.mockDriverConfig?.mode === 'replay' && this.mockDriverConfig?.replayFile) {
-          args.push('--replay', this.mockDriverConfig.replayFile);
-          log.info('[BackendManager] Mock driver enabled with replay file:', this.mockDriverConfig.replayFile);
-        }
-
         return {
           command: binaryPath,
-          args: args
+          args: this.buildDaemonArgs()
         };
       } else if (platform === 'linux') {
         // Linux: use linux-amd64 or linux-arm64 based on architecture
@@ -584,52 +575,14 @@ class BackendManager {
           log.warn('Could not set binary permissions:', error.message);
         }
 
-        const args = ['monolith'];
-
-        // Add mock driver flags if configured
-        if (this.mockDriverConfig?.enabled && this.mockDriverConfig?.mode === 'replay' && this.mockDriverConfig?.replayFile) {
-          args.push('--replay', this.mockDriverConfig.replayFile);
-          log.info('[BackendManager] Mock driver enabled with replay file:', this.mockDriverConfig.replayFile);
-        }
-
         return {
           command: binaryPath,
-          args: args
+          args: this.buildDaemonArgs()
         };
       } else {
         throw new Error(`Unsupported platform: ${platform}`);
       }
     }
-  }
-
-  async findConsecutiveFreePorts(startPort, count) {
-    // Check if a specific range of ports is free
-    const checkPortRange = async (basePort) => {
-      try {
-        // Check each port in the range
-        for (let i = 0; i < count; i++) {
-          const port = basePort + i;
-          // Try to find a free port starting at exactly this port
-          const [freePort] = await findFreePort(port, port);
-          if (freePort !== port) {
-            return null; // This port is not free
-          }
-        }
-        return basePort; // All ports in range are free
-      } catch (error) {
-        return null; // Range is not available
-      }
-    };
-
-    // Try starting from the specified port, incrementing until we find a free range
-    for (let basePort = startPort; basePort < startPort + 1000; basePort++) {
-      const freeBase = await checkPortRange(basePort);
-      if (freeBase !== null) {
-        return freeBase;
-      }
-    }
-
-    throw new Error(`Could not find ${count} consecutive free ports starting from ${startPort}`);
   }
 
   async waitForReady(timeout = null) {
@@ -641,20 +594,22 @@ class BackendManager {
       const checkReady = async () => {
         // Check if we've exceeded timeout
         if (Date.now() - startTime > actualTimeout) {
-          reject(new Error(`Backend failed to become ready within ${actualTimeout}ms`));
+          reject(new Error(`Daemon failed to become ready within ${actualTimeout}ms`));
           return;
         }
 
+        // The daemon doesn't expose a local HTTP health endpoint.
+        // Check readiness by verifying the process is still alive and
+        // the daemon PID file has been written (indicating successful startup).
         try {
-          const isHealthy = await this.checkHealth();
-          if (isHealthy) {
-            log.info(`[BackendManager] Backend ready after ${Date.now() - startTime}ms`);
+          const isReady = await this.checkHealth();
+          if (isReady) {
+            log.info(`[BackendManager] Daemon ready after ${Date.now() - startTime}ms`);
             resolve(true);
             return;
-          } else {
           }
         } catch (error) {
-          // Backend not ready yet, continue polling
+          // Daemon not ready yet, continue polling
         }
 
         // Schedule next check - poll faster for quicker startup
@@ -666,66 +621,42 @@ class BackendManager {
     });
   }
 
+  /**
+   * Check if the daemon process is healthy.
+   * The daemon in client mode doesn't expose a local HTTP endpoint.
+   * We check that the process is still running and the PID file exists
+   * (written by the daemon on successful startup).
+   */
   checkHealth() {
-    const protocol = this.useTLS ? https : http;
-
-    const callConnectUnary = (path, body, validateResponse) =>
-      new Promise((resolve, reject) => {
-        const req = protocol.request({
-          hostname: 'localhost',
-          port: this.grpcPort,
-          path,
-          method: 'POST',
-          timeout: 1000,
-          rejectUnauthorized: false, // Accept self-signed certificates
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }, (res) => {
-          let responseBody = '';
-          res.setEncoding('utf8');
-          res.on('data', (chunk) => {
-            responseBody += chunk;
-          });
-          res.on('end', () => {
-            try {
-              if (validateResponse) {
-                resolve(validateResponse(res, responseBody));
-                return;
-              }
-              resolve(res.statusCode === 200);
-            } catch (error) {
-              reject(error);
-            }
-          });
-        });
-
-        req.on('error', reject);
-        req.on('timeout', () => {
-          req.destroy();
-          reject(new Error('Health check timeout'));
-        });
-
-        req.write(body);
-        req.end();
-      });
-
-    return callConnectUnary(
-      '/reliant.v1.SystemService/Ready',
-      '{}',
-      (res, responseBody) => {
-        if (res.statusCode !== 200) {
-          return false;
-        }
-
-        try {
-          const parsed = JSON.parse(responseBody);
-          return parsed?.status === 'ready';
-        } catch {
-          return false;
-        }
+    return new Promise((resolve) => {
+      // If no process, not healthy
+      if (!this.process || this.process.killed) {
+        resolve(false);
+        return;
       }
-    );
+
+      // Check if the daemon has written its PID file (indicates successful startup)
+      const dataDir = this.isDevelopment
+        ? './data'
+        : path.join(app.getPath('userData'), 'data');
+      const pidFile = path.join(dataDir, 'daemon.pid');
+
+      try {
+        if (fs.existsSync(pidFile)) {
+          const content = fs.readFileSync(pidFile, 'utf8').trim();
+          const pid = parseInt(content, 10);
+          // PID file exists and contains a valid PID matching our process
+          if (pid === this.process.pid) {
+            resolve(true);
+            return;
+          }
+        }
+      } catch (error) {
+        // PID file not yet written or not readable
+      }
+
+      resolve(false);
+    });
   }
 
   async start() {
@@ -738,43 +669,28 @@ class BackendManager {
 
     // Check if external backend is already running (dev mode with Air)
     if (process.env.RELIANT_EXTERNAL_BACKEND) {
-      const externalGrpcPort = parseInt(process.env.GRPC_PORT, 10);
-      const externalToolsDaemonPort = parseInt(process.env.TOOLS_DAEMON_PORT, 10);
-      const externalTemporalPort = parseInt(process.env.TEMPORAL_FRONTEND_PORT, 10);
-      const externalTemporalUIPort = parseInt(process.env.TEMPORAL_UI_PORT, 10);
+      const externalDaemonPort = parseInt(process.env.TOOLS_DAEMON_PORT, 10);
       
       log.info('[BackendManager] Using external backend (Air/dev mode)');
-      log.info('[BackendManager] External gRPC port:', externalGrpcPort);
-      log.info('[BackendManager] External tools daemon gRPC port:', externalToolsDaemonPort);
-      log.info('[BackendManager] External Temporal port:', externalTemporalPort);
-      log.info('[BackendManager] External Temporal UI port:', externalTemporalUIPort);
+      log.info('[BackendManager] External daemon port:', externalDaemonPort);
       
-      this.grpcPort = externalGrpcPort;
-      this.toolsDaemonPort = externalToolsDaemonPort;
-      this.temporalFrontendPort = externalTemporalPort;
-      this.temporalUIPort = externalTemporalUIPort;
+      this.daemonPort = externalDaemonPort;
       this.isRunning = true;
       
-      // Wait for external backend to be ready
-      await this.waitForReady();
       log.info('[BackendManager] ✓ External backend is ready');
-      return this.grpcPort;
+      return this.daemonPort;
     }
 
-    // Load mock driver config if not already loaded
-    if (!this.mockDriverConfig) {
-      this.loadMockDriverConfig();
-    }
-
-    log.info('[BackendManager] Mock driver config:', JSON.stringify(this.mockDriverConfig));
+    log.info('[BackendManager] API URL:', this.apiUrl);
+    log.info('[BackendManager] Gateway URL:', this.gatewayUrl || '(auto-derived from API URL)');
 
     if (this.isRunning) {
-      log.info('[BackendManager] Backend already running on gRPC port:', this.grpcPort);
-      return this.grpcPort;
+      log.info('[BackendManager] Daemon already running on port:', this.daemonPort);
+      return this.daemonPort;
     }
 
     if (this.isShuttingDown) {
-      log.info('[BackendManager] Backend is shutting down, waiting...');
+      log.info('[BackendManager] Daemon is shutting down, waiting...');
       // Wait for shutdown to complete using event-driven approach
       await new Promise((resolve) => {
         const checkShutdown = () => {
@@ -791,56 +707,24 @@ class BackendManager {
     }
 
     try {
-      // Find available port for gRPC server (or use env var if set by dev script)
-      const grpcPortStart = Date.now();
-      if (process.env.GRPC_PORT) {
-        this.grpcPort = parseInt(process.env.GRPC_PORT, 10);
-        log.info(`[BackendManager] Using GRPC_PORT from environment: ${this.grpcPort}`);
-      } else {
-        [this.grpcPort] = await findFreePort(9090, 9190);
-        log.info(`[BackendManager] ✓ gRPC port found in ${Date.now() - grpcPortStart}ms:`, this.grpcPort);
-      }
-
-      const toolsDaemonPortStart = Date.now();
+      // Find available port for daemon (or use env var if set by dev script)
       if (process.env.TOOLS_DAEMON_PORT) {
-        this.toolsDaemonPort = parseInt(process.env.TOOLS_DAEMON_PORT, 10);
-        log.info(`[BackendManager] Using TOOLS_DAEMON_PORT from environment: ${this.toolsDaemonPort}`);
+        this.daemonPort = parseInt(process.env.TOOLS_DAEMON_PORT, 10);
+        log.info(`[BackendManager] Using TOOLS_DAEMON_PORT from environment: ${this.daemonPort}`);
       } else {
-        [this.toolsDaemonPort] = await findFreePort(9190, 9290);
-        log.info(`[BackendManager] ✓ tools daemon gRPC port found in ${Date.now() - toolsDaemonPortStart}ms:`, this.toolsDaemonPort);
+        const findFreePort = require('find-free-port');
+        [this.daemonPort] = await findFreePort(9190, 9290);
+        log.info(`[BackendManager] ✓ Daemon port found: ${this.daemonPort}`);
       }
-
-      // Find 4 consecutive free ports for Temporal (frontend, history, matching, worker)
-      const temporalPortStart = Date.now();
-      const temporalFrontendPort = await this.findConsecutiveFreePorts(7000, 4);
-      log.info(`[BackendManager] ✓ Temporal ports found in ${Date.now() - temporalPortStart}ms: ${temporalFrontendPort}-${temporalFrontendPort + 3}`);
-
-      // Find a free port for Temporal UI (or use env var if set by dev script)
-      const temporalUIPortStart = Date.now();
-      let temporalUIPort;
-      if (process.env.TEMPORAL_UI_PORT) {
-        temporalUIPort = parseInt(process.env.TEMPORAL_UI_PORT, 10);
-        log.info(`[BackendManager] Using TEMPORAL_UI_PORT from environment: ${temporalUIPort}`);
-      } else {
-        [temporalUIPort] = await findFreePort(8233, 8333);
-        log.info(`[BackendManager] ✓ Temporal UI port found in ${Date.now() - temporalUIPortStart}ms: ${temporalUIPort}`);
-      }
-
-      // Store temporal ports
-      this.temporalFrontendPort = temporalFrontendPort;
-      this.temporalUIPort = temporalUIPort;
 
       // Get binary path
       const binaryPath = this.getBinaryPath();
-      // Build environment variables for V2
+      // Build environment variables
       const homeDir = require('os').homedir();
       let backendEnv = {
         ...process.env,
-        GRPC_PORT: this.grpcPort.toString(),  // Pass allocated gRPC port
-        TOOLS_DAEMON_PORT: this.toolsDaemonPort.toString(),  // Dedicated tools-daemon gRPC listener
-        TEMPORAL_FRONTEND_PORT: temporalFrontendPort.toString(),  // Pass allocated Temporal gRPC port
-        TEMPORAL_UI_PORT: temporalUIPort.toString(),  // Pass allocated Temporal UI port
-// User config: ~/.reliant/ (user-editable, git-friendly)
+        TOOLS_DAEMON_PORT: this.daemonPort.toString(),
+        // User config: ~/.reliant/ (user-editable, git-friendly)
         RELIANT_USER_CONFIG_DIR: path.join(homeDir, '.reliant'),
         // Internal app data: platform-specific (databases, analytics, auth, cache)
         RELIANT_APP_DATA_DIR: app.getPath('userData'),
@@ -851,32 +735,14 @@ class BackendManager {
         // CRITICAL: Set environment mode for the Go backend
         // In packaged apps, NODE_ENV is not set automatically, causing the backend to default to dev mode
         RELIANT_ENV: this.isDevelopment ? 'dev' : 'prod',
+        // Pass hosted API URLs to the daemon process as env vars
+        RELIANT_SERVER_URL: this.apiUrl,
       };
 
-      // Keep backend database env deterministic from the already-normalized process env.
-      // This prevents stale inherited DATABASE_URL/PG* values from leaking into spawned backend.
-      [
-        'DATABASE_DRIVER',
-        'DATABASE_URL',
-        'PGHOST',
-        'PGPORT',
-        'PGDATABASE',
-        'PGUSER',
-        'PGSSLMODE',
-        'RELIANT_POSTGRES_PORT'
-      ].forEach((key) => {
-        if (process.env[key] !== undefined) {
-          backendEnv[key] = process.env[key];
-        }
-      });
-
-      log.info('[BackendManager] Effective backend DB env', {
-        driver: backendEnv.DATABASE_DRIVER || '(unset)',
-        pgHost: backendEnv.PGHOST || '(unset)',
-        pgPort: backendEnv.PGPORT || '(unset)',
-        pgDatabase: backendEnv.PGDATABASE || '(unset)',
-        hasDatabaseUrl: Boolean(backendEnv.DATABASE_URL)
-      });
+      // Pass gateway URL if explicitly configured
+      if (this.gatewayUrl) {
+        backendEnv.RELIANT_GATEWAY_URL = this.gatewayUrl;
+      }
 
       // CRITICAL: In production, ensure PATH includes common locations for MCP tools
       // MCP servers often use npx, uvx, python, etc. which aren't in Electron's default PATH
@@ -989,11 +855,13 @@ class BackendManager {
           : path.join(app.getPath('userData'), 'data');  // Prod: shared app data
       }
 
-      // Spawn backend process
+      // Spawn daemon process
       // In development, inherit stdout/stderr so we can see output directly
       // In production, pipe them so we can capture them
-      // CRITICAL: Always pipe stdin (index 0) so the backend can detect when the parent process dies (Suicide Pact pattern)
+      // CRITICAL: Always pipe stdin (index 0) so the daemon can detect when the parent process dies (Suicide Pact pattern)
       const stdio = this.isDevelopment ? ['pipe', 'inherit', 'inherit'] : ['pipe', 'pipe', 'pipe'];
+
+      log.info('[BackendManager] Spawning daemon:', binaryPath.command, binaryPath.args.join(' '));
 
       this.process = spawn(binaryPath.command, binaryPath.args, {
         cwd: process.cwd(),
@@ -1002,7 +870,7 @@ class BackendManager {
         windowsHide: true  // Prevent console window from appearing on Windows
       });
 
-      log.info('[BackendManager] Backend process started with PID:', this.process.pid);
+      log.info('[BackendManager] Daemon process started with PID:', this.process.pid);
 
       // CRITICAL: Keep stdin stream alive for the "Suicide Pact" pattern to work correctly.
       // The Go backend monitors stdin for EOF to detect when the parent process dies.
@@ -1023,31 +891,31 @@ class BackendManager {
           const output = data.toString().trim();
           // Always log backend stdout
           if (output) {
-            log.info(`[Backend]: ${output}`);
+            log.info(`[Daemon]: ${output}`);
           }
         });
 
         this.process.stderr.on('data', (data) => {
           const output = data.toString().trim();
           if (output) {
-            log.error(`[Backend Error]: ${output}`);
+            log.error(`[Daemon Error]: ${output}`);
           }
         });
       }
 
       this.process.on('error', (error) => {
-        log.error('Failed to start backend process:', error);
+        log.error('Failed to start daemon process:', error);
         this.isRunning = false;
       });
 
       this.process.on('exit', (code, signal) => {
-        log.info(`[BackendManager] Backend process exited (code: ${code}, signal: ${signal})`);
+        log.info(`[BackendManager] Daemon process exited (code: ${code}, signal: ${signal})`);
         this.isRunning = false;
         this.process = null;
 
         // Auto-restart on crash if not intentionally shutting down
         if (!this.isShuttingDown && !this.intentionalShutdown && code !== 0) {
-          log.error('Backend crashed unexpectedly, attempting restart...');
+          log.error('Daemon crashed unexpectedly, attempting restart...');
           this.handleCrash();
         } else if (code === 0) {
           // Reset restart attempts on clean exit
@@ -1055,18 +923,18 @@ class BackendManager {
         }
       });
 
-      // Wait for backend to be ready
+      // Wait for daemon to be ready
       const readyStart = Date.now();
       await this.waitForReady();
-      log.info(`[BackendManager] ✓ Backend ready in ${Date.now() - readyStart}ms`);
+      log.info(`[BackendManager] ✓ Daemon ready in ${Date.now() - readyStart}ms`);
 
       this.isRunning = true;
 
-      log.info(`[BackendManager] ✓✓✓ Total backend startup: ${Date.now() - startTime}ms`);
-      return this.grpcPort;
+      log.info(`[BackendManager] ✓✓✓ Total daemon startup: ${Date.now() - startTime}ms`);
+      return this.daemonPort;
 
     } catch (error) {
-      log.error('[BackendManager] Failed to start backend:', error);
+      log.error('[BackendManager] Failed to start daemon:', error);
       log.error('[BackendManager] Error stack:', error.stack);
       await this.cleanup();
       throw error;
@@ -1087,10 +955,7 @@ class BackendManager {
     }
     this.process = null;
     this.isRunning = false;
-    this.grpcPort = null;
-    this.toolsDaemonPort = null;
-    this.temporalFrontendPort = null;
-    this.temporalUIPort = null;
+    this.daemonPort = null;
   }
 
   async handleCrash() {
@@ -1108,11 +973,11 @@ class BackendManager {
     setTimeout(async () => {
       try {
         await this.start();
-        log.info('[BackendManager] Backend restarted successfully');
+        log.info('[BackendManager] Daemon restarted successfully');
         // Reset attempts after successful restart
         this.restartAttempts = 0;
       } catch (error) {
-        log.error('[BackendManager] Failed to restart backend:', error);
+        log.error('[BackendManager] Failed to restart daemon:', error);
         // Will retry if attempts remaining
         this.handleCrash();
       }
@@ -1133,7 +998,7 @@ class BackendManager {
 
     this.intentionalShutdown = true; // Mark as intentional shutdown
     this.isShuttingDown = true;
-    log.info('[BackendManager] Stopping backend gracefully...');
+    log.info('[BackendManager] Stopping daemon gracefully...');
 
     return new Promise((resolve) => {
       let cleanupDone = false;
@@ -1144,10 +1009,7 @@ class BackendManager {
 
         this.process = null;
         this.isRunning = false;
-        this.grpcPort = null;
-        this.toolsDaemonPort = null;
-        this.temporalFrontendPort = null;
-        this.temporalUIPort = null;
+        this.daemonPort = null;
         this.isShuttingDown = false;
         this.intentionalShutdown = false; // Reset for next start
         resolve();
@@ -1156,7 +1018,7 @@ class BackendManager {
       // Set a timeout for forced kill
       const forceKillTimeout = setTimeout(() => {
         if (this.process && !this.process.killed) {
-          log.warn('[BackendManager] Force killing backend after timeout');
+          log.warn('[BackendManager] Force killing daemon after timeout');
           try {
             this.process.kill('SIGKILL');
           } catch (e) {
@@ -1168,7 +1030,7 @@ class BackendManager {
 
       // Listen for exit
       this.process.once('exit', (code, signal) => {
-        log.info(`[BackendManager] Backend exited gracefully (code: ${code}, signal: ${signal})`);
+        log.info(`[BackendManager] Daemon exited gracefully (code: ${code}, signal: ${signal})`);
         clearTimeout(forceKillTimeout);
         cleanup();
       });
@@ -1185,33 +1047,29 @@ class BackendManager {
   }
 
   getPort() {
-    return this.grpcPort;
+    return this.daemonPort;
   }
 
-  getTemporalFrontendPort() {
-    return this.temporalFrontendPort;
+  getApiUrl() {
+    return this.apiUrl;
   }
 
-  getTemporalUIPort() {
-    return this.temporalUIPort;
+  getGatewayUrl() {
+    return this.gatewayUrl;
   }
 
   getStatus() {
     return {
       isRunning: this.isRunning,
-      grpcPort: this.grpcPort,
-      toolsDaemonPort: this.toolsDaemonPort,
-      temporalFrontendPort: this.temporalFrontendPort,
-      temporalUIPort: this.temporalUIPort,
-      useTLS: this.useTLS,
+      daemonPort: this.daemonPort,
+      apiUrl: this.apiUrl,
+      gatewayUrl: this.gatewayUrl,
       isShuttingDown: this.isShuttingDown,
-      mockDriverActive: this.mockDriverConfig?.enabled && this.mockDriverConfig?.mode === 'replay',
-      mockDriverFile: this.mockDriverConfig?.replayFile
     };
   }
 
   async isReady() {
-    if (!this.isRunning || !this.grpcPort) {
+    if (!this.isRunning) {
       return false;
     }
 

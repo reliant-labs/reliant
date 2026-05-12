@@ -8,15 +8,27 @@
 import { create } from "zustand";
 import { api } from "../api/client";
 import { logger } from "../lib/logger";
+import { useAuthStore } from "./authStore";
 
 const DISMISSED_KEY = "reliant.apiKeySetup.dismissed";
 
 const AUTO_MANAGED_PROVIDERS = new Set(["reliant"]);
 
+/**
+ * Returns true when the current user is signed into Reliant (has an active
+ * session).  The "reliant" provider is auto-managed via their JWT, so we
+ * treat it as configured without requiring an explicit API key in the DB.
+ */
+function isReliantSessionActive(): boolean {
+  const { user, session } = useAuthStore.getState();
+  return !!(user && session);
+}
+
 /** Match onboarding `detectCompletedItems` / checklist: key or OAuth-backed provider. */
 function hasAnyProviderCredentials(
   providers: { provider?: string; hasApiKey: boolean; configured: boolean }[],
 ): boolean {
+  if (isReliantSessionActive()) return true;
   return providers.some((p) => p.hasApiKey || p.configured);
 }
 

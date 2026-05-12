@@ -1758,7 +1758,7 @@ func (r *Repo) DeleteRepo(ctx context.Context, id string) error {
 	return r.repos.DeleteRepo(ctx, id)
 }
 
-// Plans and Tasks methods are provided by the embedded sqlitedb.Querier
+// Plans and Tasks methods are provided by the embedded pgdb.Querier
 
 func (r *Repo) CreateSetting(ctx context.Context, setting *Setting) error {
 	if setting == nil {

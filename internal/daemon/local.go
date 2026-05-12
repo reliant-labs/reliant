@@ -24,7 +24,7 @@ import (
 var _ Client = (*LocalClient)(nil)
 
 // LocalClient implements Client by making direct OS and exec calls.
-// It is used in monolith mode or when running on the daemon itself.
+// It is used when running on the daemon itself.
 type LocalClient struct{}
 
 // NewLocalClient creates a new LocalClient.

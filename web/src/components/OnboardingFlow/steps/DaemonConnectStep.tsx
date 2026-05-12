@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { cn } from "@/lib/utils";
+import { daemonStartCommand } from "@/lib/cli-commands";
 import type { StepProps } from "../types";
 
 type ChecklistItemStatus = "done" | "active" | "pending";
@@ -135,8 +136,8 @@ export function DaemonConnectStep({ onNext }: StepProps) {
           <span className="block text-xs text-muted-foreground">
             Run this in your terminal — it will prompt you to paste the token from the previous step:
           </span>
-          <code className="block select-all font-mono text-xs text-foreground">
-            reliant daemon start --token
+          <code className="block select-all font-mono text-xs text-foreground break-all">
+            {daemonStartCommand()}
           </code>
         </div>
       )}

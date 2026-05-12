@@ -10,20 +10,21 @@ import (
 type StreamingDriver string
 
 const (
-	DriverMemory StreamingDriver = "memory"
-	DriverNATS   StreamingDriver = "nats"
+	DriverNATS StreamingDriver = "nats"
+
+	// subscriberBufferSize is the channel buffer size for each subscriber.
+	// Larger buffer = more tolerance for slow consumers, more memory.
+	subscriberBufferSize = 100
 )
 
 // ParseStreamingDriver parses a raw string into a StreamingDriver.
-// Empty string defaults to "memory".
+// Empty string defaults to "nats".
 func ParseStreamingDriver(raw string) (StreamingDriver, error) {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "", string(DriverMemory):
-		return DriverMemory, nil
-	case string(DriverNATS):
+	case "", string(DriverNATS):
 		return DriverNATS, nil
 	default:
-		return "", fmt.Errorf("invalid STREAMING_DRIVER %q (expected memory or nats)", raw)
+		return "", fmt.Errorf("invalid STREAMING_DRIVER %q (expected nats)", raw)
 	}
 }
 
@@ -34,7 +35,7 @@ type StreamingConfig struct {
 }
 
 // StreamingHub is the interface for pub/sub streaming of ephemeral events.
-// Implementations: MemoryHub (in-memory), NATSHub (JetStream).
+// Implementation: NATSHub (JetStream).
 type StreamingHub interface {
 	// Publish broadcasts a streaming delta to all subscribers of a chat.
 	// Non-blocking — slow consumers may miss events.
@@ -57,11 +58,18 @@ type StreamingHub interface {
 	Stats() HubStats
 
 	// IsConnected reports whether the hub's underlying transport is healthy.
-	// Always returns true for in-memory hubs.
 	IsConnected() bool
 
 	// Close shuts down the hub and releases resources.
 	Close() error
+}
+
+// HubStats holds current hub statistics.
+type HubStats struct {
+	TotalPublished   uint64
+	TotalDropped     uint64
+	TotalSubscribers uint64
+	ActiveChats      int
 }
 
 // Subscription represents a single subscription to chat streaming events.
@@ -76,9 +84,7 @@ type Subscription interface {
 // NewStreamingHub creates a new streaming hub based on the config.
 func NewStreamingHub(cfg StreamingConfig) (StreamingHub, error) {
 	switch cfg.Driver {
-	case DriverMemory, "":
-		return NewMemoryHub(), nil
-	case DriverNATS:
+	case DriverNATS, "":
 		return NewNATSHub(cfg.NATSUrl)
 	default:
 		return nil, fmt.Errorf("unknown streaming driver: %q", cfg.Driver)

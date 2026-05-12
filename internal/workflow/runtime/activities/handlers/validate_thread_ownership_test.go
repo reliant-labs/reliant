@@ -15,13 +15,12 @@ import (
 
 func TestValidateThreadOwnership_ValidOwnership(t *testing.T) {
 	ctx := context.Background()
-	repo, err := db.NewInMemoryRepo()
-	require.NoError(t, err)
+	repo := db.NewTestRepo(t)
 	defer repo.Close()
 
 	// Setup: Create a project, chat, thread
 	projectID := "test-project"
-	err = repo.CreateProject(ctx, &db.Project{
+	err := repo.CreateProject(ctx, &db.Project{
 		ID:        projectID,
 		Name:      "Test Project",
 		Path:      "/tmp/test",
@@ -73,13 +72,12 @@ func TestValidateThreadOwnership_ValidOwnership(t *testing.T) {
 
 func TestValidateThreadOwnership_InvalidOwnership(t *testing.T) {
 	ctx := context.Background()
-	repo, err := db.NewInMemoryRepo()
-	require.NoError(t, err)
+	repo := db.NewTestRepo(t)
 	defer repo.Close()
 
 	// Setup: Create a project, two chats, and a thread in chat A
 	projectID := "test-project"
-	err = repo.CreateProject(ctx, &db.Project{
+	err := repo.CreateProject(ctx, &db.Project{
 		ID:        projectID,
 		Name:      "Test Project",
 		Path:      "/tmp/test",
@@ -144,8 +142,7 @@ func TestValidateThreadOwnership_InvalidOwnership(t *testing.T) {
 }
 
 func TestValidateThreadOwnership_ThreadNotFound(t *testing.T) {
-	repo, err := db.NewInMemoryRepo()
-	require.NoError(t, err)
+	repo := db.NewTestRepo(t)
 	defer repo.Close()
 
 	// Test: Validate a non-existent thread
@@ -170,13 +167,12 @@ func TestValidateThreadOwnership_ThreadNotFound(t *testing.T) {
 
 func TestValidateThreadOwnership_SubAgentThread(t *testing.T) {
 	ctx := context.Background()
-	repo, err := db.NewInMemoryRepo()
-	require.NoError(t, err)
+	repo := db.NewTestRepo(t)
 	defer repo.Close()
 
 	// Setup: Create a project, chat, root thread, and sub-agent thread
 	projectID := "test-project"
-	err = repo.CreateProject(ctx, &db.Project{
+	err := repo.CreateProject(ctx, &db.Project{
 		ID:        projectID,
 		Name:      "Test Project",
 		Path:      "/tmp/test",

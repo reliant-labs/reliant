@@ -79,6 +79,7 @@ import { focusChatInput } from "./hooks/useFocusManager";
 import { useOnboardingChecklistStore } from "./store/onboardingChecklistStore";
 import { useApiKeySetupStore } from "./store/apiKeySetupStore";
 import { useGlobalDataStore } from "./store/globalDataStore";
+import { trackEvent } from "./lib/analytics";
 
 function App() {
   const chats = useChatStore((state) => state.chats); // Map<string, Chat>
@@ -87,7 +88,7 @@ function App() {
   const currentProject = useProjectStore((state) => state.currentProject);
   const selectProject = useProjectStore((state) => state.selectProject);
   const loadProjects = useProjectStore((state) => state.loadProjects);
-  const { step: onboardingStep, 'reset-onboarding': resetOnboarding } = useSearch({ from: '/' });
+  const { step: onboardingStep, 'reset-onboarding': resetOnboarding, github_connected, github_error, github_error_msg } = useSearch({ from: '/' });
   const navigate = useNavigate();
   const { data: currentUser, isLoading: isUserLoading } = useCurrentUser();
 
@@ -106,6 +107,11 @@ function App() {
 
   // Ensure global, project-scoped data (workflows/presets) is loaded whenever a project
   const cachedWorkflows = useGlobalDataStore((s) => s.workflows);
+
+  // Track session start once on mount
+  useEffect(() => {
+    trackEvent("session_start");
+  }, []);
 
   // Update browser tab title with current project name
   useEffect(() => {
@@ -1430,6 +1436,20 @@ function App() {
       navigate({ to: '/', search: { step: 'goal' } });
     }
   }, [isBackendReady, isWorkspaceRestoring, isUserLoading, resetOnboarding, needsOnboardingRedirect, navigate]);
+
+  // Handle GitHub OAuth redirect — open Settings to show result
+  useEffect(() => {
+    if (!isBackendReady) return;
+    if (github_connected || github_error) {
+      setSettingsMode(true, "git-connections");
+      if (github_connected) {
+        toast.success("GitHub connected successfully");
+      } else if (github_error) {
+        toast.error(github_error_msg || github_error || "GitHub connection failed");
+      }
+      navigate({ to: '/', search: {}, replace: true });
+    }
+  }, [isBackendReady, github_connected, github_error, github_error_msg, setSettingsMode, navigate]);
 
   // Show loading spinner until backend is ready
   if (!isBackendReady) {

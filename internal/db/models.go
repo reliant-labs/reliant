@@ -159,7 +159,7 @@ type DaemonPAT struct {
 	TokenHash   string // SHA-256 hex digest of the raw token
 	TokenPrefix string // First 8 chars of raw token for display in UI
 	Name        string // Human-readable label ("Sean's MacBook", "CI runner")
-	Ephemeral   bool   // Auto-created tokens (monolith, desktop session) — revoked on shutdown
+	Ephemeral   bool   // Auto-created tokens (desktop session) — revoked on shutdown
 	ExpiresAt   *time.Time
 	LastUsedAt  *time.Time
 	RevokedAt   *time.Time

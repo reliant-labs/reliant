@@ -180,15 +180,14 @@ func TestExtractActivityInputInfo(t *testing.T) {
 
 // TestLoopContextDatabasePersistence verifies loop context is stored correctly in DB
 func TestLoopContextDatabasePersistence(t *testing.T) {
-	// Create in-memory database for testing
-	repo, err := db.NewInMemoryRepo()
-	require.NoError(t, err, "Failed to create in-memory repo")
+	// Create test database
+	repo := db.NewTestRepo(t)
 
 	ctx := context.Background()
 
 	// Create test project
 	projectID := uuid.New().String()
-	err = repo.CreateProject(ctx, &db.Project{
+	err := repo.CreateProject(ctx, &db.Project{
 		ID:        projectID,
 		Name:      "test-project",
 		Path:      "/tmp/test",

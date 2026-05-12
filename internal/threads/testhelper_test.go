@@ -11,7 +11,7 @@ import (
 )
 
 // testHelper wraps db.Repo and provides convenience methods for testing.
-// It uses a real in-memory SQLite database instead of mocks.
+// It uses a real Postgres database (via SetupTestDB) instead of mocks.
 type testHelper struct {
 	t    *testing.T
 	repo *db.Repo
@@ -23,7 +23,7 @@ type testHelper struct {
 	cleanup   func()
 }
 
-// newTestHelper creates a new test helper with an in-memory database.
+// newTestHelper creates a new test helper with a test database.
 func newTestHelper(t *testing.T) *testHelper {
 	t.Helper()
 

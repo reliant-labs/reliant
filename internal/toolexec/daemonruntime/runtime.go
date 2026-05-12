@@ -742,11 +742,25 @@ func pathLooksLikeGitRepo(projectPath string) bool {
 	if projectPath == "" {
 		return false
 	}
-	st, err := os.Stat(filepath.Join(projectPath, ".git"))
+	// Direct .git at root: single-repo checkout or worktree.
+	if _, err := os.Stat(filepath.Join(projectPath, ".git")); err == nil {
+		return true
+	}
+	// Multi-repo root: no .git here, but immediate children may have one.
+	// A shallow scan (depth 1) avoids walking large trees.
+	entries, err := os.ReadDir(projectPath)
 	if err != nil {
 		return false
 	}
-	return st.IsDir() || !st.IsDir()
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(projectPath, e.Name(), ".git")); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 func (d *daemonClient) sendLoadProjectConfigResponse(projectPath, requestID string) error {

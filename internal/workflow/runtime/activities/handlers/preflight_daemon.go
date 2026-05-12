@@ -69,7 +69,7 @@ func (a *PreflightDaemonCheckActivity) Execute(ctx context.Context, input Prefli
 	// We access it through the ToolExecutor interface.
 	remoteExec, ok := a.toolExecutor.(*toolexec.RemoteExecutor)
 	if !ok {
-		// In monolith mode with a local executor, daemon is always available.
+		// With a non-remote executor, daemon is always available.
 		return PreflightDaemonCheckOutput{DaemonAvailable: true}, nil
 	}
 

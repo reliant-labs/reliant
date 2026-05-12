@@ -15,11 +15,12 @@ import {
 import { hasActiveDaemon, getFirstDaemonId } from "../api";
 import type { CodeSource, ComputeChoice, OnboardingIntent, StepProps } from "../types";
 import { DaemonConnectionDiagrams } from "../DaemonConnectionDiagrams";
+import { daemonStartCommand, HOMEBREW_CLI_INSTALL, HOMEBREW_CASK_INSTALL } from "@/lib/cli-commands";
 
 const DOWNLOAD_BASE =
   import.meta.env.VITE_DOWNLOAD_BASE_URL || "https://downloads.reliantlabs.io";
 import { capabilities } from "@/services/controlPlane/capabilities";
-const HAS_CLOUD_WORKSPACES = capabilities.cloudWorkspaces;
+const HAS_CLOUD_DAEMONS = capabilities.cloudDaemons;
 const DAEMON_TYPE_MANAGED = 1;
 const DAEMON_SIZE_SMALL = 1;
 
@@ -142,7 +143,7 @@ export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
   const startingCloud = createDaemonMutation.isPending || resumeDaemonMutation.isPending;
 
   const handleCloud = async () => {
-    if (!HAS_CLOUD_WORKSPACES) return;
+    if (!HAS_CLOUD_DAEMONS) return;
 
     setError(null);
     try {
@@ -199,7 +200,7 @@ export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
       // No daemons at all — create a new one
       try {
         await createDaemonMutation.mutateAsync({
-          name: "onboarding-workspace",
+          name: "onboarding-daemon",
           daemonType: DAEMON_TYPE_MANAGED,
           size: DAEMON_SIZE_SMALL,
           gitRepo: "",
@@ -310,7 +311,7 @@ export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
             plan.compute === "cloud_free_trial"
               ? "border-primary bg-primary/10"
               : "border-primary/25 bg-primary/5",
-            !HAS_CLOUD_WORKSPACES && "border-border/50 bg-muted/30 opacity-80",
+            !HAS_CLOUD_DAEMONS && "border-border/50 bg-muted/30 opacity-80",
           )}
         >
           <div className="flex min-w-0 items-start gap-4">
@@ -331,7 +332,7 @@ export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
                 </span>
               </div>
               <span className="block text-xs leading-relaxed text-muted-foreground">
-                {HAS_CLOUD_WORKSPACES
+                {HAS_CLOUD_DAEMONS
                   ? "Start a hosted daemon now. If provisioning takes a few minutes, Reliant will continue setup and connect when it is ready."
                   : "Cloud daemons are not enabled for this environment."}
               </span>
@@ -341,10 +342,10 @@ export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
           <button
             type="button"
             onClick={handleCloud}
-            disabled={startingCloud || !HAS_CLOUD_WORKSPACES || !eligible || loading}
+            disabled={startingCloud || !HAS_CLOUD_DAEMONS || !eligible || loading}
             className={cn(
               "inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors",
-              startingCloud || !HAS_CLOUD_WORKSPACES || !eligible || loading
+              startingCloud || !HAS_CLOUD_DAEMONS || !eligible || loading
                 ? "cursor-not-allowed bg-muted text-muted-foreground"
                 : "bg-sky-600 text-white shadow-sm shadow-sky-600/20 hover:bg-sky-500",
             )}
@@ -352,14 +353,14 @@ export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
             {(startingCloud || loading) && <Loader2 className="h-4 w-4 animate-spin" />}
             {startingCloud ? "Requesting daemon..." : loading ? "Checking availability..." : "Start cloud daemon"}
           </button>
-          {(!HAS_CLOUD_WORKSPACES || (!eligible && reason)) && (
+          {(!HAS_CLOUD_DAEMONS || (!eligible && reason)) && (
             <div className="space-y-1.5">
               <p className="text-xs leading-relaxed text-muted-foreground">
-                {!HAS_CLOUD_WORKSPACES
+                {!HAS_CLOUD_DAEMONS
                   ? 'Cloud daemons are unavailable because this environment is not configured for cloud mode. Choose "I\'ll connect my own" to continue.'
                   : reason}
               </p>
-              {HAS_CLOUD_WORKSPACES && !eligible && (
+              {HAS_CLOUD_DAEMONS && !eligible && (
                 <a
                   href="https://reliantlabs.io/pricing"
                   target="_blank"
@@ -489,10 +490,16 @@ export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
 
           <div className="space-y-1.5">
             <span className="block text-xs text-muted-foreground">
-              Or install via Homebrew:
+              Or install the CLI via Homebrew:
             </span>
             <code className="block select-all rounded border border-border/40 bg-background px-3 py-2 font-mono text-xs text-foreground">
-              brew install --cask reliant-labs/reliant/reliant
+              {HOMEBREW_CLI_INSTALL}
+            </code>
+            <span className="block text-xs text-muted-foreground">
+              Desktop app (Homebrew Cask):
+            </span>
+            <code className="block select-all rounded border border-border/40 bg-background px-3 py-2 font-mono text-xs text-foreground">
+              {HOMEBREW_CASK_INSTALL}
             </code>
           </div>
 
@@ -559,8 +566,8 @@ export function ComputeStep({ plan, updatePlan, onNext }: StepProps) {
             <span className="block text-xs font-medium text-foreground">
               2. Start the daemon
             </span>
-            <code className="block select-all rounded border border-border/40 bg-background px-3 py-2 font-mono text-xs text-foreground">
-              reliant daemon start --token
+            <code className="block select-all rounded border border-border/40 bg-background px-3 py-2 font-mono text-xs text-foreground break-all">
+              {daemonStartCommand()}
             </code>
             <p className="text-[11px] text-muted-foreground">
               The command will prompt you to paste the token.

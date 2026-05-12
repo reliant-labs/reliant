@@ -17,14 +17,13 @@ import (
 func setupTestFileSystemService(t *testing.T) (*FileSystemService, string) {
 	t.Helper()
 
-	repo, err := db.NewInMemoryRepo()
-	require.NoError(t, err)
+	repo := db.NewTestRepo(t)
 	t.Cleanup(func() {
 		require.NoError(t, repo.DB.Close())
 	})
 
 	projectPath := t.TempDir()
-	_, err = repo.DB.ExecContext(
+	_, err := repo.DB.ExecContext(
 		context.Background(),
 		`INSERT INTO projects (id, user_id, name, path, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))`,

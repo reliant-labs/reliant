@@ -5,6 +5,7 @@
  * Shows one clear CTA, secondary links, and a subtle tip.
  */
 
+import { useEffect } from "react";
 import { Search, Code2 } from "lucide-react";
 import { OnboardingModal } from "../OnboardingModal";
 import {
@@ -13,6 +14,7 @@ import {
 } from "../../../store/onboardingChecklistStore";
 import { useViewerStore } from "../../../store/viewerStore";
 import type { StepProps } from "../types";
+import { trackEvent } from "../../../lib/analytics";
 
 export function CompletionStep({
   onComplete,
@@ -20,6 +22,10 @@ export function CompletionStep({
   totalSteps,
 }: StepProps) {
   const projectHasCode = useOnboardingChecklistStore((s) => s.projectHasCode);
+
+  useEffect(() => {
+    trackEvent("onboarding_completed", { totalSteps });
+  }, [totalSteps]);
 
   const handleQuickStart = () => {
     onComplete();

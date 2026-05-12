@@ -33,7 +33,6 @@ import {
   GetProviderStatusesRequestSchema,
   UpdateProviderAPIKeyRequestSchema,
   ValidateProviderAPIKeyRequestSchema,
-  SyncReliantProviderRequestSchema,
   CompleteCodexOAuthRequestSchema,
   CompleteClaudeOAuthRequestSchema,
   // Sub-phase 6e: Privacy
@@ -435,35 +434,6 @@ export const settingsGrpc = {
       valid: response.valid,
       message: response.message,
     };
-  },
-
-  async syncReliantProvider(forceRotate = false): Promise<{
-    success: boolean;
-    message: string;
-    synced: boolean;
-    created_org: boolean;
-    created_key: boolean;
-    rotated_key: boolean;
-    provider?: ProviderStatus;
-  }> {
-    return singleflight(`syncReliantProvider:${forceRotate}`, async () => {
-      const client = grpcClient.settings();
-      const request = create(SyncReliantProviderRequestSchema, {
-        forceRotate,
-      });
-      const response = await client.syncReliantProvider(request);
-      return {
-        success: response.success,
-        message: response.message,
-        synced: response.synced,
-        created_org: response.createdOrg,
-        created_key: response.createdKey,
-        rotated_key: response.rotatedKey,
-        provider: response.provider
-          ? protoProviderStatusToFrontend(response.provider)
-          : undefined,
-      };
-    });
   },
 
   async completeCodexOAuth(

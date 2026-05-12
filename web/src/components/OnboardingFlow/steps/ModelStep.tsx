@@ -7,6 +7,7 @@ import { onboardingService } from "@/services/controlPlane/onboarding";
 import { cn } from "@/lib/utils";
 import { getIsDev } from "@/lib/constants";
 import { logger } from "@/lib/logger";
+import { authServeCommand } from "@/lib/cli-commands";
 import { useCodexOAuth, useClaudeOAuth, useOAuthAvailability } from "@/hooks";
 import { useCloudEligibility, useCompleteOnboarding } from "@/hooks/useOnboardingQueries";
 // TODO: Remove this store import once the ApiKeySetupModal is converted to event-driven
@@ -108,14 +109,6 @@ async function applyTempChatParams(plan: Partial<LaunchPlan>) {
     if (plan.selectedPresets) store.setTempNewChatPresets(plan.selectedPresets);
   }
 
-  if (plan.initialPrompt) {
-    const { useProjectStore } = await import("@/store/projectStore");
-    const projectId = useProjectStore.getState().currentProject?.id;
-    if (projectId) {
-      const { useWorkspaceStateStore } = await import("@/store/workspaceStateStore");
-      useWorkspaceStateStore.getState().setNewChatDraft(projectId, plan.initialPrompt);
-    }
-  }
 }
 
 export function ModelStep({ plan, updatePlan }: StepProps) {
@@ -384,8 +377,8 @@ export function ModelStep({ plan, updatePlan }: StepProps) {
                   : "The local OAuth helper is not running. Start it in your terminal to enable login:"}
               </p>
               {!oauthAvailability.available && !oauthAvailability.loading && (
-                <code className="block select-all rounded-md border border-border bg-background px-3 py-2 font-mono text-sm">
-                  reliant auth serve
+                <code className="block select-all rounded-md border border-border bg-background px-3 py-2 font-mono text-sm break-all">
+                  {authServeCommand()}
                 </code>
               )}
               <button

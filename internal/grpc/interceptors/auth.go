@@ -82,7 +82,6 @@ type AuthInterceptor struct {
 	validator      auth.TokenValidator
 	sessionTracker *sessionTracker
 	publicMethods  map[string]bool // Methods that don't require auth
-	onFirstAuth    func(userID string)
 }
 
 // NewAuthInterceptor creates a new auth interceptor.
@@ -141,13 +140,6 @@ func NewAuthInterceptor(publicKeyPEM string, jwksURL string, publicMethods []str
 	}
 }
 
-// SetOnFirstAuth registers a callback fired exactly once per userID per process
-// lifetime, the first time that user successfully authenticates. Used in monolith
-// mode to lazy-start the in-process daemon under the authenticated user's ID.
-func (i *AuthInterceptor) SetOnFirstAuth(fn func(userID string)) {
-	i.onFirstAuth = fn
-}
-
 // authenticateRequest validates the auth token and returns the authenticated context, claims, and raw token.
 // Returns an error if authentication fails.
 func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure string, header func(string) string) (context.Context, *auth.JWTClaims, string, error) {
@@ -188,6 +180,9 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 	ctx = context.WithValue(ctx, auth.UserRoleContextKey, claims.Role)
 	ctx = context.WithValue(ctx, auth.UserEmailContextKey, claims.Email)
 
+	// Store JWT so subsystems (e.g. Reliant LLM driver) can look it up by userID.
+	auth.SetUserJWT(claims.Sub, tokenString)
+
 	logging.Debug("[gRPC Auth] Authenticated request",
 		"user_id", claims.Sub,
 		"role", claims.Role,
@@ -210,9 +205,6 @@ func (i *AuthInterceptor) trackSession(ctx context.Context, claims *auth.JWTClai
 		logging.Info("[Analytics] User authenticated, updated analytics client",
 			"userID", claims.Sub,
 			"email", claims.Email)
-		if i.onFirstAuth != nil {
-			i.onFirstAuth(claims.Sub)
-		}
 	}
 
 	// Always update the JWT (it refreshes on each request)

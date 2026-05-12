@@ -46,8 +46,7 @@ func TestLoadBuiltinWorkflowWithRaw(t *testing.T) {
 }
 
 func TestLoadWorkflowActivity_LoadsProjectWorkflowFromStoredConfig(t *testing.T) {
-	repo, err := db.NewInMemoryRepo()
-	require.NoError(t, err)
+	repo := db.NewTestRepo(t)
 	defer repo.Close()
 
 	ctx := context.Background()
@@ -115,8 +114,7 @@ nodes:
 }
 
 func TestLoadWorkflowActivity_LoadsProjectWorkflowByName(t *testing.T) {
-	repo, err := db.NewInMemoryRepo()
-	require.NoError(t, err)
+	repo := db.NewTestRepo(t)
 	defer repo.Close()
 
 	ctx := context.Background()

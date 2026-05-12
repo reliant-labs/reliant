@@ -201,6 +201,38 @@ func TestDiscover_IncludesExternalProviderSkillRoots(t *testing.T) {
 	require.Equal(t, skillscore.ScopeCodexGlobal, snapshot.ByName["codex-global"].Scope)
 }
 
+func TestDiscover_MultiRepoSources(t *testing.T) {
+	project := t.TempDir()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	writeSkill := func(dir, name, description string) {
+		skillPath := filepath.Join(dir, name, "SKILL.md")
+		require.NoError(t, os.MkdirAll(filepath.Dir(skillPath), 0o755))
+		require.NoError(t, os.WriteFile(skillPath, []byte("---\nname: "+name+"\ndescription: "+description+"\n---\nBody"), 0o644))
+	}
+
+	// Nested repo "api" has a skill in .claude/skills
+	writeSkill(filepath.Join(project, "api", ".claude", "skills"), "api-deploy", "Deploy API")
+	// Nested repo "web" has a skill in .reliant/skills
+	writeSkill(filepath.Join(project, "web", ".reliant", "skills"), "web-deploy", "Deploy Web")
+
+	snapshot := DiscoverAll(DiscoverInput{
+		ProjectPath: project,
+		RepoSources: []string{"api", "web"},
+	})
+
+	// Skills from nested repos get their NormalizedKey prefixed with source.
+	require.Contains(t, snapshot.ByName, "api/api-deploy")
+	require.Equal(t, "api", snapshot.ByName["api/api-deploy"].Source)
+
+	require.Contains(t, snapshot.ByName, "web/web-deploy")
+	require.Equal(t, "web", snapshot.ByName["web/web-deploy"].Source)
+
+	// Builtins should still be present.
+	require.Contains(t, snapshot.ByName, "reliant-config")
+}
+
 func TestDiscover_ReliantShadowsExternalProviderSkills(t *testing.T) {
 	project := t.TempDir()
 	home := t.TempDir()
