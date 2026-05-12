@@ -41,11 +41,11 @@ type Options struct {
 	// BindAddress is the network interface to bind to (e.g. "0.0.0.0").
 	BindAddress string
 
-	// DatabaseDriver is "sqlite" or "postgres".
+	// DatabaseDriver is the database driver (postgres).
 	DatabaseDriver string
-	// DatabaseURL is the Postgres connection string (required when driver=postgres).
+	// DatabaseURL is the Postgres connection string (required).
 	DatabaseURL string
-	// DataDir is the directory for local data (logs, certs, sqlite DB).
+	// DataDir is the directory for local data (logs, certs).
 	DataDir string
 
 	// NATSURL is the NATS server connection URL.
@@ -69,8 +69,8 @@ func Run(ctx context.Context, opts Options) error {
 	if opts.NATSURL == "" {
 		return fmt.Errorf("daemon-gateway: NATS_URL is required")
 	}
-	if opts.DatabaseDriver == "postgres" && opts.DatabaseURL == "" {
-		return fmt.Errorf("daemon-gateway: DATABASE_URL is required when DATABASE_DRIVER=postgres")
+	if opts.DatabaseURL == "" {
+		return fmt.Errorf("daemon-gateway: DATABASE_URL is required")
 	}
 
 	// -------------------------------------------------------------------------

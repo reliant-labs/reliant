@@ -23,6 +23,7 @@ import {
   resetApiKeySetupDismissed,
 } from "../../store/apiKeySetupStore";
 import { useCodexOAuth, useClaudeOAuth, useOAuthAvailability } from "../../hooks";
+import { authServeCommand } from "../../lib/cli-commands";
 
 interface CombinedGeneralSettingsProps {
   providers: Array<{
@@ -44,8 +45,6 @@ const VISIBLE_PROVIDERS = [
   "gemini",
   "openrouter",
 ] as const;
-
-const AUTO_MANAGED_PROVIDERS = ["reliant"] as const;
 
 const providerConfigs = {
   claude: {
@@ -395,13 +394,8 @@ export function CombinedGeneralSettings({
   const configuredProviders = providers.filter(
     (p) =>
       p.hasApiKey &&
-      (
-        VISIBLE_PROVIDERS.includes(
-          p.provider as (typeof VISIBLE_PROVIDERS)[number]
-        ) ||
-        AUTO_MANAGED_PROVIDERS.includes(
-          p.provider as (typeof AUTO_MANAGED_PROVIDERS)[number]
-        )
+      VISIBLE_PROVIDERS.includes(
+        p.provider as (typeof VISIBLE_PROVIDERS)[number]
       )
   );
   const availableProviders = Object.entries(providerConfigs).filter(
@@ -663,8 +657,8 @@ export function CombinedGeneralSettings({
                           : "The local OAuth helper is not running. Start it in your terminal to enable login:"}
                       </p>
                       {!oauthAvailability.available && !oauthAvailability.loading && (
-                        <code className="block mt-2 px-3 py-2 text-sm bg-background border border-border/40 rounded-md font-mono select-all">
-                          reliant auth serve
+                        <code className="block mt-2 px-3 py-2 text-sm bg-background border border-border/40 rounded-md font-mono select-all break-all">
+                          {authServeCommand()}
                         </code>
                       )}
                     </div>
@@ -840,9 +834,7 @@ export function CombinedGeneralSettings({
                 providerConfigs[
                   provider.provider as ProviderId
                 ];
-              const isAutoManagedProvider = AUTO_MANAGED_PROVIDERS.includes(
-                provider.provider as (typeof AUTO_MANAGED_PROVIDERS)[number]
-              );
+
               return (
                 <div
                   key={provider.provider}
@@ -870,16 +862,12 @@ export function CombinedGeneralSettings({
                             </span>
                           )}
                         </div>
-                        {isAutoManagedProvider && (
-                          <p className="mt-2 text-xs text-muted-foreground">
-                            Managed automatically from your Reliant account after sign-in.
-                          </p>
-                        )}
+
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       {/* Hide manual management controls for auto-managed providers like Reliant. */}
-                      {!config?.usesOAuth && !isAutoManagedProvider && (
+                      {!config?.usesOAuth && (
                         <button
                           className="px-3 py-1.5 text-sm border border-border/40 rounded-md hover:bg-accent transition-colors flex items-center gap-1"
                           onClick={() => {
@@ -908,25 +896,23 @@ export function CombinedGeneralSettings({
                             : "Update"}
                         </button>
                       )}
-                      {!isAutoManagedProvider && (
-                        <button
-                          className="px-3 py-1.5 text-sm border border-destructive/20 text-destructive rounded-md hover:bg-destructive/10 transition-colors flex items-center gap-1"
-                          onClick={() => handleDeleteProvider(provider.provider)}
-                          disabled={deletingProvider === provider.provider}
-                        >
-                          {deletingProvider === provider.provider ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="w-4 h-4" />
-                          )}
-                          {config?.usesOAuth ? "Disconnect" : "Delete"}
-                        </button>
-                      )}
+                      <button
+                        className="px-3 py-1.5 text-sm border border-destructive/20 text-destructive rounded-md hover:bg-destructive/10 transition-colors flex items-center gap-1"
+                        onClick={() => handleDeleteProvider(provider.provider)}
+                        disabled={deletingProvider === provider.provider}
+                      >
+                        {deletingProvider === provider.provider ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                        {config?.usesOAuth ? "Disconnect" : "Delete"}
+                      </button>
                     </div>
                   </div>
 
                   {/* Only show edit section for providers that use API-key auth */}
-                  {editingProvider === provider.provider && !config?.usesOAuth && !isAutoManagedProvider && (
+                  {editingProvider === provider.provider && !config?.usesOAuth && (
                     <div className="border-t border-border/40 mt-4 pt-4 space-y-4">
                       <div className="space-y-2">
                         <label className="text-sm font-medium">

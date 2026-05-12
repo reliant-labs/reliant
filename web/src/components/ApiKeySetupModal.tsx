@@ -6,6 +6,7 @@ import { useApiKeySetupStore } from "../store/apiKeySetupStore";
 import { cn } from "../lib/utils";
 import { logger } from "../lib/logger";
 import { useCodexOAuth, useClaudeOAuth, useOAuthAvailability } from "../hooks";
+import { authServeCommand } from "../lib/cli-commands";
 
 const PROVIDERS = [
   {
@@ -311,8 +312,8 @@ export function ApiKeySetupModal() {
                     : "The local OAuth helper is not running. Start it in your terminal to enable login:"}
                 </p>
                 {!oauthAvailability.available && !oauthAvailability.loading && (
-                  <code className="block mt-2 px-3 py-2 text-sm bg-background border border-border rounded-md font-mono select-all">
-                    reliant auth serve
+                  <code className="block mt-2 px-3 py-2 text-sm bg-background border border-border rounded-md font-mono select-all break-all">
+                    {authServeCommand()}
                   </code>
                 )}
               </div>

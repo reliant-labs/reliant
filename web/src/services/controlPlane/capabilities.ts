@@ -11,8 +11,10 @@
 import { hasControlPlane } from "./config";
 
 export const capabilities = {
-  /** Hosted ("cloud_free_trial") workspace daemons are offered. */
-  cloudWorkspaces: hasControlPlane,
+  /** Hosted ("cloud_free_trial") cloud daemons are offered. */
+  cloudDaemons: hasControlPlane,
   /** Reliant-managed model credits are offered. */
   managedCredits: hasControlPlane,
+  /** Cloud-managed git credential storage & repo cloning. */
+  gitConnections: hasControlPlane,
 } as const;

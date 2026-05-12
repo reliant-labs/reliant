@@ -46,7 +46,7 @@ vi.mock('@/hooks', () => ({
 
 import { CombinedGeneralSettings } from '@/components/Settings/CombinedGeneralSettings'
 
-describe('CombinedGeneralSettings Reliant manual controls', () => {
+describe('CombinedGeneralSettings Reliant provider', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.getPreferences.mockResolvedValue({ streaming_enabled: false })
@@ -54,25 +54,16 @@ describe('CombinedGeneralSettings Reliant manual controls', () => {
     mocks.refetchModels.mockResolvedValue(undefined)
   })
 
-  it('hides Reliant from add-provider options while still showing managed status', async () => {
+  it('does not show Reliant in the add-provider dropdown (uses JWT, no key needed)', async () => {
     render(
       <CombinedGeneralSettings
-        providers={[
-          {
-            provider: 'reliant',
-            displayName: 'Reliant',
-            hasApiKey: true,
-            maskedKey: 'sk-a...1234',
-            configured: true,
-          },
-        ]}
+        providers={[]}
       />
     )
 
-    expect(await screen.findByText('Reliant')).toBeInTheDocument()
-    expect(screen.getByText(/managed automatically from your Reliant account/i)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Update' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: 'Reliant' })).not.toBeInTheDocument()
+    const select = await screen.findByRole('combobox')
+    const options = Array.from(select.querySelectorAll('option'))
+    const reliantOption = options.find((o) => o.textContent === 'Reliant')
+    expect(reliantOption).toBeUndefined()
   })
 })

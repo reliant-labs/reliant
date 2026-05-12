@@ -143,7 +143,7 @@ func TestDaemonRegistrationUserIDRejectsSpoofedRegisterUserID(t *testing.T) {
 }
 
 func TestDaemonRegistrationUserIDAcceptsMatchingOrEmptyRegisterUserID(t *testing.T) {
-	// Monolith mode: context has an authenticated user.
+	// Context has an authenticated user.
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "trusted-user")
 
 	resolved, err := daemonRegistrationUserID(ctx, &reliantv1.DaemonRegister{UserId: "trusted-user"})

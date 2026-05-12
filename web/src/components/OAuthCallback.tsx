@@ -3,7 +3,6 @@ import { useNavigate } from '@tanstack/react-router'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/authStore'
 import { logger } from '@/lib/logger'
-import { persistProviderToken } from '@/lib/persist-provider-token'
 import { GradientBackground } from './GradientBackground'
 import { BrandMark } from './icons/BrandMark'
 
@@ -66,8 +65,10 @@ export function OAuthCallback() {
         // includes provider_token, unlike onAuthStateChange which may not.
         const provider = data.user?.app_metadata?.provider
         if (provider === 'github' && data.session?.provider_token) {
-          persistProviderToken(data.session.provider_token, 'github', 'repo').catch((err) => {
-            logger.warn('[OAuthCallback] Failed to persist provider token', err)
+          import('@/services/controlPlane/git').then(({ gitService }) =>
+            gitService.saveCredential('github', data.session!.provider_token!, 'repo'),
+          ).catch((err) => {
+            logger.warn('[OAuthCallback] Failed to save git credential', err)
           })
         }
 

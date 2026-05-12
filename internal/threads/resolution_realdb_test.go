@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-// Tests for CW chain resolution using a REAL SQLite database.
+// Tests for CW chain resolution using a REAL Postgres database.
 // These tests catch bugs in the actual repository implementation that mocks would hide.
 package threads
 

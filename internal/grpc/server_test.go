@@ -26,26 +26,26 @@ func (i *testNamedInterceptor) WrapStreamingHandler(next connect.StreamingHandle
 	}
 }
 
-func TestNewInterceptorsOrdersRecoveryErrorReporterTimeoutAndAuth(t *testing.T) {
+func TestNewInterceptorsUsesForgeChainWithExtras(t *testing.T) {
 	timeout := &testNamedInterceptor{}
 	auth := &testNamedInterceptor{}
 
 	result := newInterceptors(timeout, auth)
-	require.Len(t, result, 5)
-	require.IsType(t, &interceptors.ObservabilityInterceptor{}, result[0])
-	require.IsType(t, &interceptors.RecoveryInterceptor{}, result[1])
-	require.IsType(t, &interceptors.ErrorReporterInterceptor{}, result[2])
-	require.Same(t, timeout, result[3])
-	require.Same(t, auth, result[4])
+	// forge's DefaultMiddlewares produces 5 (Recovery, RequestID, Logging, Tracing, Metrics)
+	// + Extras: ErrorReporterInterceptor, timeout, auth = 8 total
+	require.Len(t, result, 8)
+	// The last three are the reliant-specific Extras in order.
+	require.IsType(t, &interceptors.ErrorReporterInterceptor{}, result[5])
+	require.Same(t, timeout, result[6])
+	require.Same(t, auth, result[7])
 }
 
 func TestNewInterceptorsSkipsNilAuthInterceptor(t *testing.T) {
 	timeout := &testNamedInterceptor{}
 
 	result := newInterceptors(timeout, (*interceptors.AuthInterceptor)(nil))
-	require.Len(t, result, 4)
-	require.IsType(t, &interceptors.ObservabilityInterceptor{}, result[0])
-	require.IsType(t, &interceptors.RecoveryInterceptor{}, result[1])
-	require.IsType(t, &interceptors.ErrorReporterInterceptor{}, result[2])
-	require.Same(t, timeout, result[3])
+	// forge's 5 + ErrorReporterInterceptor + timeout = 7 (nil auth skipped)
+	require.Len(t, result, 7)
+	require.IsType(t, &interceptors.ErrorReporterInterceptor{}, result[5])
+	require.Same(t, timeout, result[6])
 }

@@ -11,8 +11,7 @@ import (
 )
 
 // DaemonClientFactory creates a daemon.Client for a given user ID.
-// In monolith mode this returns the shared LocalClient; in distributed mode it
-// creates a RemoteClient bound to the user's daemon via NATS.
+// In distributed mode it creates a RemoteClient bound to the user's daemon via NATS.
 type DaemonClientFactory func(userID string) daemon.Client
 
 // RemoteExecutor executes tools via server-side execution or daemon routing.

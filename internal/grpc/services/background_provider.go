@@ -45,7 +45,6 @@ type OutputSubscriptionInfo struct {
 
 // BackgroundProcessProvider abstracts access to background process state.
 // Implementations:
-//   - LocalBackgroundProcessProvider: wraps shell.GetBackgroundManager() (monolith/daemon)
 //   - DBBackgroundProcessProvider: queries background_processes DB table (distributed api-server)
 type BackgroundProcessProvider interface {
 	// ListProcesses returns processes matching the given filters.

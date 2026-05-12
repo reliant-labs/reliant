@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"testing"
 	"time"
@@ -20,12 +19,7 @@ import (
 func setupTestScenarioService(t *testing.T) (*ScenarioService, *db.Repo, string, string, context.Context) {
 	t.Helper()
 
-	sqlDB, err := sql.Open("sqlite3", ":memory:")
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, sqlDB.Close()) })
-	require.NoError(t, db.RunMigrations(sqlDB))
-
-	repo := db.NewRepo(sqlDB)
+	repo := db.NewTestRepo(t)
 	userID := uuid.NewString()
 	projectID := uuid.NewString()
 	now := time.Now().UTC()

@@ -1643,16 +1643,13 @@ func (a *CallLLMActivity) managedReliantKey(ctx context.Context, chat *db.Chat, 
 		return "", "", false
 	}
 
-	managedKey, err := a.repo.GetProviderAPIKey(ctx, chat.UserID, "reliant")
-	if err != nil {
-		logging.Warn("Failed to load Reliant provider key for managed wallet operation", "operation", operation, "chat_id", chat.ID, "user_id", chat.UserID, "error", err)
+	// Use the user's JWT for billing RPCs instead of a stored managed key.
+	jwt, ok := auth.GetUserJWT(chat.UserID)
+	if !ok || strings.TrimSpace(jwt) == "" {
+		logging.Warn("No JWT available for Reliant billing", "operation", operation, "chat_id", chat.ID, "user_id", chat.UserID)
 		return "", "", false
 	}
-	managedKey = strings.TrimSpace(managedKey)
-	if !strings.HasPrefix(managedKey, "rlnt_") && !strings.HasPrefix(managedKey, "rly_") {
-		return "", "", false
-	}
-	return managedKey, managedReliantCanonicalModelID(string(driver.Model().ID), string(driver.Model().ID)), true
+	return jwt, managedReliantCanonicalModelID(string(driver.Model().ID), string(driver.Model().ID)), true
 }
 
 func managedReliantCanonicalModelID(candidate string, fallbacks ...string) string {

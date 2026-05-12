@@ -1,6 +1,7 @@
 import { cn } from "../../lib/utils";
-import { Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, FolderOpen, Globe, FolderGit2, Bell, KeyRound, Github } from "lucide-react";
+import { Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, FolderOpen, Globe, FolderGit2, Bell, KeyRound, Github, Cloud, Server, CreditCard, LayoutDashboard, Building2, ExternalLink } from "lucide-react";
 import { McpIcon } from "../icons/McpIcon";
+import { hasControlPlane } from "../../services/controlPlane/config";
 
 export type SettingsSection =
   | "account"
@@ -17,7 +18,12 @@ export type SettingsSection =
   | "about"
   | "tokens"
   | "git-connections"
-  | "developer";
+  | "developer"
+  | "cloud-overview"
+  | "cloud-environments"
+  | "cloud-ai"
+  | "cloud-billing"
+  | "cloud-organization";
 
 interface SettingsNavigationProps {
   activeSection: SettingsSection;
@@ -29,6 +35,7 @@ interface SectionItem {
   id: SettingsSection;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
+  external?: boolean;
 }
 
 interface SectionGroup {
@@ -69,10 +76,24 @@ const sectionGroups: SectionGroup[] = [
     ],
   },
   {
+    label: "Cloud",
+    items: [
+      ...(hasControlPlane
+        ? [
+            { id: "cloud-overview" as SettingsSection, label: "Overview", icon: LayoutDashboard, external: true },
+            { id: "cloud-environments" as SettingsSection, label: "Environments", icon: Server, external: true },
+            { id: "cloud-ai" as SettingsSection, label: "AI Management", icon: Sparkles, external: true },
+            { id: "cloud-billing" as SettingsSection, label: "Billing", icon: CreditCard, external: true },
+            { id: "cloud-organization" as SettingsSection, label: "Organization", icon: Building2, external: true },
+          ]
+        : []),
+      { id: "git-connections", label: "GitHub", icon: Github },
+    ],
+  },
+  {
     label: "System",
     items: [
       { id: "tokens", label: "Access Tokens", icon: KeyRound },
-      { id: "git-connections", label: "GitHub", icon: Github },
       { id: "about", label: "About", icon: Info },
       { id: "developer", label: "Developer", icon: Code },
     ],
@@ -136,8 +157,11 @@ export function SettingsNavigation({
                       <div className={cn("flex items-center", isCollapsed ? "justify-center" : "gap-2.5")}>
                         <section.icon className="h-4 w-4 flex-shrink-0" />
                         {!isCollapsed && (
-                          <div>
+                          <div className="flex flex-1 items-center justify-between">
                             <div className="font-medium">{section.label}</div>
+                            {section.external && (
+                              <ExternalLink className="h-3 w-3 flex-shrink-0 opacity-50" />
+                            )}
                           </div>
                         )}
                       </div>

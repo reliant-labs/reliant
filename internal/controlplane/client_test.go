@@ -11,7 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/gen/controlplane/v1/controlplanev1connect"
 )
 
-func TestClient_CheckManagedReliantAffordability_DoesNotAttachAuthorization(t *testing.T) {
+func TestClient_CheckManagedReliantAffordability_AttachesAuthorization(t *testing.T) {
 	var gotAuth string
 	var gotManagedKey string
 	var gotEstimatedSpend float64
@@ -47,8 +47,8 @@ func TestClient_CheckManagedReliantAffordability_DoesNotAttachAuthorization(t *t
 	if err != nil {
 		t.Fatalf("CheckManagedReliantAffordability: %v", err)
 	}
-	if gotAuth != "" {
-		t.Fatalf("authorization header = %q, want empty", gotAuth)
+	if gotAuth != "Bearer rlnt_test_key" {
+		t.Fatalf("authorization header = %q, want %q", gotAuth, "Bearer rlnt_test_key")
 	}
 	if gotManagedKey != "rlnt_test_key" {
 		t.Fatalf("managed key = %q, want rlnt_test_key", gotManagedKey)
@@ -70,7 +70,7 @@ func TestClient_CheckManagedReliantAffordability_DoesNotAttachAuthorization(t *t
 	}
 }
 
-func TestClient_ReserveManagedReliantUsage_DoesNotAttachAuthorization(t *testing.T) {
+func TestClient_ReserveManagedReliantUsage_AttachesAuthorization(t *testing.T) {
 	var gotAuth string
 	var gotManagedKey string
 	var gotReservationID string
@@ -109,8 +109,8 @@ func TestClient_ReserveManagedReliantUsage_DoesNotAttachAuthorization(t *testing
 	if err != nil {
 		t.Fatalf("ReserveManagedReliantUsage: %v", err)
 	}
-	if gotAuth != "" {
-		t.Fatalf("authorization header = %q, want empty", gotAuth)
+	if gotAuth != "Bearer rlnt_test_key" {
+		t.Fatalf("authorization header = %q, want %q", gotAuth, "Bearer rlnt_test_key")
 	}
 	if gotManagedKey != "rlnt_test_key" {
 		t.Fatalf("managed key = %q, want rlnt_test_key", gotManagedKey)
@@ -135,7 +135,7 @@ func TestClient_ReserveManagedReliantUsage_DoesNotAttachAuthorization(t *testing
 	}
 }
 
-func TestClient_FinalizeManagedReliantUsage_DoesNotAttachAuthorization(t *testing.T) {
+func TestClient_FinalizeManagedReliantUsage_AttachesAuthorization(t *testing.T) {
 	var gotAuth string
 	var gotManagedKey string
 	var gotReservationID string
@@ -181,8 +181,8 @@ func TestClient_FinalizeManagedReliantUsage_DoesNotAttachAuthorization(t *testin
 	if err != nil {
 		t.Fatalf("FinalizeManagedReliantUsage: %v", err)
 	}
-	if gotAuth != "" {
-		t.Fatalf("authorization header = %q, want empty", gotAuth)
+	if gotAuth != "Bearer rlnt_test_key" {
+		t.Fatalf("authorization header = %q, want %q", gotAuth, "Bearer rlnt_test_key")
 	}
 	if gotManagedKey != "rlnt_test_key" {
 		t.Fatalf("managed key = %q, want rlnt_test_key", gotManagedKey)
@@ -210,7 +210,7 @@ func TestClient_FinalizeManagedReliantUsage_DoesNotAttachAuthorization(t *testin
 	}
 }
 
-func TestClient_ReleaseManagedReliantUsageReservation_DoesNotAttachAuthorization(t *testing.T) {
+func TestClient_ReleaseManagedReliantUsageReservation_AttachesAuthorization(t *testing.T) {
 	var gotAuth string
 	var gotManagedKey string
 	var gotReservationID string
@@ -232,8 +232,8 @@ func TestClient_ReleaseManagedReliantUsageReservation_DoesNotAttachAuthorization
 	if err != nil {
 		t.Fatalf("ReleaseManagedReliantUsageReservation: %v", err)
 	}
-	if gotAuth != "" {
-		t.Fatalf("authorization header = %q, want empty", gotAuth)
+	if gotAuth != "Bearer rlnt_test_key" {
+		t.Fatalf("authorization header = %q, want %q", gotAuth, "Bearer rlnt_test_key")
 	}
 	if gotManagedKey != "rlnt_test_key" {
 		t.Fatalf("managed key = %q, want rlnt_test_key", gotManagedKey)
@@ -246,30 +246,8 @@ func TestClient_ReleaseManagedReliantUsageReservation_DoesNotAttachAuthorization
 	}
 }
 
-func TestClient_GetCurrentUserReliantState_AttachesAuthorization(t *testing.T) {
-	var gotAuth string
-
-	handler := connect.NewUnaryHandler(
-		controlplanev1connect.BillingServiceGetCurrentUserReliantStateProcedure,
-		func(ctx context.Context, req *connect.Request[controlplanev1.GetCurrentUserReliantStateRequest]) (*connect.Response[controlplanev1.GetCurrentUserReliantStateResponse], error) {
-			gotAuth = req.Header().Get("Authorization")
-			return connect.NewResponse(&controlplanev1.GetCurrentUserReliantStateResponse{}), nil
-		},
-	)
-	server := httptest.NewServer(handler)
-	defer server.Close()
-
-	client := NewClient(server.URL)
-	if _, err := client.GetCurrentUserReliantState(context.Background(), "Bearer sync-token"); err != nil {
-		t.Fatalf("GetCurrentUserReliantState: %v", err)
-	}
-	if gotAuth != "Bearer sync-token" {
-		t.Fatalf("authorization header = %q, want Bearer sync-token", gotAuth)
-	}
-}
-
 func TestAttachAuthorization_LeavesHeaderUnsetWhenBlank(t *testing.T) {
-	req := connect.NewRequest(&controlplanev1.GetCurrentUserReliantStateRequest{})
+	req := connect.NewRequest(&controlplanev1.CheckManagedReliantAffordabilityRequest{})
 	attachAuthorization(req, "  ")
 	if got := req.Header().Get("Authorization"); got != "" {
 		t.Fatalf("authorization header = %q, want empty", got)

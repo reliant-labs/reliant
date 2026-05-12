@@ -1,5 +1,5 @@
 // Package localfs provides an abstraction over local filesystem operations.
-// In the monolith, Local wraps the standard os/filepath calls.
+// Local wraps the standard os/filepath calls.
 // In the split architecture, a remote implementation will proxy through the tools daemon.
 package localfs
 

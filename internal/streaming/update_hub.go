@@ -12,9 +12,8 @@ import (
 // persisted to the database. It eliminates the need for polling by pushing
 // events to subscribers in real-time.
 //
-// Two implementations:
-//   - MemoryUpdateHub: in-process fan-out (monolith/desktop)
-//   - NATSUpdateHub:   core NATS pub/sub (distributed/cloud)
+// Implementation:
+//   - NATSUpdateHub: core NATS pub/sub (distributed/cloud)
 //
 // The database remains the source of truth. UpdateHub is the notification
 // channel — on reconnect, clients catch up from the DB, then switch to
@@ -67,6 +66,14 @@ type UpdateSubscription[T any] interface {
 
 	// Unsubscribe removes this subscription and closes the events channel.
 	Unsubscribe()
+}
+
+// truncateKey shortens a key for log output.
+func truncateKey(key string) string {
+	if len(key) > 8 {
+		return key[:8]
+	}
+	return key
 }
 
 // UpdateHub is a generic pub/sub hub for durable update events.

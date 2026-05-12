@@ -16,8 +16,8 @@ describe("getDaemonId", () => {
   });
 
   it("returns name when both daemonId and daemon_id are absent (control-plane AIP resource name)", () => {
-    const d: Daemon = { name: "daemons/onboarding-workspace", status: 0 };
-    expect(getDaemonId(d)).toBe("daemons/onboarding-workspace");
+    const d: Daemon = { name: "daemons/onboarding-daemon", status: 0 };
+    expect(getDaemonId(d)).toBe("daemons/onboarding-daemon");
   });
 
   it("prefers daemonId over daemon_id over name", () => {
@@ -67,9 +67,9 @@ describe("getFirstDaemonId", () => {
 
   it("works with control-plane response shape (name only)", () => {
     const daemons: Daemon[] = [
-      { name: "daemons/onboarding-workspace", hostname: "ws-abc", status: 0 },
+      { name: "daemons/onboarding-daemon", hostname: "ws-abc", status: 0 },
     ];
-    expect(getFirstDaemonId(daemons)).toBe("daemons/onboarding-workspace");
+    expect(getFirstDaemonId(daemons)).toBe("daemons/onboarding-daemon");
   });
 
   it("works with OSS response shape (daemonId)", () => {

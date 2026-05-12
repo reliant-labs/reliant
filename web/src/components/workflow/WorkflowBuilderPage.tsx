@@ -27,6 +27,7 @@ import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { usePreferencesStore } from "../../store/preferencesStore";
 import { useOnboardingChecklistStore } from "../../store/onboardingChecklistStore";
+import { trackEvent } from "../../lib/analytics";
 
 interface WorkflowBuilderPageProps {
   selectedWorkflow?: Workflow | null;
@@ -400,6 +401,12 @@ export function WorkflowBuilderPage({
       if (response.yamlDefinition) {
         setYamlDefinition(response.yamlDefinition);
       }
+
+      trackEvent("workflow_draft_saved", {
+        workflowSlug: workflow.name,
+        workflowName: workflow.name,
+        isNew: !draftId,
+      });
 
       // After first save, clear the session ID since workflow now has proper identification
       workflowSessionIdRef.current = undefined;

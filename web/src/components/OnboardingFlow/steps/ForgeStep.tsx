@@ -8,8 +8,7 @@ export function ForgeStep({ plan, updatePlan, onNext }: StepProps) {
       workflowId: "builtin://forge-one-shot",
       useForge: true,
       workflowParams: { mode: "auto", ask: true },
-      initialPrompt:
-        "Help me scope a new Forge app. Ask the key product and design questions, then create the initial plan.",
+
     });
     onNext();
   };
@@ -19,8 +18,7 @@ export function ForgeStep({ plan, updatePlan, onNext }: StepProps) {
       workflowId: "builtin://agent",
       useForge: false,
       workflowParams: { mode: "auto" },
-      initialPrompt:
-        "Help me create a new project from scratch. Ask a few setup questions, then scaffold the smallest useful version.",
+
     });
     onNext();
   };

@@ -11,6 +11,7 @@ import { WorkspacesSection } from "./WorkspacesSection";
 import { BrowserSettings } from "./BrowserSettings";
 import { TokenSettings } from "./TokenSettings";
 import { GitConnectionsSettings } from "./GitConnectionsSettings";
+import { CloudSection } from "./CloudSection";
 import type { SettingsSection } from "./SettingsNavigation";
 import { useEffect, useState } from "react";
 import { PromptsSettings } from "./PromptsSettings";
@@ -93,6 +94,9 @@ export function SettingsContent({
     }
     if (activeSection === "developer") {
       return <DeveloperSettings />;
+    }
+    if (activeSection.startsWith("cloud-")) {
+      return <CloudSection section={activeSection} />;
     }
     return (
       <CombinedGeneralSettings

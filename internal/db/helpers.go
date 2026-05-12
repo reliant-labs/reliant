@@ -15,7 +15,7 @@ import (
 //
 // These helpers provide clean, composable functions for database operations.
 // They MUST be called within a RunTx transaction context.
-// SQLite triggers automatically populate the chat_updates table (migration 028).
+// Database triggers automatically populate the chat_updates table (migration 028).
 
 // GetToolResultBlock retrieves a tool_result block for a given tool_call_id.
 // Can be called outside a transaction context.

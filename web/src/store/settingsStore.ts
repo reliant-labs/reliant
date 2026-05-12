@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 import { api } from "../api/client";
 import { toast } from "../lib/toast-manager";
 import { logger } from "../lib/logger";
+import { trackEvent } from "../lib/analytics";
 
 export type WorktreeArchiveMode = "ask_me" | "always_cleanup" | "always_keep";
 
@@ -129,6 +130,9 @@ export const useSettingsStore = create<SettingsStore>()(
 
           await api.settings.updatePreferences(backendPrefs);
 
+          trackEvent("preferences_updated", {
+            changedKeys: Object.keys(prefs).join(","),
+          });
           toast.success("Worktree preferences updated", { duration: 2000 });
         } catch (error) {
           // Revert on error
@@ -176,6 +180,9 @@ export const useSettingsStore = create<SettingsStore>()(
           }
 
           await api.settings.updatePreferences(backendPrefs);
+          trackEvent("preferences_updated", {
+            changedKeys: Object.keys(prefs).join(","),
+          });
         } catch (error) {
           // Revert on error
           set({ preferences: currentPrefs });

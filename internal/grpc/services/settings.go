@@ -38,17 +38,15 @@ import (
 // SettingsService implements the SettingsService RPC handlers
 type SettingsService struct {
 	reliantv1connect.UnimplementedSettingsServiceHandler
-	database           db.Repository
-	daemonRouter       toolexec.DaemonRouter
-	controlPlaneClient controlPlaneClient
+	database     db.Repository
+	daemonRouter toolexec.DaemonRouter
 }
 
 // NewSettingsService creates a new SettingsService
 func NewSettingsService(database db.Repository, daemonRouter toolexec.DaemonRouter) *SettingsService {
 	return &SettingsService{
-		database:           database,
-		daemonRouter:       daemonRouter,
-		controlPlaneClient: newControlPlaneClient(""),
+		database:     database,
+		daemonRouter: daemonRouter,
 	}
 }
 
@@ -904,7 +902,6 @@ func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.
 	providers := []models.Family{
 		"claude",
 		"codex",
-		"reliant",
 		"openrouter",
 		"anthropic",
 		"openai",
@@ -914,7 +911,6 @@ func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.
 	providerDisplayNames := map[models.Family]string{
 		"claude":     "Claude Code",
 		"codex":      "Codex (ChatGPT)",
-		"reliant":    "Reliant",
 		"openrouter": "OpenRouter",
 		"anthropic":  "Anthropic",
 		"openai":     "OpenAI",
@@ -974,6 +970,14 @@ func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.
 
 		statuses = append(statuses, status)
 	}
+
+	// Reliant provider is always available for authenticated users (uses JWT, no API key).
+	statuses = append(statuses, &reliantv1.ProviderStatus{
+		Provider:    "reliant",
+		DisplayName: "Reliant",
+		Configured:  true,
+		HasApiKey:   true,
+	})
 
 	return connect.NewResponse(&reliantv1.GetProviderStatusesResponse{
 		Providers: statuses,

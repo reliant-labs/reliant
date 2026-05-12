@@ -165,17 +165,6 @@ const USER_SERVICE = "controlplane.v1.UserService";
 
 export interface ControlPlaneUser {
   onboardingCompleted?: boolean;
-  freeCreditsEligible?: boolean;
-  reliantCreditsEligible?: boolean;
-  creditsEligible?: boolean;
-  welcomeCreditEligible?: boolean;
-  hasFreeCredits?: boolean;
-  freeCreditsAvailable?: boolean;
-  creditsAvailable?: boolean;
-  trialCreditsRemaining?: number | string;
-  freeCreditsRemaining?: number | string;
-  creditsRemaining?: number | string;
-  creditBalance?: number | string;
   globalBudgetAvailable?: boolean;
   budgetAvailable?: boolean;
   ipAllowed?: boolean;
@@ -184,32 +173,6 @@ export interface ControlPlaneUser {
 
 interface GetCurrentUserResponse {
   user?: ControlPlaneUser;
-}
-
-function isPositiveNumber(value: unknown): boolean {
-  if (typeof value === "number") return value > 0;
-  if (typeof value === "string") return Number(value) > 0;
-  return false;
-}
-
-export function hasReliantCreditEligibility(user: ControlPlaneUser | undefined): boolean {
-  if (!user) return false;
-  if (user.ipRestricted === true || user.ipAllowed === false) return false;
-  if (user.globalBudgetAvailable === false || user.budgetAvailable === false) return false;
-
-  return Boolean(
-    user.freeCreditsEligible ||
-      user.reliantCreditsEligible ||
-      user.creditsEligible ||
-      user.welcomeCreditEligible ||
-      user.hasFreeCredits ||
-      user.freeCreditsAvailable ||
-      user.creditsAvailable ||
-      isPositiveNumber(user.trialCreditsRemaining) ||
-      isPositiveNumber(user.freeCreditsRemaining) ||
-      isPositiveNumber(user.creditsRemaining) ||
-      isPositiveNumber(user.creditBalance),
-  );
 }
 
 let _userPromise: Promise<GetCurrentUserResponse> | null = null;
@@ -233,6 +196,42 @@ export async function completeOnboardingRPC(
 ): Promise<void> {
   await callRPC(USER_SERVICE, "CompleteOnboarding", { onboardingData });
   _userPromise = null; // Clear cache so next fetch gets fresh data
+}
+
+// ── Billing Service ─────────────────────────────────────────
+
+const BILLING_SERVICE = "controlplane.v1.BillingService";
+
+export interface ReliantEntitlement {
+  status?: string;
+  reliantEnabled?: boolean;
+  reliant_enabled?: boolean;
+}
+
+interface GetCurrentUserReliantStateResponse {
+  entitlement?: ReliantEntitlement;
+}
+
+let _entitlementPromise: Promise<GetCurrentUserReliantStateResponse> | null = null;
+export function getReliantEntitlement(): Promise<GetCurrentUserReliantStateResponse> {
+  if (!_entitlementPromise) {
+    _entitlementPromise = callRPC<Record<string, unknown>, GetCurrentUserReliantStateResponse>(
+      BILLING_SERVICE,
+      "GetCurrentUserReliantState",
+      {},
+    ).finally(() => {
+      setTimeout(() => {
+        _entitlementPromise = null;
+      }, 30_000);
+    });
+  }
+  return _entitlementPromise;
+}
+
+export function isCloudEligible(entitlement: ReliantEntitlement | undefined): boolean {
+  if (!entitlement) return false;
+  const enabled = entitlement.reliantEnabled ?? entitlement.reliant_enabled ?? false;
+  return entitlement.status === "active" && enabled;
 }
 
 // ── Daemon Service ──────────────────────────────────────────

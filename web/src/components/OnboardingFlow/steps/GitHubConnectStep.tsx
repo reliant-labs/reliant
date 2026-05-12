@@ -87,6 +87,7 @@ export function GitHubConnectStep({ plan, updatePlan, onNext, onBack }: StepProp
   const {
     data: reposData,
     isLoading: reposLoading,
+    isError: reposIsError,
     error: reposQueryError,
     refetch: fetchRepos,
   } = useGitRepos();
@@ -141,10 +142,10 @@ export function GitHubConnectStep({ plan, updatePlan, onNext, onBack }: StepProp
 
   // Load repos when entering picker phase
   useEffect(() => {
-    if (phase === "picker" && repos.length === 0 && !reposLoading) {
+    if (phase === "picker" && repos.length === 0 && !reposLoading && !reposIsError) {
       fetchRepos();
     }
-  }, [phase, repos.length, reposLoading, fetchRepos]);
+  }, [phase, repos.length, reposLoading, reposIsError, fetchRepos]);
 
   // Client-side search filter
   const filteredRepos = useMemo(() => {
