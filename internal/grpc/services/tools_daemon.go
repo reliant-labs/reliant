@@ -345,7 +345,6 @@ func (s *ToolsDaemonService) ConnectDaemon(
 	if err != nil {
 		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed daemon registration identity validation",
 			"error", err,
-			"registerUserID", reg.UserId,
 		)
 		return err
 	}
@@ -382,6 +381,7 @@ func (s *ToolsDaemonService) ConnectDaemon(
 		Status:        db.DaemonStatusActive,
 		Capabilities:  capabilitiesJSON,
 		ProjectPaths:  projectPathsJSON,
+		DaemonType:    normalizeRegisteredDaemonType(reg.GetDaemonType()),
 		ConnectedAt:   &now,
 		LastHeartbeat: &now,
 	}); err != nil {
@@ -444,6 +444,7 @@ func (s *ToolsDaemonService) ConnectDaemon(
 				Accepted:              true,
 				RequestedProjectPaths: requestedProjectPaths,
 				DaemonId:              daemonID,
+				UserId:                userID,
 			},
 		},
 	}
@@ -535,6 +536,7 @@ func (s *ToolsDaemonService) RegisterOutboundConnection(
 		Platform:      daemonStringPtrOrNil(reg.Platform),
 		Status:        db.DaemonStatusActive,
 		Capabilities:  capabilitiesJSON,
+		DaemonType:    normalizeRegisteredDaemonType(reg.GetDaemonType()),
 		ConnectedAt:   &now,
 		LastHeartbeat: &now,
 	}); err != nil {
@@ -1871,6 +1873,24 @@ func daemonStringPtrOrNil(value string) *string {
 		return nil
 	}
 	return &trimmed
+}
+
+// normalizeRegisteredDaemonType translates the daemon's self-reported daemon_type
+// (from DaemonRegister.daemon_type — historically "local" or "cloud") into the
+// vocabulary used on DaemonInfo.daemon_type ("self_hosted" or "managed").
+// Returns nil for unknown/empty values so the existing column value is preserved
+// on re-registration (the COALESCE in UpsertDaemon handles that).
+func normalizeRegisteredDaemonType(value string) *string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "cloud", "managed":
+		s := "managed"
+		return &s
+	case "local", "self_hosted", "self-hosted":
+		s := "self_hosted"
+		return &s
+	default:
+		return nil
+	}
 }
 
 func bytesToStringPtr(value []byte) *string {

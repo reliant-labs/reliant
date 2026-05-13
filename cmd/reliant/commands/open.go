@@ -102,7 +102,6 @@ This is the "reliant ." command.`,
 				}
 
 				bootCfg := bootstrap.DaemonBootstrapConfig{
-					UserID:    creds.UserID,
 					AuthToken: creds.PAT,
 					GRPCURL:   daemonGRPCURL,
 					TLSMode:   tlsMode,

@@ -1,19 +1,18 @@
 import { useCallback, useMemo, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
 import { CheckCircle2, ExternalLink, Eye, EyeOff, KeyRound, Loader2, XCircle } from "lucide-react";
 import { api } from "@/api/client";
-import { onboardingService } from "@/services/controlPlane/onboarding";
 import { cn } from "@/lib/utils";
 import { getIsDev } from "@/lib/constants";
 import { logger } from "@/lib/logger";
 import { authServeCommand } from "@/lib/cli-commands";
 import { useCodexOAuth, useClaudeOAuth, useOAuthAvailability } from "@/hooks";
-import { useCloudEligibility, useCompleteOnboarding } from "@/hooks/useOnboardingQueries";
+import { useCloudEligibility } from "@/hooks/useOnboardingQueries";
 // TODO: Remove this store import once the ApiKeySetupModal is converted to event-driven
 import { useApiKeySetupStore } from "@/store/apiKeySetupStore";
-import { ensureProject } from "../useOnboardingComplete";
-import type { LaunchPlan, ModelProvider, StepProps } from "../types";
+import { trackEvent } from "@/lib/analytics";
+import { getEventBus } from "@/lib/events";
+import type { ModelProvider, StepProps } from "../types";
 
 const PROVIDERS = [
   {
@@ -100,20 +99,7 @@ function getForcedEligibility(): "eligible" | "ineligible" | null {
   return null;
 }
 
-async function applyTempChatParams(plan: Partial<LaunchPlan>) {
-  if (plan.workflowId || plan.workflowParams || plan.selectedPresets) {
-    const { useChatParamsStore } = await import("@/store/chatParamsStore");
-    const store = useChatParamsStore.getState();
-    if (plan.workflowParams) store.setTempNewChatParams(plan.workflowParams);
-    if (plan.workflowId) store.setTempNewChatWorkflow(plan.workflowId);
-    if (plan.selectedPresets) store.setTempNewChatPresets(plan.selectedPresets);
-  }
-
-}
-
-export function ModelStep({ plan, updatePlan }: StepProps) {
-  const navigate = useNavigate();
-  const completeOnboardingMutation = useCompleteOnboarding();
+export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
   const codexOAuth = useCodexOAuth();
   const claudeOAuth = useClaudeOAuth();
   const oauthAvailability = useOAuthAvailability();
@@ -145,88 +131,20 @@ export function ModelStep({ plan, updatePlan }: StepProps) {
       api.settings.updateProvider(providerId, key),
   });
 
-  const saving = saveKeyMutation.isPending || completeOnboardingMutation.isPending;
+  const saving = saveKeyMutation.isPending;
   const validating = validateKeyMutation.isPending;
 
   const finishOnboarding = useCallback(async (modelProvider: ModelProvider) => {
-    if (!plan.intent || !plan.workflowId || !plan.codeSource || !plan.compute) {
-      setError("Choose what you are building before finishing setup.");
-      return;
-    }
-    const isCloud = plan.compute === "cloud_free_trial";
-    if (
-      !isCloud &&
-      (plan.codeSource === "local_folder" ||
-        plan.codeSource === "new_project" ||
-        plan.codeSource === "sample_project") &&
-      !plan.localPath
-    ) {
-      setError("Choose a directory before finishing setup.");
-      return;
-    }
-    if (plan.codeSource === "github_repo" && (!plan.repo || !plan.localPath)) {
-      setError(
-        plan.daemonProvisioning
-          ? "Choose a repository target before finishing setup. Reliant will clone it when the daemon is ready."
-          : "Choose and clone a repository before finishing setup."
-      );
+    if (!plan.compute) {
+      setError("Choose where Reliant should run before finishing setup.");
       return;
     }
 
     setError(null);
-    try {
-      const finalPlan: Partial<LaunchPlan> = { ...plan, modelProvider };
-      updatePlan({ modelProvider });
-
-      // Ensure a project exists before navigating
-      await ensureProject(finalPlan);
-
-      // Mark onboarding complete. The mutation persists a local flag and
-      // calls the control-plane RPC if it's configured.
-      await completeOnboardingMutation.mutateAsync({
-        intent: finalPlan.intent,
-        compute: finalPlan.compute,
-        codeSource: finalPlan.codeSource,
-        workflowId: finalPlan.workflowId,
-        modelProvider: finalPlan.modelProvider,
-        ...(finalPlan.repo && {
-          repo: {
-            provider: finalPlan.repo.provider,
-            url: finalPlan.repo.url,
-            branch: finalPlan.repo.branch,
-          },
-        }),
-        ...(finalPlan.localPath && { localPath: finalPlan.localPath }),
-        ...(finalPlan.presetId && { presetId: finalPlan.presetId }),
-        ...(finalPlan.useForge !== undefined && { useForge: finalPlan.useForge }),
-      });
-
-      // Provision the Reliant managed API key in the background. The service
-      // is a no-op in local-only mode; in cloud mode it talks to the local
-      // Reliant SettingsService which in turn calls the control plane.
-      if (modelProvider === "reliant_credits") {
-        onboardingService.provisionManagedKey().then(
-          (result) => logger.info("[OnboardingModelStep] Reliant provider synced", { synced: result.synced }),
-          (err) => logger.warn("[OnboardingModelStep] Reliant provider sync failed", err),
-        );
-      }
-
-      // Apply temp chat params (workflow, presets, initial prompt)
-      await applyTempChatParams(finalPlan);
-
-      if (finalPlan.launchTour) {
-        const { useOnboardingChecklistStore } = await import(
-          "@/store/onboardingChecklistStore"
-        );
-        await useOnboardingChecklistStore.getState().startWizard();
-      }
-
-      // Navigate to main app (server marks onboarding complete via RPC)
-      navigate({ to: "/", search: { step: undefined, "reset-onboarding": undefined } });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to finish onboarding");
-    }
-  }, [completeOnboardingMutation, navigate, plan, updatePlan]);
+    trackEvent('onboarding_model_selected', { provider: modelProvider });
+    updatePlan({ modelProvider });
+    onNext();
+  }, [onNext, plan, updatePlan]);
 
   const handleConnectOAuth = useCallback(async () => {
     if (!provider.usesOAuth) return;
@@ -245,7 +163,7 @@ export function ModelStep({ plan, updatePlan }: StepProps) {
       useApiKeySetupStore.setState({ hasApiKey: true, showModal: false, hasChecked: true });
       const { useGlobalDataStore } = await import("@/store/globalDataStore");
       await useGlobalDataStore.getState().refetchModels();
-      window.dispatchEvent(new CustomEvent("api-key-saved"));
+      getEventBus().emit("api-key:saved", { provider: provider.modelProvider });
       await finishOnboarding(provider.modelProvider);
     } catch (err) {
       setValidationResult({ valid: false, message: err instanceof Error ? err.message : String(err) });
@@ -279,7 +197,7 @@ export function ModelStep({ plan, updatePlan }: StepProps) {
       useApiKeySetupStore.setState({ hasApiKey: true, showModal: false, hasChecked: true });
       const { useGlobalDataStore } = await import("@/store/globalDataStore");
       await useGlobalDataStore.getState().refetchModels();
-      window.dispatchEvent(new CustomEvent("api-key-saved"));
+      getEventBus().emit("api-key:saved", { provider: selectedProvider });
       logger.info("[OnboardingModelStep] Saved API key", { provider: selectedProvider });
       await finishOnboarding(provider.modelProvider);
     } catch (err) {

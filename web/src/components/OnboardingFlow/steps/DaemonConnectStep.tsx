@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { cn } from "@/lib/utils";
 import { daemonStartCommand } from "@/lib/cli-commands";
+import { trackEvent } from "@/lib/analytics";
 import type { StepProps } from "../types";
 
 type ChecklistItemStatus = "done" | "active" | "pending";
@@ -42,22 +43,34 @@ function StatusIcon({ status }: { status: ChecklistItemStatus }) {
 export function DaemonConnectStep({ onNext }: StepProps) {
   const { daemons, activeDaemon, loading } = useDaemonStatus();
   const [manualFeedback, setManualFeedback] = useState<string | null>(null);
-  const hasAdvancedRef = useRef(false);
+  const hasAdvanced = useRef(false);
+  const hasTrackedConnectedRef = useRef(false);
   const connected = Boolean(activeDaemon);
 
   const advanceOnce = useCallback(() => {
-    if (hasAdvancedRef.current) return;
-    hasAdvancedRef.current = true;
+    if (hasAdvanced.current) return;
+    hasAdvanced.current = true;
     onNext();
   }, [onNext]);
 
   useEffect(() => {
-    if (connected) {
+    // Only fire once on the first true `connected` transition. If the daemon
+    // connection flaps (true → false → true) we intentionally do NOT advance
+    // again — the step is forward-only and `hasAdvanced` is never reset.
+    if (connected && hasAdvanced.current === false) {
+      // Set the guard synchronously *before* any side effects so a re-render
+      // triggered by `setManualFeedback` (or a race with a flap) cannot fire
+      // `advanceOnce` a second time.
+      hasAdvanced.current = true;
+      if (!hasTrackedConnectedRef.current) {
+        hasTrackedConnectedRef.current = true;
+        trackEvent('onboarding_daemon_connected');
+      }
       setManualFeedback(null);
       // No delay - advance immediately if already connected
-      advanceOnce();
+      onNext();
     }
-  }, [advanceOnce, connected]);
+  }, [connected, onNext]);
 
   const handleManualCheck = () => {
     if (activeDaemon) {

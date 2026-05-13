@@ -4,6 +4,8 @@ import { supabase } from '@/lib/supabase'
 import { logger } from '@/lib/logger'
 import { setSentryUser } from '@/lib/sentry'
 import { devAuthGrpc } from '@/api/grpc-unauth'
+import { githubCredentialSync } from '@/lib/githubCredentialSync'
+import { gitService } from '@/services/controlPlane/git'
 
 const isElectron = !!window.electronAPI
 const getOAuthRedirectUrl = async (): Promise<string> => {
@@ -17,6 +19,28 @@ const getOAuthRedirectUrl = async (): Promise<string> => {
   }
 
   return response.redirectUrl
+}
+
+// Append OAuth round-trip state to the redirect URL as query params. Replaces
+// the previous side-channel localStorage flags (Phase 3 refactor).
+// `source` tags the trigger for analytics (signin vs link). `returnTo`
+// preserves the originating URL so the callback can land the user back where
+// they came from (e.g. mid-onboarding step + plan).
+type OAuthRedirectState = {
+  source?: 'signin' | 'link'
+  returnTo?: string
+}
+
+const withOAuthState = (baseUrl: string, state: OAuthRedirectState): string => {
+  try {
+    const url = new URL(baseUrl)
+    if (state.source) url.searchParams.set('source', state.source)
+    if (state.returnTo) url.searchParams.set('returnTo', state.returnTo)
+    return url.toString()
+  } catch {
+    // Fallback for unparseable URLs (shouldn't happen for redirect URLs).
+    return baseUrl
+  }
 }
 
 const normalizeFailureReason = (error: unknown): string => {
@@ -110,13 +134,17 @@ const setupElectronOAuthCallbackListener = (setState: (state: Partial<AuthState>
           identities: data.user?.identities?.map(i => i.provider),
         })
 
-        // Capture GitHub provider_token if available (only emitted once at sign-in)
+        // Capture GitHub provider_token if available (only emitted once at sign-in).
+        // Routed through githubCredentialSync so retries + UI surfacing kick in
+        // automatically; failures must NOT block login.
         if (data.session?.provider_token) {
-          try {
-            const { gitService } = await import('@/services/controlPlane/git')
-            await gitService.saveCredential('github', data.session.provider_token, 'repo')
-          } catch (err) {
-            console.warn('Failed to save git credential:', err)
+          const provider = data.user?.app_metadata?.provider || data.user?.identities?.[0]?.provider
+          if (provider === 'github') {
+            // Trigger tag comes from the `source` query param on the redirect
+            // URL — set by linkGithubAccount/signInWithGithub before redirect.
+            const trigger: 'signin' | 'link' =
+              url.searchParams.get('source') === 'link' ? 'link' : 'signin'
+            await githubCredentialSync.sync(data.session.provider_token, 'repo', trigger)
           }
         }
 
@@ -155,9 +183,9 @@ interface AuthState {
   signIn: (email: string, password: string) => Promise<void>
   signUp: (email: string, password: string) => Promise<{ user: User | null; session: Session | null }>
   signInWithGoogle: () => Promise<void>
-  signInWithGithub: () => Promise<void>
+  signInWithGithub: (state?: OAuthRedirectState) => Promise<void>
   signInWithApple: () => Promise<void>
-  linkGithubAccount: () => Promise<void>
+  linkGithubAccount: (state?: OAuthRedirectState) => Promise<void>
   linkGoogleAccount: () => Promise<void>
   linkAppleAccount: () => Promise<void>
   unlinkIdentity: (identityId: string) => Promise<void>
@@ -319,7 +347,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  signInWithGithub: async () => {
+  signInWithGithub: async (state?: OAuthRedirectState) => {
     set({ loading: true })
     const startedAt = Date.now()
     await trackAuthFunnelEvent('oauth_started', {
@@ -341,14 +369,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           throw error
         }
 
-        // Save GitHub provider token as git credential if available
+        // Save GitHub provider token via the resilient sync bridge.
+        // sync() handles retries + status surfacing; never blocks login on failure.
         if (oauthSession.providerToken) {
-          try {
-            const { gitService } = await import('@/services/controlPlane/git')
-            await gitService.saveCredential('github', oauthSession.providerToken, 'repo')
-          } catch (err) {
-            console.warn('Failed to save git credential:', err)
-          }
+          const trigger = state?.source === 'link' ? 'link' : 'signin'
+          await githubCredentialSync.sync(oauthSession.providerToken, 'repo', trigger)
         }
 
         set({
@@ -364,7 +389,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         return
       }
 
-      const redirectTo = await getOAuthRedirectUrl()
+      const redirectTo = withOAuthState(await getOAuthRedirectUrl(), state ?? {})
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'github',
         options: {
@@ -537,10 +562,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  linkGithubAccount: async () => {
+  linkGithubAccount: async (state?: OAuthRedirectState) => {
     set({ loading: true })
     try {
-      const redirectTo = await getOAuthRedirectUrl()
+      // Tag this OAuth roundtrip as a "link" via the redirect URL so the
+      // callback handlers can attribute the credential sync trigger
+      // accordingly. Any caller-provided returnTo hint is preserved.
+      const redirectTo = withOAuthState(
+        await getOAuthRedirectUrl(),
+        { source: 'link', ...(state ?? {}) },
+      )
       logger.info('[AuthStore] linkGithubAccount: Starting link flow', {
         isElectron,
         redirectTo,
@@ -914,11 +945,28 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         if (_event === 'SIGNED_IN' && session?.provider_token && !session.user?.is_anonymous) {
           const provider = session.user?.app_metadata?.provider
           if (provider === 'github') {
+            await githubCredentialSync.sync(session.provider_token, 'repo', 'signin')
+          }
+        }
+
+        // Recovery: if Supabase refreshes the session and ships us a fresh
+        // provider_token AND the control plane has no usable credential yet,
+        // run the sync. This catches the case where the original signin-time
+        // save failed and the user would otherwise be stuck behind a
+        // "Reconnect GitHub" prompt.
+        if (_event === 'TOKEN_REFRESHED' && session?.provider_token && !session.user?.is_anonymous) {
+          const provider = session.user?.app_metadata?.provider
+          if (provider === 'github') {
             try {
-              const { gitService } = await import('@/services/controlPlane/git')
-              await gitService.saveCredential('github', session.provider_token, 'repo')
+              const status = await gitService.getCredential('github')
+              if (!status.hasToken) {
+                await githubCredentialSync.sync(session.provider_token, 'repo', 'session_refresh')
+              }
             } catch (err) {
-              logger.warn('[AuthStore] Failed to save git credential', err)
+              // Local-only mode or transient probe failure — fire the sync
+              // anyway; it will be a no-op in local mode.
+              logger.debug('[AuthStore] getCredential probe failed before TOKEN_REFRESHED sync', err)
+              await githubCredentialSync.sync(session.provider_token, 'repo', 'session_refresh')
             }
           }
         }

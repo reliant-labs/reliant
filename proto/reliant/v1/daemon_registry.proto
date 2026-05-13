@@ -1,0 +1,83 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+import "google/protobuf/timestamp.proto";
+import "reliant/v1/tools_daemon.proto"; // for DiscoveredProject
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+// DaemonRegistryService exposes daemon registry queries to the web UI.
+// All RPCs require a Supabase JWT — the CLI does not call this service.
+service DaemonRegistryService {
+  // ListDaemons returns the authenticated user's registered daemons.
+  rpc ListDaemons(ListDaemonsRequest) returns (ListDaemonsResponse) {}
+
+  // GetDaemon fetches a specific daemon by ID.
+  rpc GetDaemon(GetDaemonRequest) returns (GetDaemonResponse) {}
+
+  // ResolveDaemon picks the right daemon for routing given optional selectors.
+  // Used by distributed OSS routers.
+  rpc ResolveDaemon(ResolveDaemonRequest) returns (ResolveDaemonResponse) {}
+
+  // ResumeDaemon wakes up a suspended or idle daemon. Used by routers when
+  // the resolved daemon is not currently active.
+  rpc ResumeDaemon(ResumeDaemonRequest) returns (ResumeDaemonResponse) {}
+}
+
+message ListDaemonsRequest {}
+
+message ListDaemonsResponse {
+  repeated DaemonInfo daemons = 1;
+}
+
+message GetDaemonRequest {
+  string daemon_id = 1;
+}
+
+message GetDaemonResponse {
+  DaemonInfo daemon = 1;
+}
+
+message ResolveDaemonRequest {
+  string daemon_id = 1;       // Exact daemon ID (highest priority)
+  string daemon_name = 2;     // Match by name
+  string daemon_type = 3;     // "local", "cloud", or "any"
+  map<string, string> labels = 4; // Match by labels
+}
+
+message ResolveDaemonResponse {
+  DaemonInfo daemon = 1;
+  bool found = 2;
+}
+
+message ResumeDaemonRequest {
+  string daemon_id = 1;
+}
+
+message ResumeDaemonResponse {
+  bool resumed = 1;
+  string error_message = 2; // Non-empty on failure
+}
+
+message DaemonInfo {
+  string daemon_id = 1;
+  string user_id = 2;
+  string hostname = 3;
+  string platform = 4;
+  DaemonStatus status = 5;
+  repeated DiscoveredProject projects = 6;
+  google.protobuf.Timestamp connected_at = 7;
+  google.protobuf.Timestamp last_heartbeat = 8;
+  // Type of daemon: "managed" (cloud-hosted) or "self_hosted" (user-run local daemon).
+  // Set at registration time by the daemon registry. Empty/"unknown" if undetermined.
+  string daemon_type = 9;
+}
+
+enum DaemonStatus {
+  DAEMON_STATUS_UNSPECIFIED = 0;
+  DAEMON_STATUS_ACTIVE = 1;
+  DAEMON_STATUS_IDLE = 2;
+  DAEMON_STATUS_DISCONNECTED = 3;
+}

@@ -46,7 +46,6 @@ func TestDaemonAuthRoundTripperPreservesExistingAuthorizationHeader(t *testing.T
 
 func TestNewDaemonHTTPClientRequiresAuthToken(t *testing.T) {
 	_, _, err := NewDaemonHTTPClient(bootstrap.DaemonBootstrapConfig{
-		UserID:    "user",
 		AuthToken: "",
 		GRPCURL:   "http://127.0.0.1:9190",
 		TLSMode:   bootstrap.TLSModeH2C,
@@ -56,7 +55,6 @@ func TestNewDaemonHTTPClientRequiresAuthToken(t *testing.T) {
 
 func TestNewDaemonHTTPClientWrapsTransportWithAuth(t *testing.T) {
 	client, _, err := NewDaemonHTTPClient(bootstrap.DaemonBootstrapConfig{
-		UserID:    "user",
 		AuthToken: "daemon-token",
 		GRPCURL:   "http://127.0.0.1:9190",
 		TLSMode:   bootstrap.TLSModeH2C,

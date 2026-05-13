@@ -3,7 +3,7 @@ import { ExternalLink, BookOpen, FileText, Shield, Globe, Terminal, Calendar, Gi
 import { toast } from "../../lib/toast-manager";
 import { UpdateSection } from "./UpdateSection";
 import { systemGrpc } from "../../api/system-grpc";
-import { useOnboardingChecklistStore } from "../../store/onboardingChecklistStore";
+import { useTourStore } from "../../store/tourStore";
 import { BrandMark } from "../icons/BrandMark";
 
 type LinkItem = {
@@ -107,7 +107,7 @@ export function AboutSection() {
       icon: WandSparkles,
       label: "Restart Onboarding Guide",
       onClick: async () => {
-        const store = useOnboardingChecklistStore.getState();
+        const store = useTourStore.getState();
         await store.restartWizard();
         toast.success("Onboarding guide has been reset");
       },

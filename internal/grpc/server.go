@@ -145,7 +145,8 @@ func NewServer(cfg *Config) (*Server, error) {
 	presetService := services.NewPresetService(database)
 
 	patService := pat.NewService(database)
-	daemonRegistryService := services.NewDaemonRegistryService(database, router, patService)
+	daemonRegistryService := services.NewDaemonRegistryService(database, router)
+	daemonTokenService := services.NewDaemonTokenService(patService)
 	daemonProxyService := services.NewDaemonProxyService(router)
 	toolCallService := services.NewToolCallService(database, cfg.TemporalClient, router)
 
@@ -225,10 +226,15 @@ func NewServer(cfg *Config) (*Server, error) {
 		}
 	}
 
-	// Daemon registry APIs remain on the app gRPC server.
-	// The ToolsDaemonService streaming endpoint itself is hosted on the dedicated
-	// daemon listener (see daemon_server.go) and is the only surface that uses PAT auth.
+	// Daemon services on the app gRPC server (both JWT):
+	//   - DaemonRegistryService: browser-driven list/get/resolve/resume
+	//   - DaemonTokenService:    browser- or CLI-driven PAT CRUD
+	// The ToolsDaemonService streaming endpoint lives on the dedicated daemon
+	// listener (see daemon_server.go) — it does the only PAT auth in this server.
+	// PAT validation for the CLI happens at stream-connect time; no dedicated
+	// introspection RPC is needed.
 	daemonRegistryPath, daemonRegistryHandler := reliantv1connect.NewDaemonRegistryServiceHandler(daemonRegistryService, opts...)
+	daemonTokenPath, daemonTokenHandler := reliantv1connect.NewDaemonTokenServiceHandler(daemonTokenService, opts...)
 	daemonPath, daemonHandler := reliantv1connect.NewDaemonServiceHandler(daemonProxyService, opts...)
 
 	mux.Handle(systemPath, systemHandler)
@@ -258,6 +264,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	mux.Handle(presetPath, presetHandler)
 
 	mux.Handle(daemonRegistryPath, daemonRegistryHandler)
+	mux.Handle(daemonTokenPath, daemonTokenHandler)
 	mux.Handle(daemonPath, daemonHandler)
 
 	if backgroundHandler != nil {

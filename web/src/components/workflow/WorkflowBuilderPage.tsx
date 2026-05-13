@@ -26,7 +26,7 @@ import { useViewerStore } from "../../store/viewerStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { usePreferencesStore } from "../../store/preferencesStore";
-import { useOnboardingChecklistStore } from "../../store/onboardingChecklistStore";
+import { useTourStore } from "../../store/tourStore";
 import { trackEvent } from "../../lib/analytics";
 
 interface WorkflowBuilderPageProps {
@@ -344,7 +344,7 @@ export function WorkflowBuilderPage({
       }
 
       // Defer to onboarding tour if it's active (it handles its own Escape)
-      if (useOnboardingChecklistStore.getState().isWizardActive) return;
+      if (useTourStore.getState().isWizardActive) return;
 
       // Prevent ModernApp from handling this ESC
       e.preventDefault();
@@ -407,6 +407,10 @@ export function WorkflowBuilderPage({
         workflowName: workflow.name,
         isNew: !draftId,
       });
+
+      if (!draftId) {
+        trackEvent("workflow_created");
+      }
 
       // After first save, clear the session ID since workflow now has proper identification
       workflowSessionIdRef.current = undefined;

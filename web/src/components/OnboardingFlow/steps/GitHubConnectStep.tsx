@@ -1,13 +1,17 @@
 import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { Github, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProjectStore } from "@/store/projectStore";
 import type { Project } from "@/store/projectStore";
-// TODO: migrate to useAuth() once AuthUser exposes `identities` and identity-linking methods (linkGithubAccount, signInWithGithub)
+// TODO: migrate to useAuth() once AuthUser exposes identity-linking methods (linkGithubAccount, signInWithGithub)
 import { useAuthStore } from "@/store/authStore";
 import { useEventBus } from "@/lib/event-context";
-import { useGitRepos, useCloneRepo } from "@/hooks/useOnboardingQueries";
+import { useGitRepos, useCloneRepo, useCompleteOnboarding } from "@/hooks/useOnboardingQueries";
+import { useGitHubCredential } from "@/hooks/useGitHubCredential";
+import { trackEvent } from "@/lib/analytics";
+import { finalizeOnboardingSideEffects } from "../useOnboardingComplete";
 import type { StepProps } from "../types";
 import {
   getActiveDaemonName,
@@ -45,6 +49,19 @@ function isAlreadyExistsError(error: unknown): boolean {
   );
 }
 
+function isMissingGitCredentialError(error: unknown): boolean {
+  if (error instanceof ConnectError && error.code === Code.FailedPrecondition) {
+    return true;
+  }
+  if (error instanceof Error && error.message.includes("no git credential found")) {
+    return true;
+  }
+  if (typeof error === "string" && error.includes("no git credential found")) {
+    return true;
+  }
+  return false;
+}
+
 function findProjectByPath(projects: Project[], path: string): Project | undefined {
   return projects.find((project) => project.path === path);
 }
@@ -62,24 +79,27 @@ function formatUpdated(updatedAt: string): string {
   return `${Math.floor(diffDays / 365)}y ago`;
 }
 
-export function GitHubConnectStep({ plan, updatePlan, onNext, onBack }: StepProps) {
+export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
+  const navigate = useNavigate();
   const createProject = useProjectStore((state) => state.createProject);
   const loadProjects = useProjectStore((state) => state.loadProjects);
   const projects = useProjectStore((state) => state.projects);
 
-  // TODO: migrate to useAuth() once AuthUser exposes `identities` and identity-linking methods
-  const user = useAuthStore((state) => state.user);
+  // TODO: migrate to useAuth() once AuthUser exposes identity-linking methods
   const linkGithubAccount = useAuthStore((state) => state.linkGithubAccount);
   const signInWithGithub = useAuthStore((state) => state.signInWithGithub);
 
   const eventBus = useEventBus();
+  const completeOnboardingMutation = useCompleteOnboarding();
 
-  const hasGithub = useMemo(
-    () => user?.identities?.some((i) => i.provider === "github") ?? false,
-    [user?.identities],
+  // Canonical "can do git things" check — backed by the control-plane credential,
+  // not the Supabase identity record. See useGitHubCredential for rationale.
+  // Window-focus refetch in the hook handles the post-OAuth redirect case.
+  const { hasToken: hasGithubCredential } = useGitHubCredential();
+
+  const [phase, setPhase] = useState<Phase>(() =>
+    hasGithubCredential ? "picker" : "connect",
   );
-
-  const [phase, setPhase] = useState<Phase>(() => (hasGithub ? "picker" : "connect"));
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState("");
 
@@ -103,19 +123,36 @@ export function GitHubConnectStep({ plan, updatePlan, onNext, onBack }: StepProp
   // Clone mutation (via React Query)
   const cloneRepoMutation = useCloneRepo();
 
-  // When GitHub identity appears (after OAuth callback), transition to picker
+  const [confirmCredentialMissing, setConfirmCredentialMissing] = useState(false);
+
+  // When a GitHub git credential appears (after OAuth callback), transition to picker.
   useEffect(() => {
-    if (hasGithub && phase === "connect") {
+    if (hasGithubCredential && phase === "connect") {
       setPhase("picker");
     }
-  }, [hasGithub, phase]);
+  }, [hasGithubCredential, phase]);
 
   const handleConnect = async () => {
     setConnecting(true);
     setError("");
     try {
-      localStorage.setItem('onboarding-return-step', 'github-connect');
-      await linkGithubAccount();
+      // Decide up front whether to link an identity onto an existing session
+      // or to start a fresh OAuth sign-in. linkIdentity 404s for anonymous /
+      // unauthenticated users (full-page navigation to Supabase happens before
+      // any catch can fire), so we must NOT call it without a session.
+      const session = useAuthStore.getState().session;
+      const hasGithubIdentity = !!useAuthStore.getState().user?.identities?.some(
+        (i: { provider: string }) => i.provider === 'github'
+      );
+      const useLink = !!session && !hasGithubIdentity;
+
+      const returnTo = `${window.location.pathname}${window.location.search}`;
+
+      if (useLink) {
+        await linkGithubAccount({ returnTo });
+      } else {
+        await signInWithGithub({ returnTo });
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to connect GitHub";
       if (
@@ -126,14 +163,7 @@ export function GitHubConnectStep({ plan, updatePlan, onNext, onBack }: StepProp
           "This GitHub account is already linked to another Reliant account. Please sign out and sign in with GitHub instead.",
         );
       } else {
-        // linkIdentity can fail for anonymous users — fall back to full OAuth sign-in
-        try {
-          await signInWithGithub();
-        } catch (fallbackErr) {
-          setError(
-            fallbackErr instanceof Error ? fallbackErr.message : "Failed to connect GitHub",
-          );
-        }
+        setError(message);
       }
     } finally {
       setConnecting(false);
@@ -241,13 +271,52 @@ export function GitHubConnectStep({ plan, updatePlan, onNext, onBack }: StepProp
         localPath: clonedPath,
         projectName,
       });
-      onNext();
+
+      await completeOnboardingMutation.mutateAsync({
+        compute: plan.compute,
+        modelProvider: plan.modelProvider,
+      });
+      trackEvent("onboarding_completed", {
+        provider: plan.modelProvider ?? "unknown",
+        compute: plan.compute ?? "unknown",
+        project_source: "github",
+      });
+      await finalizeOnboardingSideEffects(plan.modelProvider);
+      navigate({ to: "/", search: { step: undefined, plan: undefined } });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to clone repository");
+      if (isMissingGitCredentialError(err)) {
+        setConfirmCredentialMissing(true);
+        setError("");
+      } else {
+        setConfirmCredentialMissing(false);
+        setError(err instanceof Error ? err.message : "Failed to clone repository");
+      }
     }
   };
 
   const cloning = cloneRepoMutation.isPending;
+
+  const reposCredentialMissing = isMissingGitCredentialError(reposQueryError);
+
+  useEffect(() => {
+    if (phase === "picker" && reposCredentialMissing) {
+      trackEvent("github_credential_missing_shown", { phase: "picker" });
+    }
+  }, [phase, reposCredentialMissing]);
+
+  useEffect(() => {
+    if (phase === "confirm" && confirmCredentialMissing) {
+      trackEvent("github_credential_missing_shown", { phase: "confirm" });
+    }
+  }, [phase, confirmCredentialMissing]);
+
+  const handleReconnect = (phaseLabel: "picker" | "confirm") => {
+    trackEvent("github_reconnect_clicked", { phase: phaseLabel });
+    if (phaseLabel === "confirm") {
+      setConfirmCredentialMissing(false);
+    }
+    void handleConnect();
+  };
 
   // -- Phase: Connect GitHub via OAuth --
 
@@ -308,6 +377,33 @@ export function GitHubConnectStep({ plan, updatePlan, onNext, onBack }: StepProp
         </div>
 
         <div className="space-y-3">
+          {reposCredentialMissing && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 space-y-3">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-foreground">
+                  GitHub credential missing
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Reliant needs to connect to GitHub before it can list your repositories.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleReconnect("picker")}
+                disabled={connecting}
+                className={cn(
+                  "flex items-center justify-center gap-2 w-full py-2.5 rounded-lg text-sm font-semibold transition-colors",
+                  connecting
+                    ? "bg-muted text-muted-foreground cursor-not-allowed"
+                    : "bg-primary text-primary-foreground hover:bg-primary/90",
+                )}
+              >
+                <Github className="w-4 h-4" />
+                {connecting ? "Connecting..." : "Reconnect GitHub"}
+              </button>
+            </div>
+          )}
+
           {/* Search */}
           <div className="relative">
             <svg
@@ -338,7 +434,7 @@ export function GitHubConnectStep({ plan, updatePlan, onNext, onBack }: StepProp
 
           {/* Repo list */}
           <div className="max-h-64 overflow-y-auto rounded-lg border border-border/40">
-            {reposError && (
+            {reposError && !reposCredentialMissing && (
               <div className="flex items-center gap-2 border-b border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
                 {reposError}
               </div>
@@ -506,7 +602,34 @@ export function GitHubConnectStep({ plan, updatePlan, onNext, onBack }: StepProp
             />
           </div>
 
-          {error && <p className="text-xs text-destructive">{error}</p>}
+          {confirmCredentialMissing ? (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 space-y-3">
+              <div className="space-y-1">
+                <p className="text-sm font-semibold text-foreground">
+                  GitHub credential missing
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Reliant needs to connect to GitHub before it can list your repositories.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleReconnect("confirm")}
+                disabled={connecting}
+                className={cn(
+                  "flex items-center justify-center gap-2 w-full py-2.5 rounded-lg text-sm font-semibold transition-colors",
+                  connecting
+                    ? "bg-muted text-muted-foreground cursor-not-allowed"
+                    : "bg-primary text-primary-foreground hover:bg-primary/90",
+                )}
+              >
+                <Github className="w-4 h-4" />
+                {connecting ? "Connecting..." : "Reconnect GitHub"}
+              </button>
+            </div>
+          ) : (
+            error && <p className="text-xs text-destructive">{error}</p>
+          )}
 
           <button
             onClick={handleConfirm}
