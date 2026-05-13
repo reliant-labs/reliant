@@ -17,8 +17,9 @@ const (
 )
 
 // DaemonBootstrapConfig is the explicit launcher-provided config for tools-daemon.
+// user_id is no longer carried here — the gateway derives it from the PAT and
+// returns it in the RegistrationAck.
 type DaemonBootstrapConfig struct {
-	UserID    string
 	AuthToken string
 	GRPCURL   string
 	TLSMode   TLSMode
@@ -32,9 +33,6 @@ type DaemonBootstrapConfig struct {
 }
 
 func (c DaemonBootstrapConfig) Validate() error {
-	if !c.ServerMode && strings.TrimSpace(c.UserID) == "" {
-		return fmt.Errorf("missing required user ID (run 'reliant daemon register' to set up credentials)")
-	}
 	if !c.ServerMode && strings.TrimSpace(c.AuthToken) == "" {
 		return fmt.Errorf("missing required daemon PAT (run 'reliant daemon register' to set up credentials)")
 	}

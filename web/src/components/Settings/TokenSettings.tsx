@@ -6,8 +6,8 @@ import {
   ListDaemonTokensRequestSchema,
   CreateDaemonTokenRequestSchema,
   RevokeDaemonTokenRequestSchema,
-} from "../../gen/reliant/v1/tools_daemon_pb";
-import type { DaemonTokenInfo } from "../../gen/reliant/v1/tools_daemon_pb";
+} from "../../gen/reliant/v1/daemon_token_pb";
+import type { DaemonTokenInfo } from "../../gen/reliant/v1/daemon_token_pb";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 
@@ -26,7 +26,7 @@ export function TokenSettings() {
     try {
       setError(null);
       const res = await grpcClient
-        .daemonRegistry()
+        .daemonToken()
         .listDaemonTokens(create(ListDaemonTokensRequestSchema, {}));
       setTokens(res.tokens);
     } catch (err) {
@@ -47,7 +47,7 @@ export function TokenSettings() {
     setError(null);
     try {
       const res = await grpcClient
-        .daemonRegistry()
+        .daemonToken()
         .createDaemonToken(
           create(CreateDaemonTokenRequestSchema, { name: newTokenName.trim() })
         );
@@ -67,7 +67,7 @@ export function TokenSettings() {
     setError(null);
     try {
       await grpcClient
-        .daemonRegistry()
+        .daemonToken()
         .revokeDaemonToken(
           create(RevokeDaemonTokenRequestSchema, { tokenId: id })
         );

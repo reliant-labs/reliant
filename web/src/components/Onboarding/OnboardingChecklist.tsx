@@ -10,6 +10,7 @@ import {
 import { cn } from "../../lib/utils";
 import { Progress } from "../ui/Progress";
 import { useOnboardingChecklistStore } from "../../store/onboardingChecklistStore";
+import { useTourStore } from "../../store/tourStore";
 import { useApiKeySetupStore } from "../../store/apiKeySetupStore";
 import { useViewerStore } from "../../store/viewerStore";
 import { REQUIRED_ITEMS, BONUS_ITEMS, CHECKLIST_ITEMS } from "./constants";
@@ -33,7 +34,7 @@ function executeItemAction(item: ChecklistItem) {
       useViewerStore.getState().setWorkflowMode(true);
       break;
     case "take-product-tour":
-      void useOnboardingChecklistStore.getState().startWizard();
+      void useTourStore.getState().startWizard();
       break;
     case "create-workspace":
       window.dispatchEvent(new CustomEvent("open-create-worktree-modal"));

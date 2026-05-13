@@ -105,7 +105,6 @@ func TestNewDaemonClient_BindsLocalMCPContextBinder(t *testing.T) {
 	t.Setenv("DAEMON_WORKING_DIR", t.TempDir())
 
 	client, err := newDaemonClient(bootstrap.DaemonBootstrapConfig{
-		UserID:    "test-user",
 		AuthToken: "test-token",
 		GRPCURL:   "http://127.0.0.1:9999",
 		TLSMode:   bootstrap.TLSModeH2C,

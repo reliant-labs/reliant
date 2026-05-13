@@ -13,9 +13,10 @@ import (
 const daemonFileName = "reliant-daemon.json"
 
 // DaemonCredentials holds the persisted daemon registration credentials for a single host.
+// user_id is intentionally absent — the server derives it from the PAT and tells the
+// daemon at registration time, so we don't need to track it client-side.
 type DaemonCredentials struct {
 	PAT          string    `json:"pat"`
-	UserID       string    `json:"user_id"`
 	ServerURL    string    `json:"server_url"`
 	GatewayURL   string    `json:"gateway_url,omitempty"`
 	RegisteredAt time.Time `json:"registered_at"`

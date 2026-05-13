@@ -135,43 +135,21 @@ func TestSendDaemonCommandCancelsInFlightCommandWhenCallerContextEnds(t *testing
 	require.ErrorIs(t, err, context.Canceled)
 }
 
-func TestDaemonRegistrationUserIDRejectsSpoofedRegisterUserID(t *testing.T) {
-	// No auth context: PAT authentication required.
-	_, err := daemonRegistrationUserID(context.Background(), &reliantv1.DaemonRegister{UserId: "spoofed-user"})
+// DaemonRegister.user_id is now `reserved` — the daemon can't assert identity,
+// the server derives it from the PAT in context. The function only needs to
+// confirm a userID is present in context; spoofing is impossible by construction.
+
+func TestDaemonRegistrationUserIDRequiresAuthContext(t *testing.T) {
+	_, err := daemonRegistrationUserID(context.Background(), &reliantv1.DaemonRegister{})
 	require.Error(t, err)
 	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 }
 
-func TestDaemonRegistrationUserIDAcceptsMatchingOrEmptyRegisterUserID(t *testing.T) {
-	// Context has an authenticated user.
+func TestDaemonRegistrationUserIDReturnsContextUserID(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "trusted-user")
-
-	resolved, err := daemonRegistrationUserID(ctx, &reliantv1.DaemonRegister{UserId: "trusted-user"})
+	resolved, err := daemonRegistrationUserID(ctx, &reliantv1.DaemonRegister{})
 	require.NoError(t, err)
 	require.Equal(t, "trusted-user", resolved)
-
-	resolved, err = daemonRegistrationUserID(ctx, &reliantv1.DaemonRegister{UserId: ""})
-	require.NoError(t, err)
-	require.Equal(t, "trusted-user", resolved)
-}
-
-func TestDaemonRegistrationUserIDCloudModeTrustsRegisterMessage(t *testing.T) {
-	// With auth context, returns the context user ID (register message user ID is ignored).
-	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "cloud-user-123")
-	resolved, err := daemonRegistrationUserID(ctx, &reliantv1.DaemonRegister{UserId: "cloud-user-123"})
-	require.NoError(t, err)
-	require.Equal(t, "cloud-user-123", resolved)
-}
-
-func TestDaemonRegistrationUserIDCloudModeRequiresRegisterUserID(t *testing.T) {
-	// No auth context: PAT authentication required.
-	_, err := daemonRegistrationUserID(context.Background(), &reliantv1.DaemonRegister{UserId: ""})
-	require.Error(t, err)
-	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
-
-	_, err = daemonRegistrationUserID(context.Background(), nil)
-	require.Error(t, err)
-	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 }
 
 func TestHandleProjectDiscoveryCreatesProjectAndRequestsConfig(t *testing.T) {

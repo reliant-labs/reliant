@@ -142,7 +142,12 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
         }
 
         const waitForChecklist = async () => {
-          const { useOnboardingChecklistStore } = await import("../store/onboardingChecklistStore");
+          const [{ useOnboardingChecklistStore }, { useTourStore }] = await Promise.all([
+            import("../store/onboardingChecklistStore"),
+            import("../store/tourStore"),
+          ]);
+          void useOnboardingChecklistStore.getState().loadState();
+          void useTourStore.getState().loadState();
           let attempts = 0;
           while (!useOnboardingChecklistStore.getState().isInitialized && attempts < 50) {
             await new Promise((resolve) => setTimeout(resolve, 100));

@@ -23,7 +23,8 @@ import { TerminalService } from "../gen/reliant/v1/terminal_pb";
 import { AttachmentService } from "../gen/reliant/v1/attachment_pb";
 import { ToolCallService } from "../gen/reliant/v1/tool_call_pb";
 import { PresetService } from "../gen/reliant/v1/preset_pb";
-import { DaemonRegistryService } from "../gen/reliant/v1/tools_daemon_pb";
+import { DaemonRegistryService } from "../gen/reliant/v1/daemon_registry_pb";
+import { DaemonTokenService } from "../gen/reliant/v1/daemon_token_pb";
 import { QuestionService } from "../gen/reliant/v1/question_pb";
 import { supabase } from "../lib/supabase";
 import { logger } from "../lib/logger";
@@ -590,6 +591,10 @@ export const createDaemonRegistryClient = (): Client<typeof DaemonRegistryServic
   return createClient(DaemonRegistryService, getTransport());
 };
 
+export const createDaemonTokenClient = (): Client<typeof DaemonTokenService> => {
+  return createClient(DaemonTokenService, getTransport());
+};
+
 export const createQuestionClient = (): Client<typeof QuestionService> => {
   return createClient(QuestionService, getTransport());
 };
@@ -618,6 +623,7 @@ let _toolCallClient: Client<typeof ToolCallService> | null = null;
 let _presetClient: Client<typeof PresetService> | null = null;
 let _scenarioClient: Client<typeof ScenarioService> | null = null;
 let _daemonRegistryClient: Client<typeof DaemonRegistryService> | null = null;
+let _daemonTokenClient: Client<typeof DaemonTokenService> | null = null;
 let _questionClient: Client<typeof QuestionService> | null = null;
 
 export const getSystemClient = (): Client<typeof SystemService> => {
@@ -790,6 +796,13 @@ export const getDaemonRegistryClient = (): Client<typeof DaemonRegistryService> 
   return _daemonRegistryClient;
 };
 
+export const getDaemonTokenClient = (): Client<typeof DaemonTokenService> => {
+  if (!_daemonTokenClient) {
+    _daemonTokenClient = createDaemonTokenClient();
+  }
+  return _daemonTokenClient;
+};
+
 export const getQuestionClient = (): Client<typeof QuestionService> => {
   if (!_questionClient) {
     _questionClient = createQuestionClient();
@@ -823,5 +836,6 @@ export const grpcClient = {
   preset: () => getPresetClient(),
   scenario: () => getScenarioClient(),
   daemonRegistry: () => getDaemonRegistryClient(),
+  daemonToken: () => getDaemonTokenClient(),
   question: () => getQuestionClient(),
 };
