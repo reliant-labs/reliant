@@ -24,25 +24,34 @@ export function OnboardingPage() {
   const progressSteps = steps.map(id => ({ id, label: STEP_LABELS[id] }));
 
   const onNext = () => {
-    // Re-derive steps from the latest persisted plan so that navigation
-    // works even when called in the same event handler as updatePlan
-    // (React state hasn't re-rendered yet but localStorage is already updated).
-    let latestPlan = plan;
+    // Re-derive steps from the latest URL plan. Within a single event
+    // handler, React state (and therefore `plan` above) may still reflect
+    // the pre-updatePlan snapshot. The URL has already been updated
+    // synchronously by navigate({ replace: true }) inside updatePlan, so
+    // parsing window.location gives us the authoritative plan.
+    let latestPlan: Partial<typeof plan> = plan;
     try {
-      const stored = localStorage.getItem('reliant-onboarding-plan');
-      if (stored) latestPlan = JSON.parse(stored);
+      const params = new URLSearchParams(window.location.search);
+      const encoded = params.get('plan');
+      if (encoded) latestPlan = JSON.parse(decodeURIComponent(encoded));
     } catch { /* use current plan */ }
     const latestSteps = getStepsForPlan(latestPlan);
     const idx = latestSteps.indexOf(actualStep);
     const si = idx >= 0 ? idx : 0;
     if (si < latestSteps.length - 1) {
-      navigate({ to: '/', search: { step: latestSteps[si + 1] } });
+      navigate({
+        to: '/',
+        search: (prev: Record<string, unknown>) => ({ ...prev, step: latestSteps[si + 1] }),
+      });
     }
   };
 
   const onBack = () => {
     if (safeIndex > 0) {
-      navigate({ to: '/', search: { step: steps[safeIndex - 1] } });
+      navigate({
+        to: '/',
+        search: (prev: Record<string, unknown>) => ({ ...prev, step: steps[safeIndex - 1] }),
+      });
     }
   };
 

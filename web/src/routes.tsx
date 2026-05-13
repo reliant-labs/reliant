@@ -70,6 +70,7 @@ const verifyEmailRoute = createRoute({
 
 type IndexSearch = {
   step?: string;
+  plan?: string;
   'reset-onboarding'?: boolean;
   github_connected?: string;
   github_error?: string;
@@ -82,6 +83,7 @@ const indexRoute = createRoute({
   validateSearch: (search: Record<string, unknown>): IndexSearch => {
     const result: IndexSearch = {};
     if (search.step) result.step = search.step as string;
+    if (search.plan) result.plan = search.plan as string;
     if (search['reset-onboarding'] !== undefined) result['reset-onboarding'] = true;
     if (search.github_connected) result.github_connected = search.github_connected as string;
     if (search.github_error) result.github_error = search.github_error as string;

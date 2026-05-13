@@ -1,7 +1,7 @@
 import { logger } from "../../lib/logger";
 import { useState, useEffect, useRef } from "react";
 import { ConnectDaemonModal } from "../Layout/ConnectDaemonModal";
-import { useChatStore } from "../../store/chatStore"; // For getState() and setState() only
+import { useChatStore } from "../../store/chatStore"; // For getState() and setState() only — also subscribed via selector below
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useAttachmentStore } from "../../store/attachmentStore";
@@ -11,6 +11,7 @@ import { useChatParamsStore } from "../../store/chatParamsStore";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { ChatInput } from "./ChatInput";
 import { ReliantIcon } from "../icons/ReliantIcon";
+import { WorkflowStarterCards } from "../Onboarding/WorkflowStarterCards";
 import { CreateWorktreeModal } from "../Worktrees/CreateWorktreeModal";
 import { DiscoverWorktreesModal } from "../Worktrees/DiscoverWorktreesModal";
 import { getFileTree } from "../../api/fileSystem";
@@ -26,6 +27,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "../../lib/utils";
 import { safeGetSetting, upsertStringSetting } from "../../lib/settingsPersistence";
+import { trackEvent } from "../../lib/analytics";
 
 interface NewChatViewProps {
   tabId: string;
@@ -66,6 +68,22 @@ export function NewChatView({
 
   const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
   const worktrees = useWorktreeStore((state) => state.worktrees);
+  // Only show inline starter cards on the empty state — i.e. when the
+  // current project has zero chats across all worktrees. The chatStore's
+  // chats map is scoped to the current project (see loadChats), so
+  // chats.size === 0 is equivalent to "no chats in this project".
+  // We additionally wait for the initial `loadChats` to complete (success or
+  // failure) before showing the cards, so we don't flash them prematurely
+  // while chats are still loading. `hasLoaded` is set in both paths of
+  // loadChats, so a load failure won't trap the cards from ever showing.
+  // The post-tour modal variant is mounted separately in ModernApp and
+  // is not affected by this gate.
+  const chatsCount = useChatStore((state) => state.chats.size);
+  const chatsLoaded = useChatStore((state) => state.hasLoaded);
+  const showInlineCards = chatsLoaded && chatsCount === 0;
+  const hasNoChatsInProject = chatsLoaded && chatsCount === 0;
+  const hasPickedStarter = useChatParamsStore((s) => Boolean(s.tempNewChatWorkflow));
+  const lockChatInput = hasNoChatsInProject && !hasPickedStarter;
   const switchWorktreeContext = useWorktreeStore(
     (state) => state.switchWorktreeContext
   );
@@ -219,6 +237,11 @@ export function NewChatView({
         .getState()
         .createChat(chatWorktreeId, content, attachmentIds, workflowParams, workflow);
 
+      trackEvent('chat_created', {
+        has_attachments: Boolean(attachmentIds?.length),
+        workflow: workflow ?? 'default',
+      });
+
       useChatParamsStore.getState().transferTempToChat(chat.id);
       useChatStore.getState().selectChat(chat);
 
@@ -308,17 +331,11 @@ export function NewChatView({
       <div className="relative flex-1 min-h-0 px-8 overflow-y-auto">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_38%,hsl(var(--muted)_/_0.16),transparent_62%)]" />
 
-        <div className="relative z-10 min-h-full w-full max-w-5xl mx-auto grid grid-rows-[1fr_auto]">
-          <div className="flex items-center justify-center pt-20">
+        <div className="relative z-10 min-h-full w-full max-w-5xl mx-auto grid grid-rows-[auto_1fr_auto]">
+          <div className="flex items-center justify-center pt-12">
             <div className="w-full max-w-xl mx-auto flex flex-col items-center text-center gap-4">
-              <div className="inline-flex h-[4.5rem] w-[4.5rem] items-center justify-center">
-                <ReliantIcon className="h-[4.5rem] w-[4.5rem]" />
-              </div>
-
-              <div className="space-y-2">
-                <h1 className="text-3xl md:text-4xl font-semibold text-foreground tracking-tight">
-                  Let’s code
-                </h1>
+              <div className="inline-flex h-12 w-12 items-center justify-center">
+                <ReliantIcon className="h-12 w-12" />
               </div>
 
               {/* Workspace controls */}
@@ -433,6 +450,16 @@ export function NewChatView({
             </div>
           </div>
 
+          {/* Starter cards — pick a workflow to seed the next chat.
+              Only shown on the genuine empty state (no chats yet in this
+              project). Once the project has any chat, the inline cards
+              are hidden so they don't clutter NewChatView. */}
+          {showInlineCards && (
+            <div className="w-full px-4 py-6 md:py-8">
+              <WorkflowStarterCards />
+            </div>
+          )}
+
           {/* Migration prompt */}
           <div className="w-full max-w-2xl mx-auto pb-4 md:pb-5">
             {shouldShowMigrationPrompt && (
@@ -481,7 +508,8 @@ export function NewChatView({
           <ChatInput
             ref={chatInputRef}
             onSend={handleCreateAndSend}
-            disabled={isCreating || !daemonConnected}
+            disabled={isCreating || !daemonConnected || lockChatInput}
+            placeholder={lockChatInput ? "Pick a starting point above to begin" : undefined}
             worktreeId={selectedWorkspaceId || mainWorktree?.id}
           />
         </div>

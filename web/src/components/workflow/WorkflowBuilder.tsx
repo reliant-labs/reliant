@@ -81,7 +81,7 @@ import type { BackgroundVariant, SelectionMode } from "@xyflow/react";
 import { WorkflowBuilderChat, type PanelSize } from "./WorkflowBuilderChat";
 import { ScenarioPanel } from "./ScenarioPanel";
 import { useProjectStore } from "../../store/projectStore";
-import { useOnboardingChecklistStore } from "../../store/onboardingChecklistStore";
+import { useTourStore } from "../../store/tourStore";
 import { useIsChatRunning } from "../../store/activityStore";
 import { useGlobalUpdatesStore } from "../../store/globalUpdatesStore";
 import { normalizeWorkflowRef } from "./useWorkflowInputs";
@@ -1413,7 +1413,7 @@ function WorkflowBuilderInner({
       }
 
       // Defer to onboarding tour if it's active (it handles its own Escape)
-      if (useOnboardingChecklistStore.getState().isWizardActive) return;
+      if (useTourStore.getState().isWizardActive) return;
 
       // Prevent ModernApp from handling this ESC
       e.preventDefault();

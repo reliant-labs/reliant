@@ -170,9 +170,9 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 	}
 
 	return &daemonClient{
-		daemonID:          identity.DaemonID,
-		daemonName:        identity.Name,
-		userID:            bootCfg.UserID,
+		daemonID:   identity.DaemonID,
+		daemonName: identity.Name,
+		// userID is set later from RegistrationAck (gateway-derived from PAT).
 		hostname:          hostname,
 		platform:          runtime.GOOS,
 		cwd:               cwd,
@@ -307,10 +307,11 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 	stream := client.ConnectDaemon(ctx)
 
 	// --- Registration: send directly before starting the sender goroutine ---
-	// daemon_id is no longer self-asserted; the gateway assigns it from the PAT binding.
+	// daemon_id and user_id are no longer self-asserted; the gateway derives
+	// both from the PAT used to authenticate the stream and returns them in
+	// the RegistrationAck.
 	register := &reliantv1.DaemonMessage{
 		Message: &reliantv1.DaemonMessage_Register{Register: &reliantv1.DaemonRegister{
-			UserId:       d.userID,
 			Hostname:     d.hostname,
 			Platform:     d.platform,
 			WorkingDir:   d.cwd,
@@ -376,10 +377,15 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, msg *reliantv1.S
 
 	case *reliantv1.ServerMessage_RegistrationAck:
 		if m.RegistrationAck != nil {
-			// Update daemon identity from the gateway-assigned ID.
+			// Gateway derives both identities from the PAT used to authenticate
+			// the stream and tells us. Daemon stores them locally for downstream
+			// use (tool execution context, logging).
 			if m.RegistrationAck.DaemonId != "" {
 				d.daemonID = m.RegistrationAck.DaemonId
 				logging.Info(logPrefix+" Daemon identity assigned by gateway", "daemonID", d.daemonID)
+			}
+			if m.RegistrationAck.UserId != "" {
+				d.userID = m.RegistrationAck.UserId
 			}
 			for _, projectPath := range m.RegistrationAck.RequestedProjectPaths {
 				if err := d.sendLoadProjectConfigResponse(projectPath, uuid.New().String()); err != nil {

@@ -46,6 +46,7 @@ import {
   ContentBlockType,
   MessageRole,
 } from "../../gen/reliant/v1/chat_pb";
+import { useEvent } from "../../lib/event-context";
 
 // Note: Tools are defined in the workflow_builder preset (internal/workflow/builtin/presets/workflow_builder.yaml)
 // Includes: update_workflow, set_workflow, validate_workflow, read_workflow_state, view, grep, glob
@@ -307,14 +308,9 @@ export function WorkflowBuilderChat({
   ]);
 
   // React to provider/API-key updates so model-aware controls recover without refresh.
-  useEffect(() => {
-    const handleApiKeySaved = () => {
-      void refetchModels();
-    };
-
-    window.addEventListener("api-key-saved", handleApiKeySaved);
-    return () => window.removeEventListener("api-key-saved", handleApiKeySaved);
-  }, [refetchModels]);
+  useEvent("api-key:saved", () => {
+    void refetchModels();
+  });
 
   // Validate and load persisted chat on mount
   // Priority order:

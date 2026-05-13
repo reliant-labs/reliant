@@ -8,10 +8,7 @@
 import { useEffect } from "react";
 import { Search, Code2 } from "lucide-react";
 import { OnboardingModal } from "../OnboardingModal";
-import {
-  suppressNextOnboardingChatLaunch,
-  useOnboardingChecklistStore,
-} from "../../../store/onboardingChecklistStore";
+import { useTourStore } from "../../../store/tourStore";
 import { useViewerStore } from "../../../store/viewerStore";
 import type { StepProps } from "../types";
 import { trackEvent } from "../../../lib/analytics";
@@ -21,7 +18,7 @@ export function CompletionStep({
   stepNumber,
   totalSteps,
 }: StepProps) {
-  const projectHasCode = useOnboardingChecklistStore((s) => s.projectHasCode);
+  const projectHasCode = useTourStore((s) => s.projectHasCode);
 
   useEffect(() => {
     trackEvent("onboarding_completed", { totalSteps });
@@ -75,7 +72,6 @@ export function CompletionStep({
           <button
             type="button"
             onClick={() => {
-              suppressNextOnboardingChatLaunch();
               onComplete();
               setTimeout(() => {
                 useViewerStore.getState().setWorkflowMode(true);

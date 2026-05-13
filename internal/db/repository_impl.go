@@ -900,12 +900,13 @@ func (r *Repo) UpsertDaemon(ctx context.Context, daemon *Daemon) error {
 			status,
 			capabilities,
 			project_paths,
+			daemon_type,
 			connected_at,
 			last_heartbeat,
 			disconnected_at,
 			created_at,
 			updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			user_id = excluded.user_id,
 			hostname = excluded.hostname,
@@ -913,6 +914,7 @@ func (r *Repo) UpsertDaemon(ctx context.Context, daemon *Daemon) error {
 			status = excluded.status,
 			capabilities = excluded.capabilities,
 			project_paths = excluded.project_paths,
+			daemon_type = COALESCE(excluded.daemon_type, daemons.daemon_type),
 			connected_at = excluded.connected_at,
 			last_heartbeat = excluded.last_heartbeat,
 			disconnected_at = excluded.disconnected_at,
@@ -933,6 +935,7 @@ func (r *Repo) UpsertDaemon(ctx context.Context, daemon *Daemon) error {
 		daemon.Status,
 		daemon.Capabilities,
 		daemon.ProjectPaths,
+		daemon.DaemonType,
 		daemon.ConnectedAt,
 		daemon.LastHeartbeat,
 		daemon.DisconnectedAt,
@@ -960,6 +963,7 @@ func (r *Repo) GetDaemon(ctx context.Context, id string) (*Daemon, error) {
 			status,
 			capabilities,
 			project_paths,
+			daemon_type,
 			connected_at,
 			last_heartbeat,
 			disconnected_at,
@@ -977,6 +981,7 @@ func (r *Repo) GetDaemon(ctx context.Context, id string) (*Daemon, error) {
 		platform       sql.NullString
 		capabilities   sql.NullString
 		projectPaths   sql.NullString
+		daemonType     sql.NullString
 		connectedAt    sql.NullTime
 		lastHeartbeat  sql.NullTime
 		disconnectedAt sql.NullTime
@@ -990,6 +995,7 @@ func (r *Repo) GetDaemon(ctx context.Context, id string) (*Daemon, error) {
 		&daemon.Status,
 		&capabilities,
 		&projectPaths,
+		&daemonType,
 		&connectedAt,
 		&lastHeartbeat,
 		&disconnectedAt,
@@ -1007,6 +1013,7 @@ func (r *Repo) GetDaemon(ctx context.Context, id string) (*Daemon, error) {
 	daemon.Platform = nullStringToPtr(platform)
 	daemon.Capabilities = nullStringToPtr(capabilities)
 	daemon.ProjectPaths = nullStringToPtr(projectPaths)
+	daemon.DaemonType = nullStringToPtr(daemonType)
 	daemon.ConnectedAt = nullTimeToPtr(connectedAt)
 	daemon.LastHeartbeat = nullTimeToPtr(lastHeartbeat)
 	daemon.DisconnectedAt = nullTimeToPtr(disconnectedAt)
@@ -1028,6 +1035,7 @@ func (r *Repo) ListDaemonsByUserID(ctx context.Context, userID string) ([]*Daemo
 			status,
 			capabilities,
 			project_paths,
+			daemon_type,
 			connected_at,
 			last_heartbeat,
 			disconnected_at,
@@ -1053,6 +1061,7 @@ func (r *Repo) ListDaemonsByUserID(ctx context.Context, userID string) ([]*Daemo
 			platform       sql.NullString
 			capabilities   sql.NullString
 			projectPaths   sql.NullString
+			daemonType     sql.NullString
 			connectedAt    sql.NullTime
 			lastHeartbeat  sql.NullTime
 			disconnectedAt sql.NullTime
@@ -1066,6 +1075,7 @@ func (r *Repo) ListDaemonsByUserID(ctx context.Context, userID string) ([]*Daemo
 			&daemon.Status,
 			&capabilities,
 			&projectPaths,
+			&daemonType,
 			&connectedAt,
 			&lastHeartbeat,
 			&disconnectedAt,
@@ -1079,6 +1089,7 @@ func (r *Repo) ListDaemonsByUserID(ctx context.Context, userID string) ([]*Daemo
 		daemon.Platform = nullStringToPtr(platform)
 		daemon.Capabilities = nullStringToPtr(capabilities)
 		daemon.ProjectPaths = nullStringToPtr(projectPaths)
+		daemon.DaemonType = nullStringToPtr(daemonType)
 		daemon.ConnectedAt = nullTimeToPtr(connectedAt)
 		daemon.LastHeartbeat = nullTimeToPtr(lastHeartbeat)
 		daemon.DisconnectedAt = nullTimeToPtr(disconnectedAt)
@@ -1103,6 +1114,7 @@ func (r *Repo) ListStaleActiveDaemons(ctx context.Context, cutoff time.Time) ([]
 			status,
 			capabilities,
 			project_paths,
+			daemon_type,
 			connected_at,
 			last_heartbeat,
 			disconnected_at,
@@ -1129,6 +1141,7 @@ func (r *Repo) ListStaleActiveDaemons(ctx context.Context, cutoff time.Time) ([]
 			platform       sql.NullString
 			capabilities   sql.NullString
 			projectPaths   sql.NullString
+			daemonType     sql.NullString
 			connectedAt    sql.NullTime
 			lastHeartbeat  sql.NullTime
 			disconnectedAt sql.NullTime
@@ -1142,6 +1155,7 @@ func (r *Repo) ListStaleActiveDaemons(ctx context.Context, cutoff time.Time) ([]
 			&daemon.Status,
 			&capabilities,
 			&projectPaths,
+			&daemonType,
 			&connectedAt,
 			&lastHeartbeat,
 			&disconnectedAt,
@@ -1155,6 +1169,7 @@ func (r *Repo) ListStaleActiveDaemons(ctx context.Context, cutoff time.Time) ([]
 		daemon.Platform = nullStringToPtr(platform)
 		daemon.Capabilities = nullStringToPtr(capabilities)
 		daemon.ProjectPaths = nullStringToPtr(projectPaths)
+		daemon.DaemonType = nullStringToPtr(daemonType)
 		daemon.ConnectedAt = nullTimeToPtr(connectedAt)
 		daemon.LastHeartbeat = nullTimeToPtr(lastHeartbeat)
 		daemon.DisconnectedAt = nullTimeToPtr(disconnectedAt)

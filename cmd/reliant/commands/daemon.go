@@ -70,13 +70,13 @@ func registerDaemon(ctx context.Context, cmd *cobra.Command, apiURL, gwURL strin
 		accessToken = result.AccessToken
 	}
 
-	// Step 2: Call CreateDaemonToken RPC (via the API server, not the gateway)
+	// Step 2: Call CreateDaemonToken RPC on DaemonTokenService (JWT-authed).
 	hostname, _ := os.Hostname()
 
 	logging.Info("Registering daemon via CreateDaemonToken", "api_url", apiURL, "hostname", hostname)
 
 	httpClient := newRegistrationHTTPClient(accessToken, apiURL)
-	client := reliantv1connect.NewDaemonRegistryServiceClient(httpClient, apiURL)
+	client := reliantv1connect.NewDaemonTokenServiceClient(httpClient, apiURL)
 
 	resp, err := client.CreateDaemonToken(ctx, connect.NewRequest(&reliantv1.CreateDaemonTokenRequest{
 		Name: hostname,
@@ -85,12 +85,12 @@ func registerDaemon(ctx context.Context, cmd *cobra.Command, apiURL, gwURL strin
 		logging.Error("CreateDaemonToken failed", "error", err, "code", connect.CodeOf(err), "api_url", apiURL)
 		return fmt.Errorf("creating daemon token: %w", err)
 	}
-	logging.Info("Daemon token created successfully", "user_id", resp.Msg.GetUserId())
+	logging.Info("Daemon token created successfully", "token_id", resp.Msg.GetTokenId())
 
-	// Step 3: Write daemon credentials
+	// Step 3: Write daemon credentials. The server identifies the user from the
+	// PAT on every call, so the client doesn't store user_id.
 	creds := &auth.DaemonCredentials{
 		PAT:          resp.Msg.GetToken(),
-		UserID:       resp.Msg.GetUserId(),
 		ServerURL:    apiURL,
 		GatewayURL:   gwURL,
 		RegisteredAt: time.Now().UTC(),
@@ -170,30 +170,13 @@ func credentialsFromToken(cmd *cobra.Command, apiURL, gwURL string) (*auth.Daemo
 		return nil, fmt.Errorf("invalid token format (expected rlnt_pat_...)")
 	}
 
-	// Validate the token by calling ListDaemons (requires auth).
-	// If the call succeeds, the token is valid. We also try to extract
-	// the caller's user ID from the returned daemon list.
-	httpClient := newRegistrationHTTPClient(token, apiURL)
-	client := reliantv1connect.NewDaemonRegistryServiceClient(httpClient, apiURL)
-	resp, err := client.ListDaemons(cmd.Context(), connect.NewRequest(&reliantv1.ListDaemonsRequest{}))
-	if err != nil {
-		return nil, fmt.Errorf("token validation failed: %w", err)
-	}
-
-	var userID string
-	for _, d := range resp.Msg.GetDaemons() {
-		if d.GetUserId() != "" {
-			userID = d.GetUserId()
-			break
-		}
-	}
-	if userID == "" {
-		return nil, fmt.Errorf("token is valid but no existing daemons found to resolve user ID; register via 'reliant daemon register' first")
-	}
-
+	// We don't pre-validate the token over the network. The stream connect
+	// the daemon makes next does PAT auth on every call, so a bad token
+	// surfaces with a clear CodeUnauthenticated on the very first reach-out.
+	// Skipping a redundant probe keeps the server's PAT auth surface
+	// confined to the daemon listener.
 	creds := &auth.DaemonCredentials{
 		PAT:          token,
-		UserID:       userID,
 		ServerURL:    apiURL,
 		GatewayURL:   gwURL,
 		RegisteredAt: time.Now().UTC(),
@@ -204,7 +187,7 @@ func credentialsFromToken(cmd *cobra.Command, apiURL, gwURL string) (*auth.Daemo
 	}
 
 	hostname, _ := os.Hostname()
-	fmt.Fprintf(cmd.OutOrStdout(), "\u2713 Token validated for user %s (host: %s)\n", userID, hostname)
+	fmt.Fprintf(cmd.OutOrStdout(), "\u2713 Token accepted (host: %s)\n", hostname)
 	return creds, nil
 }
 
@@ -404,7 +387,6 @@ Credential resolution order:
 			startDaemon := func(c *auth.DaemonCredentials) error {
 				return daemonruntime.Start(ctx, daemonruntime.StartOptions{
 					BootstrapConfig: bootstrap.DaemonBootstrapConfig{
-						UserID:     c.UserID,
 						AuthToken:  c.PAT,
 						GRPCURL:    daemonGRPCURL,
 						TLSMode:    parsedTLSMode,
@@ -416,12 +398,23 @@ Credential resolution order:
 				})
 			}
 
-			logging.Info("Connecting daemon to gateway", "gateway_url", daemonGRPCURL, "user_id", creds.UserID)
+			logging.Info("Connecting daemon to gateway", "gateway_url", daemonGRPCURL)
 			err = startDaemon(creds)
 			if err != nil {
-				// On auth failure, delete stale credentials and re-register automatically
 				code := connect.CodeOf(err)
-				if code == connect.CodeUnauthenticated || code == connect.CodePermissionDenied {
+				isAuthFail := code == connect.CodeUnauthenticated || code == connect.CodePermissionDenied
+
+				// If the user pasted a token explicitly with --token, a rejection
+				// is a real error — don't silently flip into Supabase OAuth, that
+				// would surprise the user who chose to use a specific PAT.
+				if isAuthFail && useToken {
+					_ = auth.DeleteDaemonCredentials(serverURL)
+					return fmt.Errorf("token rejected by gateway (%s) — verify the PAT is correct, not revoked, and matches the --server URL", code.String())
+				}
+
+				// Register flow: stale creds get cleaned up and we re-run the
+				// Supabase login + CreateDaemonToken handshake.
+				if isAuthFail {
 					logging.Warn("Daemon gateway authentication failed — deleting stale credentials and re-registering",
 						"error", err, "code", code.String(), "gateway_url", daemonGRPCURL)
 					_ = auth.DeleteDaemonCredentials(serverURL)

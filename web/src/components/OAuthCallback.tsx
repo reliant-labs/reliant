@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/authStore'
 import { logger } from '@/lib/logger'
+import { githubCredentialSync } from '@/lib/githubCredentialSync'
 import { GradientBackground } from './GradientBackground'
 import { BrandMark } from './icons/BrandMark'
 
@@ -63,18 +64,44 @@ export function OAuthCallback() {
         // Capture the transient provider_token before it disappears.
         // This is the primary capture point — exchangeCodeForSession reliably
         // includes provider_token, unlike onAuthStateChange which may not.
+        // We AWAIT the sync (with retries) so the credential lands before the
+        // user navigates to the main app and any "Reconnect GitHub" gates run.
+        // Failures do not block navigation — banner UI surfaces them.
+        //
+        // OAuth round-trip state (the `source` and `returnTo` query params) is
+        // encoded into the redirect URL by linkGithubAccount /
+        // signInWithGithub before redirect, replacing the previous
+        // side-channel localStorage flags.
+        const source = url.searchParams.get('source')
+        const returnTo = url.searchParams.get('returnTo')
+
         const provider = data.user?.app_metadata?.provider
+        logger.info('[OAuthCallback] post-OAuth session state', {
+          provider,
+          hasProviderToken: !!data.session?.provider_token,
+          userId: data.user?.id,
+        })
         if (provider === 'github' && data.session?.provider_token) {
-          import('@/services/controlPlane/git').then(({ gitService }) =>
-            gitService.saveCredential('github', data.session!.provider_token!, 'repo'),
-          ).catch((err) => {
-            logger.warn('[OAuthCallback] Failed to save git credential', err)
-          })
+          const trigger: 'signin' | 'link' = source === 'link' ? 'link' : 'signin'
+          await githubCredentialSync.sync(data.session.provider_token, 'repo', trigger)
         }
 
-        const returnStep = localStorage.getItem('onboarding-return-step')
-        localStorage.removeItem('onboarding-return-step')
-        navigate({ to: '/', search: returnStep ? { step: returnStep } : {} })
+        if (returnTo) {
+          // Restore the originating URL (preserves onboarding step + plan
+          // search params). Only honor same-origin relative paths to avoid
+          // open-redirect issues.
+          try {
+            const decoded = decodeURIComponent(returnTo)
+            if (decoded.startsWith('/') && !decoded.startsWith('//')) {
+              window.location.assign(decoded)
+              return
+            }
+          } catch (err) {
+            logger.warn('[OAuthCallback] Failed to decode returnTo', err)
+          }
+        }
+
+        navigate({ to: '/', search: {} })
       } catch (err) {
         logger.error('[OAuthCallback] Unexpected callback error', err)
         setError(err instanceof Error ? err.message : 'Authentication failed')

@@ -4,7 +4,7 @@ import { Check, Cloud, Copy, Download, Loader2, Monitor } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getIsDev } from "@/lib/constants";
 import { grpcClient } from "@/api/grpc-client";
-import { CreateDaemonTokenRequestSchema } from "@/gen/reliant/v1/tools_daemon_pb";
+import { CreateDaemonTokenRequestSchema } from "@/gen/reliant/v1/daemon_token_pb";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { useEventBus } from "@/lib/event-context";
 import {
@@ -16,6 +16,7 @@ import { hasActiveDaemon, getFirstDaemonId } from "../api";
 import type { CodeSource, ComputeChoice, OnboardingIntent, StepProps } from "../types";
 import { DaemonConnectionDiagrams } from "../DaemonConnectionDiagrams";
 import { daemonStartCommand, HOMEBREW_CLI_INSTALL, HOMEBREW_CASK_INSTALL } from "@/lib/cli-commands";
+import { trackEvent } from "@/lib/analytics";
 
 const DOWNLOAD_BASE =
   import.meta.env.VITE_DOWNLOAD_BASE_URL || "https://downloads.reliantlabs.io";
@@ -170,6 +171,7 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
           localPath: undefined,
           projectName: undefined,
         });
+        trackEvent('onboarding_compute_selected', { compute: 'cloud' });
         onNext();
         return;
       }
@@ -193,6 +195,7 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
           localPath: undefined,
           projectName: undefined,
         });
+        trackEvent('onboarding_compute_selected', { compute: 'cloud' });
         onNext();
         return;
       }
@@ -233,6 +236,7 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
         localPath: undefined,
         projectName: undefined,
       });
+      trackEvent('onboarding_compute_selected', { compute: 'cloud' });
       onNext();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to start hosted daemon";
@@ -257,6 +261,7 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
 
   const handleLocalContinue = () => {
     handleLocal();
+    trackEvent('onboarding_compute_selected', { compute: 'local', daemon_preconnected: Boolean(activeDaemon) });
     onNext();
   };
 
@@ -269,7 +274,7 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
           ? `onboarding-${window.location.hostname}`
           : "onboarding";
       const res = await grpcClient
-        .daemonRegistry()
+        .daemonToken()
         .createDaemonToken(
           create(CreateDaemonTokenRequestSchema, { name: hostname }),
         );

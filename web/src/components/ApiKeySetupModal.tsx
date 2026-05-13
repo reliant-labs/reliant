@@ -7,6 +7,7 @@ import { cn } from "../lib/utils";
 import { logger } from "../lib/logger";
 import { useCodexOAuth, useClaudeOAuth, useOAuthAvailability } from "../hooks";
 import { authServeCommand } from "../lib/cli-commands";
+import { getEventBus } from "../lib/events";
 
 const PROVIDERS = [
   {
@@ -85,9 +86,31 @@ function parseErrorMessage(errorText: string, provider: string): string {
   return errorText || "Validation failed. Please check your API key.";
 }
 
-export function ApiKeySetupModal() {
-  const showModal = useApiKeySetupStore((s) => s.showModal);
+export interface ApiKeySetupModalProps {
+  /**
+   * When provided, the modal is driven by the parent (ModalLayer in production).
+   * When omitted, the modal falls back to reading the legacy
+   * `useApiKeySetupStore.showModal` flag so external tests / standalone usage
+   * keep working through the migration window.
+   */
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
+export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}) {
+  const legacyShowModal = useApiKeySetupStore((s) => s.showModal);
   const dismissModal = useApiKeySetupStore((s) => s.dismissModal);
+
+  // Parent control takes precedence; otherwise honor the legacy store flag.
+  const showModal = isOpen ?? legacyShowModal;
+  const handleDismiss = useCallback(
+    (permanent: boolean) => {
+      // Persist "don't ask again" via the legacy store regardless of caller.
+      dismissModal(permanent);
+      onClose?.();
+    },
+    [dismissModal, onClose]
+  );
 
   const [selectedProvider, setSelectedProvider] = useState<ProviderId>(
     "claude"
@@ -140,11 +163,12 @@ export function ApiKeySetupModal() {
 
       // Mark store as having a key and close modal
       useApiKeySetupStore.setState({ hasApiKey: true, showModal: false });
+      onClose?.();
 
       // Refetch models
       const { useGlobalDataStore } = await import("../store/globalDataStore");
       await useGlobalDataStore.getState().refetchModels();
-      window.dispatchEvent(new CustomEvent("api-key-saved"));
+      getEventBus().emit("api-key:saved", { provider: oauthType });
       return true;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -153,7 +177,7 @@ export function ApiKeySetupModal() {
     } finally {
       setIsValidating(false);
     }
-  }, [codexOAuth, claudeOAuth]);
+  }, [codexOAuth, claudeOAuth, onClose]);
 
   // Handle provider selection only; OAuth starts from explicit button click.
   const handleProviderSelect = useCallback((providerId: ProviderId) => {
@@ -232,13 +256,14 @@ export function ApiKeySetupModal() {
 
       // Mark store as having a key so other ensure() calls stop prompting.
       useApiKeySetupStore.setState({ hasApiKey: true, showModal: false });
+      onClose?.();
 
       // Immediately refetch models so they appear in dropdowns right away
       const { useGlobalDataStore } = await import("../store/globalDataStore");
       await useGlobalDataStore.getState().refetchModels();
 
-      // Dispatch event to notify all model inputs to refresh
-      window.dispatchEvent(new CustomEvent('api-key-saved'));
+      // Notify model inputs to refresh via the typed event bus.
+      getEventBus().emit("api-key:saved", { provider: selectedProvider });
 
       logger.info("[ApiKeySetupModal] Saved API key and refetched models", { provider: selectedProvider });
     } catch (err) {
@@ -250,12 +275,12 @@ export function ApiKeySetupModal() {
     } finally {
       setIsSaving(false);
     }
-  }, [apiKey, selectedProvider]);
+  }, [apiKey, selectedProvider, onClose]);
 
   return (
     <Modal
       isOpen={showModal}
-      onClose={() => dismissModal(false)}
+      onClose={() => handleDismiss(false)}
       title="Add an API key"
       size="lg"
     >
@@ -340,7 +365,7 @@ export function ApiKeySetupModal() {
             <div className="flex items-center justify-between gap-3 pt-1">
               <button
                 type="button"
-                onClick={() => dismissModal(true)}
+                onClick={() => handleDismiss(true)}
                 className="text-sm text-muted-foreground hover:text-foreground"
               >
                 Don't ask again
@@ -412,7 +437,7 @@ export function ApiKeySetupModal() {
             <div className="flex items-center justify-between gap-3 pt-1">
               <button
                 type="button"
-                onClick={() => dismissModal(true)}
+                onClick={() => handleDismiss(true)}
                 className="text-sm text-muted-foreground hover:text-foreground"
               >
                 Don't ask again

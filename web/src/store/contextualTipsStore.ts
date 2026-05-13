@@ -14,7 +14,7 @@ import {
 import { useChatStore } from "./chatStore";
 import { useThreadActivityStore } from "./threadActivityStore";
 import { useWorktreeStore } from "./worktreeStore";
-import { useOnboardingChecklistStore } from "./onboardingChecklistStore";
+import { useTourStore } from "./tourStore";
 
 function createDefaultContextualTipState(): Record<ContextualTipId, ContextualTipStateRecord> {
   return JSON.parse(JSON.stringify(DEFAULT_CONTEXTUAL_TIP_STATE)) as Record<
@@ -126,7 +126,7 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
   },
 
   reevaluate: async () => {
-    const onboardingState = useOnboardingChecklistStore.getState();
+    const onboardingState = useTourStore.getState();
     const state = get();
     if (!state.isInitialized || state.loadFailed || state.tipsDisabled) {
       if (state.activeTipId !== null) {
@@ -288,7 +288,7 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
     const unsubscribeChat = useChatStore.subscribe(debouncedReevaluate);
     const unsubscribeThreads = useThreadActivityStore.subscribe(debouncedReevaluate);
     const unsubscribeWorktrees = useWorktreeStore.subscribe(debouncedReevaluate);
-    const unsubscribeOnboarding = useOnboardingChecklistStore.subscribe(debouncedReevaluate);
+    const unsubscribeOnboarding = useTourStore.subscribe(debouncedReevaluate);
 
     const handleThreadInteracted = () => {
       void get().markFeatureEngaged("threadInteraction");

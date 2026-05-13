@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { useOnboardingChecklistStore } from "../../store/onboardingChecklistStore";
+import { useTourStore } from "../../store/tourStore";
 import { useContextualTipsStore } from "../../store/contextualTipsStore";
 import { CONTEXTUAL_TIP_DEFINITIONS } from "./contextualTipsRegistry";
 import { ContextualTipCoachmark } from "./ContextualTipCoachmark";
@@ -15,9 +15,9 @@ export function ContextualTipsLayer() {
   const dismissTip = useContextualTipsStore((state) => state.dismissTip);
   const disableAllTips = useContextualTipsStore((state) => state.disableAllTips);
   const subscribeToSources = useContextualTipsStore((state) => state.subscribeToSources);
-  const onboardingReady = useOnboardingChecklistStore((state) => state.isInitialized);
-  const onboardingComplete = useOnboardingChecklistStore((state) => state.hasCompletedOnboarding);
-  const isWizardActive = useOnboardingChecklistStore((state) => state.isWizardActive);
+  const onboardingReady = useTourStore((state) => state.isInitialized);
+  const onboardingComplete = useTourStore((state) => state.hasCompletedOnboarding);
+  const isWizardActive = useTourStore((state) => state.isWizardActive);
 
   useEffect(() => {
     if (!onboardingReady) return;

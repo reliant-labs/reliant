@@ -70,6 +70,14 @@ export interface EventMap {
 
   // Daemon
   "daemon:heartbeat": undefined;
+
+  // GitHub credential sync lifecycle
+  "github-credential:syncing": undefined;
+  "github-credential:succeeded": { trigger: string; attempt: number };
+  "github-credential:failed": { trigger: string; attempts: number; error: string };
+
+  // API key lifecycle
+  "api-key:saved": { provider: string };
 }
 
 type EventHandler<T> = (payload: T) => void;
