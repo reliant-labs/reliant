@@ -23,6 +23,7 @@
 import { useEffect } from "react";
 import { Workflow, Sparkles, Settings2 } from "lucide-react";
 import { useOnboardingChecklistStore } from "../../store/onboardingChecklistStore";
+import { useTourStore } from "../../store/tourStore";
 import { useViewerStore } from "../../store/viewerStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { trackEvent } from "../../lib/analytics";
@@ -306,29 +307,38 @@ const STEP_COMPONENTS: Record<OnboardingStepId, React.ComponentType<StepProps>> 
 // ─── Main Wizard Component ───────────────────────────────────────────────────
 
 export function OnboardingWizard() {
-  // Get everything from our unified store
   const {
     isWizardActive,
     currentStepId,
-    isInitialized,
-    loadState,
+    isInitialized: tourInitialized,
+    loadState: loadTourState,
     completeStep,
     skipAll,
     nextStep,
     previousStep,
+  } = useTourStore();
+
+  const {
+    isInitialized: checklistInitialized,
+    loadState: loadChecklistState,
     panelState,
     detectCompletedItems,
     subscribeToStoreChanges,
   } = useOnboardingChecklistStore();
 
+  const isInitialized = tourInitialized && checklistInitialized;
+
   const isWorkflowMode = useViewerStore((s) => s.isWorkflowMode);
   const isSettingsMode = useViewerStore((s) => s.isSettingsMode);
   // Load state on mount
   useEffect(() => {
-    if (!isInitialized) {
-      loadState();
+    if (!tourInitialized) {
+      loadTourState();
     }
-  }, [isInitialized, loadState]);
+    if (!checklistInitialized) {
+      loadChecklistState();
+    }
+  }, [tourInitialized, checklistInitialized, loadTourState, loadChecklistState]);
 
   // Track onboarding_started when wizard becomes active
   useEffect(() => {
@@ -375,11 +385,11 @@ export function OnboardingWizard() {
 
   // Set up checklist detection after checklist state is ready
   useEffect(() => {
-    if (!isInitialized) return;
+    if (!checklistInitialized) return;
     detectCompletedItems();
     const unsub = subscribeToStoreChanges();
     return unsub;
-  }, [isInitialized, detectCompletedItems, subscribeToStoreChanges]);
+  }, [checklistInitialized, detectCompletedItems, subscribeToStoreChanges]);
 
   // Not ready yet
   if (!isInitialized) return null;

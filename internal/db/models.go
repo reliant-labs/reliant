@@ -138,13 +138,16 @@ const (
 // Daemon represents a persisted tools daemon registration/state.
 // Capabilities and ProjectPaths are JSON-encoded arrays.
 type Daemon struct {
-	ID             string
-	UserID         string
-	Hostname       *string
-	Platform       *string
-	Status         DaemonStatus
-	Capabilities   *string
-	ProjectPaths   *string
+	ID           string
+	UserID       string
+	Hostname     *string
+	Platform     *string
+	Status       DaemonStatus
+	Capabilities *string
+	ProjectPaths *string
+	// DaemonType is the type of daemon: "managed" (cloud-hosted) or
+	// "self_hosted" (user-run local daemon). Empty/nil if undetermined.
+	DaemonType     *string
 	ConnectedAt    *time.Time
 	LastHeartbeat  *time.Time
 	DisconnectedAt *time.Time

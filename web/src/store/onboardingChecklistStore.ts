@@ -1,12 +1,9 @@
 /**
  * Onboarding Checklist Store
  *
- * Achievement-based onboarding that tracks real user actions,
- * combined with the guided-tour wizard state.
- *
- * Replaces the passive spotlight tour with a unified store that manages
- * both the checklist (auto-detected milestones) and the step-by-step
- * tour wizard.
+ * Achievement-based onboarding that tracks real user actions.
+ * The guided-tour wizard lives in tourStore.ts; the two stores coordinate
+ * for the "take-product-tour" achievement.
  */
 
 import { create } from "zustand";
@@ -16,40 +13,21 @@ import { logger } from "../lib/logger";
 import {
   safeGetSetting,
   upsertStringSetting,
-  deleteSettingIfExists,
 } from "../lib/settingsPersistence";
 import {
   CHECKLIST_ITEMS,
   CHECKLIST_SETTINGS_KEYS,
-  TOUR_SETTINGS_KEYS,
-  ONBOARDING_STEPS,
   REQUIRED_ITEMS,
-  getNextStepId,
-  getPreviousStepId,
-  stepRequiresWorkflowMode,
-  stepRequiresWorkflowBuilder,
-  stepRequiresChatMode,
-  stepRequiresSettingsMode,
 } from "../components/Onboarding/constants";
 import type {
   ChecklistItemId,
   ChecklistPanelState,
-  OnboardingStepId,
 } from "../components/Onboarding/types";
 import { useChatStore } from "./chatStore";
 import { useWorktreeStore } from "./worktreeStore";
 import { useProjectStore } from "./projectStore";
 import { useGlobalDataStore } from "./globalDataStore";
-import { useViewerStore } from "./viewerStore";
-import { useChatParamsStore } from "./chatParamsStore";
-import { useAttachmentStore } from "./attachmentStore";
-import { useWorkspaceStateStore } from "./workspaceStateStore";
-
-let suppressNextChatLaunch = false;
-
-export function suppressNextOnboardingChatLaunch(): void {
-  suppressNextChatLaunch = true;
-}
+import { getEventBus } from "../lib/events";
 
 // ─── Store Interface ──────────────────────────────────────────────────────────
 
@@ -68,20 +46,6 @@ interface OnboardingChecklistState {
 
   /** Loading guard */
   isLoading: boolean;
-
-  // ─── Tour State ──────────────────────────────────────────────────────────
-  /** Whether the guided tour is currently active */
-  isWizardActive: boolean;
-  /** Current tour step ID */
-  currentStepId: OnboardingStepId | null;
-  /** Set of completed tour step IDs */
-  completedSteps: Set<OnboardingStepId>;
-  /** Set of skipped tour step IDs */
-  skippedSteps: Set<OnboardingStepId>;
-  /** Whether the tour has been completed at least once */
-  hasCompletedOnboarding: boolean;
-  /** Whether the project has existing source code (for completion step) */
-  projectHasCode: boolean | null;
 
   // ─── Derived ────────────────────────────────────────────────────────────
 
@@ -129,132 +93,20 @@ interface OnboardingChecklistState {
 
   /** Reset store to initial state (for testing / restart) */
   reset: () => void;
-
-  // ─── Tour Actions ────────────────────────────────────────────────────────
-  startWizard: () => Promise<void>;
-  resumeWizard: () => Promise<void>;
-  closeWizard: () => void;
-  goToStep: (stepId: OnboardingStepId) => void;
-  completeStep: (stepId: OnboardingStepId) => Promise<void>;
-  skipStep: (stepId: OnboardingStepId) => Promise<void>;
-  skipAll: () => Promise<void>;
-  nextStep: () => void;
-  previousStep: () => void;
-  restartWizard: () => Promise<void>;
-  saveTourState: () => Promise<void>;
-  detectProjectCode: () => Promise<void>;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Serialize a Set<ChecklistItemId> to JSON string */
 function serializeItems(items: Set<ChecklistItemId>): string {
   return JSON.stringify(Array.from(items));
 }
 
-/** Deserialize a JSON string to Set<ChecklistItemId> */
 function deserializeItems(json: string): Set<ChecklistItemId> {
   try {
     const parsed = JSON.parse(json) as ChecklistItemId[];
     return new Set(parsed);
   } catch {
     return new Set();
-  }
-}
-
-/** After tour ends, show API key modal if none configured (same path as setup guide). */
-async function promptApiKeyIfNeededAfterOnboarding(): Promise<void> {
-  const { useApiKeySetupStore } = await import("./apiKeySetupStore");
-  // If onboarding already confirmed the user has a key, don't re-check
-  if (useApiKeySetupStore.getState().hasApiKey === true) return;
-  // Reset hasChecked so the check actually re-runs (it may have been set during app startup)
-  useApiKeySetupStore.setState({ hasChecked: false });
-  await useApiKeySetupStore.getState().ensureApiKeyOrShowModal();
-}
-
-function getLaunchPrompt(projectHasCode: boolean | null): string {
-  const projectId = useProjectStore.getState().currentProject?.id;
-  if (projectId) {
-    const draft = useWorkspaceStateStore.getState().getNewChatDraft(projectId).trim();
-    if (draft) return draft;
-  }
-
-  return projectHasCode !== false
-    ? "Search for refactoring opportunities in this codebase"
-    : "Write me a Python hello world HTTP server";
-}
-
-function dropNullPresets(presets: Record<string, string | null>): Record<string, string> | undefined {
-  const filtered: Record<string, string> = {};
-  for (const [target, preset] of Object.entries(presets)) {
-    if (preset) filtered[target] = preset;
-  }
-  return Object.keys(filtered).length > 0 ? filtered : undefined;
-}
-
-async function launchConfiguredOnboardingChat(projectHasCode: boolean | null): Promise<boolean> {
-  const worktreeStore = useWorktreeStore.getState();
-  const worktreeId =
-    worktreeStore.currentWorktree?.id ??
-    worktreeStore.worktrees.find((worktree) => worktree.is_main && !worktree.deleted_at)?.id;
-  if (!worktreeId) return false;
-
-  const chatParamsState = useChatParamsStore.getState();
-  const workflowParams = chatParamsState.tempNewChatParams;
-  const workflow = chatParamsState.tempNewChatWorkflow ?? undefined;
-  const selectedPresets = dropNullPresets(chatParamsState.tempNewChatPresets);
-
-  const hasAnyTemp =
-    Object.keys(workflowParams).length > 0 ||
-    workflow !== undefined ||
-    selectedPresets !== undefined;
-  if (!hasAnyTemp) return false;
-
-  const prompt = getLaunchPrompt(projectHasCode);
-
-  const chat = await useChatStore
-    .getState()
-    .createChat(
-      worktreeId,
-      prompt,
-      undefined,
-      Object.keys(workflowParams).length > 0 ? workflowParams : undefined,
-      workflow,
-      selectedPresets,
-    );
-
-  useChatParamsStore.getState().transferTempToChat(chat.id);
-  useChatStore.getState().selectChat(chat);
-  useAttachmentStore.getState().clearAttachments("temp");
-  return true;
-}
-
-async function finishTourAndLaunchChat(projectHasCode: boolean | null): Promise<void> {
-  if (suppressNextChatLaunch) {
-    suppressNextChatLaunch = false;
-    return;
-  }
-
-  try {
-    const launched = await launchConfiguredOnboardingChat(projectHasCode);
-    if (!launched) {
-      useChatStore.getState().clearCurrentChat();
-    }
-  } catch (error) {
-    logger.error("[ChecklistStore] Failed to launch onboarding chat", error);
-    useChatStore.getState().clearCurrentChat();
-  }
-}
-/** Detect if the project has source code files. */
-async function detectHasCode(): Promise<boolean> {
-  try {
-    const { getFileTree } = await import("../api/fileSystem");
-    const files = await getFileTree("/", false);
-    const ignoreDirs = new Set([".git", ".reliant", "node_modules", ".vscode", ".idea"]);
-    const codeFiles = files.filter((f) => !ignoreDirs.has(f.name));
-    return codeFiles.length > 1;
-  } catch {
-    return true;
   }
 }
 
@@ -267,14 +119,6 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
     panelState: "collapsed",
     isInitialized: false,
     isLoading: false,
-
-    // ─── Tour State ────────────────────────────────────────────────────────
-    isWizardActive: false,
-    currentStepId: null,
-    completedSteps: new Set(),
-    skippedSteps: new Set(),
-    hasCompletedOnboarding: false,
-    projectHasCode: null,
 
     // ─── Derived ──────────────────────────────────────────────────────────
 
@@ -304,25 +148,13 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
       if (get().isLoading) return;
       set({ isLoading: true });
 
-      // Load all settings independently — each call is wrapped so one
-      // missing/failing key never prevents the others from loading.
-      // This is critical: if e.g. COMPLETED_ITEMS doesn't exist yet
-      // but onboarding.completed does, we must still read the latter.
       const [
         completedSetting,
         panelSetting,
-        tourCompletedSetting,
-        currentStepSetting,
-        completedStepsSetting,
-        skippedStepsSetting,
         welcomeSetting,
       ] = await Promise.all([
         safeGetSetting(CHECKLIST_SETTINGS_KEYS.COMPLETED_ITEMS),
         safeGetSetting(CHECKLIST_SETTINGS_KEYS.PANEL_STATE),
-        safeGetSetting(TOUR_SETTINGS_KEYS.COMPLETED),
-        safeGetSetting(TOUR_SETTINGS_KEYS.CURRENT_STEP),
-        safeGetSetting(TOUR_SETTINGS_KEYS.COMPLETED_STEPS),
-        safeGetSetting(TOUR_SETTINGS_KEYS.SKIPPED_STEPS),
         safeGetSetting(CHECKLIST_SETTINGS_KEYS.WELCOME_SHOWN),
       ]);
 
@@ -333,35 +165,14 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
       const panelState =
         (panelSetting?.value as ChecklistPanelState) || "collapsed";
 
-      const hasCompletedOnboarding = tourCompletedSetting?.value === "true";
-
-      const currentStep = currentStepSetting?.value as OnboardingStepId | undefined;
-
-      let completedSteps = new Set<OnboardingStepId>();
-      if (completedStepsSetting?.value) {
-        try { completedSteps = new Set(JSON.parse(completedStepsSetting.value)); } catch { /* ignore */ }
-      }
-
-      let skippedSteps = new Set<OnboardingStepId>();
-      if (skippedStepsSetting?.value) {
-        try { skippedSteps = new Set(JSON.parse(skippedStepsSetting.value)); } catch { /* ignore */ }
-      }
-
-      // Welcome shown: check DB first, fallback to localStorage,
-      // and also consider tour completion as implicit welcome shown
       const welcomeShown =
         welcomeSetting?.value === "true" ||
-        hasCompletedOnboarding ||
         localStorage.getItem("reliant.checklist.welcomeShown") === "true";
 
       set({
         completedItems,
         panelState,
         welcomeShown,
-        hasCompletedOnboarding,
-        currentStepId: currentStep || null,
-        completedSteps,
-        skippedSteps,
         isInitialized: true,
         isLoading: false,
       });
@@ -385,9 +196,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
 
     markWelcomeShown: async () => {
       set({ welcomeShown: true });
-      // Persist to localStorage immediately as fallback (sync, never fails)
       localStorage.setItem("reliant.checklist.welcomeShown", "true");
-      // Also persist to DB (async, may fail on first load)
       try {
         await upsertStringSetting(CHECKLIST_SETTINGS_KEYS.WELCOME_SHOWN, "true");
       } catch (e) {
@@ -407,7 +216,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
 
       const projectId = useProjectStore.getState().currentProject?.id;
 
-      // 1. API key — check if any provider is configured (hasApiKey or configured for OAuth)
+      // 1. API key
       if (!newItems.has("add-api-key")) {
         try {
           const providers = await api.settings.getProviders();
@@ -416,11 +225,11 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
             changed = true;
           }
         } catch {
-          // Fail open — don't mark as complete if we can't check
+          // Fail open
         }
       }
 
-      // 2. Start a chat — check if any chats exist
+      // 2. Start a chat
       if (!newItems.has("start-chat")) {
         const chats = useChatStore.getState().chats;
         if (chats.size > 0) {
@@ -429,7 +238,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
         }
       }
 
-      // 3. Use a custom workflow — check if any chat used a non-default workflow
+      // 3. Use a custom workflow
       if (!newItems.has("use-custom-workflow")) {
         const chats = useChatStore.getState().chats;
         const isDefaultWorkflow = (name?: string) =>
@@ -443,7 +252,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
         }
       }
 
-      // 4. Create a workflow — check if any user-created workflows exist
+      // 4. Create a workflow
       if (!newItems.has("create-workflow") && projectId) {
         try {
           const workflows = useGlobalDataStore.getState().workflows;
@@ -456,13 +265,16 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
         }
       }
 
-      // 5. Take product tour — check if the tour has been completed
-      if (!newItems.has("take-product-tour") && get().hasCompletedOnboarding) {
-        newItems.add("take-product-tour");
-        changed = true;
+      // 5. Take product tour — read from tour store
+      if (!newItems.has("take-product-tour")) {
+        const { useTourStore } = await import("./tourStore");
+        if (useTourStore.getState().hasCompletedOnboarding) {
+          newItems.add("take-product-tour");
+          changed = true;
+        }
       }
 
-      // 6. Create a workspace — check if any non-main worktrees exist
+      // 6. Create a workspace
       if (!newItems.has("create-workspace")) {
         const worktrees = useWorktreeStore.getState().worktrees;
         const hasUserWorktree = worktrees.some(
@@ -487,7 +299,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
         }
       }
 
-      // 8. Create a preset — check if any user presets exist
+      // 8. Create a preset
       if (!newItems.has("create-preset") && projectId) {
         try {
           const presets = useGlobalDataStore.getState().presets;
@@ -500,8 +312,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
         }
       }
 
-      // 9. Read docs — this is manually marked only (external link click)
-      // No auto-detection needed.
+      // 9. Read docs — manually marked only
 
       if (changed) {
         set({ completedItems: newItems });
@@ -518,17 +329,14 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
     subscribeToStoreChanges: () => {
       const unsubscribers: (() => void)[] = [];
 
-      // Watch chat store for new chats and workflow runs
       let prevChatCount = useChatStore.getState().chats.size;
       unsubscribers.push(
         useChatStore.subscribe((state) => {
-          // Detect new chats
           if (state.chats.size > prevChatCount) {
             get().markComplete("start-chat");
           }
           prevChatCount = state.chats.size;
 
-          // Detect custom workflow usage
           if (!get().completedItems.has("use-custom-workflow")) {
             const isDefault = (name?: string) =>
               !name || name === "" || name === "agent" || name === "builtin://agent";
@@ -542,7 +350,6 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
         }),
       );
 
-      // Watch worktrees for new workspaces
       unsubscribers.push(
         useWorktreeStore.subscribe((state) => {
           if (get().completedItems.has("create-workspace")) return;
@@ -555,7 +362,6 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
         }),
       );
 
-      // Watch globalDataStore for user workflows and presets
       unsubscribers.push(
         useGlobalDataStore.subscribe((state) => {
           if (
@@ -573,224 +379,18 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
         }),
       );
 
-      // Watch for API key saves (dispatched by ApiKeySetupModal and CombinedGeneralSettings)
-      const handleApiKeySaved = () => {
-        get().markComplete("add-api-key");
-      };
-      window.addEventListener("api-key-saved", handleApiKeySaved);
-      unsubscribers.push(() => {
-        window.removeEventListener("api-key-saved", handleApiKeySaved);
-      });
+      try {
+        const unsubscribeApiKey = getEventBus().on("api-key:saved", () => {
+          get().markComplete("add-api-key");
+        });
+        unsubscribers.push(unsubscribeApiKey);
+      } catch {
+        /* bus not ready yet */
+      }
 
       return () => {
         unsubscribers.forEach((unsub) => unsub());
       };
-    },
-
-    // ─── Tour Actions ─────────────────────────────────────────────────────
-
-    startWizard: async () => {
-      set({
-        isWizardActive: true,
-        currentStepId: ONBOARDING_STEPS[0].id,
-        completedSteps: new Set(),
-        skippedSteps: new Set(),
-        hasCompletedOnboarding: false,
-      });
-      await get().saveTourState();
-      await get().detectProjectCode();
-    },
-
-    resumeWizard: async () => {
-      const state = get();
-      if (state.currentStepId) {
-        set({ isWizardActive: true });
-      } else {
-        await get().startWizard();
-      }
-    },
-
-    closeWizard: () => {
-      set({ isWizardActive: false });
-      suppressNextChatLaunch = false;
-      get().saveTourState();
-    },
-
-    goToStep: (stepId: OnboardingStepId) => {
-      set({ currentStepId: stepId });
-    },
-
-    completeStep: async (stepId: OnboardingStepId) => {
-      const newCompleted = new Set(get().completedSteps);
-      newCompleted.add(stepId);
-      set({ completedSteps: newCompleted });
-      await get().saveTourState();
-    },
-
-    skipStep: async (stepId: OnboardingStepId) => {
-      const newSkipped = new Set(get().skippedSteps);
-      newSkipped.add(stepId);
-      set({ skippedSteps: newSkipped });
-      await get().saveTourState();
-    },
-
-    skipAll: async () => {
-      // Navigate back to chat area if in workflow mode
-      const viewerStore = useViewerStore.getState();
-      if (viewerStore.isWorkflowMode) {
-        viewerStore.setWorkflowMode(false);
-      }
-
-      set({
-        isWizardActive: false,
-        currentStepId: null,
-        welcomeShown: true,
-      });
-
-      // Mark welcomeShown in localStorage as well
-      localStorage.setItem("reliant.checklist.welcomeShown", "true");
-
-      // Mark skipped_all in database
-      await upsertStringSetting(TOUR_SETTINGS_KEYS.SKIPPED_ALL, "true");
-      await get().saveTourState();
-
-      void finishTourAndLaunchChat(get().projectHasCode);
-      void promptApiKeyIfNeededAfterOnboarding();
-    },
-
-    nextStep: () => {
-      const state = get();
-      if (!state.currentStepId) return;
-
-      const nextId = getNextStepId(state.currentStepId);
-      if (nextId) {
-        set({ currentStepId: nextId });
-        get().saveTourState();
-      } else {
-        // No more steps — complete the wizard
-        const viewerStore = useViewerStore.getState();
-        viewerStore.setSettingsMode(false);
-        viewerStore.setWorkflowMode(false);
-
-        const completedItems = new Set(get().completedItems);
-        completedItems.add("take-product-tour");
-
-        set({
-          isWizardActive: false,
-          hasCompletedOnboarding: true,
-          currentStepId: null,
-          welcomeShown: true,
-          completedItems,
-        });
-
-        // Persist welcomeShown via localStorage too
-        localStorage.setItem("reliant.checklist.welcomeShown", "true");
-
-        void upsertStringSetting(
-          CHECKLIST_SETTINGS_KEYS.COMPLETED_ITEMS,
-          serializeItems(completedItems),
-        );
-        get().saveTourState();
-
-        void finishTourAndLaunchChat(state.projectHasCode);
-        void promptApiKeyIfNeededAfterOnboarding();
-      }
-    },
-
-    previousStep: () => {
-      const state = get();
-      if (!state.currentStepId) return;
-
-      const prevId = getPreviousStepId(state.currentStepId);
-      if (prevId) {
-        const viewerStore = useViewerStore.getState();
-
-        // Set the correct view mode BEFORE changing step so targets are visible
-        if (stepRequiresWorkflowMode(prevId)) {
-          viewerStore.setSettingsMode(false);
-          const workflowName = stepRequiresWorkflowBuilder(prevId) ? "builtin://agent" : undefined;
-          viewerStore.setWorkflowMode(true, workflowName);
-        } else if (stepRequiresSettingsMode(prevId)) {
-          viewerStore.setWorkflowMode(false);
-          viewerStore.setSettingsMode(true);
-        } else if (stepRequiresChatMode(prevId)) {
-          viewerStore.setSettingsMode(false);
-          viewerStore.setWorkflowMode(false);
-        } else {
-          // Modal step or unknown — close both modes
-          viewerStore.setSettingsMode(false);
-          viewerStore.setWorkflowMode(false);
-        }
-
-        set({ currentStepId: prevId });
-        get().saveTourState();
-      }
-    },
-
-    restartWizard: async () => {
-      // Navigate to chat area (close settings and workflow modes)
-      const viewerStore = useViewerStore.getState();
-      viewerStore.setSettingsMode(false);
-      viewerStore.setWorkflowMode(false);
-
-      // Clear current chat to show the new-chat page
-      useChatStore.getState().clearCurrentChat();
-
-      // Clear the skipped_all flag
-      try {
-        await deleteSettingIfExists(TOUR_SETTINGS_KEYS.SKIPPED_ALL);
-      } catch {
-        // Ignore if doesn't exist
-      }
-
-      // Reset all tour state
-      set({
-        isWizardActive: true,
-        currentStepId: ONBOARDING_STEPS[0].id,
-        completedSteps: new Set(),
-        skippedSteps: new Set(),
-        hasCompletedOnboarding: false,
-        projectHasCode: null,
-        // Reset checklist state as well
-        completedItems: new Set(),
-        welcomeShown: false,
-        panelState: "expanded",
-      });
-
-      // Clear localStorage welcomeShown
-      localStorage.removeItem("reliant.checklist.welcomeShown");
-      suppressNextChatLaunch = false;
-
-      await get().saveTourState();
-      await get().detectProjectCode();
-    },
-
-    saveTourState: async () => {
-      const state = get();
-      try {
-        await upsertStringSetting(
-          TOUR_SETTINGS_KEYS.COMPLETED,
-          state.hasCompletedOnboarding ? "true" : "false",
-        );
-        if (state.currentStepId) {
-          await upsertStringSetting(TOUR_SETTINGS_KEYS.CURRENT_STEP, state.currentStepId);
-        }
-        await upsertStringSetting(
-          TOUR_SETTINGS_KEYS.COMPLETED_STEPS,
-          JSON.stringify(Array.from(state.completedSteps)),
-        );
-        await upsertStringSetting(
-          TOUR_SETTINGS_KEYS.SKIPPED_STEPS,
-          JSON.stringify(Array.from(state.skippedSteps)),
-        );
-      } catch (error) {
-        logger.error("[ChecklistStore] Failed to save tour state", error);
-      }
-    },
-
-    detectProjectCode: async () => {
-      const hasCode = await detectHasCode();
-      set({ projectHasCode: hasCode });
     },
 
     reset: () => {
@@ -800,14 +400,8 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
         panelState: "expanded",
         isInitialized: false,
         isLoading: false,
-        isWizardActive: false,
-        currentStepId: null,
-        completedSteps: new Set(),
-        skippedSteps: new Set(),
-        hasCompletedOnboarding: false,
-        projectHasCode: null,
       });
-      suppressNextChatLaunch = false;
+      localStorage.removeItem("reliant.checklist.welcomeShown");
     },
   }),
 );

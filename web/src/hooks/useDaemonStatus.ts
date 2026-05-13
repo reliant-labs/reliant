@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { create } from "@bufbuild/protobuf";
 import { grpcClient } from "../api/grpc-client";
-import { DaemonStatus, ListDaemonsRequestSchema } from "../gen/reliant/v1/tools_daemon_pb";
-import type { DaemonInfo } from "../gen/reliant/v1/tools_daemon_pb";
+import { DaemonStatus, ListDaemonsRequestSchema } from "../gen/reliant/v1/daemon_registry_pb";
+import type { DaemonInfo } from "../gen/reliant/v1/daemon_registry_pb";
 
 export function useDaemonStatus() {
   const [daemons, setDaemons] = useState<DaemonInfo[]>([]);

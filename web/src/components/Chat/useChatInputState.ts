@@ -52,11 +52,29 @@ export function useChatInputState({
 
   // Workflow selection state - tracks which workflow is selected.
   // null means use user's default workflow (from preferences).
-  // For new chats, onboarding can hint a one-time selection via
+  // For new chats, onboarding/starter cards can hint a one-time selection via
   // chatParamsStore.tempNewChatWorkflow.
   const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(
     () => useChatParamsStore.getState().tempNewChatWorkflow,
   );
+
+  // Subscribe to tempNewChatWorkflow so external updates (e.g. WorkflowStarterCards
+  // clicks) propagate to the composer. Without this subscription, the initial
+  // useState reads the value once and never reacts to changes.
+  const tempNewChatWorkflow = useChatParamsStore(
+    (state) => state.tempNewChatWorkflow,
+  );
+
+  // Sync external temp workflow changes into local state for new chats.
+  // Only fires when the external value actually differs from local — this
+  // prevents infinite loops when the user changes workflow locally via
+  // WorkflowSelector (which doesn't touch tempNewChatWorkflow).
+  useEffect(() => {
+    if (chatId) return; // Only sync temp value for new chats
+    setSelectedWorkflow((current) =>
+      current === tempNewChatWorkflow ? current : tempNewChatWorkflow,
+    );
+  }, [tempNewChatWorkflow, chatId]);
 
   // Computed values — read chat from React Query cache
   const { data: currentChat } = useChat(chatId);

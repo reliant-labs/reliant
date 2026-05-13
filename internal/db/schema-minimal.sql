@@ -612,6 +612,7 @@ CREATE TABLE daemons (
     capabilities TEXT,   -- JSON array
     project_paths TEXT,  -- JSON array of paths requiring config
     projects_json TEXT,  -- JSON array of discovered projects
+    daemon_type TEXT,    -- "managed", "self_hosted", or NULL/"unknown"
     connected_at DATETIME,
     last_heartbeat DATETIME,
     disconnected_at DATETIME,

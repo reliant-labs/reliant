@@ -2,6 +2,7 @@
 
 import { grpcClient } from "./grpc-client";
 import { singleflight } from "../lib/singleflight";
+import { trackEvent } from "../lib/analytics";
 import { create } from "@bufbuild/protobuf";
 import type { PresetInfo as ProtoPresetInfo } from "../gen/reliant/v1/preset_pb";
 import { jsToProtoValue, protoValueToJs } from "./proto-utils";
@@ -207,6 +208,10 @@ export const presetGrpc = {
     });
 
     const response = await client.createPreset(request);
+
+    if (response.success) {
+      trackEvent('preset_created');
+    }
 
     return {
       success: response.success,

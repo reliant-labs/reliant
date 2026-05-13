@@ -12,6 +12,7 @@ import { DynamicInput } from "./DynamicInput";
 import type { ParamSuggestion, NodeSuggestion } from "./DynamicInput";
 import { ObjectSchemaEditor } from "./ObjectSchemaEditor";
 import { useThinkingCapability, reconcileThinkingLevel } from "../../hooks/useThinkingCapability";
+import { useEvent } from "../../lib/event-context";
 
 import type { InputDef } from "../../lib/inputHelpers";
 import {
@@ -968,27 +969,22 @@ function ModelDropdown({
   const isActuallyLoading = isLoading || isPrefetching || !isInitialized;
 
   // Listen for API key updates to automatically refetch models
-  useEffect(() => {
-    const handleApiKeySaved = async () => {
-      logger.info('[ModelInput] API key saved event detected, refetching models immediately');
-      try {
-        await refetchModels();
-        logger.info('[ModelInput] Models refetched successfully after API key save');
-        setTimeout(async () => {
-          const currentModels = useGlobalDataStore.getState().models;
-          if (currentModels.length === 0) {
-            logger.info('[ModelInput] Models still empty after delay, refetching again');
-            await refetchModels();
-          }
-        }, 500);
-      } catch (error) {
-        logger.error('[ModelInput] Failed to refetch models after API key save:', error);
-      }
-    };
-
-    window.addEventListener('api-key-saved', handleApiKeySaved);
-    return () => window.removeEventListener('api-key-saved', handleApiKeySaved);
-  }, [refetchModels]);
+  useEvent("api-key:saved", async () => {
+    logger.info('[ModelInput] API key saved event detected, refetching models immediately');
+    try {
+      await refetchModels();
+      logger.info('[ModelInput] Models refetched successfully after API key save');
+      setTimeout(async () => {
+        const currentModels = useGlobalDataStore.getState().models;
+        if (currentModels.length === 0) {
+          logger.info('[ModelInput] Models still empty after delay, refetching again');
+          await refetchModels();
+        }
+      }, 500);
+    } catch (error) {
+      logger.error('[ModelInput] Failed to refetch models after API key save:', error);
+    }
+  });
 
   // Extract model ID from value (handles legacy string and new { id } format)
   const valueModelId = extractModelId(value);

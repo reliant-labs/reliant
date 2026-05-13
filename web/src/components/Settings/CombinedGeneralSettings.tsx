@@ -24,6 +24,7 @@ import {
 } from "../../store/apiKeySetupStore";
 import { useCodexOAuth, useClaudeOAuth, useOAuthAvailability } from "../../hooks";
 import { authServeCommand } from "../../lib/cli-commands";
+import { getEventBus } from "../../lib/events";
 
 interface CombinedGeneralSettingsProps {
   providers: Array<{
@@ -424,8 +425,8 @@ export function CombinedGeneralSettings({
       // Refresh models immediately - the API call already waits for the database write to complete
       await useGlobalDataStore.getState().refetchModels();
 
-      // Dispatch event to notify all model inputs to refresh
-      window.dispatchEvent(new CustomEvent('api-key-saved'));
+      // Notify model inputs to refresh via the typed event bus.
+      getEventBus().emit("api-key:saved", { provider });
 
       // Check if this was the last API key - if so, reset the API key setup state
       // so the modal will show again when user navigates to project/chat screens
@@ -460,8 +461,8 @@ export function CombinedGeneralSettings({
       // Refresh models immediately - the API call already waits for the database write to complete
       await useGlobalDataStore.getState().refetchModels();
 
-      // Dispatch event to notify all model inputs to refresh
-      window.dispatchEvent(new CustomEvent('api-key-saved'));
+      // Notify model inputs to refresh via the typed event bus.
+      getEventBus().emit("api-key:saved", { provider: targetProvider });
 
       if (provider) {
         // Editing existing provider
@@ -581,7 +582,7 @@ export function CombinedGeneralSettings({
 
       // Refresh models
       await useGlobalDataStore.getState().refetchModels();
-      window.dispatchEvent(new CustomEvent("api-key-saved"));
+      getEventBus().emit("api-key:saved", { provider: oauthType });
 
       // Reset form
       setSelectedProvider("");

@@ -110,6 +110,7 @@ interface ChatInputProps {
   chatId?: string;
   connectionStatus?: ConnectionStatus;
   isChatBusy?: boolean;
+  placeholder?: string;
   // Command center mode
   paneId?: string;
   // Thread-specific params
@@ -129,6 +130,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
       isStreaming = false,
       chatId,
       isChatBusy = false,
+      placeholder,
       paneId,
       selectedThreadId,
       workflowExecution,
@@ -479,29 +481,25 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
         }
         // If workflow doesn't match, persistedPresets stays empty - fresh start for new workflow
       } else {
-        // New chat (no chatId): only clear temp state when the workflow actually changes.
-        // This preserves user-set params (e.g. model) across re-renders and effect re-runs
-        // while still clearing stale params when switching workflows.
-        const workflowActuallyChanged = prevWorkflowNameRef.current !== undefined && prevWorkflowNameRef.current !== workflowName;
-        if (workflowActuallyChanged) {
-          logger.debug("[ChatInput] Workflow changed for new chat, clearing temp state", {
-            from: prevWorkflowNameRef.current,
-            to: workflowName,
+        // New chat (no chatId): always read the latest temp state so external
+        // writers (WorkflowStarterCards) can configure workflow + params +
+        // presets atomically. Previously this branch cleared temp state on
+        // workflow change, which wiped the params/presets a starter card
+        // had just set.
+        //
+        // The manual WorkflowSelector path is responsible for clearing temp
+        // params/presets itself when the user switches workflows interactively
+        // (see the WorkflowSelector onChange handler below), so by the time
+        // this effect runs after a manual switch, temp state is already empty.
+        const tempState = useChatParamsStore.getState();
+        if (Object.keys(tempState.tempNewChatParams).length > 0) {
+          persistedParams = { ...tempState.tempNewChatParams };
+          logger.debug("[ChatInput] Restoring temp params for new chat", {
+            keys: Object.keys(tempState.tempNewChatParams),
           });
-          useChatParamsStore.getState().clearTempNewChatParams();
-        } else {
-          // Same workflow (or initial mount) — restore any existing temp state
-          // so user selections (model, presets, etc.) survive re-renders.
-          const tempState = useChatParamsStore.getState();
-          if (Object.keys(tempState.tempNewChatParams).length > 0) {
-            persistedParams = { ...tempState.tempNewChatParams };
-            logger.debug("[ChatInput] Restoring temp params for new chat", {
-              keys: Object.keys(tempState.tempNewChatParams),
-            });
-          }
-          if (Object.keys(tempState.tempNewChatPresets).length > 0) {
-            persistedPresets = tempState.tempNewChatPresets;
-          }
+        }
+        if (Object.keys(tempState.tempNewChatPresets).length > 0) {
+          persistedPresets = tempState.tempNewChatPresets;
         }
       }
       prevWorkflowNameRef.current = workflowName;
@@ -1378,6 +1376,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                         disabled={disabled || !isMessagingAllowed}
                         isStreaming={effectiveStreaming}
                         chatId={chatId}
+                        placeholder={placeholder}
                       />
                     </div>
 
@@ -1446,6 +1445,16 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                                 newChats.set(chatId, { ...existing, selectedPresets: {} });
                                 return { chats: newChats };
                               });
+                            } else {
+                              // New chat: also clear temp params/presets so the
+                              // workflow-change effect doesn't reapply stale values
+                              // from a previous workflow (e.g. a starter card).
+                              // Note: we keep tempNewChatWorkflow in sync with the
+                              // user's manual selection so the subscription in
+                              // useChatInputState doesn't snap us back.
+                              useChatParamsStore.getState().setTempNewChatParams({});
+                              useChatParamsStore.getState().setTempNewChatPresets({});
+                              useChatParamsStore.getState().setTempNewChatWorkflow(wf);
                             }
                           }}
                           isStreaming={effectiveStreaming}

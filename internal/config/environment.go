@@ -12,9 +12,9 @@ type Environment string
 const (
 	EnvironmentDev     Environment = "dev"
 	EnvironmentTest    Environment = "test"
+	EnvironmentProd    Environment = "prod"
 	EnvironmentStaging Environment = "staging"
 	EnvironmentPreprod Environment = "preprod"
-	EnvironmentProd    Environment = "prod"
 )
 
 // GetEnvironment returns the current environment from environment variables
@@ -46,9 +46,11 @@ func IsTestEnvironment() bool {
 	return GetEnvironment() == EnvironmentTest
 }
 
-// IsDevelopmentEnvironment returns true if running in development environment
+// IsDevelopmentEnvironment returns true if running in development environment.
+// Staging and preprod are treated as dev for auth bypass and other dev-mode behaviors.
 func IsDevelopmentEnvironment() bool {
-	return GetEnvironment() == EnvironmentDev
+	env := GetEnvironment()
+	return env == EnvironmentDev || env == EnvironmentStaging || env == EnvironmentPreprod
 }
 
 // IsProductionEnvironment returns true if running in production environment
@@ -64,4 +66,10 @@ func IsStagingEnvironment() bool {
 // IsPreprodEnvironment returns true if running in preprod environment
 func IsPreprodEnvironment() bool {
 	return GetEnvironment() == EnvironmentPreprod
+}
+
+// IsRestrictedEnvironment returns true for environments that enforce domain whitelisting.
+func IsRestrictedEnvironment() bool {
+	env := GetEnvironment()
+	return env == EnvironmentStaging || env == EnvironmentPreprod
 }

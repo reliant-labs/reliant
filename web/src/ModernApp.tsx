@@ -46,11 +46,12 @@ import { Header, type HeaderRef } from "./components/Layout/Header";
 import { ProjectPicker } from "./components/Projects/ProjectPicker";
 import { InitializeGitModal } from "./components/Git/InitializeGitModal";
 import { RescanModal } from "./components/Projects/RescanModal";
-import { ApiKeySetupModal } from "./components/ApiKeySetupModal";
+import { ModalLayer } from "./components/Modals/ModalLayer";
 
 import { TerminalPanel } from "./components/Terminal/TerminalPanel";
 import { Toaster } from "./lib/toast";
 import { LoadingSpinner } from "./components/Layout/LoadingSpinner";
+import { GitHubSyncBanner } from "./components/Layout/GitHubSyncBanner";
 import { GlobalUpdateHandler } from "./components/Settings/GlobalUpdateHandler";
 import { useChatStore } from "./store/chatStore";
 import { useActivityStore, ChatActivity } from "./store/activityStore";
@@ -76,8 +77,8 @@ import { useNotificationStore, startPermissionRefresh } from "./store/notificati
 import { useWorkspaceStateStore } from "./store/workspaceStateStore";
 import { useWorkspaceRestore, useAutoSaveWorkspaceState } from "./hooks/useWorkspaceRestore";
 import { focusChatInput } from "./hooks/useFocusManager";
-import { useOnboardingChecklistStore } from "./store/onboardingChecklistStore";
-import { useApiKeySetupStore } from "./store/apiKeySetupStore";
+import { useTourStore } from "./store/tourStore";
+import { useModalStore } from "./store/modalStore";
 import { useGlobalDataStore } from "./store/globalDataStore";
 import { trackEvent } from "./lib/analytics";
 
@@ -1331,16 +1332,16 @@ function App() {
   }, [handleNavigateToProjectPicker]);
 
   // Get onboarding state - we defer git init check until onboarding tour is completed
-  const hasCompletedOnboarding = useOnboardingChecklistStore((state) => state.hasCompletedOnboarding);
-  const checklistInitialized = useOnboardingChecklistStore((state) => state.isInitialized);
+  const hasCompletedOnboarding = useTourStore((state) => state.hasCompletedOnboarding);
+  const tourInitialized = useTourStore((state) => state.isInitialized);
 
   // Check git initialization when a project is selected (use stable ID to avoid re-fires)
   // Skip during onboarding welcome to avoid dual modal confusion
   useEffect(() => {
     if (projectId && isBackendReady) {
       // Wait for checklist state to be loaded from database
-      if (!checklistInitialized) {
-        logger.info("[ModernApp] Waiting for checklist state to initialize before git check");
+      if (!tourInitialized) {
+        logger.info("[ModernApp] Waiting for tour state to initialize before git check");
         return;
       }
 
@@ -1350,9 +1351,10 @@ function App() {
         return;
       }
 
-      // If the API key setup modal is currently open, defer git init modal.
-      if (useApiKeySetupStore.getState().showModal) {
-        logger.info("[ModernApp] Deferring git init check until API key modal closes");
+      // If any modal is currently open via the unified modal store, defer the
+      // git-init modal so we never stack two modals on top of each other.
+      if (useModalStore.getState().activeModal !== null) {
+        logger.info("[ModernApp] Deferring git init check while another modal is open");
         return;
       }
 
@@ -1384,7 +1386,7 @@ function App() {
     checkGitInitialization,
     checkForRescan,
     isBackendReady,
-    checklistInitialized,
+    tourInitialized,
     hasCompletedOnboarding,
   ]);
 
@@ -1428,12 +1430,13 @@ function App() {
   useEffect(() => {
     if (!isBackendReady || isWorkspaceRestoring || isUserLoading) return;
     if (resetOnboarding) {
-      localStorage.removeItem('reliant-onboarding-plan');
-      navigate({ to: '/', search: { step: 'goal', 'reset-onboarding': undefined } });
+      // Plan is URL-backed now (Phase 3); clearing the `plan` search param
+      // drops the prior state without touching localStorage.
+      navigate({ to: '/', search: { step: 'compute', 'reset-onboarding': undefined } });
       return;
     }
     if (needsOnboardingRedirect) {
-      navigate({ to: '/', search: { step: 'goal' } });
+      navigate({ to: '/', search: { step: 'compute' } });
     }
   }, [isBackendReady, isWorkspaceRestoring, isUserLoading, resetOnboarding, needsOnboardingRedirect, navigate]);
 
@@ -1451,130 +1454,129 @@ function App() {
     }
   }, [isBackendReady, github_connected, github_error, github_error_msg, setSettingsMode, navigate]);
 
-  // Show loading spinner until backend is ready
-  if (!isBackendReady) {
-    return <LoadingSpinner />;
-  }
+  // ─── Branch dispatch ────────────────────────────────────────────────────
+  // Compute the per-branch UI as a value rather than returning early so the
+  // "always-on" global overlays below (ModalLayer, OnboardingWizard,
+  // ContextualTipsLayer, GitHubSyncBanner, Toaster) render in every branch.
+  // This is the structural fix for the post-OAuth redirect bug — the
+  // existing-project modal must remain visible even when ModernApp falls into
+  // the ProjectPicker branch while workspace restore is still in flight.
+  const renderBranches = () => {
+    // Show loading spinner until backend is ready
+    if (!isBackendReady) {
+      return <LoadingSpinner />;
+    }
 
-  // Show loading spinner while workspace is restoring or user is loading
-  if (isWorkspaceRestoring || isUserLoading) {
-    return <LoadingSpinner />;
-  }
+    // Show loading spinner while workspace is restoring or user is loading
+    if (isWorkspaceRestoring || isUserLoading) {
+      return <LoadingSpinner />;
+    }
 
-  // Clean up old onboarding localStorage key
-  localStorage.removeItem('reliant-onboarding');
+    // While the redirect effect runs, keep the spinner up.
+    if (resetOnboarding || needsOnboardingRedirect) {
+      return <LoadingSpinner />;
+    }
 
-  // While the redirect effect runs, keep the spinner up.
-  if (resetOnboarding || needsOnboardingRedirect) {
-    return <LoadingSpinner />;
-  }
-
-  // URL-driven onboarding: if ?step= is present, show OnboardingPage
-  if (onboardingStep) {
-    return (
-      <div className="flex h-screen flex-col overflow-hidden bg-background">
-        <OnboardingPage />
-        <Toaster />
-      </div>
-    );
-  }
-
-  // Show project picker only after the account has projects but none is selected.
-  if (!currentProject) {
-    return (
-      <div className="flex flex-col h-screen overflow-hidden">
-        <Header
-          ref={headerRef}
-          logoSize="xl"
-          windowAligned={true}
-          onNavigateToSettings={() => {
-            setSettingsMode(true);
-          }}
-          onNavigateToWorktrees={() => {
-            // No longer used
-          }}
-          onNavigateToSettingsSection={(section) => {
-            setSettingsMode(true, section);
-          }}
-          onNavigateToChats={() => {
-            // No longer used
-          }}
-          onNavigateToProjects={() => {
-            // No longer used
-          }}
-          projectPickerMode={true}
-          onProjectSelect={(project) => {
-            selectProject(project);
-          }}
-          onToggleTerminal={toggleTerminal}
-          onToggleFileBrowser={() => setShowFileBrowser((prev) => !prev)}
-          onToggleChatSidebar={() => setShowChatSidebar((prev) => !prev)}
-        />
-        <ProjectPicker
-          onProjectSelected={(project) => {
-            // Always select the project - initialization check will happen after navigation
-            // Ensure all required properties are present for the store
-            const fullProject = {
-              ...project,
-              is_git_repo: project.is_git_repo ?? true,
-              worktree_count: project.worktree_count ?? 0,
-              last_active: new Date().toISOString(),
-              created_at: project.created_at ?? new Date().toISOString(),
-              updated_at: project.updated_at ?? new Date().toISOString(),
-            };
-            selectProject(fullProject);
-          }}
-        />
-      </div>
-    );
-  }
-
-  // Settings Mode - Full screen layout without sidebars
-  if (isSettingsMode) {
-    return (
-      <div className="flex flex-col h-screen bg-background font-mono dense-ui">
-        <SettingsHeader onClose={() => {
-          setSettingsMode(false);
-          focusChatInput();
-        }} />
-        <div className="flex-1 overflow-hidden">
-          <SettingsPage initialSection={settingsSection} />
+    // URL-driven onboarding: if ?step= is present, show OnboardingPage
+    if (onboardingStep) {
+      return (
+        <div className="flex h-screen flex-col overflow-hidden bg-background">
+          <OnboardingPage />
         </div>
-        {/* Toast Notifications */}
-        <Toaster />
-        <OnboardingWizard />
-        <ContextualTipsLayer />
-      </div>
-    );
-  }
+      );
+    }
 
-  // Workflow Mode - Full screen layout without sidebars
-  if (isWorkflowMode) {
-    return (
-      <div className="flex flex-col h-screen bg-background font-mono dense-ui">
-        <WorkflowHeader
-          onClose={() => {
-            setWorkflowMode(false);
+    // Show project picker only after the account has projects but none is selected.
+    if (!currentProject) {
+      return (
+        <div className="flex flex-col h-screen overflow-hidden">
+          <Header
+            ref={headerRef}
+            logoSize="xl"
+            windowAligned={true}
+            onNavigateToSettings={() => {
+              setSettingsMode(true);
+            }}
+            onNavigateToWorktrees={() => {
+              // No longer used
+            }}
+            onNavigateToSettingsSection={(section) => {
+              setSettingsMode(true, section);
+            }}
+            onNavigateToChats={() => {
+              // No longer used
+            }}
+            onNavigateToProjects={() => {
+              // No longer used
+            }}
+            projectPickerMode={true}
+            onProjectSelect={(project) => {
+              selectProject(project);
+            }}
+            onToggleTerminal={toggleTerminal}
+            onToggleFileBrowser={() => setShowFileBrowser((prev) => !prev)}
+            onToggleChatSidebar={() => setShowChatSidebar((prev) => !prev)}
+          />
+          <ProjectPicker
+            onProjectSelected={(project) => {
+              // Always select the project - initialization check will happen after navigation
+              // Ensure all required properties are present for the store
+              const fullProject = {
+                ...project,
+                is_git_repo: project.is_git_repo ?? true,
+                worktree_count: project.worktree_count ?? 0,
+                last_active: new Date().toISOString(),
+                created_at: project.created_at ?? new Date().toISOString(),
+                updated_at: project.updated_at ?? new Date().toISOString(),
+              };
+              selectProject(fullProject);
+            }}
+          />
+        </div>
+      );
+    }
+
+    // Settings Mode - Full screen layout without sidebars
+    if (isSettingsMode) {
+      return (
+        <div className="flex flex-col h-screen bg-background font-sans dense-ui">
+          <SettingsHeader onClose={() => {
+            setSettingsMode(false);
             focusChatInput();
-          }}
-          onNavigateToSettings={() => {
-            // setSettingsMode handles tracking that we came from workflow mode
-            setSettingsMode(true);
-          }}
-        />
-        <div className="flex-1 overflow-hidden">
-          <WorkflowBuilderPageWithKey />
+          }} />
+          <div className="flex-1 overflow-hidden">
+            <SettingsPage initialSection={settingsSection} />
+          </div>
         </div>
-        {/* Toast Notifications */}
-        <Toaster />
-        <OnboardingWizard />
-        <ContextualTipsLayer />
-      </div>
-    );
-  }
+      );
+    }
 
-  return (
-    <div className="flex flex-col h-screen bg-background font-mono dense-ui">
+    // Workflow Mode - Full screen layout without sidebars
+    if (isWorkflowMode) {
+      return (
+        <div className="flex flex-col h-screen bg-background font-sans dense-ui">
+          <WorkflowHeader
+            onClose={() => {
+              setWorkflowMode(false);
+              focusChatInput();
+            }}
+            onNavigateToSettings={() => {
+              // setSettingsMode handles tracking that we came from workflow mode
+              setSettingsMode(true);
+            }}
+          />
+          <div className="flex-1 overflow-hidden">
+            <WorkflowBuilderPageWithKey />
+          </div>
+        </div>
+      );
+    }
+
+    return renderMainAppShell();
+  };
+
+  const renderMainAppShell = () => (
+    <div className="flex flex-col h-screen bg-background font-sans dense-ui">
       {/* Global Header */}
       <Header
         ref={headerRef}
@@ -1690,9 +1692,6 @@ function App() {
         </div>
       </div>
 
-      {/* API Key Setup Modal */}
-      <ApiKeySetupModal />
-
       {/* Git Initialization Modal */}
       {showGitInitModal && gitInitProjectInfo && currentProject && (
         <InitializeGitModal
@@ -1746,15 +1745,27 @@ function App() {
         onClose={() => setShowChatSearch(false)}
       />
 
-      {/* Toast Notifications */}
-      <Toaster />
-
       {/* Global Update Handler - shows update modal when updates are available */}
       <GlobalUpdateHandler />
+    </div>
+  );
 
+  // ─── Final return ────────────────────────────────────────────────────────
+  // ModalLayer + Toaster + OnboardingWizard + ContextualTipsLayer +
+  // GitHubSyncBanner live as SIBLINGS of whichever branch renderBranches()
+  // returns. Mounting them above the branch dispatch is what keeps modals on
+  // screen across branch transitions — in particular the post-OAuth flow where
+  // we briefly fall into the ProjectPicker branch before workspace restore
+  // completes.
+  return (
+    <>
+      {renderBranches()}
+      <ModalLayer />
+      <Toaster />
       <OnboardingWizard />
       <ContextualTipsLayer />
-    </div>
+      <GitHubSyncBanner />
+    </>
   );
 }
 

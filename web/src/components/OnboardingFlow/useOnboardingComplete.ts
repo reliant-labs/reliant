@@ -1,62 +1,74 @@
 /**
  * Shared helpers for onboarding completion.
- *
- * The actual completion logic lives in ModelStep.tsx — this module
- * exports reusable helpers that ModelStep (or other consumers) call directly.
  */
 
 import { logger } from "@/lib/logger";
-import type { LaunchPlan } from "./types";
+import { onboardingService } from "@/services/controlPlane/onboarding";
+import type { LaunchPlan, ModelProvider } from "./types";
+
+const CLOUD_DEFAULT_PROJECT_PATH = "/home/workspace/projects/reliant-project";
+
+async function defaultProjectPath(isCloud: boolean): Promise<string> {
+  if (isCloud) return CLOUD_DEFAULT_PROJECT_PATH;
+  try {
+    const { listDirectory } = await import("@/api/filesystem-grpc");
+    const result = await listDirectory("");
+    const home = result.path || "~";
+    return `${home}/Projects/reliant-project`;
+  } catch {
+    return CLOUD_DEFAULT_PROJECT_PATH;
+  }
+}
 
 /**
- * Ensure a project exists and is selected. Some onboarding paths (e.g. cloud
- * with daemonProvisioning, or github-connect when daemon isn't ready) skip
- * ProjectLocationStep's project creation. Without a project the main UI never
- * renders because hasProjects stays false.
+ * Ensure a project exists and is selected. Without a project the main UI
+ * never renders (ModernApp shows ProjectPicker instead), which breaks the
+ * post-onboarding tour spotlight targets.
  */
 export async function ensureProject(plan: Partial<LaunchPlan>): Promise<string> {
   const { useProjectStore } = await import("@/store/projectStore");
   const store = useProjectStore.getState();
 
-  // If a project is already selected, we're good
   if (store.currentProject) {
     return store.currentProject.id;
   }
 
-  // Try to find an existing project matching the plan path
-  if (plan.localPath) {
-    await store.loadProjects();
-    const existing = useProjectStore.getState().projects.find(
-      (p) => p.path === plan.localPath,
-    );
-    if (existing) {
-      await useProjectStore.getState().selectProject(existing);
-      return existing.id;
-    }
+  await store.loadProjects();
+  const refreshed = useProjectStore.getState();
+  if (refreshed.projects.length > 0) {
+    const first = refreshed.projects[0];
+    await refreshed.selectProject(first);
+    return first.id;
   }
 
-  // Create a new project with plan data or sensible defaults
-  const projectPath = plan.localPath || "/home/workspace/projects/reliant-project";
-  const projectName = plan.projectName || "Reliant Project";
+  const isCloud = plan.compute === "cloud_free_trial";
+  const projectPath = await defaultProjectPath(isCloud);
+  const projectName = "Reliant Project";
 
-  logger.info("[OnboardingComplete] Creating project since none exists", {
-    projectName,
-    projectPath,
-  });
+  logger.info("[OnboardingComplete] Creating default project", { projectName, projectPath });
 
   const created = await store.createProject({
     name: projectName,
     path: projectPath,
     description: "",
-    is_git_repo: Boolean(plan.repo),
-    default_branch: plan.repo?.branch || "main",
+    is_git_repo: false,
+    default_branch: "main",
   });
 
-  // createProject already sets currentProject, but ensure selection is complete
   await useProjectStore.getState().selectProject(created);
-
-  // Refresh project list so hasProjects becomes true in ModernApp
   await store.loadProjects();
 
   return created.id;
+}
+
+export async function finalizeOnboardingSideEffects(modelProvider: ModelProvider | undefined): Promise<void> {
+  if (modelProvider === "reliant_credits") {
+    onboardingService.provisionManagedKey().then(
+      (result) => logger.info("[OnboardingComplete] Reliant provider synced", { synced: result.synced }),
+      (err) => logger.warn("[OnboardingComplete] Reliant provider sync failed", err),
+    );
+  }
+
+  const { useTourStore } = await import("@/store/tourStore");
+  await useTourStore.getState().startWizard();
 }

@@ -1,0 +1,55 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+
+// DaemonTokenService manages Personal Access Tokens (PATs) used by daemons
+// to authenticate against the control plane. All RPCs require a Supabase JWT
+// — you bootstrap a PAT from a session, you do not authenticate this service
+// with a PAT.
+service DaemonTokenService {
+  // CreateDaemonToken mints a new PAT for the authenticated user.
+  // Returns the raw token exactly once.
+  rpc CreateDaemonToken(CreateDaemonTokenRequest) returns (CreateDaemonTokenResponse) {}
+
+  // ListDaemonTokens returns all PATs owned by the authenticated user
+  // (token hashes are never returned).
+  rpc ListDaemonTokens(ListDaemonTokensRequest) returns (ListDaemonTokensResponse) {}
+
+  // RevokeDaemonToken marks a PAT revoked. Subsequent uses fail auth.
+  rpc RevokeDaemonToken(RevokeDaemonTokenRequest) returns (RevokeDaemonTokenResponse) {}
+}
+
+message CreateDaemonTokenRequest {
+  string name = 1; // Human-readable name for the token (e.g. hostname)
+}
+
+message CreateDaemonTokenResponse {
+  string token = 1;    // Raw PAT — display once, cannot be retrieved again
+  string token_id = 2; // Unique ID for future revocation
+}
+
+message ListDaemonTokensRequest {}
+
+message ListDaemonTokensResponse {
+  repeated DaemonTokenInfo tokens = 1;
+}
+
+message DaemonTokenInfo {
+  string id = 1;
+  string name = 2;
+  string token_prefix = 3;  // First chars for display (e.g. "rlnt_pat_AbCd...")
+  bool ephemeral = 4;
+  string created_at = 5;    // ISO 8601
+  string last_used_at = 6;  // ISO 8601, empty if never used
+  string expires_at = 7;    // ISO 8601, empty if no expiry
+  bool revoked = 8;
+}
+
+message RevokeDaemonTokenRequest {
+  string token_id = 1;
+}
+
+message RevokeDaemonTokenResponse {}

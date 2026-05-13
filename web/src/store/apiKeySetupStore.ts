@@ -9,6 +9,24 @@ import { create } from "zustand";
 import { api } from "../api/client";
 import { logger } from "../lib/logger";
 import { useAuthStore } from "./authStore";
+import { useModalStore } from "./modalStore";
+
+/** Open the central API-key-setup modal via the unified modal store. */
+function openApiKeySetupModal(): void {
+  useModalStore.getState().openModal("api-key-setup");
+}
+
+/**
+ * Close the API-key-setup modal IF it's the active one in the unified store.
+ * We intentionally avoid clobbering whatever modal happens to be open (a
+ * different one might have been opened during a race).
+ */
+function closeApiKeySetupModalIfActive(): void {
+  const { activeModal, closeModal } = useModalStore.getState();
+  if (activeModal === "api-key-setup") {
+    closeModal();
+  }
+}
 
 const DISMISSED_KEY = "reliant.apiKeySetup.dismissed";
 
@@ -43,18 +61,25 @@ function hasAnyManualProviderCredentials(
 }
 
 interface ApiKeySetupState {
-  // Whether the setup modal should be shown
+  /**
+   * Legacy visibility flag.
+   *
+   * Modal visibility now lives in `useModalStore` (Forge Phase 1). This field
+   * is retained as a transitional alias: actions on this store still set it
+   * for any external consumers (e.g. tests that haven't been migrated yet),
+   * but the production `ModalLayer` reads from the modal store.
+   */
   showModal: boolean;
-  
+
   // Whether we're currently checking for API keys
   isChecking: boolean;
-  
+
   // Whether the check has been completed this session
   hasChecked: boolean;
-  
+
   // Cached result of last API key check (true if user has at least one key)
   hasApiKey: boolean | null;
-  
+
   // Actions
   checkApiKeys: () => Promise<void>;
   ensureApiKeyOrShowModal: () => Promise<void>;
@@ -80,6 +105,7 @@ export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
       showModal: false,
       hasApiKey: null,
     });
+    closeApiKeySetupModalIfActive();
     logger.info("[ApiKeySetupStore] Store state reset");
   },
 
@@ -129,18 +155,20 @@ export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
       logger.info("[ApiKeySetupStore] API key check result", {
         hasAnyKey,
         hasAnyManualKey,
-        providers: providers.map((p) => ({ 
-          provider: p.provider, 
-          hasKey: p.hasApiKey 
+        providers: providers.map((p) => ({
+          provider: p.provider,
+          hasKey: p.hasApiKey
         })),
       });
 
+      const shouldShowModal = !hasAnyKey && !hasAnyManualKey;
       set({
-        showModal: !hasAnyKey && !hasAnyManualKey,
+        showModal: shouldShowModal,
         isChecking: false,
         hasChecked: true,
         hasApiKey: hasAnyKey,
       });
+      if (shouldShowModal) openApiKeySetupModal();
     } catch (error) {
       logger.error("[ApiKeySetupStore] Failed to check API keys:", error);
       set({
@@ -209,13 +237,15 @@ export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
 
       logger.info("[ApiKeySetupStore] API key ensure result", { hasAnyKey, hasAnyManualKey });
 
+      const shouldShowModal = !hasAnyKey && !hasAnyManualKey;
       set({
         hasApiKey: hasAnyKey,
         hasChecked: true,
         isChecking: false,
         // Show modal only if neither auto-managed nor manual providers are configured
-        showModal: !hasAnyKey && !hasAnyManualKey,
+        showModal: shouldShowModal,
       });
+      if (shouldShowModal) openApiKeySetupModal();
     } catch (error) {
       logger.error("[ApiKeySetupStore] Failed to ensure API key:", error);
       set({
@@ -237,6 +267,7 @@ export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
       logger.info("[ApiKeySetupStore] Modal dismissed for this session");
     }
     set({ showModal: false });
+    closeApiKeySetupModalIfActive();
   },
 
   /**
@@ -244,6 +275,7 @@ export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
    */
   openModal: () => {
     set({ showModal: true });
+    openApiKeySetupModal();
   },
 }));
 
