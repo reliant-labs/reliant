@@ -36,6 +36,7 @@ export interface ElectronAPI {
   openTerminal: (path: string) => Promise<{ success: boolean; error?: string }>;
   openExternal: (url: string) => Promise<void>;
   installCLI: () => Promise<{ success: boolean; error?: string; message?: string }>;
+  getCliStatus: () => Promise<{ installed: boolean; path: string | null; embeddedPath: string | null }>;
   showNotification: (options: any) => Promise<{ success: boolean; muted?: boolean; error?: string }>;
   getNotificationMuteStatus: () => Promise<{ muted: boolean; mutedUntil: number | null; preset: 'unmuted' | 'one_hour' | 'until_tomorrow' | 'custom' }>;
   setTrayStatus: (status: { agentStatus: 'idle' | 'running' | 'error'; activeWorkflows: number; hasChats: boolean; canCreateChat: boolean; currentProjectName: string | null; currentWorktreeName: string | null; currentWorktreeId: string; activeChatId: string | null; activeChatTitle: string | null; recentChats: Array<{ id: string; title: string; activity: string; needsRecovery: boolean }>; workspaces: Array<{ id: string; name: string; isMain: boolean }>; workflows: Array<{ name: string; source: 'builtin' | 'user' | 'project' }>; lastActivityAt: string | null }) => Promise<{ success: boolean; error?: string }>;

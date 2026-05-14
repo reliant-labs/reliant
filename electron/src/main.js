@@ -21,6 +21,7 @@ const WindowManager = require("./window-manager");
 const BrowserManager = require("./browser-manager");
 const windowConfig = require("./window-config");
 const authStorage = require("./auth-storage");
+const cliInstaller = require("./cli-installer");
 const {
   describeAuthPrincipalChange,
   shouldRestartBackendForAuthChange,
@@ -2115,94 +2116,36 @@ ipcMain.handle("get-privacy-settings", async () => {
   return settings;
 });
 
-// Install CLI command
+// Install CLI command. Tries a no-sudo install first (via the shared
+// cli-installer module), then escalates with osascript / pkexec only if the
+// user explicitly clicked the "Install CLI Command" button and the silent
+// path failed.
 ipcMain.handle("install-cli", async () => {
   const { exec } = require("child_process");
 
-  // Locate the Go backend binary based on platform and architecture
-  function getGoBinaryPath() {
-    const platform = process.platform;
-    const arch = process.arch;
-    const ext = platform === "win32" ? ".exe" : "";
-    const binaryName = `reliant-backend${ext}`;
-
-    if (!app.isPackaged) {
-      // Dev mode: use the dev build output
-      return path.join(__dirname, "..", "..", "dist", `reliant${ext}`);
-    }
-
-    if (platform === "darwin") {
-      const macArch = arch === "x64" ? "x64" : "arm64";
-      return path.join(process.resourcesPath, "server", `mac-${macArch}`, binaryName);
-    } else if (platform === "win32") {
-      const winArch = arch === "arm64" ? "win32-arm64" : "win32-amd64";
-      return path.join(process.resourcesPath, "server", winArch, binaryName);
-    } else {
-      const linuxArch = arch === "arm64" ? "linux-arm64" : "linux-amd64";
-      return path.join(process.resourcesPath, "server", linuxArch, binaryName);
-    }
+  // 1) Try the silent path first (no privilege prompt). On macOS/Linux this
+  // covers Homebrew users (writable /usr/local/bin) and falls back to
+  // ~/.local/bin. On Windows it copies to %LOCALAPPDATA%\Reliant\bin and
+  // adds that dir to the user PATH via PowerShell.
+  const silent = await cliInstaller.installSilently();
+  if (silent.success) {
+    const msg = silent.warning
+      ? `CLI installed at ${silent.target}. ${silent.warning}`
+      : `CLI installed at ${silent.target}. Restart your terminal to use 'reliant'.`;
+    return { success: true, message: msg };
   }
 
-  const goBinaryPath = getGoBinaryPath();
-
-  if (!fs.existsSync(goBinaryPath)) {
-    return { success: false, error: "Go binary not found at " + goBinaryPath };
+  // 2) Fall back to a sudo-prompting install on Unix-like systems.
+  const source = cliInstaller.getEmbeddedBinaryPath();
+  if (!source) {
+    return { success: false, error: "Bundled CLI binary not found. Reinstall the app." };
   }
 
-  // Platform-specific installation
-  if (process.platform === "win32") {
-    const userBinDir = path.join(process.env.LOCALAPPDATA || process.env.APPDATA, "Reliant", "bin");
-    const targetPath = path.join(userBinDir, "reliant.exe");
-
-    try {
-      if (!fs.existsSync(userBinDir)) {
-        fs.mkdirSync(userBinDir, { recursive: true });
-      }
-
-      fs.copyFileSync(goBinaryPath, targetPath);
-
-      // Add to user PATH via PowerShell
-      return new Promise((resolve) => {
-        const psCommand = `$userPath = [Environment]::GetEnvironmentVariable('Path', 'User'); if ($userPath -notlike '*${userBinDir.replace(/\\/g, "\\\\")}*') { [Environment]::SetEnvironmentVariable('Path', $userPath + ';${userBinDir.replace(/\\/g, "\\\\")}', 'User') }`;
-        exec(`powershell -Command "${psCommand}"`, (error) => {
-          if (error) {
-            log.error("[IPC] Failed to update PATH:", error);
-            resolve({
-              success: true,
-              message: `CLI installed to ${targetPath}. You may need to restart your terminal or add "${userBinDir}" to your PATH.`,
-            });
-          } else {
-            resolve({
-              success: true,
-              message: "CLI installed! Restart your terminal to use 'reliant' command.",
-            });
-          }
-        });
-      });
-    } catch (error) {
-      log.error("[IPC] Failed to install CLI on Windows:", error);
-      return { success: false, error: "Failed to install CLI: " + error.message };
-    }
-  }
-
-  // Unix-like systems (macOS and Linux)
   const symlinkPath = "/usr/local/bin/reliant";
 
-  // First try without sudo (in case user has write permissions)
-  try {
-    if (fs.existsSync(symlinkPath)) {
-      fs.unlinkSync(symlinkPath);
-    }
-    fs.symlinkSync(goBinaryPath, symlinkPath);
-    return { success: true, message: "CLI command installed successfully" };
-  } catch (error) {
-    log.info("[IPC] Direct symlink failed, trying with admin privileges:", error.message);
-  }
-
-  // On macOS, use osascript to request admin privileges
   if (process.platform === "darwin") {
     return new Promise((resolve) => {
-      const script = `do shell script "ln -sf '${goBinaryPath}' '${symlinkPath}'" with administrator privileges`;
+      const script = `do shell script "ln -sf '${source}' '${symlinkPath}'" with administrator privileges`;
       exec(`osascript -e '${script}'`, (error) => {
         if (error) {
           log.error("[IPC] Failed to install CLI with admin privileges:", error);
@@ -2213,46 +2156,57 @@ ipcMain.handle("install-cli", async () => {
         } else {
           resolve({
             success: true,
-            message: "CLI command installed successfully",
+            message: `CLI installed at ${symlinkPath}. Restart your terminal to use 'reliant'.`,
           });
         }
       });
     });
   }
 
-  // On Linux, try pkexec for GUI password prompt
   if (process.platform === "linux") {
     return new Promise((resolve) => {
       exec("which pkexec", (whichError) => {
         if (!whichError) {
-          exec(`pkexec ln -sf "${goBinaryPath}" "${symlinkPath}"`, (error) => {
+          exec(`pkexec ln -sf "${source}" "${symlinkPath}"`, (error) => {
             if (error) {
               log.error("[IPC] Failed to install CLI with pkexec:", error);
               resolve({
                 success: false,
-                error: `Installation cancelled or failed. You can manually run:\nsudo ln -sf "${goBinaryPath}" ${symlinkPath}`,
+                error: `Installation cancelled or failed. You can manually run:\nsudo ln -sf "${source}" ${symlinkPath}`,
               });
             } else {
               resolve({
                 success: true,
-                message: "CLI command installed successfully",
+                message: `CLI installed at ${symlinkPath}. Restart your terminal to use 'reliant'.`,
               });
             }
           });
         } else {
           resolve({
             success: false,
-            error: `Please run this command in your terminal:\nsudo ln -sf "${goBinaryPath}" ${symlinkPath}`,
+            error: `Please run this command in your terminal:\nsudo ln -sf "${source}" ${symlinkPath}`,
           });
         }
       });
     });
   }
 
-  // Fallback
   return {
     success: false,
-    error: `Please run this command in your terminal:\nsudo ln -sf "${goBinaryPath}" ${symlinkPath}`,
+    error: silent.error || "CLI installation failed. Please retry from Settings → About.",
+  };
+});
+
+// Returns the current CLI install state so the renderer can decide whether
+// to show the "Run this terminal command" onboarding step.
+//
+// Shape: { installed: boolean, path: string | null, embeddedPath: string | null }
+ipcMain.handle("get-cli-status", () => {
+  const installedPath = cliInstaller.getInstalledCliPath();
+  return {
+    installed: Boolean(installedPath),
+    path: installedPath,
+    embeddedPath: cliInstaller.getEmbeddedBinaryPath(),
   };
 });
 
@@ -3859,6 +3813,14 @@ app.whenReady().then(async () => {
       "Failed to start the backend service. Please check the logs and try again."
     );
     throw error;
+  });
+
+  // Ensure the `reliant` CLI is on $PATH (fire-and-forget; first-run only).
+  // Silent best-effort: writes to /usr/local/bin if writable, otherwise
+  // ~/.local/bin (macOS/Linux) or %LOCALAPPDATA%\Reliant\bin (Windows).
+  // The sudo-capable install flow remains in the `install-cli` IPC handler.
+  cliInstaller.ensureInstalledOnce().catch((err) => {
+    log.warn("[CLIInstaller] background install failed:", err.message);
   });
 
   // Create tray (fast, synchronous)

@@ -49,7 +49,6 @@ export interface LaunchPlan {
   selectedPresets?: Record<string, string | null>;
   launchTour?: boolean;
   daemonProvisioning?: boolean;
-  daemonPreConnected?: boolean;
 }
 
 export interface StepConfig {
