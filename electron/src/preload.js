@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
 
   installCLI: () => ipcRenderer.invoke('install-cli'),
+  getCliStatus: () => ipcRenderer.invoke('get-cli-status'),
 
   // Mock driver configuration
   getMockDriverConfig: () => ipcRenderer.invoke('get-mock-driver-config'),

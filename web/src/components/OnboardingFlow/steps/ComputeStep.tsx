@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { create } from "@bufbuild/protobuf";
-import { Check, Cloud, Copy, Download, Loader2, Monitor } from "lucide-react";
+import { Check, Cloud, Copy, Download, Loader2, Monitor, Terminal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getIsDev } from "@/lib/constants";
 import { grpcClient } from "@/api/grpc-client";
@@ -10,9 +10,7 @@ import { useEventBus } from "@/lib/event-context";
 import {
   useCloudEligibility,
   useCreateDaemon,
-  useResumeDaemon,
 } from "@/hooks/useOnboardingQueries";
-import { hasActiveDaemon, getFirstDaemonId } from "../api";
 import type { CodeSource, ComputeChoice, OnboardingIntent, StepProps } from "../types";
 import { DaemonConnectionDiagrams } from "../DaemonConnectionDiagrams";
 import { daemonStartCommand, HOMEBREW_CLI_INSTALL, HOMEBREW_CASK_INSTALL } from "@/lib/cli-commands";
@@ -113,8 +111,76 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
   const [pat, setPat] = useState<string | null>(null);
   const [generatingPat, setGeneratingPat] = useState(false);
   const [patCopied, setPatCopied] = useState(false);
-  const { activeDaemon } = useDaemonStatus();
+  const [manualFeedback, setManualFeedback] = useState<string | null>(null);
+  const { activeDaemon, daemons, loading: daemonLoading } = useDaemonStatus();
   const events = useEventBus();
+  const hasAdvanced = useRef(false);
+  const hasTrackedConnectedRef = useRef(false);
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // CLI install state (Electron only). When the user runs the desktop app,
+  // electron's main process auto-installs `reliant` to PATH at first launch
+  // (see electron/src/cli-installer.js). We poll the install status so the
+  // onboarding step can suppress the "Run this terminal command" instructions
+  // when the CLI is already available, and offer a one-click install when
+  // it is not.
+  // ──────────────────────────────────────────────────────────────────────────
+  const isElectron = typeof window !== "undefined" && !!window.electronAPI;
+  const [cliInstalled, setCliInstalled] = useState<boolean | null>(null);
+  const [cliPath, setCliPath] = useState<string | null>(null);
+  const [installingCli, setInstallingCli] = useState(false);
+
+  useEffect(() => {
+    if (!isElectron || !window.electronAPI?.getCliStatus) return;
+    let cancelled = false;
+    window.electronAPI
+      .getCliStatus()
+      .then((status) => {
+        if (cancelled) return;
+        setCliInstalled(status.installed);
+        setCliPath(status.path);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCliInstalled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isElectron]);
+
+  const handleInstallCli = async () => {
+    if (!window.electronAPI?.installCLI) return;
+    setInstallingCli(true);
+    setError(null);
+    try {
+      const result = await window.electronAPI.installCLI();
+      if (result.success) {
+        // Re-check status to update UI.
+        if (window.electronAPI.getCliStatus) {
+          const status = await window.electronAPI.getCliStatus();
+          setCliInstalled(status.installed);
+          setCliPath(status.path);
+        } else {
+          setCliInstalled(true);
+        }
+        events.emit("toast:show", {
+          message: result.message || "CLI installed",
+          variant: "success",
+        });
+      } else {
+        const msg = result.error || "Failed to install CLI";
+        setError(msg);
+        events.emit("toast:show", { message: msg, variant: "error" });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to install CLI";
+      setError(msg);
+      events.emit("toast:show", { message: msg, variant: "error" });
+    } finally {
+      setInstallingCli(false);
+    }
+  };
 
   // Cloud eligibility via React Query
   const isDev = getIsDev();
@@ -129,7 +195,6 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
 
   // Daemon mutations via React Query
   const createDaemonMutation = useCreateDaemon();
-  const resumeDaemonMutation = useResumeDaemon();
 
   const detectedOS = useMemo(() => getOS(), []);
   const primaryDownload = useMemo(
@@ -141,92 +206,31 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
     [primaryDownload],
   );
 
-  const startingCloud = createDaemonMutation.isPending || resumeDaemonMutation.isPending;
+  // `isStartingCloud` covers the gap between click and the first mutation
+  // firing — dynamic chunk imports + the listDaemons() round-trip can take
+  // 100ms–2s on a cold load, during which the button would otherwise look
+  // idle and invite a second click.
+  const [isStartingCloud, setIsStartingCloud] = useState(false);
+  const startingCloud = isStartingCloud || createDaemonMutation.isPending;
 
   const handleCloud = async () => {
     if (!HAS_CLOUD_DAEMONS) return;
+    if (isStartingCloud) return;
 
     setError(null);
+    setIsStartingCloud(true);
     try {
-      // Fetch daemons inline — we need fresh data for the decision tree
-      const { queryClient } = await import("@/lib/query-client");
-      const { listDaemons } = await import("../api");
-      const existing = await queryClient.fetchQuery({
-        queryKey: ["onboarding", "daemons"],
-        queryFn: async () => {
-          const { daemons } = await listDaemons();
-          return daemons;
-        },
-        staleTime: 0,
+      // CreateDaemon is idempotent server-side: if a daemon with the same
+      // slug already exists for this owner, the server refreshes its image
+      // and resources to current and republishes the workspace command.
+      // No client-side list/resume/409 dance needed.
+      await createDaemonMutation.mutateAsync({
+        name: "onboarding-daemon",
+        daemonType: DAEMON_TYPE_MANAGED,
+        size: DAEMON_SIZE_SMALL,
+        gitRepo: "",
+        gitBranch: "main",
       });
-      const daemons = existing;
-
-      if (hasActiveDaemon(daemons)) {
-        // Active daemon already exists — reuse it, skip creation
-        updatePlan({
-          compute: "cloud_free_trial",
-          daemonLocation: "reliant_cloud",
-          daemonProvisioning: false,
-          codeSource: codeSourceForCompute(plan.codeSource, "cloud_free_trial", plan.intent),
-          localPath: undefined,
-          projectName: undefined,
-        });
-        trackEvent('onboarding_compute_selected', { compute: 'cloud' });
-        onNext();
-        return;
-      }
-
-      if (daemons.length > 0) {
-        // Daemon exists but is not active — resume it
-        const daemonId = getFirstDaemonId(daemons);
-        if (!daemonId) {
-          throw new Error("Found existing daemon but could not determine its ID. Please try again.");
-        }
-        try {
-          await resumeDaemonMutation.mutateAsync(daemonId);
-        } catch (resumeErr) {
-          console.warn("resumeDaemon failed, proceeding with provisioning state:", resumeErr);
-        }
-        updatePlan({
-          compute: "cloud_free_trial",
-          daemonLocation: "reliant_cloud",
-          daemonProvisioning: true,
-          codeSource: codeSourceForCompute(plan.codeSource, "cloud_free_trial", plan.intent),
-          localPath: undefined,
-          projectName: undefined,
-        });
-        trackEvent('onboarding_compute_selected', { compute: 'cloud' });
-        onNext();
-        return;
-      }
-
-      // No daemons at all — create a new one
-      try {
-        await createDaemonMutation.mutateAsync({
-          name: "onboarding-daemon",
-          daemonType: DAEMON_TYPE_MANAGED,
-          size: DAEMON_SIZE_SMALL,
-          gitRepo: "",
-          gitBranch: "main",
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message.toLowerCase() : "";
-        if (message.includes("plan limit") || message.includes("already") || message.includes("exists")) {
-          // Plan limit or already exists — try to find and resume existing daemon
-          const { listDaemons: listDaemonsFallback } = await import("../api");
-          const fallback = await listDaemonsFallback();
-          const fallbackId = getFirstDaemonId(fallback.daemons);
-          if (fallbackId) {
-            try {
-              await resumeDaemonMutation.mutateAsync(fallbackId);
-            } catch (resumeErr) {
-              console.warn("Fallback resumeDaemon failed, proceeding:", resumeErr);
-            }
-          }
-        } else {
-          throw err;
-        }
-      }
 
       updatePlan({
         compute: "cloud_free_trial",
@@ -242,6 +246,8 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
       const msg = err instanceof Error ? err.message : "Failed to start hosted daemon";
       setError(msg);
       events.emit("toast:show", { message: msg, variant: "error" });
+    } finally {
+      setIsStartingCloud(false);
     }
   };
 
@@ -251,7 +257,6 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
       compute: "local_daemon",
       daemonLocation: "self_hosted",
       daemonProvisioning: false,
-      daemonPreConnected: Boolean(activeDaemon),
       codeSource: codeSourceForCompute(plan.codeSource, "local_daemon", plan.intent),
       localPath: undefined,
       projectName: undefined,
@@ -262,8 +267,23 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
   const handleLocalContinue = () => {
     handleLocal();
     trackEvent('onboarding_compute_selected', { compute: 'local', daemon_preconnected: Boolean(activeDaemon) });
+    if (hasAdvanced.current) return;
+    hasAdvanced.current = true;
     onNext();
   };
+
+  useEffect(() => {
+    if (plan.compute !== "local_daemon") return;
+    if (!activeDaemon) return;
+    if (hasAdvanced.current) return;
+    hasAdvanced.current = true;
+    if (!hasTrackedConnectedRef.current) {
+      hasTrackedConnectedRef.current = true;
+      trackEvent('onboarding_daemon_connected');
+    }
+    trackEvent('onboarding_compute_selected', { compute: 'local', daemon_preconnected: true });
+    onNext();
+  }, [activeDaemon, plan.compute, onNext]);
 
   const handleGeneratePat = async () => {
     setGeneratingPat(true);
@@ -286,6 +306,29 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
     } finally {
       setGeneratingPat(false);
     }
+  };
+
+  const handleManualCheck = () => {
+    if (activeDaemon) {
+      setManualFeedback("Daemon connected. Moving on...");
+      handleLocalContinue();
+      return;
+    }
+    if (daemonLoading) {
+      setManualFeedback(
+        "Still checking daemon status. Keep this screen open and try again in a moment.",
+      );
+      return;
+    }
+    if (daemons.length > 0) {
+      setManualFeedback(
+        "A daemon was found, but it is not active yet. Make sure it is still running, then try again.",
+      );
+      return;
+    }
+    setManualFeedback(
+      "No active daemon detected yet. Start the daemon, wait a few seconds, then check again.",
+    );
   };
 
   const handleCopyPat = async () => {
@@ -448,6 +491,15 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
             </div>
           </div>
 
+          <div className="rounded-lg border border-sky-500/30 bg-sky-500/5 p-3 text-xs leading-relaxed text-foreground">
+            <span className="font-medium">Already downloaded Reliant?</span>{" "}
+            <span className="text-muted-foreground">
+              Opening the desktop app installs the <code className="font-mono">reliant</code> CLI on your PATH and
+              starts the daemon automatically — no terminal commands needed. This screen will move on the moment it
+              connects.
+            </span>
+          </div>
+
           {primaryDownload ? (
             <div className="space-y-3">
               <a
@@ -573,21 +625,79 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
             <span className="block text-xs font-medium text-foreground">
               2. Start the daemon
             </span>
+
+            {/*
+              Inside the Electron app we know whether the `reliant` CLI is
+              already on $PATH (the main process installs it on first launch).
+              If it's missing, surface a one-click install button so the user
+              doesn't have to hunt through Settings → About. When CLI install
+              succeeds (or already done), we still show the start command —
+              the user has to run it themselves because we don't have a token
+              yet (it's in the textbox above, not in the daemon's creds file).
+            */}
+            {isElectron && cliInstalled === false && (
+              <div className="rounded border border-amber-500/30 bg-amber-500/5 p-2.5 space-y-2">
+                <p className="flex items-start gap-2 text-[11px] text-amber-700 dark:text-amber-300">
+                  <Terminal className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+                  <span>
+                    The <code className="font-mono">reliant</code> command is not on your PATH yet.
+                    Install it to run the daemon from your terminal.
+                  </span>
+                </p>
+                <button
+                  type="button"
+                  onClick={handleInstallCli}
+                  disabled={installingCli}
+                  className={cn(
+                    "inline-flex w-full items-center justify-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                    installingCli
+                      ? "cursor-not-allowed bg-muted text-muted-foreground"
+                      : "bg-zinc-950 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200",
+                  )}
+                >
+                  {installingCli && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  {installingCli ? "Installing..." : "Install reliant CLI"}
+                </button>
+              </div>
+            )}
+
+            {isElectron && cliInstalled === true && cliPath && (
+              <p className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400">
+                <Check className="h-3 w-3" />
+                <span>
+                  <code className="font-mono">reliant</code> CLI installed at{" "}
+                  <code className="font-mono">{cliPath}</code>
+                </span>
+              </p>
+            )}
+
             <code className="block select-all rounded border border-border/40 bg-background px-3 py-2 font-mono text-xs text-foreground break-all">
               {daemonStartCommand()}
             </code>
             <p className="text-[11px] text-muted-foreground">
               The command will prompt you to paste the token.
+              {isElectron && cliInstalled === false && (
+                <> If you skip the CLI install, install it separately via Homebrew or download the binary.</>
+              )}
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={handleLocalContinue}
-            className="w-full rounded-lg bg-zinc-950 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
-          >
-            Continue to daemon check
-          </button>
+          <div className="space-y-2 border-t border-border/30 pt-3">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <span>Waiting for the daemon to connect. This screen will continue automatically.</span>
+            </div>
+            <button
+              type="button"
+              onClick={handleManualCheck}
+              className="w-full rounded-lg bg-zinc-950 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+            >
+              I've started the daemon — check connection
+            </button>
+            {manualFeedback && (
+              <p className="text-center text-xs text-muted-foreground">{manualFeedback}</p>
+            )}
+          </div>
         </div>
       )}
     </div>

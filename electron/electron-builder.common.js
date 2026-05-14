@@ -122,13 +122,27 @@ const config = {
     vendor: "Reliant Labs"
   },
 
+  // Debian package hooks: symlink /usr/bin/reliant -> embedded backend so the
+  // CLI is on $PATH immediately after `apt install` (no GUI launch needed).
+  // See electron/build/deb-after-{install,remove}.sh.
+  // AppImage users get the CLI installed at first GUI launch via
+  // electron/src/cli-installer.js (~/.local/bin/reliant).
+  deb: {
+    afterInstall: "build/deb-after-install.sh",
+    afterRemove: "build/deb-after-remove.sh"
+  },
+
   nsis: {
     oneClick: false,
     allowToChangeInstallationDirectory: true,
     allowElevation: true,
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
-    shortcutName: "Reliant"
+    shortcutName: "Reliant",
+    // Custom installer hook: copies reliant-backend.exe to $INSTDIR\cli\reliant.exe
+    // and adds $INSTDIR\cli to the user PATH so `reliant` works in cmd/PowerShell
+    // without re-login. See electron/build/installer.nsh.
+    include: "build/installer.nsh"
   },
 
   artifactName: "${productName}-${version}-${os}-${arch}.${ext}",
