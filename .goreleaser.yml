@@ -1,7 +1,5 @@
 version: 2
 project_name: reliant
-before:
-  hooks:
 builds:
   - env:
       - CGO_ENABLED=0
@@ -31,7 +29,6 @@ archives:
       {{- else if eq .Os "windows" }}windows-
       {{- else if eq .Os "linux" }}linux-{{end}}
       {{- if eq .Arch "amd64" }}x86_64
-      {{- else if eq .Arch "#86" }}i386
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
     format_overrides:
@@ -59,7 +56,12 @@ aurs:
 brews:
   - repository:
       owner: reliant-labs
-      name: homebrew-tap
+      name: homebrew-reliant
+    homepage: "https://reliantlabs.io"
+    description: "terminal based agent that can build anything"
+    license: "Proprietary"
+    test: |
+      system "#{bin}/reliant", "version"
 nfpms:
   - maintainer: Reliant Labs <support@reliantlabs.io>
     description: terminal based agent that can build anything

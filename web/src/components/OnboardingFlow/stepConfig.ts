@@ -3,7 +3,6 @@ import type { ComponentType } from 'react';
 
 export const ONBOARDING_STEPS = [
   'compute',
-  'daemon-connect',
   'model',
   'project-choice',
   'github-connect',
@@ -22,7 +21,6 @@ export function registerStepComponents(map: Record<string, ComponentType<StepPro
 
 export const STEP_LABELS: Record<OnboardingStepId, string> = {
   'compute': 'Daemon',
-  'daemon-connect': 'Connect',
   'model': 'Model',
   'project-choice': 'Project',
   'github-connect': 'GitHub',
@@ -34,14 +32,8 @@ export function getStepsForPlan(plan: Partial<LaunchPlan>): OnboardingStepId[] {
   if (!plan.compute) return ['compute'];
 
   const isCloud = plan.compute === 'cloud_free_trial';
-  const isPreconnected = plan.daemonPreConnected;
 
   const steps: OnboardingStepId[] = ['compute'];
-
-  // Daemon connect (local only, not pre-connected)
-  if (!isCloud && !isPreconnected) {
-    steps.push('daemon-connect');
-  }
 
   steps.push('model');
 
