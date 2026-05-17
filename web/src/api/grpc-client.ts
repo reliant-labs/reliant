@@ -447,6 +447,26 @@ const clearClientCache = () => {
 
 export const getGRPCBaseURLPublic = (): string | null => getGRPCBaseURL();
 
+// Daemon registry/token RPCs are owned by the control-plane admin-server in
+// cloud mode (it hosts the compat adapter that translates reliant.v1 →
+// controlplane.v1). When VITE_CONTROL_PLANE_API_URL is set, daemon-registry
+// clients use this transport so they see cloud-managed daemons; otherwise
+// they fall through to the regular reliant api-server transport (local /
+// self-hosted daemons).
+let _controlPlaneTransport: ReturnType<typeof createConnectTransport> | null = null;
+export const getControlPlaneTransport = () => {
+  const cpURL = import.meta.env.VITE_CONTROL_PLANE_API_URL;
+  if (!cpURL) return null;
+  if (!_controlPlaneTransport) {
+    _controlPlaneTransport = createConnectTransport({
+      baseUrl: cpURL,
+      interceptors: [timeoutInterceptor, authInterceptor, daemonLastSeenInterceptor, tracingInterceptor, errorInterceptor, unauthInterceptor],
+      useBinaryFormat: false,
+    });
+  }
+  return _controlPlaneTransport;
+};
+
 export const getTransport = () => {
   const currentBaseURL = getGRPCBaseURL();
 
@@ -588,11 +608,11 @@ export const createScenarioClient = (): Client<typeof ScenarioService> => {
 };
 
 export const createDaemonRegistryClient = (): Client<typeof DaemonRegistryService> => {
-  return createClient(DaemonRegistryService, getTransport());
+  return createClient(DaemonRegistryService, getControlPlaneTransport() ?? getTransport());
 };
 
 export const createDaemonTokenClient = (): Client<typeof DaemonTokenService> => {
-  return createClient(DaemonTokenService, getTransport());
+  return createClient(DaemonTokenService, getControlPlaneTransport() ?? getTransport());
 };
 
 export const createQuestionClient = (): Client<typeof QuestionService> => {
