@@ -17,6 +17,9 @@ export function useCurrentUser() {
     queryKey: ['onboarding', 'currentUser'],
     queryFn: () => onboardingService.getCurrentUser(),
     staleTime: 30_000,
+    // A focus refetch flips isLoading back to true mid-click and re-disables
+    // the Start cloud daemon button, eating the first click.
+    refetchOnWindowFocus: false,
   });
 }
 
@@ -26,6 +29,7 @@ export function useCloudEligibility() {
     queryKey: ['onboarding', 'reliantEntitlement'],
     queryFn: () => getReliantEntitlement(),
     staleTime: 30_000,
+    refetchOnWindowFocus: false,
   });
 
   const isLoading = userLoading || entitlementLoading;
