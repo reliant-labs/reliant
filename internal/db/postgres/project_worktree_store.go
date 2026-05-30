@@ -25,6 +25,8 @@ func (s *projectStore) CreateProject(ctx context.Context, project *core.Project)
 		Description:   ptrToNullString(project.Description),
 		IsGitRepo:     project.IsGitRepo,
 		DefaultBranch: ptrToNullString(project.DefaultBranch),
+		RemoteUrl:     ptrToNullString(project.RemoteURL),
+		IsForge:       project.IsForge,
 		CreatedAt:     project.CreatedAt,
 		UpdatedAt:     project.UpdatedAt,
 		LastActive:    project.LastActive,
@@ -64,6 +66,20 @@ func (s *projectStore) GetProjectByPathAndUser(ctx context.Context, path, userID
 	return projectFromPG(row), nil
 }
 
+func (s *projectStore) GetProjectByRemoteURLAndUser(ctx context.Context, remoteURL, userID string) (*core.Project, error) {
+	row, err := s.q.GetProjectByRemoteURLAndUser(ctx, pgdb.GetProjectByRemoteURLAndUserParams{
+		RemoteUrl: sql.NullString{String: remoteURL, Valid: remoteURL != ""},
+		UserID:    userID,
+	})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("project not found for remote_url: %s", remoteURL)
+		}
+		return nil, fmt.Errorf("failed to get project by remote_url and user: %w", err)
+	}
+	return projectFromPG(row), nil
+}
+
 func (s *projectStore) GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*core.Project, error) {
 	row, err := s.q.GetProjectWithUserCheck(ctx, pgdb.GetProjectWithUserCheckParams{ID: id, UserID: userID})
 	if err != nil {
@@ -95,6 +111,8 @@ func (s *projectStore) UpdateProject(ctx context.Context, project *core.Project,
 		Description:   ptrToNullString(project.Description),
 		IsGitRepo:     project.IsGitRepo,
 		DefaultBranch: ptrToNullString(project.DefaultBranch),
+		RemoteUrl:     ptrToNullString(project.RemoteURL),
+		IsForge:       project.IsForge,
 		LastActive:    project.LastActive,
 		UserID:        userID,
 	})
@@ -112,6 +130,56 @@ func (s *projectStore) DeleteProject(ctx context.Context, id string, userID stri
 		ID:     id,
 		UserID: userID,
 	})
+}
+
+func (s *projectStore) UpsertProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) error {
+	return s.q.UpsertProjectDaemon(ctx, pgdb.UpsertProjectDaemonParams{
+		ProjectID:     projectID,
+		DaemonID:      daemonID,
+		Path:          path,
+		DefaultBranch: ptrToNullString(defaultBranch),
+	})
+}
+
+func (s *projectStore) ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error) {
+	rows, err := s.q.ListProjectDaemonsForProject(ctx, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list project_daemons for project: %w", err)
+	}
+	out := make([]*core.ProjectDaemon, len(rows))
+	for i, row := range rows {
+		out[i] = projectDaemonFromPG(row)
+	}
+	return out, nil
+}
+
+func (s *projectStore) ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error) {
+	rows, err := s.q.ListProjectDaemonsForDaemon(ctx, daemonID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list project_daemons for daemon: %w", err)
+	}
+	out := make([]*core.ProjectDaemon, len(rows))
+	for i, row := range rows {
+		out[i] = projectDaemonFromPG(row)
+	}
+	return out, nil
+}
+
+func (s *projectStore) DeleteProjectDaemon(ctx context.Context, projectID, daemonID string) error {
+	return s.q.DeleteProjectDaemon(ctx, pgdb.DeleteProjectDaemonParams{
+		ProjectID: projectID,
+		DaemonID:  daemonID,
+	})
+}
+
+func projectDaemonFromPG(row pgdb.ProjectDaemon) *core.ProjectDaemon {
+	return &core.ProjectDaemon{
+		ProjectID:     row.ProjectID,
+		DaemonID:      row.DaemonID,
+		Path:          row.Path,
+		DefaultBranch: nullStringToPtr(row.DefaultBranch),
+		ClonedAt:      row.ClonedAt,
+	}
 }
 
 type worktreeStore struct{ q pgdb.Querier }
@@ -268,6 +336,8 @@ func projectFromPG(row pgdb.Project) *core.Project {
 		Description:   nullStringToPtr(row.Description),
 		IsGitRepo:     row.IsGitRepo,
 		DefaultBranch: nullStringToPtr(row.DefaultBranch),
+		RemoteURL:     nullStringToPtr(row.RemoteUrl),
+		IsForge:       row.IsForge,
 		CreatedAt:     row.CreatedAt,
 		UpdatedAt:     row.UpdatedAt,
 		LastActive:    row.LastActive,

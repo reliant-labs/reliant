@@ -56,6 +56,47 @@ service ProjectService {
   
   // InitializeGitRepo initializes a git repository for a project
   rpc InitializeGitRepo(InitializeGitRepoRequest) returns (InitializeGitRepoResponse) {}
+
+  // ListProjectDaemonsForDaemon returns the project_daemons rows installed on
+  // the given daemon. The ProjectPicker uses this to mark projects that are
+  // (or aren't) cloned on the user's currently-active daemon.
+  rpc ListProjectDaemonsForDaemon(ListProjectDaemonsForDaemonRequest) returns (ListProjectDaemonsForDaemonResponse) {}
+
+  // ListProjectDaemons returns every project_daemons row across all the
+  // caller's daemons. The ProjectPicker uses this to render badges that name
+  // *which* daemon(s) a project lives on (vs the leaner per-daemon view that
+  // can only answer "installed here or not"). User-scoped: filtered to
+  // projects owned by the calling user.
+  rpc ListProjectDaemons(ListProjectDaemonsRequest) returns (ListProjectDaemonsResponse) {}
+
+  // MarkProjectInstalled records that a project has a clone on a daemon.
+  // Called after gitService.cloneRepo() succeeds so the picker can see the
+  // project on that daemon. Idempotent — re-running with the same
+  // (project, daemon) updates the path/branch.
+  rpc MarkProjectInstalled(MarkProjectInstalledRequest) returns (MarkProjectInstalledResponse) {}
+
+  // ListRepositoriesForDaemon returns the projects cloned on the given daemon,
+  // denormalized with project metadata (name, remote_url) so admin callers
+  // can render a "Repositories" table without a follow-up GetProject for each
+  // row. Filtered to projects owned by the calling user.
+  rpc ListRepositoriesForDaemon(ListRepositoriesForDaemonRequest) returns (ListRepositoriesForDaemonResponse) {}
+
+  // PullProjectOnDaemon runs `git pull` for the project's clone on a daemon.
+  // The daemon must currently host the project (project_daemons row must
+  // exist). Fails if the daemon is offline.
+  rpc PullProjectOnDaemon(PullProjectOnDaemonRequest) returns (PullProjectOnDaemonResponse) {}
+
+  // RemoveProjectFromDaemon deletes the on-disk clone AND the
+  // project_daemons row for (project_id, daemon_id). Project itself is NOT
+  // deleted — other daemons may still host clones. Idempotent: succeeds even
+  // if the row was already absent (the on-disk delete is best-effort).
+  rpc RemoveProjectFromDaemon(RemoveProjectFromDaemonRequest) returns (RemoveProjectFromDaemonResponse) {}
+
+  // RecloneProjectOnDaemon removes the existing on-disk clone and re-clones
+  // it from the project's remote_url at the recorded default branch. Any
+  // local-only changes are lost; UI must confirm before calling. The
+  // project_daemons row is updated with the new cloned_at.
+  rpc RecloneProjectOnDaemon(RecloneProjectOnDaemonRequest) returns (RecloneProjectOnDaemonResponse) {}
 }
 
 // Project represents a project in the system
@@ -70,6 +111,28 @@ message Project {
   string created_at = 8;
   string updated_at = 9;
   string last_active = 10;
+  // remote_url is the canonical git remote URL for the project (e.g.
+  // "https://github.com/foo/bar.git"). Identifies a project across daemons:
+  // two clones of the same remote on different daemons are the same Project,
+  // distinguished by their project_daemons rows. NULL for non-git projects
+  // or projects whose remote hasn't been resolved yet.
+  optional string remote_url = 11;
+  // is_forge is true when the project's repo root contains a forge.yaml.
+  // Populated at clone / project-create time; not lazily recomputed on read.
+  bool is_forge = 12;
+}
+
+// ProjectDaemon records that a daemon has a local clone of a project.
+// A single project may have rows here for multiple daemons (e.g. user
+// desktop + cloud daemon), each with its own checkout path. Used by the
+// project/daemon picker to know where a project is installed.
+message ProjectDaemon {
+  string project_id = 1;
+  string daemon_id = 2;
+  // Absolute path on that daemon where the clone lives.
+  string path = 3;
+  optional string default_branch = 4;
+  string cloned_at = 5;
 }
 
 // CreateProjectRequest creates a new project
@@ -319,4 +382,99 @@ message InitializeGitRepoResponse {
   string project_id = 2;
   bool is_git_repo = 3;
   string default_branch = 4;
+}
+
+// ListProjectDaemonsForDaemonRequest filters project_daemons rows by daemon.
+message ListProjectDaemonsForDaemonRequest {
+  string daemon_id = 1;
+}
+
+// ListProjectDaemonsForDaemonResponse returns the matching rows.
+message ListProjectDaemonsForDaemonResponse {
+  repeated ProjectDaemon project_daemons = 1;
+}
+
+// ListProjectDaemonsRequest takes no parameters — the response is scoped to
+// the authenticated user via the request context.
+message ListProjectDaemonsRequest {}
+
+// ListProjectDaemonsResponse returns every project_daemons row for projects
+// owned by the calling user, across all of their daemons.
+message ListProjectDaemonsResponse {
+  repeated ProjectDaemon project_daemons = 1;
+}
+
+// MarkProjectInstalledRequest records (project, daemon, path) after a clone.
+message MarkProjectInstalledRequest {
+  string project_id = 1;
+  string daemon_id = 2;
+  string path = 3;
+  optional string default_branch = 4;
+}
+
+// MarkProjectInstalledResponse returns the upserted row.
+message MarkProjectInstalledResponse {
+  ProjectDaemon project_daemon = 1;
+}
+
+// DaemonRepository is one cloned project on a daemon, denormalized with
+// project metadata. Used by admin "Repositories" tabs in the dashboard /
+// admin-web; the ProjectPicker keeps using the leaner ProjectDaemon shape.
+message DaemonRepository {
+  string project_id = 1;
+  string name = 2;
+  // remote_url is project.remote_url (e.g. "https://github.com/foo/bar.git").
+  // Empty for non-git projects.
+  string remote_url = 3;
+  // branch is project_daemons.default_branch (falls back to
+  // project.default_branch).
+  string branch = 4;
+  // path is the absolute on-disk clone path on the daemon.
+  string path = 5;
+  // cloned_at is project_daemons.cloned_at, refreshed on pull/reclone.
+  string cloned_at = 6;
+}
+
+// ListRepositoriesForDaemonRequest filters by daemon.
+message ListRepositoriesForDaemonRequest {
+  string daemon_id = 1;
+}
+
+// ListRepositoriesForDaemonResponse returns matching rows joined with project
+// metadata.
+message ListRepositoriesForDaemonResponse {
+  repeated DaemonRepository repositories = 1;
+}
+
+// PullProjectOnDaemonRequest runs `git pull` on a specific clone.
+message PullProjectOnDaemonRequest {
+  string project_id = 1;
+  string daemon_id = 2;
+}
+
+// PullProjectOnDaemonResponse returns the trimmed git pull output.
+message PullProjectOnDaemonResponse {
+  string output = 1;
+}
+
+// RemoveProjectFromDaemonRequest removes an on-disk clone + its
+// project_daemons row.
+message RemoveProjectFromDaemonRequest {
+  string project_id = 1;
+  string daemon_id = 2;
+}
+
+// RemoveProjectFromDaemonResponse is empty on success.
+message RemoveProjectFromDaemonResponse {}
+
+// RecloneProjectOnDaemonRequest blows away the on-disk clone and re-clones
+// from the project's remote_url.
+message RecloneProjectOnDaemonRequest {
+  string project_id = 1;
+  string daemon_id = 2;
+}
+
+// RecloneProjectOnDaemonResponse returns the (potentially-changed) clone path.
+message RecloneProjectOnDaemonResponse {
+  string path = 1;
 }

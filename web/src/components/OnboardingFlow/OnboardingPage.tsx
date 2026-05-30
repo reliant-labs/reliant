@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils';
 import { ProgressBar } from './ProgressBar';
 import { useOnboardingPlan } from './useOnboardingPlan';
 import { BACK_CLEARS, deriveStep, getStepsForPlan, STEP_COMPONENTS, STEP_LABELS } from './stepConfig';
+import { useOnboardingTracking } from './analytics';
 import type { LaunchPlan } from './types';
 // Ensure step components are registered on module load
 import './steps';
@@ -18,6 +19,8 @@ export function OnboardingPage() {
   const StepComponent = STEP_COMPONENTS[actualStep];
   const isFirst = safeIndex === 0;
   const progressSteps = steps.map(id => ({ id, label: STEP_LABELS[id] }));
+
+  useOnboardingTracking(actualStep);
 
   // onNext is a legacy no-op: step components call it after updatePlan() as
   // an "I'm done" signal, but derivation handles transitions automatically

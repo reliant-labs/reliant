@@ -6,11 +6,28 @@ CREATE TABLE projects (
     description TEXT,
     is_git_repo BOOLEAN NOT NULL DEFAULT TRUE,
     default_branch TEXT,
+    remote_url TEXT,
+    is_forge BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL,
     updated_at TIMESTAMP NOT NULL,
     last_active TIMESTAMP NOT NULL,
     UNIQUE (user_id, path)
 );
+
+CREATE UNIQUE INDEX projects_user_remote_url_uniq
+    ON projects(user_id, remote_url)
+    WHERE remote_url IS NOT NULL;
+
+CREATE TABLE project_daemons (
+    project_id     TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    daemon_id      TEXT NOT NULL,
+    path           TEXT NOT NULL,
+    default_branch TEXT,
+    cloned_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (project_id, daemon_id)
+);
+
+CREATE INDEX project_daemons_daemon_idx ON project_daemons(daemon_id);
 
 CREATE TABLE repos (
     id TEXT PRIMARY KEY,

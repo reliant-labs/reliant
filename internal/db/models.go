@@ -36,6 +36,10 @@ type MessageContentBlock = core.MessageContentBlock
 // Project is an alias to the shared core project model.
 type Project = core.Project
 
+// ProjectDaemon is an alias to the shared core project-daemon installation
+// model. Tracks per-daemon clones of a Project.
+type ProjectDaemon = core.ProjectDaemon
+
 // ProjectConfigRecord stores daemon-pushed configuration for a project.
 // This table is part of cloud-refactor scaffolding and may not exist in all runtimes yet.
 type ProjectConfigRecord struct {

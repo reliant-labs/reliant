@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/stretchr/testify/require"
 )
 
@@ -505,4 +507,197 @@ func testStringPtr(v string) *string {
 func registerTestConn(svc *ToolsDaemonService, conn *daemonConnection) {
 	svc.connections[conn.daemonID] = conn
 	svc.userDaemons[conn.userID] = append(svc.userDaemons[conn.userID], conn.daemonID)
+}
+
+func TestHasConnectedDaemonsForUser(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+
+	svc := NewToolsDaemonService(repo)
+	defer svc.Close()
+
+	const userID = "user-x"
+	require.False(t, svc.HasConnectedDaemonsForUser(userID))
+
+	conn := &daemonConnection{userID: userID, daemonID: uuid.New().String()}
+	svc.mu.Lock()
+	registerTestConn(svc, conn)
+	svc.mu.Unlock()
+	require.True(t, svc.HasConnectedDaemonsForUser(userID))
+
+	svc.mu.Lock()
+	delete(svc.connections, conn.daemonID)
+	svc.userDaemons[userID] = nil
+	delete(svc.userDaemons, userID)
+	svc.mu.Unlock()
+	require.False(t, svc.HasConnectedDaemonsForUser(userID))
+}
+
+// fakeDisconnectListener captures OnDaemonDisconnected calls for assertion.
+type fakeDisconnectListener struct {
+	mu     sync.Mutex
+	events []string // formatted "userID/daemonID"
+}
+
+func (f *fakeDisconnectListener) OnDaemonConnected(userID, daemonID string) {}
+func (f *fakeDisconnectListener) OnDaemonDisconnected(userID, daemonID string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.events = append(f.events, userID+"/"+daemonID)
+}
+func (f *fakeDisconnectListener) snapshot() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]string, len(f.events))
+	copy(out, f.events)
+	return out
+}
+
+func TestSweepStaleConnectionsRemovesHalfOpenAndFiresListeners(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+
+	svc := NewToolsDaemonService(repo)
+	defer svc.Close()
+
+	// Inject a controllable clock so we can age connections without sleeping.
+	baseTime := time.Date(2026, 5, 30, 12, 0, 0, 0, time.UTC)
+	currentTime := baseTime
+	svc.now = func() time.Time { return currentTime }
+
+	listener := &fakeDisconnectListener{}
+	svc.AddConnectionListener(listener)
+
+	// Pre-seed daemon row so DeleteDaemonAttachment (in teardown) doesn't choke.
+	staleUserID := "stale-user"
+	staleDaemonID := uuid.New().String()
+	require.NoError(t, repo.UpsertDaemon(context.Background(), &db.Daemon{
+		ID:     staleDaemonID,
+		UserID: staleUserID,
+	}))
+
+	freshUserID := "fresh-user"
+	freshDaemonID := uuid.New().String()
+	require.NoError(t, repo.UpsertDaemon(context.Background(), &db.Daemon{
+		ID:     freshDaemonID,
+		UserID: freshUserID,
+	}))
+
+	// Stale connection: registered long ago, last activity 5 minutes ago —
+	// well past the 90s threshold.
+	staleConn := &daemonConnection{
+		userID:            staleUserID,
+		daemonID:          staleDaemonID,
+		connectedAt:       baseTime.Add(-10 * time.Minute),
+		lastActivity:      baseTime.Add(-5 * time.Minute),
+		sendCh:            make(chan *reliantv1.ServerMessage, 4),
+		done:              make(chan struct{}),
+		terminalSubs:      make(map[string][]chan *toolexec.TerminalOutputEvent),
+		processOutputSubs: make(map[string][]chan *toolexec.ProcessOutputEvent),
+	}
+
+	// Fresh connection: active right now, must NOT be reaped.
+	freshConn := &daemonConnection{
+		userID:            freshUserID,
+		daemonID:          freshDaemonID,
+		connectedAt:       baseTime.Add(-10 * time.Minute),
+		lastActivity:      baseTime, // active now
+		sendCh:            make(chan *reliantv1.ServerMessage, 4),
+		done:              make(chan struct{}),
+		terminalSubs:      make(map[string][]chan *toolexec.TerminalOutputEvent),
+		processOutputSubs: make(map[string][]chan *toolexec.ProcessOutputEvent),
+	}
+
+	svc.mu.Lock()
+	registerTestConn(svc, staleConn)
+	registerTestConn(svc, freshConn)
+	svc.mu.Unlock()
+
+	require.Equal(t, 2, svc.GetActiveConnections())
+
+	// Run the sweep at "current" time.
+	svc.sweepStaleConnections()
+
+	// Stale should be gone; fresh should remain.
+	require.Equal(t, 1, svc.GetActiveConnections())
+	require.False(t, svc.HasConnectedDaemonsForUser(staleUserID), "stale connection should be removed")
+	require.True(t, svc.HasConnectedDaemonsForUser(freshUserID), "fresh connection should survive")
+
+	// done channel for the stale conn must be closed so any goroutines
+	// blocked on it (e.g. SendDaemonCommand) unblock.
+	select {
+	case <-staleConn.done:
+		// expected
+	default:
+		t.Fatal("expected stale connection's done channel to be closed")
+	}
+
+	// OnDaemonDisconnected listener fired exactly once for the stale daemon.
+	events := listener.snapshot()
+	require.Equal(t, []string{staleUserID + "/" + staleDaemonID}, events)
+
+	// Calling sweep again is a no-op — slot already gone, no double-fire.
+	svc.sweepStaleConnections()
+	require.Equal(t, []string{staleUserID + "/" + staleDaemonID}, listener.snapshot())
+}
+
+func TestSweepStaleConnectionsSkipsRecentlyRegistered(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+
+	svc := NewToolsDaemonService(repo)
+	defer svc.Close()
+
+	baseTime := time.Date(2026, 5, 30, 12, 0, 0, 0, time.UTC)
+	svc.now = func() time.Time { return baseTime }
+
+	// Connection registered only 30s ago but with a stale lastActivity
+	// (shouldn't happen in practice, but guard against false positives on
+	// daemons that haven't sent their first message yet).
+	conn := &daemonConnection{
+		userID:            "u",
+		daemonID:          uuid.New().String(),
+		connectedAt:       baseTime.Add(-30 * time.Second),
+		lastActivity:      baseTime.Add(-30 * time.Second),
+		sendCh:            make(chan *reliantv1.ServerMessage, 1),
+		done:              make(chan struct{}),
+		terminalSubs:      make(map[string][]chan *toolexec.TerminalOutputEvent),
+		processOutputSubs: make(map[string][]chan *toolexec.ProcessOutputEvent),
+	}
+	svc.mu.Lock()
+	registerTestConn(svc, conn)
+	svc.mu.Unlock()
+
+	svc.sweepStaleConnections()
+	require.Equal(t, 1, svc.GetActiveConnections(), "young connection must not be reaped even if lastActivity looks stale")
+}
+
+func TestTouchDaemonsForUserBumpsOnlyMatchingUser(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+
+	svc := NewToolsDaemonService(repo)
+	defer svc.Close()
+
+	stale := time.Now().Add(-1 * time.Hour).UTC()
+	connA1 := &daemonConnection{userID: "user-a", daemonID: uuid.New().String(), lastActivity: stale}
+	connA2 := &daemonConnection{userID: "user-a", daemonID: uuid.New().String(), lastActivity: stale}
+	connB := &daemonConnection{userID: "user-b", daemonID: uuid.New().String(), lastActivity: stale}
+
+	svc.mu.Lock()
+	registerTestConn(svc, connA1)
+	registerTestConn(svc, connA2)
+	registerTestConn(svc, connB)
+	svc.mu.Unlock()
+
+	before := time.Now().UTC()
+	svc.TouchDaemonsForUser("user-a")
+
+	require.True(t, !connA1.lastActivity.Before(before), "connA1 lastActivity should be bumped")
+	require.True(t, !connA2.lastActivity.Before(before), "connA2 lastActivity should be bumped")
+	require.Equal(t, stale, connB.lastActivity, "connB should be untouched")
+
+	// No-op for unknown user — must not panic or mutate other users.
+	svc.TouchDaemonsForUser("user-c")
+	require.Equal(t, stale, connB.lastActivity)
 }

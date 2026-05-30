@@ -80,6 +80,14 @@ export interface Project {
   last_active: string;
   created_at: string;
   updated_at: string;
+  // Canonical git remote URL — present for git-backed projects whose root
+  // repo's remote has been resolved. NULL for non-git / local-only
+  // projects. The picker uses this to know whether a project can be
+  // re-cloned to another daemon.
+  remote_url?: string;
+  // True when the project's repo root contains a forge.yaml. Populated at
+  // clone / project-create time by the server.
+  is_forge: boolean;
 }
 
 interface ProjectStore {
@@ -342,6 +350,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         isLoading: false,
       }));
 
+      trackEvent("project_created", {
+        is_forge: project.is_forge,
+        is_git_repo: project.is_git_repo,
+        has_remote: Boolean(project.remote_url),
+      });
       toast.success(`Project "${project.name}" created successfully`);
       return project;
     } catch (error) {

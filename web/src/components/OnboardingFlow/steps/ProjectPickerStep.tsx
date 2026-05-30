@@ -3,12 +3,12 @@ import { useNavigate } from "@tanstack/react-router";
 import { FolderOpen, GitBranch, Loader2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logger } from "@/lib/logger";
-import { trackEvent } from "@/lib/analytics";
 import { useCompleteOnboarding } from "@/hooks/useOnboardingQueries";
 import { useProjectStore } from "@/store/projectStore";
 import type { Project } from "@/store/projectStore";
 import { ProjectPickerModal } from "@/components/Projects/ProjectPickerModal";
 import { finalizeOnboardingSideEffects } from "../useOnboardingComplete";
+import { markOnboardingFinalized } from "../analytics";
 import { DaemonConnectingGate } from "../DaemonConnectingGate";
 import type { StepProps } from "../types";
 
@@ -60,11 +60,7 @@ export function ProjectPickerStep({ plan, onBack }: StepProps) {
           compute: plan.compute,
           modelProvider: plan.modelProvider,
         });
-        trackEvent("onboarding_completed", {
-          provider: plan.modelProvider ?? "unknown",
-          compute: plan.compute ?? "unknown",
-          project_source: source,
-        });
+        markOnboardingFinalized(plan, source === "existing" ? "existing" : "new");
         await finalizeOnboardingSideEffects(plan.modelProvider);
         // Cloud daemons may still be provisioning at this point — show the
         // gate so the user knows whether to wait or report. Local daemons

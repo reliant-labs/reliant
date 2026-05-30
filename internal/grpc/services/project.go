@@ -4,6 +4,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -126,6 +127,7 @@ func projectToProto(p *db.Project) *reliantv1.Project {
 		Name:       p.Name,
 		Path:       p.Path,
 		IsGitRepo:  p.IsGitRepo,
+		IsForge:    p.IsForge,
 		CreatedAt:  p.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:  p.UpdatedAt.Format(time.RFC3339),
 		LastActive: p.LastActive.Format(time.RFC3339),
@@ -135,6 +137,9 @@ func projectToProto(p *db.Project) *reliantv1.Project {
 	}
 	if p.DefaultBranch != nil {
 		proto.DefaultBranch = p.DefaultBranch
+	}
+	if p.RemoteURL != nil {
+		proto.RemoteUrl = p.RemoteURL
 	}
 	return proto
 }
@@ -173,6 +178,7 @@ func (s *ProjectService) CreateProject(
 	}
 	var discoverResp struct {
 		Discovered []discoveredRepo `json:"discovered"`
+		HasForge   bool             `json:"has_forge"`
 	}
 	if err := s.sendProjectDaemonCommand(ctx, userID, "repo.discover", map[string]interface{}{"path": req.Msg.Path}, &discoverResp); err != nil {
 		logging.Warn("Failed to discover repos via daemon, project will start with zero repos", "error", err, "path", req.Msg.Path)
@@ -185,6 +191,21 @@ func (s *ProjectService) CreateProject(
 		defaultBranch = *req.Msg.DefaultBranch
 	}
 
+	// Derive the project's canonical remote URL from the root repo (the
+	// discovered repo at RelativePath == "" or "."). For a single-repo
+	// project this is the repo's git remote; multi-repo workspaces fall
+	// back to whichever repo sits at the project root, if any. NULL when
+	// no root remote is resolvable (non-git or daemon offline).
+	var projectRemoteURL *string
+	for _, found := range discoverResp.Discovered {
+		rel := strings.TrimSpace(found.RelativePath)
+		if (rel == "" || rel == ".") && found.RemoteURL != "" {
+			rurl := found.RemoteURL
+			projectRemoteURL = &rurl
+			break
+		}
+	}
+
 	now := time.Now().UTC()
 	project := &db.Project{
 		ID:            uuid.New().String(),
@@ -194,6 +215,8 @@ func (s *ProjectService) CreateProject(
 		Description:   req.Msg.Description,
 		IsGitRepo:     isGitRepo,
 		DefaultBranch: &defaultBranch,
+		RemoteURL:     projectRemoteURL,
+		IsForge:       discoverResp.HasForge,
 		CreatedAt:     now,
 		UpdatedAt:     now,
 		LastActive:    now,
@@ -1101,5 +1124,324 @@ func (s *ProjectService) InitializeGitRepo(
 		ProjectId:     req.Msg.ProjectId,
 		IsGitRepo:     true,
 		DefaultBranch: *project.DefaultBranch,
+	}), nil
+}
+
+// projectDaemonToProto converts a db.ProjectDaemon to its proto form.
+func projectDaemonToProto(pd *db.ProjectDaemon) *reliantv1.ProjectDaemon {
+	out := &reliantv1.ProjectDaemon{
+		ProjectId: pd.ProjectID,
+		DaemonId:  pd.DaemonID,
+		Path:      pd.Path,
+		ClonedAt:  pd.ClonedAt.Format(time.RFC3339),
+	}
+	if pd.DefaultBranch != nil {
+		out.DefaultBranch = pd.DefaultBranch
+	}
+	return out
+}
+
+// ListProjectDaemonsForDaemon returns the project_daemons rows installed on
+// the given daemon, filtered to projects owned by the calling user.
+func (s *ProjectService) ListProjectDaemonsForDaemon(
+	ctx context.Context,
+	req *connect.Request[reliantv1.ListProjectDaemonsForDaemonRequest],
+) (*connect.Response[reliantv1.ListProjectDaemonsForDaemonResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+
+	if req.Msg.DaemonId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("daemon_id is required"))
+	}
+
+	rows, err := s.database.ListProjectDaemonsForDaemon(ctx, req.Msg.DaemonId)
+	if err != nil {
+		logging.Error("Failed to list project_daemons for daemon", "error", err, "daemon_id", req.Msg.DaemonId)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list project_daemons"))
+	}
+
+	// Filter by ownership: a project_daemons row is only visible to a user
+	// if the underlying project belongs to them.
+	out := make([]*reliantv1.ProjectDaemon, 0, len(rows))
+	for _, pd := range rows {
+		if _, err := s.database.GetProjectWithUserCheck(ctx, pd.ProjectID, userID); err != nil {
+			continue
+		}
+		out = append(out, projectDaemonToProto(pd))
+	}
+
+	return connect.NewResponse(&reliantv1.ListProjectDaemonsForDaemonResponse{
+		ProjectDaemons: out,
+	}), nil
+}
+
+// ListProjectDaemons returns every project_daemons row across all the
+// caller's projects. Implemented as a fan-out over the user's projects (we
+// already have ListProjectDaemonsForProject) rather than a new join query —
+// the fan-out is bounded by project count (small) and keeps the SQL surface
+// minimal. The picker uses this to tell users *which* daemon hosts a project
+// instead of just "another one".
+func (s *ProjectService) ListProjectDaemons(
+	ctx context.Context,
+	_ *connect.Request[reliantv1.ListProjectDaemonsRequest],
+) (*connect.Response[reliantv1.ListProjectDaemonsResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+
+	projects, err := s.database.ListProjects(ctx, db.ProjectFilters{UserID: userID})
+	if err != nil {
+		logging.Error("Failed to list projects for ListProjectDaemons", "error", err, "user_id", userID)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list project_daemons"))
+	}
+
+	out := make([]*reliantv1.ProjectDaemon, 0)
+	for _, p := range projects {
+		rows, err := s.database.ListProjectDaemonsForProject(ctx, p.ID)
+		if err != nil {
+			logging.Error("Failed to list project_daemons for project",
+				"error", err, "project_id", p.ID, "user_id", userID)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list project_daemons"))
+		}
+		for _, pd := range rows {
+			out = append(out, projectDaemonToProto(pd))
+		}
+	}
+
+	return connect.NewResponse(&reliantv1.ListProjectDaemonsResponse{
+		ProjectDaemons: out,
+	}), nil
+}
+
+// MarkProjectInstalled records that a project has a clone on a daemon. The
+// project must belong to the calling user; the daemon_id is trusted because
+// the user-facing flow that calls this just successfully cloned through the
+// gateway, which already authenticated the daemon binding.
+func (s *ProjectService) MarkProjectInstalled(
+	ctx context.Context,
+	req *connect.Request[reliantv1.MarkProjectInstalledRequest],
+) (*connect.Response[reliantv1.MarkProjectInstalledResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+
+	if req.Msg.ProjectId == "" || req.Msg.DaemonId == "" || req.Msg.Path == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id, daemon_id, and path are required"))
+	}
+
+	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+		return nil, err
+	}
+
+	var defaultBranch *string
+	if req.Msg.DefaultBranch != nil && *req.Msg.DefaultBranch != "" {
+		db := *req.Msg.DefaultBranch
+		defaultBranch = &db
+	}
+
+	if err := s.database.UpsertProjectDaemon(ctx, req.Msg.ProjectId, req.Msg.DaemonId, req.Msg.Path, defaultBranch); err != nil {
+		logging.Error("Failed to upsert project_daemons row",
+			"error", err,
+			"project_id", req.Msg.ProjectId,
+			"daemon_id", req.Msg.DaemonId,
+		)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to record project installation"))
+	}
+
+	// Return the resolved row so the client can populate UI state without
+	// a follow-up list call.
+	pd := &db.ProjectDaemon{
+		ProjectID:     req.Msg.ProjectId,
+		DaemonID:      req.Msg.DaemonId,
+		Path:          req.Msg.Path,
+		DefaultBranch: defaultBranch,
+		ClonedAt:      time.Now().UTC(),
+	}
+	return connect.NewResponse(&reliantv1.MarkProjectInstalledResponse{
+		ProjectDaemon: projectDaemonToProto(pd),
+	}), nil
+}
+
+// ListRepositoriesForDaemon returns the projects cloned on the given daemon,
+// joined with project metadata (name + remote_url) so admin callers can
+// render a table without per-row GetProject calls. Filtered to projects
+// owned by the calling user.
+func (s *ProjectService) ListRepositoriesForDaemon(
+	ctx context.Context,
+	req *connect.Request[reliantv1.ListRepositoriesForDaemonRequest],
+) (*connect.Response[reliantv1.ListRepositoriesForDaemonResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+	if req.Msg.DaemonId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("daemon_id is required"))
+	}
+	rows, err := s.database.ListProjectDaemonsForDaemon(ctx, req.Msg.DaemonId)
+	if err != nil {
+		logging.Error("ListRepositoriesForDaemon: failed to list project_daemons", "error", err, "daemon_id", req.Msg.DaemonId)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list repositories"))
+	}
+	out := make([]*reliantv1.DaemonRepository, 0, len(rows))
+	for _, pd := range rows {
+		project, err := s.database.GetProjectWithUserCheck(ctx, pd.ProjectID, userID)
+		if err != nil {
+			// Either the project belongs to a different user or it was
+			// hard-deleted while still leaving the FK-cascaded row. Skip
+			// quietly so the admin table doesn't show orphans.
+			continue
+		}
+		branch := ""
+		if pd.DefaultBranch != nil {
+			branch = *pd.DefaultBranch
+		} else if project.DefaultBranch != nil {
+			branch = *project.DefaultBranch
+		}
+		remoteURL := ""
+		if project.RemoteURL != nil {
+			remoteURL = *project.RemoteURL
+		}
+		out = append(out, &reliantv1.DaemonRepository{
+			ProjectId: project.ID,
+			Name:      project.Name,
+			RemoteUrl: remoteURL,
+			Branch:    branch,
+			Path:      pd.Path,
+			ClonedAt:  pd.ClonedAt.Format(time.RFC3339),
+		})
+	}
+	return connect.NewResponse(&reliantv1.ListRepositoriesForDaemonResponse{
+		Repositories: out,
+	}), nil
+}
+
+// resolveProjectDaemonRow loads the project_daemons row for (project_id,
+// daemon_id) and the parent project, enforcing user ownership. Returns
+// NotFound when there's no clone of that project on that daemon.
+func (s *ProjectService) resolveProjectDaemonRow(ctx context.Context, projectID, daemonID, userID string) (*db.Project, *core.ProjectDaemon, error) {
+	if projectID == "" || daemonID == "" {
+		return nil, nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id and daemon_id are required"))
+	}
+	project, err := s.database.GetProjectWithUserCheck(ctx, projectID, userID)
+	if err != nil {
+		return nil, nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
+	}
+	rows, err := s.database.ListProjectDaemonsForProject(ctx, projectID)
+	if err != nil {
+		return nil, nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to look up project_daemons"))
+	}
+	for _, pd := range rows {
+		if pd.DaemonID == daemonID {
+			return project, pd, nil
+		}
+	}
+	return nil, nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project is not cloned on that daemon"))
+}
+
+// PullProjectOnDaemon runs `git pull` for the project's clone on a daemon.
+// Reuses the user's default daemon command channel; control-plane callers
+// are expected to invoke this with the daemon's owner user identity.
+func (s *ProjectService) PullProjectOnDaemon(
+	ctx context.Context,
+	req *connect.Request[reliantv1.PullProjectOnDaemonRequest],
+) (*connect.Response[reliantv1.PullProjectOnDaemonResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+	_, pd, err := s.resolveProjectDaemonRow(ctx, req.Msg.ProjectId, req.Msg.DaemonId, userID)
+	if err != nil {
+		return nil, err
+	}
+	branch := ""
+	if pd.DefaultBranch != nil {
+		branch = *pd.DefaultBranch
+	}
+	var pullResp struct {
+		Success bool   `json:"success"`
+		Output  string `json:"output"`
+		Error   string `json:"error"`
+	}
+	payload := map[string]string{"path": pd.Path, "branch": branch}
+	if err := s.sendProjectDaemonCommand(ctx, userID, "git.pull", payload, &pullResp); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("git pull failed: %w", err))
+	}
+	// Refresh cloned_at so the admin UI shows "just now" after a successful
+	// pull. Errors here are non-fatal — the pull already landed.
+	if err := s.database.UpsertProjectDaemon(ctx, req.Msg.ProjectId, req.Msg.DaemonId, pd.Path, pd.DefaultBranch); err != nil {
+		logging.Warn("PullProjectOnDaemon: failed to refresh cloned_at", "error", err, "project_id", req.Msg.ProjectId, "daemon_id", req.Msg.DaemonId)
+	}
+	return connect.NewResponse(&reliantv1.PullProjectOnDaemonResponse{
+		Output: pullResp.Output,
+	}), nil
+}
+
+// RemoveProjectFromDaemon deletes the on-disk clone AND the
+// project_daemons row. The Project row itself is untouched (it may still be
+// cloned on other daemons). Idempotent — calling on an absent clone still
+// succeeds so the UI can clean up half-broken state.
+func (s *ProjectService) RemoveProjectFromDaemon(
+	ctx context.Context,
+	req *connect.Request[reliantv1.RemoveProjectFromDaemonRequest],
+) (*connect.Response[reliantv1.RemoveProjectFromDaemonResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+	_, pd, err := s.resolveProjectDaemonRow(ctx, req.Msg.ProjectId, req.Msg.DaemonId, userID)
+	if err != nil {
+		// NotFound is treated as success — the row's already gone and
+		// there's nothing on disk to delete from our perspective. Anything
+		// else is a real error.
+		var ce *connect.Error
+		if errors.As(err, &ce) && ce.Code() == connect.CodeNotFound {
+			return connect.NewResponse(&reliantv1.RemoveProjectFromDaemonResponse{}), nil
+		}
+		return nil, err
+	}
+	var removeResp struct {
+		Success bool   `json:"success"`
+		Removed bool   `json:"removed"`
+		Error   string `json:"error"`
+	}
+	payload := map[string]string{"path": pd.Path}
+	if err := s.sendProjectDaemonCommand(ctx, userID, "git.remove", payload, &removeResp); err != nil {
+		// On-disk remove failure: still try to drop the DB row so the UI
+		// stops listing a ghost. Log so an operator can investigate.
+		logging.Warn("RemoveProjectFromDaemon: on-disk remove failed (will still drop project_daemons row)", "error", err, "path", pd.Path)
+	}
+	if err := s.database.DeleteProjectDaemon(ctx, req.Msg.ProjectId, req.Msg.DaemonId); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete project_daemons row: %w", err))
+	}
+	return connect.NewResponse(&reliantv1.RemoveProjectFromDaemonResponse{}), nil
+}
+
+// RecloneProjectOnDaemon blows away the existing clone and re-clones from the
+// project's remote_url at the recorded default branch. Refuses to run when
+// the project has no remote_url (non-git project — nothing to clone from).
+func (s *ProjectService) RecloneProjectOnDaemon(
+	ctx context.Context,
+	req *connect.Request[reliantv1.RecloneProjectOnDaemonRequest],
+) (*connect.Response[reliantv1.RecloneProjectOnDaemonResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+	project, pd, err := s.resolveProjectDaemonRow(ctx, req.Msg.ProjectId, req.Msg.DaemonId, userID)
+	if err != nil {
+		return nil, err
+	}
+	if project.RemoteURL == nil || *project.RemoteURL == "" {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("project has no remote_url; cannot reclone"))
+	}
+	branch := ""
+	if pd.DefaultBranch != nil {
+		branch = *pd.DefaultBranch
+	} else if project.DefaultBranch != nil {
+		branch = *project.DefaultBranch
+	}
+	var recloneResp struct {
+		Success bool   `json:"success"`
+		Path    string `json:"path"`
+		Error   string `json:"error"`
+	}
+	payload := map[string]string{
+		"path":   pd.Path,
+		"repo":   *project.RemoteURL,
+		"branch": branch,
+	}
+	if err := s.sendProjectDaemonCommand(ctx, userID, "git.reclone", payload, &recloneResp); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("git reclone failed: %w", err))
+	}
+	// Refresh cloned_at — the row's path/branch are unchanged but the
+	// "Last cloned/pulled" column should now show "just now".
+	if err := s.database.UpsertProjectDaemon(ctx, req.Msg.ProjectId, req.Msg.DaemonId, pd.Path, pd.DefaultBranch); err != nil {
+		logging.Warn("RecloneProjectOnDaemon: failed to refresh cloned_at", "error", err, "project_id", req.Msg.ProjectId, "daemon_id", req.Msg.DaemonId)
+	}
+	return connect.NewResponse(&reliantv1.RecloneProjectOnDaemonResponse{
+		Path: recloneResp.Path,
 	}), nil
 }
