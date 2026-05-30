@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Github, Loader2, Sparkles } from "lucide-react";
+import { ArrowRightLeft, Github, Loader2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logger } from "@/lib/logger";
 import { supabase } from "@/lib/supabase";
@@ -84,6 +84,54 @@ export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
     }
   }, [hasGithubCredential, updatePlan]);
 
+  const handleMigrate = useCallback(async () => {
+    if (!plan.compute) {
+      setError("Missing compute selection. Go back and try again.");
+      return;
+    }
+    setError(null);
+    setBusy(true);
+    try {
+      const finalPlan: Partial<LaunchPlan> = { ...plan, intent: "migrate" };
+      updatePlan({ intent: "migrate" });
+
+      try {
+        await ensureProject(finalPlan);
+      } catch (projectErr) {
+        logger.warn("[ProjectChoiceStep] ensureProject failed; aborting", projectErr);
+        trackEvent("onboarding_ensure_project_failed", { error: String(projectErr) });
+        setError(
+          "Couldn't create your workspace. Please try again, or contact support if the problem persists.",
+        );
+        setBusy(false);
+        return;
+      }
+
+      await completeOnboardingMutation.mutateAsync({
+        compute: finalPlan.compute,
+        modelProvider: finalPlan.modelProvider,
+      });
+
+      trackEvent("onboarding_completed", {
+        provider: finalPlan.modelProvider ?? "unknown",
+        compute: finalPlan.compute ?? "unknown",
+        project_source: "migrate",
+      });
+
+      // Pre-set the migration workflow so the first chat uses it
+      const { useChatParamsStore } = await import("@/store/chatParamsStore");
+      const paramsStore = useChatParamsStore.getState();
+      paramsStore.setTempNewChatWorkflow("builtin://migrate");
+      paramsStore.setTempNewChatParams({ mode: "auto" });
+
+      await finalizeOnboardingSideEffects(finalPlan.modelProvider);
+      navigate({ to: "/", search: { step: undefined, plan: undefined } });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to finish onboarding");
+      setBusy(false);
+    }
+  }, [completeOnboardingMutation, navigate, plan, updatePlan]);
+
   return (
     <div className="space-y-6">
       <div className="space-y-2 text-center">
@@ -95,7 +143,7 @@ export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <button
           type="button"
           onClick={handleStartNew}
@@ -142,6 +190,29 @@ export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
             </span>
             <p className="text-xs leading-relaxed text-muted-foreground">
               Connect GitHub to work on an existing project.
+            </p>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={handleMigrate}
+          disabled={busy}
+          className={cn(
+            "group relative flex min-h-[180px] min-w-0 flex-col items-start gap-3 overflow-hidden rounded-xl border-2 border-border/50 bg-background p-5 text-left transition-all",
+            !busy && "hover:border-primary/50 hover:bg-muted/40",
+            busy && "cursor-not-allowed opacity-60",
+          )}
+        >
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
+            <ArrowRightLeft className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 space-y-1">
+            <span className="block text-base font-semibold text-foreground">
+              Migrate from Claude Code
+            </span>
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Import configuration from Claude Code, Cursor, Codex, or Windsurf into Reliant.
             </p>
           </div>
         </button>
