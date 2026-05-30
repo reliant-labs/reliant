@@ -6,17 +6,40 @@ import (
 )
 
 // Project represents a code repository.
+//
+// RemoteURL is the canonical git remote URL (e.g.
+// "https://github.com/foo/bar.git") used to identify the project across
+// daemons. Two clones of the same remote on different daemons collapse into
+// one Project row; per-daemon checkout paths live in project_daemons. Nil for
+// non-git projects, or projects whose remote has not yet been resolved.
 type Project struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
+	ID            string  `json:"id"`
+	Name          string  `json:"name"`
+	Path          string  `json:"path"`
+	UserID        string  `json:"user_id"`
+	Description   *string `json:"description,omitempty"`
+	IsGitRepo     bool    `json:"is_git_repo"`
+	DefaultBranch *string `json:"default_branch,omitempty"`
+	RemoteURL     *string `json:"remote_url,omitempty"`
+	// IsForge is true when the project's repo root contains a forge.yaml.
+	// Set by the project lifecycle when a clone / create happens; not lazily
+	// recomputed on read. See [internal/skills/catalog/forge.go] for the
+	// canonical detection check.
+	IsForge    bool      `json:"is_forge"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+	LastActive time.Time `json:"last_active"`
+}
+
+// ProjectDaemon records that a daemon has a local clone of a project. A
+// single Project may have rows for multiple daemons (desktop + cloud), each
+// with its own checkout path. Backs the project/daemon picker.
+type ProjectDaemon struct {
+	ProjectID     string    `json:"project_id"`
+	DaemonID      string    `json:"daemon_id"`
 	Path          string    `json:"path"`
-	UserID        string    `json:"user_id"`
-	Description   *string   `json:"description,omitempty"`
-	IsGitRepo     bool      `json:"is_git_repo"`
 	DefaultBranch *string   `json:"default_branch,omitempty"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
-	LastActive    time.Time `json:"last_active"`
+	ClonedAt      time.Time `json:"cloned_at"`
 }
 
 // CleanupMetadata tracks what was cleaned up when archiving a worktree.
@@ -106,11 +129,19 @@ type ProjectStore interface {
 	GetProject(ctx context.Context, id string) (*Project, error)
 	GetProjectByPath(ctx context.Context, path string) (*Project, error)
 	GetProjectByPathAndUser(ctx context.Context, path, userID string) (*Project, error)
+	GetProjectByRemoteURLAndUser(ctx context.Context, remoteURL, userID string) (*Project, error)
 	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*Project, error)
 	ListProjects(ctx context.Context, filters ProjectFilters) ([]*Project, error)
 	UpdateProject(ctx context.Context, project *Project, userID string) error
 	TouchProject(ctx context.Context, id string, userID string) error
 	DeleteProject(ctx context.Context, id string, userID string) error
+
+	// Project ↔ Daemon installations. A row exists for each daemon that has
+	// a local clone of the project.
+	UpsertProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) error
+	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*ProjectDaemon, error)
+	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*ProjectDaemon, error)
+	DeleteProjectDaemon(ctx context.Context, projectID, daemonID string) error
 }
 
 // WorktreeStore is the shared contract for worktree persistence across drivers.

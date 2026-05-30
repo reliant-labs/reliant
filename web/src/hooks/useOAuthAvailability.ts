@@ -6,8 +6,22 @@ export interface UseOAuthAvailabilityReturn {
   available: boolean
   /** True while the initial health check is in flight (web mode only). */
   loading: boolean
-  /** Re-check availability on demand. */
+  /** Re-check availability on demand. Surfaces `loading` while in flight. */
   recheck: () => void
+}
+
+const POLL_INTERVAL_MS = 2000
+const HEALTH_TIMEOUT_MS = 2000
+
+async function pingHealth(): Promise<boolean> {
+  try {
+    const resp = await fetch(`${OAUTH_LOCAL_SERVER_URL}/health`, {
+      signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
+    })
+    return resp.ok
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -15,6 +29,8 @@ export interface UseOAuthAvailabilityReturn {
  *
  * - **Electron**: always available immediately (daemon handles it).
  * - **Web**: pings `http://127.0.0.1:19284/health` to see if `reliant auth serve` is running.
+ *   While unavailable, polls every 2s so the UI flips automatically when the user starts
+ *   the helper in their terminal.
  */
 export function useOAuthAvailability(): UseOAuthAvailabilityReturn {
   const isElectron = !!window.electronAPI
@@ -28,23 +44,27 @@ export function useOAuthAvailability(): UseOAuthAvailabilityReturn {
       setLoading(false)
       return
     }
-
     setLoading(true)
-    try {
-      const resp = await fetch(`${OAUTH_LOCAL_SERVER_URL}/health`, {
-        signal: AbortSignal.timeout(2000),
-      })
-      setAvailable(resp.ok)
-    } catch {
-      setAvailable(false)
-    } finally {
-      setLoading(false)
-    }
+    const ok = await pingHealth()
+    setAvailable(ok)
+    setLoading(false)
   }, [isElectron])
 
+  // Initial check on mount.
   useEffect(() => {
     check()
   }, [check])
+
+  // Poll silently while unavailable so the UI flips automatically once the user
+  // starts `reliant auth serve`. Stops on success or unmount.
+  useEffect(() => {
+    if (isElectron || available) return
+    const id = setInterval(async () => {
+      const ok = await pingHealth()
+      if (ok) setAvailable(true)
+    }, POLL_INTERVAL_MS)
+    return () => clearInterval(id)
+  }, [available, isElectron])
 
   return { available, loading, recheck: check }
 }

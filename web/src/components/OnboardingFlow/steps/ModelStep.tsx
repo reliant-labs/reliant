@@ -5,8 +5,8 @@ import { api } from "@/api/client";
 import { cn } from "@/lib/utils";
 import { getIsDev } from "@/lib/constants";
 import { logger } from "@/lib/logger";
-import { authServeCommand } from "@/lib/cli-commands";
 import { useCodexOAuth, useClaudeOAuth, useOAuthAvailability } from "@/hooks";
+import { OAuthHelperPanel } from "@/components/OAuthHelperPanel";
 import { useCloudEligibility } from "@/hooks/useOnboardingQueries";
 // TODO: Remove this store import once the ApiKeySetupModal is converted to event-driven
 import { useApiKeySetupStore } from "@/store/apiKeySetupStore";
@@ -287,33 +287,17 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
               </button>
             </div>
           ) : provider.usesOAuth ? (
-            <div className="space-y-3 rounded-lg border border-border/40 bg-background/70 p-4">
-              <p className="text-sm font-medium text-foreground">Authenticate via {provider.name}</p>
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                {oauthAvailability.available
-                  ? `Sign in with ${provider.name} to connect your account.`
-                  : "The local OAuth helper is not running. Start it in your terminal to enable login:"}
-              </p>
-              {!oauthAvailability.available && !oauthAvailability.loading && (
-                <code className="block select-all rounded-md border border-border bg-background px-3 py-2 font-mono text-sm break-all">
-                  {authServeCommand()}
-                </code>
-              )}
-              <button
-                type="button"
-                onClick={handleConnectOAuth}
-                disabled={validating || oauthAvailability.loading || !oauthAvailability.available}
-                className={cn(
-                  "inline-flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition-colors",
-                  !validating && oauthAvailability.available && !oauthAvailability.loading
-                    ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                    : "cursor-not-allowed bg-muted text-muted-foreground",
-                )}
-              >
-                {validating && <Loader2 className="h-4 w-4 animate-spin" />}
-                Connect {provider.name}
-              </button>
-            </div>
+            <OAuthHelperPanel
+              providerName={provider.name}
+              available={oauthAvailability.available}
+              loading={oauthAvailability.loading}
+              onRetry={oauthAvailability.recheck}
+              onConnect={handleConnectOAuth}
+              connecting={validating}
+              connectLabel={`Connect ${provider.name}`}
+              buttonAlign="stretch"
+              size="compact"
+            />
           ) : (
             <div className="space-y-3 rounded-lg border border-border/40 bg-background/70 p-4">
               <div className="flex items-center justify-between">

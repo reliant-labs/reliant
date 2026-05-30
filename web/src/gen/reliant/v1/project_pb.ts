@@ -15,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/project.proto.
  */
 export const file_reliant_v1_project: GenFile = /*@__PURE__*/
-  fileDesc("ChhyZWxpYW50L3YxL3Byb2plY3QucHJvdG8SCnJlbGlhbnQudjEi7gEKB1Byb2plY3QSCgoCaWQYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIMCgRuYW1lGAMgASgJEgwKBHBhdGgYBCABKAkSGAoLZGVzY3JpcHRpb24YBSABKAlIAIgBARITCgtpc19naXRfcmVwbxgGIAEoCBIbCg5kZWZhdWx0X2JyYW5jaBgHIAEoCUgBiAEBEhIKCmNyZWF0ZWRfYXQYCCABKAkSEgoKdXBkYXRlZF9hdBgJIAEoCRITCgtsYXN0X2FjdGl2ZRgKIAEoCUIOCgxfZGVzY3JpcHRpb25CEQoPX2RlZmF1bHRfYnJhbmNoIowBChRDcmVhdGVQcm9qZWN0UmVxdWVzdBIMCgRuYW1lGAEgASgJEgwKBHBhdGgYAiABKAkSGAoLZGVzY3JpcHRpb24YAyABKAlIAIgBARIbCg5kZWZhdWx0X2JyYW5jaBgEIAEoCUgBiAEBQg4KDF9kZXNjcmlwdGlvbkIRCg9fZGVmYXVsdF9icmFuY2giPQoVQ3JlYXRlUHJvamVjdFJlc3BvbnNlEiQKB3Byb2plY3QYASABKAsyEy5yZWxpYW50LnYxLlByb2plY3QiNAoTTGlzdFByb2plY3RzUmVxdWVzdBINCgVsaW1pdBgBIAEoBRIOCgZvZmZzZXQYAiABKAUiTAoUTGlzdFByb2plY3RzUmVzcG9uc2USJQoIcHJvamVjdHMYASADKAsyEy5yZWxpYW50LnYxLlByb2plY3QSDQoFdG90YWwYAiABKAUiJwoRR2V0UHJvamVjdFJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCSI6ChJHZXRQcm9qZWN0UmVzcG9uc2USJAoHcHJvamVjdBgBIAEoCzITLnJlbGlhbnQudjEuUHJvamVjdCKgAQoUVXBkYXRlUHJvamVjdFJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIRCgRuYW1lGAIgASgJSACIAQESGAoLZGVzY3JpcHRpb24YAyABKAlIAYgBARIbCg5kZWZhdWx0X2JyYW5jaBgEIAEoCUgCiAEBQgcKBV9uYW1lQg4KDF9kZXNjcmlwdGlvbkIRCg9fZGVmYXVsdF9icmFuY2giPQoVVXBkYXRlUHJvamVjdFJlc3BvbnNlEiQKB3Byb2plY3QYASABKAsyEy5yZWxpYW50LnYxLlByb2plY3QiKgoURGVsZXRlUHJvamVjdFJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCSI5ChVEZWxldGVQcm9qZWN0UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJIikKE1RvdWNoUHJvamVjdFJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCSI4ChRUb3VjaFByb2plY3RSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg8KB21lc3NhZ2UYAiABKAkiLwoZR2V0UHJvamVjdE1ldGFkYXRhUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJIvgBChpHZXRQcm9qZWN0TWV0YWRhdGFSZXNwb25zZRISCgpwcm9qZWN0X2lkGAEgASgJEgwKBG5hbWUYAiABKAkSDAoEcGF0aBgDIAEoCRIYCgtkZXNjcmlwdGlvbhgEIAEoCUgAiAEBEhMKC2lzX2dpdF9yZXBvGAUgASgIEhsKDmRlZmF1bHRfYnJhbmNoGAYgASgJSAGIAQESEgoKY3JlYXRlZF9hdBgHIAEoCRISCgp1cGRhdGVkX2F0GAggASgJEhMKC2xhc3RfYWN0aXZlGAkgASgJQg4KDF9kZXNjcmlwdGlvbkIRCg9fZGVmYXVsdF9icmFuY2giXAocVXBkYXRlUHJvamVjdE1ldGFkYXRhUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEhgKC2Rlc2NyaXB0aW9uGAIgASgJSACIAQFCDgoMX2Rlc2NyaXB0aW9uIkUKHVVwZGF0ZVByb2plY3RNZXRhZGF0YVJlc3BvbnNlEiQKB3Byb2plY3QYASABKAsyEy5yZWxpYW50LnYxLlByb2plY3QiPwoYR2V0UHJvamVjdEdpdEluZm9SZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDwoHcmVwb19pZBgCIAEoCSKMAgoZR2V0UHJvamVjdEdpdEluZm9SZXNwb25zZRISCgpwcm9qZWN0X2lkGAEgASgJEhMKC2lzX2dpdF9yZXBvGAIgASgIEhYKDmN1cnJlbnRfYnJhbmNoGAMgASgJEhMKC2hhc19jaGFuZ2VzGAQgASgIEg4KBnN0YXR1cxgFIAEoCRIUCgxzdGFnZWRfZmlsZXMYBiADKAkSFgoOdW5zdGFnZWRfZmlsZXMYByADKAkSFwoPdW50cmFja2VkX2ZpbGVzGAggAygJEg0KBWFoZWFkGAkgASgFEg4KBmJlaGluZBgKIAEoBRISCgpyZW1vdGVfdXJsGAsgASgJEg8KB21lc3NhZ2UYDCABKAkilAEKCUdpdEJyYW5jaBIMCgRuYW1lGAEgASgJEhIKCmlzX2N1cnJlbnQYAiABKAgSEQoJaXNfcmVtb3RlGAMgASgIEhAKCHVwc3RyZWFtGAQgASgJEhcKD2xhc3RfY29tbWl0X2FnZRgFIAEoAxITCgtpc19kZXRhY2hlZBgGIAEoCBISCgpjb21taXRfc2hhGAcgASgJIkMKHEdldFByb2plY3RHaXRCcmFuY2hlc1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIPCgdyZXBvX2lkGAIgASgJIkgKHUdldFByb2plY3RHaXRCcmFuY2hlc1Jlc3BvbnNlEicKCGJyYW5jaGVzGAEgAygLMhUucmVsaWFudC52MS5HaXRCcmFuY2giMQobR2V0UHJvamVjdEluaXRTdGF0dXNSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkiWAocR2V0UHJvamVjdEluaXRTdGF0dXNSZXNwb25zZRITCgtpbml0aWFsaXplZBgBIAEoCBISCgpwcm9qZWN0X2lkGAIgASgJEg8KB21lc3NhZ2UYAyABKAkiLgoYSW5pdGlhbGl6ZVByb2plY3RSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkiZQoZSW5pdGlhbGl6ZVByb2plY3RSZXNwb25zZRISCgpwcm9qZWN0X2lkGAEgASgJEg4KBnN0YXR1cxgCIAEoCRIPCgdtZXNzYWdlGAMgASgJEhMKC2luaXRpYWxpemVkGAQgASgIIpEBCgpGaWxlQ2hhbmdlEgwKBHBhdGgYASABKAkSLAoGc3RhdHVzGAIgASgOMhwucmVsaWFudC52MS5GaWxlQ2hhbmdlU3RhdHVzEgwKBGRpZmYYAyABKAkSDwoHY29udGVudBgEIAEoCRIYChBvcmlnaW5hbF9jb250ZW50GAUgASgJEg4KBmlzX25ldxgGIAEoCCI/ChhHZXRQcm9qZWN0Q2hhbmdlc1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIPCgdyZXBvX2lkGAIgASgJImcKGUdldFByb2plY3RDaGFuZ2VzUmVzcG9uc2USDgoGYnJhbmNoGAEgASgJEiUKBWZpbGVzGAIgAygLMhYucmVsaWFudC52MS5GaWxlQ2hhbmdlEhMKC3RvdGFsX2ZpbGVzGAMgASgFInAKBlByb21wdBIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEg8KB2NvbnRlbnQYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSEgoKY3JlYXRlZF9hdBgFIAEoCRISCgp1cGRhdGVkX2F0GAYgASgJIi4KGEdldFByb2plY3RQcm9tcHRzUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJIkAKGUdldFByb2plY3RQcm9tcHRzUmVzcG9uc2USIwoHcHJvbXB0cxgBIAMoCzISLnJlbGlhbnQudjEuUHJvbXB0IlQKGVNhdmVQcm9qZWN0UHJvbXB0c1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIjCgdwcm9tcHRzGAIgAygLMhIucmVsaWFudC52MS5Qcm9tcHQiUgoaU2F2ZVByb2plY3RQcm9tcHRzUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCRIjCgdwcm9tcHRzGAIgAygLMhIucmVsaWFudC52MS5Qcm9tcHQiegoYSW5pdGlhbGl6ZUdpdFJlcG9SZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSFgoOaW5pdGlhbF9icmFuY2gYAiABKAkSGgoSZ2l0aWdub3JlX3BhdHRlcm5zGAMgAygJEhYKDmluaXRpYWxfY29tbWl0GAQgASgIIm0KGUluaXRpYWxpemVHaXRSZXBvUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCRISCgpwcm9qZWN0X2lkGAIgASgJEhMKC2lzX2dpdF9yZXBvGAMgASgIEhYKDmRlZmF1bHRfYnJhbmNoGAQgASgJMqAMCg5Qcm9qZWN0U2VydmljZRJWCg1DcmVhdGVQcm9qZWN0EiAucmVsaWFudC52MS5DcmVhdGVQcm9qZWN0UmVxdWVzdBohLnJlbGlhbnQudjEuQ3JlYXRlUHJvamVjdFJlc3BvbnNlIgASUwoMTGlzdFByb2plY3RzEh8ucmVsaWFudC52MS5MaXN0UHJvamVjdHNSZXF1ZXN0GiAucmVsaWFudC52MS5MaXN0UHJvamVjdHNSZXNwb25zZSIAEk0KCkdldFByb2plY3QSHS5yZWxpYW50LnYxLkdldFByb2plY3RSZXF1ZXN0Gh4ucmVsaWFudC52MS5HZXRQcm9qZWN0UmVzcG9uc2UiABJWCg1VcGRhdGVQcm9qZWN0EiAucmVsaWFudC52MS5VcGRhdGVQcm9qZWN0UmVxdWVzdBohLnJlbGlhbnQudjEuVXBkYXRlUHJvamVjdFJlc3BvbnNlIgASVgoNRGVsZXRlUHJvamVjdBIgLnJlbGlhbnQudjEuRGVsZXRlUHJvamVjdFJlcXVlc3QaIS5yZWxpYW50LnYxLkRlbGV0ZVByb2plY3RSZXNwb25zZSIAElMKDFRvdWNoUHJvamVjdBIfLnJlbGlhbnQudjEuVG91Y2hQcm9qZWN0UmVxdWVzdBogLnJlbGlhbnQudjEuVG91Y2hQcm9qZWN0UmVzcG9uc2UiABJlChJHZXRQcm9qZWN0TWV0YWRhdGESJS5yZWxpYW50LnYxLkdldFByb2plY3RNZXRhZGF0YVJlcXVlc3QaJi5yZWxpYW50LnYxLkdldFByb2plY3RNZXRhZGF0YVJlc3BvbnNlIgASbgoVVXBkYXRlUHJvamVjdE1ldGFkYXRhEigucmVsaWFudC52MS5VcGRhdGVQcm9qZWN0TWV0YWRhdGFSZXF1ZXN0GikucmVsaWFudC52MS5VcGRhdGVQcm9qZWN0TWV0YWRhdGFSZXNwb25zZSIAEmIKEUdldFByb2plY3RHaXRJbmZvEiQucmVsaWFudC52MS5HZXRQcm9qZWN0R2l0SW5mb1JlcXVlc3QaJS5yZWxpYW50LnYxLkdldFByb2plY3RHaXRJbmZvUmVzcG9uc2UiABJuChVHZXRQcm9qZWN0R2l0QnJhbmNoZXMSKC5yZWxpYW50LnYxLkdldFByb2plY3RHaXRCcmFuY2hlc1JlcXVlc3QaKS5yZWxpYW50LnYxLkdldFByb2plY3RHaXRCcmFuY2hlc1Jlc3BvbnNlIgASawoUR2V0UHJvamVjdEluaXRTdGF0dXMSJy5yZWxpYW50LnYxLkdldFByb2plY3RJbml0U3RhdHVzUmVxdWVzdBooLnJlbGlhbnQudjEuR2V0UHJvamVjdEluaXRTdGF0dXNSZXNwb25zZSIAEmIKEUluaXRpYWxpemVQcm9qZWN0EiQucmVsaWFudC52MS5Jbml0aWFsaXplUHJvamVjdFJlcXVlc3QaJS5yZWxpYW50LnYxLkluaXRpYWxpemVQcm9qZWN0UmVzcG9uc2UiABJiChFHZXRQcm9qZWN0Q2hhbmdlcxIkLnJlbGlhbnQudjEuR2V0UHJvamVjdENoYW5nZXNSZXF1ZXN0GiUucmVsaWFudC52MS5HZXRQcm9qZWN0Q2hhbmdlc1Jlc3BvbnNlIgASYgoRR2V0UHJvamVjdFByb21wdHMSJC5yZWxpYW50LnYxLkdldFByb2plY3RQcm9tcHRzUmVxdWVzdBolLnJlbGlhbnQudjEuR2V0UHJvamVjdFByb21wdHNSZXNwb25zZSIAEmUKElNhdmVQcm9qZWN0UHJvbXB0cxIlLnJlbGlhbnQudjEuU2F2ZVByb2plY3RQcm9tcHRzUmVxdWVzdBomLnJlbGlhbnQudjEuU2F2ZVByb2plY3RQcm9tcHRzUmVzcG9uc2UiABJiChFJbml0aWFsaXplR2l0UmVwbxIkLnJlbGlhbnQudjEuSW5pdGlhbGl6ZUdpdFJlcG9SZXF1ZXN0GiUucmVsaWFudC52MS5Jbml0aWFsaXplR2l0UmVwb1Jlc3BvbnNlIgBCQ1pBZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9pbnRlcm5hbC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_reliant_v1_common]);
+  fileDesc("ChhyZWxpYW50L3YxL3Byb2plY3QucHJvdG8SCnJlbGlhbnQudjEiqAIKB1Byb2plY3QSCgoCaWQYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIMCgRuYW1lGAMgASgJEgwKBHBhdGgYBCABKAkSGAoLZGVzY3JpcHRpb24YBSABKAlIAIgBARITCgtpc19naXRfcmVwbxgGIAEoCBIbCg5kZWZhdWx0X2JyYW5jaBgHIAEoCUgBiAEBEhIKCmNyZWF0ZWRfYXQYCCABKAkSEgoKdXBkYXRlZF9hdBgJIAEoCRITCgtsYXN0X2FjdGl2ZRgKIAEoCRIXCgpyZW1vdGVfdXJsGAsgASgJSAKIAQESEAoIaXNfZm9yZ2UYDCABKAhCDgoMX2Rlc2NyaXB0aW9uQhEKD19kZWZhdWx0X2JyYW5jaEINCgtfcmVtb3RlX3VybCKHAQoNUHJvamVjdERhZW1vbhISCgpwcm9qZWN0X2lkGAEgASgJEhEKCWRhZW1vbl9pZBgCIAEoCRIMCgRwYXRoGAMgASgJEhsKDmRlZmF1bHRfYnJhbmNoGAQgASgJSACIAQESEQoJY2xvbmVkX2F0GAUgASgJQhEKD19kZWZhdWx0X2JyYW5jaCKMAQoUQ3JlYXRlUHJvamVjdFJlcXVlc3QSDAoEbmFtZRgBIAEoCRIMCgRwYXRoGAIgASgJEhgKC2Rlc2NyaXB0aW9uGAMgASgJSACIAQESGwoOZGVmYXVsdF9icmFuY2gYBCABKAlIAYgBAUIOCgxfZGVzY3JpcHRpb25CEQoPX2RlZmF1bHRfYnJhbmNoIj0KFUNyZWF0ZVByb2plY3RSZXNwb25zZRIkCgdwcm9qZWN0GAEgASgLMhMucmVsaWFudC52MS5Qcm9qZWN0IjQKE0xpc3RQcm9qZWN0c1JlcXVlc3QSDQoFbGltaXQYASABKAUSDgoGb2Zmc2V0GAIgASgFIkwKFExpc3RQcm9qZWN0c1Jlc3BvbnNlEiUKCHByb2plY3RzGAEgAygLMhMucmVsaWFudC52MS5Qcm9qZWN0Eg0KBXRvdGFsGAIgASgFIicKEUdldFByb2plY3RSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkiOgoSR2V0UHJvamVjdFJlc3BvbnNlEiQKB3Byb2plY3QYASABKAsyEy5yZWxpYW50LnYxLlByb2plY3QioAEKFFVwZGF0ZVByb2plY3RSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSEQoEbmFtZRgCIAEoCUgAiAEBEhgKC2Rlc2NyaXB0aW9uGAMgASgJSAGIAQESGwoOZGVmYXVsdF9icmFuY2gYBCABKAlIAogBAUIHCgVfbmFtZUIOCgxfZGVzY3JpcHRpb25CEQoPX2RlZmF1bHRfYnJhbmNoIj0KFVVwZGF0ZVByb2plY3RSZXNwb25zZRIkCgdwcm9qZWN0GAEgASgLMhMucmVsaWFudC52MS5Qcm9qZWN0IioKFERlbGV0ZVByb2plY3RSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkiOQoVRGVsZXRlUHJvamVjdFJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDwoHbWVzc2FnZRgCIAEoCSIpChNUb3VjaFByb2plY3RSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkiOAoUVG91Y2hQcm9qZWN0UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJIi8KGUdldFByb2plY3RNZXRhZGF0YVJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCSL4AQoaR2V0UHJvamVjdE1ldGFkYXRhUmVzcG9uc2USEgoKcHJvamVjdF9pZBgBIAEoCRIMCgRuYW1lGAIgASgJEgwKBHBhdGgYAyABKAkSGAoLZGVzY3JpcHRpb24YBCABKAlIAIgBARITCgtpc19naXRfcmVwbxgFIAEoCBIbCg5kZWZhdWx0X2JyYW5jaBgGIAEoCUgBiAEBEhIKCmNyZWF0ZWRfYXQYByABKAkSEgoKdXBkYXRlZF9hdBgIIAEoCRITCgtsYXN0X2FjdGl2ZRgJIAEoCUIOCgxfZGVzY3JpcHRpb25CEQoPX2RlZmF1bHRfYnJhbmNoIlwKHFVwZGF0ZVByb2plY3RNZXRhZGF0YVJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIYCgtkZXNjcmlwdGlvbhgCIAEoCUgAiAEBQg4KDF9kZXNjcmlwdGlvbiJFCh1VcGRhdGVQcm9qZWN0TWV0YWRhdGFSZXNwb25zZRIkCgdwcm9qZWN0GAEgASgLMhMucmVsaWFudC52MS5Qcm9qZWN0Ij8KGEdldFByb2plY3RHaXRJbmZvUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEg8KB3JlcG9faWQYAiABKAkijAIKGUdldFByb2plY3RHaXRJbmZvUmVzcG9uc2USEgoKcHJvamVjdF9pZBgBIAEoCRITCgtpc19naXRfcmVwbxgCIAEoCBIWCg5jdXJyZW50X2JyYW5jaBgDIAEoCRITCgtoYXNfY2hhbmdlcxgEIAEoCBIOCgZzdGF0dXMYBSABKAkSFAoMc3RhZ2VkX2ZpbGVzGAYgAygJEhYKDnVuc3RhZ2VkX2ZpbGVzGAcgAygJEhcKD3VudHJhY2tlZF9maWxlcxgIIAMoCRINCgVhaGVhZBgJIAEoBRIOCgZiZWhpbmQYCiABKAUSEgoKcmVtb3RlX3VybBgLIAEoCRIPCgdtZXNzYWdlGAwgASgJIpQBCglHaXRCcmFuY2gSDAoEbmFtZRgBIAEoCRISCgppc19jdXJyZW50GAIgASgIEhEKCWlzX3JlbW90ZRgDIAEoCBIQCgh1cHN0cmVhbRgEIAEoCRIXCg9sYXN0X2NvbW1pdF9hZ2UYBSABKAMSEwoLaXNfZGV0YWNoZWQYBiABKAgSEgoKY29tbWl0X3NoYRgHIAEoCSJDChxHZXRQcm9qZWN0R2l0QnJhbmNoZXNSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDwoHcmVwb19pZBgCIAEoCSJICh1HZXRQcm9qZWN0R2l0QnJhbmNoZXNSZXNwb25zZRInCghicmFuY2hlcxgBIAMoCzIVLnJlbGlhbnQudjEuR2l0QnJhbmNoIjEKG0dldFByb2plY3RJbml0U3RhdHVzUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJIlgKHEdldFByb2plY3RJbml0U3RhdHVzUmVzcG9uc2USEwoLaW5pdGlhbGl6ZWQYASABKAgSEgoKcHJvamVjdF9pZBgCIAEoCRIPCgdtZXNzYWdlGAMgASgJIi4KGEluaXRpYWxpemVQcm9qZWN0UmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJImUKGUluaXRpYWxpemVQcm9qZWN0UmVzcG9uc2USEgoKcHJvamVjdF9pZBgBIAEoCRIOCgZzdGF0dXMYAiABKAkSDwoHbWVzc2FnZRgDIAEoCRITCgtpbml0aWFsaXplZBgEIAEoCCKRAQoKRmlsZUNoYW5nZRIMCgRwYXRoGAEgASgJEiwKBnN0YXR1cxgCIAEoDjIcLnJlbGlhbnQudjEuRmlsZUNoYW5nZVN0YXR1cxIMCgRkaWZmGAMgASgJEg8KB2NvbnRlbnQYBCABKAkSGAoQb3JpZ2luYWxfY29udGVudBgFIAEoCRIOCgZpc19uZXcYBiABKAgiPwoYR2V0UHJvamVjdENoYW5nZXNSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDwoHcmVwb19pZBgCIAEoCSJnChlHZXRQcm9qZWN0Q2hhbmdlc1Jlc3BvbnNlEg4KBmJyYW5jaBgBIAEoCRIlCgVmaWxlcxgCIAMoCzIWLnJlbGlhbnQudjEuRmlsZUNoYW5nZRITCgt0b3RhbF9maWxlcxgDIAEoBSJwCgZQcm9tcHQSCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRIPCgdjb250ZW50GAMgASgJEhMKC2Rlc2NyaXB0aW9uGAQgASgJEhIKCmNyZWF0ZWRfYXQYBSABKAkSEgoKdXBkYXRlZF9hdBgGIAEoCSIuChhHZXRQcm9qZWN0UHJvbXB0c1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCSJAChlHZXRQcm9qZWN0UHJvbXB0c1Jlc3BvbnNlEiMKB3Byb21wdHMYASADKAsyEi5yZWxpYW50LnYxLlByb21wdCJUChlTYXZlUHJvamVjdFByb21wdHNSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSIwoHcHJvbXB0cxgCIAMoCzISLnJlbGlhbnQudjEuUHJvbXB0IlIKGlNhdmVQcm9qZWN0UHJvbXB0c1Jlc3BvbnNlEg8KB21lc3NhZ2UYASABKAkSIwoHcHJvbXB0cxgCIAMoCzISLnJlbGlhbnQudjEuUHJvbXB0InoKGEluaXRpYWxpemVHaXRSZXBvUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEhYKDmluaXRpYWxfYnJhbmNoGAIgASgJEhoKEmdpdGlnbm9yZV9wYXR0ZXJucxgDIAMoCRIWCg5pbml0aWFsX2NvbW1pdBgEIAEoCCJtChlJbml0aWFsaXplR2l0UmVwb1Jlc3BvbnNlEg8KB21lc3NhZ2UYASABKAkSEgoKcHJvamVjdF9pZBgCIAEoCRITCgtpc19naXRfcmVwbxgDIAEoCBIWCg5kZWZhdWx0X2JyYW5jaBgEIAEoCSI3CiJMaXN0UHJvamVjdERhZW1vbnNGb3JEYWVtb25SZXF1ZXN0EhEKCWRhZW1vbl9pZBgBIAEoCSJZCiNMaXN0UHJvamVjdERhZW1vbnNGb3JEYWVtb25SZXNwb25zZRIyCg9wcm9qZWN0X2RhZW1vbnMYASADKAsyGS5yZWxpYW50LnYxLlByb2plY3REYWVtb24iGwoZTGlzdFByb2plY3REYWVtb25zUmVxdWVzdCJQChpMaXN0UHJvamVjdERhZW1vbnNSZXNwb25zZRIyCg9wcm9qZWN0X2RhZW1vbnMYASADKAsyGS5yZWxpYW50LnYxLlByb2plY3REYWVtb24iggEKG01hcmtQcm9qZWN0SW5zdGFsbGVkUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEhEKCWRhZW1vbl9pZBgCIAEoCRIMCgRwYXRoGAMgASgJEhsKDmRlZmF1bHRfYnJhbmNoGAQgASgJSACIAQFCEQoPX2RlZmF1bHRfYnJhbmNoIlEKHE1hcmtQcm9qZWN0SW5zdGFsbGVkUmVzcG9uc2USMQoOcHJvamVjdF9kYWVtb24YASABKAsyGS5yZWxpYW50LnYxLlByb2plY3REYWVtb24ieQoQRGFlbW9uUmVwb3NpdG9yeRISCgpwcm9qZWN0X2lkGAEgASgJEgwKBG5hbWUYAiABKAkSEgoKcmVtb3RlX3VybBgDIAEoCRIOCgZicmFuY2gYBCABKAkSDAoEcGF0aBgFIAEoCRIRCgljbG9uZWRfYXQYBiABKAkiNQogTGlzdFJlcG9zaXRvcmllc0ZvckRhZW1vblJlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJIlcKIUxpc3RSZXBvc2l0b3JpZXNGb3JEYWVtb25SZXNwb25zZRIyCgxyZXBvc2l0b3JpZXMYASADKAsyHC5yZWxpYW50LnYxLkRhZW1vblJlcG9zaXRvcnkiQwoaUHVsbFByb2plY3RPbkRhZW1vblJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIRCglkYWVtb25faWQYAiABKAkiLQobUHVsbFByb2plY3RPbkRhZW1vblJlc3BvbnNlEg4KBm91dHB1dBgBIAEoCSJHCh5SZW1vdmVQcm9qZWN0RnJvbURhZW1vblJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIRCglkYWVtb25faWQYAiABKAkiIQofUmVtb3ZlUHJvamVjdEZyb21EYWVtb25SZXNwb25zZSJGCh1SZWNsb25lUHJvamVjdE9uRGFlbW9uUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEhEKCWRhZW1vbl9pZBgCIAEoCSIuCh5SZWNsb25lUHJvamVjdE9uRGFlbW9uUmVzcG9uc2USDAoEcGF0aBgBIAEoCTLGEgoOUHJvamVjdFNlcnZpY2USVgoNQ3JlYXRlUHJvamVjdBIgLnJlbGlhbnQudjEuQ3JlYXRlUHJvamVjdFJlcXVlc3QaIS5yZWxpYW50LnYxLkNyZWF0ZVByb2plY3RSZXNwb25zZSIAElMKDExpc3RQcm9qZWN0cxIfLnJlbGlhbnQudjEuTGlzdFByb2plY3RzUmVxdWVzdBogLnJlbGlhbnQudjEuTGlzdFByb2plY3RzUmVzcG9uc2UiABJNCgpHZXRQcm9qZWN0Eh0ucmVsaWFudC52MS5HZXRQcm9qZWN0UmVxdWVzdBoeLnJlbGlhbnQudjEuR2V0UHJvamVjdFJlc3BvbnNlIgASVgoNVXBkYXRlUHJvamVjdBIgLnJlbGlhbnQudjEuVXBkYXRlUHJvamVjdFJlcXVlc3QaIS5yZWxpYW50LnYxLlVwZGF0ZVByb2plY3RSZXNwb25zZSIAElYKDURlbGV0ZVByb2plY3QSIC5yZWxpYW50LnYxLkRlbGV0ZVByb2plY3RSZXF1ZXN0GiEucmVsaWFudC52MS5EZWxldGVQcm9qZWN0UmVzcG9uc2UiABJTCgxUb3VjaFByb2plY3QSHy5yZWxpYW50LnYxLlRvdWNoUHJvamVjdFJlcXVlc3QaIC5yZWxpYW50LnYxLlRvdWNoUHJvamVjdFJlc3BvbnNlIgASZQoSR2V0UHJvamVjdE1ldGFkYXRhEiUucmVsaWFudC52MS5HZXRQcm9qZWN0TWV0YWRhdGFSZXF1ZXN0GiYucmVsaWFudC52MS5HZXRQcm9qZWN0TWV0YWRhdGFSZXNwb25zZSIAEm4KFVVwZGF0ZVByb2plY3RNZXRhZGF0YRIoLnJlbGlhbnQudjEuVXBkYXRlUHJvamVjdE1ldGFkYXRhUmVxdWVzdBopLnJlbGlhbnQudjEuVXBkYXRlUHJvamVjdE1ldGFkYXRhUmVzcG9uc2UiABJiChFHZXRQcm9qZWN0R2l0SW5mbxIkLnJlbGlhbnQudjEuR2V0UHJvamVjdEdpdEluZm9SZXF1ZXN0GiUucmVsaWFudC52MS5HZXRQcm9qZWN0R2l0SW5mb1Jlc3BvbnNlIgASbgoVR2V0UHJvamVjdEdpdEJyYW5jaGVzEigucmVsaWFudC52MS5HZXRQcm9qZWN0R2l0QnJhbmNoZXNSZXF1ZXN0GikucmVsaWFudC52MS5HZXRQcm9qZWN0R2l0QnJhbmNoZXNSZXNwb25zZSIAEmsKFEdldFByb2plY3RJbml0U3RhdHVzEicucmVsaWFudC52MS5HZXRQcm9qZWN0SW5pdFN0YXR1c1JlcXVlc3QaKC5yZWxpYW50LnYxLkdldFByb2plY3RJbml0U3RhdHVzUmVzcG9uc2UiABJiChFJbml0aWFsaXplUHJvamVjdBIkLnJlbGlhbnQudjEuSW5pdGlhbGl6ZVByb2plY3RSZXF1ZXN0GiUucmVsaWFudC52MS5Jbml0aWFsaXplUHJvamVjdFJlc3BvbnNlIgASYgoRR2V0UHJvamVjdENoYW5nZXMSJC5yZWxpYW50LnYxLkdldFByb2plY3RDaGFuZ2VzUmVxdWVzdBolLnJlbGlhbnQudjEuR2V0UHJvamVjdENoYW5nZXNSZXNwb25zZSIAEmIKEUdldFByb2plY3RQcm9tcHRzEiQucmVsaWFudC52MS5HZXRQcm9qZWN0UHJvbXB0c1JlcXVlc3QaJS5yZWxpYW50LnYxLkdldFByb2plY3RQcm9tcHRzUmVzcG9uc2UiABJlChJTYXZlUHJvamVjdFByb21wdHMSJS5yZWxpYW50LnYxLlNhdmVQcm9qZWN0UHJvbXB0c1JlcXVlc3QaJi5yZWxpYW50LnYxLlNhdmVQcm9qZWN0UHJvbXB0c1Jlc3BvbnNlIgASYgoRSW5pdGlhbGl6ZUdpdFJlcG8SJC5yZWxpYW50LnYxLkluaXRpYWxpemVHaXRSZXBvUmVxdWVzdBolLnJlbGlhbnQudjEuSW5pdGlhbGl6ZUdpdFJlcG9SZXNwb25zZSIAEoABChtMaXN0UHJvamVjdERhZW1vbnNGb3JEYWVtb24SLi5yZWxpYW50LnYxLkxpc3RQcm9qZWN0RGFlbW9uc0ZvckRhZW1vblJlcXVlc3QaLy5yZWxpYW50LnYxLkxpc3RQcm9qZWN0RGFlbW9uc0ZvckRhZW1vblJlc3BvbnNlIgASZQoSTGlzdFByb2plY3REYWVtb25zEiUucmVsaWFudC52MS5MaXN0UHJvamVjdERhZW1vbnNSZXF1ZXN0GiYucmVsaWFudC52MS5MaXN0UHJvamVjdERhZW1vbnNSZXNwb25zZSIAEmsKFE1hcmtQcm9qZWN0SW5zdGFsbGVkEicucmVsaWFudC52MS5NYXJrUHJvamVjdEluc3RhbGxlZFJlcXVlc3QaKC5yZWxpYW50LnYxLk1hcmtQcm9qZWN0SW5zdGFsbGVkUmVzcG9uc2UiABJ6ChlMaXN0UmVwb3NpdG9yaWVzRm9yRGFlbW9uEiwucmVsaWFudC52MS5MaXN0UmVwb3NpdG9yaWVzRm9yRGFlbW9uUmVxdWVzdBotLnJlbGlhbnQudjEuTGlzdFJlcG9zaXRvcmllc0ZvckRhZW1vblJlc3BvbnNlIgASaAoTUHVsbFByb2plY3RPbkRhZW1vbhImLnJlbGlhbnQudjEuUHVsbFByb2plY3RPbkRhZW1vblJlcXVlc3QaJy5yZWxpYW50LnYxLlB1bGxQcm9qZWN0T25EYWVtb25SZXNwb25zZSIAEnQKF1JlbW92ZVByb2plY3RGcm9tRGFlbW9uEioucmVsaWFudC52MS5SZW1vdmVQcm9qZWN0RnJvbURhZW1vblJlcXVlc3QaKy5yZWxpYW50LnYxLlJlbW92ZVByb2plY3RGcm9tRGFlbW9uUmVzcG9uc2UiABJxChZSZWNsb25lUHJvamVjdE9uRGFlbW9uEikucmVsaWFudC52MS5SZWNsb25lUHJvamVjdE9uRGFlbW9uUmVxdWVzdBoqLnJlbGlhbnQudjEuUmVjbG9uZVByb2plY3RPbkRhZW1vblJlc3BvbnNlIgBCQ1pBZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9pbnRlcm5hbC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_reliant_v1_common]);
 
 /**
  * Project represents a project in the system
@@ -72,6 +72,25 @@ export type Project = Message<"reliant.v1.Project"> & {
    * @generated from field: string last_active = 10;
    */
   lastActive: string;
+
+  /**
+   * remote_url is the canonical git remote URL for the project (e.g.
+   * "https://github.com/foo/bar.git"). Identifies a project across daemons:
+   * two clones of the same remote on different daemons are the same Project,
+   * distinguished by their project_daemons rows. NULL for non-git projects
+   * or projects whose remote hasn't been resolved yet.
+   *
+   * @generated from field: optional string remote_url = 11;
+   */
+  remoteUrl?: string | undefined;
+
+  /**
+   * is_forge is true when the project's repo root contains a forge.yaml.
+   * Populated at clone / project-create time; not lazily recomputed on read.
+   *
+   * @generated from field: bool is_forge = 12;
+   */
+  isForge: boolean;
 };
 
 /**
@@ -80,6 +99,50 @@ export type Project = Message<"reliant.v1.Project"> & {
  */
 export const ProjectSchema: GenMessage<Project> = /*@__PURE__*/
   messageDesc(file_reliant_v1_project, 0);
+
+/**
+ * ProjectDaemon records that a daemon has a local clone of a project.
+ * A single project may have rows here for multiple daemons (e.g. user
+ * desktop + cloud daemon), each with its own checkout path. Used by the
+ * project/daemon picker to know where a project is installed.
+ *
+ * @generated from message reliant.v1.ProjectDaemon
+ */
+export type ProjectDaemon = Message<"reliant.v1.ProjectDaemon"> & {
+  /**
+   * @generated from field: string project_id = 1;
+   */
+  projectId: string;
+
+  /**
+   * @generated from field: string daemon_id = 2;
+   */
+  daemonId: string;
+
+  /**
+   * Absolute path on that daemon where the clone lives.
+   *
+   * @generated from field: string path = 3;
+   */
+  path: string;
+
+  /**
+   * @generated from field: optional string default_branch = 4;
+   */
+  defaultBranch?: string | undefined;
+
+  /**
+   * @generated from field: string cloned_at = 5;
+   */
+  clonedAt: string;
+};
+
+/**
+ * Describes the message reliant.v1.ProjectDaemon.
+ * Use `create(ProjectDaemonSchema)` to create a new message.
+ */
+export const ProjectDaemonSchema: GenMessage<ProjectDaemon> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_project, 1);
 
 /**
  * CreateProjectRequest creates a new project
@@ -113,7 +176,7 @@ export type CreateProjectRequest = Message<"reliant.v1.CreateProjectRequest"> & 
  * Use `create(CreateProjectRequestSchema)` to create a new message.
  */
 export const CreateProjectRequestSchema: GenMessage<CreateProjectRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 1);
+  messageDesc(file_reliant_v1_project, 2);
 
 /**
  * CreateProjectResponse returns the created project
@@ -132,7 +195,7 @@ export type CreateProjectResponse = Message<"reliant.v1.CreateProjectResponse"> 
  * Use `create(CreateProjectResponseSchema)` to create a new message.
  */
 export const CreateProjectResponseSchema: GenMessage<CreateProjectResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 2);
+  messageDesc(file_reliant_v1_project, 3);
 
 /**
  * ListProjectsRequest lists projects with optional filters
@@ -156,7 +219,7 @@ export type ListProjectsRequest = Message<"reliant.v1.ListProjectsRequest"> & {
  * Use `create(ListProjectsRequestSchema)` to create a new message.
  */
 export const ListProjectsRequestSchema: GenMessage<ListProjectsRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 3);
+  messageDesc(file_reliant_v1_project, 4);
 
 /**
  * ListProjectsResponse returns a list of projects
@@ -180,7 +243,7 @@ export type ListProjectsResponse = Message<"reliant.v1.ListProjectsResponse"> & 
  * Use `create(ListProjectsResponseSchema)` to create a new message.
  */
 export const ListProjectsResponseSchema: GenMessage<ListProjectsResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 4);
+  messageDesc(file_reliant_v1_project, 5);
 
 /**
  * GetProjectRequest retrieves a project by ID
@@ -199,7 +262,7 @@ export type GetProjectRequest = Message<"reliant.v1.GetProjectRequest"> & {
  * Use `create(GetProjectRequestSchema)` to create a new message.
  */
 export const GetProjectRequestSchema: GenMessage<GetProjectRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 5);
+  messageDesc(file_reliant_v1_project, 6);
 
 /**
  * GetProjectResponse returns the requested project
@@ -218,7 +281,7 @@ export type GetProjectResponse = Message<"reliant.v1.GetProjectResponse"> & {
  * Use `create(GetProjectResponseSchema)` to create a new message.
  */
 export const GetProjectResponseSchema: GenMessage<GetProjectResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 6);
+  messageDesc(file_reliant_v1_project, 7);
 
 /**
  * UpdateProjectRequest updates a project
@@ -252,7 +315,7 @@ export type UpdateProjectRequest = Message<"reliant.v1.UpdateProjectRequest"> & 
  * Use `create(UpdateProjectRequestSchema)` to create a new message.
  */
 export const UpdateProjectRequestSchema: GenMessage<UpdateProjectRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 7);
+  messageDesc(file_reliant_v1_project, 8);
 
 /**
  * UpdateProjectResponse returns the updated project
@@ -271,7 +334,7 @@ export type UpdateProjectResponse = Message<"reliant.v1.UpdateProjectResponse"> 
  * Use `create(UpdateProjectResponseSchema)` to create a new message.
  */
 export const UpdateProjectResponseSchema: GenMessage<UpdateProjectResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 8);
+  messageDesc(file_reliant_v1_project, 9);
 
 /**
  * DeleteProjectRequest deletes a project
@@ -290,7 +353,7 @@ export type DeleteProjectRequest = Message<"reliant.v1.DeleteProjectRequest"> & 
  * Use `create(DeleteProjectRequestSchema)` to create a new message.
  */
 export const DeleteProjectRequestSchema: GenMessage<DeleteProjectRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 9);
+  messageDesc(file_reliant_v1_project, 10);
 
 /**
  * DeleteProjectResponse confirms deletion
@@ -314,7 +377,7 @@ export type DeleteProjectResponse = Message<"reliant.v1.DeleteProjectResponse"> 
  * Use `create(DeleteProjectResponseSchema)` to create a new message.
  */
 export const DeleteProjectResponseSchema: GenMessage<DeleteProjectResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 10);
+  messageDesc(file_reliant_v1_project, 11);
 
 /**
  * TouchProjectRequest updates the project's last_active timestamp
@@ -333,7 +396,7 @@ export type TouchProjectRequest = Message<"reliant.v1.TouchProjectRequest"> & {
  * Use `create(TouchProjectRequestSchema)` to create a new message.
  */
 export const TouchProjectRequestSchema: GenMessage<TouchProjectRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 11);
+  messageDesc(file_reliant_v1_project, 12);
 
 /**
  * TouchProjectResponse confirms the touch operation
@@ -357,7 +420,7 @@ export type TouchProjectResponse = Message<"reliant.v1.TouchProjectResponse"> & 
  * Use `create(TouchProjectResponseSchema)` to create a new message.
  */
 export const TouchProjectResponseSchema: GenMessage<TouchProjectResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 12);
+  messageDesc(file_reliant_v1_project, 13);
 
 /**
  * GetProjectMetadataRequest retrieves project metadata
@@ -376,7 +439,7 @@ export type GetProjectMetadataRequest = Message<"reliant.v1.GetProjectMetadataRe
  * Use `create(GetProjectMetadataRequestSchema)` to create a new message.
  */
 export const GetProjectMetadataRequestSchema: GenMessage<GetProjectMetadataRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 13);
+  messageDesc(file_reliant_v1_project, 14);
 
 /**
  * GetProjectMetadataResponse returns project metadata
@@ -435,7 +498,7 @@ export type GetProjectMetadataResponse = Message<"reliant.v1.GetProjectMetadataR
  * Use `create(GetProjectMetadataResponseSchema)` to create a new message.
  */
 export const GetProjectMetadataResponseSchema: GenMessage<GetProjectMetadataResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 14);
+  messageDesc(file_reliant_v1_project, 15);
 
 /**
  * UpdateProjectMetadataRequest updates project metadata
@@ -459,7 +522,7 @@ export type UpdateProjectMetadataRequest = Message<"reliant.v1.UpdateProjectMeta
  * Use `create(UpdateProjectMetadataRequestSchema)` to create a new message.
  */
 export const UpdateProjectMetadataRequestSchema: GenMessage<UpdateProjectMetadataRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 15);
+  messageDesc(file_reliant_v1_project, 16);
 
 /**
  * UpdateProjectMetadataResponse returns the updated project
@@ -478,7 +541,7 @@ export type UpdateProjectMetadataResponse = Message<"reliant.v1.UpdateProjectMet
  * Use `create(UpdateProjectMetadataResponseSchema)` to create a new message.
  */
 export const UpdateProjectMetadataResponseSchema: GenMessage<UpdateProjectMetadataResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 16);
+  messageDesc(file_reliant_v1_project, 17);
 
 /**
  * GetProjectGitInfoRequest retrieves git info for a project.
@@ -506,7 +569,7 @@ export type GetProjectGitInfoRequest = Message<"reliant.v1.GetProjectGitInfoRequ
  * Use `create(GetProjectGitInfoRequestSchema)` to create a new message.
  */
 export const GetProjectGitInfoRequestSchema: GenMessage<GetProjectGitInfoRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 17);
+  messageDesc(file_reliant_v1_project, 18);
 
 /**
  * GetProjectGitInfoResponse returns git repository information
@@ -584,7 +647,7 @@ export type GetProjectGitInfoResponse = Message<"reliant.v1.GetProjectGitInfoRes
  * Use `create(GetProjectGitInfoResponseSchema)` to create a new message.
  */
 export const GetProjectGitInfoResponseSchema: GenMessage<GetProjectGitInfoResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 18);
+  messageDesc(file_reliant_v1_project, 19);
 
 /**
  * GitBranch represents a git branch
@@ -637,7 +700,7 @@ export type GitBranch = Message<"reliant.v1.GitBranch"> & {
  * Use `create(GitBranchSchema)` to create a new message.
  */
 export const GitBranchSchema: GenMessage<GitBranch> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 19);
+  messageDesc(file_reliant_v1_project, 20);
 
 /**
  * GetProjectGitBranchesRequest retrieves git branches for a project.
@@ -663,7 +726,7 @@ export type GetProjectGitBranchesRequest = Message<"reliant.v1.GetProjectGitBran
  * Use `create(GetProjectGitBranchesRequestSchema)` to create a new message.
  */
 export const GetProjectGitBranchesRequestSchema: GenMessage<GetProjectGitBranchesRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 20);
+  messageDesc(file_reliant_v1_project, 21);
 
 /**
  * GetProjectGitBranchesResponse returns git branches
@@ -682,7 +745,7 @@ export type GetProjectGitBranchesResponse = Message<"reliant.v1.GetProjectGitBra
  * Use `create(GetProjectGitBranchesResponseSchema)` to create a new message.
  */
 export const GetProjectGitBranchesResponseSchema: GenMessage<GetProjectGitBranchesResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 21);
+  messageDesc(file_reliant_v1_project, 22);
 
 /**
  * GetProjectInitStatusRequest retrieves project initialization status
@@ -701,7 +764,7 @@ export type GetProjectInitStatusRequest = Message<"reliant.v1.GetProjectInitStat
  * Use `create(GetProjectInitStatusRequestSchema)` to create a new message.
  */
 export const GetProjectInitStatusRequestSchema: GenMessage<GetProjectInitStatusRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 22);
+  messageDesc(file_reliant_v1_project, 23);
 
 /**
  * GetProjectInitStatusResponse returns initialization status
@@ -730,7 +793,7 @@ export type GetProjectInitStatusResponse = Message<"reliant.v1.GetProjectInitSta
  * Use `create(GetProjectInitStatusResponseSchema)` to create a new message.
  */
 export const GetProjectInitStatusResponseSchema: GenMessage<GetProjectInitStatusResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 23);
+  messageDesc(file_reliant_v1_project, 24);
 
 /**
  * InitializeProjectRequest initializes a project
@@ -749,7 +812,7 @@ export type InitializeProjectRequest = Message<"reliant.v1.InitializeProjectRequ
  * Use `create(InitializeProjectRequestSchema)` to create a new message.
  */
 export const InitializeProjectRequestSchema: GenMessage<InitializeProjectRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 24);
+  messageDesc(file_reliant_v1_project, 25);
 
 /**
  * InitializeProjectResponse confirms initialization
@@ -783,7 +846,7 @@ export type InitializeProjectResponse = Message<"reliant.v1.InitializeProjectRes
  * Use `create(InitializeProjectResponseSchema)` to create a new message.
  */
 export const InitializeProjectResponseSchema: GenMessage<InitializeProjectResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 25);
+  messageDesc(file_reliant_v1_project, 26);
 
 /**
  * FileChange represents a changed file with its diff
@@ -827,7 +890,7 @@ export type FileChange = Message<"reliant.v1.FileChange"> & {
  * Use `create(FileChangeSchema)` to create a new message.
  */
 export const FileChangeSchema: GenMessage<FileChange> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 26);
+  messageDesc(file_reliant_v1_project, 27);
 
 /**
  * GetProjectChangesRequest retrieves recent changes for a project.
@@ -853,7 +916,7 @@ export type GetProjectChangesRequest = Message<"reliant.v1.GetProjectChangesRequ
  * Use `create(GetProjectChangesRequestSchema)` to create a new message.
  */
 export const GetProjectChangesRequestSchema: GenMessage<GetProjectChangesRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 27);
+  messageDesc(file_reliant_v1_project, 28);
 
 /**
  * GetProjectChangesResponse returns recent changes
@@ -882,7 +945,7 @@ export type GetProjectChangesResponse = Message<"reliant.v1.GetProjectChangesRes
  * Use `create(GetProjectChangesResponseSchema)` to create a new message.
  */
 export const GetProjectChangesResponseSchema: GenMessage<GetProjectChangesResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 28);
+  messageDesc(file_reliant_v1_project, 29);
 
 /**
  * Prompt represents a saved prompt
@@ -926,7 +989,7 @@ export type Prompt = Message<"reliant.v1.Prompt"> & {
  * Use `create(PromptSchema)` to create a new message.
  */
 export const PromptSchema: GenMessage<Prompt> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 29);
+  messageDesc(file_reliant_v1_project, 30);
 
 /**
  * GetProjectPromptsRequest retrieves project prompts
@@ -945,7 +1008,7 @@ export type GetProjectPromptsRequest = Message<"reliant.v1.GetProjectPromptsRequ
  * Use `create(GetProjectPromptsRequestSchema)` to create a new message.
  */
 export const GetProjectPromptsRequestSchema: GenMessage<GetProjectPromptsRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 30);
+  messageDesc(file_reliant_v1_project, 31);
 
 /**
  * GetProjectPromptsResponse returns project prompts
@@ -964,7 +1027,7 @@ export type GetProjectPromptsResponse = Message<"reliant.v1.GetProjectPromptsRes
  * Use `create(GetProjectPromptsResponseSchema)` to create a new message.
  */
 export const GetProjectPromptsResponseSchema: GenMessage<GetProjectPromptsResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 31);
+  messageDesc(file_reliant_v1_project, 32);
 
 /**
  * SaveProjectPromptsRequest saves project prompts
@@ -988,7 +1051,7 @@ export type SaveProjectPromptsRequest = Message<"reliant.v1.SaveProjectPromptsRe
  * Use `create(SaveProjectPromptsRequestSchema)` to create a new message.
  */
 export const SaveProjectPromptsRequestSchema: GenMessage<SaveProjectPromptsRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 32);
+  messageDesc(file_reliant_v1_project, 33);
 
 /**
  * SaveProjectPromptsResponse confirms prompts saved
@@ -1012,7 +1075,7 @@ export type SaveProjectPromptsResponse = Message<"reliant.v1.SaveProjectPromptsR
  * Use `create(SaveProjectPromptsResponseSchema)` to create a new message.
  */
 export const SaveProjectPromptsResponseSchema: GenMessage<SaveProjectPromptsResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 33);
+  messageDesc(file_reliant_v1_project, 34);
 
 /**
  * InitializeGitRepoRequest initializes a git repository
@@ -1046,7 +1109,7 @@ export type InitializeGitRepoRequest = Message<"reliant.v1.InitializeGitRepoRequ
  * Use `create(InitializeGitRepoRequestSchema)` to create a new message.
  */
 export const InitializeGitRepoRequestSchema: GenMessage<InitializeGitRepoRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 34);
+  messageDesc(file_reliant_v1_project, 35);
 
 /**
  * InitializeGitRepoResponse confirms git repository initialization
@@ -1080,7 +1143,356 @@ export type InitializeGitRepoResponse = Message<"reliant.v1.InitializeGitRepoRes
  * Use `create(InitializeGitRepoResponseSchema)` to create a new message.
  */
 export const InitializeGitRepoResponseSchema: GenMessage<InitializeGitRepoResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_project, 35);
+  messageDesc(file_reliant_v1_project, 36);
+
+/**
+ * ListProjectDaemonsForDaemonRequest filters project_daemons rows by daemon.
+ *
+ * @generated from message reliant.v1.ListProjectDaemonsForDaemonRequest
+ */
+export type ListProjectDaemonsForDaemonRequest = Message<"reliant.v1.ListProjectDaemonsForDaemonRequest"> & {
+  /**
+   * @generated from field: string daemon_id = 1;
+   */
+  daemonId: string;
+};
+
+/**
+ * Describes the message reliant.v1.ListProjectDaemonsForDaemonRequest.
+ * Use `create(ListProjectDaemonsForDaemonRequestSchema)` to create a new message.
+ */
+export const ListProjectDaemonsForDaemonRequestSchema: GenMessage<ListProjectDaemonsForDaemonRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_project, 37);
+
+/**
+ * ListProjectDaemonsForDaemonResponse returns the matching rows.
+ *
+ * @generated from message reliant.v1.ListProjectDaemonsForDaemonResponse
+ */
+export type ListProjectDaemonsForDaemonResponse = Message<"reliant.v1.ListProjectDaemonsForDaemonResponse"> & {
+  /**
+   * @generated from field: repeated reliant.v1.ProjectDaemon project_daemons = 1;
+   */
+  projectDaemons: ProjectDaemon[];
+};
+
+/**
+ * Describes the message reliant.v1.ListProjectDaemonsForDaemonResponse.
+ * Use `create(ListProjectDaemonsForDaemonResponseSchema)` to create a new message.
+ */
+export const ListProjectDaemonsForDaemonResponseSchema: GenMessage<ListProjectDaemonsForDaemonResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_project, 38);
+
+/**
+ * ListProjectDaemonsRequest takes no parameters — the response is scoped to
+ * the authenticated user via the request context.
+ *
+ * @generated from message reliant.v1.ListProjectDaemonsRequest
+ */
+export type ListProjectDaemonsRequest = Message<"reliant.v1.ListProjectDaemonsRequest"> & {
+};
+
+/**
+ * Describes the message reliant.v1.ListProjectDaemonsRequest.
+ * Use `create(ListProjectDaemonsRequestSchema)` to create a new message.
+ */
+export const ListProjectDaemonsRequestSchema: GenMessage<ListProjectDaemonsRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_project, 39);
+
+/**
+ * ListProjectDaemonsResponse returns every project_daemons row for projects
+ * owned by the calling user, across all of their daemons.
+ *
+ * @generated from message reliant.v1.ListProjectDaemonsResponse
+ */
+export type ListProjectDaemonsResponse = Message<"reliant.v1.ListProjectDaemonsResponse"> & {
+  /**
+   * @generated from field: repeated reliant.v1.ProjectDaemon project_daemons = 1;
+   */
+  projectDaemons: ProjectDaemon[];
+};
+
+/**
+ * Describes the message reliant.v1.ListProjectDaemonsResponse.
+ * Use `create(ListProjectDaemonsResponseSchema)` to create a new message.
+ */
+export const ListProjectDaemonsResponseSchema: GenMessage<ListProjectDaemonsResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_project, 40);
+
+/**
+ * MarkProjectInstalledRequest records (project, daemon, path) after a clone.
+ *
+ * @generated from message reliant.v1.MarkProjectInstalledRequest
+ */
+export type MarkProjectInstalledRequest = Message<"reliant.v1.MarkProjectInstalledRequest"> & {
+  /**
+   * @generated from field: string project_id = 1;
+   */
+  projectId: string;
+
+  /**
+   * @generated from field: string daemon_id = 2;
+   */
+  daemonId: string;
+
+  /**
+   * @generated from field: string path = 3;
+   */
+  path: string;
+
+  /**
+   * @generated from field: optional string default_branch = 4;
+   */
+  defaultBranch?: string | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.MarkProjectInstalledRequest.
+ * Use `create(MarkProjectInstalledRequestSchema)` to create a new message.
+ */
+export const MarkProjectInstalledRequestSchema: GenMessage<MarkProjectInstalledRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_project, 41);
+
+/**
+ * MarkProjectInstalledResponse returns the upserted row.
+ *
+ * @generated from message reliant.v1.MarkProjectInstalledResponse
+ */
+export type MarkProjectInstalledResponse = Message<"reliant.v1.MarkProjectInstalledResponse"> & {
+  /**
+   * @generated from field: reliant.v1.ProjectDaemon project_daemon = 1;
+   */
+  projectDaemon?: ProjectDaemon | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.MarkProjectInstalledResponse.
+ * Use `create(MarkProjectInstalledResponseSchema)` to create a new message.
+ */
+export const MarkProjectInstalledResponseSchema: GenMessage<MarkProjectInstalledResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_project, 42);
+
+/**
+ * DaemonRepository is one cloned project on a daemon, denormalized with
+ * project metadata. Used by admin "Repositories" tabs in the dashboard /
+ * admin-web; the ProjectPicker keeps using the leaner ProjectDaemon shape.
+ *
+ * @generated from message reliant.v1.DaemonRepository
+ */
+export type DaemonRepository = Message<"reliant.v1.DaemonRepository"> & {
+  /**
+   * @generated from field: string project_id = 1;
+   */
+  projectId: string;
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * remote_url is project.remote_url (e.g. "https://github.com/foo/bar.git").
+   * Empty for non-git projects.
+   *
+   * @generated from field: string remote_url = 3;
+   */
+  remoteUrl: string;
+
+  /**
+   * branch is project_daemons.default_branch (falls back to
+   * project.default_branch).
+   *
+   * @generated from field: string branch = 4;
+   */
+  branch: string;
+
+  /**
+   * path is the absolute on-disk clone path on the daemon.
+   *
+   * @generated from field: string path = 5;
+   */
+  path: string;
+
+  /**
+   * cloned_at is project_daemons.cloned_at, refreshed on pull/reclone.
+   *
+   * @generated from field: string cloned_at = 6;
+   */
+  clonedAt: string;
+};
+
+/**
+ * Describes the message reliant.v1.DaemonRepository.
+ * Use `create(DaemonRepositorySchema)` to create a new message.
+ */
+export const DaemonRepositorySchema: GenMessage<DaemonRepository> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_project, 43);
+
+/**
+ * ListRepositoriesForDaemonRequest filters by daemon.
+ *
+ * @generated from message reliant.v1.ListRepositoriesForDaemonRequest
+ */
+export type ListRepositoriesForDaemonRequest = Message<"reliant.v1.ListRepositoriesForDaemonRequest"> & {
+  /**
+   * @generated from field: string daemon_id = 1;
+   */
+  daemonId: string;
+};
+
+/**
+ * Describes the message reliant.v1.ListRepositoriesForDaemonRequest.
+ * Use `create(ListRepositoriesForDaemonRequestSchema)` to create a new message.
+ */
+export const ListRepositoriesForDaemonRequestSchema: GenMessage<ListRepositoriesForDaemonRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_project, 44);
+
+/**
+ * ListRepositoriesForDaemonResponse returns matching rows joined with project
+ * metadata.
+ *
+ * @generated from message reliant.v1.ListRepositoriesForDaemonResponse
+ */
+export type ListRepositoriesForDaemonResponse = Message<"reliant.v1.ListRepositoriesForDaemonResponse"> & {
+  /**
+   * @generated from field: repeated reliant.v1.DaemonRepository repositories = 1;
+   */
+  repositories: DaemonRepository[];
+};
+
+/**
+ * Describes the message reliant.v1.ListRepositoriesForDaemonResponse.
+ * Use `create(ListRepositoriesForDaemonResponseSchema)` to create a new message.
+ */
+export const ListRepositoriesForDaemonResponseSchema: GenMessage<ListRepositoriesForDaemonResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_project, 45);
+
+/**
+ * PullProjectOnDaemonRequest runs `git pull` on a specific clone.
+ *
+ * @generated from message reliant.v1.PullProjectOnDaemonRequest
+ */
+export type PullProjectOnDaemonRequest = Message<"reliant.v1.PullProjectOnDaemonRequest"> & {
+  /**
+   * @generated from field: string project_id = 1;
+   */
+  projectId: string;
+
+  /**
+   * @generated from field: string daemon_id = 2;
+   */
+  daemonId: string;
+};
+
+/**
+ * Describes the message reliant.v1.PullProjectOnDaemonRequest.
+ * Use `create(PullProjectOnDaemonRequestSchema)` to create a new message.
+ */
+export const PullProjectOnDaemonRequestSchema: GenMessage<PullProjectOnDaemonRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_project, 46);
+
+/**
+ * PullProjectOnDaemonResponse returns the trimmed git pull output.
+ *
+ * @generated from message reliant.v1.PullProjectOnDaemonResponse
+ */
+export type PullProjectOnDaemonResponse = Message<"reliant.v1.PullProjectOnDaemonResponse"> & {
+  /**
+   * @generated from field: string output = 1;
+   */
+  output: string;
+};
+
+/**
+ * Describes the message reliant.v1.PullProjectOnDaemonResponse.
+ * Use `create(PullProjectOnDaemonResponseSchema)` to create a new message.
+ */
+export const PullProjectOnDaemonResponseSchema: GenMessage<PullProjectOnDaemonResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_project, 47);
+
+/**
+ * RemoveProjectFromDaemonRequest removes an on-disk clone + its
+ * project_daemons row.
+ *
+ * @generated from message reliant.v1.RemoveProjectFromDaemonRequest
+ */
+export type RemoveProjectFromDaemonRequest = Message<"reliant.v1.RemoveProjectFromDaemonRequest"> & {
+  /**
+   * @generated from field: string project_id = 1;
+   */
+  projectId: string;
+
+  /**
+   * @generated from field: string daemon_id = 2;
+   */
+  daemonId: string;
+};
+
+/**
+ * Describes the message reliant.v1.RemoveProjectFromDaemonRequest.
+ * Use `create(RemoveProjectFromDaemonRequestSchema)` to create a new message.
+ */
+export const RemoveProjectFromDaemonRequestSchema: GenMessage<RemoveProjectFromDaemonRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_project, 48);
+
+/**
+ * RemoveProjectFromDaemonResponse is empty on success.
+ *
+ * @generated from message reliant.v1.RemoveProjectFromDaemonResponse
+ */
+export type RemoveProjectFromDaemonResponse = Message<"reliant.v1.RemoveProjectFromDaemonResponse"> & {
+};
+
+/**
+ * Describes the message reliant.v1.RemoveProjectFromDaemonResponse.
+ * Use `create(RemoveProjectFromDaemonResponseSchema)` to create a new message.
+ */
+export const RemoveProjectFromDaemonResponseSchema: GenMessage<RemoveProjectFromDaemonResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_project, 49);
+
+/**
+ * RecloneProjectOnDaemonRequest blows away the on-disk clone and re-clones
+ * from the project's remote_url.
+ *
+ * @generated from message reliant.v1.RecloneProjectOnDaemonRequest
+ */
+export type RecloneProjectOnDaemonRequest = Message<"reliant.v1.RecloneProjectOnDaemonRequest"> & {
+  /**
+   * @generated from field: string project_id = 1;
+   */
+  projectId: string;
+
+  /**
+   * @generated from field: string daemon_id = 2;
+   */
+  daemonId: string;
+};
+
+/**
+ * Describes the message reliant.v1.RecloneProjectOnDaemonRequest.
+ * Use `create(RecloneProjectOnDaemonRequestSchema)` to create a new message.
+ */
+export const RecloneProjectOnDaemonRequestSchema: GenMessage<RecloneProjectOnDaemonRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_project, 50);
+
+/**
+ * RecloneProjectOnDaemonResponse returns the (potentially-changed) clone path.
+ *
+ * @generated from message reliant.v1.RecloneProjectOnDaemonResponse
+ */
+export type RecloneProjectOnDaemonResponse = Message<"reliant.v1.RecloneProjectOnDaemonResponse"> & {
+  /**
+   * @generated from field: string path = 1;
+   */
+  path: string;
+};
+
+/**
+ * Describes the message reliant.v1.RecloneProjectOnDaemonResponse.
+ * Use `create(RecloneProjectOnDaemonResponseSchema)` to create a new message.
+ */
+export const RecloneProjectOnDaemonResponseSchema: GenMessage<RecloneProjectOnDaemonResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_project, 51);
 
 /**
  * ProjectService handles project-related operations
@@ -1247,6 +1659,96 @@ export const ProjectService: GenService<{
     methodKind: "unary";
     input: typeof InitializeGitRepoRequestSchema;
     output: typeof InitializeGitRepoResponseSchema;
+  },
+  /**
+   * ListProjectDaemonsForDaemon returns the project_daemons rows installed on
+   * the given daemon. The ProjectPicker uses this to mark projects that are
+   * (or aren't) cloned on the user's currently-active daemon.
+   *
+   * @generated from rpc reliant.v1.ProjectService.ListProjectDaemonsForDaemon
+   */
+  listProjectDaemonsForDaemon: {
+    methodKind: "unary";
+    input: typeof ListProjectDaemonsForDaemonRequestSchema;
+    output: typeof ListProjectDaemonsForDaemonResponseSchema;
+  },
+  /**
+   * ListProjectDaemons returns every project_daemons row across all the
+   * caller's daemons. The ProjectPicker uses this to render badges that name
+   * *which* daemon(s) a project lives on (vs the leaner per-daemon view that
+   * can only answer "installed here or not"). User-scoped: filtered to
+   * projects owned by the calling user.
+   *
+   * @generated from rpc reliant.v1.ProjectService.ListProjectDaemons
+   */
+  listProjectDaemons: {
+    methodKind: "unary";
+    input: typeof ListProjectDaemonsRequestSchema;
+    output: typeof ListProjectDaemonsResponseSchema;
+  },
+  /**
+   * MarkProjectInstalled records that a project has a clone on a daemon.
+   * Called after gitService.cloneRepo() succeeds so the picker can see the
+   * project on that daemon. Idempotent — re-running with the same
+   * (project, daemon) updates the path/branch.
+   *
+   * @generated from rpc reliant.v1.ProjectService.MarkProjectInstalled
+   */
+  markProjectInstalled: {
+    methodKind: "unary";
+    input: typeof MarkProjectInstalledRequestSchema;
+    output: typeof MarkProjectInstalledResponseSchema;
+  },
+  /**
+   * ListRepositoriesForDaemon returns the projects cloned on the given daemon,
+   * denormalized with project metadata (name, remote_url) so admin callers
+   * can render a "Repositories" table without a follow-up GetProject for each
+   * row. Filtered to projects owned by the calling user.
+   *
+   * @generated from rpc reliant.v1.ProjectService.ListRepositoriesForDaemon
+   */
+  listRepositoriesForDaemon: {
+    methodKind: "unary";
+    input: typeof ListRepositoriesForDaemonRequestSchema;
+    output: typeof ListRepositoriesForDaemonResponseSchema;
+  },
+  /**
+   * PullProjectOnDaemon runs `git pull` for the project's clone on a daemon.
+   * The daemon must currently host the project (project_daemons row must
+   * exist). Fails if the daemon is offline.
+   *
+   * @generated from rpc reliant.v1.ProjectService.PullProjectOnDaemon
+   */
+  pullProjectOnDaemon: {
+    methodKind: "unary";
+    input: typeof PullProjectOnDaemonRequestSchema;
+    output: typeof PullProjectOnDaemonResponseSchema;
+  },
+  /**
+   * RemoveProjectFromDaemon deletes the on-disk clone AND the
+   * project_daemons row for (project_id, daemon_id). Project itself is NOT
+   * deleted — other daemons may still host clones. Idempotent: succeeds even
+   * if the row was already absent (the on-disk delete is best-effort).
+   *
+   * @generated from rpc reliant.v1.ProjectService.RemoveProjectFromDaemon
+   */
+  removeProjectFromDaemon: {
+    methodKind: "unary";
+    input: typeof RemoveProjectFromDaemonRequestSchema;
+    output: typeof RemoveProjectFromDaemonResponseSchema;
+  },
+  /**
+   * RecloneProjectOnDaemon removes the existing on-disk clone and re-clones
+   * it from the project's remote_url at the recorded default branch. Any
+   * local-only changes are lost; UI must confirm before calling. The
+   * project_daemons row is updated with the new cloned_at.
+   *
+   * @generated from rpc reliant.v1.ProjectService.RecloneProjectOnDaemon
+   */
+  recloneProjectOnDaemon: {
+    methodKind: "unary";
+    input: typeof RecloneProjectOnDaemonRequestSchema;
+    output: typeof RecloneProjectOnDaemonResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_reliant_v1_project, 0);

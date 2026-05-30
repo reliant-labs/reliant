@@ -9,6 +9,7 @@ import { useCompleteOnboarding } from "@/hooks/useOnboardingQueries";
 import { useGitHubCredential } from "@/hooks/useGitHubCredential";
 import { gitService } from "@/services/controlPlane/git";
 import { ensureProject, finalizeOnboardingSideEffects } from "../useOnboardingComplete";
+import { markOnboardingFinalized } from "../analytics";
 import type { LaunchPlan, StepProps } from "../types";
 
 export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
@@ -25,6 +26,7 @@ export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
     }
     setError(null);
     setBusy(true);
+    trackEvent("onboarding_intent_selected", { intent: "build_app" });
     try {
       const finalPlan: Partial<LaunchPlan> = { ...plan, intent: "build_app" };
       updatePlan({ intent: "build_app" });
@@ -46,11 +48,7 @@ export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
         modelProvider: finalPlan.modelProvider,
       });
 
-      trackEvent("onboarding_completed", {
-        provider: finalPlan.modelProvider ?? "unknown",
-        compute: finalPlan.compute ?? "unknown",
-        project_source: "new",
-      });
+      markOnboardingFinalized(finalPlan, "new");
 
       await finalizeOnboardingSideEffects(finalPlan.modelProvider);
       navigate({ to: "/", search: { step: undefined, plan: undefined } });
@@ -62,6 +60,7 @@ export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
 
   const handleConnectExisting = useCallback(async () => {
     setError(null);
+    trackEvent("onboarding_intent_selected", { intent: "existing_codebase" });
     // Set intent first. If we already have a credential, derivation will
     // immediately route to the github-connect step (repo picker) on the
     // next render. If we don't, launch the custom OAuth flow with

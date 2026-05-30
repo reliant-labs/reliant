@@ -9,6 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/nats-io/nats.go"
+	"github.com/reliant-labs/reliant/internal/daemonliveness"
 	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/gen/reliant/v1/reliantv1connect"
@@ -210,25 +211,71 @@ func (r *NATSDaemonRouter) resolveViaControlPlane(ctx context.Context, selector 
 // reports a heartbeat within this window we skip the DB query.
 const daemonStaleThreshold = 30 * time.Second
 
-// isDaemonReachable checks whether the daemon is online. It first looks at
-// the x-daemon-last-seen header stashed in ctx by the auth interceptor. If
-// the header is recent enough the DB query is skipped entirely.
+// LocalConnectionChecker is implemented by resolvers that can report whether
+// any daemon stream is currently held in-process for a given user. It lets the
+// router skip DB-based liveness checks for single-replica deployments.
+type LocalConnectionChecker interface {
+	HasConnectedDaemonsForUser(userID string) bool
+}
+
+// isDaemonReachable checks whether the daemon is online. If the resolver also
+// satisfies LocalConnectionChecker and reports a live stream on this gateway,
+// the DB lookup is skipped — the in-memory map is authoritative for the
+// connections this process owns. Otherwise it falls back to the auth header
+// hint and finally to the DB attachment query.
 func (r *NATSDaemonRouter) isDaemonReachable(ctx context.Context, userID string) (bool, error) {
+	if checker, ok := r.resolver.(LocalConnectionChecker); ok && checker.HasConnectedDaemonsForUser(userID) {
+		return true, nil
+	}
 	if interceptors.DaemonLastSeenFresh(ctx, daemonStaleThreshold) {
 		return true, nil
 	}
 	return r.IsDaemonOnline(ctx, userID)
 }
 
+// IsDaemonOnline is a thin wrapper that delegates to
+// daemonliveness.ReachableByUser. The signature is preserved so call sites
+// don't change during the Step 1 migration.
+//
+// When no DB is configured (OSS single-replica) the router falls back to the
+// legacy NATS request-reply path, which enumerates and asks; otherwise the
+// daemonliveness package owns the answer.
 func (r *NATSDaemonRouter) IsDaemonOnline(ctx context.Context, userID string) (bool, error) {
 	if r.db == nil {
 		return r.isDaemonOnlineViaNATS(ctx, userID)
 	}
-	online, err := r.db.IsDaemonAttached(ctx, userID, daemonStaleThreshold)
+	s, err := daemonliveness.ReachableByUser(ctx, r.nc, dbAdapter{r.db}, userID)
 	if err != nil {
-		return false, fmt.Errorf("checking daemon attachment in DB: %w", err)
+		return false, fmt.Errorf("checking daemon liveness: %w", err)
 	}
-	return online, nil
+	return s.Live, nil
+}
+
+// dbAdapter implements daemonliveness.Repository by delegating to the
+// existing db.Repository. We deliberately do NOT add a new repo method:
+// IsDaemonAttached already answers the boolean we need, and LastSeen=zero is
+// acceptable for the current callers (none read it). The per-daemon variant
+// is a TODO — see below.
+type dbAdapter struct {
+	repo db.Repository
+}
+
+func (a dbAdapter) GetUserLiveness(ctx context.Context, userID string, staleThreshold time.Duration) (daemonliveness.Status, error) {
+	live, err := a.repo.IsDaemonAttached(ctx, userID, staleThreshold)
+	if err != nil {
+		return daemonliveness.Status{}, err
+	}
+	return daemonliveness.Status{Live: live}, nil
+}
+
+func (a dbAdapter) GetDaemonLiveness(ctx context.Context, daemonID string, staleThreshold time.Duration) (daemonliveness.Status, error) {
+	// TODO: add a per-daemon attachment-freshness query to db.Repository when
+	// the first caller for Reachable(daemonID) lands. For now, callers route
+	// through ReachableByUser via IsDaemonOnline, so this path is unused.
+	_ = ctx
+	_ = daemonID
+	_ = staleThreshold
+	return daemonliveness.Status{}, fmt.Errorf("dbAdapter.GetDaemonLiveness: not implemented; no caller yet")
 }
 
 // isDaemonOnlineViaNATS is the legacy NATS request-reply check, used as fallback

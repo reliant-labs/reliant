@@ -75,12 +75,19 @@ type Repository interface {
 	GetProject(ctx context.Context, id string) (*Project, error)
 	GetProjectByPath(ctx context.Context, path string) (*Project, error)
 	GetProjectByPathAndUser(ctx context.Context, path, userID string) (*Project, error)
+	GetProjectByRemoteURLAndUser(ctx context.Context, remoteURL, userID string) (*Project, error)
 	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*Project, error)
 	ListProjects(ctx context.Context, filters ProjectFilters) ([]*Project, error)
 	UpdateProject(ctx context.Context, project *Project, userID string) error
 	TouchProject(ctx context.Context, id string, userID string) error
 	DeleteProject(ctx context.Context, id string, userID string) error
 	GetProjectConfigRecord(ctx context.Context, projectID string) (*ProjectConfigRecord, error)
+
+	// Project ↔ Daemon installations (which daemons have a clone of a project).
+	UpsertProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) error
+	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error)
+	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error)
+	DeleteProjectDaemon(ctx context.Context, projectID, daemonID string) error
 
 	// Worktrees
 	CreateWorktree(ctx context.Context, worktree *Worktree) error
@@ -203,7 +210,7 @@ type Repository interface {
 	GetDaemon(ctx context.Context, id string) (*Daemon, error)
 	ListDaemonsByUserID(ctx context.Context, userID string) ([]*Daemon, error)
 	UpsertDaemonAttachment(ctx context.Context, att *DaemonAttachment) error
-	TouchDaemonAttachment(ctx context.Context, daemonID string, activityAt time.Time) error
+	TouchDaemonAttachmentIfNewer(ctx context.Context, daemonID string, activityAt time.Time) error
 	DeleteDaemonAttachment(ctx context.Context, daemonID string) error
 	IsDaemonAttached(ctx context.Context, userID string, staleThreshold time.Duration) (bool, error)
 	ListAttachedDaemonIDsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]string, error)

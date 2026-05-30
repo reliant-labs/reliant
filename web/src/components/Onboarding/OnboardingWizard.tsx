@@ -17,7 +17,7 @@
  * 3. Tour completed + checklist dismissed: Render nothing
  */
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useLocation } from "@tanstack/react-router";
 import { Workflow } from "lucide-react";
 import { useOnboardingChecklistStore } from "../../store/onboardingChecklistStore";
@@ -331,14 +331,29 @@ export function OnboardingWizard() {
     }
   }, [tourInitialized, checklistInitialized, loadTourState, loadChecklistState]);
 
-  // Track onboarding_started when wizard becomes active. Fires once per tour
-  // session — not on every step change.
+  // tour_started fires once when the wizard becomes active. tourStartRef holds
+  // the wall-clock start so tour_completed / tour_step_skipped can report a
+  // full-tour duration. stepStartRef tracks the current step's view time so
+  // tour_step_completed / tour_step_skipped can report per-step duration.
+  const tourStartRef = useRef<number | null>(null);
+  const stepStartRef = useRef<number | null>(null);
   useEffect(() => {
     if (isWizardActive && currentStepId) {
-      trackEvent("onboarding_started", { totalSteps: ONBOARDING_STEPS.length });
+      tourStartRef.current = Date.now();
+      stepStartRef.current = Date.now();
+      trackEvent("tour_started", { totalSteps: ONBOARDING_STEPS.length });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isWizardActive]);
+
+  // tour_step_viewed fires on every step transition (including the first).
+  // stepStartRef resets so subsequent step_completed / step_skipped events get
+  // a fresh per-step duration.
+  useEffect(() => {
+    if (!isWizardActive || !currentStepId) return;
+    stepStartRef.current = Date.now();
+    trackEvent("tour_step_viewed", { stepId: currentStepId });
+  }, [isWizardActive, currentStepId]);
 
   // Set up checklist detection after checklist state is ready
   useEffect(() => {
@@ -361,22 +376,42 @@ export function OnboardingWizard() {
     if (!StepComponent) return null;
 
     const handleComplete = async () => {
-      trackEvent("onboarding_step_completed", {
+      const stepDuration = stepStartRef.current
+        ? Date.now() - stepStartRef.current
+        : 0;
+      trackEvent("tour_step_completed", {
         stepId: currentStepId,
         stepName: currentStep.title,
         stepsCompleted: stepIndex + 1,
         totalSteps: ONBOARDING_STEPS.length,
+        duration_ms: stepDuration,
       });
+      if (stepIndex === ONBOARDING_STEPS.length - 1 && tourStartRef.current) {
+        trackEvent("tour_completed", {
+          totalSteps: ONBOARDING_STEPS.length,
+          duration_ms: Date.now() - tourStartRef.current,
+        });
+        tourStartRef.current = null;
+      }
       await completeAndAdvance();
     };
 
     const handleSkipAll = async () => {
-      trackEvent("onboarding_step_skipped", {
+      const stepDuration = stepStartRef.current
+        ? Date.now() - stepStartRef.current
+        : 0;
+      const tourDuration = tourStartRef.current
+        ? Date.now() - tourStartRef.current
+        : 0;
+      trackEvent("tour_step_skipped", {
         stepId: currentStepId,
         stepName: currentStep.title,
         stepsCompleted: stepIndex,
         totalSteps: ONBOARDING_STEPS.length,
+        duration_ms: stepDuration,
+        tour_duration_ms: tourDuration,
       });
+      tourStartRef.current = null;
       await skipAll();
     };
 

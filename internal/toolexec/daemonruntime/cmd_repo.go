@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/reliant-labs/reliant/internal/repo"
 )
@@ -28,6 +30,11 @@ type repoDiscoverFound struct {
 
 type repoDiscoverResponse struct {
 	Discovered []repoDiscoverFound `json:"discovered"`
+	// HasForge is true when forge.yaml exists at the requested root path.
+	// Used by ProjectService.CreateProject to set projects.is_forge without a
+	// second daemon round-trip. Detection mirrors the os.Stat check in
+	// [internal/skills/catalog/forge.go].
+	HasForge bool `json:"has_forge"`
 }
 
 // handleRepoDiscover scans a project directory for nested git repositories.
@@ -53,6 +60,9 @@ func handleRepoDiscover(ctx context.Context, payload []byte) ([]byte, error) {
 			Name:         f.Name,
 			RemoteURL:    f.RemoteURL,
 		}
+	}
+	if _, err := os.Stat(filepath.Join(req.Path, "forge.yaml")); err == nil {
+		resp.HasForge = true
 	}
 	return json.Marshal(resp)
 }
