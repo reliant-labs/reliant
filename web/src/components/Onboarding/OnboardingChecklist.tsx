@@ -160,7 +160,7 @@ function ChecklistItemRow({
         <button
           onClick={(e) => {
             e.stopPropagation();
-            trackEvent("onboarding_step_completed", {
+            trackEvent("checklist_step_completed", {
               stepId: item.id,
               stepName: item.title,
               stepsCompleted: 0,

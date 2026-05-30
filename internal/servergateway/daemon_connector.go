@@ -232,15 +232,14 @@ func (dc *DaemonConnector) connectOnce(ctx context.Context, daemonID, userID, po
 		return fmt.Errorf("registering outbound connection: %w", err)
 	}
 
+	// Cleanup via defer so the connections map is freed even if
+	// HandleIncoming panics. Disconnect is idempotent — if the sweeper
+	// already nuked this connection, this is a no-op.
+	defer outbound.Disconnect()
+	defer func() { _ = stream.CloseResponse() }()
+
 	// Run the receive loop — blocks until the stream ends.
-	recvErr := outbound.HandleIncoming(ctx)
-
-	// Clean up the connection from ToolsDaemonService state.
-	outbound.Disconnect()
-
-	_ = stream.CloseResponse()
-
-	return recvErr
+	return outbound.HandleIncoming(ctx)
 }
 
 // h2cClient returns an HTTP client configured for h2c (HTTP/2 cleartext),

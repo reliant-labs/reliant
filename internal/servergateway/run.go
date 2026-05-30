@@ -21,8 +21,10 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/reliant-labs/reliant/internal/certs"
+	"github.com/reliant-labs/reliant/internal/daemonactivity"
 	"github.com/reliant-labs/reliant/internal/daemonevents"
 	"github.com/reliant-labs/reliant/internal/daemonquery"
+	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
@@ -171,6 +173,37 @@ func Run(ctx context.Context, opts Options) error {
 	toolsDaemonService := services.NewToolsDaemonService(repo)
 	defer toolsDaemonService.Close()
 
+	// State publisher: emits daemon.v1.state.* lifecycle events on the
+	// core-NATS bus. The control-plane derivation consumer fans these out
+	// to the derived stores (daemon_attachment, daemons.status, workspace
+	// CR). See .dev/simplification-proposal.md, Step 3.
+	toolsDaemonService.SetStatePublisher(daemonstate.NewPublisher(nc))
+	logging.Info("Daemon state publisher wired",
+		"subjectPrefix", daemonstate.SubjectPrefix,
+	)
+
+	// Reliant-side derivation consumer: subscribes to the same subject and
+	// mirrors lifecycle events into daemon_attachment. Replaces the legacy
+	// debounced TouchDaemonAttachment / heartbeat-special-cased touch in
+	// ToolsDaemonService — the publisher above is now the single writer
+	// upstream, and this consumer is the single writer downstream.
+	derivation := daemonstate.NewDerivation(nc, repo)
+	go func() {
+		if err := derivation.Start(ctx); err != nil && ctx.Err() == nil {
+			logging.Error("Daemon state derivation consumer failed", "error", err)
+		}
+	}()
+	logging.Info("Daemon state derivation consumer started",
+		"subject", daemonstate.SubjectWildcard,
+	)
+
+	// Stale-connection sweeper: nukes connections whose application-level
+	// stream has died but whose TCP socket is still ESTABLISHED (observed
+	// in production — see Layer B of the half-open-cleanup fix). Bound to
+	// the same ctx as the rest of the bootstrap.
+	go toolsDaemonService.Start(ctx)
+	logging.Info("Stale-connection sweeper started for ToolsDaemonService")
+
 	// RemoteExecutor is used by DaemonServer to wire the local daemon router
 	remoteExecutor := toolexec.NewRemoteExecutor(nil)
 
@@ -219,6 +252,19 @@ func Run(ctx context.Context, opts Options) error {
 	toolsDaemonService.AddConnectionListener(statusResponder)
 	logging.Info("Daemon status responder started",
 		"subjectPattern", daemonquery.SubjectQueryPrefix+"<daemonID>.status",
+	)
+
+	// Cross-process activity ping subscriber. The control-plane LLM proxy
+	// publishes to daemon.v1.activity.user.<userID> when forwarding a call;
+	// we bump lastActivity for that user's daemons so the status query
+	// reflects real usage between heartbeats.
+	activitySubscriber := daemonactivity.NewSubscriber()
+	if err := activitySubscriber.Start(nc, toolsDaemonService); err != nil {
+		return fmt.Errorf("failed to start daemon activity subscriber: %w", err)
+	}
+	defer activitySubscriber.Stop()
+	logging.Info("Daemon activity subscriber started",
+		"subjectPattern", daemonactivity.SubjectWildcard,
 	)
 
 	// Daemon gRPC server (bidi streaming endpoint for tools-daemon connections)

@@ -3,11 +3,12 @@
 import { grpcClient } from "./grpc-client";
 import { singleflight } from "../lib/singleflight";
 import { create } from "@bufbuild/protobuf";
-import type { 
+import type {
   Project as ProtoProject,
   GitBranch as ProtoGitBranch,
   FileChange as ProtoFileChange,
   Prompt as ProtoPrompt,
+  ProjectDaemon as ProtoProjectDaemon,
 } from "../gen/reliant/v1/project_pb";
 import { FileChangeStatus } from "../gen/reliant/v1/common_pb";
 import {
@@ -28,6 +29,9 @@ import {
   SaveProjectPromptsRequestSchema,
   InitializeGitRepoRequestSchema,
   PromptSchema,
+  ListProjectDaemonsForDaemonRequestSchema,
+  ListProjectDaemonsRequestSchema,
+  MarkProjectInstalledRequestSchema,
 } from "../gen/reliant/v1/project_pb";
 
 // Type definitions matching frontend expectations (snake_case to match store interface)
@@ -42,6 +46,14 @@ export interface Project {
   last_active: string;
   created_at: string;
   updated_at: string;
+  // Canonical git remote URL — present for git-backed projects whose root
+  // repo's remote has been resolved by the daemon. NULL for non-git or
+  // unresolved projects. Used by the picker to decide whether a project
+  // can be re-cloned to another daemon.
+  remote_url?: string;
+  // True when the project's repo root contains a forge.yaml. Populated at
+  // clone / project-create time by the server.
+  is_forge: boolean;
 }
 
 export interface GitBranch {
@@ -109,6 +121,26 @@ export interface ProjectInitStatus {
   message: string;
 }
 
+// ProjectDaemonInfo mirrors the proto ProjectDaemon row — one record per
+// (project, daemon) pair where the daemon has a local clone of the project.
+export interface ProjectDaemonInfo {
+  project_id: string;
+  daemon_id: string;
+  path: string;
+  default_branch?: string;
+  cloned_at: string;
+}
+
+function protoProjectDaemonToFrontend(proto: ProtoProjectDaemon): ProjectDaemonInfo {
+  return {
+    project_id: proto.projectId,
+    daemon_id: proto.daemonId,
+    path: proto.path,
+    default_branch: proto.defaultBranch || undefined,
+    cloned_at: proto.clonedAt,
+  };
+}
+
 // Convert proto Project to frontend Project
 function protoToFrontend(proto: ProtoProject): Project {
   return {
@@ -122,6 +154,8 @@ function protoToFrontend(proto: ProtoProject): Project {
     last_active: proto.lastActive,
     created_at: proto.createdAt,
     updated_at: proto.updatedAt,
+    remote_url: proto.remoteUrl || undefined,
+    is_forge: proto.isForge,
   };
 }
 
@@ -366,6 +400,45 @@ export const projectGrpc = {
       message: response.message,
       prompts: response.prompts.map(protoPromptToFrontend),
     };
+  },
+
+  // List project_daemons rows for a daemon — the set of projects that have a
+  // clone installed on that daemon. The picker uses this to mark rows.
+  async listProjectDaemonsForDaemon(daemonId: string): Promise<ProjectDaemonInfo[]> {
+    const client = grpcClient.project();
+    const request = create(ListProjectDaemonsForDaemonRequestSchema, { daemonId });
+    const response = await client.listProjectDaemonsForDaemon(request);
+    return response.projectDaemons.map(protoProjectDaemonToFrontend);
+  },
+
+  // List every project_daemons row across all the user's daemons in one
+  // round-trip. The picker uses this for the cross-daemon view — naming
+  // which daemon(s) host a project and gating per-daemon clone actions.
+  async listProjectDaemons(): Promise<ProjectDaemonInfo[]> {
+    const client = grpcClient.project();
+    const request = create(ListProjectDaemonsRequestSchema, {});
+    const response = await client.listProjectDaemons(request);
+    return response.projectDaemons.map(protoProjectDaemonToFrontend);
+  },
+
+  // Record that a project has been cloned onto a daemon. Called after
+  // gitService.cloneRepo() succeeds.
+  async markProjectInstalled(
+    projectId: string,
+    daemonId: string,
+    path: string,
+    defaultBranch?: string,
+  ): Promise<ProjectDaemonInfo | undefined> {
+    const client = grpcClient.project();
+    const request = create(MarkProjectInstalledRequestSchema, {
+      projectId,
+      daemonId,
+      path,
+      defaultBranch,
+    });
+    const response = await client.markProjectInstalled(request);
+    if (!response.projectDaemon) return undefined;
+    return protoProjectDaemonToFrontend(response.projectDaemon);
   },
 
   // Initialize a git repository

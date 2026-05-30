@@ -9,8 +9,6 @@ import { supabase } from "@/lib/supabase";
 import { initSentry } from "@/lib/sentry";
 import { identifyUser, resetUser } from "@/lib/analytics";
 import { settingsSync } from "@/services/settingsSync";
-import { api } from "@/api/client";
-import { triggerRefetch } from "@/store/refetchStore";
 
 // NOTE: OAuth callback handling is done in authStore.initialize() to avoid duplicate listeners
 
@@ -28,9 +26,6 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
   const initializePrivacy = usePrivacyStore((state) => state.initialize);
   const hasPrefetched = useRef(false);
   const hasInitializedAuthenticatedStartup = useRef(false);
-  // Tracks whether SyncReliantProvider has been called for the current session.
-  // Reset on logout so the next login re-hydrates the key.
-  const hasSyncedReliantProvider = useRef(false);
 
   useEffect(() => {
     void initialize();
@@ -50,10 +45,6 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
         hasInitializedAuthenticatedStartup.current = false;
         void resetUser();
       }
-
-      // Reset the reliant-sync gate so a subsequent login re-hydrates the
-      // per-user internal API key for that account.
-      hasSyncedReliantProvider.current = false;
     }
   }, [user, resetApiKeyCheck]);
 
@@ -88,51 +79,6 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
         settingsSync.applyAppearanceSettingsToDOM();
       } catch (error) {
         logger.warn("[AuthInitializer] Authenticated startup initialization failed:", error);
-      }
-
-      // Hydrate the per-user Reliant provider API key from control-plane.
-      // Without this, BuildAvailableDrivers finds no rlnt_ key and chats
-      // fall through to "no available provider". Idempotent on the server;
-      // guarded by a ref so it only fires once per logged-in session.
-      // Failures are non-fatal — other providers can still be used and the
-      // user can retry later (e.g. next login).
-      if (!hasSyncedReliantProvider.current) {
-        hasSyncedReliantProvider.current = true;
-        try {
-          const result = await api.settings.syncReliantProvider();
-          logger.info("[AuthInitializer] SyncReliantProvider completed", {
-            success: result.success,
-            synced: result.synced,
-            createdOrg: result.createdOrg,
-            createdKey: result.createdKey,
-            rotatedKey: result.rotatedKey,
-          });
-
-          if (result.success) {
-            // Refresh provider-statuses / config-health consumers so the
-            // setup-guide tile and any "no key" banners re-evaluate now that
-            // reliant is configured.
-            triggerRefetch("config_health");
-            try {
-              const { useOnboardingChecklistStore } = await import(
-                "../store/onboardingChecklistStore"
-              );
-              void useOnboardingChecklistStore.getState().detectCompletedItems();
-            } catch (err) {
-              logger.warn(
-                "[AuthInitializer] Post-sync checklist refresh failed:",
-                err,
-              );
-            }
-          }
-        } catch (error) {
-          // Non-blocking: log only. The user can still use other providers,
-          // and the next login will retry the sync.
-          logger.warn("[AuthInitializer] SyncReliantProvider failed:", error);
-          // Allow a retry within this session if the failure was transient
-          // (e.g. control-plane briefly unreachable).
-          hasSyncedReliantProvider.current = false;
-        }
       }
 
       try {

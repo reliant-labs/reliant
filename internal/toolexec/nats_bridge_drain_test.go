@@ -151,7 +151,7 @@ func (c *stubConsumer) Messages(...jetstream.PullMessagesOpt) (jetstream.Message
 }
 func (c *stubConsumer) Next(...jetstream.FetchOpt) (jetstream.Msg, error) { panic("not implemented") }
 func (c *stubConsumer) Info(context.Context) (*jetstream.ConsumerInfo, error) {
-	panic("not implemented")
+	return &jetstream.ConsumerInfo{Name: "stub-consumer"}, nil
 }
 func (c *stubConsumer) CachedInfo() *jetstream.ConsumerInfo { panic("not implemented") }
 
@@ -167,8 +167,8 @@ func (s *stubStream) OrderedConsumer(_ context.Context, _ jetstream.OrderedConsu
 func (s *stubStream) CreateOrUpdateConsumer(context.Context, jetstream.ConsumerConfig) (jetstream.Consumer, error) {
 	panic("not implemented")
 }
-func (s *stubStream) CreateConsumer(context.Context, jetstream.ConsumerConfig) (jetstream.Consumer, error) {
-	panic("not implemented")
+func (s *stubStream) CreateConsumer(_ context.Context, _ jetstream.ConsumerConfig) (jetstream.Consumer, error) {
+	return s.consumer, nil
 }
 func (s *stubStream) UpdateConsumer(context.Context, jetstream.ConsumerConfig) (jetstream.Consumer, error) {
 	panic("not implemented")
@@ -176,7 +176,7 @@ func (s *stubStream) UpdateConsumer(context.Context, jetstream.ConsumerConfig) (
 func (s *stubStream) Consumer(context.Context, string) (jetstream.Consumer, error) {
 	panic("not implemented")
 }
-func (s *stubStream) DeleteConsumer(context.Context, string) error { panic("not implemented") }
+func (s *stubStream) DeleteConsumer(context.Context, string) error { return nil }
 func (s *stubStream) PauseConsumer(context.Context, string, time.Time) (*jetstream.ConsumerPauseResponse, error) {
 	panic("not implemented")
 }

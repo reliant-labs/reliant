@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/gen/reliant/v1/reliantv1connect"
@@ -31,6 +32,18 @@ const (
 
 	// Heartbeat interval for keeping connections alive.
 	daemonHeartbeatInterval = 15 * time.Second
+
+	// staleConnectionSweepInterval is how often the sweeper goroutine scans
+	// the connections map for half-open (dead application stream, live TCP)
+	// daemon connections.
+	staleConnectionSweepInterval = 60 * time.Second
+
+	// staleConnectionThreshold is how long a connection can be silent (no
+	// heartbeats, no receives, no sends) before the sweeper treats it as
+	// dead and removes it. Daemon heartbeat interval is 15s, so 90s = 6
+	// missed heartbeats — comfortably beyond any plausible transient
+	// network blip but well within human-noticeable latency.
+	staleConnectionThreshold = 90 * time.Second
 )
 
 // ToolsDaemonService implements bidirectional streaming for tool execution.
@@ -52,6 +65,15 @@ type ToolsDaemonService struct {
 	// userUpdateHub is used to publish ephemeral daemon heartbeat events
 	// to the frontend via the streaming connection. Set via SetUserUpdateHub.
 	userUpdateHub streaming.UpdateHub[db.UserUpdate]
+
+	// statePublisher emits daemon.v1.state.* lifecycle events. Set via
+	// SetStatePublisher; nil-safe (calls on a nil publisher are no-ops).
+	statePublisher *daemonstate.Publisher
+
+	// now returns the current time. Overridable for tests; defaults to
+	// time.Now (UTC). Used by the stale-connection sweeper so tests can
+	// jump the clock without sleeping.
+	now func() time.Time
 }
 
 // daemonStream abstracts the send/receive operations for a daemon connection.
@@ -119,6 +141,7 @@ func NewToolsDaemonService(database db.Repository) *ToolsDaemonService {
 		database:    database,
 		connections: make(map[string]*daemonConnection),
 		userDaemons: make(map[string][]string),
+		now:         func() time.Time { return time.Now().UTC() },
 	}
 }
 
@@ -135,10 +158,84 @@ func (s *ToolsDaemonService) SetUserUpdateHub(hub streaming.UpdateHub[db.UserUpd
 	s.userUpdateHub = hub
 }
 
+// SetStatePublisher wires the daemon lifecycle state publisher. Optional;
+// if unset, lifecycle events are simply not emitted (the existing hand-rolled
+// daemonevents publisher still covers the connect/disconnect path until
+// Step 4 of the simplification proposal lands).
+func (s *ToolsDaemonService) SetStatePublisher(p *daemonstate.Publisher) {
+	s.statePublisher = p
+}
+
 // Close stops background workers owned by the daemon service.
-// Now a no-op (kept for API stability) — the sweeper goroutine was removed
-// when daemon lifecycle moved entirely to daemon_attachment.
+// Kept for API stability. The stale-connection sweeper goroutine started by
+// Start() is bound to the context passed to Start, not to Close — cancel
+// that context to stop it.
 func (s *ToolsDaemonService) Close() {}
+
+// Start launches background goroutines owned by the service. Currently this
+// is just the stale-connection sweeper, which periodically scans the
+// connections map for half-open daemon streams (TCP socket alive but the
+// application-level bidi stream is dead — observed in production when a
+// gateway → workspace-pod connection stays ESTABLISHED long after the
+// daemon's gRPC stream ended).
+//
+// Returns when ctx is cancelled. Safe to call once; the caller is
+// responsible for running this in its own goroutine.
+func (s *ToolsDaemonService) Start(ctx context.Context) {
+	ticker := time.NewTicker(staleConnectionSweepInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.sweepStaleConnections()
+		}
+	}
+}
+
+// sweepStaleConnections removes daemon connections whose lastActivity is
+// older than staleConnectionThreshold, provided the connection has been
+// registered for at least staleConnectionThreshold (so we don't reap a
+// brand-new connection that hasn't sent its first message yet).
+//
+// For each reaped connection: fires OnDaemonDisconnected listeners, closes
+// done + subscribers, and deletes the daemon_attachment row — same as a
+// normal disconnect, just driven by the sweeper rather than the stream's
+// receive-loop returning.
+func (s *ToolsDaemonService) sweepStaleConnections() {
+	now := s.now()
+	threshold := staleConnectionThreshold
+
+	// Collect stale connections under the read lock, then release before
+	// calling teardownConnection (which acquires the write lock + fires
+	// listeners outside it).
+	var stale []*daemonConnection
+	s.mu.RLock()
+	for _, conn := range s.connections {
+		if now.Sub(conn.connectedAt) < threshold {
+			// Don't reap a freshly-registered connection that hasn't had a
+			// chance to send anything yet.
+			continue
+		}
+		if now.Sub(conn.lastActivity) <= threshold {
+			continue
+		}
+		stale = append(stale, conn)
+	}
+	s.mu.RUnlock()
+
+	for _, conn := range stale {
+		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Reaping stale daemon connection",
+			"daemonID", conn.daemonID,
+			"userID", conn.userID,
+			"lastActivity", conn.lastActivity,
+			"silentFor", now.Sub(conn.lastActivity).Round(time.Second),
+		)
+		s.teardownConnection(conn, "stale-connection sweeper")
+	}
+}
 
 // AddConnectionListener registers a listener that will be notified when
 // daemon connections are established or torn down. Safe to call before Start.
@@ -168,6 +265,73 @@ func (s *ToolsDaemonService) notifyDisconnected(userID, daemonID string) {
 	}
 }
 
+// removeConnection removes the given daemonID from s.connections and
+// s.userDaemons, but ONLY if the currently-registered connection pointer
+// matches `expected`. This avoids racing a fresh reconnect that has already
+// taken over the slot. Returns true if a removal happened; the caller is
+// responsible for firing OnDaemonDisconnected listeners and closing the
+// connection's done/subscriber channels.
+//
+// Passing expected == nil unconditionally removes whatever is at the key —
+// only the sweeper should do this.
+func (s *ToolsDaemonService) removeConnection(daemonID, userID string, expected *daemonConnection) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cur, ok := s.connections[daemonID]
+	if !ok {
+		return false
+	}
+	if expected != nil && cur != expected {
+		// The slot has been taken over by a newer connection (reconnect).
+		// Leave it alone.
+		return false
+	}
+	delete(s.connections, daemonID)
+	ids := s.userDaemons[userID]
+	for i, id := range ids {
+		if id == daemonID {
+			s.userDaemons[userID] = append(ids[:i], ids[i+1:]...)
+			break
+		}
+	}
+	if len(s.userDaemons[userID]) == 0 {
+		delete(s.userDaemons, userID)
+	}
+	return true
+}
+
+// teardownConnection performs the full disconnect path for a daemon
+// connection: remove from the connections/userDaemons maps, close the
+// connection's done channel + subscribers, fire OnDaemonDisconnected
+// listeners, and best-effort delete the daemon_attachment row.
+//
+// Idempotent and safe to call multiple times (e.g. from both a `defer` in
+// the stream handler AND from the stale-connection sweeper) — only the
+// first call that finds the connection still registered actually does the
+// work.
+func (s *ToolsDaemonService) teardownConnection(conn *daemonConnection, reason string) {
+	if conn == nil {
+		return
+	}
+	userID := conn.userID
+	daemonID := conn.daemonID
+	daemonType := conn.daemonType
+
+	removed := s.removeConnection(daemonID, userID, conn)
+	// Always close done + subscribers so any goroutines waiting on this
+	// specific connection unblock, even if the slot was already taken over.
+	conn.closeDone()
+	conn.closeAllSubscribers()
+
+	if removed {
+		s.notifyDisconnected(userID, daemonID)
+		s.statePublisher.Disconnected(daemonID, userID, daemonType)
+		if err := s.database.DeleteDaemonAttachment(context.Background(), daemonID); err != nil {
+			logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to delete daemon attachment", "error", err, "daemonID", daemonID, "reason", reason)
+		}
+	}
+}
+
 // DaemonStatus implements daemonquery.StatusSource. Returns the connection's
 // lastActivity timestamp and daemonType if this gateway currently holds a
 // stream for the daemon. ok=false means no connection — the caller's NATS
@@ -184,6 +348,21 @@ func (s *ToolsDaemonService) DaemonStatus(daemonID string) (lastActive time.Time
 		return time.Time{}, "", false
 	}
 	return conn.lastActivity, conn.daemonType, true
+}
+
+// TouchDaemonsForUser bumps lastActivity on every daemon connection currently
+// held for the given user. Used by the cross-process activity ping (the
+// control-plane LLM proxy publishes a NATS message when it forwards a call so
+// the daemon's status query reflects real usage, not just heartbeat cadence).
+func (s *ToolsDaemonService) TouchDaemonsForUser(userID string) {
+	now := time.Now().UTC()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, daemonID := range s.userDaemons[userID] {
+		if conn, ok := s.connections[daemonID]; ok {
+			conn.lastActivity = now
+		}
+	}
 }
 
 // publishDaemonHeartbeat publishes an ephemeral daemon heartbeat event
@@ -365,6 +544,7 @@ func (s *ToolsDaemonService) ConnectDaemon(
 
 	// Notify listeners outside the mutex.
 	s.notifyConnected(userID, daemonID)
+	s.statePublisher.Connected(daemonID, userID, conn.daemonType)
 
 	// Publish an immediate heartbeat so the frontend knows the daemon is
 	// online without waiting for the first periodic heartbeat (up to 15s).
@@ -402,42 +582,16 @@ func (s *ToolsDaemonService) ConnectDaemon(
 		}
 	}
 
+	// Cleanup on disconnect via defer so it runs even on panic from the
+	// receive loop. Idempotent — safe if the sweeper or a reconnect-driven
+	// replace already removed the slot.
+	defer func() {
+		s.teardownConnection(conn, "inbound stream ended")
+		logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Daemon disconnected", "userID", userID, "daemonID", daemonID)
+	}()
+
 	// Handle incoming messages (blocking)
-	err = s.handleIncoming(ctx, conn)
-
-	// Cleanup on disconnect: remove from primary map and user's daemon list.
-	var wasConnected bool
-	s.mu.Lock()
-	if s.connections[daemonID] == conn {
-		delete(s.connections, daemonID)
-		// Remove from userDaemons secondary index.
-		ids := s.userDaemons[userID]
-		for i, id := range ids {
-			if id == daemonID {
-				s.userDaemons[userID] = append(ids[:i], ids[i+1:]...)
-				break
-			}
-		}
-		if len(s.userDaemons[userID]) == 0 {
-			delete(s.userDaemons, userID)
-		}
-		wasConnected = true
-	}
-	s.mu.Unlock()
-	conn.closeDone()
-	conn.closeAllSubscribers()
-
-	// Notify listeners outside the mutex.
-	if wasConnected {
-		s.notifyDisconnected(userID, daemonID)
-	}
-
-	if err := s.database.DeleteDaemonAttachment(context.Background(), daemonID); err != nil {
-		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to delete daemon attachment", "error", err, "daemonID", daemonID)
-	}
-
-	logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Daemon disconnected", "userID", userID)
-	return err
+	return s.handleIncoming(ctx, conn)
 }
 
 // Repo returns the underlying repository. Used by the daemon connector for resync queries.
@@ -522,6 +676,7 @@ func (s *ToolsDaemonService) RegisterOutboundConnection(
 	}
 
 	s.notifyConnected(userID, daemonID)
+	s.statePublisher.Connected(daemonID, userID, conn.daemonType)
 	s.publishDaemonHeartbeat(context.Background(), userID, daemonID, time.Now().UTC())
 
 	// Start sender and heartbeat goroutines.
@@ -545,39 +700,11 @@ func (o *OutboundConn) HandleIncoming(ctx context.Context) error {
 }
 
 // Disconnect removes the connection from the service's internal state and
-// notifies listeners. Must be called when the stream ends.
+// notifies listeners. Must be called when the stream ends. Idempotent —
+// safe to call multiple times (e.g. from a `defer` in the caller AND from
+// the stale-connection sweeper).
 func (o *OutboundConn) Disconnect() {
-	conn := o.conn
-	userID := conn.userID
-	daemonID := conn.daemonID
-
-	var wasConnected bool
-	o.service.mu.Lock()
-	if o.service.connections[daemonID] == conn {
-		delete(o.service.connections, daemonID)
-		ids := o.service.userDaemons[userID]
-		for i, id := range ids {
-			if id == daemonID {
-				o.service.userDaemons[userID] = append(ids[:i], ids[i+1:]...)
-				break
-			}
-		}
-		if len(o.service.userDaemons[userID]) == 0 {
-			delete(o.service.userDaemons, userID)
-		}
-		wasConnected = true
-	}
-	o.service.mu.Unlock()
-	conn.closeDone()
-	conn.closeAllSubscribers()
-
-	if wasConnected {
-		o.service.notifyDisconnected(userID, daemonID)
-	}
-
-	if err := o.service.database.DeleteDaemonAttachment(context.Background(), daemonID); err != nil {
-		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to delete daemon attachment", "error", err, "daemonID", daemonID)
-	}
+	o.service.teardownConnection(o.conn, "outbound stream ended")
 }
 
 // handleIncoming handles incoming messages from the daemon
@@ -595,6 +722,12 @@ func (s *ToolsDaemonService) handleIncoming(ctx context.Context, conn *daemonCon
 		if err != nil {
 			return err
 		}
+
+		now := time.Now().UTC()
+		s.mu.Lock()
+		conn.lastActivity = now
+		s.mu.Unlock()
+		s.statePublisher.Activity(conn.daemonID, conn.userID, conn.daemonType)
 
 		switch m := msg.Message.(type) {
 		case *reliantv1.DaemonMessage_ToolResponse:
@@ -620,17 +753,7 @@ func (s *ToolsDaemonService) handleIncoming(ctx context.Context, conn *daemonCon
 			}
 
 		case *reliantv1.DaemonMessage_Heartbeat:
-			now := time.Now().UTC()
-			if err := s.database.TouchDaemonAttachment(ctx, conn.daemonID, now); err != nil {
-				logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to touch daemon attachment", "error", err, "daemonID", conn.daemonID)
-			}
-			s.publishDaemonHeartbeat(ctx, conn.userID, conn.daemonID, now)
-			// Update lastActivity so the pull-RPC status responder returns
-			// fresh data. The pull architecture replaced the per-heartbeat
-			// NATS fan-out — the subscription itself is the heartbeat now.
-			s.mu.Lock()
-			conn.lastActivity = now
-			s.mu.Unlock()
+			s.publishDaemonHeartbeat(ctx, conn.userID, conn.daemonID, time.Now().UTC())
 
 		case *reliantv1.DaemonMessage_ProjectDiscovery:
 			if err := s.handleProjectDiscovery(ctx, conn, m.ProjectDiscovery); err != nil {
@@ -1274,6 +1397,9 @@ func (s *ToolsDaemonService) runSender(conn *daemonConnection) {
 				conn.closeDone()
 				return
 			}
+			s.mu.Lock()
+			conn.lastActivity = time.Now().UTC()
+			s.mu.Unlock()
 		}
 	}
 }
@@ -1335,6 +1461,15 @@ func (s *ToolsDaemonService) ListConnectedDaemons(userID string) []toolexec.Daem
 
 // IsDaemonOnline checks if a daemon is currently connected for the user
 func (s *ToolsDaemonService) IsDaemonOnline(_ context.Context, userID string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.userDaemons[userID]) > 0
+}
+
+// HasConnectedDaemonsForUser reports whether this gateway currently holds any
+// daemon stream for the user. Implements toolexec.LocalConnectionChecker so the
+// NATS router can skip the DB freshness check on the hot path.
+func (s *ToolsDaemonService) HasConnectedDaemonsForUser(userID string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.userDaemons[userID]) > 0
