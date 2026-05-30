@@ -239,6 +239,8 @@ github.com/prometheus/procfs v0.19.2 h1:zUMhqEW66Ex7OXIiDkll3tl9a1ZdilUOd/F6ZXw4
 github.com/prometheus/procfs v0.19.2/go.mod h1:M0aotyiemPhBCM0z5w87kL22CxfcH05ZpYlu+b4J7mw=
 github.com/reliant-labs/forge v0.0.0-20260509033156-fc1e2a3c5a10 h1:imPKdmEiF7orCtEc3a8rdbn9F9LgbgNexGk9dG5qrUg=
 github.com/reliant-labs/forge v0.0.0-20260509033156-fc1e2a3c5a10/go.mod h1:Xtx5qGR2bbUJoQfHUNbMSv7taPFDjtdd/J0rDdeVESc=
+github.com/reliant-labs/forge v0.0.0-20260530150732-7f51b64be69f h1:pV0OPNi5MV3KU4RHbfZwICjmeeOKBs9W8zesUNbMTf4=
+github.com/reliant-labs/forge v0.0.0-20260530150732-7f51b64be69f/go.mod h1:iFEnzM/pnAyVgPD/gsTeTsjj8BtnISTZ8/4HxXY6aSc=
 github.com/reliant-labs/forge/pkg v0.0.0-20260509033156-fc1e2a3c5a10 h1:vKzJOm13E0paoH9h3Of7TDePlq6cAo8+a1X7LIcZLdk=
 github.com/reliant-labs/forge/pkg v0.0.0-20260509033156-fc1e2a3c5a10/go.mod h1:6jkyeeTmyW6P7hknv6O7GZZTZmAuC96MByx1UJAetDI=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:W09IVJc94icq4NjY3clb7Lk8O1qJ8BdBEF8z0ibU0rE=
@@ -425,6 +427,8 @@ golang.org/x/sys v0.44.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
 golang.org/x/telemetry v0.0.0-20240228155512-f48c80bd79b2/go.mod h1:TeRTkGYfJXctD9OcfyVLyj2J3IxLnKwHJR8f4D8a3YE=
 golang.org/x/telemetry v0.0.0-20260311193753-579e4da9a98c h1:6a8FdnNk6bTXBjR4AGKFgUKuo+7GnR3FX5L7CbveeZc=
 golang.org/x/telemetry v0.0.0-20260311193753-579e4da9a98c/go.mod h1:TpUTTEp9frx7rTdLpC9gFG9kdI7zVLFTFFlqaH2Cncw=
+golang.org/x/telemetry v0.0.0-20260409153401-be6f6cb8b1fa h1:efT73AJZfAAUV7SOip6pWGkwJDzIGiKBZGVzHYa+ve4=
+golang.org/x/telemetry v0.0.0-20260409153401-be6f6cb8b1fa/go.mod h1:kHjTxDEnAu6/Nl9lDkzjWpR+bmKfxeiRuSDlsMb70gE=
 golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1/go.mod h1:bj7SfCRtBDWHUb9snDiAeCFNEtKQo2Wmx5Cou7ajbmo=
 golang.org/x/term v0.0.0-20210927222741-03fcf44c2211/go.mod h1:jbD1KX2456YbFQfuXm/mYQcufACuNUgVhRMnK/tPxf8=
 golang.org/x/term v0.5.0/go.mod h1:jMB1sMXY+tzblOD4FWmEbocvup2/aLOaQEp7JmGp78k=

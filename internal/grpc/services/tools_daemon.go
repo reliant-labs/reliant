@@ -256,9 +256,31 @@ func (s *ToolsDaemonService) ConnectDaemon(
 	// Daemon ID is assigned by the gateway from the PAT binding, not self-asserted.
 	daemonID := auth.GetDaemonIDFromContext(ctx)
 	if daemonID == "" {
-		// Unbound PAT (external daemon self-registration) — generate a new ID.
-		daemonID = uuid.NewString()
-		logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Generated daemon_id for unbound PAT", "daemonID", daemonID, "userID", userID)
+		// Unbound PAT (external daemon self-registration). Reuse the existing
+		// (userID, hostname) row if one exists so reconnects don't accumulate
+		// ghost daemon rows — otherwise every reconnect would mint a fresh ID,
+		// the daemons table would grow without bound, and the frontend's
+		// status==ACTIVE filter would never lock onto a stable row.
+		if hostname := strings.TrimSpace(reg.GetHostname()); hostname != "" {
+			existing, lookupErr := s.database.ListDaemonsByUserID(ctx, userID)
+			if lookupErr != nil {
+				logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to lookup existing daemons for hostname reuse",
+					"error", lookupErr, "userID", userID, "hostname", hostname)
+			} else {
+				for _, d := range existing {
+					if d.Hostname != nil && *d.Hostname == hostname {
+						daemonID = d.ID
+						logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Reusing existing daemon_id for unbound PAT",
+							"daemonID", daemonID, "userID", userID, "hostname", hostname)
+						break
+					}
+				}
+			}
+		}
+		if daemonID == "" {
+			daemonID = uuid.NewString()
+			logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Generated daemon_id for unbound PAT", "daemonID", daemonID, "userID", userID)
+		}
 	}
 
 	requestedProjectPaths, err := s.listAllProjectPaths(ctx, userID)

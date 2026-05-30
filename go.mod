@@ -26,7 +26,7 @@ require (
 	github.com/openai/openai-go/v3 v3.32.0
 	github.com/pressly/goose/v3 v3.24.2
 	github.com/prometheus/client_golang v1.23.2
-	github.com/reliant-labs/forge v0.0.0-20260509033156-fc1e2a3c5a10
+	github.com/reliant-labs/forge v0.0.0-20260530150732-7f51b64be69f
 	github.com/reliant-labs/forge/pkg v0.0.0-20260509033156-fc1e2a3c5a10
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -99,7 +99,7 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/arch v0.11.0 // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
-	golang.org/x/telemetry v0.0.0-20260311193753-579e4da9a98c // indirect
+	golang.org/x/telemetry v0.0.0-20260409153401-be6f6cb8b1fa // indirect
 	golang.org/x/time v0.15.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260401024825-9d38bb4040a9 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260401024825-9d38bb4040a9 // indirect
