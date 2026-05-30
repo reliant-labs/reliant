@@ -28,10 +28,7 @@ export const SETTINGS_KEYS = {
   
   // Monaco editor settings (stored as JSON)
   EDITOR_SETTINGS: "appearance.editorSettings",
-  
-  // Settings page
-  SETTINGS_SECTION: "appearance.settingsSection",
-  
+
   // Tool call display settings
   TOOL_COLLAPSE_DEFAULTS: "toolcalls.collapseDefaults",
   

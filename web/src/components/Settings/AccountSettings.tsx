@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import { useAuthStore } from '../../store/authStore'
 import { LogOut, User, CheckCircle } from 'lucide-react'
 import { Button } from '../ui/Button'
@@ -11,6 +12,7 @@ export function AccountSettings() {
     authError,
     clearAuthError,
   } = useAuthStore()
+  const navigate = useNavigate()
 
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [linkSuccess, setLinkSuccess] = useState<string | null>(null)
@@ -56,16 +58,21 @@ export function AccountSettings() {
   }, [authError, clearAuthError])
 
   const handleSignOut = async () => {
-    if (confirm('Are you sure you want to sign out?')) {
-      setIsSigningOut(true)
-      try {
-        await signOut()
-      } catch (error) {
-        console.error('Sign out failed:', error)
-        alert('Failed to sign out. Please try again.')
-      } finally {
-        setIsSigningOut(false)
-      }
+    if (!confirm('Are you sure you want to sign out?')) return
+    setIsSigningOut(true)
+    try {
+      await signOut()
+      // Explicitly route to the auth screen. AuthGuard would eventually do
+      // this once its loading=true window closes, but there's a render gap
+      // where the (now project-less) main app shell can flash up — driving
+      // the navigation here closes that gap, and also clears any onboarding
+      // plan still sitting in the URL.
+      navigate({ to: '/auth', search: { redirect: undefined } })
+    } catch (error) {
+      console.error('Sign out failed:', error)
+      alert('Failed to sign out. Please try again.')
+    } finally {
+      setIsSigningOut(false)
     }
   }
 

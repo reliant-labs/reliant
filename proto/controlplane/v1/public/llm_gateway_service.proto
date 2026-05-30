@@ -1,0 +1,97 @@
+syntax = "proto3";
+
+// EXPERIMENTAL: controlplane.v1 is unstable. Field numbers, RPC names, and
+// service shapes may change without notice until the package is declared
+// stable. Consumers should pin to a specific control-plane commit.
+//
+// See proto/controlplane/v1/public/README.md for stability/versioning policy.
+
+package controlplane.v1;
+
+option go_package = "github.com/reliant-labs/control-plane/internal/gen/controlplane/v1;controlplanev1";
+
+import "controlplane/v1/public/shared.proto";
+
+// === LLMGatewayService ===
+
+service LLMGatewayService {
+  rpc CreateLLMKey(CreateLLMKeyRequest) returns (CreateLLMKeyResponse) {}
+  rpc ListLLMKeys(ListLLMKeysRequest) returns (ListLLMKeysResponse) {}
+  rpc GetLLMKey(GetLLMKeyRequest) returns (GetLLMKeyResponse) {}
+  rpc RevokeLLMKey(RevokeLLMKeyRequest) returns (RevokeLLMKeyResponse) {}
+  rpc RotateLLMKey(RotateLLMKeyRequest) returns (RotateLLMKeyResponse) {}
+  rpc GetLLMSpend(GetLLMSpendRequest) returns (GetLLMSpendResponse) {}
+  rpc ListAvailableModels(ListAvailableModelsRequest) returns (ListAvailableModelsResponse) {}
+  rpc IssueMyReliantAPIKey(IssueMyReliantAPIKeyRequest) returns (IssueMyReliantAPIKeyResponse) {}
+}
+
+message CreateLLMKeyRequest {
+  string org_id = 1;
+  string name = 2;
+  repeated string models = 3;
+  optional double max_budget = 4; // nil means no budget limit
+  string budget_duration = 5;
+}
+
+message CreateLLMKeyResponse {
+  LLMKey key = 1;
+  string plaintext_key = 2;
+}
+
+message ListLLMKeysRequest {
+  string org_id = 1;
+}
+
+message ListLLMKeysResponse {
+  repeated LLMKey keys = 1;
+}
+
+message GetLLMKeyRequest {
+  string key_id = 1;
+}
+
+message GetLLMKeyResponse {
+  LLMKey key = 1;
+}
+
+message RevokeLLMKeyRequest {
+  string key_id = 1;
+}
+
+message RevokeLLMKeyResponse {}
+
+message RotateLLMKeyRequest {
+  string key_id = 1;
+  string grace_period = 2;
+}
+
+message RotateLLMKeyResponse {
+  LLMKey key = 1;
+  string plaintext_key = 2;
+}
+
+message GetLLMSpendRequest {
+  string org_id = 1;
+  optional string key_id = 2;
+  string start_date = 3;
+  string end_date = 4;
+}
+
+message GetLLMSpendResponse {
+  repeated LLMSpendEntry entries = 1;
+  double total_spend = 2;
+}
+
+message ListAvailableModelsRequest {
+  string org_id = 1;
+}
+
+message ListAvailableModelsResponse {
+  repeated string models = 1;
+}
+
+message IssueMyReliantAPIKeyRequest {}
+
+message IssueMyReliantAPIKeyResponse {
+  string key = 1;
+}

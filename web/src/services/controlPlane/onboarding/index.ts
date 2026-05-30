@@ -18,3 +18,4 @@ const _localMatchesCloud: typeof cloud = local;
 void _localMatchesCloud;
 
 export const onboardingService = hasControlPlane ? cloud : local;
+export type { OnboardingUser } from "./types";

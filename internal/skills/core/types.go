@@ -21,6 +21,11 @@ const (
 	ScopeCodexGlobal  Scope = "codex_global"
 	ScopeClaudeGlobal Scope = "claude_global"
 	ScopeBuiltin      Scope = "builtin"
+	// ScopeForge marks skills surfaced from a sibling forge module (forge-shipped,
+	// forge project, or forge user skills) when the project root contains
+	// forge.yaml. The skills are loaded in-memory via forge's public API — none
+	// of them live on the reliant filesystem.
+	ScopeForge Scope = "forge"
 )
 
 const (
@@ -48,6 +53,8 @@ func (s Scope) Priority() int {
 		return 8
 	case ScopeClaudeGlobal:
 		return 9
+	case ScopeForge:
+		return 10
 	default:
 		return 100
 	}
@@ -55,7 +62,7 @@ func (s Scope) Priority() int {
 
 func (s Scope) IsTrustedForAutoActivation() bool {
 	switch s {
-	case ScopeProjectLocal, ScopeProject, ScopeGlobal, ScopeBuiltin:
+	case ScopeProjectLocal, ScopeProject, ScopeGlobal, ScopeBuiltin, ScopeForge:
 		return true
 	default:
 		return false

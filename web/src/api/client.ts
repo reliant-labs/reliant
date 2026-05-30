@@ -420,6 +420,10 @@ export const api = {
       return settingsGrpc.completeCodexOAuth(code, codeVerifier, redirectURI);
     },
 
+    syncReliantProvider: async (forceRotate = false) => {
+      return settingsGrpc.syncReliantProvider(forceRotate);
+    },
+
     getPrivacySettings: async () => {
       return settingsGrpc.getPrivacySettings();
     },

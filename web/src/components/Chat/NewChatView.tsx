@@ -1,5 +1,6 @@
 import { logger } from "../../lib/logger";
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { ConnectDaemonModal } from "../Layout/ConnectDaemonModal";
 import { useChatStore } from "../../store/chatStore"; // For getState() and setState() only — also subscribed via selector below
 import { useWorktreeStore } from "../../store/worktreeStore";
@@ -9,6 +10,7 @@ import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { useApiKeySetupStore } from "../../store/apiKeySetupStore";
 import { useChatParamsStore } from "../../store/chatParamsStore";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
+import { getAdminURL } from "@/lib/constants";
 import { ChatInput } from "./ChatInput";
 import { ReliantIcon } from "../icons/ReliantIcon";
 import { WorkflowStarterCards } from "../Onboarding/WorkflowStarterCards";
@@ -110,6 +112,16 @@ export function NewChatView({
       return () => clearTimeout(timer);
     }
   }, [isFocused]);
+
+  // Lock body scroll while the starter-picker modal is open.
+  useEffect(() => {
+    if (!lockChatInput) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [lockChatInput]);
 
   // NOTE: We intentionally do NOT clear tempNewChatParams on mount.
   // ChatInput's workflow-change effect handles clearing when the workflow changes.
@@ -454,7 +466,7 @@ export function NewChatView({
               Only shown on the genuine empty state (no chats yet in this
               project). Once the project has any chat, the inline cards
               are hidden so they don't clutter NewChatView. */}
-          {showInlineCards && (
+          {showInlineCards && !lockChatInput && (
             <div className="w-full px-4 py-6 md:py-8">
               <WorkflowStarterCards />
             </div>
@@ -487,29 +499,43 @@ export function NewChatView({
       </div>
 
       {/* Message Input - Collapsible when not focused */}
-      {!daemonConnected && !daemonLoading && (
-        <div className="flex items-center justify-center gap-2 border-t border-yellow-500/20 bg-yellow-500/5 px-4 py-2.5 text-sm text-yellow-600 dark:text-yellow-400">
-          <Activity className="h-4 w-4" />
-          <span>
-            No daemon connected.{" "}
-            <button
-              type="button"
-              onClick={() => setShowConnectDaemonModal(true)}
-              className="font-medium underline underline-offset-2 hover:text-yellow-700 dark:hover:text-yellow-300"
-            >
-              Start a cloud daemon or run one locally
-            </button>{" "}
-            to begin chatting.
-          </span>
-        </div>
-      )}
+      {!daemonConnected && !daemonLoading && (() => {
+        const adminURL = getAdminURL();
+        const manageHref = adminURL ? `${adminURL.replace(/\/$/, "")}/workspaces` : undefined;
+        return (
+          <div className="flex items-center justify-center gap-2 border-t border-yellow-500/20 bg-yellow-500/5 px-4 py-2.5 text-sm text-yellow-600 dark:text-yellow-400">
+            <Activity className="h-4 w-4" />
+            <span>
+              No daemon connected.{" "}
+              {manageHref ? (
+                <a
+                  href={manageHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium underline underline-offset-2 hover:text-yellow-700 dark:hover:text-yellow-300"
+                >
+                  Manage daemons
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowConnectDaemonModal(true)}
+                  className="font-medium underline underline-offset-2 hover:text-yellow-700 dark:hover:text-yellow-300"
+                >
+                  Start a cloud daemon or run one locally
+                </button>
+              )}{" "}
+              to begin chatting.
+            </span>
+          </div>
+        );
+      })()}
       {isFocused ? (
         <div className="flex-shrink-0">
           <ChatInput
             ref={chatInputRef}
             onSend={handleCreateAndSend}
-            disabled={isCreating || !daemonConnected || lockChatInput}
-            placeholder={lockChatInput ? "Pick a starting point above to begin" : undefined}
+            disabled={isCreating || !daemonConnected}
             worktreeId={selectedWorkspaceId || mainWorktree?.id}
           />
         </div>
@@ -541,6 +567,28 @@ export function NewChatView({
         isOpen={showConnectDaemonModal}
         onClose={() => setShowConnectDaemonModal(false)}
       />
+
+      {lockChatInput &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="starter-picker-title"
+          >
+            <div
+              className="absolute inset-0 bg-black/80 backdrop-blur-xl"
+              aria-hidden="true"
+            />
+            <div className="relative w-full max-w-5xl max-h-[calc(100vh-80px)] overflow-y-auto rounded-2xl border border-white/10 bg-[hsl(var(--surface-modal))] px-6 py-8 sm:px-10 sm:py-10 elevation-5 animate-in fade-in-0 zoom-in-95 duration-300">
+              <h2 id="starter-picker-title" className="sr-only">
+                Pick a starting point
+              </h2>
+              <WorkflowStarterCards />
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

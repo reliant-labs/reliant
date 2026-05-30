@@ -1,9 +1,9 @@
 // Copyright (c) 2025 Reliant Labs
 
 import { useState, useRef, useEffect, useMemo } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { cn } from "../../lib/utils";
 import { useModels, useGlobalDataStore } from "../../store/globalDataStore";
-import { useViewerStore } from "../../store/viewerStore";
 import { logger } from "../../lib/logger";
 import { hasDefaultValue, formatValueForDisplay } from "../../lib/paramUtils";
 import { ChevronDown, Check, Info, Loader2 } from "lucide-react";
@@ -964,7 +964,7 @@ function ModelDropdown({
   const isInitialized = useGlobalDataStore((state) => state.isInitialized);
   const isPrefetching = useGlobalDataStore((state) => state.isPrefetching);
   const refetchModels = useGlobalDataStore((state) => state.refetchModels);
-  const setSettingsMode = useViewerStore((state) => state.setSettingsMode);
+  const navigate = useNavigate();
 
   const isActuallyLoading = isLoading || isPrefetching || !isInitialized;
 
@@ -1103,7 +1103,7 @@ function ModelDropdown({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      setSettingsMode(true, "general");
+                      navigate({ to: '/settings/$section', params: { section: 'general' } });
                     }}
                     className="text-primary hover:underline text-xs"
                   >

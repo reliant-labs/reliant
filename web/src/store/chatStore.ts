@@ -79,9 +79,13 @@ import {
 import { trackEvent } from "../lib/analytics";
 
 // Lazy getter to avoid circular dependency with globalUpdatesStore.
-// Uses a cached dynamic import instead of synchronous require() which
-// Vite's ESM bundler cannot resolve during circular initialization.
-let _globalUpdatesStoreModule: typeof import("./globalUpdatesStore") | null = null;
+// `var` (not `let`) is intentional: globalUpdatesStore.ts calls
+// initGlobalUpdatesStoreRef() from its module body, which can fire BEFORE
+// this line executes when the import graph cycles through chatStore. `var`
+// is hoisted (initialized to undefined at function/module scope), so the
+// assignment in initGlobalUpdatesStoreRef never hits a temporal dead zone.
+// eslint-disable-next-line no-var
+var _globalUpdatesStoreModule: typeof import("./globalUpdatesStore") | null = null;
 
 function getGlobalUpdatesStore() {
   if (!_globalUpdatesStoreModule) {

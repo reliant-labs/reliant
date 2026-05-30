@@ -18,4 +18,10 @@ const _localMatchesCloud: typeof cloud = local;
 void _localMatchesCloud;
 
 export const gitService = hasControlPlane ? cloud : local;
-export type { GitCredentialStatus, GitAccount, GitService } from "./types";
+export type {
+  GitCredentialStatus,
+  GitAccount,
+  GitService,
+  GitRepo,
+  ListGitReposPage,
+} from "./types";

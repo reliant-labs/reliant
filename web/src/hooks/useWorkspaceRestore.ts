@@ -222,8 +222,8 @@ export function useWorkspaceRestore(
       const worktreeState = workspaceState.getWorktreeState(currentProject.id, currentWorktreeId);
 
       // Step 5: Restore viewers
-      // NOTE: viewerStore no longer has setCurrentWorktree - it reads from worktreeStore directly
-      viewerStore.setCurrentProject(currentProject.id);
+      // NOTE: viewerStore reads project context from projectStore (single owner)
+      // and worktree context from worktreeStore — no setCurrentProject call needed.
       viewerStore.restoreFromWorkspaceState(currentProject.id, currentWorktreeId);
       // Get fresh viewer state after restoration
       const freshViewerStore = useViewerStore.getState();
@@ -289,14 +289,10 @@ export function useWorkspaceRestore(
         logger.info("[WorkspaceRestore] Restored terminal open state");
       }
 
-      // Step 10: Restore workflow mode state
-      if (worktreeState.isWorkflowMode) {
-        viewerStore.setWorkflowMode(true, worktreeState.activeWorkflowName ?? undefined);
-        logger.info("[WorkspaceRestore] Restored workflow state", {
-          isWorkflowMode: worktreeState.isWorkflowMode,
-          activeWorkflowName: worktreeState.activeWorkflowName,
-        });
-      }
+      // Step 10: Workflow mode restoration removed — the URL (/workflow,
+      // /workflow/$name) is now the source of truth for the workflow view.
+      // The browser preserves the URL across reloads, so no manual restore is
+      // needed.
 
       hasRestoredRef.current = true;
       const result: WorkspaceRestoreResult = {

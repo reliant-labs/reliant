@@ -1,29 +1,10 @@
 import { cn } from "../../lib/utils";
-import { Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, FolderOpen, Globe, FolderGit2, Bell, KeyRound, Github, Cloud, Server, CreditCard, LayoutDashboard, Building2, ExternalLink } from "lucide-react";
+import { Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, FolderOpen, Globe, FolderGit2, Bell, KeyRound, Github, Server, CreditCard, LayoutDashboard, Building2, ExternalLink } from "lucide-react";
 import { McpIcon } from "../icons/McpIcon";
 import { hasControlPlane } from "../../services/controlPlane/config";
+import type { SettingsSection } from "../../routeSchemas";
 
-export type SettingsSection =
-  | "account"
-  | "general"
-  | "shortcuts"
-  | "prompts"
-  | "workspaces"
-  | "projects"
-  | "browser"
-  | "appearance"
-  | "notifications"
-  | "privacy"
-  | "mcp"
-  | "about"
-  | "tokens"
-  | "git-connections"
-  | "developer"
-  | "cloud-overview"
-  | "cloud-environments"
-  | "cloud-ai"
-  | "cloud-billing"
-  | "cloud-organization";
+export type { SettingsSection };
 
 interface SettingsNavigationProps {
   activeSection: SettingsSection;

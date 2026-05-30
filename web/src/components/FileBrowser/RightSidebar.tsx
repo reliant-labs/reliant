@@ -72,7 +72,6 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
   const gitRefreshTrigger = useGitStatusRefreshTrigger();
 
   const openFileViewer = useViewerStore((state) => state.openFileViewer);
-  const setCurrentProject = useViewerStore((state) => state.setCurrentProject);
   const activeViewer = useViewerStore((state) => state.getActiveViewer());
   const activeFilePath = activeViewer?.type === "file" ? activeViewer.file.path : null;
 
@@ -163,18 +162,17 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
     }
   }, [shouldAutoFocus]);
 
-  // Reset state when project or worktree changes
+  // Reset state when project or worktree changes. Project context is owned by
+  // projectStore now — viewerStore reads it via getCurrentProjectId() — so we
+  // no longer need to call setCurrentProject here.
   useEffect(() => {
-    if (currentProject?.id) {
-      setCurrentProject(currentProject.id);
-    }
     // Reset file tree state on project/worktree change
     setFocusedPath(null);
     setExpandedPaths(new Set());
     // Note: showHidden is now persisted in UI store and won't reset on project change
     // Don't remount via treeKey — FileTree's own useEffect on [worktreeId] handles re-fetch.
     // Remounting caused 2-3 redundant GetFileTree calls during initial hydration.
-  }, [currentProject?.id, activeWorktreeId, setCurrentProject]);
+  }, [currentProject?.id, activeWorktreeId]);
 
   // Listen for file operation undo events to refresh the tree and expand paths
   useEffect(() => {

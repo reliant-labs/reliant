@@ -30,24 +30,6 @@ func ResolveReliantAPIKey(apiKey, baseURL string) (string, map[string]string) {
 		return trimmedKey, nil
 	}
 
-	// JWT tokens are forwarded as Bearer auth to the proxy.
-	// In local dev (LiteLLM), swap to master key + forward the JWT in a header.
-	if isJWT(trimmedKey) {
-		if !isLocalLiteLLMBaseURL(baseURL) {
-			// Production: use JWT directly as Bearer token
-			return trimmedKey, nil
-		}
-		// Local dev: use LiteLLM master key, forward JWT in header
-		masterKey := strings.TrimSpace(os.Getenv("LITELLM_MASTER_KEY"))
-		if masterKey == "" {
-			masterKey = reliantLocalLiteLLMMasterKey
-			logging.Warn("LITELLM_MASTER_KEY not set; using default local LiteLLM master key for JWT auth", "base_url", baseURL)
-		}
-		return masterKey, map[string]string{
-			"X-Reliant-JWT": trimmedKey,
-		}
-	}
-
 	// Legacy managed keys (rlnt_/rly_): keep existing behavior for backward compat
 	if isManagedReliantKey(trimmedKey) && isLocalLiteLLMBaseURL(baseURL) {
 		masterKey := strings.TrimSpace(os.Getenv("LITELLM_MASTER_KEY"))
@@ -66,12 +48,6 @@ func ResolveReliantAPIKey(apiKey, baseURL string) (string, map[string]string) {
 func isManagedReliantKey(apiKey string) bool {
 	trimmedKey := strings.TrimSpace(apiKey)
 	return strings.HasPrefix(trimmedKey, "rly_") || strings.HasPrefix(trimmedKey, "rlnt_")
-}
-
-// isJWT returns true if the token looks like a JWT (three dot-separated base64 segments).
-func isJWT(token string) bool {
-	parts := strings.Split(token, ".")
-	return len(parts) == 3 && len(parts[0]) > 10
 }
 
 func isLocalLiteLLMBaseURL(rawURL string) bool {

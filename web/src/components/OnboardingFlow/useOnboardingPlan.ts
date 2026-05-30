@@ -4,49 +4,42 @@ import type { LaunchPlan } from './types';
 
 // URL-backed onboarding plan state.
 //
-// Phase 3 refactor: the plan used to live in localStorage under
-// `reliant-onboarding-plan`, which caused split-brain bugs (React state lagging
-// behind localStorage during a single render) and let the plan persist
-// indefinitely across sessions. Durable navigation state belongs in the URL.
-//
-// The plan is serialized as a single JSON-encoded `plan` search param to keep
-// the route schema minimal and updates atomic. Plan fields are non-sensitive
-// (no model API keys live in the plan), so URL encoding is safe.
+// The plan is stored as a single object-valued `plan` search param on
+// `/onboarding`. tanstack-router handles JSON-encoding/URL-encoding via the
+// route's Zod `validateSearch` schema (see routes.tsx + routeSchemas.ts).
+// Callers pass and receive plain objects — no manual encodeURIComponent or
+// JSON.stringify anywhere.
 
 const EMPTY_PLAN: Partial<LaunchPlan> = {};
 
-function parsePlan(encoded: string | undefined): Partial<LaunchPlan> {
-  if (!encoded) return EMPTY_PLAN;
-  try {
-    return JSON.parse(decodeURIComponent(encoded)) as Partial<LaunchPlan>;
-  } catch {
-    return EMPTY_PLAN;
-  }
-}
-
-function encodePlan(plan: Partial<LaunchPlan>): string | undefined {
-  if (!plan || Object.keys(plan).length === 0) return undefined;
-  return encodeURIComponent(JSON.stringify(plan));
-}
-
 export function useOnboardingPlan() {
   const navigate = useNavigate();
-  const search = useSearch({ from: '/' }) as { plan?: string };
+  const search = useSearch({ from: '/_authenticated/onboarding' });
 
-  const plan = parsePlan(search.plan);
+  // The route schema produces an already-typed Partial<LaunchPlan> here.
+  const plan = (search.plan ?? EMPTY_PLAN) as Partial<LaunchPlan>;
 
   const updatePlan = useCallback(
     (updates: Partial<LaunchPlan>) => {
-      // Re-parse the current URL plan inside the updater so concurrent
-      // updates within the same event handler compose correctly without
-      // relying on React state. `navigate` with the function form of
-      // `search` will use the latest URL state at the time of the call.
-      navigate({
-        to: '/',
-        search: (prev: Record<string, unknown>) => {
-          const current = parsePlan(prev.plan as string | undefined);
-          const next = { ...current, ...updates };
-          return { ...prev, plan: encodePlan(next) };
+      // Re-read the current URL plan inside the updater so concurrent updates
+      // within the same event handler compose correctly without relying on
+      // React state. Returns the navigate promise so callers that follow
+      // updatePlan with onNext() can `await` it.
+      return navigate({
+        to: '/onboarding',
+        search: (prev) => {
+          const current = (prev.plan ?? EMPTY_PLAN) as Partial<LaunchPlan>;
+          const merged = { ...current, ...updates };
+          // Drop fields that were explicitly cleared (set to undefined) so
+          // they don't sit in the URL as null/undefined.
+          const cleaned: Partial<LaunchPlan> = {};
+          for (const [k, v] of Object.entries(merged)) {
+            if (v !== undefined) {
+              (cleaned as Record<string, unknown>)[k] = v;
+            }
+          }
+          const isEmpty = Object.keys(cleaned).length === 0;
+          return { ...prev, plan: isEmpty ? undefined : cleaned };
         },
         replace: true,
       });
@@ -56,8 +49,8 @@ export function useOnboardingPlan() {
 
   const resetPlan = useCallback(() => {
     navigate({
-      to: '/',
-      search: (prev: Record<string, unknown>) => {
+      to: '/onboarding',
+      search: (prev) => {
         const { plan: _omit, ...rest } = prev;
         return rest;
       },

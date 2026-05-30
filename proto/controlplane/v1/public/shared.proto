@@ -1,0 +1,375 @@
+syntax = "proto3";
+
+// EXPERIMENTAL: controlplane.v1 is unstable. Field numbers, RPC names, and
+// service shapes may change without notice until the package is declared
+// stable. Consumers should pin to a specific control-plane commit.
+//
+// See proto/controlplane/v1/public/README.md for stability/versioning policy.
+
+package controlplane.v1;
+
+option go_package = "github.com/reliant-labs/control-plane/internal/gen/controlplane/v1;controlplanev1";
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+// === Enums ===
+
+enum DaemonType {
+  DAEMON_TYPE_UNSPECIFIED = 0;
+  DAEMON_TYPE_MANAGED = 1;
+  DAEMON_TYPE_EXTERNAL = 2;
+}
+
+enum DaemonStatus {
+  DAEMON_STATUS_UNSPECIFIED = 0;
+  DAEMON_STATUS_PENDING = 1;
+  DAEMON_STATUS_ACTIVE = 2;
+  DAEMON_STATUS_SUSPENDED = 3;
+  DAEMON_STATUS_DISCONNECTED = 4;
+  DAEMON_STATUS_FAILED = 5;
+}
+
+enum OwnerType {
+  OWNER_TYPE_UNSPECIFIED = 0;
+  OWNER_TYPE_USER = 1;
+  OWNER_TYPE_ORGANIZATION = 2;
+}
+
+enum DaemonSize {
+  DAEMON_SIZE_UNSPECIFIED = 0;
+  DAEMON_SIZE_SMALL = 1;    // 1 CPU, 2GB RAM
+  DAEMON_SIZE_MEDIUM = 2;   // 2 CPU, 4GB RAM
+  DAEMON_SIZE_LARGE = 3;    // 4 CPU, 8GB RAM
+  DAEMON_SIZE_XL = 4;       // 8 CPU, 16GB RAM
+}
+
+enum PortAccessMode {
+  PORT_ACCESS_MODE_UNSPECIFIED = 0;
+  PORT_ACCESS_MODE_PUBLIC = 1;        // anyone with the URL
+  PORT_ACCESS_MODE_AUTHENTICATED = 2; // requires Reliant login
+  PORT_ACCESS_MODE_TOKEN = 3;         // requires specific bearer token
+}
+
+enum SubscriptionStatus {
+  SUBSCRIPTION_STATUS_UNSPECIFIED = 0;
+  SUBSCRIPTION_STATUS_ACTIVE = 1;
+  SUBSCRIPTION_STATUS_PAST_DUE = 2;
+  SUBSCRIPTION_STATUS_CANCELED = 3;
+  SUBSCRIPTION_STATUS_TRIALING = 4;
+}
+
+enum PlanTier {
+  PLAN_TIER_UNSPECIFIED = 0;
+  PLAN_TIER_FREE = 1;
+  PLAN_TIER_STARTER = 2;
+  PLAN_TIER_PRO = 3;
+  PLAN_TIER_ENTERPRISE = 4;
+}
+
+enum LLMKeyStatus {
+  LLM_KEY_STATUS_UNSPECIFIED = 0;
+  LLM_KEY_STATUS_ACTIVE = 1;
+  LLM_KEY_STATUS_REVOKED = 2;
+  LLM_KEY_STATUS_EXPIRED = 3;
+}
+
+// === Entity messages ===
+
+message ResourceRequirements {
+  string cpu_request = 1;
+  string cpu_limit = 2;
+  string memory_request = 3;
+  string memory_limit = 4;
+}
+
+// Daemon is the public view of a managed or external daemon. Implementation
+// internals (workspace pod name, k8s phase, workspace_id) are exposed via
+// DaemonAdminService.GetDaemonInternal -> DaemonInternal in
+// controlplane/v1/internal/shared_internal.proto.
+message Daemon {
+  string id = 1;
+  string name = 2;
+  string owner_id = 3;
+  OwnerType owner_type = 4;
+  DaemonType daemon_type = 5;
+  DaemonStatus status = 6;
+
+  reserved 7;        // was workspace_id (moved to DaemonInternal)
+  reserved "workspace_id";
+
+  // Managed daemon fields
+  string image = 8;
+  ResourceRequirements resources = 9;
+  string git_repo = 10;
+  string git_branch = 11;
+  string storage_size = 12;
+
+  // External daemon fields
+  string hostname = 13;
+  string platform = 14;
+
+  // Status/timing
+  google.protobuf.Timestamp connected_at = 15;
+  google.protobuf.Timestamp last_heartbeat = 16;
+  google.protobuf.Timestamp disconnected_at = 17;
+  google.protobuf.Timestamp created_at = 18;
+  google.protobuf.Timestamp updated_at = 19;
+
+  reserved 20, 21;   // was workspace_phase, pod_name (moved to DaemonInternal)
+  reserved "workspace_phase", "pod_name";
+
+  reserved 22;       // was slug (daemons are addressed by UUID id now)
+  reserved "slug";
+
+  // Daemon enhancements
+  DaemonSize size = 23;
+  string idle_timeout = 25; // duration string e.g. "30m"
+
+  // Human-readable reason for the most recent connect/disconnect transition.
+  // Empty when the daemon is actively connected. Populated from gateway-side
+  // NATS events (disconnected / connect_failed) — e.g. "dial tcp: i/o
+  // timeout", "receiving registration: timed out after 10s".
+  string last_status_message = 26;
+  // When status / last_status_message most recently changed, as observed by
+  // the daemon-gateway.
+  google.protobuf.Timestamp last_status_changed_at = 27;
+}
+
+// Port access control
+message PortAccessRule {
+  string id = 1;
+  string daemon_id = 2;
+  int32 port = 3;
+  PortAccessMode access_mode = 4;
+  string url = 5; // computed: https://{port}-{daemon_id}.{baseDomain}
+  google.protobuf.Timestamp created_at = 6;
+}
+
+message User {
+  string id = 1;
+  string external_id = 2;
+  string email = 3;
+  string name = 4;
+  string avatar_url = 5;
+  string role = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+  bool onboarding_completed = 9;
+  google.protobuf.Struct onboarding_data = 10;
+}
+
+message Organization {
+  string id = 1;
+  string name = 2;
+  string slug = 3;
+  string owner_id = 4;
+  reserved 5; // was litellm_team_id (internal implementation detail)
+  string stripe_customer_id = 6;
+  string settings = 7;
+  int32 member_count = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+}
+
+message Product {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+}
+
+// PlanLimits contains the typed limits for a billing plan.
+// Fields mirror the JSON stored in the plans table (see PlanLimits in
+// internal/service/llm_gateway_service.go).
+message PlanLimits {
+  int32 max_seats = 1;
+  int32 max_workspaces = 2;
+  double max_llm_spend_monthly = 3;
+  int32 max_llm_keys = 4;
+  int32 requests_per_min = 7;
+
+  reserved 5, 6;
+  reserved "ip_restricted", "max_ips_per_key";
+}
+
+message Plan {
+  string id = 1;
+  string product_id = 2;
+  string name = 3;
+  PlanTier tier = 4;
+  string stripe_price_id = 5;
+  string limits = 6 [deprecated = true]; // Deprecated: use structured_limits instead
+  google.protobuf.Timestamp created_at = 7;
+  PlanLimits structured_limits = 8;
+  // 9 previously reserved for stripe_slot_price_id (removed with compute slots)
+}
+
+message Subscription {
+  string id = 1;
+  string org_id = 2;
+  string plan_id = 3;
+  Plan plan = 4;
+  string stripe_subscription_id = 5;
+  SubscriptionStatus status = 6;
+  google.protobuf.Timestamp current_period_start = 7;
+  google.protobuf.Timestamp current_period_end = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+  // Whether workspace compute overage billing is enabled for this subscription.
+  bool overage_enabled = 11;
+}
+
+message ReliantEntitlement {
+  string user_id = 1;
+  string status = 2;
+  string plan_id = 3;
+  string plan_name = 4;
+  bool reliant_enabled = 5;
+  repeated string allowed_models = 6;
+  int64 monthly_spend_cap_cents = 7;
+  int32 requests_per_minute = 8;
+  int32 max_concurrent_requests = 9;
+  bool hard_cap = 10;
+  bool overage_allowed = 11;
+  google.protobuf.Timestamp current_period_start = 12;
+  google.protobuf.Timestamp current_period_end = 13;
+  string source_type = 14;
+  string source_ref_id = 15;
+  google.protobuf.Timestamp updated_at = 16;
+}
+
+message UsageSummary {
+  string metric = 1;
+  double current = 2;
+  double limit = 3;
+  string unit = 4;
+}
+
+message Invoice {
+  string id = 1;
+  int64 amount_due = 2;
+  int64 amount_paid = 3;
+  string currency = 4;
+  string status = 5;
+  google.protobuf.Timestamp period_start = 6;
+  google.protobuf.Timestamp period_end = 7;
+  string hosted_invoice_url = 8;
+  string pdf_url = 9;
+  google.protobuf.Timestamp created_at = 10;
+}
+
+message Wallet {
+  string id = 1;
+  string org_id = 2;
+  string currency = 3;
+  int64 balance_cents = 4;
+  bool welcome_credit_granted = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+  int64 balance_usd_micros = 8;
+  int64 balance_usd_nanos = 9;
+}
+
+message WalletLedgerEntry {
+  string id = 1;
+  string wallet_id = 2;
+  string org_id = 3;
+  string entry_type = 4;
+  int64 amount_cents = 5;
+  int64 balance_after_cents = 6;
+  optional string description = 7;
+  optional string source_type = 8;
+  optional string source_id = 9;
+  string metadata = 10;
+  google.protobuf.Timestamp created_at = 11;
+  int64 amount_usd_micros = 12;
+  int64 balance_after_usd_micros = 13;
+  int64 amount_usd_nanos = 14;
+  int64 balance_after_usd_nanos = 15;
+}
+
+message WalletTopup {
+  string id = 1;
+  string wallet_id = 2;
+  string org_id = 3;
+  int64 amount_cents = 4;
+  string currency = 5;
+  string status = 6;
+  optional string stripe_checkout_session_id = 7;
+  optional string stripe_payment_intent_id = 8;
+  optional string created_by_user_id = 9;
+  string metadata = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp updated_at = 12;
+  int64 amount_usd_micros = 13;
+  int64 amount_usd_nanos = 14;
+}
+
+message WalletOverview {
+  Organization organization = 1;
+  Wallet wallet = 2;
+  repeated WalletLedgerEntry ledger_entries = 3;
+  repeated WalletTopup topups = 4;
+  int32 ledger_page = 5;
+  int32 ledger_page_size = 6;
+  int32 total_ledger_entries = 7;
+}
+
+message LLMKey {
+  string id = 1;
+  string org_id = 2;
+  string name = 3;
+  repeated string models = 4;
+  optional double max_budget = 5; // nil means no budget limit; 0 means $0 budget
+  string budget_duration = 6;
+  LLMKeyStatus status = 7;
+  optional double spend = 8; // nil means no spend data available
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp revoked_at = 10;
+}
+
+message LLMSpendEntry {
+  string key_id = 1;
+  string key_name = 2;
+  string model = 3;
+  double spend = 4;
+  int64 requests = 5;
+  google.protobuf.Timestamp period_start = 6;
+  google.protobuf.Timestamp period_end = 7;
+}
+
+message ManagedReliantAccess {
+  string id = 1;
+  string user_id = 2;
+  string status = 3;
+  string active_llm_key_id = 4;
+  int32 credential_version = 5;
+  optional int32 entitlement_snapshot_version = 6;
+  google.protobuf.Timestamp last_rotated_at = 7;
+  google.protobuf.Timestamp last_provisioned_at = 8;
+  string last_error = 9;
+  string internal_org_id = 10;
+  google.protobuf.Timestamp created_at = 11;
+  google.protobuf.Timestamp updated_at = 12;
+}
+
+message ReliantOverview {
+  ReliantEntitlement entitlement = 1;
+  ManagedReliantAccess managed_access = 2;
+  int64 current_period_spend_cents = 3;
+  int64 remaining_spend_cents = 4;
+  bool spend_cap_reached = 5;
+  bool spend_cap_unlimited = 6;
+  bool request_rate_unlimited = 7;
+  int64 current_period_request_count = 8;
+}
+
+message GitRepo {
+  string full_name = 1;
+  string clone_url = 2;
+  string default_branch = 3;
+  string description = 4;
+  bool private = 5;
+  string language = 6;
+  google.protobuf.Timestamp updated_at = 7;
+}

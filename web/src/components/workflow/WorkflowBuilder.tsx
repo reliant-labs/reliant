@@ -81,7 +81,6 @@ import type { BackgroundVariant, SelectionMode } from "@xyflow/react";
 import { WorkflowBuilderChat, type PanelSize } from "./WorkflowBuilderChat";
 import { ScenarioPanel } from "./ScenarioPanel";
 import { useProjectStore } from "../../store/projectStore";
-import { useTourStore } from "../../store/tourStore";
 import { useIsChatRunning } from "../../store/activityStore";
 import { useGlobalUpdatesStore } from "../../store/globalUpdatesStore";
 import { normalizeWorkflowRef } from "./useWorkflowInputs";
@@ -194,6 +193,13 @@ interface WorkflowBuilderProps {
   yamlDefinition?: string;
   /** Callback when YAML definition changes (e.g., after apply from modal) */
   onYamlDefinitionChange?: (yaml: string | undefined) => void;
+  /**
+   * One-shot drill target from the route's `?drill=` search param. After the
+   * workflow loads, the builder enters inline-edit on this node (used by the
+   * onboarding tour to land the user inside a workflow's body). Consumed once
+   * per workflow load via a ref guard.
+   */
+  drillIntoNodeId?: string;
 }
 
 function WorkflowBuilderInner({
@@ -214,6 +220,7 @@ function WorkflowBuilderInner({
   onVersionChange,
   yamlDefinition,
   onYamlDefinitionChange,
+  drillIntoNodeId,
 }: WorkflowBuilderProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
@@ -1133,10 +1140,6 @@ function WorkflowBuilderInner({
       setSelectedNode(null);
       setSelectedEdge(null);
       clearHistory();
-
-      toast.success(
-        `${isBuiltinWorkflow ? "Viewing" : "Editing"} ${label.toLowerCase()}: ${step.id}`,
-      );
     },
     [
       nodes,
@@ -1149,6 +1152,32 @@ function WorkflowBuilderInner({
       canDragNodes,
     ],
   );
+
+  // Auto-drill into a named loop/workflow node after load. Used by the
+  // onboarding tour to land users in the multi-node body of a workflow whose
+  // top level is a single loop. The signal comes in via the `drillIntoNodeId`
+  // prop (sourced from the URL's `?drill=` search param). We consume it once
+  // per workflow load via a ref guard — the URL doesn't need clearing because
+  // the next navigation drops the search param naturally.
+  const consumedDrillRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!initialWorkflow || loopEditStack.length > 0) return;
+    if (!drillIntoNodeId) return;
+    // Skip if we've already consumed this exact drill target for this load.
+    const consumeKey = `${initialWorkflow.name ?? ""}::${drillIntoNodeId}`;
+    if (consumedDrillRef.current === consumeKey) return;
+    consumedDrillRef.current = consumeKey;
+
+    const step = (initialWorkflow.nodes ?? []).find(
+      (n) => n.id === drillIntoNodeId,
+    );
+    if (!step) return;
+    if (step.type === "loop") {
+      enterInlineEdit(step as LoopStep, "loop");
+    } else if (step.type === "workflow" && getStepInline(step as WorkflowStep)) {
+      enterInlineEdit(step as WorkflowStep, "workflow");
+    }
+  }, [initialWorkflow, loopEditStack.length, enterInlineEdit, drillIntoNodeId]);
 
   // Convenience wrappers for enterInlineEdit
   const enterLoopEdit = useCallback(
@@ -1412,8 +1441,10 @@ function WorkflowBuilderInner({
         return;
       }
 
-      // Defer to onboarding tour if it's active (it handles its own Escape)
-      if (useTourStore.getState().isWizardActive) return;
+      // Defer to onboarding tour if it's active. Tour activity lives in the
+      // URL (`?tour=<step>`); read it directly since this handler is outside
+      // the React render cycle.
+      if (new URLSearchParams(window.location.search).has("tour")) return;
 
       // Prevent ModernApp from handling this ESC
       e.preventDefault();
@@ -1555,21 +1586,32 @@ function WorkflowBuilderInner({
         return;
       }
       markDirty();
+      // updatedStep.id must be set — the early `!updatedStep.type` guard
+      // above runs in tandem with id presence; tightened here so we don't
+      // silently lose track of which node we're updating.
+      if (!updatedStep.id) {
+        console.error("[WorkflowBuilder] Cannot update step without id");
+        return;
+      }
+      const updatedStepId = updatedStep.id;
       setNodes((nds) =>
         nds.map((node) => {
-          if (node.id === updatedStep.id) {
+          if (node.id === updatedStepId) {
             const currentStep = (node.data as FlowNodeData).step as Step | undefined;
             const mergedStep = currentStep
               ? mergeStepUpdate(currentStep, updatedStep)
               : updatedStep;
             const nodeType = getStepType(mergedStep);
+            // mergeStepUpdate preserves updatedStep.id, which we've guarded
+            // above — use the narrowed value directly instead of re-narrowing
+            // mergedStep.id (which the Step type keeps optional repo-wide).
             return {
               ...node,
-              id: mergedStep.id,
+              id: updatedStepId,
               type: getFlowNodeType(nodeType),
               data: {
                 step: mergedStep,
-                label: mergedStep.id,
+                label: updatedStepId,
               },
             };
           }
@@ -1579,7 +1621,8 @@ function WorkflowBuilderInner({
 
       // Update selected node
       setSelectedNode((current) => {
-        if (current?.id === updatedStep.id) {
+        if (!current) return current;
+        if (current.id === updatedStepId) {
           const currentStep = (current.data as FlowNodeData).step as Step | undefined;
           const mergedStep = currentStep
             ? mergeStepUpdate(currentStep, updatedStep)

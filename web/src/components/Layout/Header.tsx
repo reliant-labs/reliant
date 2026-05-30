@@ -10,7 +10,6 @@ import {
   Workflow,
   FolderOpen,
   FolderGit2,
-  MessageSquarePlus,
 } from "lucide-react";
 import {
   useState,
@@ -21,12 +20,14 @@ import {
 import { Tooltip } from "../ui/Tooltip";
 
 import { useProjectStore, type Project } from "../../store/projectStore";
+import type { SettingsSection } from "../../routeSchemas";
 import { useShortcutsStore } from "../../store/shortcutsStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { ConfigHealthIndicator } from "./ConfigHealthIndicator";
 import { DaemonStatusDot } from "./DaemonStatusDot";
 import { isDev } from "../../lib/constants";
 import { openExternalLink } from "../../lib/open-link";
+import { useTitleBarChrome } from "../../hooks/useTitleBarChrome";
 
 interface HeaderProps {
   // Controls logo size in the app bar for tasteful variations
@@ -36,7 +37,7 @@ interface HeaderProps {
   windowAligned?: boolean;
   onNavigateToSettings?: () => void;
   onNavigateToWorktrees?: () => void;
-  onNavigateToSettingsSection?: (section: string) => void;
+  onNavigateToSettingsSection?: (section: SettingsSection) => void;
   onNavigateToChats?: () => void;
   onNavigateToProjects?: () => void;
   projectPickerMode?: boolean;
@@ -75,41 +76,14 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
     ref
   ) => {
     const [isMaximized, setIsMaximized] = useState(false);
-    const [isFullscreen, setIsFullscreen] = useState(false);
 
-    const isElectron = Boolean(window.electronAPI);
-    const isMac = window.electronAPI?.platform === "darwin";
-
-
-    // Track fullscreen state - use both resize listener AND Electron API
-    // Query Electron API on every resize to catch Fill modes immediately
-    useEffect(() => {
-      const checkFullscreenStatus = async () => {
-        if (window.electronAPI?.getFullscreenStatus) {
-          const isFS = await window.electronAPI.getFullscreenStatus();
-          setIsFullscreen(isFS);
-        }
-      };
-
-      // Get initial fullscreen status
-      checkFullscreenStatus();
-
-      // Listen for resize events (catches Fill modes, manual resizes, etc.)
-      window.addEventListener('resize', checkFullscreenStatus);
-
-      // Also listen to Electron fullscreen events for instant true fullscreen detection
-      let unsubscribe: (() => void) | undefined;
-      if (window.electronAPI?.onFullscreenChanged) {
-        unsubscribe = window.electronAPI.onFullscreenChanged((fs: boolean) => {
-          setIsFullscreen(fs);
-        });
-      }
-
-      return () => {
-        window.removeEventListener('resize', checkFullscreenStatus);
-        if (unsubscribe) unsubscribe();
-      };
-    }, []);
+    const {
+      isElectron,
+      trafficLightPadding,
+      dragRegionStyle,
+      noDragRegionStyle,
+      showWindowControls,
+    } = useTitleBarChrome({ alignedToWindowEdge: windowAligned });
     const currentProject = useProjectStore((state) => state.currentProject);
     const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
     const worktrees = useWorktreeStore((state) => state.worktrees);
@@ -198,17 +172,11 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
 
     return (
       <header
-        className="h-12 border-b border-border flex items-center bg-background dense-ui select-none cursor-move relative z-[100]"
-        style={
-          {
-            WebkitAppRegion: "drag",
-            WebkitUserSelect: "none",
-            userSelect: "none",
-          } as React.CSSProperties
-        }
+        className={`h-12 border-b border-border flex items-center bg-background dense-ui select-none relative z-[100] ${isElectron ? "cursor-move" : ""}`}
+        style={dragRegionStyle}
       >
         {/* Left side */}
-        <div className="flex items-center flex-1 transition-[padding] duration-200 ease-in-out gap-1" style={{ paddingLeft: !isFullscreen && isMac && windowAligned ? '80px' : '12px' }}>
+        <div className="flex items-center flex-1 transition-[padding] duration-200 ease-in-out gap-1" style={{ paddingLeft: trafficLightPadding }}>
 
           {/* Toggle Chat Sidebar button */}
           {!projectPickerMode && onToggleChatSidebar && (
@@ -223,7 +191,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
                 onClick={onToggleChatSidebar}
                 className="header-icon-btn p-1.5 rounded text-xs transition-colors"
                 aria-label="Toggle Chat Sidebar"
-                style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+                style={noDragRegionStyle}
               >
                 <PanelLeft className="w-4 h-4" />
               </button>
@@ -241,7 +209,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
                 onClick={onNavigateToProjectPicker}
                 className="header-icon-btn p-1.5 rounded text-xs transition-colors"
                 aria-label="Switch Project"
-                style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+                style={noDragRegionStyle}
               >
                 <FolderOpen className="w-4 h-4" />
               </button>
@@ -259,7 +227,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
                 onClick={onOpenWorkflows}
                 className="header-icon-btn p-1.5 rounded text-xs transition-colors"
                 aria-label="Open Workflows"
-                style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+                style={noDragRegionStyle}
                 data-onboarding="workflow-button"
               >
                 <Workflow className="w-4 h-4" />
@@ -273,7 +241,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
         <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center">
           <div
             className="flex items-center gap-2 text-sm font-medium text-foreground/80 px-2 py-1 rounded-md bg-accent/20"
-            style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+            style={noDragRegionStyle}
           >
             <button
               type="button"
@@ -300,13 +268,13 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
           {/* Draggable spacer to the right of search */}
           <div
             className="flex-1 min-w-4"
-            style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
+            style={dragRegionStyle}
           />
 
           {/* Control buttons (not draggable) */}
           <div
             className="flex items-center gap-1 pr-2 cursor-default"
-            style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+            style={noDragRegionStyle}
           >
             {/* Dev-only: Temporal UI button (shown in all modes) */}
             {isDev && (
@@ -416,7 +384,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
             )}
 
             {/* Window controls for non-Mac Electron only — browsers can't drive these */}
-            {isElectron && !isMac && (
+            {showWindowControls && (
               <>
                 <div className="h-4 w-px bg-border mx-1" />
                 <button

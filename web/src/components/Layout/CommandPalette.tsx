@@ -6,10 +6,12 @@ import {
   FolderOpen, GitBranch, Workflow, Bot, Terminal,
   Code
 } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import { cn } from "../../lib/utils";
 import { useViewerStore } from "../../store/viewerStore";
 import { useProjectStore } from "../../store/projectStore";
 import { focusChatInput } from "../../hooks/useFocusManager";
+import type { SettingsSection } from "../../routeSchemas";
 
 interface Command {
   id: string;
@@ -31,7 +33,7 @@ interface CommandPaletteProps {
   isOpen?: boolean;
   onClose?: () => void;
   onNavigateToSettings?: () => void;
-  onNavigateToSettingsSection?: (section: string) => void;
+  onNavigateToSettingsSection?: (section: SettingsSection) => void;
   onNavigateToWorktrees?: () => void;
   onNavigateToProjects?: () => void;
   onOpenWorkflows?: () => void;
@@ -68,8 +70,7 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
     const modalContentRef = useRef<HTMLDivElement>(null);
     
     const currentProject = useProjectStore((state) => state.currentProject);
-    const setSettingsMode = useViewerStore((state) => state.setSettingsMode);
-    const setWorkflowMode = useViewerStore((state) => state.setWorkflowMode);
+    const navigate = useNavigate();
     
     // Sync with external isOpen state and focus input when opened
     useEffect(() => {
@@ -126,7 +127,7 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         category: "navigation",
         keywords: ["workflow", "automation", "flow"],
         action: () => {
-          setWorkflowMode(true);
+          navigate({ to: '/workflow' });
           closeAndFocus();
         },
       },
@@ -139,7 +140,7 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         category: "settings",
         keywords: ["preferences", "config", "configuration"],
         action: () => {
-          setSettingsMode(true);
+          navigate({ to: '/settings' });
           closeAndFocus();
         },
       },
@@ -151,7 +152,7 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         category: "settings",
         keywords: ["keys", "hotkeys", "bindings"],
         action: () => {
-          setSettingsMode(true, "shortcuts");
+          navigate({ to: '/settings/$section', params: { section: 'shortcuts' } });
           closeAndFocus();
         },
       },
@@ -163,7 +164,7 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         category: "settings",
         keywords: ["theme", "color", "dark", "light"],
         action: () => {
-          setSettingsMode(true, "appearance");
+          navigate({ to: '/settings/$section', params: { section: 'appearance' } });
           closeAndFocus();
         },
       },
@@ -175,7 +176,7 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         category: "settings",
         keywords: ["api", "key", "openai", "anthropic", "claude"],
         action: () => {
-          setSettingsMode(true, "general");
+          navigate({ to: '/settings/$section', params: { section: 'general' } });
           closeAndFocus();
         },
       },
@@ -187,7 +188,7 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         category: "settings",
         keywords: ["data", "telemetry", "tracking"],
         action: () => {
-          setSettingsMode(true, "privacy");
+          navigate({ to: '/settings/$section', params: { section: 'privacy' } });
           closeAndFocus();
         },
       },
@@ -199,7 +200,7 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         category: "settings",
         keywords: ["debug", "dev", "advanced"],
         action: () => {
-          setSettingsMode(true, "developer");
+          navigate({ to: '/settings/$section', params: { section: 'developer' } });
           closeAndFocus();
         },
       },
@@ -211,7 +212,7 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         category: "settings",
         keywords: ["version", "info"],
         action: () => {
-          setSettingsMode(true, "about");
+          navigate({ to: '/settings/$section', params: { section: 'about' } });
           closeAndFocus();
         },
       },

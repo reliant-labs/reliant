@@ -51,9 +51,9 @@ export interface WorktreeState {
   activeChatId: string | null;
   chatQueue: string[]; // LRU navigation history
 
-  // Workflow state
-  isWorkflowMode: boolean; // Whether workflow builder is open
-  activeWorkflowName: string | null; // Name of open workflow (null = hub view)
+  // Workflow state removed — the URL (/workflow, /workflow/$name) is now the
+  // source of truth. Persisted blobs from older versions may still contain
+  // `isWorkflowMode` and `activeWorkflowName`; they're ignored.
 
   // Viewer state
   openViewers: SerializedViewer[];
@@ -194,14 +194,6 @@ interface WorkspaceStateStore {
     worktreeId: string | null
   ) => void;
 
-  // === Workflow State Actions ===
-  setWorkflowState: (
-    projectId: string,
-    worktreeId: string | null,
-    isWorkflowMode: boolean,
-    activeWorkflowName: string | null
-  ) => void;
-
   // === Expanded Loops State Actions ===
   getExpandedLoops: (
     projectId: string,
@@ -288,8 +280,6 @@ export function createDefaultWorktreeState(): WorktreeState {
   return {
     activeChatId: null,
     chatQueue: [],
-    isWorkflowMode: false,
-    activeWorkflowName: null,
     openViewers: [],
     activeViewerIndex: null,
     rightPanelState: {
@@ -565,20 +555,6 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
         const currentIndex = tabs.indexOf(currentState.rightSidebarTab);
         const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length;
         get().setWorktreeState(projectId, worktreeId, { rightSidebarTab: tabs[prevIndex] });
-      },
-
-      // === Workflow State Actions ===
-      setWorkflowState: (projectId, worktreeId, isWorkflowMode, activeWorkflowName) => {
-        logger.debug("[WorkspaceState] setWorkflowState", {
-          projectId,
-          worktreeId,
-          isWorkflowMode,
-          activeWorkflowName,
-        });
-        get().setWorktreeState(projectId, worktreeId, {
-          isWorkflowMode,
-          activeWorkflowName,
-        });
       },
 
       // === Expanded Loops State Actions ===
@@ -934,25 +910,12 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
           logger.info("[WorkspaceState] Migrated to v2: leftSidebarExpanded is now global");
         }
 
-        // Migration v2 -> v3: Add workflow state fields to worktrees
+        // Migration v2 -> v3 was a no-op for the current schema. It used to add
+        // isWorkflowMode/activeWorkflowName fields, which have since been
+        // removed in favor of route-based navigation (/workflow/*). We keep
+        // the version bump only so the migration chain is intact.
         if (version < 3) {
-          const state = persistedState as Partial<WorkspaceStateStore>;
-          // Add default workflow state to all existing worktrees
-          if (state.projects) {
-            for (const projectId of Object.keys(state.projects)) {
-              const project = state.projects[projectId];
-              if (project?.worktrees) {
-                for (const worktreeKey of Object.keys(project.worktrees)) {
-                  const worktree = project.worktrees[worktreeKey] as Partial<WorktreeState>;
-                  if (worktree) {
-                    worktree.isWorkflowMode = worktree.isWorkflowMode ?? false;
-                    worktree.activeWorkflowName = worktree.activeWorkflowName ?? null;
-                  }
-                }
-              }
-            }
-          }
-          logger.info("[WorkspaceState] Migrated to v3: Added workflow state fields");
+          logger.info("[WorkspaceState] Migrated to v3: (workflow state fields no longer used)");
         }
 
         // Migration v3 -> v4: Add expandedLoops field to worktrees

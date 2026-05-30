@@ -15,6 +15,7 @@ import { ScrollToBottomButton } from "./ScrollToBottomButton";
 import { PermissionsPanelWrapper } from "./PermissionsPanelWrapper";
 import { PermissionsPanel } from "./PermissionsPanel";
 import { ChatHeader } from "./ChatHeader";
+import { ResumeDaemonPill } from "./ResumeDaemonPill";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { InterleavedTimeline } from "./thread-views";
 import { WorkflowViewerPanel } from "../workflow/WorkflowViewerPanel";
@@ -398,6 +399,8 @@ export const ChatPresenter = memo(function ChatPresenter({
           workflowViewerMode={workflowViewerMode}
           onToggleWorkflowViewerMode={handleToggleWorkflowViewerMode}
         />
+
+        <ResumeDaemonPill />
 
         {/* Inline Workflow Viewer Panel - shown when in inline mode */}
         {isInlineWorkflowViewerOpen && workflowExecution && projectId && (

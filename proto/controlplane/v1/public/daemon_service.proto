@@ -1,0 +1,129 @@
+syntax = "proto3";
+
+// EXPERIMENTAL: controlplane.v1 is unstable. Field numbers, RPC names, and
+// service shapes may change without notice until the package is declared
+// stable. Consumers should pin to a specific control-plane commit.
+//
+// See proto/controlplane/v1/public/README.md for stability/versioning policy.
+
+package controlplane.v1;
+
+option go_package = "github.com/reliant-labs/control-plane/internal/gen/controlplane/v1;controlplanev1";
+
+import "controlplane/v1/public/shared.proto";
+
+// === DaemonService ===
+
+service DaemonService {
+  rpc CreateDaemon(CreateDaemonRequest) returns (CreateDaemonResponse) {}
+  rpc GetDaemon(GetDaemonRequest) returns (GetDaemonResponse) {}
+  rpc ListDaemons(ListDaemonsRequest) returns (ListDaemonsResponse) {}
+  rpc UpdateDaemon(UpdateDaemonRequest) returns (UpdateDaemonResponse) {}
+  rpc DeleteDaemon(DeleteDaemonRequest) returns (DeleteDaemonResponse) {}
+  rpc SuspendDaemon(SuspendDaemonRequest) returns (SuspendDaemonResponse) {}
+  rpc ResumeDaemon(ResumeDaemonRequest) returns (ResumeDaemonResponse) {}
+  rpc SetPortAccess(SetPortAccessRequest) returns (SetPortAccessResponse) {}
+  rpc RemovePortAccess(RemovePortAccessRequest) returns (RemovePortAccessResponse) {}
+  rpc ListPortAccessRules(ListPortAccessRulesRequest) returns (ListPortAccessRulesResponse) {}
+}
+
+message CreateDaemonRequest {
+  // Human-readable name for the new daemon. Used for display and for the
+  // (owner, name) idempotency check inside CreateDaemon; not a lookup key.
+  string name = 1;
+  DaemonType daemon_type = 2;
+  // Managed daemon fields
+  string image = 3;
+  ResourceRequirements resources = 4;
+  string git_repo = 5;
+  string git_branch = 6;
+  string storage_size = 7;
+  // External daemon fields
+  string hostname = 8;
+  string platform = 9;
+  // Daemon enhancements
+  DaemonSize size = 10;
+  string idle_timeout = 11; // duration string, e.g. "30m"
+}
+
+message CreateDaemonResponse {
+  Daemon daemon = 1;
+}
+
+message GetDaemonRequest {
+  string daemon_id = 1;
+}
+
+message GetDaemonResponse {
+  Daemon daemon = 1;
+  string workspace_base_domain = 2; // e.g. "workspaces.reliantapi.com"
+}
+
+message ListDaemonsRequest {
+  DaemonType daemon_type = 1;
+  DaemonStatus status = 2;
+}
+
+message ListDaemonsResponse {
+  repeated Daemon daemons = 1;
+}
+
+message UpdateDaemonRequest {
+  string daemon_id = 1;
+  string new_name = 2;
+  string image = 3;
+  ResourceRequirements resources = 4;
+}
+
+message UpdateDaemonResponse {
+  Daemon daemon = 1;
+}
+
+message DeleteDaemonRequest {
+  string daemon_id = 1;
+  bool snapshot_before_delete = 2;
+}
+
+message DeleteDaemonResponse {}
+
+message SuspendDaemonRequest {
+  string daemon_id = 1;
+}
+
+message SuspendDaemonResponse {
+  Daemon daemon = 1;
+}
+
+message ResumeDaemonRequest {
+  string daemon_id = 1;
+}
+
+message ResumeDaemonResponse {
+  Daemon daemon = 1;
+}
+
+message SetPortAccessRequest {
+  string daemon_id = 1;
+  int32 port = 2;
+  PortAccessMode access_mode = 3;
+}
+
+message SetPortAccessResponse {
+  PortAccessRule rule = 1;
+  string access_token = 2; // only populated when access_mode is TOKEN
+}
+
+message RemovePortAccessRequest {
+  string daemon_id = 1;
+  int32 port = 2;
+}
+
+message RemovePortAccessResponse {}
+
+message ListPortAccessRulesRequest {
+  string daemon_id = 1;
+}
+
+message ListPortAccessRulesResponse {
+  repeated PortAccessRule rules = 1;
+}

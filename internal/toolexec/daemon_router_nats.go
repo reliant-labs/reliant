@@ -135,19 +135,30 @@ func (r *NATSDaemonRouter) resolveDaemonID(ctx context.Context, userID string, s
 		// If control plane doesn't find a daemon, fall through to DB.
 	}
 
-	// Step 3: Fallback — look up from DB.
+	// Step 3: Fallback — look up from DB. Routability is now derived from the
+	// daemon_attachment table: a daemon is reachable iff it has a recent attachment
+	// row, regardless of any stale state recorded on the daemons row itself.
 	if r.db != nil {
 		daemons, err := r.db.ListDaemonsByUserID(ctx, userID)
 		if err != nil {
 			return "", fmt.Errorf("resolving daemon ID from DB: %w", err)
 		}
+		attachedIDs, err := r.db.ListAttachedDaemonIDsForUser(ctx, userID, daemonStaleThreshold)
+		if err != nil {
+			return "", fmt.Errorf("resolving attached daemon IDs from DB: %w", err)
+		}
+		attached := make(map[string]bool, len(attachedIDs))
+		for _, id := range attachedIDs {
+			attached[id] = true
+		}
 		for _, d := range daemons {
-			if d.Status == db.DaemonStatusActive {
-				if selector != nil && selector.Type != "" && selector.Type != "any" {
-					continue
-				}
-				return d.ID, nil
+			if !attached[d.ID] {
+				continue
 			}
+			if selector != nil && selector.Type != "" && selector.Type != "any" {
+				continue
+			}
+			return d.ID, nil
 		}
 	}
 
@@ -213,16 +224,11 @@ func (r *NATSDaemonRouter) IsDaemonOnline(ctx context.Context, userID string) (b
 	if r.db == nil {
 		return r.isDaemonOnlineViaNATS(ctx, userID)
 	}
-	daemons, err := r.db.ListDaemonsByUserID(ctx, userID)
+	online, err := r.db.IsDaemonAttached(ctx, userID, daemonStaleThreshold)
 	if err != nil {
-		return false, fmt.Errorf("checking daemon status in DB: %w", err)
+		return false, fmt.Errorf("checking daemon attachment in DB: %w", err)
 	}
-	for _, d := range daemons {
-		if d.Status == db.DaemonStatusActive {
-			return true, nil
-		}
-	}
-	return false, nil
+	return online, nil
 }
 
 // isDaemonOnlineViaNATS is the legacy NATS request-reply check, used as fallback

@@ -1,50 +1,62 @@
 /**
- * Shared HTTP client for control-plane Connect RPC endpoints.
+ * Shared transport + typed-client factory for control-plane Connect RPCs.
  *
- * Every cloud service module (git, secrets, deployments, …) delegates its
- * network calls here so auth handling, error formatting, and base-URL
- * resolution live in exactly one place.
+ * Every cloud service module (git, daemon, onboarding, billing, …) calls into
+ * `getControlPlaneClient(SomeService)` to get a `Client<SomeService>` wired up
+ * with the Supabase auth header. The transport is created per call so the
+ * interceptor closure always reads the freshest session token.
+ *
+ * Wire format is Connect-JSON (protojson). Connect-go's protojson accepts and
+ * emits camelCase field names natively, so request bodies should use the
+ * generated TS types as-is — DO NOT send snake_case duplicates or
+ * hand-rolled aliases.
  */
-
+import { createClient, type Client } from "@connectrpc/connect";
+import { createConnectTransport } from "@connectrpc/connect-web";
+import type { DescService } from "@bufbuild/protobuf";
 import { supabase } from "@/lib/supabase";
 import { CONTROL_PLANE_API_URL } from "./config";
 
+async function getAuthToken(): Promise<string | undefined> {
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    return session?.access_token ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
- * Authenticated POST to a Connect RPC method on the control-plane API.
+ * Create a typed Connect client for a control-plane service. The auth
+ * interceptor reads the Supabase session token on every request so token
+ * refreshes are picked up without rebuilding the transport.
  *
- * @param service  Fully-qualified Connect service name, e.g. `"controlplane.v1.GitCredentialService"`
- * @param method   RPC method name, e.g. `"GetGitCredential"`
- * @param body     JSON-serialisable request payload (defaults to `{}`)
+ * Throws synchronously when `VITE_CONTROL_PLANE_API_URL` isn't configured —
+ * callers that already gate on `hasControlPlane` will never see that case.
  */
-export async function controlPlaneFetch(
-  service: string,
-  method: string,
-  body: Record<string, unknown> = {},
-) {
+export function getControlPlaneClient<T extends DescService>(
+  service: T,
+): Client<T> {
   if (!CONTROL_PLANE_API_URL) {
     throw new Error(
       "Control plane API URL not configured (VITE_CONTROL_PLANE_API_URL)",
     );
   }
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (!session) throw new Error("No active session");
-
-  const resp = await fetch(`${CONTROL_PLANE_API_URL}/${service}/${method}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${session.access_token}`,
-    },
-    body: JSON.stringify(body),
+  const transport = createConnectTransport({
+    baseUrl: CONTROL_PLANE_API_URL,
+    interceptors: [
+      (next) => async (req) => {
+        const token = await getAuthToken();
+        if (token) {
+          req.header.set("Authorization", `Bearer ${token}`);
+        }
+        return next(req);
+      },
+    ],
   });
 
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(`${method} failed (${resp.status}): ${text}`);
-  }
-
-  return resp.json();
+  return createClient(service, transport);
 }

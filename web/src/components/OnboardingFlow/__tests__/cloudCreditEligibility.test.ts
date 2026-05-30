@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { isCloudEligible, type ReliantEntitlement } from "../api";
+import {
+  isCloudEligible,
+  type ReliantEntitlement,
+} from "@/services/controlPlane/billing";
+
+// The proto-generated `ReliantEntitlement` has every field as a non-optional
+// primitive; tests construct partial entitlements by casting through
+// `unknown` so we only have to spell out the fields under test.
+function ent(partial: Partial<ReliantEntitlement>): ReliantEntitlement {
+  return partial as unknown as ReliantEntitlement;
+}
 
 describe("isCloudEligible", () => {
   it("returns false for undefined entitlement", () => {
@@ -7,36 +17,34 @@ describe("isCloudEligible", () => {
   });
 
   it("returns false for empty entitlement", () => {
-    expect(isCloudEligible({})).toBe(false);
+    expect(isCloudEligible(ent({}))).toBe(false);
   });
 
   it("returns true when status is active and reliantEnabled is true", () => {
-    const ent: ReliantEntitlement = { status: "active", reliantEnabled: true };
-    expect(isCloudEligible(ent)).toBe(true);
-  });
-
-  it("returns true when status is active and reliant_enabled is true (snake_case)", () => {
-    const ent: ReliantEntitlement = { status: "active", reliant_enabled: true };
-    expect(isCloudEligible(ent)).toBe(true);
+    expect(
+      isCloudEligible(ent({ status: "active", reliantEnabled: true })),
+    ).toBe(true);
   });
 
   it("returns false when status is active but reliantEnabled is false", () => {
-    const ent: ReliantEntitlement = { status: "active", reliantEnabled: false };
-    expect(isCloudEligible(ent)).toBe(false);
+    expect(
+      isCloudEligible(ent({ status: "active", reliantEnabled: false })),
+    ).toBe(false);
   });
 
   it("returns false when reliantEnabled is true but status is not active", () => {
-    const ent: ReliantEntitlement = { status: "canceled", reliantEnabled: true };
-    expect(isCloudEligible(ent)).toBe(false);
+    expect(
+      isCloudEligible(ent({ status: "canceled", reliantEnabled: true })),
+    ).toBe(false);
   });
 
   it("returns false when status is trialing", () => {
-    const ent: ReliantEntitlement = { status: "trialing", reliantEnabled: true };
-    expect(isCloudEligible(ent)).toBe(false);
+    expect(
+      isCloudEligible(ent({ status: "trialing", reliantEnabled: true })),
+    ).toBe(false);
   });
 
   it("returns false when reliantEnabled is missing", () => {
-    const ent: ReliantEntitlement = { status: "active" };
-    expect(isCloudEligible(ent)).toBe(false);
+    expect(isCloudEligible(ent({ status: "active" }))).toBe(false);
   });
 });

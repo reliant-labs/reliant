@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/claude"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/codex"
@@ -83,12 +82,6 @@ func BuildAvailableDrivers(ctx context.Context, repo db.Repository, userID strin
 			continue
 		}
 
-		// Skip reliant — it's configured from the user's JWT below,
-		// not from a stored API key.
-		if driverID == "reliant" {
-			continue
-		}
-
 		// Get the actual unmasked API key for this provider
 		apiKey, err := repo.GetProviderAPIKey(ctx, userID, driverID)
 		if err != nil {
@@ -106,26 +99,12 @@ func BuildAvailableDrivers(ctx context.Context, repo db.Repository, userID strin
 			switch driverID {
 			case "openrouter":
 				config.BaseURL = "https://openrouter.ai/api/v1"
-				// case "groq":
-				// 	config.BaseURL = "https://api.groq.com/openai/v1"
-				// case "xai":
-				// 	config.BaseURL = "https://api.x.ai/v1"
+			case "reliant":
+				// Reliant routes to the admin-server proxy via RELIANT_API_BASE_URL.
+				config.BaseURL = ResolveReliantBaseURL(apiKey)
 			}
 
 			drivers[models.DriverID(driverID)] = config
-		}
-	}
-
-	// Reliant driver: use the user's JWT (no stored API key needed).
-	if jwt, ok := auth.GetUserJWT(userID); ok && jwt != "" {
-		baseURL := ResolveReliantBaseURL(jwt)
-		apiKey, extraHeaders := ResolveReliantAPIKey(jwt, baseURL)
-		drivers[models.DriverID("reliant")] = models.DriverConfig{
-			DriverID:     models.DriverID("reliant"),
-			APIKey:       apiKey,
-			BaseURL:      baseURL,
-			ExtraHeaders: extraHeaders,
-			Enabled:      true,
 		}
 	}
 

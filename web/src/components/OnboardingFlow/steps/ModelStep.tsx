@@ -142,7 +142,7 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
 
     setError(null);
     trackEvent('onboarding_model_selected', { provider: modelProvider });
-    updatePlan({ modelProvider });
+    await updatePlan({ modelProvider });
     onNext();
   }, [onNext, plan, updatePlan]);
 

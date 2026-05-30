@@ -126,33 +126,38 @@ type ItemDefault = core.ItemDefault
 // Approval is an alias to the shared core approval model.
 type Approval = core.Approval
 
-// DaemonStatus represents daemon lifecycle state in persistent registry.
-type DaemonStatus = reliantv1.DaemonStatus
-
-const (
-	DaemonStatusActive       DaemonStatus = reliantv1.DaemonStatus_DAEMON_STATUS_ACTIVE
-	DaemonStatusIdle         DaemonStatus = reliantv1.DaemonStatus_DAEMON_STATUS_IDLE
-	DaemonStatusDisconnected DaemonStatus = reliantv1.DaemonStatus_DAEMON_STATUS_DISCONNECTED
-)
-
-// Daemon represents a persisted tools daemon registration/state.
+// Daemon represents a persisted tools daemon identity registration.
+// Lifecycle state (connection, heartbeat) lives in daemon_attachment.
 // Capabilities and ProjectPaths are JSON-encoded arrays.
 type Daemon struct {
 	ID           string
 	UserID       string
 	Hostname     *string
 	Platform     *string
-	Status       DaemonStatus
 	Capabilities *string
 	ProjectPaths *string
 	// DaemonType is the type of daemon: "managed" (cloud-hosted) or
 	// "self_hosted" (user-run local daemon). Empty/nil if undetermined.
-	DaemonType     *string
-	ConnectedAt    *time.Time
-	LastHeartbeat  *time.Time
-	DisconnectedAt *time.Time
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	DaemonType *string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
+type DaemonAttachmentSource string
+
+const (
+	DaemonAttachmentSourceInbound  DaemonAttachmentSource = "inbound"
+	DaemonAttachmentSourceOutbound DaemonAttachmentSource = "outbound"
+)
+
+type DaemonAttachment struct {
+	DaemonID           string
+	UserID             string
+	Source             DaemonAttachmentSource
+	PodIP              *string
+	PodPort            *int
+	AttachedAt         time.Time
+	LastStreamActivity time.Time
 }
 
 // DaemonPAT is a personal access token for daemon authentication.

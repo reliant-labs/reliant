@@ -31,6 +31,12 @@ type RuntimeContext struct {
 	// Daemon targeting - specifies which daemon should execute tools.
 	// Set from workflow-level or node-level daemon field. nil means use default resolution.
 	DaemonSelector *DaemonSelector `json:"daemon_selector,omitempty"`
+
+	// UserJWT carries the user's bearer token into the activity so workers in a
+	// separate process (where the gRPC auth interceptor never ran) can hydrate the
+	// in-memory JWT map and resolve the Reliant LLM driver. Token persists into
+	// workflow history; rely on its natural expiry as the security boundary.
+	UserJWT string `json:"user_jwt,omitempty"`
 }
 
 // DaemonSelector specifies criteria for selecting which daemon executes tools.

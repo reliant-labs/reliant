@@ -1,10 +1,10 @@
 import { useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 import { AlertTriangle, FolderX, Check, Settings, FolderGit2 } from "lucide-react";
 import type { Worktree } from "../../store/worktreeStore";
 import { usePreferences } from "../../hooks/settings-queries";
-import { useViewerStore } from "../../store/viewerStore";
 
 interface DeleteWorktreeModalProps {
   isOpen: boolean;
@@ -22,7 +22,7 @@ export function DeleteWorktreeModal({
   chatCount = 0,
 }: DeleteWorktreeModalProps) {
   const { data: preferences } = usePreferences();
-  const setSettingsMode = useViewerStore((state) => state.setSettingsMode);
+  const navigate = useNavigate();
   const [isDeleting, setIsDeleting] = useState(false);
   
   // Smart defaults based on whether it's first archive or permanent delete
@@ -150,7 +150,7 @@ export function DeleteWorktreeModal({
                 onClick={() => {
                   onClose(); // Close the modal first
                   setTimeout(() => {
-                    setSettingsMode(true, "workspaces");
+                    navigate({ to: '/settings/$section', params: { section: 'workspaces' } });
                   }, 100); // Small delay to ensure modal is closed
                 }}
                 className="text-xs text-primary hover:underline flex items-center gap-1"
