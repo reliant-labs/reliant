@@ -202,10 +202,12 @@ type Repository interface {
 	UpsertDaemon(ctx context.Context, daemon *Daemon) error
 	GetDaemon(ctx context.Context, id string) (*Daemon, error)
 	ListDaemonsByUserID(ctx context.Context, userID string) ([]*Daemon, error)
-	ListStaleActiveDaemons(ctx context.Context, cutoff time.Time) ([]*Daemon, error)
-	UpdateDaemonStatus(ctx context.Context, daemonID string, status DaemonStatus, connectedAt *time.Time, lastHeartbeat *time.Time, disconnectedAt *time.Time) error
-	UpdateDaemonHeartbeat(ctx context.Context, daemonID string, heartbeatAt time.Time) error
-	MarkDaemonsDisconnected(ctx context.Context, daemonIDs []string, disconnectedAt time.Time) error
+	UpsertDaemonAttachment(ctx context.Context, att *DaemonAttachment) error
+	TouchDaemonAttachment(ctx context.Context, daemonID string, activityAt time.Time) error
+	DeleteDaemonAttachment(ctx context.Context, daemonID string) error
+	IsDaemonAttached(ctx context.Context, userID string, staleThreshold time.Duration) (bool, error)
+	ListAttachedDaemonIDsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]string, error)
+	ListOutboundAttachments(ctx context.Context) ([]*DaemonAttachment, error)
 	UpsertProjectConfigRecord(ctx context.Context, record *ProjectConfigRecord) error
 
 	// Daemon PATs (Personal Access Tokens)

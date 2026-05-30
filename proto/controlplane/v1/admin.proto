@@ -109,6 +109,15 @@ service BillingService {
   rpc ReserveManagedReliantUsage(ReserveManagedReliantUsageRequest) returns (ReserveManagedReliantUsageResponse) {}
   rpc FinalizeManagedReliantUsage(FinalizeManagedReliantUsageRequest) returns (FinalizeManagedReliantUsageResponse) {}
   rpc ReleaseManagedReliantUsageReservation(ReleaseManagedReliantUsageReservationRequest) returns (ReleaseManagedReliantUsageReservationResponse) {}
+  rpc IssueMyReliantAPIKey(IssueMyReliantAPIKeyRequest) returns (IssueMyReliantAPIKeyResponse) {}
+}
+
+message IssueMyReliantAPIKeyRequest {}
+
+message IssueMyReliantAPIKeyResponse {
+  // plaintext_key is the rlnt_-prefixed API key the caller should use against
+  // the Reliant proxy. Idempotent: returns the existing active key if present.
+  string plaintext_key = 1;
 }
 
 message GetCurrentUserReliantStateRequest {}

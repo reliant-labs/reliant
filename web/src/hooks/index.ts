@@ -1,5 +1,10 @@
 // Custom hooks
 export { useFullscreen } from './useFullscreen';
+export {
+  useTitleBarChrome,
+  type UseTitleBarChromeOptions,
+  type UseTitleBarChromeResult,
+} from './useTitleBarChrome';
 export { useWindowContext } from './useWindowContext';
 export { useKeyboardShortcuts, useAppKeyboardShortcuts } from './useKeyboardShortcuts';
 export { useUnifiedProcessCounts, useCurrentWorkspaceRunningCount } from './useUnifiedProcesses';

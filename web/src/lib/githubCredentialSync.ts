@@ -15,7 +15,7 @@
  *   - Retries with exponential backoff (500ms, 2s, 8s).
  *   - Broadcasts sync state via the typed EventBus
  *     (`github-credential:syncing|succeeded|failed`) for UI consumers like
- *     `GitHubSyncBanner`.
+ *     `GitHubSyncStatus`.
  *   - Invalidates the React Query cache for the `useGitHubCredential` hook
  *     so the UI updates immediately on success.
  *   - Treats local-only deployments (no control plane configured) as a

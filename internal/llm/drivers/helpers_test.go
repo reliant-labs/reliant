@@ -81,6 +81,43 @@ func TestBuildAvailableDrivers_CodexExpiredTokenIsSkipped(t *testing.T) {
 	assert.Equal(t, "sk-openai-test", openAI.APIKey)
 }
 
+func TestBuildAvailableDrivers_ReliantConfiguredViaProviderAPIKey(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+
+	t.Setenv("RELIANT_API_BASE_URL", "https://proxy.example.com/v1")
+
+	ctx := context.Background()
+	userID := "test-user"
+
+	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "reliant", "rlnt_abcdef0123456789"))
+
+	availableDrivers, err := BuildAvailableDrivers(ctx, repo, userID)
+	require.NoError(t, err)
+
+	cfg, ok := availableDrivers.Drivers["reliant"]
+	require.True(t, ok, "reliant should be available when rlnt_ key is persisted")
+	assert.Equal(t, "rlnt_abcdef0123456789", cfg.APIKey)
+	assert.Equal(t, "https://proxy.example.com/v1", cfg.BaseURL)
+	assert.True(t, cfg.Enabled)
+}
+
+func TestBuildAvailableDrivers_ReliantNotConfiguredWithoutKey(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	userID := "test-user"
+
+	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "anthropic", "sk-ant-test"))
+
+	availableDrivers, err := BuildAvailableDrivers(ctx, repo, userID)
+	require.NoError(t, err)
+
+	_, hasReliant := availableDrivers.Drivers["reliant"]
+	assert.False(t, hasReliant, "reliant should not be available without a stored API key")
+}
+
 func TestBuildAvailableDrivers_CodexMarkerWithoutTokensIsSkipped(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()

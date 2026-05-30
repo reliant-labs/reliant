@@ -154,16 +154,18 @@ export function OnboardingSpotlight({
   totalSteps: _totalSteps,
   onNext,
   onBack,
-  onSkipAll,
+  onSkipAll: _onSkipAll,
   tooltipPosition = "auto",
   autoSkipIfMissing = false,
   tooltipPadding = 16,
   spotlightConfig,
 }: OnboardingSpotlightProps) {
-  // Note: stepNumber and totalSteps are passed for interface compatibility
-  // but navigation is handled by the floating OnboardingNavBar
+  // stepNumber/totalSteps are accepted for interface compatibility — the
+  // OnboardingNavBar renders progress. onSkipAll is accepted but unused:
+  // ESC no longer ends the tour; skipping happens via the nav bar button.
   void _stepNumber;
   void _totalSteps;
+  void _onSkipAll;
   const [spotlightRect, setSpotlightRect] = useState<SpotlightRect | null>(null);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
   const [tooltipSize, setTooltipSize] = useState<ElementSize>(DEFAULT_TOOLTIP_SIZE);
@@ -316,14 +318,12 @@ export function OnboardingSpotlight({
     };
   }, [updatePosition, targetSelector, autoSkipIfMissing, onNext]);
 
-  // Handle keyboard navigation
+  // Handle keyboard navigation.
+  // ESC intentionally does nothing — it must not end the tour. The user can
+  // skip explicitly via the "Skip tour" button in OnboardingNavBar.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        e.preventDefault();
-        onSkipAll();
-      } else if (e.key === "Enter" || e.key === "ArrowRight") {
+      if (e.key === "Enter" || e.key === "ArrowRight") {
         e.stopPropagation();
         e.preventDefault();
         onNext();
@@ -337,7 +337,7 @@ export function OnboardingSpotlight({
     // Use capture phase to intercept before other handlers
     document.addEventListener("keydown", handleKeyDown, true);
     return () => document.removeEventListener("keydown", handleKeyDown, true);
-  }, [onNext, onBack, onSkipAll]);
+  }, [onNext, onBack]);
 
   // Calculate the spotlight cutout dimensions (element + padding)
   // For elements at viewport edges, use exact bounds with no padding
@@ -376,7 +376,7 @@ export function OnboardingSpotlight({
   const spotlightContent = (
     <div
       className={cn(
-        "fixed inset-0 z-[100] transition-opacity duration-300 overflow-hidden",
+        "fixed inset-0 z-[100] transition-opacity duration-300 overflow-hidden pointer-events-none",
         isVisible ? "opacity-100" : "opacity-0"
       )}
     >
@@ -407,8 +407,12 @@ export function OnboardingSpotlight({
         />
       </svg>
 
-      {/* Overlay area (blocks interaction with app during spotlight) */}
-      <div className="absolute inset-0" />
+      {/* Visual dim layer — does NOT block clicks. The tour state lives in the
+       * URL (?tour=<step-id>); if the user clicks a non-spotlighted element
+       * during the tour, the wizard simply re-renders against the new page.
+       * Blocking clicks here was the source of dead-button bugs (e.g. Back
+       * to app on /workflow). */}
+      <div className="absolute inset-0 pointer-events-none" />
 
       {/* Highlight border around target - uses inset box-shadow to avoid overflow issues */}
       {cutoutRect && (

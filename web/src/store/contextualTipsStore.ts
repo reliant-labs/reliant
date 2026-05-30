@@ -16,6 +16,20 @@ import { useThreadActivityStore } from "./threadActivityStore";
 import { useWorktreeStore } from "./worktreeStore";
 import { useTourStore } from "./tourStore";
 
+/**
+ * Whether the guided tour is currently active. Source of truth: the URL
+ * (`?tour=<step-id>`). Reads from `window.location.search` because this
+ * function runs outside React — it has no router instance.
+ */
+function isTourActiveFromUrl(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return new URLSearchParams(window.location.search).has("tour");
+  } catch {
+    return false;
+  }
+}
+
 function createDefaultContextualTipState(): Record<ContextualTipId, ContextualTipStateRecord> {
   return JSON.parse(JSON.stringify(DEFAULT_CONTEXTUAL_TIP_STATE)) as Record<
     ContextualTipId,
@@ -155,7 +169,7 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
     const nextTip = getNextEligibleContextualTip(
       {
         onboardingComplete: onboardingState.hasCompletedOnboarding,
-        isWizardActive: onboardingState.isWizardActive,
+        isWizardActive: isTourActiveFromUrl(),
         activeChatId,
         chats: Array.from(chatState.chats.values()),
         activeMessages,
@@ -288,7 +302,11 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
     const unsubscribeChat = useChatStore.subscribe(debouncedReevaluate);
     const unsubscribeThreads = useThreadActivityStore.subscribe(debouncedReevaluate);
     const unsubscribeWorktrees = useWorktreeStore.subscribe(debouncedReevaluate);
+    // hasCompletedOnboarding still lives in the store and changes during
+    // loadState / markTourCompleted, so we keep subscribing here. The active-
+    // step (tour visibility) lives in the URL — popstate covers that.
     const unsubscribeOnboarding = useTourStore.subscribe(debouncedReevaluate);
+    window.addEventListener("popstate", debouncedReevaluate);
 
     const handleThreadInteracted = () => {
       void get().markFeatureEngaged("threadInteraction");
@@ -308,6 +326,7 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
       unsubscribeThreads();
       unsubscribeWorktrees();
       unsubscribeOnboarding();
+      window.removeEventListener("popstate", debouncedReevaluate);
       window.removeEventListener("contextual-tip-thread-interacted", handleThreadInteracted);
       window.removeEventListener("contextual-tip-params-opened", handleParamsOpened);
     };

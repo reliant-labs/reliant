@@ -121,9 +121,10 @@ func TestGrepNonContentModeDoesNotRecordAwareness(t *testing.T) {
 }
 
 // TestGrepContextLines tests that grep correctly parses and returns context lines
-// when using -A (after), -B (before), or -C (context) options.
-// BUG: Currently context lines are dropped because ripgrep uses "-" as separator
-// for context lines (file-10-content) vs ":" for match lines (file:10:content).
+// when using -A (after), -B (before), or -C (context) options. The daemon
+// forces --field-context-separator=":" so context and match lines share the
+// same colon-delimited format; without that, paths containing "-" (e.g.
+// macOS /var/folders/<two-char>/...) caused context lines to be dropped.
 func TestGrepContextLines(t *testing.T) {
 	// Create a temporary directory with test files
 	tmpDir := t.TempDir()

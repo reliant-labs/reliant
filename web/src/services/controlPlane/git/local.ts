@@ -4,7 +4,12 @@
  * render a clean "cloud feature" message instead of crashing.
  */
 
-import type { GitCredentialStatus, GitAccount } from "./types";
+import type {
+  CloneRepoArgs,
+  GitAccount,
+  GitCredentialStatus,
+  ListGitReposPage,
+} from "./types";
 
 export async function getCredential(
   provider: string,
@@ -40,11 +45,15 @@ export function getOAuthURL(): string | null {
 }
 
 export async function cloneRepo(
-  _daemonName: string,
-  _gitRepo: string,
-  _gitBranch: string,
-  _path: string,
-  _accountLogin?: string,
+  _args: CloneRepoArgs,
 ): Promise<{ clonedPath: string }> {
   throw new Error("Git clone via control plane requires a Reliant Cloud account");
+}
+
+export async function listRepos(
+  _page = 1,
+  _perPage = 20,
+  _sort = "updated",
+): Promise<ListGitReposPage> {
+  return { repos: [], hasMore: false };
 }

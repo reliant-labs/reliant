@@ -27,15 +27,16 @@ export const STEP_LABELS: Record<OnboardingStepId, string> = {
   'project-picker': 'Project',
 };
 
-/** Derive which steps to show based on the current plan state. */
+/** All steps that *would* appear in the user's onboarding given the plan
+ *  branch they're on. Used only by the progress bar; current-step
+ *  selection is via `deriveStep` below.
+ */
 export function getStepsForPlan(plan: Partial<LaunchPlan>): OnboardingStepId[] {
   if (!plan.compute) return ['compute'];
 
   const isCloud = plan.compute === 'cloud_free_trial';
 
-  const steps: OnboardingStepId[] = ['compute'];
-
-  steps.push('model');
+  const steps: OnboardingStepId[] = ['compute', 'model'];
 
   if (isCloud) {
     steps.push('project-choice');
@@ -48,3 +49,40 @@ export function getStepsForPlan(plan: Partial<LaunchPlan>): OnboardingStepId[] {
 
   return steps;
 }
+
+/** Derive the single step the user should be on right now from plan state.
+ *  This is the source of truth — there is no `step` URL param. Forward
+ *  motion happens when a step updates the plan; backward motion happens
+ *  when `onBack` clears the relevant plan fields via BACK_CLEARS.
+ *
+ *  Note: we deliberately do NOT take `hasGithubCredential` into account. The
+ *  picker phase of github-connect handles missing/revoked credentials via
+ *  its built-in reconnect UI. Gating step derivation on a credential check
+ *  would re-route the user mid-flow if a token check transiently fails.
+ */
+export function deriveStep(plan: Partial<LaunchPlan>): OnboardingStepId {
+  if (!plan.compute) return 'compute';
+  if (!plan.modelProvider) return 'model';
+
+  const isCloud = plan.compute === 'cloud_free_trial';
+  if (!isCloud) return 'project-picker';
+
+  if (!plan.intent) return 'project-choice';
+  if (plan.intent === 'existing_codebase') return 'github-connect';
+
+  // Cloud + build_app — terminal step is project-choice (it owns the
+  // completeOnboarding call). Until completion fires, leave the user there.
+  return 'project-choice';
+}
+
+/** When a step's Back button is clicked, these plan fields are cleared.
+ *  Derivation then naturally lands the user on the previous step.
+ *  Empty array = no back action available (we're at the first step).
+ */
+export const BACK_CLEARS: Record<OnboardingStepId, (keyof LaunchPlan)[]> = {
+  'compute': [],
+  'model': ['compute'],
+  'project-choice': ['modelProvider'],
+  'project-picker': ['modelProvider'],
+  'github-connect': ['intent'],
+};

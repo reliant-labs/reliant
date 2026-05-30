@@ -25,9 +25,12 @@ function getClient(): StatsigClient | null {
     if (!key) return null;
 
     client = new StatsigClient(key, {});
-    initPromise = client.initializeAsync().catch(() => {
-      // Silently ignore init failures — analytics is best-effort
-    });
+    initPromise = client
+      .initializeAsync()
+      .then(() => undefined)
+      .catch(() => {
+        // Silently ignore init failures — analytics is best-effort
+      });
   }
 
   return client;

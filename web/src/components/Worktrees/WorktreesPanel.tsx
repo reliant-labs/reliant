@@ -13,13 +13,13 @@ import { workspaceButton } from "./workspaceStyles";
 
 interface WorktreesPanelProps {
   paddingClass?: string;
-  daemonName?: string;
+  daemonId?: string;
   includeArchivedOnLoad?: boolean;
 }
 
 export function WorktreesPanel({
   paddingClass = "",
-  daemonName,
+  daemonId,
   includeArchivedOnLoad = false,
 }: WorktreesPanelProps) {
   const allWorktrees = useWorktreeStore((state) => state.worktrees);
@@ -210,7 +210,7 @@ export function WorktreesPanel({
           >
             Import
           </Button>
-          {daemonName && (
+          {daemonId && (
             <Button
               onClick={() => setShowAddRepoModal(true)}
               leftIcon={<Download className="h-3 w-3" />}
@@ -311,11 +311,11 @@ export function WorktreesPanel({
             onWorktreesImported={handleWorktreesImported}
             projectId={currentProject.id}
           />
-          {daemonName && (
+          {daemonId && (
             <AddRepoModal
               isOpen={showAddRepoModal}
               onClose={() => setShowAddRepoModal(false)}
-              daemonName={daemonName}
+              daemonId={daemonId}
             />
           )}
         </>

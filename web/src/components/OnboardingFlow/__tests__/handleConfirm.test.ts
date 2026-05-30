@@ -1,90 +1,125 @@
 /**
  * Tests for GitHubConnectStep confirm logic — verifies cloneRepo is always
- * called (even when daemon is provisioning) and that clone failures are
- * non-blocking.
+ * called and that clone failures now propagate to the outer catch so the user
+ * sees the error in the inline error block.
  *
  * Mirrors the handleCloud.test.ts pattern: extract orchestration logic into
  * a pure function that uses mocked API calls.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Daemon, GitRepo } from "../api";
+import type { Daemon } from "@/services/controlPlane/daemon";
+import type { GitRepo } from "@/services/controlPlane/git";
+import { DaemonStatus } from "@/gen/controlplane/v1/public/shared_pb";
 
-// ── Mock the API module ──────────────────────────────────────
+// ── Mock the daemon + git modules ────────────────────────────
 
 const mockListDaemons = vi.fn<() => Promise<{ daemons: Daemon[] }>>();
-const mockGetActiveDaemonName = vi.fn<(daemons: Daemon[]) => string>();
-const mockGetFirstDaemonId = vi.fn<(daemons: Daemon[]) => string>();
 const mockCloneRepo = vi.fn<
   (req: {
-    daemonName: string;
+    daemonId: string;
     gitRepo: string;
     gitBranch: string;
     path: string;
-    accountLogin?: string;
   }) => Promise<{ clonedPath: string }>
 >();
+const mockCreateDaemon = vi.fn<
+  (req: {
+    name: string;
+    daemonType: number;
+    size: number;
+    gitRepo: string;
+    gitBranch: string;
+  }) => Promise<void>
+>();
 
-vi.mock("../api", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../api")>();
+vi.mock("@/services/controlPlane/daemon", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/services/controlPlane/daemon")>();
   return {
     ...actual,
-    listDaemons: (...args: Parameters<typeof mockListDaemons>) => mockListDaemons(...args),
-    getActiveDaemonName: (...args: Parameters<typeof mockGetActiveDaemonName>) =>
-      mockGetActiveDaemonName(...args),
-    getFirstDaemonId: (...args: Parameters<typeof mockGetFirstDaemonId>) =>
-      mockGetFirstDaemonId(...args),
-    cloneRepo: (...args: Parameters<typeof mockCloneRepo>) => mockCloneRepo(...args),
+    listDaemons: (...args: Parameters<typeof mockListDaemons>) =>
+      mockListDaemons(...args),
+    createDaemon: (...args: Parameters<typeof mockCreateDaemon>) =>
+      mockCreateDaemon(...args),
   };
 });
+
+vi.mock("@/services/controlPlane/git", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/services/controlPlane/git")>();
+  return {
+    ...actual,
+    gitService: {
+      ...actual.gitService,
+      cloneRepo: (...args: Parameters<typeof mockCloneRepo>) =>
+        mockCloneRepo(...args),
+    },
+  };
+});
+
+function makeDaemon(partial: Partial<Daemon>): Daemon {
+  return partial as unknown as Daemon;
+}
 
 // ── Re-implement handleConfirm clone orchestration as a testable function ──
 
 interface ConfirmResult {
   clonedPath: string;
-  daemonName: string;
-  cloneSucceeded: boolean;
+  daemonId: string;
 }
 
 const CLOUD_PROJECT_ROOT = "/home/workspace/projects";
+const ONBOARDING_DAEMON_NAME = "onboarding-daemon";
+const DAEMON_TYPE_MANAGED = 1;
+const DAEMON_SIZE_SMALL = 1;
 
 /**
  * Mirrors the clone orchestration in GitHubConnectStep.handleConfirm:
  * 1. List daemons
- * 2. Pick active daemon name or fall back to first daemon ID
- * 3. Always attempt clone (non-blocking on failure)
+ * 2. Pick the active daemon, falling back to the first daemon by index
+ *    (the daemon's UUID is what the server keys lookups by)
+ * 3. Re-run CreateDaemon with the picked repo so the daemon row stores
+ *    git_repo and the workspace command carries it to the controller
+ *    (non-blocking on failure)
+ * 4. Always attempt clone — failures propagate (the user sees them in the
+ *    confirm-step error block).
  */
 async function confirmCloneLogic(
   repo: GitRepo,
   branch: string,
   projectPath: string,
 ): Promise<ConfirmResult> {
-  const { listDaemons, getActiveDaemonName, getFirstDaemonId, cloneRepo } =
-    await import("../api");
+  const { listDaemons, createDaemon, DAEMON_STATUS_ACTIVE } = await import(
+    "@/services/controlPlane/daemon"
+  );
+  const { gitService } = await import("@/services/controlPlane/git");
 
   const { daemons } = await listDaemons();
-  const daemonName = getActiveDaemonName(daemons) || getFirstDaemonId(daemons);
-  if (!daemonName) {
+  const daemon =
+    daemons.find((d) => d.status === DAEMON_STATUS_ACTIVE) ?? daemons[0];
+  if (!daemon) {
     throw new Error("Hosted workspace is still starting. Try again in a moment.");
   }
 
-  // Always attempt clone — CloneRepo queues via JetStream when daemon is offline
-  let clonedPath = projectPath;
-  let cloneSucceeded = true;
   try {
-    const result = await cloneRepo({
-      daemonName,
+    await createDaemon({
+      name: ONBOARDING_DAEMON_NAME,
+      daemonType: DAEMON_TYPE_MANAGED,
+      size: DAEMON_SIZE_SMALL,
       gitRepo: repo.cloneUrl,
       gitBranch: branch,
-      path: projectPath,
-      accountLogin: repo.accountLogin,
     });
-    clonedPath = result.clonedPath;
   } catch {
-    // Clone may fail for transient reasons; warn but don't block
-    cloneSucceeded = false;
+    // Refresh may fail (e.g. plan limit, transient error); proceed with clone.
   }
 
-  return { clonedPath, daemonName, cloneSucceeded };
+  const cloneResult = await gitService.cloneRepo({
+    daemonId: daemon.id,
+    gitRepo: repo.cloneUrl,
+    gitBranch: branch,
+    path: projectPath,
+  });
+  return { clonedPath: cloneResult.clonedPath, daemonId: daemon.id };
 }
 
 // ── Test data ────────────────────────────────────────────────
@@ -97,7 +132,6 @@ const testRepo: GitRepo = {
   private: false,
   language: "TypeScript",
   updatedAt: "2024-01-01T00:00:00Z",
-  accountLogin: "user",
 };
 
 const projectPath = `${CLOUD_PROJECT_ROOT}/my-app`;
@@ -106,6 +140,8 @@ const projectPath = `${CLOUD_PROJECT_ROOT}/my-app`;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Default: createDaemon refresh succeeds. Individual tests can override.
+  mockCreateDaemon.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -113,71 +149,69 @@ afterEach(() => {
 });
 
 describe("GitHubConnectStep confirm — clone orchestration", () => {
-  it("calls cloneRepo with active daemon name", async () => {
+  it("calls cloneRepo with the active daemon's UUID", async () => {
     mockListDaemons.mockResolvedValue({
-      daemons: [{ hostname: "ws-active", status: 3 }],
+      daemons: [
+        makeDaemon({
+          id: "daemon-active-uuid",
+          hostname: "ws-active",
+          status: DaemonStatus.ACTIVE,
+        }),
+      ],
     });
-    mockGetActiveDaemonName.mockReturnValue("ws-active");
-    mockGetFirstDaemonId.mockReturnValue("");
     mockCloneRepo.mockResolvedValue({ clonedPath: projectPath });
 
     const result = await confirmCloneLogic(testRepo, "main", projectPath);
 
     expect(mockCloneRepo).toHaveBeenCalledWith({
-      daemonName: "ws-active",
+      daemonId: "daemon-active-uuid",
       gitRepo: "https://github.com/user/my-app.git",
       gitBranch: "main",
       path: projectPath,
-      accountLogin: "user",
     });
-    expect(result.daemonName).toBe("ws-active");
-    expect(result.cloneSucceeded).toBe(true);
+    expect(result.daemonId).toBe("daemon-active-uuid");
   });
 
-  it("falls back to first daemon ID when no active daemon (provisioning)", async () => {
+  it("falls back to the first daemon's UUID when none are active (provisioning)", async () => {
     mockListDaemons.mockResolvedValue({
-      daemons: [{ name: "daemons/onboarding-daemon", status: 0 }],
+      daemons: [
+        makeDaemon({
+          id: "pending-uuid",
+          name: "onboarding-daemon",
+          status: DaemonStatus.PENDING,
+        }),
+      ],
     });
-    mockGetActiveDaemonName.mockReturnValue(""); // No active daemon
-    mockGetFirstDaemonId.mockReturnValue("daemons/onboarding-daemon");
     mockCloneRepo.mockResolvedValue({ clonedPath: projectPath });
 
     const result = await confirmCloneLogic(testRepo, "develop", projectPath);
 
     expect(mockCloneRepo).toHaveBeenCalledWith(
       expect.objectContaining({
-        daemonName: "daemons/onboarding-daemon",
+        daemonId: "pending-uuid",
         gitRepo: "https://github.com/user/my-app.git",
         gitBranch: "develop",
       }),
     );
-    expect(result.daemonName).toBe("daemons/onboarding-daemon");
-    expect(result.cloneSucceeded).toBe(true);
+    expect(result.daemonId).toBe("pending-uuid");
   });
 
-  it("does not throw when cloneRepo fails — proceeds with plan update", async () => {
+  it("propagates the cloneRepo error to the caller — the UI surfaces it", async () => {
     mockListDaemons.mockResolvedValue({
-      daemons: [{ hostname: "ws-active", status: 3 }],
+      daemons: [makeDaemon({ id: "d-1", status: DaemonStatus.ACTIVE })],
     });
-    mockGetActiveDaemonName.mockReturnValue("ws-active");
-    mockGetFirstDaemonId.mockReturnValue("");
     mockCloneRepo.mockRejectedValue(new Error("daemon unreachable"));
 
-    const result = await confirmCloneLogic(testRepo, "main", projectPath);
-
-    expect(mockCloneRepo).toHaveBeenCalled();
-    expect(result.cloneSucceeded).toBe(false);
-    // Falls back to the original projectPath
-    expect(result.clonedPath).toBe(projectPath);
+    await expect(
+      confirmCloneLogic(testRepo, "main", projectPath),
+    ).rejects.toThrow("daemon unreachable");
   });
 
   it("uses clonedPath from successful clone result", async () => {
     const overriddenPath = "/home/workspace/projects/my-app-123";
     mockListDaemons.mockResolvedValue({
-      daemons: [{ hostname: "ws-active", status: 1 }],
+      daemons: [makeDaemon({ id: "d-1", status: DaemonStatus.ACTIVE })],
     });
-    mockGetActiveDaemonName.mockReturnValue("ws-active");
-    mockGetFirstDaemonId.mockReturnValue("");
     mockCloneRepo.mockResolvedValue({ clonedPath: overriddenPath });
 
     const result = await confirmCloneLogic(testRepo, "main", projectPath);
@@ -185,38 +219,64 @@ describe("GitHubConnectStep confirm — clone orchestration", () => {
     expect(result.clonedPath).toBe(overriddenPath);
   });
 
-  it("passes correct repo URL, branch, and accountLogin to cloneRepo", async () => {
+  it("passes correct repo URL and branch to cloneRepo", async () => {
     const customRepo: GitRepo = {
       ...testRepo,
       cloneUrl: "https://github.com/org/special-repo.git",
-      accountLogin: "org-bot",
     };
     mockListDaemons.mockResolvedValue({
-      daemons: [{ daemonId: "d-99", status: 3 }],
+      daemons: [makeDaemon({ id: "d-99", status: DaemonStatus.ACTIVE })],
     });
-    mockGetActiveDaemonName.mockReturnValue("d-99");
-    mockGetFirstDaemonId.mockReturnValue("");
     mockCloneRepo.mockResolvedValue({ clonedPath: projectPath });
 
     await confirmCloneLogic(customRepo, "feature/xyz", projectPath);
 
     expect(mockCloneRepo).toHaveBeenCalledWith({
-      daemonName: "d-99",
+      daemonId: "d-99",
       gitRepo: "https://github.com/org/special-repo.git",
       gitBranch: "feature/xyz",
       path: projectPath,
-      accountLogin: "org-bot",
     });
   });
 
   it("throws when no daemon is found at all", async () => {
     mockListDaemons.mockResolvedValue({ daemons: [] });
-    mockGetActiveDaemonName.mockReturnValue("");
-    mockGetFirstDaemonId.mockReturnValue("");
 
     await expect(confirmCloneLogic(testRepo, "main", projectPath)).rejects.toThrow(
       "Hosted workspace is still starting",
     );
     expect(mockCloneRepo).not.toHaveBeenCalled();
+    expect(mockCreateDaemon).not.toHaveBeenCalled();
+  });
+
+  it("re-runs CreateDaemon with the picked repo so daemons.git_repo is populated", async () => {
+    mockListDaemons.mockResolvedValue({
+      daemons: [makeDaemon({ id: "d-1", status: DaemonStatus.ACTIVE })],
+    });
+    mockCloneRepo.mockResolvedValue({ clonedPath: projectPath });
+
+    await confirmCloneLogic(testRepo, "main", projectPath);
+
+    expect(mockCreateDaemon).toHaveBeenCalledWith({
+      name: "onboarding-daemon",
+      daemonType: 1,
+      size: 1,
+      gitRepo: "https://github.com/user/my-app.git",
+      gitBranch: "main",
+    });
+  });
+
+  it("still clones when CreateDaemon refresh fails (non-blocking)", async () => {
+    mockListDaemons.mockResolvedValue({
+      daemons: [makeDaemon({ id: "d-1", status: DaemonStatus.ACTIVE })],
+    });
+    mockCreateDaemon.mockRejectedValue(new Error("refresh failed"));
+    mockCloneRepo.mockResolvedValue({ clonedPath: projectPath });
+
+    const result = await confirmCloneLogic(testRepo, "main", projectPath);
+
+    expect(mockCreateDaemon).toHaveBeenCalled();
+    expect(mockCloneRepo).toHaveBeenCalled();
+    expect(result.clonedPath).toBe(projectPath);
   });
 });

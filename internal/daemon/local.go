@@ -444,7 +444,13 @@ func buildRgSearchArgs(pattern, outputMode string, opts *SearchOpts) []string {
 	case "count":
 		args = append(args, "-c")
 	case "content":
-		args = append(args, "-H", "-n")
+		// Force the context-line separator to ":" so context lines use the
+		// same file:line:content format as match lines. Without this, ripgrep
+		// emits file-line-content for context lines, which parseRgOutput
+		// fails to split correctly when the path itself contains "-" (common
+		// on macOS, where t.TempDir() lives under /var/folders/<two chars>/
+		// often containing dashes).
+		args = append(args, "-H", "-n", "--field-context-separator", ":")
 		if opts != nil {
 			if opts.ContextBefore > 0 {
 				args = append(args, "-B", strconv.Itoa(opts.ContextBefore))
@@ -526,9 +532,9 @@ func parseRgOutput(output, outputMode, baseDir string) []SearchMatch {
 			}
 
 		case "content":
-			// Ripgrep uses ":" as separator for match lines and "-" for context lines.
-			// Match line format: file:line:content
-			// Context line format: file-line-content
+			// Both match lines (file:line:content) and context lines
+			// (file:line:content, normalized via --field-context-separator
+			// in buildRgSearchArgs) share the same colon-delimited format.
 			parts := strings.SplitN(line, ":", 3)
 			if len(parts) == 3 {
 				filePath := resolveRgPath(parts[0], baseDir)
@@ -538,20 +544,6 @@ func parseRgOutput(output, outputMode, baseDir string) []SearchMatch {
 					Line:    lineNum,
 					Content: parts[2],
 				})
-			} else {
-				// Try context-line separator "-"
-				parts = strings.SplitN(line, "-", 3)
-				if len(parts) == 3 {
-					if _, err := strconv.Atoi(parts[1]); err == nil {
-						filePath := resolveRgPath(parts[0], baseDir)
-						lineNum, _ := strconv.Atoi(parts[1])
-						matches = append(matches, SearchMatch{
-							File:    filePath,
-							Line:    lineNum,
-							Content: parts[2],
-						})
-					}
-				}
 			}
 		}
 	}

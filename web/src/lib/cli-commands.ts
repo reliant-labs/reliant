@@ -2,16 +2,28 @@
  * Builds copy-pasteable CLI commands with the correct environment variables
  * for the current deployment.
  *
- * In production the CLI defaults are correct, so we return bare commands.
- * In non-prod (staging, local dev, etc.) the user needs env-var overrides
- * so the CLI talks to the right server, auth provider, and gateway.
+ * In production the `reliant` CLI binary is built with the right server,
+ * gateway, admin, and auth defaults compiled in (see internal/builddefaults
+ * in the Go repo), so we return a bare command. In non-prod — staging,
+ * preprod, local dev, OSS self-hosted — the user needs explicit env-var
+ * overrides so the daemon dials the same hosts the web frontend is using.
  */
 
 // ---------------------------------------------------------------------------
 // Environment detection
 // ---------------------------------------------------------------------------
 
-/** The API URL the web frontend is currently talking to. */
+/**
+ * Hostname substrings that identify the production deployment. If
+ * VITE_API_URL contains any of these (and we're not running `vite dev`),
+ * we treat the build as production and emit a bare command.
+ *
+ * Keep this in sync with `.github/workflows/deploy.yml` in the
+ * control-plane repo.
+ */
+const PROD_API_HOSTS = ["prod.reliantapi.com"] as const;
+
+/** The API URL the web frontend was built against. */
 function getServerURL(): string {
   return (
     import.meta.env.VITE_API_URL ||
@@ -21,17 +33,25 @@ function getServerURL(): string {
 }
 
 /**
- * True when the web app is pointing at a non-production backend.
+ * True when the build is targeting a non-production backend. Non-prod when
+ * ANY of:
+ *  - Vite is running in dev mode (`pnpm dev`), regardless of which env
+ *    vars are populated — catches OSS-style local dev where only the
+ *    Supabase vars are set.
+ *  - VITE_API_URL is set to a host that isn't in PROD_API_HOSTS — catches
+ *    staging/preprod builds where the deploy pipeline bakes in the
+ *    per-env URL.
  *
- * We consider it "production" when:
- *  - No VITE_API_URL / VITE_GRPC_URL is set (the CLI will fall back to its
- *    compiled-in production default), OR
- *  - The URL contains "reliantapi.com" (the production domain).
+ * Production builds for Reliant Labs leave the CLI defaults in place, so
+ * we deliberately do NOT consider auth/admin/gateway URLs in this check —
+ * the API URL is the single source of truth.
  */
 function isNonProd(): boolean {
+  if (import.meta.env.DEV) return true;
+
   const url = getServerURL();
-  if (!url) return false; // no override → production defaults
-  return !url.includes("reliantapi.com");
+  if (!url) return false;
+  return !PROD_API_HOSTS.some((host) => url.includes(host));
 }
 
 // ---------------------------------------------------------------------------
@@ -39,10 +59,22 @@ function isNonProd(): boolean {
 // ---------------------------------------------------------------------------
 
 /**
- * Returns a shell env-var prefix string like:
- *   RELIANT_SERVER_URL=https://… RELIANT_AUTH_URL=https://… RELIANT_AUTH_KEY=… 
+ * Returns a shell env-var prefix string the user can paste verbatim, e.g.:
+ *   RELIANT_SERVER_URL=… RELIANT_GATEWAY_URL=… RELIANT_API_BASE_URL=… \
+ *   RELIANT_AUTH_URL=… RELIANT_AUTH_KEY=…
  *
- * Empty string in production (no prefix needed).
+ * Returns "" in production (CLI defaults already correct).
+ *
+ * Mapping of daemon env vars → Vite-injected build vars:
+ *
+ *   RELIANT_SERVER_URL    ← VITE_API_URL || VITE_GRPC_URL  (root.go:36)
+ *   RELIANT_GATEWAY_URL   ← VITE_GATEWAY_URL               (root.go:37, falls back to server URL when unset)
+ *   RELIANT_API_BASE_URL  ← VITE_CONTROL_PLANE_API_URL     (admin-server LLM proxy; internal/llm/drivers/reliant_base_url.go)
+ *   RELIANT_AUTH_URL      ← VITE_SUPABASE_URL              (internal/auth/oauth.go:27)
+ *   RELIANT_AUTH_KEY      ← VITE_SUPABASE_ANON_KEY         (oauth.go:31)
+ *
+ * Only keys with a populated value are emitted. Order matches the daemon's
+ * own config-loading order for readability.
  */
 function envPrefix(): string {
   if (!isNonProd()) return "";
@@ -52,6 +84,16 @@ function envPrefix(): string {
   const server = getServerURL();
   if (server) {
     parts.push(`RELIANT_SERVER_URL=${server}`);
+  }
+
+  const gateway = import.meta.env.VITE_GATEWAY_URL;
+  if (gateway) {
+    parts.push(`RELIANT_GATEWAY_URL=${gateway}`);
+  }
+
+  const adminURL = import.meta.env.VITE_CONTROL_PLANE_API_URL;
+  if (adminURL) {
+    parts.push(`RELIANT_API_BASE_URL=${adminURL}`);
   }
 
   const authURL = import.meta.env.VITE_SUPABASE_URL;
@@ -81,9 +123,10 @@ export function authServeCommand(): string {
   return `${envPrefix()}reliant auth serve`;
 }
 
-/** Homebrew formula that installs the CLI binary (not the Electron cask). */
-export const HOMEBREW_CLI_INSTALL = "brew install reliant-labs/reliant/reliant";
-
-/** Homebrew cask that installs the Electron desktop app. */
+/**
+ * Homebrew cask that installs the Reliant desktop app. The desktop app
+ * ships the `reliant` CLI and installs it on PATH on first launch — there
+ * is no separate CLI-only Homebrew formula.
+ */
 export const HOMEBREW_CASK_INSTALL =
   "brew install --cask reliant-labs/reliant/reliant";

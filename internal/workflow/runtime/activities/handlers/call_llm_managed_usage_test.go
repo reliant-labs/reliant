@@ -72,6 +72,10 @@ func (f *fakeManagedUsageControlPlaneClient) ReleaseManagedReliantUsageReservati
 	return &controlplanev1.ReleaseManagedReliantUsageReservationResponse{}, nil
 }
 
+func (f *fakeManagedUsageControlPlaneClient) IssueMyReliantAPIKey(context.Context, string) (string, error) {
+	return "", nil
+}
+
 type fakeManagedUsageDriver struct {
 	name  string
 	model models.Model

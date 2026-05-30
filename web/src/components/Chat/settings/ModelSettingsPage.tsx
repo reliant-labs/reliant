@@ -1,8 +1,8 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { ChevronLeft, X, Search, Settings2 } from "lucide-react";
 import { cn } from "../../../lib/utils";
 import { useModels } from "../../../store/globalDataStore";
-import { useViewerStore } from "../../../store/viewerStore";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -85,13 +85,6 @@ function buildModelValue(
   return result;
 }
 
-function formatContextWindow(tokens: number | undefined): string {
-  if (!tokens) return "";
-  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(tokens % 1_000_000 === 0 ? 0 : 1)}M`;
-  if (tokens >= 1_000) return `${Math.round(tokens / 1_000)}k`;
-  return String(tokens);
-}
-
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -102,6 +95,7 @@ export function ModelSettingsPage({
   onBack,
   onClose,
 }: ModelSettingsPageProps) {
+  const navigate = useNavigate();
   const parsed = parseModelValue(value);
 
   // Determine initial tab from current value
@@ -257,7 +251,7 @@ export function ModelSettingsPage({
         <button
           onClick={() => {
             onClose();
-            useViewerStore.getState().setSettingsMode(true, 'general');
+            navigate({ to: '/settings/$section', params: { section: 'general' } });
           }}
           title="Model preferences"
           className="w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors"

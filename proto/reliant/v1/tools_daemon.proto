@@ -126,8 +126,19 @@ message ServerMessage {
     // Process output streaming
     ProcessOutputSubscribeMessage process_output_subscribe = 12;
     ProcessOutputUnsubscribeMessage process_output_unsubscribe = 13;
+
+    // Stream initiation. Sent as the first message on a new ConnectGateway
+    // stream so the underlying HTTP request is actually dispatched (connect-go
+    // defers makeRequest until the first client Send). Carries no payload —
+    // the gateway intentionally transmits no identity over this channel; the
+    // (daemonID, conn) mapping lives only in gateway memory so the daemon
+    // can never assert its own identity.
+    GatewayHello hello = 14;
   }
 }
+
+// GatewayHello is an intentionally-empty marker. See ServerMessage.hello.
+message GatewayHello {}
 
 // ToolRequest is sent when a tool needs to be executed
 message ToolRequest {

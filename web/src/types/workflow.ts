@@ -328,16 +328,15 @@ export function getStepProject(step: Step): ProjectConfig | undefined {
   return undefined
 }
 
-/** Get thread config from a workflow or loop step (reads from args oneof) */
+/** Get thread config from a workflow or loop step (reads from args oneof).
+ *  Returns undefined for any other step shape — callers can't depend on a
+ *  thread being present for non-workflow/loop/router steps. */
 export function getStepThread(step: Step): NodeThreadConfig | undefined {
   if (step.args?.case === 'workflow') {
     return (step.args.value as Partial<SubWorkflowArgs>)?.thread as NodeThreadConfig | undefined
   }
   if (step.args?.case === 'loop') {
     return (step.args.value as Partial<LoopArgs>)?.thread as NodeThreadConfig | undefined
-  }
-  if ((step.type === 'workflow' || step.type === 'loop') && step.args?.value) {
-    return (step.args.value as Partial<SubWorkflowArgs & LoopArgs>)?.thread as NodeThreadConfig | undefined
   }
   if (step.args?.case === 'router') {
     return (step.args.value as Record<string, unknown>)?.thread as NodeThreadConfig | undefined

@@ -57,7 +57,9 @@ export function GitConnectionsSettings() {
       if (!oauthURL) throw new Error("Control plane URL not configured");
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("No active session");
-      window.location.href = `${oauthURL}?token=${session.access_token}`;
+      const returnTo = `${window.location.pathname}${window.location.search}`;
+      const params = new URLSearchParams({ token: session.access_token, returnTo });
+      window.location.href = `${oauthURL}?${params.toString()}`;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start OAuth flow");
       setConnectingOAuth(false);

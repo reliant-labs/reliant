@@ -57,6 +57,12 @@ type ExecutionContext struct {
 	// Parent context - set for child workflows
 	// nil if this is a root workflow
 	Parent *ParentContext
+
+	// UserJWT is the user's bearer token captured at workflow start. Propagated
+	// into activity inputs so worker processes can hydrate auth.SetUserJWT and
+	// resolve the Reliant driver. See activities/types/runtime_context.go for
+	// the lifecycle/security trade-off.
+	UserJWT string
 }
 
 // DaemonSelectorValue holds a resolved daemon selector for runtime routing.
@@ -254,6 +260,7 @@ func (ctx *ExecutionContext) ForIteration(iteration int, reuseThread bool) *Exec
 		DaemonSelector: ctx.DaemonSelector, // Inherit daemon selector
 		SpawnDepth:     ctx.SpawnDepth,     // Inherit spawn depth (iterations don't increase depth)
 		Parent:         ctx.Parent,
+		UserJWT:        ctx.UserJWT, // Reliant provider is JWT-gated; dropping it here would exclude it from availableProviders inside the loop.
 	}
 
 	if reuseThread {
@@ -289,6 +296,7 @@ func (ctx *ExecutionContext) ForChild(stepID string, mode string, workflowName s
 		DaemonSelector: ctx.DaemonSelector, // Inherit daemon selector (can be overridden by node's daemon field)
 		SpawnDepth:     ctx.SpawnDepth,     // Inherit spawn depth (inline children don't increase depth)
 		Loop:           ctx.Loop,           // Inherit loop context
+		UserJWT:        ctx.UserJWT,        // Reliant provider is JWT-gated; child contexts must carry it.
 		Parent: &ParentContext{
 			WorkflowID: ctx.WorkflowID,
 			StepPath:   stepID,
@@ -359,6 +367,7 @@ func (ctx *ExecutionContext) Clone() *ExecutionContext {
 		ParentThread:   ctx.ParentThread,
 		ProjectPath:    ctx.ProjectPath,
 		DaemonSelector: ctx.DaemonSelector,
+		UserJWT:        ctx.UserJWT, // Reliant provider is JWT-gated; cloned contexts must carry it.
 	}
 
 	if ctx.Loop != nil {

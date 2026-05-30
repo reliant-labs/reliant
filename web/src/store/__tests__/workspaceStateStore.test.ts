@@ -393,8 +393,6 @@ describe('Default State Factories', () => {
       expect(state).toEqual({
         activeChatId: null,
         chatQueue: [],
-        isWorkflowMode: false,
-        activeWorkflowName: null,
         openViewers: [],
         activeViewerIndex: null,
         rightPanelState: {

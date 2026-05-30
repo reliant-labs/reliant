@@ -33,7 +33,7 @@ import { NodeDetailsPanel } from './NodeDetailsPanel'
 import { ActivityLog, type ActivityEvent } from './ActivityLog'
 import { useExtendedExecutionStatus, findStepExecutionsForNode, findChildWorkflow, findLoopIterations, findLoopIterationSteps, type LoopIterationInfo } from './hooks/useExecutionStatus'
 import { useExpandedLoops } from './hooks/useExpandedLoops'
-import { useViewerStore } from '../../store/viewerStore'
+import { useNavigate } from '@tanstack/react-router'
 import { useProjectStore } from '../../store/projectStore'
 import { useWorktreeStore } from '../../store/worktreeStore'
 import { workflowGrpc } from '../../api/workflow-grpc'
@@ -96,7 +96,7 @@ function WorkflowViewerInner({
   onExpandedChange,
 }: WorkflowViewerProps) {
   const { fitView, getNodes } = useReactFlow()
-  const setWorkflowMode = useViewerStore((state) => state.setWorkflowMode)
+  const navigate = useNavigate()
   const currentProject = useProjectStore((state) => state.currentProject)
   const currentWorktree = useWorktreeStore((state) => state.currentWorktree)
   
@@ -785,7 +785,14 @@ function WorkflowViewerInner({
             <div className="flex items-center gap-1">
             {(workflowName || workflow.name) && (
               <button
-                onClick={() => setWorkflowMode(true, workflowName || workflow.name)}
+                onClick={() => {
+                  const name = workflowName || workflow.name;
+                  if (!name) return;
+                  navigate({
+                    to: '/workflow/$workflowName',
+                    params: { workflowName: name },
+                  });
+                }}
                 className="p-1 hover:bg-muted rounded"
                 title="Edit in Workflow Builder"
               >

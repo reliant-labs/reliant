@@ -275,6 +275,12 @@ func LoadFullDefinition(definition Definition) (Definition, error) {
 		return definition, nil
 	}
 
+	// Forge-scoped skills aren't backed by a real path — they're served via
+	// forge's public skills API. Route around the disk read.
+	if definition.Scope == skillscore.ScopeForge {
+		return loadForgeDefinition(definition)
+	}
+
 	var (
 		blob []byte
 		err  error
@@ -473,6 +479,15 @@ func discoverAll(input DiscoverInput) Snapshot {
 	}
 
 	for _, definition := range builtinSkills(input.LoadFullDefinitions) {
+		mergeDefinition(&result, definition)
+	}
+
+	for _, definition := range forgeSkillsForInput(input) {
+		if len(input.DisabledDefinitionPathSet) > 0 {
+			if _, disabled := input.DisabledDefinitionPathSet[skillscore.CanonicalDefinitionPath(definition.Path)]; disabled {
+				continue
+			}
+		}
 		mergeDefinition(&result, definition)
 	}
 
