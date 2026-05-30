@@ -28,7 +28,7 @@ import { cn } from "../../../lib/utils";
 const MAX_PREVIEW_MESSAGES = 10;
 const MAX_TEXT_LENGTH = 150;
 const MAX_DETAIL_LENGTH = 40;
-const MAX_HEIGHT = 150;
+const FIXED_HEIGHT = 150;
 
 /** Tool call info with optional detail extracted from input */
 interface ToolCallInfo {
@@ -155,13 +155,25 @@ function SpawnPreview({ ctx }: ToolContentProps) {
   const spawnThreadId = spawnThread?.thread || spawnWorkflow?.thread;
   const allMessages = useChatMessages(chatId);
 
+  const workflowCompleted = spawnWorkflow?.status === ChatWorkflowStatus.COMPLETED;
+  const workflowFailed =
+    spawnWorkflow?.status === ChatWorkflowStatus.FAILED ||
+    spawnWorkflow?.status === ChatWorkflowStatus.CANCELLED;
+
+  const isDone = isCompleted || workflowCompleted;
+
   const summaries = useMemo((): MessageSummary[] => {
     if (!spawnThreadId) return [];
     const threadMsgs = allMessages.filter(
       (msg) => msg.thread === spawnThreadId && msg.role === MessageRole.ASSISTANT,
     );
 
-    return threadMsgs.slice(-MAX_PREVIEW_MESSAGES).map((msg) => {
+    // When complete, pop the last message - it's the result shown in tool output
+    const msgs = isDone && threadMsgs.length > 1
+      ? threadMsgs.slice(0, -1)
+      : threadMsgs;
+
+    return msgs.slice(-MAX_PREVIEW_MESSAGES).map((msg) => {
       const blocks = (msg.contentBlocks || []) as ContentBlock[];
       let textSnippet = "";
       const toolCalls: ToolCallInfo[] = [];
@@ -189,7 +201,7 @@ function SpawnPreview({ ctx }: ToolContentProps) {
       }
       return { id: msg.id, textSnippet, toolCalls };
     });
-  }, [allMessages, spawnThreadId]);
+  }, [allMessages, spawnThreadId, isDone]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -197,17 +209,12 @@ function SpawnPreview({ ctx }: ToolContentProps) {
     if (el) el.scrollTop = el.scrollHeight;
   }, [summaries]);
 
-  const workflowCompleted = spawnWorkflow?.status === ChatWorkflowStatus.COMPLETED;
-  const workflowFailed =
-    spawnWorkflow?.status === ChatWorkflowStatus.FAILED ||
-    spawnWorkflow?.status === ChatWorkflowStatus.CANCELLED;
-
   const hasContent = summaries.some((s) => s.textSnippet || s.toolCalls.length > 0);
 
   return (
     <div className="tool-content-spawn w-full">
       {hasContent ? (
-        <div ref={scrollRef} style={{ maxHeight: MAX_HEIGHT }} className="overflow-y-auto">
+        <div ref={scrollRef} style={{ height: FIXED_HEIGHT }} className="overflow-y-auto">
           {summaries.map((s) => (
             <div key={s.id} className="px-2 py-1 border-b border-border/10 last:border-0">
               {s.textSnippet && (
