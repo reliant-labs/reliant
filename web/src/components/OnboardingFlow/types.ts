@@ -1,6 +1,7 @@
 export type OnboardingIntent =
   | "build_app"
   | "existing_codebase"
+  | "migrate"
   | "landing_page"
   | "pitch_deck"
   | "blog_post"

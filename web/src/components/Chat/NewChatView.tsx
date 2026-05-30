@@ -16,19 +16,17 @@ import { ReliantIcon } from "../icons/ReliantIcon";
 import { WorkflowStarterCards } from "../Onboarding/WorkflowStarterCards";
 import { CreateWorktreeModal } from "../Worktrees/CreateWorktreeModal";
 import { DiscoverWorktreesModal } from "../Worktrees/DiscoverWorktreesModal";
-import { getFileTree } from "../../api/fileSystem";
 import {
   FolderGit2,
   ChevronDown,
   Check,
   Search,
-  ArrowRightLeft,
   FolderPlus,
   Activity,
 } from "lucide-react";
+import { ResumeDaemonPill } from "./ResumeDaemonPill";
 import { toast } from "sonner";
 import { cn } from "../../lib/utils";
-import { safeGetSetting, upsertStringSetting } from "../../lib/settingsPersistence";
 import { trackEvent } from "../../lib/analytics";
 
 interface NewChatViewProps {
@@ -37,19 +35,6 @@ interface NewChatViewProps {
   isFocused?: boolean; // NEW: Whether this pane has focus
   onChatCreated?: (chatId: string) => void; // Optional: Callback when chat is created (for command center)
 }
-
-const MIGRATION_COMPLETED_SETTING_KEY = "migration.completed";
-const migrationDetectionTargets = [
-  ".claude",
-  ".cursor",
-  ".codex",
-  ".windsurf",
-  "CLAUDE.md",
-  "AGENTS.md",
-  ".cursorrules",
-  ".windsurfrules",
-  ".mcp.json",
-];
 
 export function NewChatView({
   tabId: _tabId,
@@ -64,7 +49,6 @@ export function NewChatView({
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<
     string | undefined
   >(undefined);
-  const [shouldShowMigrationPrompt, setShouldShowMigrationPrompt] = useState(false);
   const chatInputRef = useRef<HTMLDivElement>(null);
   const workspaceDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -149,44 +133,6 @@ export function NewChatView({
         document.removeEventListener("mousedown", handleClickOutside);
     }
   }, [showWorkspaceDropdown]);
-
-  useEffect(() => {
-    // Wait until project is loaded before running migration detection.
-    // Without this gate, the effect fires multiple times as propsWorktreeId,
-    // selectedWorkspaceId, and currentProject?.id stabilize during hydration,
-    // causing 2-3 redundant GetFileTree calls.
-    if (!currentProject?.id) return;
-
-    let cancelled = false;
-
-    const detectMigrationSources = async () => {
-      try {
-        const [completedSetting, files] = await Promise.all([
-          safeGetSetting(MIGRATION_COMPLETED_SETTING_KEY),
-          getFileTree("/", true, selectedWorkspaceId),
-        ]);
-
-        if (cancelled) return;
-
-        const hasMigrated = completedSetting?.value === "true";
-        const hasMigrationSources = files.some((file) =>
-          migrationDetectionTargets.includes(file.name)
-        );
-
-        setShouldShowMigrationPrompt(!hasMigrated || hasMigrationSources);
-      } catch {
-        if (!cancelled) {
-          setShouldShowMigrationPrompt(true);
-        }
-      }
-    };
-
-    void detectMigrationSources();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedWorkspaceId, currentProject?.id]);
 
   // Sync selected workspace with currentWorktree from the store
   useEffect(() => {
@@ -314,19 +260,6 @@ export function NewChatView({
     setShowWorkspaceDropdown(false);
   };
 
-  const handleMigrationClick = async () => {
-    await handleCreateAndSend(
-      "Help me migrate useful configuration from Claude Code, Cursor, Codex, or Windsurf into Reliant.",
-      undefined,
-      "builtin://migrate",
-      {
-        mode: "auto",
-      }
-    );
-    await upsertStringSetting(MIGRATION_COMPLETED_SETTING_KEY, "true");
-    setShouldShowMigrationPrompt(false);
-  };
-
   // Get display name for selected workspace
   const selectedWorkspaceName = selectedWorkspaceId
     ? worktrees.find((w) => w.id === selectedWorkspaceId)?.branch ||
@@ -341,6 +274,7 @@ export function NewChatView({
     <div className="flex flex-col h-full min-h-0 bg-background">
       {/* Welcome Content */}
       <div className="relative flex-1 min-h-0 px-8 overflow-y-auto">
+        <ResumeDaemonPill />
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_38%,hsl(var(--muted)_/_0.16),transparent_62%)]" />
 
         <div className="relative z-10 min-h-full w-full max-w-5xl mx-auto grid grid-rows-[auto_1fr_auto]">
@@ -359,11 +293,11 @@ export function NewChatView({
                 <div className="relative" ref={workspaceDropdownRef}>
                   <button
                     onClick={() => setShowWorkspaceDropdown(!showWorkspaceDropdown)}
-                    className="flex items-center gap-2 px-3 py-1.5 text-xs text-muted-foreground border border-border/40 rounded-md hover:border-border hover:text-foreground transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground border border-border/40 rounded-lg hover:border-border hover:text-foreground transition-colors"
                   >
-                    <FolderGit2 className="w-3.5 h-3.5" />
-                    <span className="max-w-[120px] truncate">{selectedWorkspaceName}</span>
-                    <ChevronDown className="w-3 h-3 opacity-50" />
+                    <FolderGit2 className="w-4 h-4" />
+                    <span className="max-w-[180px] truncate">{selectedWorkspaceName}</span>
+                    <ChevronDown className="w-3.5 h-3.5 opacity-50" />
                   </button>
 
                   {showWorkspaceDropdown && (
@@ -452,9 +386,9 @@ export function NewChatView({
                 {/* Quick create workspace */}
                 <button
                   onClick={() => setShowCreateWorktreeModal(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-muted-foreground border border-border/40 rounded-md hover:border-border hover:text-foreground transition-colors"
+                  className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground border border-border/40 rounded-lg hover:border-border hover:text-foreground transition-colors"
                 >
-                  <FolderPlus className="w-3.5 h-3.5 shrink-0 -translate-y-px" />
+                  <FolderPlus className="w-4 h-4 shrink-0" />
                   <span className="leading-none">New workspace</span>
                 </button>
               </div>
@@ -472,29 +406,6 @@ export function NewChatView({
             </div>
           )}
 
-          {/* Migration prompt */}
-          <div className="w-full max-w-2xl mx-auto pb-4 md:pb-5">
-            {shouldShowMigrationPrompt && (
-              <button
-                onClick={() => void handleMigrationClick()}
-                className="w-full rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-left transition-colors hover:border-primary/50 hover:bg-primary/10"
-              >
-                <div className="flex items-start gap-3">
-                  <div className="mt-0.5 rounded-md bg-primary/10 p-2 text-primary">
-                    <ArrowRightLeft className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-foreground">
-                      Migrate from Claude Code, Cursor, Codex, or Windsurf
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      Launch a guided migration chat that inspects common config locations, summarizes what’s worth carrying over, and asks before writing Reliant files.
-                    </p>
-                  </div>
-                </div>
-              </button>
-            )}
-          </div>
         </div>
       </div>
 
