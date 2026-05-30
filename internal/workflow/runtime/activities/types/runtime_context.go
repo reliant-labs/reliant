@@ -21,9 +21,10 @@ type RuntimeContext struct {
 	ContextSequence *int `json:"context_sequence,omitempty"`
 
 	// Spawn context
-	SpawnedBy   string       `json:"spawned_by,omitempty"`
-	SpawnDepth  int          `json:"spawn_depth,omitempty"`
-	SpawnConfig *SpawnConfig `json:"spawn_config,omitempty"`
+	SpawnedBy        string       `json:"spawned_by,omitempty"`
+	SpawnDepth       int          `json:"spawn_depth,omitempty"`
+	SpawnConfig      *SpawnConfig `json:"spawn_config,omitempty"`
+	ParentPermission string       `json:"parent_permission,omitempty"` // Cap child permission to parent's level
 
 	// Project context
 	ProjectPath string `json:"project_path,omitempty"`
