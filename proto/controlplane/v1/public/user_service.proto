@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+// EXPERIMENTAL: controlplane.v1 is unstable. Field numbers, RPC names, and
+// service shapes may change without notice until the package is declared
+// stable. Consumers should pin to a specific control-plane commit.
+//
+// See proto/controlplane/v1/public/README.md for stability/versioning policy.
+
+package controlplane.v1;
+
+option go_package = "github.com/reliant-labs/control-plane/internal/gen/controlplane/v1;controlplanev1";
+
+import "google/protobuf/struct.proto";
+import "controlplane/v1/public/shared.proto";
+
+// === UserService ===
+
+service UserService {
+  rpc GetCurrentUser(GetCurrentUserRequest) returns (GetCurrentUserResponse) {}
+  rpc UpdateProfile(UpdateProfileRequest) returns (UpdateProfileResponse) {}
+  rpc CompleteOnboarding(CompleteOnboardingRequest) returns (CompleteOnboardingResponse) {}
+}
+
+message GetCurrentUserRequest {}
+
+message GetCurrentUserResponse {
+  User user = 1;
+  repeated Organization organizations = 2;
+}
+
+message UpdateProfileRequest {
+  string name = 1;
+  string avatar_url = 2;
+}
+
+message UpdateProfileResponse {
+  User user = 1;
+}
+
+message CompleteOnboardingRequest {
+  google.protobuf.Struct onboarding_data = 1;
+}
+
+message CompleteOnboardingResponse {}

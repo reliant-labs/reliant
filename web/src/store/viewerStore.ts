@@ -4,10 +4,17 @@ import type { FileNode } from "../components/FileBrowser";
 import { useBrowserStore } from "./browserStore";
 import { useWorkspaceStateStore, type SerializedViewer } from "./workspaceStateStore";
 import { useWorktreeStore } from "./worktreeStore";
+import { useProjectStore } from "./projectStore";
 import { logger } from "../lib/logger";
-import { api } from "../api/client";
-import { trackEvent } from "../lib/analytics";
 import { FileChangeStatus } from "../gen/reliant/v1/common_pb";
+
+// NOTE: viewerStore <-> projectStore is a circular import (projectStore also
+// imports useViewerStore). This is safe because both modules only access each
+// other via getState() inside store actions — never at module init.
+// Canonical source for the current project ID is projectStore.currentProject.
+function getCurrentProjectId(): string | null {
+  return useProjectStore.getState().currentProject?.id ?? null;
+}
 
 export type ViewerType = "diff" | "file" | "worktrees" | "projects" | "agents" | "commands" | "browser" | "workflow";
 
@@ -74,20 +81,14 @@ export type Viewer = DiffViewer | FileViewer | WorktreesViewer | ProjectsViewer 
 interface ViewerState {
   viewers: Viewer[];
   activeViewerId: string | null;
-  currentProjectId: string | null;
-  // NOTE: currentWorktreeId removed - use worktreeStore.currentWorktree?.id as single source of truth
   isFullscreen: boolean;
-  isWorkflowMode: boolean; // Controls full-screen workflow builder mode
-  workflowToOpen?: string; // Workflow name to load when entering workflow mode
-  workflowViewKey: number; // Key to force remount of WorkflowBuilderPage
-  isSettingsMode: boolean; // Controls full-screen settings mode
-  settingsSection?: string; // Initial section to show when opening settings
-  returnToWorkflow: boolean; // Track if settings was opened from workflow mode
   closedFiles: FileViewer[]; // History of closed file viewers for Cmd+Shift+T
 
   // Context management
-  setCurrentProject: (projectId: string | null) => void;
   switchWorktreeContext: (projectId: string, worktreeId: string | null) => void;
+  // Clear viewers for the current project (called by projectStore.selectProject
+  // on project switch, replacing the old setCurrentProject side-effect).
+  clearViewersForProjectSwitch: () => void;
   
   // Helper to get current worktree ID from worktreeStore (single source of truth)
   getCurrentWorktreeId: () => string | null;
@@ -107,14 +108,7 @@ interface ViewerState {
   setActiveViewer: (viewerId: string | null) => void;
   updateViewerTitle: (viewerId: string, title: string) => void;
   reopenLastClosedFile: () => boolean; // Returns true if a file was reopened
-  
-  // Workflow mode (full-screen)
-  setWorkflowMode: (open: boolean, workflowName?: string) => void;
-  clearWorkflowToOpen: () => void;
-  
-  // Settings mode (full-screen)
-  setSettingsMode: (open: boolean, section?: string) => void;
-  
+
   // Utility
   getActiveViewer: () => Viewer | null;
   hasOpenViewers: () => boolean;
@@ -137,16 +131,9 @@ const generateViewerId = () =>
 export const useViewerStore = create<ViewerState>()((set, get) => ({
       viewers: [],
       activeViewerId: null,
-      currentProjectId: null,
       isFullscreen: false,
-      isWorkflowMode: false,
-      workflowToOpen: undefined,
-      workflowViewKey: 0,
-      isSettingsMode: false,
-      settingsSection: undefined,
-      returnToWorkflow: false,
       closedFiles: [],
-      
+
       getCurrentWorktreeId: () => {
         return useWorktreeStore.getState().currentWorktree?.id ?? null;
       },
@@ -155,56 +142,45 @@ export const useViewerStore = create<ViewerState>()((set, get) => ({
         set((state) => ({ isFullscreen: !state.isFullscreen }));
       },
 
-      setCurrentProject: (projectId: string | null) => {
-        const currentId = get().currentProjectId;
-        
-        // Skip if project hasn't changed
-        if (projectId === currentId) {
-          return;
-        }
-        
-        // Save current state before switching
-        if (currentId) {
+      clearViewersForProjectSwitch: () => {
+        // Save current state before clearing (uses projectStore.currentProject
+        // as the project context).
+        const projectId = getCurrentProjectId();
+        if (projectId) {
           get().saveToWorkspaceState();
         }
-        
-        set({ currentProjectId: projectId });
-        
-        // Clear viewers when project changes
-        if (currentId !== null) {
-          set({ viewers: [], activeViewerId: null });
-        }
+        set({ viewers: [], activeViewerId: null });
       },
-      
+
       switchWorktreeContext: (projectId: string, worktreeId: string | null) => {
-        const state = get();
         const currentWorktreeId = get().getCurrentWorktreeId();
-        const isSameProject = state.currentProjectId === projectId;
+        const currentProjectId = getCurrentProjectId();
+        const isSameProject = currentProjectId === projectId;
         const isSameWorktree = currentWorktreeId === worktreeId;
-        
+
         // No change needed
         if (isSameProject && isSameWorktree) {
           return;
         }
-        
+
         logger.info("[ViewerStore] Switching worktree context", {
-          from: { projectId: state.currentProjectId, worktreeId: currentWorktreeId },
+          from: { projectId: currentProjectId, worktreeId: currentWorktreeId },
           to: { projectId, worktreeId },
         });
-        
-        // Save current state before switching (if we have a valid context)
-        if (state.currentProjectId) {
+
+        // Save current state before switching (if we have a valid context).
+        // NOTE: read projectId from projectStore — viewerStore no longer mirrors it.
+        if (currentProjectId) {
           get().saveToWorkspaceState();
         }
-        
-        // Update context - only projectId is stored here, worktreeId comes from worktreeStore
-        set({ 
-          currentProjectId: projectId,
-          // Clear viewers - they'll be restored from workspace state
+
+        // Clear viewers - they'll be restored from workspace state.
+        // The projectId is now owned by projectStore; we just refresh viewers.
+        set({
           viewers: [],
           activeViewerId: null,
         });
-        
+
         // Restore viewers for new context
         get().restoreFromWorkspaceState(projectId, worktreeId);
       },
@@ -348,72 +324,6 @@ export const useViewerStore = create<ViewerState>()((set, get) => ({
           viewers: [...state.viewers, newViewer],
           activeViewerId: viewerId,
         }));
-      },
-
-      setWorkflowMode: (open: boolean, workflowName?: string) => {
-        const previousMode = get().isWorkflowMode ? (get().workflowToOpen ? 'workflow_builder' : 'workflow_hub') : 'chat';
-        
-        // Increment key when showing hub (no workflow name) to force remount
-        const newKey = workflowName ? get().workflowViewKey : get().workflowViewKey + 1;
-        set({ isWorkflowMode: open, workflowToOpen: workflowName, workflowViewKey: newKey });
-
-        // Track page visit
-        if (open) {
-          const pageName = workflowName ? 'workflow_builder' : 'workflow_hub';
-          api.settings.trackPageVisited(pageName, previousMode);
-          trackEvent("page_visited", { pageName, previousPage: previousMode });
-        } else {
-          api.settings.trackPageVisited('chat', previousMode);
-          trackEvent("page_visited", { pageName: "chat", previousPage: previousMode });
-        }
-
-        // Persist to workspace state
-        const projectId = get().currentProjectId;
-        const worktreeId = useWorktreeStore.getState().currentWorktree?.id ?? null;
-        if (projectId) {
-          useWorkspaceStateStore.getState().setWorkflowState(
-            projectId,
-            worktreeId,
-            open,
-            workflowName ?? null
-          );
-        }
-      },
-
-      clearWorkflowToOpen: () => {
-        set({ workflowToOpen: undefined });
-      },
-
-      setSettingsMode: (open: boolean, section?: string) => {
-        const { isWorkflowMode, workflowToOpen } = get();
-        const previousMode = isWorkflowMode 
-          ? (workflowToOpen ? 'workflow_builder' : 'workflow_hub') 
-          : 'chat';
-        
-        if (open) {
-          // When opening settings, track if we came from workflow mode
-          set({ 
-            isSettingsMode: true, 
-            settingsSection: section,
-            returnToWorkflow: isWorkflowMode,
-            isWorkflowMode: false, // Exit workflow mode while in settings
-          });
-          // Track page visit
-          api.settings.trackPageVisited('settings', previousMode);
-          trackEvent("page_visited", { pageName: "settings", previousPage: previousMode });
-        } else {
-          // When closing settings, return to workflow mode if that's where we came from
-          const { returnToWorkflow } = get();
-          set({ 
-            isSettingsMode: false, 
-            settingsSection: undefined,
-            isWorkflowMode: returnToWorkflow,
-            returnToWorkflow: false,
-          });
-          // Track page visit
-          const nextPage = returnToWorkflow ? 'workflow_hub' : 'chat';
-          api.settings.trackPageVisited(nextPage, 'settings');
-        }
       },
 
       openCommandsViewer: (projectId: string, worktreeId?: string, processId?: string) => {
@@ -645,7 +555,8 @@ export const useViewerStore = create<ViewerState>()((set, get) => ({
       },
 
       getProjectViewers: () => {
-        const { viewers, currentProjectId, getCurrentWorktreeId } = get();
+        const { viewers, getCurrentWorktreeId } = get();
+        const currentProjectId = getCurrentProjectId();
         const currentWorktreeId = getCurrentWorktreeId();
         if (!currentProjectId) {
           return viewers;
@@ -741,9 +652,10 @@ export const useViewerStore = create<ViewerState>()((set, get) => ({
       },
       
       saveToWorkspaceState: () => {
-        const { currentProjectId, viewers, activeViewerId, getCurrentWorktreeId } = get();
+        const { viewers, activeViewerId, getCurrentWorktreeId } = get();
+        const currentProjectId = getCurrentProjectId();
         const currentWorktreeId = getCurrentWorktreeId();
-        
+
         if (!currentProjectId) {
           logger.debug("[ViewerStore] No project context, skipping save");
           return;

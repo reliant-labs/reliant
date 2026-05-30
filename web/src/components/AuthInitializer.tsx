@@ -4,7 +4,6 @@ import { useGlobalDataStore } from "@/store/globalDataStore";
 import { useApiKeySetupStore } from "@/store/apiKeySetupStore";
 import { usePrivacyStore } from "@/store/privacyStore";
 import { useProjectStore } from "@/store/projectStore";
-import { api } from "@/api/client";
 import { logger } from "@/lib/logger";
 import { supabase } from "@/lib/supabase";
 import { initSentry } from "@/lib/sentry";

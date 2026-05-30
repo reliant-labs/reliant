@@ -5,22 +5,33 @@ import { Github, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProjectStore } from "@/store/projectStore";
 import type { Project } from "@/store/projectStore";
-// TODO: migrate to useAuth() once AuthUser exposes identity-linking methods (linkGithubAccount, signInWithGithub)
-import { useAuthStore } from "@/store/authStore";
+import { supabase } from "@/lib/supabase";
 import { useEventBus } from "@/lib/event-context";
-import { useGitRepos, useCloneRepo, useCompleteOnboarding } from "@/hooks/useOnboardingQueries";
-import { useGitHubCredential } from "@/hooks/useGitHubCredential";
+import { useGitRepos, useCloneRepo, useCompleteOnboarding, useCreateDaemon } from "@/hooks/useOnboardingQueries";
 import { trackEvent } from "@/lib/analytics";
+import { gitService } from "@/services/controlPlane/git";
 import { finalizeOnboardingSideEffects } from "../useOnboardingComplete";
+import { DaemonConnectingGate } from "../DaemonConnectingGate";
 import type { StepProps } from "../types";
 import {
-  getActiveDaemonName,
-  getFirstDaemonId,
+  DAEMON_STATUS_ACTIVE,
   listDaemons,
-} from "../api";
-import type { GitRepo } from "../api";
+} from "@/services/controlPlane/daemon";
+import type { GitRepo } from "@/services/controlPlane/git";
 
-type Phase = "connect" | "picker" | "confirm";
+// Must match the name + type + size used by ComputeStep's createDaemon call so
+// that the control-plane's CreateDaemon idempotency path (refreshManagedDaemon)
+// updates the existing daemon's git_repo column instead of erroring out.
+const ONBOARDING_DAEMON_NAME = "onboarding-daemon";
+const DAEMON_TYPE_MANAGED = 1;
+const DAEMON_SIZE_SMALL = 1;
+
+// Entry to this step is gated by an existing GitHub credential (the
+// ProjectChoiceStep "Connect GitHub" button performs the OAuth handshake
+// before advancing). If the credential disappears (token revoked, server
+// deletes), the picker phase surfaces a Reconnect button — no separate
+// "connect" landing page is needed.
+type Phase = "picker" | "confirm";
 
 const CLOUD_PROJECT_ROOT = "/home/workspace/projects";
 
@@ -85,23 +96,18 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
   const loadProjects = useProjectStore((state) => state.loadProjects);
   const projects = useProjectStore((state) => state.projects);
 
-  // TODO: migrate to useAuth() once AuthUser exposes identity-linking methods
-  const linkGithubAccount = useAuthStore((state) => state.linkGithubAccount);
-  const signInWithGithub = useAuthStore((state) => state.signInWithGithub);
-
   const eventBus = useEventBus();
   const completeOnboardingMutation = useCompleteOnboarding();
 
-  // Canonical "can do git things" check — backed by the control-plane credential,
-  // not the Supabase identity record. See useGitHubCredential for rationale.
-  // Window-focus refetch in the hook handles the post-OAuth redirect case.
-  const { hasToken: hasGithubCredential } = useGitHubCredential();
-
-  const [phase, setPhase] = useState<Phase>(() =>
-    hasGithubCredential ? "picker" : "connect",
-  );
+  const [phase, setPhase] = useState<Phase>("picker");
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState("");
+  // After clone + completeOnboarding succeed we show the daemon gate before
+  // navigating to the chat view. The clone may have queued via JetStream
+  // because the daemon was still provisioning — the gate lets the user wait
+  // (or skip) instead of landing on a silent "No daemon connected" banner.
+  const [showDaemonGate, setShowDaemonGate] = useState(false);
+  const [gateDaemonRef, setGateDaemonRef] = useState<string | undefined>(undefined);
 
   // Repo picker state (via React Query)
   const {
@@ -122,50 +128,39 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
 
   // Clone mutation (via React Query)
   const cloneRepoMutation = useCloneRepo();
+  // Daemon refresh mutation — re-running CreateDaemon with the picked repo
+  // hits the server-side refresh path so the daemon row stores git_repo and
+  // the workspace command carries it to the controller.
+  const createDaemonMutation = useCreateDaemon();
 
   const [confirmCredentialMissing, setConfirmCredentialMissing] = useState(false);
-
-  // When a GitHub git credential appears (after OAuth callback), transition to picker.
-  useEffect(() => {
-    if (hasGithubCredential && phase === "connect") {
-      setPhase("picker");
-    }
-  }, [hasGithubCredential, phase]);
 
   const handleConnect = async () => {
     setConnecting(true);
     setError("");
     try {
-      // Decide up front whether to link an identity onto an existing session
-      // or to start a fresh OAuth sign-in. linkIdentity 404s for anonymous /
-      // unauthenticated users (full-page navigation to Supabase happens before
-      // any catch can fire), so we must NOT call it without a session.
-      const session = useAuthStore.getState().session;
-      const hasGithubIdentity = !!useAuthStore.getState().user?.identities?.some(
-        (i: { provider: string }) => i.provider === 'github'
-      );
-      const useLink = !!session && !hasGithubIdentity;
-
+      // Always go through the control-plane custom OAuth flow. Supabase's
+      // GitHub provider is sign-in only (0 scopes); the long-lived repo-scoped
+      // token comes from /auth/github/authorize, which writes it to
+      // git_credentials.
+      const oauthURL = gitService.getOAuthURL();
+      if (!oauthURL) {
+        throw new Error("Control plane URL not configured");
+      }
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error("Not signed in");
+      }
+      // Preserve the onboarding step/plan params so the callback lands the
+      // user back on this step instead of restarting onboarding.
       const returnTo = `${window.location.pathname}${window.location.search}`;
-
-      if (useLink) {
-        await linkGithubAccount({ returnTo });
-      } else {
-        await signInWithGithub({ returnTo });
-      }
+      const params = new URLSearchParams({
+        token: session.access_token,
+        returnTo,
+      });
+      window.location.href = `${oauthURL}?${params.toString()}`;
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to connect GitHub";
-      if (
-        message.includes("identity already exists") ||
-        message.includes("already linked")
-      ) {
-        setError(
-          "This GitHub account is already linked to another Reliant account. Please sign out and sign in with GitHub instead.",
-        );
-      } else {
-        setError(message);
-      }
-    } finally {
+      setError(err instanceof Error ? err.message : "Failed to connect GitHub");
       setConnecting(false);
     }
   };
@@ -210,28 +205,47 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
 
     try {
       const { daemons } = await listDaemons();
-      // Prefer active daemon name; fall back to first daemon ID (covers provisioning daemons)
-      const daemonName = getActiveDaemonName(daemons) || getFirstDaemonId(daemons);
-      if (!daemonName) {
+      // Prefer an active daemon; fall back to the first daemon if it's still
+      // provisioning (CloneRepo queues via JetStream when offline). The UUID
+      // is what the server actually keys lookups by — names are display-only.
+      const daemon =
+        daemons.find((d) => d.status === DAEMON_STATUS_ACTIVE) ?? daemons[0];
+      if (!daemon) {
         throw new Error("Hosted workspace is still starting. Try again in a moment.");
       }
 
-      // Always attempt clone — CloneRepo queues via JetStream when daemon is offline
-      let clonedPath = projectPath;
+      // Persist the picked repo on the daemon row before cloning. ComputeStep
+      // created the daemon with an empty git_repo (the user hadn't picked one
+      // yet); re-running CreateDaemon with the same name hits the server-side
+      // refresh path, which updates daemons.git_repo and republishes the
+      // workspace command with GitRepo populated so the controller / init
+      // container see it. Failures here are non-fatal — the clone below still
+      // populates the working tree via the daemon command path.
       try {
-        const result = await cloneRepoMutation.mutateAsync({
-          daemonName,
+        await createDaemonMutation.mutateAsync({
+          name: ONBOARDING_DAEMON_NAME,
+          daemonType: DAEMON_TYPE_MANAGED,
+          size: DAEMON_SIZE_SMALL,
           gitRepo: selectedRepo.cloneUrl,
           gitBranch: selectedBranch,
-          path: projectPath,
-          accountLogin: selectedRepo.accountLogin,
         });
-        clonedPath = result.clonedPath;
-      } catch (cloneErr) {
-        // Clone may fail for transient reasons; warn but don't block — the clone
-        // will be retried when the daemon comes online via the queued message.
-        console.warn("CloneRepo failed (will retry when daemon is online):", cloneErr);
+      } catch (refreshErr) {
+        console.warn("CreateDaemon refresh with git_repo failed (continuing with clone):", refreshErr);
       }
+
+      // CloneRepo queues via JetStream when the daemon is offline, so a
+      // success here is genuine — the message was either delivered or queued
+      // for replay. A failure means the request didn't reach the gateway at
+      // all (auth, network, server-side validation). That's user-visible,
+      // not a silent retry, so we let it propagate to the outer catch which
+      // surfaces it via the `error` state below.
+      const cloneResult = await cloneRepoMutation.mutateAsync({
+        daemonId: daemon.id,
+        gitRepo: selectedRepo.cloneUrl,
+        gitBranch: selectedBranch,
+        path: projectPath,
+      });
+      const clonedPath = cloneResult.clonedPath;
 
       eventBus.emit("toast:show", {
         message: `Opening project "${projectName}"...`,
@@ -282,7 +296,11 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
         project_source: "github",
       });
       await finalizeOnboardingSideEffects(plan.modelProvider);
-      navigate({ to: "/", search: { step: undefined, plan: undefined } });
+      // Show the daemon gate before navigating — the daemon may still be
+      // provisioning. We hand the gate the UUID we already used for the
+      // CloneRepo call so its polling looks up the same row.
+      setGateDaemonRef(daemon.id);
+      setShowDaemonGate(true);
     } catch (err) {
       if (isMissingGitCredentialError(err)) {
         setConfirmCredentialMissing(true);
@@ -318,46 +336,18 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
     void handleConnect();
   };
 
-  // -- Phase: Connect GitHub via OAuth --
-
-  if (phase === "connect") {
+  // -- Phase: Daemon connecting gate --
+  // Rendered after a successful clone + completeOnboarding while we wait for
+  // the daemon to come ACTIVE. Takes precedence over the picker / confirm UI.
+  if (showDaemonGate) {
     return (
       <div className="space-y-6">
-        <div className="text-center space-y-2">
-          <h2 className="text-xl font-semibold text-foreground">
-            Connect your GitHub repos
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Sign in with GitHub to give Reliant access to your repositories.
-          </p>
-        </div>
-
-        <div className="space-y-4">
-          {error && (
-            <p className="text-xs text-destructive">{error}</p>
-          )}
-
-          <button
-            onClick={handleConnect}
-            disabled={connecting}
-            className={cn(
-              "flex items-center justify-center gap-2 w-full py-3 rounded-lg text-sm font-semibold transition-colors",
-              connecting
-                ? "bg-muted text-muted-foreground cursor-not-allowed"
-                : "bg-primary text-primary-foreground hover:bg-primary/90",
-            )}
-          >
-            <Github className="w-4 h-4" />
-            {connecting ? "Connecting..." : "Connect with GitHub"}
-          </button>
-        </div>
-
-        <button
-          onClick={onBack}
-          className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
-        >
-          Back
-        </button>
+        <DaemonConnectingGate
+          daemonRef={gateDaemonRef}
+          onContinue={() =>
+            navigate({ to: "/", search: { step: undefined, plan: undefined } })
+          }
+        />
       </div>
     );
   }
@@ -493,11 +483,6 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
                       </p>
                     )}
                     <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground/70">
-                      {repo.accountLogin && (
-                        <span className="rounded bg-muted/50 px-1.5 py-0.5 font-medium">
-                          @{repo.accountLogin}
-                        </span>
-                      )}
                       {repo.language && <span>{repo.language}</span>}
                       {repo.defaultBranch && (
                         <span className="flex items-center gap-0.5">

@@ -5,16 +5,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"connectrpc.com/connect"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
+
+// daemonAttachmentStaleThreshold is the freshness window for daemon_attachment
+// rows when determining whether a daemon is currently routable.
+const daemonAttachmentStaleThreshold = 30 * time.Second
 
 // DaemonRegistryService handles daemon registry queries (list/get/resolve/resume).
 // Token CRUD lives in DaemonTokenService; PAT introspection lives in DaemonAuthService.
@@ -50,12 +55,30 @@ func (s *DaemonRegistryService) ListDaemons(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list daemons: %w", err))
 	}
 
+	attached := s.attachedDaemonSet(ctx, userID)
+
 	resp := &reliantv1.ListDaemonsResponse{Daemons: make([]*reliantv1.DaemonInfo, 0, len(daemons))}
 	for _, d := range daemons {
-		resp.Daemons = append(resp.Daemons, daemonToProto(d))
+		resp.Daemons = append(resp.Daemons, daemonToProto(d, attached[d.ID]))
 	}
 
 	return connect.NewResponse(resp), nil
+}
+
+// attachedDaemonSet returns the set of daemon IDs for the user that currently
+// have a fresh daemon_attachment row. Errors are logged and treated as "no
+// daemons attached" so a transient DB hiccup doesn't break list/get responses.
+func (s *DaemonRegistryService) attachedDaemonSet(ctx context.Context, userID string) map[string]bool {
+	attachedIDs, err := s.database.ListAttachedDaemonIDsForUser(ctx, userID, daemonAttachmentStaleThreshold)
+	if err != nil {
+		logging.Warn("[DaemonRegistry] Failed to list attached daemon IDs", "error", err, "userID", userID)
+		return map[string]bool{}
+	}
+	attached := make(map[string]bool, len(attachedIDs))
+	for _, id := range attachedIDs {
+		attached[id] = true
+	}
+	return attached
 }
 
 func (s *DaemonRegistryService) GetDaemon(
@@ -78,7 +101,8 @@ func (s *DaemonRegistryService) GetDaemon(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("daemon not found"))
 	}
 
-	return connect.NewResponse(&reliantv1.GetDaemonResponse{Daemon: daemonToProto(daemon)}), nil
+	attached := s.attachedDaemonSet(ctx, userID)
+	return connect.NewResponse(&reliantv1.GetDaemonResponse{Daemon: daemonToProto(daemon, attached[daemon.ID])}), nil
 }
 
 func (s *DaemonRegistryService) ResolveDaemon(
@@ -95,6 +119,8 @@ func (s *DaemonRegistryService) ResolveDaemon(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("listing daemons: %w", err))
 	}
 
+	attached := s.attachedDaemonSet(ctx, userID)
+
 	var best *db.Daemon
 	for _, d := range daemons {
 		if req.Msg.DaemonId != "" && d.ID != req.Msg.DaemonId {
@@ -109,11 +135,11 @@ func (s *DaemonRegistryService) ResolveDaemon(
 				continue
 			}
 		}
-		// Prefer active daemons, but accept any match.
-		if best == nil || d.Status == db.DaemonStatusActive {
+		// Prefer attached (routable) daemons, but accept any match.
+		if best == nil || attached[d.ID] {
 			best = d
 		}
-		if d.Status == db.DaemonStatusActive {
+		if attached[d.ID] {
 			break
 		}
 	}
@@ -123,7 +149,7 @@ func (s *DaemonRegistryService) ResolveDaemon(
 	}
 
 	return connect.NewResponse(&reliantv1.ResolveDaemonResponse{
-		Daemon: daemonToProto(best),
+		Daemon: daemonToProto(best, attached[best.ID]),
 		Found:  true,
 	}), nil
 }
@@ -150,28 +176,36 @@ func (s *DaemonRegistryService) ResumeDaemon(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("daemon not found"))
 	}
 
-	// If the daemon is already active, nothing to do.
-	if daemon.Status == db.DaemonStatusActive {
+	// If the daemon currently has a fresh attachment row, it's already routable.
+	if s.attachedDaemonSet(ctx, userID)[daemon.ID] {
 		return connect.NewResponse(&reliantv1.ResumeDaemonResponse{Resumed: true}), nil
 	}
 
-	// For OSS, we can only report that the daemon is not active.
+	// For OSS, we can only report that the daemon is not routable.
 	// The control plane (commercial) can override this to actually wake cloud daemons.
 	return connect.NewResponse(&reliantv1.ResumeDaemonResponse{
 		Resumed:      false,
-		ErrorMessage: fmt.Sprintf("daemon %s is %s; automatic resume not available in OSS mode", req.Msg.DaemonId, daemon.Status.String()),
+		ErrorMessage: fmt.Sprintf("daemon %s has no active attachment; automatic resume not available in OSS mode", req.Msg.DaemonId),
 	}), nil
 }
 
-func daemonToProto(d *db.Daemon) *reliantv1.DaemonInfo {
+// daemonToProto converts a db.Daemon into the proto DaemonInfo. The proto
+// Status field is derived from daemon_attachment freshness (the attached flag)
+// rather than any column on the daemons row, which is now identity-only.
+func daemonToProto(d *db.Daemon, attached bool) *reliantv1.DaemonInfo {
 	if d == nil {
 		return &reliantv1.DaemonInfo{}
+	}
+
+	status := reliantv1.DaemonStatus_DAEMON_STATUS_DISCONNECTED
+	if attached {
+		status = reliantv1.DaemonStatus_DAEMON_STATUS_ACTIVE
 	}
 
 	info := &reliantv1.DaemonInfo{
 		DaemonId: d.ID,
 		UserId:   d.UserID,
-		Status:   mapDaemonStatus(d.Status),
+		Status:   status,
 		Projects: projectPathsToDiscoveredProjects(d.ProjectPaths),
 	}
 	if d.Hostname != nil {
@@ -183,17 +217,10 @@ func daemonToProto(d *db.Daemon) *reliantv1.DaemonInfo {
 	if d.DaemonType != nil {
 		info.DaemonType = *d.DaemonType
 	}
-	if d.ConnectedAt != nil {
-		info.ConnectedAt = timestamppb.New(*d.ConnectedAt)
-	}
-	if d.LastHeartbeat != nil {
-		info.LastHeartbeat = timestamppb.New(*d.LastHeartbeat)
-	}
+	// ConnectedAt and LastHeartbeat now intentionally left unset — those fields
+	// have been removed from the daemons row. Callers needing freshness should
+	// consult daemon_attachment.
 	return info
-}
-
-func mapDaemonStatus(status db.DaemonStatus) reliantv1.DaemonStatus {
-	return status
 }
 
 func projectPathsToDiscoveredProjects(projectPathsJSON *string) []*reliantv1.DiscoveredProject {

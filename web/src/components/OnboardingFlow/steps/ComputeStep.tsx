@@ -220,22 +220,64 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
     setError(null);
     setIsStartingCloud(true);
     try {
-      // CreateDaemon is idempotent server-side: if a daemon with the same
-      // slug already exists for this owner, the server refreshes its image
-      // and resources to current and republishes the workspace command.
-      // No client-side list/resume/409 dance needed.
-      await createDaemonMutation.mutateAsync({
-        name: "onboarding-daemon",
-        daemonType: DAEMON_TYPE_MANAGED,
-        size: DAEMON_SIZE_SMALL,
-        gitRepo: "",
-        gitBranch: "main",
-      });
+      // Resolve the right path for this user. If a daemon already exists
+      // (e.g. from a prior session) we either reuse it or resume it — the
+      // server-side CreateDaemon is NOT a wake-up for a suspended workspace,
+      // so calling it again leaves a suspended daemon suspended.
+      const { listDaemons, hasActiveDaemon, resumeDaemon } = await import(
+        "@/services/controlPlane/daemon"
+      );
+      const existing = await listDaemons();
+      const daemons = existing.daemons;
 
-      updatePlan({
+      let needsProvisioning = true;
+
+      if (hasActiveDaemon(daemons)) {
+        // Active daemon already present — nothing to do.
+        needsProvisioning = false;
+      } else if (daemons.length > 0) {
+        // Daemon exists but isn't active (suspended / disconnected / failed).
+        // Resume it. Resume failure is non-fatal — the user can retry from
+        // the chat banner; we still proceed to the provisioning UI so the
+        // app waits for state to settle.
+        const daemonId = daemons[0]?.id ?? "";
+        if (daemonId) {
+          try {
+            await resumeDaemon(daemonId);
+          } catch {
+            // Surface as a soft error via the provisioning UI rather than
+            // blocking onboarding.
+          }
+        }
+      } else {
+        // No daemons → create one. createDaemon may itself 409 if another
+        // tab raced us; treat "already exists" as a resume.
+        try {
+          await createDaemonMutation.mutateAsync({
+            name: "onboarding-daemon",
+            daemonType: DAEMON_TYPE_MANAGED,
+            size: DAEMON_SIZE_SMALL,
+            gitRepo: "",
+            gitBranch: "main",
+          });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message.toLowerCase() : "";
+          if (msg.includes("plan limit") || msg.includes("already") || msg.includes("exists")) {
+            const fallback = await listDaemons();
+            const fallbackId = fallback.daemons[0]?.id ?? "";
+            if (fallbackId) {
+              try { await resumeDaemon(fallbackId); } catch { /* non-fatal */ }
+            }
+          } else {
+            throw err;
+          }
+        }
+      }
+
+      await updatePlan({
         compute: "cloud_free_trial",
         daemonLocation: "reliant_cloud",
-        daemonProvisioning: true,
+        daemonProvisioning: needsProvisioning,
         codeSource: codeSourceForCompute(plan.codeSource, "cloud_free_trial", plan.intent),
         localPath: undefined,
         projectName: undefined,
@@ -253,7 +295,7 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
 
   const handleLocal = () => {
     setError(null);
-    updatePlan({
+    const p = updatePlan({
       compute: "local_daemon",
       daemonLocation: "self_hosted",
       daemonProvisioning: false,
@@ -262,10 +304,11 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
       projectName: undefined,
     });
     setShowLocal(true);
+    return p;
   };
 
-  const handleLocalContinue = () => {
-    handleLocal();
+  const handleLocalContinue = async () => {
+    await handleLocal();
     trackEvent('onboarding_compute_selected', { compute: 'local', daemon_preconnected: Boolean(activeDaemon) });
     if (hasAdvanced.current) return;
     hasAdvanced.current = true;

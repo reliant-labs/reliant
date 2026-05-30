@@ -105,7 +105,7 @@ export function QuestionPrompt({ questions, onSubmit }: QuestionPromptProps) {
     if (!canAdvance) return;
     setSubmitting(true);
     // Finalize the current answer's freetext
-    const finalAnswers = answers.map((a, i) => {
+    const finalAnswers = answers.map((a) => {
       const ans: QuestionAnswer = {
         question: a.question,
         selected: a.selected,

@@ -1179,6 +1179,50 @@ func (s *SettingsService) ValidateProviderAPIKey(ctx context.Context, req *conne
 	}), nil
 }
 
+// RotateReliantAPIKey rotates the caller's Reliant virtual key via the LiteLLM
+// admin API and persists the new key in our DB.
+func (s *SettingsService) RotateReliantAPIKey(ctx context.Context, _ *connect.Request[reliantv1.RotateReliantAPIKeyRequest]) (*connect.Response[reliantv1.RotateReliantAPIKeyResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+
+	oldKey, err := s.database.GetProviderAPIKey(ctx, userID, "reliant")
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("no Reliant API key to rotate; connect Reliant first"))
+		}
+		logging.Error("Failed to load existing Reliant API key for rotation", "user_id", userID, "error", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load existing Reliant key"))
+	}
+
+	newKey, err := drivers.RotateReliantUserAPIKey(ctx, userID, oldKey)
+	if err != nil {
+		logging.Error("Failed to rotate Reliant virtual key", "user_id", userID, "error", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to rotate Reliant key: %w", err))
+	}
+
+	if err := s.database.SetProviderAPIKey(ctx, userID, "reliant", newKey); err != nil {
+		// Upstream has the new key but our DB doesn't; the next request will lazy-
+		// provision yet another key, orphaning this one. Logging loud so ops sees it.
+		logging.Error("Failed to persist rotated Reliant key; upstream key is orphaned",
+			"user_id", userID, "error", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to persist rotated Reliant key"))
+	}
+
+	if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
+		logging.Warn("Failed to emit config_health refetch after Reliant rotation", "error", err)
+	}
+
+	analytics.GetClientForUser(ctx, userID).TrackProviderSettingsUpdated(analytics.ProviderSettingsUpdatedMetrics{
+		Provider:   "reliant",
+		Action:     "rotated",
+		AuthMethod: "api_key",
+	})
+
+	return connect.NewResponse(&reliantv1.RotateReliantAPIKeyResponse{
+		Success: true,
+		Message: "Reliant API key rotated",
+	}), nil
+}
+
 func (s *SettingsService) CompleteCodexOAuth(ctx context.Context, req *connect.Request[reliantv1.CompleteCodexOAuthRequest]) (*connect.Response[reliantv1.CompleteCodexOAuthResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 	code := strings.TrimSpace(req.Msg.Code)

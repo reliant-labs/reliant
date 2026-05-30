@@ -99,21 +99,13 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     type: "spotlight",
     title: "Builder AI Assistant",
     description:
-      "Need help building your workflow? Chat with the AI assistant to add steps, modify connections, or get suggestions — it edits the YAML for you.",
+      "Generate an entire workflow from a one-line description, or chat to edit and refine an existing one — it writes the YAML for you.",
     targetSelector: "[data-onboarding='workflow-chat']",
     skippable: true,
     spotlightConfig: {
       padding: 0,
       borderRadius: "none",
     },
-  },
-  {
-    id: "presets-and-params",
-    type: "modal",
-    title: "Presets & Parameters",
-    description:
-      "Presets set the agent's role. Parameters are workflow settings defined in YAML that you can tune — model, tools, thinking level, and more.",
-    skippable: true,
   },
   {
     id: "completion",
@@ -175,7 +167,6 @@ export const CHAT_MODE_STEPS: OnboardingStepId[] = [
 ];
 
 export const MODAL_STEPS: OnboardingStepId[] = [
-  "presets-and-params",
   "completion",
 ];
 
@@ -312,7 +303,36 @@ export const CHECKLIST_SETTINGS_KEYS = {
 export const TOUR_SETTINGS_KEYS = {
   COMPLETED: "onboarding.completed",
   SKIPPED_ALL: "onboarding.skipped_all",
+  // CURRENT_STEP is intentionally absent: the URL (?tour=<step>) is the
+  // source of truth for the active step. tourStore.loadState() best-effort
+  // deletes the stale row so old installs don't carry the value forever.
   CURRENT_STEP: "onboarding.current_step",
   COMPLETED_STEPS: "onboarding.completed_steps",
   SKIPPED_STEPS: "onboarding.skipped_steps",
 } as const;
+
+// ─── Step ID tuple (for Zod search-param schemas) ───────────────────────────
+// Hard-coded here (not derived from ONBOARDING_STEPS) so it can be imported by
+// routeSchemas.ts without dragging in this module's other dependencies. The
+// build-time consistency check below (top-level throw on mismatch) guarantees
+// the tuple stays in sync with ONBOARDING_STEPS.
+export const ONBOARDING_STEP_IDS = [
+  "chat-and-sidebars",
+  "workspaces",
+  "workflow-intro",
+  "workflow-hub",
+  "workflow-builder",
+  "workflow-builder-chat",
+  "completion",
+] as const satisfies readonly OnboardingStepId[];
+
+if (
+  ONBOARDING_STEP_IDS.length !== ONBOARDING_STEPS.length ||
+  !ONBOARDING_STEP_IDS.every((id, i) => ONBOARDING_STEPS[i].id === id)
+) {
+  // Module-load failure surfaces immediately in dev and in tests; we never
+  // want the wizard's URL schema to silently drift from the step list.
+  throw new Error(
+    "[Onboarding] ONBOARDING_STEP_IDS does not match ONBOARDING_STEPS — update one to match the other.",
+  );
+}

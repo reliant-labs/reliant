@@ -92,7 +92,8 @@ type DaemonRouter interface {
 }
 
 // DaemonConnectionListener is notified when daemon connections change.
-// Used by NATSToolBridge to manage per-daemon NATS subscriptions.
+// Used by NATSToolBridge to manage per-daemon NATS subscriptions and by
+// daemonevents.Publisher to mirror lifecycle to the control plane.
 type DaemonConnectionListener interface {
 	OnDaemonConnected(userID, daemonID string)
 	OnDaemonDisconnected(userID, daemonID string)

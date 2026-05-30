@@ -1,0 +1,244 @@
+syntax = "proto3";
+
+// EXPERIMENTAL: controlplane.v1 is unstable. Field numbers, RPC names, and
+// service shapes may change without notice until the package is declared
+// stable. Consumers should pin to a specific control-plane commit.
+//
+// See proto/controlplane/v1/public/README.md for stability/versioning policy.
+
+package controlplane.v1;
+
+option go_package = "github.com/reliant-labs/control-plane/internal/gen/controlplane/v1;controlplanev1";
+
+import "google/protobuf/timestamp.proto";
+import "controlplane/v1/public/shared.proto";
+
+// === BillingService (public) ===
+//
+// User-facing billing RPCs. Admin-only (org-scoped or arbitrary-user) and
+// gateway-internal usage-reservation RPCs live in
+// BillingAdminService / BillingGatewayService.
+
+service BillingService {
+  // Read-only catalog.
+  rpc ListPlans(ListPlansRequest) returns (ListPlansResponse) {}
+  rpc GetPlan(GetPlanRequest) returns (GetPlanResponse) {}
+
+  // Current user subscription / billing portal / invoices.
+  rpc GetCurrentUserSubscription(GetCurrentUserSubscriptionRequest) returns (GetCurrentUserSubscriptionResponse) {}
+  rpc CreateCurrentUserCheckoutSession(CreateCurrentUserCheckoutSessionRequest) returns (CreateCurrentUserCheckoutSessionResponse) {}
+  rpc CreateCurrentUserBillingPortalSession(CreateCurrentUserBillingPortalSessionRequest) returns (CreateCurrentUserBillingPortalSessionResponse) {}
+  rpc ListCurrentUserInvoices(ListCurrentUserInvoicesRequest) returns (ListCurrentUserInvoicesResponse) {}
+
+  // Wallet (per-user).
+  rpc GetCurrentUserWalletOverview(GetCurrentUserWalletOverviewRequest) returns (GetCurrentUserWalletOverviewResponse) {}
+  rpc GrantCurrentUserWelcomeCredit(GrantCurrentUserWelcomeCreditRequest) returns (GrantCurrentUserWelcomeCreditResponse) {}
+  rpc CreateCurrentUserWalletTopupSession(CreateCurrentUserWalletTopupSessionRequest) returns (CreateCurrentUserWalletTopupSessionResponse) {}
+
+  // Reliant managed-LLM access (per-user).
+  rpc GetCurrentUserReliantState(GetCurrentUserReliantStateRequest) returns (GetCurrentUserReliantStateResponse) {}
+  rpc RepairCurrentUserReliantAccess(RepairCurrentUserReliantAccessRequest) returns (RepairCurrentUserReliantAccessResponse) {}
+  rpc RotateCurrentUserReliantAccess(RotateCurrentUserReliantAccessRequest) returns (RotateCurrentUserReliantAccessResponse) {}
+  rpc GetCurrentUserReliantOverview(GetCurrentUserReliantOverviewRequest) returns (GetCurrentUserReliantOverviewResponse) {}
+
+  // Workspace compute plan (per-user).
+  rpc GetCurrentUserComputeSubscription(GetCurrentUserComputeSubscriptionRequest) returns (GetCurrentUserComputeSubscriptionResponse) {}
+  rpc SetCurrentUserComputeOverage(SetCurrentUserComputeOverageRequest) returns (SetCurrentUserComputeOverageResponse) {}
+  rpc GetCurrentUserComputeUsage(GetCurrentUserComputeUsageRequest) returns (GetCurrentUserComputeUsageResponse) {}
+
+  // Misc per-org reads that callers expect on the public surface.
+  rpc GetUsageSummary(GetUsageSummaryRequest) returns (GetUsageSummaryResponse) {}
+  rpc GetComputeUsage(GetComputeUsageRequest) returns (GetComputeUsageResponse) {}
+  rpc GetInvoicePreview(GetInvoicePreviewRequest) returns (GetInvoicePreviewResponse) {}
+}
+
+message ListPlansRequest {
+  optional string product_id = 1;
+}
+
+message ListPlansResponse {
+  repeated Plan plans = 1;
+}
+
+message GetPlanRequest {
+  string plan_id = 1;
+}
+
+message GetPlanResponse {
+  Plan plan = 1;
+}
+
+message GetCurrentUserSubscriptionRequest {}
+
+message GetCurrentUserSubscriptionResponse {
+  Subscription subscription = 1;
+}
+
+message CreateCurrentUserCheckoutSessionRequest {
+  string plan_id = 1;
+  string success_url = 2;
+  string cancel_url = 3;
+}
+
+message CreateCurrentUserCheckoutSessionResponse {
+  string checkout_url = 1;
+}
+
+message GetCurrentUserWalletOverviewRequest {
+  int32 ledger_page = 1;
+  int32 ledger_page_size = 2;
+}
+
+message GetCurrentUserWalletOverviewResponse {
+  WalletOverview overview = 1;
+}
+
+message GrantCurrentUserWelcomeCreditRequest {}
+
+message GrantCurrentUserWelcomeCreditResponse {
+  WalletOverview overview = 1;
+  bool granted = 2;
+}
+
+message GetCurrentUserComputeSubscriptionRequest {}
+
+message GetCurrentUserComputeSubscriptionResponse {
+  Subscription subscription = 1;
+}
+
+message CreateCurrentUserWalletTopupSessionRequest {
+  int64 amount_cents = 1;
+  string success_url = 2;
+  string cancel_url = 3;
+}
+
+message CreateCurrentUserWalletTopupSessionResponse {
+  WalletTopup topup = 1;
+  string checkout_url = 2;
+}
+
+message CreateCurrentUserBillingPortalSessionRequest {
+  string return_url = 1;
+}
+
+message CreateCurrentUserBillingPortalSessionResponse {
+  string portal_url = 1;
+}
+
+message ListCurrentUserInvoicesRequest {}
+
+message ListCurrentUserInvoicesResponse {
+  repeated Invoice invoices = 1;
+}
+
+message GetUsageSummaryRequest {
+  string org_id = 1;
+}
+
+message GetUsageSummaryResponse {
+  repeated UsageSummary summaries = 1;
+}
+
+// GetComputeUsage returns daemon compute usage for the current billing period.
+message GetComputeUsageRequest {
+  string org_id = 1;
+}
+
+message ComputeUsageBySizeTier {
+  string size_tier = 1;
+  double total_minutes = 2;
+  double estimated_cost_cents = 3;
+}
+
+message GetComputeUsageResponse {
+  double total_minutes = 1;
+  int32 included_minutes = 2;
+  double overage_minutes = 3;
+  double estimated_overage_cost_cents = 4;
+  repeated ComputeUsageBySizeTier per_size_breakdown = 5;
+  google.protobuf.Timestamp period_start = 6;
+  google.protobuf.Timestamp period_end = 7;
+}
+
+message GetCurrentUserReliantStateRequest {}
+
+message GetCurrentUserReliantStateResponse {
+  ReliantEntitlement entitlement = 1;
+  ManagedReliantAccess managed_access = 2;
+}
+
+message RepairCurrentUserReliantAccessRequest {}
+
+message RepairCurrentUserReliantAccessResponse {
+  ReliantEntitlement entitlement = 1;
+  ManagedReliantAccess managed_access = 2;
+  bool repaired = 3;
+}
+
+message RotateCurrentUserReliantAccessRequest {
+  optional string grace_period = 1;
+}
+
+message RotateCurrentUserReliantAccessResponse {
+  ReliantEntitlement entitlement = 1;
+  ManagedReliantAccess managed_access = 2;
+  bool rotated = 3;
+  bool replaced = 4;
+  string plaintext_key = 5;
+}
+
+message GetCurrentUserReliantOverviewRequest {}
+
+message GetCurrentUserReliantOverviewResponse {
+  ReliantOverview overview = 1;
+}
+
+// === Current-user workspace compute plan ===
+
+message SetCurrentUserComputeOverageRequest {
+  bool enabled = 1;
+}
+
+message SetCurrentUserComputeOverageResponse {
+  Subscription subscription = 1;
+}
+
+message ComputeUsageByWorkspace {
+  string workspace_id = 1;
+  string workspace_name = 2;
+  string size = 3;
+  double minutes = 4;
+  double overage_minutes = 5;
+}
+
+message ComputeUsageByDay {
+  google.protobuf.Timestamp day = 1;
+  double minutes = 2;
+}
+
+message GetCurrentUserComputeUsageRequest {
+  optional string period = 1; // "current" (default) | "previous"
+}
+
+message GetCurrentUserComputeUsageResponse {
+  int32 included_minutes = 1;
+  double used_minutes = 2;
+  double overage_minutes = 3;
+  double estimated_overage_cost_cents = 4;
+  google.protobuf.Timestamp period_start = 5;
+  google.protobuf.Timestamp period_end = 6;
+  repeated ComputeUsageByWorkspace by_workspace = 7;
+  repeated ComputeUsageByDay by_day = 8;
+}
+
+// === Invoice preview ===
+
+message GetInvoicePreviewRequest {
+  string size = 1;
+  int32 quantity_delta = 2;  // +1 to add, -1 to remove
+}
+
+message GetInvoicePreviewResponse {
+  int32 proration_cents = 1;      // charge or credit today
+  int32 new_monthly_cents = 2;    // new total monthly after change
+}

@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/claude"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/codex"
@@ -83,12 +82,6 @@ func BuildAvailableDrivers(ctx context.Context, repo db.Repository, userID strin
 			continue
 		}
 
-		// Skip reliant — it's configured from the user's JWT below,
-		// not from a stored API key.
-		if driverID == "reliant" {
-			continue
-		}
-
 		// Get the actual unmasked API key for this provider
 		apiKey, err := repo.GetProviderAPIKey(ctx, userID, driverID)
 		if err != nil {
@@ -116,18 +109,22 @@ func BuildAvailableDrivers(ctx context.Context, repo db.Repository, userID strin
 		}
 	}
 
-	// Reliant driver: use the user's JWT (no stored API key needed).
-	if jwt, ok := auth.GetUserJWT(userID); ok && jwt != "" {
-		baseURL := ResolveReliantBaseURL(jwt)
-		apiKey, extraHeaders := ResolveReliantAPIKey(jwt, baseURL)
-		drivers[models.DriverID("reliant")] = models.DriverConfig{
-			DriverID:     models.DriverID("reliant"),
-			APIKey:       apiKey,
-			BaseURL:      baseURL,
-			ExtraHeaders: extraHeaders,
-			Enabled:      true,
+	if _, ok := drivers[models.DriverID("reliant")]; !ok {
+		mintedKey, err := MintReliantUserAPIKey(ctx, userID)
+		if err != nil {
+			logging.Warn("Failed to lazy-provision Reliant key", "user_id", userID, "error", err)
+		} else {
+			if err := repo.SetProviderAPIKey(ctx, userID, "reliant", mintedKey); err != nil {
+				logging.Warn("Failed to persist lazy-provisioned Reliant key", "user_id", userID, "error", err)
+			}
+			drivers[models.DriverID("reliant")] = models.DriverConfig{
+				DriverID: models.DriverID("reliant"),
+				APIKey:   mintedKey,
+				Enabled:  true,
+			}
 		}
 	}
+	// TODO test lazy provision
 
 	// Add local driver if configured
 	// Local drivers use BaseURL instead of API key

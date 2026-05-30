@@ -3,6 +3,7 @@ import { useTourStore } from "../../store/tourStore";
 import { useContextualTipsStore } from "../../store/contextualTipsStore";
 import { CONTEXTUAL_TIP_DEFINITIONS } from "./contextualTipsRegistry";
 import { ContextualTipCoachmark } from "./ContextualTipCoachmark";
+import { useTourNavigation } from "./useTourNavigation";
 
 export function ContextualTipsLayer() {
   const isInitialized = useContextualTipsStore((state) => state.isInitialized);
@@ -17,7 +18,10 @@ export function ContextualTipsLayer() {
   const subscribeToSources = useContextualTipsStore((state) => state.subscribeToSources);
   const onboardingReady = useTourStore((state) => state.isInitialized);
   const onboardingComplete = useTourStore((state) => state.hasCompletedOnboarding);
-  const isWizardActive = useTourStore((state) => state.isWizardActive);
+  // isWizardActive is URL-derived: presence of ?tour=<step> means tour is on.
+  // Reading from the navigation hook keeps tour visibility in lock-step with
+  // the URL — no chance for store/URL drift.
+  const { isWizardActive } = useTourNavigation();
 
   useEffect(() => {
     if (!onboardingReady) return;

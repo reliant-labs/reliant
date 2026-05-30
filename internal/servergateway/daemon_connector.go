@@ -5,168 +5,89 @@ package servergateway
 import (
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
 	"sync"
 	"time"
 
-	"github.com/nats-io/nats.go/jetstream"
 	"golang.org/x/net/http2"
 
+	"github.com/reliant-labs/reliant/internal/daemonevents"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
+// connectFailedPublisher is the narrow surface the connector uses to report
+// outbound connect failures upstream. Satisfied by *daemonevents.Publisher.
+type connectFailedPublisher interface {
+	OnDaemonConnectFailed(userID, daemonID, reason string)
+}
+
 const (
 	connectorLogPrefix = "[DaemonConnector]"
-
-	// JetStream stream and subjects for daemon connect/disconnect commands.
-	streamDaemonCommands     = "DAEMON_COMMANDS"
-	subjectCommandsAll       = "daemon.v1.commands.*"
-	subjectCommandConnect    = "daemon.v1.commands.connect"
-	subjectCommandDisconnect = "daemon.v1.commands.disconnect"
-
-	// Durable consumer name for this gateway instance.
-	consumerDaemonCommands = "gateway-daemon-commands"
 
 	// Reconnection backoff parameters.
 	reconnectMinDelay = 1 * time.Second
 	reconnectMaxDelay = 15 * time.Second
 )
 
-// DaemonConnectCommand is the NATS message format for a connect command.
-type DaemonConnectCommand struct {
-	Version  int    `json:"version"`
-	DaemonID string `json:"daemonId"`
-	UserID   string `json:"userId"`
-	PodIP    string `json:"podIp"`
-	Port     int    `json:"port"`
-}
-
-// DaemonDisconnectCommand is the NATS message format for a disconnect command.
-type DaemonDisconnectCommand struct {
-	Version  int    `json:"version"`
-	DaemonID string `json:"daemonId"`
-	UserID   string `json:"userId"`
-}
-
-// DaemonConnector subscribes to NATS JetStream for daemon connect/disconnect
-// commands and initiates outbound gRPC connections to daemon pods.
+// DaemonConnector initiates outbound gRPC connections to daemon pods. It is
+// driven by ManagedDaemonReconciler — the reconciler calls startConnection /
+// stopConnection based on the authoritative DAEMON_STATE snapshot stream.
 type DaemonConnector struct {
-	nc            jetstream.JetStream
 	daemonService *services.ToolsDaemonService
+	// failPublisher emits NATS events for outbound connect failures so the
+	// control plane can persist a reason on the daemon row. Nil is allowed
+	// (no-op) — keeps tests simple.
+	failPublisher connectFailedPublisher
 
 	mu          sync.Mutex
 	activeConns map[string]context.CancelFunc // daemonID → cancel
 }
 
-// NewDaemonConnector creates a new DaemonConnector.
-func NewDaemonConnector(js jetstream.JetStream, daemonService *services.ToolsDaemonService) *DaemonConnector {
-	return &DaemonConnector{
-		nc:            js,
+// NewDaemonConnector creates a new DaemonConnector. The failPublisher is
+// optional; pass nil to disable connect-failure event emission.
+func NewDaemonConnector(daemonService *services.ToolsDaemonService, failPublisher *daemonevents.Publisher) *DaemonConnector {
+	dc := &DaemonConnector{
 		daemonService: daemonService,
 		activeConns:   make(map[string]context.CancelFunc),
 	}
+	if failPublisher != nil {
+		dc.failPublisher = failPublisher
+	}
+	return dc
 }
 
-// Start subscribes to the DAEMON_COMMANDS JetStream stream and processes
-// connect/disconnect commands. It blocks until ctx is cancelled.
-func (dc *DaemonConnector) Start(ctx context.Context) error {
-	// The DAEMON_COMMANDS stream is created by the control-plane's
-	// EnsureStreams(). We just create our consumer on it.
-	consumer, err := dc.nc.CreateOrUpdateConsumer(ctx, streamDaemonCommands, jetstream.ConsumerConfig{
-		Durable:        consumerDaemonCommands,
-		AckPolicy:      jetstream.AckExplicitPolicy,
-		FilterSubjects: []string{subjectCommandConnect, subjectCommandDisconnect},
-	})
-	if err != nil {
-		return fmt.Errorf("create consumer: %w", err)
-	}
-
-	logging.Info(connectorLogPrefix+" Started — consuming from "+streamDaemonCommands,
-		"subjects", []string{subjectCommandConnect, subjectCommandDisconnect},
-	)
-
-	// Consume messages until ctx is cancelled.
-	cc, err := consumer.Consume(func(msg jetstream.Msg) {
-		dc.handleMessage(ctx, msg)
-	})
-	if err != nil {
-		return fmt.Errorf("start consuming: %w", err)
-	}
-	defer cc.Stop()
-
-	<-ctx.Done()
-
-	// Cancel all active connections on shutdown.
+// CloseAll cancels every outbound connection currently managed by the connector.
+// Call it on gateway shutdown to drain streams cleanly.
+func (dc *DaemonConnector) CloseAll() {
 	dc.mu.Lock()
+	defer dc.mu.Unlock()
 	for daemonID, cancel := range dc.activeConns {
 		cancel()
 		delete(dc.activeConns, daemonID)
-	}
-	dc.mu.Unlock()
-
-	logging.Info(connectorLogPrefix + " Stopped")
-	return nil
-}
-
-func (dc *DaemonConnector) handleMessage(ctx context.Context, msg jetstream.Msg) {
-	subject := msg.Subject()
-
-	switch subject {
-	case subjectCommandConnect:
-		var cmd DaemonConnectCommand
-		if err := json.Unmarshal(msg.Data(), &cmd); err != nil {
-			logging.Error(connectorLogPrefix+" Failed to unmarshal connect command", "error", err)
-			_ = msg.Nak()
-			return
-		}
-		if cmd.DaemonID == "" || cmd.PodIP == "" || cmd.Port == 0 {
-			logging.Warn(connectorLogPrefix+" Invalid connect command — missing required fields",
-				"daemonId", cmd.DaemonID, "podIp", cmd.PodIP, "port", cmd.Port)
-			_ = msg.Term()
-			return
-		}
-		_ = msg.Ack()
-		dc.startConnection(ctx, cmd)
-
-	case subjectCommandDisconnect:
-		var cmd DaemonDisconnectCommand
-		if err := json.Unmarshal(msg.Data(), &cmd); err != nil {
-			logging.Error(connectorLogPrefix+" Failed to unmarshal disconnect command", "error", err)
-			_ = msg.Nak()
-			return
-		}
-		_ = msg.Ack()
-		dc.stopConnection(cmd.DaemonID)
-
-	default:
-		logging.Warn(connectorLogPrefix+" Unknown command subject", "subject", subject)
-		_ = msg.Term()
 	}
 }
 
 // startConnection initiates a new outbound connection to a daemon pod.
 // If a connection already exists for this daemonID, it is cancelled first.
-func (dc *DaemonConnector) startConnection(parentCtx context.Context, cmd DaemonConnectCommand) {
+func (dc *DaemonConnector) startConnection(parentCtx context.Context, daemonID, userID, podIP string, podPort int) {
 	dc.mu.Lock()
-	if cancel, ok := dc.activeConns[cmd.DaemonID]; ok {
+	if cancel, ok := dc.activeConns[daemonID]; ok {
 		cancel()
-		delete(dc.activeConns, cmd.DaemonID)
+		delete(dc.activeConns, daemonID)
 	}
 	connCtx, connCancel := context.WithCancel(parentCtx)
-	dc.activeConns[cmd.DaemonID] = connCancel
+	dc.activeConns[daemonID] = connCancel
 	dc.mu.Unlock()
 
-	logging.Info(connectorLogPrefix+" Starting outbound connection",
-		"daemonId", cmd.DaemonID, "userId", cmd.UserID,
-		"podIp", cmd.PodIP, "port", cmd.Port)
+	logging.Info(connectorLogPrefix+" starting outbound connection",
+		"daemonId", daemonID, "userId", userID, "podIp", podIP, "port", podPort)
 
-	go dc.connectWithRetry(connCtx, cmd)
+	go dc.connectWithRetry(connCtx, daemonID, userID, podIP, podPort)
 }
 
 // stopConnection cancels the context for an active daemon connection.
@@ -181,16 +102,25 @@ func (dc *DaemonConnector) stopConnection(daemonID string) {
 }
 
 // connectWithRetry connects to the daemon pod and retries with backoff on failure.
-func (dc *DaemonConnector) connectWithRetry(ctx context.Context, cmd DaemonConnectCommand) {
+// Each failure is also surfaced via the connectFailedPublisher (if configured)
+// so the control plane can show *why* the daemon can't connect instead of a
+// generic "Disconnected" badge.
+func (dc *DaemonConnector) connectWithRetry(ctx context.Context, daemonID, userID, podIP string, podPort int) {
 	delay := reconnectMinDelay
 	for {
-		err := dc.connectOnce(ctx, cmd)
+		err := dc.connectOnce(ctx, daemonID, userID, podIP, podPort)
 		if ctx.Err() != nil {
 			return
 		}
 
+		// Surface the failure upstream. publish() is best-effort — never
+		// blocks the retry loop.
+		if dc.failPublisher != nil && err != nil {
+			dc.failPublisher.OnDaemonConnectFailed(userID, daemonID, err.Error())
+		}
+
 		logging.Warn(connectorLogPrefix+" Outbound connection lost, retrying",
-			"daemonId", cmd.DaemonID, "error", err, "retryIn", delay)
+			"daemonId", daemonID, "error", err, "retryIn", delay)
 
 		select {
 		case <-ctx.Done():
@@ -209,19 +139,57 @@ func (dc *DaemonConnector) connectWithRetry(ctx context.Context, cmd DaemonConne
 // connectOnce opens a single ConnectGateway bidi stream to the daemon pod,
 // registers it with ToolsDaemonService, and runs the message loops until
 // the stream ends.
-func (dc *DaemonConnector) connectOnce(ctx context.Context, cmd DaemonConnectCommand) error {
-	baseURL := fmt.Sprintf("http://%s:%d", cmd.PodIP, cmd.Port)
+func (dc *DaemonConnector) connectOnce(ctx context.Context, daemonID, userID, podIP string, podPort int) error {
+	baseURL := fmt.Sprintf("http://%s:%d", podIP, podPort)
 
 	client := reliantv1connect.NewToolsDaemonServiceClient(
 		h2cClient(),
 		baseURL,
 	)
 
-	stream := client.ConnectGateway(ctx)
+	// Use a derived context that is cancelled only if the daemon takes too
+	// long to send its DaemonRegister. The stream is bound to regCtx for its
+	// entire lifetime — regCtx is also cancelled when the parent ctx is, so
+	// the stream still dies on shutdown / stopConnection. Once registration
+	// succeeds we stop the timer so the cancel is never invoked and the
+	// stream can run indefinitely.
+	regCtx, regCancel := context.WithCancel(ctx)
+	regTimer := time.AfterFunc(10*time.Second, regCancel)
+
+	stream := client.ConnectGateway(regCtx)
+
+	// Kick the stream so the underlying HTTP request actually gets dispatched.
+	// connect-go's bidi defers makeRequest() until the first Send/CloseRequest;
+	// our protocol is server-first (daemon speaks first), so without this we'd
+	// block forever waiting for a request that was never sent. We send an
+	// intentionally-empty GatewayHello rather than identity-bearing data: the
+	// gateway must NEVER transmit identity over this channel — the daemon is
+	// untrusted, and the (daemonID, conn) mapping lives only in this process's
+	// memory so the daemon can't assert an identity to anyone.
+	hello := &reliantv1.ServerMessage{
+		Message: &reliantv1.ServerMessage_Hello{Hello: &reliantv1.GatewayHello{}},
+	}
+	if err := stream.Send(hello); err != nil {
+		regCancel()
+		_ = stream.CloseRequest()
+		_ = stream.CloseResponse()
+		return fmt.Errorf("sending gateway hello: %w", err)
+	}
 
 	// The daemon sends DaemonRegister as the first message.
 	msg, err := stream.Receive()
+	// Stop returns false if the timer already fired (or was already stopped).
+	// If it fired, regCancel has been invoked (or is about to be) and the
+	// stream is dead — treat as a registration timeout regardless of what
+	// Receive returned.
+	if !regTimer.Stop() {
+		regCancel()
+		_ = stream.CloseRequest()
+		_ = stream.CloseResponse()
+		return fmt.Errorf("receiving registration: timed out after 10s")
+	}
 	if err != nil {
+		regCancel()
 		_ = stream.CloseRequest()
 		_ = stream.CloseResponse()
 		return fmt.Errorf("receiving registration: %w", err)
@@ -234,10 +202,10 @@ func (dc *DaemonConnector) connectOnce(ctx context.Context, cmd DaemonConnectCom
 		return fmt.Errorf("first message was not DaemonRegister")
 	}
 
-	// Identity comes from the NATS connect command, not from the daemon.
+	// Identity comes from the reconciler snapshot, not from the daemon.
 	// The daemon is untrusted — the gateway is the authority.
 	logging.Info(connectorLogPrefix+" Received registration from daemon",
-		"daemonId", cmd.DaemonID, "userId", cmd.UserID,
+		"daemonId", daemonID, "userId", userID,
 		"hostname", reg.Hostname, "daemonType", reg.DaemonType)
 
 	// Send registration ack with the assigned daemon_id.
@@ -245,7 +213,7 @@ func (dc *DaemonConnector) connectOnce(ctx context.Context, cmd DaemonConnectCom
 		Message: &reliantv1.ServerMessage_RegistrationAck{
 			RegistrationAck: &reliantv1.RegistrationAck{
 				Accepted: true,
-				DaemonId: cmd.DaemonID,
+				DaemonId: daemonID,
 			},
 		},
 	}
@@ -255,9 +223,9 @@ func (dc *DaemonConnector) connectOnce(ctx context.Context, cmd DaemonConnectCom
 		return fmt.Errorf("sending registration ack: %w", err)
 	}
 
-	// Register with ToolsDaemonService — identity comes from the NATS
-	// command, capabilities/platform from the daemon.
-	outbound, err := dc.daemonService.RegisterOutboundConnection(ctx, cmd.UserID, cmd.DaemonID, reg, stream)
+	// Register with ToolsDaemonService — identity comes from the reconciler,
+	// capabilities/platform from the daemon.
+	outbound, err := dc.daemonService.RegisterOutboundConnection(ctx, userID, daemonID, podIP, podPort, reg, stream)
 	if err != nil {
 		_ = stream.CloseRequest()
 		_ = stream.CloseResponse()
@@ -276,15 +244,17 @@ func (dc *DaemonConnector) connectOnce(ctx context.Context, cmd DaemonConnectCom
 }
 
 // h2cClient returns an HTTP client configured for h2c (HTTP/2 cleartext),
-// used for intra-cluster connections to daemon pods without TLS.
+// used for intra-cluster connections to daemon pods without TLS. This follows
+// the canonical connect-go h2c pattern: DialTLS (not DialTLSContext) and no
+// extra fields on http2.Transport. Deviating from this shape has been observed
+// to cause SETTINGS frames to silently not reach the server.
 func h2cClient() *http.Client {
 	return &http.Client{
 		Transport: &http2.Transport{
-			AllowHTTP:       true,
-			ReadIdleTimeout: 60 * time.Second,
-			PingTimeout:     15 * time.Second,
-			DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
-				return (&net.Dialer{}).DialContext(ctx, network, addr)
+			AllowHTTP: true,
+			DialTLS: func(network, addr string, _ *tls.Config) (net.Conn, error) {
+				var d net.Dialer
+				return d.Dial(network, addr)
 			},
 		},
 	}

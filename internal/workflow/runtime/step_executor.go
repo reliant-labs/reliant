@@ -812,6 +812,12 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 		rtx.ProjectPath = e.execContext.ProjectPath
 	}
 
+	// User JWT — propagated so activity workers in a separate process can
+	// hydrate the in-memory auth map and resolve the Reliant LLM driver.
+	if e.execContext != nil && e.execContext.UserJWT != "" {
+		rtx.UserJWT = e.execContext.UserJWT
+	}
+
 	// Daemon selector: node-level override takes priority over workflow-level default
 	if node.GetDaemon() != nil {
 		if lit := node.GetDaemon().GetLiteral(); lit != nil {

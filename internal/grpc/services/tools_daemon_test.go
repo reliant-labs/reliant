@@ -14,76 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSweepStaleDaemonsMarksDisconnectedAndClosesConnection(t *testing.T) {
-	repo, cleanup := db.SetupTestDB(t)
-	defer cleanup()
-
-	svc := NewToolsDaemonService(repo)
-	defer svc.Close()
-
-	now := time.Now().UTC().Truncate(time.Second)
-	staleHeartbeat := now.Add(-10 * time.Minute)
-	freshHeartbeat := now.Add(-30 * time.Second)
-	connectedAt := now.Add(-20 * time.Minute)
-
-	staleDaemonID := uuid.New().String()
-	freshDaemonID := uuid.New().String()
-
-	require.NoError(t, repo.UpsertDaemon(context.Background(), &db.Daemon{
-		ID:            staleDaemonID,
-		UserID:        "test-user",
-		Status:        db.DaemonStatusActive,
-		ConnectedAt:   &connectedAt,
-		LastHeartbeat: &staleHeartbeat,
-	}))
-	require.NoError(t, repo.UpsertDaemon(context.Background(), &db.Daemon{
-		ID:            freshDaemonID,
-		UserID:        "test-user",
-		Status:        db.DaemonStatusActive,
-		ConnectedAt:   &connectedAt,
-		LastHeartbeat: &freshHeartbeat,
-	}))
-
-	staleConn := &daemonConnection{userID: "test-user", daemonID: staleDaemonID, done: make(chan struct{})}
-	freshConn := &daemonConnection{userID: "fresh-user", daemonID: freshDaemonID, done: make(chan struct{})}
-
-	svc.mu.Lock()
-	registerTestConn(svc, staleConn)
-	registerTestConn(svc, freshConn)
-	svc.mu.Unlock()
-
-	require.NoError(t, svc.sweepStaleDaemons(context.Background(), now))
-
-	staleReloaded, err := repo.GetDaemon(context.Background(), staleDaemonID)
-	require.NoError(t, err)
-	require.Equal(t, db.DaemonStatusDisconnected, staleReloaded.Status)
-	require.NotNil(t, staleReloaded.DisconnectedAt)
-
-	freshReloaded, err := repo.GetDaemon(context.Background(), freshDaemonID)
-	require.NoError(t, err)
-	require.Equal(t, db.DaemonStatusActive, freshReloaded.Status)
-
-	svc.mu.RLock()
-	_, staleStillPresent := svc.connections[staleConn.daemonID]
-	_, freshStillPresent := svc.connections[freshConn.daemonID]
-	svc.mu.RUnlock()
-	require.False(t, staleStillPresent)
-	require.True(t, freshStillPresent)
-
-	select {
-	case <-staleConn.done:
-		// expected
-	default:
-		t.Fatal("expected stale daemon connection to be closed")
-	}
-
-	select {
-	case <-freshConn.done:
-		t.Fatal("fresh daemon connection should remain open")
-	default:
-	}
-}
-
 func TestToolsDaemonServiceCloseIsIdempotent(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
@@ -159,14 +89,10 @@ func TestHandleProjectDiscoveryCreatesProjectAndRequestsConfig(t *testing.T) {
 	svc := NewToolsDaemonService(repo)
 	defer svc.Close()
 
-	now := time.Now().UTC()
 	daemonID := uuid.New().String()
 	require.NoError(t, repo.UpsertDaemon(context.Background(), &db.Daemon{
-		ID:            daemonID,
-		UserID:        "test-user",
-		Status:        db.DaemonStatusActive,
-		ConnectedAt:   &now,
-		LastHeartbeat: &now,
+		ID:     daemonID,
+		UserID: "test-user",
 	}))
 
 	conn := &daemonConnection{
@@ -228,14 +154,10 @@ func TestHandleLoadProjectConfigsResponsePersistsSnapshotAndTracksState(t *testi
 	svc := NewToolsDaemonService(repo)
 	defer svc.Close()
 
-	now := time.Now().UTC()
 	daemonID := uuid.New().String()
 	require.NoError(t, repo.UpsertDaemon(context.Background(), &db.Daemon{
-		ID:            daemonID,
-		UserID:        "test-user",
-		Status:        db.DaemonStatusActive,
-		ConnectedAt:   &now,
-		LastHeartbeat: &now,
+		ID:     daemonID,
+		UserID: "test-user",
 	}))
 
 	conn := &daemonConnection{userID: "test-user", daemonID: daemonID}
@@ -298,11 +220,8 @@ func TestHandleProjectConfigDeltaStaleGuardAndReloadRequest(t *testing.T) {
 	projectID := uuid.New().String()
 	projectPath := "/tmp/test-" + uuid.New().String()
 	require.NoError(t, repo.UpsertDaemon(context.Background(), &db.Daemon{
-		ID:            daemonID,
-		UserID:        "test-user",
-		Status:        db.DaemonStatusActive,
-		ConnectedAt:   &now,
-		LastHeartbeat: &now,
+		ID:     daemonID,
+		UserID: "test-user",
 	}))
 
 	require.NoError(t, repo.CreateProject(context.Background(), &db.Project{
@@ -378,11 +297,8 @@ func TestPR5Smoke_ConfigSyncCancelDisconnectReconnect(t *testing.T) {
 	projectPath := "/tmp/pr5-smoke-" + uuid.New().String()
 
 	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{
-		ID:            daemonID,
-		UserID:        userID,
-		Status:        db.DaemonStatusActive,
-		ConnectedAt:   &now,
-		LastHeartbeat: &now,
+		ID:     daemonID,
+		UserID: userID,
 	}))
 
 	require.NoError(t, repo.CreateProject(ctx, &db.Project{
@@ -454,16 +370,15 @@ func TestPR5Smoke_ConfigSyncCancelDisconnectReconnect(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, daemonID, record.DaemonID)
 
-	// 2) Disconnect via stale sweep, then reconnect.
-	staleHeartbeat := now.Add(-10 * time.Minute)
-	require.NoError(t, repo.UpdateDaemonStatus(ctx, daemonID, db.DaemonStatusActive, nil, &staleHeartbeat, nil))
-	require.NoError(t, svc.sweepStaleDaemons(ctx, now))
+	// 2) Disconnect by closing the connection; the stale-sweep path has been removed
+	// in favor of daemon_attachment-based liveness, so a manual close stands in for it.
+	conn1.closeDone()
 
 	select {
 	case <-conn1.done:
 		// expected
 	default:
-		t.Fatal("expected stale sweep to close first connection")
+		t.Fatal("expected connection to be closed")
 	}
 }
 
@@ -532,11 +447,8 @@ func TestHandleFileSystemChanged(t *testing.T) {
 		projectPath := "/tmp/test-fs-" + uuid.New().String()
 
 		require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{
-			ID:            daemonID,
-			UserID:        userID,
-			Status:        db.DaemonStatusActive,
-			ConnectedAt:   &now,
-			LastHeartbeat: &now,
+			ID:     daemonID,
+			UserID: userID,
 		}))
 
 		require.NoError(t, repo.CreateProject(ctx, &db.Project{

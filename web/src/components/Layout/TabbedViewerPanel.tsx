@@ -26,7 +26,8 @@ export function TabbedViewerPanel({
   hasTerminal = false,
 }: TabbedViewerPanelProps = {}) {
   const allViewers = useViewerStore((state) => state.viewers);
-  const currentProjectId = useViewerStore((state) => state.currentProjectId);
+  // Project context is now owned by projectStore (single source of truth).
+  const currentProjectId = useProjectStore((state) => state.currentProject?.id ?? null);
   // Get current worktree from worktreeStore (single source of truth)
   const currentWorktreeId = useWorktreeStore((state) => state.currentWorktree?.id ?? null);
   const activeViewerId = useViewerStore((state) => state.activeViewerId);
@@ -384,7 +385,7 @@ function WorktreesViewerContent() {
         {/* List Content */}
         <div className="flex-1 overflow-auto">
           {worktreeView === "active" ? (
-            <WorktreesPanel daemonName={activeDaemon?.hostname} />
+            <WorktreesPanel daemonId={activeDaemon?.daemonId} />
           ) : (
             <ArchivedWorktreesPanel />
           )}

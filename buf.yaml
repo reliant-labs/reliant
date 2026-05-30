@@ -1,8 +1,18 @@
 # buf.yaml - Buf workspace configuration
 version: v2
-# Modules define the protobuf packages in this workspace
+# Modules define the protobuf packages in this workspace.
+# proto/controlplane/v1/admin.proto is Reliant's minimal app-side
+# subset of controlplane.v1 (used by the authenticated key-sync flow);
+# it shares the controlplane.v1 package with the public proto subtree
+# under proto/controlplane/v1/public/. The two define overlapping
+# symbols (BillingService, ManagedReliantAccess, etc.), so the public
+# subtree is excluded from the default module build here. The public
+# protos are still generated for the web app via buf.gen.controlplane.yaml,
+# which scopes to proto/controlplane/v1/public/ explicitly.
 modules:
   - path: proto
+    excludes:
+      - proto/controlplane/v1/public
 # Lint configuration
 lint:
   use:

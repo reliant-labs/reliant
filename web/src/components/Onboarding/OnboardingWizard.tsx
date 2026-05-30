@@ -4,37 +4,30 @@
  * Main orchestrator component that manages the onboarding flow.
  * Renders the appropriate step component based on current state.
  *
+ * The wizard is fully URL-decoupled: the active step lives in the URL as
+ * `?tour=<step-id>`. The wizard derives `currentStepId` and `isWizardActive`
+ * via `useTourNavigation()`. Steps that need to spotlight an element on a
+ * specific page check `pathname` and either render the spotlight (right page)
+ * or a small "Open <page> to continue" modal (wrong page). The user owns the
+ * URL; the wizard reacts. There are no useEffects that push routes.
+ *
  * 3-phase flow:
- * 1. Tour not completed + wizard active: Show guided spotlight tour steps (8 steps)
+ * 1. Tour active (`?tour=<step>` present): Show guided spotlight tour steps (8 steps)
  * 2. Tour completed + checklist not dismissed: Show floating OnboardingChecklist
  * 3. Tour completed + checklist dismissed: Render nothing
- *
- * 8-step tour:
- * 1. Chat & Sidebars (multi-spotlight) - development environment overview
- * 2. Workspaces (spotlight) - isolated branches
- * 3. Workflow Intro (spotlight) - what workflows are
- * 4. Workflow Hub (spotlight) - browse templates
- * 5. Workflow Builder (spotlight) - visual builder canvas
- * 6. Workflow Builder Chat (spotlight) - builder AI assistant
- * 7. Presets & Params (spotlight) - customization
- * 8. Completion (modal) - quick-start actions
  */
 
 import { useEffect } from "react";
-import { Workflow, Sparkles, Settings2 } from "lucide-react";
+import { useLocation } from "@tanstack/react-router";
+import { Workflow } from "lucide-react";
 import { useOnboardingChecklistStore } from "../../store/onboardingChecklistStore";
 import { useTourStore } from "../../store/tourStore";
-import { useViewerStore } from "../../store/viewerStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { trackEvent } from "../../lib/analytics";
 
 import {
   ONBOARDING_STEPS,
   getStepById,
-  getNextStepId,
-  stepRequiresChatMode,
-  stepRequiresSettingsMode,
-  stepRequiresWorkflowMode,
 } from "./constants";
 import { OnboardingSpotlight } from "./OnboardingSpotlight";
 import { OnboardingMultiSpotlight } from "./OnboardingMultiSpotlight";
@@ -43,6 +36,52 @@ import { OnboardingNavBar } from "./OnboardingNavBar";
 import { OnboardingChecklist } from "./OnboardingChecklist";
 import type { OnboardingStepId, StepProps } from "./types";
 import { CompletionStep } from "./steps";
+import { useTourNavigation, STEP_EXPECTED_PATH } from "./useTourNavigation";
+
+// ─── Page-redirect modal ─────────────────────────────────────────────────────
+// Rendered when a spotlight step's expected page is not the current page.
+// Keeps the user in control of navigation — single button takes them to the
+// right place, Skip/Back still available via the OnboardingNavBar.
+
+interface OpenPageModalProps extends StepProps {
+  title: string;
+  message: string;
+  actionLabel: string;
+  onOpen: () => void;
+}
+
+function OpenPageModal({
+  title,
+  message,
+  actionLabel,
+  onOpen,
+  stepNumber,
+  totalSteps,
+}: OpenPageModalProps) {
+  return (
+    <OnboardingModal
+      isOpen={true}
+      title={title}
+      stepNumber={stepNumber}
+      totalSteps={totalSteps}
+      hideNavigation
+      hideProgressBar
+    >
+      <div className="space-y-5">
+        <p className="text-sm text-muted-foreground text-center">{message}</p>
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={onOpen}
+            className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+          >
+            {actionLabel}
+          </button>
+        </div>
+      </div>
+    </OnboardingModal>
+  );
+}
 
 // ─── Spotlight Step Wrappers ─────────────────────────────────────────────────
 
@@ -119,19 +158,23 @@ function WorkflowIntroStep(props: StepProps) {
 
 function WorkflowHubStep(props: StepProps) {
   const step = getStepById("workflow-hub")!;
+  const { pathname } = useLocation();
+  const { goToStep } = useTourNavigation();
+  const expected = STEP_EXPECTED_PATH("workflow-hub")!;
 
-  // Navigate to workflow mode when this step mounts
-  useEffect(() => {
-    useViewerStore.getState().setWorkflowMode(true);
-  }, []);
-
-  // When going back from this step, exit workflow mode
-  const handleBack = props.onBack
-    ? () => {
-        useViewerStore.getState().setWorkflowMode(false);
-        props.onBack!();
-      }
-    : undefined;
+  // Wrong page → render a modal asking the user to open Workflows. We never
+  // push routes from an effect — the user clicks the button.
+  if (!pathname.startsWith(expected)) {
+    return (
+      <OpenPageModal
+        {...props}
+        title={step.title}
+        message="Open Workflows to continue this step."
+        actionLabel="Open Workflows"
+        onOpen={() => goToStep("workflow-hub")}
+      />
+    );
+  }
 
   return (
     <OnboardingSpotlight
@@ -159,11 +202,8 @@ function WorkflowHubStep(props: StepProps) {
       stepNumber={props.stepNumber}
       totalSteps={props.totalSteps}
       onNext={props.onComplete}
-      onBack={handleBack}
-      onSkipAll={() => {
-        useViewerStore.getState().setWorkflowMode(false);
-        props.onSkipAll();
-      }}
+      onBack={props.onBack}
+      onSkipAll={props.onSkipAll}
       tooltipPosition="top"
       tooltipPadding={80}
       spotlightConfig={step.spotlightConfig}
@@ -173,17 +213,22 @@ function WorkflowHubStep(props: StepProps) {
 
 function WorkflowBuilderStep(props: StepProps) {
   const step = getStepById("workflow-builder")!;
+  const { pathname } = useLocation();
+  const { goToStep } = useTourNavigation();
+  const expected = STEP_EXPECTED_PATH("workflow-builder")!;
 
-  useEffect(() => {
-    useViewerStore.getState().setWorkflowMode(true, "__new__");
-  }, []);
-
-  const handleBack = props.onBack
-    ? () => {
-        useViewerStore.getState().setWorkflowMode(true, "__hub__");
-        props.onBack!();
-      }
-    : undefined;
+  // The builder needs `/workflow/<name>`; the hub alone doesn't satisfy this.
+  if (!pathname.startsWith(expected)) {
+    return (
+      <OpenPageModal
+        {...props}
+        title={step.title}
+        message="Open the workflow builder to continue this step."
+        actionLabel="Open Workflow Builder"
+        onOpen={() => goToStep("workflow-builder")}
+      />
+    );
+  }
 
   return (
     <OnboardingSpotlight
@@ -193,7 +238,7 @@ function WorkflowBuilderStep(props: StepProps) {
       stepNumber={props.stepNumber}
       totalSteps={props.totalSteps}
       onNext={props.onComplete}
-      onBack={handleBack}
+      onBack={props.onBack}
       onSkipAll={props.onSkipAll}
       tooltipPosition="top"
       tooltipPadding={80}
@@ -204,24 +249,21 @@ function WorkflowBuilderStep(props: StepProps) {
 
 function WorkflowBuilderChatStep(props: StepProps) {
   const step = getStepById("workflow-builder-chat")!;
+  const { pathname } = useLocation();
+  const { goToStep } = useTourNavigation();
+  const expected = STEP_EXPECTED_PATH("workflow-builder-chat")!;
 
-  useEffect(() => {
-    const vs = useViewerStore.getState();
-    if (!vs.isWorkflowMode) {
-      vs.setWorkflowMode(true, "__new__");
-    }
-  }, []);
-
-  // When completing, exit workflow mode
-  const handleComplete = () => {
-    useViewerStore.getState().setWorkflowMode(false);
-    props.onComplete();
-  };
-
-  const handleSkipAll = () => {
-    useViewerStore.getState().setWorkflowMode(false);
-    props.onSkipAll();
-  };
+  if (!pathname.startsWith(expected)) {
+    return (
+      <OpenPageModal
+        {...props}
+        title={step.title}
+        message="Open the workflow builder to continue this step."
+        actionLabel="Open Workflow Builder"
+        onOpen={() => goToStep("workflow-builder-chat")}
+      />
+    );
+  }
 
   return (
     <OnboardingSpotlight
@@ -230,64 +272,12 @@ function WorkflowBuilderChatStep(props: StepProps) {
       description={step.description}
       stepNumber={props.stepNumber}
       totalSteps={props.totalSteps}
-      onNext={handleComplete}
+      onNext={props.onComplete}
       onBack={props.onBack}
-      onSkipAll={handleSkipAll}
+      onSkipAll={props.onSkipAll}
       tooltipPosition="left"
       spotlightConfig={step.spotlightConfig}
     />
-  );
-}
-
-function PresetsAndParamsStep({ onComplete: _onComplete, stepNumber, totalSteps }: StepProps) {
-  return (
-    <OnboardingModal
-      isOpen={true}
-      title="Presets & Parameters"
-      stepNumber={stepNumber}
-      totalSteps={totalSteps}
-      hideNavigation
-      hideProgressBar
-    >
-      <div className="space-y-4">
-        <p className="text-[15px] leading-relaxed text-muted-foreground">
-          Customize how your AI agents work with presets and parameters,
-          found at the bottom of the chat input.
-        </p>
-
-        <div className="grid gap-2">
-          <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 border-l-2 border-primary/30">
-            <div className="flex-shrink-0 p-1.5 rounded-lg bg-primary/15 text-primary">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <h4 className="text-sm font-medium text-foreground">Presets</h4>
-              <p className="text-xs text-muted-foreground">
-                Choose agent roles — researcher, debugger, planner, and more
-              </p>
-            </div>
-          </div>
-          <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 border-l-2 border-primary/30">
-            <div className="flex-shrink-0 p-1.5 rounded-lg bg-primary/15 text-primary">
-              <Settings2 className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <h4 className="text-sm font-medium text-foreground">Parameters</h4>
-              <p className="text-xs text-muted-foreground">
-                Workflow settings defined in YAML — model, tools, thinking level, and more
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 p-2 rounded-lg bg-primary/10 border border-primary/20">
-          <Settings2 className="w-4 h-4 text-primary flex-shrink-0" />
-          <p className="text-xs text-foreground">
-            All parameters come from the workflow's YAML — authors control what users can configure.
-          </p>
-        </div>
-      </div>
-    </OnboardingModal>
   );
 }
 
@@ -300,7 +290,6 @@ const STEP_COMPONENTS: Record<OnboardingStepId, React.ComponentType<StepProps>> 
   "workflow-hub": WorkflowHubStep,
   "workflow-builder": WorkflowBuilderStep,
   "workflow-builder-chat": WorkflowBuilderChatStep,
-  "presets-and-params": PresetsAndParamsStep,
   "completion": CompletionStep,
 };
 
@@ -308,15 +297,15 @@ const STEP_COMPONENTS: Record<OnboardingStepId, React.ComponentType<StepProps>> 
 
 export function OnboardingWizard() {
   const {
-    isWizardActive,
     currentStepId,
-    isInitialized: tourInitialized,
-    loadState: loadTourState,
-    completeStep,
+    isWizardActive,
+    completeAndAdvance,
+    goBack,
     skipAll,
-    nextStep,
-    previousStep,
-  } = useTourStore();
+  } = useTourNavigation();
+
+  const tourInitialized = useTourStore((state) => state.isInitialized);
+  const loadTourState = useTourStore((state) => state.loadState);
 
   const {
     isInitialized: checklistInitialized,
@@ -328,65 +317,33 @@ export function OnboardingWizard() {
 
   const isInitialized = tourInitialized && checklistInitialized;
 
-  const isWorkflowMode = useViewerStore((s) => s.isWorkflowMode);
-  const isSettingsMode = useViewerStore((s) => s.isSettingsMode);
-  // Load state on mount
+  const location = useLocation();
+  const isSettingsMode = location.pathname.startsWith("/settings");
+  const isWorkflowMode = location.pathname.startsWith("/workflow");
+
+  // Load state on mount. Pure data fetch — no navigation.
   useEffect(() => {
     if (!tourInitialized) {
-      loadTourState();
+      void loadTourState();
     }
     if (!checklistInitialized) {
-      loadChecklistState();
+      void loadChecklistState();
     }
   }, [tourInitialized, checklistInitialized, loadTourState, loadChecklistState]);
 
-  // Track onboarding_started when wizard becomes active
+  // Track onboarding_started when wizard becomes active. Fires once per tour
+  // session — not on every step change.
   useEffect(() => {
     if (isWizardActive && currentStepId) {
       trackEvent("onboarding_started", { totalSteps: ONBOARDING_STEPS.length });
     }
-    // Only fire when wizard activates, not on every step change
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isWizardActive]);
-
-  // The guided tour is started explicitly from onboarding launch choices or the setup guide.
-
-  // Handle view context based on current step
-  useEffect(() => {
-    if (!currentStepId || !isWizardActive) return;
-
-    const viewerStore = useViewerStore.getState();
-
-    // If we're on a chat step, ensure we're NOT in workflow/settings mode
-    if (stepRequiresChatMode(currentStepId)) {
-      if (viewerStore.isWorkflowMode) {
-        viewerStore.setWorkflowMode(false);
-      }
-      if (viewerStore.isSettingsMode) {
-        viewerStore.setSettingsMode(false);
-      }
-    }
-
-    // If we're on a settings step, ensure we're NOT in workflow mode
-    if (stepRequiresSettingsMode(currentStepId)) {
-      if (viewerStore.isWorkflowMode) {
-        viewerStore.setWorkflowMode(false);
-      }
-    }
-  }, [currentStepId, isWizardActive]);
-
-  // Ensure workflow builder steps have the correct workflow mode
-  useEffect(() => {
-    if (!currentStepId) return;
-    if (currentStepId === "workflow-builder" || currentStepId === "workflow-builder-chat") {
-      useViewerStore.getState().setWorkflowMode(true, "__new__");
-    }
-  }, [currentStepId]);
 
   // Set up checklist detection after checklist state is ready
   useEffect(() => {
     if (!checklistInitialized) return;
-    detectCompletedItems();
+    void detectCompletedItems();
     const unsub = subscribeToStoreChanges();
     return unsub;
   }, [checklistInitialized, detectCompletedItems, subscribeToStoreChanges]);
@@ -404,33 +361,16 @@ export function OnboardingWizard() {
     if (!StepComponent) return null;
 
     const handleComplete = async () => {
-      // Clean up view mode before transitioning — the NavBar calls this
-      // directly (bypassing step-specific wrappers), so we must handle
-      // mode exits here at the wizard level.
-      const nextId = getNextStepId(currentStepId);
-      if (nextId && !stepRequiresWorkflowMode(nextId)) {
-        const vs = useViewerStore.getState();
-        if (vs.isWorkflowMode) vs.setWorkflowMode(false);
-      }
-      if (nextId && !stepRequiresSettingsMode(nextId)) {
-        const vs = useViewerStore.getState();
-        if (vs.isSettingsMode) vs.setSettingsMode(false);
-      }
       trackEvent("onboarding_step_completed", {
         stepId: currentStepId,
         stepName: currentStep.title,
         stepsCompleted: stepIndex + 1,
         totalSteps: ONBOARDING_STEPS.length,
       });
-      await completeStep(currentStepId);
-      nextStep();
+      await completeAndAdvance();
     };
 
     const handleSkipAll = async () => {
-      // Always clean up view modes when skipping
-      const vs = useViewerStore.getState();
-      if (vs.isWorkflowMode) vs.setWorkflowMode(false);
-      if (vs.isSettingsMode) vs.setSettingsMode(false);
       trackEvent("onboarding_step_skipped", {
         stepId: currentStepId,
         stepName: currentStep.title,
@@ -440,11 +380,10 @@ export function OnboardingWizard() {
       await skipAll();
     };
 
-    const handleBack = stepIndex > 0 ? previousStep : undefined;
+    const handleBack = stepIndex > 0 ? goBack : undefined;
 
-    const isFirstStep = stepIndex === 0;
     const isLastStep = stepIndex === ONBOARDING_STEPS.length - 1;
-    const nextLabel = isFirstStep ? "Get started" : isLastStep ? "Finish" : "Next";
+    const nextLabel = isLastStep ? "Finish" : "Next";
 
     return (
       <>

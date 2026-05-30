@@ -1,24 +1,48 @@
 /**
- * Cloud implementation of the onboarding service. Talks to the control-plane
- * admin server (controlplane.v1.UserService) and the local Reliant gRPC
- * SettingsService for managed-key provisioning.
+ * Cloud implementation of the onboarding service. Talks to
+ * `controlplane.v1.UserService` for the current-user / completion calls.
  */
 
-import {
-  getCurrentUser as fetchCurrentUser,
-  completeOnboardingRPC,
-  type ControlPlaneUser,
-} from "@/components/OnboardingFlow/api";
+import { UserService } from "@/gen/controlplane/v1/public/user_service_pb";
+import { getControlPlaneClient } from "../client";
+import type { OnboardingUser } from "./types";
 
-export async function getCurrentUser(): Promise<ControlPlaneUser | null> {
-  const { user } = await fetchCurrentUser();
-  return user ?? null;
+/** Cache the in-flight GetCurrentUser promise for 30s so that the dozen-odd
+ *  hooks that depend on it during initial render don't fan out into a dozen
+ *  identical RPCs. */
+let _userPromise: Promise<OnboardingUser | null> | null = null;
+const USER_CACHE_TTL_MS = 30_000;
+
+export async function getCurrentUser(): Promise<OnboardingUser | null> {
+  if (_userPromise) return _userPromise;
+  _userPromise = (async () => {
+    const res = await getControlPlaneClient(UserService).getCurrentUser({});
+    if (!res.user) return null;
+    return {
+      onboardingCompleted: res.user.onboardingCompleted,
+      id: res.user.id,
+      email: res.user.email,
+      name: res.user.name,
+    };
+  })().finally(() => {
+    setTimeout(() => {
+      _userPromise = null;
+    }, USER_CACHE_TTL_MS);
+  });
+  return _userPromise;
 }
 
 export async function completeOnboarding(
   data: Record<string, unknown>,
 ): Promise<void> {
-  await completeOnboardingRPC(data);
+  await getControlPlaneClient(UserService).completeOnboarding({
+    // protobuf-es expects `JsonObject` for google.protobuf.Struct fields; the
+    // shape is structurally identical to `Record<string, unknown>` as long as
+    // the values themselves are JSON-serializable. Onboarding only stores
+    // primitive strings (compute / modelProvider), so this round-trips fine.
+    onboardingData: data as never,
+  });
+  _userPromise = null; // Force the next getCurrentUser to refetch.
 }
 
 export async function provisionManagedKey(): Promise<{ synced: boolean }> {

@@ -1,9 +1,15 @@
 /**
  * Tour Store
  *
- * Owns the guided-tour wizard state — the post-onboarding step-by-step
- * walkthrough. Coordinates with the checklist store for the
- * "take-product-tour" achievement.
+ * Owns the post-onboarding tour's *persistence* — completion flag, per-step
+ * completed/skipped sets. It has ZERO navigation and ZERO router access.
+ * The active step lives in the URL as `?tour=<step-id>`; anything that needs
+ * to know whether the tour is active reads the URL, not this store.
+ *
+ * The wizard UI derives the active step from `useSearch({ strict: false })`
+ * via `useTourNavigation()`. Step components observe the current pathname and
+ * either render their spotlight (right page) or a "navigate here to continue"
+ * modal (wrong page). The user owns the URL.
  */
 
 import { create } from "zustand";
@@ -14,26 +20,12 @@ import {
   upsertStringSetting,
   deleteSettingIfExists,
 } from "../lib/settingsPersistence";
-import {
-  TOUR_SETTINGS_KEYS,
-  ONBOARDING_STEPS,
-  getNextStepId,
-  getPreviousStepId,
-  stepRequiresWorkflowMode,
-  stepRequiresWorkflowBuilder,
-  stepRequiresChatMode,
-  stepRequiresSettingsMode,
-} from "../components/Onboarding/constants";
+import { TOUR_SETTINGS_KEYS } from "../components/Onboarding/constants";
 import type { OnboardingStepId } from "../components/Onboarding/types";
-import { useChatStore } from "./chatStore";
-import { useViewerStore } from "./viewerStore";
-import { useOnboardingChecklistStore } from "./onboardingChecklistStore";
 
 // ─── Store Interface ──────────────────────────────────────────────────────────
 
 interface TourState {
-  isWizardActive: boolean;
-  currentStepId: OnboardingStepId | null;
   completedSteps: Set<OnboardingStepId>;
   skippedSteps: Set<OnboardingStepId>;
   hasCompletedOnboarding: boolean;
@@ -42,28 +34,17 @@ interface TourState {
   isLoading: boolean;
 
   loadState: () => Promise<void>;
-  startWizard: () => Promise<void>;
-  resumeWizard: () => Promise<void>;
-  closeWizard: () => void;
-  goToStep: (stepId: OnboardingStepId) => void;
   completeStep: (stepId: OnboardingStepId) => Promise<void>;
   skipStep: (stepId: OnboardingStepId) => Promise<void>;
-  skipAll: () => Promise<void>;
-  nextStep: () => void;
-  previousStep: () => void;
-  restartWizard: () => Promise<void>;
+  /** Mark the tour as completed (sets flag + analytics + persists). */
+  markTourCompleted: () => Promise<void>;
+  /** Reset all per-step progress so the tour can be restarted from scratch. */
+  resetTourProgress: () => Promise<void>;
   saveTourState: () => Promise<void>;
   detectProjectCode: () => Promise<void>;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-async function promptApiKeyIfNeededAfterOnboarding(): Promise<void> {
-  const { useApiKeySetupStore } = await import("./apiKeySetupStore");
-  if (useApiKeySetupStore.getState().hasApiKey === true) return;
-  useApiKeySetupStore.setState({ hasChecked: false });
-  await useApiKeySetupStore.getState().ensureApiKeyOrShowModal();
-}
 
 async function detectHasCode(): Promise<boolean> {
   try {
@@ -80,8 +61,6 @@ async function detectHasCode(): Promise<boolean> {
 // ─── Store ────────────────────────────────────────────────────────────────────
 
 export const useTourStore = create<TourState>((set, get) => ({
-  isWizardActive: false,
-  currentStepId: null,
   completedSteps: new Set(),
   skippedSteps: new Set(),
   hasCompletedOnboarding: false,
@@ -95,18 +74,15 @@ export const useTourStore = create<TourState>((set, get) => ({
 
     const [
       tourCompletedSetting,
-      currentStepSetting,
       completedStepsSetting,
       skippedStepsSetting,
     ] = await Promise.all([
       safeGetSetting(TOUR_SETTINGS_KEYS.COMPLETED),
-      safeGetSetting(TOUR_SETTINGS_KEYS.CURRENT_STEP),
       safeGetSetting(TOUR_SETTINGS_KEYS.COMPLETED_STEPS),
       safeGetSetting(TOUR_SETTINGS_KEYS.SKIPPED_STEPS),
     ]);
 
     const hasCompletedOnboarding = tourCompletedSetting?.value === "true";
-    const currentStep = currentStepSetting?.value as OnboardingStepId | undefined;
 
     let completedSteps = new Set<OnboardingStepId>();
     if (completedStepsSetting?.value) {
@@ -120,43 +96,19 @@ export const useTourStore = create<TourState>((set, get) => ({
 
     set({
       hasCompletedOnboarding,
-      currentStepId: currentStep || null,
       completedSteps,
       skippedSteps,
       isInitialized: true,
       isLoading: false,
     });
-  },
 
-  startWizard: async () => {
-    set({
-      isWizardActive: true,
-      currentStepId: ONBOARDING_STEPS[0].id,
-      completedSteps: new Set(),
-      skippedSteps: new Set(),
-      hasCompletedOnboarding: false,
+    // Backwards-compat: a previous version of this store persisted the
+    // current step under TOUR_SETTINGS_KEYS.CURRENT_STEP. That value is no
+    // longer the source of truth (the URL is). Delete it on first load so
+    // the row doesn't linger forever — best-effort, swallow failures.
+    void deleteSettingIfExists(TOUR_SETTINGS_KEYS.CURRENT_STEP).catch(() => {
+      /* ignore */
     });
-    trackEvent('tour_started');
-    await get().saveTourState();
-    await get().detectProjectCode();
-  },
-
-  resumeWizard: async () => {
-    const state = get();
-    if (state.currentStepId) {
-      set({ isWizardActive: true });
-    } else {
-      await get().startWizard();
-    }
-  },
-
-  closeWizard: () => {
-    set({ isWizardActive: false });
-    get().saveTourState();
-  },
-
-  goToStep: (stepId: OnboardingStepId) => {
-    set({ currentStepId: stepId });
   },
 
   completeStep: async (stepId: OnboardingStepId) => {
@@ -175,98 +127,27 @@ export const useTourStore = create<TourState>((set, get) => ({
     await get().saveTourState();
   },
 
-  skipAll: async () => {
-    const viewerStore = useViewerStore.getState();
-    if (viewerStore.isWorkflowMode) {
-      viewerStore.setWorkflowMode(false);
-    }
-
-    trackEvent('tour_skipped_all', { completed_count: get().completedSteps.size });
-
-    set({
-      isWizardActive: false,
-      currentStepId: null,
+  markTourCompleted: async () => {
+    trackEvent('tour_completed', {
+      completed_count: get().completedSteps.size,
+      skipped_count: get().skippedSteps.size,
     });
-
-    void useOnboardingChecklistStore.getState().markComplete("take-product-tour");
-    void useOnboardingChecklistStore.getState().markWelcomeShown();
-
-    await upsertStringSetting(TOUR_SETTINGS_KEYS.SKIPPED_ALL, "true");
-    await get().saveTourState();
-
-    useChatStore.getState().clearCurrentChat();
-    void promptApiKeyIfNeededAfterOnboarding();
-  },
-
-  nextStep: () => {
-    const state = get();
-    if (!state.currentStepId) return;
-
-    const nextId = getNextStepId(state.currentStepId);
-    if (nextId) {
-      set({ currentStepId: nextId });
-      get().saveTourState();
-    } else {
-      const viewerStore = useViewerStore.getState();
-      viewerStore.setSettingsMode(false);
-      viewerStore.setWorkflowMode(false);
-
-      trackEvent('tour_completed', {
-        completed_count: get().completedSteps.size,
-        skipped_count: get().skippedSteps.size,
-      });
-
-      set({
-        isWizardActive: false,
-        hasCompletedOnboarding: true,
-        currentStepId: null,
-      });
-
+    set({ hasCompletedOnboarding: true });
+    // Coordinate with the achievement checklist — the wizard's onComplete
+    // path used to do this; keep it here so any caller that finishes the
+    // tour (wizard hook or external) gets consistent side effects.
+    try {
+      const { useOnboardingChecklistStore } = await import("./onboardingChecklistStore");
       void useOnboardingChecklistStore.getState().markComplete("take-product-tour");
       void useOnboardingChecklistStore.getState().markWelcomeShown();
-
-      get().saveTourState();
-
-      useChatStore.getState().clearCurrentChat();
-      void promptApiKeyIfNeededAfterOnboarding();
+    } catch {
+      /* ignore */
     }
+    await get().saveTourState();
   },
 
-  previousStep: () => {
-    const state = get();
-    if (!state.currentStepId) return;
-
-    const prevId = getPreviousStepId(state.currentStepId);
-    if (prevId) {
-      const viewerStore = useViewerStore.getState();
-
-      if (stepRequiresWorkflowMode(prevId)) {
-        viewerStore.setSettingsMode(false);
-        const workflowName = stepRequiresWorkflowBuilder(prevId) ? "builtin://agent" : undefined;
-        viewerStore.setWorkflowMode(true, workflowName);
-      } else if (stepRequiresSettingsMode(prevId)) {
-        viewerStore.setWorkflowMode(false);
-        viewerStore.setSettingsMode(true);
-      } else if (stepRequiresChatMode(prevId)) {
-        viewerStore.setSettingsMode(false);
-        viewerStore.setWorkflowMode(false);
-      } else {
-        viewerStore.setSettingsMode(false);
-        viewerStore.setWorkflowMode(false);
-      }
-
-      set({ currentStepId: prevId });
-      get().saveTourState();
-    }
-  },
-
-  restartWizard: async () => {
+  resetTourProgress: async () => {
     trackEvent('tour_restarted');
-    const viewerStore = useViewerStore.getState();
-    viewerStore.setSettingsMode(false);
-    viewerStore.setWorkflowMode(false);
-
-    useChatStore.getState().clearCurrentChat();
 
     try {
       await deleteSettingIfExists(TOUR_SETTINGS_KEYS.SKIPPED_ALL);
@@ -275,8 +156,6 @@ export const useTourStore = create<TourState>((set, get) => ({
     }
 
     set({
-      isWizardActive: true,
-      currentStepId: ONBOARDING_STEPS[0].id,
       completedSteps: new Set(),
       skippedSteps: new Set(),
       hasCompletedOnboarding: false,
@@ -285,11 +164,16 @@ export const useTourStore = create<TourState>((set, get) => ({
 
     // Clear checklist state without clobbering its isInitialized flag —
     // consumers like ContextualTipsLayer gate on isInitialized.
-    useOnboardingChecklistStore.setState({
-      completedItems: new Set(),
-      welcomeShown: false,
-      panelState: "expanded",
-    });
+    try {
+      const { useOnboardingChecklistStore } = await import("./onboardingChecklistStore");
+      useOnboardingChecklistStore.setState({
+        completedItems: new Set(),
+        welcomeShown: false,
+        panelState: "expanded",
+      });
+    } catch {
+      /* ignore */
+    }
     localStorage.removeItem("reliant.checklist.welcomeShown");
 
     await get().saveTourState();
@@ -303,9 +187,6 @@ export const useTourStore = create<TourState>((set, get) => ({
         TOUR_SETTINGS_KEYS.COMPLETED,
         state.hasCompletedOnboarding ? "true" : "false",
       );
-      if (state.currentStepId) {
-        await upsertStringSetting(TOUR_SETTINGS_KEYS.CURRENT_STEP, state.currentStepId);
-      }
       await upsertStringSetting(
         TOUR_SETTINGS_KEYS.COMPLETED_STEPS,
         JSON.stringify(Array.from(state.completedSteps)),

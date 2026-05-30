@@ -13,7 +13,6 @@ export type OnboardingStepId =
   | "workflow-hub"
   | "workflow-builder"
   | "workflow-builder-chat"
-  | "presets-and-params"
   | "completion";
 
 export type OnboardingStepType = "modal" | "spotlight" | "multi-spotlight";

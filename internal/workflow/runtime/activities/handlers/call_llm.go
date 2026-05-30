@@ -165,6 +165,13 @@ func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, a
 	// Add userID to context for API key loading
 	ctx = context.WithValue(ctx, auth.UserIDContextKey, chat.UserID)
 
+	// Hydrate the user's JWT into the in-memory auth map so the Reliant LLM
+	// driver can be resolved on workers that didn't see the originating gRPC
+	// request. The JWT travels through workflow inputs; see RuntimeContext.
+	if rtx.UserJWT != "" {
+		auth.SetUserJWT(chat.UserID, rtx.UserJWT)
+	}
+
 	// Load conversation history
 	history, err := a.loadConversationHistory(ctx, rtx.ChatID, thread, rtx.ContextSequence)
 	if err != nil {

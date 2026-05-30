@@ -1,0 +1,31 @@
+# buf.gen.controlplane.yaml — TypeScript codegen for the public controlplane.v1
+# proto subtree consumed by the web app (Connect-Web clients).
+#
+# Source: proto/controlplane/v1/public/ — canonical home of the public
+#   controlplane.v1 API. Control-plane consumes these files from this
+#   repo via a sibling-checkout symlink; see
+#   proto/controlplane/v1/public/README.md.
+# Output: web/src/gen/controlplane/v1/   (one *_pb.ts per service file plus
+#   shared_pb.ts; Connect service descriptors are embedded by protoc-gen-es,
+#   so no separate *_connect.ts is generated).
+#
+# This is a TS-only emit. Go code that talks to control-plane stays generated
+# from the local proto/controlplane/v1/admin.proto subset via buf.gen.yaml /
+# buf.gen-go-only.yaml. admin.proto and the public protos share package
+# controlplane.v1 but define overlapping symbols (BillingService,
+# ManagedReliantAccess, etc.), so the public subtree is excluded from the
+# default workspace module in buf.yaml and reached only by this template
+# (the npm script passes the workspace as the input and uses --path to
+# scope to the public subtree).
+#
+# Regenerate with:  npm run proto:generate:controlplane
+version: v2
+managed:
+  enabled: false
+plugins:
+  - remote: buf.build/bufbuild/es:v2.12.0
+    out: web/src/gen
+    include_imports: true
+    opt:
+      - target=ts
+      - ts_nocheck=true

@@ -22,6 +22,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/certs"
 	"github.com/reliant-labs/reliant/internal/daemonevents"
+	"github.com/reliant-labs/reliant/internal/daemonquery"
 	"github.com/reliant-labs/reliant/internal/db"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
@@ -209,6 +210,17 @@ func Run(ctx context.Context, opts Options) error {
 		"subjects", daemonevents.SubjectDaemonEventsAll,
 	)
 
+	// Pull-architecture status responder. Subscribes per-daemon to
+	// daemon.v1.query.<daemonID>.status when a connection is registered and
+	// answers from in-memory state. Subject-based routing means the
+	// control-plane's request reaches whichever gateway holds the bidi
+	// stream — no service registry, no DB column to keep in sync.
+	statusResponder := daemonquery.NewResponder(nc, toolsDaemonService)
+	toolsDaemonService.AddConnectionListener(statusResponder)
+	logging.Info("Daemon status responder started",
+		"subjectPattern", daemonquery.SubjectQueryPrefix+"<daemonID>.status",
+	)
+
 	// Daemon gRPC server (bidi streaming endpoint for tools-daemon connections)
 	daemonSrv := grpcserver.NewDaemonServer(&grpcserver.DaemonConfig{
 		Port:               opts.ToolsDaemonPort,
@@ -224,15 +236,19 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	logging.Info("Daemon gRPC server started", "port", opts.ToolsDaemonPort)
 
-	// Outbound daemon connector: subscribes to DAEMON_COMMANDS JetStream and
-	// initiates ConnectGateway streams to daemon pods on connect commands.
-	connector := NewDaemonConnector(js, toolsDaemonService)
+	// Outbound daemon connector: dial engine driven by ManagedDaemonReconciler.
+	// The connector publishes connect-failure events via the same
+	// daemonevents.Publisher used for connected/disconnected so the control
+	// plane can persist a reason on the daemon row.
+	connector := NewDaemonConnector(toolsDaemonService, eventPublisher)
+
+	managedReconciler := NewManagedDaemonReconciler(js, connector)
 	go func() {
-		if err := connector.Start(ctx); err != nil && ctx.Err() == nil {
-			logging.Error("DaemonConnector failed", "error", err)
+		if err := managedReconciler.Start(ctx); err != nil && ctx.Err() == nil {
+			logging.Error("ManagedDaemonReconciler failed", "error", err)
 		}
 	}()
-	logging.Info("Outbound daemon connector started")
+	logging.Info("Managed daemon reconciler started")
 
 	// -------------------------------------------------------------------------
 	// 4. Health endpoint

@@ -9,6 +9,7 @@ import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { useApiKeySetupStore } from "../../store/apiKeySetupStore";
 import { useChatParamsStore } from "../../store/chatParamsStore";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
+import { getAdminURL } from "@/lib/constants";
 import { ChatInput } from "./ChatInput";
 import { ReliantIcon } from "../icons/ReliantIcon";
 import { WorkflowStarterCards } from "../Onboarding/WorkflowStarterCards";
@@ -487,22 +488,37 @@ export function NewChatView({
       </div>
 
       {/* Message Input - Collapsible when not focused */}
-      {!daemonConnected && !daemonLoading && (
-        <div className="flex items-center justify-center gap-2 border-t border-yellow-500/20 bg-yellow-500/5 px-4 py-2.5 text-sm text-yellow-600 dark:text-yellow-400">
-          <Activity className="h-4 w-4" />
-          <span>
-            No daemon connected.{" "}
-            <button
-              type="button"
-              onClick={() => setShowConnectDaemonModal(true)}
-              className="font-medium underline underline-offset-2 hover:text-yellow-700 dark:hover:text-yellow-300"
-            >
-              Start a cloud daemon or run one locally
-            </button>{" "}
-            to begin chatting.
-          </span>
-        </div>
-      )}
+      {!daemonConnected && !daemonLoading && (() => {
+        const adminURL = getAdminURL();
+        const manageHref = adminURL ? `${adminURL.replace(/\/$/, "")}/workspaces` : undefined;
+        return (
+          <div className="flex items-center justify-center gap-2 border-t border-yellow-500/20 bg-yellow-500/5 px-4 py-2.5 text-sm text-yellow-600 dark:text-yellow-400">
+            <Activity className="h-4 w-4" />
+            <span>
+              No daemon connected.{" "}
+              {manageHref ? (
+                <a
+                  href={manageHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium underline underline-offset-2 hover:text-yellow-700 dark:hover:text-yellow-300"
+                >
+                  Manage daemons
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowConnectDaemonModal(true)}
+                  className="font-medium underline underline-offset-2 hover:text-yellow-700 dark:hover:text-yellow-300"
+                >
+                  Start a cloud daemon or run one locally
+                </button>
+              )}{" "}
+              to begin chatting.
+            </span>
+          </div>
+        );
+      })()}
       {isFocused ? (
         <div className="flex-shrink-0">
           <ChatInput

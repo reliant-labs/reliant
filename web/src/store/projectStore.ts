@@ -12,6 +12,63 @@ import { useChatNavigationStore } from "./chatNavigationStore";
 import { useGlobalDataStore } from "./globalDataStore";
 import { trackEvent } from "../lib/analytics";
 
+// Lazy router accessor — importing from ../routes at module-init time creates
+// a cycle (routes.tsx → App → ModernApp → projectStore → routes.tsx), which
+// reordered the module-init graph and broke an unrelated TDZ in chatStore.
+// By the time syncProjectUrl() runs (in response to a user action), routes.tsx
+// has long since finished loading; we read window.__RELIANT_ROUTER set by
+// routes.tsx during its own module init, or fall back to a dynamic import.
+//
+// The static-import-of-router pattern was the wrong answer; this accessor
+// + the registration on the router-side (see routes.tsx) is the right one.
+type RouterLike = {
+  state: { location: { pathname: string } };
+  navigate: (opts: { to: string; params?: unknown; search?: unknown }) => unknown;
+};
+function getRouter(): RouterLike | null {
+  const r = (globalThis as { __RELIANT_ROUTER?: RouterLike }).__RELIANT_ROUTER;
+  return r ?? null;
+}
+
+// Drive the URL to match the current project selection. The URL is the
+// canonical source of "which project am I in" now that `/project/$projectId`
+// is a real route. We compare the current pathname before navigating so we
+// don't loop when the route-param effect calls selectProject in response to a
+// URL change.
+function syncProjectUrl(projectId: string | null) {
+  try {
+    const router = getRouter();
+    if (!router) return; // routes.tsx hasn't registered yet — startup window
+    const currentPath = router.state.location.pathname;
+    if (projectId) {
+      const targetPrefix = `/project/${projectId}`;
+      if (currentPath === targetPrefix || currentPath.startsWith(`${targetPrefix}/`)) {
+        return;
+      }
+      // Skip navigating away from settings/workflow/auth routes — the user is
+      // doing something else and the project is just background context.
+      if (
+        currentPath.startsWith("/settings") ||
+        currentPath.startsWith("/workflow") ||
+        currentPath.startsWith("/auth") ||
+        currentPath.startsWith("/reset-password") ||
+        currentPath.startsWith("/verify-email") ||
+        currentPath.startsWith("/design-sandbox")
+      ) {
+        return;
+      }
+      router.navigate({ to: "/project/$projectId", params: { projectId } });
+    } else {
+      if (currentPath === "/" || currentPath.startsWith("/settings") || currentPath.startsWith("/workflow")) {
+        return;
+      }
+      router.navigate({ to: "/", search: {} });
+    }
+  } catch (err) {
+    logger.warn("[ProjectStore] Failed to sync project URL", err);
+  }
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -96,6 +153,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   },
 
   selectProject: async (project: Project, options?: { skipClear?: boolean; skipWorkspaceStateSave?: boolean }) => {
+    const prevProjectId = get().currentProject?.id ?? null;
+    const isProjectSwitch = prevProjectId !== null && prevProjectId !== project.id;
+
     // Clear worktrees and chats FIRST to avoid showing stale data
     // Skip clearing if this is initial window setup with context
     if (!options?.skipClear) {
@@ -108,6 +168,15 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     }
 
     set({ currentProject: project });
+
+    // Clear viewers when switching between projects (replaces the old
+    // setCurrentProject side-effect in viewerStore).
+    if (isProjectSwitch) {
+      useViewerStore.getState().clearViewersForProjectSwitch();
+    }
+
+    // Drive the URL to /project/$projectId so deep-linking + refresh works.
+    syncProjectUrl(project.id);
 
     trackEvent("project_opened", {
       projectId: project.id,
@@ -157,8 +226,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       useWorktreeStore.getState().restoreLastWorktree(project.id);
       const currentWorktreeId = useWorktreeStore.getState().currentWorktree?.id ?? null;
       
-      // Restore viewer state
-      useViewerStore.getState().setCurrentProject(project.id);
+      // Restore viewer state (project context is now read from projectStore.currentProject)
       useViewerStore.getState().restoreFromWorkspaceState(project.id, currentWorktreeId);
       
       // Restore chat navigation state
@@ -335,13 +403,19 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       await projectGrpc.delete(id);
 
       // Remove from local state
+      const wasCurrent = get().currentProject?.id === id;
       set((state) => ({
         projects: state.projects.filter((p) => p.id !== id),
         currentProject:
           state.currentProject?.id === id ? null : state.currentProject,
         isLoading: false,
       }));
-      
+
+      // If we deleted the current project, push the URL back to the picker.
+      if (wasCurrent) {
+        syncProjectUrl(null);
+      }
+
       // Clean up workspace state for deleted project
       useWorkspaceStateStore.getState().removeProjectState(id);
 

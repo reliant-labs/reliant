@@ -3,14 +3,18 @@ import { useNavigate } from "@tanstack/react-router";
 import { Github, Loader2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logger } from "@/lib/logger";
+import { supabase } from "@/lib/supabase";
 import { trackEvent } from "@/lib/analytics";
 import { useCompleteOnboarding } from "@/hooks/useOnboardingQueries";
+import { useGitHubCredential } from "@/hooks/useGitHubCredential";
+import { gitService } from "@/services/controlPlane/git";
 import { ensureProject, finalizeOnboardingSideEffects } from "../useOnboardingComplete";
 import type { LaunchPlan, StepProps } from "../types";
 
-export function ProjectChoiceStep({ plan, updatePlan, onNext }: StepProps) {
+export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
   const navigate = useNavigate();
   const completeOnboardingMutation = useCompleteOnboarding();
+  const { hasToken: hasGithubCredential } = useGitHubCredential();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,11 +60,29 @@ export function ProjectChoiceStep({ plan, updatePlan, onNext }: StepProps) {
     }
   }, [completeOnboardingMutation, navigate, plan, updatePlan]);
 
-  const handleConnectExisting = useCallback(() => {
+  const handleConnectExisting = useCallback(async () => {
     setError(null);
-    updatePlan({ intent: "existing_codebase" });
-    onNext();
-  }, [onNext, updatePlan]);
+    // Set intent first. If we already have a credential, derivation will
+    // immediately route to the github-connect step (repo picker) on the
+    // next render. If we don't, launch the custom OAuth flow with
+    // returnTo back to /; the picker step naturally appears once intent
+    // is set and the credential lands.
+    await updatePlan({ intent: "existing_codebase" });
+    if (hasGithubCredential) return;
+    setBusy(true);
+    try {
+      const oauthURL = gitService.getOAuthURL();
+      if (!oauthURL) throw new Error("Control plane URL not configured");
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Not signed in");
+      const returnTo = `${window.location.pathname}${window.location.search}`;
+      const params = new URLSearchParams({ token: session.access_token, returnTo });
+      window.location.href = `${oauthURL}?${params.toString()}`;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to start GitHub OAuth");
+      setBusy(false);
+    }
+  }, [hasGithubCredential, updatePlan]);
 
   return (
     <div className="space-y-6">
@@ -116,10 +138,10 @@ export function ProjectChoiceStep({ plan, updatePlan, onNext }: StepProps) {
           </div>
           <div className="min-w-0 space-y-1">
             <span className="block text-base font-semibold text-foreground">
-              Work on an existing project
+              Connect GitHub
             </span>
             <p className="text-xs leading-relaxed text-muted-foreground">
-              Connect GitHub and clone one of your repos into the cloud workspace.
+              Connect GitHub to work on an existing project.
             </p>
           </div>
         </button>

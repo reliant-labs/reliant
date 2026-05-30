@@ -73,6 +73,11 @@ service SettingsService {
   // SyncReliantProvider hydrates the Reliant provider API key from authenticated control-plane state.
   rpc SyncReliantProvider(SyncReliantProviderRequest) returns (SyncReliantProviderResponse) {}
 
+  // RotateReliantAPIKey rotates the caller's Reliant LiteLLM virtual key:
+  // deletes the existing key upstream (best-effort), mints a fresh one, and
+  // persists it server-side. The new key is not returned in the response.
+  rpc RotateReliantAPIKey(RotateReliantAPIKeyRequest) returns (RotateReliantAPIKeyResponse) {}
+
   // CompleteCodexOAuth exchanges an OAuth authorization code + PKCE verifier
   // and marks Codex as connected for the current user.
   rpc CompleteCodexOAuth(CompleteCodexOAuthRequest) returns (CompleteCodexOAuthResponse) {}
@@ -417,6 +422,13 @@ message SyncReliantProviderResponse {
   bool created_key = 5;
   bool rotated_key = 6;
   ProviderStatus provider = 7;
+}
+
+message RotateReliantAPIKeyRequest {}
+
+message RotateReliantAPIKeyResponse {
+  bool success = 1;
+  string message = 2;
 }
 
 message CompleteCodexOAuthRequest {

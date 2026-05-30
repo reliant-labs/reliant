@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { ExternalLink, BookOpen, FileText, Shield, Globe, Terminal, Calendar, Github, Slack, WandSparkles } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import { toast } from "../../lib/toast-manager";
 import { UpdateSection } from "./UpdateSection";
 import { systemGrpc } from "../../api/system-grpc";
 import { useTourStore } from "../../store/tourStore";
+import { ONBOARDING_STEPS } from "../Onboarding/constants";
 import { BrandMark } from "../icons/BrandMark";
 
 type LinkItem = {
@@ -24,6 +26,7 @@ export function AboutSection() {
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
   const [isInstallingCLI, setIsInstallingCLI] = useState(false);
   const isElectron = !!window.electronAPI;
+  const navigate = useNavigate();
 
   const handleInstallCLI = async () => {
     if (!window.electronAPI?.installCLI) return;
@@ -107,8 +110,13 @@ export function AboutSection() {
       icon: WandSparkles,
       label: "Restart Onboarding Guide",
       onClick: async () => {
-        const store = useTourStore.getState();
-        await store.restartWizard();
+        // Reset persisted progress, then drop the user on the home route
+        // with `?tour=<first-step>` — the wizard takes it from there.
+        await useTourStore.getState().resetTourProgress();
+        void navigate({
+          to: "/",
+          search: { tour: ONBOARDING_STEPS[0].id },
+        });
         toast.success("Onboarding guide has been reset");
       },
     },

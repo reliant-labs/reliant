@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/authStore'
 import { logger } from '@/lib/logger'
@@ -9,6 +9,7 @@ import { BrandMark } from './icons/BrandMark'
 
 export function OAuthCallback() {
   const navigate = useNavigate()
+  const search = useSearch({ from: '/auth/callback' })
   const { setUser, setSession } = useAuthStore()
   const [error, setError] = useState<string | null>(null)
   const exchanged = useRef(false)
@@ -18,10 +19,8 @@ export function OAuthCallback() {
     exchanged.current = true
 
     const handleCallback = async () => {
-      const url = new URL(window.location.href)
+      const { code, error: errorParam, error_description: errorDescription, source, returnTo } = search
 
-      const errorParam = url.searchParams.get('error')
-      const errorDescription = url.searchParams.get('error_description')
       if (errorParam) {
         let friendlyMessage = 'Authentication failed'
 
@@ -30,7 +29,7 @@ export function OAuthCallback() {
         } else if (errorDescription?.includes('denied') || errorDescription?.includes('cancelled')) {
           friendlyMessage = 'Authorization cancelled. Please try again.'
         } else if (errorDescription) {
-          friendlyMessage = decodeURIComponent(errorDescription.replace(/\+/g, ' '))
+          friendlyMessage = errorDescription.replace(/\+/g, ' ')
         }
 
         logger.error('[OAuthCallback] Error from provider', {
@@ -41,7 +40,6 @@ export function OAuthCallback() {
         return
       }
 
-      const code = url.searchParams.get('code')
       if (!code) {
         logger.error('[OAuthCallback] Missing authorization code in callback URL')
         setError('Invalid authentication callback. Please try signing in again.')
@@ -67,14 +65,6 @@ export function OAuthCallback() {
         // We AWAIT the sync (with retries) so the credential lands before the
         // user navigates to the main app and any "Reconnect GitHub" gates run.
         // Failures do not block navigation — banner UI surfaces them.
-        //
-        // OAuth round-trip state (the `source` and `returnTo` query params) is
-        // encoded into the redirect URL by linkGithubAccount /
-        // signInWithGithub before redirect, replacing the previous
-        // side-channel localStorage flags.
-        const source = url.searchParams.get('source')
-        const returnTo = url.searchParams.get('returnTo')
-
         const provider = data.user?.app_metadata?.provider
         logger.info('[OAuthCallback] post-OAuth session state', {
           provider,
@@ -86,19 +76,11 @@ export function OAuthCallback() {
           await githubCredentialSync.sync(data.session.provider_token, 'repo', trigger)
         }
 
-        if (returnTo) {
-          // Restore the originating URL (preserves onboarding step + plan
-          // search params). Only honor same-origin relative paths to avoid
-          // open-redirect issues.
-          try {
-            const decoded = decodeURIComponent(returnTo)
-            if (decoded.startsWith('/') && !decoded.startsWith('//')) {
-              window.location.assign(decoded)
-              return
-            }
-          } catch (err) {
-            logger.warn('[OAuthCallback] Failed to decode returnTo', err)
-          }
+        if (returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//')) {
+          // Restore the originating URL (preserves onboarding plan param).
+          // Only honor same-origin relative paths to avoid open-redirect issues.
+          window.location.assign(returnTo)
+          return
         }
 
         navigate({ to: '/', search: {} })
@@ -109,7 +91,7 @@ export function OAuthCallback() {
     }
 
     void handleCallback()
-  }, [navigate, setSession, setUser])
+  }, [navigate, search, setSession, setUser])
 
   if (error) {
     return (

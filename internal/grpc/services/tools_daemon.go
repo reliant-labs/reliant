@@ -29,10 +29,8 @@ import (
 const (
 	LOG_PREFIX_TOOLS_DAEMON = "[🔧 ToolsDaemon]"
 
-	// Heartbeat interval for keeping connections alive and for the stale sweep ticker.
+	// Heartbeat interval for keeping connections alive.
 	daemonHeartbeatInterval = 15 * time.Second
-	// Daemon is considered stale when no heartbeat has been seen for this duration (2× heartbeat).
-	daemonStaleAfter = 30 * time.Second
 )
 
 // ToolsDaemonService implements bidirectional streaming for tool execution.
@@ -50,9 +48,6 @@ type ToolsDaemonService struct {
 	// listeners are notified (outside the mutex) when daemons connect/disconnect.
 	listeners   []toolexec.DaemonConnectionListener
 	listenersMu sync.RWMutex
-
-	monitorCancel context.CancelFunc
-	monitorDone   chan struct{}
 
 	// userUpdateHub is used to publish ephemeral daemon heartbeat events
 	// to the frontend via the streaming connection. Set via SetUserUpdateHub.
@@ -116,38 +111,22 @@ type daemonConnection struct {
 	processOutputSubs   map[string][]chan *toolexec.ProcessOutputEvent
 }
 
-// NewToolsDaemonService creates a new ToolsDaemonService with a background
-// stale-daemon monitor goroutine. Use NewToolsDaemonServiceWithoutMonitor for
-// deployments (e.g. cloud api-server) that never accept daemon connections.
+// NewToolsDaemonService creates a new ToolsDaemonService.
+// Daemon connection routability is now derived from the daemon_attachment table,
+// so no background sweeper goroutine is required.
 func NewToolsDaemonService(database db.Repository) *ToolsDaemonService {
-	monitorCtx, monitorCancel := context.WithCancel(context.Background())
-
-	service := &ToolsDaemonService{
-		database:      database,
-		connections:   make(map[string]*daemonConnection),
-		userDaemons:   make(map[string][]string),
-		monitorCancel: monitorCancel,
-		monitorDone:   make(chan struct{}),
-	}
-
-	go service.runStaleDaemonMonitor(monitorCtx)
-
-	return service
-}
-
-// NewToolsDaemonServiceWithoutMonitor creates a ToolsDaemonService that does
-// not start the background stale-daemon monitor. This is intended for
-// environments (like cloud api-server replicas) where no daemons connect
-// directly, so the periodic DB sweep is unnecessary.
-func NewToolsDaemonServiceWithoutMonitor(database db.Repository) *ToolsDaemonService {
-	done := make(chan struct{})
-	close(done) // no monitor goroutine, so mark done immediately
 	return &ToolsDaemonService{
 		database:    database,
 		connections: make(map[string]*daemonConnection),
 		userDaemons: make(map[string][]string),
-		monitorDone: done,
 	}
+}
+
+// NewToolsDaemonServiceWithoutMonitor is retained as an alias for callers
+// that previously opted out of the stale-daemon monitor. The monitor has been
+// removed entirely; this now behaves identically to NewToolsDaemonService.
+func NewToolsDaemonServiceWithoutMonitor(database db.Repository) *ToolsDaemonService {
+	return NewToolsDaemonService(database)
 }
 
 // SetUserUpdateHub configures the hub used to publish ephemeral daemon
@@ -157,17 +136,9 @@ func (s *ToolsDaemonService) SetUserUpdateHub(hub streaming.UpdateHub[db.UserUpd
 }
 
 // Close stops background workers owned by the daemon service.
-func (s *ToolsDaemonService) Close() {
-	if s == nil {
-		return
-	}
-	if s.monitorCancel != nil {
-		s.monitorCancel()
-	}
-	if s.monitorDone != nil {
-		<-s.monitorDone
-	}
-}
+// Now a no-op (kept for API stability) — the sweeper goroutine was removed
+// when daemon lifecycle moved entirely to daemon_attachment.
+func (s *ToolsDaemonService) Close() {}
 
 // AddConnectionListener registers a listener that will be notified when
 // daemon connections are established or torn down. Safe to call before Start.
@@ -195,6 +166,24 @@ func (s *ToolsDaemonService) notifyDisconnected(userID, daemonID string) {
 	for _, l := range s.listeners {
 		l.OnDaemonDisconnected(userID, daemonID)
 	}
+}
+
+// DaemonStatus implements daemonquery.StatusSource. Returns the connection's
+// lastActivity timestamp and daemonType if this gateway currently holds a
+// stream for the daemon. ok=false means no connection — the caller's NATS
+// status query will time out and the caller will treat the daemon as
+// disconnected, which is correct.
+//
+// Reads from the connections map under the read lock; safe for high QPS as
+// long as listeners don't fan out into it under the write lock (they don't).
+func (s *ToolsDaemonService) DaemonStatus(daemonID string) (lastActive time.Time, daemonType string, ok bool) {
+	s.mu.RLock()
+	conn, found := s.connections[daemonID]
+	s.mu.RUnlock()
+	if !found {
+		return time.Time{}, "", false
+	}
+	return conn.lastActivity, conn.daemonType, true
 }
 
 // publishDaemonHeartbeat publishes an ephemeral daemon heartbeat event
@@ -228,91 +217,6 @@ func (c *daemonConnection) closeDone() {
 	c.doneOnce.Do(func() {
 		close(c.done)
 	})
-}
-
-func (s *ToolsDaemonService) runStaleDaemonMonitor(ctx context.Context) {
-	defer close(s.monitorDone)
-
-	ticker := time.NewTicker(daemonHeartbeatInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if err := s.sweepStaleDaemons(ctx, time.Now().UTC()); err != nil {
-				logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed stale-daemon sweep", "error", err)
-			}
-		}
-	}
-}
-
-func (s *ToolsDaemonService) sweepStaleDaemons(ctx context.Context, now time.Time) error {
-	cutoff := now.Add(-daemonStaleAfter)
-	staleDaemons, err := s.database.ListStaleActiveDaemons(ctx, cutoff)
-	if err != nil {
-		return err
-	}
-	if len(staleDaemons) == 0 {
-		return nil
-	}
-
-	daemonIDs := make([]string, 0, len(staleDaemons))
-	daemonIDSet := make(map[string]struct{}, len(staleDaemons))
-	for _, daemon := range staleDaemons {
-		if daemon == nil || strings.TrimSpace(daemon.ID) == "" {
-			continue
-		}
-		daemonIDs = append(daemonIDs, daemon.ID)
-		daemonIDSet[daemon.ID] = struct{}{}
-	}
-	if len(daemonIDs) == 0 {
-		return nil
-	}
-
-	if err := s.database.MarkDaemonsDisconnected(ctx, daemonIDs, now); err != nil {
-		return err
-	}
-
-	type removedConn struct{ userID, daemonID string }
-	var removed []removedConn
-	s.mu.Lock()
-	for dID, conn := range s.connections {
-		if conn == nil {
-			continue
-		}
-		if _, ok := daemonIDSet[dID]; !ok {
-			continue
-		}
-		delete(s.connections, dID)
-		// Remove from userDaemons secondary index.
-		uIDs := s.userDaemons[conn.userID]
-		for i, id := range uIDs {
-			if id == dID {
-				s.userDaemons[conn.userID] = append(uIDs[:i], uIDs[i+1:]...)
-				break
-			}
-		}
-		if len(s.userDaemons[conn.userID]) == 0 {
-			delete(s.userDaemons, conn.userID)
-		}
-		conn.closeDone()
-		removed = append(removed, removedConn{conn.userID, dID})
-	}
-	s.mu.Unlock()
-
-	// Notify listeners outside the mutex.
-	for _, rc := range removed {
-		s.notifyDisconnected(rc.userID, rc.daemonID)
-	}
-
-	logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Marked stale daemons disconnected",
-		"count", len(daemonIDs),
-		"cutoff", cutoff.Format(time.RFC3339),
-	)
-
-	return nil
 }
 
 func daemonRegistrationUserID(ctx context.Context, reg *reliantv1.DaemonRegister) (string, error) {
@@ -374,19 +278,26 @@ func (s *ToolsDaemonService) ConnectDaemon(
 	}
 
 	if err := s.database.UpsertDaemon(ctx, &db.Daemon{
-		ID:            daemonID,
-		UserID:        userID,
-		Hostname:      daemonStringPtrOrNil(reg.Hostname),
-		Platform:      daemonStringPtrOrNil(reg.Platform),
-		Status:        db.DaemonStatusActive,
-		Capabilities:  capabilitiesJSON,
-		ProjectPaths:  projectPathsJSON,
-		DaemonType:    normalizeRegisteredDaemonType(reg.GetDaemonType()),
-		ConnectedAt:   &now,
-		LastHeartbeat: &now,
+		ID:           daemonID,
+		UserID:       userID,
+		Hostname:     daemonStringPtrOrNil(reg.Hostname),
+		Platform:     daemonStringPtrOrNil(reg.Platform),
+		Capabilities: capabilitiesJSON,
+		ProjectPaths: projectPathsJSON,
+		DaemonType:   normalizeRegisteredDaemonType(reg.GetDaemonType()),
 	}); err != nil {
 		logging.Error(LOG_PREFIX_TOOLS_DAEMON+" Failed to persist daemon registration", "error", err, "daemonID", daemonID)
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to persist daemon registration: %w", err))
+	}
+
+	if err := s.database.UpsertDaemonAttachment(ctx, &db.DaemonAttachment{
+		DaemonID:           daemonID,
+		UserID:             userID,
+		Source:             db.DaemonAttachmentSourceInbound,
+		AttachedAt:         now,
+		LastStreamActivity: now,
+	}); err != nil {
+		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to upsert daemon attachment", "error", err, "daemonID", daemonID)
 	}
 
 	logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Daemon registered",
@@ -499,13 +410,17 @@ func (s *ToolsDaemonService) ConnectDaemon(
 		s.notifyDisconnected(userID, daemonID)
 	}
 
-	disconnectedAt := time.Now().UTC()
-	if err := s.database.UpdateDaemonStatus(context.Background(), daemonID, db.DaemonStatusDisconnected, nil, nil, &disconnectedAt); err != nil {
-		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to mark daemon disconnected", "daemonID", daemonID, "error", err)
+	if err := s.database.DeleteDaemonAttachment(context.Background(), daemonID); err != nil {
+		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to delete daemon attachment", "error", err, "daemonID", daemonID)
 	}
 
 	logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Daemon disconnected", "userID", userID)
 	return err
+}
+
+// Repo returns the underlying repository. Used by the daemon connector for resync queries.
+func (s *ToolsDaemonService) Repo() db.Repository {
+	return s.database
 }
 
 // RegisterOutboundConnection registers an outbound gateway→daemon connection.
@@ -515,7 +430,8 @@ func (s *ToolsDaemonService) ConnectDaemon(
 // The caller is responsible for running the receive loop via HandleIncomingLoop.
 func (s *ToolsDaemonService) RegisterOutboundConnection(
 	ctx context.Context,
-	userID, daemonID string,
+	userID, daemonID, podIP string,
+	podPort int,
 	reg *reliantv1.DaemonRegister,
 	stream *connect.BidiStreamForClient[reliantv1.ServerMessage, reliantv1.DaemonMessage],
 ) (*OutboundConn, error) {
@@ -530,17 +446,26 @@ func (s *ToolsDaemonService) RegisterOutboundConnection(
 	}
 
 	if err := s.database.UpsertDaemon(ctx, &db.Daemon{
-		ID:            daemonID,
-		UserID:        userID,
-		Hostname:      daemonStringPtrOrNil(reg.Hostname),
-		Platform:      daemonStringPtrOrNil(reg.Platform),
-		Status:        db.DaemonStatusActive,
-		Capabilities:  capabilitiesJSON,
-		DaemonType:    normalizeRegisteredDaemonType(reg.GetDaemonType()),
-		ConnectedAt:   &now,
-		LastHeartbeat: &now,
+		ID:           daemonID,
+		UserID:       userID,
+		Hostname:     daemonStringPtrOrNil(reg.Hostname),
+		Platform:     daemonStringPtrOrNil(reg.Platform),
+		Capabilities: capabilitiesJSON,
+		DaemonType:   normalizeRegisteredDaemonType(reg.GetDaemonType()),
 	}); err != nil {
 		return nil, fmt.Errorf("failed to persist daemon registration: %w", err)
+	}
+
+	if err := s.database.UpsertDaemonAttachment(ctx, &db.DaemonAttachment{
+		DaemonID:           daemonID,
+		UserID:             userID,
+		Source:             db.DaemonAttachmentSourceOutbound,
+		PodIP:              &podIP,
+		PodPort:            &podPort,
+		AttachedAt:         now,
+		LastStreamActivity: now,
+	}); err != nil {
+		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to upsert daemon attachment", "error", err, "daemonID", daemonID)
 	}
 
 	conn := &daemonConnection{
@@ -628,9 +553,8 @@ func (o *OutboundConn) Disconnect() {
 		o.service.notifyDisconnected(userID, daemonID)
 	}
 
-	disconnectedAt := time.Now().UTC()
-	if err := o.service.database.UpdateDaemonStatus(context.Background(), daemonID, db.DaemonStatusDisconnected, nil, nil, &disconnectedAt); err != nil {
-		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to mark daemon disconnected (outbound)", "daemonID", daemonID, "error", err)
+	if err := o.service.database.DeleteDaemonAttachment(context.Background(), daemonID); err != nil {
+		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to delete daemon attachment", "error", err, "daemonID", daemonID)
 	}
 }
 
@@ -675,10 +599,16 @@ func (s *ToolsDaemonService) handleIncoming(ctx context.Context, conn *daemonCon
 
 		case *reliantv1.DaemonMessage_Heartbeat:
 			now := time.Now().UTC()
-			if err := s.database.UpdateDaemonHeartbeat(ctx, conn.daemonID, now); err != nil {
-				logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to update heartbeat", "daemonID", conn.daemonID, "error", err)
+			if err := s.database.TouchDaemonAttachment(ctx, conn.daemonID, now); err != nil {
+				logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to touch daemon attachment", "error", err, "daemonID", conn.daemonID)
 			}
 			s.publishDaemonHeartbeat(ctx, conn.userID, conn.daemonID, now)
+			// Update lastActivity so the pull-RPC status responder returns
+			// fresh data. The pull architecture replaced the per-heartbeat
+			// NATS fan-out — the subscription itself is the heartbeat now.
+			s.mu.Lock()
+			conn.lastActivity = now
+			s.mu.Unlock()
 
 		case *reliantv1.DaemonMessage_ProjectDiscovery:
 			if err := s.handleProjectDiscovery(ctx, conn, m.ProjectDiscovery); err != nil {

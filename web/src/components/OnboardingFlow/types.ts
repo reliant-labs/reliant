@@ -61,7 +61,7 @@ export interface StepConfig {
 
 export interface StepProps {
   plan: Partial<LaunchPlan>;
-  updatePlan: (updates: Partial<LaunchPlan>) => void;
+  updatePlan: (updates: Partial<LaunchPlan>) => Promise<void> | void;
   onNext: () => void;
   onBack: () => void;
 }
