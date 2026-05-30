@@ -271,6 +271,15 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	if tc != nil && model.CelStringIsSet(tc.GetPermission()) {
 		permission = model.CelStringValue(tc.GetPermission())
 	}
+	// Cap permission to parent's level for spawned workflows.
+	// A plan-mode parent should not spawn a child with mutating permission.
+	if rtx.ParentPermission != "" && !tools.PermissionAtLeast(rtx.ParentPermission, permission) {
+		activity.GetLogger(ctx).Info("[CallLLM] Capping child permission to parent level",
+			"child_permission", permission,
+			"parent_permission", rtx.ParentPermission,
+			"thread", thread)
+		permission = rtx.ParentPermission
+	}
 	if chat != nil {
 		tools.GetLoadedToolsStore().SetPermission(chat.ID, permission)
 	}

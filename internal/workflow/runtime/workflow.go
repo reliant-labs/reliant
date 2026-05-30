@@ -1991,12 +1991,22 @@ func splitProtoToolCalls(toolCalls []*reliantv1.ToolCallMsg) protoToolCallSplit 
 //
 // Model values must be selector objects ({"id":"gpt-5.3-codex"}, {"tags":[...]}).
 // String model values are normalized to {"id": string} objects.
+//
+// parent_permission is propagated so the child's resolved permission is capped
+// to be at most as permissive as the parent's.
 func buildSpawnChildInputs(workflowInputs map[string]interface{}) map[string]interface{} {
 	childInputs := map[string]interface{}{}
 
 	mode := getModeFromInputs(workflowInputs)
 	if mode != "" {
 		childInputs["mode"] = mode
+	}
+
+	// Derive parent_permission so child permission is capped to parent's level.
+	// If the parent already has a parent_permission (chained spawn), propagate the
+	// most restrictive. Otherwise derive from mode.
+	if parentPerm := resolveParentPermission(workflowInputs); parentPerm != "" {
+		childInputs["parent_permission"] = parentPerm
 	}
 
 	if workflowInputs == nil {
@@ -2018,6 +2028,32 @@ func buildSpawnChildInputs(workflowInputs map[string]interface{}) map[string]int
 
 	childInputs["model"] = deepCopyJSONLike(model)
 	return childInputs
+}
+
+// resolveParentPermission determines the effective permission level of the parent workflow.
+// It checks for an explicitly inherited parent_permission first (chained spawns),
+// then falls back to deriving from mode.
+func resolveParentPermission(workflowInputs map[string]interface{}) string {
+	if workflowInputs == nil {
+		return ""
+	}
+
+	// If parent itself has a parent_permission constraint, propagate it
+	if pp, ok := workflowInputs["parent_permission"].(string); ok && pp != "" {
+		return pp
+	}
+
+	// Derive from mode: plan mode = readonly, otherwise mutating
+	// These match the permission constants in internal/llm/tools/permissions.go
+	mode := getModeFromInputs(workflowInputs)
+	switch mode {
+	case "plan":
+		return "readonly"
+	case "manual", "auto":
+		return "mutating"
+	default:
+		return "" // Unknown mode, don't constrain
+	}
 }
 
 // deepCopyJSONLike performs a deep copy for JSON-like values used in workflow inputs.
@@ -2299,17 +2335,21 @@ func executeSpawnInline(
 		}
 	}
 
+	// Resolve parent permission for the child to inherit
+	parentPermission := resolveParentPermission(workflowInputs)
+
 	childExecContext := &ExecutionContext{
-		WorkflowID:   config.childWorkflowID,
-		ChatID:       chatID,
-		WorkflowName: targetWorkflow,
-		Thread:       config.childThread,
-		ThreadMode:   threadMode,
-		ThreadTitle:  threadTitle,
-		ForkedFrom:   forkedFrom,
-		ParentThread: parentThread,
-		ProjectPath:  projectPath, // Always inherit from parent
-		SpawnDepth:   parentSpawnDepth + 1,
+		WorkflowID:       config.childWorkflowID,
+		ChatID:           chatID,
+		WorkflowName:     targetWorkflow,
+		Thread:           config.childThread,
+		ThreadMode:       threadMode,
+		ThreadTitle:      threadTitle,
+		ForkedFrom:       forkedFrom,
+		ParentThread:     parentThread,
+		ProjectPath:      projectPath, // Always inherit from parent
+		SpawnDepth:       parentSpawnDepth + 1,
+		ParentPermission: parentPermission,
 		Parent: &ParentContext{
 			WorkflowID: parentWorkflowID,
 			StepPath:   "spawn_tool",
@@ -2359,6 +2399,9 @@ func executeSpawnInline(
 		SpawnedByToolCallID: config.toolCallID,
 	})
 
+	// Emit per-tool-call "executing" status so the UI shows this spawn as active
+	notifyToolCallStatus(ctx, chatID, config.toolCallID, config.toolCallID, "spawn", "executing")
+
 	// Retry loop for transient errors (worker restarts, heartbeat timeouts).
 	// Spawn tool calls are long-running and must survive any number of worker restarts.
 	// Unlike regular activities, workflow.Go() goroutines are NOT automatically retried
@@ -2392,6 +2435,7 @@ func executeSpawnInline(
 			notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, targetWorkflow, "failed", parentWorkflowID, config.childThread, &workflowStatusOpts{
 				SpawnedByToolCallID: config.toolCallID,
 			})
+			notifyToolCallStatus(ctx, chatID, config.toolCallID, config.toolCallID, "spawn", "failed")
 			return &spawnInlineResult{
 				ToolCallID: config.toolCallID,
 				Content:    fmt.Sprintf("Failed to create spawn executor: %v", err),
@@ -2450,6 +2494,7 @@ func executeSpawnInline(
 		notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, targetWorkflow, "failed", parentWorkflowID, config.childThread, &workflowStatusOpts{
 			SpawnedByToolCallID: config.toolCallID,
 		})
+		notifyToolCallStatus(ctx, chatID, config.toolCallID, config.toolCallID, "spawn", "failed")
 		return &spawnInlineResult{
 			ToolCallID: config.toolCallID,
 			Content:    fmt.Sprintf("Spawned workflow failed: %v", execErr),
@@ -2461,6 +2506,9 @@ func executeSpawnInline(
 	notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, targetWorkflow, "completed", parentWorkflowID, config.childThread, &workflowStatusOpts{
 		SpawnedByToolCallID: config.toolCallID,
 	})
+
+	// Emit per-tool-call "completed" status so the UI marks this spawn as done
+	notifyToolCallStatus(ctx, chatID, config.toolCallID, config.toolCallID, "spawn", "completed")
 
 	// Fetch the last message from the child's thread as the spawn result
 	result := fetchSpawnResult(ctx, chatID, config.childThread, config.toolCallID)
@@ -3049,6 +3097,38 @@ func notifyWorkflowStatus(ctx workflow.Context, chatID, workflowID, workflowName
 		logger.Info("[Workflow Runtime] Notified workflow status",
 			"status", status,
 			"workflowID", workflowID)
+	}
+}
+
+// notifyToolCallStatus emits a tool call status update so the UI can show
+// per-tool-call progress (e.g. spawn tool calls starting/completing independently).
+// Fire-and-forget: errors are logged but don't fail the workflow.
+func notifyToolCallStatus(ctx workflow.Context, chatID, contentBlockID, toolCallID, toolName, status string) {
+	logger := workflow.GetLogger(ctx)
+
+	activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 5 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    5 * time.Second,
+			MaximumAttempts:    2,
+		},
+	})
+
+	input := map[string]interface{}{
+		"chat_id":          chatID,
+		"content_block_id": contentBlockID,
+		"tool_call_id":     toolCallID,
+		"tool_name":        toolName,
+		"status":           status,
+	}
+
+	var result map[string]interface{}
+	err := workflow.ExecuteActivity(activityCtx, "EmitToolCallStatus", input).Get(ctx, &result)
+	if err != nil {
+		logger.Warn("[notifyToolCallStatus] Failed",
+			"toolCallID", toolCallID, "status", status, "error", err)
 	}
 }
 

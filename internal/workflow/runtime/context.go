@@ -54,6 +54,11 @@ type ExecutionContext struct {
 	// 0 = top-level (not spawned), 1 = spawned child, 2 = grandchild, etc.
 	SpawnDepth int
 
+	// ParentPermission is the permission level of the parent workflow that spawned this one.
+	// The child's resolved permission is capped to be at most this permissive.
+	// Empty means no constraint (root workflow).
+	ParentPermission string
+
 	// Parent context - set for child workflows
 	// nil if this is a root workflow
 	Parent *ParentContext
@@ -258,9 +263,10 @@ func (ctx *ExecutionContext) ForIteration(iteration int, reuseThread bool) *Exec
 		ParentThread:   ctx.ParentThread,   // Preserve parent thread chain
 		ProjectPath:    ctx.ProjectPath,    // Inherit project path (can be overridden by loop's project config)
 		DaemonSelector: ctx.DaemonSelector, // Inherit daemon selector
-		SpawnDepth:     ctx.SpawnDepth,     // Inherit spawn depth (iterations don't increase depth)
-		Parent:         ctx.Parent,
-		UserJWT:        ctx.UserJWT, // Reliant provider is JWT-gated; dropping it here would exclude it from availableProviders inside the loop.
+		SpawnDepth:       ctx.SpawnDepth,       // Inherit spawn depth (iterations don't increase depth)
+		ParentPermission: ctx.ParentPermission, // Inherit parent permission cap
+		Parent:           ctx.Parent,
+		UserJWT:          ctx.UserJWT, // Reliant provider is JWT-gated; dropping it here would exclude it from availableProviders inside the loop.
 	}
 
 	if reuseThread {
@@ -294,9 +300,10 @@ func (ctx *ExecutionContext) ForChild(stepID string, mode string, workflowName s
 		ParentThread:   ctx.Thread,         // Always track parent's thread for save_message
 		ProjectPath:    ctx.ProjectPath,    // Inherit project path (can be overridden by node's project config)
 		DaemonSelector: ctx.DaemonSelector, // Inherit daemon selector (can be overridden by node's daemon field)
-		SpawnDepth:     ctx.SpawnDepth,     // Inherit spawn depth (inline children don't increase depth)
-		Loop:           ctx.Loop,           // Inherit loop context
-		UserJWT:        ctx.UserJWT,        // Reliant provider is JWT-gated; child contexts must carry it.
+		SpawnDepth:       ctx.SpawnDepth,       // Inherit spawn depth (inline children don't increase depth)
+		ParentPermission: ctx.ParentPermission, // Inherit parent permission cap
+		Loop:             ctx.Loop,             // Inherit loop context
+		UserJWT:          ctx.UserJWT,          // Reliant provider is JWT-gated; child contexts must carry it.
 		Parent: &ParentContext{
 			WorkflowID: ctx.WorkflowID,
 			StepPath:   stepID,
