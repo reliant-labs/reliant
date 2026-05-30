@@ -3,6 +3,7 @@ package tools
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -56,18 +57,17 @@ func TestComponentLibraryCategories(t *testing.T) {
 		counts[entry.Category]++
 	}
 
-	expected := map[components.Category]int{
-		components.CategoryLayouts:  11,
-		components.CategoryCharts:   6,
-		components.CategoryDiagrams: 5,
-		components.CategoryDeck:     7,
-		components.CategoryUI:       32,
-	}
-
-	for cat, want := range expected {
-		got := counts[cat]
-		if got != want {
-			t.Errorf("category %q: expected %d components, got %d", cat, want, got)
+	// Each canonical category must be non-empty. Exact counts drift as forge
+	// adds components — assert presence, not magic numbers.
+	for _, cat := range []components.Category{
+		components.CategoryLayouts,
+		components.CategoryCharts,
+		components.CategoryDiagrams,
+		components.CategoryDeck,
+		components.CategoryUI,
+	} {
+		if counts[cat] == 0 {
+			t.Errorf("category %q has no components", cat)
 		}
 	}
 }
@@ -160,23 +160,35 @@ func TestComponentLibrarySearch(t *testing.T) {
 
 func TestComponentLibraryList(t *testing.T) {
 	tool := &componentLibraryTool{}
+	lib := components.NewLibrary()
 
-	// List all
+	// list("") should report the registry's actual total. Derived from the
+	// library at test time so additions don't break the assertion.
+	total := len(lib.Registry())
 	resp, err := tool.list("", "")
 	if err != nil {
 		t.Fatalf("list all: %v", err)
 	}
-	if !strings.Contains(resp.Content, "61 components") {
-		t.Errorf("list all should show 61 components, got: %s", resp.Content[:100])
+	wantAll := fmt.Sprintf("%d components", total)
+	if !strings.Contains(resp.Content, wantAll) {
+		t.Errorf("list all should report %q, got: %s", wantAll, resp.Content[:min(len(resp.Content), 200)])
 	}
 
-	// List filtered by category
+	// list("", category) should match the count of components with that
+	// category in the registry — again derived, not hardcoded.
+	var deckCount int
+	for _, e := range lib.Registry() {
+		if e.Category == components.CategoryDeck {
+			deckCount++
+		}
+	}
 	resp, err = tool.list("", "deck")
 	if err != nil {
 		t.Fatalf("list category=deck: %v", err)
 	}
-	if !strings.Contains(resp.Content, "7 components") {
-		t.Errorf("list category=deck should show 7 components")
+	wantDeck := fmt.Sprintf("%d components", deckCount)
+	if !strings.Contains(resp.Content, wantDeck) {
+		t.Errorf("list category=deck should report %q, got: %s", wantDeck, resp.Content[:min(len(resp.Content), 200)])
 	}
 }
 

@@ -22,6 +22,7 @@ service LLMGatewayService {
   rpc RotateLLMKey(RotateLLMKeyRequest) returns (RotateLLMKeyResponse) {}
   rpc GetLLMSpend(GetLLMSpendRequest) returns (GetLLMSpendResponse) {}
   rpc ListAvailableModels(ListAvailableModelsRequest) returns (ListAvailableModelsResponse) {}
+  rpc IssueMyReliantAPIKey(IssueMyReliantAPIKeyRequest) returns (IssueMyReliantAPIKeyResponse) {}
 }
 
 message CreateLLMKeyRequest {
@@ -87,4 +88,10 @@ message ListAvailableModelsRequest {
 
 message ListAvailableModelsResponse {
   repeated string models = 1;
+}
+
+message IssueMyReliantAPIKeyRequest {}
+
+message IssueMyReliantAPIKeyResponse {
+  string key = 1;
 }

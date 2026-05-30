@@ -41,6 +41,10 @@ service BillingService {
   rpc RotateCurrentUserReliantAccess(RotateCurrentUserReliantAccessRequest) returns (RotateCurrentUserReliantAccessResponse) {}
   rpc GetCurrentUserReliantOverview(GetCurrentUserReliantOverviewRequest) returns (GetCurrentUserReliantOverviewResponse) {}
 
+  // Mints / fetches the caller's opaque rlnt_ Reliant API key. Idempotent: returns
+  // the existing active key plaintext if one exists, otherwise creates a fresh one.
+  rpc IssueMyReliantAPIKey(BillingIssueMyReliantAPIKeyRequest) returns (BillingIssueMyReliantAPIKeyResponse) {}
+
   // Workspace compute plan (per-user).
   rpc GetCurrentUserComputeSubscription(GetCurrentUserComputeSubscriptionRequest) returns (GetCurrentUserComputeSubscriptionResponse) {}
   rpc SetCurrentUserComputeOverage(SetCurrentUserComputeOverageRequest) returns (SetCurrentUserComputeOverageResponse) {}
@@ -50,6 +54,14 @@ service BillingService {
   rpc GetUsageSummary(GetUsageSummaryRequest) returns (GetUsageSummaryResponse) {}
   rpc GetComputeUsage(GetComputeUsageRequest) returns (GetComputeUsageResponse) {}
   rpc GetInvoicePreview(GetInvoicePreviewRequest) returns (GetInvoicePreviewResponse) {}
+}
+
+message BillingIssueMyReliantAPIKeyRequest {}
+
+message BillingIssueMyReliantAPIKeyResponse {
+  // plaintext_key is the rlnt_-prefixed API key the caller should use against
+  // the Reliant proxy. Idempotent: returns the existing active key if present.
+  string plaintext_key = 1;
 }
 
 message ListPlansRequest {

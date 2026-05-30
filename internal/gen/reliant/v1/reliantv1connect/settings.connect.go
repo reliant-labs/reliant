@@ -83,9 +83,6 @@ const (
 	// SettingsServiceSyncReliantProviderProcedure is the fully-qualified name of the SettingsService's
 	// SyncReliantProvider RPC.
 	SettingsServiceSyncReliantProviderProcedure = "/reliant.v1.SettingsService/SyncReliantProvider"
-	// SettingsServiceRotateReliantAPIKeyProcedure is the fully-qualified name of the SettingsService's
-	// RotateReliantAPIKey RPC.
-	SettingsServiceRotateReliantAPIKeyProcedure = "/reliant.v1.SettingsService/RotateReliantAPIKey"
 	// SettingsServiceCompleteCodexOAuthProcedure is the fully-qualified name of the SettingsService's
 	// CompleteCodexOAuth RPC.
 	SettingsServiceCompleteCodexOAuthProcedure = "/reliant.v1.SettingsService/CompleteCodexOAuth"
@@ -161,10 +158,6 @@ type SettingsServiceClient interface {
 	ValidateProviderAPIKey(context.Context, *connect.Request[v1.ValidateProviderAPIKeyRequest]) (*connect.Response[v1.ValidateProviderAPIKeyResponse], error)
 	// SyncReliantProvider hydrates the Reliant provider API key from authenticated control-plane state.
 	SyncReliantProvider(context.Context, *connect.Request[v1.SyncReliantProviderRequest]) (*connect.Response[v1.SyncReliantProviderResponse], error)
-	// RotateReliantAPIKey rotates the caller's Reliant LiteLLM virtual key:
-	// deletes the existing key upstream (best-effort), mints a fresh one, and
-	// persists it server-side. The new key is not returned in the response.
-	RotateReliantAPIKey(context.Context, *connect.Request[v1.RotateReliantAPIKeyRequest]) (*connect.Response[v1.RotateReliantAPIKeyResponse], error)
 	// CompleteCodexOAuth exchanges an OAuth authorization code + PKCE verifier
 	// and marks Codex as connected for the current user.
 	CompleteCodexOAuth(context.Context, *connect.Request[v1.CompleteCodexOAuthRequest]) (*connect.Response[v1.CompleteCodexOAuthResponse], error)
@@ -302,12 +295,6 @@ func NewSettingsServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(settingsServiceMethods.ByName("SyncReliantProvider")),
 			connect.WithClientOptions(opts...),
 		),
-		rotateReliantAPIKey: connect.NewClient[v1.RotateReliantAPIKeyRequest, v1.RotateReliantAPIKeyResponse](
-			httpClient,
-			baseURL+SettingsServiceRotateReliantAPIKeyProcedure,
-			connect.WithSchema(settingsServiceMethods.ByName("RotateReliantAPIKey")),
-			connect.WithClientOptions(opts...),
-		),
 		completeCodexOAuth: connect.NewClient[v1.CompleteCodexOAuthRequest, v1.CompleteCodexOAuthResponse](
 			httpClient,
 			baseURL+SettingsServiceCompleteCodexOAuthProcedure,
@@ -407,7 +394,6 @@ type settingsServiceClient struct {
 	updateProviderAPIKey        *connect.Client[v1.UpdateProviderAPIKeyRequest, v1.UpdateProviderAPIKeyResponse]
 	validateProviderAPIKey      *connect.Client[v1.ValidateProviderAPIKeyRequest, v1.ValidateProviderAPIKeyResponse]
 	syncReliantProvider         *connect.Client[v1.SyncReliantProviderRequest, v1.SyncReliantProviderResponse]
-	rotateReliantAPIKey         *connect.Client[v1.RotateReliantAPIKeyRequest, v1.RotateReliantAPIKeyResponse]
 	completeCodexOAuth          *connect.Client[v1.CompleteCodexOAuthRequest, v1.CompleteCodexOAuthResponse]
 	completeClaudeOAuth         *connect.Client[v1.CompleteClaudeOAuthRequest, v1.CompleteClaudeOAuthResponse]
 	getPrivacySettings          *connect.Client[v1.GetPrivacySettingsRequest, v1.GetPrivacySettingsResponse]
@@ -501,11 +487,6 @@ func (c *settingsServiceClient) ValidateProviderAPIKey(ctx context.Context, req 
 // SyncReliantProvider calls reliant.v1.SettingsService.SyncReliantProvider.
 func (c *settingsServiceClient) SyncReliantProvider(ctx context.Context, req *connect.Request[v1.SyncReliantProviderRequest]) (*connect.Response[v1.SyncReliantProviderResponse], error) {
 	return c.syncReliantProvider.CallUnary(ctx, req)
-}
-
-// RotateReliantAPIKey calls reliant.v1.SettingsService.RotateReliantAPIKey.
-func (c *settingsServiceClient) RotateReliantAPIKey(ctx context.Context, req *connect.Request[v1.RotateReliantAPIKeyRequest]) (*connect.Response[v1.RotateReliantAPIKeyResponse], error) {
-	return c.rotateReliantAPIKey.CallUnary(ctx, req)
 }
 
 // CompleteCodexOAuth calls reliant.v1.SettingsService.CompleteCodexOAuth.
@@ -607,10 +588,6 @@ type SettingsServiceHandler interface {
 	ValidateProviderAPIKey(context.Context, *connect.Request[v1.ValidateProviderAPIKeyRequest]) (*connect.Response[v1.ValidateProviderAPIKeyResponse], error)
 	// SyncReliantProvider hydrates the Reliant provider API key from authenticated control-plane state.
 	SyncReliantProvider(context.Context, *connect.Request[v1.SyncReliantProviderRequest]) (*connect.Response[v1.SyncReliantProviderResponse], error)
-	// RotateReliantAPIKey rotates the caller's Reliant LiteLLM virtual key:
-	// deletes the existing key upstream (best-effort), mints a fresh one, and
-	// persists it server-side. The new key is not returned in the response.
-	RotateReliantAPIKey(context.Context, *connect.Request[v1.RotateReliantAPIKeyRequest]) (*connect.Response[v1.RotateReliantAPIKeyResponse], error)
 	// CompleteCodexOAuth exchanges an OAuth authorization code + PKCE verifier
 	// and marks Codex as connected for the current user.
 	CompleteCodexOAuth(context.Context, *connect.Request[v1.CompleteCodexOAuthRequest]) (*connect.Response[v1.CompleteCodexOAuthResponse], error)
@@ -744,12 +721,6 @@ func NewSettingsServiceHandler(svc SettingsServiceHandler, opts ...connect.Handl
 		connect.WithSchema(settingsServiceMethods.ByName("SyncReliantProvider")),
 		connect.WithHandlerOptions(opts...),
 	)
-	settingsServiceRotateReliantAPIKeyHandler := connect.NewUnaryHandler(
-		SettingsServiceRotateReliantAPIKeyProcedure,
-		svc.RotateReliantAPIKey,
-		connect.WithSchema(settingsServiceMethods.ByName("RotateReliantAPIKey")),
-		connect.WithHandlerOptions(opts...),
-	)
 	settingsServiceCompleteCodexOAuthHandler := connect.NewUnaryHandler(
 		SettingsServiceCompleteCodexOAuthProcedure,
 		svc.CompleteCodexOAuth,
@@ -862,8 +833,6 @@ func NewSettingsServiceHandler(svc SettingsServiceHandler, opts ...connect.Handl
 			settingsServiceValidateProviderAPIKeyHandler.ServeHTTP(w, r)
 		case SettingsServiceSyncReliantProviderProcedure:
 			settingsServiceSyncReliantProviderHandler.ServeHTTP(w, r)
-		case SettingsServiceRotateReliantAPIKeyProcedure:
-			settingsServiceRotateReliantAPIKeyHandler.ServeHTTP(w, r)
 		case SettingsServiceCompleteCodexOAuthProcedure:
 			settingsServiceCompleteCodexOAuthHandler.ServeHTTP(w, r)
 		case SettingsServiceCompleteClaudeOAuthProcedure:
@@ -961,10 +930,6 @@ func (UnimplementedSettingsServiceHandler) ValidateProviderAPIKey(context.Contex
 
 func (UnimplementedSettingsServiceHandler) SyncReliantProvider(context.Context, *connect.Request[v1.SyncReliantProviderRequest]) (*connect.Response[v1.SyncReliantProviderResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.SyncReliantProvider is not implemented"))
-}
-
-func (UnimplementedSettingsServiceHandler) RotateReliantAPIKey(context.Context, *connect.Request[v1.RotateReliantAPIKeyRequest]) (*connect.Response[v1.RotateReliantAPIKeyResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.RotateReliantAPIKey is not implemented"))
 }
 
 func (UnimplementedSettingsServiceHandler) CompleteCodexOAuth(context.Context, *connect.Request[v1.CompleteCodexOAuthRequest]) (*connect.Response[v1.CompleteCodexOAuthResponse], error) {

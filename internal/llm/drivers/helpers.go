@@ -99,32 +99,14 @@ func BuildAvailableDrivers(ctx context.Context, repo db.Repository, userID strin
 			switch driverID {
 			case "openrouter":
 				config.BaseURL = "https://openrouter.ai/api/v1"
-				// case "groq":
-				// 	config.BaseURL = "https://api.groq.com/openai/v1"
-				// case "xai":
-				// 	config.BaseURL = "https://api.x.ai/v1"
+			case "reliant":
+				// Reliant routes to the admin-server proxy via RELIANT_API_BASE_URL.
+				config.BaseURL = ResolveReliantBaseURL(apiKey)
 			}
 
 			drivers[models.DriverID(driverID)] = config
 		}
 	}
-
-	if _, ok := drivers[models.DriverID("reliant")]; !ok {
-		mintedKey, err := MintReliantUserAPIKey(ctx, userID)
-		if err != nil {
-			logging.Warn("Failed to lazy-provision Reliant key", "user_id", userID, "error", err)
-		} else {
-			if err := repo.SetProviderAPIKey(ctx, userID, "reliant", mintedKey); err != nil {
-				logging.Warn("Failed to persist lazy-provisioned Reliant key", "user_id", userID, "error", err)
-			}
-			drivers[models.DriverID("reliant")] = models.DriverConfig{
-				DriverID: models.DriverID("reliant"),
-				APIKey:   mintedKey,
-				Enabled:  true,
-			}
-		}
-	}
-	// TODO test lazy provision
 
 	// Add local driver if configured
 	// Local drivers use BaseURL instead of API key
