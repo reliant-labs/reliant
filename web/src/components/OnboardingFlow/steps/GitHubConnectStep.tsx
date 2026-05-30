@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { Github, Lock } from "lucide-react";
@@ -7,10 +7,11 @@ import { useProjectStore } from "@/store/projectStore";
 import type { Project } from "@/store/projectStore";
 import { supabase } from "@/lib/supabase";
 import { useEventBus } from "@/lib/event-context";
-import { useGitRepos, useCloneRepo, useCompleteOnboarding, useCreateDaemon } from "@/hooks/useOnboardingQueries";
+import { useCloneRepo, useCompleteOnboarding, useCreateDaemon } from "@/hooks/useOnboardingQueries";
 import { trackEvent } from "@/lib/analytics";
 import { gitService } from "@/services/controlPlane/git";
 import { finalizeOnboardingSideEffects } from "../useOnboardingComplete";
+import { markOnboardingFinalized } from "../analytics";
 import { DaemonConnectingGate } from "../DaemonConnectingGate";
 import type { StepProps } from "../types";
 import {
@@ -18,6 +19,8 @@ import {
   listDaemons,
 } from "@/services/controlPlane/daemon";
 import type { GitRepo } from "@/services/controlPlane/git";
+import { RepoSelector } from "@/components/Projects/RepoSelector";
+import { projectGrpc } from "@/api/project-grpc";
 
 // Must match the name + type + size used by ComputeStep's createDaemon call so
 // that the control-plane's CreateDaemon idempotency path (refreshManagedDaemon)
@@ -77,19 +80,6 @@ function findProjectByPath(projects: Project[], path: string): Project | undefin
   return projects.find((project) => project.path === path);
 }
 
-function formatUpdated(updatedAt: string): string {
-  if (!updatedAt) return "";
-  const d = new Date(updatedAt);
-  if (isNaN(d.getTime())) return "";
-  const diffMs = Date.now() - d.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  if (diffDays === 0) return "today";
-  if (diffDays === 1) return "yesterday";
-  if (diffDays < 30) return `${diffDays}d ago`;
-  if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`;
-  return `${Math.floor(diffDays / 365)}y ago`;
-}
-
 export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
   const navigate = useNavigate();
   const createProject = useProjectStore((state) => state.createProject);
@@ -109,18 +99,6 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
   const [showDaemonGate, setShowDaemonGate] = useState(false);
   const [gateDaemonRef, setGateDaemonRef] = useState<string | undefined>(undefined);
 
-  // Repo picker state (via React Query)
-  const {
-    data: reposData,
-    isLoading: reposLoading,
-    isError: reposIsError,
-    error: reposQueryError,
-    refetch: fetchRepos,
-  } = useGitRepos();
-  const repos = reposData?.repos ?? [];
-  const reposError = reposQueryError instanceof Error ? reposQueryError.message : "";
-
-  const [search, setSearch] = useState("");
   const [selectedRepo, setSelectedRepo] = useState<GitRepo | null>(null);
 
   // Confirmation state
@@ -165,34 +143,10 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
     }
   };
 
-  // Load repos when entering picker phase
-  useEffect(() => {
-    if (phase === "picker" && repos.length === 0 && !reposLoading && !reposIsError) {
-      fetchRepos();
-    }
-  }, [phase, repos.length, reposLoading, reposIsError, fetchRepos]);
-
-  // Client-side search filter
-  const filteredRepos = useMemo(() => {
-    if (!search.trim()) return repos;
-    const q = search.toLowerCase();
-    return repos.filter(
-      r =>
-        r.fullName.toLowerCase().includes(q) ||
-        r.description?.toLowerCase().includes(q) ||
-        r.language?.toLowerCase().includes(q),
-    );
-  }, [repos, search]);
-
   const handleSelectRepo = (repo: GitRepo) => {
-    if (selectedRepo?.fullName === repo.fullName) {
-      setSelectedRepo(null);
-      setBranch("");
-    } else {
-      setSelectedRepo(repo);
-      setBranch(repo.defaultBranch || "main");
-      setPhase("confirm");
-    }
+    setSelectedRepo(repo);
+    setBranch(repo.defaultBranch || "main");
+    setPhase("confirm");
   };
 
   const handleConfirm = async () => {
@@ -252,6 +206,7 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
         variant: "info",
       });
 
+      let installedProjectId: string | undefined;
       try {
         const createdProject = await createProject({
           name: projectName,
@@ -260,6 +215,7 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
           is_git_repo: true,
           default_branch: selectedBranch,
         });
+        installedProjectId = createdProject.id;
         await loadProjects();
         await useProjectStore.getState().selectProject(createdProject);
       } catch (projectError) {
@@ -272,7 +228,25 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
           findProjectByPath(projects, clonedPath) ||
           findProjectByPath(useProjectStore.getState().projects, clonedPath);
         if (existingProject) {
+          installedProjectId = existingProject.id;
           await useProjectStore.getState().selectProject(existingProject);
+        }
+      }
+
+      // Record the (project, daemon) install so the picker on later visits
+      // can show this project as "available on this daemon". Failures are
+      // non-fatal — the project is still usable; we just lose the indicator
+      // until a future markProjectInstalled call (e.g. from the picker).
+      if (installedProjectId) {
+        try {
+          await projectGrpc.markProjectInstalled(
+            installedProjectId,
+            daemon.id,
+            clonedPath,
+            selectedBranch,
+          );
+        } catch (markErr) {
+          console.warn("markProjectInstalled failed (non-fatal):", markErr);
         }
       }
 
@@ -290,11 +264,7 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
         compute: plan.compute,
         modelProvider: plan.modelProvider,
       });
-      trackEvent("onboarding_completed", {
-        provider: plan.modelProvider ?? "unknown",
-        compute: plan.compute ?? "unknown",
-        project_source: "github",
-      });
+      markOnboardingFinalized(plan, "github");
       await finalizeOnboardingSideEffects(plan.modelProvider);
       // Show the daemon gate before navigating — the daemon may still be
       // provisioning. We hand the gate the UUID we already used for the
@@ -314,25 +284,15 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
 
   const cloning = cloneRepoMutation.isPending;
 
-  const reposCredentialMissing = isMissingGitCredentialError(reposQueryError);
-
-  useEffect(() => {
-    if (phase === "picker" && reposCredentialMissing) {
-      trackEvent("github_credential_missing_shown", { phase: "picker" });
-    }
-  }, [phase, reposCredentialMissing]);
-
   useEffect(() => {
     if (phase === "confirm" && confirmCredentialMissing) {
       trackEvent("github_credential_missing_shown", { phase: "confirm" });
     }
   }, [phase, confirmCredentialMissing]);
 
-  const handleReconnect = (phaseLabel: "picker" | "confirm") => {
-    trackEvent("github_reconnect_clicked", { phase: phaseLabel });
-    if (phaseLabel === "confirm") {
-      setConfirmCredentialMissing(false);
-    }
+  const handleReconnect = () => {
+    trackEvent("github_reconnect_clicked", { phase: "confirm" });
+    setConfirmCredentialMissing(false);
     void handleConnect();
   };
 
@@ -366,153 +326,7 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
           </p>
         </div>
 
-        <div className="space-y-3">
-          {reposCredentialMissing && (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 space-y-3">
-              <div className="space-y-1">
-                <p className="text-sm font-semibold text-foreground">
-                  GitHub credential missing
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Reliant needs to connect to GitHub before it can list your repositories.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleReconnect("picker")}
-                disabled={connecting}
-                className={cn(
-                  "flex items-center justify-center gap-2 w-full py-2.5 rounded-lg text-sm font-semibold transition-colors",
-                  connecting
-                    ? "bg-muted text-muted-foreground cursor-not-allowed"
-                    : "bg-primary text-primary-foreground hover:bg-primary/90",
-                )}
-              >
-                <Github className="w-4 h-4" />
-                {connecting ? "Connecting..." : "Reconnect GitHub"}
-              </button>
-            </div>
-          )}
-
-          {/* Search */}
-          <div className="relative">
-            <svg
-              className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/50"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
-            <input
-              type="text"
-              placeholder="Search repositories..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className={cn(
-                "w-full pl-9 pr-3 py-2.5 rounded-lg text-sm transition-colors",
-                "bg-background border border-border/40 text-foreground placeholder:text-muted-foreground/50",
-                "focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50",
-              )}
-            />
-          </div>
-
-          {/* Repo list */}
-          <div className="max-h-64 overflow-y-auto rounded-lg border border-border/40">
-            {reposError && !reposCredentialMissing && (
-              <div className="flex items-center gap-2 border-b border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-                {reposError}
-              </div>
-            )}
-
-            {!reposLoading && filteredRepos.length === 0 && (
-              <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-                {search ? "No repos match your search." : "No repositories found."}
-              </div>
-            )}
-
-            {filteredRepos.map((repo) => {
-              const isSelected = selectedRepo?.fullName === repo.fullName;
-              return (
-                <button
-                  key={repo.fullName}
-                  type="button"
-                  onClick={() => handleSelectRepo(repo)}
-                  className={cn(
-                    "flex w-full items-start gap-3 border-b border-border/30 px-3 py-2.5 text-left transition-colors last:border-b-0",
-                    isSelected
-                      ? "bg-primary/10 ring-1 ring-inset ring-primary/30"
-                      : "hover:bg-muted/50",
-                  )}
-                >
-                  {/* Checkbox */}
-                  <div
-                    className={cn(
-                      "mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border",
-                      isSelected ? "border-primary bg-primary" : "border-border",
-                    )}
-                  >
-                    {isSelected && (
-                      <svg className="h-3 w-3 text-primary-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                      </svg>
-                    )}
-                  </div>
-
-                  {/* Repo info */}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate text-sm font-medium text-foreground">
-                        {repo.fullName}
-                      </span>
-                      {repo.private && (
-                        <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium bg-muted text-muted-foreground">
-                          <Lock className="w-2.5 h-2.5" />
-                          Private
-                        </span>
-                      )}
-                    </div>
-                    {repo.description && (
-                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                        {repo.description}
-                      </p>
-                    )}
-                    <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground/70">
-                      {repo.language && <span>{repo.language}</span>}
-                      {repo.defaultBranch && (
-                        <span className="flex items-center gap-0.5">
-                          <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                          </svg>
-                          {repo.defaultBranch}
-                        </span>
-                      )}
-                      {repo.updatedAt && (
-                        <span>Updated {formatUpdated(repo.updatedAt)}</span>
-                      )}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-
-            {/* Loading spinner */}
-            {reposLoading && (
-              <div className="flex items-center justify-center py-4 text-sm text-muted-foreground">
-                <svg className="mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                Loading repos...
-              </div>
-            )}
-          </div>
-        </div>
+        <RepoSelector onSelect={handleSelectRepo} analyticsPhase="picker" />
 
         <button
           onClick={onBack}
@@ -599,7 +413,7 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
               </div>
               <button
                 type="button"
-                onClick={() => handleReconnect("confirm")}
+                onClick={() => handleReconnect()}
                 disabled={connecting}
                 className={cn(
                   "flex items-center justify-center gap-2 w-full py-2.5 rounded-lg text-sm font-semibold transition-colors",

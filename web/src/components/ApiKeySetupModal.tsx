@@ -6,7 +6,7 @@ import { useApiKeySetupStore } from "../store/apiKeySetupStore";
 import { cn } from "../lib/utils";
 import { logger } from "../lib/logger";
 import { useCodexOAuth, useClaudeOAuth, useOAuthAvailability } from "../hooks";
-import { authServeCommand } from "../lib/cli-commands";
+import { OAuthHelperPanel } from "./OAuthHelperPanel";
 import { getEventBus } from "../lib/events";
 
 const PROVIDERS = [
@@ -326,23 +326,14 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
         {/* OAuth Section */}
         {provider.usesOAuth ? (
           <div className="space-y-4">
-            <div className="p-4 rounded-lg border border-border bg-muted/30">
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-foreground">
-                  Authenticate via {provider.name}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {oauthAvailability.available
-                    ? `Sign in with ${provider.name} to connect your account.`
-                    : "The local OAuth helper is not running. Start it in your terminal to enable login:"}
-                </p>
-                {!oauthAvailability.available && !oauthAvailability.loading && (
-                  <code className="block mt-2 px-3 py-2 text-sm bg-background border border-border rounded-md font-mono select-all break-all">
-                    {authServeCommand()}
-                  </code>
-                )}
-              </div>
-            </div>
+            <OAuthHelperPanel
+              providerName={provider.name}
+              available={oauthAvailability.available}
+              loading={oauthAvailability.loading}
+              onRetry={oauthAvailability.recheck}
+              onConnect={handleValidate}
+              connecting={isValidating}
+            />
 
             {validationResult && (
               <div
@@ -362,7 +353,7 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
               </div>
             )}
 
-            <div className="flex items-center justify-between gap-3 pt-1">
+            <div className="flex pt-1">
               <button
                 type="button"
                 onClick={() => handleDismiss(true)}
@@ -370,29 +361,6 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
               >
                 Don't ask again
               </button>
-
-              {oauthAvailability.available ? (
-                <button
-                  type="button"
-                  onClick={handleValidate}
-                  disabled={isValidating}
-                  className={cn(
-                    "px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors",
-                    isValidating && "opacity-50 cursor-not-allowed"
-                  )}
-                >
-                  {isValidating ? "Connecting…" : `Login with ${provider.name}`}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={oauthAvailability.recheck}
-                  disabled={oauthAvailability.loading}
-                  className="px-4 py-2 text-sm border border-border rounded-lg hover:bg-muted transition-colors"
-                >
-                  {oauthAvailability.loading ? "Checking…" : "Retry"}
-                </button>
-              )}
             </div>
           </div>
         ) : (

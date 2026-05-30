@@ -83,6 +83,27 @@ const (
 	// ProjectServiceInitializeGitRepoProcedure is the fully-qualified name of the ProjectService's
 	// InitializeGitRepo RPC.
 	ProjectServiceInitializeGitRepoProcedure = "/reliant.v1.ProjectService/InitializeGitRepo"
+	// ProjectServiceListProjectDaemonsForDaemonProcedure is the fully-qualified name of the
+	// ProjectService's ListProjectDaemonsForDaemon RPC.
+	ProjectServiceListProjectDaemonsForDaemonProcedure = "/reliant.v1.ProjectService/ListProjectDaemonsForDaemon"
+	// ProjectServiceListProjectDaemonsProcedure is the fully-qualified name of the ProjectService's
+	// ListProjectDaemons RPC.
+	ProjectServiceListProjectDaemonsProcedure = "/reliant.v1.ProjectService/ListProjectDaemons"
+	// ProjectServiceMarkProjectInstalledProcedure is the fully-qualified name of the ProjectService's
+	// MarkProjectInstalled RPC.
+	ProjectServiceMarkProjectInstalledProcedure = "/reliant.v1.ProjectService/MarkProjectInstalled"
+	// ProjectServiceListRepositoriesForDaemonProcedure is the fully-qualified name of the
+	// ProjectService's ListRepositoriesForDaemon RPC.
+	ProjectServiceListRepositoriesForDaemonProcedure = "/reliant.v1.ProjectService/ListRepositoriesForDaemon"
+	// ProjectServicePullProjectOnDaemonProcedure is the fully-qualified name of the ProjectService's
+	// PullProjectOnDaemon RPC.
+	ProjectServicePullProjectOnDaemonProcedure = "/reliant.v1.ProjectService/PullProjectOnDaemon"
+	// ProjectServiceRemoveProjectFromDaemonProcedure is the fully-qualified name of the
+	// ProjectService's RemoveProjectFromDaemon RPC.
+	ProjectServiceRemoveProjectFromDaemonProcedure = "/reliant.v1.ProjectService/RemoveProjectFromDaemon"
+	// ProjectServiceRecloneProjectOnDaemonProcedure is the fully-qualified name of the ProjectService's
+	// RecloneProjectOnDaemon RPC.
+	ProjectServiceRecloneProjectOnDaemonProcedure = "/reliant.v1.ProjectService/RecloneProjectOnDaemon"
 )
 
 // ProjectServiceClient is a client for the reliant.v1.ProjectService service.
@@ -119,6 +140,40 @@ type ProjectServiceClient interface {
 	SaveProjectPrompts(context.Context, *connect.Request[v1.SaveProjectPromptsRequest]) (*connect.Response[v1.SaveProjectPromptsResponse], error)
 	// InitializeGitRepo initializes a git repository for a project
 	InitializeGitRepo(context.Context, *connect.Request[v1.InitializeGitRepoRequest]) (*connect.Response[v1.InitializeGitRepoResponse], error)
+	// ListProjectDaemonsForDaemon returns the project_daemons rows installed on
+	// the given daemon. The ProjectPicker uses this to mark projects that are
+	// (or aren't) cloned on the user's currently-active daemon.
+	ListProjectDaemonsForDaemon(context.Context, *connect.Request[v1.ListProjectDaemonsForDaemonRequest]) (*connect.Response[v1.ListProjectDaemonsForDaemonResponse], error)
+	// ListProjectDaemons returns every project_daemons row across all the
+	// caller's daemons. The ProjectPicker uses this to render badges that name
+	// *which* daemon(s) a project lives on (vs the leaner per-daemon view that
+	// can only answer "installed here or not"). User-scoped: filtered to
+	// projects owned by the calling user.
+	ListProjectDaemons(context.Context, *connect.Request[v1.ListProjectDaemonsRequest]) (*connect.Response[v1.ListProjectDaemonsResponse], error)
+	// MarkProjectInstalled records that a project has a clone on a daemon.
+	// Called after gitService.cloneRepo() succeeds so the picker can see the
+	// project on that daemon. Idempotent — re-running with the same
+	// (project, daemon) updates the path/branch.
+	MarkProjectInstalled(context.Context, *connect.Request[v1.MarkProjectInstalledRequest]) (*connect.Response[v1.MarkProjectInstalledResponse], error)
+	// ListRepositoriesForDaemon returns the projects cloned on the given daemon,
+	// denormalized with project metadata (name, remote_url) so admin callers
+	// can render a "Repositories" table without a follow-up GetProject for each
+	// row. Filtered to projects owned by the calling user.
+	ListRepositoriesForDaemon(context.Context, *connect.Request[v1.ListRepositoriesForDaemonRequest]) (*connect.Response[v1.ListRepositoriesForDaemonResponse], error)
+	// PullProjectOnDaemon runs `git pull` for the project's clone on a daemon.
+	// The daemon must currently host the project (project_daemons row must
+	// exist). Fails if the daemon is offline.
+	PullProjectOnDaemon(context.Context, *connect.Request[v1.PullProjectOnDaemonRequest]) (*connect.Response[v1.PullProjectOnDaemonResponse], error)
+	// RemoveProjectFromDaemon deletes the on-disk clone AND the
+	// project_daemons row for (project_id, daemon_id). Project itself is NOT
+	// deleted — other daemons may still host clones. Idempotent: succeeds even
+	// if the row was already absent (the on-disk delete is best-effort).
+	RemoveProjectFromDaemon(context.Context, *connect.Request[v1.RemoveProjectFromDaemonRequest]) (*connect.Response[v1.RemoveProjectFromDaemonResponse], error)
+	// RecloneProjectOnDaemon removes the existing on-disk clone and re-clones
+	// it from the project's remote_url at the recorded default branch. Any
+	// local-only changes are lost; UI must confirm before calling. The
+	// project_daemons row is updated with the new cloned_at.
+	RecloneProjectOnDaemon(context.Context, *connect.Request[v1.RecloneProjectOnDaemonRequest]) (*connect.Response[v1.RecloneProjectOnDaemonResponse], error)
 }
 
 // NewProjectServiceClient constructs a client for the reliant.v1.ProjectService service. By
@@ -228,27 +283,76 @@ func NewProjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(projectServiceMethods.ByName("InitializeGitRepo")),
 			connect.WithClientOptions(opts...),
 		),
+		listProjectDaemonsForDaemon: connect.NewClient[v1.ListProjectDaemonsForDaemonRequest, v1.ListProjectDaemonsForDaemonResponse](
+			httpClient,
+			baseURL+ProjectServiceListProjectDaemonsForDaemonProcedure,
+			connect.WithSchema(projectServiceMethods.ByName("ListProjectDaemonsForDaemon")),
+			connect.WithClientOptions(opts...),
+		),
+		listProjectDaemons: connect.NewClient[v1.ListProjectDaemonsRequest, v1.ListProjectDaemonsResponse](
+			httpClient,
+			baseURL+ProjectServiceListProjectDaemonsProcedure,
+			connect.WithSchema(projectServiceMethods.ByName("ListProjectDaemons")),
+			connect.WithClientOptions(opts...),
+		),
+		markProjectInstalled: connect.NewClient[v1.MarkProjectInstalledRequest, v1.MarkProjectInstalledResponse](
+			httpClient,
+			baseURL+ProjectServiceMarkProjectInstalledProcedure,
+			connect.WithSchema(projectServiceMethods.ByName("MarkProjectInstalled")),
+			connect.WithClientOptions(opts...),
+		),
+		listRepositoriesForDaemon: connect.NewClient[v1.ListRepositoriesForDaemonRequest, v1.ListRepositoriesForDaemonResponse](
+			httpClient,
+			baseURL+ProjectServiceListRepositoriesForDaemonProcedure,
+			connect.WithSchema(projectServiceMethods.ByName("ListRepositoriesForDaemon")),
+			connect.WithClientOptions(opts...),
+		),
+		pullProjectOnDaemon: connect.NewClient[v1.PullProjectOnDaemonRequest, v1.PullProjectOnDaemonResponse](
+			httpClient,
+			baseURL+ProjectServicePullProjectOnDaemonProcedure,
+			connect.WithSchema(projectServiceMethods.ByName("PullProjectOnDaemon")),
+			connect.WithClientOptions(opts...),
+		),
+		removeProjectFromDaemon: connect.NewClient[v1.RemoveProjectFromDaemonRequest, v1.RemoveProjectFromDaemonResponse](
+			httpClient,
+			baseURL+ProjectServiceRemoveProjectFromDaemonProcedure,
+			connect.WithSchema(projectServiceMethods.ByName("RemoveProjectFromDaemon")),
+			connect.WithClientOptions(opts...),
+		),
+		recloneProjectOnDaemon: connect.NewClient[v1.RecloneProjectOnDaemonRequest, v1.RecloneProjectOnDaemonResponse](
+			httpClient,
+			baseURL+ProjectServiceRecloneProjectOnDaemonProcedure,
+			connect.WithSchema(projectServiceMethods.ByName("RecloneProjectOnDaemon")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // projectServiceClient implements ProjectServiceClient.
 type projectServiceClient struct {
-	createProject         *connect.Client[v1.CreateProjectRequest, v1.CreateProjectResponse]
-	listProjects          *connect.Client[v1.ListProjectsRequest, v1.ListProjectsResponse]
-	getProject            *connect.Client[v1.GetProjectRequest, v1.GetProjectResponse]
-	updateProject         *connect.Client[v1.UpdateProjectRequest, v1.UpdateProjectResponse]
-	deleteProject         *connect.Client[v1.DeleteProjectRequest, v1.DeleteProjectResponse]
-	touchProject          *connect.Client[v1.TouchProjectRequest, v1.TouchProjectResponse]
-	getProjectMetadata    *connect.Client[v1.GetProjectMetadataRequest, v1.GetProjectMetadataResponse]
-	updateProjectMetadata *connect.Client[v1.UpdateProjectMetadataRequest, v1.UpdateProjectMetadataResponse]
-	getProjectGitInfo     *connect.Client[v1.GetProjectGitInfoRequest, v1.GetProjectGitInfoResponse]
-	getProjectGitBranches *connect.Client[v1.GetProjectGitBranchesRequest, v1.GetProjectGitBranchesResponse]
-	getProjectInitStatus  *connect.Client[v1.GetProjectInitStatusRequest, v1.GetProjectInitStatusResponse]
-	initializeProject     *connect.Client[v1.InitializeProjectRequest, v1.InitializeProjectResponse]
-	getProjectChanges     *connect.Client[v1.GetProjectChangesRequest, v1.GetProjectChangesResponse]
-	getProjectPrompts     *connect.Client[v1.GetProjectPromptsRequest, v1.GetProjectPromptsResponse]
-	saveProjectPrompts    *connect.Client[v1.SaveProjectPromptsRequest, v1.SaveProjectPromptsResponse]
-	initializeGitRepo     *connect.Client[v1.InitializeGitRepoRequest, v1.InitializeGitRepoResponse]
+	createProject               *connect.Client[v1.CreateProjectRequest, v1.CreateProjectResponse]
+	listProjects                *connect.Client[v1.ListProjectsRequest, v1.ListProjectsResponse]
+	getProject                  *connect.Client[v1.GetProjectRequest, v1.GetProjectResponse]
+	updateProject               *connect.Client[v1.UpdateProjectRequest, v1.UpdateProjectResponse]
+	deleteProject               *connect.Client[v1.DeleteProjectRequest, v1.DeleteProjectResponse]
+	touchProject                *connect.Client[v1.TouchProjectRequest, v1.TouchProjectResponse]
+	getProjectMetadata          *connect.Client[v1.GetProjectMetadataRequest, v1.GetProjectMetadataResponse]
+	updateProjectMetadata       *connect.Client[v1.UpdateProjectMetadataRequest, v1.UpdateProjectMetadataResponse]
+	getProjectGitInfo           *connect.Client[v1.GetProjectGitInfoRequest, v1.GetProjectGitInfoResponse]
+	getProjectGitBranches       *connect.Client[v1.GetProjectGitBranchesRequest, v1.GetProjectGitBranchesResponse]
+	getProjectInitStatus        *connect.Client[v1.GetProjectInitStatusRequest, v1.GetProjectInitStatusResponse]
+	initializeProject           *connect.Client[v1.InitializeProjectRequest, v1.InitializeProjectResponse]
+	getProjectChanges           *connect.Client[v1.GetProjectChangesRequest, v1.GetProjectChangesResponse]
+	getProjectPrompts           *connect.Client[v1.GetProjectPromptsRequest, v1.GetProjectPromptsResponse]
+	saveProjectPrompts          *connect.Client[v1.SaveProjectPromptsRequest, v1.SaveProjectPromptsResponse]
+	initializeGitRepo           *connect.Client[v1.InitializeGitRepoRequest, v1.InitializeGitRepoResponse]
+	listProjectDaemonsForDaemon *connect.Client[v1.ListProjectDaemonsForDaemonRequest, v1.ListProjectDaemonsForDaemonResponse]
+	listProjectDaemons          *connect.Client[v1.ListProjectDaemonsRequest, v1.ListProjectDaemonsResponse]
+	markProjectInstalled        *connect.Client[v1.MarkProjectInstalledRequest, v1.MarkProjectInstalledResponse]
+	listRepositoriesForDaemon   *connect.Client[v1.ListRepositoriesForDaemonRequest, v1.ListRepositoriesForDaemonResponse]
+	pullProjectOnDaemon         *connect.Client[v1.PullProjectOnDaemonRequest, v1.PullProjectOnDaemonResponse]
+	removeProjectFromDaemon     *connect.Client[v1.RemoveProjectFromDaemonRequest, v1.RemoveProjectFromDaemonResponse]
+	recloneProjectOnDaemon      *connect.Client[v1.RecloneProjectOnDaemonRequest, v1.RecloneProjectOnDaemonResponse]
 }
 
 // CreateProject calls reliant.v1.ProjectService.CreateProject.
@@ -331,6 +435,41 @@ func (c *projectServiceClient) InitializeGitRepo(ctx context.Context, req *conne
 	return c.initializeGitRepo.CallUnary(ctx, req)
 }
 
+// ListProjectDaemonsForDaemon calls reliant.v1.ProjectService.ListProjectDaemonsForDaemon.
+func (c *projectServiceClient) ListProjectDaemonsForDaemon(ctx context.Context, req *connect.Request[v1.ListProjectDaemonsForDaemonRequest]) (*connect.Response[v1.ListProjectDaemonsForDaemonResponse], error) {
+	return c.listProjectDaemonsForDaemon.CallUnary(ctx, req)
+}
+
+// ListProjectDaemons calls reliant.v1.ProjectService.ListProjectDaemons.
+func (c *projectServiceClient) ListProjectDaemons(ctx context.Context, req *connect.Request[v1.ListProjectDaemonsRequest]) (*connect.Response[v1.ListProjectDaemonsResponse], error) {
+	return c.listProjectDaemons.CallUnary(ctx, req)
+}
+
+// MarkProjectInstalled calls reliant.v1.ProjectService.MarkProjectInstalled.
+func (c *projectServiceClient) MarkProjectInstalled(ctx context.Context, req *connect.Request[v1.MarkProjectInstalledRequest]) (*connect.Response[v1.MarkProjectInstalledResponse], error) {
+	return c.markProjectInstalled.CallUnary(ctx, req)
+}
+
+// ListRepositoriesForDaemon calls reliant.v1.ProjectService.ListRepositoriesForDaemon.
+func (c *projectServiceClient) ListRepositoriesForDaemon(ctx context.Context, req *connect.Request[v1.ListRepositoriesForDaemonRequest]) (*connect.Response[v1.ListRepositoriesForDaemonResponse], error) {
+	return c.listRepositoriesForDaemon.CallUnary(ctx, req)
+}
+
+// PullProjectOnDaemon calls reliant.v1.ProjectService.PullProjectOnDaemon.
+func (c *projectServiceClient) PullProjectOnDaemon(ctx context.Context, req *connect.Request[v1.PullProjectOnDaemonRequest]) (*connect.Response[v1.PullProjectOnDaemonResponse], error) {
+	return c.pullProjectOnDaemon.CallUnary(ctx, req)
+}
+
+// RemoveProjectFromDaemon calls reliant.v1.ProjectService.RemoveProjectFromDaemon.
+func (c *projectServiceClient) RemoveProjectFromDaemon(ctx context.Context, req *connect.Request[v1.RemoveProjectFromDaemonRequest]) (*connect.Response[v1.RemoveProjectFromDaemonResponse], error) {
+	return c.removeProjectFromDaemon.CallUnary(ctx, req)
+}
+
+// RecloneProjectOnDaemon calls reliant.v1.ProjectService.RecloneProjectOnDaemon.
+func (c *projectServiceClient) RecloneProjectOnDaemon(ctx context.Context, req *connect.Request[v1.RecloneProjectOnDaemonRequest]) (*connect.Response[v1.RecloneProjectOnDaemonResponse], error) {
+	return c.recloneProjectOnDaemon.CallUnary(ctx, req)
+}
+
 // ProjectServiceHandler is an implementation of the reliant.v1.ProjectService service.
 type ProjectServiceHandler interface {
 	// CreateProject creates a new project
@@ -365,6 +504,40 @@ type ProjectServiceHandler interface {
 	SaveProjectPrompts(context.Context, *connect.Request[v1.SaveProjectPromptsRequest]) (*connect.Response[v1.SaveProjectPromptsResponse], error)
 	// InitializeGitRepo initializes a git repository for a project
 	InitializeGitRepo(context.Context, *connect.Request[v1.InitializeGitRepoRequest]) (*connect.Response[v1.InitializeGitRepoResponse], error)
+	// ListProjectDaemonsForDaemon returns the project_daemons rows installed on
+	// the given daemon. The ProjectPicker uses this to mark projects that are
+	// (or aren't) cloned on the user's currently-active daemon.
+	ListProjectDaemonsForDaemon(context.Context, *connect.Request[v1.ListProjectDaemonsForDaemonRequest]) (*connect.Response[v1.ListProjectDaemonsForDaemonResponse], error)
+	// ListProjectDaemons returns every project_daemons row across all the
+	// caller's daemons. The ProjectPicker uses this to render badges that name
+	// *which* daemon(s) a project lives on (vs the leaner per-daemon view that
+	// can only answer "installed here or not"). User-scoped: filtered to
+	// projects owned by the calling user.
+	ListProjectDaemons(context.Context, *connect.Request[v1.ListProjectDaemonsRequest]) (*connect.Response[v1.ListProjectDaemonsResponse], error)
+	// MarkProjectInstalled records that a project has a clone on a daemon.
+	// Called after gitService.cloneRepo() succeeds so the picker can see the
+	// project on that daemon. Idempotent — re-running with the same
+	// (project, daemon) updates the path/branch.
+	MarkProjectInstalled(context.Context, *connect.Request[v1.MarkProjectInstalledRequest]) (*connect.Response[v1.MarkProjectInstalledResponse], error)
+	// ListRepositoriesForDaemon returns the projects cloned on the given daemon,
+	// denormalized with project metadata (name, remote_url) so admin callers
+	// can render a "Repositories" table without a follow-up GetProject for each
+	// row. Filtered to projects owned by the calling user.
+	ListRepositoriesForDaemon(context.Context, *connect.Request[v1.ListRepositoriesForDaemonRequest]) (*connect.Response[v1.ListRepositoriesForDaemonResponse], error)
+	// PullProjectOnDaemon runs `git pull` for the project's clone on a daemon.
+	// The daemon must currently host the project (project_daemons row must
+	// exist). Fails if the daemon is offline.
+	PullProjectOnDaemon(context.Context, *connect.Request[v1.PullProjectOnDaemonRequest]) (*connect.Response[v1.PullProjectOnDaemonResponse], error)
+	// RemoveProjectFromDaemon deletes the on-disk clone AND the
+	// project_daemons row for (project_id, daemon_id). Project itself is NOT
+	// deleted — other daemons may still host clones. Idempotent: succeeds even
+	// if the row was already absent (the on-disk delete is best-effort).
+	RemoveProjectFromDaemon(context.Context, *connect.Request[v1.RemoveProjectFromDaemonRequest]) (*connect.Response[v1.RemoveProjectFromDaemonResponse], error)
+	// RecloneProjectOnDaemon removes the existing on-disk clone and re-clones
+	// it from the project's remote_url at the recorded default branch. Any
+	// local-only changes are lost; UI must confirm before calling. The
+	// project_daemons row is updated with the new cloned_at.
+	RecloneProjectOnDaemon(context.Context, *connect.Request[v1.RecloneProjectOnDaemonRequest]) (*connect.Response[v1.RecloneProjectOnDaemonResponse], error)
 }
 
 // NewProjectServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -470,6 +643,48 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 		connect.WithSchema(projectServiceMethods.ByName("InitializeGitRepo")),
 		connect.WithHandlerOptions(opts...),
 	)
+	projectServiceListProjectDaemonsForDaemonHandler := connect.NewUnaryHandler(
+		ProjectServiceListProjectDaemonsForDaemonProcedure,
+		svc.ListProjectDaemonsForDaemon,
+		connect.WithSchema(projectServiceMethods.ByName("ListProjectDaemonsForDaemon")),
+		connect.WithHandlerOptions(opts...),
+	)
+	projectServiceListProjectDaemonsHandler := connect.NewUnaryHandler(
+		ProjectServiceListProjectDaemonsProcedure,
+		svc.ListProjectDaemons,
+		connect.WithSchema(projectServiceMethods.ByName("ListProjectDaemons")),
+		connect.WithHandlerOptions(opts...),
+	)
+	projectServiceMarkProjectInstalledHandler := connect.NewUnaryHandler(
+		ProjectServiceMarkProjectInstalledProcedure,
+		svc.MarkProjectInstalled,
+		connect.WithSchema(projectServiceMethods.ByName("MarkProjectInstalled")),
+		connect.WithHandlerOptions(opts...),
+	)
+	projectServiceListRepositoriesForDaemonHandler := connect.NewUnaryHandler(
+		ProjectServiceListRepositoriesForDaemonProcedure,
+		svc.ListRepositoriesForDaemon,
+		connect.WithSchema(projectServiceMethods.ByName("ListRepositoriesForDaemon")),
+		connect.WithHandlerOptions(opts...),
+	)
+	projectServicePullProjectOnDaemonHandler := connect.NewUnaryHandler(
+		ProjectServicePullProjectOnDaemonProcedure,
+		svc.PullProjectOnDaemon,
+		connect.WithSchema(projectServiceMethods.ByName("PullProjectOnDaemon")),
+		connect.WithHandlerOptions(opts...),
+	)
+	projectServiceRemoveProjectFromDaemonHandler := connect.NewUnaryHandler(
+		ProjectServiceRemoveProjectFromDaemonProcedure,
+		svc.RemoveProjectFromDaemon,
+		connect.WithSchema(projectServiceMethods.ByName("RemoveProjectFromDaemon")),
+		connect.WithHandlerOptions(opts...),
+	)
+	projectServiceRecloneProjectOnDaemonHandler := connect.NewUnaryHandler(
+		ProjectServiceRecloneProjectOnDaemonProcedure,
+		svc.RecloneProjectOnDaemon,
+		connect.WithSchema(projectServiceMethods.ByName("RecloneProjectOnDaemon")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.ProjectService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ProjectServiceCreateProjectProcedure:
@@ -504,6 +719,20 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 			projectServiceSaveProjectPromptsHandler.ServeHTTP(w, r)
 		case ProjectServiceInitializeGitRepoProcedure:
 			projectServiceInitializeGitRepoHandler.ServeHTTP(w, r)
+		case ProjectServiceListProjectDaemonsForDaemonProcedure:
+			projectServiceListProjectDaemonsForDaemonHandler.ServeHTTP(w, r)
+		case ProjectServiceListProjectDaemonsProcedure:
+			projectServiceListProjectDaemonsHandler.ServeHTTP(w, r)
+		case ProjectServiceMarkProjectInstalledProcedure:
+			projectServiceMarkProjectInstalledHandler.ServeHTTP(w, r)
+		case ProjectServiceListRepositoriesForDaemonProcedure:
+			projectServiceListRepositoriesForDaemonHandler.ServeHTTP(w, r)
+		case ProjectServicePullProjectOnDaemonProcedure:
+			projectServicePullProjectOnDaemonHandler.ServeHTTP(w, r)
+		case ProjectServiceRemoveProjectFromDaemonProcedure:
+			projectServiceRemoveProjectFromDaemonHandler.ServeHTTP(w, r)
+		case ProjectServiceRecloneProjectOnDaemonProcedure:
+			projectServiceRecloneProjectOnDaemonHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -575,4 +804,32 @@ func (UnimplementedProjectServiceHandler) SaveProjectPrompts(context.Context, *c
 
 func (UnimplementedProjectServiceHandler) InitializeGitRepo(context.Context, *connect.Request[v1.InitializeGitRepoRequest]) (*connect.Response[v1.InitializeGitRepoResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.InitializeGitRepo is not implemented"))
+}
+
+func (UnimplementedProjectServiceHandler) ListProjectDaemonsForDaemon(context.Context, *connect.Request[v1.ListProjectDaemonsForDaemonRequest]) (*connect.Response[v1.ListProjectDaemonsForDaemonResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.ListProjectDaemonsForDaemon is not implemented"))
+}
+
+func (UnimplementedProjectServiceHandler) ListProjectDaemons(context.Context, *connect.Request[v1.ListProjectDaemonsRequest]) (*connect.Response[v1.ListProjectDaemonsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.ListProjectDaemons is not implemented"))
+}
+
+func (UnimplementedProjectServiceHandler) MarkProjectInstalled(context.Context, *connect.Request[v1.MarkProjectInstalledRequest]) (*connect.Response[v1.MarkProjectInstalledResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.MarkProjectInstalled is not implemented"))
+}
+
+func (UnimplementedProjectServiceHandler) ListRepositoriesForDaemon(context.Context, *connect.Request[v1.ListRepositoriesForDaemonRequest]) (*connect.Response[v1.ListRepositoriesForDaemonResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.ListRepositoriesForDaemon is not implemented"))
+}
+
+func (UnimplementedProjectServiceHandler) PullProjectOnDaemon(context.Context, *connect.Request[v1.PullProjectOnDaemonRequest]) (*connect.Response[v1.PullProjectOnDaemonResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.PullProjectOnDaemon is not implemented"))
+}
+
+func (UnimplementedProjectServiceHandler) RemoveProjectFromDaemon(context.Context, *connect.Request[v1.RemoveProjectFromDaemonRequest]) (*connect.Response[v1.RemoveProjectFromDaemonResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.RemoveProjectFromDaemon is not implemented"))
+}
+
+func (UnimplementedProjectServiceHandler) RecloneProjectOnDaemon(context.Context, *connect.Request[v1.RecloneProjectOnDaemonRequest]) (*connect.Response[v1.RecloneProjectOnDaemonResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.RecloneProjectOnDaemon is not implemented"))
 }

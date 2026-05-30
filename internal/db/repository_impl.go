@@ -839,6 +839,17 @@ func (r *Repo) GetProjectByPathAndUser(ctx context.Context, path, userID string)
 	return r.projects.GetProjectByPathAndUser(ctx, path, userID)
 }
 
+func (r *Repo) GetProjectByRemoteURLAndUser(ctx context.Context, remoteURL, userID string) (*Project, error) {
+	if remoteURL == "" {
+		return nil, fmt.Errorf("remote URL cannot be empty")
+	}
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+
+	return r.projects.GetProjectByRemoteURLAndUser(ctx, remoteURL, userID)
+}
+
 func (r *Repo) GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*Project, error) {
 	if id == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
@@ -877,6 +888,47 @@ func (r *Repo) DeleteProject(ctx context.Context, id string, userID string) erro
 		return fmt.Errorf("project ID cannot be empty")
 	}
 	return r.projects.DeleteProject(ctx, id, userID)
+}
+
+// =============================================================================
+// Project ↔ Daemon installations
+// =============================================================================
+
+func (r *Repo) UpsertProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) error {
+	if projectID == "" {
+		return fmt.Errorf("project ID cannot be empty")
+	}
+	if daemonID == "" {
+		return fmt.Errorf("daemon ID cannot be empty")
+	}
+	if path == "" {
+		return fmt.Errorf("path cannot be empty")
+	}
+	return r.projects.UpsertProjectDaemon(ctx, projectID, daemonID, path, defaultBranch)
+}
+
+func (r *Repo) ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error) {
+	if projectID == "" {
+		return nil, fmt.Errorf("project ID cannot be empty")
+	}
+	return r.projects.ListProjectDaemonsForProject(ctx, projectID)
+}
+
+func (r *Repo) ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error) {
+	if daemonID == "" {
+		return nil, fmt.Errorf("daemon ID cannot be empty")
+	}
+	return r.projects.ListProjectDaemonsForDaemon(ctx, daemonID)
+}
+
+func (r *Repo) DeleteProjectDaemon(ctx context.Context, projectID, daemonID string) error {
+	if projectID == "" {
+		return fmt.Errorf("project ID cannot be empty")
+	}
+	if daemonID == "" {
+		return fmt.Errorf("daemon ID cannot be empty")
+	}
+	return r.projects.DeleteProjectDaemon(ctx, projectID, daemonID)
 }
 
 func (r *Repo) UpsertDaemon(ctx context.Context, daemon *Daemon) error {
@@ -1102,13 +1154,17 @@ func (r *Repo) UpsertDaemonAttachment(ctx context.Context, att *DaemonAttachment
 	return nil
 }
 
-func (r *Repo) TouchDaemonAttachment(ctx context.Context, daemonID string, activityAt time.Time) error {
+// TouchDaemonAttachmentIfNewer advances last_stream_activity only when the
+// incoming timestamp is strictly newer than what's already stored. The
+// derivation consumer is the sole caller; the guard makes out-of-order NATS
+// delivery a no-op rather than a regression.
+func (r *Repo) TouchDaemonAttachmentIfNewer(ctx context.Context, daemonID string, activityAt time.Time) error {
 	if daemonID == "" {
 		return fmt.Errorf("daemon ID cannot be empty")
 	}
-	query := `UPDATE daemon_attachment SET last_stream_activity = ? WHERE daemon_id = ?`
+	query := `UPDATE daemon_attachment SET last_stream_activity = ? WHERE daemon_id = ? AND last_stream_activity < ?`
 	query = r.bindQuery(query)
-	if _, err := r.DB.ExecContext(ctx, query, activityAt, daemonID); err != nil {
+	if _, err := r.DB.ExecContext(ctx, query, activityAt, daemonID, activityAt); err != nil {
 		return fmt.Errorf("touching daemon attachment: %w", err)
 	}
 	return nil

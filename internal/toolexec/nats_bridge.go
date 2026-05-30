@@ -490,7 +490,7 @@ func (b *NATSToolBridge) startProcessOutputForwarder(userCtx context.Context, us
 	}()
 }
 
-// drainPendingCommands creates an ephemeral ordered consumer on the
+// drainPendingCommands creates an ephemeral pull consumer on the
 // DAEMON_PENDING_COMMANDS stream, drains any messages queued for this
 // daemon while it was offline, dispatches them, and returns.
 func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemonID string) {
@@ -513,15 +513,28 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 		return
 	}
 
-	// Create an ephemeral ordered consumer filtered to this daemon's subject.
-	consumer, err := stream.OrderedConsumer(ctx, jetstream.OrderedConsumerConfig{
-		FilterSubjects: []string{subject},
+	// Create an ephemeral pull consumer filtered to this daemon's subject.
+	// DAEMON_PENDING_COMMANDS uses WorkQueue retention, which requires an
+	// explicit ack policy (ordered consumers force AckNone and fail with
+	// "consumer in pull mode requires ack policy"). InactiveThreshold lets
+	// the server reap the consumer if we exit without explicit cleanup.
+	consumer, err := stream.CreateConsumer(ctx, jetstream.ConsumerConfig{
+		FilterSubject:     subject,
+		AckPolicy:         jetstream.AckExplicitPolicy,
+		DeliverPolicy:     jetstream.DeliverAllPolicy,
+		InactiveThreshold: 1 * time.Minute,
 	})
 	if err != nil {
 		logging.Warn("[NATSToolBridge] Failed to create pending commands consumer",
 			"daemonID", daemonID, "error", err)
 		return
 	}
+	defer func() {
+		// Best-effort cleanup — InactiveThreshold above is the fallback.
+		if info, infoErr := consumer.Info(ctx); infoErr == nil {
+			_ = stream.DeleteConsumer(ctx, info.Name)
+		}
+	}()
 
 	// Fetch available messages with a short timeout — we only want to drain
 	// what's already queued, not block waiting for new messages.
