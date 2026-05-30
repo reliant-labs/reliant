@@ -6,26 +6,38 @@
  */
 
 import { useEffect } from "react";
-import { Search, Code2 } from "lucide-react";
+import { ArrowRight } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import { OnboardingModal } from "../OnboardingModal";
-import { useTourStore } from "../../../store/tourStore";
-import { useViewerStore } from "../../../store/viewerStore";
 import type { StepProps } from "../types";
 import { trackEvent } from "../../../lib/analytics";
+import { useProjectStore } from "../../../store/projectStore";
 
 export function CompletionStep({
   onComplete,
   stepNumber,
   totalSteps,
 }: StepProps) {
-  const projectHasCode = useTourStore((s) => s.projectHasCode);
-
+  const navigate = useNavigate();
+  const currentProject = useProjectStore((s) => s.currentProject);
   useEffect(() => {
     trackEvent("onboarding_completed", { totalSteps });
   }, [totalSteps]);
 
+  // "Let's get started" lands the user on the chat page for their current
+  // project. Without this they'd stay wherever they last were in the tour
+  // (typically the workflow builder), which is not where you want to start.
   const handleQuickStart = () => {
     onComplete();
+    if (currentProject?.id) {
+      setTimeout(() => {
+        void navigate({
+          to: "/project/$projectId",
+          params: { projectId: currentProject.id },
+          search: {},
+        });
+      }, 300);
+    }
   };
 
   return (
@@ -41,26 +53,15 @@ export function CompletionStep({
         {/* Primary CTA */}
         <div className="text-center">
           <p className="text-sm text-muted-foreground mb-4">
-            {projectHasCode !== false
-              ? "We detected code in your project. Let's dive in."
-              : "Start building something new."}
+            You're all set up. Jump in and start building.
           </p>
           <button
             type="button"
             onClick={handleQuickStart}
             className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
           >
-            {projectHasCode !== false ? (
-              <>
-                <Search className="w-4 h-4" />
-                Explore your codebase
-              </>
-            ) : (
-              <>
-                <Code2 className="w-4 h-4" />
-                Create something new
-              </>
-            )}
+            Let's get started
+            <ArrowRight className="w-4 h-4" />
           </button>
         </div>
 
@@ -73,8 +74,11 @@ export function CompletionStep({
             type="button"
             onClick={() => {
               onComplete();
+              // Defer the navigation so the tour completion flow finishes
+              // first (clears active chat, persists state) before the user
+              // lands on the workflow hub.
               setTimeout(() => {
-                useViewerStore.getState().setWorkflowMode(true);
+                void navigate({ to: "/workflow", search: {} });
               }, 300);
             }}
             className="text-muted-foreground hover:text-primary transition-colors"

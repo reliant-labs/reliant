@@ -897,27 +897,19 @@ func (r *Repo) UpsertDaemon(ctx context.Context, daemon *Daemon) error {
 			user_id,
 			hostname,
 			platform,
-			status,
 			capabilities,
 			project_paths,
 			daemon_type,
-			connected_at,
-			last_heartbeat,
-			disconnected_at,
 			created_at,
 			updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			user_id = excluded.user_id,
-			hostname = excluded.hostname,
-			platform = excluded.platform,
-			status = excluded.status,
-			capabilities = excluded.capabilities,
-			project_paths = excluded.project_paths,
+			hostname = COALESCE(excluded.hostname, daemons.hostname),
+			platform = COALESCE(excluded.platform, daemons.platform),
+			capabilities = COALESCE(excluded.capabilities, daemons.capabilities),
+			project_paths = COALESCE(excluded.project_paths, daemons.project_paths),
 			daemon_type = COALESCE(excluded.daemon_type, daemons.daemon_type),
-			connected_at = excluded.connected_at,
-			last_heartbeat = excluded.last_heartbeat,
-			disconnected_at = excluded.disconnected_at,
 			updated_at = excluded.updated_at
 	`
 	query = r.bindQuery(query)
@@ -932,13 +924,9 @@ func (r *Repo) UpsertDaemon(ctx context.Context, daemon *Daemon) error {
 		daemon.UserID,
 		daemon.Hostname,
 		daemon.Platform,
-		daemon.Status,
 		daemon.Capabilities,
 		daemon.ProjectPaths,
 		daemon.DaemonType,
-		daemon.ConnectedAt,
-		daemon.LastHeartbeat,
-		daemon.DisconnectedAt,
 		createdAt,
 		now,
 	)
@@ -960,13 +948,9 @@ func (r *Repo) GetDaemon(ctx context.Context, id string) (*Daemon, error) {
 			user_id,
 			hostname,
 			platform,
-			status,
 			capabilities,
 			project_paths,
 			daemon_type,
-			connected_at,
-			last_heartbeat,
-			disconnected_at,
 			created_at,
 			updated_at
 		FROM daemons
@@ -976,15 +960,12 @@ func (r *Repo) GetDaemon(ctx context.Context, id string) (*Daemon, error) {
 	query = r.bindQuery(query)
 
 	var (
-		daemon         Daemon
-		hostname       sql.NullString
-		platform       sql.NullString
-		capabilities   sql.NullString
-		projectPaths   sql.NullString
-		daemonType     sql.NullString
-		connectedAt    sql.NullTime
-		lastHeartbeat  sql.NullTime
-		disconnectedAt sql.NullTime
+		daemon       Daemon
+		hostname     sql.NullString
+		platform     sql.NullString
+		capabilities sql.NullString
+		projectPaths sql.NullString
+		daemonType   sql.NullString
 	)
 
 	err := r.DB.QueryRowContext(ctx, query, id).Scan(
@@ -992,13 +973,9 @@ func (r *Repo) GetDaemon(ctx context.Context, id string) (*Daemon, error) {
 		&daemon.UserID,
 		&hostname,
 		&platform,
-		&daemon.Status,
 		&capabilities,
 		&projectPaths,
 		&daemonType,
-		&connectedAt,
-		&lastHeartbeat,
-		&disconnectedAt,
 		&daemon.CreatedAt,
 		&daemon.UpdatedAt,
 	)
@@ -1014,9 +991,6 @@ func (r *Repo) GetDaemon(ctx context.Context, id string) (*Daemon, error) {
 	daemon.Capabilities = nullStringToPtr(capabilities)
 	daemon.ProjectPaths = nullStringToPtr(projectPaths)
 	daemon.DaemonType = nullStringToPtr(daemonType)
-	daemon.ConnectedAt = nullTimeToPtr(connectedAt)
-	daemon.LastHeartbeat = nullTimeToPtr(lastHeartbeat)
-	daemon.DisconnectedAt = nullTimeToPtr(disconnectedAt)
 
 	return &daemon, nil
 }
@@ -1032,13 +1006,9 @@ func (r *Repo) ListDaemonsByUserID(ctx context.Context, userID string) ([]*Daemo
 			user_id,
 			hostname,
 			platform,
-			status,
 			capabilities,
 			project_paths,
 			daemon_type,
-			connected_at,
-			last_heartbeat,
-			disconnected_at,
 			created_at,
 			updated_at
 		FROM daemons
@@ -1056,15 +1026,12 @@ func (r *Repo) ListDaemonsByUserID(ctx context.Context, userID string) ([]*Daemo
 	var result []*Daemon
 	for rows.Next() {
 		var (
-			daemon         Daemon
-			hostname       sql.NullString
-			platform       sql.NullString
-			capabilities   sql.NullString
-			projectPaths   sql.NullString
-			daemonType     sql.NullString
-			connectedAt    sql.NullTime
-			lastHeartbeat  sql.NullTime
-			disconnectedAt sql.NullTime
+			daemon       Daemon
+			hostname     sql.NullString
+			platform     sql.NullString
+			capabilities sql.NullString
+			projectPaths sql.NullString
+			daemonType   sql.NullString
 		)
 
 		if err := rows.Scan(
@@ -1072,13 +1039,9 @@ func (r *Repo) ListDaemonsByUserID(ctx context.Context, userID string) ([]*Daemo
 			&daemon.UserID,
 			&hostname,
 			&platform,
-			&daemon.Status,
 			&capabilities,
 			&projectPaths,
 			&daemonType,
-			&connectedAt,
-			&lastHeartbeat,
-			&disconnectedAt,
 			&daemon.CreatedAt,
 			&daemon.UpdatedAt,
 		); err != nil {
@@ -1090,9 +1053,6 @@ func (r *Repo) ListDaemonsByUserID(ctx context.Context, userID string) ([]*Daemo
 		daemon.Capabilities = nullStringToPtr(capabilities)
 		daemon.ProjectPaths = nullStringToPtr(projectPaths)
 		daemon.DaemonType = nullStringToPtr(daemonType)
-		daemon.ConnectedAt = nullTimeToPtr(connectedAt)
-		daemon.LastHeartbeat = nullTimeToPtr(lastHeartbeat)
-		daemon.DisconnectedAt = nullTimeToPtr(disconnectedAt)
 
 		result = append(result, &daemon)
 	}
@@ -1104,195 +1064,151 @@ func (r *Repo) ListDaemonsByUserID(ctx context.Context, userID string) ([]*Daemo
 	return result, nil
 }
 
-func (r *Repo) ListStaleActiveDaemons(ctx context.Context, cutoff time.Time) ([]*Daemon, error) {
+func (r *Repo) UpsertDaemonAttachment(ctx context.Context, att *DaemonAttachment) error {
+	if att == nil {
+		return fmt.Errorf("daemon attachment cannot be nil")
+	}
+	if att.DaemonID == "" {
+		return fmt.Errorf("daemon attachment requires daemon_id")
+	}
+	if att.UserID == "" {
+		return fmt.Errorf("daemon attachment requires user_id")
+	}
+	if att.Source == "" {
+		return fmt.Errorf("daemon attachment requires source")
+	}
+	now := time.Now().UTC()
+	if att.AttachedAt.IsZero() {
+		att.AttachedAt = now
+	}
+	if att.LastStreamActivity.IsZero() {
+		att.LastStreamActivity = now
+	}
 	query := `
-		SELECT
-			id,
-			user_id,
-			hostname,
-			platform,
-			status,
-			capabilities,
-			project_paths,
-			daemon_type,
-			connected_at,
-			last_heartbeat,
-			disconnected_at,
-			created_at,
-			updated_at
-		FROM daemons
-		WHERE status = ?
-			AND COALESCE(last_heartbeat, connected_at, created_at) < ?
-		ORDER BY updated_at ASC
+		INSERT INTO daemon_attachment (daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (daemon_id) DO UPDATE SET
+			user_id = EXCLUDED.user_id,
+			source = EXCLUDED.source,
+			pod_ip = EXCLUDED.pod_ip,
+			pod_port = EXCLUDED.pod_port,
+			attached_at = EXCLUDED.attached_at,
+			last_stream_activity = EXCLUDED.last_stream_activity
 	`
 	query = r.bindQuery(query)
+	if _, err := r.DB.ExecContext(ctx, query, att.DaemonID, att.UserID, string(att.Source), att.PodIP, att.PodPort, att.AttachedAt, att.LastStreamActivity); err != nil {
+		return fmt.Errorf("upserting daemon attachment: %w", err)
+	}
+	return nil
+}
 
-	rows, err := r.DB.QueryContext(ctx, query, DaemonStatusActive, cutoff)
+func (r *Repo) TouchDaemonAttachment(ctx context.Context, daemonID string, activityAt time.Time) error {
+	if daemonID == "" {
+		return fmt.Errorf("daemon ID cannot be empty")
+	}
+	query := `UPDATE daemon_attachment SET last_stream_activity = ? WHERE daemon_id = ?`
+	query = r.bindQuery(query)
+	if _, err := r.DB.ExecContext(ctx, query, activityAt, daemonID); err != nil {
+		return fmt.Errorf("touching daemon attachment: %w", err)
+	}
+	return nil
+}
+
+func (r *Repo) DeleteDaemonAttachment(ctx context.Context, daemonID string) error {
+	if daemonID == "" {
+		return fmt.Errorf("daemon ID cannot be empty")
+	}
+	query := `DELETE FROM daemon_attachment WHERE daemon_id = ?`
+	query = r.bindQuery(query)
+	if _, err := r.DB.ExecContext(ctx, query, daemonID); err != nil {
+		return fmt.Errorf("deleting daemon attachment: %w", err)
+	}
+	return nil
+}
+
+func (r *Repo) IsDaemonAttached(ctx context.Context, userID string, staleThreshold time.Duration) (bool, error) {
+	if userID == "" {
+		return false, fmt.Errorf("user ID cannot be empty")
+	}
+	cutoff := time.Now().UTC().Add(-staleThreshold)
+	query := `SELECT 1 FROM daemon_attachment WHERE user_id = ? AND last_stream_activity > ? LIMIT 1`
+	query = r.bindQuery(query)
+	var n int
+	err := r.DB.QueryRowContext(ctx, query, userID, cutoff).Scan(&n)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to list stale daemons before %s: %w", cutoff.Format(time.RFC3339), err)
+		return false, fmt.Errorf("checking daemon attachment: %w", err)
+	}
+	return true, nil
+}
+
+func (r *Repo) ListOutboundAttachments(ctx context.Context) ([]*DaemonAttachment, error) {
+	query := `
+		SELECT daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity
+		FROM daemon_attachment
+		WHERE source = 'outbound'
+	`
+	query = r.bindQuery(query)
+	rows, err := r.DB.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("listing outbound attachments: %w", err)
 	}
 	defer rows.Close()
 
-	var result []*Daemon
+	var result []*DaemonAttachment
 	for rows.Next() {
 		var (
-			daemon         Daemon
-			hostname       sql.NullString
-			platform       sql.NullString
-			capabilities   sql.NullString
-			projectPaths   sql.NullString
-			daemonType     sql.NullString
-			connectedAt    sql.NullTime
-			lastHeartbeat  sql.NullTime
-			disconnectedAt sql.NullTime
+			att     DaemonAttachment
+			source  string
+			podIP   sql.NullString
+			podPort sql.NullInt64
 		)
-
-		if err := rows.Scan(
-			&daemon.ID,
-			&daemon.UserID,
-			&hostname,
-			&platform,
-			&daemon.Status,
-			&capabilities,
-			&projectPaths,
-			&daemonType,
-			&connectedAt,
-			&lastHeartbeat,
-			&disconnectedAt,
-			&daemon.CreatedAt,
-			&daemon.UpdatedAt,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan stale daemon row: %w", err)
+		if err := rows.Scan(&att.DaemonID, &att.UserID, &source, &podIP, &podPort, &att.AttachedAt, &att.LastStreamActivity); err != nil {
+			return nil, fmt.Errorf("scanning outbound attachment: %w", err)
 		}
-
-		daemon.Hostname = nullStringToPtr(hostname)
-		daemon.Platform = nullStringToPtr(platform)
-		daemon.Capabilities = nullStringToPtr(capabilities)
-		daemon.ProjectPaths = nullStringToPtr(projectPaths)
-		daemon.DaemonType = nullStringToPtr(daemonType)
-		daemon.ConnectedAt = nullTimeToPtr(connectedAt)
-		daemon.LastHeartbeat = nullTimeToPtr(lastHeartbeat)
-		daemon.DisconnectedAt = nullTimeToPtr(disconnectedAt)
-
-		result = append(result, &daemon)
+		att.Source = DaemonAttachmentSource(source)
+		if podIP.Valid {
+			v := podIP.String
+			att.PodIP = &v
+		}
+		if podPort.Valid {
+			v := int(podPort.Int64)
+			att.PodPort = &v
+		}
+		result = append(result, &att)
 	}
-
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed iterating stale daemon rows: %w", err)
+		return nil, fmt.Errorf("iterating outbound attachments: %w", err)
 	}
-
 	return result, nil
 }
 
-func (r *Repo) UpdateDaemonStatus(ctx context.Context, daemonID string, status DaemonStatus, connectedAt *time.Time, lastHeartbeat *time.Time, disconnectedAt *time.Time) error {
-	if daemonID == "" {
-		return fmt.Errorf("daemon ID cannot be empty")
+func (r *Repo) ListAttachedDaemonIDsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]string, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-
-	query := `
-		UPDATE daemons
-		SET
-			status = ?,
-			connected_at = COALESCE(?, connected_at),
-			last_heartbeat = COALESCE(?, last_heartbeat),
-			disconnected_at = COALESCE(?, disconnected_at),
-			updated_at = ?
-		WHERE id = ?
-	`
+	cutoff := time.Now().UTC().Add(-staleThreshold)
+	query := `SELECT daemon_id FROM daemon_attachment WHERE user_id = ? AND last_stream_activity > ?`
 	query = r.bindQuery(query)
-
-	_, err := r.DB.ExecContext(ctx, query,
-		status,
-		connectedAt,
-		lastHeartbeat,
-		disconnectedAt,
-		time.Now().UTC(),
-		daemonID,
-	)
+	rows, err := r.DB.QueryContext(ctx, query, userID, cutoff)
 	if err != nil {
-		return fmt.Errorf("failed to update daemon status for %s: %w", daemonID, err)
+		return nil, fmt.Errorf("listing attached daemon ids: %w", err)
 	}
-
-	return nil
-}
-
-func (r *Repo) UpdateDaemonHeartbeat(ctx context.Context, daemonID string, heartbeatAt time.Time) error {
-	if daemonID == "" {
-		return fmt.Errorf("daemon ID cannot be empty")
-	}
-	if heartbeatAt.IsZero() {
-		heartbeatAt = time.Now().UTC()
-	}
-
-	query := `
-		UPDATE daemons
-		SET
-			last_heartbeat = ?,
-			status = ?,
-			disconnected_at = NULL,
-			updated_at = ?
-		WHERE id = ?
-	`
-	query = r.bindQuery(query)
-
-	_, err := r.DB.ExecContext(ctx, query,
-		heartbeatAt,
-		DaemonStatusActive,
-		time.Now().UTC(),
-		daemonID,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to update daemon heartbeat for %s: %w", daemonID, err)
-	}
-
-	return nil
-}
-
-func (r *Repo) MarkDaemonsDisconnected(ctx context.Context, daemonIDs []string, disconnectedAt time.Time) error {
-	if len(daemonIDs) == 0 {
-		return nil
-	}
-	if disconnectedAt.IsZero() {
-		disconnectedAt = time.Now().UTC()
-	}
-
-	placeholders := make([]string, 0, len(daemonIDs))
-	args := make([]interface{}, 0, len(daemonIDs)+4)
-	args = append(args,
-		DaemonStatusDisconnected,
-		disconnectedAt,
-		disconnectedAt,
-		DaemonStatusActive,
-	)
-
-	for _, daemonID := range daemonIDs {
-		if strings.TrimSpace(daemonID) == "" {
-			continue
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scanning attached daemon id: %w", err)
 		}
-		placeholders = append(placeholders, "?")
-		args = append(args, daemonID)
+		ids = append(ids, id)
 	}
-
-	if len(placeholders) == 0 {
-		return nil
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating attached daemon ids: %w", err)
 	}
-
-	query := fmt.Sprintf(`
-		UPDATE daemons
-		SET
-			status = ?,
-			disconnected_at = ?,
-			updated_at = ?
-		WHERE status = ?
-			AND id IN (%s)
-	`, strings.Join(placeholders, ","))
-	query = r.bindQuery(query)
-
-	if _, err := r.DB.ExecContext(ctx, query, args...); err != nil {
-		return fmt.Errorf("failed to mark daemons disconnected: %w", err)
-	}
-
-	return nil
+	return ids, nil
 }
 
 func (r *Repo) UpsertProjectConfigRecord(ctx context.Context, record *ProjectConfigRecord) error {

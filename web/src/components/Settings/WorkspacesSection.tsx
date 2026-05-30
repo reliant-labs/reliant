@@ -153,7 +153,7 @@ export function WorkspacesSection() {
           <div className="flex h-full min-h-0">
             <div className="w-80 flex-shrink-0 overflow-hidden border-r border-border/60 bg-card/20">
               {activeTab === "active" ? (
-                <WorktreesPanel daemonName={activeDaemon?.hostname} includeArchivedOnLoad />
+                <WorktreesPanel daemonId={activeDaemon?.daemonId} includeArchivedOnLoad />
               ) : (
                 <ArchivedWorktreesPanel />
               )}

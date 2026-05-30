@@ -67,7 +67,6 @@ interface CloudSectionProps {
 
 export function CloudSection({ section }: CloudSectionProps) {
   const adminURL = getAdminURL();
-  const activeLink = cloudLinks.find((l) => l.id === section);
 
   if (!adminURL) {
     return (

@@ -23,7 +23,6 @@ import (
 	"github.com/google/uuid"
 	"gopkg.in/yaml.v3"
 
-	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
@@ -159,20 +158,16 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 	SetTerminalManager(terminal.NewManager())
 	SetMCPManager(mcpManager)
 
-	// Resolve stable daemon identity: persisted UUID + optional name override.
+	// daemonID is left empty here — the gateway is the authoritative source
+	// and assigns it via RegistrationAck once the stream is up.
 	daemonName := bootCfg.Name
 	if daemonName == "" {
 		daemonName = hostname
 	}
-	identity, err := auth.EnsureDaemonIdentity(daemonName)
-	if err != nil {
-		return nil, fmt.Errorf("resolving daemon identity: %w", err)
-	}
 
 	return &daemonClient{
-		daemonID:   identity.DaemonID,
-		daemonName: identity.Name,
-		// userID is set later from RegistrationAck (gateway-derived from PAT).
+		daemonName: daemonName,
+		// daemonID and userID are set later from RegistrationAck (gateway-derived from PAT).
 		hostname:          hostname,
 		platform:          runtime.GOOS,
 		cwd:               cwd,

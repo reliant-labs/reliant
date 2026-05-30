@@ -127,6 +127,9 @@ func (s *ChatService) resurrectGhostWorkflow(
 		Thread:       targetThread,
 		ThreadMode:   model.ThreadModeInherit, // Inherit existing thread context
 	}
+	if jwt, ok := auth.GetUserJWT(userID); ok {
+		execContext.UserJWT = jwt
+	}
 
 	// Note: Message was already saved above before ghost recovery
 
@@ -667,6 +670,9 @@ func (s *ChatService) SendMessage(
 		WorkflowName: workflowName,
 		Thread:       targetThread,
 		ThreadMode:   model.ThreadModeNew,
+	}
+	if jwt, ok := auth.GetUserJWT(userID); ok {
+		execContext.UserJWT = jwt
 	}
 
 	// Save messages BEFORE starting workflow for consistency

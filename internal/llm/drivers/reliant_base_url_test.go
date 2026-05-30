@@ -1,13 +1,9 @@
 package drivers
 
 import (
-	"context"
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestResolveReliantBaseURL_DefaultWhenUnset(t *testing.T) {
@@ -73,68 +69,6 @@ func TestResolveReliantAPIKey_PreservesManagedKeyForRemoteBaseURL(t *testing.T) 
 
 	assert.Equal(t, "rlnt_managed_key", resolvedKey)
 	assert.Nil(t, headers)
-}
-
-func TestBuildAvailableDrivers_ReliantJWTUsesLoopbackMasterKey(t *testing.T) {
-	repo, cleanup := db.SetupTestDB(t)
-	defer cleanup()
-
-	ctx := context.Background()
-	userID := "test-user-jwt-loopback"
-	jwt := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.dGVzdA"
-	t.Setenv("RELIANT_API_BASE_URL", "http://localhost:4000/v1")
-	t.Setenv("LITELLM_MASTER_KEY", "sk-local-master")
-	auth.SetUserJWT(userID, jwt)
-
-	availableDrivers, err := BuildAvailableDrivers(ctx, repo, userID)
-	require.NoError(t, err)
-
-	cfg, ok := availableDrivers.Drivers["reliant"]
-	require.True(t, ok)
-	assert.Equal(t, "http://localhost:4000/v1", cfg.BaseURL)
-	assert.Equal(t, "sk-local-master", cfg.APIKey)
-	assert.Equal(t, map[string]string{"X-Reliant-JWT": jwt}, cfg.ExtraHeaders)
-}
-
-func TestBuildAvailableDrivers_ReliantJWTUsesInClusterLiteLLMMasterKey(t *testing.T) {
-	repo, cleanup := db.SetupTestDB(t)
-	defer cleanup()
-
-	ctx := context.Background()
-	userID := "test-user-jwt-cluster"
-	jwt := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.dGVzdA"
-	t.Setenv("RELIANT_API_BASE_URL", "http://litellm:4000/v1")
-	t.Setenv("LITELLM_MASTER_KEY", "sk-local-master")
-	auth.SetUserJWT(userID, jwt)
-
-	availableDrivers, err := BuildAvailableDrivers(ctx, repo, userID)
-	require.NoError(t, err)
-
-	cfg, ok := availableDrivers.Drivers["reliant"]
-	require.True(t, ok)
-	assert.Equal(t, "http://litellm:4000/v1", cfg.BaseURL)
-	assert.Equal(t, "sk-local-master", cfg.APIKey)
-	assert.Equal(t, map[string]string{"X-Reliant-JWT": jwt}, cfg.ExtraHeaders)
-}
-
-func TestBuildAvailableDrivers_ReliantJWTUsesDirectBearerForProduction(t *testing.T) {
-	repo, cleanup := db.SetupTestDB(t)
-	defer cleanup()
-
-	ctx := context.Background()
-	userID := "test-user-jwt-prod"
-	jwt := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0In0.dGVzdA"
-	t.Setenv("RELIANT_API_BASE_URL", "") // uses default production URL
-	auth.SetUserJWT(userID, jwt)
-
-	availableDrivers, err := BuildAvailableDrivers(ctx, repo, userID)
-	require.NoError(t, err)
-
-	cfg, ok := availableDrivers.Drivers["reliant"]
-	require.True(t, ok)
-	assert.Equal(t, "https://api.reliant.dev/v1", cfg.BaseURL)
-	assert.Equal(t, jwt, cfg.APIKey)
-	assert.Nil(t, cfg.ExtraHeaders)
 }
 
 func TestIsLocalLiteLLMBaseURL(t *testing.T) {

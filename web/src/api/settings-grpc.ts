@@ -33,6 +33,7 @@ import {
   GetProviderStatusesRequestSchema,
   UpdateProviderAPIKeyRequestSchema,
   ValidateProviderAPIKeyRequestSchema,
+  SyncReliantProviderRequestSchema,
   CompleteCodexOAuthRequestSchema,
   CompleteClaudeOAuthRequestSchema,
   // Sub-phase 6e: Privacy
@@ -454,6 +455,40 @@ export const settingsGrpc = {
     return {
       success: response.success,
       message: response.message,
+    };
+  },
+
+  /**
+   * Sync the Reliant provider API key from control-plane.
+   *
+   * Mints or fetches the per-user rlnt_ internal API key and persists it
+   * locally so chat requests can use the reliant provider without manual
+   * configuration. Safe to call once per session post-login; idempotent.
+   *
+   * @param forceRotate If true, force-rotate the existing key on control-plane.
+   */
+  async syncReliantProvider(
+    forceRotate = false
+  ): Promise<{
+    success: boolean;
+    message: string;
+    synced: boolean;
+    createdOrg: boolean;
+    createdKey: boolean;
+    rotatedKey: boolean;
+  }> {
+    const client = grpcClient.settings();
+    const request = create(SyncReliantProviderRequestSchema, {
+      forceRotate,
+    });
+    const response = await client.syncReliantProvider(request);
+    return {
+      success: response.success,
+      message: response.message,
+      synced: response.synced,
+      createdOrg: response.createdOrg,
+      createdKey: response.createdKey,
+      rotatedKey: response.rotatedKey,
     };
   },
 

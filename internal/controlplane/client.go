@@ -19,6 +19,7 @@ type Client interface {
 	ReserveManagedReliantUsage(ctx context.Context, managedKey string, request ManagedReliantReservationRequest) (*controlplanev1.ReserveManagedReliantUsageResponse, error)
 	FinalizeManagedReliantUsage(ctx context.Context, managedKey string, request ManagedReliantFinalizeRequest) (*controlplanev1.FinalizeManagedReliantUsageResponse, error)
 	ReleaseManagedReliantUsageReservation(ctx context.Context, managedKey, reservationID string) (*controlplanev1.ReleaseManagedReliantUsageReservationResponse, error)
+	IssueMyReliantAPIKey(ctx context.Context, jwt string) (string, error)
 }
 
 type ManagedReliantAffordabilityRequest struct {
@@ -136,6 +137,16 @@ func (c *connectClient) FinalizeManagedReliantUsage(ctx context.Context, managed
 		return nil, err
 	}
 	return resp.Msg, nil
+}
+
+func (c *connectClient) IssueMyReliantAPIKey(ctx context.Context, jwt string) (string, error) {
+	req := connect.NewRequest(&controlplanev1.IssueMyReliantAPIKeyRequest{})
+	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
+	resp, err := c.billingClient().IssueMyReliantAPIKey(ctx, req)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(resp.Msg.GetPlaintextKey()), nil
 }
 
 func (c *connectClient) ReleaseManagedReliantUsageReservation(ctx context.Context, managedKey, reservationID string) (*controlplanev1.ReleaseManagedReliantUsageReservationResponse, error) {

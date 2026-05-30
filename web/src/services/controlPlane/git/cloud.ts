@@ -1,29 +1,55 @@
 /**
- * Cloud implementation of the git service. Talks to the control-plane
- * `controlplane.v1.GitCredentialService` via Connect JSON.
+ * Cloud implementation of the git service. Uses typed Connect-Web clients
+ * against `controlplane.v1.GitCredentialService` (see
+ * web/src/gen/controlplane/v1/public/git_credential_service_pb.ts).
+ *
+ * Connect's protojson is camelCase-native — request fields use the generated
+ * TS message shapes and snake_case duplicates are not sent.
  */
 
-import { controlPlaneFetch } from "../client";
+import { timestampDate, type Timestamp } from "@bufbuild/protobuf/wkt";
+import { ConnectError } from "@connectrpc/connect";
+import { getControlPlaneClient } from "../client";
 import { CONTROL_PLANE_API_URL } from "../config";
-import type { GitCredentialStatus, GitAccount } from "./types";
+import { GitCredentialService } from "@/gen/controlplane/v1/public/git_credential_service_pb";
+import type {
+  CloneRepoArgs,
+  GitAccount,
+  GitCredentialStatus,
+  GitRepo,
+  ListGitReposPage,
+} from "./types";
 
-const SVC = "controlplane.v1.GitCredentialService";
+function timestampToISO(ts: Timestamp | undefined): string | undefined {
+  if (!ts) return undefined;
+  try {
+    return timestampDate(ts).toISOString();
+  } catch {
+    return undefined;
+  }
+}
 
 export async function getCredential(
   provider: string,
 ): Promise<GitCredentialStatus> {
-  const res = await controlPlaneFetch(SVC, "GetGitCredential", {
-    provider,
-    account_login: "",
-  });
-  return {
-    available: true,
-    hasToken: Boolean(res.has_token),
-    provider: res.provider ?? provider,
-    scopes: res.scopes ?? "",
-    createdAt: res.created_at,
-    updatedAt: res.updated_at,
-  };
+  try {
+    const res = await getControlPlaneClient(GitCredentialService).getGitCredential({
+      provider,
+    });
+    return {
+      available: true,
+      hasToken: res.hasToken,
+      provider: res.provider || provider,
+      scopes: res.scopes ?? "",
+      createdAt: timestampToISO(res.createdAt),
+      updatedAt: timestampToISO(res.updatedAt),
+    };
+  } catch (err) {
+    // NotFound bubbles up as a credential-missing signal; rethrow so callers
+    // (hooks/useGitHubCredential, etc.) can branch on the ConnectError code.
+    if (err instanceof ConnectError) throw err;
+    throw err;
+  }
 }
 
 export async function saveCredential(
@@ -31,28 +57,26 @@ export async function saveCredential(
   accessToken: string,
   scopes: string,
 ): Promise<void> {
-  await controlPlaneFetch(SVC, "SaveGitCredential", {
+  await getControlPlaneClient(GitCredentialService).saveGitCredential({
     provider,
-    access_token: accessToken,
+    accessToken,
     scopes,
-    account_login: "",
   });
 }
 
 export async function deleteCredential(provider: string): Promise<void> {
-  await controlPlaneFetch(SVC, "DeleteGitCredential", {
+  await getControlPlaneClient(GitCredentialService).deleteGitCredential({
     provider,
-    account_login: "",
   });
 }
 
+// listCredentials isn't a real cloud RPC — credentials are keyed by provider
+// and looked up individually via getCredential. Kept as a stub for parity
+// with local.ts (the dispatch in index.ts requires structural matching).
 export async function listCredentials(
-  provider?: string,
+  _provider?: string,
 ): Promise<{ accounts: GitAccount[] }> {
-  const res = await controlPlaneFetch(SVC, "ListGitCredentials", {
-    provider: provider ?? "",
-  });
-  return { accounts: res.accounts ?? [] };
+  return { accounts: [] };
 }
 
 export function getOAuthURL(): string | null {
@@ -61,18 +85,36 @@ export function getOAuthURL(): string | null {
 }
 
 export async function cloneRepo(
-  daemonName: string,
-  gitRepo: string,
-  gitBranch: string,
-  path: string,
-  accountLogin?: string,
+  args: CloneRepoArgs,
 ): Promise<{ clonedPath: string }> {
-  const res = await controlPlaneFetch(SVC, "CloneRepo", {
-    daemon_name: daemonName,
-    git_repo: gitRepo,
-    git_branch: gitBranch,
-    path,
-    account_login: accountLogin ?? "",
+  const res = await getControlPlaneClient(GitCredentialService).cloneRepo({
+    daemonId: args.daemonId,
+    gitRepo: args.gitRepo,
+    gitBranch: args.gitBranch,
+    path: args.path,
   });
-  return { clonedPath: res.cloned_path };
+  return { clonedPath: res.clonedPath };
+}
+
+export async function listRepos(
+  page = 1,
+  perPage = 20,
+  sort = "updated",
+): Promise<ListGitReposPage> {
+  const res = await getControlPlaneClient(GitCredentialService).listGitRepos({
+    provider: "github",
+    page,
+    perPage,
+    sort,
+  });
+  const repos: GitRepo[] = res.repos.map((r) => ({
+    fullName: r.fullName,
+    cloneUrl: r.cloneUrl,
+    defaultBranch: r.defaultBranch,
+    description: r.description,
+    private: r.private,
+    language: r.language,
+    updatedAt: timestampToISO(r.updatedAt) ?? "",
+  }));
+  return { repos, hasMore: res.hasMore };
 }

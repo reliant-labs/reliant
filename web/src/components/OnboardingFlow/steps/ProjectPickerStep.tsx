@@ -9,6 +9,7 @@ import { useProjectStore } from "@/store/projectStore";
 import type { Project } from "@/store/projectStore";
 import { ProjectPickerModal } from "@/components/Projects/ProjectPickerModal";
 import { finalizeOnboardingSideEffects } from "../useOnboardingComplete";
+import { DaemonConnectingGate } from "../DaemonConnectingGate";
 import type { StepProps } from "../types";
 
 export function ProjectPickerStep({ plan, onBack }: StepProps) {
@@ -23,6 +24,11 @@ export function ProjectPickerStep({ plan, onBack }: StepProps) {
   const [completing, setCompleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  // After completeOnboarding succeeds for a cloud user we render the daemon
+  // gate instead of navigating immediately, so the user gets a clear signal
+  // whether the daemon came online. For local daemons ComputeStep already
+  // gates on activeDaemon, so we skip the gate.
+  const [showDaemonGate, setShowDaemonGate] = useState(false);
 
   useEffect(() => {
     void loadProjects();
@@ -34,6 +40,12 @@ export function ProjectPickerStep({ plan, onBack }: StepProps) {
         new Date(b.last_active).getTime() - new Date(a.last_active).getTime(),
     );
   }, [projects]);
+
+  const isCloud = plan.compute === "cloud_free_trial";
+
+  const goToChat = useCallback(() => {
+    navigate({ to: "/", search: { step: undefined, plan: undefined } });
+  }, [navigate]);
 
   const finalize = useCallback(
     async (source: "existing" | "new") => {
@@ -54,14 +66,21 @@ export function ProjectPickerStep({ plan, onBack }: StepProps) {
           project_source: source,
         });
         await finalizeOnboardingSideEffects(plan.modelProvider);
-        navigate({ to: "/", search: { step: undefined, plan: undefined } });
+        // Cloud daemons may still be provisioning at this point — show the
+        // gate so the user knows whether to wait or report. Local daemons
+        // were already verified ACTIVE by ComputeStep.
+        if (isCloud) {
+          setShowDaemonGate(true);
+        } else {
+          goToChat();
+        }
       } catch (err) {
         logger.warn("[ProjectPickerStep] finalize failed", err);
         setError(err instanceof Error ? err.message : "Failed to finish onboarding");
         setCompleting(false);
       }
     },
-    [completeOnboardingMutation, navigate, plan],
+    [completeOnboardingMutation, goToChat, isCloud, plan],
   );
 
   const handleSelectExisting = useCallback(
@@ -100,6 +119,14 @@ export function ProjectPickerStep({ plan, onBack }: StepProps) {
     },
     [finalize, loadProjects, selectProject],
   );
+
+  if (showDaemonGate) {
+    return (
+      <div className="space-y-6">
+        <DaemonConnectingGate onContinue={goToChat} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

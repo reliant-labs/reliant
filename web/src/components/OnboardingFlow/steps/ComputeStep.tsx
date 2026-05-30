@@ -13,7 +13,7 @@ import {
 } from "@/hooks/useOnboardingQueries";
 import type { CodeSource, ComputeChoice, OnboardingIntent, StepProps } from "../types";
 import { DaemonConnectionDiagrams } from "../DaemonConnectionDiagrams";
-import { daemonStartCommand, HOMEBREW_CLI_INSTALL, HOMEBREW_CASK_INSTALL } from "@/lib/cli-commands";
+import { daemonStartCommand, HOMEBREW_CASK_INSTALL } from "@/lib/cli-commands";
 import { trackEvent } from "@/lib/analytics";
 
 const DOWNLOAD_BASE =
@@ -64,18 +64,54 @@ const DOWNLOAD_LINKS: DownloadLink[] = [
   },
 ];
 
-function getOS(): DetectedOS {
+// Synchronous best-guess based on `navigator.platform`. For Macs we default to
+// arm64 (the overwhelming majority of Macs sold since 2020) and refine async
+// via `detectMacArch` below. We can't read CPU arch synchronously: Chromium's
+// `userAgentData.architecture` is a high-entropy hint that requires the async
+// `getHighEntropyValues` call, Safari has no `userAgentData` at all, and
+// `navigator.platform` reports "MacIntel" on Apple Silicon for web-compat.
+function getInitialOS(): DetectedOS {
   const platform = navigator.platform;
-  if (/Mac/i.test(platform)) {
-    return (
-      navigator as Navigator & { userAgentData?: { architecture?: string } }
-    ).userAgentData?.architecture === "arm"
-      ? "mac-arm64"
-      : "mac-x64";
-  }
+  if (/Mac/i.test(platform)) return "mac-arm64";
   if (/Win/i.test(platform)) return "windows";
   if (/Linux/i.test(platform)) return "linux";
   return "unknown";
+}
+
+type UserAgentDataLike = {
+  getHighEntropyValues?: (hints: string[]) => Promise<{ architecture?: string }>;
+};
+
+async function detectMacArch(): Promise<"mac-arm64" | "mac-x64"> {
+  const uaData = (navigator as Navigator & { userAgentData?: UserAgentDataLike })
+    .userAgentData;
+  if (uaData?.getHighEntropyValues) {
+    try {
+      const { architecture } = await uaData.getHighEntropyValues(["architecture"]);
+      if (architecture === "arm") return "mac-arm64";
+      if (architecture === "x86") return "mac-x64";
+    } catch {
+      // fall through to WebGL probe
+    }
+  }
+  // Safari / fallback: the unmasked WebGL renderer is "Apple GPU" / "Apple M…"
+  // on Apple Silicon and includes "Intel" on Intel Macs.
+  try {
+    const canvas = document.createElement("canvas");
+    const gl =
+      (canvas.getContext("webgl") as WebGLRenderingContext | null) ??
+      (canvas.getContext("experimental-webgl") as WebGLRenderingContext | null);
+    const ext = gl?.getExtension("WEBGL_debug_renderer_info");
+    if (gl && ext) {
+      const renderer = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) as string;
+      if (/Intel/i.test(renderer)) return "mac-x64";
+      if (/Apple/i.test(renderer)) return "mac-arm64";
+    }
+  } catch {
+    // ignore — fall through to default
+  }
+  // Modern default. Intel Mac users can still click "Other platforms".
+  return "mac-arm64";
 }
 
 function getPrimaryDownload(os: DetectedOS): DownloadLink | null {
@@ -196,7 +232,20 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
   // Daemon mutations via React Query
   const createDaemonMutation = useCreateDaemon();
 
-  const detectedOS = useMemo(() => getOS(), []);
+  const [detectedOS, setDetectedOS] = useState<DetectedOS>(() => getInitialOS());
+  useEffect(() => {
+    if (detectedOS !== "mac-arm64") return;
+    let cancelled = false;
+    void detectMacArch().then((arch) => {
+      if (!cancelled) setDetectedOS(arch);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Only run once at mount — re-running on every detectedOS change would
+    // loop after `setDetectedOS("mac-x64")` flips us off the arm64 branch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const primaryDownload = useMemo(
     () => getPrimaryDownload(detectedOS),
     [detectedOS],
@@ -218,24 +267,67 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
     if (isStartingCloud) return;
 
     setError(null);
+    setShowLocal(false);
     setIsStartingCloud(true);
     try {
-      // CreateDaemon is idempotent server-side: if a daemon with the same
-      // slug already exists for this owner, the server refreshes its image
-      // and resources to current and republishes the workspace command.
-      // No client-side list/resume/409 dance needed.
-      await createDaemonMutation.mutateAsync({
-        name: "onboarding-daemon",
-        daemonType: DAEMON_TYPE_MANAGED,
-        size: DAEMON_SIZE_SMALL,
-        gitRepo: "",
-        gitBranch: "main",
-      });
+      // Resolve the right path for this user. If a daemon already exists
+      // (e.g. from a prior session) we either reuse it or resume it — the
+      // server-side CreateDaemon is NOT a wake-up for a suspended workspace,
+      // so calling it again leaves a suspended daemon suspended.
+      const { listDaemons, hasActiveDaemon, resumeDaemon } = await import(
+        "@/services/controlPlane/daemon"
+      );
+      const existing = await listDaemons();
+      const daemons = existing.daemons;
 
-      updatePlan({
+      let needsProvisioning = true;
+
+      if (hasActiveDaemon(daemons)) {
+        // Active daemon already present — nothing to do.
+        needsProvisioning = false;
+      } else if (daemons.length > 0) {
+        // Daemon exists but isn't active (suspended / disconnected / failed).
+        // Resume it. Resume failure is non-fatal — the user can retry from
+        // the chat banner; we still proceed to the provisioning UI so the
+        // app waits for state to settle.
+        const daemonId = daemons[0]?.id ?? "";
+        if (daemonId) {
+          try {
+            await resumeDaemon(daemonId);
+          } catch {
+            // Surface as a soft error via the provisioning UI rather than
+            // blocking onboarding.
+          }
+        }
+      } else {
+        // No daemons → create one. createDaemon may itself 409 if another
+        // tab raced us; treat "already exists" as a resume.
+        try {
+          await createDaemonMutation.mutateAsync({
+            name: "onboarding-daemon",
+            daemonType: DAEMON_TYPE_MANAGED,
+            size: DAEMON_SIZE_SMALL,
+            gitRepo: "",
+            gitBranch: "main",
+          });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message.toLowerCase() : "";
+          if (msg.includes("plan limit") || msg.includes("already") || msg.includes("exists")) {
+            const fallback = await listDaemons();
+            const fallbackId = fallback.daemons[0]?.id ?? "";
+            if (fallbackId) {
+              try { await resumeDaemon(fallbackId); } catch { /* non-fatal */ }
+            }
+          } else {
+            throw err;
+          }
+        }
+      }
+
+      await updatePlan({
         compute: "cloud_free_trial",
         daemonLocation: "reliant_cloud",
-        daemonProvisioning: true,
+        daemonProvisioning: needsProvisioning,
         codeSource: codeSourceForCompute(plan.codeSource, "cloud_free_trial", plan.intent),
         localPath: undefined,
         projectName: undefined,
@@ -251,9 +343,22 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
     }
   };
 
+  // Clicking "I'll connect my own" only flips local UI state — it does NOT
+  // commit `plan.compute` yet. If we set it here, `deriveStep` would see
+  // compute set + modelProvider unset and immediately route the user to the
+  // model step, skipping the download/connect instructions that render below
+  // when `showLocal && !activeDaemon`. We commit compute once the daemon
+  // actually connects (the useEffect below) or via the explicit Continue
+  // button when a daemon is already running.
   const handleLocal = () => {
     setError(null);
-    updatePlan({
+    setShowLocal(true);
+  };
+
+  const commitLocalAndAdvance = async (daemonPreconnected: boolean) => {
+    if (hasAdvanced.current) return;
+    hasAdvanced.current = true;
+    await updatePlan({
       compute: "local_daemon",
       daemonLocation: "self_hosted",
       daemonProvisioning: false,
@@ -261,29 +366,38 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
       localPath: undefined,
       projectName: undefined,
     });
-    setShowLocal(true);
-  };
-
-  const handleLocalContinue = () => {
-    handleLocal();
-    trackEvent('onboarding_compute_selected', { compute: 'local', daemon_preconnected: Boolean(activeDaemon) });
-    if (hasAdvanced.current) return;
-    hasAdvanced.current = true;
+    trackEvent('onboarding_compute_selected', { compute: 'local', daemon_preconnected: daemonPreconnected });
     onNext();
   };
 
+  const handleLocalContinue = async () => {
+    await commitLocalAndAdvance(Boolean(activeDaemon));
+  };
+
+  // Auto-skip the compute step whenever a daemon is already active. Two
+  // cases this covers:
+  //   1. Initial mount with a daemon already running (Electron's main
+  //      process auto-starts the daemon on first launch; users on the web
+  //      may also have one from a prior session).
+  //   2. User clicked "I'll connect my own", followed the instructions,
+  //      and their newly-started daemon just connected.
+  // The `!startingCloud` guard avoids racing handleCloud: while the cloud
+  // flow is running, an already-active daemon (e.g. a stale local one)
+  // must not pre-empt the cloud commit.
   useEffect(() => {
-    if (plan.compute !== "local_daemon") return;
     if (!activeDaemon) return;
+    if (startingCloud) return;
     if (hasAdvanced.current) return;
-    hasAdvanced.current = true;
     if (!hasTrackedConnectedRef.current) {
       hasTrackedConnectedRef.current = true;
       trackEvent('onboarding_daemon_connected');
     }
-    trackEvent('onboarding_compute_selected', { compute: 'local', daemon_preconnected: true });
-    onNext();
-  }, [activeDaemon, plan.compute, onNext]);
+    void commitLocalAndAdvance(true);
+    // commitLocalAndAdvance closes over plan.codeSource / plan.intent /
+    // updatePlan / onNext, but the hasAdvanced ref guards against re-entry,
+    // so we intentionally narrow the dep list to the trigger conditions.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeDaemon, startingCloud]);
 
   const handleGeneratePat = async () => {
     setGeneratingPat(true);
@@ -430,7 +544,7 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
           className={cn(
             "flex min-w-0 items-start gap-4 rounded-xl border-2 p-5 text-left transition-all",
             "hover:border-primary/50 hover:bg-muted/50",
-            plan.compute === "local_daemon"
+            showLocal
               ? "border-primary bg-primary/10"
               : "border-border/50 bg-background",
           )}
@@ -549,13 +663,7 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
 
           <div className="space-y-1.5">
             <span className="block text-xs text-muted-foreground">
-              Or install the CLI via Homebrew:
-            </span>
-            <code className="block select-all rounded border border-border/40 bg-background px-3 py-2 font-mono text-xs text-foreground">
-              {HOMEBREW_CLI_INSTALL}
-            </code>
-            <span className="block text-xs text-muted-foreground">
-              Desktop app (Homebrew Cask):
+              Or install via Homebrew:
             </span>
             <code className="block select-all rounded border border-border/40 bg-background px-3 py-2 font-mono text-xs text-foreground">
               {HOMEBREW_CASK_INSTALL}

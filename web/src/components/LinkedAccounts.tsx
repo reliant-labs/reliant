@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { useAuthStore } from '@/store/authStore'
+import { gitService } from '@/services/controlPlane/git'
+import { supabase } from '@/lib/supabase'
 import { SocialProviderIcon, type SocialProvider } from './icons/SocialProviderIcon'
 
 type Provider = SocialProvider
 
 export function LinkedAccounts() {
-  const { linkGithubAccount, linkGoogleAccount, linkAppleAccount, unlinkIdentity, user } = useAuthStore()
+  const { linkGoogleAccount, linkAppleAccount, unlinkIdentity, user } = useAuthStore()
   const [linkingProvider, setLinkingProvider] = useState<Provider | null>(null)
   const [unlinkingId, setUnlinkingId] = useState<string | null>(null)
 
@@ -21,9 +23,20 @@ export function LinkedAccounts() {
     setLinkingProvider(provider)
     try {
       switch (provider) {
-        case 'github':
-          await linkGithubAccount()
-          break
+        case 'github': {
+          // GitHub uses the control-plane custom OAuth flow rather than
+          // Supabase identity linking. The Supabase GitHub provider is
+          // sign-in only (0 scopes); the long-lived repo-scoped token comes
+          // from /auth/github/authorize, which writes to git_credentials.
+          const oauthURL = gitService.getOAuthURL()
+          if (!oauthURL) throw new Error('Control plane URL not configured')
+          const { data: { session } } = await supabase.auth.getSession()
+          if (!session?.access_token) throw new Error('Not signed in')
+          const returnTo = `${window.location.pathname}${window.location.search}`
+          const params = new URLSearchParams({ token: session.access_token, returnTo })
+          window.location.href = `${oauthURL}?${params.toString()}`
+          return
+        }
         case 'google':
           await linkGoogleAccount()
           break

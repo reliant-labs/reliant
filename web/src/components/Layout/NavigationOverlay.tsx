@@ -1,4 +1,5 @@
 import { FileText, Terminal as TerminalIcon, FolderOpen, Workflow, FolderGit2 } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import { useTerminalStore } from "../../store/terminalStore";
 import { useViewerStore } from "../../store/viewerStore";
 import { useProjectStore } from "../../store/projectStore";
@@ -19,7 +20,7 @@ export function NavigationOverlay({ onClose }: NavigationOverlayProps) {
   const toggleTerminal = useTerminalStore((state) => state.toggleTerminal);
   const openWorktreesViewer = useViewerStore((state) => state.openWorktreesViewer);
   const openProjectsViewer = useViewerStore((state) => state.openProjectsViewer);
-  const setWorkflowMode = useViewerStore((state) => state.setWorkflowMode);
+  const navigate = useNavigate();
   const currentProject = useProjectStore((state) => state.currentProject);
 
   const menuItems: MenuItem[] = [
@@ -68,7 +69,7 @@ export function NavigationOverlay({ onClose }: NavigationOverlayProps) {
       icon: Workflow,
       shortcut: "⌘ K",
       onClick: () => {
-        setWorkflowMode(true);
+        navigate({ to: '/workflow' });
         onClose();
       },
     },

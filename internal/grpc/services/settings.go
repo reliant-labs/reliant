@@ -17,6 +17,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/controlplane"
 
 	"github.com/reliant-labs/reliant/internal/db"
 
@@ -38,16 +39,24 @@ import (
 // SettingsService implements the SettingsService RPC handlers
 type SettingsService struct {
 	reliantv1connect.UnimplementedSettingsServiceHandler
-	database     db.Repository
-	daemonRouter toolexec.DaemonRouter
+	database           db.Repository
+	daemonRouter       toolexec.DaemonRouter
+	controlPlaneClient controlplane.Client
 }
 
 // NewSettingsService creates a new SettingsService
 func NewSettingsService(database db.Repository, daemonRouter toolexec.DaemonRouter) *SettingsService {
 	return &SettingsService{
-		database:     database,
-		daemonRouter: daemonRouter,
+		database:           database,
+		daemonRouter:       daemonRouter,
+		controlPlaneClient: controlplane.NewClient(""),
 	}
+}
+
+// WithControlPlaneClient overrides the default control-plane client. Intended for tests.
+func (s *SettingsService) WithControlPlaneClient(client controlplane.Client) *SettingsService {
+	s.controlPlaneClient = client
+	return s
 }
 
 // sendDaemonCommand sends a command to the user's daemon and unmarshals the response.
@@ -971,13 +980,20 @@ func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.
 		statuses = append(statuses, status)
 	}
 
-	// Reliant provider is always available for authenticated users (uses JWT, no API key).
-	statuses = append(statuses, &reliantv1.ProviderStatus{
+	// Reliant provider is configured once the user has synced an rlnt_ key
+	// from control-plane via SyncReliantProvider.
+	reliantStatus := &reliantv1.ProviderStatus{
 		Provider:    "reliant",
 		DisplayName: "Reliant",
-		Configured:  true,
-		HasApiKey:   true,
-	})
+	}
+	if maskedKey, hasKey := apiKeys["reliant"]; hasKey {
+		reliantStatus.Configured = true
+		reliantStatus.HasApiKey = true
+		if maskedKey != "" {
+			reliantStatus.MaskedKey = &maskedKey
+		}
+	}
+	statuses = append(statuses, reliantStatus)
 
 	return connect.NewResponse(&reliantv1.GetProviderStatusesResponse{
 		Providers: statuses,
@@ -1287,6 +1303,66 @@ func (s *SettingsService) CompleteClaudeOAuth(ctx context.Context, req *connect.
 	return connect.NewResponse(&reliantv1.CompleteClaudeOAuthResponse{
 		Success: true,
 		Message: "Connected to Claude",
+	}), nil
+}
+
+// SyncReliantProvider mints (or rehydrates) the user's internal Reliant API key
+// via control-plane and persists it locally as the "reliant" provider credential.
+func (s *SettingsService) SyncReliantProvider(ctx context.Context, req *connect.Request[reliantv1.SyncReliantProviderRequest]) (*connect.Response[reliantv1.SyncReliantProviderResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+
+	if s.controlPlaneClient == nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("control-plane client not configured"))
+	}
+
+	jwt, ok := auth.GetUserJWT(userID)
+	if !ok || strings.TrimSpace(jwt) == "" {
+		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("missing user JWT for control-plane call"))
+	}
+
+	plaintext, err := s.controlPlaneClient.IssueMyReliantAPIKey(ctx, jwt)
+	if err != nil {
+		logging.Error("Failed to issue Reliant API key via control-plane", "error", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to issue Reliant API key: %w", err))
+	}
+	plaintext = strings.TrimSpace(plaintext)
+	if plaintext == "" {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("control-plane returned empty Reliant API key"))
+	}
+
+	previous, _ := s.database.GetProviderAPIKey(ctx, userID, "reliant")
+	if err := s.database.SetProviderAPIKey(ctx, userID, "reliant", plaintext); err != nil {
+		logging.Error("Failed to persist Reliant provider API key", "error", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to persist Reliant API key"))
+	}
+
+	if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
+		logging.Warn("Failed to emit config_health refetch after SyncReliantProvider", "error", err)
+	}
+
+	created := strings.TrimSpace(previous) == ""
+	rotated := !created && strings.TrimSpace(previous) != plaintext
+
+	maskedKey := ""
+	if len(plaintext) > 8 {
+		maskedKey = plaintext[:4] + "..." + plaintext[len(plaintext)-4:]
+	} else {
+		maskedKey = "***"
+	}
+
+	return connect.NewResponse(&reliantv1.SyncReliantProviderResponse{
+		Success:    true,
+		Message:    "Reliant provider synced",
+		Synced:     true,
+		CreatedKey: created,
+		RotatedKey: rotated,
+		Provider: &reliantv1.ProviderStatus{
+			Provider:    "reliant",
+			DisplayName: "Reliant",
+			Configured:  true,
+			HasApiKey:   true,
+			MaskedKey:   &maskedKey,
+		},
 	}), nil
 }
 

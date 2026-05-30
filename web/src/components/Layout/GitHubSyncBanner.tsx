@@ -1,130 +1,79 @@
 /**
- * GitHubSyncBanner
+ * GitHubSyncStatus
  *
- * Non-blocking, top-level UI surface for the GitHub credential sync state
- * managed by `githubCredentialSync`. Renders nothing when idle.
+ * Headless surface for the GitHub credential sync state managed by
+ * `githubCredentialSync`. Renders nothing — it just bridges sync events to
+ * sonner toasts so the user gets a consistent, top-of-app notification
+ * regardless of which route they're on.
  *
- *  - status='syncing': subtle indicator pinned to the bottom-right.
- *  - status='failed':  warning banner with a Retry button. Retry attempts
- *                       a fresh `linkGithubAccount()` OAuth handshake because
- *                       the original transient provider_token is no longer
- *                       in memory — we never keep it around.
+ *  - status='syncing': loading toast pinned by stable id (no stacking).
+ *  - status='succeeded': dismisses the loading toast.
+ *  - status='failed': error toast with a Retry action that re-runs the
+ *                     control-plane `/auth/github/authorize` flow, which
+ *                     (re)issues a long-lived repo-scoped token and writes
+ *                     it to `git_credentials`.
  *
- * The banner is intentionally fire-and-forget: it never blocks login or any
- * other interaction. It exists to (a) tell the user what's happening when
- * sync is in flight and (b) recover them with one click when the original
- * save retries all failed.
+ * Previously this was a `position: fixed` floating banner (`GitHubSyncBanner`)
+ * which collided z-index-wise with the onboarding checklist and only mounted
+ * inside `ModernApp` — so users on `/settings` or `/workflow/*` got no sync
+ * feedback at all. Now mounted on the root route; works everywhere.
  */
 
-import { useState } from "react";
-import { Loader2, AlertTriangle, X } from "lucide-react";
+import { toast } from "sonner";
 
-import { useAuthStore } from "@/store/authStore";
+import { gitService } from "@/services/controlPlane/git";
+import { supabase } from "@/lib/supabase";
 import { trackEvent } from "@/lib/analytics";
 import { logger } from "@/lib/logger";
 import { useEvent } from "@/lib/event-context";
 
-type SyncStatus = "idle" | "syncing" | "failed";
+const SYNC_TOAST_ID = "github-sync";
 
-export function GitHubSyncBanner() {
-  const [status, setStatus] = useState<SyncStatus>("idle");
-  const [dismissed, setDismissed] = useState(false);
-  const [retryInFlight, setRetryInFlight] = useState(false);
+async function retryGitHubOAuth() {
+  trackEvent("github_credential_sync_retry_clicked");
+  try {
+    // Restart the control-plane custom OAuth flow. The backend
+    // /auth/github/authorize endpoint will exchange the code for a
+    // long-lived repo-scoped token and write it to git_credentials,
+    // which clears the failed-sync state on return.
+    const oauthURL = gitService.getOAuthURL();
+    if (!oauthURL) throw new Error("Control plane URL not configured");
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error("Not signed in");
+    const returnTo = `${window.location.pathname}${window.location.search}`;
+    const params = new URLSearchParams({
+      token: session.access_token,
+      returnTo,
+    });
+    window.location.href = `${oauthURL}?${params.toString()}`;
+  } catch (err) {
+    logger.warn("[GitHubSyncStatus] retry GitHub OAuth failed", err);
+  }
+}
 
-  const linkGithubAccount = useAuthStore((s) => s.linkGithubAccount);
-
+export function GitHubSyncStatus() {
   useEvent("github-credential:syncing", () => {
-    setStatus("syncing");
-    setDismissed(false);
+    toast.loading("Syncing GitHub credentials…", { id: SYNC_TOAST_ID });
   });
+
   useEvent("github-credential:succeeded", () => {
-    setStatus("idle");
+    toast.dismiss(SYNC_TOAST_ID);
   });
+
   useEvent("github-credential:failed", () => {
-    setStatus("failed");
-    setDismissed(false);
+    toast.error("GitHub credential sync failed", {
+      id: SYNC_TOAST_ID,
+      description:
+        "We couldn't save your GitHub credential to Reliant Cloud. Git operations may not work until this is resolved.",
+      duration: Infinity,
+      action: {
+        label: "Retry",
+        onClick: () => {
+          void retryGitHubOAuth();
+        },
+      },
+    });
   });
-
-  if (dismissed) return null;
-
-  if (status === "syncing") {
-    return (
-      <div
-        className="fixed bottom-4 right-4 z-50 flex items-center gap-2 rounded-md border border-border bg-background/95 px-3 py-2 text-xs text-muted-foreground shadow-md backdrop-blur"
-        role="status"
-        aria-live="polite"
-      >
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        <span>Syncing GitHub credentials…</span>
-      </div>
-    );
-  }
-
-  if (status === "failed") {
-    const onRetry = async () => {
-      if (retryInFlight) return;
-      setRetryInFlight(true);
-      trackEvent("github_credential_sync_retry_clicked");
-      try {
-        // We don't have the original provider_token in memory anymore — the
-        // only safe way to obtain a new one is to redo the Supabase OAuth
-        // handshake. The callback handlers will pipe the new token through
-        // githubCredentialSync, which will flip status back to 'idle' on
-        // success.
-        await linkGithubAccount();
-      } catch (err) {
-        logger.warn("[GitHubSyncBanner] retry linkGithubAccount failed", err);
-      } finally {
-        setRetryInFlight(false);
-      }
-    };
-
-    return (
-      <div
-        className="fixed bottom-4 right-4 z-50 max-w-sm rounded-md border border-amber-500/40 bg-amber-500/10 p-3 shadow-md backdrop-blur"
-        role="alert"
-        aria-live="polite"
-      >
-        <div className="flex items-start gap-3">
-          <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground">
-              GitHub credential sync failed
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              We couldn't save your GitHub credential to Reliant Cloud. Git
-              operations may not work until this is resolved.
-            </p>
-            <div className="mt-2 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={onRetry}
-                disabled={retryInFlight}
-                className="rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium hover:bg-accent disabled:opacity-50"
-              >
-                {retryInFlight ? "Retrying…" : "Retry"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setDismissed(true)}
-                className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setDismissed(true)}
-            className="rounded p-0.5 text-muted-foreground hover:bg-accent"
-            aria-label="Dismiss"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return null;
 }

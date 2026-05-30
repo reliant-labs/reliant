@@ -5,7 +5,6 @@ import {
   getVisibleSettingsSectionIds,
   type SettingsSection,
 } from "./SettingsNavigation";
-import { settingsSync, SETTINGS_KEYS } from "../../services/settingsSync";
 import { cn } from "../../lib/utils";
 
 const SettingsContent = lazy(() =>
@@ -15,46 +14,17 @@ const SettingsContent = lazy(() =>
 );
 
 interface SettingsViewerTabProps {
-  initialSection?: string;
+  // The URL-driven section. Controlled by SettingsPage which reads it from
+  // useParams and validates it against SETTINGS_SECTION_IDS.
+  section: SettingsSection;
+  // Called with the next section when the user clicks a nav item or uses arrow
+  // keys. SettingsPage turns this into a navigate({to:'/settings/$section'}).
+  onSectionChange: (section: SettingsSection) => void;
 }
 
-// Get persisted section from localStorage (sync read for initial render)
-const getPersistedSection = (): SettingsSection => {
-  const saved = settingsSync.getSetting(SETTINGS_KEYS.SETTINGS_SECTION, "account");
-  return saved as SettingsSection;
-};
-
-export function SettingsViewerTab({ initialSection }: SettingsViewerTabProps) {
-  const [activeSection, setActiveSection] = useState<SettingsSection>(
-    (initialSection as SettingsSection) || getPersistedSection()
-  );
+export function SettingsViewerTab({ section, onSectionChange }: SettingsViewerTabProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  // Update active section when initialSection prop changes (e.g., from onboarding wizard)
-  useEffect(() => {
-    if (initialSection) {
-      setActiveSection(initialSection as SettingsSection);
-    }
-  }, [initialSection]);
-
-  // Listen for navigation events from other components
-  useEffect(() => {
-    const handleNavigate = (event: CustomEvent<{ section: string }>) => {
-      const requestedSection = event.detail.section as SettingsSection;
-      setActiveSection(requestedSection);
-    };
-
-    window.addEventListener('navigate-to-settings-section', handleNavigate as EventListener);
-    return () => {
-      window.removeEventListener('navigate-to-settings-section', handleNavigate as EventListener);
-    };
-  }, []);
-
-  // Persist active section when it changes
-  useEffect(() => {
-    settingsSync.setSetting(SETTINGS_KEYS.SETTINGS_SECTION, activeSection).catch(console.error);
-  }, [activeSection]);
 
   // Same order as SettingsNavigation sidebar (single source: settingsSections)
   const visibleSections = useMemo(
@@ -62,11 +32,15 @@ export function SettingsViewerTab({ initialSection }: SettingsViewerTabProps) {
     []
   );
 
+  // If the URL points at a section that isn't visible (e.g. /settings/developer
+  // in a non-dev build), redirect to the first visible one. Doing this via the
+  // parent's onSectionChange keeps URL the source of truth.
   useEffect(() => {
-    if (!visibleSections.includes(activeSection)) {
-      setActiveSection(visibleSections[0] ?? "account");
+    if (!visibleSections.includes(section)) {
+      const fallback = visibleSections[0] ?? "account";
+      onSectionChange(fallback);
     }
-  }, [activeSection, visibleSections]);
+  }, [section, visibleSections, onSectionChange]);
 
   // Keyboard navigation for settings tabs
   useEffect(() => {
@@ -74,7 +48,7 @@ export function SettingsViewerTab({ initialSection }: SettingsViewerTabProps) {
       // Only handle if we're in settings mode and not typing in an input
       // Check if settings container is visible
       if (!containerRef.current) return;
-      
+
       const target = e.target as HTMLElement;
       const isInputField =
         target.tagName === "INPUT" ||
@@ -93,7 +67,7 @@ export function SettingsViewerTab({ initialSection }: SettingsViewerTabProps) {
         e.preventDefault();
         e.stopPropagation();
 
-        const currentIndex = visibleSections.indexOf(activeSection);
+        const currentIndex = visibleSections.indexOf(section);
         if (currentIndex === -1) return;
 
         let newIndex: number;
@@ -105,7 +79,7 @@ export function SettingsViewerTab({ initialSection }: SettingsViewerTabProps) {
 
         const newSection = visibleSections[newIndex];
         if (newSection) {
-          setActiveSection(newSection);
+          onSectionChange(newSection);
         }
       }
     };
@@ -114,7 +88,7 @@ export function SettingsViewerTab({ initialSection }: SettingsViewerTabProps) {
     return () => {
       window.removeEventListener("keydown", handleKeyDown, true);
     };
-  }, [activeSection, visibleSections]);
+  }, [section, visibleSections, onSectionChange]);
 
   // Detect width and collapse sidebar when narrow
   useEffect(() => {
@@ -176,8 +150,8 @@ export function SettingsViewerTab({ initialSection }: SettingsViewerTabProps) {
           </div>
         </div>
         <SettingsNavigation
-          activeSection={activeSection}
-          onSectionChange={setActiveSection}
+          activeSection={section}
+          onSectionChange={onSectionChange}
           isCollapsed={isCollapsed}
         />
       </aside>
@@ -194,7 +168,7 @@ export function SettingsViewerTab({ initialSection }: SettingsViewerTabProps) {
           }
         >
           <SettingsContent
-            activeSection={activeSection}
+            activeSection={section}
             apiUrl={getApiUrl()}
           />
         </Suspense>

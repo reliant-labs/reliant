@@ -142,28 +142,54 @@ func ensureDaemonCredentials(ctx context.Context, cmd *cobra.Command, apiURL, gw
 
 // credentialsFromToken reads a PAT from stdin and constructs daemon credentials.
 // Supports both interactive (prompt) and piped input.
-func credentialsFromToken(cmd *cobra.Command, apiURL, gwURL string) (*auth.DaemonCredentials, error) {
-	// Detect if stdin is a pipe or interactive
+//
+// The stdin read runs in a background goroutine and the main path selects on
+// ctx.Done() so Ctrl+C unblocks the wait. `bufio.Scanner.Scan` blocks in
+// `syscall.read(2)` and cannot itself be canceled — the goroutine outlives
+// this function in that case, but the process is on its way out so the leak
+// is bounded.
+func credentialsFromToken(ctx context.Context, cmd *cobra.Command, apiURL, gwURL string) (*auth.DaemonCredentials, error) {
 	stat, _ := os.Stdin.Stat()
 	isPiped := (stat.Mode() & os.ModeCharDevice) == 0
 
-	var token string
-	scanner := bufio.NewScanner(os.Stdin)
-	if isPiped {
+	if !isPiped {
+		fmt.Fprint(cmd.OutOrStdout(), "Paste your access token: ")
+	}
+
+	type readResult struct {
+		token string
+		err   error
+	}
+	readCh := make(chan readResult, 1)
+	go func() {
+		scanner := bufio.NewScanner(os.Stdin)
 		if scanner.Scan() {
-			token = strings.TrimSpace(scanner.Text())
+			readCh <- readResult{token: strings.TrimSpace(scanner.Text())}
+			return
 		}
-		if token == "" {
+		if err := scanner.Err(); err != nil {
+			readCh <- readResult{err: err}
+			return
+		}
+		readCh <- readResult{}
+	}()
+
+	var token string
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case res := <-readCh:
+		if res.err != nil {
+			return nil, res.err
+		}
+		token = res.token
+	}
+
+	if token == "" {
+		if isPiped {
 			return nil, fmt.Errorf("no token provided via stdin")
 		}
-	} else {
-		fmt.Fprint(cmd.OutOrStdout(), "Paste your access token: ")
-		if scanner.Scan() {
-			token = strings.TrimSpace(scanner.Text())
-		}
-		if token == "" {
-			return nil, fmt.Errorf("no token provided")
-		}
+		return nil, fmt.Errorf("no token provided")
 	}
 
 	if !auth.IsPATFormat(token) {
@@ -306,8 +332,25 @@ Credential resolution order:
 
 			logging.Setup(slog.LevelInfo)
 
-			ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+			// Manual signal handling so a second Ctrl+C force-exits.
+			//   first  SIGINT/SIGTERM → cancel ctx (graceful shutdown)
+			//   second SIGINT/SIGTERM → os.Exit(130) (escape hatch when a
+			//                            reconnect loop, blocking stdin
+			//                            read, or stuck shutdown defer would
+			//                            otherwise keep the process alive)
+			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
+			sigCh := make(chan os.Signal, 2)
+			signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+			defer signal.Stop(sigCh)
+			go func() {
+				<-sigCh
+				fmt.Fprintln(cmd.ErrOrStderr(), "\nShutting down — press Ctrl+C again to force-exit")
+				cancel()
+				<-sigCh
+				fmt.Fprintln(cmd.ErrOrStderr(), "Force-exiting")
+				os.Exit(130)
+			}()
 
 			// Write PID file for `daemon stop`
 			pidFile := filepath.Join(dataDir, "daemon.pid")
@@ -348,7 +391,7 @@ Credential resolution order:
 			var creds *auth.DaemonCredentials
 			var err error
 			if useToken {
-				creds, err = credentialsFromToken(cmd, serverURL, resolveGatewayURL())
+				creds, err = credentialsFromToken(ctx, cmd, serverURL, resolveGatewayURL())
 				if err != nil {
 					return err
 				}

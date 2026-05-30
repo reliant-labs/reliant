@@ -4,8 +4,6 @@ import { supabase } from '@/lib/supabase'
 import { logger } from '@/lib/logger'
 import { setSentryUser } from '@/lib/sentry'
 import { devAuthGrpc } from '@/api/grpc-unauth'
-import { githubCredentialSync } from '@/lib/githubCredentialSync'
-import { gitService } from '@/services/controlPlane/git'
 
 const isElectron = !!window.electronAPI
 const getOAuthRedirectUrl = async (): Promise<string> => {
@@ -134,19 +132,12 @@ const setupElectronOAuthCallbackListener = (setState: (state: Partial<AuthState>
           identities: data.user?.identities?.map(i => i.provider),
         })
 
-        // Capture GitHub provider_token if available (only emitted once at sign-in).
-        // Routed through githubCredentialSync so retries + UI surfacing kick in
-        // automatically; failures must NOT block login.
-        if (data.session?.provider_token) {
-          const provider = data.user?.app_metadata?.provider || data.user?.identities?.[0]?.provider
-          if (provider === 'github') {
-            // Trigger tag comes from the `source` query param on the redirect
-            // URL — set by linkGithubAccount/signInWithGithub before redirect.
-            const trigger: 'signin' | 'link' =
-              url.searchParams.get('source') === 'link' ? 'link' : 'signin'
-            await githubCredentialSync.sync(data.session.provider_token, 'repo', trigger)
-          }
-        }
+        // The Supabase GitHub provider is sign-in only (0 scopes) — its
+        // provider_token has no useful scopes and expires in 8h with no
+        // refresh token. Repo access goes through the dedicated
+        // /auth/github/authorize flow, which writes the long-lived token
+        // directly to git_credentials. See ../OnboardingFlow/steps/
+        // GitHubConnectStep.tsx and Settings/GitConnectionsSettings.tsx.
 
         setState({
           user: data.user,
@@ -185,7 +176,6 @@ interface AuthState {
   signInWithGoogle: () => Promise<void>
   signInWithGithub: (state?: OAuthRedirectState) => Promise<void>
   signInWithApple: () => Promise<void>
-  linkGithubAccount: (state?: OAuthRedirectState) => Promise<void>
   linkGoogleAccount: () => Promise<void>
   linkAppleAccount: () => Promise<void>
   unlinkIdentity: (identityId: string) => Promise<void>
@@ -287,7 +277,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     try {
       if (isElectron) {
-        const oauthSession = await devAuthGrpc.startOAuthSignIn('google', 120)
+        const oauthSession = await devAuthGrpc.startOAuthSignIn('google')
         const { data, error } = await supabase.auth.setSession({
           access_token: oauthSession.accessToken,
           refresh_token: oauthSession.refreshToken,
@@ -369,12 +359,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           throw error
         }
 
-        // Save GitHub provider token via the resilient sync bridge.
-        // sync() handles retries + status surfacing; never blocks login on failure.
-        if (oauthSession.providerToken) {
-          const trigger = state?.source === 'link' ? 'link' : 'signin'
-          await githubCredentialSync.sync(oauthSession.providerToken, 'repo', trigger)
-        }
+        // The Supabase GitHub provider is sign-in only (0 scopes). We never
+        // persist the provider_token here — repo access comes from the
+        // dedicated /auth/github/authorize custom flow.
 
         set({
           user: data.user,
@@ -393,7 +380,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'github',
         options: {
-          scopes: 'user:email repo',
           redirectTo,
           skipBrowserRedirect: true,
         },
@@ -435,7 +421,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     try {
       if (isElectron) {
-        const oauthSession = await devAuthGrpc.startOAuthSignIn('apple', 120)
+        const oauthSession = await devAuthGrpc.startOAuthSignIn('apple')
         const { data, error } = await supabase.auth.setSession({
           access_token: oauthSession.accessToken,
           refresh_token: oauthSession.refreshToken,
@@ -557,66 +543,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         loading: false,
       })
     } catch (error) {
-      set({ loading: false })
-      throw error
-    }
-  },
-
-  linkGithubAccount: async (state?: OAuthRedirectState) => {
-    set({ loading: true })
-    try {
-      // Tag this OAuth roundtrip as a "link" via the redirect URL so the
-      // callback handlers can attribute the credential sync trigger
-      // accordingly. Any caller-provided returnTo hint is preserved.
-      const redirectTo = withOAuthState(
-        await getOAuthRedirectUrl(),
-        { source: 'link', ...(state ?? {}) },
-      )
-      logger.info('[AuthStore] linkGithubAccount: Starting link flow', {
-        isElectron,
-        redirectTo,
-      })
-
-      const { data, error } = await supabase.auth.linkIdentity({
-        provider: 'github',
-        options: {
-          scopes: 'user:email repo',
-          redirectTo,
-          skipBrowserRedirect: true,
-        },
-      })
-
-      logger.info('[AuthStore] linkGithubAccount: linkIdentity response', {
-        hasData: !!data,
-        hasUrl: !!data?.url,
-        urlPreview: data?.url?.substring(0, 100),
-        error: error?.message,
-        errorCode: error?.code,
-      })
-
-      if (error) {
-        // Check if identity already exists on another account
-        if (error.message?.includes('already linked') ||
-            error.message?.includes('identity already exists') ||
-            error.code === 'identity_already_exists') {
-          throw new Error('This GitHub account is already linked to an existing account. Please sign out and sign in with GitHub instead.')
-        }
-        throw error
-      }
-
-      if (isElectron && data?.url && window.electronAPI) {
-        logger.info('[AuthStore] linkGithubAccount: Opening external browser')
-        await window.electronAPI.openExternal(data.url)
-        logger.info('[AuthStore] linkGithubAccount: External browser opened')
-      } else if (data?.url) {
-        window.location.href = data.url
-      } else {
-        logger.error('[AuthStore] linkGithubAccount: No link URL returned from Supabase')
-      }
-
-      set({ loading: false })
-    } catch (error) {
-      logger.error('[AuthStore] linkGithubAccount: Error:', error)
       set({ loading: false })
       throw error
     }
@@ -938,38 +864,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         // Update Sentry user context for error correlation
         setSentryUser(session?.user ? { id: session.user.id, email: session.user.email } : null)
 
-        // Best-effort backup: capture provider_token if present.
-        // Supabase may not include provider_token here — it's transient and
-        // only reliably available from exchangeCodeForSession() in OAuthCallback.
-        // This handler fires for ALL providers, so check before persisting.
-        if (_event === 'SIGNED_IN' && session?.provider_token && !session.user?.is_anonymous) {
-          const provider = session.user?.app_metadata?.provider
-          if (provider === 'github') {
-            await githubCredentialSync.sync(session.provider_token, 'repo', 'signin')
-          }
-        }
-
-        // Recovery: if Supabase refreshes the session and ships us a fresh
-        // provider_token AND the control plane has no usable credential yet,
-        // run the sync. This catches the case where the original signin-time
-        // save failed and the user would otherwise be stuck behind a
-        // "Reconnect GitHub" prompt.
-        if (_event === 'TOKEN_REFRESHED' && session?.provider_token && !session.user?.is_anonymous) {
-          const provider = session.user?.app_metadata?.provider
-          if (provider === 'github') {
-            try {
-              const status = await gitService.getCredential('github')
-              if (!status.hasToken) {
-                await githubCredentialSync.sync(session.provider_token, 'repo', 'session_refresh')
-              }
-            } catch (err) {
-              // Local-only mode or transient probe failure — fire the sync
-              // anyway; it will be a no-op in local mode.
-              logger.debug('[AuthStore] getCredential probe failed before TOKEN_REFRESHED sync', err)
-              await githubCredentialSync.sync(session.provider_token, 'repo', 'session_refresh')
-            }
-          }
-        }
+        // The Supabase GitHub provider is sign-in only (0 scopes); we never
+        // persist its provider_token. Repo access is owned by the dedicated
+        // /auth/github/authorize flow, which writes git_credentials directly.
 
         // NOTE: Supabase automatically saves session through custom storage adapter
       })

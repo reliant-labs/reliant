@@ -1,7 +1,11 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useLocation, useNavigate } from "@tanstack/react-router";
+import { getParentRouteNavigateOptions } from "../../lib/routeParent";
 import { WorkflowBuilder } from "./WorkflowBuilder";
 import { WorkflowHub } from "./WorkflowHub";
 import { WorkflowParseErrorView } from "./WorkflowParseErrorView";
+import { WorkflowHeader } from "./WorkflowHeader";
+import { LoadingSpinner } from "../Layout/LoadingSpinner";
 import type { Workflow } from "../../types/workflow";
 import type {
   Step as ResponseStep,
@@ -22,16 +26,29 @@ import {
   type WorkflowDef,
 } from "../../store/globalDataStore";
 import { useProjectStore } from "../../store/projectStore";
-import { useViewerStore } from "../../store/viewerStore";
-import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
-import { useWorktreeStore } from "../../store/worktreeStore";
 import { usePreferencesStore } from "../../store/preferencesStore";
-import { useTourStore } from "../../store/tourStore";
 import { trackEvent } from "../../lib/analytics";
 
 interface WorkflowBuilderPageProps {
   selectedWorkflow?: Workflow | null;
   onWorkflowChange?: (workflow: Workflow) => void;
+  /** Workflow name from the URL route. Undefined means hub view. */
+  routeWorkflowName?: string;
+  /** When true, the route is `/workflow/new` and a fresh blank workflow should be created. */
+  routeIsNew?: boolean;
+  /** One-shot drill target from `?drill=`. Forwarded to WorkflowBuilder. */
+  routeDrillIntoNodeId?: string;
+  /**
+   * When true, the onboarding tour is active on a builder step. The page treats
+   * the loaded workflow (typically a builtin like `get-it-right`) as editable
+   * in-memory: the "View Only / Create a Copy" banner is suppressed and saves
+   * no-op with a toast. Nothing actually persists.
+   */
+  tourMode?: boolean;
+  /** Close handler (router back / navigate to /). */
+  onClose?: () => void;
+  /** Navigate to /settings. */
+  onNavigateToSettings?: () => void;
 }
 
 // Helper to convert WorkflowDef (from global store) to WorkflowResponse format
@@ -51,10 +68,15 @@ function workflowDefToResponse(def: WorkflowDef): WorkflowResponse {
 export function WorkflowBuilderPage({
   selectedWorkflow,
   onWorkflowChange,
+  routeWorkflowName,
+  routeIsNew = false,
+  routeDrillIntoNodeId,
+  tourMode = false,
+  onClose,
+  onNavigateToSettings,
 }: WorkflowBuilderPageProps) {
-  const [currentView, setCurrentView] = useState<"hub" | "builder" | "error">(
-    "hub",
-  );
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [editingWorkflow, setEditingWorkflow] = useState<Workflow | undefined>(
     selectedWorkflow || undefined,
   );
@@ -67,17 +89,13 @@ export function WorkflowBuilderPage({
     "builtin" | "user" | "project"
   >("user");
   const [workflowVersion, setWorkflowVersion] = useState<number>(0);
-  const [_workflowSlug, setWorkflowSlug] = useState<string | undefined>(
-    undefined,
-  );
-
   // Track draft ID - loaded from existing workflow (for LLM tool calls)
   const [draftId, setDraftId] = useState<string | undefined>(undefined);
 
-  // Track initial name for new workflows (from random generation)
-  const [initialWorkflowName, setInitialWorkflowName] = useState<
-    string | undefined
-  >(undefined);
+  // Track initial name for new workflows (kept for forward-compat; the route
+  // adapter no longer assigns to this, but the builder still receives it as a
+  // prop).
+  const [initialWorkflowName] = useState<string | undefined>(undefined);
 
   // Track builder chat ID - for chat resumption (separate from draft ID)
   const [builderChatId, setBuilderChatId] = useState<string | undefined>(
@@ -98,6 +116,18 @@ export function WorkflowBuilderPage({
     string | undefined
   >(undefined);
 
+  // View is fully derived from URL (+ a parse error from the last load and a
+  // prop selectedWorkflow for embedded composition). No setState — keeping
+  // currentView as separate state was the bug that let URL and view diverge.
+  // Order matters: parse errors win so the user can recover; otherwise any of
+  // routeWorkflowName / routeIsNew / selectedWorkflow is enough to be in the
+  // builder; else hub.
+  const currentView: "hub" | "builder" | "error" = parseError
+    ? "error"
+    : routeWorkflowName || routeIsNew || selectedWorkflow
+      ? "builder"
+      : "hub";
+
   // Session ID for new/unsaved workflows - used as a stable key for localStorage before workflow is saved
   // This is a ref to avoid unnecessary re-renders
   const workflowSessionIdRef = useRef<string | undefined>(undefined);
@@ -113,6 +143,10 @@ export function WorkflowBuilderPage({
   );
   const currentProject = useProjectStore((state) => state.currentProject);
   const projectId = currentProject?.id;
+  // Track whether the projects list is being fetched. Used below to distinguish
+  // "still loading projects" from "loaded but no project picked" when we hit a
+  // /workflow/$name deep-link with no current project.
+  const projectsLoading = useProjectStore((state) => state.isLoading);
 
   // Use cached workflows from global store for immediate display
   const { workflows: cachedWorkflows, loading: workflowsLoading } =
@@ -143,13 +177,6 @@ export function WorkflowBuilderPage({
       refetchPresets(projectId);
     }
   }, [projectId, presets.length, refetchPresets]);
-
-  // Check if we should open a specific workflow from the viewer store
-  const workflowToOpen = useViewerStore((state) => state.workflowToOpen);
-  const clearWorkflowToOpen = useViewerStore(
-    (state) => state.clearWorkflowToOpen,
-  );
-  const setWorkflowMode = useViewerStore((state) => state.setWorkflowMode);
 
   // Merge cached workflows with any detailed data we've fetched
   const existingWorkflows = useMemo(() => {
@@ -206,42 +233,96 @@ export function WorkflowBuilderPage({
       window.removeEventListener("workflow-saved", handleWorkflowSaved);
   }, [projectId, loadDetailedWorkflows]);
 
-  // If a workflow is pre-selected from props, show the builder
+  // Keep editingWorkflow in sync if a parent passes a different selectedWorkflow
+  // after mount. (Embedded usage path; the route-driven path sets editingWorkflow
+  // in the loadWorkflow effect below.)
   useEffect(() => {
     if (selectedWorkflow) {
       setEditingWorkflow(selectedWorkflow);
-      setCurrentView("builder");
     }
   }, [selectedWorkflow]);
 
-  // If workflowToOpen is set from the viewer store, load that workflow
-  // Special value "__hub__" means show hub view
-  // Special value "__new__" means create a new editable workflow (for onboarding)
+  // Drive view state from the URL route:
+  //   routeIsNew === true                       → new blank editable workflow
+  //   routeWorkflowName === undefined && !isNew → hub view
+  //   routeWorkflowName set                     → load that workflow
+  // The route is the source of truth; no flag to clear afterwards.
   useEffect(() => {
-    if (workflowToOpen === "__hub__") {
-      setCurrentView("hub");
-      setEditingWorkflow(undefined);
-      setYamlDefinition(undefined);
-      clearWorkflowToOpen();
-      return;
-    }
-    if (workflowToOpen === "__new__") {
-      // Create a new editable workflow for onboarding
-      setEditingWorkflow(undefined);
-      setYamlDefinition(undefined);
+    if (routeIsNew) {
+      // Create a new editable workflow. If a projectId is available, create a
+      // draft so we have a stable random name + draftId before showing the
+      // builder (mirrors the previous handleCreateNew flow). If there's no
+      // project, just show a blank builder.
       setIsReadOnly(false);
       setIsNewWorkflow(true);
       setWorkflowSource("user");
       setWorkflowVersion(0);
       setBuilderChatId(undefined);
-      setDraftId(undefined);
       workflowSessionIdRef.current = crypto.randomUUID();
-      setCurrentView("builder");
-      clearWorkflowToOpen();
+
+      let cancelled = false;
+      const createDraft = async () => {
+        if (!projectId) {
+          setEditingWorkflow(undefined);
+          setYamlDefinition(undefined);
+          setDraftId(undefined);
+          return;
+        }
+        try {
+          const { draftId: newDraftId } =
+            await workflowGrpc.createWorkflowDraft(projectId);
+          if (cancelled) return;
+          setDraftId(newDraftId);
+          const {
+            workflow,
+            version,
+            yamlDefinition: newYaml,
+          } = await getWorkflowByDraftId(projectId, newDraftId);
+          if (cancelled) return;
+          if (workflow) {
+            setEditingWorkflow(workflow);
+            setWorkflowVersion(version);
+            setYamlDefinition(newYaml);
+          } else {
+            setEditingWorkflow(undefined);
+          }
+        } catch (error) {
+          console.error("Failed to create workflow draft:", error);
+          if (cancelled) return;
+          setDraftId(undefined);
+          setEditingWorkflow(undefined);
+        }
+      };
+      void createDraft();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!routeWorkflowName) {
+      // No workflow name and not "new" → hub view (derived from props).
+      // Clear any lingering editor data so the next time the user opens a
+      // workflow they don't see a flash of the previous one.
+      setEditingWorkflow(undefined);
+      setYamlDefinition(undefined);
+      setParseError(undefined);
       return;
     }
-    if (!workflowToOpen || !projectId) return;
 
+    if (!projectId) {
+      // Deep-link to /workflow/$name without a current project. Two states:
+      //   - projects are still being fetched → wait; the effect will re-run
+      //     when projectId resolves.
+      //   - projects already loaded, none selected → URL is the source of
+      //     truth, so push the user to the project picker shell. Rendering
+      //     stale builder chrome would lie about what they're looking at.
+      if (!projectsLoading) {
+        navigate({ to: "/", search: {} });
+      }
+      return;
+    }
+
+    const workflowName = routeWorkflowName;
     const loadWorkflow = async () => {
       try {
         const {
@@ -251,16 +332,15 @@ export function WorkflowBuilderPage({
           parseError: loadedParseError,
           rawDefinition: loadedRawDefinition,
           yamlDefinition: loadedYamlDef,
-        } = await getWorkflowWithDraftId(projectId, workflowToOpen);
+        } = await getWorkflowWithDraftId(projectId, workflowName);
 
         // Handle parse error - show error view with chat available
         if (loadedParseError) {
           setParseError(loadedParseError);
           setRawDefinition(loadedRawDefinition);
-          setErrorWorkflowName(workflowToOpen);
+          setErrorWorkflowName(workflowName);
           setDraftId(loadedDraftId);
           setBuilderChatId(loadedChatId);
-          setCurrentView("error");
           return;
         }
 
@@ -270,16 +350,19 @@ export function WorkflowBuilderPage({
           setRawDefinition(undefined);
           setErrorWorkflowName(undefined);
 
-          // Detect if this is a built-in workflow from the workflowToOpen name
-          const isBuiltinWorkflow = workflowToOpen.startsWith("builtin://");
+          // Detect if this is a built-in workflow from the workflowName
+          const isBuiltinWorkflow = workflowName.startsWith("builtin://");
           // Check if it's a project workflow by looking it up in existing workflows
           const existingWorkflow = existingWorkflows.find(
-            (w) => w.name === workflowToOpen,
+            (w) => w.name === workflowName,
           );
           const isProjectWorkflow = existingWorkflow?.source === "project";
 
           setEditingWorkflow(workflow);
-          setIsReadOnly(isBuiltinWorkflow || isProjectWorkflow);
+          // In tour mode, force editable so the user sees what editing feels
+          // like on a builtin demo (e.g. get-it-right). Saves are blocked in
+          // handleSave below — nothing actually persists.
+          setIsReadOnly((isBuiltinWorkflow || isProjectWorkflow) && !tourMode);
           setIsNewWorkflow(false);
           setWorkflowSource(
             isBuiltinWorkflow
@@ -292,41 +375,23 @@ export function WorkflowBuilderPage({
           setBuilderChatId(loadedChatId);
           setYamlDefinition(loadedYamlDef);
           workflowSessionIdRef.current = undefined;
-          setCurrentView("builder");
         } else {
-          toast.error(`Workflow "${workflowToOpen}" not found`);
+          toast.error(`Workflow "${workflowName}" not found`);
           // Workflow was deleted or doesn't exist - fall back to hub
-          setCurrentView("hub");
-          // Clear the saved workflow state
-          const worktreeId =
-            useWorktreeStore.getState().currentWorktree?.id ?? null;
-          useWorkspaceStateStore.getState().setWorkflowState(
-            projectId,
-            worktreeId,
-            true, // Stay in workflow mode
-            null, // But no specific workflow
-          );
+          navigate({ to: "/workflow" });
         }
       } catch (err) {
         console.error("Failed to load workflow:", err);
-        toast.error(`Failed to load workflow "${workflowToOpen}"`);
+        toast.error(`Failed to load workflow "${workflowName}"`);
         // Same fallback logic for errors
-        setCurrentView("hub");
-        const worktreeId =
-          useWorktreeStore.getState().currentWorktree?.id ?? null;
-        useWorkspaceStateStore
-          .getState()
-          .setWorkflowState(projectId, worktreeId, true, null);
-      } finally {
-        // Clear the flag so we don't reload on re-render
-        clearWorkflowToOpen();
+        navigate({ to: "/workflow" });
       }
     };
 
     loadWorkflow();
-  }, [workflowToOpen, projectId, clearWorkflowToOpen, existingWorkflows]);
+  }, [routeWorkflowName, routeIsNew, projectId, projectsLoading, existingWorkflows, navigate, tourMode]);
 
-  // Escape key handling for hub view - exit workflow mode
+  // Escape key handling for hub view - close the workflow route
   // When in builder view, WorkflowBuilder handles escape itself
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -343,25 +408,31 @@ export function WorkflowBuilderPage({
         return;
       }
 
-      // Defer to onboarding tour if it's active (it handles its own Escape)
-      if (useTourStore.getState().isWizardActive) return;
+      // Defer to onboarding tour if it's active. Tour activity now lives in
+      // the URL (`?tour=<step>`); this handler runs outside React so we read
+      // directly from window.location rather than via a hook.
+      if (new URLSearchParams(window.location.search).has("tour")) return;
 
       // Prevent ModernApp from handling this ESC
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
 
-      // Exit workflow mode (go back to main chat)
-      setWorkflowMode(false);
+      // Exit the workflow route (go back to main chat)
+      onClose?.();
     };
 
     // Use window with capture phase to run BEFORE document-level handlers (like ModernApp's global shortcuts)
     // This ensures the workflow navigation stack is respected (panels → hub → exit)
     window.addEventListener("keydown", handleEscape, true);
     return () => window.removeEventListener("keydown", handleEscape, true);
-  }, [currentView, setWorkflowMode]);
+  }, [currentView, onClose]);
 
   const handleSave = async (workflow: Workflow) => {
+    if (tourMode) {
+      toast.info("Tour mode — changes are not saved", { duration: 4000 });
+      return { success: true, validationErrors: [] };
+    }
     if (!projectId) {
       toast.error("No project selected", { duration: 5000 });
       return { success: false, validationErrors: [] };
@@ -402,6 +473,9 @@ export function WorkflowBuilderPage({
         setYamlDefinition(response.yamlDefinition);
       }
 
+      if (!workflow.name) {
+        throw new Error("workflow.name required to save draft");
+      }
       trackEvent("workflow_draft_saved", {
         workflowSlug: workflow.name,
         workflowName: workflow.name,
@@ -530,115 +604,26 @@ export function WorkflowBuilderPage({
   };
 
   const handleCreateNew = async () => {
-    setIsReadOnly(false);
-    setIsNewWorkflow(true);
-    setWorkflowSource("user");
-    setWorkflowVersion(0);
-
-    // Generate a new session ID for this new workflow (for localStorage persistence before save)
-    workflowSessionIdRef.current = crypto.randomUUID();
-
-    // Persist state - new workflow, so no name yet
-    const worktreeId = useWorktreeStore.getState().currentWorktree?.id ?? null;
-
-    // Create draft BEFORE showing builder so we have the random name ready
-    if (projectId) {
-      useWorkspaceStateStore.getState().setWorkflowState(
-        projectId,
-        worktreeId,
-        true,
-        null, // New workflow has no name yet
-      );
-
-      // Create draft immediately so we have a draft ID and random name before showing builder
-      try {
-        const { draftId: newDraftId } =
-          await workflowGrpc.createWorkflowDraft(projectId);
-        setDraftId(newDraftId);
-
-        // Fetch the full workflow content from the draft to display immediately
-        const {
-          workflow,
-          version,
-          yamlDefinition: newYaml,
-        } = await getWorkflowByDraftId(projectId, newDraftId);
-        if (workflow) {
-          setEditingWorkflow(workflow);
-          setWorkflowVersion(version);
-          setYamlDefinition(newYaml);
-        } else {
-          setEditingWorkflow(undefined);
-        }
-      } catch (error) {
-        console.error("Failed to create workflow draft:", error);
-        // Continue without draft ID - tools will create one on first write
-        setDraftId(undefined);
-        setEditingWorkflow(undefined);
-      }
-    } else {
-      setDraftId(undefined);
-      setEditingWorkflow(undefined);
-    }
-
-    // Show builder AFTER we have the workflow content
-    setCurrentView("builder");
+    // Navigate to /workflow/new — the route effect will create the draft and
+    // flip to the builder view. No need for workspaceStateStore persistence;
+    // the URL is the source of truth.
+    navigate({ to: "/workflow/new" });
   };
 
-  const handleSelectWorkflow = async (
+  const handleSelectWorkflow = (
     workflowName: string,
-    isReadOnlyWorkflow: boolean = false,
-    source?: "builtin" | "user" | "project",
+    _isReadOnlyWorkflow: boolean = false,
+    _source?: "builtin" | "user" | "project",
     _updatedAt?: string,
-    slug?: string,
-    draftIdFromList?: string,
+    _slug?: string,
+    _draftIdFromList?: string,
   ) => {
-    if (!projectId) {
-      toast.error("No project selected", { duration: 5000 });
-      return;
-    }
-
-    try {
-      // For user workflows with a draft_id, use ID-based lookup (stable, doesn't depend on slug generation)
-      // For builtin/project workflows, use name-based lookup
-      const {
-        workflow,
-        draftId: loadedDraftId,
-        builderChatId: loadedChatId,
-        version: loadedVersion,
-        yamlDefinition: loadedYaml,
-      } = source === "user" && draftIdFromList
-        ? await getWorkflowByDraftId(projectId, draftIdFromList)
-        : await getWorkflowWithDraftId(projectId, workflowName);
-      setEditingWorkflow(workflow);
-      setIsReadOnly(isReadOnlyWorkflow);
-      setIsNewWorkflow(false);
-      setWorkflowSource(source ?? "user");
-      // Use the version from getWorkflow for OCC
-      setWorkflowVersion(loadedVersion);
-      setWorkflowSlug(slug);
-      setDraftId(loadedDraftId);
-      setBuilderChatId(loadedChatId);
-      setYamlDefinition(loadedYaml);
-
-      // For existing workflows, clear the session ID and initial name as we use the workflow name for persistence
-      workflowSessionIdRef.current = undefined;
-      setInitialWorkflowName(undefined);
-
-      setCurrentView("builder");
-
-      // Persist the active workflow
-      const worktreeId =
-        useWorktreeStore.getState().currentWorktree?.id ?? null;
-      useWorkspaceStateStore
-        .getState()
-        .setWorkflowState(projectId, worktreeId, true, workflowName);
-    } catch (err) {
-      console.error("Failed to load workflow:", err);
-      toast.error(
-        err instanceof Error ? err.message : "Failed to load workflow",
-        { duration: 5000 },
-      );
-    }
+    // Selecting a workflow from the hub just navigates — the route effect
+    // takes care of fetching the workflow content, source detection, etc.
+    navigate({
+      to: "/workflow/$workflowName",
+      params: { workflowName },
+    });
   };
 
   const handleDeleteWorkflow = async (name: string) => {
@@ -763,8 +748,37 @@ export function WorkflowBuilderPage({
     }
   };
 
-  if (currentView === "hub") {
+  // Shared full-screen layout: header (with close + settings) + content below.
+  // The header is only rendered when route adapters provide handlers (route
+  // mode); when WorkflowBuilderPage is composed directly with no onClose
+  // (e.g. embedded usage), we render just the content.
+  const renderWithChrome = (content: React.ReactNode) => {
+    if (!onClose && !onNavigateToSettings) {
+      return content;
+    }
     return (
+      <div className="flex flex-col h-screen bg-background font-sans dense-ui">
+        <WorkflowHeader
+          onClose={onClose ?? (() => {})}
+          onNavigateToSettings={onNavigateToSettings ?? (() => {})}
+        />
+        <div className="flex-1 overflow-hidden">{content}</div>
+      </div>
+    );
+  };
+
+  // Deep-link to /workflow/$name or /workflow/new with no current project: the
+  // route effect either redirects (projects already loaded, no selection) or is
+  // waiting for projectStore to finish loading. Either way, do NOT render the
+  // builder — it would show stale/blank workflow chrome until the redirect
+  // lands or the effect re-runs. Show the loading spinner; if the redirect is
+  // imminent, it'll unmount this component before the spinner is even visible.
+  if ((routeWorkflowName || routeIsNew) && !projectId) {
+    return <LoadingSpinner />;
+  }
+
+  if (currentView === "hub") {
+    return renderWithChrome(
       <WorkflowHub
         onCreateNew={handleCreateNew}
         onSelectWorkflow={(name) => {
@@ -799,26 +813,18 @@ export function WorkflowBuilderPage({
         defaultWorkflow={preferences?.defaultWorkflow}
         onSetDefaultWorkflow={handleSetDefaultWorkflow}
         projectId={projectId}
-      />
+      />,
     );
   }
 
   const handleBack = async () => {
-    setCurrentView("hub");
-    setEditingWorkflow(undefined);
-    setYamlDefinition(undefined);
+    // Navigate to the logical parent of the current route (lib/routeParent).
+    // From /workflow/$name that's /workflow (the hub); the route effect will
+    // reset the view to hub.
+    navigate(getParentRouteNavigateOptions(pathname));
 
-    // Clear active workflow but stay in workflow mode
-    const worktreeId = useWorktreeStore.getState().currentWorktree?.id ?? null;
+    // Refresh workflow list to show any changes made
     if (projectId) {
-      useWorkspaceStateStore.getState().setWorkflowState(
-        projectId,
-        worktreeId,
-        true, // Still in workflow mode
-        null, // Hub view - no specific workflow
-      );
-
-      // Refresh workflow list to show any changes made
       await Promise.all([
         useGlobalDataStore.getState().refetchWorkflows(projectId),
         loadDetailedWorkflows(),
@@ -846,13 +852,14 @@ export function WorkflowBuilderPage({
 
       toast.success("Workflow cleared");
 
-      // Clear error state and go back to hub
+      // Clear error state and navigate back to the hub URL — clearing the
+      // route param is what flips the derived view back to "hub".
       setParseError(undefined);
       setRawDefinition(undefined);
       setErrorWorkflowName(undefined);
       setDraftId(undefined);
       setBuilderChatId(undefined);
-      setCurrentView("hub");
+      navigate({ to: "/workflow" });
 
       // Refetch workflows
       useGlobalDataStore
@@ -891,7 +898,8 @@ export function WorkflowBuilderPage({
         setRawDefinition(undefined);
         setErrorWorkflowName(undefined);
 
-        // Set up builder view
+        // Set up builder data — clearing parseError above is what flips the
+        // derived view back to "builder".
         setEditingWorkflow(workflow);
         setIsReadOnly(false);
         setIsNewWorkflow(false);
@@ -899,7 +907,6 @@ export function WorkflowBuilderPage({
         setDraftId(loadedDraftId);
         setBuilderChatId(loadedChatId);
         setYamlDefinition(fixedYaml);
-        setCurrentView("builder");
 
         toast.success("Workflow loaded successfully");
       }
@@ -911,7 +918,7 @@ export function WorkflowBuilderPage({
 
   // Render error view
   if (currentView === "error") {
-    return (
+    return renderWithChrome(
       <WorkflowParseErrorView
         workflowName={errorWorkflowName || "Unknown"}
         parseError={parseError || "Unknown error"}
@@ -923,11 +930,11 @@ export function WorkflowBuilderPage({
         onFixed={handleWorkflowFixed}
         onChatIdChange={handleChatIdChange}
         onDraftIdChange={setDraftId}
-      />
+      />,
     );
   }
 
-  return (
+  return renderWithChrome(
     <div className="h-full w-full bg-background">
       <WorkflowBuilder
         onSave={handleSave}
@@ -946,7 +953,8 @@ export function WorkflowBuilderPage({
         onVersionChange={setWorkflowVersion}
         yamlDefinition={yamlDefinition}
         onYamlDefinitionChange={setYamlDefinition}
+        drillIntoNodeId={routeDrillIntoNodeId}
       />
-    </div>
+    </div>,
   );
 }

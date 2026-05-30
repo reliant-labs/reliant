@@ -24,6 +24,8 @@ class BackendManager {
     this.restartDelay = 1000; // Start with 1 second delay
     this.intentionalShutdown = false; // Track if shutdown was intentional
     this.instanceId = null; // Unique identifier for this instance (used in dev mode for process identification)
+    this.devBinaryPath = null; // Resolved dev-mode binary path (set by resolveDevBinary / getBinaryPath)
+    this.devProcessSearchPattern = null; // Pattern used by orphan cleanup to grep ps output in dev mode
 
     // Hosted API configuration
     this.apiUrl = process.env.RELIANT_API_URL || DEFAULT_API_URL;
@@ -173,28 +175,57 @@ class BackendManager {
    * In development mode: Only kills processes matching our instanceId (reliant-{instanceId})
    * In production mode: Kills all orphaned reliant-backend processes
    */
+  /**
+   * Resolve dev-mode binary path, instanceId, and the ps search pattern used
+   * for orphan cleanup. Idempotent — safe to call from cleanupOrphanedProcesses
+   * (which runs before getBinaryPath) and again from getBinaryPath itself.
+   *
+   * Two modes:
+   *   1. RELIANT_BACKEND_BIN env var set → use that absolute path directly.
+   *      The full path is used as the ps grep pattern, so each cloud-dev /
+   *      worktree instance stays uniquely identifiable without symlinks.
+   *   2. Unset → fall back to ./dist/reliant + a per-worktree symlink named
+   *      reliant-{instanceId} (legacy production-Electron behavior).
+   */
+  resolveDevBinary() {
+    if (!this.isDevelopment || this.devBinaryPath) {
+      return;
+    }
+
+    const envBin = process.env.RELIANT_BACKEND_BIN;
+    if (envBin) {
+      this.devBinaryPath = envBin;
+      // Derive instanceId from the binary's enclosing dev state dir.
+      // e.g. /…/control-plane/.cloud-dev-feat-foo/bin/reliant → .cloud-dev-feat-foo
+      this.instanceId = path.basename(path.dirname(path.dirname(envBin)));
+      // Use the absolute binary path as the ps search pattern — uniquely
+      // identifies this instance's daemon across parallel worktrees.
+      this.devProcessSearchPattern = envBin;
+      return;
+    }
+
+    const binaryName = process.platform === 'win32' ? 'reliant.exe' : 'reliant';
+    this.devBinaryPath = path.join(__dirname, '../../dist', binaryName);
+
+    const projectRoot = path.join(__dirname, '../..');
+    const worktreeMatch = projectRoot.match(/\.reliant\/worktrees\/([^/]+)/);
+    this.instanceId = worktreeMatch ? worktreeMatch[1] : path.basename(projectRoot);
+    this.devProcessSearchPattern = `reliant-${this.instanceId}`;
+  }
+
   async cleanupOrphanedProcesses() {
     const { execSync } = require('child_process');
-    
-    // Compute instanceId early if not already set (for cleanup before getBinaryPath is called)
-    if (!this.instanceId && this.isDevelopment) {
-      const projectRoot = path.join(__dirname, '../..');
-      const worktreeMatch = projectRoot.match(/\.reliant\/worktrees\/([^/]+)/);
-      if (worktreeMatch) {
-        this.instanceId = worktreeMatch[1];
-      } else {
-        this.instanceId = path.basename(projectRoot);
-      }
-    }
-    
+
+    this.resolveDevBinary();
+
     log.info(`[BackendManager] Checking for orphaned processes (instanceId: ${this.instanceId || 'production'})`);
-    
+
     try {
       if (process.platform === 'darwin' || process.platform === 'linux') {
-        // In dev mode, look for our unique binary name: reliant-{instanceId}
+        // In dev mode, look for our unique pattern (binary path or reliant-{instanceId})
         // In prod mode, look for reliant-backend
-        const searchPattern = this.isDevelopment && this.instanceId
-          ? `reliant-${this.instanceId}`
+        const searchPattern = this.isDevelopment && this.devProcessSearchPattern
+          ? this.devProcessSearchPattern
           : 'reliant-backend';
         
         try {
@@ -284,9 +315,13 @@ class BackendManager {
         }
         
       } else if (process.platform === 'win32') {
-        // Windows: Look for our unique binary name or reliant-backend.exe in prod
-        const searchName = this.isDevelopment && this.instanceId
-          ? `reliant-${this.instanceId}.exe`
+        // Windows: Look for our unique binary name or reliant-backend.exe in prod.
+        // When RELIANT_BACKEND_BIN is set, search by the binary's basename so
+        // tasklist's IMAGENAME filter finds it.
+        const searchName = this.isDevelopment && this.devProcessSearchPattern
+          ? (process.env.RELIANT_BACKEND_BIN
+              ? path.basename(process.env.RELIANT_BACKEND_BIN)
+              : `reliant-${this.instanceId}.exe`)
           : 'reliant-backend.exe';
         
         try {
@@ -445,38 +480,37 @@ class BackendManager {
   getBinaryPath() {
 
     if (this.isDevelopment) {
-      // In development, use the pre-built dev binary
-      // The npm script builds to dist/reliant (or reliant.exe on Windows)
-      const binaryName = process.platform === 'win32' ? 'reliant.exe' : 'reliant';
-      const devBinaryPath = path.join(__dirname, '../../dist', binaryName);
+      this.resolveDevBinary();
+      const devBinaryPath = this.devBinaryPath;
       log.info('[BackendManager] Development mode - using binary:', devBinaryPath);
 
       if (!fs.existsSync(devBinaryPath)) {
         log.error('[BackendManager] ERROR: Development binary not found at:', devBinaryPath);
-
-        throw new Error(`Development backend binary not found: ${devBinaryPath}. Run 'npm run build:backend' first.`);
+        const hint = process.env.RELIANT_BACKEND_BIN
+          ? `RELIANT_BACKEND_BIN=${devBinaryPath} does not exist. Ensure cloud-dev / dev-up has built it.`
+          : `Run 'npm run build:backend' first, or export RELIANT_BACKEND_BIN to point at a prebuilt binary.`;
+        throw new Error(`Development backend binary not found: ${devBinaryPath}. ${hint}`);
       }
 
-      // Generate a unique instance ID based on the worktree/project directory
-      // This allows us to identify and clean up only OUR backend process
-      const projectRoot = path.join(__dirname, '../..');
-      const worktreeMatch = projectRoot.match(/\.reliant\/worktrees\/([^/]+)/);
-      if (worktreeMatch) {
-        // We're in a worktree - use the worktree ID (e.g., "19e1db5c3d48")
-        this.instanceId = worktreeMatch[1];
-      } else {
-        // Main repo - use the project directory name
-        this.instanceId = path.basename(projectRoot);
+      // When the caller supplied an explicit binary path (cloud-dev / dev-up),
+      // use it directly. The full path is unique per worktree, so orphan
+      // cleanup can grep ps output without needing a per-instance symlink.
+      if (process.env.RELIANT_BACKEND_BIN) {
+        log.info('[BackendManager] Using RELIANT_BACKEND_BIN; skipping symlink. Instance ID:', this.instanceId);
+        return {
+          command: devBinaryPath,
+          args: this.buildDaemonArgs()
+        };
       }
-      
-      // Create a symlink with unique name for process identification
-      // This makes it easy to find/kill only processes for this worktree
-      const uniqueBinaryName = process.platform === 'win32' 
-        ? `reliant-${this.instanceId}.exe` 
+
+      // Legacy fallback: create a symlink with a unique name (reliant-{instanceId})
+      // so multiple worktrees sharing the same dist/ stay distinguishable in ps.
+      const binaryName = process.platform === 'win32' ? 'reliant.exe' : 'reliant';
+      const uniqueBinaryName = process.platform === 'win32'
+        ? `reliant-${this.instanceId}.exe`
         : `reliant-${this.instanceId}`;
       const symlinkPath = path.join(__dirname, '../../dist', uniqueBinaryName);
-      
-      // Create/update symlink if needed
+
       try {
         if (fs.existsSync(symlinkPath)) {
           const existingTarget = fs.readlinkSync(symlinkPath);

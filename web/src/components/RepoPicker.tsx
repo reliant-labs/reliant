@@ -77,7 +77,7 @@ export function RepoPicker({
   emptyMessage,
 }: RepoPickerProps) {
   const [query, setQuery] = useState("");
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const handleQueryChange = useCallback(
     (value: string) => {

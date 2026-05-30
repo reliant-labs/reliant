@@ -4,19 +4,17 @@ import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 import { gitService } from "../../services/controlPlane/git";
 import type { GitAccount } from "../../services/controlPlane/git";
-import { useAuthStore } from "../../store/authStore";
+import { supabase } from "../../lib/supabase";
 
 interface AddRepoModalProps {
   isOpen: boolean;
   onClose: () => void;
-  daemonName: string;
+  daemonId: string;
 }
 
 type ModalState = "idle" | "loading" | "success" | "error";
 
-export function AddRepoModal({ isOpen, onClose, daemonName }: AddRepoModalProps) {
-  const linkGithubAccount = useAuthStore((state) => state.linkGithubAccount);
-
+export function AddRepoModal({ isOpen, onClose, daemonId }: AddRepoModalProps) {
   const [accounts, setAccounts] = useState<GitAccount[]>([]);
   const [checkingGitHub, setCheckingGitHub] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<string>("");
@@ -79,10 +77,18 @@ export function AddRepoModal({ isOpen, onClose, daemonName }: AddRepoModalProps)
 
   const handleConnectGitHub = async () => {
     try {
-      await linkGithubAccount();
-      // Re-check after linking
-      const res = await listGitCredentials("github");
-      setAccounts(res.accounts ?? []);
+      // Kick off the control-plane custom OAuth flow. The Supabase GitHub
+      // provider is sign-in only (0 scopes); the long-lived repo-scoped
+      // token comes from /auth/github/authorize, which writes it to
+      // git_credentials. The page will navigate away; on return, the
+      // modal's open-effect re-runs and refreshes accounts.
+      const oauthURL = gitService.getOAuthURL();
+      if (!oauthURL) throw new Error("Control plane URL not configured");
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) throw new Error("Not signed in");
+      const returnTo = `${window.location.pathname}${window.location.search}`;
+      const params = new URLSearchParams({ token: session.access_token, returnTo });
+      window.location.href = `${oauthURL}?${params.toString()}`;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to connect GitHub");
     }
@@ -100,7 +106,12 @@ export function AddRepoModal({ isOpen, onClose, daemonName }: AddRepoModalProps)
     setError(null);
 
     try {
-      const result = await gitService.cloneRepo(daemonName, repoUrl, branch, path, selectedAccount || undefined);
+      const result = await gitService.cloneRepo({
+        daemonId,
+        gitRepo: repoUrl,
+        gitBranch: branch,
+        path,
+      });
       setClonedPath(result.clonedPath);
       setModalState("success");
 

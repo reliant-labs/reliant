@@ -3,17 +3,16 @@ import {
   listDaemons,
   createDaemon,
   resumeDaemon,
-  cloneRepo,
-  listGitRepos,
-  getReliantEntitlement,
-  isCloudEligible,
-  type ControlPlaneUser,
-} from '@/components/OnboardingFlow/api';
-
+  type CreateDaemonArgs,
+} from '@/services/controlPlane/daemon';
+import { getReliantState, isCloudEligible } from '@/services/controlPlane/billing';
+import { gitService } from '@/services/controlPlane/git';
+import type { CloneRepoArgs } from '@/services/controlPlane/git/types';
 import { onboardingService } from '@/services/controlPlane/onboarding';
+import type { OnboardingUser } from '@/services/controlPlane/onboarding';
 
 export function useCurrentUser() {
-  return useQuery<ControlPlaneUser | null>({
+  return useQuery<OnboardingUser | null>({
     queryKey: ['onboarding', 'currentUser'],
     queryFn: () => onboardingService.getCurrentUser(),
     staleTime: 30_000,
@@ -25,22 +24,22 @@ export function useCurrentUser() {
 
 export function useCloudEligibility() {
   const { data: user, isLoading: userLoading } = useCurrentUser();
-  const { data: entitlementResp, isLoading: entitlementLoading } = useQuery({
-    queryKey: ['onboarding', 'reliantEntitlement'],
-    queryFn: () => getReliantEntitlement(),
+  const { data: state, isLoading: stateLoading } = useQuery({
+    queryKey: ['onboarding', 'reliantState'],
+    queryFn: () => getReliantState(),
     staleTime: 30_000,
     refetchOnWindowFocus: false,
   });
 
-  const isLoading = userLoading || entitlementLoading;
-  const entitlement = entitlementResp?.entitlement;
+  const isLoading = userLoading || stateLoading;
+  const entitlement = state?.entitlement;
   const eligible = !isLoading && isCloudEligible(entitlement);
 
-  const reason = !user ? 'Sign up required'
-    : user.ipRestricted ? 'Cloud daemons not available from your network'
-    : (user.globalBudgetAvailable === false || user.budgetAvailable === false) ? 'Cloud budget reached'
-    : !isCloudEligible(entitlement) ? 'No cloud credits available'
-    : null;
+  const reason = !user
+    ? 'Sign up required'
+    : !isCloudEligible(entitlement)
+      ? 'No cloud credits available'
+      : null;
 
   return { eligible, reason, isLoading };
 }
@@ -59,7 +58,7 @@ export function useDaemonList() {
 export function useCreateDaemon() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: createDaemon,
+    mutationFn: (args: CreateDaemonArgs) => createDaemon(args),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['onboarding', 'daemons'] });
     },
@@ -69,23 +68,25 @@ export function useCreateDaemon() {
 export function useResumeDaemon() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: resumeDaemon,
+    mutationFn: (name: string) => resumeDaemon(name),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['onboarding', 'daemons'] });
     },
   });
 }
 
-export function useGitRepos(accountLogin?: string) {
+export function useGitRepos() {
   return useQuery({
-    queryKey: ['onboarding', 'gitRepos', accountLogin],
-    queryFn: () => listGitRepos(1, 100, 'updated', accountLogin),
+    queryKey: ['onboarding', 'gitRepos'],
+    queryFn: () => gitService.listRepos(1, 100, 'updated'),
     enabled: false, // manually triggered
   });
 }
 
 export function useCloneRepo() {
-  return useMutation({ mutationFn: cloneRepo });
+  return useMutation({
+    mutationFn: (args: CloneRepoArgs) => gitService.cloneRepo(args),
+  });
 }
 
 export function useCompleteOnboarding() {
@@ -96,9 +97,12 @@ export function useCompleteOnboarding() {
     onSuccess: () => {
       // Optimistically mark onboarding complete so ModernApp doesn't redirect
       // back to ?step=goal before the refetch completes.
-      queryClient.setQueryData<ControlPlaneUser | null>(
+      queryClient.setQueryData<OnboardingUser | null>(
         ['onboarding', 'currentUser'],
-        (old) => ({ ...(old ?? {}), onboardingCompleted: true }),
+        (old) => ({
+          ...(old ?? { onboardingCompleted: false }),
+          onboardingCompleted: true,
+        }),
       );
       queryClient.invalidateQueries({ queryKey: ['onboarding', 'currentUser'] });
     },

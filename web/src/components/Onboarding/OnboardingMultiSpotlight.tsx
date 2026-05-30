@@ -182,10 +182,13 @@ export function OnboardingMultiSpotlight({
   totalSteps: _totalSteps,
   onNext,
   onBack,
-  onSkipAll,
+  onSkipAll: _onSkipAll,
 }: OnboardingMultiSpotlightProps) {
+  // ESC no longer ends the tour — onSkipAll is accepted for interface
+  // compatibility but unused. Skip happens via the nav bar button.
   void _stepNumber;
   void _totalSteps;
+  void _onSkipAll;
 
   const [resolved, setResolved] = useState<ResolvedTarget[]>([]);
   const [isVisible, setIsVisible] = useState(false);
@@ -322,14 +325,12 @@ export function OnboardingMultiSpotlight({
     return () => cancelAnimationFrame(frame);
   }, [resolved.length, isVisible]);
 
-  // Keyboard navigation
+  // Keyboard navigation.
+  // ESC intentionally does nothing — it must not end the tour. The user can
+  // skip explicitly via the "Skip tour" button in OnboardingNavBar.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        e.preventDefault();
-        onSkipAll();
-      } else if (e.key === "Enter" || e.key === "ArrowRight") {
+      if (e.key === "Enter" || e.key === "ArrowRight") {
         e.stopPropagation();
         e.preventDefault();
         onNext();
@@ -342,12 +343,12 @@ export function OnboardingMultiSpotlight({
 
     document.addEventListener("keydown", handleKeyDown, true);
     return () => document.removeEventListener("keydown", handleKeyDown, true);
-  }, [onNext, onBack, onSkipAll]);
+  }, [onNext, onBack]);
 
   const content = (
     <div
       className={cn(
-        "fixed inset-0 z-[100] transition-opacity duration-300 overflow-hidden",
+        "fixed inset-0 z-[100] transition-opacity duration-300 overflow-hidden pointer-events-none",
         isVisible ? "opacity-100" : "opacity-0"
       )}
     >
@@ -379,8 +380,10 @@ export function OnboardingMultiSpotlight({
         />
       </svg>
 
-      {/* Overlay to block interaction */}
-      <div className="absolute inset-0" />
+      {/* Visual dim layer — does NOT block clicks. See OnboardingSpotlight
+       * for rationale: tour state is in the URL so the wizard re-renders
+       * against whatever page the user navigates to. */}
+      <div className="absolute inset-0 pointer-events-none" />
 
       {/* Highlight borders — one per target */}
       {resolved.map((r, i) => (

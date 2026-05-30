@@ -7,19 +7,28 @@ import {
   Circle,
   Calendar,
 } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import { cn } from "../../lib/utils";
 import { Progress } from "../ui/Progress";
 import { useOnboardingChecklistStore } from "../../store/onboardingChecklistStore";
 import { useTourStore } from "../../store/tourStore";
 import { useApiKeySetupStore } from "../../store/apiKeySetupStore";
-import { useViewerStore } from "../../store/viewerStore";
-import { REQUIRED_ITEMS, BONUS_ITEMS, CHECKLIST_ITEMS } from "./constants";
+import { REQUIRED_ITEMS, BONUS_ITEMS, CHECKLIST_ITEMS, ONBOARDING_STEPS } from "./constants";
 import type { ChecklistItem, ChecklistItemId } from "./types";
 import { trackEvent } from "../../lib/analytics";
+import { useTourNavigation } from "./useTourNavigation";
 
 // ─── Action Handlers ──────────────────────────────────────────────────────────
 
-function executeItemAction(item: ChecklistItem) {
+// Navigation lives in the component (useNavigate hook); this helper accepts
+// the navigate / tour callbacks so it stays a pure switch and the Onboarding
+// directory has zero direct router references.
+interface ItemActionDeps {
+  navigate: ReturnType<typeof useNavigate>;
+  startTour: () => void;
+}
+
+function executeItemAction(item: ChecklistItem, deps: ItemActionDeps) {
   switch (item.id as ChecklistItemId) {
     case "add-api-key":
       useApiKeySetupStore.getState().openModal();
@@ -28,22 +37,22 @@ function executeItemAction(item: ChecklistItem) {
       document.querySelector<HTMLElement>("[data-chat-input]")?.focus();
       break;
     case "use-custom-workflow":
-      useViewerStore.getState().setWorkflowMode(true);
+      void deps.navigate({ to: "/workflow", search: {} });
       break;
     case "create-workflow":
-      useViewerStore.getState().setWorkflowMode(true);
+      void deps.navigate({ to: "/workflow", search: {} });
       break;
     case "take-product-tour":
-      void useTourStore.getState().startWizard();
+      deps.startTour();
       break;
     case "create-workspace":
       window.dispatchEvent(new CustomEvent("open-create-worktree-modal"));
       break;
     case "create-preset":
-      useViewerStore.getState().setWorkflowMode(true);
+      void deps.navigate({ to: "/workflow", search: {} });
       break;
     case "install-mcp":
-      useViewerStore.getState().setSettingsMode(true, "mcp");
+      void deps.navigate({ to: "/settings/$section", params: { section: "mcp" } });
       break;
     case "read-docs":
       window.open("https://docs.reliantlabs.io/", "_blank");
@@ -109,9 +118,11 @@ function ProgressRing({
 function ChecklistItemRow({
   item,
   isComplete,
+  actionDeps,
 }: {
   item: ChecklistItem;
   isComplete: boolean;
+  actionDeps: ItemActionDeps;
 }) {
   return (
     <div className="flex items-start gap-3 py-2 px-1 group">
@@ -155,7 +166,7 @@ function ChecklistItemRow({
               stepsCompleted: 0,
               totalSteps: CHECKLIST_ITEMS.length,
             });
-            executeItemAction(item);
+            executeItemAction(item, actionDeps);
           }}
           className="shrink-0 mt-0.5 text-xs font-medium px-2.5 py-1 rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
         >
@@ -176,6 +187,18 @@ export function OnboardingChecklist() {
     totalCompleted,
     completionPercentage,
   } = useOnboardingChecklistStore();
+
+  const navigate = useNavigate();
+  const { goToStep } = useTourNavigation();
+  // Starting the tour from the checklist: reset any prior tour state and put
+  // the user on the first step via the URL. goToStep handles routing for
+  // workflow-bound steps; the first step is path-agnostic, so it just sets
+  // the search param on whatever route we're currently on.
+  const startTour = () => {
+    void useTourStore.getState().resetTourProgress();
+    goToStep(ONBOARDING_STEPS[0].id);
+  };
+  const actionDeps: ItemActionDeps = { navigate, startTour };
 
   const [bonusExpanded, setBonusExpanded] = useState(false);
 
@@ -256,6 +279,7 @@ export function OnboardingChecklist() {
               key={item.id}
               item={item}
               isComplete={completedItems.has(item.id)}
+              actionDeps={actionDeps}
             />
           ))}
         </div>

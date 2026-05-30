@@ -1,5 +1,7 @@
 // ModernApp - Main application component
-import { useSearch, useNavigate } from '@tanstack/react-router';
+import { useSearch, useNavigate, useLocation, useParams } from '@tanstack/react-router';
+import { useQueryClient } from '@tanstack/react-query';
+import { GITHUB_CREDENTIAL_QUERY_KEY } from './hooks/useGitHubCredential';
 import { ChatState } from "./gen/reliant/v1/chat_pb";
 import type { Chat } from "./api/client";
 import { logger } from "./lib/logger";
@@ -27,31 +29,16 @@ import { QuickFileOpen } from "./components/Layout/QuickFileOpen";
 import { CommandPalette } from "./components/Layout/CommandPalette";
 import { ChatSearch } from "./components/Layout/ChatSearch";
 import { NewChatView } from "./components/Chat/NewChatView";
-import { WorkflowBuilderPage } from "./components/workflow/WorkflowBuilderPage";
 import { useCurrentUser } from "@/hooks/useOnboardingQueries";
-
-// Wrapper to handle key-based remount for hub view reset
-function WorkflowBuilderPageWithKey() {
-  const workflowViewKey = useViewerStore((s) => s.workflowViewKey);
-  return <WorkflowBuilderPage key={`wf-${workflowViewKey}`} />;
-}
-import { WorkflowHeader } from "./components/workflow/WorkflowHeader";
-import { SettingsPage } from "./components/Settings/SettingsPage";
-import { SettingsHeader } from "./components/Settings/SettingsHeader";
-import { ContextualTipsLayer, OnboardingWizard } from "./components/Onboarding";
-import { OnboardingPage } from "./components/OnboardingFlow/OnboardingPage";
 
 
 import { Header, type HeaderRef } from "./components/Layout/Header";
 import { ProjectPicker } from "./components/Projects/ProjectPicker";
 import { InitializeGitModal } from "./components/Git/InitializeGitModal";
 import { RescanModal } from "./components/Projects/RescanModal";
-import { ModalLayer } from "./components/Modals/ModalLayer";
 
 import { TerminalPanel } from "./components/Terminal/TerminalPanel";
-import { Toaster } from "./lib/toast";
 import { LoadingSpinner } from "./components/Layout/LoadingSpinner";
-import { GitHubSyncBanner } from "./components/Layout/GitHubSyncBanner";
 import { GlobalUpdateHandler } from "./components/Settings/GlobalUpdateHandler";
 import { useChatStore } from "./store/chatStore";
 import { useActivityStore, ChatActivity } from "./store/activityStore";
@@ -65,6 +52,7 @@ import {
 import { useElectronIPC } from "./hooks/useElectronIPC";
 import { useSidebarOverlay } from "./hooks/useSidebarOverlay";
 import { useGitInitialization } from "./hooks/useGitInitialization";
+import { useDaemonStatus } from "./hooks/useDaemonStatus";
 import { useProjectRescan } from "./hooks/useProjectRescan";
 import { useCancelOnUnload } from "./hooks/useCancelOnUnload";
 import { useTerminalStore } from "./store/terminalStore";
@@ -89,9 +77,15 @@ function App() {
   const currentProject = useProjectStore((state) => state.currentProject);
   const selectProject = useProjectStore((state) => state.selectProject);
   const loadProjects = useProjectStore((state) => state.loadProjects);
-  const { step: onboardingStep, 'reset-onboarding': resetOnboarding, github_connected, github_error, github_error_msg } = useSearch({ from: '/' });
+  // Onboarding state (`plan`, `reset-onboarding`) now lives on /onboarding —
+  // see OnboardingRoute. We still read the github_* params here because non-
+  // onboarding OAuth callers (GitHubSyncStatus, AddRepoModal) return to /
+  // or /project/$id and we want a toast + credential cache refresh at the
+  // route they came back to. Settings has its own local handler.
+  const { github_connected, github_error, github_error_msg } = useSearch({ from: '/_app' });
   const navigate = useNavigate();
   const { data: currentUser, isLoading: isUserLoading } = useCurrentUser();
+  const queryClient = useQueryClient();
 
   const isTerminalOpen = useTerminalStore((state) => state.isOpen);
   const toggleTerminal = useTerminalStore((state) => state.toggleTerminal);
@@ -121,7 +115,7 @@ function App() {
       : "Reliant";
   }, [currentProject?.name]);
 
-  // NOTE: Workflows and presets are fetched by projectStore.setCurrentProject().
+  // NOTE: Workflows and presets are fetched by projectStore.selectProject().
   // With singleflight at the gRPC layer, duplicate concurrent calls are deduplicated
   // automatically, so no secondary trigger is needed here.
 
@@ -171,18 +165,69 @@ function App() {
   useAutoSaveWorkspaceState();
   // Subscribe to viewers array so component re-renders when viewers change
   const viewers = useViewerStore((state) => state.viewers);
-  const viewerProjectId = useViewerStore((state) => state.currentProjectId);
+  // The viewer "current project" is now the projectStore's currentProject — no
+  // dual-write. Use currentProject?.id directly.
+  const viewerProjectId = currentProject?.id ?? null;
   const activeViewerId = useViewerStore((state) => state.activeViewerId);
   const setActiveViewer = useViewerStore((state) => state.setActiveViewer);
-  const isWorkflowMode = useViewerStore((state) => state.isWorkflowMode);
-  const setWorkflowMode = useViewerStore((state) => state.setWorkflowMode);
-  const isSettingsMode = useViewerStore((state) => state.isSettingsMode);
-  const settingsSection = useViewerStore((state) => state.settingsSection);
-  const setSettingsMode = useViewerStore((state) => state.setSettingsMode);
+  const location = useLocation();
+  const isSettingsMode = location.pathname.startsWith("/settings");
+  const isWorkflowMode = location.pathname.startsWith("/workflow");
   // Calculate hasOpenViewers based on subscribed state
   const hasOpenViewers = viewerProjectId
     ? viewers.filter((v) => v.projectId === viewerProjectId).length > 0
     : viewers.length > 0;
+
+  // Read projectId from URL (/project/$projectId). useParams with strict:false
+  // returns undefined when the current route doesn't have $projectId.
+  const routeParams = useParams({ strict: false }) as { projectId?: string };
+  const routeProjectId = routeParams.projectId;
+
+  // Track the last URL projectId we acted on so the effect only fires on URL
+  // changes — not on store changes (selectProject would otherwise re-trigger).
+  const lastRouteProjectIdRef = useRef<string | undefined>(undefined);
+
+  // Deep-link the URL into a project. When /project/$projectId is mounted and
+  // its id differs from the currently selected project, look up the project
+  // and call selectProject. Loads projects first if not yet loaded.
+  useEffect(() => {
+    if (!routeProjectId) {
+      lastRouteProjectIdRef.current = undefined;
+      return;
+    }
+    if (lastRouteProjectIdRef.current === routeProjectId) {
+      return; // already handled this URL
+    }
+    lastRouteProjectIdRef.current = routeProjectId;
+
+    const projectStore = useProjectStore.getState();
+    if (projectStore.currentProject?.id === routeProjectId) {
+      return; // already selected, no work needed
+    }
+
+    (async () => {
+      let projects = useProjectStore.getState().projects;
+      if (projects.length === 0) {
+        try {
+          await useProjectStore.getState().loadProjects();
+        } catch (err) {
+          logger.warn("[ModernApp] Failed to load projects for deep-link", err);
+          return;
+        }
+        projects = useProjectStore.getState().projects;
+      }
+      const match = projects.find((p) => p.id === routeProjectId);
+      if (!match) {
+        logger.warn("[ModernApp] Deep-link project not found, leaving user in current state", { routeProjectId });
+        return;
+      }
+      const stillSelected = useProjectStore.getState().currentProject?.id;
+      if (stillSelected === match.id) {
+        return; // raced with another selectProject — no-op
+      }
+      await useProjectStore.getState().selectProject(match);
+    })();
+  }, [routeProjectId]);
 
   const headerRef = useRef<HeaderRef>(null);
 
@@ -192,15 +237,13 @@ function App() {
   // Used to prevent clearing chat during workspace restoration
   const hasInitialProjectLoadedRef = useRef(false);
   
-  // Handle project switching: clear diff panel and chat
+  // Handle project switching: clear chat on manual switch (viewer clearing is
+  // now handled by projectStore.selectProject directly via
+  // clearViewersForProjectSwitch — no dual-write to viewerStore.currentProjectId).
   useEffect(() => {
-    const viewerStore = useViewerStore.getState();
     const chatStore = useChatStore.getState();
 
     if (currentProject?.id) {
-      // Set current project in viewer store (this will clear viewers from other projects)
-      viewerStore.setCurrentProject(currentProject.id);
-
       // Only clear current chat when switching projects manually (not during initial load)
       // During initial load, the workspace restore hook will set the correct chat
       if (hasInitialProjectLoadedRef.current) {
@@ -209,9 +252,6 @@ function App() {
         // Mark that initial project has loaded - subsequent changes will clear chat
         hasInitialProjectLoadedRef.current = true;
       }
-    } else {
-      // No project selected - clear viewer store project
-      viewerStore.setCurrentProject(null);
     }
   }, [currentProject?.id]);
 
@@ -326,9 +366,14 @@ function App() {
   // Handler for navigating to project picker
   const handleNavigateToProjectPicker = useCallback(() => {
     useChatStore.getState().clearCurrentChat(null);
-    // Clear current project selection to show project picker
+    // Save and clear viewer state before deselecting the project — the old
+    // sync effect used to do this via viewerStore.setCurrentProject(null).
+    useViewerStore.getState().clearViewersForProjectSwitch();
+    // Clear current project selection to show project picker. The selectProject
+    // path drives the URL; for deselect we set state and navigate manually.
     useProjectStore.setState({ currentProject: null });
-  }, []);
+    navigate({ to: '/', search: {} });
+  }, [navigate]);
 
   // Get current worktreeId from the global worktree store (single source of truth)
   const getCurrentWorktreeId = useCallback(() => {
@@ -388,9 +433,12 @@ function App() {
         handleNavigateToProjectPicker();
       },
       onToggleSettings: () => {
-        // Toggle settings full-screen mode
-        const viewerState = useViewerStore.getState();
-        viewerState.setSettingsMode(!viewerState.isSettingsMode);
+        // Toggle settings route
+        if (window.location.pathname.startsWith("/settings")) {
+          navigate({ to: '/', search: {} });
+        } else {
+          navigate({ to: '/settings' });
+        }
       },
       onCloseTab: () => {
         try {
@@ -466,24 +514,20 @@ function App() {
         setShowChatSearch(true);
       },
       onStopStreaming: () => {
-        // Priority 1: Close Settings mode if open
-        const viewerState = useViewerStore.getState();
-        if (viewerState.isSettingsMode) {
+        // Priority 1: Close Settings route if open
+        if (window.location.pathname.startsWith("/settings")) {
           logger.info("🛑 ESC pressed - closing Settings");
-          viewerState.setSettingsMode(false);
+          navigate({ to: '/', search: {} });
           // Focus chat input after closing settings
           focusChatInput();
           return;
         }
 
-        // Priority 2: If in Workflow mode, let WorkflowBuilderPage handle ESC
-        // This allows the navigation stack: panels → hub → exit
-        // The workflow components register their own handlers on window (capture phase)
-        // which run before this handler and call stopImmediatePropagation()
-        // If we reach here, it means the user is in an input field or modal
-        // within the workflow, so we should NOT close workflow mode.
-        if (viewerState.isWorkflowMode) {
-          // Don't close workflow mode - let the workflow handle its own navigation
+        // Priority 2: If on a workflow route, defer to WorkflowBuilderPage's
+        // own ESC handler (registered on window capture). When ModernApp is
+        // mounted we're not on a workflow route, but on multi-window setups
+        // this guards against the rare case where both are alive.
+        if (window.location.pathname.startsWith("/workflow")) {
           return;
         }
 
@@ -607,7 +651,7 @@ function App() {
         setShowChatSidebar((prev) => !prev);
       },
       onOpenWorkflows: () => {
-        useViewerStore.getState().setWorkflowMode(true);
+        navigate({ to: '/workflow' });
       },
       onNextRightSidebarTab: () => {
         const projectId = currentProject?.id;
@@ -642,6 +686,7 @@ function App() {
       showChatSearch,
       setShowFileBrowser,
       setShowChatSidebar,
+      navigate,
     ]
   );
 
@@ -982,8 +1027,8 @@ function App() {
   // Listen for open prompts settings requests from UI
   useEffect(() => {
     const handler = () => {
-      // Open settings in full-screen mode with prompts section
-      useViewerStore.getState().setSettingsMode(true, "prompts");
+      // Navigate to the prompts settings section
+      navigate({ to: '/settings/$section', params: { section: 'prompts' } });
     };
     window.addEventListener("open-settings-prompts", handler as EventListener);
     return () =>
@@ -991,7 +1036,7 @@ function App() {
         "open-settings-prompts",
         handler as EventListener
       );
-  }, []);
+  }, [navigate]);
 
   // Listen for search modal open requests (from Electron menu)
   useEffect(() => {
@@ -1186,8 +1231,11 @@ function App() {
 
   const { isRestoring: isWorkspaceRestoring } = useWorkspaceRestore({
     autoRestore: isBackendReady,
-    // In Electron, skip project restoration - let useWindowContext handle it
-    skipProjectRestore: isElectron,
+    // In Electron, skip project restoration - let useWindowContext handle it.
+    // Also skip if the URL deep-links to a specific project (`/project/$projectId`) —
+    // the route-param effect above owns project selection in that case so we
+    // don't race lastProjectId vs the URL.
+    skipProjectRestore: isElectron || Boolean(routeProjectId),
   });
 
   // Listen for Electron menu events from tray and app menus
@@ -1269,10 +1317,7 @@ function App() {
       const unsubscribe = window.electronAPI.onTrayGoToWorkflowHub(() => {
         const projectId = useProjectStore.getState().currentProject?.id;
         if (!projectId) return;
-
-        const viewerStore = useViewerStore.getState();
-        viewerStore.setSettingsMode(false);
-        viewerStore.setWorkflowMode(true);
+        navigate({ to: '/workflow' });
       });
       if (typeof unsubscribe === "function") cleanups.push(unsubscribe);
     }
@@ -1285,16 +1330,17 @@ function App() {
         const workflowName = payload?.workflowName;
         if (!workflowName) return;
 
-        const viewerStore = useViewerStore.getState();
-        viewerStore.setSettingsMode(false);
-        viewerStore.setWorkflowMode(true, workflowName);
+        navigate({
+          to: '/workflow/$workflowName',
+          params: { workflowName },
+        });
       });
       if (typeof unsubscribe === "function") cleanups.push(unsubscribe);
     }
 
     if ("onTrayGoToSettings" in window.electronAPI) {
       const unsubscribe = window.electronAPI.onTrayGoToSettings(() => {
-        useViewerStore.getState().setSettingsMode(true);
+        navigate({ to: '/settings' });
       });
       if (typeof unsubscribe === "function") cleanups.push(unsubscribe);
     }
@@ -1334,6 +1380,7 @@ function App() {
   // Get onboarding state - we defer git init check until onboarding tour is completed
   const hasCompletedOnboarding = useTourStore((state) => state.hasCompletedOnboarding);
   const tourInitialized = useTourStore((state) => state.isInitialized);
+  const { activeDaemon, loading: daemonStatusLoading } = useDaemonStatus();
 
   // Check git initialization when a project is selected (use stable ID to avoid re-fires)
   // Skip during onboarding welcome to avoid dual modal confusion
@@ -1348,6 +1395,14 @@ function App() {
       // Skip git init check if onboarding tour hasn't been completed yet
       if (!hasCompletedOnboarding) {
         logger.info("[ModernApp] Deferring git init check until onboarding tour completes");
+        return;
+      }
+
+      // Don't prompt to initialize git if there's no daemon connected — the
+      // operation runs on the daemon, so it would fail. Also covers the
+      // brief window during daemon status fetch where we don't yet know.
+      if (daemonStatusLoading || !activeDaemon) {
+        logger.info("[ModernApp] Deferring git init check while no daemon is connected");
         return;
       }
 
@@ -1388,6 +1443,8 @@ function App() {
     isBackendReady,
     tourInitialized,
     hasCompletedOnboarding,
+    activeDaemon,
+    daemonStatusLoading,
   ]);
 
   // Note: Sidebar timeout cleanup is now handled by useSidebarOverlay hook
@@ -1421,46 +1478,60 @@ function App() {
     );
   };
 
-  // Drive both onboarding redirects from an effect — calling navigate() during
-  // render schedules a setState on the router's Transitioner mid-render, which
-  // React rejects with a "Cannot update a component while rendering a different
-  // component" warning and can wedge the app in a redirect loop.
-  const needsOnboardingRedirect =
-    !onboardingStep && !isUserLoading && (!currentUser || !currentUser.onboardingCompleted);
+  // Whether the user is mid-onboarding. The onboarding UI itself lives at
+  // /onboarding now (see OnboardingRoute); this flag exists only so we can
+  // bounce stray landings on / or /project/$id over there.
+  const inOnboarding =
+    !isUserLoading && (!currentUser || !currentUser.onboardingCompleted);
+
+  // If we land here while the user still needs to onboard, redirect to the
+  // dedicated route. Preserve any incoming search (e.g. legacy /?plan=... or
+  // /?github_connected=true) — onboardingSearchSchema accepts the same
+  // fields, and OnboardingRoute will pick them up. We wait for the backend
+  // ready signal + user-load to settle so we don't bounce twice (once before
+  // currentUser arrives, once after).
   useEffect(() => {
     if (!isBackendReady || isWorkspaceRestoring || isUserLoading) return;
-    if (resetOnboarding) {
-      // Plan is URL-backed now (Phase 3); clearing the `plan` search param
-      // drops the prior state without touching localStorage.
-      navigate({ to: '/', search: { step: 'compute', 'reset-onboarding': undefined } });
-      return;
-    }
-    if (needsOnboardingRedirect) {
-      navigate({ to: '/', search: { step: 'compute' } });
-    }
-  }, [isBackendReady, isWorkspaceRestoring, isUserLoading, resetOnboarding, needsOnboardingRedirect, navigate]);
+    if (!inOnboarding) return;
+    navigate({
+      to: '/onboarding',
+      search: (prev: Record<string, unknown>) => prev,
+      replace: true,
+    });
+  }, [isBackendReady, isWorkspaceRestoring, isUserLoading, inOnboarding, navigate]);
 
-  // Handle GitHub OAuth redirect — open Settings to show result
+  // GitHub OAuth return for app-shell triggers (GitHubSyncStatus, AddRepoModal).
+  // /onboarding and /settings/git-connections handle their own returns in-route.
+  // Here we just toast, refresh the credential cache, and strip the params so
+  // a reload doesn't replay the toast.
   useEffect(() => {
     if (!isBackendReady) return;
-    if (github_connected || github_error) {
-      setSettingsMode(true, "git-connections");
-      if (github_connected) {
-        toast.success("GitHub connected successfully");
-      } else if (github_error) {
-        toast.error(github_error_msg || github_error || "GitHub connection failed");
-      }
-      navigate({ to: '/', search: {}, replace: true });
+    if (isUserLoading || !currentUser) return;
+    if (!github_connected && !github_error) return;
+
+    if (github_connected) {
+      toast.success("GitHub connected successfully");
+      void queryClient.invalidateQueries({ queryKey: GITHUB_CREDENTIAL_QUERY_KEY });
+    } else if (github_error) {
+      toast.error(github_error_msg || github_error || "GitHub connection failed");
     }
-  }, [isBackendReady, github_connected, github_error, github_error_msg, setSettingsMode, navigate]);
+
+    navigate({
+      to: '/',
+      search: (prev: Record<string, unknown>) => {
+        const { github_connected: _c, github_error: _e, github_error_msg: _m, ...rest } = prev;
+        return rest;
+      },
+      replace: true,
+    });
+  }, [isBackendReady, isUserLoading, currentUser, github_connected, github_error, github_error_msg, navigate, queryClient]);
 
   // ─── Branch dispatch ────────────────────────────────────────────────────
-  // Compute the per-branch UI as a value rather than returning early so the
-  // "always-on" global overlays below (ModalLayer, OnboardingWizard,
-  // ContextualTipsLayer, GitHubSyncBanner, Toaster) render in every branch.
-  // This is the structural fix for the post-OAuth redirect bug — the
-  // existing-project modal must remain visible even when ModernApp falls into
-  // the ProjectPicker branch while workspace restore is still in flight.
+  // Compute the per-branch UI as a value rather than returning early. The
+  // app-global overlays (ModalLayer, Toaster, ContextualTipsLayer,
+  // GitHubSyncStatus, OnboardingWizard) now live on the root route in
+  // routes.tsx — they render on every route, including /settings,
+  // /workflow/*, and unauthenticated routes.
   const renderBranches = () => {
     // Show loading spinner until backend is ready
     if (!isBackendReady) {
@@ -1472,51 +1543,19 @@ function App() {
       return <LoadingSpinner />;
     }
 
-    // While the redirect effect runs, keep the spinner up.
-    if (resetOnboarding || needsOnboardingRedirect) {
+    // Mid-onboarding users get redirected to /onboarding by the effect above;
+    // show a spinner instead of the picker for the one render between
+    // currentUser arriving and the navigate landing.
+    if (inOnboarding) {
       return <LoadingSpinner />;
     }
 
-    // URL-driven onboarding: if ?step= is present, show OnboardingPage
-    if (onboardingStep) {
-      return (
-        <div className="flex h-screen flex-col overflow-hidden bg-background">
-          <OnboardingPage />
-        </div>
-      );
-    }
-
     // Show project picker only after the account has projects but none is selected.
+    // Header is hoisted to the App-level return — this branch returns only the
+    // content rendered below it.
     if (!currentProject) {
       return (
-        <div className="flex flex-col h-screen overflow-hidden">
-          <Header
-            ref={headerRef}
-            logoSize="xl"
-            windowAligned={true}
-            onNavigateToSettings={() => {
-              setSettingsMode(true);
-            }}
-            onNavigateToWorktrees={() => {
-              // No longer used
-            }}
-            onNavigateToSettingsSection={(section) => {
-              setSettingsMode(true, section);
-            }}
-            onNavigateToChats={() => {
-              // No longer used
-            }}
-            onNavigateToProjects={() => {
-              // No longer used
-            }}
-            projectPickerMode={true}
-            onProjectSelect={(project) => {
-              selectProject(project);
-            }}
-            onToggleTerminal={toggleTerminal}
-            onToggleFileBrowser={() => setShowFileBrowser((prev) => !prev)}
-            onToggleChatSidebar={() => setShowChatSidebar((prev) => !prev)}
-          />
+        <div className="flex-1 min-h-0 overflow-hidden">
           <ProjectPicker
             onProjectSelected={(project) => {
               // Always select the project - initialization check will happen after navigation
@@ -1536,67 +1575,17 @@ function App() {
       );
     }
 
-    // Settings Mode - Full screen layout without sidebars
-    if (isSettingsMode) {
-      return (
-        <div className="flex flex-col h-screen bg-background font-sans dense-ui">
-          <SettingsHeader onClose={() => {
-            setSettingsMode(false);
-            focusChatInput();
-          }} />
-          <div className="flex-1 overflow-hidden">
-            <SettingsPage initialSection={settingsSection} />
-          </div>
-        </div>
-      );
-    }
-
-    // Workflow Mode - Full screen layout without sidebars
-    if (isWorkflowMode) {
-      return (
-        <div className="flex flex-col h-screen bg-background font-sans dense-ui">
-          <WorkflowHeader
-            onClose={() => {
-              setWorkflowMode(false);
-              focusChatInput();
-            }}
-            onNavigateToSettings={() => {
-              // setSettingsMode handles tracking that we came from workflow mode
-              setSettingsMode(true);
-            }}
-          />
-          <div className="flex-1 overflow-hidden">
-            <WorkflowBuilderPageWithKey />
-          </div>
-        </div>
-      );
-    }
+    // Workflow routes are handled by /workflow/* in routes.tsx — they render
+    // WorkflowPage directly, not App, so we never reach here while on
+    // /workflow.
 
     return renderMainAppShell();
   };
 
   const renderMainAppShell = () => (
-    <div className="flex flex-col h-screen bg-background font-sans dense-ui">
-      {/* Global Header */}
-      <Header
-        ref={headerRef}
-        logoSize="xl"
-        windowAligned={true}
-        onNavigateToSettings={() => {
-          setSettingsMode(true);
-        }}
-        onNavigateToSettingsSection={(section) => {
-          setSettingsMode(true, section);
-        }}
-        onNavigateToProjectPicker={handleNavigateToProjectPicker}
-        onToggleTerminal={toggleTerminal}
-        onToggleFileBrowser={() => setShowFileBrowser((prev) => !prev)}
-        onToggleChatSidebar={() => setShowChatSidebar((prev) => !prev)}
-        onOpenWorkflows={() => {
-          useViewerStore.getState().setWorkflowMode(true);
-        }}
-      />
-
+    // Header is hoisted to the App-level return; this wrapper renders only the
+    // chat-shell content below it.
+    <div className="flex flex-col flex-1 min-h-0 bg-background font-sans dense-ui">
       <div className="flex flex-1 min-h-0 relative">
         {/* Hover trigger area - shows when sidebar is closed */}
         {!showChatSidebar && (
@@ -1733,11 +1722,11 @@ function App() {
         onClose={() => setShowCommandPalette(false)}
         onNavigateToSettings={() => {
           setShowCommandPalette(false);
-          setSettingsMode(true);
+          navigate({ to: '/settings' });
         }}
         onNavigateToSettingsSection={(section) => {
           setShowCommandPalette(false);
-          setSettingsMode(true, section);
+          navigate({ to: '/settings/$section', params: { section } });
         }}
       />
       <ChatSearch
@@ -1751,21 +1740,54 @@ function App() {
   );
 
   // ─── Final return ────────────────────────────────────────────────────────
-  // ModalLayer + Toaster + OnboardingWizard + ContextualTipsLayer +
-  // GitHubSyncBanner live as SIBLINGS of whichever branch renderBranches()
-  // returns. Mounting them above the branch dispatch is what keeps modals on
-  // screen across branch transitions — in particular the post-OAuth flow where
-  // we briefly fall into the ProjectPicker branch before workspace restore
-  // completes.
+  // App-global overlays (ModalLayer, Toaster, ContextualTipsLayer,
+  // GitHubSyncStatus, OnboardingWizard) are mounted on the root route — see
+  // routes.tsx. The wizard gates its own visibility internally and is fully
+  // URL-decoupled, so it is safe to mount globally.
+
+  // Header is meaningful only after backend is ready and the workspace/user
+  // state has settled. Mid-onboarding users get redirected to /onboarding —
+  // we don't render the app-shell header during that bounce. Mirrors the
+  // gates inside renderBranches() that previously suppressed the header.
+  const showHeader =
+    isBackendReady &&
+    !isWorkspaceRestoring &&
+    !isUserLoading &&
+    !inOnboarding;
+
   return (
-    <>
+    <div className="flex flex-col h-screen">
+      {showHeader && (
+        <Header
+          ref={headerRef}
+          logoSize="xl"
+          windowAligned={true}
+          projectPickerMode={!currentProject}
+          onNavigateToSettings={() => {
+            navigate({ to: '/settings' });
+          }}
+          onNavigateToSettingsSection={(section) => {
+            navigate({ to: '/settings/$section', params: { section } });
+          }}
+          // Picker mode only — no-op outside picker mode (Header gates the
+          // project-tile click on projectPickerMode, so this is dead unless
+          // !currentProject).
+          onProjectSelect={(project) => {
+            selectProject(project);
+          }}
+          // Header internally gates these on `!projectPickerMode`, so it's
+          // safe to pass them unconditionally — they're inert in picker mode.
+          onNavigateToProjectPicker={handleNavigateToProjectPicker}
+          onToggleTerminal={toggleTerminal}
+          onToggleFileBrowser={() => setShowFileBrowser((prev) => !prev)}
+          onToggleChatSidebar={() => setShowChatSidebar((prev) => !prev)}
+          onOpenWorkflows={() => {
+            navigate({ to: '/workflow' });
+          }}
+        />
+      )}
       {renderBranches()}
-      <ModalLayer />
-      <Toaster />
-      <OnboardingWizard />
-      <ContextualTipsLayer />
-      <GitHubSyncBanner />
-    </>
+    </div>
   );
 }
 

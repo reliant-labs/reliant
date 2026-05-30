@@ -69,6 +69,17 @@ export async function finalizeOnboardingSideEffects(modelProvider: ModelProvider
     );
   }
 
-  const { useTourStore } = await import("@/store/tourStore");
-  await useTourStore.getState().startWizard();
+  // Tour state lives in the URL now — clear any prior progress and push the
+  // user to the home route with the first step in the search params. The
+  // wizard is mounted at the root and will render the step on arrival.
+  const [{ useTourStore }, { router }, { ONBOARDING_STEPS }] = await Promise.all([
+    import("@/store/tourStore"),
+    import("@/routes"),
+    import("@/components/Onboarding/constants"),
+  ]);
+  await useTourStore.getState().resetTourProgress();
+  void router.navigate({
+    to: "/",
+    search: { tour: ONBOARDING_STEPS[0].id },
+  });
 }

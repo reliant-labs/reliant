@@ -5,7 +5,7 @@
  * the cloud admin server.
  */
 
-import type { ControlPlaneUser } from "@/components/OnboardingFlow/api";
+import type { OnboardingUser } from "./types";
 
 const ONBOARDING_COMPLETED_KEY = "reliant-local-onboarding-completed";
 
@@ -37,7 +37,7 @@ function writeCompleted(value: boolean): void {
   }
 }
 
-export async function getCurrentUser(): Promise<ControlPlaneUser | null> {
+export async function getCurrentUser(): Promise<OnboardingUser | null> {
   return { onboardingCompleted: readCompleted() };
 }
 
