@@ -140,10 +140,10 @@ nodes:
             thinking_level: "{{has(inputs.model.thinking_level) ? inputs.model.thinking_level : ''}}"
             system_prompt: >
               {{inputs.mode == 'plan' && inputs.planning_prompt != '' ? (inputs.system_prompt != '' ? inputs.system_prompt + "\n\n" : '') + inputs.planning_prompt : inputs.system_prompt}}
-            # Plan mode gets plan-tagged tools only; spawn no-op when presets empty
+            # Plan mode gets plan-tagged tools only; spawn available in all modes (child inherits preset config)
             tools_config:
               filter: "{{inputs.mode == 'plan' ? ['tag:plan'] : inputs.tools}}"
-              spawn: "{{inputs.mode != 'plan' ? [spawn(workflow.name, inputs.spawn_presets)] : []}}"
+              spawn: "{{[spawn(workflow.name, inputs.spawn_presets)]}}"
               permission: "{{inputs.mode == 'plan' ? 'readonly' : 'mutating'}}"
 
         - id: approval

@@ -218,6 +218,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	v2.RegisterActivity(registry, handlers.NewFetchThreadResultActivity(deps.Repo, deps.Threads))
 	v2.RegisterActivity(registry, handlers.NewValidateThreadOwnershipActivity(deps.Repo))
 	v2.RegisterActivity(registry, handlers.NewLoadPresetParamsActivity(deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewEmitToolCallStatusActivity(deps.Repo))
 
 }
 
