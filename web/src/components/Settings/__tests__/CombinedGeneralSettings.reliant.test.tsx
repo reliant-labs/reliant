@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 const mocks = vi.hoisted(() => ({
   refetchModels: vi.fn(),
@@ -9,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   updatePreferences: vi.fn(),
   useApiKeySetupSetState: vi.fn(),
   resetApiKeySetupDismissed: vi.fn(),
+  provisionManagedKey: vi.fn(),
 }))
 
 vi.mock('@/api/client', () => ({
@@ -44,7 +46,22 @@ vi.mock('@/hooks', () => ({
   useOAuthAvailability: () => ({ available: true, loading: false, recheck: vi.fn() }),
 }))
 
+vi.mock('@/hooks/useOnboardingQueries', () => ({
+  useCloudEligibility: () => ({ eligible: false, reason: null, isLoading: false }),
+}))
+
+vi.mock('@/services/controlPlane/onboarding', () => ({
+  onboardingService: {
+    provisionManagedKey: mocks.provisionManagedKey,
+  },
+}))
+
 import { CombinedGeneralSettings } from '@/components/Settings/CombinedGeneralSettings'
+
+function renderWithClient(ui: React.ReactElement) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>)
+}
 
 describe('CombinedGeneralSettings Reliant provider', () => {
   beforeEach(() => {
@@ -55,11 +72,7 @@ describe('CombinedGeneralSettings Reliant provider', () => {
   })
 
   it('shows Reliant in the add-provider dropdown so users can open the admin portal', async () => {
-    render(
-      <CombinedGeneralSettings
-        providers={[]}
-      />
-    )
+    renderWithClient(<CombinedGeneralSettings providers={[]} />)
 
     const select = await screen.findByRole('combobox')
     const options = Array.from(select.querySelectorAll('option'))
@@ -67,8 +80,8 @@ describe('CombinedGeneralSettings Reliant provider', () => {
     expect(reliantOption).toBeDefined()
   })
 
-  it('renders a managed badge and hides edit/delete affordances when Reliant is configured', async () => {
-    render(
+  it('renders Disconnect (not Delete) and hides the masked key for a configured Reliant row', async () => {
+    renderWithClient(
       <CombinedGeneralSettings
         providers={[
           {
@@ -82,16 +95,18 @@ describe('CombinedGeneralSettings Reliant provider', () => {
       />
     )
 
-    // Managed badge is visible.
-    expect(await screen.findByText('Managed by Reliant')).toBeInTheDocument()
+    // Disconnect button is rendered (and the legacy "Managed by Reliant" badge is gone).
+    expect(await screen.findByRole('button', { name: /disconnect/i })).toBeInTheDocument()
+    expect(screen.queryByText('Managed by Reliant')).not.toBeInTheDocument()
 
-    // No masked key is shown for the managed provider.
+    // Key stays opaque — no masked key shown.
     expect(screen.queryByText('sk-...abcd')).not.toBeInTheDocument()
 
-    // No Update / Delete buttons for the managed row.
+    // No Update button for Reliant — the key is provisioned, not manually editable.
     expect(screen.queryByRole('button', { name: /update/i })).not.toBeInTheDocument()
+
+    // No "Delete" label — Reliant uses Disconnect terminology.
     expect(screen.queryByRole('button', { name: /^delete$/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /disconnect/i })).not.toBeInTheDocument()
 
     // No mutation should fire on render.
     expect(mocks.updateProvider).not.toHaveBeenCalled()

@@ -13,11 +13,8 @@ import {
   CheckCircle2,
   XCircle,
   ExternalLink,
-  Lock,
 } from "lucide-react";
 import { Toggle } from "../ui/Toggle";
-import { Badge } from "../ui/Badge";
-import { Tooltip } from "../ui/Tooltip";
 import { cn } from "../../lib/utils";
 import { api } from "../../api/client";
 import { useGlobalDataStore } from "../../store/globalDataStore";
@@ -27,7 +24,9 @@ import {
   resetApiKeySetupDismissed,
 } from "../../store/apiKeySetupStore";
 import { useCodexOAuth, useClaudeOAuth, useOAuthAvailability } from "../../hooks";
-import { authServeCommand } from "../../lib/cli-commands";
+import { useCloudEligibility } from "../../hooks/useOnboardingQueries";
+import { onboardingService } from "../../services/controlPlane/onboarding";
+import { OAuthHelperPanel } from "../OAuthHelperPanel";
 import { getEventBus } from "../../lib/events";
 import { getAdminURL } from "../../lib/constants";
 import { openExternalLink } from "../../lib/open-link";
@@ -403,6 +402,8 @@ export function CombinedGeneralSettings({
   const codexOAuth = useCodexOAuth();
   const claudeOAuth = useClaudeOAuth();
   const oauthAvailability = useOAuthAvailability();
+  const cloudEligibility = useCloudEligibility();
+  const [enablingReliant, setEnablingReliant] = useState(false);
 
   // Filter to only show manual-entry providers plus auto-managed Reliant status
   const configuredProviders = providers.filter(
@@ -412,6 +413,25 @@ export function CombinedGeneralSettings({
         p.provider as (typeof VISIBLE_PROVIDERS)[number]
       )
   );
+  const reliantConfigured = configuredProviders.some((p) => p.provider === "reliant");
+  const canOfferReliant = cloudEligibility.eligible && !reliantConfigured;
+
+  const handleEnableReliant = async () => {
+    setEnablingReliant(true);
+    try {
+      await onboardingService.provisionManagedKey();
+      onProvidersUpdate?.();
+      await useGlobalDataStore.getState().refetchModels();
+      getEventBus().emit("api-key:saved", { provider: "reliant" });
+      setValidationMessage({ valid: true, message: "Reliant enabled." });
+      setTimeout(() => setValidationMessage(null), 3000);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to enable Reliant";
+      setValidationMessage({ valid: false, message });
+    } finally {
+      setEnablingReliant(false);
+    }
+  };
   const availableProviders = Object.entries(providerConfigs).filter(
     ([id]) =>
       VISIBLE_PROVIDERS.includes(id as (typeof VISIBLE_PROVIDERS)[number]) &&
@@ -420,15 +440,12 @@ export function CombinedGeneralSettings({
 
   const handleDeleteProvider = async (provider: string) => {
     const config = providerConfigs[provider as keyof typeof providerConfigs];
-    // Reliant is server-managed; the key cannot be deleted by the user.
-    if (provider === "reliant") return;
-    if (
-      !confirm(
-        `Are you sure you want to remove the API key for ${
-          config?.name || provider
-        }?`
-      )
-    ) {
+    const displayName = provider === "reliant" ? "Reliant" : config?.name || provider;
+    const prompt =
+      provider === "reliant"
+        ? "Disconnect Reliant? You can re-enable it later from Settings."
+        : `Are you sure you want to remove the API key for ${displayName}?`;
+    if (!confirm(prompt)) {
       return;
     }
 
@@ -709,23 +726,15 @@ export function CombinedGeneralSettings({
               ) : providerConfigs[selectedProvider as ProviderId]?.usesOAuth ? (
                 /* OAuth Section */
                 <div className="space-y-4">
-                  <div className="p-4 rounded-lg border border-border/40 bg-muted/30">
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium text-foreground">
-                        Authenticate via {providerConfigs[selectedProvider as ProviderId]?.name}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {oauthAvailability.available
-                          ? `Sign in with ${providerConfigs[selectedProvider as ProviderId]?.name} to connect your account.`
-                          : "The local OAuth helper is not running. Start it in your terminal to enable login:"}
-                      </p>
-                      {!oauthAvailability.available && !oauthAvailability.loading && (
-                        <code className="block mt-2 px-3 py-2 text-sm bg-background border border-border/40 rounded-md font-mono select-all break-all">
-                          {authServeCommand()}
-                        </code>
-                      )}
-                    </div>
-                  </div>
+                  <OAuthHelperPanel
+                    providerName={providerConfigs[selectedProvider as ProviderId]?.name as string}
+                    available={oauthAvailability.available}
+                    loading={oauthAvailability.loading}
+                    onRetry={oauthAvailability.recheck}
+                    onConnect={() => handleConnectOAuth(providerConfigs[selectedProvider as ProviderId]?.usesOAuth as string)}
+                    connecting={validating}
+                    buttonVariant="subtle"
+                  />
 
                   {validationMessage && (
                     <div
@@ -744,33 +753,6 @@ export function CombinedGeneralSettings({
                       {validationMessage.message}
                     </div>
                   )}
-
-                  <div className="flex justify-end">
-                    {oauthAvailability.available ? (
-                      <button
-                        className="px-4 py-2 text-sm font-medium border border-primary/40 bg-primary/10 text-primary rounded-md transition-colors hover:bg-primary/20 disabled:opacity-50 flex items-center gap-2"
-                        onClick={() => handleConnectOAuth(providerConfigs[selectedProvider as ProviderId]?.usesOAuth as string)}
-                        disabled={validating}
-                      >
-                        {validating ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Checking...
-                          </>
-                        ) : (
-                          <>Login with {providerConfigs[selectedProvider as ProviderId]?.name}</>
-                        )}
-                      </button>
-                    ) : (
-                      <button
-                        className="px-4 py-2 text-sm font-medium border border-border/40 bg-background rounded-md transition-colors hover:bg-accent disabled:opacity-50"
-                        onClick={oauthAvailability.recheck}
-                        disabled={oauthAvailability.loading}
-                      >
-                        {oauthAvailability.loading ? "Checking…" : "Retry"}
-                      </button>
-                    )}
-                  </div>
                 </div>
               ) : (
                 /* Standard API Key Input Section */
@@ -887,6 +869,42 @@ export function CombinedGeneralSettings({
         </div>
       )}
 
+      {/* Enable Reliant tile — shown when the user is entitled but has no Reliant key. */}
+      {canOfferReliant && (
+        <div>
+          <h3 className="text-lg font-semibold mb-4">Available</h3>
+          <div className="border border-border/40 rounded-lg bg-card p-4 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                  <span className="text-xs font-semibold text-primary">R</span>
+                </div>
+                <div>
+                  <h4 className="font-semibold">Reliant</h4>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    Use Reliant&apos;s model routing with included credits.
+                  </p>
+                </div>
+              </div>
+              <button
+                className="px-4 py-2 text-sm font-medium border border-primary/40 bg-primary/10 text-primary rounded-md transition-colors hover:bg-primary/20 disabled:opacity-50 flex items-center gap-2"
+                onClick={handleEnableReliant}
+                disabled={enablingReliant}
+              >
+                {enablingReliant ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Enabling...
+                  </>
+                ) : (
+                  <>Enable</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Configured Providers List */}
       {configuredProviders.length > 0 && (
         <div>
@@ -897,8 +915,11 @@ export function CombinedGeneralSettings({
                 providerConfigs[
                   provider.provider as ProviderId
                 ];
-              // Reliant key is provisioned & rotated server-side; render a managed row.
-              const isManaged = provider.provider === "reliant";
+              // Reliant's key is provisioned server-side and stays opaque to the user —
+              // no masked-key display and no manual Update.
+              const isReliant = provider.provider === "reliant";
+              const canUpdate = !config?.usesOAuth && !isReliant;
+              const disconnectLabel = config?.usesOAuth || isReliant ? "Disconnect" : "Delete";
 
               return (
                 <div
@@ -921,7 +942,7 @@ export function CombinedGeneralSettings({
                             <Check className="h-3 w-3" />
                             Connected
                           </span>
-                          {!isManaged && provider.maskedKey && (
+                          {!isReliant && provider.maskedKey && (
                             <span className="text-sm text-muted-foreground font-mono" data-sentry-mask>
                               {provider.maskedKey}
                             </span>
@@ -931,70 +952,52 @@ export function CombinedGeneralSettings({
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {isManaged ? (
-                        <Tooltip
-                          content="This key is provisioned and rotated automatically. It cannot be edited."
-                          placement="left"
+                      {canUpdate && (
+                        <button
+                          className="px-3 py-1.5 text-sm border border-border/40 rounded-md hover:bg-accent transition-colors flex items-center gap-1"
+                          onClick={() => {
+                            if (editingProvider === provider.provider) {
+                              setEditingProvider(null);
+                              setEditApiKeys({
+                                ...editApiKeys,
+                                [provider.provider]: "",
+                              });
+                              setShowEditKeys({
+                                ...showEditKeys,
+                                [provider.provider]: false,
+                              });
+                            } else {
+                              setEditingProvider(provider.provider);
+                              setEditApiKeys({
+                                ...editApiKeys,
+                                [provider.provider]: "",
+                              });
+                            }
+                          }}
                         >
-                          <Badge
-                            variant="secondary"
-                            size="sm"
-                            className="gap-1 cursor-default"
-                          >
-                            <Lock className="w-3 h-3" />
-                            Managed by Reliant
-                          </Badge>
-                        </Tooltip>
-                      ) : (
-                        <>
-                          {!config?.usesOAuth && (
-                            <button
-                              className="px-3 py-1.5 text-sm border border-border/40 rounded-md hover:bg-accent transition-colors flex items-center gap-1"
-                              onClick={() => {
-                                if (editingProvider === provider.provider) {
-                                  setEditingProvider(null);
-                                  setEditApiKeys({
-                                    ...editApiKeys,
-                                    [provider.provider]: "",
-                                  });
-                                  setShowEditKeys({
-                                    ...showEditKeys,
-                                    [provider.provider]: false,
-                                  });
-                                } else {
-                                  setEditingProvider(provider.provider);
-                                  setEditApiKeys({
-                                    ...editApiKeys,
-                                    [provider.provider]: "",
-                                  });
-                                }
-                              }}
-                            >
-                              <Settings2 className="w-4 h-4" />
-                              {editingProvider === provider.provider
-                                ? "Cancel"
-                                : "Update"}
-                            </button>
-                          )}
-                          <button
-                            className="px-3 py-1.5 text-sm border border-destructive/20 text-destructive rounded-md hover:bg-destructive/10 transition-colors flex items-center gap-1"
-                            onClick={() => handleDeleteProvider(provider.provider)}
-                            disabled={deletingProvider === provider.provider}
-                          >
-                            {deletingProvider === provider.provider ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Trash2 className="w-4 h-4" />
-                            )}
-                            {config?.usesOAuth ? "Disconnect" : "Delete"}
-                          </button>
-                        </>
+                          <Settings2 className="w-4 h-4" />
+                          {editingProvider === provider.provider
+                            ? "Cancel"
+                            : "Update"}
+                        </button>
                       )}
+                      <button
+                        className="px-3 py-1.5 text-sm border border-destructive/20 text-destructive rounded-md hover:bg-destructive/10 transition-colors flex items-center gap-1"
+                        onClick={() => handleDeleteProvider(provider.provider)}
+                        disabled={deletingProvider === provider.provider}
+                      >
+                        {deletingProvider === provider.provider ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                        {disconnectLabel}
+                      </button>
                     </div>
                   </div>
 
                   {/* Only show edit section for providers that use API-key auth */}
-                  {editingProvider === provider.provider && !config?.usesOAuth && !isManaged && (
+                  {editingProvider === provider.provider && canUpdate && (
                     <div className="border-t border-border/40 mt-4 pt-4 space-y-4">
                       <div className="space-y-2">
                         <label className="text-sm font-medium">
