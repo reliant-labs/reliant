@@ -1487,18 +1487,25 @@ function App() {
   // If we land here while the user still needs to onboard, redirect to the
   // dedicated route. Preserve any incoming search (e.g. legacy /?plan=... or
   // /?github_connected=true) — onboardingSearchSchema accepts the same
-  // fields, and OnboardingRoute will pick them up. We wait for the backend
-  // ready signal + user-load to settle so we don't bounce twice (once before
-  // currentUser arrives, once after).
+  // fields, and OnboardingRoute will pick them up.
+  //
+  // We deliberately do NOT gate on `isBackendReady` or `isWorkspaceRestoring`:
+  // a mid-onboarding user has no projects to list and no workspace to restore,
+  // and waiting for ListProjects to complete (which can run several hundred
+  // ms to a couple seconds before the singleflight inside loadProjects
+  // resolves) just delays the redirect — leaving the user staring at a
+  // LoadingSpinner before the OnboardingPage / ComputeStep mounts and fires
+  // its own queries (ListDaemons, etc.). Gate only on `isUserLoading` so we
+  // don't bounce twice (once before `currentUser` arrives, once after).
   useEffect(() => {
-    if (!isBackendReady || isWorkspaceRestoring || isUserLoading) return;
+    if (isUserLoading) return;
     if (!inOnboarding) return;
     navigate({
       to: '/onboarding',
       search: (prev: Record<string, unknown>) => prev,
       replace: true,
     });
-  }, [isBackendReady, isWorkspaceRestoring, isUserLoading, inOnboarding, navigate]);
+  }, [isUserLoading, inOnboarding, navigate]);
 
   // GitHub OAuth return for app-shell triggers (GitHubSyncStatus, AddRepoModal).
   // /onboarding and /settings/git-connections handle their own returns in-route.

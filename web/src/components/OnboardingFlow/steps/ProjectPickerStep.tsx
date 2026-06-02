@@ -43,8 +43,18 @@ export function ProjectPickerStep({ plan, onBack }: StepProps) {
 
   const isCloud = plan.compute === "cloud_free_trial";
 
+  // Leaves /onboarding for the home route while preserving any search params
+  // finalizeOnboardingSideEffects set (notably ?tour=<first-step>, which the
+  // post-onboarding wizard reads to auto-start). Stripping legacy `step` /
+  // `plan` keeps reload-safe URLs from re-entering the onboarding flow.
   const goToChat = useCallback(() => {
-    navigate({ to: "/", search: { step: undefined, plan: undefined } });
+    navigate({
+      to: "/",
+      search: (prev: Record<string, unknown>) => {
+        const { step: _step, plan: _plan, ...rest } = prev;
+        return rest;
+      },
+    });
   }, [navigate]);
 
   const finalize = useCallback(
@@ -61,14 +71,13 @@ export function ProjectPickerStep({ plan, onBack }: StepProps) {
           modelProvider: plan.modelProvider,
         });
         markOnboardingFinalized(plan, source === "existing" ? "existing" : "new");
+        // finalizeOnboardingSideEffects navigates to `/?tour=<first-step>`
+        // for the local-daemon path; the wizard takes it from there. For
+        // cloud we still need the daemon-connecting gate, which renders
+        // here and hands control to goToChat() on continue.
         await finalizeOnboardingSideEffects(plan.modelProvider);
-        // Cloud daemons may still be provisioning at this point — show the
-        // gate so the user knows whether to wait or report. Local daemons
-        // were already verified ACTIVE by ComputeStep.
         if (isCloud) {
           setShowDaemonGate(true);
-        } else {
-          goToChat();
         }
       } catch (err) {
         logger.warn("[ProjectPickerStep] finalize failed", err);
@@ -76,7 +85,7 @@ export function ProjectPickerStep({ plan, onBack }: StepProps) {
         setCompleting(false);
       }
     },
-    [completeOnboardingMutation, goToChat, isCloud, plan],
+    [completeOnboardingMutation, isCloud, plan],
   );
 
   const handleSelectExisting = useCallback(

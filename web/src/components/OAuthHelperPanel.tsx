@@ -90,7 +90,7 @@ export function OAuthHelperPanel({
         <p className={cn(bodyText, "text-muted-foreground")}>
           {available
             ? `Sign in with ${providerName} to connect your account.`
-            : "The local OAuth helper is not running. Start it in your terminal to enable login:"}
+            : "The local OAuth helper is not running. We need this to intercept your credentials:"}
         </p>
         {!available && !loading && (
           <code

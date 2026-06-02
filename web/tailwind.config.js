@@ -59,6 +59,19 @@ export default {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      // Bumped one step up from Tailwind defaults so dense UI text reads better.
+      // Spacing/layout (rem-based padding, gap, etc.) is unchanged so existing
+      // layouts don't shift; only font sizes grow.
+      fontSize: {
+        xs:    ["0.8125rem", { lineHeight: "1.125rem" }],  // 13px (was 12px)
+        sm:    ["0.9375rem", { lineHeight: "1.375rem" }],  // 15px (was 14px)
+        base:  ["1.0625rem", { lineHeight: "1.625rem" }],  // 17px (was 16px)
+        lg:    ["1.1875rem", { lineHeight: "1.875rem" }],  // 19px (was 18px)
+        xl:    ["1.375rem",  { lineHeight: "2rem" }],      // 22px (was 20px)
+        "2xl": ["1.625rem",  { lineHeight: "2.25rem" }],   // 26px (was 24px)
+        "3xl": ["2rem",      { lineHeight: "2.5rem" }],    // 32px (was 30px)
+        "4xl": ["2.375rem",  { lineHeight: "2.75rem" }],   // 38px (was 36px)
+      },
     },
   },
   plugins: [
