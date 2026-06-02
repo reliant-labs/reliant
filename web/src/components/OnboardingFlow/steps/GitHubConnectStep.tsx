@@ -305,7 +305,17 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
         <DaemonConnectingGate
           daemonRef={gateDaemonRef}
           onContinue={() =>
-            navigate({ to: "/", search: { step: undefined, plan: undefined } })
+            // Preserve any search params finalizeOnboardingSideEffects set
+            // (notably ?tour=<first-step> for the post-onboarding wizard).
+            // Stripping legacy `step`/`plan` keeps reload-safe URLs from
+            // re-entering the onboarding flow.
+            navigate({
+              to: "/",
+              search: (prev: Record<string, unknown>) => {
+                const { step: _step, plan: _plan, ...rest } = prev;
+                return rest;
+              },
+            })
           }
         />
       </div>

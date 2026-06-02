@@ -1,127 +1,297 @@
-import { Cloud, FolderCode, Monitor, Server } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
+import {
+  Boxes,
+  Cloud,
+  FolderCode,
+  Laptop,
+  Monitor,
+  Server,
+  Sparkles,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-type DiagramNode = {
-  label: string;
-  detail: string;
+type Location = {
+  id: string;
   icon: LucideIcon;
-  tone?: "default" | "primary";
+  name: string;
+  sub: string;
 };
 
-const clientNode: DiagramNode = {
-  label: "App",
-  detail: "Desktop or web",
-  icon: Monitor,
-};
+const LOCATIONS: Location[] = [
+  {
+    id: "reliant",
+    icon: Sparkles,
+    name: "Reliant Cloud",
+    sub: "Hosted for you",
+  },
+  { id: "cloud", icon: Cloud, name: "Your cloud", sub: "AWS · GCP · Azure" },
+  {
+    id: "laptop",
+    icon: Laptop,
+    name: "Local machine",
+    sub: "Laptop or workstation",
+  },
+  { id: "onprem", icon: Server, name: "On-prem", sub: "Bare metal" },
+  { id: "k8s", icon: Boxes, name: "Kubernetes", sub: "Your cluster" },
+];
 
-const cloudNode: DiagramNode = {
-  label: "Reliant Cloud",
-  detail: "Routes work",
-  icon: Cloud,
-  tone: "primary",
-};
+const W = 1060;
+const H = 480;
+const ROWS = [40, 140, 240, 340, 440];
+const DAEMON_X = 556;
+const DAEMON_W = 220;
+const DAEMON_RIGHT = DAEMON_X + DAEMON_W;
+const CLOUD_X = 220;
+const CLOUD_W = 210;
+const CLOUD_RIGHT = CLOUD_X + CLOUD_W;
+const CODE_X = 884;
+const CODE_W = 176;
+const APP_W = 176;
+const HUB_Y = 240;
+const CARD_H = 72;
+const COMPACT_H = 64;
 
-const daemonNode: DiagramNode = {
-  label: "Daemon",
-  detail: "Hosted or self-run",
-  icon: Server,
-};
+function curve(x1: number, y1: number, x2: number, y2: number) {
+  const mx = (x1 + x2) / 2;
+  return `M${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`;
+}
 
-const codeNode: DiagramNode = {
-  label: "Your code",
-  detail: "Files and commands",
-  icon: FolderCode,
-};
-
-function NodeCard({ node }: { node: DiagramNode }) {
-  const Icon = node.icon;
-  const isPrimary = node.tone === "primary";
-
+function Node({
+  icon: Icon,
+  title,
+  sub,
+  highlight,
+  compact,
+}: {
+  icon: LucideIcon;
+  title: string;
+  sub: string;
+  highlight?: boolean;
+  compact?: boolean;
+}) {
   return (
     <div
       className={cn(
-        "min-w-0 rounded-xl border p-3 shadow-sm",
-        isPrimary
-          ? "border-primary/30 bg-primary/10"
+        "flex h-full min-w-0 items-center gap-3 rounded-xl border shadow-sm",
+        compact ? "px-3 py-2.5" : "p-3.5",
+        highlight
+          ? "border-primary/40 bg-primary/10"
           : "border-border/60 bg-background/85",
       )}
     >
-      <div className="flex min-w-0 items-start gap-2.5">
-        <div
+      <div
+        className={cn(
+          "flex shrink-0 items-center justify-center rounded-lg",
+          compact ? "h-9 w-9" : "h-10 w-10",
+          highlight
+            ? "bg-primary text-primary-foreground"
+            : "bg-muted text-muted-foreground",
+        )}
+      >
+        <Icon className={compact ? "h-[18px] w-[18px]" : "h-5 w-5"} />
+      </div>
+      <div className="min-w-0">
+        <h3
           className={cn(
-            "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
-            isPrimary ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
+            "truncate font-semibold leading-tight text-foreground",
+            compact ? "text-sm" : "text-base",
           )}
         >
-          <Icon className="h-4 w-4" />
-        </div>
-        <div className="min-w-0 space-y-0.5">
-          <h3 className="break-words text-sm font-semibold leading-tight text-foreground">
-            {node.label}
-          </h3>
-          <p className="break-words text-xs leading-snug text-muted-foreground">
-            {node.detail}
-          </p>
-        </div>
+          {title}
+        </h3>
+        <p
+          className={cn(
+            "truncate leading-snug text-muted-foreground",
+            compact ? "text-xs" : "text-sm",
+          )}
+        >
+          {sub}
+        </p>
       </div>
     </div>
   );
 }
 
-function Connector({ label, emphasis = false }: { label: string; emphasis?: boolean }) {
-  return (
-    <div className="flex min-h-7 min-w-0 items-center justify-center gap-2 text-[10px] text-muted-foreground md:flex-col md:gap-1 md:py-2">
-      <div
-        className={cn(
-          "h-5 w-px shrink-0 rounded-full md:h-px md:w-full",
-          emphasis ? "bg-primary/70" : "bg-border",
-        )}
-      />
-      <span
-        className={cn(
-          "max-w-full rounded-full border px-1.5 py-0.5 font-medium leading-none",
-          emphasis
-            ? "border-primary/25 bg-primary/10 text-primary"
-            : "border-border/50 bg-background/70",
-        )}
-      >
-        {label}
-      </span>
-    </div>
-  );
-}
+export function DaemonConnectionDiagrams({
+  className,
+}: {
+  className?: string;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+  const gradientId = useId();
+  const leftGradient = `${gradientId}-left`;
+  const rightGradient = `${gradientId}-right`;
 
-export function DaemonConnectionDiagrams({ className }: { className?: string }) {
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const update = (width: number) => setScale(Math.min(1, width / W));
+    update(el.getBoundingClientRect().width);
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width ?? 0;
+      update(w);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   return (
     <section
       className={cn(
-        "rounded-2xl border border-border/60 bg-card/85 p-4 shadow-sm",
+        "rounded-2xl border border-border/60 bg-card/85 p-5 shadow-sm",
         className,
       )}
     >
-      <div className="space-y-4">
-        <div className="space-y-1.5">
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-primary">
-            Smart routing
-          </p>
-          <h2 className="text-base font-semibold leading-tight text-foreground">
-            Reliant routes each task to the daemon beside the code.
+      <div className="space-y-5">
+        <div className="space-y-2">
+          <h2 className="text-lg font-semibold leading-tight text-foreground">
+            One control plane. Daemons anywhere.
           </h2>
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            Pick hosted or self-run compute. Either way, the daemon is the only piece that needs filesystem access.
+          <p className="text-m leading-relaxed text-muted-foreground">
+            Reliant Cloud routes every task to a daemon beside the code —
+            hosted, your cloud, a laptop, on-prem, or a cluster.
           </p>
         </div>
 
-        <div className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_2rem_minmax(0,1fr)_2rem_minmax(0,1fr)_2rem_minmax(0,1fr)] md:items-stretch">
-          <NodeCard node={clientNode} />
-          <Connector label="start" />
-          <NodeCard node={cloudNode} />
-          <Connector label="route" emphasis />
-          <NodeCard node={daemonNode} />
-          <Connector label="access" />
-          <NodeCard node={codeNode} />
+        <div
+          ref={containerRef}
+          className="mx-auto w-full overflow-hidden"
+          style={{ maxWidth: W, aspectRatio: `${W} / ${H}` }}
+          aria-hidden
+        >
+          <div
+            className="relative"
+            style={{
+              width: W,
+              height: H,
+              transformOrigin: "top left",
+              transform: `scale(${scale})`,
+            }}
+          >
+            <svg
+              viewBox={`0 0 ${W} ${H}`}
+              className="pointer-events-none absolute inset-0 h-full w-full text-muted-foreground"
+            >
+              <defs>
+                <linearGradient
+                  id={leftGradient}
+                  x1={CLOUD_RIGHT}
+                  y1={HUB_Y}
+                  x2={DAEMON_X}
+                  y2={HUB_Y}
+                  gradientUnits="userSpaceOnUse"
+                >
+                  <stop offset="0" stopColor="currentColor" stopOpacity="0.1" />
+                  <stop
+                    offset="0.5"
+                    stopColor="currentColor"
+                    stopOpacity="0.55"
+                  />
+                  <stop offset="1" stopColor="currentColor" stopOpacity="0.1" />
+                </linearGradient>
+                <linearGradient
+                  id={rightGradient}
+                  x1={DAEMON_RIGHT}
+                  y1={HUB_Y}
+                  x2={CODE_X}
+                  y2={HUB_Y}
+                  gradientUnits="userSpaceOnUse"
+                >
+                  <stop offset="0" stopColor="currentColor" stopOpacity="0.1" />
+                  <stop
+                    offset="0.5"
+                    stopColor="currentColor"
+                    stopOpacity="0.55"
+                  />
+                  <stop offset="1" stopColor="currentColor" stopOpacity="0.1" />
+                </linearGradient>
+              </defs>
+              {ROWS.map((y, i) => (
+                <g key={i}>
+                  <path
+                    d={curve(CLOUD_RIGHT, HUB_Y, DAEMON_X, y)}
+                    stroke={`url(#${leftGradient})`}
+                    strokeWidth="1.6"
+                    fill="none"
+                  />
+                  <path
+                    d={curve(DAEMON_RIGHT, y, CODE_X, HUB_Y)}
+                    stroke={`url(#${rightGradient})`}
+                    strokeWidth="1.6"
+                    fill="none"
+                  />
+                </g>
+              ))}
+            </svg>
+
+            <div
+              className="absolute"
+              style={{
+                left: 0,
+                top: HUB_Y - CARD_H / 2,
+                width: APP_W,
+                height: CARD_H,
+              }}
+            >
+              <Node icon={Monitor} title="App" sub="Desktop or web" />
+            </div>
+
+            <div
+              className="absolute"
+              style={{
+                left: CLOUD_X,
+                top: HUB_Y - CARD_H / 2,
+                width: CLOUD_W,
+                height: CARD_H,
+              }}
+            >
+              <Node
+                icon={Sparkles}
+                title="Reliant Cloud"
+                sub="Routes work"
+                highlight
+              />
+            </div>
+
+            <div
+              className="absolute text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground"
+              style={{ left: DAEMON_X, top: ROWS[0] - 28 }}
+            ></div>
+
+            {LOCATIONS.map((l, i) => (
+              <div
+                key={l.id}
+                className="absolute"
+                style={{
+                  left: DAEMON_X,
+                  top: ROWS[i] - COMPACT_H / 2,
+                  width: DAEMON_W,
+                  height: COMPACT_H,
+                }}
+              >
+                <Node icon={l.icon} title={l.name} sub={l.sub} compact />
+              </div>
+            ))}
+
+            <div
+              className="absolute"
+              style={{
+                left: CODE_X,
+                top: HUB_Y - CARD_H / 2,
+                width: CODE_W,
+                height: CARD_H,
+              }}
+            >
+              <Node
+                icon={FolderCode}
+                title="Your code"
+                sub="Files and commands"
+              />
+            </div>
+          </div>
         </div>
       </div>
     </section>

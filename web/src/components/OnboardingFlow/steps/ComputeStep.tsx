@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { create } from "@bufbuild/protobuf";
-import { Check, Cloud, Copy, Download, Loader2, Monitor, Terminal } from "lucide-react";
+import {
+  Check,
+  Cloud,
+  Copy,
+  Download,
+  Loader2,
+  Monitor,
+  Terminal,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getIsDev } from "@/lib/constants";
 import { grpcClient } from "@/api/grpc-client";
@@ -11,7 +19,12 @@ import {
   useCloudEligibility,
   useCreateDaemon,
 } from "@/hooks/useOnboardingQueries";
-import type { CodeSource, ComputeChoice, OnboardingIntent, StepProps } from "../types";
+import type {
+  CodeSource,
+  ComputeChoice,
+  OnboardingIntent,
+  StepProps,
+} from "../types";
 import { DaemonConnectionDiagrams } from "../DaemonConnectionDiagrams";
 import { daemonStartCommand, HOMEBREW_CASK_INSTALL } from "@/lib/cli-commands";
 import { trackEvent } from "@/lib/analytics";
@@ -79,15 +92,20 @@ function getInitialOS(): DetectedOS {
 }
 
 type UserAgentDataLike = {
-  getHighEntropyValues?: (hints: string[]) => Promise<{ architecture?: string }>;
+  getHighEntropyValues?: (
+    hints: string[],
+  ) => Promise<{ architecture?: string }>;
 };
 
 async function detectMacArch(): Promise<"mac-arm64" | "mac-x64"> {
-  const uaData = (navigator as Navigator & { userAgentData?: UserAgentDataLike })
-    .userAgentData;
+  const uaData = (
+    navigator as Navigator & { userAgentData?: UserAgentDataLike }
+  ).userAgentData;
   if (uaData?.getHighEntropyValues) {
     try {
-      const { architecture } = await uaData.getHighEntropyValues(["architecture"]);
+      const { architecture } = await uaData.getHighEntropyValues([
+        "architecture",
+      ]);
       if (architecture === "arm") return "mac-arm64";
       if (architecture === "x86") return "mac-x64";
     } catch {
@@ -138,10 +156,13 @@ function codeSourceForCompute(
   return "new_project";
 }
 
-export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps & { hideHeader?: boolean }) {
-  const [showLocal, setShowLocal] = useState(
-    plan.compute === "local_daemon",
-  );
+export function ComputeStep({
+  plan,
+  updatePlan,
+  onNext,
+  hideHeader,
+}: StepProps & { hideHeader?: boolean }) {
+  const [showLocal, setShowLocal] = useState(plan.compute === "local_daemon");
   const [showOtherPlatforms, setShowOtherPlatforms] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pat, setPat] = useState<string | null>(null);
@@ -232,7 +253,9 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
   // Daemon mutations via React Query
   const createDaemonMutation = useCreateDaemon();
 
-  const [detectedOS, setDetectedOS] = useState<DetectedOS>(() => getInitialOS());
+  const [detectedOS, setDetectedOS] = useState<DetectedOS>(() =>
+    getInitialOS(),
+  );
   useEffect(() => {
     if (detectedOS !== "mac-arm64") return;
     let cancelled = false;
@@ -274,9 +297,8 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
       // (e.g. from a prior session) we either reuse it or resume it — the
       // server-side CreateDaemon is NOT a wake-up for a suspended workspace,
       // so calling it again leaves a suspended daemon suspended.
-      const { listDaemons, hasActiveDaemon, resumeDaemon } = await import(
-        "@/services/controlPlane/daemon"
-      );
+      const { listDaemons, hasActiveDaemon, resumeDaemon } =
+        await import("@/services/controlPlane/daemon");
       const existing = await listDaemons();
       const daemons = existing.daemons;
 
@@ -312,11 +334,19 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
           });
         } catch (err) {
           const msg = err instanceof Error ? err.message.toLowerCase() : "";
-          if (msg.includes("plan limit") || msg.includes("already") || msg.includes("exists")) {
+          if (
+            msg.includes("plan limit") ||
+            msg.includes("already") ||
+            msg.includes("exists")
+          ) {
             const fallback = await listDaemons();
             const fallbackId = fallback.daemons[0]?.id ?? "";
             if (fallbackId) {
-              try { await resumeDaemon(fallbackId); } catch { /* non-fatal */ }
+              try {
+                await resumeDaemon(fallbackId);
+              } catch {
+                /* non-fatal */
+              }
             }
           } else {
             throw err;
@@ -328,14 +358,19 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
         compute: "cloud_free_trial",
         daemonLocation: "reliant_cloud",
         daemonProvisioning: needsProvisioning,
-        codeSource: codeSourceForCompute(plan.codeSource, "cloud_free_trial", plan.intent),
+        codeSource: codeSourceForCompute(
+          plan.codeSource,
+          "cloud_free_trial",
+          plan.intent,
+        ),
         localPath: undefined,
         projectName: undefined,
       });
-      trackEvent('onboarding_compute_selected', { compute: 'cloud' });
+      trackEvent("onboarding_compute_selected", { compute: "cloud" });
       onNext();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to start hosted daemon";
+      const msg =
+        err instanceof Error ? err.message : "Failed to start hosted daemon";
       setError(msg);
       events.emit("toast:show", { message: msg, variant: "error" });
     } finally {
@@ -362,11 +397,18 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
       compute: "local_daemon",
       daemonLocation: "self_hosted",
       daemonProvisioning: false,
-      codeSource: codeSourceForCompute(plan.codeSource, "local_daemon", plan.intent),
+      codeSource: codeSourceForCompute(
+        plan.codeSource,
+        "local_daemon",
+        plan.intent,
+      ),
       localPath: undefined,
       projectName: undefined,
     });
-    trackEvent('onboarding_compute_selected', { compute: 'local', daemon_preconnected: daemonPreconnected });
+    trackEvent("onboarding_compute_selected", {
+      compute: "local",
+      daemon_preconnected: daemonPreconnected,
+    });
     onNext();
   };
 
@@ -390,7 +432,7 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
     if (hasAdvanced.current) return;
     if (!hasTrackedConnectedRef.current) {
       hasTrackedConnectedRef.current = true;
-      trackEvent('onboarding_daemon_connected');
+      trackEvent("onboarding_daemon_connected");
     }
     void commitLocalAndAdvance(true);
     // commitLocalAndAdvance closes over plan.codeSource / plan.intent /
@@ -414,7 +456,8 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
         );
       setPat(res.token);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to generate access token";
+      const msg =
+        err instanceof Error ? err.message : "Failed to generate access token";
       setError(msg);
       events.emit("toast:show", { message: msg, variant: "error" });
     } finally {
@@ -454,18 +497,6 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
 
   return (
     <div className="space-y-6">
-      {!hideHeader && (
-        <div className="space-y-2 text-center">
-          <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-            Where should Reliant run your daemon?
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            The daemon runs next to your code so agents can read files, run
-            commands, and keep work moving.
-          </p>
-        </div>
-      )}
-
       {!showLocal && <DaemonConnectionDiagrams />}
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -506,7 +537,9 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
           <button
             type="button"
             onClick={handleCloud}
-            disabled={startingCloud || !HAS_CLOUD_DAEMONS || !eligible || loading}
+            disabled={
+              startingCloud || !HAS_CLOUD_DAEMONS || !eligible || loading
+            }
             className={cn(
               "inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors",
               startingCloud || !HAS_CLOUD_DAEMONS || !eligible || loading
@@ -514,8 +547,14 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
                 : "bg-sky-600 text-white shadow-sm shadow-sky-600/20 hover:bg-sky-500",
             )}
           >
-            {(startingCloud || loading) && <Loader2 className="h-4 w-4 animate-spin" />}
-            {startingCloud ? "Requesting daemon..." : loading ? "Checking availability..." : "Start cloud daemon"}
+            {(startingCloud || loading) && (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            )}
+            {startingCloud
+              ? "Requesting daemon..."
+              : loading
+                ? "Checking availability..."
+                : "Start cloud daemon"}
           </button>
           {(!HAS_CLOUD_DAEMONS || (!eligible && reason)) && (
             <div className="space-y-1.5">
@@ -608,9 +647,10 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
           <div className="rounded-lg border border-sky-500/30 bg-sky-500/5 p-3 text-xs leading-relaxed text-foreground">
             <span className="font-medium">Already downloaded Reliant?</span>{" "}
             <span className="text-muted-foreground">
-              Opening the desktop app installs the <code className="font-mono">reliant</code> CLI on your PATH and
-              starts the daemon automatically — no terminal commands needed. This screen will move on the moment it
-              connects.
+              Opening the desktop app installs the{" "}
+              <code className="font-mono">reliant</code> CLI on your PATH and
+              starts the daemon automatically — no terminal commands needed.
+              This screen will move on the moment it connects.
             </span>
           </div>
 
@@ -716,9 +756,7 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
                     : "bg-sky-600 text-white shadow-sm shadow-sky-600/20 hover:bg-sky-500",
                 )}
               >
-                {generatingPat && (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                )}
+                {generatingPat && <Loader2 className="h-4 w-4 animate-spin" />}
                 {generatingPat ? "Generating..." : "Generate token"}
               </button>
             )}
@@ -748,8 +786,9 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
                 <p className="flex items-start gap-2 text-[11px] text-amber-700 dark:text-amber-300">
                   <Terminal className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
                   <span>
-                    The <code className="font-mono">reliant</code> command is not on your PATH yet.
-                    Install it to run the daemon from your terminal.
+                    The <code className="font-mono">reliant</code> command is
+                    not on your PATH yet. Install it to run the daemon from your
+                    terminal.
                   </span>
                 </p>
                 <button
@@ -763,7 +802,9 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
                       : "bg-zinc-950 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200",
                   )}
                 >
-                  {installingCli && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  {installingCli && (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  )}
                   {installingCli ? "Installing..." : "Install reliant CLI"}
                 </button>
               </div>
@@ -785,7 +826,11 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
             <p className="text-[11px] text-muted-foreground">
               The command will prompt you to paste the token.
               {isElectron && cliInstalled === false && (
-                <> If you skip the CLI install, install it separately via Homebrew or download the binary.</>
+                <>
+                  {" "}
+                  If you skip the CLI install, install it separately via
+                  Homebrew or download the binary.
+                </>
               )}
             </p>
           </div>
@@ -793,7 +838,10 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
           <div className="space-y-2 border-t border-border/30 pt-3">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              <span>Waiting for the daemon to connect. This screen will continue automatically.</span>
+              <span>
+                Waiting for the daemon to connect. This screen will continue
+                automatically.
+              </span>
             </div>
             <button
               type="button"
@@ -803,7 +851,9 @@ export function ComputeStep({ plan, updatePlan, onNext, hideHeader }: StepProps 
               I've started the daemon — check connection
             </button>
             {manualFeedback && (
-              <p className="text-center text-xs text-muted-foreground">{manualFeedback}</p>
+              <p className="text-center text-xs text-muted-foreground">
+                {manualFeedback}
+              </p>
             )}
           </div>
         </div>

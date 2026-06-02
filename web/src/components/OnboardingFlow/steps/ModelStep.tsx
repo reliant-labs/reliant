@@ -1,6 +1,14 @@
 import { useCallback, useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { CheckCircle2, ExternalLink, Eye, EyeOff, KeyRound, Loader2, XCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Loader2,
+  XCircle,
+} from "lucide-react";
 import { api } from "@/api/client";
 import { cn } from "@/lib/utils";
 import { getIsDev } from "@/lib/constants";
@@ -76,10 +84,17 @@ type ProviderId = (typeof PROVIDERS)[number]["id"];
 function parseErrorMessage(errorText: string, provider: string): string {
   const lowerError = (errorText || "").toLowerCase();
 
-  if (provider === "openrouter" && lowerError.includes("no endpoints found matching your data policy")) {
+  if (
+    provider === "openrouter" &&
+    lowerError.includes("no endpoints found matching your data policy")
+  ) {
     return "No models available with your current data policy.";
   }
-  if (lowerError.includes("unauthorized") || lowerError.includes("401") || lowerError.includes("invalid")) {
+  if (
+    lowerError.includes("unauthorized") ||
+    lowerError.includes("401") ||
+    lowerError.includes("invalid")
+  ) {
     return "Invalid API key. Please check your credentials.";
   }
   if (lowerError.includes("rate limit") || lowerError.includes("429")) {
@@ -93,7 +108,9 @@ function parseErrorMessage(errorText: string, provider: string): string {
 
 function getForcedEligibility(): "eligible" | "ineligible" | null {
   if (typeof window === "undefined") return null;
-  const value = new URLSearchParams(window.location.search).get("onboarding-credits");
+  const value = new URLSearchParams(window.location.search).get(
+    "onboarding-credits",
+  );
   if (value === "eligible") return "eligible";
   if (value === "ineligible") return "ineligible";
   return null;
@@ -106,15 +123,21 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
   const cloudEligibility = useCloudEligibility();
 
   const forcedEligibility = getForcedEligibility();
-  const isEligible = forcedEligibility === "eligible"
-    || (forcedEligibility == null && (getIsDev() || cloudEligibility.eligible));
-  const eligibilityLoading = forcedEligibility == null && !getIsDev() && cloudEligibility.isLoading;
+  const isEligible =
+    forcedEligibility === "eligible" ||
+    (forcedEligibility == null && (getIsDev() || cloudEligibility.eligible));
+  const eligibilityLoading =
+    forcedEligibility == null && !getIsDev() && cloudEligibility.isLoading;
 
-  const [selectedProvider, setSelectedProvider] = useState<ProviderId>("reliant");
+  const [selectedProvider, setSelectedProvider] =
+    useState<ProviderId>("reliant");
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [validationResult, setValidationResult] = useState<{ valid: boolean; message: string } | null>(null);
+  const [validationResult, setValidationResult] = useState<{
+    valid: boolean;
+    message: string;
+  } | null>(null);
 
   const provider = useMemo(
     () => PROVIDERS.find((item) => item.id === selectedProvider)!,
@@ -134,24 +157,28 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
   const saving = saveKeyMutation.isPending;
   const validating = validateKeyMutation.isPending;
 
-  const finishOnboarding = useCallback(async (modelProvider: ModelProvider) => {
-    if (!plan.compute) {
-      setError("Choose where Reliant should run before finishing setup.");
-      return;
-    }
+  const finishOnboarding = useCallback(
+    async (modelProvider: ModelProvider) => {
+      if (!plan.compute) {
+        setError("Choose where Reliant should run before finishing setup.");
+        return;
+      }
 
-    setError(null);
-    trackEvent('onboarding_model_selected', { provider: modelProvider });
-    await updatePlan({ modelProvider });
-    onNext();
-  }, [onNext, plan, updatePlan]);
+      setError(null);
+      trackEvent("onboarding_model_selected", { provider: modelProvider });
+      await updatePlan({ modelProvider });
+      onNext();
+    },
+    [onNext, plan, updatePlan],
+  );
 
   const handleConnectOAuth = useCallback(async () => {
     if (!provider.usesOAuth) return;
     setError(null);
     setValidationResult(null);
 
-    const oauthHook = provider.usesOAuth === "claude" ? claudeOAuth : codexOAuth;
+    const oauthHook =
+      provider.usesOAuth === "claude" ? claudeOAuth : codexOAuth;
     try {
       const result = await oauthHook.start();
       if (!result.ok) {
@@ -160,13 +187,20 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
       }
 
       // TODO: Remove once ApiKeySetupModal is event-driven
-      useApiKeySetupStore.setState({ hasApiKey: true, showModal: false, hasChecked: true });
+      useApiKeySetupStore.setState({
+        hasApiKey: true,
+        showModal: false,
+        hasChecked: true,
+      });
       const { useGlobalDataStore } = await import("@/store/globalDataStore");
       await useGlobalDataStore.getState().refetchModels();
       getEventBus().emit("api-key:saved", { provider: provider.modelProvider });
       await finishOnboarding(provider.modelProvider);
     } catch (err) {
-      setValidationResult({ valid: false, message: err instanceof Error ? err.message : String(err) });
+      setValidationResult({
+        valid: false,
+        message: err instanceof Error ? err.message : String(err),
+      });
     }
   }, [claudeOAuth, codexOAuth, finishOnboarding, provider]);
 
@@ -183,7 +217,10 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
       if (!validation.valid) {
         setValidationResult({
           valid: false,
-          message: parseErrorMessage(validation.message || "Invalid API key", selectedProvider),
+          message: parseErrorMessage(
+            validation.message || "Invalid API key",
+            selectedProvider,
+          ),
         });
         return;
       }
@@ -194,20 +231,35 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
       });
 
       // TODO: Remove once ApiKeySetupModal is event-driven
-      useApiKeySetupStore.setState({ hasApiKey: true, showModal: false, hasChecked: true });
+      useApiKeySetupStore.setState({
+        hasApiKey: true,
+        showModal: false,
+        hasChecked: true,
+      });
       const { useGlobalDataStore } = await import("@/store/globalDataStore");
       await useGlobalDataStore.getState().refetchModels();
       getEventBus().emit("api-key:saved", { provider: selectedProvider });
-      logger.info("[OnboardingModelStep] Saved API key", { provider: selectedProvider });
+      logger.info("[OnboardingModelStep] Saved API key", {
+        provider: selectedProvider,
+      });
       await finishOnboarding(provider.modelProvider);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      setValidationResult({ valid: false, message: parseErrorMessage(message, selectedProvider) });
+      setValidationResult({
+        valid: false,
+        message: parseErrorMessage(message, selectedProvider),
+      });
     }
-  }, [apiKey, finishOnboarding, provider, saveKeyMutation, selectedProvider, validateKeyMutation]);
+  }, [
+    apiKey,
+    finishOnboarding,
+    provider,
+    saveKeyMutation,
+    selectedProvider,
+    validateKeyMutation,
+  ]);
 
   const creditsAvailable = isEligible;
-
 
   return (
     <div className="space-y-6">
@@ -216,7 +268,8 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
           Choose model access
         </h2>
         <p className="text-sm text-muted-foreground">
-          Connect your own provider, or use Reliant credits when capacity is available.
+          Connect your own provider, or use Reliant credits when capacity is
+          available.
         </p>
       </div>
 
@@ -225,9 +278,12 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
           <div className="flex items-start gap-3">
             <KeyRound className="mt-0.5 h-4 w-4 text-primary" />
             <div>
-              <h3 className="text-sm font-medium text-foreground">Connect your own provider</h3>
+              <h3 className="text-sm font-medium text-foreground">
+                Connect your own provider
+              </h3>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                OAuth providers connect directly. API keys are validated before being saved.
+                Use Reliant's multi-model API, or bring your own key or
+                subscription.
               </p>
             </div>
           </div>
@@ -249,14 +305,18 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
                     : "border-border/40 bg-background hover:bg-muted/60",
                 )}
               >
-                <span className="block text-sm font-medium text-foreground">{item.name}</span>
+                <span className="block text-sm font-medium text-foreground">
+                  {item.name}
+                </span>
               </button>
             ))}
           </div>
 
           {provider.builtIn ? (
             <div className="space-y-3 rounded-lg border border-border/40 bg-background/70 p-4">
-              <p className="text-sm font-medium text-foreground">Use Reliant&apos;s model routing</p>
+              <p className="text-sm font-medium text-foreground">
+                Use Reliant&apos;s model routing
+              </p>
               {eligibilityLoading ? (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -268,7 +328,8 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
                 </p>
               ) : (
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  No API key needed. Reliant routes to the best available model automatically.
+                  No API key needed. Reliant routes to the best available model
+                  automatically.
                 </p>
               )}
               <button
@@ -301,7 +362,10 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
           ) : (
             <div className="space-y-3 rounded-lg border border-border/40 bg-background/70 p-4">
               <div className="flex items-center justify-between">
-                <label htmlFor="onboarding-llm-key-input" className="text-xs text-muted-foreground">
+                <label
+                  htmlFor="onboarding-llm-key-input"
+                  className="text-xs text-muted-foreground"
+                >
                   API key
                 </label>
                 <a
@@ -331,7 +395,11 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
                   className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
                   aria-label={showKey ? "Hide API key" : "Show API key"}
                 >
-                  {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showKey ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
                 </button>
               </div>
               <button
@@ -362,7 +430,11 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
               : "border-red-500/20 bg-red-500/10 text-red-600",
           )}
         >
-          {validationResult.valid ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+          {validationResult.valid ? (
+            <CheckCircle2 className="h-4 w-4" />
+          ) : (
+            <XCircle className="h-4 w-4" />
+          )}
           {validationResult.message}
         </div>
       )}
