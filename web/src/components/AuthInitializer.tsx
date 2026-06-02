@@ -145,13 +145,18 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
             import("../store/onboardingChecklistStore"),
             import("../store/tourStore"),
           ]);
-          void useOnboardingChecklistStore.getState().loadState();
-          void useTourStore.getState().loadState();
-          let attempts = 0;
-          while (!useOnboardingChecklistStore.getState().isInitialized && attempts < 50) {
-            await new Promise((resolve) => setTimeout(resolve, 100));
-            attempts++;
-          }
+          // Await loadState() directly instead of firing it as `void` and then
+          // polling `isInitialized` in a 100ms-tick loop. The previous pattern
+          // wasted up to 5s of timers waiting for a promise we already had,
+          // and added scheduler noise to the post-login critical path.
+          await Promise.all([
+            useOnboardingChecklistStore.getState().loadState().catch((error) => {
+              logger.warn("[AuthInitializer] Checklist loadState failed:", error);
+            }),
+            useTourStore.getState().loadState().catch((error) => {
+              logger.warn("[AuthInitializer] Tour loadState failed:", error);
+            }),
+          ]);
           checkApiKeys().catch((error) => {
             logger.warn("[AuthInitializer] API key check failed:", error);
           });

@@ -109,10 +109,13 @@ export function AboutSection() {
     {
       icon: WandSparkles,
       label: "Restart Onboarding Guide",
-      onClick: async () => {
-        // Reset persisted progress, then drop the user on the home route
-        // with `?tour=<first-step>` — the wizard takes it from there.
-        await useTourStore.getState().resetTourProgress();
+      onClick: () => {
+        // Drop the user on the home route with `?tour=<first-step>` — the
+        // wizard reads the URL and takes it from there. The reset is
+        // fire-and-forget (matches OnboardingChecklist.startTour); waiting on
+        // the persistence RPC just delays the navigation and, when the RPC
+        // is slow, makes the click look like a no-op.
+        void useTourStore.getState().resetTourProgress();
         void navigate({
           to: "/",
           search: { tour: ONBOARDING_STEPS[0].id },
