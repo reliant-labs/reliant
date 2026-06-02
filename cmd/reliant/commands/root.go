@@ -102,8 +102,9 @@ func resolveGatewayURL() string {
 
 	// For localhost/loopback addresses, don't transform the hostname.
 	// In local dev the gateway runs on a different port on the same host.
-	// Without RELIANT_GATEWAY_URL, fall back to the server URL itself
-	// (the API server also hosts the ConnectDaemon endpoint in dev).
+	// Without RELIANT_GATEWAY_URL, fall back to the server URL itself —
+	// the caller's connect logic will reach the daemon-gateway via the
+	// port the user actually has running.
 	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
 		return serverURL
 	}

@@ -41,8 +41,9 @@ type Server struct {
 
 	toolExecutor *toolexec.RemoteExecutor
 
-	// ToolsDaemonService for remote tool execution
-	toolsDaemonService *services.ToolsDaemonService
+	// ProjectService is exposed so callers can wire it to out-of-band
+	// inputs (e.g. the daemon-events JetStream consumer in serverapi.Run).
+	projectService *services.ProjectService
 
 	router toolexec.DaemonRouter
 }
@@ -64,9 +65,8 @@ type Config struct {
 	PauseService        *workflow.PauseService             // Pause service for unified pause/resume operations
 	SharedTaskQueue     string                             // Shared workflow task queue name
 
-	ToolExecutor       *toolexec.RemoteExecutor     // Optional remote tool executor to bind to daemon service
-	ToolsDaemonService *services.ToolsDaemonService // Optional pre-created daemon service to share across startup wiring
-	DaemonRouter       toolexec.DaemonRouter        // Optional pre-created daemon router for transport-agnostic daemon access
+	ToolExecutor *toolexec.RemoteExecutor // Optional remote tool executor to bind to daemon service
+	DaemonRouter toolexec.DaemonRouter    // Optional pre-created daemon router for transport-agnostic daemon access
 
 	BackgroundProvider services.BackgroundProcessProvider // Provider for background process state
 
@@ -106,19 +106,12 @@ func NewServer(cfg *Config) (*Server, error) {
 	// Order matters: recovery (outermost) -> error reporter -> timeout -> auth -> domain whitelist (innermost).
 	opts := newHandlerOptions(interceptors.NewTimeoutInterceptor().Interceptor(), authInterceptor, domainWhitelistInterceptor)
 
-	// Tools daemon service for remote tool execution (initialized early
-	// because other services depend on it for config loading)
-	toolsDaemonService := cfg.ToolsDaemonService
-	if toolsDaemonService == nil {
-		toolsDaemonService = services.NewToolsDaemonServiceWithoutMonitor(database)
-	}
-
-	// Wire the user update hub so daemon heartbeats can be pushed to the frontend.
-	if cfg.UserUpdateHub != nil {
-		toolsDaemonService.SetUserUpdateHub(cfg.UserUpdateHub)
-	}
-
 	// Build a DaemonRouter for services that need transport-agnostic daemon access.
+	// The api-server itself never accepts daemon bidi streams — daemons connect to
+	// the daemon-gateway process (see internal/servergateway) and the api-server
+	// reaches them through this router (NATS-backed in production). Anything that
+	// looks like a ToolsDaemonService here used to be live in the pre-split
+	// monolith days; it isn't anymore.
 	router := cfg.DaemonRouter
 
 	// Create services
@@ -127,12 +120,6 @@ func NewServer(cfg *Config) (*Server, error) {
 	taskService := services.NewTaskService(database)
 	catalogService := services.NewCatalogService(cfg.ToolsFactory)
 	projectService := services.NewProjectService(database, router)
-	// Heal project directories on daemon connect. CreateProject's
-	// synchronous mkdir + EnqueueDaemonCommand both require knowing the
-	// daemon ID, which during onboarding isn't yet registered with the
-	// api-server when ProjectChoiceStep fires. The listener picks up the
-	// connect event the moment the cloud pod's bidi stream lands.
-	toolsDaemonService.AddConnectionListener(projectService)
 	worktreeService := services.NewWorktreeService(database, cfg.TemporalClient, router)
 	repoService := services.NewRepoService(database, router)
 	approvalService := services.NewApprovalService(database, cfg.PauseService)
@@ -235,10 +222,11 @@ func NewServer(cfg *Config) (*Server, error) {
 	// Daemon services on the app gRPC server (both JWT):
 	//   - DaemonRegistryService: browser-driven list/get/resolve/resume
 	//   - DaemonTokenService:    browser- or CLI-driven PAT CRUD
-	// The ToolsDaemonService streaming endpoint lives on the dedicated daemon
-	// listener (see daemon_server.go) — it does the only PAT auth in this server.
-	// PAT validation for the CLI happens at stream-connect time; no dedicated
-	// introspection RPC is needed.
+	// The ToolsDaemonService streaming endpoint (ConnectDaemon /
+	// ConnectGateway) is hosted by the daemon-gateway, not the api-server —
+	// see internal/grpc/daemon_server.go, which only the gateway constructs.
+	// PAT validation for the CLI happens at stream-connect time over there;
+	// no dedicated introspection RPC is needed here.
 	daemonRegistryPath, daemonRegistryHandler := reliantv1connect.NewDaemonRegistryServiceHandler(daemonRegistryService, opts...)
 	daemonTokenPath, daemonTokenHandler := reliantv1connect.NewDaemonTokenServiceHandler(daemonTokenService, opts...)
 	daemonPath, daemonHandler := reliantv1connect.NewDaemonServiceHandler(daemonProxyService, opts...)
@@ -343,14 +331,14 @@ func NewServer(cfg *Config) (*Server, error) {
 		Addr:    addr,
 		Handler: handler,
 
-		// IMPORTANT: ToolsDaemonService uses long-lived bidi streaming.
-		// ReadTimeout applies to the ENTIRE request body read duration; if non-zero,
-		// it will terminate healthy daemon streams at a fixed interval.
-		// Keep ReadHeaderTimeout for slowloris protection while allowing streaming bodies.
+		// Keep ReadTimeout=0 / WriteTimeout=0 for any streaming RPCs the
+		// api-server still hosts (e.g. UserUpdate / ChatUpdate). The bidi
+		// daemon endpoints live on the gateway, but our other long-lived
+		// streams have the same fixed-deadline-kills-healthy-stream problem.
 		ReadTimeout:       0,
 		ReadHeaderTimeout: transport.ServerReadHeaderTimeout,
-		WriteTimeout:      0,                           // Streaming responses should not be write-time-limited globally.
-		IdleTimeout:       transport.ServerIdleTimeout, // Keep-alive idle timeout between requests.
+		WriteTimeout:      0,
+		IdleTimeout:       transport.ServerIdleTimeout,
 	}
 
 	if cfg.ToolExecutor != nil {
@@ -358,19 +346,20 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 
 	return &Server{
-		server:             srv,
-		mux:                mux,
-		tlsCertFile:        cfg.TLSCertFile,
-		tlsKeyFile:         cfg.TLSKeyFile,
-		toolExecutor:       cfg.ToolExecutor,
-		toolsDaemonService: toolsDaemonService,
-		router:             router,
+		server:         srv,
+		mux:            mux,
+		tlsCertFile:    cfg.TLSCertFile,
+		tlsKeyFile:     cfg.TLSKeyFile,
+		toolExecutor:   cfg.ToolExecutor,
+		projectService: projectService,
+		router:         router,
 	}, nil
 }
 
-// ToolsDaemonService returns the tools daemon service for remote execution.
-func (s *Server) ToolsDaemonService() *services.ToolsDaemonService {
-	return s.toolsDaemonService
+// ProjectService returns the project service so callers can wire it to
+// out-of-band inputs (e.g. JetStream consumers in serverapi.Run).
+func (s *Server) ProjectService() *services.ProjectService {
+	return s.projectService
 }
 
 // DaemonRouter returns the daemon router used by this server.

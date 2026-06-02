@@ -14,10 +14,13 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/configadapter"
+	"github.com/reliant-labs/reliant/internal/daemonevents"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
@@ -52,47 +55,129 @@ func NewProjectService(database db.Repository, daemonRouter toolexec.DaemonRoute
 	return &ProjectService{database: database, daemonRouter: daemonRouter}
 }
 
-// OnDaemonConnected satisfies toolexec.DaemonConnectionListener.
+// projectDirHealConsumerName is the durable JetStream consumer name used by
+// StartDaemonEventConsumer. Stable across api-server restarts so progress is
+// preserved; safe across multiple api-server replicas because JetStream
+// serializes delivery to a single instance per durable.
+const projectDirHealConsumerName = "api-server-project-dir-heal"
+
+// StartDaemonEventConsumer subscribes to daemon.v1.events.connected on the
+// DAEMON_EVENTS JetStream stream and heals user project directories on each
+// connect. Blocks until ctx is cancelled.
+//
+// Why this exists: the api-server's local ToolsDaemonService never sees
+// daemon connections — daemons connect to the daemon-gateway process, not
+// here. Previously a DaemonConnectionListener on the local service was used
+// for the same heal job, but it never fired in cloud OR OSS mode. The
+// daemon-gateway publishes connect events to JetStream
+// (internal/daemonevents/publisher.go); we consume those instead.
 //
 // The synchronous fs.mkdir at the top of CreateProject and the
 // EnqueueDaemonCommand fallback both require the daemon to be known to the
 // api-server — but during onboarding the api-server's daemons table is
 // empty until the cloud pod actually opens its bidi stream, which races
-// CreateProject by several seconds. Listening for the connect event lets
-// us mkdir each of the user's project paths the moment the daemon comes
+// CreateProject by several seconds. Reacting to the connect event lets us
+// mkdir each of the user's project paths the moment the daemon comes
 // online, healing those rows without depending on the api-server having
 // the daemon ID at create time.
 //
-// Async + fire-and-forget: the listener fires from the connection
-// registration path and must not block. mkdir is idempotent so it's safe
-// to re-run on every reconnect.
-func (s *ProjectService) OnDaemonConnected(userID, daemonID string) {
-	if s == nil || s.database == nil || s.daemonRouter == nil || userID == "" {
-		return
+// mkdir is idempotent, so JetStream redelivery on a missed Ack is harmless.
+func (s *ProjectService) StartDaemonEventConsumer(ctx context.Context, nc *nats.Conn) error {
+	if s == nil || s.database == nil || s.daemonRouter == nil {
+		logging.Warn("daemon-events consumer not started: ProjectService missing database or daemon router")
+		return nil
 	}
-	go s.ensureProjectDirsOnDaemon(userID, daemonID)
+	if nc == nil {
+		logging.Warn("daemon-events consumer not started: nil NATS connection")
+		return nil
+	}
+
+	js, err := jetstream.New(nc)
+	if err != nil {
+		return fmt.Errorf("create jetstream context: %w", err)
+	}
+
+	// Look up the stream — don't create it. The daemon-gateway owns stream
+	// config (file storage, 7-day retention). If it hasn't started yet,
+	// exit gracefully; the heal job will be re-attempted on the next
+	// api-server restart.
+	stream, err := js.Stream(ctx, daemonevents.StreamDaemonEvents)
+	if err != nil {
+		if errors.Is(err, jetstream.ErrStreamNotFound) {
+			logging.Warn("daemon-events consumer not started: DAEMON_EVENTS stream does not exist yet (daemon-gateway will create it)")
+			return nil
+		}
+		return fmt.Errorf("look up %s stream: %w", daemonevents.StreamDaemonEvents, err)
+	}
+
+	consumer, err := stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
+		Durable:       projectDirHealConsumerName,
+		FilterSubject: daemonevents.SubjectConnected,
+		// Don't replay historical connects — every daemon that's already
+		// connected when this consumer starts is irrelevant for heal; we
+		// only care about future connect events. The reconciler equivalent
+		// for the existing-state case is the synchronous mkdir during
+		// CreateProject + the EnqueueDaemonCommand fallback.
+		DeliverPolicy: jetstream.DeliverNewPolicy,
+		AckPolicy:     jetstream.AckExplicitPolicy,
+	})
+	if err != nil {
+		return fmt.Errorf("create/update %s consumer: %w", projectDirHealConsumerName, err)
+	}
+
+	cc, err := consumer.Consume(func(msg jetstream.Msg) {
+		var evt daemonevents.Event
+		if err := json.Unmarshal(msg.Data(), &evt); err != nil {
+			logging.Warn("daemon-events consumer: failed to unmarshal event, acking to avoid poison loop", "error", err)
+			_ = msg.Ack()
+			return
+		}
+		if evt.UserID == "" {
+			_ = msg.Ack()
+			return
+		}
+		s.ensureProjectDirsOnDaemon(evt.UserID, evt.DaemonID)
+		_ = msg.Ack()
+	})
+	if err != nil {
+		return fmt.Errorf("start consuming %s: %w", daemonevents.SubjectConnected, err)
+	}
+	defer cc.Stop()
+
+	logging.Info("daemon-events consumer started",
+		"stream", daemonevents.StreamDaemonEvents,
+		"subject", daemonevents.SubjectConnected,
+		"durable", projectDirHealConsumerName,
+	)
+
+	<-ctx.Done()
+	logging.Info("daemon-events consumer stopped")
+	return nil
 }
 
-// OnDaemonDisconnected satisfies toolexec.DaemonConnectionListener.
-// Nothing to do on disconnect — project dirs live in the workspace PVC and
-// survive daemon restarts.
-func (s *ProjectService) OnDaemonDisconnected(_, _ string) {}
-
+// ensureProjectDirsOnDaemon mkdirs each of the user's project paths on the
+// connected daemon. Called by StartDaemonEventConsumer on every daemon
+// connect event. Idempotent.
 func (s *ProjectService) ensureProjectDirsOnDaemon(userID, daemonID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	projects, err := s.database.ListProjects(ctx, db.ProjectFilters{UserID: userID, Limit: 200})
 	if err != nil {
-		logging.Warn("OnDaemonConnected: failed to list user projects for dir heal", "error", err, "userID", userID, "daemonID", daemonID)
+		logging.Warn("project-dir-heal: failed to list user projects", "error", err, "userID", userID, "daemonID", daemonID)
 		return
 	}
+	if len(projects) == 0 {
+		return
+	}
+	logging.Info("project-dir-heal: ensuring project dirs on daemon",
+		"userID", userID, "daemonID", daemonID, "projects", len(projects))
 	for _, p := range projects {
 		if p == nil || p.Path == "" || !filepath.IsAbs(p.Path) {
 			continue
 		}
 		if err := s.sendProjectDaemonCommand(ctx, userID, "fs.mkdir", map[string]string{"path": p.Path}, nil); err != nil {
-			logging.Warn("OnDaemonConnected: failed to mkdir project path", "error", err, "userID", userID, "daemonID", daemonID, "path", p.Path)
+			logging.Warn("project-dir-heal: failed to mkdir project path", "error", err, "userID", userID, "daemonID", daemonID, "path", p.Path)
 		}
 	}
 }
