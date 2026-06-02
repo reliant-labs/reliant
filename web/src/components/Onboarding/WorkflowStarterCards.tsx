@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from "react";
 import {
+  ArrowRightLeft,
   BarChart3,
   FileText,
   MessageSquare,
@@ -25,9 +26,17 @@ export type WorkflowStarterIntent =
   | "pitch_deck"
   | "blog_post"
   | "custom_workflow"
+  | "migrate"
   | "plain_chat";
 
-type AccentTone = "sky" | "fuchsia" | "emerald" | "amber" | "rose" | "violet" | "slate";
+type AccentTone =
+  | "sky"
+  | "fuchsia"
+  | "emerald"
+  | "amber"
+  | "rose"
+  | "violet"
+  | "slate";
 
 interface StarterOption {
   intent: WorkflowStarterIntent;
@@ -38,24 +47,29 @@ interface StarterOption {
   workflowParams: Record<string, unknown>;
   selectedPresets?: Record<string, string | null>;
   accent?: AccentTone;
+  featured?: boolean;
+  learnMoreUrl?: string;
 }
 
 const STARTER_OPTIONS: StarterOption[] = [
   {
     intent: "build_app",
     icon: Sparkles,
-    label: "Build something new",
+    label: "Build something new with Forge",
     description:
-      "Forge scaffolds the project, picks the stack, and orchestrates the build end-to-end.",
+      "Forge is your LLM companion. It creates guardrails on projects to productionize and instill best practices from day 1. Use it and launch a production ready app within your first week.",
     workflowId: "builtin://forge-one-shot",
     workflowParams: { mode: "auto", ask: true },
     accent: "sky",
+    featured: true,
+    learnMoreUrl: "https://github.com/reliant-labs/forge",
   },
   {
     intent: "landing_page",
     icon: Palette,
     label: "Create a landing page",
-    description: "Review-loop workflow that iterates until the page feels polished.",
+    description:
+      "Review-loop workflow that iterates until the page feels polished.",
     workflowId: "builtin://get-it-right",
     workflowParams: {
       mode: "auto",
@@ -70,7 +84,8 @@ const STARTER_OPTIONS: StarterOption[] = [
     intent: "pitch_deck",
     icon: BarChart3,
     label: "Create a pitch deck",
-    description: "Pipeline that coordinates research, narrative, and slide generation.",
+    description:
+      "Pipeline that coordinates research, narrative, and slide generation.",
     workflowId: "builtin://pitch-deck",
     workflowParams: { mode: "auto", ask: false },
     accent: "amber",
@@ -79,7 +94,8 @@ const STARTER_OPTIONS: StarterOption[] = [
     intent: "blog_post",
     icon: FileText,
     label: "Write docs or a blog post",
-    description: "Turn source material into structured technical writing with reviewable steps.",
+    description:
+      "Turn source material into structured technical writing with reviewable steps.",
     workflowId: "builtin://blog-content-pipeline",
     workflowParams: { mode: "auto", ask: false },
     selectedPresets: { default: "documentation" },
@@ -89,10 +105,21 @@ const STARTER_OPTIONS: StarterOption[] = [
     intent: "custom_workflow",
     icon: Workflow,
     label: "Create a custom workflow",
-    description: "Design and build a multi-agent pipeline tailored to your process.",
+    description:
+      "Design and build a multi-agent pipeline tailored to your process.",
     workflowId: "builtin://build-workflow",
     workflowParams: { mode: "auto", ask: true },
     accent: "violet",
+  },
+  {
+    intent: "migrate",
+    icon: ArrowRightLeft,
+    label: "Migrate from Claude Code",
+    description:
+      "Import configuration from Claude Code, Cursor, Codex, or Windsurf into Reliant.",
+    workflowId: "builtin://migrate",
+    workflowParams: { mode: "auto" },
+    accent: "rose",
   },
   {
     intent: "plain_chat",
@@ -105,7 +132,10 @@ const STARTER_OPTIONS: StarterOption[] = [
   },
 ];
 
-const ACCENT_STYLES: Record<AccentTone, { iconBg: string; iconText: string; hoverBorder: string; hoverGlow: string }> = {
+const ACCENT_STYLES: Record<
+  AccentTone,
+  { iconBg: string; iconText: string; hoverBorder: string; hoverGlow: string }
+> = {
   sky: {
     iconBg: "bg-sky-500/15 ring-1 ring-sky-400/30",
     iconText: "text-sky-300",
@@ -168,7 +198,8 @@ function applyStarter(option: StarterOption) {
 export function WorkflowStarterCards({
   onComplete,
 }: WorkflowStarterCardsProps = {}) {
-  const [selectedIntent, setSelectedIntent] = useState<WorkflowStarterIntent | null>(null);
+  const [selectedIntent, setSelectedIntent] =
+    useState<WorkflowStarterIntent | null>(null);
 
   useEffect(() => {
     trackEvent("starter_cards_shown");
@@ -207,6 +238,7 @@ export function WorkflowStarterCards({
               option={option}
               selected={selectedIntent === option.intent}
               onClick={() => handlePick(option)}
+              className={cn(option.featured && "sm:col-span-2 lg:col-span-3")}
             />
           ))}
         </div>
@@ -219,48 +251,99 @@ interface SecondaryCardProps {
   option: StarterOption;
   selected: boolean;
   onClick: () => void;
+  className?: string;
 }
 
-function SecondaryCard({ option, selected, onClick }: SecondaryCardProps) {
+function SecondaryCard({
+  option,
+  selected,
+  onClick,
+  className,
+}: SecondaryCardProps) {
   const Icon = option.icon;
   const accent = ACCENT_STYLES[option.accent ?? "slate"];
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
       className={cn(
-        "group relative flex h-full flex-col overflow-hidden rounded-2xl border p-5 text-left font-sans transition-all duration-300",
+        "group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border p-5 text-left font-sans transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         "border-white/10 bg-white/[0.025]",
         "hover:-translate-y-0.5 hover:bg-white/[0.045]",
         accent.hoverBorder,
         accent.hoverGlow,
-        selected && "border-primary/70 bg-primary/[0.08] ring-2 ring-primary/30",
+        selected &&
+          "border-primary/70 bg-primary/[0.08] ring-2 ring-primary/30",
+        className,
       )}
     >
       <div
         className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"
         aria-hidden="true"
       />
+      {option.featured && (
+        <span className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-full bg-primary/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary ring-1 ring-inset ring-primary/30">
+          <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_8px_1px] shadow-primary/60" />
+          Recommended
+        </span>
+      )}
       <div className="flex items-start gap-3.5">
         <div
           className={cn(
-            "flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl transition-transform duration-300 group-hover:scale-105",
+            "flex flex-shrink-0 items-center justify-center rounded-xl transition-transform duration-300 group-hover:scale-105",
+            option.featured ? "h-12 w-12" : "h-10 w-10",
             accent.iconBg,
             accent.iconText,
           )}
         >
-          <Icon className="h-5 w-5" />
+          <Icon className={option.featured ? "h-6 w-6" : "h-5 w-5"} />
         </div>
         <div className="min-w-0 flex-1 space-y-1.5">
-          <h3 className="text-[15px] font-semibold leading-tight tracking-tight text-foreground">
+          <h3
+            className={cn(
+              "font-semibold leading-tight tracking-tight text-foreground",
+              option.featured ? "text-base pr-32" : "text-[15px]",
+            )}
+          >
             {option.label}
           </h3>
-          <p className="text-xs leading-relaxed text-muted-foreground/80">
+          <p
+            className={cn(
+              "leading-relaxed text-muted-foreground/80",
+              option.featured ? "text-sm" : "text-xs",
+            )}
+          >
             {option.description}
           </p>
+          {option.learnMoreUrl && (
+            <p
+              className={cn(
+                "leading-relaxed text-muted-foreground/80",
+                option.featured ? "text-sm" : "text-xs",
+              )}
+            >
+              Learn more at{" "}
+              <a
+                href={option.learnMoreUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                onClick={(e) => e.stopPropagation()}
+                className="break-all text-sky-400 underline-offset-2 hover:text-sky-300 hover:underline"
+              >
+                {option.learnMoreUrl}
+              </a>
+            </p>
+          )}
         </div>
       </div>
-    </button>
+    </div>
   );
 }

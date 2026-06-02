@@ -6,7 +6,8 @@ import { logger } from "@/lib/logger";
 import { onboardingService } from "@/services/controlPlane/onboarding";
 import type { LaunchPlan, ModelProvider } from "./types";
 
-const CLOUD_DEFAULT_PROJECT_PATH = "/home/workspace/projects/reliant-project";
+const DEFAULT_PROJECT_NAME = "first_project";
+const CLOUD_DEFAULT_PROJECT_PATH = `/home/workspace/projects/${DEFAULT_PROJECT_NAME}`;
 
 async function defaultProjectPath(isCloud: boolean): Promise<string> {
   if (isCloud) return CLOUD_DEFAULT_PROJECT_PATH;
@@ -14,7 +15,7 @@ async function defaultProjectPath(isCloud: boolean): Promise<string> {
     const { listDirectory } = await import("@/api/filesystem-grpc");
     const result = await listDirectory("");
     const home = result.path || "~";
-    return `${home}/Projects/reliant-project`;
+    return `${home}/Projects/${DEFAULT_PROJECT_NAME}`;
   } catch {
     return CLOUD_DEFAULT_PROJECT_PATH;
   }
@@ -43,7 +44,7 @@ export async function ensureProject(plan: Partial<LaunchPlan>): Promise<string> 
 
   const isCloud = plan.compute === "cloud_free_trial";
   const projectPath = await defaultProjectPath(isCloud);
-  const projectName = "Reliant Project";
+  const projectName = DEFAULT_PROJECT_NAME;
 
   logger.info("[OnboardingComplete] Creating default project", { projectName, projectPath });
 

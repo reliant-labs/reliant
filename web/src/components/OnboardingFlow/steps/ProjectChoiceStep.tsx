@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowRightLeft, Github, Loader2, Sparkles } from "lucide-react";
+import { Github, Loader2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logger } from "@/lib/logger";
 import { supabase } from "@/lib/supabase";
@@ -10,6 +10,7 @@ import { useGitHubCredential } from "@/hooks/useGitHubCredential";
 import { gitService } from "@/services/controlPlane/git";
 import { ensureProject, finalizeOnboardingSideEffects } from "../useOnboardingComplete";
 import { markOnboardingFinalized } from "../analytics";
+import { DaemonConnectingGate } from "../DaemonConnectingGate";
 import type { LaunchPlan, StepProps } from "../types";
 
 export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
@@ -18,6 +19,29 @@ export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
   const { hasToken: hasGithubCredential } = useGitHubCredential();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // After completeOnboarding succeeds for a cloud user we render the daemon
+  // gate instead of letting the post-onboarding tour fire immediately on top
+  // of unconnected daemon RPCs (empty chat list, empty file tree, etc). For
+  // local daemons ComputeStep already gated on activeDaemon, so we skip the
+  // gate. Mirrors the pattern in ProjectPickerStep / GitHubConnectStep.
+  const [showDaemonGate, setShowDaemonGate] = useState(false);
+
+  const isCloud = plan.compute === "cloud_free_trial";
+
+  // Mirrors ProjectPickerStep.goToChat: leave /onboarding for the home route
+  // while preserving any search params finalizeOnboardingSideEffects set
+  // (notably ?tour=<first-step>, which the post-onboarding wizard reads to
+  // auto-start). Stripping legacy `step` / `plan` keeps reload-safe URLs from
+  // re-entering the onboarding flow.
+  const goToChat = useCallback(() => {
+    navigate({
+      to: "/",
+      search: (prev: Record<string, unknown>) => {
+        const { step: _step, plan: _plan, ...rest } = prev;
+        return rest;
+      },
+    });
+  }, [navigate]);
 
   const handleStartNew = useCallback(async () => {
     if (!plan.compute) {
@@ -50,13 +74,20 @@ export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
 
       markOnboardingFinalized(finalPlan, "new");
 
+      // finalizeOnboardingSideEffects sets ?tour=<first-step> so the wizard
+      // auto-starts. For cloud, we render the daemon-connecting gate first so
+      // the tour doesn't spotlight empty surfaces while the hosted daemon is
+      // still provisioning. The gate's "Continue" handoff navigates to / and
+      // preserves the tour param, so the wizard then kicks in normally.
       await finalizeOnboardingSideEffects(finalPlan.modelProvider);
-      navigate({ to: "/", search: { step: undefined, plan: undefined } });
+      if (isCloud) {
+        setShowDaemonGate(true);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to finish onboarding");
       setBusy(false);
     }
-  }, [completeOnboardingMutation, navigate, plan, updatePlan]);
+  }, [completeOnboardingMutation, isCloud, plan, updatePlan]);
 
   const handleConnectExisting = useCallback(async () => {
     setError(null);
@@ -83,53 +114,13 @@ export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
     }
   }, [hasGithubCredential, updatePlan]);
 
-  const handleMigrate = useCallback(async () => {
-    if (!plan.compute) {
-      setError("Missing compute selection. Go back and try again.");
-      return;
-    }
-    setError(null);
-    setBusy(true);
-    try {
-      const finalPlan: Partial<LaunchPlan> = { ...plan, intent: "migrate" };
-      updatePlan({ intent: "migrate" });
-
-      try {
-        await ensureProject(finalPlan);
-      } catch (projectErr) {
-        logger.warn("[ProjectChoiceStep] ensureProject failed; aborting", projectErr);
-        trackEvent("onboarding_ensure_project_failed", { error: String(projectErr) });
-        setError(
-          "Couldn't create your workspace. Please try again, or contact support if the problem persists.",
-        );
-        setBusy(false);
-        return;
-      }
-
-      await completeOnboardingMutation.mutateAsync({
-        compute: finalPlan.compute,
-        modelProvider: finalPlan.modelProvider,
-      });
-
-      trackEvent("onboarding_completed", {
-        provider: finalPlan.modelProvider ?? "unknown",
-        compute: finalPlan.compute ?? "unknown",
-        project_source: "migrate",
-      });
-
-      // Pre-set the migration workflow so the first chat uses it
-      const { useChatParamsStore } = await import("@/store/chatParamsStore");
-      const paramsStore = useChatParamsStore.getState();
-      paramsStore.setTempNewChatWorkflow("builtin://migrate");
-      paramsStore.setTempNewChatParams({ mode: "auto" });
-
-      await finalizeOnboardingSideEffects(finalPlan.modelProvider);
-      navigate({ to: "/", search: { step: undefined, plan: undefined } });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to finish onboarding");
-      setBusy(false);
-    }
-  }, [completeOnboardingMutation, navigate, plan, updatePlan]);
+  if (showDaemonGate) {
+    return (
+      <div className="space-y-6">
+        <DaemonConnectingGate onContinue={goToChat} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -142,7 +133,7 @@ export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <button
           type="button"
           onClick={handleStartNew}
@@ -189,29 +180,6 @@ export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
             </span>
             <p className="text-xs leading-relaxed text-muted-foreground">
               Connect GitHub to work on an existing project.
-            </p>
-          </div>
-        </button>
-
-        <button
-          type="button"
-          onClick={handleMigrate}
-          disabled={busy}
-          className={cn(
-            "group relative flex min-h-[180px] min-w-0 flex-col items-start gap-3 overflow-hidden rounded-xl border-2 border-border/50 bg-background p-5 text-left transition-all",
-            !busy && "hover:border-primary/50 hover:bg-muted/40",
-            busy && "cursor-not-allowed opacity-60",
-          )}
-        >
-          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
-            <ArrowRightLeft className="h-5 w-5" />
-          </div>
-          <div className="min-w-0 space-y-1">
-            <span className="block text-base font-semibold text-foreground">
-              Migrate from Claude Code
-            </span>
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              Import configuration from Claude Code, Cursor, Codex, or Windsurf into Reliant.
             </p>
           </div>
         </button>
