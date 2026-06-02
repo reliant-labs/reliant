@@ -23,6 +23,8 @@ import { Workflow } from "lucide-react";
 import { useOnboardingChecklistStore } from "../../store/onboardingChecklistStore";
 import { useTourStore } from "../../store/tourStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
+import { useChatStore } from "../../store/chatStore";
+import { useChatParamsStore } from "../../store/chatParamsStore";
 import { trackEvent } from "../../lib/analytics";
 
 import {
@@ -321,6 +323,28 @@ export function OnboardingWizard() {
   const isSettingsMode = location.pathname.startsWith("/settings");
   const isWorkflowMode = location.pathname.startsWith("/workflow");
 
+  // Defer the tour while NewChatView's "What are you building?" starter-picker
+  // modal is up. That modal portals to document.body on the empty-state
+  // (no chats yet, no workflow picked) and renders on top of any spotlight
+  // the wizard would otherwise show. Mirror the exact conditions used by
+  // NewChatView's `lockChatInput` so we hide for the same lifetime — once
+  // the user picks a card, `tempNewChatWorkflow` is set, the modal closes,
+  // and the wizard's spotlight takes over. The wizard's URL state
+  // (`?tour=<step>`) is preserved across this gate, so the tour resumes
+  // automatically; nothing in tourStore needs to change.
+  //
+  // Scope: only the routes where NewChatView mounts (`/`, `/project/$id`).
+  // On `/workflow`, `/settings`, etc. NewChatView is unmounted, so its
+  // portal isn't on screen and we mustn't accidentally block tour steps
+  // that target those pages.
+  const chatsLoaded = useChatStore((state) => state.hasLoaded);
+  const chatsCount = useChatStore((state) => state.chats.size);
+  const hasPickedStarter = useChatParamsStore((s) => Boolean(s.tempNewChatWorkflow));
+  const newChatViewMounted =
+    location.pathname === "/" || location.pathname.startsWith("/project/");
+  const starterPickerModalBlocking =
+    newChatViewMounted && chatsLoaded && chatsCount === 0 && !hasPickedStarter;
+
   // Load state on mount. Pure data fetch — no navigation.
   useEffect(() => {
     if (!tourInitialized) {
@@ -338,22 +362,26 @@ export function OnboardingWizard() {
   const tourStartRef = useRef<number | null>(null);
   const stepStartRef = useRef<number | null>(null);
   useEffect(() => {
-    if (isWizardActive && currentStepId) {
+    // Don't fire tour_started until the wizard actually renders — i.e. not
+    // while the starter-picker modal is still gating us. Otherwise the event
+    // marks a tour the user never visually saw.
+    if (isWizardActive && currentStepId && !starterPickerModalBlocking) {
       tourStartRef.current = Date.now();
       stepStartRef.current = Date.now();
       trackEvent("tour_started", { totalSteps: ONBOARDING_STEPS.length });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isWizardActive]);
+  }, [isWizardActive, starterPickerModalBlocking]);
 
   // tour_step_viewed fires on every step transition (including the first).
   // stepStartRef resets so subsequent step_completed / step_skipped events get
   // a fresh per-step duration.
   useEffect(() => {
     if (!isWizardActive || !currentStepId) return;
+    if (starterPickerModalBlocking) return;
     stepStartRef.current = Date.now();
     trackEvent("tour_step_viewed", { stepId: currentStepId });
-  }, [isWizardActive, currentStepId]);
+  }, [isWizardActive, currentStepId, starterPickerModalBlocking]);
 
   // Set up checklist detection after checklist state is ready
   useEffect(() => {
@@ -365,6 +393,13 @@ export function OnboardingWizard() {
 
   // Not ready yet
   if (!isInitialized) return null;
+
+  // Defer Phase 1 while the starter-picker modal is up. We render nothing
+  // (not Phase 2/3 either) so the post-tour checklist doesn't flash while
+  // the user is mid-decision on the starter cards. The `?tour=<step>` URL
+  // is preserved across this branch, so the wizard resumes the same step
+  // as soon as the modal closes.
+  if (starterPickerModalBlocking) return null;
 
   // Phase 1: Guided tour is active
   if (isWizardActive && currentStepId) {
