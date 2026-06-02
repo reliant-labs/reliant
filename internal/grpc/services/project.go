@@ -166,6 +166,15 @@ func (s *ProjectService) CreateProject(
 		return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("a project already exists at this path"))
 	}
 
+	// Ensure the project directory exists on the daemon. The cloud
+	// workspace pod ships with an empty /home/workspace/projects/, and
+	// repo.discover / project.init_files below silently no-op when their
+	// target path is missing, leaving the DB row pointing at a phantom
+	// directory. MkdirAll is idempotent so this is safe for repeat opens.
+	if err := s.sendProjectDaemonCommand(ctx, userID, "fs.mkdir", map[string]string{"path": req.Msg.Path}, nil); err != nil {
+		logging.Warn("Failed to mkdir project path via daemon", "error", err, "path", req.Msg.Path)
+	}
+
 	// Discover nested git repos under the project path. A project may
 	// contain 0..N repos (a docs folder is a valid project with zero).
 	// IsGitRepo is derived from "any repos discovered". If the daemon is
