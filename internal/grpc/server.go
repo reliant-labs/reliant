@@ -127,11 +127,6 @@ func NewServer(cfg *Config) (*Server, error) {
 	taskService := services.NewTaskService(database)
 	catalogService := services.NewCatalogService(cfg.ToolsFactory)
 	projectService := services.NewProjectService(database, router)
-	// Heal project directories on daemon (re)connect. The onboarding flow
-	// can race the daemon coming online — CreateProject's mkdir may fire
-	// before the daemon is reachable, leaving a row pointing at a phantom
-	// path. Retrying on every connect makes it self-correcting.
-	toolsDaemonService.AddConnectionListener(projectService)
 	worktreeService := services.NewWorktreeService(database, cfg.TemporalClient, router)
 	repoService := services.NewRepoService(database, router)
 	approvalService := services.NewApprovalService(database, cfg.PauseService)

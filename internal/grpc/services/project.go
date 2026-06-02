@@ -52,48 +52,6 @@ func NewProjectService(database db.Repository, daemonRouter toolexec.DaemonRoute
 	return &ProjectService{database: database, daemonRouter: daemonRouter}
 }
 
-// OnDaemonConnected satisfies toolexec.DaemonConnectionListener. When a
-// daemon comes online we mkdir every project path the user owns, healing
-// rows whose CreateProject fired before the daemon was reachable (the
-// onboarding flow races daemon provisioning by ~10s, so the create-time
-// mkdir at the top of CreateProject often hits "no daemon connected").
-//
-// Async + fire-and-forget: the listener is invoked from the connection
-// registration path and must not block. Failures are logged at warn level
-// because the path will heal on subsequent connects.
-func (s *ProjectService) OnDaemonConnected(userID, daemonID string) {
-	if s == nil || s.database == nil || s.daemonRouter == nil || userID == "" {
-		return
-	}
-	go s.ensureProjectDirsOnDaemon(userID, daemonID)
-}
-
-// OnDaemonDisconnected satisfies toolexec.DaemonConnectionListener.
-// Nothing to do on disconnect — project dirs live in the workspace PVC and
-// survive daemon restarts.
-func (s *ProjectService) OnDaemonDisconnected(_, _ string) {}
-
-func (s *ProjectService) ensureProjectDirsOnDaemon(userID, daemonID string) {
-	// Bounded budget for the whole heal pass — we don't want a long-running
-	// goroutine if the daemon hangs mid-mkdir for some reason.
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	projects, err := s.database.ListProjects(ctx, db.ProjectFilters{UserID: userID, Limit: 200})
-	if err != nil {
-		logging.Warn("OnDaemonConnected: failed to list user projects for dir heal", "error", err, "userID", userID, "daemonID", daemonID)
-		return
-	}
-	for _, p := range projects {
-		if p == nil || p.Path == "" || !filepath.IsAbs(p.Path) {
-			continue
-		}
-		if err := s.sendProjectDaemonCommand(ctx, userID, "fs.mkdir", map[string]string{"path": p.Path}, nil); err != nil {
-			logging.Warn("OnDaemonConnected: failed to mkdir project path", "error", err, "userID", userID, "daemonID", daemonID, "path", p.Path)
-		}
-	}
-}
-
 // sendProjectDaemonCommand sends a command to the user's daemon and unmarshals the response.
 // If the daemon is offline, it returns connect.CodeUnavailable.
 func (s *ProjectService) sendProjectDaemonCommand(ctx context.Context, userID, commandType string, payload interface{}, resp interface{}) error {
@@ -213,8 +171,24 @@ func (s *ProjectService) CreateProject(
 	// repo.discover / project.init_files below silently no-op when their
 	// target path is missing, leaving the DB row pointing at a phantom
 	// directory. MkdirAll is idempotent so this is safe for repeat opens.
-	if err := s.sendProjectDaemonCommand(ctx, userID, "fs.mkdir", map[string]string{"path": req.Msg.Path}, nil); err != nil {
-		logging.Warn("Failed to mkdir project path via daemon", "error", err, "path", req.Msg.Path)
+	//
+	// The onboarding flow races daemon provisioning by ~10s: CreateDaemon
+	// fires first, then CreateProject hits this code before the workspace
+	// pod has registered. The synchronous mkdir fails with "no daemon
+	// connected" in that window. To heal it, queue the same command on the
+	// DAEMON_PENDING_COMMANDS JetStream so the gateway dispatches it the
+	// moment the daemon's bidi stream comes up.
+	mkdirPayload := map[string]string{"path": req.Msg.Path}
+	if err := s.sendProjectDaemonCommand(ctx, userID, "fs.mkdir", mkdirPayload, nil); err != nil {
+		logging.Warn("Failed to mkdir project path via daemon; enqueueing for delivery on next connect", "error", err, "path", req.Msg.Path)
+		payloadBytes, marshalErr := json.Marshal(mkdirPayload)
+		if marshalErr != nil {
+			logging.Warn("Failed to marshal mkdir payload for enqueue", "error", marshalErr, "path", req.Msg.Path)
+		} else if n, enqErr := s.daemonRouter.EnqueueDaemonCommand(ctx, userID, "fs.mkdir", payloadBytes, 30_000); enqErr != nil {
+			logging.Warn("Failed to enqueue mkdir for daemon", "error", enqErr, "path", req.Msg.Path)
+		} else {
+			logging.Info("Queued fs.mkdir on DAEMON_PENDING_COMMANDS", "path", req.Msg.Path, "daemons", n)
+		}
 	}
 
 	// Discover nested git repos under the project path. A project may
