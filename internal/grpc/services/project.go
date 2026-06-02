@@ -52,6 +52,51 @@ func NewProjectService(database db.Repository, daemonRouter toolexec.DaemonRoute
 	return &ProjectService{database: database, daemonRouter: daemonRouter}
 }
 
+// OnDaemonConnected satisfies toolexec.DaemonConnectionListener.
+//
+// The synchronous fs.mkdir at the top of CreateProject and the
+// EnqueueDaemonCommand fallback both require the daemon to be known to the
+// api-server — but during onboarding the api-server's daemons table is
+// empty until the cloud pod actually opens its bidi stream, which races
+// CreateProject by several seconds. Listening for the connect event lets
+// us mkdir each of the user's project paths the moment the daemon comes
+// online, healing those rows without depending on the api-server having
+// the daemon ID at create time.
+//
+// Async + fire-and-forget: the listener fires from the connection
+// registration path and must not block. mkdir is idempotent so it's safe
+// to re-run on every reconnect.
+func (s *ProjectService) OnDaemonConnected(userID, daemonID string) {
+	if s == nil || s.database == nil || s.daemonRouter == nil || userID == "" {
+		return
+	}
+	go s.ensureProjectDirsOnDaemon(userID, daemonID)
+}
+
+// OnDaemonDisconnected satisfies toolexec.DaemonConnectionListener.
+// Nothing to do on disconnect — project dirs live in the workspace PVC and
+// survive daemon restarts.
+func (s *ProjectService) OnDaemonDisconnected(_, _ string) {}
+
+func (s *ProjectService) ensureProjectDirsOnDaemon(userID, daemonID string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	projects, err := s.database.ListProjects(ctx, db.ProjectFilters{UserID: userID, Limit: 200})
+	if err != nil {
+		logging.Warn("OnDaemonConnected: failed to list user projects for dir heal", "error", err, "userID", userID, "daemonID", daemonID)
+		return
+	}
+	for _, p := range projects {
+		if p == nil || p.Path == "" || !filepath.IsAbs(p.Path) {
+			continue
+		}
+		if err := s.sendProjectDaemonCommand(ctx, userID, "fs.mkdir", map[string]string{"path": p.Path}, nil); err != nil {
+			logging.Warn("OnDaemonConnected: failed to mkdir project path", "error", err, "userID", userID, "daemonID", daemonID, "path", p.Path)
+		}
+	}
+}
+
 // sendProjectDaemonCommand sends a command to the user's daemon and unmarshals the response.
 // If the daemon is offline, it returns connect.CodeUnavailable.
 func (s *ProjectService) sendProjectDaemonCommand(ctx context.Context, userID, commandType string, payload interface{}, resp interface{}) error {

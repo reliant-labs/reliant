@@ -127,6 +127,12 @@ func NewServer(cfg *Config) (*Server, error) {
 	taskService := services.NewTaskService(database)
 	catalogService := services.NewCatalogService(cfg.ToolsFactory)
 	projectService := services.NewProjectService(database, router)
+	// Heal project directories on daemon connect. CreateProject's
+	// synchronous mkdir + EnqueueDaemonCommand both require knowing the
+	// daemon ID, which during onboarding isn't yet registered with the
+	// api-server when ProjectChoiceStep fires. The listener picks up the
+	// connect event the moment the cloud pod's bidi stream lands.
+	toolsDaemonService.AddConnectionListener(projectService)
 	worktreeService := services.NewWorktreeService(database, cfg.TemporalClient, router)
 	repoService := services.NewRepoService(database, router)
 	approvalService := services.NewApprovalService(database, cfg.PauseService)
