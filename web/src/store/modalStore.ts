@@ -11,10 +11,25 @@
 
 import { create } from "zustand";
 
-export type ModalId = "api-key-setup";
+export type ModalId = "api-key-setup" | "upgrade-required";
+
+export interface UpgradeRequiredData {
+  // Machine-readable reason (X-Reliant-Reason header). The modal uses this
+  // to pick which copy to show; unrecognized values fall back to a generic
+  // "quota exceeded" message. See control-plane/internal/enforcement for
+  // the canonical list.
+  reason: string;
+  // Human-readable message from the backend (Connect error message). Shown
+  // verbatim under the title as the explanation.
+  message: string;
+  // Optional upgrade-page URL from X-Reliant-Upgrade-URL. Empty when the
+  // backend doesn't offer one; the CTA button is hidden in that case.
+  upgradeUrl: string;
+}
 
 export interface ModalData {
   "api-key-setup": undefined;
+  "upgrade-required": UpgradeRequiredData;
 }
 
 interface ModalState {

@@ -136,6 +136,17 @@ function NoActiveDaemonState() {
       // active daemon and the showConnectionInstructions branch flips off.
       await refetch();
     } catch (err) {
+      // Quota gate? The shared upgradeInterceptor (api/upgradeInterceptor.ts)
+      // already popped the UpgradeRequiredModal with the per-reason copy.
+      // Suppress the inline toast/error so the user doesn't see a duplicate
+      // raw "[resource_exhausted] …" string under the modal.
+      if (
+        err instanceof ConnectError &&
+        err.code === Code.ResourceExhausted &&
+        err.metadata.get("x-reliant-reason")
+      ) {
+        return;
+      }
       const msg = err instanceof Error ? err.message : "Failed to resume daemon";
       setError(msg);
       toast.error(msg);

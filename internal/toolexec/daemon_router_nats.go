@@ -5,15 +5,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
 	"connectrpc.com/connect"
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/reliant-labs/reliant/internal/daemonliveness"
 	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
 )
 
@@ -54,6 +57,15 @@ type NATSDaemonRouter struct {
 	db                 db.Repository
 	resolver           DaemonResolver                               // optional: used to resolve daemonID for a user
 	controlPlaneClient reliantv1connect.DaemonRegistryServiceClient // optional: gRPC client for control plane resolution
+
+	// jsOnce lazily initializes the JetStream context the first time
+	// EnqueueDaemonCommand is called. JetStream is only used for the
+	// pending-commands stream — the rest of the router is core NATS only,
+	// and we don't want to pay the JetStream startup cost on every router
+	// that never enqueues.
+	jsOnce sync.Once
+	js     jetstream.JetStream
+	jsErr  error
 }
 
 // NewNATSDaemonRouter creates a new NATS-based daemon router.
@@ -750,6 +762,86 @@ func (r *NATSDaemonRouter) SubscribeProcessOutput(ctx context.Context, userID st
 
 func (r *NATSDaemonRouter) Close() error {
 	return nil
+}
+
+// pendingCommandsStream and pendingSubjectPrefix mirror the values used by
+// control-plane's natsio package (StreamDaemonPendingCommands /
+// SubjectDaemonPendingAll) and by the gateway's NATSToolBridge drainer.
+// Kept as constants here so we don't take a circular dep on control-plane.
+const (
+	pendingCommandsStream = "DAEMON_PENDING_COMMANDS"
+	pendingSubjectPrefix  = "daemon.pending."
+)
+
+// EnqueueDaemonCommand persists a fire-and-forget command to
+// DAEMON_PENDING_COMMANDS for every daemon the user owns. The gateway's
+// NATSToolBridge.drainPendingCommands consumer picks each message up on
+// the daemon's next connect and dispatches it via SendDaemonCommand,
+// healing creation-time races where the daemon wasn't yet online.
+func (r *NATSDaemonRouter) EnqueueDaemonCommand(ctx context.Context, userID, commandType string, payload []byte, timeoutMs int32) (int, error) {
+	if userID == "" {
+		return 0, fmt.Errorf("userID required")
+	}
+	if r.db == nil {
+		return 0, fmt.Errorf("daemon router has no DB; cannot resolve user's daemons for enqueue")
+	}
+
+	daemons, err := r.db.ListDaemonsByUserID(ctx, userID)
+	if err != nil {
+		return 0, fmt.Errorf("listing daemons for enqueue: %w", err)
+	}
+	if len(daemons) == 0 {
+		return 0, nil
+	}
+
+	js, err := r.jetstream()
+	if err != nil {
+		return 0, err
+	}
+
+	envelope, err := json.Marshal(struct {
+		RequestID   string          `json:"request_id"`
+		CommandType string          `json:"command_type"`
+		Payload     json.RawMessage `json:"payload"`
+		TimeoutMs   int32           `json:"timeout_ms"`
+	}{
+		RequestID:   fmt.Sprintf("enq-%d", time.Now().UnixNano()),
+		CommandType: commandType,
+		Payload:     json.RawMessage(payload),
+		TimeoutMs:   timeoutMs,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("marshal pending command envelope: %w", err)
+	}
+
+	var enqueued int
+	for _, d := range daemons {
+		if d == nil || d.ID == "" {
+			continue
+		}
+		subject := pendingSubjectPrefix + d.ID
+		if _, pubErr := js.Publish(ctx, subject, envelope); pubErr != nil {
+			logging.Warn("EnqueueDaemonCommand: JetStream publish failed",
+				"userID", userID, "daemonID", d.ID, "subject", subject,
+				"commandType", commandType, "error", pubErr)
+			continue
+		}
+		enqueued++
+	}
+	return enqueued, nil
+}
+
+// jetstream returns the lazily-initialized JetStream context. Safe to call
+// from multiple goroutines; sync.Once guarantees a single init.
+func (r *NATSDaemonRouter) jetstream() (jetstream.JetStream, error) {
+	r.jsOnce.Do(func() {
+		if r.nc == nil {
+			r.jsErr = fmt.Errorf("nats connection is nil")
+			return
+		}
+		r.js, r.jsErr = jetstream.New(r.nc)
+	})
+	return r.js, r.jsErr
 }
 
 // Compile-time interface check.

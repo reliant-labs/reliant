@@ -148,11 +148,11 @@ export function DaemonConnectionDiagrams({
       <div className="space-y-5">
         <div className="space-y-2">
           <h2 className="text-lg font-semibold leading-tight text-foreground">
-            One control plane. Daemons anywhere.
+            One chat interface. Daemons anywhere.
           </h2>
           <p className="text-m leading-relaxed text-muted-foreground">
-            Reliant Cloud routes every task to a daemon beside the code —
-            hosted, your cloud, a laptop, on-prem, or a cluster.
+            Reliant Cloud routes every task to a daemon beside the code — you
+            choose where to run it.
           </p>
         </div>
 

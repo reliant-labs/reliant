@@ -255,14 +255,14 @@ func daemonSelectorFromCELResult(result interface{}) (*DaemonSelectorValue, erro
 // When reuseThread is false, each iteration gets a unique deterministic thread.
 func (ctx *ExecutionContext) ForIteration(iteration int, reuseThread bool) *ExecutionContext {
 	child := &ExecutionContext{
-		WorkflowID:     ctx.WorkflowID,
-		ChatID:         ctx.ChatID,
-		WorkflowName:   ctx.WorkflowName,
-		ThreadMode:     ctx.ThreadMode,
-		ForkedFrom:     ctx.ForkedFrom,
-		ParentThread:   ctx.ParentThread,   // Preserve parent thread chain
-		ProjectPath:    ctx.ProjectPath,    // Inherit project path (can be overridden by loop's project config)
-		DaemonSelector: ctx.DaemonSelector, // Inherit daemon selector
+		WorkflowID:       ctx.WorkflowID,
+		ChatID:           ctx.ChatID,
+		WorkflowName:     ctx.WorkflowName,
+		ThreadMode:       ctx.ThreadMode,
+		ForkedFrom:       ctx.ForkedFrom,
+		ParentThread:     ctx.ParentThread,     // Preserve parent thread chain
+		ProjectPath:      ctx.ProjectPath,      // Inherit project path (can be overridden by loop's project config)
+		DaemonSelector:   ctx.DaemonSelector,   // Inherit daemon selector
 		SpawnDepth:       ctx.SpawnDepth,       // Inherit spawn depth (iterations don't increase depth)
 		ParentPermission: ctx.ParentPermission, // Inherit parent permission cap
 		Parent:           ctx.Parent,
@@ -293,13 +293,13 @@ func (ctx *ExecutionContext) ForIteration(iteration int, reuseThread bool) *Exec
 // - mode: fork → new deterministic thread (caller should copy context from ForkedFrom)
 func (ctx *ExecutionContext) ForChild(stepID string, mode string, workflowName string, memo bool) *ExecutionContext {
 	child := &ExecutionContext{
-		WorkflowID:     ctx.WorkflowID, // Same workflow ID for inline execution
-		ChatID:         ctx.ChatID,
-		WorkflowName:   workflowName,
-		ThreadMode:     mode,
-		ParentThread:   ctx.Thread,         // Always track parent's thread for save_message
-		ProjectPath:    ctx.ProjectPath,    // Inherit project path (can be overridden by node's project config)
-		DaemonSelector: ctx.DaemonSelector, // Inherit daemon selector (can be overridden by node's daemon field)
+		WorkflowID:       ctx.WorkflowID, // Same workflow ID for inline execution
+		ChatID:           ctx.ChatID,
+		WorkflowName:     workflowName,
+		ThreadMode:       mode,
+		ParentThread:     ctx.Thread,           // Always track parent's thread for save_message
+		ProjectPath:      ctx.ProjectPath,      // Inherit project path (can be overridden by node's project config)
+		DaemonSelector:   ctx.DaemonSelector,   // Inherit daemon selector (can be overridden by node's daemon field)
 		SpawnDepth:       ctx.SpawnDepth,       // Inherit spawn depth (inline children don't increase depth)
 		ParentPermission: ctx.ParentPermission, // Inherit parent permission cap
 		Loop:             ctx.Loop,             // Inherit loop context

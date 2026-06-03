@@ -44,8 +44,8 @@ func NewEmitToolCallStatusActivity(repo db.Repository) *EmitToolCallStatusActivi
 }
 
 func (a *EmitToolCallStatusActivity) Name() string        { return "EmitToolCallStatus" }
-func (a *EmitToolCallStatusActivity) DisplayName() string  { return "Emit Tool Call Status" }
-func (a *EmitToolCallStatusActivity) Description() string  { return "Emits a tool call status update" }
+func (a *EmitToolCallStatusActivity) DisplayName() string { return "Emit Tool Call Status" }
+func (a *EmitToolCallStatusActivity) Description() string { return "Emits a tool call status update" }
 func (a *EmitToolCallStatusActivity) Category() schema.ActivityCategory {
 	return schema.CategoryWorkflowManagement
 }

@@ -30,6 +30,7 @@ import { supabase } from "../lib/supabase";
 import { logger } from "../lib/logger";
 import * as Sentry from "@sentry/react";
 import { buildLocalhostUrl } from "../lib/protocol";
+import { upgradeInterceptor } from "./upgradeInterceptor";
 import {
   DEFAULT_GRPC_TIMEOUT_MS,
   FILE_OPERATION_TIMEOUT_MS,
@@ -339,6 +340,13 @@ const errorInterceptor: Interceptor = (next) => async (req) => {
   }
 };
 
+// The UpgradeRequiredModal-on-ResourceExhausted interceptor is defined in
+// ./upgradeInterceptor.ts so the cloud control-plane transport
+// (services/controlPlane/client.ts) can share the same module-level
+// single-fire guard. Without that sharing, the project picker's "Resume
+// daemon" call (which uses the controlPlane transport) couldn't pop the
+// modal — it surfaced as a raw toast instead.
+
 // Auto-sign-out on 401 with an active session.
 //
 // When the backend rejects a stored token (most often because the token was
@@ -460,7 +468,7 @@ export const getControlPlaneTransport = () => {
   if (!_controlPlaneTransport) {
     _controlPlaneTransport = createConnectTransport({
       baseUrl: cpURL,
-      interceptors: [timeoutInterceptor, authInterceptor, daemonLastSeenInterceptor, tracingInterceptor, errorInterceptor, unauthInterceptor],
+      interceptors: [timeoutInterceptor, authInterceptor, daemonLastSeenInterceptor, tracingInterceptor, errorInterceptor, upgradeInterceptor, unauthInterceptor],
       useBinaryFormat: false,
     });
   }
@@ -497,7 +505,7 @@ export const getTransport = () => {
       baseUrl: currentBaseURL,
       // Order: timeout -> auth -> error logging
       // Timeout is outermost so it applies to the full request lifecycle
-      interceptors: [timeoutInterceptor, authInterceptor, daemonLastSeenInterceptor, tracingInterceptor, errorInterceptor, unauthInterceptor],
+      interceptors: [timeoutInterceptor, authInterceptor, daemonLastSeenInterceptor, tracingInterceptor, errorInterceptor, upgradeInterceptor, unauthInterceptor],
       // Use JSON for easier debugging during migration
       // Can switch to binary later for performance
       useBinaryFormat: false,

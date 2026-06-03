@@ -1,10 +1,9 @@
-import { useState, useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type {
   Step,
   ActionStep,
   ResponseToolDefinition,
 } from "../../../types/workflow";
-import { getCatalogClient } from "../../../api/grpc-client";
 import { ResponseToolsEditor } from "../ResponseToolsEditor";
 import { ProtoFieldRenderer } from "../ProtoFieldRenderer";
 import { nodeInputFieldToSchema, groupFieldsByCategory } from "../../../lib/nodeFieldAdapter";
@@ -20,44 +19,36 @@ import { Section, SectionFields, SectionLabel } from "./primitives";
 export function ActionStepConfig({
   step,
   onUpdate,
+  catalogNodes,
+  catalogLoading = false,
   isReadOnly = false,
 }: {
   step: ActionStep;
   onUpdate: (step: Step) => void;
+  catalogNodes: NodeInfo[];
+  catalogLoading?: boolean;
   isReadOnly?: boolean;
 }) {
-  const [nodes, setNodes] = useState<NodeInfo[]>([]);
-  const [loadingNodes, setLoadingNodes] = useState(true);
-
-  useEffect(() => {
-    const fetchNodes = async () => {
-      try {
-        const client = getCatalogClient();
-        const response = await client.listNodes({});
-        setNodes(response.nodes || []);
-      } catch (error) {
-        console.error("Failed to fetch nodes:", error);
-        setNodes([]);
-      } finally {
-        setLoadingNodes(false);
-      }
-    };
-    fetchNodes();
-  }, []);
-
-  const currentNode = nodes.find((n) => n.id === step.type);
+  const currentNode = catalogNodes.find((n) => n.id === step.type);
   const allFields = currentNode?.inputFields || [];
 
+  // Apply field defaults exactly once per (node id, step id) pair. Using a ref
+  // instead of useState avoids an extra render and survives parent re-renders
+  // that swap the catalog reference without changing its contents.
+  const defaultsAppliedRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!currentNode || allFields.length === 0) return
-    if (!hasTypedArgs(step)) return
+    if (!currentNode || allFields.length === 0) return;
+    if (!hasTypedArgs(step)) return;
+    const key = `${currentNode.id}::${step.id}`;
+    if (defaultsAppliedRef.current === key) return;
 
     const hasExistingValues = allFields.some(
       (field) => getActionArgValue(step, field.name) !== undefined,
-    )
-    if (hasExistingValues) return
+    );
+    defaultsAppliedRef.current = key;
+    if (hasExistingValues) return;
 
-    const defaults: Array<{ name: string; value: unknown; type: string; isCel: boolean }> = []
+    const defaults: Array<{ name: string; value: unknown; type: string; isCel: boolean }> = [];
     for (const field of allFields) {
       if (field.defaultValue !== undefined && field.defaultValue !== '') {
         defaults.push({
@@ -65,15 +56,16 @@ export function ActionStepConfig({
           value: field.defaultValue,
           type: field.type,
           isCel: field.isCel,
-        })
+        });
       }
     }
 
     if (defaults.length > 0) {
-      onUpdate(withActionArgs(step, defaults))
+      onUpdate(withActionArgs(step, defaults));
     }
+  // step is read inside but we only want to apply defaults once per (node, step) pair.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentNode?.id]);
+  }, [currentNode?.id, step.id]);
 
   const handleFieldChange = (fieldName: string, fieldType: string, isCel: boolean, value: unknown) => {
     onUpdate(withActionArg(step, fieldName, value, fieldType, isCel));
@@ -102,7 +94,7 @@ export function ActionStepConfig({
         </Section>
       )}
 
-      {loadingNodes ? (
+      {catalogLoading ? (
         <Section>
           <p className="cpv2-field-hint !mt-0">Loading configuration...</p>
         </Section>

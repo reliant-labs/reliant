@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { JoinStep } from "../../../types/workflow";
 import { directCel } from "../../../lib/celAdapter";
 import { getConditionExpression, getJoinCondition } from "./shared";
@@ -15,7 +15,13 @@ export function JoinStepConfig({
 }) {
   const condition = getJoinCondition(step.condition);
 
+  // Default the condition to "all" on first mount per node, but only once —
+  // re-firing on every step change marked the workflow dirty just from
+  // opening a Join, and could clobber a user who clears the value.
+  const didDefaultRef = useRef(false);
   useEffect(() => {
+    if (didDefaultRef.current) return;
+    didDefaultRef.current = true;
     if (!getConditionExpression(step.condition)) {
       onUpdate({ condition: directCel("all") });
     }

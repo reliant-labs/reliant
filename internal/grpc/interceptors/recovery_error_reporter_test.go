@@ -109,6 +109,43 @@ func TestErrorReporterInterceptorSkipsExpectedAndTransientErrors(t *testing.T) {
 	})
 }
 
+func TestErrorReporterInterceptorSkipsUnavailableCode(t *testing.T) {
+	// CodeUnavailable means the backend is not ready (e.g. daemon
+	// reconnecting). It is client-observable and forge's observe.Logging
+	// interceptor already logs it at WARN, so the error reporter should
+	// neither re-log nor report to Sentry.
+	spy := &telemetrySpyReporter{}
+	withTelemetryReporter(t, spy)
+
+	wrapped := NewErrorReporterInterceptor().WrapUnary(func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New("backend reconnecting"))
+	})
+
+	_, err := wrapped(context.Background(), connect.NewRequest(&struct{}{}))
+	require.Error(t, err)
+	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+	require.Empty(t, spy.errors, "CodeUnavailable should not be reported to Sentry")
+}
+
+func TestErrorReporterInterceptorSkipsDaemonNotConnectedInternalError(t *testing.T) {
+	// Real-world case: a handler wraps a "no daemon connected" condition as
+	// CodeInternal. The connect code looks server-side, but the error message
+	// reveals a transient client-facing cause. We should skip Sentry; the
+	// log level (WARN, not ERROR) is verified by the level-routing logic.
+	spy := &telemetrySpyReporter{}
+	withTelemetryReporter(t, spy)
+
+	wrapped := NewErrorReporterInterceptor().WrapUnary(func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) {
+		return nil, connect.NewError(connect.CodeInternal, errors.New(
+			"cannot access worktree directory: daemon command worktree.validate_path: unavailable: no daemon connected for user",
+		))
+	})
+
+	_, err := wrapped(context.Background(), connect.NewRequest(&struct{}{}))
+	require.Error(t, err)
+	require.Empty(t, spy.errors, "transient daemon-connection errors should not be reported to Sentry")
+}
+
 func TestErrorReporterInterceptorReportsUnexpectedInternalErrors(t *testing.T) {
 	spy := &telemetrySpyReporter{}
 	withTelemetryReporter(t, spy)
