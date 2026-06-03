@@ -494,6 +494,12 @@ func (c *ReliantClient) shouldRetry(attempts int, err error) (bool, int64, error
 	retry, reason := shouldRetryReliantAPIError(apierr)
 	c.logReliantAPIError(attempts, apierr, retry, reason)
 	if !retry {
+		// Surface the reliant-managed quota-exhausted case as a typed,
+		// marker-bearing error so the frontend can detect it across the
+		// Temporal serialization boundary (see ErrReliantManagedQuotaExhausted).
+		if reason == "reliant_managed_quota_exhausted" {
+			return false, 0, wrapReliantManagedQuotaError(apierr)
+		}
 		return false, 0, err
 	}
 
@@ -528,6 +534,16 @@ func shouldRetryReliantAPIError(apierr *openai.Error) (bool, string) {
 		"refresherror",
 	) {
 		return false, "terminal_auth_config_error"
+	}
+
+	// HTTP 429 + error.code == "insufficient_quota" is the reliant-managed
+	// free-tier global budget exhaustion signal (see
+	// control-plane/internal/service/llmproxy/proxy.go). Retrying is futile —
+	// the budget is hard-capped for the month. Surface as a terminal error
+	// so the workflow stops retrying and the frontend can open the
+	// upgrade-required modal.
+	if apierr.StatusCode == 429 && isReliantManagedQuotaError(apierr) {
+		return false, "reliant_managed_quota_exhausted"
 	}
 
 	switch apierr.StatusCode {
@@ -637,6 +653,121 @@ func containsAny(haystack string, needles ...string) bool {
 		}
 	}
 	return false
+}
+
+// ReliantManagedQuotaMarker is a stable substring baked into the error message
+// returned when the reliant-managed (LiteLLM virtual key) free-tier budget is
+// exhausted. The marker survives Temporal's JSON stringification of activity
+// errors so the frontend can detect the case in the chat-error stream and
+// surface the upgrade-required modal.
+//
+// Wire format: `RELIANT_MANAGED_QUOTA_EXHAUSTED:<upgrade_url>`
+//
+// DO NOT RENAME without coordinated changes in
+// reliant/web/src/store/chatStore.ts (frontend marker scanner) and any tests
+// that pin the literal. The colon and the marker prefix are the contract.
+const ReliantManagedQuotaMarker = "RELIANT_MANAGED_QUOTA_EXHAUSTED"
+
+// DefaultReliantUpgradeURL is the path embedded when the upstream proxy didn't
+// supply one. The frontend resolves it against window.location.origin.
+const DefaultReliantUpgradeURL = "/billing/plans"
+
+// ErrReliantManagedQuotaExhausted is the sentinel error returned when the
+// reliant-managed LLM (LiteLLM virtual key) free-tier global budget is
+// exhausted. Only the reliant driver emits this — user-provided keys to
+// OpenAI / Anthropic / etc. surface their own provider's quota errors
+// unchanged, which is correct because that's the user's own billing
+// relationship, not ours.
+//
+// The error's Error() string embeds ReliantManagedQuotaMarker and the
+// upgrade URL so the frontend can recognize it after Temporal serializes
+// the activity error to a string.
+type ErrReliantManagedQuotaExhausted struct {
+	// UpgradeURL is the path/URL the user should be sent to in order to
+	// upgrade their plan. Sourced from the proxy's `error.upgrade_url` JSON
+	// field; falls back to DefaultReliantUpgradeURL when missing.
+	UpgradeURL string
+	// Message is the upstream proxy's human-readable error message
+	// (e.g. "Free tier quota exceeded — please upgrade your plan.").
+	Message string
+}
+
+// Error returns a string carrying ReliantManagedQuotaMarker + upgrade URL so
+// downstream consumers (notably the chat-update stream on the frontend) can
+// detect the case via a substring scan after Temporal stringifies the
+// activity error. Format: `<message> [RELIANT_MANAGED_QUOTA_EXHAUSTED:<url>]`.
+func (e *ErrReliantManagedQuotaExhausted) Error() string {
+	msg := strings.TrimSpace(e.Message)
+	if msg == "" {
+		msg = "reliant-managed LLM quota exhausted"
+	}
+	url := e.UpgradeURL
+	if url == "" {
+		url = DefaultReliantUpgradeURL
+	}
+	return fmt.Sprintf("%s [%s:%s]", msg, ReliantManagedQuotaMarker, url)
+}
+
+// isReliantManagedQuotaError returns true when the OpenAI-shape error body
+// from LiteLLM (proxied by control-plane/internal/service/llmproxy) signals
+// the free-tier global budget is exhausted. The proxy emits:
+//
+//	{"error":{"message":"…","type":"insufficient_quota","code":"insufficient_quota","upgrade_url":"…"}}
+//
+// We match on `code == "insufficient_quota"` to keep the check tight; the
+// `type` field is a secondary fallback because some intermediaries (LiteLLM
+// pass-throughs) may mutate one field but not both.
+func isReliantManagedQuotaError(apierr *openai.Error) bool {
+	if apierr == nil {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(apierr.Code), "insufficient_quota") {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(apierr.Type), "insufficient_quota") {
+		return true
+	}
+	// Fall back to scanning the raw JSON — handles malformed openai-go
+	// decoding paths where Code/Type didn't populate.
+	return strings.Contains(strings.ToLower(apierr.RawJSON()), `"insufficient_quota"`)
+}
+
+// reliantManagedQuotaUpgradeURL pulls `error.upgrade_url` out of the proxy's
+// response body. The openai-go Error struct doesn't expose vendor-specific
+// fields directly, so we parse the raw JSON. Returns "" when not present;
+// the caller substitutes DefaultReliantUpgradeURL.
+func reliantManagedQuotaUpgradeURL(apierr *openai.Error) string {
+	if apierr == nil {
+		return ""
+	}
+	raw := apierr.RawJSON()
+	if raw == "" {
+		return ""
+	}
+	var envelope struct {
+		Error struct {
+			UpgradeURL string `json:"upgrade_url"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(raw), &envelope); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(envelope.Error.UpgradeURL)
+}
+
+// wrapReliantManagedQuotaError builds the typed sentinel error from an
+// openai.Error known to represent the insufficient_quota case. Callers should
+// have already gated on isReliantManagedQuotaError.
+func wrapReliantManagedQuotaError(apierr *openai.Error) error {
+	upgradeURL := reliantManagedQuotaUpgradeURL(apierr)
+	if upgradeURL == "" {
+		upgradeURL = DefaultReliantUpgradeURL
+	}
+	message := summarizeReliantAPIError(apierr)
+	return &ErrReliantManagedQuotaExhausted{
+		UpgradeURL: upgradeURL,
+		Message:    message,
+	}
 }
 
 func (c *ReliantClient) toolCalls(completion openai.ChatCompletion) []message.ToolCall {

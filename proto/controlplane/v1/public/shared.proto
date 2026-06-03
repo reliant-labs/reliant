@@ -142,7 +142,7 @@ message PortAccessRule {
   string daemon_id = 2;
   int32 port = 3;
   PortAccessMode access_mode = 4;
-  string url = 5; // computed: https://{port}-{daemon_id}.{baseDomain}
+  string url = 5; // computed: https://{port}-{daemon_id}.{baseDomain} — DEPRECATED for clients: prefer rendering from Daemon.workspace_base_domain so the URL reflects current admin config (this field can go stale across config changes).
   google.protobuf.Timestamp created_at = 6;
 }
 
