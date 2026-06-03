@@ -129,6 +129,15 @@ export interface ElectronAPI {
   isDevelopment: boolean;
 }
 
+/**
+ * Canonical shape for the runtime config Electron's preload script injects
+ * onto `window.RELIANT_CONFIG`. This is the single source of truth — do NOT
+ * re-declare this shape elsewhere. The preload script (electron/src/preload.js)
+ * builds this object and assigns it to the window.
+ *
+ * The Window property is optional because the config is injected asynchronously
+ * after page load (and in plain-browser/dev contexts it may never be set).
+ */
 export interface ReliantConfig {
   grpcPort: number;
   grpcUrl: string;
@@ -144,6 +153,6 @@ export interface ReliantConfig {
 declare global {
   interface Window {
     electronAPI: ElectronAPI;
-    RELIANT_CONFIG: ReliantConfig;
+    RELIANT_CONFIG?: ReliantConfig;
   }
 }

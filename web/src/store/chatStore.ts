@@ -209,6 +209,52 @@ function maybeOpenReliantManagedQuotaModal(errorMessage: string): void {
   });
 }
 
+// Daemon-offline halt detection.
+//
+// When DynamicWorkflow observes DaemonOfflineHaltThreshold consecutive turns
+// where every daemon-targeted activity returned "no daemon connected" and
+// none succeeded, it terminates with a workflow error carrying:
+//
+//     "<message> [RELIANT_DAEMON_OFFLINE_HALT:<turns>]"
+//
+// The marker survives Temporal's JSON stringification of the workflow error
+// the same way the quota marker does. We use a substring scan for the same
+// reason.
+//
+// Today this helper strips the marker from the displayed message so the user
+// doesn't see the literal `[RELIANT_DAEMON_OFFLINE_HALT:3]` tail. A follow-up
+// can upgrade this to a banner / "Reconnect workspace" affordance — the
+// helper signature stays the same.
+//
+// Wire-format contract is duplicated in
+//   reliant/internal/workflow/runtime/daemon_offline_tracker.go
+//     (DaemonOfflineHaltMarker).
+// Do not rename either side independently.
+const RELIANT_DAEMON_OFFLINE_HALT_MARKER = "RELIANT_DAEMON_OFFLINE_HALT";
+const RELIANT_DAEMON_OFFLINE_HALT_REGEX = /\s*\[RELIANT_DAEMON_OFFLINE_HALT:[^\]]*\]/;
+
+function maybeRecognizeDaemonOfflineHalt(errorUpdate: {
+  error_message: string;
+}): void {
+  if (
+    !errorUpdate.error_message ||
+    !errorUpdate.error_message.includes(RELIANT_DAEMON_OFFLINE_HALT_MARKER)
+  ) {
+    return;
+  }
+  // Strip the marker tail from the message so the user-facing copy is clean.
+  // The stripped message still includes the human-readable "daemon offline
+  // for N consecutive turns" prefix, which is fine to show as a normal
+  // workflow error for now.
+  errorUpdate.error_message = errorUpdate.error_message
+    .replace(RELIANT_DAEMON_OFFLINE_HALT_REGEX, "")
+    .trim();
+  // TODO(daemon-offline-halt): upgrade this to a non-modal banner with a
+  // "Reconnect workspace" action that links to the daemon detail page. For
+  // now, returning leaves the (cleaned) message to flow through the regular
+  // chat-error UI.
+}
+
 // Normalize thread to a consistent key - main thread uses chatId
 function normalizeThreadKey(
   chatId: string,
@@ -2346,6 +2392,14 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             if (!isSnapshot) {
               maybeOpenReliantManagedQuotaModal(errorUpdate.error_message);
             }
+            // Daemon-offline halt detection: if the workflow self-terminated
+            // because the daemon stayed offline for N consecutive turns, the
+            // error message carries RELIANT_DAEMON_OFFLINE_HALT. Strip the
+            // marker tail so the user sees a clean message. (Banner upgrade
+            // tracked as TODO inside the helper.) Apply on both snapshot and
+            // live updates — the cleanup is idempotent and the user sees the
+            // same message either way.
+            maybeRecognizeDaemonOfflineHalt(errorUpdate);
           });
 
           // Process info updates (notifications shown to user, not saved to thread)
