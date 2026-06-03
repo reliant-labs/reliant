@@ -546,6 +546,42 @@ export function ComputeStep({
     setTimeout(() => setPatCopied(false), 2000);
   };
 
+  // Block the form behind a deterministic loading state until the FIRST
+  // listDaemons settle. Otherwise the radio + Continue button render while
+  // the query is still in-flight, and a fast user can click through and set
+  // hasAdvanced=true before the auto-skip effect ever evaluates
+  // hasUsableDaemonForOnboarding(daemons).
+  //
+  // We key on `daemonLoading` (= TanStack's `isLoading`), which is true ONLY
+  // during the initial fetch and flips to false on the first settle.
+  // `isFetching` would also be true during the 5s background polls; gating
+  // on it would remount this UI every poll cycle and flicker the form.
+  // Visual pattern mirrors DaemonConnectingGate's "connecting" phase
+  // (centered spinner in a tinted circle + headline) so the two onboarding
+  // wait states feel consistent.
+  if (daemonLoading) {
+    return (
+      <div
+        className="space-y-5 py-6 text-center"
+        role="status"
+        aria-live="polite"
+        data-testid="compute-step-loading"
+      >
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/15 text-primary">
+          <Loader2 className="h-7 w-7 animate-spin" />
+        </div>
+        <div className="space-y-1">
+          <h2 className="text-sm font-medium text-foreground">
+            Checking your workspace…
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            One moment while we look for an existing daemon.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {!showLocal && <DaemonConnectionDiagrams />}
