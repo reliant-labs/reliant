@@ -30,6 +30,7 @@ import { supabase } from "../lib/supabase";
 import { logger } from "../lib/logger";
 import * as Sentry from "@sentry/react";
 import { buildLocalhostUrl } from "../lib/protocol";
+import { upgradeInterceptor } from "./upgradeInterceptor";
 import {
   DEFAULT_GRPC_TIMEOUT_MS,
   FILE_OPERATION_TIMEOUT_MS,
@@ -339,63 +340,12 @@ const errorInterceptor: Interceptor = (next) => async (req) => {
   }
 };
 
-// Open the UpgradeRequiredModal on ResourceExhausted errors that carry the
-// backend's reason/upgrade_url metadata headers. The backend attaches these
-// at every quota gate (see control-plane/internal/enforcement/connecterr.go).
-// Without this interceptor, the user sees only a generic error toast and has
-// no actionable upgrade path.
-//
-// The interceptor RE-THROWS the error after opening the modal — callers'
-// catch/try/finally semantics stay intact (mutations roll back, retries
-// don't fire, error states render). The modal is a UX overlay, not error
-// recovery.
-//
-// Single-fire guard: a burst of failed RPCs (e.g. a dashboard that fires N
-// queries on mount) opens exactly one modal, not N.
-const RELIANT_REASON_HEADER = "x-reliant-reason";
-const RELIANT_UPGRADE_URL_HEADER = "x-reliant-upgrade-url";
-let _upgradeModalInFlight = false;
-const upgradeInterceptor: Interceptor = (next) => async (req) => {
-  try {
-    return await next(req);
-  } catch (error) {
-    if (
-      !(error instanceof ConnectError) ||
-      error.code !== Code.ResourceExhausted
-    ) {
-      throw error;
-    }
-    const reason = error.metadata.get(RELIANT_REASON_HEADER) ?? "";
-    if (!reason || _upgradeModalInFlight) {
-      throw error;
-    }
-    const upgradeUrl = error.metadata.get(RELIANT_UPGRADE_URL_HEADER) ?? "";
-
-    _upgradeModalInFlight = true;
-    try {
-      const { useModalStore } = await import("../store/modalStore");
-      const close = useModalStore.getState().closeModal;
-      useModalStore.getState().openModal("upgrade-required", {
-        reason,
-        message: error.rawMessage || error.message,
-        upgradeUrl,
-      });
-      // Reset the single-fire guard when the modal closes so a later quota
-      // hit (different feature) opens a new one.
-      const unsub = useModalStore.subscribe((s) => {
-        if (s.activeModal !== "upgrade-required") {
-          _upgradeModalInFlight = false;
-          unsub();
-        }
-      });
-      void close; // silence unused-var if future refactor drops the reference
-    } catch (modalErr) {
-      logger.error("[gRPC Client] Failed to open upgrade modal", modalErr);
-      _upgradeModalInFlight = false;
-    }
-    throw error;
-  }
-};
+// The UpgradeRequiredModal-on-ResourceExhausted interceptor is defined in
+// ./upgradeInterceptor.ts so the cloud control-plane transport
+// (services/controlPlane/client.ts) can share the same module-level
+// single-fire guard. Without that sharing, the project picker's "Resume
+// daemon" call (which uses the controlPlane transport) couldn't pop the
+// modal — it surfaced as a raw toast instead.
 
 // Auto-sign-out on 401 with an active session.
 //

@@ -25,6 +25,19 @@ service DaemonService {
   rpc SetPortAccess(SetPortAccessRequest) returns (SetPortAccessResponse) {}
   rpc RemovePortAccess(RemovePortAccessRequest) returns (RemovePortAccessResponse) {}
   rpc ListPortAccessRules(ListPortAccessRulesRequest) returns (ListPortAccessRulesResponse) {}
+
+  // GetCurrentDaemonImage returns the container image the control-plane would
+  // assign to a freshly created managed daemon right now. The UI compares it
+  // to each daemon's Daemon.image to render an "update available" affordance
+  // on workspaces whose pod was created before the latest image rolled out.
+  rpc GetCurrentDaemonImage(GetCurrentDaemonImageRequest) returns (GetCurrentDaemonImageResponse) {}
+
+  // RolloutDaemon updates one owned managed daemon to the current default
+  // image (whatever GetCurrentDaemonImage would return). Patches the
+  // Workspace CR's spec.image; the reconciler rotates the pod via
+  // podImageDrifted. The caller must own the daemon — this is the
+  // user-facing equivalent of the admin-only RolloutDaemonImage.
+  rpc RolloutDaemon(RolloutDaemonRequest) returns (RolloutDaemonResponse) {}
 }
 
 message CreateDaemonRequest {
@@ -126,4 +139,24 @@ message ListPortAccessRulesRequest {
 
 message ListPortAccessRulesResponse {
   repeated PortAccessRule rules = 1;
+}
+
+message GetCurrentDaemonImageRequest {}
+
+message GetCurrentDaemonImageResponse {
+  // image is the full container reference (registry/name:tag) the
+  // control-plane currently stamps onto new managed daemons.
+  string image = 1;
+}
+
+message RolloutDaemonRequest {
+  string daemon_id = 1;
+}
+
+message RolloutDaemonResponse {
+  // image is the reference that was applied to the daemon's Workspace CR.
+  // Empty if the daemon was already on the current image (no-op).
+  string image = 1;
+  // rolled is true when spec.image actually changed; false on no-op.
+  bool rolled = 2;
 }
