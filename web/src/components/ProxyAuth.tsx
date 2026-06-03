@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { supabase } from '@/lib/supabase'
-import { getAdminURL } from '@/lib/constants'
+import { getControlPlaneURL } from '@/lib/constants'
 import { logger } from '@/lib/logger'
 import { GradientBackground } from './GradientBackground'
 import Logo from '../assets/logo.svg'
@@ -13,7 +13,7 @@ import Logo from '../assets/logo.svg'
  * 1. Proxy redirects browser to /auth/proxy?return={originalURL}
  * 2. This component checks for a valid Supabase session
  * 3. If no session → redirect to /auth with return back here
- * 4. If session → POST to admin-server /api/proxy-session to mint a proxy token
+ * 4. If session → POST to admin-server (control-plane) /api/proxy-session to mint a proxy token
  * 5. Redirect to {return_url_origin}/__proxy/callback?token={token}
  */
 export function ProxyAuth() {
@@ -55,15 +55,19 @@ export function ProxyAuth() {
       }
 
       // Session exists — mint a proxy session token via the admin-server.
-      const adminURL = getAdminURL()
-      if (!adminURL) {
-        setError('Admin API URL not configured.')
+      // Important: this must hit admin-server (the control-plane API), NOT
+      // admin-web. In cloud-dev they are separate origins; in prod they
+      // typically share an origin but callers should still use the
+      // control-plane accessor so this stays correct everywhere.
+      const controlPlaneURL = getControlPlaneURL()
+      if (!controlPlaneURL) {
+        setError('Control plane API URL not configured.')
         return
       }
 
       try {
         logger.info('[ProxyAuth] Minting proxy session token')
-        const response = await fetch(`${adminURL}/api/proxy-session`, {
+        const response = await fetch(`${controlPlaneURL}/api/proxy-session`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

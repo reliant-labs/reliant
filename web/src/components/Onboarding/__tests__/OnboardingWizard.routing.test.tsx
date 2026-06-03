@@ -111,14 +111,22 @@ vi.mock("../../../store/workspaceStateStore", () => ({
 vi.mock("../../../store/chatStore", async (importOriginal) => {
   // Use partial mock to preserve every named export the rest of the app
   // expects (initGlobalUpdatesStoreRef, etc.). We only override getState
-  // for clearCurrentChat.
+  // for clearCurrentChat. `chats` and `hasLoaded` are read by the wizard's
+  // starter-picker-modal gate; default to a populated `chats` so the gate
+  // does NOT trigger (these routing tests are about tour navigation, not
+  // the empty-state intent modal).
   const actual = await importOriginal<typeof import("../../../store/chatStore")>();
+  const mockState = {
+    clearCurrentChat: vi.fn(),
+    chats: new Map([["existing-chat", {}]]),
+    hasLoaded: true,
+  };
   return {
     ...actual,
     useChatStore: Object.assign(
-      (selector: any) => (selector ? selector({ clearCurrentChat: vi.fn() }) : { clearCurrentChat: vi.fn() }),
+      (selector: any) => (selector ? selector(mockState) : mockState),
       {
-        getState: () => ({ clearCurrentChat: vi.fn() }),
+        getState: () => mockState,
         setState: vi.fn(),
         subscribe: vi.fn(() => () => undefined),
       }

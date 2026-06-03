@@ -77,7 +77,6 @@ export function WorkflowStepConfig({
   // Use shared hook for workflow inputs logic (only when using ref mode)
   const stepInputs = getStepInputs(step);
   const stepPresets = getStepPresets(step);
-  console.log('[WorkflowStepConfig] stepInputs:', Object.keys(stepInputs), 'stepPresets:', stepPresets);
   const {
     loadingDef,
     inputGroups,
@@ -100,7 +99,6 @@ export function WorkflowStepConfig({
   // Merge step args with selected preset values for display
   // Step args take priority over preset values
   const mergedValues = useMemo(() => {
-    console.log('[WorkflowStepConfig] mergedValues computing:', { selectedPresets, availablePresetNames: availablePresets.map(p => p.name) });
     const merged: Record<string, unknown> = {};
     // Apply preset values first (lower priority)
     for (const [groupName, presetName] of Object.entries(selectedPresets)) {
@@ -269,21 +267,17 @@ export function WorkflowStepConfig({
               <FieldSelect
                 value={getSelectionType()}
                 onChange={(e) => {
-                  if (e.target.value === "custom") {
-                    onUpdate(
-                      withWorkflowArgs(step, {
-                        ref: celString("") as any,
-                        args: {},
-                      }) as WorkflowStep,
-                    );
-                  } else {
-                    onUpdate(
-                      withWorkflowArgs(step, {
-                        ref: celString(e.target.value) as any,
-                        args: {},
-                      }) as WorkflowStep,
-                    );
-                  }
+                  const nextRef = e.target.value === "custom" ? "" : e.target.value;
+                  // Clear both args AND presets when ref changes — stale presets
+                  // pointing at the old workflow leave the panel showing a chip
+                  // that has no matching preset under the new ref.
+                  onUpdate(
+                    withWorkflowArgs(step, {
+                      ref: celString(nextRef) as any,
+                      args: {},
+                      presets: {},
+                    }) as WorkflowStep,
+                  );
                 }}
                 disabled={isReadOnly}
               >

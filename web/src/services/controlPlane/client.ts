@@ -15,6 +15,7 @@ import { createClient, type Client } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-web";
 import type { DescService } from "@bufbuild/protobuf";
 import { supabase } from "@/lib/supabase";
+import { upgradeInterceptor } from "@/api/upgradeInterceptor";
 import { CONTROL_PLANE_API_URL } from "./config";
 
 async function getAuthToken(): Promise<string | undefined> {
@@ -55,6 +56,13 @@ export function getControlPlaneClient<T extends DescService>(
         }
         return next(req);
       },
+      // Open the UpgradeRequiredModal on ResourceExhausted errors that carry
+      // X-Reliant-Reason / X-Reliant-Upgrade-URL metadata. The project
+      // picker's "Resume onboarding daemon" button calls
+      // controlplane.v1.DaemonService.ResumeDaemon through this transport;
+      // without the interceptor here, the per-org compute-cap error showed
+      // up only as a raw toast.
+      upgradeInterceptor,
     ],
   });
 

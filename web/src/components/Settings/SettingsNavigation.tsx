@@ -2,6 +2,8 @@ import { cn } from "../../lib/utils";
 import { Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, FolderOpen, Globe, FolderGit2, Bell, KeyRound, Github, Server, CreditCard, LayoutDashboard, Building2, ExternalLink } from "lucide-react";
 import { McpIcon } from "../icons/McpIcon";
 import { hasControlPlane } from "../../services/controlPlane/config";
+import { getAdminURL } from "../../lib/constants";
+import { openExternalLink } from "../../lib/open-link";
 import type { SettingsSection } from "../../routeSchemas";
 
 export type { SettingsSection };
@@ -17,6 +19,7 @@ interface SectionItem {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   external?: boolean;
+  adminPath?: string;
 }
 
 interface SectionGroup {
@@ -29,6 +32,21 @@ const sectionGroups: SectionGroup[] = [
     label: "Account",
     items: [
       { id: "account", label: "Account", icon: User },
+    ],
+  },
+  {
+    label: "Cloud",
+    items: [
+      ...(hasControlPlane
+        ? [
+            { id: "cloud-overview" as SettingsSection, label: "Overview", icon: LayoutDashboard, external: true, adminPath: "/dashboard" },
+            { id: "cloud-environments" as SettingsSection, label: "Environments", icon: Server, external: true, adminPath: "/workspaces" },
+            { id: "cloud-ai" as SettingsSection, label: "AI Management", icon: Sparkles, external: true, adminPath: "/ai" },
+            { id: "cloud-billing" as SettingsSection, label: "Billing", icon: CreditCard, external: true, adminPath: "/billing" },
+            { id: "cloud-organization" as SettingsSection, label: "Organization", icon: Building2, external: true, adminPath: "/settings" },
+          ]
+        : []),
+      { id: "git-connections", label: "GitHub", icon: Github },
     ],
   },
   {
@@ -54,21 +72,6 @@ const sectionGroups: SectionGroup[] = [
       { id: "shortcuts", label: "Keyboard Shortcuts", icon: Keyboard },
       { id: "notifications", label: "Notifications", icon: Bell },
       { id: "privacy", label: "Privacy", icon: Shield },
-    ],
-  },
-  {
-    label: "Cloud",
-    items: [
-      ...(hasControlPlane
-        ? [
-            { id: "cloud-overview" as SettingsSection, label: "Overview", icon: LayoutDashboard, external: true },
-            { id: "cloud-environments" as SettingsSection, label: "Environments", icon: Server, external: true },
-            { id: "cloud-ai" as SettingsSection, label: "AI Management", icon: Sparkles, external: true },
-            { id: "cloud-billing" as SettingsSection, label: "Billing", icon: CreditCard, external: true },
-            { id: "cloud-organization" as SettingsSection, label: "Organization", icon: Building2, external: true },
-          ]
-        : []),
-      { id: "git-connections", label: "GitHub", icon: Github },
     ],
   },
   {
@@ -122,10 +125,18 @@ export function SettingsNavigation({
               <div className="space-y-0.5">
                 {visibleItems.map((section) => {
                   const isActive = section.id === activeSection;
+                  const adminURL = section.adminPath ? getAdminURL() : undefined;
+                  const externalHref = adminURL ? `${adminURL.replace(/\/$/, "")}${section.adminPath}` : undefined;
                   return (
                     <button
                       key={section.id}
-                      onClick={() => onSectionChange(section.id)}
+                      onClick={() => {
+                        if (externalHref) {
+                          void openExternalLink(externalHref);
+                          return;
+                        }
+                        onSectionChange(section.id);
+                      }}
                       title={isCollapsed ? section.label : undefined}
                       className={cn(
                         "w-full cursor-pointer rounded-md border-l-2 px-3 py-1.5 text-sm transition-all",

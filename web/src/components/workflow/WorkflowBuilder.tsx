@@ -1523,10 +1523,18 @@ function WorkflowBuilderInner({
     };
   }, [enterWorkflowEdit]);
 
-  // Update sibling info whenever edges change
+  // Recompute sibling layout info when the edge topology changes. Keying on
+  // `edges.length` misses the case where an edge is rerouted (same count,
+  // different source/target) — labels then render in the wrong order. We
+  // depend on a topology fingerprint and only call setEdges when at least one
+  // edge's siblingIndex/totalSiblings actually changes (preserving array
+  // identity is what keeps this from looping).
+  const edgeTopologyKey = useMemo(
+    () => edges.map((e) => `${e.id}|${e.source}>${e.target}`).join(","),
+    [edges],
+  );
   useEffect(() => {
     setEdges((currentEdges) => {
-      // Group edges by source-target pair
       const groups = new Map<string, Edge[]>();
       currentEdges.forEach((edge) => {
         const key = `${edge.source}-${edge.target}`;
@@ -1534,30 +1542,27 @@ function WorkflowBuilderInner({
         groups.get(key)!.push(edge);
       });
 
-      // Update sibling info
-      return currentEdges.map((edge) => {
+      let changed = false;
+      const next = currentEdges.map((edge) => {
         const key = `${edge.source}-${edge.target}`;
         const siblings = groups.get(key) || [];
         const siblingIndex = siblings.findIndex((e) => e.id === edge.id);
         const totalSiblings = siblings.length;
-
         if (
           edge.data?.siblingIndex !== siblingIndex ||
           edge.data?.totalSiblings !== totalSiblings
         ) {
+          changed = true;
           return {
             ...edge,
-            data: {
-              ...edge.data,
-              siblingIndex,
-              totalSiblings,
-            },
+            data: { ...edge.data, siblingIndex, totalSiblings },
           };
         }
         return edge;
       });
+      return changed ? next : currentEdges;
     });
-  }, [edges.length, setEdges]);
+  }, [edgeTopologyKey, setEdges]);
 
   // Handle edge selection
   const onEdgeClick = useCallback((_event: React.MouseEvent, edge: Edge) => {
@@ -1739,45 +1744,37 @@ function WorkflowBuilderInner({
   const handleSwitchUpdate = useCallback(
     (nodeId: string, data: any) => {
       markDirty();
-      setNodes((nds) => {
-        const updated = nds.map((node) => {
-          if (node.id === nodeId) {
-            const newNode = {
-              ...node,
-              data: {
-                ...node.data,
-                ...data,
-              },
-            };
-            // Also update selectedNode so the panel sees the changes
-            setSelectedNode(newNode);
-            return newNode;
-          }
-          return node;
-        });
+      // Calling setSelectedNode from inside a setNodes updater runs the setter
+      // twice under React 18 strict mode (updaters must be pure). Sync the
+      // selected node via its own updater after setNodes returns.
+      setNodes((nds) =>
+        nds.map((node) =>
+          node.id === nodeId
+            ? { ...node, data: { ...node.data, ...data } }
+            : node,
+        ),
+      );
 
-        // Reconcile switch edges when case IDs change (e.g. re-ordering/deleting cases).
-        // Any edge leaving this switch whose sourceHandle no longer exists should be removed,
-        // otherwise buildWorkflow may serialize malformed routing.
-        const updatedSwitch = updated.find((n) => n.id === nodeId);
-        const nextCases = ((updatedSwitch?.data as FlowNodeData | undefined)
-          ?.cases || []) as Array<{ id: string }>;
+      setSelectedNode((current) => {
+        if (current?.id !== nodeId) return current;
+        return { ...current, data: { ...current.data, ...data } };
+      });
+
+      // Reconcile switch edges when case IDs change (e.g. re-ordering/deleting
+      // cases). Any edge leaving this switch whose sourceHandle no longer
+      // exists should be removed, otherwise buildWorkflow may serialize
+      // malformed routing.
+      const nextCases = ((data?.cases ?? []) as Array<{ id: string }>);
+      if (Array.isArray(data?.cases)) {
         const validHandles = new Set(nextCases.map((c) => c.id));
-
         setEdges((eds) =>
           eds.filter((edge) => {
-            if (edge.source !== nodeId) {
-              return true;
-            }
-            if (!edge.sourceHandle) {
-              return true;
-            }
+            if (edge.source !== nodeId) return true;
+            if (!edge.sourceHandle) return true;
             return validHandles.has(edge.sourceHandle);
           }),
         );
-
-        return updated;
-      });
+      }
     },
     [setNodes, setEdges, markDirty],
   );

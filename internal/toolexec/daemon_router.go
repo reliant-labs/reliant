@@ -66,6 +66,20 @@ type DaemonRouter interface {
 	// SendDaemonCommand sends a generic command to the user's daemon and waits for a response.
 	SendDaemonCommand(ctx context.Context, userID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
 
+	// EnqueueDaemonCommand persists a fire-and-forget command to the
+	// DAEMON_PENDING_COMMANDS JetStream stream for each of the user's
+	// daemons. The gateway drains the stream on the daemon's next connect
+	// and replays the command. Use for writes that must eventually run on
+	// the daemon's filesystem (e.g. ensure-dir) when the daemon may not be
+	// online right now — synchronous responses are not available, so this
+	// is unsuitable for reads.
+	//
+	// Returns the number of daemons the command was enqueued for. Zero is
+	// not an error: it just means the user has no managed daemons yet
+	// (caller should be tolerant — the directory will be created on the
+	// next successful create flow).
+	EnqueueDaemonCommand(ctx context.Context, userID, commandType string, payload []byte, timeoutMs int32) (int, error)
+
 	// SendLoadProjectConfigs asks the daemon to load and send project configs.
 	SendLoadProjectConfigs(ctx context.Context, userID string, projectPath string, requestID string) error
 

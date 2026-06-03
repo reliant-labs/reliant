@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Edit3, Eye } from "lucide-react";
 import type { ProtoFieldSchema } from "../../../types/workflowFieldSchema";
 import type { LoopStep } from "../../../types/workflow";
@@ -118,7 +119,13 @@ export function LoopStepConfig({
   };
 
   const inlineWorkflow = getStepInline(step);
-  if (!inlineWorkflow) {
+
+  // Initialize inline workflow lazily. Doing this in render fires onUpdate
+  // mid-render, which marks the workflow dirty just by viewing the loop step
+  // and risks an extra paint. The effect only runs when the step lacks an
+  // inline body for real.
+  useEffect(() => {
+    if (inlineWorkflow) return;
     onUpdate(
       withLoopArgs(step, {
         inline: {
@@ -130,7 +137,10 @@ export function LoopStepConfig({
         } as any,
       }) as LoopStep,
     );
-  }
+    // We intentionally only run when the inline body is missing; including
+    // `step` or `onUpdate` would re-run on every keystroke and overwrite edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inlineWorkflow]);
 
   return (
     <>

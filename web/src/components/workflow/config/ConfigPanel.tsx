@@ -25,7 +25,7 @@ import {
   getStepThread,
 } from "../../../types/workflow";
 import { ConfigurationPanel } from "../ConfigurationPanel";
-import { workflowGrpc, type WorkflowResponse } from "../../../api/workflow-grpc";
+import { workflowGrpc } from "../../../api/workflow-grpc";
 import { useProjectStore } from "../../../store/projectStore";
 import { directCel, celString } from "../../../lib/celAdapter";
 import { SaveMessageConfigEditor } from "../SaveMessageConfigEditor";
@@ -124,8 +124,8 @@ export function ConfigPanel({
   isInLoop = false,
   isReadOnly = false,
 }: ConfigPanelProps) {
-  const [_workflows, setWorkflows] = useState<WorkflowResponse[]>([]);
   const [catalogNodes, setCatalogNodes] = useState<NodeInfo[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
   const currentProject = useProjectStore((state) => state.currentProject);
   const projectId = currentProject?.id;
 
@@ -214,24 +214,16 @@ export function ConfigPanel({
     [handleIdSave, handleIdCancel],
   );
 
-  // Fetch workflows for loop step selector
-  useEffect(() => {
-    if (!isLoopStep(step) || !projectId) return;
-    let cancelled = false;
-    workflowGrpc
-      .listWorkflows(projectId)
-      .then((wfs) => { if (!cancelled) setWorkflows(wfs); })
-      .catch(console.error);
-    return () => { cancelled = true; };
-  }, [step, projectId]);
-
-  // Fetch catalog nodes for output fields
+  // Fetch catalog nodes for output fields. Shared with ActionStepConfig via
+  // props so we don't fire two identical listNodes RPCs per panel open.
   useEffect(() => {
     let cancelled = false;
     const client = getCatalogClient();
-    client.listNodes({}).then((res) => {
-      if (!cancelled) setCatalogNodes(res.nodes || []);
-    }).catch(console.error);
+    setCatalogLoading(true);
+    client.listNodes({})
+      .then((res) => { if (!cancelled) setCatalogNodes(res.nodes || []); })
+      .catch(console.error)
+      .finally(() => { if (!cancelled) setCatalogLoading(false); });
     return () => { cancelled = true; };
   }, []);
 
@@ -456,6 +448,8 @@ export function ConfigPanel({
             <ActionStepConfig
               step={step as ActionStep}
               onUpdate={onUpdate}
+              catalogNodes={catalogNodes}
+              catalogLoading={catalogLoading}
               isReadOnly={isReadOnly}
             />
           )}
