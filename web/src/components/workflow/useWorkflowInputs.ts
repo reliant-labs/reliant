@@ -210,8 +210,10 @@ export function useWorkflowInputs({
           name: canonicalWorkflowRef,
         });
         setWorkflowDef(result.workflow ?? null);
-        // Reset presets when workflow changes
+        // Reset preset selection and the "stored presets applied" gate so the
+        // stored-presets effect re-runs against the new workflow's preset list.
         setSelectedPresets({});
+        setStoredPresetsApplied(false);
       } catch (error) {
         console.error("Failed to fetch workflow definition:", error);
         setWorkflowDef(null);
@@ -341,14 +343,12 @@ export function useWorkflowInputs({
   // Handle individual input change
   const handleInputChange = useCallback(
     (name: string, value: unknown) => {
-      console.log('[useWorkflowInputs] handleInputChange', name, typeof value, value);
       const newValues = { ...values };
       if (value === undefined || value === "") {
         delete newValues[name];
       } else {
         newValues[name] = fromJson(ValueSchema, value as any);
       }
-      console.log('[useWorkflowInputs] stored value', name, newValues[name]);
       onValuesChange(newValues);
     },
     [values, onValuesChange]

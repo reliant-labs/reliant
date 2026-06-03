@@ -69,6 +69,9 @@ func (f *fakeDaemonRouter) SubscribeProcessOutput(_ context.Context, _, _ string
 	return ch, func() { close(ch) }, nil
 }
 func (f *fakeDaemonRouter) Close() error { return nil }
+func (f *fakeDaemonRouter) EnqueueDaemonCommand(_ context.Context, _, _ string, _ []byte, _ int32) (int, error) {
+	return 0, nil
+}
 
 func TestCancelToolCall_SetsCancelSignalAndSucceeds(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)

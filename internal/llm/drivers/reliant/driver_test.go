@@ -1,6 +1,7 @@
 package reliant
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -51,6 +52,18 @@ func TestShouldRetryReliantAPIError(t *testing.T) {
 			wantReason:  "non_retryable_500",
 			wantSummary: "Model misconfiguration for local provider",
 		},
+		{
+			// 429 + insufficient_quota is the reliant-managed free-tier global
+			// budget exhaustion signal from the control-plane LLM proxy.
+			// Retrying is futile (budget is monthly hard cap), so we fail
+			// fast and let the wrapper attach the upgrade marker.
+			name:        "fails fast on reliant-managed quota exhausted",
+			statusCode:  429,
+			body:        `{"error":{"message":"Free tier quota exceeded — please upgrade your plan.","type":"insufficient_quota","code":"insufficient_quota","upgrade_url":"/billing/plans"}}`,
+			wantRetry:   false,
+			wantReason:  "reliant_managed_quota_exhausted",
+			wantSummary: "Free tier quota exceeded — please upgrade your plan.",
+		},
 	}
 
 	for _, tt := range tests {
@@ -82,6 +95,66 @@ func TestReliantRetryExhaustedError(t *testing.T) {
 	transient500 := newOpenAIErrorForTest(t, 503, `{"error":{"message":"Service unavailable","type":"api_error","code":"503"}}`)
 	if got := reliantRetryExhaustedError(transient500).Error(); got != "maximum retry attempts reached for transient Reliant API error (status 503): 8 retries" {
 		t.Fatalf("transient retry exhaustion = %q", got)
+	}
+}
+
+func TestWrapReliantManagedQuotaError(t *testing.T) {
+	apierr := newOpenAIErrorForTest(t, 429, `{"error":{"message":"Free tier quota exceeded — please upgrade your plan.","type":"insufficient_quota","code":"insufficient_quota","upgrade_url":"/billing/plans"}}`)
+
+	err := wrapReliantManagedQuotaError(apierr)
+	var quotaErr *ErrReliantManagedQuotaExhausted
+	if !errors.As(err, &quotaErr) {
+		t.Fatalf("wrapReliantManagedQuotaError = %T, want *ErrReliantManagedQuotaExhausted", err)
+	}
+	// Without the openai-go raw-JSON populated (private field), the parser
+	// falls back to DefaultReliantUpgradeURL. The test contract is that the
+	// marker + a non-empty upgrade URL are baked into the message.
+	if quotaErr.UpgradeURL == "" {
+		t.Fatalf("UpgradeURL = empty, want non-empty")
+	}
+	if !strings.Contains(err.Error(), ReliantManagedQuotaMarker) {
+		t.Fatalf("err.Error() = %q, want substring %q", err.Error(), ReliantManagedQuotaMarker)
+	}
+	if !strings.Contains(err.Error(), DefaultReliantUpgradeURL) {
+		t.Fatalf("err.Error() = %q, want substring %q", err.Error(), DefaultReliantUpgradeURL)
+	}
+
+	// Missing message still produces a usable error string.
+	apierr2 := newOpenAIErrorForTest(t, 429, `{"error":{"type":"insufficient_quota","code":"insufficient_quota"}}`)
+	err2 := wrapReliantManagedQuotaError(apierr2)
+	var quotaErr2 *ErrReliantManagedQuotaExhausted
+	if !errors.As(err2, &quotaErr2) {
+		t.Fatalf("wrapReliantManagedQuotaError = %T, want *ErrReliantManagedQuotaExhausted", err2)
+	}
+	if !strings.Contains(err2.Error(), ReliantManagedQuotaMarker) {
+		t.Fatalf("err2.Error() = %q, want substring %q", err2.Error(), ReliantManagedQuotaMarker)
+	}
+}
+
+func TestIsReliantManagedQuotaError(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want bool
+	}{
+		{
+			name: "insufficient_quota in code",
+			body: `{"error":{"message":"quota","type":"insufficient_quota","code":"insufficient_quota"}}`,
+			want: true,
+		},
+		{
+			name: "plain rate limit is not quota",
+			body: `{"error":{"message":"slow down","type":"rate_limit_error","code":"429"}}`,
+			want: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			apierr := newOpenAIErrorForTest(t, 429, tc.body)
+			if got := isReliantManagedQuotaError(apierr); got != tc.want {
+				t.Fatalf("isReliantManagedQuotaError = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 

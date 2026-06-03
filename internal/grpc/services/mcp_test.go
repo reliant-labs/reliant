@@ -802,6 +802,10 @@ func (r *fakeMCPDaemonRouter) SubscribeProcessOutput(_ context.Context, _, _ str
 }
 func (r *fakeMCPDaemonRouter) Close() error { return nil }
 
+func (r *fakeMCPDaemonRouter) EnqueueDaemonCommand(_ context.Context, _ string, _ string, _ []byte, _ int32) (int, error) {
+	return 0, nil
+}
+
 func (r *fakeMCPDaemonRouter) SendDaemonCommand(_ context.Context, _ string, commandType string, payload []byte, _ int32) ([]byte, error) {
 	switch commandType {
 	case "mcp.server_status":

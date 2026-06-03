@@ -333,6 +333,19 @@ func Run(ctx context.Context, opts Options) error {
 	}
 	logging.Info("gRPC/Connect server started", "port", opts.GRPCPort)
 
+	// Subscribe to daemon.v1.events.connected on the DAEMON_EVENTS
+	// JetStream stream so we can heal each user's project directories the
+	// moment their workspace daemon comes online. The api-server's local
+	// ToolsDaemonService never sees daemon connections directly — daemons
+	// connect to the daemon-gateway process, which publishes events here.
+	if projectSvc := grpcSrv.ProjectService(); projectSvc != nil {
+		go func() {
+			if err := projectSvc.StartDaemonEventConsumer(ctx, nc); err != nil {
+				logging.Warn("daemon-events consumer exited with error", "error", err)
+			}
+		}()
+	}
+
 	// -----------------------------------------------------------------
 	// 4. pprof debug server
 	// -----------------------------------------------------------------
@@ -452,11 +465,6 @@ func Run(ctx context.Context, opts Options) error {
 	logging.Info("Stopping gRPC server")
 	if err := grpcSrv.Stop(shutdownCtx); err != nil {
 		logging.Error("Error stopping gRPC server", "error", err)
-	}
-
-	// Close ToolsDaemonService (stops stale-daemon monitor goroutine)
-	if tds := grpcSrv.ToolsDaemonService(); tds != nil {
-		tds.Close()
 	}
 
 	// Stop reconciler

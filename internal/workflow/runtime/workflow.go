@@ -719,6 +719,15 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		}
 	}
 
+	// STEP 8.8: Initialize daemon-offline tracker.
+	// Counts consecutive main-loop iterations where every daemon-targeted
+	// activity returned "no daemon connected" and none succeeded. When the
+	// streak meets DaemonOfflineHaltThreshold the workflow halts itself with
+	// a terminal error carrying DaemonOfflineHaltMarker, so the frontend
+	// surfaces a "Reconnect workspace" affordance instead of leaving the user
+	// staring at a stuck thinking indicator.
+	daemonOfflineTracker := NewDaemonOfflineTracker()
+
 	// STEP 9: Main workflow loop
 	for {
 		// Yield to the Temporal scheduler to prevent deadlock detection during replay.
@@ -734,6 +743,11 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			)
 			return nil, ctx.Err()
 		}
+
+		// Reset per-turn daemon-offline observation flags. Any daemon-targeted
+		// step completion observed BEFORE the next ObserveTurnBoundary call
+		// (at the bottom of the iteration) contributes to THIS turn's verdict.
+		daemonOfflineTracker.Reset()
 
 		// Check for pause signal at step boundary
 		checkPause(ctx)
@@ -1523,6 +1537,24 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 
 				events = append(events, stepEvent.ToEvent())
 
+				// Observe daemon-offline signals from this completed step.
+				// - Step error: e.g. ExecuteRunStep returns the daemon-offline
+				//   error directly when RemoteRunExecutor can't reach the daemon.
+				// - Step output: ExecuteTools wraps daemon-offline into the
+				//   tool_results array (the activity itself succeeds), so we
+				//   scan the payload for daemon-offline markers.
+				if stepEvent.Error != nil {
+					daemonOfflineTracker.ObserveStepError(stepEvent.Error)
+				} else {
+					daemonOfflineTracker.ObserveStepOutput(stepEvent.StepID, stepEvent.Data)
+					// Run steps (ExecuteRunStep) return non-tool_results output
+					// shapes when successful — record them as explicit daemon
+					// liveness signals so a successful run step resets the streak.
+					if running.ActivityName == "ExecuteRunStep" {
+						daemonOfflineTracker.ObserveDaemonSuccess(running.StepID)
+					}
+				}
+
 				// Update thread liveness - mark step as completed
 				if threadTracker != nil && running.StepID != "" {
 					threadTracker.Mapping.MarkStepCompleted(running.StepID)
@@ -1728,6 +1760,37 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 					threadTracker.Mapping.MarkStepCompleted(running.StepID)
 				}
 			}
+		}
+
+		// End-of-turn daemon-offline evaluation. This is the seam between
+		// turns — every step completion from this iteration has been
+		// observed; we now decide whether to bump the streak, reset it,
+		// or leave it alone (CallLLM-only turns are neither).
+		//
+		// We deliberately halt LATE in the iteration so users still see the
+		// final tool_result errors and the assistant's last reply in chat
+		// before the workflow terminates. Returning here also exits the
+		// main loop directly, so no subsequent turn will run.
+		streak := daemonOfflineTracker.ObserveTurnBoundary()
+		if streak >= DaemonOfflineHaltThreshold {
+			logger.Error("[Workflow Runtime] Halting: daemon offline for consecutive turns",
+				"workflowID", workflowID,
+				"chatID", input.ChatID,
+				"consecutiveTurns", streak,
+				"threshold", DaemonOfflineHaltThreshold,
+			)
+			haltErr := HaltError(streak)
+			// Surface to the chat-error UI via the same path used by other
+			// terminal workflow errors. The error message embeds
+			// DaemonOfflineHaltMarker so the frontend can render a structured
+			// "Reconnect workspace" affordance instead of a generic toast.
+			notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName,
+				"daemon_offline_halt", haltErr.Error())
+			// Use NonRetryable so Temporal doesn't retry the workflow on a
+			// halt that the user must remediate (reconnect the daemon).
+			return nil, temporal.NewNonRetryableApplicationError(
+				haltErr.Error(), "DaemonOfflineHalt", haltErr,
+			)
 		}
 	}
 }
