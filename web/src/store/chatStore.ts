@@ -15,6 +15,11 @@ import {
 import { ApprovalStatus } from "../gen/reliant/v1/approval_pb";
 import type { ProcessedMessage } from "../lib/messageProcessor";
 import { processMessage } from "../lib/messageProcessor";
+import {
+  CHAT_MARKER_KINDS,
+  extractChatMarker,
+  stripChatMarker,
+} from "../lib/chatMarkers";
 
 import * as Sentry from "@sentry/react";
 
@@ -127,28 +132,21 @@ interface StreamingBuffer {
 // Buffers are keyed by "chatId:thread" to support multiple simultaneous streams
 const streamingBuffers = new Map<string, StreamingBuffer>();
 
-// Reliant-managed LLM quota detection.
+// Chat-error marker routing.
 //
-// When the chat workflow's LLM activity fails because the user's reliant-managed
-// (LiteLLM virtual key) free-tier budget is exhausted, the reliant driver wraps
-// the error with a stable substring marker baked into the message:
+// Some workflow / driver error classes are surfaced through the chat-error
+// stream (ErrorUpdate.error_message) with a stable bracketed tail that
+// survives Temporal's JSON stringification. The wire contract — kind strings,
+// regex, wrap format — lives in `../lib/chatMarkers.ts` and is mirrored in
+// `reliant/internal/chatmarkers/markers.go`. This file just routes on the
+// kind and converts the structured signal into UI side effects.
 //
-//     "<message> [RELIANT_MANAGED_QUOTA_EXHAUSTED:<upgrade_url>]"
-//
-// The marker survives Temporal's JSON stringification of activity errors, which
-// is why we use a substring scan instead of a typed error — by the time the
-// error reaches the frontend it's a plain string in ErrorUpdate.error_message.
-//
-// IMPORTANT: this only fires for the reliant-managed driver. User-provided
-// keys to OpenAI / Anthropic / etc. surface their own provider's 429s
-// unchanged, with no marker, and the upgrade modal does NOT open for them.
-// That's intentional: the user owns those billing relationships, not us.
-//
-// Wire-format contract is duplicated in
-//   reliant/internal/llm/drivers/reliant/driver.go (ReliantManagedQuotaMarker).
-// Do not rename either side independently.
-const RELIANT_MANAGED_QUOTA_MARKER = "RELIANT_MANAGED_QUOTA_EXHAUSTED";
-const RELIANT_MANAGED_QUOTA_REGEX = /\[RELIANT_MANAGED_QUOTA_EXHAUSTED:([^\]]+)\]/;
+// IMPORTANT: the quota path only fires for the reliant-managed driver.
+// User-provided keys to OpenAI / Anthropic / etc. surface their own
+// provider's 429s unchanged, with no marker, and the upgrade modal does NOT
+// open for them. That's intentional: the user owns those billing
+// relationships, not us.
+
 const DEFAULT_RELIANT_UPGRADE_URL = "/billing/plans";
 
 // Single-fire guard: a burst of error events (one per workflow retry attempt
@@ -157,24 +155,10 @@ const DEFAULT_RELIANT_UPGRADE_URL = "/billing/plans";
 // closes so a later quota hit in a different chat still surfaces a modal.
 let _reliantManagedQuotaModalInFlight = false;
 
-function extractReliantManagedQuotaUpgradeURL(errorMessage: string): string | null {
-  if (!errorMessage || !errorMessage.includes(RELIANT_MANAGED_QUOTA_MARKER)) {
-    return null;
-  }
-  const match = RELIANT_MANAGED_QUOTA_REGEX.exec(errorMessage);
-  if (!match) {
-    // Marker present but the bracketed URL wasn't parseable. Still treat it
-    // as a quota event so the user sees the modal — fall back to the default
-    // billing path.
-    return DEFAULT_RELIANT_UPGRADE_URL;
-  }
-  const url = match[1].trim();
-  return url || DEFAULT_RELIANT_UPGRADE_URL;
-}
-
-function maybeOpenReliantManagedQuotaModal(errorMessage: string): void {
-  const upgradeUrl = extractReliantManagedQuotaUpgradeURL(errorMessage);
-  if (upgradeUrl === null) return;
+function openReliantManagedQuotaModal(
+  errorMessage: string,
+  upgradeUrl: string,
+): void {
   if (_reliantManagedQuotaModalInFlight) return;
   // Don't reopen if the modal is already up (e.g. a fresh chat hits the same
   // wall while the previous chat's modal is still showing).
@@ -191,7 +175,7 @@ function maybeOpenReliantManagedQuotaModal(errorMessage: string): void {
 
   _reliantManagedQuotaModalInFlight = true;
   // Strip the marker tail from the message so the user-facing copy is clean.
-  const cleanMessage = errorMessage.replace(RELIANT_MANAGED_QUOTA_REGEX, "").trim();
+  const cleanMessage = stripChatMarker(errorMessage);
   useModalStore.getState().openModal("upgrade-required", {
     // Mirrors the canonical code used by the Connect-side enforcement path
     // (control-plane/internal/enforcement/check.go) so UpgradeRequiredModal
@@ -209,50 +193,60 @@ function maybeOpenReliantManagedQuotaModal(errorMessage: string): void {
   });
 }
 
-// Daemon-offline halt detection.
-//
-// When DynamicWorkflow observes DaemonOfflineHaltThreshold consecutive turns
-// where every daemon-targeted activity returned "no daemon connected" and
-// none succeeded, it terminates with a workflow error carrying:
-//
-//     "<message> [RELIANT_DAEMON_OFFLINE_HALT:<turns>]"
-//
-// The marker survives Temporal's JSON stringification of the workflow error
-// the same way the quota marker does. We use a substring scan for the same
-// reason.
-//
-// Today this helper strips the marker from the displayed message so the user
-// doesn't see the literal `[RELIANT_DAEMON_OFFLINE_HALT:3]` tail. A follow-up
-// can upgrade this to a banner / "Reconnect workspace" affordance — the
-// helper signature stays the same.
-//
-// Wire-format contract is duplicated in
-//   reliant/internal/workflow/runtime/daemon_offline_tracker.go
-//     (DaemonOfflineHaltMarker).
-// Do not rename either side independently.
-const RELIANT_DAEMON_OFFLINE_HALT_MARKER = "RELIANT_DAEMON_OFFLINE_HALT";
-const RELIANT_DAEMON_OFFLINE_HALT_REGEX = /\s*\[RELIANT_DAEMON_OFFLINE_HALT:[^\]]*\]/;
+/**
+ * Inspect an incoming error update, route on the embedded chat marker (if
+ * any), and either trigger side effects (e.g. open the upgrade modal) or
+ * mutate `errorUpdate.error_message` to strip the marker tail before it
+ * reaches the chat-error UI.
+ *
+ * `isSnapshot` suppresses live-only side effects (modal pop) on replayed
+ * snapshot events — the cleanup mutation is idempotent and runs in both
+ * cases so the user sees the same clean message either way.
+ *
+ * TODO(daemon-offline-halt): upgrade the DaemonOfflineHalt branch to a
+ * non-modal banner with a "Reconnect workspace" action that links to the
+ * daemon detail page. For now we just strip the marker and let the cleaned
+ * message flow through the regular chat-error UI.
+ */
+function routeChatErrorMarker(
+  errorUpdate: { error_message: string },
+  isSnapshot: boolean,
+): void {
+  const marker = extractChatMarker(errorUpdate.error_message);
+  if (marker === null) return;
 
-function maybeRecognizeDaemonOfflineHalt(errorUpdate: {
-  error_message: string;
-}): void {
-  if (
-    !errorUpdate.error_message ||
-    !errorUpdate.error_message.includes(RELIANT_DAEMON_OFFLINE_HALT_MARKER)
-  ) {
-    return;
+  switch (marker.kind) {
+    case CHAT_MARKER_KINDS.ReliantManagedQuotaExhausted: {
+      // Modal is a LIVE side-effect — skip on snapshot replays so switching
+      // back into the chat doesn't re-pop the modal.
+      if (!isSnapshot) {
+        const upgradeUrl =
+          marker.payload.trim() || DEFAULT_RELIANT_UPGRADE_URL;
+        openReliantManagedQuotaModal(errorUpdate.error_message, upgradeUrl);
+      }
+      // Note: the quota modal helper strips the marker for its OWN displayed
+      // copy via stripChatMarker, but the underlying chat-error event still
+      // carries the marker until we strip it here. Strip on both live and
+      // snapshot paths so the timeline render is clean either way.
+      errorUpdate.error_message = stripChatMarker(errorUpdate.error_message);
+      return;
+    }
+    case CHAT_MARKER_KINDS.DaemonOfflineHalt: {
+      // Strip the marker tail from the message so the user-facing copy is
+      // clean. The stripped message still includes the human-readable
+      // "daemon offline for N consecutive turns" prefix, which is fine to
+      // show as a normal workflow error for now. Idempotent on both
+      // snapshot and live paths.
+      errorUpdate.error_message = stripChatMarker(errorUpdate.error_message);
+      return;
+    }
+    default: {
+      // Exhaustiveness guard: a new kind landed in chatMarkers.ts without
+      // being routed here. TypeScript will flag this at compile time.
+      const _exhaustive: never = marker.kind;
+      void _exhaustive;
+    }
   }
-  // Strip the marker tail from the message so the user-facing copy is clean.
-  // The stripped message still includes the human-readable "daemon offline
-  // for N consecutive turns" prefix, which is fine to show as a normal
-  // workflow error for now.
-  errorUpdate.error_message = errorUpdate.error_message
-    .replace(RELIANT_DAEMON_OFFLINE_HALT_REGEX, "")
-    .trim();
-  // TODO(daemon-offline-halt): upgrade this to a non-modal banner with a
-  // "Reconnect workspace" action that links to the daemon detail page. For
-  // now, returning leaves the (cleaned) message to flow through the regular
-  // chat-error UI.
 }
 
 // Normalize thread to a consistent key - main thread uses chatId
@@ -2380,26 +2374,12 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
               updatedErrorEvents.push(errorUpdate);
             }
 
-            // Reliant-managed LLM quota detection: if the wrapped activity
-            // error carries the RELIANT_MANAGED_QUOTA_EXHAUSTED marker
-            // (planted by the reliant driver — and ONLY that driver, so
-            // user-provided keys don't trigger this path), open the
-            // upgrade-required modal. Single-fire guard inside the helper
-            // ensures a burst of retry-attempt error events surfaces one
-            // modal, not N. Skip on snapshot replays to avoid re-firing
-            // the modal every time the user switches back into this chat
-            // — we only want it on live, in-session errors.
-            if (!isSnapshot) {
-              maybeOpenReliantManagedQuotaModal(errorUpdate.error_message);
-            }
-            // Daemon-offline halt detection: if the workflow self-terminated
-            // because the daemon stayed offline for N consecutive turns, the
-            // error message carries RELIANT_DAEMON_OFFLINE_HALT. Strip the
-            // marker tail so the user sees a clean message. (Banner upgrade
-            // tracked as TODO inside the helper.) Apply on both snapshot and
-            // live updates — the cleanup is idempotent and the user sees the
-            // same message either way.
-            maybeRecognizeDaemonOfflineHalt(errorUpdate);
+            // Route on any chat-error marker tail planted by the workflow /
+            // driver (RELIANT_MANAGED_QUOTA_EXHAUSTED, RELIANT_DAEMON_OFFLINE_HALT,
+            // …). Live-only side effects (modal pop) skip the snapshot
+            // path; marker-stripping is idempotent and runs in both modes
+            // so the rendered timeline is clean either way.
+            routeChatErrorMarker(errorUpdate, isSnapshot);
           });
 
           // Process info updates (notifications shown to user, not saved to thread)

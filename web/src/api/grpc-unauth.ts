@@ -1,17 +1,22 @@
 /**
- * Unauthenticated gRPC transport for DevAuth calls
- * 
- * This is separated from grpc-client.ts to avoid circular dependencies:
- * - supabase.ts needs devAuth for storage
- * - grpc-client.ts needs supabase for auth interceptor
- * - This file provides transport without needing supabase
+ * Unauthenticated gRPC transport for DevAuth calls.
+ *
+ * This is separated from grpc-client.ts to avoid circular dependencies with
+ * Supabase:
+ *   supabase.ts → devAuth (this file) for session storage,
+ *   grpc-client.ts → supabase for the auth interceptor.
+ *
+ * The interceptor chain comes from `buildInterceptors({ withAuth: false })`
+ * in `./transport`. That call site dynamic-imports Supabase only inside the
+ * auth interceptor body — and that interceptor isn't included when
+ * `withAuth: false` — so this file doesn't pull Supabase into its dependency
+ * graph at module load time. The cycle stays broken.
  */
 
 import { createClient } from "@connectrpc/connect";
-import type { Interceptor } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-web";
 import { create } from "@bufbuild/protobuf";
-import { 
+import {
   DevAuthLoadRequestSchema,
   DevAuthSaveRequestSchema,
   DevAuthClearRequestSchema,
@@ -19,12 +24,14 @@ import {
   SystemService,
 } from "../gen/reliant/v1/system_pb";
 import { buildLocalhostUrl } from "../lib/protocol";
+import { buildInterceptors } from "./transport";
 
-// Simple logger that doesn't depend on the main logger module
+// Minimal local logger. Avoids depending on `@/lib/logger` to keep the
+// pre-auth bootstrap path's import graph small. The interceptor chain
+// supplied by buildInterceptors already covers per-RPC request/error
+// logging; this is only for the transport-creation event.
 const log = {
   info: (...args: unknown[]) => console.log('[gRPC-Unauth]', ...args),
-  error: (...args: unknown[]) => console.error('[gRPC-Unauth]', ...args),
-  warn: (...args: unknown[]) => console.warn('[gRPC-Unauth]', ...args),
 };
 
 // Get gRPC base URL - simplified version without Electron config dependencies
@@ -54,19 +61,6 @@ const getGRPCBaseURL = (): string | null => {
   return fallbackUrl;
 };
 
-// Simple error logging interceptor (no auth)
-const errorInterceptor: Interceptor = (next) => async (req) => {
-  try {
-    log.info('DevAuth request:', req.method.name);
-    const result = await next(req);
-    log.info('DevAuth request succeeded:', req.method.name);
-    return result;
-  } catch (error) {
-    log.error('DevAuth request failed:', req.method.name, error);
-    throw error;
-  }
-};
-
 // Lazy-initialized transport
 let _transport: ReturnType<typeof createConnectTransport> | null = null;
 let _currentBaseURL: string | null = null;
@@ -81,9 +75,17 @@ const getTransport = () => {
   // Recreate transport if URL changed
   if (!_transport || _currentBaseURL !== currentBaseURL) {
     _currentBaseURL = currentBaseURL;
+    log.info('Creating DevAuth transport', currentBaseURL);
+    // interceptors via buildInterceptors — see api/transport.ts
+    //
+    // withAuth: false skips the bearer-token + 401-auto-signout interceptors
+    // (DevAuth runs *before* a session exists; a 401 here is a normal
+    // "not logged in yet" signal, not a stale token). Timeout / tracing /
+    // error logging / upgrade-modal still apply so the chain matches the
+    // other transports below the auth layer.
     _transport = createConnectTransport({
       baseUrl: currentBaseURL,
-      interceptors: [errorInterceptor],
+      interceptors: buildInterceptors({ withAuth: false }),
       useBinaryFormat: false,
     });
   }

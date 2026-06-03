@@ -1,20 +1,24 @@
 /**
- * Upgrade-modal Connect interceptor — shared by every Connect transport in the
- * app (`api/grpc-client.ts` and `services/controlPlane/client.ts`).
+ * Backend-signalled-modal Connect interceptor — shared by every Connect
+ * transport in the app (`api/grpc-client.ts` and
+ * `services/controlPlane/client.ts`).
  *
- * Background: the backend signals "quota hit, please upgrade" by returning
- * Connect `ResourceExhausted` with two response headers attached:
- *   - `x-reliant-reason`      machine-readable reason code (e.g.
- *                             "free_tier_compute_minutes")
- *   - `x-reliant-upgrade-url` optional path/URL to the upgrade page
+ * Background: control-plane signals two kinds of "UI should intervene"
+ * conditions via response headers on Connect errors:
  *
- * The UI translates that into an `UpgradeRequiredModal` opened via the
- * `useModalStore`. Without this interceptor on a given transport, the user
- * sees only a raw error toast on that transport's calls — which is exactly
- * how the project picker's "Resume daemon" button leaked before this module
- * existed: it routes through `services/controlPlane/client.ts`, which built
- * its own transport with only an auth interceptor, so `ResourceExhausted`
- * from the per-org compute cap surfaced as toast text instead of the modal.
+ *   1. Quota exhausted (Code.ResourceExhausted, x-reliant-reason set)
+ *      -> opens UpgradeRequiredModal with the reason + optional upgrade URL.
+ *   2. Billing email missing (Code.InvalidArgument,
+ *      x-reliant-reason=billing_email_missing)
+ *      -> opens BillingEmailRequiredModal so the user can call
+ *      BillingService.UpdateBillingEmail and retry.
+ *
+ * Without this interceptor on a given transport, the user sees only a raw
+ * error toast on that transport's calls — which is exactly how the project
+ * picker's "Resume daemon" button leaked before this module existed: it
+ * routed through `services/controlPlane/client.ts`, which built its own
+ * transport with only an auth interceptor, so `ResourceExhausted` from the
+ * per-org compute cap surfaced as toast text instead of the modal.
  *
  * The interceptor RE-THROWS the error after opening the modal — callers'
  * catch/try/finally semantics stay intact (mutations roll back, retries
@@ -34,52 +38,84 @@ import { logger } from "../lib/logger";
 const RELIANT_REASON_HEADER = "x-reliant-reason";
 const RELIANT_UPGRADE_URL_HEADER = "x-reliant-upgrade-url";
 
-let _upgradeModalInFlight = false;
+// Stable contract with control-plane; mirrors
+// internal/service/svcbilling/connecterr.go.
+const BILLING_EMAIL_MISSING_REASON = "billing_email_missing";
+
+let _backendModalInFlight = false;
 
 export const upgradeInterceptor: Interceptor = (next) => async (req) => {
   try {
     return await next(req);
   } catch (error) {
-    if (
-      !(error instanceof ConnectError) ||
-      error.code !== Code.ResourceExhausted
-    ) {
+    if (!(error instanceof ConnectError)) {
       throw error;
     }
     const reason = error.metadata.get(RELIANT_REASON_HEADER) ?? "";
-    if (!reason || _upgradeModalInFlight) {
+
+    if (
+      error.code === Code.InvalidArgument &&
+      reason === BILLING_EMAIL_MISSING_REASON
+    ) {
+      if (!_backendModalInFlight) {
+        openModalOnce("billing-email-required", {
+          message: error.rawMessage || error.message,
+        });
+      }
       throw error;
     }
-    const upgradeUrl = error.metadata.get(RELIANT_UPGRADE_URL_HEADER) ?? "";
 
-    _upgradeModalInFlight = true;
+    if (error.code === Code.ResourceExhausted && reason) {
+      if (!_backendModalInFlight) {
+        const upgradeUrl = error.metadata.get(RELIANT_UPGRADE_URL_HEADER) ?? "";
+        openModalOnce("upgrade-required", {
+          reason,
+          message: error.rawMessage || error.message,
+          upgradeUrl,
+        });
+      }
+      throw error;
+    }
+
+    throw error;
+  }
+};
+
+function openModalOnce<K extends "upgrade-required" | "billing-email-required">(
+  id: K,
+  // Lazy-typed because we can't import the heavy modalStore types here
+  // without creating an eager dependency cycle (modalStore -> components
+  // -> transport -> interceptor -> modalStore).
+  data: unknown,
+): void {
+  _backendModalInFlight = true;
+  void (async () => {
     try {
       const { useModalStore } = await import("../store/modalStore");
-      useModalStore.getState().openModal("upgrade-required", {
-        reason,
-        message: error.rawMessage || error.message,
-        upgradeUrl,
-      });
-      // Reset the single-fire guard when the modal closes so a later quota
-      // hit (different feature) opens a new one.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      useModalStore.getState().openModal(id, data as any);
+      // Reset the single-fire guard when this modal closes so a later
+      // event (different feature, possibly different modal) opens fresh.
       const unsub = useModalStore.subscribe((s) => {
-        if (s.activeModal !== "upgrade-required") {
-          _upgradeModalInFlight = false;
+        if (s.activeModal !== id) {
+          _backendModalInFlight = false;
           unsub();
         }
       });
     } catch (modalErr) {
-      logger.error("[upgradeInterceptor] Failed to open upgrade modal", modalErr);
-      _upgradeModalInFlight = false;
+      logger.error(
+        "[upgradeInterceptor] Failed to open backend-signalled modal",
+        modalErr,
+      );
+      _backendModalInFlight = false;
     }
-    throw error;
-  }
-};
+  })();
+}
 
 /**
  * Test-only reset. Vitest suites that mount the modal store can call this
  * between cases to make sure the single-fire guard doesn't leak across tests.
  */
 export function __resetUpgradeModalGuardForTests(): void {
-  _upgradeModalInFlight = false;
+  _backendModalInFlight = false;
 }

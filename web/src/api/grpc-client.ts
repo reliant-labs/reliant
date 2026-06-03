@@ -1,7 +1,6 @@
-import { createClient, ConnectError, Code } from "@connectrpc/connect";
-import type { Interceptor, Client } from "@connectrpc/connect";
+import { createClient } from "@connectrpc/connect";
+import type { Client } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-web";
-import { trace, context, SpanStatusCode, SpanKind, propagation, type Span } from '@opentelemetry/api';
 import { SystemService } from "../gen/reliant/v1/system_pb";
 import { PlanService } from "../gen/reliant/v1/plan_pb";
 import { TaskService } from "../gen/reliant/v1/task_pb";
@@ -26,22 +25,17 @@ import { PresetService } from "../gen/reliant/v1/preset_pb";
 import { DaemonRegistryService } from "../gen/reliant/v1/daemon_registry_pb";
 import { DaemonTokenService } from "../gen/reliant/v1/daemon_token_pb";
 import { QuestionService } from "../gen/reliant/v1/question_pb";
-import { supabase } from "../lib/supabase";
 import { logger } from "../lib/logger";
-import * as Sentry from "@sentry/react";
 import { buildLocalhostUrl } from "../lib/protocol";
-import { upgradeInterceptor } from "./upgradeInterceptor";
 import {
-  DEFAULT_GRPC_TIMEOUT_MS,
-  FILE_OPERATION_TIMEOUT_MS,
-  CHAT_OPERATION_TIMEOUT_MS,
-  MCP_OPERATION_TIMEOUT_MS,
-  UPLOAD_TIMEOUT_MS,
-  WORKTREE_OPERATION_TIMEOUT_MS,
-  OAUTH_TIMEOUT_MS,
-  OAUTH_EXCHANGE_TIMEOUT_MS,
-  PROVIDER_VALIDATION_TIMEOUT_MS,
-} from "../lib/constants";
+  buildInterceptors,
+  setCurrentBaseURL,
+  setDaemonLastSeen as _setDaemonLastSeenInTransport,
+} from "./transport";
+
+// Re-export setDaemonLastSeen for backwards compatibility — globalUpdatesStore
+// imports it from this module today.
+export const setDaemonLastSeen = _setDaemonLastSeenInTransport;
 
 // Detect if running in Electron and get gRPC URL
 // Returns null if config not yet available (Electron loading)
@@ -76,349 +70,6 @@ const getGRPCBaseURL = (): string | null => {
     grpcPort,
   });
   return fallbackUrl;
-};
-
-// ---- Daemon last-seen header ----
-// Module-level state set by globalUpdatesStore to avoid circular imports.
-let _daemonLastSeen: number | null = null;
-/** Called by globalUpdatesStore when a DAEMON_HEARTBEAT event arrives. */
-export function setDaemonLastSeen(unixSeconds: number): void {
-  _daemonLastSeen = unixSeconds;
-}
-
-// Attaches x-daemon-last-seen header so the server can skip the
-// IsDaemonOnline DB query when the daemon was recently seen.
-const daemonLastSeenInterceptor: Interceptor = (next) => async (req) => {
-  if (_daemonLastSeen !== null) {
-    req.header.set("x-daemon-last-seen", String(_daemonLastSeen));
-  }
-  return await next(req);
-};
-
-// Auth interceptor to add JWT token to requests
-const authInterceptor: Interceptor = (next) => async (req) => {
-  // Check for API key auth first (stored by ApiKeyLogin)
-  const apiKey = localStorage.getItem('reliant-api-key');
-  if (apiKey) {
-    req.header.set("Authorization", `Bearer ${apiKey}`);
-    logger.info("[gRPC Client] API key auth set for request:", {
-      method: req.method.name,
-    });
-    return await next(req);
-  }
-
-  try {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    if (session?.access_token) {
-      req.header.set("Authorization", `Bearer ${session.access_token}`);
-      logger.info("[gRPC Client] Auth token set for request:", {
-        method: req.method.name,
-        tokenLength: session.access_token.length,
-      });
-    } else {
-      logger.warn("[gRPC Client] No auth token available for request:", {
-        method: req.method.name,
-        hasSession: !!session,
-        isElectron: !!window.electronAPI,
-      });
-    }
-  } catch (error) {
-    logger.error("[gRPC Client] Error getting session in interceptor:", {
-      method: req.method.name,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-
-  return await next(req);
-};
-
-
-// Methods that need longer timeouts (0 = no timeout, handled by streaming layer)
-const LONG_TIMEOUT_METHODS: Record<string, number> = {
-  // File operations - may involve large files
-  "ReadFile": FILE_OPERATION_TIMEOUT_MS,
-  "WriteFile": FILE_OPERATION_TIMEOUT_MS,
-  "ListFiles": FILE_OPERATION_TIMEOUT_MS,
-  // Chat operations that involve workflows - initial setup can take time
-  "CreateChat": CHAT_OPERATION_TIMEOUT_MS,
-  "SendMessage": CHAT_OPERATION_TIMEOUT_MS,
-  // MCP operations - external process startup can be slow
-  "StartServer": MCP_OPERATION_TIMEOUT_MS,
-  "InstallServer": MCP_OPERATION_TIMEOUT_MS,
-  "RestartServer": MCP_OPERATION_TIMEOUT_MS,
-  "UpdateServerConfig": MCP_OPERATION_TIMEOUT_MS,
-  "UninstallServer": MCP_OPERATION_TIMEOUT_MS,
-  "CallTool": MCP_OPERATION_TIMEOUT_MS,
-  // Attachment uploads - depends on file size
-  "Upload": UPLOAD_TIMEOUT_MS,
-  // Worktree operations - involve git commands and copied files that can exceed 30s
-  "CreateWorktree": WORKTREE_OPERATION_TIMEOUT_MS,
-  "DeleteWorktree": WORKTREE_OPERATION_TIMEOUT_MS,
-  "ArchiveWorktree": WORKTREE_OPERATION_TIMEOUT_MS,
-  "UnarchiveWorktree": WORKTREE_OPERATION_TIMEOUT_MS,
-  "ImportWorktree": WORKTREE_OPERATION_TIMEOUT_MS,
-  "DiscoverWorktrees": WORKTREE_OPERATION_TIMEOUT_MS,
-  "RecreateWorktree": WORKTREE_OPERATION_TIMEOUT_MS,
-  "GetWorktreeChanges": WORKTREE_OPERATION_TIMEOUT_MS,
-  "GetWorktreeGitStatus": WORKTREE_OPERATION_TIMEOUT_MS,
-  "GetWorktreeCommits": WORKTREE_OPERATION_TIMEOUT_MS,
-  "StageFiles": WORKTREE_OPERATION_TIMEOUT_MS,
-  "UnstageFiles": WORKTREE_OPERATION_TIMEOUT_MS,
-  "CommitWorktree": WORKTREE_OPERATION_TIMEOUT_MS,
-  "PushWorktree": WORKTREE_OPERATION_TIMEOUT_MS,
-  "PullWorktree": WORKTREE_OPERATION_TIMEOUT_MS,
-  "GetWorktreePR": WORKTREE_OPERATION_TIMEOUT_MS,
-  "CreateWorktreePR": WORKTREE_OPERATION_TIMEOUT_MS,
-  "RevertFiles": WORKTREE_OPERATION_TIMEOUT_MS,
-  // OAuth flows — no timeout, user can take as long as needed (cancelled via AbortController)
-  "StartOAuthFlow": OAUTH_TIMEOUT_MS,
-  // OAuth token exchange - external network call
-  "CompleteClaudeOAuth": OAUTH_EXCHANGE_TIMEOUT_MS,
-  "CompleteCodexOAuth": OAUTH_EXCHANGE_TIMEOUT_MS,
-  // Provider API key validation - external network call
-  "ValidateProviderAPIKey": PROVIDER_VALIDATION_TIMEOUT_MS,
-  "UpdateProviderAPIKey": PROVIDER_VALIDATION_TIMEOUT_MS,
-
-  // Streaming methods should not have client-side timeout
-  // These are server-streaming RPCs that manage their own lifecycle via AbortController
-  "StreamUserUpdates": 0,
-  "StreamProcessOutput": 0,
-};
-
-// Timeout interceptor to prevent requests from hanging indefinitely.
-// Races the RPC against a timer since req.signal is readonly and timeoutMs
-// is consumed by the transport before interceptors run.
-const timeoutInterceptor: Interceptor = (next) => async (req) => {
-  const methodName = req.method.name;
-  const timeoutMs = LONG_TIMEOUT_METHODS[methodName] ?? DEFAULT_GRPC_TIMEOUT_MS;
-
-  // Skip timeout for streaming methods (timeout = 0)
-  if (timeoutMs === 0) {
-    return next(req);
-  }
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => {
-    controller.abort(new ConnectError(`${methodName} timed out after ${timeoutMs}ms`, Code.DeadlineExceeded));
-  }, timeoutMs);
-
-  // Abort our timer if the request's own signal fires first
-  const onUpstreamAbort = () => {
-    clearTimeout(timer);
-    controller.abort(req.signal.reason);
-  };
-  if (req.signal.aborted) {
-    clearTimeout(timer);
-    throw ConnectError.from(req.signal.reason);
-  }
-  req.signal.addEventListener("abort", onUpstreamAbort);
-
-  try {
-    return await Promise.race([
-      next(req),
-      new Promise<never>((_, reject) => {
-        controller.signal.addEventListener("abort", () => {
-          reject(ConnectError.from(controller.signal.reason));
-        });
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-    req.signal.removeEventListener("abort", onUpstreamAbort);
-  }
-};
-
-// OTel tracing interceptor — creates a span per RPC and injects W3C traceparent/tracestate headers
-const tracingInterceptor: Interceptor = (next) => async (req) => {
-  const tracer = trace.getTracer('reliant-frontend');
-  const spanName = `grpc.${req.service.typeName}/${req.method.name}`;
-
-  return tracer.startActiveSpan(spanName, { kind: SpanKind.CLIENT }, async (span: Span) => {
-    try {
-      // Inject W3C trace context into request headers
-      const carrier: Record<string, string> = {};
-      propagation.inject(context.active(), carrier);
-      for (const [key, value] of Object.entries(carrier)) {
-        req.header.set(key, value);
-      }
-
-      span.setAttribute('rpc.system', 'connect');
-      span.setAttribute('rpc.service', req.service.typeName);
-      span.setAttribute('rpc.method', req.method.name);
-
-      const result = await next(req);
-      span.setStatus({ code: SpanStatusCode.OK });
-      return result;
-    } catch (error) {
-      span.setStatus({
-        code: SpanStatusCode.ERROR,
-        message: error instanceof Error ? error.message : String(error),
-      });
-      span.recordException(error instanceof Error ? error : new Error(String(error)));
-      throw error;
-    } finally {
-      span.end();
-    }
-  });
-};
-
-// Connect error codes that are client-side / expected and should NOT be reported to Sentry.
-const SENTRY_SKIP_CODES = new Set([
-  Code.Canceled,
-  Code.InvalidArgument,
-  Code.NotFound,
-  Code.AlreadyExists,
-  Code.PermissionDenied,
-  Code.Unauthenticated,
-  Code.FailedPrecondition,
-  Code.Aborted,
-  Code.OutOfRange,
-  Code.ResourceExhausted,
-]);
-
-// Error logging interceptor
-const errorInterceptor: Interceptor = (next) => async (req) => {
-  const startTime = Date.now();
-  try {
-    logger.info("[gRPC Client] Request starting:", {
-      service: req.service.typeName,
-      method: req.method.name,
-      baseUrl: _currentBaseURL,
-      isElectron: !!window.electronAPI,
-      protocol: window.location.protocol,
-      hasReliantConfig: !!window.RELIANT_CONFIG,
-      configGrpcUrl: window.RELIANT_CONFIG?.grpcUrl,
-    });
-    const result = await next(req);
-    const duration = Date.now() - startTime;
-    logger.debug("[gRPC Client] Request succeeded:", {
-      service: req.service.typeName,
-      method: req.method.name,
-      durationMs: duration,
-    });
-    return result;
-  } catch (error) {
-    const duration = Date.now() - startTime;
-    // Log detailed error info
-    logger.error("[gRPC Client] Request failed:", {
-      service: req.service.typeName,
-      method: req.method.name,
-      baseUrl: _currentBaseURL,
-      isElectron: !!window.electronAPI,
-      protocol: window.location.protocol,
-      durationMs: duration,
-      error,
-      errorMessage: error instanceof Error ? error.message : String(error),
-      errorCode: (error as any)?.code,
-      errorName: (error as any)?.name,
-      errorCause: (error as any)?.cause,
-    });
-
-    // Report non-trivial errors to Sentry
-    const shouldReport =
-      !(error instanceof ConnectError) ||
-      !SENTRY_SKIP_CODES.has(error.code);
-
-    if (shouldReport) {
-      Sentry.captureException(error, {
-        tags: {
-          grpc_service: req.service.typeName,
-          grpc_method: req.method.name,
-          grpc_code: error instanceof ConnectError ? Code[error.code] : "unknown",
-        },
-        extra: {
-          baseUrl: _currentBaseURL,
-          durationMs: duration,
-        },
-      });
-    }
-
-    throw error;
-  }
-};
-
-// The UpgradeRequiredModal-on-ResourceExhausted interceptor is defined in
-// ./upgradeInterceptor.ts so the cloud control-plane transport
-// (services/controlPlane/client.ts) can share the same module-level
-// single-fire guard. Without that sharing, the project picker's "Resume
-// daemon" call (which uses the controlPlane transport) couldn't pop the
-// modal — it surfaced as a raw toast instead.
-
-// Auto-sign-out on 401 with an active session.
-//
-// When the backend rejects a stored token (most often because the token was
-// issued by a different Supabase project, or the user was deleted server-side,
-// or signing keys rotated), we clear the local session and redirect to /auth.
-// Without this, users get stuck on a loading screen with no recourse.
-//
-// Safety guards:
-// - Only fires when a session/API key is currently set (no sign-in→sign-out loops).
-// - Single-flight: a burst of parallel 401s triggers exactly one sign-out.
-// - Skipped on /auth so a 401 there doesn't trigger a redirect to itself.
-let _signOutInFlight = false;
-const unauthInterceptor: Interceptor = (next) => async (req) => {
-  try {
-    return await next(req);
-  } catch (error) {
-    if (
-      !(error instanceof ConnectError) ||
-      error.code !== Code.Unauthenticated ||
-      _signOutInFlight
-    ) {
-      throw error;
-    }
-
-    let hasSession = !!localStorage.getItem("reliant-api-key");
-    if (!hasSession) {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        hasSession = !!session?.access_token;
-      } catch {
-        // Fall through with hasSession=false; nothing to clear.
-      }
-    }
-    if (!hasSession) throw error;
-
-    _signOutInFlight = true;
-    logger.warn(
-      "[gRPC Client] 401 with active session — token rejected by backend; signing out",
-      {
-        service: req.service.typeName,
-        method: req.method.name,
-        message: error.message,
-      },
-    );
-    Sentry.captureMessage("Auto sign-out on 401 with active session", {
-      level: "warning",
-      tags: {
-        grpc_service: req.service.typeName,
-        grpc_method: req.method.name,
-      },
-    });
-
-    try {
-      const { useAuthStore } = await import("../store/authStore");
-      await useAuthStore.getState().signOut();
-    } catch (signOutErr) {
-      logger.error("[gRPC Client] Auto sign-out failed", signOutErr);
-    }
-
-    // Hard redirect clears React Query caches and any in-flight retries that
-    // would otherwise keep firing 401s against the dead session.
-    if (
-      typeof window !== "undefined" &&
-      !window.location.pathname.startsWith("/auth")
-    ) {
-      window.location.href = "/auth";
-    } else {
-      _signOutInFlight = false;
-    }
-
-    throw error;
-  }
 };
 
 // Create the Connect transport
@@ -466,9 +117,10 @@ export const getControlPlaneTransport = () => {
   const cpURL = import.meta.env.VITE_CONTROL_PLANE_API_URL;
   if (!cpURL) return null;
   if (!_controlPlaneTransport) {
+    // interceptors via buildInterceptors — see api/transport.ts
     _controlPlaneTransport = createConnectTransport({
       baseUrl: cpURL,
-      interceptors: [timeoutInterceptor, authInterceptor, daemonLastSeenInterceptor, tracingInterceptor, errorInterceptor, upgradeInterceptor, unauthInterceptor],
+      interceptors: buildInterceptors({ withAuth: true }),
       useBinaryFormat: false,
     });
   }
@@ -501,11 +153,13 @@ export const getTransport = () => {
     }
     
     _currentBaseURL = currentBaseURL;
+    // Mirror the URL into transport.ts so errorInterceptor can include it
+    // in Sentry/log context.
+    setCurrentBaseURL(currentBaseURL);
+    // interceptors via buildInterceptors — see api/transport.ts
     _transport = createConnectTransport({
       baseUrl: currentBaseURL,
-      // Order: timeout -> auth -> error logging
-      // Timeout is outermost so it applies to the full request lifecycle
-      interceptors: [timeoutInterceptor, authInterceptor, daemonLastSeenInterceptor, tracingInterceptor, errorInterceptor, upgradeInterceptor, unauthInterceptor],
+      interceptors: buildInterceptors({ withAuth: true }),
       // Use JSON for easier debugging during migration
       // Can switch to binary later for performance
       useBinaryFormat: false,

@@ -32,9 +32,16 @@ function writeDismissed(sig: string): void {
 
 export function ResumeDaemonPill() {
   const { data: daemons = [] } = useDaemonList();
-  const resume = useResumeDaemon();
   const [dismissedSig, setDismissedSig] = useState<string>(() => readDismissed());
   const [error, setError] = useState("");
+  // The hook routes reasoned-quota errors to the global UpgradeRequiredModal
+  // and only fires onError for OTHER failures. Without that filter the pill
+  // used to render "[resource_exhausted] …" under the modal.
+  const resume = useResumeDaemon({
+    onError: (err) => {
+      setError(err instanceof Error ? err.message : "Failed to resume environment");
+    },
+  });
 
   const { active, suspended } = useMemo(() => {
     const a: Daemon[] = [];
@@ -62,13 +69,9 @@ export function ResumeDaemonPill() {
   if (active.length > 0 || suspended.length === 0) return null;
   if (dismissedSig && dismissedSig === sig) return null;
 
-  const handleResume = async (id: string) => {
+  const handleResume = (id: string) => {
     setError("");
-    try {
-      await resume.mutateAsync(id);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to resume environment");
-    }
+    resume.mutate(id);
   };
 
   const busyId =

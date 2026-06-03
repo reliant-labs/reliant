@@ -13,11 +13,17 @@ import { cn } from "@/lib/utils";
 import { getIsDev } from "@/lib/constants";
 import { grpcClient } from "@/api/grpc-client";
 import { CreateDaemonTokenRequestSchema } from "@/gen/reliant/v1/daemon_token_pb";
+import {
+  DaemonStatus,
+  type DaemonInfo,
+} from "@/gen/reliant/v1/daemon_registry_pb";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { useEventBus } from "@/lib/event-context";
 import {
   useCloudEligibility,
   useCreateDaemon,
+  useResumeDaemon,
+  isReasonedQuotaError,
 } from "@/hooks/useOnboardingQueries";
 import type {
   CodeSource,
@@ -137,6 +143,27 @@ function getPrimaryDownload(os: DetectedOS): DownloadLink | null {
   return DOWNLOAD_LINKS.find((link) => link.os === os) ?? null;
 }
 
+// The "where do you want to run your daemon?" step is bootstrap-only: it
+// disambiguates a brand-new user between "Reliant Cloud" and "your own
+// machine." Once a daemon — local OR managed — is registered to the user's
+// account, that bootstrap question is moot. The post-onboarding workspace
+// picker handles selection when multiple daemons exist.
+//
+// We treat ACTIVE and IDLE as "usable":
+//   - ACTIVE: actively connected (the obvious case).
+//   - IDLE:   registered but currently transitioning (cloud daemon
+//             provisioning, local daemon just-came-up between gateway
+//             reconnect attempts). The user has clearly already picked a
+//             daemon location, so the where-question shouldn't re-appear.
+// DISCONNECTED / UNSPECIFIED are skipped: those signal a stale row or an
+// unhealthy registration where the user genuinely needs to (re)decide.
+export function hasUsableDaemonForOnboarding(daemons: DaemonInfo[]): boolean {
+  return daemons.some(
+    (d) =>
+      d.status === DaemonStatus.ACTIVE || d.status === DaemonStatus.IDLE,
+  );
+}
+
 function codeSourceForCompute(
   current: CodeSource | undefined,
   compute: ComputeChoice,
@@ -250,8 +277,13 @@ export function ComputeStep({
   const reason = isDev ? null : cloudReason;
   const loading = isDev ? false : cloudLoading;
 
-  // Daemon mutations via React Query
+  // Daemon mutations via React Query. We use mutateAsync below because the
+  // surrounding handler needs to sequence listDaemons → resume/create →
+  // updatePlan; the hooks' default-onError still suppresses reasoned-quota
+  // errors from the toast/banner side, but mutateAsync rejects regardless,
+  // so the outer catch must consult isReasonedQuotaError before surfacing.
   const createDaemonMutation = useCreateDaemon();
+  const resumeDaemonMutation = useResumeDaemon();
 
   const [detectedOS, setDetectedOS] = useState<DetectedOS>(() =>
     getInitialOS(),
@@ -297,7 +329,7 @@ export function ComputeStep({
       // (e.g. from a prior session) we either reuse it or resume it — the
       // server-side CreateDaemon is NOT a wake-up for a suspended workspace,
       // so calling it again leaves a suspended daemon suspended.
-      const { listDaemons, hasActiveDaemon, resumeDaemon } =
+      const { listDaemons, hasActiveDaemon } =
         await import("@/services/controlPlane/daemon");
       const existing = await listDaemons();
       const daemons = existing.daemons;
@@ -315,10 +347,11 @@ export function ComputeStep({
         const daemonId = daemons[0]?.id ?? "";
         if (daemonId) {
           try {
-            await resumeDaemon(daemonId);
+            await resumeDaemonMutation.mutateAsync(daemonId);
           } catch {
             // Surface as a soft error via the provisioning UI rather than
-            // blocking onboarding.
+            // blocking onboarding. The hook already routes reasoned-quota
+            // errors into the upgrade modal.
           }
         }
       } else {
@@ -343,7 +376,7 @@ export function ComputeStep({
             const fallbackId = fallback.daemons[0]?.id ?? "";
             if (fallbackId) {
               try {
-                await resumeDaemon(fallbackId);
+                await resumeDaemonMutation.mutateAsync(fallbackId);
               } catch {
                 /* non-fatal */
               }
@@ -369,6 +402,12 @@ export function ComputeStep({
       trackEvent("onboarding_compute_selected", { compute: "cloud" });
       onNext();
     } catch (err) {
+      // Reasoned-quota errors are already routed into the global
+      // UpgradeRequiredModal by upgradeInterceptor — don't double-surface as
+      // an inline error or toast.
+      if (isReasonedQuotaError(err)) {
+        return;
+      }
       const msg =
         err instanceof Error ? err.message : "Failed to start hosted daemon";
       setError(msg);
@@ -416,30 +455,42 @@ export function ComputeStep({
     await commitLocalAndAdvance(Boolean(activeDaemon));
   };
 
-  // Auto-skip the compute step whenever a daemon is already active. Two
-  // cases this covers:
+  // Auto-skip the compute step whenever the user already has a usable
+  // daemon registered. Cases this covers:
   //   1. Initial mount with a daemon already running (Electron's main
   //      process auto-starts the daemon on first launch; users on the web
   //      may also have one from a prior session).
   //   2. User clicked "I'll connect my own", followed the instructions,
   //      and their newly-started daemon just connected.
+  //   3. The cloud-dev `make dev-electron` pairing: the Electron-spawned
+  //      local daemon registers with the control-plane right after sign-in.
+  //      Its lifecycle status flips ACTIVE the moment the NATS connect
+  //      event lands; in the gap between registration and that flip it
+  //      sits at IDLE — we still treat it as "user has a daemon" so the
+  //      bootstrap "where" question doesn't briefly appear and then vanish.
   // The `!startingCloud` guard avoids racing handleCloud: while the cloud
-  // flow is running, an already-active daemon (e.g. a stale local one)
+  // flow is running, an already-usable daemon (e.g. a stale local one)
   // must not pre-empt the cloud commit.
+  //
+  // We wait for `!daemonLoading` so the initial in-flight ListDaemons
+  // doesn't briefly read as "no daemons" and let the user click through
+  // the prompt before detection settles.
+  const hasUsableDaemon = hasUsableDaemonForOnboarding(daemons);
   useEffect(() => {
-    if (!activeDaemon) return;
+    if (daemonLoading) return;
+    if (!hasUsableDaemon) return;
     if (startingCloud) return;
     if (hasAdvanced.current) return;
     if (!hasTrackedConnectedRef.current) {
       hasTrackedConnectedRef.current = true;
       trackEvent("onboarding_daemon_connected");
     }
-    void commitLocalAndAdvance(true);
+    void commitLocalAndAdvance(Boolean(activeDaemon));
     // commitLocalAndAdvance closes over plan.codeSource / plan.intent /
     // updatePlan / onNext, but the hasAdvanced ref guards against re-entry,
     // so we intentionally narrow the dep list to the trigger conditions.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeDaemon, startingCloud]);
+  }, [hasUsableDaemon, daemonLoading, startingCloud]);
 
   const handleGeneratePat = async () => {
     setGeneratingPat(true);
