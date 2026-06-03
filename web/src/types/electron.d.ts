@@ -138,6 +138,7 @@ export interface ReliantConfig {
   useTLS: boolean;
   temporalUIPort?: number;
   adminURL?: string;
+  controlPlaneURL?: string;
 }
 
 declare global {

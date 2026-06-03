@@ -6,6 +6,7 @@ declare global {
       grpcUrl?: string;
       useTLS?: boolean;
       adminURL?: string;
+      controlPlaneURL?: string;
     };
   }
 }

@@ -11,6 +11,7 @@ declare global {
       grpcUrl?: string;
       useTLS?: boolean;
       adminURL?: string;
+      controlPlaneURL?: string;
     };
     electronAPI?: {
       getConfig: () => typeof window.RELIANT_CONFIG;
