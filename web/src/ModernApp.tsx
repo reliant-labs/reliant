@@ -1610,7 +1610,17 @@ function App() {
         {showChatSidebar && (
           <ResizableSidebar storageKey="chat-sidebar-width">
             <div id="layout-left-sidebar" className="flex flex-col h-full">
-              <Sidebar paddingClass="" />
+              <Sidebar
+                paddingClass=""
+                onNavigateToProjectPicker={handleNavigateToProjectPicker}
+                onOpenWorkflows={() => {
+                  navigate({ to: '/workflow' });
+                }}
+                onOpenChatSearch={() => setShowChatSearch(true)}
+                onNavigateToSettings={() => {
+                  navigate({ to: '/settings' });
+                }}
+              />
             </div>
           </ResizableSidebar>
         )}
@@ -1627,7 +1637,17 @@ function App() {
           >
             <ResizableSidebar storageKey="chat-sidebar-width">
               <div className="flex flex-col h-full">
-                <Sidebar paddingClass="" />
+                <Sidebar
+                  paddingClass=""
+                  onNavigateToProjectPicker={handleNavigateToProjectPicker}
+                  onOpenWorkflows={() => {
+                    navigate({ to: '/workflow' });
+                  }}
+                  onOpenChatSearch={() => setShowChatSearch(true)}
+                  onNavigateToSettings={() => {
+                    navigate({ to: '/settings' });
+                  }}
+                />
               </div>
             </ResizableSidebar>
           </div>

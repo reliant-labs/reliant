@@ -31,6 +31,10 @@ import {
   Bell,
   GitBranch,
   Check,
+  FolderOpen,
+  Search,
+  Settings,
+  Workflow,
 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
 import { useChatList, useArchivedChats, useDeleteChat, useRenameChat, useUnarchiveChat } from "../../hooks/chat-queries";
@@ -99,6 +103,39 @@ const SORT_OPTIONS: {
 
 interface SidebarProps {
   paddingClass?: string;
+  onNavigateToProjectPicker?: () => void;
+  onOpenWorkflows?: () => void;
+  onOpenChatSearch?: () => void;
+  onNavigateToSettings?: () => void;
+}
+
+interface SidebarNavButtonProps {
+  icon: ReactNode;
+  label: string;
+  onClick?: () => void;
+  testId?: string;
+}
+
+function SidebarNavButton({ icon, label, onClick, testId }: SidebarNavButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!onClick}
+      className={cn(
+        "flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors",
+        "text-foreground/85 hover:bg-muted/50 hover:text-foreground",
+        "focus:outline-none focus:ring-2 focus:ring-ring/40",
+        "disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
+      )}
+      data-testid={testId}
+    >
+      <span className="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground">
+        {icon}
+      </span>
+      <span className="min-w-0 truncate">{label}</span>
+    </button>
+  );
 }
 
 // Worktree group structure
@@ -551,7 +588,13 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
   );
 });
 
-function SidebarComponent({ paddingClass = "" }: SidebarProps) {
+function SidebarComponent({
+  paddingClass = "",
+  onNavigateToProjectPicker,
+  onOpenWorkflows,
+  onOpenChatSearch,
+  onNavigateToSettings,
+}: SidebarProps) {
   const currentProject = useProjectStore((state) => state.currentProject);
   const { data: chats = [] } = useChatList(currentProject?.id);
   // Activity from activityStore (SINGLE SOURCE OF TRUTH)
@@ -1398,7 +1441,33 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
         <div className="h-12 border-b border-border/40 bg-card"></div>
       )}
 
-      <div className="border-b border-border/50 bg-card px-3 py-2">
+      <div className="border-b border-border/50 bg-card px-3 pb-3 pt-2">
+        <nav className="space-y-1" aria-label="Chat sidebar navigation">
+          <SidebarNavButton
+            icon={<Edit className="h-4 w-4" />}
+            label="New chat"
+            onClick={handleNewChat}
+            testId="create-chat-button"
+          />
+          <SidebarNavButton
+            icon={<FolderOpen className="h-4 w-4" />}
+            label="Projects"
+            onClick={onNavigateToProjectPicker}
+          />
+          <SidebarNavButton
+            icon={<Workflow className="h-4 w-4" />}
+            label="Workflows"
+            onClick={onOpenWorkflows}
+          />
+          <SidebarNavButton
+            icon={<Search className="h-4 w-4" />}
+            label="Search"
+            onClick={onOpenChatSearch}
+          />
+        </nav>
+      </div>
+
+      <div className="border-b border-border/40 bg-card px-3 py-2">
         <div className="flex items-center gap-1.5">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <button
@@ -1537,25 +1606,6 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
             </div>
           </Dropdown>
 
-          <Tooltip
-            content="New chat"
-            placement="bottom"
-            delay={300}
-            wrapperClassName={CHAT_HEADER_ACTION_TOOLTIP_CLASS}
-          >
-            <button
-              type="button"
-              onClick={handleNewChat}
-              className={cn(
-                CHAT_HEADER_ACTION_BUTTON_CLASS,
-                "bg-primary text-primary-foreground hover:bg-primary/90"
-              )}
-              aria-label="New chat"
-              data-testid="create-chat-button"
-            >
-              <Plus className={CHAT_HEADER_ACTION_ICON_CLASS} />
-            </button>
-          </Tooltip>
         </div>
       </div>
 
@@ -1644,6 +1694,14 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
             </div>
           )}
         </div>
+      </div>
+
+      <div className="border-t border-border/40 bg-card px-3 py-2">
+        <SidebarNavButton
+          icon={<Settings className="h-4 w-4" />}
+          label="Settings"
+          onClick={onNavigateToSettings}
+        />
       </div>
 
       {/* Context Menu */}
