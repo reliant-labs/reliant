@@ -274,12 +274,13 @@ export function NewChatView({
     <div className="flex flex-col h-full min-h-0 bg-background">
       {/* Welcome Content */}
       <div className="relative flex-1 min-h-0 px-8 overflow-y-auto">
-        <ResumeDaemonPill />
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_38%,hsl(var(--muted)_/_0.16),transparent_62%)]" />
 
         <div className="relative z-10 min-h-full w-full max-w-5xl mx-auto grid grid-rows-[auto_1fr_auto]">
           <div className="flex items-center justify-center pt-12">
             <div className="w-full max-w-xl mx-auto flex flex-col items-center text-center gap-4">
+              <ResumeDaemonPill placement="inline" />
+
               <div className="inline-flex h-12 w-12 items-center justify-center">
                 <ReliantIcon className="h-12 w-12" />
               </div>
