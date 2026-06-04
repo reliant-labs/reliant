@@ -200,6 +200,10 @@ describe("Sidebar selected chat scroll", () => {
     expect(screen.getByRole("button", { name: "Workflows" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Search" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Workflows" })).toHaveAttribute(
+      "data-onboarding",
+      "workflow-button"
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Projects" }));
     fireEvent.click(screen.getByRole("button", { name: "Workflows" }));
