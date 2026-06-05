@@ -31,6 +31,11 @@ import {
   Bell,
   GitBranch,
   Check,
+  MessageSquare,
+  FolderOpen,
+  Search,
+  Settings,
+  Workflow,
 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
 import { useChatList, useArchivedChats, useDeleteChat, useRenameChat, useUnarchiveChat } from "../../hooks/chat-queries";
@@ -99,6 +104,41 @@ const SORT_OPTIONS: {
 
 interface SidebarProps {
   paddingClass?: string;
+  onNavigateToProjectPicker?: () => void;
+  onOpenWorkflows?: () => void;
+  onOpenChatSearch?: () => void;
+  onNavigateToSettings?: () => void;
+}
+
+interface SidebarNavButtonProps {
+  icon: ReactNode;
+  label: string;
+  onClick?: () => void;
+  testId?: string;
+  onboardingId?: string;
+}
+
+function SidebarNavButton({ icon, label, onClick, testId, onboardingId }: SidebarNavButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!onClick}
+      className={cn(
+        "flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors",
+        "text-foreground/85 hover:bg-muted/50 hover:text-foreground",
+        "focus:outline-none focus:ring-2 focus:ring-ring/40",
+        "disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
+      )}
+      data-testid={testId}
+      data-onboarding={onboardingId}
+    >
+      <span className="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground">
+        {icon}
+      </span>
+      <span className="min-w-0 truncate">{label}</span>
+    </button>
+  );
 }
 
 // Worktree group structure
@@ -417,26 +457,28 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
   emptyState,
 }: WorktreeGroupComponentProps) {
   return (
-    <div className="mb-1.5">
+    <div className="mb-1">
       {/* Worktree Container */}
       <div
         className={cn(
-          "overflow-hidden rounded-lg border transition-all duration-150",
+          "overflow-hidden rounded-md transition-all duration-150",
           hasActiveChat
-            ? "border-primary/20 bg-primary/10"
-            : "border-transparent hover:border-border/50 hover:bg-muted/30"
+            ? "bg-primary/10"
+            : "bg-transparent hover:bg-muted/30"
         )}
       >
         {/* Header */}
         <div
-          className="flex w-full items-center gap-1.5 px-2.5 py-1.5 group/header"
+          className="group/header flex h-8 w-full items-center gap-1"
           onContextMenu={(e) => onContextMenu?.(e)}
         >
           <button
             onClick={onToggle}
-            className="flex min-w-0 flex-1 items-center gap-2 rounded-md text-left transition-all duration-150"
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left transition-all duration-150"
           >
-            {icon}
+            <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+              {icon}
+            </span>
 
             <div className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
               <div
@@ -524,7 +566,7 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
 
         {/* Chats List */}
         {isExpanded && chats.length > 0 && (
-          <div className="space-y-0.5 px-1.5 pb-1.5 pt-0.5">
+          <div className="space-y-0.5 pb-1 pt-0.5 pl-6">
             {chats.map((chat) => (
               <div key={chat.id}>{renderChat(chat)}</div>
             ))}
@@ -539,7 +581,7 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
               emptyState.onClick?.();
             }}
             className={cn(
-              "mx-2 mb-2 w-auto rounded-md p-2 text-left text-xs text-muted-foreground transition-colors",
+              "mb-1 ml-6 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors",
               emptyState.onClick ? "hover:bg-muted/50 hover:text-foreground cursor-pointer" : "cursor-default"
             )}
           >
@@ -551,7 +593,13 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
   );
 });
 
-function SidebarComponent({ paddingClass = "" }: SidebarProps) {
+function SidebarComponent({
+  paddingClass = "",
+  onNavigateToProjectPicker,
+  onOpenWorkflows,
+  onOpenChatSearch,
+  onNavigateToSettings,
+}: SidebarProps) {
   const currentProject = useProjectStore((state) => state.currentProject);
   const { data: chats = [] } = useChatList(currentProject?.id);
   // Activity from activityStore (SINGLE SOURCE OF TRUTH)
@@ -1398,31 +1446,39 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
         <div className="h-12 border-b border-border/40 bg-card"></div>
       )}
 
-      <div className="border-b border-border/50 bg-card px-3 py-2">
-        <div className="flex items-center gap-1.5">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setChatListTab("active")}
-              className={cn(
-                "text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ring/40",
-                chatListTab === "active" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-              )}
-              aria-pressed={chatListTab === "active"}
-            >
-              Active
-            </button>
-            <button
-              type="button"
-              onClick={() => setChatListTab("archived")}
-              className={cn(
-                "text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ring/40",
-                chatListTab === "archived" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-              )}
-              aria-pressed={chatListTab === "archived"}
-            >
-              Archived
-            </button>
+      <div className="border-b border-border/50 bg-card px-3 pb-3 pt-2">
+        <nav className="space-y-1" aria-label="Chat sidebar navigation">
+          <SidebarNavButton
+            icon={<Edit className="h-4 w-4" />}
+            label="New chat"
+            onClick={handleNewChat}
+            testId="create-chat-button"
+          />
+          <SidebarNavButton
+            icon={<FolderOpen className="h-4 w-4" />}
+            label="Projects"
+            onClick={onNavigateToProjectPicker}
+          />
+          <SidebarNavButton
+            icon={<Workflow className="h-4 w-4" />}
+            label="Workflows"
+            onClick={onOpenWorkflows}
+            onboardingId="workflow-button"
+          />
+          <SidebarNavButton
+            icon={<Search className="h-4 w-4" />}
+            label="Search"
+            onClick={onOpenChatSearch}
+          />
+        </nav>
+      </div>
+
+      <div className="bg-card px-3 pb-2 pt-3">
+        <div className="mb-2 flex items-center gap-2">
+          <div className="flex min-w-0 flex-1 items-center px-2">
+            <div className="min-w-0 flex-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Chats
+            </div>
           </div>
 
           <Dropdown
@@ -1441,7 +1497,7 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
                   onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}
                   className={cn(
                     CHAT_HEADER_ACTION_BUTTON_CLASS,
-                    "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                    "h-6 w-6 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                   )}
                   aria-label="Sort chats"
                 >
@@ -1452,6 +1508,36 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
             contentClassName="min-w-[190px]"
           >
             <div className="py-1">
+              <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                List
+              </div>
+              <button
+                onClick={() => setChatListTab("active")}
+                className={cn(
+                  "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-2 text-xs transition-colors hover:bg-muted/50",
+                  chatListTab === "active" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  <span>Active chats</span>
+                </div>
+                {chatListTab === "active" && <Check className="h-3.5 w-3.5 text-primary" />}
+              </button>
+              <button
+                onClick={() => setChatListTab("archived")}
+                className={cn(
+                  "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-2 text-xs transition-colors hover:bg-muted/50",
+                  chatListTab === "archived" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <Archive className="h-3.5 w-3.5" />
+                  <span>Archived chats</span>
+                </div>
+                {chatListTab === "archived" && <Check className="h-3.5 w-3.5 text-primary" />}
+              </button>
+              <div className="my-1 h-px bg-border/60" />
               <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Sort by
               </div>
@@ -1490,7 +1576,7 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
                   onClick={() => setIsViewMenuOpen(!isViewMenuOpen)}
                   className={cn(
                     CHAT_HEADER_ACTION_BUTTON_CLASS,
-                    "text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                    "h-6 w-6 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                   )}
                   aria-label="View options"
                 >
@@ -1537,30 +1623,11 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
             </div>
           </Dropdown>
 
-          <Tooltip
-            content="New chat"
-            placement="bottom"
-            delay={300}
-            wrapperClassName={CHAT_HEADER_ACTION_TOOLTIP_CLASS}
-          >
-            <button
-              type="button"
-              onClick={handleNewChat}
-              className={cn(
-                CHAT_HEADER_ACTION_BUTTON_CLASS,
-                "bg-primary text-primary-foreground hover:bg-primary/90"
-              )}
-              aria-label="New chat"
-              data-testid="create-chat-button"
-            >
-              <Plus className={CHAT_HEADER_ACTION_ICON_CLASS} />
-            </button>
-          </Tooltip>
         </div>
       </div>
 
       <div className="flex flex-1 flex-col overflow-hidden">
-        <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+        <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-y-auto px-3 pb-3 pt-1">
           {chatListTab === "active" ? (
             viewMode === "grouped" ? (
               activeGroups.length > 0 && (
@@ -1610,11 +1677,11 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
 
           {/* Empty State */}
           {!hasAnyVisibleChats && (
-            <div className="py-8 text-center text-muted-foreground">
-              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-border/50 bg-muted/40">
-                {chatListTab === "active" ? <Plus className="h-5 w-5" /> : <Archive className="h-5 w-5" />}
+            <div className="px-2 py-8 text-center text-muted-foreground">
+              <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-border/50 bg-muted/30">
+                {chatListTab === "active" ? <Plus className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
               </div>
-              <p className="mb-1 text-sm font-medium">{emptyTitle}</p>
+              <p className="mb-1 text-sm font-medium text-foreground/75">{emptyTitle}</p>
               <p className="text-xs text-muted-foreground/70">{emptyDescription}</p>
               {chatListTab === "active" && (
                 <div className="mt-3 flex flex-col items-center gap-2">
@@ -1644,6 +1711,14 @@ function SidebarComponent({ paddingClass = "" }: SidebarProps) {
             </div>
           )}
         </div>
+      </div>
+
+      <div className="border-t border-border/40 bg-card px-3 py-2">
+        <SidebarNavButton
+          icon={<Settings className="h-4 w-4" />}
+          label="Settings"
+          onClick={onNavigateToSettings}
+        />
       </div>
 
       {/* Context Menu */}

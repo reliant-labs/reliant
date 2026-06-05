@@ -3,12 +3,9 @@ import {
   Square,
   X,
   Activity,
-  Settings,
   PanelBottom,
   PanelRight,
   PanelLeft,
-  Workflow,
-  FolderOpen,
   FolderGit2,
 } from "lucide-react";
 import {
@@ -59,7 +56,6 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
   (
     {
       windowAligned = true,
-      onNavigateToSettings,
       onNavigateToWorktrees,
       onNavigateToSettingsSection: _onNavigateToSettingsSection,
       onNavigateToChats: _onNavigateToChats,
@@ -71,7 +67,6 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
       onToggleFileBrowser,
       onToggleChatSidebar,
       onOpenPageOverview: _onOpenPageOverview,
-      onOpenWorkflows,
     },
     ref
   ) => {
@@ -198,43 +193,6 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
             </Tooltip>
           )}
 
-          {/* Project Picker button */}
-          {!projectPickerMode && onNavigateToProjectPicker && (
-            <Tooltip
-              content="Switch Project"
-              placement="bottom"
-              delay={300}
-            >
-              <button
-                onClick={onNavigateToProjectPicker}
-                className="header-icon-btn p-1.5 rounded text-xs transition-colors"
-                aria-label="Switch Project"
-                style={noDragRegionStyle}
-              >
-                <FolderOpen className="w-4 h-4" />
-              </button>
-            </Tooltip>
-          )}
-
-          {/* Workflows button */}
-          {!projectPickerMode && onOpenWorkflows && (
-            <Tooltip
-              content={`Workflows (${formatShortcut("onOpenWorkflows")})`}
-              placement="bottom"
-              delay={300}
-            >
-              <button
-                onClick={onOpenWorkflows}
-                className="header-icon-btn p-1.5 rounded text-xs transition-colors"
-                aria-label="Open Workflows"
-                style={noDragRegionStyle}
-                data-onboarding="workflow-button"
-              >
-                <Workflow className="w-4 h-4" />
-              </button>
-            </Tooltip>
-          )}
-
         </div>
 
         {/* Center - Project name and workspace selector */}
@@ -300,6 +258,9 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
             )}
 
 
+            {/* Daemon status */}
+            {!projectPickerMode && <DaemonStatusDot />}
+
             {/* Terminal button */}
             {!projectPickerMode && onToggleTerminal && (
               <Tooltip
@@ -358,30 +319,8 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
               </Tooltip>
             )}
 
-            {/* Daemon and Config Health Indicators */}
-            {!projectPickerMode && <DaemonStatusDot />}
+            {/* Config Health Indicator */}
             {!projectPickerMode && <ConfigHealthIndicator />}
-
-            {/* Settings button */}
-            {!projectPickerMode && onNavigateToSettings && (
-              <Tooltip
-                content={`Settings (${formatShortcut("onToggleSettings")})`}
-                placement="bottom"
-                delay={300}
-              >
-                <button
-                  onClick={(e) => {
-                    // Prevent any potential event bubbling
-                    e.stopPropagation();
-                    onNavigateToSettings();
-                  }}
-                  className="header-icon-btn p-1.5 rounded text-xs transition-colors"
-                  aria-label="Settings"
-                >
-                  <Settings className="w-4 h-4" />
-                </button>
-              </Tooltip>
-            )}
 
             {/* Window controls for non-Mac Electron only — browsers can't drive these */}
             {showWindowControls && (

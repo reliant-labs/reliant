@@ -133,6 +133,11 @@ function WorkspacesStep(props: StepProps) {
 
 function WorkflowIntroStep(props: StepProps) {
   const step = getStepById("workflow-intro")!;
+
+  useEffect(() => {
+    useWorkspaceStateStore.getState().setLeftSidebarExpandedGlobal(true);
+  }, []);
+
   return (
     <OnboardingSpotlight
       targetSelector={step.targetSelector!}

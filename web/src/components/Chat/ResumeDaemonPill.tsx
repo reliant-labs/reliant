@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Play, X } from "lucide-react";
+import { ExternalLink, Play, X } from "lucide-react";
 import { useDaemonList, useResumeDaemon } from "@/hooks/useOnboardingQueries";
+import { getAdminURL } from "@/lib/constants";
+import { openExternalLink } from "@/lib/open-link";
 import {
   DAEMON_STATUS_ACTIVE,
   DAEMON_STATUS_SUSPENDED,
@@ -8,6 +10,12 @@ import {
 } from "@/services/controlPlane/daemon";
 
 const DISMISS_KEY = "reliant.resumeDaemonPill.dismissed";
+const DEFAULT_UPGRADE_PATH = "/billing";
+const PUBLIC_PRICING_URL = "https://reliantlabs.io/pricing";
+
+interface ResumeDaemonPillProps {
+  placement?: "absolute" | "inline";
+}
 
 function signature(ids: string[]): string {
   return ids.slice().sort().join(",");
@@ -30,7 +38,23 @@ function writeDismissed(sig: string): void {
   }
 }
 
-export function ResumeDaemonPill() {
+function formatResumeError(error: string): string {
+  const normalized = error.toLowerCase();
+  if (normalized.includes("resource_exhausted") || normalized.includes("free tier compute limit")) {
+    return "Free tier compute limit reached. Upgrade your plan to resume this environment.";
+  }
+  return error;
+}
+
+function upgradeUrl(): string {
+  const base = getAdminURL();
+  if (base) {
+    return `${base.replace(/\/$/, "")}${DEFAULT_UPGRADE_PATH}`;
+  }
+  return PUBLIC_PRICING_URL;
+}
+
+export function ResumeDaemonPill({ placement = "absolute" }: ResumeDaemonPillProps) {
   const { data: daemons = [] } = useDaemonList();
   const [dismissedSig, setDismissedSig] = useState<string>(() => readDismissed());
   const [error, setError] = useState("");
@@ -39,7 +63,8 @@ export function ResumeDaemonPill() {
   // used to render "[resource_exhausted] …" under the modal.
   const resume = useResumeDaemon({
     onError: (err) => {
-      setError(err instanceof Error ? err.message : "Failed to resume environment");
+      const message = err instanceof Error ? err.message : "Failed to resume environment";
+      setError(formatResumeError(message));
     },
   });
 
@@ -74,11 +99,21 @@ export function ResumeDaemonPill() {
     resume.mutate(id);
   };
 
+  const handleUpgrade = () => {
+    void openExternalLink(upgradeUrl());
+  };
+
   const busyId =
     resume.isPending && typeof resume.variables === "string" ? resume.variables : null;
 
   return (
-    <div className="pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2">
+    <div
+      className={
+        placement === "absolute"
+          ? "pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2"
+          : "pointer-events-none relative z-20 flex w-full justify-center"
+      }
+    >
       <div className="pointer-events-auto flex flex-col items-center gap-1">
         <div className="inline-flex items-center gap-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-1 text-sm shadow-md backdrop-blur">
           {suspended.length > 1 ? (
@@ -104,8 +139,16 @@ export function ResumeDaemonPill() {
           </button>
         </div>
         {error && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-1 text-xs text-destructive">
-            {error}
+          <div className="max-w-[min(560px,calc(100vw-3rem))] rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-center text-xs leading-relaxed text-destructive shadow-sm backdrop-blur">
+            <span>{error}</span>
+            <button
+              type="button"
+              onClick={handleUpgrade}
+              className="ml-2 inline-flex items-center gap-1 font-medium underline-offset-2 hover:underline"
+            >
+              Upgrade plan
+              <ExternalLink className="h-3 w-3" />
+            </button>
           </div>
         )}
       </div>

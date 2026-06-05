@@ -11,6 +11,7 @@
  * plumbing.
  */
 import { useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { Github, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -46,6 +47,21 @@ function formatUpdated(updatedAt: string): string {
   return `${Math.floor(diffDays / 365)}y ago`;
 }
 
+function parseGitHubRepoUrl(value: string): Pick<GitRepo, "fullName" | "cloneUrl"> | null {
+  const trimmed = value.trim();
+  const match = trimmed.match(
+    /^(?:https?:\/\/github\.com\/|git@github\.com:)([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/i,
+  );
+  if (!match) return null;
+
+  const owner = match[1];
+  const repo = match[2];
+  return {
+    fullName: `${owner}/${repo}`,
+    cloneUrl: `https://github.com/${owner}/${repo}.git`,
+  };
+}
+
 interface RepoSelectorProps {
   /** Invoked when the user confirms a repo selection. */
   onSelect: (repo: GitRepo) => void;
@@ -69,6 +85,9 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
   const reposCredentialMissing = isMissingGitCredentialError(reposQueryError);
 
   const [search, setSearch] = useState("");
+  const [manualUrl, setManualUrl] = useState("");
+  const [manualBranch, setManualBranch] = useState("main");
+  const [manualError, setManualError] = useState("");
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState("");
 
@@ -121,6 +140,26 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
     }
   };
 
+  const handleManualSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setManualError("");
+
+    const parsed = parseGitHubRepoUrl(manualUrl);
+    if (!parsed) {
+      setManualError("Enter a GitHub URL like https://github.com/org/repo");
+      return;
+    }
+
+    onSelect({
+      ...parsed,
+      defaultBranch: manualBranch.trim() || "main",
+      description: "",
+      private: false,
+      language: "",
+      updatedAt: "",
+    });
+  };
+
   return (
     <div className="space-y-3">
       {reposCredentialMissing && (
@@ -151,6 +190,54 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
       )}
 
       {error && <p className="text-xs text-destructive">{error}</p>}
+
+      <form
+        onSubmit={handleManualSubmit}
+        className="rounded-lg border border-border/40 bg-muted/20 p-3 space-y-2"
+      >
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_120px_auto]">
+          <input
+            type="text"
+            placeholder="https://github.com/org/repo"
+            value={manualUrl}
+            onChange={(e) => {
+              setManualUrl(e.target.value);
+              setManualError("");
+            }}
+            className={cn(
+              "min-w-0 rounded-lg border border-border/40 bg-background px-3 py-2 text-sm text-foreground",
+              "placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50",
+            )}
+          />
+          <input
+            type="text"
+            placeholder="main"
+            value={manualBranch}
+            onChange={(e) => setManualBranch(e.target.value)}
+            className={cn(
+              "min-w-0 rounded-lg border border-border/40 bg-background px-3 py-2 text-sm text-foreground",
+              "placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50",
+            )}
+            aria-label="Branch"
+          />
+          <button
+            type="submit"
+            className={cn(
+              "rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors",
+              "hover:bg-primary/90",
+            )}
+          >
+            Use URL
+          </button>
+        </div>
+        {manualError ? (
+          <p className="text-xs text-destructive">{manualError}</p>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Paste any GitHub repo URL your connected credential can access.
+          </p>
+        )}
+      </form>
 
       {/* Search */}
       <div className="relative">
