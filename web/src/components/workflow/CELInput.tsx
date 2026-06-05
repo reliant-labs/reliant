@@ -27,6 +27,8 @@ export interface CELInputProps {
   pureExpression?: boolean;
   /** Hide the "Use {{ }} for dynamic values" hint (default: false) */
   hideCELHint?: boolean;
+  /** DOM id applied to the underlying input (for `<label htmlFor>` association) */
+  id?: string;
 
   // Completion context (optional)
   nodeIds?: string[];
@@ -57,6 +59,7 @@ export function CELInput({
   showCELIndicator = true,
   pureExpression = false,
   hideCELHint = false,
+  id,
   nodeIds,
   nodeTypeMap,
   inputParams,
@@ -101,6 +104,7 @@ export function CELInput({
         rows={rows}
         disabled={disabled}
         pureExpression={pureExpression}
+        id={id}
         nodeIds={resolvedNodeIds}
         nodeTypeMap={resolvedNodeTypeMap}
         inputParams={resolvedInputParams}

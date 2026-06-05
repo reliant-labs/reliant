@@ -7,6 +7,7 @@ import { unwrapProtoValue } from '../../../lib/protoValueUtils'
 import type { NodeExecutionStatus } from '../../../lib/workflow-flow'
 import { NodeStatusWrapper, buildHandleClassName } from './NodeStatusWrapper'
 import { normalizeWorkflowRef } from '../useWorkflowInputs'
+import { useWorkflowNodeCallbacks } from '../WorkflowNodeCallbacksContext'
 
 interface WorkflowNodeProps {
   id: string
@@ -25,6 +26,8 @@ export const WorkflowNode = memo(({ id, data, selected }: WorkflowNodeProps) => 
   const workflowRef = getStepRef(step)
   const inlineWorkflow = getStepInline(step)
   const inputs = getStepInputs(step)
+
+  const { onExpandWorkflow } = useWorkflowNodeCallbacks()
 
   const targetConnections = useNodeConnections({ handleType: 'target' })
   const sourceConnections = useNodeConnections({ handleType: 'source' })
@@ -47,16 +50,15 @@ export const WorkflowNode = memo(({ id, data, selected }: WorkflowNodeProps) => 
   const isTargetConnected = targetConnections.length > 0
   const isSourceConnected = sourceConnections.length > 0
 
-  // Handle expand click - dispatch custom event like LoopNode does
+  // Handle expand click — typed callback from WorkflowNodeCallbacksContext.
   const handleExpandClick = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (!canExpand) return
-
-    const event = new CustomEvent('workflow-expand', {
-      detail: { workflowNodeId: id, step },
-      bubbles: true,
-    })
-    document.dispatchEvent(event)
+    if (!onExpandWorkflow) {
+      console.warn('[WorkflowNode] expand clicked but no onExpandWorkflow provider')
+      return
+    }
+    onExpandWorkflow(id, step)
   }
 
   return (

@@ -11,7 +11,10 @@
 
 import { create } from "zustand";
 
-export type ModalId = "api-key-setup" | "upgrade-required";
+export type ModalId =
+  | "api-key-setup"
+  | "upgrade-required"
+  | "billing-email-required";
 
 export interface UpgradeRequiredData {
   // Machine-readable reason (X-Reliant-Reason header). The modal uses this
@@ -27,9 +30,18 @@ export interface UpgradeRequiredData {
   upgradeUrl: string;
 }
 
+export interface BillingEmailRequiredData {
+  // Human-readable message from the backend (Connect error). Shown under
+  // the title as the explanation. The actual fix is identical regardless
+  // of message — the user must set a billing_email via
+  // BillingService.UpdateBillingEmail — so this is informational only.
+  message: string;
+}
+
 export interface ModalData {
   "api-key-setup": undefined;
   "upgrade-required": UpgradeRequiredData;
+  "billing-email-required": BillingEmailRequiredData;
 }
 
 interface ModalState {

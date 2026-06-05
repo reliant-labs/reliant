@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Edit3, Eye } from "lucide-react";
 import type { ProtoFieldSchema } from "../../../types/workflowFieldSchema";
 import type { LoopStep } from "../../../types/workflow";
@@ -12,7 +12,6 @@ import {
   getStepInputs,
   withLoopArgs,
 } from "../../../types/workflow";
-import { CELExpressionInput } from "../CELInput";
 import { ProtoFieldRenderer } from "../ProtoFieldRenderer";
 import { inputDefToSchema } from "../../../lib/nodeFieldAdapter";
 import { getInputUI } from "../../../lib/inputHelpers";
@@ -75,6 +74,39 @@ const ON_FAILURE_SCHEMA: ProtoFieldSchema = {
   helpText: "Controls how parallel loops behave when an iteration fails.",
 };
 
+const ITEMS_SCHEMA: ProtoFieldSchema = {
+  key: "items",
+  label: "Items",
+  widget: "text",
+  valueKind: "string",
+  celExpressionOnly: true,
+  placeholder: "nodes.decompose.output.components",
+  helpText:
+    "CEL expression that evaluates to a list or map of iteration items for parallel execution.",
+};
+
+const KEY_SCHEMA: ProtoFieldSchema = {
+  key: "key",
+  label: "Key (optional)",
+  widget: "text",
+  valueKind: "string",
+  celExpressionOnly: true,
+  placeholder: "iter.item.name",
+  helpText:
+    "CEL expression used to key each iteration in nodes.<loop>._results. Defaults to the iteration index.",
+};
+
+const WHILE_SCHEMA: ProtoFieldSchema = {
+  key: "while",
+  label: "Continue while",
+  widget: "text",
+  valueKind: "string",
+  celExpressionOnly: true,
+  placeholder: "outputs.done == true",
+  helpText:
+    "CEL expression that ends the loop when true. Access iteration outputs via 'outputs' namespace.",
+};
+
 export function LoopStepConfig({
   step,
   onUpdate,
@@ -120,12 +152,17 @@ export function LoopStepConfig({
 
   const inlineWorkflow = getStepInline(step);
 
-  // Initialize inline workflow lazily. Doing this in render fires onUpdate
-  // mid-render, which marks the workflow dirty just by viewing the loop step
-  // and risks an extra paint. The effect only runs when the step lacks an
-  // inline body for real.
+  // Initialize inline workflow lazily — but only ONCE per step id. Without
+  // this guard, every time the user selects a loop step that genuinely has no
+  // inline body, the effect fires and marks the workflow dirty with no real
+  // user edit. The ref ensures we only auto-initialize the first time we see
+  // a given step lacking an inline body.
+  const initializedStepRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (inlineWorkflow) return;
+    if (isReadOnly) return;
+    if (initializedStepRef.current === step.id) return;
+    initializedStepRef.current = step.id;
     onUpdate(
       withLoopArgs(step, {
         inline: {
@@ -140,7 +177,7 @@ export function LoopStepConfig({
     // We intentionally only run when the inline body is missing; including
     // `step` or `onUpdate` would re-run on every keystroke and overwrite edits.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inlineWorkflow]);
+  }, [inlineWorkflow, step.id, isReadOnly]);
 
   return (
     <>
@@ -152,40 +189,32 @@ export function LoopStepConfig({
         <Section>
           <SectionLabel>Iteration</SectionLabel>
           <SectionFields>
-            <CELExpressionInput
-              label="Items"
-              helpTooltip="CEL expression that evaluates to a list or map of iteration items for parallel execution."
+            <ProtoFieldRenderer
+              schema={ITEMS_SCHEMA}
               value={itemsValue}
-              onChange={(val) =>
+              onChange={(value) =>
                 onUpdate(
                   withLoopArgs(step, {
-                    items: val ? celString(val) as any : undefined,
+                    items: typeof value === "string" && value ? celString(value) : undefined,
                   }) as LoopStep,
                 )
               }
-              placeholder="nodes.decompose.output.components"
-              celContext="default"
               disabled={isReadOnly}
-              hideCELHint
-              showCELIndicator={false}
+              celContext="default"
             />
 
-            <CELExpressionInput
-              label="Key (optional)"
-              helpTooltip="CEL expression used to key each iteration in nodes.<loop>._results. Defaults to the iteration index."
+            <ProtoFieldRenderer
+              schema={KEY_SCHEMA}
               value={keyValue}
-              onChange={(val) =>
+              onChange={(value) =>
                 onUpdate(
                   withLoopArgs(step, {
-                    key: val || undefined,
+                    key: typeof value === "string" && value ? value : undefined,
                   }) as LoopStep,
                 )
               }
-              placeholder="iter.item.name"
-              celContext="default"
               disabled={isReadOnly}
-              hideCELHint
-              showCELIndicator={false}
+              celContext="default"
             />
 
             <ProtoFieldRenderer
@@ -206,22 +235,18 @@ export function LoopStepConfig({
       ) : (
         <Section>
           <SectionLabel>While Condition</SectionLabel>
-          <CELExpressionInput
-            label="Continue while"
-            helpTooltip="CEL expression that ends the loop when true. Access iteration outputs via 'outputs' namespace."
+          <ProtoFieldRenderer
+            schema={WHILE_SCHEMA}
             value={whileValue}
-            onChange={(val) =>
+            onChange={(value) =>
               onUpdate(
                 withLoopArgs(step, {
-                  while: val ? directCel(val) as any : undefined,
+                  while: typeof value === "string" && value ? directCel(value) : undefined,
                 }) as LoopStep,
               )
             }
-            placeholder="outputs.done == true"
-            celContext="loop_while"
             disabled={isReadOnly}
-            hideCELHint
-            showCELIndicator={false}
+            celContext="loop_while"
           />
         </Section>
       )}

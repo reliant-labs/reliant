@@ -2,29 +2,48 @@
 // CEL VALUE CONSTRUCTORS
 // Proto types CelString and DirectCelBool reject plain strings.
 // Use these constructors to create values for CEL-capable fields.
+//
+// The returned objects carry the proto Message<> brand via a single cast
+// inside each factory, so call sites don't need `as any` to assign them to
+// proto fields.
 // =============================================================================
 
+import type {
+  CelString,
+  DirectCelBool,
+  ProjectConfig,
+} from '../gen/reliant/v1/workflow_v2_pb'
+
 /** Construct a CelString literal: { value: { case: 'literal', value } } */
-export function celLiteral(s: string) {
-  return { value: { case: 'literal' as const, value: s } }
+export function celLiteral(s: string): CelString {
+  return { value: { case: 'literal' as const, value: s } } as CelString
 }
 
 /** Construct a CelString expression: { value: { case: 'expr', value } } */
-export function celExpr(s: string) {
-  return { value: { case: 'expr' as const, value: s } }
+export function celExpr(s: string): CelString {
+  return { value: { case: 'expr' as const, value: s } } as CelString
 }
 
 /**
  * Construct a CelString from a raw string.
  * Strings containing {{ }} are treated as expressions, otherwise literals.
  */
-export function celString(s: string) {
+export function celString(s: string): CelString {
   return s.includes('{{') ? celExpr(s) : celLiteral(s)
 }
 
 /** Construct a DirectCelBool expression: { expr } */
-export function directCel(expr: string) {
-  return { expr }
+export function directCel(expr: string): DirectCelBool {
+  return { expr } as DirectCelBool
+}
+
+/**
+ * Construct a `ProjectConfig` from a literal path string. Wraps the path in
+ * `celString` and brand-casts the outer object once so call sites can pass
+ * the result straight to proto fields without `as any`.
+ */
+export function projectConfigLiteral(path: string): ProjectConfig {
+  return { path: celString(path) } as ProjectConfig
 }
 
 // =============================================================================
@@ -98,6 +117,96 @@ export function normalizeCelString(value: unknown, fallback = ''): string {
   }
 
   return fallback
+}
+
+/**
+ * Normalizes plain numbers and CEL wrapper numeric values to a string.
+ *
+ * Returns the literal numeric value as a string, the CEL expression string,
+ * or `''` when the value is unrecognised. Used by `<input type="number">`
+ * controls that need a string for their `value` prop.
+ *
+ * Supports:
+ * - plain number / bigint / string
+ * - oneof shape: { value: { case: 'literal', value: number | bigint } }
+ * - oneof shape: { value: { case: 'expr', value: string } }
+ * - fallback shape: { literal: number | bigint } or { expr: string }
+ */
+export function normalizeCelNumberString(value: unknown): string {
+  if (typeof value === 'number' || typeof value === 'bigint') {
+    return String(value)
+  }
+
+  if (typeof value === 'string') {
+    return value
+  }
+
+  if (!isObjectRecord(value)) {
+    return ''
+  }
+
+  const wrapper = value as CelWrapper<number | bigint>
+
+  if (isObjectRecord(wrapper.value)) {
+    const oneof = wrapper.value as CelOneofValue<number | bigint>
+    if (oneof.case === 'literal' && (typeof oneof.value === 'number' || typeof oneof.value === 'bigint')) {
+      return String(oneof.value)
+    }
+    if (oneof.case === 'expr' && typeof oneof.value === 'string') {
+      return oneof.value
+    }
+  }
+
+  if (typeof wrapper.literal === 'number' || typeof wrapper.literal === 'bigint') {
+    return String(wrapper.literal)
+  }
+
+  if (typeof wrapper.expr === 'string') {
+    return wrapper.expr
+  }
+
+  return ''
+}
+
+/**
+ * Unwraps a CEL-wrapped literal value of arbitrary type `T`, returning either:
+ * - the literal `T` (e.g. a `ModelValue` object for model selectors);
+ * - the CEL expression string when the value is `{ case: 'expr' }`;
+ * - the raw `value` unchanged when it's already a `T` and not wrapped;
+ * - `undefined` when the value is not a recognised CEL wrapper.
+ *
+ * Useful for non-string scalar literals (objects, ModelSelectors) where the
+ * caller still wants to peek into the wrapper without committing to a
+ * `string` representation up front.
+ */
+export function unwrapCelLiteralOrExpr<T>(
+  value: unknown,
+): { kind: 'literal'; value: T } | { kind: 'expr'; value: string } | undefined {
+  if (!isObjectRecord(value)) {
+    return undefined
+  }
+
+  const wrapper = value as CelWrapper<T>
+
+  if (isObjectRecord(wrapper.value)) {
+    const oneof = wrapper.value as CelOneofValue<T>
+    if (oneof.case === 'literal' && oneof.value !== undefined) {
+      return { kind: 'literal', value: oneof.value as T }
+    }
+    if (oneof.case === 'expr' && typeof oneof.value === 'string') {
+      return { kind: 'expr', value: oneof.value }
+    }
+  }
+
+  if (wrapper.literal !== undefined) {
+    return { kind: 'literal', value: wrapper.literal as T }
+  }
+
+  if (typeof wrapper.expr === 'string') {
+    return { kind: 'expr', value: wrapper.expr }
+  }
+
+  return undefined
 }
 
 /**

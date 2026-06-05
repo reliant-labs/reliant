@@ -971,6 +971,21 @@ async function createWindow(options = {}) {
     return { action: "deny" };
   });
 
+  // Honor the renderer's beforeunload prompt (unsaved changes in the workflow
+  // builder, etc). Without this handler Electron silently allows the unload.
+  // event.preventDefault() here means "allow the navigation/close to proceed".
+  mainWindow.webContents.on("will-prevent-unload", (event) => {
+    const choice = dialog.showMessageBoxSync(mainWindow, {
+      type: "question",
+      buttons: ["Leave", "Stay"],
+      title: "Unsaved changes",
+      message: "You have unsaved changes. Are you sure you want to leave?",
+      defaultId: 1,
+      cancelId: 1,
+    });
+    if (choice === 0) event.preventDefault();
+  });
+
   mainWindow.webContents.on("will-navigate", (event, url) => {
     if (url !== mainWindow.webContents.getURL()) {
       event.preventDefault();
@@ -3789,7 +3804,11 @@ app.whenReady().then(async () => {
   // Start backend and window creation in parallel
   const backendCreateStart = Date.now();
   log.info("[Backend] Creating BackendManager instance...");
-  backendManager = new BackendManager();
+  // Inject authStorage so BackendManager can auto-mint a daemon PAT against
+  // the current --server origin before spawning the daemon binary. Without
+  // this, the daemon falls back to its own interactive registration flow,
+  // which is broken under headless Electron (no TTY).
+  backendManager = new BackendManager({ authStorage });
   log.info(`[Backend] ✓ BackendManager created in ${Date.now() - backendCreateStart}ms`);
 
   // Start backend in background (don't await yet)

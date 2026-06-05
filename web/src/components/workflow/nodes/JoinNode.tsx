@@ -17,7 +17,10 @@ interface JoinNodeProps {
 
 export const JoinNode = memo(({ data, selected }: JoinNodeProps) => {
   const { step, label, executionStatus, layoutDirection = 'horizontal' } = data
-  const joinMode = step.condition || 'all'
+  // step.condition is a DirectCelBool ({ expr: "all" | "any" }), not a raw
+  // string — extract the expression before comparing. Default to "all" to
+  // match the config panel.
+  const joinMode = step.condition?.expr || 'all'
 
   const targetConnections = useNodeConnections({ handleType: 'target' })
   const sourceConnections = useNodeConnections({ handleType: 'source' })

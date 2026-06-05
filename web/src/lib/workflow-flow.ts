@@ -113,6 +113,8 @@ export interface ConvertOptions {
   loopInfo?: Record<string, LoopNodeExecutionInfo>
   /** Whether nodes should be draggable (default: true for builder, false for viewer) */
   draggable?: boolean
+  /** Label for the workflow start node (default: "Workflow Start"). Used for "Loop Start" when entering a loop body. */
+  workflowStartLabel?: string
 }
 
 // Constants for switch node positioning
@@ -338,7 +340,7 @@ export function workflowToFlowElements(
   workflow: Workflow,
   options: ConvertOptions = {}
 ): WorkflowFlowElements {
-  const { executionStatus = {}, loopInfo = {}, draggable = true } = options
+  const { executionStatus = {}, loopInfo = {}, draggable = true, workflowStartLabel = 'Workflow Start' } = options
 
   if (!workflow.nodes || workflow.nodes.length === 0) {
     // Empty workflow - just return the start node
@@ -348,7 +350,7 @@ export function workflowToFlowElements(
       position: { x: 50, y: 200 },
       data: {
         eventType: 'started',
-        label: 'Workflow Start',
+        label: workflowStartLabel,
         executionStatus: executionStatus['workflow'],
       },
       draggable,
@@ -416,7 +418,9 @@ export function workflowToFlowElements(
   // for switches that are still referenced by workflow edges.
 
   // Create the workflow entry point node
-  const savedWorkflowPos = workflowWithLayout.ui?.positions?.['workflow']
+  // Accept "workflow" or legacy "started" position key (inline-edit bodies may use either)
+  const savedWorkflowPos =
+    workflowWithLayout.ui?.positions?.['workflow'] ?? workflowWithLayout.ui?.positions?.['started']
   const workflowNodePosition = (savedWorkflowPos?.x !== undefined && savedWorkflowPos?.y !== undefined)
     ? { x: savedWorkflowPos.x, y: savedWorkflowPos.y }
     : { x: 50, y: 200 }
@@ -426,7 +430,7 @@ export function workflowToFlowElements(
     position: workflowNodePosition,
     data: {
       eventType: 'started',
-      label: 'Workflow Start',
+      label: workflowStartLabel,
       executionStatus: executionStatus['workflow'],
     },
     draggable,

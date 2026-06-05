@@ -21,12 +21,12 @@ import { RepoSelector } from "./RepoSelector";
 
 import { toast } from "../../lib/toast-manager";
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
+import { useResumeDaemon } from "../../hooks/useOnboardingQueries";
 import { DaemonStatus } from "../../gen/reliant/v1/daemon_registry_pb";
 import { useGitHubCredential } from "../../hooks/useGitHubCredential";
 import { capabilities } from "../../services/controlPlane/capabilities";
 import {
   listDaemons as listCloudDaemons,
-  resumeDaemon,
   DAEMON_STATUS_ACTIVE,
   type Daemon as CloudDaemon,
 } from "../../services/controlPlane/daemon";
@@ -99,7 +99,6 @@ function isCloudDaemon(daemonType: string | undefined): boolean {
 //     link still routes to onboarding for "connect a new daemon".
 function NoActiveDaemonState() {
   const navigate = useNavigate();
-  const [resumingId, setResumingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const hasCloud = capabilities.cloudDaemons;
 
@@ -119,6 +118,27 @@ function NoActiveDaemonState() {
     staleTime: 5_000,
   });
 
+  // The hook owns the ResourceExhausted-with-reason suppression (the global
+  // upgradeInterceptor already opened the modal); we only see non-reasoned
+  // errors here and surface them as the inline banner + toast.
+  const resumeDaemonMutation = useResumeDaemon({
+    onSuccess: async () => {
+      // Refetch so the user sees the status flip toward ACTIVE; the picker
+      // page itself will rerender once useDaemonStatus picks up the new
+      // active daemon and the showConnectionInstructions branch flips off.
+      await refetch();
+    },
+    onError: (err) => {
+      const msg = err instanceof Error ? err.message : "Failed to resume daemon";
+      setError(msg);
+      toast.error(msg);
+    },
+  });
+  const resumingId =
+    resumeDaemonMutation.isPending && typeof resumeDaemonMutation.variables === "string"
+      ? resumeDaemonMutation.variables
+      : null;
+
   const goToOnboarding = useCallback(() => {
     // Clear the launch plan so onboarding starts at ComputeStep (it's the
     // first step whenever plan.compute is unset — see deriveStep in
@@ -126,33 +146,9 @@ function NoActiveDaemonState() {
     navigate({ to: "/onboarding", search: { plan: undefined } });
   }, [navigate]);
 
-  const handleResume = async (daemon: CloudDaemon) => {
-    setResumingId(daemon.id);
+  const handleResume = (daemon: CloudDaemon) => {
     setError(null);
-    try {
-      await resumeDaemon(daemon.id);
-      // Refetch so the user sees the status flip toward ACTIVE; the picker
-      // page itself will rerender once useDaemonStatus picks up the new
-      // active daemon and the showConnectionInstructions branch flips off.
-      await refetch();
-    } catch (err) {
-      // Quota gate? The shared upgradeInterceptor (api/upgradeInterceptor.ts)
-      // already popped the UpgradeRequiredModal with the per-reason copy.
-      // Suppress the inline toast/error so the user doesn't see a duplicate
-      // raw "[resource_exhausted] …" string under the modal.
-      if (
-        err instanceof ConnectError &&
-        err.code === Code.ResourceExhausted &&
-        err.metadata.get("x-reliant-reason")
-      ) {
-        return;
-      }
-      const msg = err instanceof Error ? err.message : "Failed to resume daemon";
-      setError(msg);
-      toast.error(msg);
-    } finally {
-      setResumingId(null);
-    }
+    resumeDaemonMutation.mutate(daemon.id);
   };
 
   if (!hasCloud) {

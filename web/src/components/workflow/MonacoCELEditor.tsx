@@ -15,6 +15,8 @@ export interface MonacoCELEditorProps {
   rows?: number;
   disabled?: boolean;
   pureExpression?: boolean;
+  /** DOM id applied to the underlying textarea for `<label htmlFor>` association */
+  id?: string;
   nodeIds?: string[];
   nodeTypeMap?: Record<string, string>;
   inputParams?: Record<string, { type: string; description?: string }>;
@@ -34,6 +36,7 @@ export function MonacoCELEditor({
   rows = 2,
   disabled = false,
   pureExpression = false,
+  id,
   nodeIds = [],
   nodeTypeMap = {},
   inputParams = {},
@@ -145,6 +148,15 @@ export function MonacoCELEditor({
     });
 
     editorRef.current = editor;
+
+    // Apply DOM id to Monaco's internal textarea so `<label htmlFor>` (and
+    // accessibility tools / `getByLabelText`) can locate the focusable input.
+    if (id) {
+      const textarea = containerRef.current.querySelector('textarea.inputarea');
+      if (textarea instanceof HTMLTextAreaElement) {
+        textarea.id = id;
+      }
+    }
 
     // Register completion context for this editor's model
     const modelUri = editor.getModel()?.uri.toString();
@@ -265,6 +277,7 @@ export function MonacoCELEditor({
         rows={rows}
         disabled={disabled}
         className={className}
+        id={id}
       />
     );
   }
@@ -307,9 +320,10 @@ function FallbackInput({
   rows,
   disabled,
   className,
+  id,
 }: Pick<
   MonacoCELEditorProps,
-  'value' | 'onChange' | 'placeholder' | 'multiline' | 'rows' | 'disabled' | 'className'
+  'value' | 'onChange' | 'placeholder' | 'multiline' | 'rows' | 'disabled' | 'className' | 'id'
 >) {
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -329,6 +343,7 @@ function FallbackInput({
   if (multiline) {
     return (
       <textarea
+        id={id}
         value={value}
         onChange={handleChange}
         placeholder={placeholder}
@@ -341,6 +356,7 @@ function FallbackInput({
 
   return (
     <input
+      id={id}
       type="text"
       value={value}
       onChange={handleChange}

@@ -1,0 +1,603 @@
+/**
+ * daemon-creds — pure helpers for the Electron "auto-mint daemon PAT"
+ * preflight that runs immediately before the daemon binary is spawned.
+ *
+ * Why this module exists
+ * ----------------------
+ * The Go daemon, when launched without credentials for its --server origin,
+ * falls into an interactive registration flow (Supabase device login +
+ * CreateDaemonToken). That works on a TTY but is broken inside Electron
+ * (no stdin, no browser handoff). In Electron we already have a live
+ * Supabase session stored via auth-storage, so we can do the mint ourselves
+ * and drop a valid daemon.json on disk before the daemon ever starts. The
+ * daemon then reads the existing entry for `endpointKey(--server)` and skips
+ * its own registration flow entirely.
+ *
+ * Contract with the Go side
+ * -------------------------
+ * The on-disk format (`~/.reliant/daemon.json`) and the keying scheme
+ * (origin = scheme://host[:port], lowercased, path/query/fragment stripped)
+ * are owned by `internal/auth/daemon_file.go`. Anything in this module that
+ * touches the file MUST match the Go semantics exactly — drift here causes
+ * silent split-brain (Electron writes, daemon can't find it).
+ *
+ * No Electron imports
+ * -------------------
+ * This module deliberately avoids requiring `electron` so it can be loaded
+ * under plain `node --test`. The orchestrator in backend-manager.js is the
+ * piece that knows about `authStorage`, `apiUrl`, `gatewayUrl`, etc.
+ */
+
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const https = require('https');
+
+const DAEMON_DIR_NAME = '.reliant';
+const DAEMON_FILE_NAME = 'daemon.json';
+const MINT_RPC_PATH = '/reliant.v1.DaemonTokenService/CreateDaemonToken';
+// Per-attempt timeout. mintDaemonPAT retries transient failures up to
+// MINT_MAX_ATTEMPTS times with backoff (see MINT_RETRY_BACKOFFS_MS), so this
+// is *one* attempt — not the budget for the whole mint. Kept short because
+// we're inside BackendManager.start() and blocking daemon spawn.
+const MINT_TIMEOUT_MS = 5_000;
+// Total mint attempts (1 initial + 2 retries). Worst-case wall time bounded
+// by MINT_MAX_ATTEMPTS * MINT_TIMEOUT_MS + sum(MINT_RETRY_BACKOFFS_MS).
+const MINT_MAX_ATTEMPTS = 3;
+// Wait between attempt N and attempt N+1. Length must equal
+// MINT_MAX_ATTEMPTS - 1. Kept small (~1s total) because daemon spawn is hot.
+const MINT_RETRY_BACKOFFS_MS = [200, 800];
+// HTTP status codes that indicate the upstream may succeed on a retry.
+// 502/503/504 are the classic transient-upstream codes. 4xx (including 401)
+// are *not* retried — bad credentials/bad request won't fix themselves.
+const MINT_RETRYABLE_STATUSES = new Set([502, 503, 504]);
+// Node error codes that mean "couldn't even reach the server" — almost
+// always transient when `air` is mid-restart of the api-server.
+const MINT_RETRYABLE_ERROR_CODES = new Set([
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ETIMEDOUT',
+  'EAI_AGAIN',
+  'ENETUNREACH',
+  'EHOSTUNREACH',
+  'EPIPE',
+]);
+
+/**
+ * Collapse a server URL to its origin key, matching the Go-side
+ * `endpointKey` at internal/auth/daemon_file.go:56.
+ *
+ * Result: `scheme://host` where `host` already includes an explicit port
+ * if one was given. Path/query/fragment dropped. Lowercased.
+ * Returns "" for any input the URL parser rejects or that has no host —
+ * callers must treat "" as "invalid, refuse to write".
+ *
+ * @param {string} serverURL
+ * @returns {string}
+ */
+function endpointKey(serverURL) {
+  const s = (serverURL ?? '').trim();
+  if (!s) return '';
+  let u;
+  try {
+    u = new URL(s);
+  } catch {
+    return '';
+  }
+  if (!u.host) return '';
+  const scheme = (u.protocol || 'https:').replace(':', '').toLowerCase();
+  return `${scheme}://${u.host.toLowerCase()}`;
+}
+
+/**
+ * Mirror of Go's `shouldSkipTLSVerify` at cmd/reliant/commands/daemon.go:255.
+ * Localhost HTTPS targets in dev typically use self-signed certs; we mirror
+ * the daemon's tolerance so the mint preflight doesn't fail where the daemon
+ * itself would have succeeded.
+ *
+ * @param {string} serverURL
+ * @returns {boolean}
+ */
+function shouldSkipTLSVerify(serverURL) {
+  if (process.env.RELIANT_SKIP_TLS_VERIFY === '1') return true;
+  const s = (serverURL ?? '').toLowerCase();
+  return (
+    s.startsWith('https://localhost') ||
+    s.startsWith('https://127.0.0.1') ||
+    s.startsWith('https://[::1]')
+  );
+}
+
+/**
+ * Absolute path to ~/.reliant/daemon.json. Exposed for tests via overrides
+ * — see readDaemonStore / writeDaemonStore.
+ *
+ * @returns {{ dir: string, file: string }}
+ */
+function daemonStorePaths() {
+  const dir = path.join(os.homedir(), DAEMON_DIR_NAME);
+  return { dir, file: path.join(dir, DAEMON_FILE_NAME) };
+}
+
+/**
+ * Read the daemon credentials store from disk. Treats any of {missing file,
+ * unreadable, unparseable JSON, non-object root} as "empty store" rather
+ * than throwing. This matches Go's readStore semantics — on a format mismatch
+ * we start fresh rather than crash, since the alternative is bricking the
+ * mint preflight on a stale file the user can't easily inspect.
+ *
+ * @param {{ filePath?: string, logger?: { warn?: Function } }} [opts]
+ * @returns {Record<string, object>}
+ */
+function readDaemonStore(opts = {}) {
+  const file = opts.filePath ?? daemonStorePaths().file;
+  const logger = opts.logger;
+  let raw;
+  try {
+    raw = fs.readFileSync(file, 'utf8');
+  } catch (e) {
+    if (e.code !== 'ENOENT' && logger?.warn) {
+      logger.warn('[daemon-creds] daemon.json unreadable, starting fresh:', e.message);
+    }
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed;
+    }
+    return {};
+  } catch (e) {
+    if (logger?.warn) {
+      logger.warn('[daemon-creds] daemon.json parse failed, starting fresh:', e.message);
+    }
+    return {};
+  }
+}
+
+/**
+ * Atomically replace the daemon credentials store on disk. Mode 0700 on the
+ * directory, 0600 on the file — matches Go's writeStore.
+ *
+ * Atomicity matters here: the Go daemon may be racing to read the same file
+ * during regular operation. We write to a tmp sibling and rename so a reader
+ * never observes a truncated/partial JSON.
+ *
+ * @param {Record<string, object>} store
+ * @param {{ filePath?: string }} [opts]
+ */
+function writeDaemonStore(store, opts = {}) {
+  const { dir, file } = (() => {
+    if (opts.filePath) {
+      return { dir: path.dirname(opts.filePath), file: opts.filePath };
+    }
+    return daemonStorePaths();
+  })();
+
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  const tmp = `${file}.tmp.${process.pid}`;
+  fs.writeFileSync(tmp, JSON.stringify(store, null, 2), { mode: 0o600 });
+  fs.renameSync(tmp, file);
+}
+
+/**
+ * Read-modify-write a single entry into the daemon credentials store.
+ * Snake_case keys (`pat`, `server_url`, `gateway_url`, `registered_at`)
+ * match the Go struct tags at internal/auth/daemon_file.go:21-26.
+ *
+ * Throws on an invalid apiUrl (empty endpoint key) — the caller in
+ * backend-manager.js wraps everything in try/catch and swallows, so this
+ * never blocks daemon spawn. Throwing here keeps the helper honest for
+ * tests; the orchestrator decides whether a failure aborts startup.
+ *
+ * `sub` is the Supabase subject the PAT was minted for. The Go side ignores
+ * this field (extra JSON keys round-trip), but BackendManager reads it via
+ * `entryOwnerSub` to decide whether the cached PAT belongs to the currently
+ * signed-in user — without it, sign-out-sign-in-as-different-user reuses the
+ * old user's PAT, the daemon registers under the wrong owner, and the new
+ * user's ListDaemons returns empty.
+ *
+ * @param {{ apiUrl: string, gatewayUrl?: string, pat: string, sub?: string,
+ *           filePath?: string, logger?: { warn?: Function } }} args
+ */
+function upsertEntry({ apiUrl, gatewayUrl, pat, sub, filePath, logger }) {
+  const key = endpointKey(apiUrl);
+  if (!key) {
+    throw new Error(`invalid --server URL: ${apiUrl}`);
+  }
+  if (!pat) {
+    throw new Error('refusing to write empty PAT to daemon.json');
+  }
+  const store = readDaemonStore({ filePath, logger });
+  store[key] = {
+    pat,
+    server_url: apiUrl,
+    gateway_url: gatewayUrl || '',
+    registered_at: new Date().toISOString(),
+    ...(sub ? { sub } : {}),
+  };
+  writeDaemonStore(store, { filePath });
+}
+
+/**
+ * Returns the `sub` of the cached entry for `apiUrl`, or null if no entry
+ * exists / the entry has no recorded `sub` (e.g. from an older write before
+ * we tracked it).
+ *
+ * @param {{ apiUrl: string, filePath?: string,
+ *           logger?: { warn?: Function } }} args
+ * @returns {string | null}
+ */
+function entryOwnerSub({ apiUrl, filePath, logger }) {
+  const key = endpointKey(apiUrl);
+  if (!key) return null;
+  const store = readDaemonStore({ filePath, logger });
+  const entry = store[key];
+  if (!entry || typeof entry !== 'object') return null;
+  return typeof entry.sub === 'string' ? entry.sub : null;
+}
+
+/**
+ * POST <apiUrl>/reliant.v1.DaemonTokenService/CreateDaemonToken using the
+ * caller's Supabase JWT as bearer credentials. Uses raw HTTP+JSON (no
+ * Connect SDK) so this module stays a thin pure-Node dependency.
+ *
+ * Retry contract
+ * --------------
+ * BackendManager calls this during daemon spawn, and `air` may be mid-restart
+ * of `reliant server api` — leading to a transient ECONNREFUSED/502 even
+ * though the next attempt 200ms later would have succeeded. We retry on
+ * connection-level errors and 502/503/504 up to MINT_MAX_ATTEMPTS times with
+ * MINT_RETRY_BACKOFFS_MS backoff. 4xx (including 401), 200-with-missing-token,
+ * and missing-apiUrl/accessToken are terminal — retrying won't help. Sleeps
+ * use the provided `sleep` (default real timers); tests pass a fake to make
+ * retry behavior synchronous.
+ *
+ * On exhausted retries, we throw the LAST error so `ensureDaemonCreds` can
+ * log+swallow as it does today.
+ *
+ * Localhost-HTTPS gets a self-signed-tolerant agent — same set of origins
+ * the Go daemon already accepts (`shouldSkipTLSVerify`).
+ *
+ * `fetch` is taken off `globalThis` rather than the built-in so tests can
+ * stub it. We deliberately do NOT pass a Node `Agent` via `dispatcher`
+ * (that's undici-specific and unreliable across Node versions); instead,
+ * for the rare localhost-HTTPS case we fall through to a `https.request`
+ * implementation that accepts a classic `https.Agent`.
+ *
+ * @param {{ apiUrl: string, accessToken: string, name?: string,
+ *           logger?: { debug?: Function, warn?: Function },
+ *           sleep?: (ms: number) => Promise<void> }} args
+ * @returns {Promise<{ token: string, tokenId?: string }>}
+ */
+async function mintDaemonPAT({ apiUrl, accessToken, name, logger, sleep }) {
+  if (!apiUrl) throw new Error('mintDaemonPAT: missing apiUrl');
+  if (!accessToken) throw new Error('mintDaemonPAT: missing accessToken');
+
+  const url = `${apiUrl.replace(/\/+$/, '')}${MINT_RPC_PATH}`;
+  const body = JSON.stringify({ name: name || os.hostname() });
+  const headers = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${accessToken}`,
+  };
+  const sleeper = typeof sleep === 'function'
+    ? sleep
+    : (ms) => new Promise((r) => setTimeout(r, ms));
+
+  let lastErr;
+  for (let attempt = 1; attempt <= MINT_MAX_ATTEMPTS; attempt++) {
+    try {
+      return await mintDaemonPATOnce({ url, headers, body, apiUrl, logger });
+    } catch (err) {
+      lastErr = err;
+      const retryable = isRetryableMintError(err);
+      if (!retryable || attempt === MINT_MAX_ATTEMPTS) {
+        throw err;
+      }
+      const backoff = MINT_RETRY_BACKOFFS_MS[attempt - 1] ?? 0;
+      if (logger?.warn) {
+        const cause = err?.mintStatus
+          ? `HTTP ${err.mintStatus}`
+          : (err?.code || err?.cause?.code || err?.message || 'unknown');
+        logger.warn(
+          `[daemon-creds] mintDaemonPAT attempt ${attempt}/${MINT_MAX_ATTEMPTS} failed (${cause}); retrying in ${backoff}ms`
+        );
+      }
+      if (backoff > 0) {
+        await sleeper(backoff);
+      }
+    }
+  }
+  // Unreachable — the loop either returns or throws.
+  throw lastErr;
+}
+
+/**
+ * Single attempt of the mint RPC. Throws a tagged error on failure so
+ * `mintDaemonPAT`'s retry loop can decide whether to retry. HTTP failures
+ * carry `err.mintStatus`; network failures pass through Node's `err.code`
+ * (or `err.cause.code` when wrapped by undici-fetch).
+ *
+ * Non-retryable terminal failures (missing token in 200, AbortSignal timeouts
+ * caused by parent cancellation) are tagged with `err.mintTerminal = true`
+ * so the loop doesn't waste backoff on them.
+ */
+async function mintDaemonPATOnce({ url, headers, body, apiUrl, logger }) {
+  const skipTLS = shouldSkipTLSVerify(apiUrl);
+
+  // For localhost-HTTPS with self-signed certs, drop down to https.request
+  // so we can hand it a rejectUnauthorized:false agent — fetch on Node 20+
+  // does not accept a classic Agent in any portable way.
+  if (skipTLS && url.toLowerCase().startsWith('https://')) {
+    return await mintViaHttpsRequest({ url, headers, body, logger });
+  }
+
+  const fetchImpl = globalThis.fetch;
+  if (typeof fetchImpl !== 'function') {
+    throw new Error('mintDaemonPAT: globalThis.fetch is not available');
+  }
+
+  const res = await fetchImpl(url, {
+    method: 'POST',
+    headers,
+    body,
+    signal: AbortSignal.timeout(MINT_TIMEOUT_MS),
+  });
+
+  if (!res.ok) {
+    const text = await safeReadText(res);
+    const e = new Error(
+      `CreateDaemonToken failed: HTTP ${res.status}${text ? ` — ${text}` : ''}`
+    );
+    e.mintStatus = res.status;
+    throw e;
+  }
+
+  const data = await res.json();
+  if (!data || typeof data.token !== 'string' || !data.token) {
+    const e = new Error('CreateDaemonToken response missing token');
+    e.mintTerminal = true; // schema mismatch — won't fix itself on retry
+    throw e;
+  }
+  return { token: data.token, tokenId: data.tokenId || data.token_id };
+}
+
+/**
+ * Decide whether a mintDaemonPATOnce failure is worth retrying. Per the
+ * contract on mintDaemonPAT:
+ *   - retry on 502/503/504 (transient upstream)
+ *   - retry on connection-level Node error codes (ECONNREFUSED etc.)
+ *   - do NOT retry on 4xx (401 means bad token; retrying won't help)
+ *   - do NOT retry on schema mismatches (mintTerminal === true)
+ *   - do NOT retry on AbortError caused by parent cancellation —
+ *     AbortSignal.timeout() per-attempt timeouts are surfaced as TimeoutError
+ *     (DOMException name "TimeoutError"), which IS treated as retryable
+ *     because it means the call took too long, not that the caller cancelled.
+ */
+function isRetryableMintError(err) {
+  if (!err) return false;
+  if (err.mintTerminal) return false;
+  if (typeof err.mintStatus === 'number') {
+    return MINT_RETRYABLE_STATUSES.has(err.mintStatus);
+  }
+  // AbortError from a user/parent AbortController — don't paper over it.
+  // (AbortSignal.timeout produces a TimeoutError, not an AbortError.)
+  if (err.name === 'AbortError') return false;
+
+  // Per-attempt timeout from AbortSignal.timeout(): retry it like a network
+  // error — the upstream was just too slow, the next attempt may succeed.
+  if (err.name === 'TimeoutError') return true;
+
+  // Node fetch wraps the underlying network error under err.cause.
+  const code = err.code || err.cause?.code;
+  if (code && MINT_RETRYABLE_ERROR_CODES.has(code)) return true;
+
+  // Fall back to message inspection for our stubbed-out tests that throw
+  // a plain Error('ECONNREFUSED'). This is best-effort: if a message
+  // contains a recognized code substring, treat it as retryable.
+  const msg = String(err.message || '');
+  for (const c of MINT_RETRYABLE_ERROR_CODES) {
+    if (msg.includes(c)) return true;
+  }
+  return false;
+}
+
+/**
+ * Localhost-HTTPS fallback path — see mintDaemonPAT.
+ */
+function mintViaHttpsRequest({ url, headers, body, logger }) {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const req = https.request(
+      {
+        method: 'POST',
+        hostname: parsed.hostname,
+        port: parsed.port || 443,
+        path: `${parsed.pathname}${parsed.search}`,
+        headers: { ...headers, 'Content-Length': Buffer.byteLength(body) },
+        rejectUnauthorized: false,
+        timeout: MINT_TIMEOUT_MS,
+      },
+      (res) => {
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => {
+          const text = Buffer.concat(chunks).toString('utf8');
+          if (res.statusCode < 200 || res.statusCode >= 300) {
+            const httpErr = new Error(
+              `CreateDaemonToken failed: HTTP ${res.statusCode}${text ? ` — ${text}` : ''}`
+            );
+            httpErr.mintStatus = res.statusCode;
+            reject(httpErr);
+            return;
+          }
+          try {
+            const data = JSON.parse(text);
+            if (!data || typeof data.token !== 'string' || !data.token) {
+              const schemaErr = new Error('CreateDaemonToken response missing token');
+              schemaErr.mintTerminal = true;
+              reject(schemaErr);
+              return;
+            }
+            resolve({ token: data.token, tokenId: data.tokenId || data.token_id });
+          } catch (e) {
+            const parseErr = new Error(`CreateDaemonToken response invalid JSON: ${e.message}`);
+            parseErr.mintTerminal = true;
+            reject(parseErr);
+          }
+        });
+      }
+    );
+    req.on('timeout', () => {
+      const timeoutErr = new Error(`CreateDaemonToken timed out after ${MINT_TIMEOUT_MS}ms`);
+      timeoutErr.name = 'TimeoutError';
+      req.destroy(timeoutErr);
+    });
+    req.on('error', (err) => {
+      if (logger?.debug) logger.debug('[daemon-creds] https.request error', err.message);
+      reject(err);
+    });
+    req.write(body);
+    req.end();
+  });
+}
+
+async function safeReadText(res) {
+  try {
+    return await res.text();
+  } catch {
+    return '';
+  }
+}
+
+// No-op logger used when the caller doesn't supply one. Keeps the orchestrator
+// pure-function from the test's perspective (no console noise leaks out).
+const NOOP_LOGGER = { debug() {}, info() {}, warn() {}, error() {} };
+
+/**
+ * Pre-spawn orchestration: ensure ~/.reliant/daemon.json has a PAT entry for
+ * the current `--server` origin that belongs to the currently signed-in user.
+ *
+ *   - If `authStorage` is null → no-op (caller wasn't given an auth source).
+ *   - If no stored session → no-op (user hasn't signed in yet; daemon will
+ *     fall into its own headless-broken flow, which is the pre-existing
+ *     behavior).
+ *   - If an existing entry matches the current session's `sub` → no-op (reuse).
+ *   - Otherwise → mint a fresh PAT via CreateDaemonToken and write it.
+ *
+ * Failure-mode contract: this function NEVER throws. Every failure path is
+ * logged and swallowed so the caller can spawn the daemon unconditionally.
+ *
+ * @param {{
+ *   authStorage: { loadStoredAuth: () => object|null } | null,
+ *   apiUrl: string,
+ *   gatewayUrl?: string,
+ *   logger?: { debug?: Function, info?: Function, warn?: Function, error?: Function },
+ * }} args
+ */
+async function ensureDaemonPATForOrigin({ authStorage, apiUrl, gatewayUrl, logger }) {
+  const log = logger || NOOP_LOGGER;
+  try {
+    if (!authStorage) {
+      log.debug?.('[daemon-creds] ensureDaemonPATForOrigin: no authStorage injected, skipping');
+      return;
+    }
+
+    const key = endpointKey(apiUrl);
+    if (!key) {
+      log.warn?.('[daemon-creds] ensureDaemonPATForOrigin: invalid --server URL, skipping:', apiUrl);
+      return;
+    }
+
+    // Read the current session BEFORE the idempotency check — we need its
+    // sub to decide whether the cached PAT still belongs to the right user.
+    const session = authStorage.loadStoredAuth();
+    const accessToken = session?.access_token;
+    const currentSub = session?.user?.id;
+
+    const store = readDaemonStore({ logger: log });
+    const existing = store[key];
+    const existingPat = existing && typeof existing.pat === 'string' ? existing.pat : '';
+    const existingSub = existing && typeof existing.sub === 'string' ? existing.sub : '';
+
+    // Reuse the cached PAT only when it belongs to the currently signed-in
+    // user. Without this guard, sign-out + sign-in-as-different-user keeps
+    // the prior user's PAT, the daemon re-registers under the wrong owner,
+    // and ListDaemons for the new user comes back empty (the daemon row
+    // belongs to the old internal_user_id). An entry written before we
+    // tracked `sub` has existingSub === '' — treat that as unknown and
+    // re-mint to be safe.
+    if (existingPat && existingSub && currentSub && existingSub === currentSub) {
+      log.debug?.('[daemon-creds] ensureDaemonPATForOrigin: existing PAT for origin matches current user, skipping mint:', key);
+      return;
+    }
+
+    // Need to mint. If no session yet, the user hasn't signed in; the
+    // daemon falls back to its own (headless-broken) flow, which is fine —
+    // the renderer is about to surface the sign-in screen.
+    if (!accessToken) {
+      log.info?.('[daemon-creds] ensureDaemonPATForOrigin: no stored session, skipping mint (user not signed in yet)');
+      return;
+    }
+
+    if (existingPat && existingSub && currentSub && existingSub !== currentSub) {
+      log.info?.('[daemon-creds] ensureDaemonPATForOrigin: cached PAT belongs to a different user — re-minting for current session');
+    } else if (existingPat && !existingSub) {
+      log.info?.('[daemon-creds] ensureDaemonPATForOrigin: cached PAT has no owner sub recorded — re-minting');
+    }
+
+    log.info?.('[daemon-creds] ensureDaemonPATForOrigin: minting daemon PAT for origin', key);
+    let minted;
+    try {
+      minted = await mintDaemonPAT({
+        apiUrl,
+        accessToken,
+        name: os.hostname(),
+        logger: log,
+      });
+    } catch (mintErr) {
+      // 401/403/5xx/network all funnel through here. Log + skip.
+      log.warn?.('[daemon-creds] ensureDaemonPATForOrigin: mint failed, falling back to daemon flow:', mintErr.message);
+      return;
+    }
+
+    try {
+      const resolvedGatewayUrl = gatewayUrl || '';
+      upsertEntry({
+        apiUrl,
+        gatewayUrl: resolvedGatewayUrl,
+        pat: minted.token,
+        sub: currentSub,
+        logger: log,
+      });
+      log.info?.(
+        '[daemon-creds] ensureDaemonPATForOrigin: wrote PAT to daemon.json for origin',
+        key,
+        'gateway:', resolvedGatewayUrl || '(empty)',
+        'sub:', currentSub || '(unknown)'
+      );
+    } catch (writeErr) {
+      log.error?.('[daemon-creds] ensureDaemonPATForOrigin: failed to persist PAT:', writeErr.message);
+    }
+  } catch (e) {
+    // Top-level safety net — nothing in the body should escape, but if
+    // something does (e.g. logger blew up), don't let it block spawn.
+    log.error?.('[daemon-creds] ensureDaemonPATForOrigin: unexpected error, swallowing:', e?.message || e);
+  }
+}
+
+module.exports = {
+  endpointKey,
+  shouldSkipTLSVerify,
+  daemonStorePaths,
+  readDaemonStore,
+  writeDaemonStore,
+  upsertEntry,
+  entryOwnerSub,
+  mintDaemonPAT,
+  ensureDaemonPATForOrigin,
+  MINT_RPC_PATH,
+  MINT_TIMEOUT_MS,
+  MINT_MAX_ATTEMPTS,
+  MINT_RETRY_BACKOFFS_MS,
+};

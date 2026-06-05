@@ -1,1 +1,0 @@
-export { ConfigPanel } from "./config";

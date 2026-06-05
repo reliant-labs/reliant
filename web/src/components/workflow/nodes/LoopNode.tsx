@@ -14,6 +14,7 @@ import {
 } from '../../../types/workflow'
 import type { NodeExecutionStatus } from '../../../lib/workflow-flow'
 import { NodeStatusWrapper, buildHandleClassName } from './NodeStatusWrapper'
+import { useWorkflowNodeCallbacks } from '../WorkflowNodeCallbacksContext'
 
 interface LoopNodeProps {
   id: string
@@ -77,6 +78,8 @@ export const LoopNode = memo(({ id, data, selected }: LoopNodeProps) => {
   // Runtime max iterations (may come from custom params at runtime)
   const effectiveMax = maxIterations
 
+  const { onExpandLoop } = useWorkflowNodeCallbacks()
+
   const targetConnections = useNodeConnections({ handleType: 'target' })
   const sourceConnections = useNodeConnections({ handleType: 'source' })
   
@@ -91,17 +94,15 @@ export const LoopNode = memo(({ id, data, selected }: LoopNodeProps) => {
   const showDots = iterationStatuses.length > 0 && iterationStatuses.length <= MAX_VISIBLE_DOTS
   const showProgress = iterationStatuses.length > MAX_VISIBLE_DOTS || (!showDots && hasExecutionInfo)
 
-  // Handle expand click
+  // Handle expand click — typed callback from WorkflowNodeCallbacksContext.
   const handleExpandClick = (e: React.MouseEvent) => {
     e.stopPropagation()
     if (!canExpand) return
-    
-    // Dispatch custom event for expansion
-    const event = new CustomEvent('loop-expand', {
-      detail: { loopNodeId: id, step },
-      bubbles: true,
-    })
-    document.dispatchEvent(event)
+    if (!onExpandLoop) {
+      console.warn('[LoopNode] expand clicked but no onExpandLoop provider')
+      return
+    }
+    onExpandLoop(id, step)
   }
 
   return (

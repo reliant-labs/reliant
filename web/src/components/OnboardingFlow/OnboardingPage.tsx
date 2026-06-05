@@ -4,12 +4,18 @@ import { ProgressBar } from './ProgressBar';
 import { useOnboardingPlan } from './useOnboardingPlan';
 import { BACK_CLEARS, deriveStep, getStepsForPlan, STEP_COMPONENTS, STEP_LABELS } from './stepConfig';
 import { useOnboardingTracking } from './analytics';
+import { useTitleBarChrome } from '@/hooks/useTitleBarChrome';
 import type { LaunchPlan } from './types';
 // Ensure step components are registered on module load
 import './steps';
 
 export function OnboardingPage() {
   const { plan, updatePlan } = useOnboardingPlan();
+  // The onboarding overlay sits at z-40 over the normal app chrome, so the
+  // Layout/Header's drag region is occluded. Render our own drag strip across
+  // the top of the window so users can still move the Electron window from
+  // the title-bar area while onboarding is open. No-op in web.
+  const { isElectron, dragRegionStyle } = useTitleBarChrome();
 
   // Current step is derived purely from plan state. No URL `step` param,
   // no sessionStorage flags, no useEffect to sync. See ./stepConfig.ts.
@@ -54,6 +60,17 @@ export function OnboardingPage() {
       <div className="absolute -left-24 top-10 h-64 w-64 rounded-full bg-sky-400/20 blur-3xl" aria-hidden="true" />
       <div className="absolute -right-16 top-1/3 h-72 w-72 rounded-full bg-fuchsia-500/20 blur-3xl" aria-hidden="true" />
       <div className="absolute bottom-0 left-1/3 h-64 w-64 rounded-full bg-emerald-400/15 blur-3xl" aria-hidden="true" />
+
+      {/* Electron-only drag strip across the top of the window. Behind the
+          card (no z-index bump) so it doesn't steal clicks from the card's
+          content, but in front of the backdrop so the OS sees the drag. */}
+      {isElectron && (
+        <div
+          className="absolute inset-x-0 top-0 h-9"
+          style={dragRegionStyle}
+          aria-hidden="true"
+        />
+      )}
 
       {/* Card */}
       <div

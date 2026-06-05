@@ -45,6 +45,16 @@ service BillingService {
   // the existing active key plaintext if one exists, otherwise creates a fresh one.
   rpc IssueMyReliantAPIKey(BillingIssueMyReliantAPIKeyRequest) returns (BillingIssueMyReliantAPIKeyResponse) {}
 
+  // User-supplied billing email (separate from JWT-sourced users.email).
+  // Required when the JWT email is empty — common for GitHub OAuth users
+  // with a private primary email. Stripe-customer / checkout / wallet-topup
+  // RPCs read billing_email first and fall back to users.email; they error
+  // with x-reliant-reason=billing_email_missing only when neither yields a
+  // valid address. The frontend turns that header into a "Set your billing
+  // email" modal that calls UpdateBillingEmail.
+  rpc GetCurrentUserBillingEmail(GetCurrentUserBillingEmailRequest) returns (GetCurrentUserBillingEmailResponse) {}
+  rpc UpdateBillingEmail(UpdateBillingEmailRequest) returns (UpdateBillingEmailResponse) {}
+
   // Workspace compute plan (per-user).
   rpc GetCurrentUserComputeSubscription(GetCurrentUserComputeSubscriptionRequest) returns (GetCurrentUserComputeSubscriptionResponse) {}
   rpc SetCurrentUserComputeOverage(SetCurrentUserComputeOverageRequest) returns (SetCurrentUserComputeOverageResponse) {}
@@ -254,3 +264,28 @@ message GetInvoicePreviewResponse {
   int32 proration_cents = 1;      // charge or credit today
   int32 new_monthly_cents = 2;    // new total monthly after change
 }
+
+// === Billing email (user-supplied) ===
+
+message GetCurrentUserBillingEmailRequest {}
+
+message GetCurrentUserBillingEmailResponse {
+  // billing_email is the user-supplied address (empty when unset). When
+  // empty, billing flows fall back to fallback_email; when both are empty
+  // they error with x-reliant-reason=billing_email_missing.
+  string billing_email = 1;
+  // fallback_email is the JWT-sourced users.email — also empty for GitHub
+  // OAuth users with a private primary email. The admin-web "Billing email"
+  // section surfaces both so the user understands which address Stripe
+  // currently sees.
+  string fallback_email = 2;
+}
+
+message UpdateBillingEmailRequest {
+  // email is the new billing address. Empty clears the override and falls
+  // back to the JWT email. Validated server-side with the same rules the
+  // Stripe-customer path enforces (GitHub noreply addresses are rejected).
+  string email = 1;
+}
+
+message UpdateBillingEmailResponse {}

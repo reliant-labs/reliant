@@ -275,10 +275,19 @@ const injectReliantConfig = async () => {
      * the Electron app now runs a local daemon that bridges to the cloud.
      */
     const buildConfig = (status, info) => {
-      // The API URL comes from the daemon's configuration (hosted API)
+      // apiUrl         = daemon --server URL (admin-server in cloud-dev, prod
+      //                  reliantapi.com in packaged builds). Renderer code that
+      //                  reads RELIANT_CONFIG.apiUrl for non-grpc purposes
+      //                  still expects this.
+      // rendererApiUrl = where the renderer's MAIN Connect transport hits for
+      //                  reliant.v1.* services (ProjectService, ChatService, …).
+      //                  In prod the two collapse; in cloud-dev they're distinct
+      //                  processes on different ports. getGRPCBaseURL() in
+      //                  web/src/api/grpc-client.ts reads window.RELIANT_CONFIG.grpcUrl.
       const apiUrl = status?.apiUrl || 'https://reliantapi.com';
+      const rendererApiUrl = status?.rendererApiUrl || apiUrl;
       return {
-        grpcUrl: apiUrl,
+        grpcUrl: rendererApiUrl,
         apiUrl: apiUrl,
         gatewayUrl: status?.gatewayUrl || '',
         daemonPort: status?.daemonPort || null,
@@ -355,8 +364,9 @@ const injectReliantConfig = async () => {
       ]);
 
       const apiUrl = backendStatus?.apiUrl || 'https://reliantapi.com';
+      const rendererApiUrl = backendStatus?.rendererApiUrl || apiUrl;
       reliantConfig = {
-        grpcUrl: apiUrl,
+        grpcUrl: rendererApiUrl,
         apiUrl: apiUrl,
         gatewayUrl: backendStatus?.gatewayUrl || '',
         daemonPort: port,

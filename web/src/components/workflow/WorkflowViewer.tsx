@@ -33,6 +33,7 @@ import { NodeDetailsPanel } from './NodeDetailsPanel'
 import { ActivityLog, type ActivityEvent } from './ActivityLog'
 import { useExtendedExecutionStatus, findStepExecutionsForNode, findChildWorkflow, findLoopIterations, findLoopIterationSteps, type LoopIterationInfo } from './hooks/useExecutionStatus'
 import { useExpandedLoops } from './hooks/useExpandedLoops'
+import { WorkflowNodeCallbacksProvider } from './WorkflowNodeCallbacksContext'
 import { useNavigate } from '@tanstack/react-router'
 import { useProjectStore } from '../../store/projectStore'
 import { useWorktreeStore } from '../../store/worktreeStore'
@@ -585,31 +586,24 @@ function WorkflowViewerInner({
     }
   }, [])
   
-  // Listen for loop expand/collapse events from nodes
-  useEffect(() => {
-    const handleLoopExpand = (e: Event) => {
-      const customEvent = e as CustomEvent<{ loopNodeId: string; step: LoopStep }>
-      console.log('[WorkflowViewer] Received loop-expand event', { 
-        loopNodeId: customEvent.detail.loopNodeId, 
-        hasStep: !!customEvent.detail.step,
-        hasProjectId: !!projectId,
-        projectId 
-      })
+  // Typed callback for LoopNode expand button (Wave-6a: was a document
+  // CustomEvent listener). Wired up via WorkflowNodeCallbacksProvider below.
+  const handleLoopExpand = useCallback(
+    (loopNodeId: string, step: LoopStep) => {
       if (!projectId) {
         console.warn('[WorkflowViewer] Cannot expand loop: projectId is missing')
         return
       }
-      // Call expandLoop and handle any errors
-      console.log('[WorkflowViewer] Calling expandLoop', { loopNodeId: customEvent.detail.loopNodeId })
-      expandedLoopsHook.expandLoop(customEvent.detail.loopNodeId, customEvent.detail.step)
-        .then(() => {
-          console.log('[WorkflowViewer] Loop expanded successfully', { loopNodeId: customEvent.detail.loopNodeId })
-        })
-        .catch((err: unknown) => {
-          console.error('[WorkflowViewer] Error expanding loop:', err)
-        })
-    }
-    
+      expandedLoopsHook.expandLoop(loopNodeId, step).catch((err: unknown) => {
+        console.error('[WorkflowViewer] Error expanding loop:', err)
+      })
+    },
+    [projectId, expandedLoopsHook],
+  )
+
+  // Remaining DOM listeners (loop collapse via data-attr, iteration change)
+  // are out of scope for the CustomEvent purge — they're not `loop-expand`.
+  useEffect(() => {
     const handleLoopCollapse = (e: MouseEvent) => {
       const target = e.target as HTMLElement
       const collapseButton = target.closest('[data-collapse-loop]')
@@ -620,21 +614,19 @@ function WorkflowViewerInner({
         }
       }
     }
-    
+
     const handleIterationChange = (e: CustomEvent<{ loopNodeId: string; iteration: number }>) => {
       expandedLoopsHook.setSelectedIteration(e.detail.loopNodeId, e.detail.iteration)
     }
-    
-    document.addEventListener('loop-expand', handleLoopExpand as EventListener)
+
     document.addEventListener('click', handleLoopCollapse)
     document.addEventListener('loop-iteration-change', handleIterationChange as EventListener)
-    
+
     return () => {
-      document.removeEventListener('loop-expand', handleLoopExpand as EventListener)
       document.removeEventListener('click', handleLoopCollapse)
       document.removeEventListener('loop-iteration-change', handleIterationChange as EventListener)
     }
-  }, [projectId, expandedLoopsHook])
+  }, [expandedLoopsHook])
   
   // Refit view when loops are expanded/collapsed (but NOT when viewer is expanded)
   useEffect(() => {
@@ -760,6 +752,7 @@ function WorkflowViewerInner({
 
   // Content to render - same whether expanded or not
   const content = (
+    <WorkflowNodeCallbacksProvider onExpandLoop={handleLoopExpand}>
     <div className={`flex bg-background overflow-hidden ${heightClass}`}>
       {/* Main content area */}
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
@@ -940,6 +933,7 @@ function WorkflowViewerInner({
         )}
       </div>
     </div>
+    </WorkflowNodeCallbacksProvider>
   )
 
   // Normal rendering - parent container controls dimensions when expanded

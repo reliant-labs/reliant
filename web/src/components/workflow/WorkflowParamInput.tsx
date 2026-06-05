@@ -437,8 +437,18 @@ function NumberInput({
         availableNodes={availableNodes}
         hideCELToggle={hideCELToggle}
         renderNative={({ value: nativeValue, onChange: nativeOnChange, disabled: nativeDisabled }) => {
-          const currentValue = (nativeValue as number) ?? getInputDefault(schema) ?? (getInputMin(schema) ?? 0);
-          
+          // Coerce BigInt → number defensively; `??` doesn't filter out BigInts
+          // and slider math (`currentValue - min`) throws on BigInt operands.
+          const toNumber = (v: unknown): number | undefined => {
+            if (typeof v === "number") return v;
+            if (typeof v === "bigint") return Number(v);
+            return undefined;
+          };
+          const currentValue =
+            toNumber(nativeValue) ??
+            toNumber(getInputDefault(schema)) ??
+            (getInputMin(schema) ?? 0);
+
           // Handle direct input change with validation
           const handleInputChange = (inputValue: string) => {
             const parsed = parseFloat(inputValue);
@@ -892,22 +902,39 @@ interface ModelInputProps {
   isChatInputContext?: boolean;
 }
 
-function ModelInput({ 
-  name, 
-  schema, 
-  value, 
-  onChange, 
-  disabled = false, 
+function ModelInput({
+  name,
+  schema,
+  value,
+  onChange,
+  disabled = false,
   className,
   availableParams = [],
   availableNodes = [],
   hideCELToggle = false,
   isChatInputContext = false,
 }: ModelInputProps) {
+  // Defensive: ModelInput must only render for model-kind inputs. A parent
+  // miswiring (e.g. routing a number-typed InputDef through here) would cause
+  // an empty model picker to render silently — surface it visibly instead.
+  if (schema?.config?.case !== "modelInput") {
+    return (
+      <ParamWrapper
+        name={name}
+        description={getInputDescription(schema)}
+        hasDefault={hasDefaultValue(schema)}
+        className={className}
+      >
+        <div className="cpv2-field-input text-xs text-destructive">
+          ModelInput received non-model schema ({String(schema?.config?.case ?? "unknown")})
+        </div>
+      </ParamWrapper>
+    );
+  }
   return (
-    <ParamWrapper 
-      name={name} 
-      description={getInputDescription(schema)} 
+    <ParamWrapper
+      name={name}
+      description={getInputDescription(schema)}
       hasDefault={hasDefaultValue(schema)}
       className={className}
     >
@@ -939,8 +966,11 @@ type ModelSelectorValue = { id: string } | { tags: string[] };
 // Extract model ID from ModelSelector value
 function extractModelId(value: ModelSelectorValue | undefined | null): string {
   if (!value) return '';
-  if ('id' in value) return value.id;
-  if ('tags' in value && value.tags.length > 0) return ''; // Tags don't map to a specific ID
+  // Guard against primitives passed via `as ModelSelectorValue` casts — e.g.
+  // a numeric default like 185000 from a non-model param schema.
+  if (typeof value !== 'object') return '';
+  if ('id' in value && typeof value.id === 'string') return value.id;
+  if ('tags' in value && Array.isArray(value.tags) && value.tags.length > 0) return ''; // Tags don't map to a specific ID
   return '';
 }
 
