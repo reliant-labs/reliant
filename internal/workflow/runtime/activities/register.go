@@ -48,11 +48,10 @@ func init() {
 		reflect.TypeOf(handlers.ExecuteRunStepInput{}),
 		reflect.TypeOf(handlers.ExecuteRunStepOutput{}))
 
-	// DeleteWorktree
+	// DeleteWorktree (utility activity, no node type — not visible in builder)
 	schema.RegisterActivityType("DeleteWorktree",
 		reflect.TypeOf(handlers.DeleteWorktreeInput{}),
 		reflect.TypeOf(handlers.DeleteWorktreeOutput{}))
-	schema.RegisterActivityMetadata((*handlers.DeleteWorktreeActivity)(nil))
 
 	// ApprovalCreate (not visible in builder, no metadata registration)
 	schema.RegisterActivityType("ApprovalCreate",

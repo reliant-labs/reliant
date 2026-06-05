@@ -1,0 +1,676 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
+const {
+  endpointKey,
+  readDaemonStore,
+  writeDaemonStore,
+  upsertEntry,
+  mintDaemonPAT,
+  ensureDaemonPATForOrigin,
+  MINT_RPC_PATH,
+  MINT_MAX_ATTEMPTS,
+} = require('../src/daemon-creds');
+
+// ----------------------------------------------------------------------------
+// endpointKey — parity with internal/auth/daemon_file.go:endpointKey
+// ----------------------------------------------------------------------------
+//
+// These cases mirror the Go semantics: lowercase scheme://host (host already
+// includes :port when explicit), path/query/fragment stripped, "" for any
+// input the URL parser rejects. Drift here means Electron writes one origin
+// key and the daemon reads a different one — silent split-brain.
+
+test('endpointKey: http with explicit port', () => {
+  assert.equal(endpointKey('http://localhost:3123'), 'http://localhost:3123');
+});
+
+test('endpointKey: scheme + host uppercase + path/query stripped', () => {
+  assert.equal(
+    endpointKey('HTTPS://API.example.com/path?q=1'),
+    'https://api.example.com'
+  );
+});
+
+test('endpointKey: production-style HTTPS, no port', () => {
+  assert.equal(endpointKey('https://reliantapi.com'), 'https://reliantapi.com');
+});
+
+test('endpointKey: empty input → empty', () => {
+  assert.equal(endpointKey(''), '');
+  assert.equal(endpointKey('   '), '');
+  assert.equal(endpointKey(null), '');
+  assert.equal(endpointKey(undefined), '');
+});
+
+test('endpointKey: unparseable input → empty', () => {
+  assert.equal(endpointKey('not-a-url'), '');
+  // A bare scheme with no host is also invalid for our purposes.
+  assert.equal(endpointKey('https://'), '');
+});
+
+test('endpointKey: IPv6 with port preserved', () => {
+  assert.equal(endpointKey('http://[::1]:8080'), 'http://[::1]:8080');
+});
+
+test('endpointKey: fragment stripped', () => {
+  assert.equal(
+    endpointKey('https://staging.reliantapi.com/grpc#x'),
+    'https://staging.reliantapi.com'
+  );
+});
+
+// ----------------------------------------------------------------------------
+// readDaemonStore / writeDaemonStore / upsertEntry — file format parity
+// ----------------------------------------------------------------------------
+//
+// We override `filePath` so the test doesn't touch the user's real
+// ~/.reliant/daemon.json. Each test sets up its own tmpdir, exercises the
+// read-modify-write, then asserts:
+//   1. Unrelated entries are preserved (no clobber).
+//   2. The new entry lands under the right origin key.
+//   3. The JSON parses and uses the expected snake_case field names.
+//   4. The file mode is 0600 (POSIX only — fs mode bits aren't meaningful
+//      on Windows, so we skip the mode check there).
+
+function makeTmpFile(name) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'daemon-creds-test-'));
+  return { dir, file: path.join(dir, name || 'daemon.json') };
+}
+
+test('upsertEntry preserves unrelated entries and adds new one at correct key', () => {
+  const { dir, file } = makeTmpFile();
+  try {
+    // Seed with two unrelated origins. Mimics a user who has registered
+    // against staging + a localhost dev origin at some point.
+    const seed = {
+      'https://staging.reliantapi.com': {
+        pat: 'rlnt_pat_existing_staging',
+        server_url: 'https://staging.reliantapi.com',
+        gateway_url: '',
+        registered_at: '2025-01-01T00:00:00.000Z',
+      },
+      'http://localhost:3123': {
+        pat: 'rlnt_pat_existing_local',
+        server_url: 'http://localhost:3123',
+        gateway_url: 'http://localhost:3124',
+        registered_at: '2025-01-02T00:00:00.000Z',
+      },
+    };
+    fs.writeFileSync(file, JSON.stringify(seed, null, 2));
+
+    upsertEntry({
+      apiUrl: 'https://reliantapi.com',
+      gatewayUrl: '',
+      pat: 'rlnt_pat_new_prod',
+      filePath: file,
+    });
+
+    const raw = fs.readFileSync(file, 'utf8');
+    const after = JSON.parse(raw);
+
+    // Both pre-existing entries survive unchanged.
+    assert.deepEqual(
+      after['https://staging.reliantapi.com'],
+      seed['https://staging.reliantapi.com'],
+      'staging entry must be preserved verbatim'
+    );
+    assert.deepEqual(
+      after['http://localhost:3123'],
+      seed['http://localhost:3123'],
+      'localhost entry must be preserved verbatim'
+    );
+
+    // New entry lands at the right key with the right field names.
+    const fresh = after['https://reliantapi.com'];
+    assert.ok(fresh, 'new entry must be present');
+    assert.equal(fresh.pat, 'rlnt_pat_new_prod');
+    assert.equal(fresh.server_url, 'https://reliantapi.com');
+    assert.equal(fresh.gateway_url, '');
+    assert.ok(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(fresh.registered_at),
+      'registered_at must be ISO 8601'
+    );
+
+    // POSIX-only: file mode 0600 ensures the PAT isn't world-readable.
+    // On Windows, mode bits are advisory and not enforced — skip.
+    if (process.platform !== 'win32') {
+      const mode = fs.statSync(file).mode & 0o777;
+      assert.equal(mode, 0o600, `expected file mode 0600, got ${mode.toString(8)}`);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('readDaemonStore returns {} on missing file', () => {
+  const { dir, file } = makeTmpFile('does-not-exist.json');
+  try {
+    const store = readDaemonStore({ filePath: file });
+    assert.deepEqual(store, {});
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('readDaemonStore returns {} on garbage JSON (matches Go fall-through)', () => {
+  const { dir, file } = makeTmpFile();
+  try {
+    fs.writeFileSync(file, 'not json at all{{{');
+    const store = readDaemonStore({ filePath: file });
+    assert.deepEqual(store, {});
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('upsertEntry throws on invalid apiUrl (empty endpoint key)', () => {
+  const { dir, file } = makeTmpFile();
+  try {
+    assert.throws(
+      () => upsertEntry({ apiUrl: 'not-a-url', pat: 'rlnt_pat_x', filePath: file }),
+      /invalid --server URL/
+    );
+    assert.equal(fs.existsSync(file), false, 'no file should have been written');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('writeDaemonStore creates the parent directory recursively', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'daemon-creds-test-'));
+  const nested = path.join(dir, 'nested', 'inner', 'daemon.json');
+  try {
+    writeDaemonStore({ 'https://x.example': { pat: 'rlnt_pat_x' } }, { filePath: nested });
+    assert.ok(fs.existsSync(nested));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ----------------------------------------------------------------------------
+// mintDaemonPAT — fetch stubbing
+// ----------------------------------------------------------------------------
+//
+// We stub globalThis.fetch directly. The localhost-HTTPS code path uses
+// https.request and is intentionally NOT covered by these tests (it would
+// require spinning up a real TLS server with a self-signed cert just to
+// confirm we wire rejectUnauthorized:false correctly, which is not worth
+// the test infrastructure). The fetch path is what runs in production.
+
+function withFetchStub(stub, fn) {
+  const orig = globalThis.fetch;
+  globalThis.fetch = stub;
+  return (async () => {
+    try {
+      return await fn();
+    } finally {
+      globalThis.fetch = orig;
+    }
+  })();
+}
+
+function jsonResponse(status, body) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    async json() {
+      return body;
+    },
+    async text() {
+      return JSON.stringify(body);
+    },
+  };
+}
+
+test('mintDaemonPAT: 200 with {token, tokenId} returns parsed', async () => {
+  let seenUrl;
+  let seenInit;
+  await withFetchStub(
+    async (url, init) => {
+      seenUrl = url;
+      seenInit = init;
+      return jsonResponse(200, { token: 'rlnt_pat_abc', tokenId: 'tok_1' });
+    },
+    async () => {
+      const result = await mintDaemonPAT({
+        apiUrl: 'https://reliantapi.com',
+        accessToken: 'jwt-xyz',
+        name: 'my-laptop',
+      });
+      assert.deepEqual(result, { token: 'rlnt_pat_abc', tokenId: 'tok_1' });
+    }
+  );
+
+  // URL assertion: correct origin + correct Connect path.
+  assert.equal(seenUrl, `https://reliantapi.com${MINT_RPC_PATH}`);
+
+  // Header assertions.
+  assert.equal(seenInit.method, 'POST');
+  assert.equal(seenInit.headers['Content-Type'], 'application/json');
+  assert.equal(seenInit.headers.Authorization, 'Bearer jwt-xyz');
+
+  // Body assertion: { name: <hostname> }.
+  assert.deepEqual(JSON.parse(seenInit.body), { name: 'my-laptop' });
+});
+
+test('mintDaemonPAT: defaults `name` to os.hostname() when not provided', async () => {
+  let seenInit;
+  await withFetchStub(
+    async (_url, init) => {
+      seenInit = init;
+      return jsonResponse(200, { token: 'rlnt_pat_xyz' });
+    },
+    async () => {
+      await mintDaemonPAT({
+        apiUrl: 'https://reliantapi.com',
+        accessToken: 'jwt',
+      });
+    }
+  );
+  const sent = JSON.parse(seenInit.body);
+  assert.equal(sent.name, os.hostname());
+});
+
+test('mintDaemonPAT: trims trailing slashes off apiUrl', async () => {
+  let seenUrl;
+  await withFetchStub(
+    async (url) => {
+      seenUrl = url;
+      return jsonResponse(200, { token: 'rlnt_pat_xyz' });
+    },
+    async () => {
+      await mintDaemonPAT({
+        apiUrl: 'https://reliantapi.com///',
+        accessToken: 'jwt',
+      });
+    }
+  );
+  assert.equal(seenUrl, `https://reliantapi.com${MINT_RPC_PATH}`);
+});
+
+test('mintDaemonPAT: 200 missing token throws', async () => {
+  await withFetchStub(
+    async () => jsonResponse(200, { tokenId: 'tok_1' }), // no `token`
+    async () => {
+      await assert.rejects(
+        () => mintDaemonPAT({ apiUrl: 'https://reliantapi.com', accessToken: 'jwt' }),
+        /missing token/i
+      );
+    }
+  );
+});
+
+test('mintDaemonPAT: 401 throws with status', async () => {
+  await withFetchStub(
+    async () => jsonResponse(401, { error: 'unauthenticated' }),
+    async () => {
+      await assert.rejects(
+        () => mintDaemonPAT({ apiUrl: 'https://reliantapi.com', accessToken: 'bad' }),
+        /HTTP 401/
+      );
+    }
+  );
+});
+
+test('mintDaemonPAT: 5xx throws', async () => {
+  await withFetchStub(
+    async () => jsonResponse(503, { error: 'overloaded' }),
+    async () => {
+      await assert.rejects(
+        () => mintDaemonPAT({ apiUrl: 'https://reliantapi.com', accessToken: 'jwt' }),
+        /HTTP 503/
+      );
+    }
+  );
+});
+
+test('mintDaemonPAT: network error throws', async () => {
+  await withFetchStub(
+    async () => {
+      throw new Error('ECONNREFUSED');
+    },
+    async () => {
+      await assert.rejects(
+        () => mintDaemonPAT({ apiUrl: 'https://reliantapi.com', accessToken: 'jwt' }),
+        /ECONNREFUSED/
+      );
+    }
+  );
+});
+
+test('mintDaemonPAT: missing apiUrl throws synchronously', async () => {
+  await assert.rejects(
+    () => mintDaemonPAT({ apiUrl: '', accessToken: 'jwt' }),
+    /missing apiUrl/
+  );
+});
+
+test('mintDaemonPAT: missing accessToken throws synchronously', async () => {
+  await assert.rejects(
+    () => mintDaemonPAT({ apiUrl: 'https://reliantapi.com', accessToken: '' }),
+    /missing accessToken/
+  );
+});
+
+// ----------------------------------------------------------------------------
+// mintDaemonPAT — retry on transient failures
+// ----------------------------------------------------------------------------
+//
+// `air` may be mid-restart of `reliant server api` when BackendManager fires
+// the mint preflight, so the admin-server forwarder returns 502 (or ECONNREFUSED
+// upstream) for a short window. mintDaemonPAT retries those up to
+// MINT_MAX_ATTEMPTS times. These tests cover:
+//   - terminal success after transient failures (502 → 502 → 200, mixed)
+//   - exhausted retries (all 502 → throw with attempt count == MAX)
+//   - non-retryable codes don't retry (401 once)
+//   - schema mismatch (200 missing token) doesn't retry
+// We inject a fake `sleep` so the retry loop runs without real backoff.
+
+function makeSequenceFetch(responses) {
+  const calls = { count: 0, urls: [], inits: [] };
+  const stub = async (url, init) => {
+    const i = calls.count++;
+    calls.urls.push(url);
+    calls.inits.push(init);
+    const entry = responses[i];
+    if (!entry) {
+      throw new Error(`fetch stub: no scripted response for call ${i + 1}`);
+    }
+    if (entry instanceof Error || typeof entry === 'function') {
+      // Allow scripting a thrown error too.
+      if (typeof entry === 'function') return await entry();
+      throw entry;
+    }
+    return entry;
+  };
+  return { stub, calls };
+}
+
+const noopSleep = async () => {};
+
+test('mintDaemonPAT: sanity — retries are bounded by MINT_MAX_ATTEMPTS = 3', () => {
+  // If someone bumps this constant we want the test changes to be conscious.
+  assert.equal(MINT_MAX_ATTEMPTS, 3);
+});
+
+test('mintDaemonPAT: 502 → 502 → 200 returns parsed result and calls fetch 3 times', async () => {
+  const { stub, calls } = makeSequenceFetch([
+    jsonResponse(502, { error: 'bad gateway' }),
+    jsonResponse(502, { error: 'bad gateway' }),
+    jsonResponse(200, { token: 'rlnt_pat_after_retry', tokenId: 'tok_2' }),
+  ]);
+  await withFetchStub(stub, async () => {
+    const result = await mintDaemonPAT({
+      apiUrl: 'https://reliantapi.com',
+      accessToken: 'jwt',
+      sleep: noopSleep,
+    });
+    assert.deepEqual(result, { token: 'rlnt_pat_after_retry', tokenId: 'tok_2' });
+  });
+  assert.equal(calls.count, 3, 'fetch should be called 3 times across retries');
+});
+
+test('mintDaemonPAT: 502 → 502 → 502 throws after exhausting retries (3 calls)', async () => {
+  const { stub, calls } = makeSequenceFetch([
+    jsonResponse(502, { error: 'bad gateway' }),
+    jsonResponse(502, { error: 'bad gateway' }),
+    jsonResponse(502, { error: 'bad gateway' }),
+  ]);
+  await withFetchStub(stub, async () => {
+    await assert.rejects(
+      () =>
+        mintDaemonPAT({
+          apiUrl: 'https://reliantapi.com',
+          accessToken: 'jwt',
+          sleep: noopSleep,
+        }),
+      /HTTP 502/
+    );
+  });
+  assert.equal(calls.count, 3, 'fetch should be called exactly MINT_MAX_ATTEMPTS times');
+});
+
+test('mintDaemonPAT: 502 → network error → 200 returns parsed (3 calls)', async () => {
+  // The middle call throws a network error (ECONNREFUSED via message-substring
+  // path — matches existing `throw new Error("ECONNREFUSED")` test pattern).
+  const { stub, calls } = makeSequenceFetch([
+    jsonResponse(502, { error: 'bad gateway' }),
+    async () => {
+      throw new Error('connect ECONNREFUSED 127.0.0.1:3001');
+    },
+    jsonResponse(200, { token: 'rlnt_pat_recovered', tokenId: 'tok_3' }),
+  ]);
+  await withFetchStub(stub, async () => {
+    const result = await mintDaemonPAT({
+      apiUrl: 'https://reliantapi.com',
+      accessToken: 'jwt',
+      sleep: noopSleep,
+    });
+    assert.deepEqual(result, { token: 'rlnt_pat_recovered', tokenId: 'tok_3' });
+  });
+  assert.equal(calls.count, 3);
+});
+
+test('mintDaemonPAT: 401 throws on first attempt WITHOUT retrying', async () => {
+  const { stub, calls } = makeSequenceFetch([
+    jsonResponse(401, { error: 'unauthenticated' }),
+    // Subsequent entries would be used if the retry path fires — fail loudly.
+    jsonResponse(200, { token: 'rlnt_pat_should_not_reach' }),
+  ]);
+  await withFetchStub(stub, async () => {
+    await assert.rejects(
+      () =>
+        mintDaemonPAT({
+          apiUrl: 'https://reliantapi.com',
+          accessToken: 'bad-jwt',
+          sleep: noopSleep,
+        }),
+      /HTTP 401/
+    );
+  });
+  assert.equal(calls.count, 1, '4xx must not trigger a retry');
+});
+
+test('mintDaemonPAT: 200 with missing token throws WITHOUT retrying', async () => {
+  const { stub, calls } = makeSequenceFetch([
+    jsonResponse(200, { tokenId: 'tok_no_token_field' }), // no `token`
+    // Sentinel — should not be reached.
+    jsonResponse(200, { token: 'rlnt_pat_should_not_reach' }),
+  ]);
+  await withFetchStub(stub, async () => {
+    await assert.rejects(
+      () =>
+        mintDaemonPAT({
+          apiUrl: 'https://reliantapi.com',
+          accessToken: 'jwt',
+          sleep: noopSleep,
+        }),
+      /missing token/i
+    );
+  });
+  assert.equal(calls.count, 1, 'schema mismatch is terminal — must not retry');
+});
+
+// ----------------------------------------------------------------------------
+// ensureDaemonPATForOrigin — orchestration that BackendManager delegates to
+// ----------------------------------------------------------------------------
+//
+// The store path is derived from os.homedir(), so we redirect HOME (and
+// USERPROFILE on Windows) to a tmpdir for each test. mintDaemonPAT is stubbed
+// at the fetch level — we don't re-cover its failure modes here.
+
+function withFakeHome(fn) {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ensure-pat-test-'));
+  const origHome = process.env.HOME;
+  const origUserProfile = process.env.USERPROFILE;
+  process.env.HOME = home;
+  process.env.USERPROFILE = home;
+  return (async () => {
+    try {
+      return await fn(home);
+    } finally {
+      if (origHome === undefined) delete process.env.HOME; else process.env.HOME = origHome;
+      if (origUserProfile === undefined) delete process.env.USERPROFILE; else process.env.USERPROFILE = origUserProfile;
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  })();
+}
+
+test('ensureDaemonPATForOrigin: skips silently when authStorage is null', async () => {
+  // Fetch should never be called.
+  await withFakeHome(async (home) => {
+    await withFetchStub(
+      async () => {
+        throw new Error('fetch must not be called when authStorage is null');
+      },
+      async () => {
+        await ensureDaemonPATForOrigin({
+          authStorage: null,
+          apiUrl: 'https://reliantapi.com',
+          gatewayUrl: '',
+        });
+      }
+    );
+    // No file written.
+    assert.equal(
+      fs.existsSync(path.join(home, '.reliant', 'daemon.json')),
+      false,
+      'no daemon.json should be created when authStorage is null'
+    );
+  });
+});
+
+test('ensureDaemonPATForOrigin: skips mint when no session is stored', async () => {
+  await withFakeHome(async (home) => {
+    const authStorage = { loadStoredAuth: () => null };
+    await withFetchStub(
+      async () => {
+        throw new Error('fetch must not be called when there is no session');
+      },
+      async () => {
+        await ensureDaemonPATForOrigin({
+          authStorage,
+          apiUrl: 'https://reliantapi.com',
+          gatewayUrl: '',
+        });
+      }
+    );
+    assert.equal(
+      fs.existsSync(path.join(home, '.reliant', 'daemon.json')),
+      false,
+      'no daemon.json when no session'
+    );
+  });
+});
+
+test('ensureDaemonPATForOrigin: mints + writes when no existing entry', async () => {
+  await withFakeHome(async (home) => {
+    const authStorage = {
+      loadStoredAuth: () => ({
+        access_token: 'jwt-abc',
+        user: { id: 'user-1' },
+      }),
+    };
+    await withFetchStub(
+      async () => jsonResponse(200, { token: 'rlnt_pat_fresh', tokenId: 'tok_1' }),
+      async () => {
+        await ensureDaemonPATForOrigin({
+          authStorage,
+          apiUrl: 'https://reliantapi.com',
+          gatewayUrl: 'http://127.0.0.1:19190/reliant-dev',
+        });
+      }
+    );
+    const file = path.join(home, '.reliant', 'daemon.json');
+    assert.ok(fs.existsSync(file), 'daemon.json should be written');
+    const store = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const entry = store['https://reliantapi.com'];
+    assert.ok(entry, 'entry must exist under the origin key');
+    assert.equal(entry.pat, 'rlnt_pat_fresh');
+    assert.equal(entry.server_url, 'https://reliantapi.com');
+    assert.equal(entry.gateway_url, 'http://127.0.0.1:19190/reliant-dev');
+    assert.equal(entry.sub, 'user-1');
+  });
+});
+
+test('ensureDaemonPATForOrigin: re-mints + overwrites when existing entry sub differs', async () => {
+  await withFakeHome(async (home) => {
+    // Seed an existing entry that belongs to a DIFFERENT user.
+    const dir = path.join(home, '.reliant');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, 'daemon.json');
+    fs.writeFileSync(file, JSON.stringify({
+      'https://reliantapi.com': {
+        pat: 'rlnt_pat_OLD_user',
+        server_url: 'https://reliantapi.com',
+        gateway_url: '',
+        sub: 'user-OLD',
+        registered_at: '2025-01-01T00:00:00.000Z',
+      },
+    }, null, 2));
+
+    const authStorage = {
+      loadStoredAuth: () => ({
+        access_token: 'jwt-new',
+        user: { id: 'user-NEW' },
+      }),
+    };
+    await withFetchStub(
+      async () => jsonResponse(200, { token: 'rlnt_pat_NEW_user' }),
+      async () => {
+        await ensureDaemonPATForOrigin({
+          authStorage,
+          apiUrl: 'https://reliantapi.com',
+          gatewayUrl: '',
+        });
+      }
+    );
+    const after = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const entry = after['https://reliantapi.com'];
+    assert.equal(entry.pat, 'rlnt_pat_NEW_user', 'must overwrite with new user\'s PAT');
+    assert.equal(entry.sub, 'user-NEW');
+  });
+});
+
+test('ensureDaemonPATForOrigin: skips mint when existing entry sub matches current session', async () => {
+  await withFakeHome(async (home) => {
+    // Seed an entry that already belongs to the current user.
+    const dir = path.join(home, '.reliant');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, 'daemon.json');
+    const seedEntry = {
+      pat: 'rlnt_pat_CURRENT',
+      server_url: 'https://reliantapi.com',
+      gateway_url: '',
+      sub: 'user-1',
+      registered_at: '2025-01-01T00:00:00.000Z',
+    };
+    fs.writeFileSync(file, JSON.stringify({ 'https://reliantapi.com': seedEntry }, null, 2));
+
+    const authStorage = {
+      loadStoredAuth: () => ({
+        access_token: 'jwt-current',
+        user: { id: 'user-1' },
+      }),
+    };
+    await withFetchStub(
+      async () => {
+        throw new Error('fetch must not be called when sub already matches');
+      },
+      async () => {
+        await ensureDaemonPATForOrigin({
+          authStorage,
+          apiUrl: 'https://reliantapi.com',
+          gatewayUrl: '',
+        });
+      }
+    );
+    // File contents unchanged.
+    const after = JSON.parse(fs.readFileSync(file, 'utf8'));
+    assert.deepEqual(after['https://reliantapi.com'], seedEntry);
+  });
+});

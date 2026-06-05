@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -83,6 +84,138 @@ func TestDaemonRegistrationUserIDReturnsContextUserID(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "trusted-user", resolved)
 }
+
+// fakeDaemonRepo is a narrow stub for resolveUnboundDaemonID — it implements
+// only the lookup the helper needs. Real repo tests cover the SQL.
+type fakeDaemonRepo struct {
+	daemons []*db.Daemon
+	err     error
+	calls   int
+}
+
+func (f *fakeDaemonRepo) ListDaemonsByUserID(_ context.Context, _ string) ([]*db.Daemon, error) {
+	f.calls++
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.daemons, nil
+}
+
+// resolveUnboundDaemonID is the gateway-side hostname reuse path that keeps
+// (userID, hostname) stable across reconnects. The tests below pin its three
+// branches so a refactor can't silently regress to "mint a fresh ID per
+// reconnect" — the failure mode this helper exists to prevent.
+
+func TestResolveUnboundDaemonIDReusesExistingByHostname(t *testing.T) {
+	existingID := "existing-daemon-id"
+	hostname := "Seans-MacBook-Pro-2.local"
+	repo := &fakeDaemonRepo{daemons: []*db.Daemon{
+		{ID: "other-host-daemon", UserID: "u1", Hostname: ptrStr("other-host")},
+		{ID: existingID, UserID: "u1", Hostname: ptrStr(hostname)},
+	}}
+
+	got := resolveUnboundDaemonID(context.Background(), repo, "u1", hostname)
+	require.Equal(t, existingID, got)
+	require.Equal(t, 1, repo.calls)
+}
+
+func TestResolveUnboundDaemonIDMintsNewWhenHostnameDoesNotMatch(t *testing.T) {
+	repo := &fakeDaemonRepo{daemons: []*db.Daemon{
+		{ID: "old-id", UserID: "u1", Hostname: ptrStr("DifferentHost")},
+	}}
+
+	got := resolveUnboundDaemonID(context.Background(), repo, "u1", "Seans-MacBook-Pro-2.local")
+	require.NotEmpty(t, got)
+	require.NotEqual(t, "old-id", got)
+	require.Equal(t, 1, repo.calls)
+}
+
+func TestResolveUnboundDaemonIDMintsNewWhenNoExistingDaemons(t *testing.T) {
+	repo := &fakeDaemonRepo{}
+	got := resolveUnboundDaemonID(context.Background(), repo, "u1", "host-a")
+	require.NotEmpty(t, got)
+}
+
+func TestResolveUnboundDaemonIDMintsNewWhenHostnameEmpty(t *testing.T) {
+	// Empty hostname must skip the lookup — otherwise an older daemon that
+	// doesn't send hostname would collide with the first row for the user
+	// and steal its identity.
+	repo := &fakeDaemonRepo{daemons: []*db.Daemon{
+		{ID: "real-daemon", UserID: "u1", Hostname: ptrStr("real-host")},
+	}}
+	got := resolveUnboundDaemonID(context.Background(), repo, "u1", "")
+	require.NotEmpty(t, got)
+	require.NotEqual(t, "real-daemon", got)
+	require.Equal(t, 0, repo.calls, "empty hostname should not query the DB")
+}
+
+func TestResolveUnboundDaemonIDIgnoresOtherUsersWithSameHostname(t *testing.T) {
+	// Multi-user dev box: two Supabase identities, same physical machine.
+	// The lookup is already user-scoped, but pin it so a future refactor
+	// can't accidentally widen the query and cross-attribute daemons.
+	repo := &fakeDaemonRepo{daemons: []*db.Daemon{
+		// ListDaemonsByUserID is contract-bound to filter; if a future
+		// implementation returns cross-user rows, we still must not pick
+		// them — the helper trusts the contract, so we model the contract
+		// (only user-scoped rows show up) and verify the new-mint path.
+	}}
+	got := resolveUnboundDaemonID(context.Background(), repo, "u2", "Seans-MacBook-Pro-2.local")
+	require.NotEmpty(t, got)
+}
+
+func TestResolveUnboundDaemonIDMintsNewOnLookupError(t *testing.T) {
+	// DB blip should not block daemon registration — fall back to a new
+	// UUID. The next successful reconnect will reuse this row.
+	repo := &fakeDaemonRepo{err: fmt.Errorf("transient DB error")}
+	got := resolveUnboundDaemonID(context.Background(), repo, "u1", "host-a")
+	require.NotEmpty(t, got)
+}
+
+func TestResolveUnboundDaemonIDTrimsHostnameWhitespace(t *testing.T) {
+	// os.Hostname() should never return padded values, but a stray space
+	// from a malformed proto must not split one machine into two rows.
+	repo := &fakeDaemonRepo{daemons: []*db.Daemon{
+		{ID: "stable-id", UserID: "u1", Hostname: ptrStr("host-a")},
+	}}
+	got := resolveUnboundDaemonID(context.Background(), repo, "u1", "  host-a  ")
+	require.Equal(t, "stable-id", got)
+}
+
+// Reconnect simulation: walk the helper through a "first connect → upsert →
+// second connect" cycle using an in-memory fake. Pins the end-to-end
+// contract that two reconnects from the same (userID, hostname) produce
+// one daemon_id, not two — the Electron-restart-loop failure mode.
+func TestResolveUnboundDaemonIDReusesAcrossReconnectsInMemory(t *testing.T) {
+	userID := "user-1"
+	hostname := "Seans-MacBook-Pro-2.local"
+	repo := &fakeDaemonRepo{}
+	ctx := context.Background()
+
+	// First connect: no existing row → mint.
+	firstID := resolveUnboundDaemonID(ctx, repo, userID, hostname)
+	require.NotEmpty(t, firstID)
+
+	// Simulate UpsertDaemon by appending to the fake's snapshot.
+	repo.daemons = append(repo.daemons, &db.Daemon{
+		ID:       firstID,
+		UserID:   userID,
+		Hostname: ptrStr(hostname),
+	})
+
+	// Second connect (Electron restart): same userID + hostname → must reuse.
+	secondID := resolveUnboundDaemonID(ctx, repo, userID, hostname)
+	require.Equal(t, firstID, secondID, "reconnect must reuse the same daemon_id, not mint a fresh one")
+
+	// Third connect: still stable.
+	thirdID := resolveUnboundDaemonID(ctx, repo, userID, hostname)
+	require.Equal(t, firstID, thirdID)
+
+	// Only one row in the fake — i.e. the upsert path the caller runs
+	// after this helper would land on the same id every time.
+	require.Len(t, repo.daemons, 1)
+}
+
+func ptrStr(s string) *string { return &s }
 
 func TestHandleProjectDiscoveryCreatesProjectAndRequestsConfig(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)

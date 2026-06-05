@@ -4,6 +4,7 @@ package runtime
 import (
 	"fmt"
 
+	"github.com/reliant-labs/reliant/internal/chatmarkers"
 	"github.com/reliant-labs/reliant/internal/daemonoffline"
 )
 
@@ -33,15 +34,10 @@ const DaemonOfflineHaltThreshold = 3
 // turns. The frontend chat-error UI scans for this marker (in chatStore.ts)
 // and renders a "Reconnect workspace" affordance instead of a generic toast.
 //
-// Wire format: `<message> [RELIANT_DAEMON_OFFLINE_HALT:<turns>]`
-//
-// This mirrors the ReliantManagedQuotaMarker convention in
-// internal/llm/drivers/reliant/driver.go — substring markers survive
-// Temporal's JSON stringification of activity / workflow errors, which is the
-// only artifact the frontend reliably receives.
-//
-// DO NOT RENAME without updating reliant/web/src/store/chatStore.ts.
-const DaemonOfflineHaltMarker = "RELIANT_DAEMON_OFFLINE_HALT"
+// The canonical contract lives in internal/chatmarkers — this constant is a
+// thin local alias kept for legacy call-site / test readability. New code
+// should refer to chatmarkers.KindDaemonOfflineHalt directly.
+const DaemonOfflineHaltMarker = string(chatmarkers.KindDaemonOfflineHalt)
 
 // DaemonOfflineTracker accumulates per-turn observations about daemon-targeted
 // activity outcomes, then evaluates whether the workflow should halt.
@@ -225,13 +221,16 @@ func (t *DaemonOfflineTracker) ConsecutiveOfflineTurns() int {
 
 // HaltError returns the terminal error that DynamicWorkflow returns when the
 // consecutive-offline-turn streak meets the halt threshold. The message
-// carries DaemonOfflineHaltMarker so the frontend can render a structured
-// recovery affordance.
+// carries the chatmarkers.KindDaemonOfflineHalt marker so the frontend can
+// render a structured recovery affordance.
 func HaltError(consecutiveTurns int) error {
-	return fmt.Errorf(
-		"daemon offline for %d consecutive turns; halting workflow. Reconnect the workspace and start a new turn. [%s:%d]",
-		consecutiveTurns,
-		DaemonOfflineHaltMarker,
+	msg := fmt.Sprintf(
+		"daemon offline for %d consecutive turns; halting workflow. Reconnect the workspace and start a new turn.",
 		consecutiveTurns,
 	)
+	return fmt.Errorf("%s", chatmarkers.Wrap(
+		chatmarkers.KindDaemonOfflineHalt,
+		fmt.Sprintf("%d", consecutiveTurns),
+		msg,
+	))
 }

@@ -330,7 +330,7 @@ export function NodeOutputsPanel({
   }
 
   return (
-    <div>
+    <div className="cpv2-section">
       {/* Header */}
       <div className="text-xs text-muted-foreground mb-3">
         Reference these outputs in downstream nodes using{" "}

@@ -164,15 +164,22 @@ function SpawnPreview({ ctx }: ToolContentProps) {
 
   const summaries = useMemo((): MessageSummary[] => {
     if (!spawnThreadId) return [];
-    const threadMsgs = allMessages.filter(
-      (msg) => msg.thread === spawnThreadId && msg.role === MessageRole.ASSISTANT,
-    );
+    // chatStore keeps messages newest-first; reorder oldest-first so the
+    // preview reads top-to-bottom in chronological order.
+    const threadMsgs = allMessages
+      .filter((msg) => msg.thread === spawnThreadId && msg.role === MessageRole.ASSISTANT)
+      .slice()
+      .sort(
+        (a, b) =>
+          new Date(a.createdAt || "").getTime() - new Date(b.createdAt || "").getTime(),
+      );
 
-    // When complete, pop the last message - it's the result shown in tool output
+    // When complete, pop the last (most recent) message - it's the result shown in tool output
     const msgs = isDone && threadMsgs.length > 1
       ? threadMsgs.slice(0, -1)
       : threadMsgs;
 
+    // Keep the most recent N so the preview tracks live activity.
     return msgs.slice(-MAX_PREVIEW_MESSAGES).map((msg) => {
       const blocks = (msg.contentBlocks || []) as ContentBlock[];
       let textSnippet = "";

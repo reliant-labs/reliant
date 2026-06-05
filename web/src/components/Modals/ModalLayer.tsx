@@ -10,9 +10,14 @@
  * stay visible regardless of which branch is currently rendering.
  */
 
-import { useModalStore, type UpgradeRequiredData } from "@/store/modalStore";
+import {
+  useModalStore,
+  type UpgradeRequiredData,
+  type BillingEmailRequiredData,
+} from "@/store/modalStore";
 import { ApiKeySetupModal } from "../ApiKeySetupModal";
 import { UpgradeRequiredModal } from "../UpgradeRequiredModal";
+import { BillingEmailRequiredModal } from "../BillingEmailRequiredModal";
 
 export function ModalLayer() {
   const activeModal = useModalStore((s) => s.activeModal);
@@ -29,6 +34,16 @@ export function ModalLayer() {
         isOpen
         onClose={closeModal}
         data={data as UpgradeRequiredData}
+      />
+    );
+  }
+
+  if (activeModal === "billing-email-required") {
+    return (
+      <BillingEmailRequiredModal
+        isOpen
+        onClose={closeModal}
+        data={data as BillingEmailRequiredData}
       />
     );
   }

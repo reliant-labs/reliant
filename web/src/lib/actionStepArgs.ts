@@ -28,6 +28,7 @@ export const TYPE_TO_CASE: Record<string, string> = {
   execute_tools: 'executeTools',
   compact: 'compact',
   approval: 'approval',
+  ask_question: 'askQuestion',
   save_message: 'saveMessageNode',
   create_worktree: 'createWorktree',
 }

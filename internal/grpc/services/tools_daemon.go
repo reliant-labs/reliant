@@ -406,6 +406,48 @@ func daemonRegistrationUserID(ctx context.Context, reg *reliantv1.DaemonRegister
 	return userID, nil
 }
 
+// daemonHostnameLookup is the subset of db.Repository needed to find an
+// existing daemon row by (userID, hostname). Kept narrow so the
+// hostname-reuse helper is trivially testable with a fake.
+type daemonHostnameLookup interface {
+	ListDaemonsByUserID(ctx context.Context, userID string) ([]*db.Daemon, error)
+}
+
+// resolveUnboundDaemonID picks the daemon_id to use when the authenticating
+// PAT is not bound to a specific daemon (the common path for external /
+// self-hosted daemons). It reuses the existing (userID, hostname) row if
+// present so reconnects don't accumulate ghost rows — every reconnect
+// minting a fresh ID would let the daemons table grow without bound and
+// the frontend's status==ACTIVE filter would never lock onto a stable row.
+//
+// Falls back to a freshly-minted UUID only when there's no prior row for
+// this hostname or when hostname is empty (older daemons that don't send it).
+// Lookup failures degrade to a new UUID so a transient DB error never blocks
+// registration — the alternative is to fail the connection, which is worse
+// than mis-attributing one row that the next reconnect will reuse.
+func resolveUnboundDaemonID(ctx context.Context, repo daemonHostnameLookup, userID, rawHostname string) string {
+	hostname := strings.TrimSpace(rawHostname)
+	if hostname != "" && repo != nil {
+		existing, lookupErr := repo.ListDaemonsByUserID(ctx, userID)
+		if lookupErr != nil {
+			logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to lookup existing daemons for hostname reuse",
+				"error", lookupErr, "userID", userID, "hostname", hostname)
+		} else {
+			for _, d := range existing {
+				if d.Hostname != nil && *d.Hostname == hostname {
+					logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Reusing existing daemon_id for unbound PAT",
+						"daemonID", d.ID, "userID", userID, "hostname", hostname)
+					return d.ID
+				}
+			}
+		}
+	}
+	id := uuid.NewString()
+	logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Generated daemon_id for unbound PAT",
+		"daemonID", id, "userID", userID, "hostname", hostname)
+	return id
+}
+
 // ConnectDaemon implements the bidirectional streaming RPC for daemon connections
 func (s *ToolsDaemonService) ConnectDaemon(
 	ctx context.Context,
@@ -435,31 +477,7 @@ func (s *ToolsDaemonService) ConnectDaemon(
 	// Daemon ID is assigned by the gateway from the PAT binding, not self-asserted.
 	daemonID := auth.GetDaemonIDFromContext(ctx)
 	if daemonID == "" {
-		// Unbound PAT (external daemon self-registration). Reuse the existing
-		// (userID, hostname) row if one exists so reconnects don't accumulate
-		// ghost daemon rows — otherwise every reconnect would mint a fresh ID,
-		// the daemons table would grow without bound, and the frontend's
-		// status==ACTIVE filter would never lock onto a stable row.
-		if hostname := strings.TrimSpace(reg.GetHostname()); hostname != "" {
-			existing, lookupErr := s.database.ListDaemonsByUserID(ctx, userID)
-			if lookupErr != nil {
-				logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to lookup existing daemons for hostname reuse",
-					"error", lookupErr, "userID", userID, "hostname", hostname)
-			} else {
-				for _, d := range existing {
-					if d.Hostname != nil && *d.Hostname == hostname {
-						daemonID = d.ID
-						logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Reusing existing daemon_id for unbound PAT",
-							"daemonID", daemonID, "userID", userID, "hostname", hostname)
-						break
-					}
-				}
-			}
-		}
-		if daemonID == "" {
-			daemonID = uuid.NewString()
-			logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Generated daemon_id for unbound PAT", "daemonID", daemonID, "userID", userID)
-		}
+		daemonID = resolveUnboundDaemonID(ctx, s.database, userID, reg.GetHostname())
 	}
 
 	requestedProjectPaths, err := s.listAllProjectPaths(ctx, userID)

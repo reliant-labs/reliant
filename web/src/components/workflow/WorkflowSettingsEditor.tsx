@@ -1,11 +1,10 @@
 import { useState } from 'react'
 import { Plus, Trash2, Tag } from 'lucide-react'
-import type { Param, ThreadConfig } from '../../types/workflow'
+import type { Param } from '../../types/workflow'
 import { ConfigurationPanel } from './ConfigurationPanel'
 import { WorkflowParamsEditorContent } from './WorkflowParamsEditor'
 import { CELExpressionInput } from './CELInput'
 import { MultiSelectDropdown, type MultiSelectOption } from '../ui/MultiSelectDropdown'
-import { NodeThreadConfigEditor } from './NodeThreadConfigEditor'
 import { HelpPopover } from '../ui/HelpPopover'
 import { ConfigPanelTabBar, type ConfigTab } from './config/ConfigPanelTabBar'
 
@@ -14,13 +13,11 @@ interface WorkflowSettingsEditorProps {
   entry?: string | string[]
   outputs?: Record<string, string>
   tag?: string
-  thread?: ThreadConfig
   nodeIds: string[]
   onUpdateParams: (params: Record<string, Param>) => void
   onUpdateEntry: (entry: string | string[] | undefined) => void
   onUpdateOutputs: (outputs: Record<string, string>) => void
   onUpdateTag: (tag: string | undefined) => void
-  onUpdateThread: (thread: ThreadConfig | undefined) => void
   onClose: () => void
   bottomOffset?: number
   topOffset?: number
@@ -33,23 +30,21 @@ export function WorkflowSettingsEditor({
   entry,
   outputs,
   tag,
-  thread,
   nodeIds,
   onUpdateParams,
   onUpdateEntry,
   onUpdateOutputs,
   onUpdateTag,
-  onUpdateThread,
   onClose,
   bottomOffset,
   topOffset,
 }: WorkflowSettingsEditorProps) {
   const [activeTab, setActiveTab] = useState<Tab>('params')
-  
+
   const paramCount = Object.keys(params || {}).length
   const outputCount = Object.keys(outputs || {}).length
   const hasEntry = entry !== undefined && (Array.isArray(entry) ? entry.length > 0 : entry !== '')
-  const hasAdvanced = !!(tag || thread)
+  const hasAdvanced = !!tag
   const tabs: ConfigTab[] = [
     { id: 'params', label: paramCount > 0 ? `Params (${paramCount})` : 'Params' },
     { id: 'entry', label: 'Entry', hasBadge: hasEntry },
@@ -100,9 +95,7 @@ export function WorkflowSettingsEditor({
       {activeTab === 'advanced' && (
         <AdvancedEditor
           tag={tag}
-          thread={thread}
           onUpdateTag={onUpdateTag}
-          onUpdateThread={onUpdateThread}
         />
       )}
     </ConfigurationPanel>
@@ -339,17 +332,16 @@ function OutputsEditor({
   )
 }
 
-// Advanced settings editor - tag and thread configuration
+// Advanced settings editor - workflow-level tag configuration.
+// Note: a thread editor used to live here, but the top-level `Workflow` proto
+// has no thread field — edits were silently dropped on save. The editor was
+// removed in favor of the per-node thread config (see ConfigPanel).
 function AdvancedEditor({
   tag,
-  thread,
   onUpdateTag,
-  onUpdateThread,
 }: {
   tag?: string
-  thread?: ThreadConfig
   onUpdateTag: (tag: string | undefined) => void
-  onUpdateThread: (thread: ThreadConfig | undefined) => void
 }) {
   return (
     <div className="space-y-6">
@@ -360,7 +352,7 @@ function AdvancedEditor({
           <label className="text-sm font-medium text-foreground">
             Workflow Tag
           </label>
-          <HelpPopover 
+          <HelpPopover
             content="Tag for preset matching. Presets with matching tag can apply to this workflow's ungrouped inputs. Common values: agent, workflow, tool"
           />
         </div>
@@ -374,17 +366,6 @@ function AdvancedEditor({
         <p className="text-xs text-muted-foreground mt-1.5">
           Used for preset matching on ungrouped inputs.
         </p>
-      </div>
-
-      {/* Workflow Thread Configuration */}
-      <div className="pt-4 border-t border-border">
-        <p className="text-sm text-muted-foreground mb-3">
-          Configure how this workflow manages its conversation thread.
-        </p>
-        <NodeThreadConfigEditor
-          config={thread}
-          onChange={onUpdateThread}
-        />
       </div>
     </div>
   )

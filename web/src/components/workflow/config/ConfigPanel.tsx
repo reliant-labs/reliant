@@ -1,6 +1,7 @@
 import { useCallback, useState, useEffect, useRef, useMemo } from "react";
 import { Check, X, Info, ChevronDown, ChevronRight } from "lucide-react";
-import { CELExpressionInput } from "../CELInput";
+import { ProtoFieldRenderer } from "../ProtoFieldRenderer";
+import type { ProtoFieldSchema } from "../../../types/workflowFieldSchema";
 import { getNodeTheme } from "../../../lib/node-metadata";
 import type {
   Step,
@@ -27,7 +28,7 @@ import {
 import { ConfigurationPanel } from "../ConfigurationPanel";
 import { workflowGrpc } from "../../../api/workflow-grpc";
 import { useProjectStore } from "../../../store/projectStore";
-import { directCel, celString } from "../../../lib/celAdapter";
+import { directCel, projectConfigLiteral } from "../../../lib/celAdapter";
 import { SaveMessageConfigEditor } from "../SaveMessageConfigEditor";
 import { NodeThreadConfigEditor } from "../NodeThreadConfigEditor";
 import { getConditionExpression, getStringValue, AdvancedProjectSettings } from "./shared";
@@ -44,18 +45,15 @@ import { getCatalogClient } from "../../../api/grpc-client";
 import type { NodeInfo } from "../../../gen/reliant/v1/catalog_pb";
 import { withWorkflowArgs, withLoopArgs, withRouterArgs } from "../../../types/workflow";
 import type { ConfigurationPanelAccent } from "../ConfigurationPanel";
+import { useWorkflowMutations } from "../WorkflowMutationContext";
 
 interface ConfigPanelProps {
   step: Step;
-  onUpdate: (step: Step) => void;
   onClose: () => void;
-  onDelete: () => void;
   /** Called when user wants to edit an inline loop body */
   onEditLoopBody?: (step: LoopStep) => void;
   /** Called when user wants to edit an inline workflow body */
   onEditInlineWorkflowBody?: (step: WorkflowStep) => void;
-  /** Called when user renames a node - handles edge updates */
-  onRename?: (oldId: string, newId: string) => void;
   /** List of existing node IDs for validation (to prevent duplicates) */
   existingNodeIds?: string[];
   /** Space to reserve at bottom when expanded (e.g., for chat panel) */
@@ -85,6 +83,17 @@ function hasProjectSupport(step: Step): boolean {
   return isWorkflowStep(step) || isLoopStep(step) || isRouterStep(step);
 }
 
+const CONDITION_SCHEMA: ProtoFieldSchema = {
+  key: "condition",
+  label: "Condition",
+  widget: "text",
+  valueKind: "string",
+  celExpressionOnly: true,
+  placeholder: "inputs.should_run == true",
+  helpText:
+    "CEL expression that determines if this node should execute. If false, node is skipped and outputs { skipped: true }. Available: inputs.*, nodes.*, workflow.*",
+};
+
 const NODE_THEME_TO_PANEL_ACCENT: Partial<Record<string, ConfigurationPanelAccent>> = {
   purple: 'purple',
   violet: 'violet',
@@ -111,12 +120,9 @@ function getStepPanelAccent(step: Step): ConfigurationPanelAccent {
 
 export function ConfigPanel({
   step,
-  onUpdate,
   onClose,
-  onDelete,
   onEditLoopBody,
   onEditInlineWorkflowBody,
-  onRename,
   existingNodeIds = [],
   bottomOffset,
   topOffset,
@@ -124,6 +130,31 @@ export function ConfigPanel({
   isInLoop = false,
   isReadOnly = false,
 }: ConfigPanelProps) {
+  // Mutation primitives from <WorkflowMutationProvider>. `onUpdate`,
+  // `onDelete`, `onRename` props were removed in favour of context so the
+  // builder doesn't have to prop-drill identical handlers everywhere.
+  const mutations = useWorkflowMutations();
+  const onUpdate = useCallback(
+    (updated: Step) => {
+      // updateStep merges onto whichever node currently has `step.id`. The
+      // step's own id is always the target — same contract as the old
+      // `handleStepUpdate` prop.
+      const nodeId = updated.id ?? step.id;
+      if (!nodeId) return;
+      mutations.updateStep(nodeId, updated);
+    },
+    [mutations, step.id],
+  );
+  const onDelete = useCallback(() => {
+    if (step.id) mutations.removeNode(step.id);
+  }, [mutations, step.id]);
+  const onRename = useCallback(
+    (oldId: string, newId: string) => {
+      mutations.renameNode(oldId, newId);
+    },
+    [mutations],
+  );
+
   const [catalogNodes, setCatalogNodes] = useState<NodeInfo[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const currentProject = useProjectStore((state) => state.currentProject);
@@ -182,11 +213,9 @@ export function ConfigPanel({
       return;
     }
 
-    // If ID changed, call onRename
+    // If ID changed, rename via mutation context.
     if (trimmedId !== step.id && step.id) {
-      if (onRename) {
-        onRename(step.id, trimmedId);
-      }
+      onRename(step.id, trimmedId);
     }
 
     setIsEditingId(false);
@@ -336,7 +365,8 @@ export function ConfigPanel({
       return "Workflow";
     }
     if (isJoinStep(step)) {
-      return `Join (${step.condition})`;
+      const cond = getConditionExpression(step.condition);
+      return cond ? `Join (${cond})` : "Join";
     }
     if (isLoopStep(step)) {
       return "Loop";
@@ -350,23 +380,20 @@ export function ConfigPanel({
   // Helper to update project on workflow/loop/router steps
   const updateProject = useCallback(
     (p: { path?: string } | undefined) => {
+      // Project nested object: `{ path: CelString }` lacks the `ProjectConfig`
+      // proto brand; the brand-stripping cast lives in one place via `projectConfigLiteral`.
+      const project = p ? projectConfigLiteral(p.path ?? "") : undefined;
       if (isWorkflowStep(step)) {
         onUpdate(
-          withWorkflowArgs(step as WorkflowStep, {
-            project: p ? { path: celString(p.path ?? "") } as any : undefined,
-          }) as Step,
+          withWorkflowArgs(step as WorkflowStep, { project }) as Step,
         );
       } else if (isLoopStep(step)) {
         onUpdate(
-          withLoopArgs(step as LoopStep, {
-            project: p ? { path: celString(p.path ?? "") } as any : undefined,
-          }) as Step,
+          withLoopArgs(step as LoopStep, { project }) as Step,
         );
       } else if (isRouterStep(step)) {
         onUpdate(
-          withRouterArgs(step, {
-            project: p ? { path: celString(p.path ?? "") } : undefined,
-          }),
+          withRouterArgs(step, { project }),
         );
       }
     },
@@ -563,20 +590,17 @@ export function ConfigPanel({
           {!isJoinStep(step) && (
             <div className="cpv2-section">
               <div className="cpv2-section-label">Execution</div>
-              <CELExpressionInput
-                label="Condition"
-                helpTooltip="CEL expression that determines if this node should execute. If false, node is skipped and outputs { skipped: true }. Available: inputs.*, nodes.*, workflow.*"
+              <ProtoFieldRenderer
+                schema={CONDITION_SCHEMA}
                 value={getConditionExpression(step.condition)}
-                onChange={(val) =>
+                onChange={(value) =>
                   updateStep({
-                    condition: val ? directCel(val) : undefined,
+                    condition:
+                      typeof value === "string" && value ? directCel(value) : undefined,
                   })
                 }
-                placeholder="inputs.should_run == true"
-                celContext="edge_condition"
                 disabled={isReadOnly}
-                hideCELHint
-                showCELIndicator={false}
+                celContext="edge_condition"
               />
               {getConditionExpression(step.condition) && (
                 <p className="cpv2-field-hint">

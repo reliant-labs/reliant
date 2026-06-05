@@ -154,6 +154,29 @@ describe('workflow-flow switch behavior', () => {
     expect(edges.some((edge) => edge.target === 'target-b')).toBe(true)
   })
 
+  it('should honor workflowStartLabel for the workflow start node', () => {
+    const workflow: Workflow = {
+      name: 'inline-loop-body',
+      nodes: [{ id: 'step-1', type: 'run', command: 'echo 1' }],
+      edges: [],
+    }
+
+    const defaultElements = workflowToFlowElements(workflow)
+    const defaultStart = defaultElements.nodes.find((n) => n.id === 'workflow')
+    expect(defaultStart?.data.label).toBe('Workflow Start')
+
+    const loopElements = workflowToFlowElements(workflow, { workflowStartLabel: 'Loop Start' })
+    const loopStart = loopElements.nodes.find((n) => n.id === 'workflow')
+    expect(loopStart?.data.label).toBe('Loop Start')
+
+    // Empty-workflow path also honors the label
+    const emptyElements = workflowToFlowElements(
+      { name: 'empty', nodes: [], edges: [] },
+      { workflowStartLabel: 'Loop Start' },
+    )
+    expect(emptyElements.nodes[0]?.data.label).toBe('Loop Start')
+  })
+
   it('should restore event-scoped switch metadata by canonical switch id', () => {
     const existingNodes = [
       {
