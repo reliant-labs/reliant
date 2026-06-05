@@ -9,6 +9,7 @@ import { ToolsSelector } from './ToolsSelector'
 import type { ModelValue } from './ModelDropdown'
 import type { ProtoFieldContext, ProtoFieldSchema } from '../../types/workflowFieldSchema'
 import { isProtoFieldVisible, normalizeProtoFieldValue } from '../../types/workflowFieldSchema'
+import { normalizeCelNumberString, unwrapCelLiteralOrExpr } from '../../lib/celAdapter'
 
 interface ProtoFieldRendererProps {
   schema: ProtoFieldSchema
@@ -33,60 +34,21 @@ function canRenderAsSelectLiteral(value: string, options: NonNullable<ProtoField
   return options.some((option) => option.value === value)
 }
 
-function isObjectRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
-}
-
+/**
+ * Read-side: convert a possibly-CEL-wrapped model value into a string suitable
+ * for `<ModelDropdown>` (literal → model id; expr → expression string).
+ * Wraps the generic `unwrapCelLiteralOrExpr` from `celAdapter` with a
+ * ModelDropdown-specific extractor; the unwrap logic itself lives in one
+ * place.
+ */
 function getModelStringValue(value: unknown): string {
   if (typeof value === 'string') {
     return value
   }
-
-  if (isObjectRecord(value)) {
-    const wrapper = value as { value?: { case?: string; value?: unknown }; literal?: unknown; expr?: unknown }
-    if (wrapper.value?.case === 'expr' && typeof wrapper.value.value === 'string') {
-      return wrapper.value.value
-    }
-    if (wrapper.value?.case === 'literal') {
-      return extractModelId(wrapper.value.value as ModelValue)
-    }
-    if (typeof wrapper.expr === 'string') {
-      return wrapper.expr
-    }
-    if (wrapper.literal) {
-      return extractModelId(wrapper.literal as ModelValue)
-    }
-  }
-
+  const unwrapped = unwrapCelLiteralOrExpr<ModelValue>(value)
+  if (unwrapped?.kind === 'expr') return unwrapped.value
+  if (unwrapped?.kind === 'literal') return extractModelId(unwrapped.value)
   return extractModelId(value as ModelValue)
-}
-
-function getNumberStringValue(value: unknown): string {
-  if (typeof value === 'number' || typeof value === 'bigint') {
-    return String(value)
-  }
-
-  if (typeof value === 'string') {
-    return value
-  }
-
-  if (isObjectRecord(value)) {
-    const wrapper = value as { value?: { case?: string; value?: unknown }; literal?: unknown; expr?: unknown }
-    if (wrapper.value?.case === 'literal' && (typeof wrapper.value.value === 'number' || typeof wrapper.value.value === 'bigint')) {
-      return String(wrapper.value.value)
-    }
-    if (wrapper.value?.case === 'expr' && typeof wrapper.value.value === 'string') {
-      return wrapper.value.value
-    }
-    if (typeof wrapper.literal === 'number' || typeof wrapper.literal === 'bigint') {
-      return String(wrapper.literal)
-    }
-    if (typeof wrapper.expr === 'string') {
-      return wrapper.expr
-    }
-  }
-
-  return ''
 }
 
 export function ProtoFieldRenderer({
@@ -107,7 +69,7 @@ export function ProtoFieldRenderer({
   const normalizedStringValue = typeof normalizedValue === 'string' ? normalizedValue : ''
   const normalizedBooleanValue = typeof normalizedValue === 'boolean' ? normalizedValue : Boolean(normalizedValue)
   const modelStringValue = getModelStringValue(value)
-  const numberStringValue = getNumberStringValue(value)
+  const numberStringValue = normalizeCelNumberString(value)
   const inputId = schema.key.replace(/\./g, '-')
 
   const supportsModeToggle = !hideCELToggle && schema.celCapable && !schema.celExpressionOnly && (
@@ -185,6 +147,7 @@ export function ProtoFieldRenderer({
 
   const renderCelInput = (celValue: string, { multiline = false, placeholder = schema.placeholder }: { multiline?: boolean; placeholder?: string } = {}) => (
     <CELInput
+      id={inputId}
       value={celValue}
       onChange={(nextValue) => onChange(nextValue)}
       placeholder={placeholder}

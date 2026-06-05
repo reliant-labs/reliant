@@ -10,7 +10,8 @@ export type ModelValue = { id: string } | { tags: string[] } | string | undefine
 export function extractModelId(value: ModelValue): string {
   if (!value) return ''
   if (typeof value === 'string') return value
-  if ('id' in value) return value.id
+  if (typeof value !== 'object') return ''
+  if ('id' in value && typeof value.id === 'string') return value.id
   return ''
 }
 

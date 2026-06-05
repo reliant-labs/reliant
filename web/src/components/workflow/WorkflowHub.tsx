@@ -38,7 +38,7 @@ import { ProtoFieldRenderer } from './ProtoFieldRenderer'
 import { inputDefToSchema } from '../../lib/nodeFieldAdapter'
 import type { InputDef } from '../../lib/inputHelpers'
 import { getInputPresetConfig, getInputDefault, getInputDescription, setInputEnumValues } from '../../lib/inputHelpers'
-import { useModels } from '../../store/globalDataStore'
+import { useModels, useGlobalDataStore } from '../../store/globalDataStore'
 import { useThinkingCapability, reconcileThinkingLevel } from '../../hooks/useThinkingCapability'
 
 // =============================================================================
@@ -1205,11 +1205,21 @@ function PresetEditModal({ preset, projectId, availablePresets = [], onSave, onC
 
   const handleAddParam = () => {
     if (!paramToAdd || !referenceSchema[paramToAdd]) return
-    
+
     const schema = referenceSchema[paramToAdd]
+    const explicitDefault = getInputDefault(schema)
+    // When the schema doesn't declare a default, fall back to a kind-correct
+    // empty value so object/array params don't get an empty-string initial
+    // value that the ParamField branches would route to the wrong renderer.
+    const fallbackDefault =
+      schema?.config?.case === 'objectInput'
+        ? {}
+        : schema?.config?.case === 'arrayInput'
+        ? []
+        : ''
     setParams(prev => ({
       ...prev,
-      [paramToAdd]: getInputDefault(schema) ?? ''
+      [paramToAdd]: explicitDefault ?? fallbackDefault
     }))
     setParamToAdd('')
   }
@@ -1681,8 +1691,20 @@ export function WorkflowHub({
       const result = await workflowGrpc.copyWorkflow(projectId, workflowName)
       if (result.success) {
         toast.success(`Created "${result.slug}" from "${displayName}"`)
-        // Refresh workflow list
-        window.location.reload() // TODO: Better refresh mechanism
+        // Refresh the workflow list (signals the parent to reload detailed
+        // data) before navigating, otherwise the hub renders empty while the
+        // global store catches up.
+        window.dispatchEvent(new Event('workflow-saved'))
+        try {
+          await useGlobalDataStore.getState().refetchWorkflows(projectId)
+        } catch {
+          // Best-effort; the workflow-saved event triggers a fallback refresh.
+        }
+        // Open the new copy directly — workflow-hub copy is a navigation
+        // affordance, not a passive list mutation.
+        if (result.slug) {
+          onSelectWorkflow(result.slug)
+        }
       } else {
         toast.error(result.message || 'Failed to copy workflow')
       }

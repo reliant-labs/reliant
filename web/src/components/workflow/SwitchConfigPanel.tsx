@@ -1,17 +1,20 @@
 import { useState, useCallback } from 'react'
 import { useMemo } from 'react'
-import type { Node } from '@xyflow/react'
+import type { Edge, Node } from '@xyflow/react'
 import { ConfigurationPanel } from './ConfigurationPanel'
-import { Trash2, GripVertical, Plus } from 'lucide-react'
+import { Trash2, GripVertical, Plus, ArrowRight } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import type { SwitchCase, SwitchNodeData } from './nodes/SwitchNode'
 import { CELExpressionInput } from './CELInput'
+import { useWorkflowMutations } from './WorkflowMutationContext'
 
 interface SwitchConfigPanelProps {
   node: Node
-  onUpdate: (nodeId: string, data: Partial<SwitchNodeData>) => void
+  /** All workflow nodes — used to resolve case destinations by label. */
+  nodes?: Node[]
+  /** All workflow edges — used to look up which node each case routes to. */
+  edges?: Edge[]
   onClose: () => void
-  onDelete: () => void
   bottomOffset?: number
   topOffset?: number
   isReadOnly?: boolean
@@ -19,15 +22,44 @@ interface SwitchConfigPanelProps {
 
 export function SwitchConfigPanel({
   node,
-  onUpdate,
+  nodes,
+  edges,
   onClose,
-  onDelete,
   bottomOffset,
   topOffset,
   isReadOnly = false,
 }: SwitchConfigPanelProps) {
+  // Mutation primitives from <WorkflowMutationProvider>. `updateSwitchNode`
+  // also reconciles dangling edges when cases are reordered/removed.
+  const mutations = useWorkflowMutations()
+  const onUpdate = useCallback(
+    (nodeId: string, data: Partial<SwitchNodeData>) => mutations.updateSwitchNode(nodeId, data),
+    [mutations],
+  )
+  const onDelete = useCallback(
+    () => mutations.removeNode(node.id),
+    [mutations, node.id],
+  )
   const data = node.data as unknown as SwitchNodeData
   const cases = useMemo(() => data.cases || [], [data.cases])
+
+  // Map case id → destination node label/id, looked up via the case's
+  // sourceHandle. Falls back to undefined when the case isn't wired up yet.
+  const destinationByCase = useMemo(() => {
+    const map: Record<string, string> = {}
+    if (!edges || !nodes) return map
+    const nodeLabel = (id: string): string => {
+      const target = nodes.find((n) => n.id === id)
+      if (!target) return id
+      const label = (target.data as { label?: unknown } | undefined)?.label
+      return typeof label === 'string' && label ? label : id
+    }
+    for (const edge of edges) {
+      if (edge.source !== node.id || !edge.sourceHandle) continue
+      map[edge.sourceHandle] = nodeLabel(edge.target)
+    }
+    return map
+  }, [edges, nodes, node.id])
   
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
 
@@ -42,31 +74,52 @@ export function SwitchConfigPanel({
     updateCases(newCases)
   }, [cases, updateCases])
 
+  // A case is the synthetic default iff workflow-flow.ts gave it id='default'
+  // (only appended when defaultTargets.length > 0). Indexing off "last case" is
+  // wrong for switches with conditional cases only.
+  const isDefaultCase = useCallback(
+    (c: SwitchCase | undefined) => c?.id === 'default',
+    [],
+  )
+  const defaultIndex = useMemo(
+    () => cases.findIndex(isDefaultCase),
+    [cases, isDefaultCase],
+  )
+
   const addCase = useCallback(() => {
-    // Insert new case before the last one (default)
+    // Pick the next free `case-N` id so the React Flow source handle survives
+    // a save→reload roundtrip (workflow-flow.ts emits `case-${idx}` on reload).
+    const usedIndices = cases
+      .map((c) => {
+        const match = /^case-(\d+)$/.exec(c.id)
+        return match ? Number(match[1]) : -1
+      })
+      .filter((n) => n >= 0)
+    const nextIdx = usedIndices.length > 0 ? Math.max(...usedIndices) + 1 : 0
     const newCase: SwitchCase = {
-      id: `case-${Date.now()}`,
+      id: `case-${nextIdx}`,
       condition: '',
       label: '',
     }
     const newCases = [...cases]
-    // Insert before the last (default) case
-    newCases.splice(cases.length - 1, 0, newCase)
+    // Insert before the default case if one exists; otherwise append.
+    const insertAt = defaultIndex >= 0 ? defaultIndex : newCases.length
+    newCases.splice(insertAt, 0, newCase)
     updateCases(newCases)
-  }, [cases, updateCases])
+  }, [cases, defaultIndex, updateCases])
 
   const deleteCase = useCallback((index: number) => {
-    // Can't delete if only one case, and can't delete the default (last) case
+    // Can't delete if only one case, and can't delete the default case.
     if (cases.length <= 1) return
-    if (index === cases.length - 1) return // Can't delete default
-    
+    if (isDefaultCase(cases[index])) return
+
     const newCases = cases.filter((_, i) => i !== index)
     updateCases(newCases)
-  }, [cases, updateCases])
+  }, [cases, isDefaultCase, updateCases])
 
   const handleDragStart = (index: number) => {
-    // Can't drag the default (last) case
-    if (index === cases.length - 1) return
+    // Can't drag the default case
+    if (isDefaultCase(cases[index])) return
     setDraggedIndex(index)
   }
 
@@ -74,7 +127,7 @@ export function SwitchConfigPanel({
     e.preventDefault()
     if (draggedIndex === null) return
     // Can't drop on the default case position
-    if (targetIndex === cases.length - 1) return
+    if (isDefaultCase(cases[targetIndex])) return
   }
 
   const handleDrop = (e: React.DragEvent, targetIndex: number) => {
@@ -84,7 +137,7 @@ export function SwitchConfigPanel({
       return
     }
     // Can't drop on the default case position
-    if (targetIndex === cases.length - 1) {
+    if (isDefaultCase(cases[targetIndex])) {
       setDraggedIndex(null)
       return
     }
@@ -111,7 +164,8 @@ export function SwitchConfigPanel({
       bottomOffset={bottomOffset}
       topOffset={topOffset}
     >
-      <p className="text-xs text-muted-foreground -mt-2 mb-3">
+      <div className="cpv2-section">
+      <p className="text-xs text-muted-foreground mb-3">
         Cases are evaluated in order. First match wins.
       </p>
 
@@ -135,10 +189,13 @@ export function SwitchConfigPanel({
         <label className="text-xs font-medium text-muted-foreground">Cases</label>
         
         {cases.map((caseItem, index) => {
-          const isDefault = index === cases.length - 1
-          const canDrag = !isDefault && cases.length > 2
+          const isDefault = isDefaultCase(caseItem)
+          // Need >1 non-default cases to reorder
+          const conditionalCount = cases.length - (defaultIndex >= 0 ? 1 : 0)
+          const canDrag = !isDefault && conditionalCount > 1
           const canDelete = !isDefault && cases.length > 1
           
+          const destination = destinationByCase[caseItem.id]
           return (
             <div
               key={caseItem.id}
@@ -159,10 +216,21 @@ export function SwitchConfigPanel({
               </div>
 
               {/* Case fields */}
-              <div className="flex-1 space-y-1.5">
-                {/* Case header */}
-                <div className="text-xs font-medium text-muted-foreground">
-                  {isDefault ? 'default' : `case ${index + 1}`}
+              <div className="flex-1 space-y-1.5 min-w-0">
+                {/* Case header + destination */}
+                <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <span>{isDefault ? 'default' : `case ${index + 1}`}</span>
+                  {destination ? (
+                    <span className="flex items-center gap-1 min-w-0 text-foreground/80 font-normal">
+                      <ArrowRight className="w-3 h-3 shrink-0 opacity-60" />
+                      <span className="truncate font-mono">{destination}</span>
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-muted-foreground/60 italic font-normal">
+                      <ArrowRight className="w-3 h-3 shrink-0 opacity-40" />
+                      <span>unconnected</span>
+                    </span>
+                  )}
                 </div>
                 
                 {/* Condition input - only for non-default cases */}
@@ -214,6 +282,7 @@ export function SwitchConfigPanel({
             Add case
           </button>
         )}
+      </div>
       </div>
     </ConfigurationPanel>
   )

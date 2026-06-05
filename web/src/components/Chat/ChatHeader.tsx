@@ -101,8 +101,11 @@ export function ChatHeader({
   const setRightSidebarTab = useWorkspaceStateStore((state) => state.setRightSidebarTab);
   const setRightPanelState = useWorkspaceStateStore((state) => state.setRightPanelState);
   
-  // Get threads from messages with workflow metadata for better names
-  const threads = useThreads(messages, chatId || "", workflowExecution);
+  // Get threads from messages with workflow metadata for better names.
+  // Spawn-tool threads are short-lived sub-agents owned by a single tool call;
+  // they're surfaced inline via the spawn preview, not in the header.
+  const allThreads = useThreads(messages, chatId || "", workflowExecution);
+  const threads = useMemo(() => allThreads.filter((t) => !t.isSpawn), [allThreads]);
   const hasMultipleThreads = threads.length > 1;
   
   // Task stats from React Query

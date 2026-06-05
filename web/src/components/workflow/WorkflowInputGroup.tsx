@@ -16,6 +16,22 @@ import type { PresetsConfig } from "../../types/workflow";
 import { Section, SectionFields, SectionLabel } from "./config/primitives";
 
 // ============================================
+// Helpers
+// ============================================
+
+/**
+ * BigInt-safe stable stringify for structural value comparison.
+ * `JSON.stringify` throws on BigInt; proto integer wrappers may surface them.
+ */
+function stableStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
+  } catch {
+    return String(value);
+  }
+}
+
+// ============================================
 // Shared Types
 // ============================================
 
@@ -133,9 +149,11 @@ export function WorkflowInputGroup({
         const presetParamName = group.name ? paramName.split(".")[1] : paramName;
         const presetValue = selectedPresetObj.params[presetParamName];
 
-        // Normalize for comparison (handle string/number conversions)
-        const normalizedCurrent = currentValue?.toString() ?? getInputDefault(schema)?.toString() ?? "";
-        const normalizedPreset = presetValue?.toString() ?? getInputDefault(schema)?.toString() ?? "";
+        // Structural comparison handles primitives, objects, and arrays;
+        // BigInts (from proto integer wrappers) are coerced via replacer.
+        const def = getInputDefault(schema);
+        const normalizedCurrent = stableStringify(currentValue ?? def);
+        const normalizedPreset = stableStringify(presetValue ?? def);
 
         if (normalizedCurrent !== normalizedPreset) {
           return true;
@@ -144,8 +162,8 @@ export function WorkflowInputGroup({
         // No preset selected - compare to defaults
         const defaultValue = getInputDefault(schema);
         if (currentValue !== undefined && currentValue !== defaultValue) {
-          // Check for string/number equivalence
-          if (currentValue?.toString() !== defaultValue?.toString()) {
+          // Structural compare (handles object/array params; BigInt-safe)
+          if (stableStringify(currentValue) !== stableStringify(defaultValue)) {
             return true;
           }
         }

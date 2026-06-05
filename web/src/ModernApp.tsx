@@ -896,39 +896,42 @@ function App() {
       try {
         // If we're in Electron, wait for the config
         if (typeof window !== "undefined" && window.electronAPI) {
-          // Get config from electronAPI (exposed by preload via contextBridge)
-          const config = window.electronAPI.getConfig();
+          // Attach the postMessage listener BEFORE we read the current
+          // config from preload. Otherwise, if preload fires its
+          // `reliant-config-ready` message between our read and the
+          // addEventListener call, we miss the event and hang on the
+          // LoadingSpinner forever (until the user refreshes, which races
+          // the opposite way: preload's reliantConfig is already cached so
+          // the synchronous read returns it). The re-check inside the
+          // listener-setup branch closes the window where preload posts
+          // between read and listener attach.
+          await new Promise<void>((resolve) => {
+            let settled = false;
+            const settleWith = (config: typeof window.RELIANT_CONFIG, source: string) => {
+              if (settled) return;
+              settled = true;
+              window.RELIANT_CONFIG = config;
+              window.removeEventListener("message", handleMessage);
+              logger.info(`[App] Config ${source}:`, config?.daemonPort);
+              resolve();
+            };
+            const handleMessage = (event: MessageEvent) => {
+              if (
+                event.data?.type === "reliant-config-ready" &&
+                event.data?.config?.daemonPort
+              ) {
+                settleWith(event.data.config, "received via postMessage");
+              }
+            };
+            window.addEventListener("message", handleMessage);
 
-          if (config?.daemonPort) {
-            // Config already available from preload
-            window.RELIANT_CONFIG = config;
-            logger.info(
-              "[App] Config available from electronAPI:",
-              config.daemonPort
-            );
-          } else {
-            // Wait for postMessage from preload when config becomes ready
-            await new Promise<void>((resolve) => {
-              const handleMessage = (event: MessageEvent) => {
-                if (
-                  event.data?.type === "reliant-config-ready" &&
-                  event.data?.config
-                ) {
-                  const config = event.data.config;
-                  if (config.daemonPort) {
-                    window.RELIANT_CONFIG = config;
-                    logger.info(
-                      "[App] Config received via postMessage:",
-                      config.daemonPort
-                    );
-                    window.removeEventListener("message", handleMessage);
-                    resolve();
-                  }
-                }
-              };
-              window.addEventListener("message", handleMessage);
-            });
-          }
+            // Synchronous re-check: if preload had the config ready before
+            // we attached, the cached `getConfig()` returns it now.
+            const current = window.electronAPI?.getConfig();
+            if (current?.daemonPort) {
+              settleWith(current, "available from electronAPI");
+            }
+          });
         }
 
         if (!mounted) return;
