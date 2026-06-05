@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react'
 import type { Edge, Node } from '@xyflow/react'
 import { ConfigurationPanel } from './ConfigurationPanel'
+import { useWorkflowMutations } from './WorkflowMutationContext'
 
 interface EdgeConfigPanelProps {
   edge: Edge
   nodes: Node[]
-  onUpdate: (edgeId: string, data: any) => void
   onClose: () => void
-  onDelete: (edgeId: string) => void
   bottomOffset?: number
   topOffset?: number
   isReadOnly?: boolean
@@ -16,14 +15,14 @@ interface EdgeConfigPanelProps {
 export function EdgeConfigPanel({
   edge,
   nodes,
-  onUpdate,
   onClose,
-  onDelete,
   bottomOffset,
   topOffset,
   isReadOnly = false,
 }: EdgeConfigPanelProps) {
-  
+  // Mutation primitives from <WorkflowMutationProvider>.
+  const { updateEdge, removeEdge } = useWorkflowMutations()
+
   const sourceNode = nodes.find((n) => n.id === edge.source)
   const targetNode = nodes.find((n) => n.id === edge.target)
 
@@ -37,24 +36,33 @@ export function EdgeConfigPanel({
   const targetLabel = getNodeLabel(targetNode, edge.target)
 
   const [label, setLabel] = useState<string>((edge.data?.label as string) || '')
+  // Track whether the user has actually typed; gates the debounced save so
+  // just selecting an edge doesn't mark the workflow dirty.
+  const [didEdit, setDidEdit] = useState(false)
 
-  // Sync with edge data
+  // Sync with edge data when switching between edges
   useEffect(() => {
     setLabel((edge.data?.label as string) || '')
+    setDidEdit(false)
   }, [edge.id, edge.data?.label])
 
-  // Auto-save with debounce
+  // Auto-save with debounce — only when the user has actually edited and the
+  // local label differs from the persisted value.
   useEffect(() => {
+    if (!didEdit) return
+    const persisted = (edge.data?.label as string) || ''
+    const next = label.trim()
+    if (next === persisted) return
     const timer = setTimeout(() => {
-      onUpdate(edge.id, {
-        label: label.trim() || undefined,
+      updateEdge(edge.id, {
+        label: next || undefined,
       })
     }, 400)
     return () => clearTimeout(timer)
-  }, [edge.id, label, onUpdate])
+  }, [edge.id, edge.data?.label, label, didEdit, updateEdge])
 
   const handleDelete = () => {
-    onDelete(edge.id)
+    removeEdge(edge.id)
   }
 
   return (
@@ -76,7 +84,10 @@ export function EdgeConfigPanel({
           <input
             type="text"
             value={label}
-            onChange={(e) => setLabel(e.target.value)}
+            onChange={(e) => {
+              setLabel(e.target.value)
+              setDidEdit(true)
+            }}
             placeholder="e.g. on success, completed"
             className="w-full px-2 py-1.5 text-sm border border-input rounded bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-60 disabled:cursor-not-allowed"
             disabled={isReadOnly}

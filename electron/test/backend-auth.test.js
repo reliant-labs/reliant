@@ -34,7 +34,7 @@ test('describeAuthPrincipalChange compares authenticated and anonymous principal
   );
 });
 
-test('shouldRestartBackendForAuthChange only restarts for production principal changes', () => {
+test('shouldRestartBackendForAuthChange restarts on principal change in dev and prod', () => {
   const previousSession = null;
   const nextSession = { user: { id: 'user-1' } };
 
@@ -42,14 +42,20 @@ test('shouldRestartBackendForAuthChange only restarts for production principal c
     shouldRestartBackendForAuthChange(previousSession, nextSession),
     true
   );
+  // The daemon's PAT is per-user — restart is required even in dev mode so
+  // ensureDaemonCreds re-mints. Suppressing it here was a footgun that left
+  // the daemon registered under the prior user's identity.
   assert.equal(
     shouldRestartBackendForAuthChange(previousSession, nextSession, { development: true }),
-    false
+    true
   );
+  // externalBackend = user is managing their own backend out-of-band; we
+  // must not stop/start it.
   assert.equal(
     shouldRestartBackendForAuthChange(previousSession, nextSession, { externalBackend: true }),
     false
   );
+  // No principal change → no restart, regardless of env.
   assert.equal(
     shouldRestartBackendForAuthChange(nextSession, { user: { id: 'user-1' } }),
     false

@@ -219,6 +219,22 @@ export function WorkflowBuilderPage({
     }
   }, [projectId]);
 
+  // Centralized refresh — always fetch global store + detailed data together so
+  // sites can't accidentally update only one. Best-effort: errors are logged
+  // rather than thrown to preserve callsite behavior.
+  const refreshWorkflowList = useCallback(async () => {
+    if (!projectId) return;
+    await Promise.all([
+      useGlobalDataStore
+        .getState()
+        .refetchWorkflows(projectId)
+        .catch((error) => {
+          console.warn("Failed to refetch workflows:", error);
+        }),
+      loadDetailedWorkflows(),
+    ]);
+  }, [projectId, loadDetailedWorkflows]);
+
   // Background fetch for detailed workflow data (updated_at, etc.)
   useEffect(() => {
     if (!projectId) return;
@@ -226,12 +242,12 @@ export function WorkflowBuilderPage({
 
     // Listen for workflow saves to refresh the detailed data
     const handleWorkflowSaved = () => {
-      loadDetailedWorkflows();
+      refreshWorkflowList();
     };
     window.addEventListener("workflow-saved", handleWorkflowSaved);
     return () =>
       window.removeEventListener("workflow-saved", handleWorkflowSaved);
-  }, [projectId, loadDetailedWorkflows]);
+  }, [projectId, loadDetailedWorkflows, refreshWorkflowList]);
 
   // Keep editingWorkflow in sync if a parent passes a different selectedWorkflow
   // after mount. (Embedded usage path; the route-driven path sets editingWorkflow
@@ -529,15 +545,9 @@ export function WorkflowBuilderPage({
         return updated;
       });
 
-      // Refetch global workflow store to update cached list and all subscribers (AgentSelector, etc.)
-      if (projectId) {
-        try {
-          await useGlobalDataStore.getState().refetchWorkflows(projectId);
-        } catch (error) {
-          // Silently ignore - global store update is best-effort
-          console.warn("Failed to refetch workflows after save:", error);
-        }
-      }
+      // Refresh global store + detailed data so cached list and all
+      // subscribers (AgentSelector, hub, etc.) see the save.
+      await refreshWorkflowList();
 
       // Return save result for WorkflowBuilder to show appropriate toasts
       return {
@@ -635,12 +645,9 @@ export function WorkflowBuilderPage({
     try {
       await workflowGrpc.deleteWorkflow(projectId, name);
 
-      // Refetch global store (primary source) and detailed data
-      // Await both to ensure UI updates immediately before returning
-      await Promise.all([
-        useGlobalDataStore.getState().refetchWorkflows(projectId),
-        loadDetailedWorkflows(),
-      ]);
+      // Refresh global store (primary source) and detailed data so the UI
+      // reflects the delete before returning.
+      await refreshWorkflowList();
     } catch (err) {
       console.error("Delete workflow failed:", err);
       toast.error(
@@ -667,12 +674,8 @@ export function WorkflowBuilderPage({
       );
 
       if (response.success) {
-        // Refetch global store (primary source) and detailed data
-        useGlobalDataStore
-          .getState()
-          .refetchWorkflows(projectId)
-          .catch(() => {});
-        await loadDetailedWorkflows();
+        // Refresh global store (primary source) and detailed data.
+        await refreshWorkflowList();
       }
 
       // Return the response for WorkflowHub to handle toasts and conflict modal
@@ -736,11 +739,8 @@ export function WorkflowBuilderPage({
         isHidden,
       );
       if (result.success) {
-        // Refresh both the global store and local detailed workflows
-        await Promise.all([
-          useGlobalDataStore.getState().refetchWorkflows(projectId),
-          loadDetailedWorkflows(),
-        ]);
+        // Refresh both the global store and local detailed workflows.
+        await refreshWorkflowList();
       }
     } catch (err) {
       console.error("Failed to toggle workflow visibility:", err);
@@ -823,13 +823,8 @@ export function WorkflowBuilderPage({
     // reset the view to hub.
     navigate(getParentRouteNavigateOptions(pathname));
 
-    // Refresh workflow list to show any changes made
-    if (projectId) {
-      await Promise.all([
-        useGlobalDataStore.getState().refetchWorkflows(projectId),
-        loadDetailedWorkflows(),
-      ]);
-    }
+    // Refresh workflow list to show any changes made.
+    await refreshWorkflowList();
   };
 
   // Callback to update chat ID when chat is created in WorkflowBuilderChat
@@ -861,11 +856,8 @@ export function WorkflowBuilderPage({
       setBuilderChatId(undefined);
       navigate({ to: "/workflow" });
 
-      // Refetch workflows
-      useGlobalDataStore
-        .getState()
-        .refetchWorkflows(projectId)
-        .catch(() => {});
+      // Refresh workflows.
+      refreshWorkflowList();
     } catch (err) {
       console.error("Failed to clear workflow:", err);
       toast.error("Failed to clear workflow");
@@ -954,6 +946,12 @@ export function WorkflowBuilderPage({
         yamlDefinition={yamlDefinition}
         onYamlDefinitionChange={setYamlDefinition}
         drillIntoNodeId={routeDrillIntoNodeId}
+        onNavigateToWorkflow={(workflowName) =>
+          navigate({
+            to: "/workflow/$workflowName",
+            params: { workflowName },
+          })
+        }
       />
     </div>,
   );

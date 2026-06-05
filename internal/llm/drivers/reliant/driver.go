@@ -14,6 +14,7 @@ import (
 
 	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/option"
+	"github.com/reliant-labs/reliant/internal/chatmarkers"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -661,12 +662,10 @@ func containsAny(haystack string, needles ...string) bool {
 // errors so the frontend can detect the case in the chat-error stream and
 // surface the upgrade-required modal.
 //
-// Wire format: `RELIANT_MANAGED_QUOTA_EXHAUSTED:<upgrade_url>`
-//
-// DO NOT RENAME without coordinated changes in
-// reliant/web/src/store/chatStore.ts (frontend marker scanner) and any tests
-// that pin the literal. The colon and the marker prefix are the contract.
-const ReliantManagedQuotaMarker = "RELIANT_MANAGED_QUOTA_EXHAUSTED"
+// The canonical contract lives in internal/chatmarkers — this constant is a
+// thin local alias kept for legacy call-site / test readability. New code
+// should refer to chatmarkers.KindReliantManagedQuotaExhausted directly.
+const ReliantManagedQuotaMarker = string(chatmarkers.KindReliantManagedQuotaExhausted)
 
 // DefaultReliantUpgradeURL is the path embedded when the upstream proxy didn't
 // supply one. The frontend resolves it against window.location.origin.
@@ -692,10 +691,11 @@ type ErrReliantManagedQuotaExhausted struct {
 	Message string
 }
 
-// Error returns a string carrying ReliantManagedQuotaMarker + upgrade URL so
-// downstream consumers (notably the chat-update stream on the frontend) can
-// detect the case via a substring scan after Temporal stringifies the
-// activity error. Format: `<message> [RELIANT_MANAGED_QUOTA_EXHAUSTED:<url>]`.
+// Error returns a string carrying the chatmarkers.KindReliantManagedQuotaExhausted
+// marker + upgrade URL so downstream consumers (notably the chat-update stream
+// on the frontend) can detect the case via a substring scan after Temporal
+// stringifies the activity error. Format:
+// `<message> [RELIANT_MANAGED_QUOTA_EXHAUSTED:<url>]`.
 func (e *ErrReliantManagedQuotaExhausted) Error() string {
 	msg := strings.TrimSpace(e.Message)
 	if msg == "" {
@@ -705,7 +705,7 @@ func (e *ErrReliantManagedQuotaExhausted) Error() string {
 	if url == "" {
 		url = DefaultReliantUpgradeURL
 	}
-	return fmt.Sprintf("%s [%s:%s]", msg, ReliantManagedQuotaMarker, url)
+	return chatmarkers.Wrap(chatmarkers.KindReliantManagedQuotaExhausted, url, msg)
 }
 
 // isReliantManagedQuotaError returns true when the OpenAI-shape error body

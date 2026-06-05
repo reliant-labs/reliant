@@ -177,25 +177,32 @@ export function WorkflowStepConfig({
   const switchToInline = () => {
     if (selectedMode === "inline") return;
     setSelectedMode("inline");
-    // Initialize inline workflow if it doesn't exist
-    if (!getStepInline(step)) {
-      onUpdate(
-        withWorkflowArgs(step, {
-          inline: {
-            name: "",
-            entry: [],
-            nodes: [],
-            edges: [],
-            outputs: {},
-          } as any,
-        }) as WorkflowStep,
-      );
-    }
+    // Always clear ref so the step serializes with inline only (backend rejects
+    // having both set, and historically picked ref over inline).
+    // Initialize inline workflow if it doesn't already exist.
+    const inline = getStepInline(step) ?? {
+      name: "",
+      entry: [],
+      nodes: [],
+      edges: [],
+      outputs: {},
+    };
+    onUpdate(
+      withWorkflowArgs(step, {
+        ref: undefined,
+        inline: inline as any,
+      }) as WorkflowStep,
+    );
   };
 
   const switchToWorkflow = () => {
     if (selectedMode === "workflow") return;
     setSelectedMode("workflow");
+    onUpdate(
+      withWorkflowArgs(step, {
+        inline: undefined,
+      }) as WorkflowStep,
+    );
   };
 
   // Fetch existing workflows list
@@ -273,7 +280,7 @@ export function WorkflowStepConfig({
                   // that has no matching preset under the new ref.
                   onUpdate(
                     withWorkflowArgs(step, {
-                      ref: celString(nextRef) as any,
+                      ref: celString(nextRef),
                       args: {},
                       presets: {},
                     }) as WorkflowStep,
@@ -319,7 +326,7 @@ export function WorkflowStepConfig({
                 onChange={(e) =>
                   onUpdate(
                     withWorkflowArgs(step, {
-                      ref: celString(e.target.value) as any,
+                      ref: celString(e.target.value),
                     }) as WorkflowStep,
                   )
                 }

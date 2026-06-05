@@ -349,6 +349,7 @@ export function RouterStepConfig({
   const nodes = (args.nodes ?? []) as Partial<NodeRouterCandidate>[];
   const systemPromptValue = normalizeCelString(args.systemPrompt);
   const fallback = args.fallback ?? "";
+  const modelExpr = args.model?.value?.case === "expr" ? args.model.value.value : undefined;
   const modelId = args.model
     ? extractModelId(
         args.model.value?.case === "literal"
@@ -523,18 +524,36 @@ export function RouterStepConfig({
 
           <div>
             <FieldLabel>Model</FieldLabel>
-            <ModelDropdown
-              value={modelId ? { id: modelId } : undefined}
-              onChange={(val) =>
-                onUpdate(
-                  withRouterArgs(step, {
-                    model: { value: { case: "literal" as const, value: val } },
-                  }),
-                )
-              }
-              disabled={isReadOnly}
-              placeholder="Default model"
-            />
+            {modelExpr !== undefined ? (
+              <div className="flex items-center gap-2">
+                <code className="flex-1 cpv2-field-input font-mono text-xs truncate" title={modelExpr}>
+                  {modelExpr}
+                </code>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onUpdate(withRouterArgs(step, { model: undefined }))
+                  }
+                  disabled={isReadOnly}
+                  className="text-xs text-muted-foreground hover:text-foreground underline"
+                >
+                  Clear CEL
+                </button>
+              </div>
+            ) : (
+              <ModelDropdown
+                value={modelId ? { id: modelId } : undefined}
+                onChange={(val) =>
+                  onUpdate(
+                    withRouterArgs(step, {
+                      model: { value: { case: "literal" as const, value: val } },
+                    }),
+                  )
+                }
+                disabled={isReadOnly}
+                placeholder="Default model"
+              />
+            )}
           </div>
 
           <div>

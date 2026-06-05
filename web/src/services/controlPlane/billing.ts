@@ -38,3 +38,30 @@ export function isCloudEligible(
   if (!entitlement) return false;
   return entitlement.status === "active" && entitlement.reliantEnabled === true;
 }
+
+/**
+ * GetCurrentUserBillingEmail returns the user-supplied billing_email override
+ * and the JWT-sourced fallback. Used by the "Set your billing email" modal to
+ * seed its input and to show which address Stripe currently sees.
+ */
+export async function getBillingEmail(): Promise<{
+  billingEmail: string;
+  fallbackEmail: string;
+}> {
+  const res = await getControlPlaneClient(
+    BillingService,
+  ).getCurrentUserBillingEmail({});
+  return {
+    billingEmail: res.billingEmail ?? "",
+    fallbackEmail: res.fallbackEmail ?? "",
+  };
+}
+
+/**
+ * UpdateBillingEmail saves a new billing address (empty clears the override).
+ * Errors propagate so the modal can show "valid billing email is required"
+ * verbatim when the backend rejects an address.
+ */
+export async function updateBillingEmail(email: string): Promise<void> {
+  await getControlPlaneClient(BillingService).updateBillingEmail({ email });
+}

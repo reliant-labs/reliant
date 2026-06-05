@@ -22,7 +22,7 @@ export function RunStepConfig({
           value={getStepCommand(step)}
           onChange={(e) =>
             onUpdate(
-              withRunArgs(step, { command: celString(e.target.value) as any }) as RunStep,
+              withRunArgs(step, { command: celString(e.target.value) }) as RunStep,
             )
           }
           rows={3}

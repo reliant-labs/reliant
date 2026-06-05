@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, useLayoutEffect, useRef, useState } from 'react'
 import { Handle, Position, useNodeConnections } from '@xyflow/react'
 import { GitBranch } from 'lucide-react'
 import { NodeStatusWrapper, buildHandleClassName } from './NodeStatusWrapper'
@@ -26,16 +26,43 @@ export const SwitchNode = memo(({ id: _id, data, selected }: SwitchNodeProps) =>
   const cases = data.cases || []
   const executionStatus = (data as { executionStatus?: import('../../../lib/workflow-flow').NodeExecutionStatus }).executionStatus
 
-  // Calculate vertical positions for each handle
-  // Header is ~44px, each case row is ~40px
+  // Measure actual case-row heights so handles stay aligned when labels wrap.
+  // Falls back to the historical 40px estimate before layout.
+  const headerRef = useRef<HTMLDivElement | null>(null)
+  const caseRowsRef = useRef<Array<HTMLDivElement | null>>([])
+  const [handleTops, setHandleTops] = useState<number[]>([])
+
+  useLayoutEffect(() => {
+    const header = headerRef.current
+    if (!header) return
+    const rows = caseRowsRef.current.slice(0, cases.length)
+    const nodeRect = header.parentElement?.getBoundingClientRect()
+    if (!nodeRect) return
+    const tops = rows.map((row) => {
+      if (!row) return 0
+      const r = row.getBoundingClientRect()
+      // Distance from top of the node to the vertical center of this row.
+      return r.top - nodeRect.top + r.height / 2
+    })
+    setHandleTops((prev) => {
+      if (prev.length === tops.length && prev.every((v, i) => v === tops[i])) {
+        return prev
+      }
+      return tops
+    })
+  })
+
+  // Fallback positioning matches the previous hard-coded layout (header ~44,
+  // row ~40) so handles render in roughly the right spot pre-measurement.
   const headerHeight = 44
   const caseHeight = 40
-  const getHandleTop = (index: number) => headerHeight + (index * caseHeight) + (caseHeight / 2)
+  const getHandleTop = (index: number) =>
+    handleTops[index] ?? headerHeight + index * caseHeight + caseHeight / 2
 
   const targetConnections = useNodeConnections({ handleType: 'target' })
   const sourceConnections = useNodeConnections({ handleType: 'source' })
   const isTargetConnected = targetConnections.length > 0
-  
+
   return (
     <NodeStatusWrapper
       status={executionStatus}
@@ -52,7 +79,7 @@ export const SwitchNode = memo(({ id: _id, data, selected }: SwitchNodeProps) =>
       />
 
       {/* Header */}
-      <div className="px-3 py-2 flex items-center gap-2 border-b border-sky-200">
+      <div ref={headerRef} className="px-3 py-2 flex items-center gap-2 border-b border-sky-200">
         <div className="w-8 h-8 rounded-lg bg-sky-500 flex items-center justify-center flex-shrink-0">
           <GitBranch className="w-4 h-4 text-white" />
         </div>
@@ -76,6 +103,9 @@ export const SwitchNode = memo(({ id: _id, data, selected }: SwitchNodeProps) =>
           return (
             <div
               key={caseItem.id}
+              ref={(el) => {
+                caseRowsRef.current[index] = el
+              }}
               className="flex items-center px-3 py-2"
             >
               {/* Case content */}
