@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -173,5 +173,46 @@ describe("Sidebar selected chat scroll", () => {
     });
 
     vi.useRealTimers();
+  });
+
+  it("renders Codex-style navigation actions and calls their handlers", () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const onNavigateToProjectPicker = vi.fn();
+    const onOpenWorkflows = vi.fn();
+    const onOpenChatSearch = vi.fn();
+    const onNavigateToSettings = vi.fn();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar
+          onNavigateToProjectPicker={onNavigateToProjectPicker}
+          onOpenWorkflows={onOpenWorkflows}
+          onOpenChatSearch={onOpenChatSearch}
+          onNavigateToSettings={onNavigateToSettings}
+        />
+      </QueryClientProvider>
+    );
+
+    expect(screen.getByRole("button", { name: "New chat" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Projects" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Workflows" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Search" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Workflows" })).toHaveAttribute(
+      "data-onboarding",
+      "workflow-button"
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Projects" }));
+    fireEvent.click(screen.getByRole("button", { name: "Workflows" }));
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+
+    expect(onNavigateToProjectPicker).toHaveBeenCalledTimes(1);
+    expect(onOpenWorkflows).toHaveBeenCalledTimes(1);
+    expect(onOpenChatSearch).toHaveBeenCalledTimes(1);
+    expect(onNavigateToSettings).toHaveBeenCalledTimes(1);
   });
 });

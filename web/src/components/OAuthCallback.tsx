@@ -3,7 +3,6 @@ import { useNavigate, useSearch } from '@tanstack/react-router'
 import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/store/authStore'
 import { logger } from '@/lib/logger'
-import { githubCredentialSync } from '@/lib/githubCredentialSync'
 import { GradientBackground } from './GradientBackground'
 import { BrandMark } from './icons/BrandMark'
 
@@ -59,22 +58,12 @@ export function OAuthCallback() {
         setUser(data.user)
         setSession(data.session)
 
-        // Capture the transient provider_token before it disappears.
-        // This is the primary capture point — exchangeCodeForSession reliably
-        // includes provider_token, unlike onAuthStateChange which may not.
-        // We AWAIT the sync (with retries) so the credential lands before the
-        // user navigates to the main app and any "Reconnect GitHub" gates run.
-        // Failures do not block navigation — banner UI surfaces them.
         const provider = data.user?.app_metadata?.provider
         logger.info('[OAuthCallback] post-OAuth session state', {
           provider,
           hasProviderToken: !!data.session?.provider_token,
           userId: data.user?.id,
         })
-        if (provider === 'github' && data.session?.provider_token) {
-          const trigger: 'signin' | 'link' = source === 'link' ? 'link' : 'signin'
-          await githubCredentialSync.sync(data.session.provider_token, 'repo', trigger)
-        }
 
         if (returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//')) {
           // Restore the originating URL (preserves onboarding plan param).

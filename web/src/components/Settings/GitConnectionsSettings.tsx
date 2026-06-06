@@ -17,6 +17,12 @@ export function GitConnectionsSettings() {
   const [pat, setPat] = useState("");
   const [submittingPat, setSubmittingPat] = useState(false);
 
+  const scopeParts = scopes
+    .split(/[,\s]+/)
+    .map((scope) => scope.trim())
+    .filter(Boolean);
+  const hasRepoScope = scopeParts.includes("repo");
+
   const refresh = useCallback(async () => {
     setError(null);
     try {
@@ -149,6 +155,7 @@ export function GitConnectionsSettings() {
             Loading...
           </div>
         ) : hasToken ? (
+          <div className="space-y-3">
           <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
             <div className="flex items-center gap-3">
               <Github className="h-4 w-4 text-muted-foreground" />
@@ -157,54 +164,101 @@ export function GitConnectionsSettings() {
                 <p className="text-xs text-muted-foreground">
                   Scopes: {scopes || "(none)"}
                 </p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Private org repos can still require org OAuth approval or SSO authorization.
+                </p>
               </div>
             </div>
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={handleDisconnect}
-              disabled={disconnecting}
-            >
-              {disconnecting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Trash2 className="h-4 w-4 text-muted-foreground" />
+            <div className="flex items-center gap-1">
+              {!adding && (
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => setAdding(true)}
+                  leftIcon={<Plus className="h-4 w-4" />}
+                >
+                  Recovery token
+                </Button>
               )}
-            </Button>
+              <Button
+                variant="ghost"
+                size="xs"
+                onClick={handleDisconnect}
+                disabled={disconnecting}
+              >
+                {disconnecting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4 text-muted-foreground" />
+                )}
+              </Button>
+            </div>
+          </div>
+          {!hasRepoScope && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
+              This GitHub token has no <code>repo</code> scope, so Reliant can only see public repositories.
+              Reauthorize GitHub to grant the required repository access.
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleConnectOAuth}
+                  disabled={connectingOAuth}
+                  leftIcon={connectingOAuth ? <Loader2 className="h-4 w-4 animate-spin" /> : <Github className="h-4 w-4" />}
+                >
+                  {connectingOAuth ? "Connecting..." : "Reauthorize GitHub"}
+                </Button>
+                {!adding && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setAdding(true)}
+                    leftIcon={<Plus className="h-4 w-4" />}
+                  >
+                    Use recovery token
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">No GitHub token configured.</p>
         )}
       </div>
 
-      {!hasToken && !loading && (
+      {!loading && (!hasToken || adding) && (
         <div className="space-y-3 rounded-lg border border-border p-4">
-          <h3 className="font-medium">Connect GitHub</h3>
+          <h3 className="font-medium">{hasToken ? "Recovery token" : "Connect GitHub"}</h3>
           <p className="text-xs text-muted-foreground">
-            Sign in with GitHub via OAuth, or paste a personal access token.
+            {hasToken
+              ? "Use this only while debugging an OAuth or org SSO authorization issue."
+              : "Sign in with GitHub via OAuth. The fallback token path is only for debugging authorization issues."}
           </p>
 
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleConnectOAuth}
-              disabled={connectingOAuth}
-              leftIcon={connectingOAuth ? <Loader2 className="h-4 w-4 animate-spin" /> : <Github className="h-4 w-4" />}
-            >
-              {connectingOAuth ? "Connecting..." : "Connect with GitHub"}
-            </Button>
-            {!adding && (
+          {!hasToken && (
+            <div className="flex flex-wrap gap-2">
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                onClick={() => setAdding(true)}
-                leftIcon={<Plus className="h-4 w-4" />}
+                onClick={handleConnectOAuth}
+                disabled={connectingOAuth}
+                leftIcon={connectingOAuth ? <Loader2 className="h-4 w-4 animate-spin" /> : <Github className="h-4 w-4" />}
               >
-                Paste a token
+                {connectingOAuth ? "Connecting..." : "Connect with GitHub"}
               </Button>
-            )}
-          </div>
+              {!adding && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setAdding(true)}
+                  leftIcon={<Plus className="h-4 w-4" />}
+                >
+                  Use recovery token
+                </Button>
+              )}
+            </div>
+          )}
 
           {adding && (
             <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3">
