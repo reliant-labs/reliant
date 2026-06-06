@@ -2,7 +2,6 @@ name: forge
 description: Balanced general-purpose agent for Forge app generation workflows with full tool access including file modification, shell commands, and ability to spawn sub-agents
 tag: agent
 recommended_skills:
-  - forge-methodology
   - general-agent
 params:
   model:

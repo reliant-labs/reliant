@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 
+	forgecli "github.com/reliant-labs/forge/cli"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	toolspkg "github.com/reliant-labs/reliant/internal/llm/tools"
 	skillscatalog "github.com/reliant-labs/reliant/internal/skills/catalog"
@@ -370,28 +371,55 @@ func TestAffectedPresetsResolveForCodex(t *testing.T) {
 }
 
 func TestPresetRecommendedSkillsExist(t *testing.T) {
-	// Build set of known builtin skill paths (including nested sub-skills)
+	// Build the set of skills the agent can resolve at runtime. The
+	// catalog has two sources now:
+	//
+	//   - Reliant's embedded builtins (reliant-config, workflow-builder)
+	//     — surfaced unconditionally at their bare path.
+	//
+	//   - Forge-shipped general skills (code-review, debug,
+	//     testing-methodology, refactor, etc.) — surfaced unconditionally
+	//     via forgecli.ListSkills at their bare path. These used to be
+	//     reliant builtins; they moved to forge so methodology lives in
+	//     one place and applies to any project. The dual-audience ones
+	//     (Emit "both", like debug) also surface at bare path; their
+	//     bodies are rendered with @forge-only stripped when no
+	//     forge.yaml is present.
+	//
+	// A preset's recommended_skills entry is valid if it appears in
+	// either set.
 	knownSkills := make(map[string]bool)
-	fs.WalkDir(skillscatalog.BuiltinSkillsFS, "builtin", func(path string, d fs.DirEntry, err error) error {
+
+	// Reliant's embedded builtins.
+	require.NoError(t, fs.WalkDir(skillscatalog.BuiltinSkillsFS, "builtin", func(path string, d fs.DirEntry, err error) error {
 		if err != nil || !d.IsDir() {
 			return nil
 		}
-		// Check if this directory contains a SKILL.md
 		if _, readErr := fs.ReadFile(skillscatalog.BuiltinSkillsFS, path+"/SKILL.md"); readErr == nil {
-			// Convert "builtin/code-review/security-review" -> "code-review/security-review"
-			skillPath := strings.TrimPrefix(path, "builtin/")
-			knownSkills[skillPath] = true
+			knownSkills[strings.TrimPrefix(path, "builtin/")] = true
 		}
 		return nil
-	})
-	require.NotEmpty(t, knownSkills, "should find builtin skills")
+	}))
+
+	// Forge-shipped general (Emit "general" or "both") skills.
+	// projectRoot="" skips on-disk lookups and returns just the
+	// embedded set — enough to validate preset references resolve.
+	forgeSkills, err := forgecli.ListSkills("")
+	require.NoError(t, err)
+	for _, s := range forgeSkills {
+		if s.Emit == "general" || s.Emit == "both" {
+			knownSkills[s.Path] = true
+		}
+	}
+
+	require.NotEmpty(t, knownSkills, "should find at least some resolvable skills (reliant builtins + forge general)")
 
 	presets := loadAllPresets(t)
 	for name, preset := range presets {
 		for _, skill := range preset.RecommendedSkills {
 			t.Run(name+"/"+skill, func(t *testing.T) {
 				assert.True(t, knownSkills[skill],
-					"preset %q references recommended_skill %q which does not exist as a builtin skill directory",
+					"preset %q references recommended_skill %q which is neither a reliant builtin nor a forge general/both skill",
 					preset.Name, skill)
 			})
 		}
