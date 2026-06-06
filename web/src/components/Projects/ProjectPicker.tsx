@@ -28,6 +28,7 @@ import { capabilities } from "../../services/controlPlane/capabilities";
 import {
   listDaemons as listCloudDaemons,
   DAEMON_STATUS_ACTIVE,
+  DAEMON_STATUS_SUSPENDED,
   type Daemon as CloudDaemon,
 } from "../../services/controlPlane/daemon";
 import { gitService } from "../../services/controlPlane/git";
@@ -45,6 +46,11 @@ import { BrandMark } from "../icons/BrandMark";
 type Project = StoreProject;
 
 const CLOUD_PROJECT_ROOT = "/home/workspace/projects";
+
+type CloneTarget = {
+  daemonId: string;
+  hostname: string;
+};
 
 function slugify(value: string): string {
   return value
@@ -87,9 +93,16 @@ function useAllProjectDaemons() {
 // their own filesystem and aren't reachable through the control-plane clone
 // path. The string set matches normalizeRegisteredDaemonType in reliant's
 // tools_daemon.go.
-const CLOUD_DAEMON_TYPES = new Set(["managed"]);
+const CLOUD_DAEMON_TYPES = new Set(["managed", "cloud"]);
 function isCloudDaemon(daemonType: string | undefined): boolean {
   return CLOUD_DAEMON_TYPES.has((daemonType ?? "").toLowerCase());
+}
+
+function cloudDaemonStatusLabel(daemon: CloudDaemon, isResuming: boolean): string {
+  if (isResuming) return "resuming";
+  if (daemon.status === DAEMON_STATUS_ACTIVE) return "active";
+  if (daemon.status === DAEMON_STATUS_SUSPENDED) return "suspended";
+  return daemon.status === 0 ? "unknown" : DaemonStatus[daemon.status]?.toLowerCase() ?? "unknown";
 }
 
 // NoCloudDaemonsState — rendered when the user is in web mode with no active
@@ -147,6 +160,7 @@ function NoActiveDaemonState() {
   }, [navigate]);
 
   const handleResume = (daemon: CloudDaemon) => {
+    if (daemon.status !== DAEMON_STATUS_SUSPENDED) return;
     setError(null);
     resumeDaemonMutation.mutate(daemon.id);
   };
@@ -199,13 +213,14 @@ function NoActiveDaemonState() {
         <div className="space-y-2">
           {daemons.map((daemon) => {
             const isResuming = resumingId === daemon.id;
-            const isActive = daemon.status === DAEMON_STATUS_ACTIVE;
+            const isSuspended = daemon.status === DAEMON_STATUS_SUSPENDED;
+            const statusLabel = cloudDaemonStatusLabel(daemon, isResuming);
             return (
               <button
                 key={daemon.id}
                 type="button"
                 onClick={() => handleResume(daemon)}
-                disabled={isResuming || isActive}
+                disabled={isResuming || !isSuspended}
                 className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg bg-background/80 border border-border/60 hover:border-primary/40 disabled:opacity-60 disabled:cursor-not-allowed transition-colors text-left"
               >
                 <div className="flex items-center gap-3 min-w-0">
@@ -224,7 +239,7 @@ function NoActiveDaemonState() {
                 <div className="flex items-center gap-2 flex-shrink-0">
                   {isResuming && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
                   <span className="text-xs font-mono uppercase tracking-wide text-muted-foreground">
-                    {isActive ? "active" : isResuming ? "resuming" : "paused"}
+                    {statusLabel}
                   </span>
                 </div>
               </button>
@@ -370,6 +385,17 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   const showConnectionInstructions = isWebMode && !activeDaemon && !daemonLoading;
 
   const { hasToken: hasGitHubCredential } = useGitHubCredential();
+  const { data: controlPlaneDaemons } = useQuery<CloudDaemon[]>({
+    queryKey: ["projectPicker", "controlPlaneDaemons"],
+    queryFn: async () => {
+      if (!capabilities.cloudDaemons) return [];
+      const res = await listCloudDaemons();
+      return res.daemons;
+    },
+    enabled: capabilities.cloudDaemons,
+    refetchInterval: 5_000,
+    staleTime: 0,
+  });
 
   // Cloud daemons are the only valid clone targets. Self-hosted daemons can
   // still be "viewed" via the switcher (you see which projects live on
@@ -378,6 +404,10 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   const cloudDaemons = useMemo(
     () => daemons.filter((d) => isCloudDaemon(d.daemonType)),
     [daemons],
+  );
+  const activeControlPlaneDaemons = useMemo(
+    () => (controlPlaneDaemons ?? []).filter((d) => d.status === DAEMON_STATUS_ACTIVE),
+    [controlPlaneDaemons],
   );
 
   // Pick the initial selectedDaemonId once daemons load. We prefer:
@@ -403,26 +433,75 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
     [daemons, selectedDaemonId],
   );
 
+  // Hostname lookup for naming daemons in badges/menus. Falls back to a
+  // short id slice when the daemon row hasn't loaded yet (rare: cross-daemon
+  // rows can reference daemons that are momentarily missing from the
+  // registry list during a poll).
+  const hostnameFor = useCallback(
+    (daemonId: string) => {
+      const d = daemons.find((x) => x.daemonId === daemonId);
+      return d?.hostname || `daemon ${daemonId.slice(0, 8)}`;
+    },
+    [daemons],
+  );
+
   // "Clone to <hostname>" target list — every ACTIVE cloud daemon. Suspended
   // cloud daemons are intentionally excluded because the gateway can't
   // forward the clone command until the daemon resumes; the user would get
   // a confusing "queued" state instead of fast feedback.
-  const cloneTargets = useMemo(
-    () =>
-      hasGitHubCredential && capabilities.cloudDaemons
-        ? cloudDaemons.filter((d) => d.status === DaemonStatus.ACTIVE)
-        : [],
-    [cloudDaemons, hasGitHubCredential],
+  const cloneTargets = useMemo<CloneTarget[]>(
+    () => {
+      if (!hasGitHubCredential || !capabilities.cloudDaemons) return [];
+
+      const targets = new Map<string, CloneTarget>();
+      for (const d of cloudDaemons.filter((daemon) => daemon.status === DaemonStatus.ACTIVE)) {
+        targets.set(d.daemonId, {
+          daemonId: d.daemonId,
+          hostname: d.hostname || hostnameFor(d.daemonId),
+        });
+      }
+      for (const d of activeControlPlaneDaemons) {
+        targets.set(d.id, {
+          daemonId: d.id,
+          hostname: d.hostname || d.name || `daemon ${d.id.slice(0, 8)}`,
+        });
+      }
+      return [...targets.values()];
+    },
+    [activeControlPlaneDaemons, cloudDaemons, hasGitHubCredential, hostnameFor],
   );
 
-  // canCloneToSelected drives the picker's top "Clone repo" button. True
-  // when the user can clone *into the currently-selected daemon*.
+  // canCloneToSelected drives the picker's top "Clone repo" button. It should
+  // be visible whenever the selected daemon is a clone-capable cloud daemon.
+  // RepoSelector owns the GitHub credential-missing state and shows the
+  // reconnect UI; hiding the entry point here leaves users stranded.
   const canCloneToSelected =
-    !!selectedDaemon &&
-    isCloudDaemon(selectedDaemon.daemonType) &&
-    selectedDaemon.status === DaemonStatus.ACTIVE &&
-    hasGitHubCredential &&
-    capabilities.cloudDaemons;
+    capabilities.cloudDaemons &&
+    (
+      (!!selectedDaemon &&
+        isCloudDaemon(selectedDaemon.daemonType) &&
+        selectedDaemon.status === DaemonStatus.ACTIVE) ||
+      activeControlPlaneDaemons.length > 0
+    );
+
+  const selectedCloneDaemon = useMemo<CloneTarget | null>(() => {
+    if (
+      selectedDaemon &&
+      isCloudDaemon(selectedDaemon.daemonType) &&
+      selectedDaemon.status === DaemonStatus.ACTIVE
+    ) {
+      return {
+        daemonId: selectedDaemon.daemonId,
+        hostname: selectedDaemon.hostname || hostnameFor(selectedDaemon.daemonId),
+      };
+    }
+    const activeCloud = activeControlPlaneDaemons[0];
+    if (!activeCloud) return null;
+    return {
+      daemonId: activeCloud.id,
+      hostname: activeCloud.hostname || activeCloud.name || `daemon ${activeCloud.id.slice(0, 8)}`,
+    };
+  }, [activeControlPlaneDaemons, hostnameFor, selectedDaemon]);
 
   // Cross-daemon view: every (project, daemon) installation row for projects
   // the user owns. The picker derives two structures from this:
@@ -448,18 +527,6 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
     });
     return m;
   }, [allProjectDaemons]);
-
-  // Hostname lookup for naming daemons in badges/menus. Falls back to a
-  // short id slice when the daemon row hasn't loaded yet (rare: cross-daemon
-  // rows can reference daemons that are momentarily missing from the
-  // registry list during a poll).
-  const hostnameFor = useCallback(
-    (daemonId: string) => {
-      const d = daemons.find((x) => x.daemonId === daemonId);
-      return d?.hostname || `daemon ${daemonId.slice(0, 8)}`;
-    },
-    [daemons],
-  );
 
   // Run a clone for a known repo onto an explicit target daemon, then
   // create the Project (or open an existing one) and mark it installed.
@@ -547,12 +614,12 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
     ],
   );
 
-  // Modal "Clone repo" → user picks a fresh repo to install on the
-  // currently-selected daemon. canCloneToSelected already gates the button
-  // that opens this modal so we trust selectedDaemonId is a valid target.
+  // Modal "Clone repo" → user picks a fresh repo to install on the active
+  // cloud daemon. The clone target may come from the local registry or the
+  // control-plane daemon list.
   const handleRepoSelectedFromModal = async (repo: GitRepo) => {
     setIsCloneModalOpen(false);
-    if (!selectedDaemonId) {
+    if (!selectedCloneDaemon) {
       toast.error("No daemon selected");
       return;
     }
@@ -560,7 +627,7 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
     const destinationPath = cloudPathForRepo(repo);
     const loadingToast = toast.loading(`Cloning "${projectName}"...`);
     try {
-      await cloneAndOpen(repo, destinationPath, projectName, selectedDaemonId);
+      await cloneAndOpen(repo, destinationPath, projectName, selectedCloneDaemon.daemonId);
       toast.success(`Cloned "${projectName}"`);
     } catch (err) {
       console.error("Clone-from-modal failed:", err);
@@ -869,8 +936,9 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
                               Clone repo
                             </h3>
                             <p className="text-sm text-muted-foreground">
-                              Pull a GitHub repo onto{" "}
-                              {selectedDaemon?.hostname || "this daemon"}
+                              {hasGitHubCredential
+                                ? `Pull a GitHub repo onto ${selectedCloneDaemon?.hostname || "this daemon"}`
+                                : "Connect GitHub to clone a repository"}
                             </p>
                           </div>
                         </div>
