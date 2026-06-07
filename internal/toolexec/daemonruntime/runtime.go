@@ -938,6 +938,12 @@ func buildProjectSnapshot(projectPath string) (*reliantv1.ProjectConfigSnapshot,
 	localMCP, _ := readOptionalFile(localMCPPath)
 	globalMemory, _ := readOptionalFile(globalMemoryPath)
 	projectMemory, _ := readOptionalFile(projectMemoryPath)
+	// Inject the forge framework cheat-sheet (architecture, proto
+	// rules, "use forge skills" callout) when the project is a forge
+	// project — forge skips writing a top-level reliant.md so the
+	// only authoritative source is the embedded template, rendered
+	// here. For non-forge projects this is a no-op.
+	projectMemory = projectMemoryWithForgeFramework(projectPath, projectMemory)
 
 	workflows, workflowBytes := indexWorkflows(projectPath)
 	presets, presetBytes := indexPresets(projectPath)
@@ -1001,7 +1007,12 @@ func collectRepoMemories(projectPath string) (map[string][]byte, []byte) {
 		}
 		repoDir := filepath.Join(projectPath, rel)
 		var parts []string
-		if md, _ := readOptionalFile(filepath.Join(repoDir, "reliant.md")); len(md) > 0 {
+		md, _ := readOptionalFile(filepath.Join(repoDir, "reliant.md"))
+		// Inject forge framework memory for nested forge repos — same
+		// rationale as the top-level case in buildProjectSnapshot. A
+		// no-op when repoDir has no forge.yaml.
+		md = projectMemoryWithForgeFramework(repoDir, md)
+		if len(md) > 0 {
 			parts = append(parts, string(md))
 		}
 		if local, _ := readOptionalFile(filepath.Join(repoDir, "reliant.local.md")); len(local) > 0 {

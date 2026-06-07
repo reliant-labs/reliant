@@ -85,51 +85,86 @@ func forgeSkillsForInput(input DiscoverInput) []Definition {
 	return out
 }
 
-// discoverForgeSkills enumerates skills from a sibling forge project rooted
-// at baseDir. Returns nil silently (no diagnostics) when baseDir is not a
-// forge project — the integration is best-effort.
+// discoverForgeSkills enumerates skills surfaced from a sibling forge
+// module rooted at baseDir. The result is partitioned by each skill's
+// `Emit` value (set from frontmatter, defaulting to "forge" for legacy
+// shipped skills):
 //
-// The returned slice always starts with a synthesized parent entry at
-// SkillPath="forge" (so the skill appears as a top-level group in the
-// announcement and the user can drill into its children), followed by one
-// entry per forge skill at SkillPath="forge/<forge-path>". Bodies are left
-// empty; [loadForgeSkillBody] hydrates them on demand via
-// [LoadFullDefinition].
+//   - Emit "general" or "both": always returned, regardless of whether
+//     baseDir contains forge.yaml. Surfaced at the bare skill path
+//     (e.g. "testing-methodology", "code-review", "debug") so preset
+//     references and the model's skill discovery resolve directly.
+//     emit:both skill bodies are loaded through audience="general" when
+//     no forge.yaml is present, which strips `@forge-only` sections.
+//
+//   - Emit "forge" (and the legacy empty default): only returned when
+//     baseDir contains forge.yaml. Surfaced under the "forge/" namespace
+//     prefix, alongside a synthesized "forge" parent skill that doubles
+//     as a navigational map of the framework children.
+//
+// Returns nil when forge enumeration fails or returns zero skills —
+// integration is best-effort and silent.
 //
 // source is propagated to each Definition.Source so the caller's
-// NormalizedKey-prefixing logic can disambiguate forge skills across nested
-// repos.
+// NormalizedKey-prefixing logic can disambiguate forge skills across
+// nested repos.
 func discoverForgeSkills(baseDir, source string, loadFullDefinitions bool) []Definition {
-	if _, err := os.Stat(filepath.Join(baseDir, "forge.yaml")); err != nil {
-		return nil
-	}
-
 	skills, err := forgecli.ListSkills(baseDir)
 	if err != nil || len(skills) == 0 {
 		return nil
 	}
 
-	// Deterministic order for the synthesized parent's body.
+	hasForgeYAML := false
+	if _, err := os.Stat(filepath.Join(baseDir, "forge.yaml")); err == nil {
+		hasForgeYAML = true
+	}
+
+	// Deterministic order so the synthesized parent's body and the
+	// returned slice both stay stable across runs.
 	sort.Slice(skills, func(i, j int) bool { return skills[i].Path < skills[j].Path })
 
 	defs := make([]Definition, 0, len(skills)+1)
 
-	defs = append(defs, Definition{
-		Name:          forgeNamespace,
-		NormalizedKey: forgeNamespace,
-		Description:   "Forge skills surfaced from this project's sibling forge module. Use the skill tool to load a specific sub-skill (e.g. forge/db, forge/proto, forge/api/handlers).",
-		Body:          forgeParentBody(skills),
-		Path:          forgeSyntheticPath(baseDir, ""),
-		Scope:         skillscore.ScopeForge,
-		Format:        skillscore.SkillFormatClaudeMarkdown,
-		SkillDir:      forgeSyntheticPath(baseDir, ""),
-		SkillPath:     forgeNamespace,
-		HasChildren:   true,
-		Source:        source,
-	})
+	// Forge framework parent — only in forge projects. Its body lists
+	// only the framework children that will actually appear under it.
+	if hasForgeYAML {
+		defs = append(defs, Definition{
+			Name:          forgeNamespace,
+			NormalizedKey: forgeNamespace,
+			Description:   "Forge skills surfaced from this project's sibling forge module. Use the skill tool to load a specific sub-skill (e.g. forge/db, forge/proto, forge/api/handlers).",
+			Body:          forgeParentBody(filterForgeAudience(skills)),
+			Path:          forgeSyntheticPath(baseDir, ""),
+			Scope:         skillscore.ScopeForge,
+			Format:        skillscore.SkillFormatClaudeMarkdown,
+			SkillDir:      forgeSyntheticPath(baseDir, ""),
+			SkillPath:     forgeNamespace,
+			HasChildren:   true,
+			Source:        source,
+		})
+	}
 
 	for _, s := range skills {
-		skillPath := forgeNamespace + "/" + s.Path
+		emit := s.Emit
+		if emit == "" {
+			emit = "forge"
+		}
+
+		var skillPath string
+		switch emit {
+		case "general", "both":
+			skillPath = s.Path
+		case "forge":
+			if !hasForgeYAML {
+				continue
+			}
+			skillPath = forgeNamespace + "/" + s.Path
+		default:
+			// Unknown emit value — be conservative and drop. A future
+			// emit category should land here as a deliberate switch
+			// case rather than silently surfacing somewhere wrong.
+			continue
+		}
+
 		defs = append(defs, Definition{
 			Name:          skillscore.NormalizeSkillName(s.Name),
 			NormalizedKey: skillPath,
@@ -159,6 +194,25 @@ func discoverForgeSkills(baseDir, source string, loadFullDefinitions bool) []Def
 	return defs
 }
 
+// filterForgeAudience returns only the skills that should appear in the
+// forge-audience view — emit "forge", "both", or the legacy empty
+// default (treated as forge). Used to render the synthetic forge
+// parent's body so it doesn't list general-only skills that surface at
+// their bare path instead.
+func filterForgeAudience(skills []forgecli.Skill) []forgecli.Skill {
+	out := make([]forgecli.Skill, 0, len(skills))
+	for _, s := range skills {
+		emit := s.Emit
+		if emit == "" {
+			emit = "forge"
+		}
+		if emit == "forge" || emit == "both" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 // forgeParentBody renders the synthetic body for the top-level "forge" skill.
 // It exists so a model that lands on the parent (rather than a specific
 // sub-skill) gets a clear navigational map of what's available.
@@ -179,9 +233,16 @@ func forgeParentBody(skills []forgecli.Skill) string {
 	return b.String()
 }
 
-// loadForgeDefinition hydrates a forge-scoped Definition's Body by calling
-// forge's public LoadSkill. The synthetic parent (forgePath == "") returns
-// its pre-rendered body; sub-skills hit forge for the SKILL.md content.
+// loadForgeDefinition hydrates a forge-scoped Definition's Body by
+// calling forge's public LoadSkillForAudience. The audience is derived
+// from whether the project has forge.yaml: present → "forge" (full body
+// including any `@forge-only` sections), absent → "general" (those
+// sections are stripped by the forge renderer). The synthetic parent
+// (forgePath == "") returns its pre-rendered body unchanged.
+//
+// We re-check forge.yaml at load time rather than encoding the audience
+// in the synthetic path so the body reflects current reality if the
+// project's forge.yaml is added or removed between discovery and load.
 func loadForgeDefinition(def Definition) (Definition, error) {
 	if def.Scope != skillscore.ScopeForge {
 		return def, fmt.Errorf("not a forge skill: %s", def.Path)
@@ -198,7 +259,11 @@ func loadForgeDefinition(def Definition) (Definition, error) {
 		// useful to load from forge here. Fall through with empty body.
 		return def, nil
 	}
-	body, err := forgecli.LoadSkill(baseDir, forgePath)
+	audience := "general"
+	if _, err := os.Stat(filepath.Join(baseDir, "forge.yaml")); err == nil {
+		audience = "forge"
+	}
+	body, err := forgecli.LoadSkillForAudience(baseDir, forgePath, audience)
 	if err != nil {
 		return def, fmt.Errorf("load forge skill %q from %s: %w", forgePath, baseDir, err)
 	}

@@ -70,39 +70,23 @@ var allowedSkillFrontmatterFields = map[string]struct{}{
 	"paths":                    {},
 }
 
+// builtinSkillPaths is the small set of skills that genuinely belong to
+// reliant (configure reliant itself, build reliant workflows). General
+// methodology skills (code-review, debug, refactor, testing-methodology,
+// etc.) used to live here but have moved to forge as the canonical
+// source of truth — they're now surfaced via forgecli.ListSkills with
+// Emit="general" (or "both" for skills like debug that have a forge
+// addendum). The forge integration gates them on Emit instead of
+// forge.yaml so methodology continues to apply in any project.
 var builtinSkillPaths = []string{
 	"reliant-config/SKILL.md",
 	"workflow-builder/SKILL.md",
-	"conflict-resolver/SKILL.md",
-	"simplification-assessment/SKILL.md",
-	"research-methodology/SKILL.md",
-	"testing-methodology/SKILL.md",
-	"git-operations/SKILL.md",
-	"planning-methodology/SKILL.md",
-	"documentation-writing/SKILL.md",
-	"ux-design/SKILL.md",
-	"general-agent/SKILL.md",
-	"forge-methodology/SKILL.md",
-	// code-review parent + sub-skills
-	"code-review/SKILL.md",
-	"code-review/code-hygiene-review/SKILL.md",
-	"code-review/performance-review/SKILL.md",
-	"code-review/security-review/SKILL.md",
-	"code-review/architecture-review/SKILL.md",
-	"code-review/ux-review-methodology/SKILL.md",
-	// debug parent + sub-skills
-	"debug/SKILL.md",
-	"debug/reproduction-methodology/SKILL.md",
-	// refactor parent + sub-skills
-	"refactor/SKILL.md",
-	"refactor/migration-guidance/SKILL.md",
-	"pivot-on-friction/SKILL.md",
-	"validation-harness/SKILL.md",
+	"workflow-builder/design-patterns/SKILL.md",
 }
 
 // BuiltinSkillsFS is exported for test use.
 //
-//go:embed builtin/reliant-config/SKILL.md builtin/workflow-builder/SKILL.md builtin/conflict-resolver/SKILL.md builtin/simplification-assessment/SKILL.md builtin/research-methodology/SKILL.md builtin/testing-methodology/SKILL.md builtin/git-operations/SKILL.md builtin/planning-methodology/SKILL.md builtin/documentation-writing/SKILL.md builtin/ux-design/SKILL.md builtin/general-agent/SKILL.md builtin/forge-methodology/SKILL.md builtin/code-review/SKILL.md builtin/code-review/code-hygiene-review/SKILL.md builtin/code-review/performance-review/SKILL.md builtin/code-review/security-review/SKILL.md builtin/code-review/architecture-review/SKILL.md builtin/code-review/ux-review-methodology/SKILL.md builtin/debug/SKILL.md builtin/debug/reproduction-methodology/SKILL.md builtin/refactor/SKILL.md builtin/refactor/migration-guidance/SKILL.md builtin/pivot-on-friction/SKILL.md builtin/validation-harness/SKILL.md
+//go:embed builtin/reliant-config/SKILL.md builtin/workflow-builder/SKILL.md builtin/workflow-builder/design-patterns/SKILL.md
 var BuiltinSkillsFS embed.FS
 
 func ParseSkillMarkdown(path string, scope skillscore.Scope, data []byte) (Definition, error) {
