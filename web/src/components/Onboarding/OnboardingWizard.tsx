@@ -327,6 +327,12 @@ export function OnboardingWizard() {
   const location = useLocation();
   const isSettingsMode = location.pathname.startsWith("/settings");
   const isWorkflowMode = location.pathname.startsWith("/workflow");
+  // The dedicated /onboarding route IS the onboarding experience — showing
+  // the post-onboarding "Setup Guide" floating panel on top of it is a
+  // bad-UX dupe of the same information. Phase 2 (the checklist) is for
+  // AFTER /onboarding exits to the main chat; while the user is on
+  // /onboarding itself we suppress the floater entirely.
+  const isOnboardingRoute = location.pathname.startsWith("/onboarding");
 
   // Defer the tour while NewChatView's "What are you building?" starter-picker
   // modal is up. That modal portals to document.body on the empty-state
@@ -483,11 +489,14 @@ export function OnboardingWizard() {
     );
   }
 
-  // Phase 2: Show checklist after setup if not dismissed (only on main chat page)
+  // Phase 2: Show checklist after setup if not dismissed (only on main chat page).
+  // isOnboardingRoute gate: the /onboarding route is the onboarding UX itself —
+  // surfacing the post-onboarding floater on top of it is a misleading dupe.
   if (
     panelState !== "dismissed" &&
     !isWorkflowMode &&
-    !isSettingsMode
+    !isSettingsMode &&
+    !isOnboardingRoute
   ) {
     return <OnboardingChecklist />;
   }

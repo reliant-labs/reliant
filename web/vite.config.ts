@@ -102,6 +102,28 @@ export default defineConfig({
         changeOrigin: true,
         ws: true,
       },
+      // Same-origin RPC routing. admin-web's Connect transport uses
+      // http://localhost:<vite-port> as its baseUrl, so EVERY RPC is
+      // first-party from the browser's POV — no CORS, no per-port
+      // bookkeeping. Vite fans out by proto service package:
+      //
+      //   /controlplane.v1.* → admin-server   (cp-forge backend)
+      //   /reliant.v1.*      → reliant-api    (this repo's backend)
+      //
+      // The two backends are HTTP/h2c Connect; ws:false avoids Vite
+      // upgrading the connection unnecessarily. Targets come from the
+      // env vars cloud-dev.sh exports (VITE_CONTROL_PLANE_API_URL,
+      // VITE_API_URL), with sensible standalone-dev defaults.
+      "/controlplane.v1.": {
+        target: process.env.VITE_CONTROL_PLANE_API_URL || "http://127.0.0.1:8090",
+        changeOrigin: true,
+        ws: false,
+      },
+      "/reliant.v1.": {
+        target: process.env.VITE_API_URL || "http://127.0.0.1:3090",
+        changeOrigin: true,
+        ws: false,
+      },
     },
   },
   test: {
