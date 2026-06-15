@@ -101,6 +101,25 @@ func classifyError(err error) error {
 		return err // Transient - Temporal will retry
 	}
 
+	// Upstream LLM HTTP failures during streaming are frequently TRANSIENT and
+	// must retry rather than wedge the workflow. The motivating case: a brand-new
+	// user's first message can race ahead of account provisioning — before the
+	// managed Reliant key + per-user LiteLLM virtual key exist, the LLM proxy
+	// surfaces a 404 Not Found. That 404 would otherwise match the generic
+	// "not found" terminal pattern below and pause the workflow PERMANENTLY, so
+	// the chat only "recovers" when the user manually starts a fresh one — the
+	// multi-minute stall observed right after signup. Classifying these upstream
+	// statuses as transient lets Temporal back off and retry until provisioning
+	// lands (typically seconds). 400/401/403 are deliberately excluded: a bad
+	// request / auth failure is genuinely terminal and falls through below.
+	if strings.Contains(errStr, "stream llm response") || strings.Contains(errStr, "failed to stream") {
+		for _, status := range []string{"404", "408", "409", "425", "429", "500", "502", "503", "504"} {
+			if strings.Contains(errStr, status) {
+				return err // Transient upstream LLM failure - Temporal will retry
+			}
+		}
+	}
+
 	// Terminal errors - validation, business logic, not found, etc.
 	terminalPatterns := []string{
 		"not found",
