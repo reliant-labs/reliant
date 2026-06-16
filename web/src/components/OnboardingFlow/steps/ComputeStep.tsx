@@ -187,7 +187,6 @@ export function ComputeStep({
   plan,
   updatePlan,
   onNext,
-  hideHeader,
 }: StepProps & { hideHeader?: boolean }) {
   const [showLocal, setShowLocal] = useState(plan.compute === "local_daemon");
   const [showOtherPlatforms, setShowOtherPlatforms] = useState(false);

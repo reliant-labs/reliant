@@ -148,6 +148,12 @@ export interface ReliantConfig {
   temporalUIPort?: number;
   adminURL?: string;
   controlPlaneURL?: string;
+  // Port the local daemon is listening on, injected by the Electron
+  // preload's buildConfig() from the get-backend-status IPC response.
+  // null until the backend reports it; absent entirely in plain-browser
+  // dev. Consumers (AppInitializer, ModernApp) read it only to detect
+  // daemon readiness.
+  daemonPort?: number | null;
 }
 
 declare global {
