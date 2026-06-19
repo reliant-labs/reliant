@@ -6,6 +6,7 @@ import {
   onboardingSearchSchema,
   proxyAuthSearchSchema,
   settingsParamsSchema,
+  upgradeSearchSchema,
   workflowSearchSchema,
 } from './routeSchemas'
 import { ErrorFallbackUI } from './components/ErrorBoundary'
@@ -14,6 +15,7 @@ import { OAuthCallback } from './components/OAuthCallback'
 import { ProxyAuth } from './components/ProxyAuth'
 import { ResetPasswordScreen } from './components/ResetPasswordScreen'
 import { EmailVerification } from './components/EmailVerification'
+import { UpgradeAccount } from './components/UpgradeAccount'
 import { AuthGuard } from './components/AuthGuard'
 import { DesignSandboxPage } from './components/DesignSandbox/DesignSandboxPage'
 import { SettingsPage } from './components/Settings/SettingsPage'
@@ -125,6 +127,23 @@ const verifyEmailRoute = createRoute({
   component: () => (
     <AuthGuard requireAuth={true} requireEmailVerification={false}>
       <EmailVerification />
+    </AuthGuard>
+  ),
+})
+
+// Account-upgrade flow. An anonymous user who needs a real identity *with an
+// email* (e.g. blocked on the admin billing page) lands here. requireAuth is
+// true because the anon user already has a Supabase session — a plain /auth
+// bounce would just redirect them away. requireEmailVerification is false by
+// design: the whole point is that they have no email yet. UpgradeAccount owns
+// its own returnTo redirect once an email is attached.
+const upgradeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/upgrade',
+  validateSearch: upgradeSearchSchema,
+  component: () => (
+    <AuthGuard requireAuth={true} requireEmailVerification={false}>
+      <UpgradeAccount />
     </AuthGuard>
   ),
 })
@@ -247,6 +266,7 @@ const routeTree = rootRoute.addChildren([
   proxyAuthRoute,
   resetPasswordRoute,
   verifyEmailRoute,
+  upgradeRoute,
   designSandboxRoute,
   projectPickerRedirectRoute,
   authenticatedLayoutRoute.addChildren([

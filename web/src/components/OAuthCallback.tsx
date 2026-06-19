@@ -18,7 +18,7 @@ export function OAuthCallback() {
     exchanged.current = true
 
     const handleCallback = async () => {
-      const { code, error: errorParam, error_description: errorDescription, source, returnTo } = search
+      const { code, error: errorParam, error_description: errorDescription, returnTo } = search
 
       if (errorParam) {
         let friendlyMessage = 'Authentication failed'

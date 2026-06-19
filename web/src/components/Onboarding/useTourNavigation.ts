@@ -107,20 +107,27 @@ export function useTourNavigation(): TourNavigation {
       }
       // Path-agnostic step: just update the search param on whatever route
       // the user is on. tanstack-router preserves the current path when no
-      // `to` is supplied.
+      // `to` is supplied. With `to` omitted the router can't resolve which
+      // route's search schema applies, so it types the reducer's return as
+      // `never`; the runtime contract (merge `tour` into the current
+      // search) is route-agnostic, so we cast the reducer to satisfy the
+      // over-narrowed signature without changing behavior.
       void navigate({
-        search: (prev: Record<string, unknown>) => ({ ...prev, tour: stepId }),
+        search: ((prev: Record<string, unknown>) => ({ ...prev, tour: stepId })) as never,
       });
     },
     [navigate],
   );
 
   const exitTour = useCallback(() => {
+    // See goToStep: `to` is omitted so the router over-narrows the reducer
+    // return to `never`; the route-agnostic "strip the tour param" contract
+    // is unchanged, so cast to satisfy the signature.
     void navigate({
-      search: (prev: Record<string, unknown>) => {
+      search: ((prev: Record<string, unknown>) => {
         const { tour: _tour, ...rest } = prev;
         return rest;
-      },
+      }) as never,
     });
   }, [navigate]);
 
