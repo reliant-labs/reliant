@@ -3324,7 +3324,7 @@ func runCleanupActivities(ctx workflow.Context, chatID, workflowID, thread strin
 			"chatID", chatID,
 			"workflowID", workflowID,
 			"thread", thread,
-			"result", result)
+			"result", redactValue(result))
 	}
 }
 
