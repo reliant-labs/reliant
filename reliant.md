@@ -2,6 +2,14 @@ IMPORTANT: The current status of the project is that we haven't launched. Thus w
 
 IMPORTANT: when doing migrations sqlite does now support ALTER TABLE DROP COLUMN
 
+## Engineering disposition
+
+For consequential decisions — architecture, public APIs, schemas, lifecycle, anything that ships and is hard to change later — reason to the production-grade, durable solution first, not the quick fix. Before building a non-trivial design, name the realistic alternatives and the trade-off, and devil's-advocate the chosen approach **including your own proposals**; bias toward the coherent design that won't hit a ceiling.
+
+**Don't manufacture urgency.** There is almost never real time pressure — user frustration usually means you haven't converged on the right thing, not "go faster / cut corners." Commit to the right design and ship it decisively; never rationalize a hack with invented pressure. When tempted by a shortcut, the question is "is this correct?", not "is this faster?"
+
+Skip this depth for trivial/mechanical work — there, just do it.
+
 ### Architecture modes
 
 Reliant runs in two modes: **distributed** and **monolith**. They share most of the same code paths, so changes should preserve parity unless a mode-specific difference is intentional.
