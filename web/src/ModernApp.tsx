@@ -1097,6 +1097,7 @@ function App() {
             last_active: new Date().toISOString(),
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
+            is_forge: false, // Temporary, refreshed when projects load from the server
           };
           // Use skipClear and skipWorkspaceStateSave since this is an Electron-initiated project set
           // We don't want to save this to lastProjectId (that would affect other windows)

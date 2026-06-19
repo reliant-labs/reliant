@@ -27,6 +27,11 @@ export const launchPlanSchema = z
       .enum([
         "build_app",
         "existing_codebase",
+        // Keep in sync with OnboardingIntent in
+        // components/OnboardingFlow/types.ts — "migrate" was added there
+        // but the URL schema drifted, so a plan carrying it failed to
+        // round-trip through the route's validateSearch.
+        "migrate",
         "landing_page",
         "pitch_deck",
         "blog_post",
@@ -91,6 +96,14 @@ export const indexSearchSchema = z.object({
 
 export const authSearchSchema = z.object({
   redirect: z.string().optional(),
+});
+
+// Search params for `/upgrade`. `returnTo` is the URL the user should be sent
+// back to after they link a real identity (with an email) onto their existing
+// anonymous account — e.g. the admin billing page. Validated at the call site
+// (same-origin relative path only) before any redirect; see UpgradeAccount.tsx.
+export const upgradeSearchSchema = z.object({
+  returnTo: z.string().optional(),
 });
 
 export const oauthCallbackSearchSchema = z.object({

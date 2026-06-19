@@ -310,6 +310,7 @@ export function OnboardingChecklist() {
                     key={item.id}
                     item={item}
                     isComplete={completedItems.has(item.id)}
+                    actionDeps={actionDeps}
                   />
                 ))}
               </div>

@@ -176,8 +176,8 @@ interface AuthState {
   signInWithGoogle: () => Promise<void>
   signInWithGithub: (state?: OAuthRedirectState) => Promise<void>
   signInWithApple: () => Promise<void>
-  linkGoogleAccount: () => Promise<void>
-  linkAppleAccount: () => Promise<void>
+  linkGoogleAccount: (state?: OAuthRedirectState) => Promise<void>
+  linkAppleAccount: (state?: OAuthRedirectState) => Promise<void>
   unlinkIdentity: (identityId: string) => Promise<void>
   sendPasswordResetOTP: (email: string) => Promise<void>
   verifyPasswordResetOTP: (email: string, code: string) => Promise<void>
@@ -548,10 +548,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  linkGoogleAccount: async () => {
+  linkGoogleAccount: async (state?: OAuthRedirectState) => {
     set({ loading: true })
     try {
-      const redirectTo = await getOAuthRedirectUrl()
+      // Thread OAuth round-trip state (source/returnTo) onto the redirect URL
+      // so the /auth/callback handler can land the user back where the link
+      // flow was triggered (e.g. the admin billing page via /upgrade).
+      const redirectTo = withOAuthState(await getOAuthRedirectUrl(), state ?? {})
       logger.info('[AuthStore] linkGoogleAccount: Starting link flow', {
         isElectron,
         redirectTo,
@@ -601,10 +604,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  linkAppleAccount: async () => {
+  linkAppleAccount: async (state?: OAuthRedirectState) => {
     set({ loading: true })
     try {
-      const redirectTo = await getOAuthRedirectUrl()
+      // See linkGoogleAccount: thread returnTo so the callback lands the user
+      // back at the originating surface after the link round-trip.
+      const redirectTo = withOAuthState(await getOAuthRedirectUrl(), state ?? {})
       const { data, error } = await supabase.auth.linkIdentity({
         provider: 'apple',
         options: {
