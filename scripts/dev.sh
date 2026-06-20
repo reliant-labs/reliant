@@ -553,8 +553,16 @@ fi
 # Use the standard Air config
 AIR_CONFIG=".air.toml"
 
+# Log only non-secret connection metadata for debugging stale-env drift.
+# Never log DATABASE_URL verbatim: in postgres mode it embeds the DB password.
 echo -e "[dev.sh] Air startup env: DATABASE_DRIVER=${DATABASE_DRIVER:-unset} PGHOST=${PGHOST:-unset} PGPORT=${PGPORT:-unset} PGDATABASE=${PGDATABASE:-unset}" >> "$LOG_FILE"
-echo -e "[dev.sh] Air startup env: DATABASE_URL=${DATABASE_URL:-unset}" >> "$LOG_FILE"
+if [ -n "${DATABASE_URL:-}" ]; then
+    # Redact credentials from any userinfo (user:pass@) component before logging.
+    redacted_database_url="$(printf '%s' "$DATABASE_URL" | sed -E 's#(://)[^/@]*@#\1<redacted>@#')"
+    echo -e "[dev.sh] Air startup env: DATABASE_URL=${redacted_database_url}" >> "$LOG_FILE"
+else
+    echo -e "[dev.sh] Air startup env: DATABASE_URL=unset" >> "$LOG_FILE"
+fi
 
 # Start Air in the background and capture its PID
 # Air will watch for Go file changes and rebuild automatically
