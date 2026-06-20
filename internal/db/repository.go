@@ -223,6 +223,11 @@ type Repository interface {
 	ListDaemonPATsByUserID(ctx context.Context, userID string) ([]*DaemonPAT, error)
 	RevokeDaemonPAT(ctx context.Context, id string) error
 	RevokeDaemonPATsByUserID(ctx context.Context, userID string, ephemeralOnly bool) error
+	// RevokeDaemonPATsByDaemonID marks every live (not-yet-revoked) PAT bound to
+	// daemonID as revoked. Used by the managed-daemon lifecycle to invalidate a
+	// pod's credentials when it is torn down or re-provisioned. Returns the number
+	// of rows transitioned to revoked.
+	RevokeDaemonPATsByDaemonID(ctx context.Context, daemonID string) (int, error)
 	UpdateDaemonPATLastUsed(ctx context.Context, id string) error
 
 	// Sequence-based Synchronization for Polling (per-chat)

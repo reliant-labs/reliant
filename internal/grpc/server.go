@@ -85,6 +85,16 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	// Create auth interceptor
 	// Public methods (no auth required)
+	// Managed-daemon-token RPCs are authenticated by the internal-service
+	// interceptor (HS256 token signed with INTERNAL_SERVICE_SECRET), NOT by the
+	// user-JWT auth interceptor. They MUST be listed as public for the user-JWT
+	// interceptor so it does not also demand a Supabase JWT for them; the
+	// InternalServiceInterceptor below enforces the real (operator) auth.
+	managedDaemonTokenProcedures := []string{
+		"/reliant.v1.DaemonTokenService/MintManagedDaemonToken",
+		"/reliant.v1.DaemonTokenService/RevokeManagedDaemonToken",
+	}
+
 	publicMethods := []string{
 		"/reliant.v1.SystemService/Health",
 		"/reliant.v1.SystemService/Ready",
@@ -96,6 +106,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		"/reliant.v1.SystemService/DevAuthSave",
 		"/reliant.v1.SystemService/DevAuthClear",
 	}
+	publicMethods = append(publicMethods, managedDaemonTokenProcedures...)
 
 	authInterceptor, err := interceptors.NewAuthInterceptor(cfg.JWTPublicKey, cfg.JWKSURL, publicMethods)
 	if err != nil {
@@ -103,8 +114,22 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 	domainWhitelistInterceptor := interceptors.NewDomainWhitelistInterceptor(cfg.AllowedEmailDomains)
 
-	// Order matters: recovery (outermost) -> error reporter -> timeout -> auth -> domain whitelist (innermost).
-	opts := newHandlerOptions(interceptors.NewTimeoutInterceptor().Interceptor(), authInterceptor, domainWhitelistInterceptor)
+	// Internal-service auth for the managed-daemon-token surface. Verifier reads
+	// INTERNAL_SERVICE_SECRET from env (fail-closed when unset). This interceptor
+	// is a no-op for every procedure not in managedDaemonTokenProcedures.
+	internalServiceInterceptor, err := interceptors.NewInternalServiceInterceptor(
+		auth.NewInternalServiceVerifierFromEnv(),
+		managedDaemonTokenProcedures,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("internal-service interceptor setup failed: %w", err)
+	}
+
+	// Order matters: recovery (outermost) -> error reporter -> timeout -> internal-service -> auth -> domain whitelist (innermost).
+	// internal-service runs before user-JWT auth so that, for the gated
+	// procedures, the operator's identity is established and user-JWT auth then
+	// skips them (they are in publicMethods).
+	opts := newHandlerOptions(interceptors.NewTimeoutInterceptor().Interceptor(), internalServiceInterceptor, authInterceptor, domainWhitelistInterceptor)
 
 	// Build a DaemonRouter for services that need transport-agnostic daemon access.
 	// The api-server itself never accepts daemon bidi streams — daemons connect to

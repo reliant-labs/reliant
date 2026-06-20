@@ -6,9 +6,17 @@ package reliant.v1;
 option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
 
 // DaemonTokenService manages Personal Access Tokens (PATs) used by daemons
-// to authenticate against the control plane. All RPCs require a Supabase JWT
-// — you bootstrap a PAT from a session, you do not authenticate this service
-// with a PAT.
+// to authenticate against the control plane.
+//
+// The user-facing RPCs (CreateDaemonToken / ListDaemonTokens /
+// RevokeDaemonToken) require a Supabase JWT — you bootstrap a PAT from a
+// session, you do not authenticate those with a PAT.
+//
+// The managed-daemon RPCs (MintManagedDaemonToken / RevokeManagedDaemonToken)
+// are NOT user-JWT-authed. They are called by the control-plane operator with
+// no end-user request in scope, and are gated on an internal-service HS256
+// token signed with the shared INTERNAL_SERVICE_SECRET (sub=internal-service,
+// role=admin). See internal/auth/internal_service.go.
 service DaemonTokenService {
   // CreateDaemonToken mints a new PAT for the authenticated user.
   // Returns the raw token exactly once.
@@ -20,6 +28,18 @@ service DaemonTokenService {
 
   // RevokeDaemonToken marks a PAT revoked. Subsequent uses fail auth.
   rpc RevokeDaemonToken(RevokeDaemonTokenRequest) returns (RevokeDaemonTokenResponse) {}
+
+  // MintManagedDaemonToken provisions a PAT bound to an authoritative
+  // daemon_id on behalf of a managed daemon. Internal-service-authed (the
+  // control-plane operator). Returns the raw token exactly once. The resulting
+  // PAT carries the daemon_id so the gateway resolves the managed daemon from
+  // the bound token instead of guessing via hostname/UUID.
+  rpc MintManagedDaemonToken(MintManagedDaemonTokenRequest) returns (MintManagedDaemonTokenResponse) {}
+
+  // RevokeManagedDaemonToken revokes every live PAT bound to a given
+  // daemon_id. Internal-service-authed. Used when a managed daemon pod is torn
+  // down or re-provisioned. Returns how many tokens were revoked.
+  rpc RevokeManagedDaemonToken(RevokeManagedDaemonTokenRequest) returns (RevokeManagedDaemonTokenResponse) {}
 }
 
 message CreateDaemonTokenRequest {
@@ -53,3 +73,22 @@ message RevokeDaemonTokenRequest {
 }
 
 message RevokeDaemonTokenResponse {}
+
+message MintManagedDaemonTokenRequest {
+  string user_id = 1;   // Owner the PAT is attributed to (control-plane workspace owner)
+  string daemon_id = 2; // Authoritative daemon ID the PAT is bound to
+  string name = 3;      // Human-readable label (e.g. "managed:<workspace>")
+}
+
+message MintManagedDaemonTokenResponse {
+  string token = 1;    // Raw PAT — returned once, cannot be retrieved again
+  string token_id = 2; // Unique ID for the minted PAT
+}
+
+message RevokeManagedDaemonTokenRequest {
+  string daemon_id = 1; // Revoke all live PATs bound to this daemon ID
+}
+
+message RevokeManagedDaemonTokenResponse {
+  int32 revoked_count = 1; // Number of PATs transitioned to revoked
+}

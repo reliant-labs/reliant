@@ -43,7 +43,7 @@ func SetupTestDB(t *testing.T) (*Repo, func()) {
 	}
 
 	// Create test project and user to satisfy foreign key constraints on chats
-	_, err = db.Exec(`INSERT INTO projects (id, user_id, name, path, created_at, updated_at) VALUES ('test-project', 'test-user', 'Test Project', '/tmp/test', NOW(), NOW()) ON CONFLICT (id) DO NOTHING`)
+	_, err = db.Exec(`INSERT INTO projects (id, user_id, name, path, created_at, updated_at, last_active) VALUES ('test-project', 'test-user', 'Test Project', '/tmp/test', NOW(), NOW(), NOW()) ON CONFLICT (id) DO NOTHING`)
 	if err != nil {
 		db.Close()
 		t.Fatalf("failed to create test project: %v", err)
@@ -78,7 +78,7 @@ func SetupTestDBWithRawDB(t *testing.T) (*Repo, *sql.DB, func()) {
 		t.Fatalf("failed to run migrations: %v", err)
 	}
 
-	_, err = db.Exec(`INSERT INTO projects (id, user_id, name, path, created_at, updated_at) VALUES ('test-project', 'test-user', 'Test Project', '/tmp/test', NOW(), NOW()) ON CONFLICT (id) DO NOTHING`)
+	_, err = db.Exec(`INSERT INTO projects (id, user_id, name, path, created_at, updated_at, last_active) VALUES ('test-project', 'test-user', 'Test Project', '/tmp/test', NOW(), NOW(), NOW()) ON CONFLICT (id) DO NOTHING`)
 	if err != nil {
 		db.Close()
 		t.Fatalf("failed to create test project: %v", err)
