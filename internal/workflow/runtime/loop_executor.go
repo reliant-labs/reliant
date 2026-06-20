@@ -1182,7 +1182,9 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 				"loopID", e.loopID,
 				"iteration", e.iteration,
 				"outputDefs", e.subWorkflow.GetOutputs(),
-				"nodeOutputs", iterNodeOutputs,
+				// Node outputs hold tool results / file contents, which may carry
+				// secrets read from files. Redact before logging.
+				"nodeOutputs", redactValue(iterNodeOutputs),
 			)
 
 			// Build workflow context for output evaluation
@@ -1202,7 +1204,8 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 			e.logger.Info("[InlineLoop] Outputs evaluated",
 				"loopID", e.loopID,
 				"iteration", e.iteration,
-				"outputs", outputs,
+				// Evaluated outputs may carry tool-result/file content; redact.
+				"outputs", redactValue(outputs),
 			)
 
 			return outputs, nil
@@ -1323,7 +1326,8 @@ func (e *InlineLoopExecutor) evaluateWhileCondition(outputs map[string]interface
 		"loopID", e.loopID,
 		"iteration", e.iteration-1,
 		"while", whileExpr,
-		"outputs", outputs,
+		// Outputs may carry tool-result/file content; redact before logging.
+		"outputs", redactValue(outputs),
 	)
 
 	ctx := &wfcel.LoopEvalContext{
