@@ -3,7 +3,7 @@ package wfyaml
 import (
 	"testing"
 
-	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"google.golang.org/protobuf/proto"
 )
 

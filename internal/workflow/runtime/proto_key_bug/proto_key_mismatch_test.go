@@ -30,7 +30,7 @@ import (
 	"strings"
 	"testing"
 
-	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	_ "github.com/reliant-labs/reliant/internal/workflow/runtime/activities" // triggers init() for schema registration
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"

@@ -7,8 +7,8 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/reliant/internal/auth"
-	controlplanev1 "github.com/reliant-labs/reliant/internal/gen/controlplane/v1"
-	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
+	controlplanev1 "github.com/reliant-labs/reliant/gen/controlplane/v1"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"

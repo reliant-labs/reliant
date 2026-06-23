@@ -894,7 +894,7 @@ const file_reliant_v1_system_proto_rawDesc = "" +
 	"\x10StartOAuthSignIn\x12#.reliant.v1.StartOAuthSignInRequest\x1a$.reliant.v1.StartOAuthSignInResponse\"\x00\x12P\n" +
 	"\vDevAuthLoad\x12\x1e.reliant.v1.DevAuthLoadRequest\x1a\x1f.reliant.v1.DevAuthLoadResponse\"\x00\x12P\n" +
 	"\vDevAuthSave\x12\x1e.reliant.v1.DevAuthSaveRequest\x1a\x1f.reliant.v1.DevAuthSaveResponse\"\x00\x12S\n" +
-	"\fDevAuthClear\x12\x1f.reliant.v1.DevAuthClearRequest\x1a .reliant.v1.DevAuthClearResponse\"\x00BCZAgithub.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1b\x06proto3"
+	"\fDevAuthClear\x12\x1f.reliant.v1.DevAuthClearRequest\x1a .reliant.v1.DevAuthClearResponse\"\x00BCZAgithub.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_system_proto_rawDescOnce sync.Once
