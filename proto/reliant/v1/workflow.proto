@@ -7,7 +7,7 @@ import "google/protobuf/struct.proto";
 import "reliant/v1/common.proto";
 import "reliant/v1/workflow_v2.proto";
 
-option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
 // NOTE: This proto is the external WorkflowService API contract.
 // Keep this stable while any clients still use the WorkflowService RPC surface.

@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 	cfg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
-	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"

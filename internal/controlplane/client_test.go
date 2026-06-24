@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
-	controlplanev1 "github.com/reliant-labs/reliant/internal/gen/controlplane/v1"
-	"github.com/reliant-labs/reliant/internal/gen/controlplane/v1/controlplanev1connect"
+	controlplanev1 "github.com/reliant-labs/reliant/gen/controlplane/v1"
+	"github.com/reliant-labs/reliant/gen/controlplane/v1/controlplanev1connect"
 )
 
 func TestClient_CheckManagedReliantAffordability_AttachesAuthorization(t *testing.T) {

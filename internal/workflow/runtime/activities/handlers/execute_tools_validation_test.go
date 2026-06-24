@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

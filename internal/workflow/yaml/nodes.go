@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"strconv"
 
-	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/structpb"

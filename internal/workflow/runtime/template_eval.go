@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/google/cel-go/common/types/ref"
-	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"google.golang.org/protobuf/types/known/structpb"
