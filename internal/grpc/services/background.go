@@ -9,8 +9,8 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 
-	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/gen/reliant/v1/reliantv1connect"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 )
 
 // BackgroundService implements the BackgroundService RPC handlers

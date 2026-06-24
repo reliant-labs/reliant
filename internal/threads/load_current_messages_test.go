@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
 // TestLoadCurrentMessages_SimpleThread tests that a non-forked thread

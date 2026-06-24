@@ -4,7 +4,7 @@ package simulator
 import (
 	"testing"
 
-	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
