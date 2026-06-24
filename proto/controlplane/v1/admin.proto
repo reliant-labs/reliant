@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package controlplane.v1;
 
-option go_package = "github.com/reliant-labs/reliant/internal/gen/controlplane/v1;controlplanev1";
+option go_package = "github.com/reliant-labs/reliant/gen/controlplane/v1;controlplanev1";
 
 import "google/protobuf/timestamp.proto";
 

@@ -5,7 +5,7 @@ package reliant.v1;
 
 import "google/protobuf/descriptor.proto";
 
-option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
 // FieldMeta provides metadata for workflow proto fields.
 // Used by UI rendering, documentation generation, and validation.
