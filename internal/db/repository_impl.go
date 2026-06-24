@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/db/core"
-	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -1606,6 +1606,33 @@ func (r *Repo) RevokeDaemonPATsByUserID(ctx context.Context, userID string, ephe
 	}
 
 	return nil
+}
+
+// RevokeDaemonPATsByDaemonID marks every live PAT bound to daemonID as revoked.
+// daemon_id is nullable on the table; this only matches rows where it equals the
+// supplied non-empty daemonID, so unbound (user-only) PATs are never touched.
+// Returns the count of rows that transitioned from live to revoked.
+func (r *Repo) RevokeDaemonPATsByDaemonID(ctx context.Context, daemonID string) (int, error) {
+	if daemonID == "" {
+		return 0, fmt.Errorf("daemon ID cannot be empty")
+	}
+
+	query := `UPDATE daemon_pats SET revoked_at = CURRENT_TIMESTAMP WHERE daemon_id = ? AND revoked_at IS NULL`
+	query = r.bindQuery(query)
+
+	res, err := r.DB.ExecContext(ctx, query, daemonID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to revoke daemon PATs for daemon %s: %w", daemonID, err)
+	}
+
+	n, err := res.RowsAffected()
+	if err != nil {
+		// The statement succeeded; the driver just couldn't report the count.
+		// Report 0 with no error rather than failing the revocation.
+		return 0, nil
+	}
+
+	return int(n), nil
 }
 
 func (r *Repo) UpdateDaemonPATLastUsed(ctx context.Context, id string) error {

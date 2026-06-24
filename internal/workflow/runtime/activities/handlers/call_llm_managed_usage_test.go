@@ -8,7 +8,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
-	controlplanev1 "github.com/reliant-labs/reliant/internal/gen/controlplane/v1"
+	controlplanev1 "github.com/reliant-labs/reliant/gen/controlplane/v1"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"

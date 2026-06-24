@@ -5,12 +5,12 @@ managed:
 plugins:
   # Generate Go protobuf code
   - remote: buf.build/protocolbuffers/go
-    out: internal/gen
+    out: gen
     opt:
       - paths=source_relative
 
   # Generate Connect-Go service code using remote plugin
   - remote: buf.build/connectrpc/go
-    out: internal/gen
+    out: gen
     opt:
       - paths=source_relative

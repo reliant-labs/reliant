@@ -9,7 +9,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow"

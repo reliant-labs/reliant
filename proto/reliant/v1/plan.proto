@@ -6,7 +6,7 @@ package reliant.v1;
 import "reliant/v1/common.proto";
 import "reliant/v1/task.proto";
 
-option go_package = "github.com/reliant-labs/reliant/internal/gen/reliant/v1;reliantv1";
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
 // PlanComplexity indicates the estimated complexity of a plan
 enum PlanComplexity {

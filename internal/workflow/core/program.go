@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 package core
 
-import reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
+import reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 
 // Program is the compiled, pure semantic representation consumed by core engine/runtime bridges.
 type Program struct {

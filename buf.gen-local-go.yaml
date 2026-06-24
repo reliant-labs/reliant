@@ -1,0 +1,17 @@
+# buf.gen-local-go.yaml — regenerate Go using LOCAL plugins so the emitted
+# descriptor wire format matches the pinned google.golang.org/protobuf runtime
+# (v1.36.12-0.20260120151049-... from the forge bump). The remote BSR plugin
+# (buf.build/protocolbuffers/go) lags that pseudo-version and emits descriptors
+# the pinned runtime rejects at init (slice bounds out of range in unmarshalSeed).
+version: v2
+managed:
+  enabled: false
+plugins:
+  - local: protoc-gen-go
+    out: gen
+    opt:
+      - paths=source_relative
+  - local: protoc-gen-connect-go
+    out: gen
+    opt:
+      - paths=source_relative

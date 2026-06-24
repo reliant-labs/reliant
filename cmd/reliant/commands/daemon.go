@@ -20,8 +20,8 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/reliant-labs/reliant/internal/auth"
-	reliantv1 "github.com/reliant-labs/reliant/internal/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/gen/reliant/v1/reliantv1connect"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
@@ -119,10 +119,13 @@ func ensureDaemonCredentials(ctx context.Context, cmd *cobra.Command, apiURL, gw
 		return nil, fmt.Errorf("reading daemon credentials: %w", err)
 	}
 	if creds != nil {
-		// Update gateway URL if it changed (e.g. flag override)
+		// Update gateway URL if it changed (e.g. flag override). The in-memory
+		// creds are authoritative for this boot; persisting the drift back to
+		// disk is an optimization, so a read-only / mounted credentials file
+		// (managed-daemon dial-out mode) must not fail the boot.
 		if gwURL != "" && creds.GatewayURL != gwURL {
 			creds.GatewayURL = gwURL
-			_ = auth.WriteDaemonCredentials(creds)
+			persistDaemonCredentials(creds)
 		}
 		return creds, nil
 	}
@@ -138,6 +141,40 @@ func ensureDaemonCredentials(ctx context.Context, cmd *cobra.Command, apiURL, gw
 		return nil, fmt.Errorf("failed to read daemon credentials after registration")
 	}
 	return creds, nil
+}
+
+// persistDaemonCredentials best-effort writes daemon credentials to disk.
+//
+// Persisting is an optimization: the supplied creds remain authoritative for
+// the running daemon whether or not the write lands. In managed-daemon
+// dial-out mode the credentials file is a read-only mounted Kubernetes Secret,
+// so a write attempt fails with EROFS/EACCES. We must tolerate that and let
+// the daemon boot rather than crashing. A genuinely unexpected write error on
+// a writable path is still surfaced as a warning (we never have anything to
+// fail hard on here — callers that *require* a successful first write call
+// auth.WriteDaemonCredentials directly and propagate its error).
+func persistDaemonCredentials(creds *auth.DaemonCredentials) {
+	err := auth.WriteDaemonCredentials(creds)
+	if err == nil {
+		return
+	}
+	if isReadOnlyOrPermissionErr(err) {
+		logging.Warn("credentials file is read-only (managed/mounted creds); skipping persist, using provided credentials",
+			"error", err)
+		return
+	}
+	logging.Warn("failed to persist daemon credentials; continuing with in-memory credentials",
+		"error", err)
+}
+
+// isReadOnlyOrPermissionErr reports whether err indicates the target path is
+// not writable because the filesystem is read-only or permission was denied —
+// the signature of a read-only mounted Secret.
+func isReadOnlyOrPermissionErr(err error) bool {
+	return errors.Is(err, os.ErrPermission) ||
+		errors.Is(err, syscall.EROFS) ||
+		errors.Is(err, syscall.EACCES) ||
+		errors.Is(err, syscall.EPERM)
 }
 
 // credentialsFromToken reads a PAT from stdin and constructs daemon credentials.
