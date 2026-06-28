@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -97,9 +98,15 @@ func connectPostgres(cfg DatabaseConfig) (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to connect to postgres database: %w", err)
 	}
 
-	// Postgres connection pool settings.
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(10)
+	// Postgres connection pool settings. Defaults are 25 open / 10 idle, but
+	// both are env-overridable so dev can cap them low: the dev Postgres is
+	// SHARED by N parallel stacks (one per git worktree), and reliant's api +
+	// worker pools count against the same instance's max_connections alongside
+	// control-plane's services. Dev sets RELIANT_DB_MAX_OPEN_CONNS=8 /
+	// RELIANT_DB_MAX_IDLE_CONNS=2 (see control-plane deploy/kcl/dev/main.k
+	// _reliant_host_env). Prod/anything that sets neither keeps 25/10.
+	db.SetMaxOpenConns(envInt("RELIANT_DB_MAX_OPEN_CONNS", 25))
+	db.SetMaxIdleConns(envInt("RELIANT_DB_MAX_IDLE_CONNS", 10))
 	db.SetConnMaxLifetime(30 * time.Minute)
 
 	logging.Debug("Applying database migrations...")
@@ -110,6 +117,23 @@ func connectPostgres(cfg DatabaseConfig) (*sql.DB, error) {
 
 	logging.Info("Database ready", "driver", DriverPostgres)
 	return db, nil
+}
+
+// envInt reads a non-negative integer from the named env var, falling back to
+// def when the var is unset, empty, or not a positive integer. Used for the
+// connection-pool sizing knobs so dev can cap them low (shared dev Postgres)
+// while prod keeps the built-in defaults.
+func envInt(name string, def int) int {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return def
+	}
+	v, err := strconv.Atoi(raw)
+	if err != nil || v <= 0 {
+		logging.Warn("Ignoring invalid pool-size env var; using default", "var", name, "value", raw, "default", def)
+		return def
+	}
+	return v
 }
 
 // RunMigrations runs database migrations using goose
