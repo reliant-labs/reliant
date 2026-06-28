@@ -328,6 +328,11 @@ func Run(ctx context.Context, opts Options) error {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ready"}`))
 	})
+	// /flow-health: the APP-FLOW assertion (daemon-connected invariant). The
+	// gateway OWNS the attachment registry, so it asserts internally and
+	// exposes a STATUS-ONLY 200/503 — no per-daemon detail — that `forge
+	// smoke` curls. See flowhealth.go.
+	healthMux.HandleFunc("/flow-health", flowHealthHandler(repo))
 
 	healthAddr := fmt.Sprintf("%s:%d", opts.BindAddress, opts.HealthPort)
 	healthServer := &http.Server{
