@@ -115,6 +115,20 @@ export const oauthCallbackSearchSchema = z.object({
   returnTo: z.string().optional(),
 });
 
+// Search params for `/auth/github/callback` — the app-owned GitHub OAuth
+// connect callback. GitHub redirects here with `code` + `state` on success, or
+// `error` + `error_description` on denial. The route exchanges the code via the
+// ExchangeGithubOAuthCode RPC (state carries identity), then navigates to the
+// decoded returnTo. Owning this route in the SPA (rather than proxying to the
+// control-plane GET handler) is what makes the flow work on Firebase, whose
+// SPA-rewrites can't proxy to the GKE backend.
+export const githubOAuthCallbackSearchSchema = z.object({
+  code: z.string().optional(),
+  state: z.string().optional(),
+  error: z.string().optional(),
+  error_description: z.string().optional(),
+});
+
 export const proxyAuthSearchSchema = z.object({
   return: z.string().optional(),
 });

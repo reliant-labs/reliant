@@ -84,6 +84,32 @@ export function getOAuthURL(): string | null {
   return `${CONTROL_PLANE_API_URL}/auth/github/authorize`;
 }
 
+export interface ExchangeGithubOAuthCodeResult {
+  ok: boolean;
+  returnTo: string;
+  /** Machine-readable error code when ok=false (empty on success). */
+  error: string;
+}
+
+/**
+ * Finish the GitHub OAuth connect flow. The app owns its own /auth/github/callback
+ * route (so it works on Firebase, whose SPA-rewrites can't proxy the callback to
+ * the GKE backend) and calls this RPC with the `code` + signed `state` GitHub
+ * redirected back with. The control-plane verifies the state, exchanges the code,
+ * and saves the git credential for the user the state names. Recoverable failures
+ * come back as { ok:false, error } — not a thrown ConnectError — so the callback
+ * UI can render them in context, mirroring the legacy ?github_error= redirect.
+ */
+export async function exchangeGithubOAuthCode(
+  code: string,
+  state: string,
+): Promise<ExchangeGithubOAuthCodeResult> {
+  const res = await getControlPlaneClient(
+    GitCredentialService,
+  ).exchangeGithubOAuthCode({ code, state });
+  return { ok: res.ok, returnTo: res.returnTo, error: res.error };
+}
+
 export async function cloneRepo(
   args: CloneRepoArgs,
 ): Promise<{ clonedPath: string }> {

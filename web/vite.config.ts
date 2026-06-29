@@ -114,6 +114,13 @@ export default defineConfig({
       // upgrading the connection unnecessarily. Targets come from the
       // env vars cloud-dev.sh exports (VITE_CONTROL_PLANE_API_URL,
       // VITE_API_URL), with sensible standalone-dev defaults.
+      // NOTE: /auth/github/callback is intentionally NOT proxied — the app owns
+      // it as an SPA route (GitHubOAuthCallback) so dev behaves exactly like
+      // prod Firebase, which can't proxy the callback to the GKE backend. The
+      // route exchanges the code via the ExchangeGithubOAuthCode RPC, which
+      // rides the /controlplane.v1. proxy below. /auth/github/authorize is a
+      // top-level browser navigation (full-page redirect to GitHub), not an XHR
+      // through Vite, so it needs no proxy entry either.
       "/controlplane.v1.": {
         target: process.env.VITE_CONTROL_PLANE_API_URL || "http://127.0.0.1:8090",
         changeOrigin: true,
