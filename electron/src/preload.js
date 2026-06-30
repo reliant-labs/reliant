@@ -275,16 +275,20 @@ const injectReliantConfig = async () => {
      * the Electron app now runs a local daemon that bridges to the cloud.
      */
     const buildConfig = (status, info) => {
-      // apiUrl         = daemon --server URL (admin-server in cloud-dev, prod
-      //                  reliantapi.com in packaged builds). Renderer code that
-      //                  reads RELIANT_CONFIG.apiUrl for non-grpc purposes
-      //                  still expects this.
+      // apiUrl         = daemon --server URL (admin-server in cloud-dev, the
+      //                  build-config-injected hosted endpoint in packaged
+      //                  commercial builds). Renderer code that reads
+      //                  RELIANT_CONFIG.apiUrl for non-grpc purposes still
+      //                  expects this. The `||` is a defensive fallback only —
+      //                  status.apiUrl is virtually always set by BackendManager;
+      //                  default it to NEUTRAL localhost (not a hosted host) so
+      //                  the OSS build ships no Reliant-hosted config.
       // rendererApiUrl = where the renderer's MAIN Connect transport hits for
       //                  reliant.v1.* services (ProjectService, ChatService, …).
       //                  In prod the two collapse; in cloud-dev they're distinct
       //                  processes on different ports. getGRPCBaseURL() in
       //                  web/src/api/grpc-client.ts reads window.RELIANT_CONFIG.grpcUrl.
-      const apiUrl = status?.apiUrl || 'https://reliantapi.com';
+      const apiUrl = status?.apiUrl || 'http://localhost:8080';
       const rendererApiUrl = status?.rendererApiUrl || apiUrl;
       return {
         grpcUrl: rendererApiUrl,
@@ -363,7 +367,10 @@ const injectReliantConfig = async () => {
         ipcRenderer.invoke('get-backend-status')
       ]);
 
-      const apiUrl = backendStatus?.apiUrl || 'https://reliantapi.com';
+      // Defensive fallback only — backendStatus.apiUrl is set by BackendManager.
+      // Default to NEUTRAL localhost (not a hosted host) per the OSS-clean
+      // contract; the hosted endpoint reaches the renderer via backendStatus.
+      const apiUrl = backendStatus?.apiUrl || 'http://localhost:8080';
       const rendererApiUrl = backendStatus?.rendererApiUrl || apiUrl;
       reliantConfig = {
         grpcUrl: rendererApiUrl,

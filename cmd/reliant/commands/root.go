@@ -33,7 +33,7 @@ Reliant server components.`,
 		SilenceErrors: true,
 	}
 
-	defaultServerURL := builddefaults.Value("RELIANT_SERVER_URL", builddefaults.ServerURL, builddefaults.ProductionServerURL)
+	defaultServerURL := builddefaults.Value("RELIANT_SERVER_URL", builddefaults.ServerURL, builddefaults.NeutralServerURL)
 	defaultGatewayURL := builddefaults.Value("RELIANT_GATEWAY_URL", builddefaults.GatewayURL, "")
 
 	// Global persistent flags available to all subcommands
