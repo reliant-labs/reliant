@@ -82,14 +82,7 @@ export function deriveStep(plan: Partial<LaunchPlan>): OnboardingStepId {
 export const BACK_CLEARS: Record<OnboardingStepId, (keyof LaunchPlan)[]> = {
   'compute': [],
   'model': ['compute'],
-  // Back from a post-model step clears BOTH modelProvider and compute so the
-  // user lands on the compute step (the real previous decision) rather than
-  // bouncing on the model step. The model step auto-skips for credit-eligible
-  // users (see ModelStep), so clearing only modelProvider would re-trigger the
-  // skip and immediately return the user here — a dead Back button. Clearing
-  // compute too sidesteps that and gives a predictable one-step-back for
-  // everyone.
-  'project-choice': ['modelProvider', 'compute'],
-  'project-picker': ['modelProvider', 'compute'],
+  'project-choice': ['modelProvider'],
+  'project-picker': ['modelProvider'],
   'github-connect': ['intent'],
 };

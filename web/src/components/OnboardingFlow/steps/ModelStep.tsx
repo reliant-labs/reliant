@@ -1,11 +1,110 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
-import { KeyRound, Loader2 } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import {
+  CheckCircle2,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Loader2,
+  XCircle,
+} from "lucide-react";
+import { api } from "@/api/client";
 import { cn } from "@/lib/utils";
 import { getIsDev } from "@/lib/constants";
+import { logger } from "@/lib/logger";
+import { useCodexOAuth, useClaudeOAuth, useOAuthAvailability } from "@/hooks";
+import { OAuthHelperPanel } from "@/components/OAuthHelperPanel";
 import { useCloudEligibility } from "@/hooks/useOnboardingQueries";
+// TODO: Remove this store import once the ApiKeySetupModal is converted to event-driven
+import { useApiKeySetupStore } from "@/store/apiKeySetupStore";
 import { trackEvent } from "@/lib/analytics";
+import { getEventBus } from "@/lib/events";
 import type { ModelProvider, StepProps } from "../types";
+
+const PROVIDERS = [
+  {
+    id: "reliant" as const,
+    modelProvider: "reliant_credits" as ModelProvider,
+    name: "Reliant",
+    docsUrl: "",
+    keyFormat: "",
+    usesOAuth: false as const,
+    builtIn: true as const,
+  },
+  {
+    id: "claude" as const,
+    modelProvider: "anthropic" as ModelProvider,
+    name: "Claude Code",
+    docsUrl: "https://claude.ai",
+    keyFormat: "",
+    usesOAuth: "claude" as const,
+    builtIn: false as const,
+  },
+  {
+    id: "codex" as const,
+    modelProvider: "openai" as ModelProvider,
+    name: "Codex (ChatGPT)",
+    docsUrl: "https://github.com/openai/codex",
+    keyFormat: "",
+    usesOAuth: "codex" as const,
+    builtIn: false as const,
+  },
+  {
+    id: "anthropic" as const,
+    modelProvider: "anthropic" as ModelProvider,
+    name: "Anthropic",
+    docsUrl: "https://console.anthropic.com/settings/keys",
+    keyFormat: "sk-ant-...",
+    usesOAuth: false as const,
+    builtIn: false as const,
+  },
+  {
+    id: "openai" as const,
+    modelProvider: "openai" as ModelProvider,
+    name: "OpenAI",
+    docsUrl: "https://platform.openai.com/api-keys",
+    keyFormat: "sk-...",
+    usesOAuth: false as const,
+    builtIn: false as const,
+  },
+  {
+    id: "openrouter" as const,
+    modelProvider: "openrouter" as ModelProvider,
+    name: "OpenRouter",
+    docsUrl: "https://openrouter.ai/keys",
+    keyFormat: "sk-or-...",
+    usesOAuth: false as const,
+    builtIn: false as const,
+  },
+];
+
+type ProviderId = (typeof PROVIDERS)[number]["id"];
+
+function parseErrorMessage(errorText: string, provider: string): string {
+  const lowerError = (errorText || "").toLowerCase();
+
+  if (
+    provider === "openrouter" &&
+    lowerError.includes("no endpoints found matching your data policy")
+  ) {
+    return "No models available with your current data policy.";
+  }
+  if (
+    lowerError.includes("unauthorized") ||
+    lowerError.includes("401") ||
+    lowerError.includes("invalid")
+  ) {
+    return "Invalid API key. Please check your credentials.";
+  }
+  if (lowerError.includes("rate limit") || lowerError.includes("429")) {
+    return "Rate limit exceeded. Please wait and try again.";
+  }
+  if (lowerError.includes("quota") || lowerError.includes("billing")) {
+    return "Account issue. Check your billing or quota.";
+  }
+  return errorText || "Validation failed. Please check your API key.";
+}
 
 function getForcedEligibility(): "eligible" | "ineligible" | null {
   if (typeof window === "undefined") return null;
@@ -18,7 +117,9 @@ function getForcedEligibility(): "eligible" | "ineligible" | null {
 }
 
 export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
-  const navigate = useNavigate();
+  const codexOAuth = useCodexOAuth();
+  const claudeOAuth = useClaudeOAuth();
+  const oauthAvailability = useOAuthAvailability();
   const cloudEligibility = useCloudEligibility();
 
   const forcedEligibility = getForcedEligibility();
@@ -28,8 +129,33 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
   const eligibilityLoading =
     forcedEligibility == null && !getIsDev() && cloudEligibility.isLoading;
 
+  const [selectedProvider, setSelectedProvider] =
+    useState<ProviderId>("reliant");
+  const [apiKey, setApiKey] = useState("");
+  const [showKey, setShowKey] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [validationResult, setValidationResult] = useState<{
+    valid: boolean;
+    message: string;
+  } | null>(null);
+
+  const provider = useMemo(
+    () => PROVIDERS.find((item) => item.id === selectedProvider)!,
+    [selectedProvider],
+  );
+
+  const validateKeyMutation = useMutation({
+    mutationFn: ({ providerId, key }: { providerId: string; key: string }) =>
+      api.settings.validateProviderAPIKey(providerId, key),
+  });
+
+  const saveKeyMutation = useMutation({
+    mutationFn: ({ providerId, key }: { providerId: string; key: string }) =>
+      api.settings.updateProvider(providerId, key),
+  });
+
+  const saving = saveKeyMutation.isPending;
+  const validating = validateKeyMutation.isPending;
 
   const finishOnboarding = useCallback(
     async (modelProvider: ModelProvider) => {
@@ -46,147 +172,272 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
     [onNext, plan, updatePlan],
   );
 
-  // ── Auto-default to Reliant credits (skip this step) ─────────────────────
-  //
-  // The model step used to be a 6-provider BYO-key fork shown before the user
-  // saw any value. For users eligible for Reliant's free credits there is an
-  // unambiguous best default — Reliant routing, no key needed — so we pick it
-  // for them and skip the step entirely. Mirrors ComputeStep's auto-skip:
-  // we wait for eligibility to settle (`!eligibilityLoading`) so the form
-  // doesn't flash before the decision, and a ref guards against re-entry.
-  //
-  // Reversible by construction: the skip is just `updatePlan({ modelProvider })`,
-  // and deriveStep moves past `model` only because modelProvider is now set.
-  // Ineligible users (no credits available) still render the step below, where
-  // Reliant is the prominent default and BYO is a demoted link to Settings.
-  const hasAutoSkipped = useRef(false);
-  useEffect(() => {
-    if (hasAutoSkipped.current) return;
-    if (plan.modelProvider) return;
-    if (!plan.compute) return;
-    if (eligibilityLoading) return;
-    if (!isEligible) return;
-    hasAutoSkipped.current = true;
-    trackEvent("onboarding_model_autoskipped", { provider: "reliant_credits" });
-    void finishOnboarding("reliant_credits");
-    // finishOnboarding closes over plan/updatePlan/onNext, but the ref guards
-    // re-entry, so we narrow deps to the trigger conditions.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEligible, eligibilityLoading, plan.modelProvider, plan.compute]);
+  const handleConnectOAuth = useCallback(async () => {
+    if (!provider.usesOAuth) return;
+    setError(null);
+    setValidationResult(null);
 
-  const handleStartReliant = useCallback(async () => {
-    setBusy(true);
+    const oauthHook =
+      provider.usesOAuth === "claude" ? claudeOAuth : codexOAuth;
     try {
-      await finishOnboarding("reliant_credits");
-    } finally {
-      setBusy(false);
-    }
-  }, [finishOnboarding]);
+      const result = await oauthHook.start();
+      if (!result.ok) {
+        setValidationResult({ valid: false, message: result.message });
+        return;
+      }
 
-  // "Use my own API key instead" — start onboarding on Reliant routing (so the
-  // flow completes and the workspace is usable immediately) and hand the user
-  // off to Settings → General, where CombinedGeneralSettings owns provider-key
-  // entry. This deliberately avoids re-implementing the BYO-key fork inline.
-  const handleUseOwnKey = useCallback(async () => {
-    setBusy(true);
-    try {
-      trackEvent("onboarding_model_byo_deferred_to_settings");
-      await finishOnboarding("reliant_credits");
-      navigate({ to: "/settings/$section", params: { section: "general" } });
-    } finally {
-      setBusy(false);
+      // TODO: Remove once ApiKeySetupModal is event-driven
+      useApiKeySetupStore.setState({
+        hasApiKey: true,
+        showModal: false,
+        hasChecked: true,
+      });
+      const { useGlobalDataStore } = await import("@/store/globalDataStore");
+      await useGlobalDataStore.getState().refetchModels();
+      getEventBus().emit("api-key:saved", { provider: provider.modelProvider });
+      await finishOnboarding(provider.modelProvider);
+    } catch (err) {
+      setValidationResult({
+        valid: false,
+        message: err instanceof Error ? err.message : String(err),
+      });
     }
-  }, [finishOnboarding, navigate]);
+  }, [claudeOAuth, codexOAuth, finishOnboarding, provider]);
+
+  const handleSaveKey = useCallback(async () => {
+    if (!apiKey.trim() || provider.usesOAuth) return;
+    setError(null);
+    setValidationResult(null);
+
+    try {
+      const validation = await validateKeyMutation.mutateAsync({
+        providerId: selectedProvider,
+        key: apiKey.trim(),
+      });
+      if (!validation.valid) {
+        setValidationResult({
+          valid: false,
+          message: parseErrorMessage(
+            validation.message || "Invalid API key",
+            selectedProvider,
+          ),
+        });
+        return;
+      }
+
+      await saveKeyMutation.mutateAsync({
+        providerId: selectedProvider,
+        key: apiKey.trim(),
+      });
+
+      // TODO: Remove once ApiKeySetupModal is event-driven
+      useApiKeySetupStore.setState({
+        hasApiKey: true,
+        showModal: false,
+        hasChecked: true,
+      });
+      const { useGlobalDataStore } = await import("@/store/globalDataStore");
+      await useGlobalDataStore.getState().refetchModels();
+      getEventBus().emit("api-key:saved", { provider: selectedProvider });
+      logger.info("[OnboardingModelStep] Saved API key", {
+        provider: selectedProvider,
+      });
+      await finishOnboarding(provider.modelProvider);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setValidationResult({
+        valid: false,
+        message: parseErrorMessage(message, selectedProvider),
+      });
+    }
+  }, [
+    apiKey,
+    finishOnboarding,
+    provider,
+    saveKeyMutation,
+    selectedProvider,
+    validateKeyMutation,
+  ]);
 
   const creditsAvailable = isEligible;
-
-  // Eligible users are auto-skipped by the effect above; render a neutral
-  // placeholder for the frame between mount and the skip firing so the BYO
-  // fallback UI never flashes for them.
-  if (isEligible && !eligibilityLoading && !plan.modelProvider) {
-    return (
-      <div
-        className="space-y-5 py-6 text-center"
-        role="status"
-        aria-live="polite"
-      >
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/15 text-primary">
-          <Loader2 className="h-7 w-7 animate-spin" />
-        </div>
-        <p className="text-xs text-muted-foreground">Setting up your models…</p>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
       <div className="space-y-2 text-center">
         <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-          Start building with Reliant
+          Choose model access
         </h2>
         <p className="text-sm text-muted-foreground">
-          No API key needed — Reliant routes to the best available model. You
-          can connect your own provider any time in Settings.
+          Connect your own provider, or use Reliant credits when capacity is
+          available.
         </p>
       </div>
 
-      {/* Primary path: Reliant model routing. Eligible users never see this
-          step (the auto-skip effect picks reliant_credits and advances); this
-          card is what ineligible users land on, with BYO demoted to the link
-          below that defers to Settings → General. */}
-      <div className="space-y-3 rounded-xl border-2 border-primary/40 bg-[linear-gradient(135deg,rgba(56,189,248,0.12),rgba(168,85,247,0.10))] p-5">
-        <div className="flex items-start gap-3">
-          <KeyRound className="mt-0.5 h-4 w-4 text-primary" />
-          <div>
-            <h3 className="text-sm font-medium text-foreground">
-              Use Reliant&apos;s model routing
-            </h3>
-            {eligibilityLoading ? (
-              <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Checking credit availability...
-              </div>
-            ) : creditsAvailable ? (
-              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                $20 free credit included &mdash; no API key needed.
+      <div className="space-y-3">
+        <div className="space-y-4 rounded-xl border border-border/50 bg-muted/30 p-4">
+          <div className="flex items-start gap-3">
+            <KeyRound className="mt-0.5 h-4 w-4 text-primary" />
+            <div>
+              <h3 className="text-sm font-medium text-foreground">
+                Connect your own provider
+              </h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Use Reliant's multi-model API, or bring your own key or
+                subscription.
               </p>
-            ) : (
-              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                No API key needed. Reliant routes to the best available model
-                automatically.
-              </p>
-            )}
+            </div>
           </div>
-        </div>
-        <button
-          type="button"
-          onClick={handleStartReliant}
-          disabled={busy}
-          className={cn(
-            "inline-flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition-colors",
-            !busy
-              ? "bg-primary text-primary-foreground hover:bg-primary/90"
-              : "cursor-not-allowed bg-muted text-muted-foreground",
+
+          <div className="grid grid-cols-2 gap-2">
+            {PROVIDERS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  setSelectedProvider(item.id);
+                  setValidationResult(null);
+                  setError(null);
+                }}
+                className={cn(
+                  "rounded-lg border px-3 py-2 text-left transition-colors",
+                  item.id === selectedProvider
+                    ? "border-primary bg-primary/10 ring-2 ring-primary/20"
+                    : "border-border/40 bg-background hover:bg-muted/60",
+                )}
+              >
+                <span className="block text-sm font-medium text-foreground">
+                  {item.name}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {provider.builtIn ? (
+            <div className="space-y-3 rounded-lg border border-border/40 bg-background/70 p-4">
+              <p className="text-sm font-medium text-foreground">
+                Use Reliant&apos;s model routing
+              </p>
+              {eligibilityLoading ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Checking credit availability...
+                </div>
+              ) : creditsAvailable ? (
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  $20 free credit included &mdash; no API key needed.
+                </p>
+              ) : (
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  No API key needed. Reliant routes to the best available model
+                  automatically.
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={() => finishOnboarding("reliant_credits")}
+                disabled={saving}
+                className={cn(
+                  "inline-flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition-colors",
+                  !saving
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                    : "cursor-not-allowed bg-muted text-muted-foreground",
+                )}
+              >
+                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                Start with Reliant
+              </button>
+            </div>
+          ) : provider.usesOAuth ? (
+            <OAuthHelperPanel
+              providerName={provider.name}
+              available={oauthAvailability.available}
+              loading={oauthAvailability.loading}
+              onRetry={oauthAvailability.recheck}
+              onConnect={handleConnectOAuth}
+              connecting={validating}
+              connectLabel={`Connect ${provider.name}`}
+              buttonAlign="stretch"
+              size="compact"
+            />
+          ) : (
+            <div className="space-y-3 rounded-lg border border-border/40 bg-background/70 p-4">
+              <div className="flex items-center justify-between">
+                <label
+                  htmlFor="onboarding-llm-key-input"
+                  className="text-xs text-muted-foreground"
+                >
+                  API key
+                </label>
+                <a
+                  href={provider.docsUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Get a key <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              </div>
+              <div className="relative">
+                <input
+                  id="onboarding-llm-key-input"
+                  type={showKey ? "text" : "password"}
+                  value={apiKey}
+                  onChange={(event) => setApiKey(event.target.value)}
+                  placeholder={provider.keyFormat || "Enter your API key"}
+                  className={cn(
+                    "w-full rounded-lg border border-border/40 bg-background px-3 py-2.5 pr-10 font-mono text-sm text-foreground transition-colors placeholder:text-muted-foreground/50",
+                    "focus:border-primary/50 focus:outline-none focus:ring-2 focus:ring-primary/30",
+                  )}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowKey((value) => !value)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
+                  aria-label={showKey ? "Hide API key" : "Show API key"}
+                >
+                  {showKey ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={handleSaveKey}
+                disabled={!apiKey.trim() || saving}
+                className={cn(
+                  "inline-flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition-colors",
+                  apiKey.trim() && !saving
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                    : "cursor-not-allowed bg-muted text-muted-foreground",
+                )}
+              >
+                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                Save key and start
+              </button>
+            </div>
           )}
-        >
-          {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-          Start with Reliant
-        </button>
+        </div>
       </div>
 
-      {/* Demoted BYO affordance. Defers key entry to Settings → General
-          (CombinedGeneralSettings) rather than re-implementing the
-          provider/key/OAuth fork inline here. */}
-      <div className="text-center">
-        <button
-          type="button"
-          onClick={handleUseOwnKey}
-          disabled={busy}
-          className="text-xs font-medium text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+      {validationResult && (
+        <div
+          className={cn(
+            "flex items-center gap-2 rounded-lg border p-3 text-sm",
+            validationResult.valid
+              ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-600"
+              : "border-red-500/20 bg-red-500/10 text-red-600",
+          )}
         >
-          Use my own API key instead &rarr;
-        </button>
-      </div>
+          {validationResult.valid ? (
+            <CheckCircle2 className="h-4 w-4" />
+          ) : (
+            <XCircle className="h-4 w-4" />
+          )}
+          {validationResult.message}
+        </div>
+      )}
 
       {error && <p className="text-center text-xs text-destructive">{error}</p>}
     </div>
