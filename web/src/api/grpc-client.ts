@@ -26,7 +26,7 @@ import { DaemonRegistryService } from "../gen/reliant/v1/daemon_registry_pb";
 import { DaemonTokenService } from "../gen/reliant/v1/daemon_token_pb";
 import { QuestionService } from "../gen/reliant/v1/question_pb";
 import { logger } from "../lib/logger";
-import { buildLocalhostUrl } from "../lib/protocol";
+import { buildLocalhostUrl, useSameOriginTransport } from "../lib/protocol";
 import {
   buildInterceptors,
   setCurrentBaseURL,
@@ -40,6 +40,17 @@ export const setDaemonLastSeen = _setDaemonLastSeenInTransport;
 // Detect if running in Electron and get gRPC URL
 // Returns null if config not yet available (Electron loading)
 const getGRPCBaseURL = (): string | null => {
+  // Same-origin (Vite-proxy) path — see useSameOriginTransport. Whenever the
+  // renderer is served over http(s) (web-dev AND electron-dev), reliant.v1.*
+  // RPCs go to the document origin and Vite's `/reliant.v1.*` proxy forwards
+  // them to reliant-api. This is first-party ⇒ ZERO CORS, and it short-circuits
+  // BEFORE RELIANT_CONFIG.grpcUrl / the absolute VITE_* fallbacks below so
+  // electron-dev never dials a cross-origin backend port. Packaged Electron
+  // (file://) falls through to the daemon URL.
+  if (useSameOriginTransport()) {
+    return window.location.origin;
+  }
+
   // Check if running in Electron with config available
   if (
     typeof window !== "undefined" &&
@@ -114,6 +125,16 @@ export const getGRPCBaseURLPublic = (): string | null => getGRPCBaseURL();
 // self-hosted daemons).
 let _controlPlaneTransport: ReturnType<typeof createConnectTransport> | null = null;
 export const getControlPlaneTransport = () => {
+  // Same-origin (Vite-proxy) path — see useSameOriginTransport. When the
+  // renderer is served over http(s) (web-dev AND electron-dev), return null so
+  // DaemonRegistry/DaemonToken fall through to the same-origin getTransport().
+  // Their RPCs are `reliant.v1.*` paths, so the Vite `/reliant.v1.*` proxy
+  // forwards them to reliant-api (which serves DaemonRegistryService against the
+  // shared dev DB) — first-party, ZERO CORS, no absolute admin-server port.
+  // Only packaged Electron (file://) needs the absolute control-plane URL to
+  // reach the hosted admin-server for cloud-managed daemons.
+  if (useSameOriginTransport()) return null;
+
   const cpURL = import.meta.env.VITE_CONTROL_PLANE_API_URL;
   if (!cpURL) return null;
   if (!_controlPlaneTransport) {
