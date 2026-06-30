@@ -398,6 +398,9 @@ export function CombinedGeneralSettings({
   // Streaming preference state
   const [streamingEnabled, setStreamingEnabled] = useState<boolean>(false);
   const [loadingPreferences, setLoadingPreferences] = useState<boolean>(true);
+  // Per-tag model tuning (model/thinking/temperature/compaction) is power-user
+  // detail that all defaults to Auto — keep it collapsed so it doesn't lead.
+  const [showModelTuning, setShowModelTuning] = useState<boolean>(false);
 
   const codexOAuth = useCodexOAuth();
   const claudeOAuth = useClaudeOAuth();
@@ -1098,8 +1101,34 @@ export function CombinedGeneralSettings({
         </div>
       </div>
 
-      {/* Model Preferences Section */}
-      <ModelPreferences providers={providers} />
+      {/* Advanced model tuning — collapsed by default (all knobs default to Auto) */}
+      <div className="mt-6 border border-border/40 rounded-lg bg-card shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
+        <button
+          type="button"
+          onClick={() => setShowModelTuning((v) => !v)}
+          aria-expanded={showModelTuning}
+          className="flex w-full items-center justify-between gap-3 p-4 text-left"
+        >
+          <div>
+            <h3 className="text-base font-semibold">Advanced model tuning</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Override the default model, thinking level, temperature, and
+              compaction for each tier. Optional — everything defaults to Auto.
+            </p>
+          </div>
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+              showModelTuning && "rotate-180"
+            )}
+          />
+        </button>
+        {showModelTuning && (
+          <div className="border-t border-border/40 p-4 pt-4">
+            <ModelPreferences providers={providers} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
