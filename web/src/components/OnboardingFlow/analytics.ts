@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { trackEvent } from "@/lib/analytics";
 import type { LaunchPlan } from "./types";
+import { codeSourceForCompute } from "./steps/ComputeStep";
 
 // Bridges the gap between the terminal-step finalize handlers and the
 // OnboardingPage unmount cleanup. Without it, the cleanup can't tell
@@ -16,9 +17,12 @@ export function markOnboardingFinalized(
   trackEvent("onboarding_completed", {
     provider: plan.modelProvider ?? "unknown",
     compute: plan.compute ?? "unknown",
-    code_source: plan.codeSource ?? "unknown",
+    // code_source is no longer stored on the plan; derive it from the
+    // compute + intent the user actually chose.
+    code_source: plan.compute
+      ? codeSourceForCompute(plan.compute, plan.intent)
+      : "unknown",
     intent: plan.intent ?? "unknown",
-    use_forge: plan.useForge ?? false,
     project_source: source,
   });
 }

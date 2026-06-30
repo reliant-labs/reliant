@@ -199,7 +199,6 @@ describe('routes: search-schema parsing', () => {
         url: 'https://github.com/owner/repo',
         branch: 'main',
       },
-      launchTour: true,
     }
 
     await router.navigate({ to: '/', search: { plan } })

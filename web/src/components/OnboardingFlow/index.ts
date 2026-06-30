@@ -7,7 +7,6 @@ export { ProgressBar } from "./ProgressBar";
 export type {
   OnboardingIntent,
   ComputeChoice,
-  DaemonLocation,
   CodeSource,
   ModelProvider,
   LaunchPlan,

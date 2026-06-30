@@ -50,22 +50,16 @@ export function hasUsableDaemonForOnboarding(daemons: DaemonInfo[]): boolean {
   );
 }
 
-function codeSourceForCompute(
-  current: CodeSource | undefined,
+// Derives the code-source classification for a given compute + intent. The
+// result is no longer stored on the plan (the wizard never branched on it);
+// it's computed on demand for analytics (see analytics.markOnboardingFinalized).
+export function codeSourceForCompute(
   compute: ComputeChoice,
   intent: OnboardingIntent | undefined,
 ): CodeSource {
-  if (current === "local_folder" && compute === "cloud_free_trial")
-    return "github_repo";
-  if (current === "github_repo" && compute === "local_daemon")
-    return "local_folder";
-  if (current) return current;
-
-  // Default codeSource when not yet set (e.g. compute pre-selected before GoalStep)
   if (intent === "existing_codebase") {
     return compute === "cloud_free_trial" ? "github_repo" : "local_folder";
   }
-  if (intent === "explore") return "sample_project";
   return "new_project";
 }
 
@@ -179,13 +173,7 @@ export function ComputeStep({
 
       await updatePlan({
         compute: "cloud_free_trial",
-        daemonLocation: "reliant_cloud",
         daemonProvisioning: needsProvisioning,
-        codeSource: codeSourceForCompute(
-          plan.codeSource,
-          "cloud_free_trial",
-          plan.intent,
-        ),
         localPath: undefined,
         projectName: undefined,
       });
@@ -224,13 +212,7 @@ export function ComputeStep({
     hasAdvanced.current = true;
     await updatePlan({
       compute: "local_daemon",
-      daemonLocation: "self_hosted",
       daemonProvisioning: false,
-      codeSource: codeSourceForCompute(
-        plan.codeSource,
-        "local_daemon",
-        plan.intent,
-      ),
       localPath: undefined,
       projectName: undefined,
     });
@@ -276,8 +258,8 @@ export function ComputeStep({
       trackEvent("onboarding_daemon_connected");
     }
     void commitLocalAndAdvance(Boolean(activeDaemon));
-    // commitLocalAndAdvance closes over plan.codeSource / plan.intent /
-    // updatePlan / onNext, but the hasAdvanced ref guards against re-entry,
+    // commitLocalAndAdvance closes over updatePlan / onNext / activeDaemon,
+    // but the hasAdvanced ref guards against re-entry,
     // so we intentionally narrow the dep list to the trigger conditions.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasUsableDaemon, daemonLoading, startingCloud]);
