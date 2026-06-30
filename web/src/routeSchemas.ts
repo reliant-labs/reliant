@@ -23,28 +23,12 @@ const tourParam = z.enum(ONBOARDING_STEP_IDS).optional();
 
 export const launchPlanSchema = z
   .object({
-    intent: z
-      .enum([
-        "build_app",
-        "existing_codebase",
-        // Keep in sync with OnboardingIntent in
-        // components/OnboardingFlow/types.ts — "migrate" was added there
-        // but the URL schema drifted, so a plan carrying it failed to
-        // round-trip through the route's validateSearch.
-        "migrate",
-        "landing_page",
-        "pitch_deck",
-        "blog_post",
-        "custom_workflow",
-        "explore",
-      ])
-      .optional(),
+    // Keep in sync with OnboardingIntent in
+    // components/OnboardingFlow/types.ts — only the two values the rendered
+    // wizard can set are accepted here.
+    intent: z.enum(["build_app", "existing_codebase"]).optional(),
     compute: z
       .enum(["cloud_free_trial", "cloud_paid", "local_daemon", "undecided"])
-      .optional(),
-    daemonLocation: z.enum(["reliant_cloud", "self_hosted"]).optional(),
-    codeSource: z
-      .enum(["new_project", "github_repo", "local_folder", "sample_project"])
       .optional(),
     repo: z
       .object({
@@ -56,8 +40,6 @@ export const launchPlanSchema = z
     localPath: z.string().optional(),
     projectName: z.string().optional(),
     workflowId: z.string().optional(),
-    presetId: z.string().optional(),
-    useForge: z.boolean().optional(),
     modelProvider: z
       .enum([
         "reliant_credits",
@@ -69,8 +51,6 @@ export const launchPlanSchema = z
       ])
       .optional(),
     workflowParams: z.record(z.string(), z.unknown()).optional(),
-    selectedPresets: z.record(z.string(), z.string().nullable()).optional(),
-    launchTour: z.boolean().optional(),
     daemonProvisioning: z.boolean().optional(),
   })
   .strict();
@@ -161,11 +141,6 @@ export const SETTINGS_SECTION_IDS = [
   "tokens",
   "git-connections",
   "developer",
-  "cloud-overview",
-  "cloud-environments",
-  "cloud-ai",
-  "cloud-billing",
-  "cloud-organization",
 ] as const;
 export type SettingsSection = (typeof SETTINGS_SECTION_IDS)[number];
 export const DEFAULT_SETTINGS_SECTION: SettingsSection = "account";
