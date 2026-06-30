@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { ColorSchemeSelector } from "./ColorSchemeSelector";
 import { useEditorStore } from "../../store/editorStore";
@@ -132,10 +133,14 @@ export function AppearanceSettings() {
   const [font, setFont] = useState<string>("system");
   const [chatFont, setChatFont] = useState<string>("default");
   const [editorFont, setEditorFont] = useState<string>("default");
+  // Whether the user wants a distinct monospace font for code, vs. letting the
+  // editor follow the app font. Derived from a non-default persisted EDITOR_FONT.
+  const [useCodeFont, setUseCodeFont] = useState<boolean>(false);
   const [fontSize, setFontSize] = useState<FontSize>("md");
   const [chatTimelineVariant, setChatTimelineVariant] = useState<ChatTimelineVariant>("compact");
   const [workflowViewerDefaultMode, setWorkflowViewerDefaultMode] = useState<'inline' | 'side'>('side');
   const [spawnDisplayMode, setSpawnDisplayMode] = useState<SpawnDisplayMode>("preview");
+  const [showEditorAdvanced, setShowEditorAdvanced] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Load settings from settingsSync on mount (wait for initialization)
@@ -156,7 +161,9 @@ export function AppearanceSettings() {
       setTheme(themeValue);
       setFont(readPref(SETTINGS_KEYS.FONT, "system"));
       setChatFont(readPref(SETTINGS_KEYS.CHAT_FONT, "default"));
-      setEditorFont(readPref(SETTINGS_KEYS.EDITOR_FONT, "default"));
+      const savedEditorFont = readPref(SETTINGS_KEYS.EDITOR_FONT, "default");
+      setEditorFont(savedEditorFont);
+      setUseCodeFont(savedEditorFont !== "default");
       setFontSize(readPref(SETTINGS_KEYS.FONT_SIZE, "md"));
       setChatTimelineVariant(readPref(SETTINGS_KEYS.CHAT_TIMELINE_VARIANT, "compact"));
       setWorkflowViewerDefaultMode(readPref(SETTINGS_KEYS.WORKFLOW_VIEWER_DEFAULT_MODE, "side"));
@@ -354,6 +361,7 @@ export function AppearanceSettings() {
               setFont("system");
               setChatFont("default");
               setEditorFont("default");
+              setUseCodeFont(false);
               setFontSize("md");
               setChatTimelineVariant("compact");
               setWorkflowViewerDefaultMode("side");
@@ -365,13 +373,13 @@ export function AppearanceSettings() {
         </div>
 
         <div className="space-y-6">
-          {/* System Font */}
+          {/* App Font — drives the system font; chat input follows it. */}
           <div className="space-y-3">
             <label
               htmlFor="appearance-font"
               className="text-sm font-medium block"
             >
-              System Font
+              App Font
             </label>
             <select
               id="appearance-font"
@@ -387,46 +395,34 @@ export function AppearanceSettings() {
             </select>
           </div>
 
-          {/* Chat Input Font */}
+          {/* Separate monospace for code */}
           <div className="space-y-3">
-            <label htmlFor="chat-font" className="text-sm font-medium block">
-              Chat Font
-            </label>
-            <select
-              id="chat-font"
-              value={chatFont}
-              onChange={(e) => setChatFont(e.target.value)}
-              className="block w-full px-3 py-2 bg-card border border-border/40 text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
-            >
-              <option value="default">System Default (Default)</option>
-              <option value="mono">JetBrains Mono</option>
-              <option value="inherit">Inherit from System</option>
-              <option value="system">System Native</option>
-              <option value="inter">Inter (Modern)</option>
-              <option value="geist">Geist</option>
-              <option value="comic">Comic Sans (Fun)</option>
-            </select>
-          </div>
-
-          {/* Editor Font */}
-          <div className="space-y-3">
-            <label htmlFor="editor-font" className="text-sm font-medium block">
-              File Editor Font
-            </label>
-            <select
-              id="editor-font"
-              value={editorFont}
-              onChange={(e) => setEditorFont(e.target.value)}
-              className="block w-full px-3 py-2 bg-card border border-border/40 text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
-            >
-              <option value="default">Monospace (Default)</option>
-              <option value="mono">JetBrains Mono</option>
-              <option value="inherit">Inherit from System</option>
-              <option value="system">System Default</option>
-              <option value="inter">Inter (Modern)</option>
-              <option value="geist">Geist</option>
-              <option value="comic">Comic Sans (Fun)</option>
-            </select>
+            <SettingToggle
+              label="Separate monospace font for code"
+              description="Use a distinct font in the file editor instead of the app font."
+              checked={useCodeFont}
+              onChange={(checked) => {
+                setUseCodeFont(checked);
+                // ON: seed a real monospace choice; OFF: editor follows the app font.
+                setEditorFont(checked ? "mono" : "default");
+              }}
+            />
+            {useCodeFont && (
+              <select
+                id="editor-font"
+                aria-label="Code font"
+                value={editorFont === "default" ? "mono" : editorFont}
+                onChange={(e) => setEditorFont(e.target.value)}
+                className="block w-full px-3 py-2 bg-card border border-border/40 text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
+              >
+                <option value="mono">JetBrains Mono</option>
+                <option value="inherit">Inherit from System</option>
+                <option value="system">System Default</option>
+                <option value="inter">Inter (Modern)</option>
+                <option value="geist">Geist</option>
+                <option value="comic">Comic Sans (Fun)</option>
+              </select>
+            )}
           </div>
 
           {/* Font Size */}
@@ -474,8 +470,46 @@ export function AppearanceSettings() {
         </div>
       </div>
 
-      {/* Monaco Editor Settings */}
-      <MonacoEditorSettings />
+      {/* Editor (advanced) — Monaco editor knobs, language servers, and tool-call
+          display defaults, collapsed by default to keep Appearance lean. */}
+      <div className="border-t border-border/40 pt-6">
+        <button
+          type="button"
+          onClick={() => setShowEditorAdvanced((v) => !v)}
+          aria-expanded={showEditorAdvanced}
+          className="flex w-full items-center justify-between gap-3 text-left"
+        >
+          <div>
+            <h3 className="text-sm font-semibold">Editor (advanced)</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Code editor, language servers, and tool-call display defaults.
+            </p>
+          </div>
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+              showEditorAdvanced && "rotate-180"
+            )}
+          />
+        </button>
+
+        {showEditorAdvanced && (
+          <div className="mt-2">
+            <MonacoEditorSettings />
+
+            {/* Tool Call Display Settings */}
+            <div className="border-t border-border/40 pt-6 mt-6 space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold">Tool Call Display</h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Configure default collapse/expand behavior for tool calls in chat
+                </p>
+              </div>
+              <ToolCallSettingsCompact />
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Spawn Display Settings */}
       <div className="border-t border-border/40 pt-6 space-y-4">
@@ -524,17 +558,6 @@ export function AppearanceSettings() {
             ? 'Shows all spawn thread messages directly in the timeline.'
             : 'Shows a compact preview of spawn results in the tool call.'}
         </p>
-      </div>
-
-      {/* Tool Call Display Settings */}
-      <div className="border-t border-border/40 pt-6 space-y-4">
-        <div>
-          <h3 className="text-sm font-semibold">Tool Call Display</h3>
-          <p className="text-xs text-muted-foreground mt-1">
-            Configure default collapse/expand behavior for tool calls in chat
-          </p>
-        </div>
-        <ToolCallSettingsCompact />
       </div>
 
       {/* Workflow Viewer Settings */}
