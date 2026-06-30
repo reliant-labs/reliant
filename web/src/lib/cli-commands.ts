@@ -13,16 +13,6 @@
 // Environment detection
 // ---------------------------------------------------------------------------
 
-/**
- * Hostname substrings that identify the production deployment. If
- * VITE_API_URL contains any of these (and we're not running `vite dev`),
- * we treat the build as production and emit a bare command.
- *
- * Keep this in sync with `.github/workflows/deploy.yml` in the
- * control-plane repo.
- */
-const PROD_API_HOSTS = ["prod.reliantapi.com"] as const;
-
 /** The API URL the web frontend was built against. */
 function getServerURL(): string {
   return (
@@ -33,25 +23,24 @@ function getServerURL(): string {
 }
 
 /**
- * True when the build is targeting a non-production backend. Non-prod when
- * ANY of:
- *  - Vite is running in dev mode (`pnpm dev`), regardless of which env
- *    vars are populated — catches OSS-style local dev where only the
- *    Supabase vars are set.
- *  - VITE_API_URL is set to a host that isn't in PROD_API_HOSTS — catches
- *    staging/preprod builds where the deploy pipeline bakes in the
- *    per-env URL.
+ * True when the daemon needs explicit env-var overrides to dial the same
+ * backend the web frontend uses.
  *
- * Production builds for Reliant Labs leave the CLI defaults in place, so
- * we deliberately do NOT consider auth/admin/gateway URLs in this check —
- * the API URL is the single source of truth.
+ * A build is treated as "managed" (CLI defaults already correct, emit a bare
+ * command) ONLY when the deploy pipeline opts in by setting
+ * VITE_CLI_DEFAULTS_BAKED=true at build time. That flag means the `reliant`
+ * CLI binary shipped alongside this build was compiled with matching server /
+ * gateway / admin / auth defaults.
+ *
+ * Everything else — `vite dev`, OSS self-hosted builds, any build without the
+ * opt-in flag — is non-managed: the user gets explicit env overrides so the
+ * daemon dials the right hosts. This is the neutral/self-host default; no
+ * hosted hostname is hardcoded here.
  */
 function isNonProd(): boolean {
   if (import.meta.env.DEV) return true;
-
-  const url = getServerURL();
-  if (!url) return false;
-  return !PROD_API_HOSTS.some((host) => url.includes(host));
+  if (import.meta.env.VITE_CLI_DEFAULTS_BAKED === "true") return false;
+  return true;
 }
 
 // ---------------------------------------------------------------------------
