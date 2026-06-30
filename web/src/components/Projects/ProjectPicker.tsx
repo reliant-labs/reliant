@@ -7,9 +7,10 @@ import {
   Loader2,
   ChevronDown,
   Check,
+  ArrowLeft,
+  Monitor,
 } from "lucide-react";
 import { ConnectError, Code } from "@connectrpc/connect";
-import { useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useProjectStore } from "../../store/projectStore";
 import type { Project as StoreProject } from "../../store/projectStore";
@@ -21,7 +22,8 @@ import { RepoSelector } from "./RepoSelector";
 
 import { toast } from "../../lib/toast-manager";
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
-import { useResumeDaemon } from "../../hooks/useOnboardingQueries";
+import { useResumeDaemon, useCreateDaemon } from "../../hooks/useOnboardingQueries";
+import { SelfHostedDaemonConnect } from "./SelfHostedDaemonConnect";
 import { DaemonStatus } from "../../gen/reliant/v1/daemon_registry_pb";
 import { useGitHubCredential } from "../../hooks/useGitHubCredential";
 import { capabilities } from "../../services/controlPlane/capabilities";
@@ -105,14 +107,228 @@ function cloudDaemonStatusLabel(daemon: CloudDaemon, isResuming: boolean): strin
   return daemon.status === 0 ? "unknown" : DaemonStatus[daemon.status]?.toLowerCase() ?? "unknown";
 }
 
+const MANAGED_DAEMON_TYPE = 1;
+const MANAGED_DAEMON_SIZE_SMALL = 1;
+
+// ConnectDaemonModal — the in-place "Connect a new daemon" flow. Offers BOTH
+// connect paths without bouncing the user into the onboarding wizard:
+//   - Managed cloud daemon: provisions a hosted daemon via CreateDaemon (only
+//     offered when this deployment has cloud daemons).
+//   - Self-hosted daemon: the SelfHostedDaemonConnect panel (shared with
+//     onboarding's ComputeStep) — generates a token + shows the
+//     `reliant daemon start --token` install steps.
+// The modal auto-dismisses once a daemon connects (the picker rerenders into
+// its normal project list as soon as useDaemonStatus reports an active daemon).
+function ConnectDaemonModal({
+  isOpen,
+  onClose,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+}) {
+  const hasCloud = capabilities.cloudDaemons;
+  // "cloud" | "self" | null — null shows the choice, the others show the
+  // respective flow. Default to the choice screen so the user explicitly
+  // picks how they want to connect.
+  const [mode, setMode] = useState<"cloud" | "self" | null>(null);
+  const [cloudError, setCloudError] = useState<string | null>(null);
+  const [cloudStarted, setCloudStarted] = useState(false);
+
+  const createDaemonMutation = useCreateDaemon({
+    onError: (err) => {
+      const msg = err instanceof Error ? err.message : "Failed to start cloud daemon";
+      setCloudError(msg);
+    },
+  });
+
+  // Reset to the choice screen each time the modal opens so a prior session's
+  // mode doesn't leak in.
+  useEffect(() => {
+    if (isOpen) {
+      setMode(null);
+      setCloudError(null);
+      setCloudStarted(false);
+    }
+  }, [isOpen]);
+
+  const startCloudDaemon = useCallback(async () => {
+    setCloudError(null);
+    try {
+      const { listDaemons, hasActiveDaemon } = await import(
+        "../../services/controlPlane/daemon"
+      );
+      const { daemons } = await listDaemons();
+      if (hasActiveDaemon(daemons)) {
+        // Already have an active daemon — nothing to provision; the picker
+        // will pick it up on the next poll.
+        setCloudStarted(true);
+        return;
+      }
+      if (daemons.length > 0) {
+        // A suspended/disconnected daemon exists — resume it instead of
+        // creating a duplicate. Resume failures are non-fatal; the user can
+        // retry from the "Resume a daemon" list.
+        const id = daemons[0]?.id ?? "";
+        if (id) {
+          const { resumeDaemon } = await import(
+            "../../services/controlPlane/daemon"
+          );
+          await resumeDaemon(id);
+          setCloudStarted(true);
+          return;
+        }
+      }
+      await createDaemonMutation.mutateAsync({
+        name: "workspace-daemon",
+        daemonType: MANAGED_DAEMON_TYPE,
+        size: MANAGED_DAEMON_SIZE_SMALL,
+        gitRepo: "",
+        gitBranch: "main",
+      });
+      setCloudStarted(true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to start cloud daemon";
+      setCloudError(msg);
+    }
+  }, [createDaemonMutation]);
+
+  const startingCloud = createDaemonMutation.isPending;
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Connect a daemon" size="lg">
+      {mode === null && (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            A daemon runs your code. Connect one to start working — either a
+            hosted Reliant Cloud daemon or your own self-hosted machine.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => {
+                setMode("cloud");
+                void startCloudDaemon();
+              }}
+              disabled={!hasCloud}
+              className={`flex min-w-0 flex-col items-start gap-3 rounded-xl border-2 p-5 text-left transition-all ${
+                hasCloud
+                  ? "border-primary/25 bg-primary/5 hover:border-primary/50 hover:bg-primary/10"
+                  : "cursor-not-allowed border-border/50 bg-muted/30 opacity-70"
+              }`}
+            >
+              <div className="rounded-lg bg-primary/15 p-2.5 text-primary">
+                <Cloud className="h-6 w-6" />
+              </div>
+              <div className="space-y-1">
+                <span className="block text-sm font-semibold text-foreground">
+                  Reliant Cloud
+                </span>
+                <span className="block text-xs leading-relaxed text-muted-foreground">
+                  {hasCloud
+                    ? "Provision a hosted daemon now. No install required."
+                    : "Cloud daemons are not enabled for this deployment."}
+                </span>
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMode("self")}
+              className="flex min-w-0 flex-col items-start gap-3 rounded-xl border-2 border-border/50 bg-background p-5 text-left transition-all hover:border-primary/50 hover:bg-muted/50"
+            >
+              <div className="rounded-lg bg-muted p-2.5 text-muted-foreground">
+                <Monitor className="h-6 w-6" />
+              </div>
+              <div className="space-y-1">
+                <span className="block text-sm font-semibold text-foreground">
+                  Self-hosted
+                </span>
+                <span className="block text-xs leading-relaxed text-muted-foreground">
+                  Run the daemon on your own laptop or server with a token.
+                </span>
+              </div>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {mode === "cloud" && (
+        <div className="space-y-4">
+          <button
+            type="button"
+            onClick={() => setMode(null)}
+            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back
+          </button>
+          <div className="flex items-center gap-3 rounded-xl border border-border/50 bg-muted/30 p-4">
+            {startingCloud ? (
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            ) : cloudStarted ? (
+              <Check className="h-5 w-5 text-emerald-500" />
+            ) : (
+              <Cloud className="h-5 w-5 text-primary" />
+            )}
+            <div className="min-w-0">
+              <h3 className="text-sm font-medium text-foreground">
+                {startingCloud
+                  ? "Requesting a cloud daemon..."
+                  : cloudStarted
+                    ? "Cloud daemon requested"
+                    : "Reliant Cloud"}
+              </h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {cloudStarted
+                  ? "It may take a few minutes to provision. This screen will refresh once it connects."
+                  : "Provisioning a hosted daemon for your account."}
+              </p>
+            </div>
+          </div>
+          {cloudError && (
+            <div className="space-y-2">
+              <p className="text-xs text-destructive">{cloudError}</p>
+              <button
+                type="button"
+                onClick={() => void startCloudDaemon()}
+                disabled={startingCloud}
+                className="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+              >
+                Try again
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {mode === "self" && (
+        <div className="space-y-4">
+          <button
+            type="button"
+            onClick={() => setMode(null)}
+            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back
+          </button>
+          {/* Shared with onboarding's ComputeStep — generates a token and
+              shows `reliant daemon start --token` install steps. Closes the
+              modal the moment the daemon connects. */}
+          <SelfHostedDaemonConnect onConnected={onClose} />
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 // NoCloudDaemonsState — rendered when the user is in web mode with no active
 // local daemon. Two sub-cases:
 //   - No cloud daemons exist for the user → CTA routes to onboarding ComputeStep.
 //   - Cloud daemon(s) exist but none active → list Resume buttons; secondary
 //     link still routes to onboarding for "connect a new daemon".
 function NoActiveDaemonState() {
-  const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
+  const [connectOpen, setConnectOpen] = useState(false);
   const hasCloud = capabilities.cloudDaemons;
 
   const {
@@ -152,13 +368,6 @@ function NoActiveDaemonState() {
       ? resumeDaemonMutation.variables
       : null;
 
-  const goToOnboarding = useCallback(() => {
-    // Clear the launch plan so onboarding starts at ComputeStep (it's the
-    // first step whenever plan.compute is unset — see deriveStep in
-    // OnboardingFlow/stepConfig.ts).
-    navigate({ to: "/onboarding", search: { plan: undefined } });
-  }, [navigate]);
-
   const handleResume = (daemon: CloudDaemon) => {
     if (daemon.status !== DAEMON_STATUS_SUSPENDED) return;
     setError(null);
@@ -166,24 +375,27 @@ function NoActiveDaemonState() {
   };
 
   if (!hasCloud) {
-    // Local-only deployment: nothing to resume; tell the user to start a
-    // local daemon and route them to onboarding which surfaces the
-    // install/connect instructions for local daemons.
+    // Local-only deployment: nothing to resume; surface the self-hosted
+    // connect instructions in-place instead of bouncing into onboarding.
     return (
       <div className="relative backdrop-blur-2xl bg-card/90 border border-border/50 rounded-2xl mb-6 overflow-hidden p-6">
         <h3 className="text-lg font-semibold text-foreground mb-1">
           Connect a daemon
         </h3>
         <p className="text-sm text-muted-foreground mb-4">
-          Reliant needs a running daemon to access your projects. Run onboarding
-          to install and connect one.
+          Reliant needs a running daemon to access your projects. Connect one
+          here — no onboarding required.
         </p>
         <button
-          onClick={goToOnboarding}
+          onClick={() => setConnectOpen(true)}
           className="w-full px-4 py-2.5 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-semibold transition-colors"
         >
-          Start onboarding
+          Connect a daemon
         </button>
+        <ConnectDaemonModal
+          isOpen={connectOpen}
+          onClose={() => setConnectOpen(false)}
+        />
       </div>
     );
   }
@@ -252,11 +464,16 @@ function NoActiveDaemonState() {
 
       <button
         type="button"
-        onClick={goToOnboarding}
+        onClick={() => setConnectOpen(true)}
         className="mt-4 w-full text-center text-xs text-muted-foreground hover:text-primary transition-colors py-1"
       >
-        {hasAnyCloudDaemon ? "Connect a new daemon" : "Start onboarding"}
+        {hasAnyCloudDaemon ? "Connect a new daemon" : "Connect a daemon"}
       </button>
+
+      <ConnectDaemonModal
+        isOpen={connectOpen}
+        onClose={() => setConnectOpen(false)}
+      />
     </div>
   );
 }
@@ -793,6 +1010,23 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
     return showAllProjects ? sortedProjects : sortedProjects.slice(0, 5);
   }, [sortedProjects, showAllProjects]);
 
+  // The most recently active project — the "main app / workspace" the user
+  // would expect to return to. Used by the "Back to <project>" affordance;
+  // when there are no projects (genuine first-run) it's undefined and the
+  // affordance hides.
+  const mostRecentProject = sortedProjects[0];
+
+  // Re-select the most recent project to leave the picker and restore the
+  // workspace/chat shell. We route through handleProjectClick so cross-daemon
+  // state (clone-on-other-daemon) is respected exactly as a normal row click.
+  const handleBackToApp = useCallback(() => {
+    if (mostRecentProject) handleProjectClick(mostRecentProject);
+    // handleProjectClick is a stable-enough closure over store setters; the
+    // picker re-renders on project changes so we intentionally key only on
+    // the target project.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mostRecentProject]);
+
   return (
     <div
       className="h-full bg-background relative overflow-hidden"
@@ -806,9 +1040,28 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
         <div className="flex-1 flex items-center justify-center px-6 py-12">
           <div className="w-full max-w-3xl">
               {/* Logo and Brand Header - Aligned with content */}
-              <div className="flex items-center gap-4 mb-8">
-                <BrandMark className="w-16 h-16" />
-                <h1 className="text-4xl font-bold text-foreground">Reliant</h1>
+              <div className="flex items-center justify-between gap-4 mb-8">
+                <div className="flex items-center gap-4">
+                  <BrandMark className="w-16 h-16" />
+                  <h1 className="text-4xl font-bold text-foreground">Reliant</h1>
+                </div>
+                {/* Back to the active workspace. The picker is reached by
+                    deselecting the current project (handleNavigateToProjectPicker
+                    in ModernApp clears currentProject); re-selecting the most
+                    recently active project restores the chat/workspace shell.
+                    Hidden on genuine first-run (no projects yet) — there's
+                    nothing to return to. */}
+                {mostRecentProject && (
+                  <button
+                    type="button"
+                    onClick={handleBackToApp}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border/60 bg-card/80 hover:bg-card text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                    data-testid="project-picker-back-to-app"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    Back to {mostRecentProject.name}
+                  </button>
+                )}
               </div>
               {showConnectionInstructions ? (
                 <NoActiveDaemonState />
