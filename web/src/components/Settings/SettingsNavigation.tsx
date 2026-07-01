@@ -1,5 +1,5 @@
 import { cn } from "../../lib/utils";
-import { Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, FolderOpen, Globe, FolderGit2, Bell, KeyRound, Github, Cloud, ExternalLink } from "lucide-react";
+import { Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, FolderOpen, Globe, FolderGit2, Bell, KeyRound, Github, CreditCard, Server, Bot, ExternalLink } from "lucide-react";
 import { McpIcon } from "../icons/McpIcon";
 import { hasControlPlane } from "../../services/controlPlane/config";
 import { getAdminURL } from "../../lib/constants";
@@ -42,13 +42,16 @@ const sectionGroups: SectionGroup[] = [
   {
     label: "Cloud",
     items: [
+      // In-app cloud settings. These replaced the old external "Manage cloud
+      // account" portal link — the overview / environments / AI / billing nav
+      // now lives inside the app as first-party /settings sections backed by
+      // controlplane.v1 public RPCs. Gated on hasControlPlane because they're
+      // meaningless without a control-plane backend.
       ...(hasControlPlane
         ? [
-            // Single entry into the cloud portal. The portal hosts its own
-            // overview / environments / AI / billing / organization nav, so we
-            // don't mirror those five here (they'd just be five clicks that all
-            // leave the app).
-            { id: "cloud-account", label: "Manage cloud account", icon: Cloud, external: true, adminPath: "/dashboard" },
+            { id: "billing", label: "Billing", icon: CreditCard },
+            { id: "environments", label: "Environments", icon: Server },
+            { id: "reliant-ai", label: "Reliant AI", icon: Bot },
           ]
         : []),
       { id: "git-connections", label: "GitHub", icon: Github },

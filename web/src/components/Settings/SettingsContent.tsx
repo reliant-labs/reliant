@@ -11,6 +11,13 @@ import { WorkspacesSection } from "./WorkspacesSection";
 import { BrowserSettings } from "./BrowserSettings";
 import { TokenSettings } from "./TokenSettings";
 import { GitConnectionsSettings } from "./GitConnectionsSettings";
+// Cloud settings sections — owned by the Billing / Environments / Reliant-AI
+// vertical agents. These modules may not exist yet while those agents are
+// still building; the imports are intentional and resolve once each vertical
+// lands its `cloud/<section>.tsx` named export.
+import { BillingSection } from "./cloud/billing";
+import { EnvironmentsSection } from "./cloud/environments";
+import { ReliantAISection } from "./cloud/reliantAI";
 import type { SettingsSection } from "./SettingsNavigation";
 import { useEffect, useState } from "react";
 import { PromptsSettings } from "./PromptsSettings";
@@ -125,6 +132,33 @@ export function SettingsContent({
     return (
       <div className="h-full overflow-hidden bg-background">
         <WorkspacesSection />
+      </div>
+    );
+  }
+
+  // Cloud settings sections. Rendered inside the `.cloud-settings` scoped
+  // treatment (Inter + admin-like density) with a wider container than the
+  // generic settings card so their data tables have room to breathe. The id →
+  // component map is the contract the vertical agents plug into:
+  //   billing        → <BillingSection/>      (./cloud/billing)
+  //   environments   → <EnvironmentsSection/> (./cloud/environments)
+  //   reliant-ai     → <ReliantAISection/>    (./cloud/reliantAI)
+  if (
+    activeSection === "billing" ||
+    activeSection === "environments" ||
+    activeSection === "reliant-ai"
+  ) {
+    const CloudSection =
+      activeSection === "billing"
+        ? BillingSection
+        : activeSection === "environments"
+          ? EnvironmentsSection
+          : ReliantAISection;
+    return (
+      <div className="cloud-settings h-full overflow-auto bg-background px-8 py-8">
+        <div className="mx-auto max-w-5xl">
+          <CloudSection />
+        </div>
       </div>
     );
   }

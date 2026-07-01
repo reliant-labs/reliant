@@ -141,6 +141,12 @@ export const SETTINGS_SECTION_IDS = [
   "tokens",
   "git-connections",
   "developer",
+  // Cloud settings sections — in-app control-plane (controlplane.v1) surfaces
+  // that replaced the external "Manage cloud account" portal link. Routes:
+  // /settings/billing, /settings/environments, /settings/reliant-ai.
+  "billing",
+  "environments",
+  "reliant-ai",
 ] as const;
 export type SettingsSection = (typeof SETTINGS_SECTION_IDS)[number];
 export const DEFAULT_SETTINGS_SECTION: SettingsSection = "account";

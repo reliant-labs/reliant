@@ -92,16 +92,6 @@ export default defineConfig({
     port: parseInt(process.env.FRONTEND_PORT || "5173"),
     strictPort: true,
     proxy: {
-      "/admin": {
-        target: `http://127.0.0.1:${parseInt(process.env.ADMIN_WEB_PORT || "3000")}`,
-        changeOrigin: true,
-        ws: true,
-      },
-      "/admin/_next": {
-        target: `http://127.0.0.1:${parseInt(process.env.ADMIN_WEB_PORT || "3000")}`,
-        changeOrigin: true,
-        ws: true,
-      },
       // Same-origin RPC routing. admin-web's Connect transport uses
       // http://localhost:<vite-port> as its baseUrl, so EVERY RPC is
       // first-party from the browser's POV — no CORS, no per-port
