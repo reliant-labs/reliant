@@ -193,7 +193,7 @@ export function DaemonConnectingGate({
             Connected
           </h2>
           <p className="text-sm text-muted-foreground">
-            Your daemon is ready. You can start chatting now.
+            Your environment is ready. You can start chatting now.
           </p>
         </div>
         <button
@@ -280,7 +280,7 @@ export function DaemonConnectingGate({
       </div>
       <div className="space-y-1">
         <h2 className="text-xl font-semibold tracking-tight text-foreground">
-          Connecting your daemon...
+          Connecting your environment...
         </h2>
         <p className="text-sm text-muted-foreground">
           Hang tight — your hosted workspace is coming online.

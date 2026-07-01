@@ -146,7 +146,6 @@ export interface ReliantConfig {
   isDev: boolean;
   useTLS: boolean;
   temporalUIPort?: number;
-  adminURL?: string;
   controlPlaneURL?: string;
   // Port the local daemon is listening on, injected by the Electron
   // preload's buildConfig() from the get-backend-status IPC response.

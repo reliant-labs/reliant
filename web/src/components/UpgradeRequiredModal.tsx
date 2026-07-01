@@ -14,7 +14,7 @@ export interface UpgradeRequiredModalProps {
 const REASON_COPY: Record<string, { title: string; body: string }> = {
   free_tier_compute_minutes: {
     title: "You've used your free compute minutes",
-    body: "Free-tier workspaces include a limited number of compute minutes per month. Upgrade to keep your daemon running.",
+    body: "Free-tier workspaces include a limited number of compute minutes per month. Upgrade to keep your environment running.",
   },
   free_tier_global_budget: {
     title: "Free tier quota exceeded",
