@@ -11,19 +11,25 @@ import { WorkspacesSection } from "./WorkspacesSection";
 import { BrowserSettings } from "./BrowserSettings";
 import { TokenSettings } from "./TokenSettings";
 import { GitConnectionsSettings } from "./GitConnectionsSettings";
-// Cloud settings sections — owned by the Billing / Environments / Reliant-AI
-// vertical agents. These modules may not exist yet while those agents are
-// still building; the imports are intentional and resolve once each vertical
-// lands its `cloud/<section>.tsx` named export.
-import { BillingSection } from "./cloud/billing";
-import { EnvironmentsSection } from "./cloud/environments";
-import { ReliantAISection } from "./cloud/reliantAI";
 import type { SettingsSection } from "./SettingsNavigation";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { PromptsSettings } from "./PromptsSettings";
 import { useProjectStore } from "../../store/projectStore";
 import { api } from "../../api/client";
 import { ProjectPanel } from "../Projects/ProjectPanel";
+
+// Cloud settings sections are lazy-loaded so they code-split out of the main
+// SettingsContent chunk — they're only fetched when the user opens a cloud
+// section. Named exports are adapted to the default export React.lazy expects.
+const BillingSection = lazy(() =>
+  import("./cloud/billing").then((m) => ({ default: m.BillingSection }))
+);
+const EnvironmentsSection = lazy(() =>
+  import("./cloud/environments").then((m) => ({ default: m.EnvironmentsSection }))
+);
+const ReliantAISection = lazy(() =>
+  import("./cloud/reliantAI").then((m) => ({ default: m.ReliantAISection }))
+);
 
 interface SettingsContentProps {
   activeSection: SettingsSection;
@@ -157,7 +163,17 @@ export function SettingsContent({
     return (
       <div className="cloud-settings h-full overflow-auto bg-background px-8 py-8">
         <div className="mx-auto max-w-5xl">
-          <CloudSection />
+          <Suspense
+            fallback={
+              <div className="flex h-full items-center justify-center">
+                <div className="rounded-lg border border-border/50 bg-card px-4 py-3 text-sm text-muted-foreground">
+                  Loading…
+                </div>
+              </div>
+            }
+          >
+            <CloudSection />
+          </Suspense>
         </div>
       </div>
     );

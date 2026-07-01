@@ -2,8 +2,6 @@ import { cn } from "../../lib/utils";
 import { Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, FolderOpen, Globe, FolderGit2, Bell, KeyRound, Github, CreditCard, Server, Bot, ExternalLink } from "lucide-react";
 import { McpIcon } from "../icons/McpIcon";
 import { hasControlPlane } from "../../services/controlPlane/config";
-import { getAdminURL } from "../../lib/constants";
-import { openExternalLink } from "../../lib/open-link";
 import type { SettingsSection } from "../../routeSchemas";
 
 export type { SettingsSection };
@@ -24,7 +22,6 @@ interface SectionItem {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   external?: boolean;
-  adminPath?: string;
 }
 
 interface SectionGroup {
@@ -138,18 +135,10 @@ export function SettingsNavigation({
               <div className="space-y-0.5">
                 {visibleItems.map((section) => {
                   const isActive = section.id === activeSection;
-                  const adminURL = section.adminPath ? getAdminURL() : undefined;
-                  const externalHref = adminURL ? `${adminURL.replace(/\/$/, "")}${section.adminPath}` : undefined;
                   return (
                     <button
                       key={section.id}
-                      onClick={() => {
-                        if (externalHref) {
-                          void openExternalLink(externalHref);
-                          return;
-                        }
-                        onSectionChange(section.id as SettingsSection);
-                      }}
+                      onClick={() => onSectionChange(section.id as SettingsSection)}
                       title={isCollapsed ? section.label : undefined}
                       className={cn(
                         "w-full cursor-pointer rounded-md border-l-2 px-3 py-1.5 text-sm transition-all",

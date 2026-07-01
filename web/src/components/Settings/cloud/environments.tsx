@@ -280,7 +280,7 @@ export function EnvironmentsSection() {
         <EmptyState
           icon={Server}
           title="Cloud environments unavailable"
-          description="Environments are managed by the Reliant control plane, which isn't configured for this build. Connect a self-hosted daemon to keep working locally."
+          description="Environments are managed by the Reliant control plane, which isn't configured for this build. Connect a self-hosted environment to keep working locally."
         />
       </div>
     );
@@ -294,7 +294,7 @@ export function EnvironmentsSection() {
         <>
           <PageHeader
             title="Environments"
-            subtitle="Managed and self-hosted compute environments for your cloud daemons."
+            subtitle="Managed and self-hosted compute environments."
           />
           <div className="mb-6 flex gap-1 border-b border-border">
             {([
@@ -422,8 +422,8 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
           title="No environments"
           description={
             hasActivePlan
-              ? "Create your first environment to run a cloud daemon."
-              : "Subscribe to a compute plan, then create an environment. Environments run on the daemon sizes your plan allows."
+              ? "Create your first cloud environment."
+              : "Subscribe to a compute plan, then create an environment. Environments run on the compute sizes your plan allows."
           }
           action={
             hasActivePlan ? (
@@ -952,7 +952,7 @@ function AccessTokensPanel() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          Long-lived tokens authenticate self-hosted daemons connecting to the control plane.
+          Long-lived tokens authenticate self-hosted environments connecting to the control plane.
         </p>
         <Button onClick={() => setCreateOpen(true)}>
           <Plus className="h-4 w-4" /> New Token
@@ -975,7 +975,7 @@ function AccessTokensPanel() {
         <EmptyState
           icon={KeyRound}
           title="No access tokens"
-          description="Create a token to authenticate a self-hosted daemon connecting to the control plane."
+          description="Create a token to authenticate a self-hosted environment connecting to the control plane."
           action={<Button onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4" /> New Token</Button>}
         />
       ) : (
@@ -1039,7 +1039,7 @@ function AccessTokensPanel() {
 
       <Modal open={revokeTarget !== null} onClose={() => setRevokeTarget(null)} title="Revoke Token">
         <p className="text-sm text-muted-foreground">
-          Revoke <span className="font-medium text-foreground">{revokeTarget?.name}</span>? Any daemon using this token
+          Revoke <span className="font-medium text-foreground">{revokeTarget?.name}</span>? Any environment using this token
           will lose access. This cannot be undone.
         </p>
         <div className="mt-6 flex justify-end gap-3">
