@@ -24,6 +24,7 @@ import { SettingsPage } from './components/Settings/SettingsPage'
 import { WorkflowPage } from './components/workflow/WorkflowPage'
 import { OnboardingRoute } from './components/OnboardingFlow/OnboardingRoute'
 import { ModalLayer } from './components/Modals/ModalLayer'
+import { AnonSignInNudge } from './components/AnonSignInNudge'
 import { Toaster } from './lib/toast'
 import { ContextualTipsLayer, OnboardingWizard } from './components/Onboarding'
 import { GitHubSyncStatus } from './components/Layout/GitHubSyncBanner'
@@ -56,6 +57,7 @@ const rootRoute = createRootRoute({
     <>
       <Outlet />
       <ModalLayer />
+      <AnonSignInNudge />
       <Toaster />
       <ContextualTipsLayer />
       <GitHubSyncStatus />
