@@ -59,5 +59,13 @@ export const buildLocalhostUrl = (port: string | number): string => {
  */
 export const useSameOriginTransport = (): boolean => {
   if (typeof window === "undefined") return false;
-  return window.location.protocol !== "file:";
+  // Same-origin (relative) baseUrl ONLY works where a dev-server PROXY is present
+  // to fan RPCs out to their backends — i.e. the Vite dev server (web-dev +
+  // electron-dev), where import.meta.env.DEV is true. A PRODUCTION build
+  // (Firebase-hosted app.reliantlabs.io / *.web.app) has NO proxy, so a
+  // same-origin RPC hits the SPA's own index.html → "unsupported content type
+  // text/html" and the app hangs. Prod builds must dial the absolute per-env
+  // backend URLs (VITE_API_URL / VITE_CONTROL_PLANE_API_URL). Packaged Electron
+  // (file://, a prod build) is excluded by both checks and uses RELIANT_CONFIG.
+  return import.meta.env.DEV && window.location.protocol !== "file:";
 };
