@@ -195,7 +195,10 @@ function ReliantAIPanel() {
   const rotateMut = useRotateLLMKey(orgId);
 
   const keys: LLMKey[] = keysQ.data ?? [];
-  const spendEntries: LLMSpendEntry[] = spendQ.data?.entries ?? [];
+  const spendEntries: LLMSpendEntry[] = useMemo(
+    () => spendQ.data?.entries ?? [],
+    [spendQ.data],
+  );
   const totalSpend = spendQ.data?.totalSpend ?? 0;
   const allowedModels = entitlement?.allowedModels ?? [];
 
