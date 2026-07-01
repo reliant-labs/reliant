@@ -97,7 +97,7 @@ const setupElectronOAuthCallbackListener = (setState: (state: Partial<AuthState>
             errorDescription?.includes('identity already exists') ||
             errorParam === 'identity_already_exists') {
           logger.warn('[AuthStore] Identity already exists on another account')
-          setState({ authError: 'This account is already linked to an existing user. Please sign out and sign in with that account instead.' })
+          setState({ authError: 'This account is already registered. Your current session is intact — your chats and workspaces are safe.' })
         } else {
           setState({ authError: errorDescription || errorParam })
         }

@@ -6,8 +6,16 @@ const log = require('./logger');
 const dotenv = require('dotenv');
 const daemonCreds = require('./daemon-creds');
 
-// Default hosted API URLs (production)
-const DEFAULT_API_URL = 'https://reliantapi.com';
+// Default API URL — NEUTRAL (localhost) for the OSS build.
+//
+// The OSS app must ship NO Reliant-hosted-specific config. The packaged
+// commercial build injects the hosted endpoint at build time via
+// build-config.js (loadEnvironment() projects it into process.env.
+// RELIANT_SERVER_URL before this default is ever consulted), exactly as the web
+// build injects hosted VITE_*. An un-injected OSS build with no env therefore
+// points at a local self-hosted stack instead of silently at Reliant's hosted
+// API. resolveDaemonServerURL()'s precedence is env > this neutral default.
+const DEFAULT_API_URL = 'http://localhost:8080';
 const DEFAULT_GATEWAY_URL = ''; // Empty means the daemon will derive from the API URL
 
 class BackendManager {
@@ -42,8 +50,9 @@ class BackendManager {
     this.authStorage = opts?.authStorage ?? null;
 
     // Hosted API configuration. There are TWO logical URLs here, and in
-    // production they collapse to the same hostname (reliantapi.com), but in
-    // cloud-dev they're distinct processes on different ports:
+    // a packaged commercial build they collapse to the same hosted hostname
+    // (injected via build-config.js), but in cloud-dev they're distinct
+    // processes on different ports:
     //
     //   apiUrl         (RELIANT_SERVER_URL) — the daemon's --server target.
     //                    In cloud-dev this is admin-server; the daemon hits
@@ -114,7 +123,9 @@ class BackendManager {
    *
    * Reads RELIANT_SERVER_URL — the canonical name the daemon binary itself
    * reads via root.go and that dev-start.sh / dev-k3d.sh export with that
-   * name. In production this defaults to reliantapi.com.
+   * name. With no env set it falls back to DEFAULT_API_URL, which is NEUTRAL
+   * localhost in the OSS build (the packaged commercial build injects the
+   * hosted endpoint into RELIANT_SERVER_URL via build-config.js).
    *
    * Note: RELIANT_API_URL is a different concept — it's the URL of reliant's
    * api-server (where non-daemon reliant.v1.* services live). In production

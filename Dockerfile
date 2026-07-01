@@ -12,7 +12,9 @@
 # deploy time: `user: root` in compose or securityContext in k8s.
 
 # ── Build ────────────────────────────────────────────────────────────────────
-FROM --platform=$BUILDPLATFORM golang:1.26.2-alpine AS builder
+# golang:1.26.2-alpine — pinned by digest, pulled via the GCP Artifact Registry
+# pull-through cache (dodges Docker Hub's per-IP rate limit).
+FROM --platform=$BUILDPLATFORM us-docker.pkg.dev/reliant-nonprod-490701/dockerhub/library/golang@sha256:f85330846cde1e57ca9ec309382da3b8e6ae3ab943d2739500e08c86393a21b1 AS builder
 ARG TARGETARCH
 RUN apk add --no-cache git
 WORKDIR /app
@@ -33,7 +35,9 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 # cgo_import_dynamic directives and is dynamically linked against glibc's
 # ld-linux even with CGO_ENABLED=0, so it cannot exec on musl ("no such file or
 # directory" crashloop). bookworm-slim stays small while providing glibc.
-FROM debian:bookworm-slim
+# debian:bookworm-slim — pinned by digest, pulled via the GCP Artifact Registry
+# pull-through cache (dodges Docker Hub's per-IP rate limit).
+FROM us-docker.pkg.dev/reliant-nonprod-490701/dockerhub/library/debian@sha256:60eac759739651111db372c07be67863818726f754804b8707c90979bda511df
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates tzdata git && \
     rm -rf /var/lib/apt/lists/* && \

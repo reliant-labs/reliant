@@ -9,8 +9,9 @@ import { useAttachmentStore } from "../../store/attachmentStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { useApiKeySetupStore } from "../../store/apiKeySetupStore";
 import { useChatParamsStore } from "../../store/chatParamsStore";
+import { useNavigate } from "@tanstack/react-router";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
-import { getAdminURL } from "@/lib/constants";
+import { capabilities } from "@/services/controlPlane/capabilities";
 import { ChatInput } from "./ChatInput";
 import { ReliantIcon } from "../icons/ReliantIcon";
 import { WorkflowStarterCards } from "../Onboarding/WorkflowStarterCards";
@@ -51,6 +52,7 @@ export function NewChatView({
   >(undefined);
   const chatInputRef = useRef<HTMLDivElement>(null);
   const workspaceDropdownRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
   const worktrees = useWorktreeStore((state) => state.worktrees);
@@ -174,8 +176,8 @@ export function NewChatView({
     workflowParams?: Record<string, unknown>
   ) => {
     if (!daemonConnected) {
-      toast.error("No daemon connected", {
-        description: "Start a daemon to begin chatting.",
+      toast.error("No environment connected", {
+        description: "Start an environment to begin chatting.",
       });
       return;
     }
@@ -412,29 +414,35 @@ export function NewChatView({
 
       {/* Message Input - Collapsible when not focused */}
       {!daemonConnected && !daemonLoading && (() => {
-        const adminURL = getAdminURL();
-        const manageHref = adminURL ? `${adminURL.replace(/\/$/, "")}/workspaces` : undefined;
+        // In cloud mode (control-plane deployment) route to the in-app
+        // Environments settings section; otherwise fall back to the local
+        // "connect a daemon" modal.
+        const isCloud = capabilities.cloudDaemons;
         return (
           <div className="flex items-center justify-center gap-2 border-t border-yellow-500/20 bg-yellow-500/5 px-4 py-2.5 text-sm text-yellow-600 dark:text-yellow-400">
             <Activity className="h-4 w-4" />
             <span>
-              No daemon connected.{" "}
-              {manageHref ? (
-                <a
-                  href={manageHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
+              No environment connected.{" "}
+              {isCloud ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate({
+                      to: "/settings/$section",
+                      params: { section: "environments" },
+                    })
+                  }
                   className="font-medium underline underline-offset-2 hover:text-yellow-700 dark:hover:text-yellow-300"
                 >
-                  Manage daemons
-                </a>
+                  Manage environments
+                </button>
               ) : (
                 <button
                   type="button"
                   onClick={() => setShowConnectDaemonModal(true)}
                   className="font-medium underline underline-offset-2 hover:text-yellow-700 dark:hover:text-yellow-300"
                 >
-                  Start a cloud daemon or run one locally
+                  Start a cloud environment or run one locally
                 </button>
               )}{" "}
               to begin chatting.

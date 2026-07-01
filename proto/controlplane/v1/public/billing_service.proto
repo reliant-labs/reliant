@@ -32,7 +32,8 @@ service BillingService {
 
   // Wallet (per-user).
   rpc GetCurrentUserWalletOverview(GetCurrentUserWalletOverviewRequest) returns (GetCurrentUserWalletOverviewResponse) {}
-  rpc GrantCurrentUserWelcomeCredit(GrantCurrentUserWelcomeCreditRequest) returns (GrantCurrentUserWelcomeCreditResponse) {}
+  // (GrantCurrentUserWelcomeCredit removed: the signup wallet credit is now
+  // auto-granted at first-login provisioning.)
   rpc CreateCurrentUserWalletTopupSession(CreateCurrentUserWalletTopupSessionRequest) returns (CreateCurrentUserWalletTopupSessionResponse) {}
 
   // Reliant managed-LLM access (per-user).
@@ -113,13 +114,6 @@ message GetCurrentUserWalletOverviewRequest {
 
 message GetCurrentUserWalletOverviewResponse {
   WalletOverview overview = 1;
-}
-
-message GrantCurrentUserWelcomeCreditRequest {}
-
-message GrantCurrentUserWelcomeCreditResponse {
-  WalletOverview overview = 1;
-  bool granted = 2;
 }
 
 message GetCurrentUserComputeSubscriptionRequest {}

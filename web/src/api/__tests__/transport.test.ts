@@ -18,7 +18,7 @@
  * canonical orderings the factory produces.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   createConnectTransport: vi.fn((options) => options),
@@ -127,24 +127,21 @@ describe('transport call sites', () => {
     })
   })
 
-  it('grpc-client::getControlPlaneTransport wires the authed factory chain', async () => {
-    // VITE_CONTROL_PLANE_API_URL must be present for the transport to be
-    // built. We use vi.stubEnv so the env-key check passes at module load.
+  it('grpc-client::getControlPlaneTransport returns null when same-origin (http-served renderer)', async () => {
+    // Same-origin (Vite-proxy) model: web-dev AND electron-dev are served over
+    // http(s), so getControlPlaneTransport returns null and DaemonRegistry/
+    // DaemonToken fall through to the same-origin getTransport() — their
+    // `reliant.v1.*` paths are proxied to reliant-api, CORS-free. jsdom's
+    // window.location.protocol is "http:", so useSameOriginTransport() is true
+    // here. The absolute VITE_CONTROL_PLANE_API_URL is never used as a transport
+    // baseUrl in this mode (it stays the proxy target + hasControlPlane gate).
     vi.stubEnv('VITE_CONTROL_PLANE_API_URL', 'https://cp.example.test')
     try {
-      const { buildInterceptors } = await import('../transport')
-      const expected = buildInterceptors({ withAuth: true })
-
       const { getControlPlaneTransport } = await import('../grpc-client')
       const transport = getControlPlaneTransport()
-      expect(transport).not.toBeNull()
-
-      // 2 calls so far: getTransport doesn't fire (no caller hit it) — only
-      // getControlPlaneTransport did.
-      expect(mocks.createConnectTransport).toHaveBeenCalledTimes(1)
-      const options = mocks.createConnectTransport.mock.calls[0][0]
-      expect(options.baseUrl).toBe('https://cp.example.test')
-      expect(options.interceptors).toHaveLength(expected.length)
+      expect(transport).toBeNull()
+      // No transport built — DaemonRegistry will use getTransport() instead.
+      expect(mocks.createConnectTransport).not.toHaveBeenCalled()
     } finally {
       vi.unstubAllEnvs()
     }
@@ -165,7 +162,12 @@ describe('transport call sites', () => {
 
     expect(mocks.createConnectTransport).toHaveBeenCalledTimes(1)
     const options = mocks.createConnectTransport.mock.calls[0][0]
-    expect(options.baseUrl).toBe('https://example.test')
+    // Same-origin (Vite-proxy) model: served over http(s) (jsdom is "http:"),
+    // so the control-plane client points at the document origin and Vite's
+    // `/controlplane.v1.*` proxy forwards to admin-server — CORS-free. The
+    // absolute VITE_CONTROL_PLANE_API_URL stays the hasControlPlane gate + proxy
+    // target; it's only the direct baseUrl in packaged Electron (file://).
+    expect(options.baseUrl).toBe(window.location.origin)
     expect(options.interceptors).toHaveLength(expected.length)
   })
 
@@ -196,5 +198,44 @@ describe('transport call sites', () => {
     expect(mocks.createConnectTransport).toHaveBeenCalledTimes(1)
     const options = mocks.createConnectTransport.mock.calls[0][0]
     expect(options.interceptors).toHaveLength(expected.length)
+  })
+})
+
+// The CORS-free model hinges on ONE decision: http(s)-served renderers
+// (web-dev AND electron-dev, which Electron loadURL()s from the Vite dev
+// server) use a SAME-ORIGIN baseUrl so the Vite proxy fans RPCs out to their
+// backends; only packaged Electron (file://) dials the absolute daemon URL.
+// These tests pin that discriminator so a regression that reintroduces an
+// absolute cross-origin baseUrl in dev (the original CORS bug) fails here.
+describe('same-origin transport selection (CORS-free dev model)', () => {
+  // Replace window.location wholesale (jsdom's native location.protocol is a
+  // non-configurable getter, so per-property redefinition throws on the second
+  // call). vi.unstubAllGlobals in afterEach restores the real one.
+  const stubLocation = (protocol: 'http:' | 'https:' | 'file:', origin: string) => {
+    vi.stubGlobal('location', { protocol, origin })
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('getGRPCBaseURL returns the document origin when served over http (dev)', async () => {
+    stubLocation('http:', 'http://127.0.0.1:5173')
+    const { getGRPCBaseURLPublic } = await import('../grpc-client')
+    expect(getGRPCBaseURLPublic()).toBe('http://127.0.0.1:5173')
+  })
+
+  it('getGRPCBaseURL prefers RELIANT_CONFIG.grpcUrl when served from file:// (packaged Electron)', async () => {
+    stubLocation('file:', 'null')
+    ;(window as unknown as { RELIANT_CONFIG?: unknown }).RELIANT_CONFIG = {
+      isElectron: true,
+      grpcUrl: 'http://127.0.0.1:54321',
+    }
+    try {
+      const { getGRPCBaseURLPublic } = await import('../grpc-client')
+      expect(getGRPCBaseURLPublic()).toBe('http://127.0.0.1:54321')
+    } finally {
+      delete (window as unknown as { RELIANT_CONFIG?: unknown }).RELIANT_CONFIG
+    }
   })
 })

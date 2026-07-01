@@ -202,23 +202,18 @@ export function ModelPreferences({ providers }: ModelPreferencesProps) {
 
   if (modelsLoading || loading) {
     return (
-      <div className="border border-border rounded-lg bg-card p-4">
-        <h3 className="text-base font-semibold mb-4">Model Preferences</h3>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Loading models...
-        </div>
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading models...
       </div>
     );
   }
 
   return (
-    <div className="border border-border rounded-lg bg-card p-4">
-      <h3 className="text-base font-semibold mb-1">Model Preferences</h3>
+    <div>
       <p className="text-sm text-muted-foreground mb-4">
-        Configure the default model, thinking level, temperature, and compaction
-        for each tag. These apply to every new chat — override per-chat in the
-        model settings popover.
+        These apply to every new chat — override per-chat in the model settings
+        popover.
       </p>
 
       <div className="space-y-1">

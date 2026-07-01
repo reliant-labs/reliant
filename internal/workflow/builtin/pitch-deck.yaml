@@ -838,8 +838,7 @@ nodes:
     inline:
       entry: [write_slide]
       outputs:
-        verdict: "{{has(nodes.slide_review.response) ? nodes.slide_review.response.verdict : 'pending'}}"
-        feedback: "{{has(nodes.slide_review.response) ? nodes.slide_review.response.summary : ''}}"
+        written: "{{has(nodes.write_slide.response_text) ? 'done' : 'pending'}}"
       nodes:
         # --- Per-slide writer: focused on one slide only ---
         - id: write_slide
@@ -1008,160 +1007,11 @@ nodes:
             content: |
               **{{iter.item.filename}}**: {{output.response_text}}
 
-        # --- Per-slide reviewer: evaluates ONE slide ---
-        - id: slide_review
-          type: workflow
-          ref: builtin://structured-agent
-          presets:
-            default: code_reviewer
-          args:
-            tools: ["tag:readonly"]
-            model: "{{inputs.model}}"
-            temperature: 0.2
-            thinking_level: high
-            response_tool_name: submit_slide_review
-            response_tool_description: "Submit your review of this individual slide with a pass/fail verdict"
-            response_schema:
-              type: object
-              required:
-                - verdict
-                - summary
-                - issues
-              properties:
-                verdict:
-                  type: string
-                  enum:
-                    - pass
-                    - fail
-                  description: "pass if the slide is investor-ready; fail if any critical issues remain"
-                summary:
-                  type: string
-                  description: "1-2 sentence assessment of this specific slide"
-                issues:
-                  type: array
-                  items:
-                    type: object
-                    required:
-                      - severity
-                      - description
-                    properties:
-                      severity:
-                        type: string
-                        enum:
-                          - critical
-                          - warning
-                          - suggestion
-                        description: "critical = must fix before deck ships"
-                      description:
-                        type: string
-                        description: "The problem and a specific fix"
-                  description: "Specific issues found in this slide"
-                ai_tells:
-                  type: array
-                  items:
-                    type: string
-                  description: "Exact quotes from the slide that sound AI-generated"
-                word_count_ok:
-                  type: boolean
-                  description: "Does the slide respect the word count constraints for its layout type?"
-                claims_verified:
-                  type: boolean
-                  description: "Are all factual claims backed by citations to research files?"
-            system_prompt: |
-              You are a pitch deck quality reviewer. You evaluate ONE slide at a time with
-              extreme attention to detail. You are the last line of defense before this slide
-              goes into an investor deck.
-
-              ## AUTONOMOUS EXECUTION
-              You are running inside an automated pipeline. Do NOT wait for user input.
-
-              ## Slide Being Reviewed
-              - **Filename**: {{iter.item.filename}}
-              - **Title**: {{iter.item.title}}
-              - **Purpose**: {{iter.item.purpose}}
-              - **Expected Key Content**: {{iter.item.key_content}}
-              - **Layout**: {{iter.item.layout_hint}}
-
-              ## Your Review Checklist
-
-              ### 1. Claim Verification
-              Read the research files referenced in the slide's sources section.
-              For every stat or claim on the slide:
-              - Does it match what the research files say?
-              - Is the source cited?
-              - If the slide says "$X" but the research says "$Y", that's a critical issue.
-              - If a claim has no source, flag it.
-
-              ### 2. AI Language Detection
-              Read the slide text out loud in your head. Flag any phrase that sounds like
-              an AI wrote it. Be specific — quote the exact text.
-              Common tells:
-              - Buzzwords: leverage, paradigm, seamlessly, robust, comprehensive, etc.
-              - "Not just X, but Y" constructions
-              - "By [gerund]..." or "With [noun]..." sentence starters
-              - "In today's [adjective] landscape..."
-              - Identical grammatical structure across bullet points
-              - Em-dash abuse
-              - Vague superlatives without numbers
-              - Generic titles like "The Problem" or "Market Opportunity"
-
-              ### 3. Word Count Compliance
-              Check the slide content against layout-specific limits:
-              - centered-hero: 10 words MAX
-              - full-bleed-stat: 1 number + 8 words
-              - quote: quote + attribution only
-              - two-column: 30 words per column
-              - card-grid: 15 words per card
-              - comparison-table: 1-5 words per cell
-              - timeline: 8 words per milestone
-              - demo-screenshot: 15 words of annotation
-
-              ### 4. Completeness Check
-              Does the slide deliver on its stated purpose and include the key content
-              from the plan? Missing a key data point is a critical issue.
-
-              ### 5. Speaker Notes Quality
-              - Do they sound like a real person talking?
-              - Are they the right length for this slide type?
-              - Do they add context beyond what's on the slide?
-              - Would a founder feel comfortable saying these words?
-
-              ### 6. Layout Appropriateness
-              Is the chosen layout right for this content? A single stat shouldn't be
-              in a card-grid. A comparison shouldn't be a bulleted list.
-
-              ## Verdict Guidance
-              - **pass**: This slide could go into an investor deck today. No critical issues.
-                Minor suggestions are okay — note them but still pass.
-              - **fail**: The slide has critical issues — wrong numbers, AI language,
-                missing key content, or layout mismatch. One critical issue = fail.
-
-              Be rigorous but not impossible. The bar is "investor-ready", not "perfect."
-          thread:
-            mode: new
-            inject:
-              role: user
-              content: |
-                ## Review Slide: {{iter.item.filename}}
-
-                Read the slide at `pitch-deck-content/slides/{{iter.item.filename}}`
-                and the research files it references.
-
-                Then evaluate this ONE slide against the review checklist in your system prompt.
-                The slide spec in your system prompt contains the expected key content and source references.
-          save_message:
-            role: assistant
-            content: |
-              **Review {{iter.item.filename}}**: {{has(output.response) ? output.response.verdict : 'unknown'}} — {{has(output.response) ? output.response.summary : 'Review not available'}}
-
-      edges:
-        - from: write_slide
-          default: slide_review
     save_message:
       role: assistant
       content: |
         ## Phase 4: Slide Pipeline Complete
-        Parallel slide writing and per-slide review finished.
+        Parallel slide writing finished. Combined visual + content review runs in the build loop.
 
   # ==========================================================================
   # PHASE 5: Build React Slides → Visual Review Loop
@@ -1323,18 +1173,20 @@ nodes:
           command: |
             cd {{inputs.pitch_deck_dir}} && node screenshot-slides.mjs http://localhost:5174 ./screenshots
 
-        # --- Visual Reviewer: reviews slide screenshots via image attachments ---
+        # --- Visual + Content Reviewer: reviews slide screenshots (visual, primary) and
+        #     checks content integrity against the source files. One combined verdict. ---
         - id: visual_review
           type: workflow
           ref: builtin://structured-agent
           presets:
             default: code_reviewer
           args:
+            tools: ["tag:readonly"]
             model: "{{inputs.model}}"
             temperature: 0.2
             thinking_level: high
             response_tool_name: submit_visual_review
-            response_tool_description: "Submit visual review of the pitch deck slides"
+            response_tool_description: "Submit the combined visual + content review of the pitch deck slides"
             response_schema:
               type: object
               required:
@@ -1391,6 +1243,27 @@ nodes:
                   items:
                     type: string
                   description: "Font sizes too small for projection, poor contrast, inconsistent text hierarchy"
+                content_issues:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - severity
+                      - description
+                    properties:
+                      slide_number:
+                        type: integer
+                        description: "Which slide (1-indexed), if slide-specific"
+                      severity:
+                        type: string
+                        enum:
+                          - critical
+                          - warning
+                          - suggestion
+                      description:
+                        type: string
+                        description: "The content problem (wrong/unsourced number, AI-language copy, broken narrative) and the fix"
+                  description: "Content-integrity problems: stats that contradict or omit their source, AI-sounding copy, or narrative gaps. A critical content_issue fails the deck just like a critical visual one."
           thread:
             mode: new
             inject:
@@ -1401,8 +1274,20 @@ nodes:
                 You are reviewing screenshot images of each slide in the pitch deck.
                 Each attached image is a 1280×720 screenshot of one slide, in order.
 
-                **Before reviewing**: Read `pitch-deck-content/phase-1-scrape/brand-identity.md`
-                to understand what the company's brand looks like. The slides should match.
+                **Before reviewing**: Read the source-of-truth files so you can judge content, not
+                just appearance:
+                - `pitch-deck-content/phase-1-scrape/brand-identity.md` — the company's brand (slides should match it).
+                - `pitch-deck-content/phase-3-interview/founder-brief.md` and the research files
+                  (`phase-2-research/competitive-landscape.md`, `phase-2-research/market-sizing.md`) — the REAL numbers.
+
+                **Content integrity (counts toward the verdict, alongside the visuals → `content_issues`):**
+                - Every stat visible on a slide must match the research/founder-brief numbers and cite a source.
+                  A number that contradicts the sources, or a bare claim with no citation, is a critical content issue.
+                - Flag AI-language copy visible on the slides: buzzwords (leverage, seamless, robust, paradigm),
+                  "not just X, but Y", "in today's landscape", generic titles like "The Problem"/"Market Opportunity".
+                - Check the narrative arc across slides: does the story flow (problem → solution → proof → ask)?
+                  Call out gaps or slides that break the throughline.
+                Primary weight is still visual, but a critical content problem fails the deck.
 
                 **Per-slide checks:**
                 - Is text readable at presentation size? (min ~14px body, ~24px headers on 1280×720)
@@ -1449,8 +1334,9 @@ nodes:
                 - Check that key numbers and headlines are large enough to read from across a room.
 
                 **Verdict guidance:**
-                - `pass` = A founder could present this tomorrow without embarrassment
-                - `fail` = Critical visual issues, brand mismatch, or obvious AI-generated appearance
+                - `pass` = A founder could present this tomorrow without embarrassment — visuals AND content hold up
+                - `fail` = Any critical issue: visual defect, brand mismatch, AI-generated appearance,
+                  a wrong/unsourced number, or a broken narrative
               attachments:
                 - path: pitch-deck/screenshots/slide-01.png
                   filename: slide-01.png

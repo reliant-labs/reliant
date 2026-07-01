@@ -1201,15 +1201,29 @@ func (r *Repo) IsDaemonAttached(ctx context.Context, userID string, staleThresho
 }
 
 func (r *Repo) ListOutboundAttachments(ctx context.Context) ([]*DaemonAttachment, error) {
-	query := `
+	return r.listAttachments(ctx, `
 		SELECT daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity
 		FROM daemon_attachment
 		WHERE source = 'outbound'
-	`
+	`)
+}
+
+// ListAllDaemonAttachments returns every attachment row regardless of source.
+func (r *Repo) ListAllDaemonAttachments(ctx context.Context) ([]*DaemonAttachment, error) {
+	return r.listAttachments(ctx, `
+		SELECT daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity
+		FROM daemon_attachment
+	`)
+}
+
+// listAttachments runs an attachment-shaped SELECT and scans the rows. Shared
+// by ListOutboundAttachments and ListAllDaemonAttachments so the scan logic
+// (nullable pod_ip / pod_port) lives in one place.
+func (r *Repo) listAttachments(ctx context.Context, query string) ([]*DaemonAttachment, error) {
 	query = r.bindQuery(query)
 	rows, err := r.DB.QueryContext(ctx, query)
 	if err != nil {
-		return nil, fmt.Errorf("listing outbound attachments: %w", err)
+		return nil, fmt.Errorf("listing attachments: %w", err)
 	}
 	defer rows.Close()
 
@@ -1222,7 +1236,7 @@ func (r *Repo) ListOutboundAttachments(ctx context.Context) ([]*DaemonAttachment
 			podPort sql.NullInt64
 		)
 		if err := rows.Scan(&att.DaemonID, &att.UserID, &source, &podIP, &podPort, &att.AttachedAt, &att.LastStreamActivity); err != nil {
-			return nil, fmt.Errorf("scanning outbound attachment: %w", err)
+			return nil, fmt.Errorf("scanning attachment: %w", err)
 		}
 		att.Source = DaemonAttachmentSource(source)
 		if podIP.Valid {
@@ -1236,7 +1250,7 @@ func (r *Repo) ListOutboundAttachments(ctx context.Context) ([]*DaemonAttachment
 		result = append(result, &att)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterating outbound attachments: %w", err)
+		return nil, fmt.Errorf("iterating attachments: %w", err)
 	}
 	return result, nil
 }

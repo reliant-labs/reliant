@@ -1,6 +1,7 @@
 package db
 
 import (
+	"os"
 	"testing"
 )
 
@@ -77,5 +78,36 @@ func TestResolveDatabaseConfig_PostgresWithURL(t *testing.T) {
 	}
 	if cfg.URL == "" {
 		t.Fatal("expected DATABASE_URL to be set")
+	}
+}
+
+func TestEnvInt(t *testing.T) {
+	const name = "RELIANT_DB_MAX_OPEN_CONNS_TEST"
+	tests := []struct {
+		name string
+		set  bool
+		val  string
+		def  int
+		want int
+	}{
+		{"unset falls back to default", false, "", 25, 25},
+		{"empty falls back to default", true, "", 25, 25},
+		{"valid override", true, "8", 25, 8},
+		{"whitespace trimmed", true, "  2 ", 10, 2},
+		{"non-numeric falls back", true, "abc", 25, 25},
+		{"zero falls back to default", true, "0", 25, 25},
+		{"negative falls back to default", true, "-4", 25, 25},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.set {
+				t.Setenv(name, tt.val)
+			} else {
+				_ = os.Unsetenv(name)
+			}
+			if got := envInt(name, tt.def); got != tt.want {
+				t.Errorf("envInt(%q, %d) = %d, want %d", tt.val, tt.def, got, tt.want)
+			}
+		})
 	}
 }

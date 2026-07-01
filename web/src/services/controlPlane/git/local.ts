@@ -10,6 +10,7 @@ import type {
   GitCredentialStatus,
   ListGitReposPage,
 } from "./types";
+import type { ExchangeGithubOAuthCodeResult } from "./cloud";
 
 export async function getCredential(
   provider: string,
@@ -42,6 +43,14 @@ export async function listCredentials(
 
 export function getOAuthURL(): string | null {
   return null;
+}
+
+export async function exchangeGithubOAuthCode(
+  _code: string,
+  _state: string,
+): Promise<ExchangeGithubOAuthCodeResult> {
+  // No control plane configured — there is no OAuth flow to complete locally.
+  throw new Error("GitHub OAuth requires a Reliant Cloud account");
 }
 
 export async function cloneRepo(

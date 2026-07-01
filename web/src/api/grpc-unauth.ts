@@ -23,7 +23,7 @@ import {
   StartOAuthSignInRequestSchema,
   SystemService,
 } from "../gen/reliant/v1/system_pb";
-import { buildLocalhostUrl } from "../lib/protocol";
+import { buildLocalhostUrl, useSameOriginTransport } from "../lib/protocol";
 import { buildInterceptors } from "./transport";
 
 // Minimal local logger. Avoids depending on `@/lib/logger` to keep the
@@ -36,6 +36,14 @@ const log = {
 
 // Get gRPC base URL - simplified version without Electron config dependencies
 const getGRPCBaseURL = (): string | null => {
+  // Same-origin (Vite-proxy) path — mirrors grpc-client.ts::getGRPCBaseURL so
+  // the pre-auth DevAuth/OAuth bootstrap is CORS-free too. http(s)-served
+  // renderer (web-dev AND electron-dev) ⇒ document origin ⇒ Vite proxies
+  // `/reliant.v1.*` to reliant-api. file:// (packaged) falls through.
+  if (useSameOriginTransport()) {
+    return window.location.origin;
+  }
+
   // Check if running in Electron with config available
   if (
     typeof window !== "undefined" &&

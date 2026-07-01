@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ExternalLink, Play, X } from "lucide-react";
+import { ArrowUpRight, Play, X } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import { useDaemonList, useResumeDaemon } from "@/hooks/useOnboardingQueries";
-import { getAdminURL } from "@/lib/constants";
-import { openExternalLink } from "@/lib/open-link";
 import {
   DAEMON_STATUS_ACTIVE,
   DAEMON_STATUS_SUSPENDED,
@@ -10,8 +9,6 @@ import {
 } from "@/services/controlPlane/daemon";
 
 const DISMISS_KEY = "reliant.resumeDaemonPill.dismissed";
-const DEFAULT_UPGRADE_PATH = "/billing";
-const PUBLIC_PRICING_URL = "https://reliantlabs.io/pricing";
 
 interface ResumeDaemonPillProps {
   placement?: "absolute" | "inline";
@@ -46,15 +43,8 @@ function formatResumeError(error: string): string {
   return error;
 }
 
-function upgradeUrl(): string {
-  const base = getAdminURL();
-  if (base) {
-    return `${base.replace(/\/$/, "")}${DEFAULT_UPGRADE_PATH}`;
-  }
-  return PUBLIC_PRICING_URL;
-}
-
 export function ResumeDaemonPill({ placement = "absolute" }: ResumeDaemonPillProps) {
+  const navigate = useNavigate();
   const { data: daemons = [] } = useDaemonList();
   const [dismissedSig, setDismissedSig] = useState<string>(() => readDismissed());
   const [error, setError] = useState("");
@@ -100,7 +90,10 @@ export function ResumeDaemonPill({ placement = "absolute" }: ResumeDaemonPillPro
   };
 
   const handleUpgrade = () => {
-    void openExternalLink(upgradeUrl());
+    // In-app upgrade path: the billing dashboard now lives at
+    // /settings/billing, so navigate there instead of bouncing the user out
+    // to the hosted admin app or the public pricing page.
+    void navigate({ to: "/settings/$section", params: { section: "billing" } });
   };
 
   const busyId =
@@ -147,7 +140,7 @@ export function ResumeDaemonPill({ placement = "absolute" }: ResumeDaemonPillPro
               className="ml-2 inline-flex items-center gap-1 font-medium underline-offset-2 hover:underline"
             >
               Upgrade plan
-              <ExternalLink className="h-3 w-3" />
+              <ArrowUpRight className="h-3 w-3" />
             </button>
           </div>
         )}

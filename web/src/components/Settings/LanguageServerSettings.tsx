@@ -190,10 +190,9 @@ export function LanguageServerSettings({ compact = false }: Props) {
                 )}
               </div>
               <p className="text-xs text-muted-foreground truncate mt-0.5">
-                <code>{server.command}</code>
-                {server.extensions.length > 0 && (
-                  <span className="ml-2">{server.extensions.join(', ')}</span>
-                )}
+                {server.extensions.length > 0
+                  ? server.extensions.join(', ')
+                  : server.language}
               </p>
             </div>
 

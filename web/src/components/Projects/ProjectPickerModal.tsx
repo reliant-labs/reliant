@@ -32,22 +32,33 @@ export function ProjectPickerModal({
     description: "",
     default_branch: "main",
   });
+  // The display name defaults to the directory basename and keeps tracking the
+  // path until the user explicitly renames. Clearing the field resumes tracking.
+  const [nameManuallyEdited, setNameManuallyEdited] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDirectoryPickerOpen, setIsDirectoryPickerOpen] = useState(false);
 
   const isElectron = !!window.electronAPI?.selectDirectory;
 
+  // Last non-empty path segment, e.g. "/Users/you/projects/my-app/" -> "my-app".
+  const deriveName = (path: string) =>
+    path.replace(/\/+$/, "").split("/").pop() || "";
+
+  const applyPath = (selectedPath: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      path: selectedPath,
+      name: nameManuallyEdited ? prev.name : deriveName(selectedPath),
+    }));
+  };
+
   const handleSelectDirectory = async () => {
     if (isElectron) {
       try {
         const selectedPath = await window.electronAPI!.selectDirectory();
         if (selectedPath) {
-          setFormData((prev) => ({
-            ...prev,
-            path: selectedPath,
-            name: prev.name || selectedPath.split("/").pop() || "New Project",
-          }));
+          applyPath(selectedPath);
         }
       } catch (err) {
         console.error("Failed to select directory via Electron:", err);
@@ -58,18 +69,14 @@ export function ProjectPickerModal({
   };
 
   const handleDirectorySelected = (selectedPath: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      path: selectedPath,
-      name: prev.name || selectedPath.split("/").pop() || "New Project",
-    }));
+    applyPath(selectedPath);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.name || !formData.path) {
-      setError("Name and path are required");
+    if (!formData.path) {
+      setError("Choose a project directory");
       return;
     }
 
@@ -78,14 +85,18 @@ export function ProjectPickerModal({
       return;
     }
 
+    // Name is optional in the UI; fall back to the directory basename.
+    const name = formData.name.trim() || deriveName(formData.path) || "New Project";
+
     setIsCreating(true);
     setError(null);
 
     try {
-      const createdProject = await createProject(formData);
+      const createdProject = await createProject({ ...formData, name });
       onProjectCreated(createdProject);
       onClose();
 
+      setNameManuallyEdited(false);
       setFormData({
         name: "",
         path: "",
@@ -149,35 +160,17 @@ export function ProjectPickerModal({
         <div className="space-y-5">
           <div className="space-y-2">
             <label className="block text-sm font-semibold text-foreground">
-              Project Name <span className="text-destructive">*</span>
-            </label>
-            <input
-              type="text"
-              value={formData.name}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, name: e.target.value }))
-              }
-              className="w-full px-4 py-3 bg-background border border-border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-              placeholder="my-awesome-project"
-              required
-              autoFocus
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="block text-sm font-semibold text-foreground">
-              Project Path <span className="text-destructive">*</span>
+              Project Directory <span className="text-destructive">*</span>
             </label>
             <div className="flex gap-3">
               <input
                 type="text"
                 value={formData.path}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, path: e.target.value }))
-                }
+                onChange={(e) => applyPath(e.target.value)}
                 className="flex-1 px-4 py-3 bg-background border border-border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
                 placeholder="Enter full path (e.g., /Users/you/projects/my-app)"
                 required
+                autoFocus
               />
               <button
                 type="button"
@@ -188,6 +181,27 @@ export function ProjectPickerModal({
                 Browse
               </button>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-sm font-semibold text-foreground">
+              Display Name
+              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                optional — defaults to the folder name
+              </span>
+            </label>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => {
+                const value = e.target.value;
+                // Resume tracking the folder name if the user clears the field.
+                setNameManuallyEdited(value.trim().length > 0);
+                setFormData((prev) => ({ ...prev, name: value }));
+              }}
+              className="w-full px-4 py-3 bg-background border border-border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+              placeholder={deriveName(formData.path) || "my-awesome-project"}
+            />
           </div>
 
           <div className="space-y-2">

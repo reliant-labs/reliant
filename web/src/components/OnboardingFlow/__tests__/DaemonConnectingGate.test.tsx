@@ -39,15 +39,13 @@ function makeDaemon(partial: Partial<Daemon>): Daemon {
   return partial as unknown as Daemon;
 }
 
-// Force getAdminURL to a deterministic value so we can assert the "View logs"
-// href in the failed-state test.
-vi.mock("@/lib/constants", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/constants")>();
-  return {
-    ...actual,
-    getAdminURL: () => "https://admin.example.test",
-  };
-});
+// The failed state now navigates in-app (no external admin app), so stub
+// useNavigate with a spy we can assert against. The gate isn't rendered under
+// a RouterProvider in this test.
+const mockNavigate = vi.fn();
+vi.mock("@tanstack/react-router", () => ({
+  useNavigate: () => mockNavigate,
+}));
 
 // Imported AFTER mocks above so the gate picks them up.
 import {
@@ -143,7 +141,7 @@ describe("DaemonConnectingGate", () => {
 
     expect(screen.getByTestId("daemon-gate-connecting")).toBeInTheDocument();
     expect(
-      screen.getByText(/Connecting your daemon\.\.\./i),
+      screen.getByText(/Connecting your environment\.\.\./i),
     ).toBeInTheDocument();
     expect(screen.getByText(/Elapsed: 0s/)).toBeInTheDocument();
     expect(onContinue).not.toHaveBeenCalled();
@@ -203,13 +201,17 @@ describe("DaemonConnectingGate", () => {
       screen.getByText(/Image pull failed: ECR rate limit/),
     ).toBeInTheDocument();
 
-    // View logs links into the admin app at /workspaces/<daemon_id>, NOT
-    // /dashboard/workspaces. The route is keyed by the daemon's UUID.
-    const logsLink = screen.getByRole("link", { name: /View logs/i });
-    expect(logsLink).toHaveAttribute(
-      "href",
-      "https://admin.example.test/workspaces/daemon-abc-123",
-    );
+    // "View environment" navigates in-app to the Environments settings
+    // section, deep-linking to the failing environment via the `daemon`
+    // search param (keyed by the environment's UUID).
+    act(() => {
+      screen.getByRole("button", { name: /View environment/i }).click();
+    });
+    expect(mockNavigate).toHaveBeenCalledWith({
+      to: "/settings/$section",
+      params: { section: "environments" },
+      search: { daemon: "daemon-abc-123" },
+    });
 
     // Skip and continue is the escape hatch — exits without retrying.
     act(() => {

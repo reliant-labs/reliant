@@ -1,20 +1,15 @@
-export type OnboardingIntent =
-  | "build_app"
-  | "existing_codebase"
-  | "migrate"
-  | "landing_page"
-  | "pitch_deck"
-  | "blog_post"
-  | "custom_workflow"
-  | "explore";
+// Intent values the rendered onboarding wizard can actually set. ProjectChoiceStep
+// only ever writes "build_app" or "existing_codebase"; deriveStep / getStepsForPlan
+// / codeSourceForCompute branch on those two alone. The richer set of
+// landing_page/pitch_deck/blog_post/etc. lives in WorkflowStarterCards
+// (components/Onboarding) under its own `WorkflowStarterIntent` type — unrelated.
+export type OnboardingIntent = "build_app" | "existing_codebase";
 
 export type ComputeChoice =
   | "cloud_free_trial"
   | "cloud_paid"
   | "local_daemon"
   | "undecided";
-
-export type DaemonLocation = "reliant_cloud" | "self_hosted";
 
 export type CodeSource =
   | "new_project"
@@ -33,8 +28,6 @@ export type ModelProvider =
 export interface LaunchPlan {
   intent: OnboardingIntent;
   compute: ComputeChoice;
-  daemonLocation?: DaemonLocation;
-  codeSource: CodeSource;
   repo?: {
     provider: "github" | "gitlab" | "bitbucket";
     url: string;
@@ -43,12 +36,8 @@ export interface LaunchPlan {
   localPath?: string;
   projectName?: string;
   workflowId: string;
-  presetId?: string;
-  useForge?: boolean;
   modelProvider: ModelProvider;
   workflowParams?: Record<string, unknown>;
-  selectedPresets?: Record<string, string | null>;
-  launchTour?: boolean;
   daemonProvisioning?: boolean;
 }
 

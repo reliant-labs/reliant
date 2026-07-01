@@ -12,8 +12,8 @@ import {
   Trash2,
   CheckCircle2,
   XCircle,
-  ExternalLink,
 } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import { Toggle } from "../ui/Toggle";
 import { cn } from "../../lib/utils";
 import { api } from "../../api/client";
@@ -28,8 +28,6 @@ import { useCloudEligibility } from "../../hooks/useOnboardingQueries";
 import { onboardingService } from "../../services/controlPlane/onboarding";
 import { OAuthHelperPanel } from "../OAuthHelperPanel";
 import { getEventBus } from "../../lib/events";
-import { getAdminURL } from "../../lib/constants";
-import { openExternalLink } from "../../lib/open-link";
 
 interface CombinedGeneralSettingsProps {
   providers: Array<{
@@ -79,10 +77,10 @@ const providerConfigs = {
     description:
       "Access AI models through your Reliant organization (Gemini, Claude, GPT). Managed automatically via your login — no API key required.",
     usesOAuth: false,
-    // External means: no key/OAuth input here; we render a link to the Reliant admin
-    // billing page (configured via window.RELIANT_CONFIG.adminURL).
+    // External means: no key/OAuth input here. Instead of an API-key field we
+    // render in-app links to the managed Reliant AI surface (/settings/reliant-ai)
+    // and billing (/settings/billing) — auth is JWT-managed, not key-managed.
     external: true as const,
-    adminPath: "/billing",
   },
   openrouter: {
     name: "OpenRouter",
@@ -398,12 +396,16 @@ export function CombinedGeneralSettings({
   // Streaming preference state
   const [streamingEnabled, setStreamingEnabled] = useState<boolean>(false);
   const [loadingPreferences, setLoadingPreferences] = useState<boolean>(true);
+  // Per-tag model tuning (model/thinking/temperature/compaction) is power-user
+  // detail that all defaults to Auto — keep it collapsed so it doesn't lead.
+  const [showModelTuning, setShowModelTuning] = useState<boolean>(false);
 
   const codexOAuth = useCodexOAuth();
   const claudeOAuth = useClaudeOAuth();
   const oauthAvailability = useOAuthAvailability();
   const cloudEligibility = useCloudEligibility();
   const [enablingReliant, setEnablingReliant] = useState(false);
+  const navigate = useNavigate();
 
   // Filter to only show manual-entry providers plus auto-managed Reliant status
   const configuredProviders = providers.filter(
@@ -687,12 +689,7 @@ export function CombinedGeneralSettings({
                   const cfg = providerConfigs[selectedProvider as ProviderId] as {
                     name: string;
                     description: string;
-                    adminPath?: string;
                   };
-                  const adminURL = getAdminURL();
-                  const adminHref = adminURL
-                    ? `${adminURL.replace(/\/$/, "")}${cfg.adminPath || ""}`
-                    : undefined;
                   return (
                     <div className="space-y-4">
                       <div className="p-4 rounded-lg border border-border/40 bg-muted/30">
@@ -702,22 +699,32 @@ export function CombinedGeneralSettings({
                         <p className="text-sm text-muted-foreground mt-1">
                           {cfg.description}
                         </p>
-                        {!adminHref && (
-                          <p className="text-xs text-muted-foreground mt-2">
-                            Admin portal URL is not configured for this build.
-                          </p>
-                        )}
                       </div>
-                      <div className="flex justify-end">
+                      {/* In-app management — Reliant AI keys/spend + billing live in
+                          Settings, no external admin portal round-trip. */}
+                      <div className="flex flex-wrap justify-end gap-2">
                         <button
-                          className="px-4 py-2 text-sm font-medium border border-primary/40 bg-primary/10 text-primary rounded-md transition-colors hover:bg-primary/20 disabled:opacity-50 flex items-center gap-2"
-                          onClick={() => {
-                            if (adminHref) void openExternalLink(adminHref);
-                          }}
-                          disabled={!adminHref}
+                          className="px-4 py-2 text-sm font-medium border border-border/40 bg-background hover:bg-accent hover:text-accent-foreground rounded-md transition-colors flex items-center gap-2"
+                          onClick={() =>
+                            navigate({
+                              to: "/settings/$section",
+                              params: { section: "billing" },
+                            })
+                          }
                         >
-                          <ExternalLink className="h-4 w-4" />
-                          Manage in {cfg.name} Admin
+                          Billing & subscription
+                        </button>
+                        <button
+                          className="px-4 py-2 text-sm font-medium border border-primary/40 bg-primary/10 text-primary rounded-md transition-colors hover:bg-primary/20 flex items-center gap-2"
+                          onClick={() =>
+                            navigate({
+                              to: "/settings/$section",
+                              params: { section: "reliant-ai" },
+                            })
+                          }
+                        >
+                          <Settings2 className="h-4 w-4" />
+                          Manage AI keys &amp; spend
                         </button>
                       </div>
                     </div>
@@ -1098,8 +1105,34 @@ export function CombinedGeneralSettings({
         </div>
       </div>
 
-      {/* Model Preferences Section */}
-      <ModelPreferences providers={providers} />
+      {/* Advanced model tuning — collapsed by default (all knobs default to Auto) */}
+      <div className="mt-6 border border-border/40 rounded-lg bg-card shadow-[inset_0_1px_0_0_rgba(255,255,255,0.03)]">
+        <button
+          type="button"
+          onClick={() => setShowModelTuning((v) => !v)}
+          aria-expanded={showModelTuning}
+          className="flex w-full items-center justify-between gap-3 p-4 text-left"
+        >
+          <div>
+            <h3 className="text-base font-semibold">Advanced model tuning</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Override the default model, thinking level, temperature, and
+              compaction for each tier. Optional — everything defaults to Auto.
+            </p>
+          </div>
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+              showModelTuning && "rotate-180"
+            )}
+          />
+        </button>
+        {showModelTuning && (
+          <div className="border-t border-border/40 p-4 pt-4">
+            <ModelPreferences providers={providers} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

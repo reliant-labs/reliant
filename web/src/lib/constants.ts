@@ -44,31 +44,14 @@ export const getIsDev = (): boolean => {
  */
 export const isDev = getIsDev();
 
-export const getAdminURL = (): string | undefined => {
-  if (typeof window !== "undefined" && window.RELIANT_CONFIG?.adminURL) {
-    return window.RELIANT_CONFIG.adminURL;
-  }
-
-  const adminURL = import.meta.env.VITE_ADMIN_URL;
-  return typeof adminURL === "string" && adminURL.length > 0 ? adminURL : undefined;
-};
-
 /**
  * URL for the admin-server (control-plane) API.
  *
- * Distinct from getAdminURL(): that one points at the admin-web Next.js app
- * (where billing pages, etc. live), while this one points at admin-server,
- * which owns endpoints like /api/proxy-session that mint workspace-proxy
- * session tokens.
+ * Points at admin-server, which owns endpoints like /api/proxy-session that
+ * mint workspace-proxy session tokens.
  *
- * In cloud-dev these are separate origins (admin-web at /admin under the Vite
- * dev port, admin-server on its own port). In prod they're typically the
- * same host because admin-web is exported statically and served alongside
- * admin-server — but callers shouldn't rely on that and should use this
- * accessor for any admin-server endpoint.
- *
- * Lookup order matches getAdminURL: window.RELIANT_CONFIG (Electron-injected)
- * first, then VITE_CONTROL_PLANE_API_URL.
+ * Lookup order: window.RELIANT_CONFIG (Electron-injected) first, then
+ * VITE_CONTROL_PLANE_API_URL.
  */
 export const getControlPlaneURL = (): string | undefined => {
   if (typeof window !== "undefined" && window.RELIANT_CONFIG?.controlPlaneURL) {

@@ -14,8 +14,8 @@
 #   - research_done       type: join
 #   - founder_interview   type: workflow, ref: builtin://agent (BLACK BOX)
 #   - plan_deck           type: workflow, ref: builtin://structured-agent (BLACK BOX)
-#   - slide_pipeline      type: loop (parallel) — per-slide write + review
-#   - slides_loop         type: loop (while) — build → screenshot → visual review
+#   - slide_pipeline      type: loop (parallel) — per-slide content writing only (no per-slide review)
+#   - slides_loop         type: loop (while) — build → screenshot → visual_review (combined visual + content gate)
 #   - complete            type: save_message
 
 ---
@@ -27,8 +27,8 @@
 # 3. research_done — join
 # 4. founder_interview — agent
 # 5. plan_deck — structured-agent (standalone)
-# 6. slide_pipeline — parallel loop (write_slide → slide_review per slide)
-# 7. slides_loop — while loop (build_slides → start_dev_server → visual_review → stop_dev_server)
+# 6. slide_pipeline — parallel loop (write_slide per slide; content only)
+# 7. slides_loop — while loop (build_slides → start_dev_server → visual_review [visual+content] → stop_dev_server)
 # 8. complete — save_message
 
 name: happy_path
@@ -306,18 +306,19 @@ expect:
     - complete
 
 ---
-# Slide Pipeline Per-Slide Results
+# Slide Pipeline Parallel Write Results
 #
-# Tests that slide_pipeline produces per-slide results with mixed verdicts.
-# plan_deck returns 4 slides, slide_pipeline returns 4 results — some pass, some fail.
+# Tests that slide_pipeline produces per-slide results over 4 slides.
+# plan_deck returns 4 slides; slide_pipeline writes all 4 in parallel and returns 4 results.
+# (Per-slide review was removed — quality is now enforced once by the combined visual_review
+# gate in slides_loop, so these results carry the writer output, not a review verdict.)
 #
 # Verifies:
 # - Parallel loop _results are keyed by filename
-# - Mixed verdicts are captured per slide
-# - Pipeline still completes even with per-slide failures (they're review verdicts, not execution failures)
+# - Pipeline completes over all items
 
-name: slide_review_results
-description: Tests slide_pipeline per-slide results structure with 4 slides, mix of pass and fail verdicts
+name: slide_pipeline_parallel_write
+description: Tests slide_pipeline parallel per-slide write results over 4 slides
 
 inputs:
   mode: auto
@@ -566,6 +567,10 @@ events:
           - "Emoji characters used as icons"
         typography_issues:
           - "Body text at 12px is unreadable when projected"
+        content_issues:
+          - slide_number: 2
+            severity: critical
+            description: "Slide shows '5,000 downloads' but founder-brief.md says 3,200. Use the real number and cite the source."
       completed: true
 
   - node: slides_loop.stop_dev_server
