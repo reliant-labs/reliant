@@ -56,6 +56,13 @@ vi.mock('@/services/controlPlane/onboarding', () => ({
   },
 }))
 
+// CombinedGeneralSettings now uses TanStack Router's useNavigate for the
+// in-app Reliant AI / billing links. The test renders the component outside a
+// RouterProvider, so stub the hook to a no-op navigate.
+vi.mock('@tanstack/react-router', () => ({
+  useNavigate: () => vi.fn(),
+}))
+
 import { CombinedGeneralSettings } from '@/components/Settings/CombinedGeneralSettings'
 
 function renderWithClient(ui: React.ReactElement) {
