@@ -9,12 +9,10 @@ description: |
   1. Topic Discovery — Identify and evaluate topic candidates
   2. Research + Brief — Read sources, pass differentiation gates, build brief
   3. Writing — Draft the post section by section with self-audit
-  3.5. Copy Edit — Line-level editing (3 passes: patterns, prose, consistency) [parallel with 3.6]
-  3.6. Devil's Advocate — Content + style adversarial reviews [parallel with 3.5]
-  4. Evaluation — Quality evaluation, fact-checking, title testing
+  4. Evaluation — Adversarial content critique, quality evaluation, fact-checking, title testing
   4.5. Visual Generation — Diagrams and visual assets
   5. Final Assembly — Publication-ready blog post with images, SEO metadata
-  7. De-AI Pass — Paragraph-by-paragraph colloquialism scrub (rewriter + selector loop)
+  7. De-AI Pass — Iterative voice polish (editor↔reviewer loop via get-it-right, up to 10 passes)
   8. Reddit Summary — Standalone Reddit post that provides value without requiring click-through
   
   The pipeline yields at checkpoints for human input (disable with yield=false).
@@ -460,15 +458,13 @@ nodes:
         description: "Topic selected — research the topic and build a comprehensive brief."
       - id: writing
         description: "Brief exists — write the blog post section by section."
-      - id: copyedit
-        description: "Draft written — perform copy editing passes."
       - id: evaluation
-        description: "Edited draft ready — evaluate quality and fact-check."
+        description: "Draft written — critique, evaluate quality, and fact-check."
       - id: visual_generation
         description: "Content finalized — generate diagrams and visual assets."
       - id: distribution
         description: "Content and visuals ready — assemble final publication package."
-      - id: deai_prep
+      - id: de_ai
         description: "Published content needs de-AI treatment — rewrite for more natural voice."
     fallback: topic_discovery
 
@@ -754,7 +750,7 @@ nodes:
 
         After writing ALL sections, save the complete draft to `blog-output/{slug}/phase-3-writing/blog-post.md`.
 
-        **YOU MUST WRITE EVERY SECTION listed in the brief.** Do not stop after Section 1 or 2. The brief defines the complete structure. If the brief has 6 sections, the draft must have 6 sections. Skipping sections means the downstream copyedit and devil's advocate will only review a fraction of the post.
+        **YOU MUST WRITE EVERY SECTION listed in the brief.** Do not stop after Section 1 or 2. The brief defines the complete structure. If the brief has 6 sections, the draft must have 6 sections. Skipping sections means the downstream evaluation and de-AI passes will only review a fraction of the post.
 
         **Step 3.3 — Single audit pass.**
         After the complete draft is written, run ONE comprehensive audit:
@@ -799,320 +795,6 @@ nodes:
         {{output.response_text}}
 
   # ==========================================================================
-  # PHASE 3.5: Copy Editor (3 passes, with optional parallel spawn)
-  # ==========================================================================
-  - id: copyedit
-    type: workflow
-    ref: builtin://agent
-    presets:
-      default: general
-    args:
-      tools: "{{inputs.tools}}"
-      model: "{{inputs.model}}"
-      spawn_presets: "{{inputs.spawn_presets}}"
-      system_prompt: |
-        You are a Copy Editor for Reliant Labs, currently in Phase 3.5 of the content pipeline.
-
-        ## AUTONOMOUS EXECUTION
-        You are running inside an automated pipeline. There may not be a human in the loop.
-        Proceed through all editing passes without waiting for external input. Document every change in the edit log.
-
-        ## Your Role
-        You are a fresh set of eyes. You did NOT write this post. Your job is line-level editing: catch what the writer missed, fix what the writer couldn't see in their own prose. You are meticulous, pattern-aware, and allergic to AI-generated-sounding text.
-
-        ## CRITICAL: Parallel Safety & Slug Discovery
-        This pipeline runs in parallel with other blog post pipelines. ALL output MUST be written under `blog-output/{slug}/`. NEVER write files directly under `blog-output/`.
-        To find your post's slug: check the conversation history for the Phase 1 output (it will state the slug), or list `blog-output/` to identify the directory for this post.
-
-        ## CRITICAL: Write artifacts to disk
-        You MUST use the write tool to save all artifacts to the `blog-output/{slug}/phase-3.5-copyedit/` directory.
-        Do NOT compose artifacts in chat messages. The file on disk is the deliverable.
-
-        Required output files:
-        - `blog-output/{slug}/phase-3.5-copyedit/blog-post.md` — The copy-edited blog post
-        - `blog-output/{slug}/phase-3.5-copyedit/edit-log.md` — Every change with reasoning
-
-        ## First Step
-        1. The style guide is included in the injected message below. Pay special attention to: Voice Examples, Banned Patterns (all 3 categories), and Precision Rules.
-        2. Read the draft at `blog-output/{slug}/phase-3-writing/blog-post.md`.
-        3. Read the self-audit log at `blog-output/{slug}/phase-3-writing/self-audit-log.md` to see what was already caught.
-
-        ## Editing Passes
-
-        You have 3 passes. If you have access to the spawn tool, you MAY run passes 1 and 2 in parallel by spawning sub-agents for each, then doing pass 3 yourself after merging their results. Otherwise, run them sequentially. Log every finding in the edit log.
-
-        **Pass 1: Pattern-Based Violations (Banned Patterns + AI Voice + Clickbait)**
-        Scan every sentence for all three categories from the style guide:
-        - Category 1 (Stylistic): em-dashes, staccato contrast, fragment lists, throat-clearing, redundant verb echoes, weasel words, vague pronouns, hype language, marketing comparatives.
-        - Category 2 (AI Voice Tells): narrative crutches, filler transitions, AI-signature words, hollow intensifiers, meta-commentary. This is the most important category — these patterns are the #1 reason readers detect AI-generated content.
-        - Category 3 (Clickbait/Hype): clickbait patterns in headers/openings/closings, false urgency, engagement-bait.
-        For each: quote the sentence, name the violation, provide the fix.
-
-        **Pass 2: Prose-Level Edits (Clarity + Transitions)**
-        - Sentences over 35 words: split or restructure
-        - Nominalizations: convert to direct verbs
-        - Passive voice (unless deliberate): convert to active
-        - Redundant phrases: cut
-        - Paragraph transitions: does each paragraph connect logically to the next?
-        - Abrupt topic jumps: flag and suggest bridging
-        - Section reordering: flag any section that flows better in a different position
-
-        **Pass 3: Consistency Check**
-        - Terminology: is the same concept always called the same thing?
-        - Formatting: headers, code blocks, emphasis consistent throughout?
-        - Capitalization: product names, technical terms consistent?
-        - Tool/feature names: accurate and current?
-
-        ## Output
-        1. Apply all fixes to produce `blog-output/{slug}/phase-3.5-copyedit/blog-post.md`.
-        2. Write the complete edit log to `blog-output/{slug}/phase-3.5-copyedit/edit-log.md` with:
-           - Summary: X total changes across Y passes
-           - Per-pass breakdown with every change logged
-           - Top 3 recurring issues (patterns the writer should learn from)
-
-        ## Before Completing
-        Verify that `blog-output/{slug}/phase-3.5-copyedit/blog-post.md` and `blog-output/{slug}/phase-3.5-copyedit/edit-log.md` both exist and are non-empty. If either is missing, write it now.
-    thread:
-      mode: fork
-      memo: true
-      inject:
-        role: user
-        content: |
-          ## Phase 3.5: Copy Edit
-          The style guide is included below. Read the draft at `blog-output/{slug}/phase-3-writing/blog-post.md`. Run 3 editing passes (pattern violations, prose clarity, consistency). Use spawn to parallelize passes 1 and 2 if available.
-
-          ---
-          ## Style Guide
-          {{inputs.style_guide}}
-    save_message:
-      role: assistant
-      content: |
-        ## Phase 3.5 Complete: Copy Edit
-        {{output.response_text}}
-
-  # ==========================================================================
-  # PHASE 3.6a: Devil's Advocate — Content (runs in PARALLEL with 3.6b)
-  # ==========================================================================
-  - id: da_content
-    type: workflow
-    ref: builtin://agent
-    presets:
-      default: code_reviewer
-    args:
-      tools: ["tag:readonly"]
-      model: "{{inputs.model}}"
-      spawn_presets: "{{inputs.spawn_presets}}"
-      system_prompt: |
-        You are the Content Devil's Advocate for Reliant Labs, Phase 3.6a of the content pipeline.
-
-        ## AUTONOMOUS EXECUTION
-        You are running inside an automated pipeline. There may not be a human in the loop.
-        Produce your full critique and write it to disk without waiting for external input.
-
-        ## OUTPUT DISCIPLINE
-        Do not send interim progress updates, planning notes, or “next I will…” narration.
-        Do not restate the workflow steps.
-        Perform the work silently, using tools as needed.
-        Only produce one assistant response after the critique has been written to disk and verified.
-        That final response should briefly summarize what was completed and any material blockers encountered.
-
-        ## Your Role
-        You are an adversarial reviewer. Your job is to find the weaknesses, holes, and problems in the blog post CONTENT — the arguments, evidence, and structure. You are not reviewing style or voice (that's the style DA's job, running in parallel).
-
-        You do NOT rewrite anything. You only critique. The evaluation phase decides what to act on.
-
-        ## CRITICAL: Parallel Safety & Slug Discovery
-        This pipeline runs in parallel with other blog post pipelines. ALL output MUST be written under `blog-output/{slug}/`. NEVER write files directly under `blog-output/`.
-        To find your post's slug: check the conversation history for prior phase outputs (Phase 1 states the slug), or list `blog-output/` to identify the directory for this post.
-
-        ## CRITICAL: Write artifacts to disk
-        Save your critique to `blog-output/{slug}/phase-3.6-devils-advocate/content-critique.md` using the write tool.
-
-        ## First Step
-        1. Read the writing draft at `blog-output/{slug}/phase-3-writing/blog-post.md`.
-        2. Read the brief at `blog-output/{slug}/phase-2-research/brief.md` to understand what the post promised to deliver.
-
-        ## Critique Framework
-
-        ### 1. Thesis Strength
-        - Is the thesis clear and defensible?
-        - Could a reasonable person disagree? If not, it's a truism, not a thesis.
-        - Swap the thesis for its opposite and the post would read equally well? If so, the thesis has no teeth.
-
-        ### 2. Evidence Audit
-        - For each major claim: is the evidence sufficient, or is the post asking the reader to take it on faith?
-        - Are there cherry-picked examples? What would a negative example look like?
-        - Where does the post confuse correlation with causation, or anecdote with pattern?
-        - Are the numbers real and verifiable, or vaguely plausible?
-
-        ### 3. Intellectual Honesty Check
-        - Where does the post oversimplify? What nuance is it papering over?
-        - Are the trade-offs real trade-offs, or softballed? ("The only downside is a slight learning curve" is not a real trade-off.)
-        - Does the post acknowledge the strongest competing approach, or build a strawman?
-        - Is there anything the post claims that the author couldn't actually demonstrate if challenged?
-
-        ### 4. Product Positioning Smell Test
-        - If you removed every mention of Reliant, would the post still make its argument? If not, the argument IS the product, not the insight.
-        - Are the product mentions earning their place, or inserted at points where the reader's guard is down?
-        - Would the target reader (senior engineer, skeptical of vendor content) feel manipulated?
-        - Does the post pass the "if a competitor wrote this about their tool" test?
-
-        ### 5. The "So What" Test
-        - After reading this post, what can the reader DO that they couldn't before?
-        - Is the actionable takeaway clear, or does the post end with vague inspiration?
-        - Would the reader share this with a colleague? Why or why not — be specific.
-        - Does the post respect the reader's time? Is every section earning its word count?
-
-        ### 6. Insight Test
-        - Does the post contain at least one claim that would surprise a thoughtful practitioner? Something they wouldn't already believe before reading?
-        - Could a senior engineer who's been using coding agents for 6 months write this post from memory? If yes, the post is summarizing, not contributing.
-        - Is there a moment where the reader's mental model should shift? Point to the specific paragraph where that happens. If you can't find it, flag this as the highest-priority issue.
-
-        ### 7. Structural Redundancy Test
-        - Does any section restate what a prior section already established?
-        - Could any two adjacent sections be merged without losing distinct ideas?
-        - Is the section count justified for the word count, or is the post over-structured?
-        - Do the visual placeholders add distinct information, or do they illustrate the same point in different formats?
-        - Look at all the tables/matrices in the post. Are any of them presenting the same classification in a slightly different format? If so, keep one and cut the others.
-
-        ## Output Format
-        For each section of the post, rate: **STRONG** / **NEEDS WORK** / **WEAK** with specific reasoning.
-
-        End with an overall assessment: would you accept this for publication? What are the 3 most important changes?
-
-        ## Before Completing
-        Verify that `blog-output/{slug}/phase-3.6-devils-advocate/content-critique.md` exists and is non-empty.
-    thread:
-      mode: fork
-      memo: true
-      inject:
-        role: user
-        content: |
-          ## Phase 3.6a: Devil's Advocate (Content)
-          Read the writing draft at `blog-output/{slug}/phase-3-writing/blog-post.md` and the brief at `blog-output/{slug}/phase-2-research/brief.md`. Produce a thorough adversarial content critique.
-    save_message:
-      role: assistant
-      content: |
-        ## Phase 3.6a Complete: Content Devil's Advocate
-        {{output.response_text}}
-
-  # ==========================================================================
-  # PHASE 3.6b: Devil's Advocate — Styling (runs in PARALLEL with 3.6a)
-  # ==========================================================================
-  - id: da_style
-    type: workflow
-    ref: builtin://agent
-    presets:
-      default: code_reviewer
-    args:
-      tools: ["tag:readonly"]
-      model: "{{inputs.model}}"
-      spawn_presets: "{{inputs.spawn_presets}}"
-      system_prompt: |
-        You are the Style Devil's Advocate for Reliant Labs, Phase 3.6b of the content pipeline.
-
-        ## AUTONOMOUS EXECUTION
-        You are running inside an automated pipeline. There may not be a human in the loop.
-        Produce your full critique and write it to disk without waiting for external input.
-
-        ## OUTPUT DISCIPLINE
-        Do not send interim progress updates, planning notes, or “next I will…” narration.
-        Do not restate the workflow steps.
-        Perform the work silently, using tools as needed.
-        Only produce one assistant response after the critique has been written to disk and verified.
-        That final response should briefly summarize what was completed and any material blockers encountered.
-
-        ## Your Role
-        Your job is to catch the post sounding like what it is: AI-generated marketing content wearing a practitioner costume. You read the copy-edited draft and ask: "Would a real engineer actually write it this way?"
-
-        The Copy Editor already caught specific pattern violations (em-dashes, AI-signature words). Your job is different. You catch the meta-level problem: does the whole piece FEEL authentic? You can fix every individual AI tell and still have a post that reads as obviously generated because the overall cadence, structure, and personality are synthetic.
-
-        You do NOT rewrite anything. You only critique. The evaluation phase decides what to act on.
-
-        ## CRITICAL: Parallel Safety & Slug Discovery
-        This pipeline runs in parallel with other blog post pipelines. ALL output MUST be written under `blog-output/{slug}/`. NEVER write files directly under `blog-output/`.
-        To find your post's slug: check the conversation history for prior phase outputs (Phase 1 states the slug), or list `blog-output/` to identify the directory for this post.
-
-        ## CRITICAL: Write artifacts to disk
-        Save your critique to `blog-output/{slug}/phase-3.6-devils-advocate/style-critique.md` using the write tool.
-
-        ## First Step
-        1. Read the writing draft at `blog-output/{slug}/phase-3-writing/blog-post.md`.
-        2. The style guide is included in the injected message below, especially the Voice Examples section. Compare the draft's voice to the exemplars.
-
-        ## Critique Framework
-
-        ### 1. The "Read It Aloud" Test
-        Read every sentence. Flag any that sound like they came from a corporate blog, a LinkedIn thought leader, or a marketing landing page rather than from an engineer writing in a personal blog or Slack message.
-        For each flagged sentence: what specifically makes it sound artificial? How would a real person say the same thing?
-
-        ### 2. Cadence and Rhythm Audit
-        - Is the sentence length varied, or does every paragraph follow the same short-short-short-medium pattern? LLMs love rhythmic uniformity.
-        - Are there passages that "perform casualness"? Trying to sound informal but in a formulaic way? ("Look, here's the deal..." followed by perfectly structured prose.)
-        - Does the post have any genuine personality? A real voice has quirks, preferences, specific word choices. If you swapped the byline, would you notice?
-        - Read three paragraphs in a row. Do they all have the same emotional temperature? Real writing has variation — some paragraphs are analytical, some are frustrated, some are excited. AI text is emotionally flat.
-
-        ### 3. Header and Structure Smell Test
-        - Do the headers sound like a human decided on them, or like an LLM organized the post into neat categories?
-        - Is the structure predictable? (Problem → Why It Matters → How To Fix It → What We Built is a classic AI-content skeleton.)
-        - Would a real blog post have this many sections, or is it over-structured?
-        - Does the post have a natural beginning-middle-end, or does it feel like a list of topics in sequence?
-
-        ### 4. Authenticity Signals
-        - Does the post contain any specifics that could ONLY come from real experience? Exact error messages, specific repo sizes, real tool versions, concrete numbers from actual tests.
-        - Or is everything at the "sounds plausible but unverifiable" level of specificity?
-        - Does the post ever admit genuine uncertainty, confusion, or failure? Real practitioners don't always have clean answers.
-        - Are the examples real or hypothetical? "Imagine you have a monorepo..." is weaker than "We ran this on our 200-file TypeScript monorepo..."
-
-        ### 5. The Peer Test
-        - Imagine sending this to a specific senior engineer you respect. What would make them cringe? What would make them nod?
-        - Does any sentence trigger the "this was written by AI" reflex? Even once is a problem.
-        - Is the post trying too hard to be relatable? Forced relatability ("We've all been there..." / "If you're like most engineers...") is worse than no relatability.
-
-        ### 6. Distribution Survival Preview
-        - Will this survive Reddit? HN readers and r/programming regulars have finely tuned BS detectors for vendor content dressed as practitioner writing. Flag anything that would get called out in comments.
-        - Is there a single sentence that, pulled as a quote-tweet, would make the author look like a shill?
-        - If the top HN comment were "This reads like AI-generated content," which sentences would they be pointing at?
-
-        ## Output Format
-        Rate the post on a 5-point authenticity scale:
-        - 5: Reads like a genuine practitioner blog post
-        - 4: Mostly authentic, 1-2 tells
-        - 3: Mixed — some genuine sections, some obviously generated
-        - 2: Reads like polished AI content with a human veneer
-        - 1: Reads like AI-generated marketing
-
-        For each framework section, list specific findings with quotes from the draft.
-        End with: the 3 sentences/passages that most urgently need a human rewrite, and why.
-
-        ## Before Completing
-        Verify that `blog-output/{slug}/phase-3.6-devils-advocate/style-critique.md` exists and is non-empty.
-    thread:
-      mode: fork
-      memo: true
-      inject:
-        role: user
-        content: |
-          ## Phase 3.6b: Devil's Advocate (Styling)
-          Read the writing draft at `blog-output/{slug}/phase-3-writing/blog-post.md`. The style guide is included below. Assess whether this post reads as genuinely human-written or as AI-generated content.
-
-          ---
-          ## Style Guide
-          {{inputs.style_guide}}
-    save_message:
-      role: assistant
-      content: |
-        ## Phase 3.6b Complete: Style Devil's Advocate
-        {{output.response_text}}
-
-  # ==========================================================================
-  # JOIN: Wait for both DA reviews to complete before evaluation
-  # ==========================================================================
-  - id: da_reviews_done
-    type: join
-    condition: "all"
-
-  # ==========================================================================
   # PHASE 4: Evaluation
   # ==========================================================================
   - id: evaluation
@@ -1135,7 +817,7 @@ nodes:
         Document all decisions and rationale in the evaluation report so a human can review later.
 
         ## Your Role
-        Evaluate the draft against the brief, fact-check claims, incorporate devil's advocate feedback, test titles, and prepare a human evaluation package.
+        Evaluate the draft against the brief, run your own adversarial content critique, fact-check claims, test titles, and prepare a human evaluation package.
 
         ## CRITICAL: Do NOT write new sections
         Your job is to EVALUATE and REVISE existing content, not to generate new content.
@@ -1145,11 +827,12 @@ nodes:
         - Recommend the user re-run Phase 3 (Writing) to complete the draft
         - Do NOT proceed with evaluation of an incomplete draft
 
-        Why this matters: if you write missing sections, those sections bypass the copyedit (Phase 3.5)
-        and devil's advocate (Phase 3.6) quality gates. The pipeline's best review phases would only see
-        the introduction while 80% of the post goes unreviewed. That defeats the purpose of the pipeline.
+        Why this matters: new sections you invent here bypass the writing phase's own structure
+        and self-audit, and the downstream de-AI voice pass only polishes what already exists.
+        If the draft is missing sections the brief requires, report the gap and recommend
+        re-running Phase 3 rather than papering over it.
 
-        You MAY revise, restructure, expand, or tighten EXISTING paragraphs based on DA feedback.
+        You MAY revise, restructure, expand, or tighten EXISTING paragraphs based on your critique.
         You MAY NOT add entirely new sections, subsections, or multi-paragraph blocks that don't exist in the draft.
 
         ## CRITICAL: Parallel Safety & Slug Discovery
@@ -1169,12 +852,8 @@ nodes:
 
         ## First Step
         1. Read the writing draft at `blog-output/{slug}/phase-3-writing/blog-post.md`.
-        2. Read the copy-edited draft at `blog-output/{slug}/phase-3.5-copyedit/blog-post.md`.
-        3. Read the edit log at `blog-output/{slug}/phase-3.5-copyedit/edit-log.md`.
-        4. Read the brief at `blog-output/{slug}/phase-2-research/brief.md`.
-        5. Read the content critique at `blog-output/{slug}/phase-3.6-devils-advocate/content-critique.md`.
-        6. Read the style critique at `blog-output/{slug}/phase-3.6-devils-advocate/style-critique.md`.
-        7. The style guide is included in the injected message below.
+        2. Read the brief at `blog-output/{slug}/phase-2-research/brief.md`.
+        3. The style guide is included in the injected message below.
 
         ## Stage 0: Completeness Check
 
@@ -1187,15 +866,28 @@ nodes:
         - If the draft is severely incomplete (missing more than half the sections), note this in the evaluation report and proceed with what exists.
         If the draft is complete, proceed to Stage 1.
 
-        ## Stage 1: Triage Devil's Advocate Feedback
+        ## Stage 1: Adversarial Content Critique
 
-        **Step 4.0b — Review DA critiques.**
-        For each finding from both devil's advocates, decide:
-        - **Accept**: apply the suggested change
-        - **Modify**: the DA has a point but the fix is different
-        - **Reject**: explain why the finding doesn't apply
+        **Step 4.0b — Attack the draft's substance yourself.** Put on the adversarial
+        reviewer hat. Voice and authenticity are handled later by the de-AI pass — here you
+        judge arguments, evidence, and positioning:
+        - **Thesis strength**: Is the thesis clear and defensible, or a truism? Swap it for
+          its opposite — would the post read equally well? If so, it has no teeth.
+        - **Evidence audit**: For each major claim, is the evidence sufficient or asking for
+          faith? Cherry-picked examples? Correlation dressed as causation? Are the numbers
+          real and verifiable?
+        - **Intellectual honesty**: Where does it oversimplify or softball trade-offs? Does
+          it engage the strongest competing approach, or build a strawman?
+        - **Product positioning smell test**: Remove every Reliant mention — does the
+          argument still stand? Are mentions earned, or dropped where the reader's guard is
+          down? Would a skeptical senior engineer feel handled?
+        - **"So what" + insight test**: After reading, what can the reader DO that they
+          couldn't before? Does the post contain at least one claim that would surprise a
+          thoughtful practitioner, or is it just summarizing what they already believe?
 
-        Track decisions in evaluation-report.md. Apply accepted/modified changes to the blog post.
+        For each finding, decide: apply the fix, apply a different fix, or note why it
+        doesn't apply. Track decisions in evaluation-report.md and apply accepted changes to
+        the blog post.
 
         ## Stage 2: Quality Evaluation
 
@@ -1256,7 +948,7 @@ nodes:
         **Step 4.4 — Prepare human evaluation package.**
         - Agent Q1-Q3 results (one-sentence summaries)
         - Fact-check results summary (any unverified claims)
-        - DA feedback triage summary
+        - Content critique triage summary
         - For Q4 (positioning): extract every product mention with surrounding context. Count mentions, percentage, sections.
         - For Q5 (peer test): state thesis, target reader, attach full post.
         - Top 3 title candidates for human selection.
@@ -1302,7 +994,7 @@ nodes:
         role: user
         content: |
           ## Phase 4: Evaluation
-          Read the writing draft at `blog-output/{slug}/phase-3-writing/blog-post.md`, the copy-edited draft at `blog-output/{slug}/phase-3.5-copyedit/blog-post.md`, the edit log at `blog-output/{slug}/phase-3.5-copyedit/edit-log.md`, the brief at `blog-output/{slug}/phase-2-research/brief.md`, and both devil's advocate critiques at `blog-output/{slug}/phase-3.6-devils-advocate/`. Merge copyedit changes with DA feedback, run Q1-Q3, fact-check claims, test titles, and prepare the human evaluation package.
+          Read the writing draft at `blog-output/{slug}/phase-3-writing/blog-post.md` and the brief at `blog-output/{slug}/phase-2-research/brief.md`. Run your own adversarial content critique, then Q1-Q3, fact-check claims, test titles, and prepare the human evaluation package.
 
           ---
           ## Style Guide
@@ -1592,250 +1284,94 @@ nodes:
         {{output.response_text}}
 
   # ==========================================================================
-  # PHASE 7: De-AI Pass (paragraph-by-paragraph colloquialism scrub)
+  # PHASE 7: De-AI Pass (iterative voice polish via get-it-right)
   # ==========================================================================
-  - id: deai_prep
+  # One editor->reviewer loop (up to 10 iterations) replaces the old
+  # copyedit + style devil's-advocate + paragraph-manifest rewrite loop.
+  # The editor forks fresh each pass but reads the reviewer's accumulated
+  # feedback (context_bridge: feedback_only); the edited file on disk is the
+  # shared memory, so no manifest / progress coordination files are needed.
+  - id: de_ai
     type: workflow
-    ref: builtin://agent
-    presets:
-      default: general
+    ref: builtin://get-it-right
+    passthrough: [model, mode, ask]
     args:
-      tools: "{{inputs.tools}}"
-      model: "{{inputs.model}}"
-      mode: auto
-      system_prompt: |
-        You are a content pipeline preparation agent for Reliant Labs, currently in Phase 7: De-AI Pass (Preparation).
+      implementer_preset: general
+      max_retries: 10
+      context_bridge: feedback_only
+      review_instructions: |
+        You are the authenticity reviewer for the de-AI pass. You do NOT edit the
+        post -- you read the current draft on disk and judge how human it reads, then
+        hand the editor a concrete punch-list for the next pass.
 
-        ## AUTONOMOUS EXECUTION
-        You are running inside an automated pipeline. There may not be a human in the loop.
-        Proceed through manifest creation without waiting for external input.
+        ## Which file
+        Read the assembled post at `blog-output/{slug}/final/blog-post.md`. Discover the
+        slug by listing `blog-output/` (use the most recently modified post directory) or
+        from the conversation history above.
 
-        ## Your Role
-        Read the final assembled blog post and create a paragraph manifest that will drive the paragraph-by-paragraph de-AI editing loop.
+        ## Strategy -- READ THIS
+        You may ONLY choose strategy "pass" or "continue". NEVER "refactor" or "stuck".
+        - "refactor" triggers a git undo that would destroy the de-AI edits -- never use it.
+        - "continue" -- the post still has AI tells or reads synthetically. List them.
+        - "pass" -- the post reads like genuine practitioner writing (authenticity >= 4/5).
 
-        ## CRITICAL: Parallel Safety & Slug Discovery
-        This pipeline runs in parallel with other blog post pipelines. ALL output MUST be written under `blog-output/{slug}/`.
-        To find your post's slug: check the conversation history for prior phase outputs, or list `blog-output/` to identify the directory for this post.
+        ## How to judge (authenticity 1-5)
+        Score the whole post 1-5:
+        - 5: indistinguishable from a human practitioner's writing
+        - 4: mostly human, at most 1-2 minor tells
+        - 3: readable but with noticeable AI patterns
+        - 2: clearly AI despite surface fixes
+        - 1: obviously AI-generated
+        Choose "pass" ONLY at >= 4. Below that, choose "continue" with a punch-list.
 
-        ## Process
+        ## What to look for (the colloquialisms checklist is your primary rubric)
+        - Em-dashes where commas/periods belong; too-perfect parallel structure.
+        - "Not just X, but Y"; filler transitions (however/moreover/furthermore/ultimately).
+        - Uniform sentence rhythm; emotionally flat, evenly-polished paragraphs.
+        - AI-signature words (delve, crucial, robust, streamline, leverage, nuanced).
+        - Vague confidence without firsthand detail; tidy takeaways; sanitized opinions.
+        - Read three consecutive paragraphs: do they share one temperature? Flag it.
 
-        1. Read the final blog post at `blog-output/{slug}/final/blog-post.md`.
-        2. Identify every PROSE paragraph. A prose paragraph is a contiguous block of non-empty lines that is NOT:
-           - A markdown header (lines starting with #)
-           - A horizontal rule (---)
-           - An image tag (lines starting with ![)
-           - An HTML comment (<!-- ... -->)
-           - A code block (``` ... ```)
-           - A bullet-point list item (lines starting with - or *)
-           - An empty line
-           - A metadata line (e.g., "*Post N of N in Series*")
-        3. For each prose paragraph, record:
-           - `index`: 0-based sequential index
-           - `start_line`: 1-indexed first line of the paragraph in the file
-           - `end_line`: 1-indexed last line of the paragraph (inclusive)
-           - `content`: the full paragraph text exactly as it appears
-           - `before_context`: the preceding prose paragraph text (empty string if first)
-           - `after_context`: the following prose paragraph text (empty string if last)
-        4. Write the manifest as JSON to `blog-output/{slug}/phase-7-deai/manifest.json` with structure:
-           ```json
-           {
-             "file": "blog-output/{slug}/final/blog-post.md",
-             "paragraph_count": N,
-             "paragraphs": [
-               {
-                 "index": 0,
-                 "start_line": 5,
-                 "end_line": 7,
-                 "content": "The full paragraph text...",
-                 "before_context": "",
-                 "after_context": "The next paragraph text..."
-               }
-             ]
-           }
-           ```
-        5. After writing, read the file back to verify it's valid JSON and paragraph count is correct.
-
-        ## Before Completing
-        State the paragraph count and the file path clearly.
+        ## Feedback format
+        In `feedback`, give the editor a specific, actionable punch-list: quote the
+        offending sentence, name the tell, and say what a real engineer would write
+        instead. Prioritize the 5-10 worst offenders each pass. Note which sections have
+        already improved so the editor does not re-touch them.
     thread:
       mode: fork
-      memo: true
       inject:
         role: user
         content: |
-          ## Phase 7 Prep: De-AI Pass
-          Read the final blog post at `blog-output/{slug}/final/blog-post.md` and create the paragraph manifest for the de-AI editing loop. Write the manifest to `blog-output/{slug}/phase-7-deai/manifest.json`.
-    save_message:
-      role: assistant
-      content: |
-        ## Phase 7 Prep Complete: De-AI Manifest
-        {{output.response_text}}
+          ## Phase 7: De-AI Pass
+          Iteratively rewrite the assembled blog post so it reads like a human
+          practitioner wrote it -- not AI-generated marketing.
 
-  - id: deai_loop
-    type: loop
-    while: "outputs.exit_code == 0 && iter.iteration < 10"
-    inline:
-      entry: [rewrite]
-      outputs:
-        exit_code: "{{nodes.check_continue.exit_code}}"
-      nodes:
-        # --- Rewriter: produces 2 alternative rewrites for one paragraph ---
-        - id: rewrite
-          type: workflow
-          ref: builtin://agent
-          presets:
-            default: general
-          args:
-            tools: ["tag:readonly"]
-            model: "{{inputs.model}}"
-            mode: auto
-            system_prompt: |
-              You are a paragraph rewriter specializing in removing LLM colloquialisms from technical writing.
+          **File to edit:** `blog-output/{slug}/final/blog-post.md` (in place). Discover
+          the slug by listing `blog-output/` (most recently modified post directory).
 
-              ## Your ONLY Job
-              Produce exactly 2 alternative rewrites of a single paragraph, plus preserve the original as a third option.
+          **Each pass:** read the current draft and the reviewer's punch-list from the
+          messages above, then apply targeted edits to the flagged sentences. Preserve
+          meaning, facts, citations, and links. Keep each paragraph within +/-1 sentence
+          of the original -- do not expand or compress. When neither a rewrite nor the
+          original is clearly better, keep the original: a lateral change is worse than
+          no change.
 
-              ## Constraints
-              - Do NOT edit any files. You have read-only access. Your job is to produce options only.
-              - Keep the same technical meaning, facts, citations, and links.
-              - Preserve the author's voice — make it sound more human, not different.
-              - Focus on the colloquialisms checklist. If the paragraph has none, say so.
-              - Each rewrite should be the SAME number of sentences (±1) as the original. Do not drastically expand or compress.
+          Do NOT create manifests or progress files -- edit the post file directly. The
+          reviewer reads the same file to judge convergence.
 
-              ## Output Format
-              Respond with EXACTLY this structure:
+          ---
+          ## Style Guide
+          {{inputs.style_guide}}
 
-              PARAGRAPH_INDEX: [number]
-
-              ORIGINAL:
-              [the exact paragraph text from the manifest]
-
-              OPTION_A:
-              [rewrite focusing on removing the most obvious LLM tells: em dashes, parallel structure, "not just X but Y", hedging, filler transitions]
-
-              OPTION_B:
-              [rewrite that also restructures sentence rhythm: break symmetry, vary sentence length, add rough edges, make it sound less polished]
-
-              CHANGES_A:
-              - [change 1]
-              - [change 2]
-
-              CHANGES_B:
-              - [change 1]
-              - [change 2]
-
-              NO_ISSUES: [true if the paragraph has no colloquialisms worth fixing, false otherwise]
-
-              If NO_ISSUES is true, still output the original text as both OPTION_A and OPTION_B.
-          thread:
-            mode: inherit
-            inject:
-              role: user
-              content: |
-                Process paragraph index {{iter.iteration}}.
-
-                1. Find the manifest: look in `blog-output/` for a directory containing `phase-7-deai/manifest.json` and read it.
-                2. Find the paragraph entry with index {{iter.iteration}}. If that index does not exist in the manifest, respond with only: NO_MORE_PARAGRAPHS
-                3. The colloquialisms checklist and style guide are included below.
-                4. Produce your 2 alternative rewrites following your output format exactly.
-
-                ---
-                ## Style Guide
-                {{inputs.style_guide}}
-
-                ---
-                ## LLM Colloquialisms Checklist
-                {{inputs.colloquialisms}}
-
-        # --- Selector: evaluates options, picks the best, applies the edit ---
-        - id: select
-          type: workflow
-          ref: builtin://agent
-          presets:
-            default: general
-          args:
-            tools: "{{inputs.tools}}"
-            model: "{{inputs.model}}"
-            mode: auto
-            system_prompt: |
-              You are a paragraph selector for the de-AI editing pass. You evaluate rewrite options and apply the best one.
-
-              ## Your Job
-              1. Read the rewriter's three options (Original, Option A, Option B) from the conversation above.
-              2. Evaluate each against the colloquialisms checklist and style guide.
-              3. Select the best option.
-              4. Apply it to the actual blog post file using the edit tool.
-              5. Write progress status so the loop knows whether to continue.
-
-              ## Selection Criteria (in order of priority)
-              1. **Accuracy**: Does it preserve the original meaning, facts, and citations? If a rewrite changes meaning, reject it.
-              2. **Fewer LLM tells**: Does it reduce colloquialisms from the checklist?
-              3. **Natural voice**: Does it sound like a person wrote it, not a "competent explainer"?
-              4. **Flow**: Does it read well with the before_context and after_context paragraphs?
-
-              ## CRITICAL: Bias toward keeping the original
-              If neither rewrite is clearly better than the original, KEEP THE ORIGINAL.
-              A lateral move (different but not better) is worse than no change.
-              Do not change text for the sake of changing it.
-
-              ## Applying the Edit
-              If you selected OPTION_A or OPTION_B:
-              1. Read the manifest from `blog-output/*/phase-7-deai/manifest.json` to get the file path and the EXACT original paragraph text.
-              2. Use the edit tool with old_string = the exact original content from the manifest, and new_string = the selected rewrite.
-              3. Be precise — the old_string must match the file content exactly (whitespace included).
-
-              If you selected ORIGINAL, skip the edit.
-
-              ## Progress Status
-              After applying (or skipping), read the manifest to check if there are more paragraphs.
-              Write a file `blog-output/{slug}/phase-7-deai/progress.txt` containing:
-              - "continue" if the current paragraph index + 1 < paragraph_count
-              - "done" if this was the last paragraph
-
-              Replace {slug} with the actual slug from the manifest's file path.
-
-              ## Output Format
-              End your response with:
-              SELECTED: [ORIGINAL|A|B]
-              REASON: [1-2 sentence explanation]
-              APPLIED: [true|false]
-              STATUS: [continue|done]
-          thread:
-            mode: inherit
-            inject:
-              role: user
-              content: |
-                Evaluate the rewrite options above for paragraph {{iter.iteration}}.
-                Select the best one and apply it to the blog post file.
-                Then update the progress status file.
-
-        # --- Check whether to continue the loop ---
-        - id: check_continue
-          type: run
-          command: |
-            PROGRESS=$(find blog-output -name progress.txt -path '*/phase-7-deai/*' 2>/dev/null | head -1)
-            if [ -z "$PROGRESS" ]; then exit 1; fi
-            STATUS=$(cat "$PROGRESS" 2>/dev/null | tr -d '[:space:]')
-            [ "$STATUS" = "continue" ] && exit 0 || exit 1
-
-      edges:
-        - from: rewrite
-          default: select
-        - from: select
-          default: check_continue
-    thread:
-      mode: fork
-      memo: false
-      inject:
-        role: user
-        content: |
-          You are processing paragraph {{iter.iteration}} in the de-AI editing pass.
-          Your job: rewrite this single paragraph to remove LLM colloquialisms, then select the best version.
+          ---
+          ## LLM Colloquialisms Checklist
+          {{inputs.colloquialisms}}
     save_message:
       role: assistant
       content: |
         ## Phase 7 Complete: De-AI Pass
-        Paragraph-by-paragraph colloquialism scrub finished.
+        Grade: {{has(output.review_grade) ? output.review_grade : 'N/A'}}
+        Iterations: {{has(output.iterations) ? output.iterations : 'N/A'}}
 
   # ==========================================================================
   # PHASE 8: Reddit Summary
@@ -1982,12 +1518,6 @@ nodes:
       echo "Phase 3:"
       check_file "phase-3-writing/blog-post.md"
       check_file "phase-3-writing/self-audit-log.md"
-      echo "Phase 3.5:"
-      check_file "phase-3.5-copyedit/blog-post.md"
-      check_file "phase-3.5-copyedit/edit-log.md"
-      echo "Phase 3.6:"
-      check_file "phase-3.6-devils-advocate/content-critique.md"
-      check_file "phase-3.6-devils-advocate/style-critique.md"
       echo "Phase 4:"
       check_file "phase-4-evaluation/blog-post.md"
       check_file "phase-4-evaluation/evaluation-report.md"
@@ -1998,8 +1528,6 @@ nodes:
       echo "Phase 6 (Final):"
       check_file "final/blog-post.md"
       check_file "final/seo-metadata.md"
-      echo "Phase 7 (De-AI):"
-      check_file "phase-7-deai/manifest.json"
       echo "Phase 8 (Reddit):"
       check_file "final/reddit-post.md"
       echo ""
@@ -2029,12 +1557,6 @@ nodes:
         ├── phase-3-writing/
         │   ├── blog-post.md
         │   └── self-audit-log.md
-        ├── phase-3.5-copyedit/
-        │   ├── blog-post.md
-        │   └── edit-log.md
-        ├── phase-3.6-devils-advocate/
-        │   ├── content-critique.md
-        │   └── style-critique.md
         ├── phase-4-evaluation/
         │   ├── blog-post.md          ← Final revised version
         │   ├── evaluation-report.md
@@ -2045,13 +1567,10 @@ nodes:
         │   ├── visual-01.mmd / .excalidraw
         │   ├── visual-01.svg
         │   └── visual-01.png
-        ├── final/
-        │   ├── blog-post.md          ← Publication-ready with images (de-AI'd)
-        │   ├── seo-metadata.md
-        │   └── reddit-post.md        ← Reddit-ready summary
-        └── phase-7-deai/
-            ├── manifest.json         ← Paragraph manifest
-            └── progress.txt          ← Loop progress tracker
+        └── final/
+            ├── blog-post.md          ← Publication-ready, images added, de-AI'd in place
+            ├── seo-metadata.md
+            └── reddit-post.md        ← Reddit-ready summary
         ```
 
         Style guide and colloquialisms are injected via workflow inputs.
@@ -2063,21 +1582,7 @@ edges:
     default: research_brief
   - from: research_brief
     default: writing
-  # Fan-out: writing → copyedit, da_content, da_style all run in parallel
   - from: writing
-    default: copyedit
-  - from: writing
-    default: da_content
-  - from: writing
-    default: da_style
-  # Fan-in: all three must complete before evaluation
-  - from: copyedit
-    default: da_reviews_done
-  - from: da_content
-    default: da_reviews_done
-  - from: da_style
-    default: da_reviews_done
-  - from: da_reviews_done
     default: evaluation
   - from: evaluation
     default: visual_generation
@@ -2085,10 +1590,8 @@ edges:
   - from: visual_generation
     default: distribution
   - from: distribution
-    default: deai_prep
-  - from: deai_prep
-    default: deai_loop
-  - from: deai_loop
+    default: de_ai
+  - from: de_ai
     default: reddit_summary
   - from: reddit_summary
     default: validate_artifacts
