@@ -23,28 +23,12 @@ const tourParam = z.enum(ONBOARDING_STEP_IDS).optional();
 
 export const launchPlanSchema = z
   .object({
-    intent: z
-      .enum([
-        "build_app",
-        "existing_codebase",
-        // Keep in sync with OnboardingIntent in
-        // components/OnboardingFlow/types.ts — "migrate" was added there
-        // but the URL schema drifted, so a plan carrying it failed to
-        // round-trip through the route's validateSearch.
-        "migrate",
-        "landing_page",
-        "pitch_deck",
-        "blog_post",
-        "custom_workflow",
-        "explore",
-      ])
-      .optional(),
+    // Keep in sync with OnboardingIntent in
+    // components/OnboardingFlow/types.ts — only the two values the rendered
+    // wizard can set are accepted here.
+    intent: z.enum(["build_app", "existing_codebase"]).optional(),
     compute: z
       .enum(["cloud_free_trial", "cloud_paid", "local_daemon", "undecided"])
-      .optional(),
-    daemonLocation: z.enum(["reliant_cloud", "self_hosted"]).optional(),
-    codeSource: z
-      .enum(["new_project", "github_repo", "local_folder", "sample_project"])
       .optional(),
     repo: z
       .object({
@@ -56,8 +40,6 @@ export const launchPlanSchema = z
     localPath: z.string().optional(),
     projectName: z.string().optional(),
     workflowId: z.string().optional(),
-    presetId: z.string().optional(),
-    useForge: z.boolean().optional(),
     modelProvider: z
       .enum([
         "reliant_credits",
@@ -69,8 +51,6 @@ export const launchPlanSchema = z
       ])
       .optional(),
     workflowParams: z.record(z.string(), z.unknown()).optional(),
-    selectedPresets: z.record(z.string(), z.string().nullable()).optional(),
-    launchTour: z.boolean().optional(),
     daemonProvisioning: z.boolean().optional(),
   })
   .strict();
@@ -115,6 +95,20 @@ export const oauthCallbackSearchSchema = z.object({
   returnTo: z.string().optional(),
 });
 
+// Search params for `/auth/github/callback` — the app-owned GitHub OAuth
+// connect callback. GitHub redirects here with `code` + `state` on success, or
+// `error` + `error_description` on denial. The route exchanges the code via the
+// ExchangeGithubOAuthCode RPC (state carries identity), then navigates to the
+// decoded returnTo. Owning this route in the SPA (rather than proxying to the
+// control-plane GET handler) is what makes the flow work on Firebase, whose
+// SPA-rewrites can't proxy to the GKE backend.
+export const githubOAuthCallbackSearchSchema = z.object({
+  code: z.string().optional(),
+  state: z.string().optional(),
+  error: z.string().optional(),
+  error_description: z.string().optional(),
+});
+
 export const proxyAuthSearchSchema = z.object({
   return: z.string().optional(),
 });
@@ -147,11 +141,12 @@ export const SETTINGS_SECTION_IDS = [
   "tokens",
   "git-connections",
   "developer",
-  "cloud-overview",
-  "cloud-environments",
-  "cloud-ai",
-  "cloud-billing",
-  "cloud-organization",
+  // Cloud settings sections — in-app control-plane (controlplane.v1) surfaces
+  // that replaced the external "Manage cloud account" portal link. Routes:
+  // /settings/billing, /settings/environments, /settings/reliant-ai.
+  "billing",
+  "environments",
+  "reliant-ai",
 ] as const;
 export type SettingsSection = (typeof SETTINGS_SECTION_IDS)[number];
 export const DEFAULT_SETTINGS_SECTION: SettingsSection = "account";

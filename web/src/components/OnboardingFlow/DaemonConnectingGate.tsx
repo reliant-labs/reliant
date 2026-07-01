@@ -19,6 +19,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import {
   AlertCircle,
   CheckCircle2,
@@ -27,7 +28,6 @@ import {
   RotateCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getAdminURL } from "@/lib/constants";
 import {
   DAEMON_STATUS_ACTIVE,
   DAEMON_STATUS_FAILED,
@@ -102,6 +102,7 @@ export function DaemonConnectingGate({
   onContinue,
   daemonRef,
 }: DaemonConnectingGateProps) {
+  const navigate = useNavigate();
   // `attemptStartedAt` resets on Retry, which both resets the elapsed clock
   // and triggers a fresh refetch.
   const [attemptStartedAt, setAttemptStartedAt] = useState(() => Date.now());
@@ -192,7 +193,7 @@ export function DaemonConnectingGate({
             Connected
           </h2>
           <p className="text-sm text-muted-foreground">
-            Your daemon is ready. You can start chatting now.
+            Your environment is ready. You can start chatting now.
           </p>
         </div>
         <button
@@ -207,12 +208,15 @@ export function DaemonConnectingGate({
   }
 
   if (phase === "failed") {
-    const adminURL = getAdminURL();
-    const logsHref = adminURL && daemon?.id
-      ? `${adminURL.replace(/\/$/, "")}/workspaces/${encodeURIComponent(daemon.id)}`
-      : adminURL
-        ? `${adminURL.replace(/\/$/, "")}/workspaces`
-        : undefined;
+    // In-app: route to the Environments settings section, deep-linking to the
+    // failing daemon's detail view when we know its id (the section reads the
+    // `daemon` search param via useSearch({ strict: false })).
+    const goToEnvironments = () =>
+      navigate({
+        to: "/settings/$section",
+        params: { section: "environments" },
+        search: daemon?.id ? { daemon: daemon.id } : {},
+      });
 
     return (
       <div
@@ -241,19 +245,16 @@ export function DaemonConnectingGate({
             <RotateCw className="h-4 w-4" />
             Retry
           </button>
-          {logsHref && (
-            <a
-              href={logsHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={cn(
-                "flex w-full items-center justify-center gap-2 rounded-lg border border-border/40 bg-background py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted",
-              )}
-            >
-              <ExternalLink className="h-4 w-4" />
-              View logs
-            </a>
-          )}
+          <button
+            type="button"
+            onClick={goToEnvironments}
+            className={cn(
+              "flex w-full items-center justify-center gap-2 rounded-lg border border-border/40 bg-background py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted",
+            )}
+          >
+            <ExternalLink className="h-4 w-4" />
+            View environment
+          </button>
           <button
             type="button"
             onClick={onContinue}
@@ -279,7 +280,7 @@ export function DaemonConnectingGate({
       </div>
       <div className="space-y-1">
         <h2 className="text-xl font-semibold tracking-tight text-foreground">
-          Connecting your daemon...
+          Connecting your environment...
         </h2>
         <p className="text-sm text-muted-foreground">
           Hang tight — your hosted workspace is coming online.

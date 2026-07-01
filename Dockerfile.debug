@@ -1,0 +1,63 @@
+# Dockerfile.debug — dlv-enabled variant of the Reliant image.
+#
+# Minimal hook for cross-repo debugging of the IN-CLUSTER daemon-gateway (and
+# the other reliant server roles) with `forge debug`. This is NOT a forge
+# adoption — it is a single self-contained debug image that wraps the same
+# `reliant` entrypoint in a headless Delve server.
+#
+# The binary is built with debug info preserved (-gcflags=all=-N -l, no
+# symbol stripping) and launched under `dlv exec --headless` so a debugger can
+# attach over the network.
+#
+#   Build:
+#     docker build -f Dockerfile.debug -t reliant:debug .
+#
+#   Run a role under Delve (gateway shown; api/worker identical):
+#     docker run -p 2345:2345 -p 29190:29190 reliant:debug server gateway
+#
+#   In-cluster (daemon-gateway pod): deploy this image instead of the prod
+#   image, then port-forward the Delve port and point `forge debug` at it:
+#     kubectl -n <ns> port-forward deploy/daemon-gateway 2345:2345
+#     # forge debug start --attach is for host PIDs; for a remote dlv server,
+#     # connect a debugger (dlv connect 127.0.0.1:2345 / IDE) to the
+#     # forwarded port. The Delve server runs --accept-multiclient so the
+#     # pod keeps serving while you attach/detach.
+#
+# DELVE_LISTEN overrides the listen address (default :2345).
+# DELVE_CONTINUE=1 starts the target running immediately (don't halt at entry)
+# so the pod becomes Ready without a debugger attached first.
+
+# ── Build (debug symbols preserved) ──────────────────────────────────────────
+FROM --platform=$BUILDPLATFORM us-docker.pkg.dev/reliant-nonprod-490701/dockerhub/library/golang@sha256:f85330846cde1e57ca9ec309382da3b8e6ae3ab943d2739500e08c86393a21b1 AS builder
+ARG TARGETARCH
+RUN apk add --no-cache git
+WORKDIR /app
+ENV GOWORK=off
+COPY go.mod go.sum ./
+RUN go mod download
+# Pin a Delve version compatible with the toolchain; installed into GOBIN.
+RUN go install github.com/go-delve/delve/cmd/dlv@latest
+COPY . .
+# -gcflags=all=-N -l: disable optimizations + inlining so Delve can map every
+# line and inspect every variable. No -ldflags=-s -w (keep the symbol table).
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg \
+    CGO_ENABLED=0 GOARCH=${TARGETARCH} go build -gcflags=all="-N -l" -o /reliant ./cmd/reliant/
+
+# ── Runtime ──────────────────────────────────────────────────────────────────
+FROM us-docker.pkg.dev/reliant-nonprod-490701/dockerhub/library/debian@sha256:60eac759739651111db372c07be67863818726f754804b8707c90979bda511df
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates tzdata git && \
+    rm -rf /var/lib/apt/lists/* && \
+    groupadd -g 65532 nonroot && \
+    useradd -u 65532 -g 65532 -s /usr/sbin/nologin -M nonroot && \
+    mkdir -p /data && chown nonroot:nonroot /data
+COPY --from=builder /reliant /usr/local/bin/reliant
+COPY --from=builder /go/bin/dlv /usr/local/bin/dlv
+COPY scripts/dlv-entrypoint.sh /usr/local/bin/dlv-entrypoint.sh
+# Delve's debug listen port. The role's own ports (e.g. gateway 29190) are
+# exposed by the deploy manifest as usual.
+EXPOSE 2345
+USER 65532:65532
+# The entrypoint wraps `reliant <args>` in a headless Delve server.
+ENTRYPOINT ["/usr/local/bin/dlv-entrypoint.sh"]

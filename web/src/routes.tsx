@@ -1,6 +1,7 @@
 import { createRootRoute, createRoute, createRouter, Outlet, Navigate } from '@tanstack/react-router'
 import {
   authSearchSchema,
+  githubOAuthCallbackSearchSchema,
   indexSearchSchema,
   oauthCallbackSearchSchema,
   onboardingSearchSchema,
@@ -12,6 +13,7 @@ import {
 import { ErrorFallbackUI } from './components/ErrorBoundary'
 import { AuthScreen } from './components/AuthScreen'
 import { OAuthCallback } from './components/OAuthCallback'
+import { GitHubOAuthCallback } from './components/GitHubOAuthCallback'
 import { ProxyAuth } from './components/ProxyAuth'
 import { ResetPasswordScreen } from './components/ResetPasswordScreen'
 import { EmailVerification } from './components/EmailVerification'
@@ -22,6 +24,7 @@ import { SettingsPage } from './components/Settings/SettingsPage'
 import { WorkflowPage } from './components/workflow/WorkflowPage'
 import { OnboardingRoute } from './components/OnboardingFlow/OnboardingRoute'
 import { ModalLayer } from './components/Modals/ModalLayer'
+import { AnonSignInNudge } from './components/AnonSignInNudge'
 import { Toaster } from './lib/toast'
 import { ContextualTipsLayer, OnboardingWizard } from './components/Onboarding'
 import { GitHubSyncStatus } from './components/Layout/GitHubSyncBanner'
@@ -54,6 +57,7 @@ const rootRoute = createRootRoute({
     <>
       <Outlet />
       <ModalLayer />
+      <AnonSignInNudge />
       <Toaster />
       <ContextualTipsLayer />
       <GitHubSyncStatus />
@@ -85,6 +89,18 @@ const oauthCallbackRoute = createRoute({
   path: '/auth/callback',
   validateSearch: oauthCallbackSearchSchema,
   component: OAuthCallback,
+})
+
+// App-owned GitHub OAuth connect callback. GITHUB_REDIRECT_URI points GitHub at
+// this app route (localhost:3000 dev / app.reliantlabs.io prod) so the flow works
+// on Firebase, whose SPA-rewrites can't proxy the callback to the GKE backend.
+// The component exchanges the code via the ExchangeGithubOAuthCode RPC. Public:
+// state carries identity, and the user may not have an app session in this tab.
+const githubOAuthCallbackRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/auth/github/callback',
+  validateSearch: githubOAuthCallbackSearchSchema,
+  component: GitHubOAuthCallback,
 })
 
 const proxyAuthRoute = createRoute({
@@ -263,6 +279,7 @@ const onboardingRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   authRoute,
   oauthCallbackRoute,
+  githubOAuthCallbackRoute,
   proxyAuthRoute,
   resetPasswordRoute,
   verifyEmailRoute,

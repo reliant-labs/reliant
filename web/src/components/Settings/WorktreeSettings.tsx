@@ -113,7 +113,7 @@ export function WorktreeSettings() {
             <PreferenceToggleRow
               icon={<FolderX className="h-4 w-4" />}
               title="Delete workspace directory"
-              description="Remove files from ~/.reliant/worktrees when archiving."
+              description="Delete the workspace's files from disk when archiving."
               checked={preferences?.worktree.defaultDeleteDirectory ?? true}
               disabled={isSaving}
               onChange={() =>

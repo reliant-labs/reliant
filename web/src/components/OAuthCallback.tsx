@@ -11,7 +11,19 @@ export function OAuthCallback() {
   const search = useSearch({ from: '/auth/callback' })
   const { setUser, setSession } = useAuthStore()
   const [error, setError] = useState<string | null>(null)
+  const [alreadyRegistered, setAlreadyRegistered] = useState(false)
   const exchanged = useRef(false)
+
+  // Return the user to where they came from (their still-intact anon session),
+  // honoring only same-origin relative paths to avoid open-redirect issues.
+  const goBack = () => {
+    const rt = search.returnTo
+    if (rt && rt.startsWith('/') && !rt.startsWith('//')) {
+      window.location.assign(rt)
+      return
+    }
+    navigate({ to: '/', search: {} })
+  }
 
   useEffect(() => {
     if (exchanged.current) return
@@ -23,7 +35,16 @@ export function OAuthCallback() {
       if (errorParam) {
         let friendlyMessage = 'Authentication failed'
 
-        if (errorDescription?.includes('Multiple accounts') || errorDescription?.includes('same email')) {
+        if (errorParam === 'identity_already_exists' ||
+            errorDescription?.includes('already linked') ||
+            errorDescription?.includes('already registered') ||
+            errorDescription?.includes('Identity is already linked')) {
+          // Anon user tried to link an identity that already belongs to another
+          // account. Do NOT sign them in as that user — that discards the anon
+          // session's chats/code. Just inform them; their session stays intact.
+          friendlyMessage = 'This account is already registered. Your current session is intact — your chats and workspaces are safe.'
+          setAlreadyRegistered(true)
+        } else if (errorDescription?.includes('Multiple accounts') || errorDescription?.includes('same email')) {
           friendlyMessage = 'An account with this email already exists. Please sign in with your existing method first, then link your OAuth provider in settings.'
         } else if (errorDescription?.includes('denied') || errorDescription?.includes('cancelled')) {
           friendlyMessage = 'Authorization cancelled. Please try again.'
@@ -91,16 +112,20 @@ export function OAuthCallback() {
           <div className="max-w-md w-full bg-background border border-border rounded-lg shadow-xl p-8 space-y-6">
             <div className="flex flex-col items-center gap-4">
               <BrandMark className="h-8 w-8" />
-              <h2 className="text-xl font-semibold text-destructive">Authentication Failed</h2>
+              <h2 className={`text-xl font-semibold ${alreadyRegistered ? 'text-foreground' : 'text-destructive'}`}>
+                {alreadyRegistered ? 'Account already registered' : 'Authentication Failed'}
+              </h2>
             </div>
-            <div className="rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 p-4">
-              <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+            <div className={alreadyRegistered
+              ? 'rounded-lg bg-muted border border-border p-4'
+              : 'rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 p-4'}>
+              <p className={`text-sm ${alreadyRegistered ? 'text-muted-foreground' : 'text-red-800 dark:text-red-200'}`}>{error}</p>
             </div>
             <button
-              onClick={() => navigate({ to: '/auth', search: { redirect: undefined } })}
+              onClick={alreadyRegistered ? goBack : () => navigate({ to: '/auth', search: { redirect: undefined } })}
               className="w-full flex justify-center py-2.5 px-4 border border-border rounded-lg text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 transition-colors"
             >
-              Back to Sign In
+              {alreadyRegistered ? 'Continue' : 'Back to Sign In'}
             </button>
           </div>
         </div>

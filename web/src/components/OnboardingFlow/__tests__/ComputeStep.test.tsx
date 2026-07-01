@@ -198,7 +198,6 @@ describe("ComputeStep loading gate", () => {
     expect(updatePlan).toHaveBeenCalledWith(
       expect.objectContaining({
         compute: "local_daemon",
-        daemonLocation: "self_hosted",
       }),
     );
     expect(onNext).toHaveBeenCalledTimes(1);

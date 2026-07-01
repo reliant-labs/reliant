@@ -11,13 +11,25 @@ import { WorkspacesSection } from "./WorkspacesSection";
 import { BrowserSettings } from "./BrowserSettings";
 import { TokenSettings } from "./TokenSettings";
 import { GitConnectionsSettings } from "./GitConnectionsSettings";
-import { CloudSection } from "./CloudSection";
 import type { SettingsSection } from "./SettingsNavigation";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { PromptsSettings } from "./PromptsSettings";
 import { useProjectStore } from "../../store/projectStore";
 import { api } from "../../api/client";
 import { ProjectPanel } from "../Projects/ProjectPanel";
+
+// Cloud settings sections are lazy-loaded so they code-split out of the main
+// SettingsContent chunk — they're only fetched when the user opens a cloud
+// section. Named exports are adapted to the default export React.lazy expects.
+const BillingSection = lazy(() =>
+  import("./cloud/billing").then((m) => ({ default: m.BillingSection }))
+);
+const EnvironmentsSection = lazy(() =>
+  import("./cloud/environments").then((m) => ({ default: m.EnvironmentsSection }))
+);
+const ReliantAISection = lazy(() =>
+  import("./cloud/reliantAI").then((m) => ({ default: m.ReliantAISection }))
+);
 
 interface SettingsContentProps {
   activeSection: SettingsSection;
@@ -95,9 +107,6 @@ export function SettingsContent({
     if (activeSection === "developer") {
       return <DeveloperSettings />;
     }
-    if (activeSection.startsWith("cloud-")) {
-      return <CloudSection section={activeSection} />;
-    }
     return (
       <CombinedGeneralSettings
         providers={providers}
@@ -129,6 +138,43 @@ export function SettingsContent({
     return (
       <div className="h-full overflow-hidden bg-background">
         <WorkspacesSection />
+      </div>
+    );
+  }
+
+  // Cloud settings sections. Rendered inside the `.cloud-settings` scoped
+  // treatment (Inter + admin-like density) with a wider container than the
+  // generic settings card so their data tables have room to breathe. The id →
+  // component map is the contract the vertical agents plug into:
+  //   billing        → <BillingSection/>      (./cloud/billing)
+  //   environments   → <EnvironmentsSection/> (./cloud/environments)
+  //   reliant-ai     → <ReliantAISection/>    (./cloud/reliantAI)
+  if (
+    activeSection === "billing" ||
+    activeSection === "environments" ||
+    activeSection === "reliant-ai"
+  ) {
+    const CloudSection =
+      activeSection === "billing"
+        ? BillingSection
+        : activeSection === "environments"
+          ? EnvironmentsSection
+          : ReliantAISection;
+    return (
+      <div className="cloud-settings h-full overflow-auto bg-background px-8 py-8">
+        <div className="mx-auto max-w-5xl">
+          <Suspense
+            fallback={
+              <div className="flex h-full items-center justify-center">
+                <div className="rounded-lg border border-border/50 bg-card px-4 py-3 text-sm text-muted-foreground">
+                  Loading…
+                </div>
+              </div>
+            }
+          >
+            <CloudSection />
+          </Suspense>
+        </div>
       </div>
     );
   }

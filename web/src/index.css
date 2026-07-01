@@ -271,6 +271,42 @@
     --font-sans: 'Comic Sans MS', 'Chalkboard SE', 'Comic Neue', cursive, sans-serif;
   }
 
+  /*
+   * Inter (variable, roman) — vendored under web/public/fonts so the cloud
+   * settings sections have the admin-web typeface with no runtime dependency
+   * on fonts.gstatic.com. Declaring the @font-face here also makes the
+   * existing `data-font="inter"` preference resolve to a real bundled font
+   * instead of a system fallback (additive, harmless).
+   */
+  @font-face {
+    font-family: 'Inter';
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url('/fonts/Inter-roman.woff2') format('woff2');
+  }
+
+  /*
+   * Scoped cloud-settings treatment. Wraps the in-app cloud settings sections
+   * (Billing / Environments / Reliant AI) so they LOOK like admin-web — Inter
+   * typeface, tabular numerals for tables, admin-like density — WITHOUT
+   * globally restyling the rest of reliant-web. Colors still come from
+   * reliant's semantic tokens (bg-card, text-foreground, …) so light/dark
+   * both work; this class only owns typography + rhythm, never color.
+   */
+  .cloud-settings {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+      'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -0.006em;
+  }
+
+  /* Tabular figures make the money/usage columns in tables line up. */
+  .cloud-settings table {
+    font-feature-settings: 'tnum' 1, 'cv01' 1;
+  }
+
 
   /* Chat Font Settings */
   :root {

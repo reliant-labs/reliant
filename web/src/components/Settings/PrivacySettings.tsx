@@ -43,9 +43,6 @@ export function PrivacySettings() {
               identify and fix issues. This includes stack traces and diagnostic
               information.
             </p>
-            <p className="text-xs text-muted-foreground">
-              Provider: <span>Sentry</span>
-            </p>
           </div>
           <Toggle
             checked={crashReportingEnabled}
@@ -64,9 +61,6 @@ export function PrivacySettings() {
               Collect anonymous usage statistics and feature analytics to help
               us understand how the application is used and improve user
               experience.
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Provider: <span>Statsig</span>
             </p>
           </div>
           <Toggle

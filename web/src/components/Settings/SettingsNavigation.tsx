@@ -1,9 +1,7 @@
 import { cn } from "../../lib/utils";
-import { Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, FolderOpen, Globe, FolderGit2, Bell, KeyRound, Github, Server, CreditCard, LayoutDashboard, Building2, ExternalLink } from "lucide-react";
+import { Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, FolderOpen, Globe, FolderGit2, Bell, KeyRound, Github, CreditCard, Server, Bot, ExternalLink } from "lucide-react";
 import { McpIcon } from "../icons/McpIcon";
 import { hasControlPlane } from "../../services/controlPlane/config";
-import { getAdminURL } from "../../lib/constants";
-import { openExternalLink } from "../../lib/open-link";
 import type { SettingsSection } from "../../routeSchemas";
 
 export type { SettingsSection };
@@ -15,11 +13,15 @@ interface SettingsNavigationProps {
 }
 
 interface SectionItem {
-  id: SettingsSection;
+  /**
+   * Stable key. For in-app sections this is a routable {@link SettingsSection}.
+   * For `external` items it's only used as a React key + collapsed-nav filter —
+   * the click opens an external URL and never calls `onSectionChange`.
+   */
+  id: SettingsSection | string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   external?: boolean;
-  adminPath?: string;
 }
 
 interface SectionGroup {
@@ -37,13 +39,16 @@ const sectionGroups: SectionGroup[] = [
   {
     label: "Cloud",
     items: [
+      // In-app cloud settings. These replaced the old external "Manage cloud
+      // account" portal link — the overview / environments / AI / billing nav
+      // now lives inside the app as first-party /settings sections backed by
+      // controlplane.v1 public RPCs. Gated on hasControlPlane because they're
+      // meaningless without a control-plane backend.
       ...(hasControlPlane
         ? [
-            { id: "cloud-overview" as SettingsSection, label: "Overview", icon: LayoutDashboard, external: true, adminPath: "/dashboard" },
-            { id: "cloud-environments" as SettingsSection, label: "Environments", icon: Server, external: true, adminPath: "/workspaces" },
-            { id: "cloud-ai" as SettingsSection, label: "AI Management", icon: Sparkles, external: true, adminPath: "/ai" },
-            { id: "cloud-billing" as SettingsSection, label: "Billing", icon: CreditCard, external: true, adminPath: "/billing" },
-            { id: "cloud-organization" as SettingsSection, label: "Organization", icon: Building2, external: true, adminPath: "/settings" },
+            { id: "billing", label: "Billing", icon: CreditCard },
+            { id: "environments", label: "Environments", icon: Server },
+            { id: "reliant-ai", label: "Reliant AI", icon: Bot },
           ]
         : []),
       { id: "git-connections", label: "GitHub", icon: Github },
@@ -84,20 +89,27 @@ const sectionGroups: SectionGroup[] = [
   },
 ];
 
-/** Section IDs in sidebar display order; use for keyboard nav so it matches the visible list. */
-export function getVisibleSettingsSectionIds(): SettingsSection[] {
+function isDevBuild(): boolean {
   const isElectron = window.RELIANT_CONFIG?.isElectron;
-  const isDevelopment = isElectron ? window.RELIANT_CONFIG?.isDev : true;
+  return isElectron ? Boolean(window.RELIANT_CONFIG?.isDev) : true;
+}
 
+/** True if the item should appear in the sidebar for the current build. */
+function isItemVisible(item: SectionItem): boolean {
+  if (item.id === "developer") return isDevBuild();
+  return true;
+}
+
+/**
+ * Routable section IDs in sidebar display order; used for keyboard nav.
+ * External items (which open an external URL and never call `onSectionChange`)
+ * are intentionally excluded so arrow-key nav never lands on a non-routable id.
+ */
+export function getVisibleSettingsSectionIds(): SettingsSection[] {
   return sectionGroups.flatMap((group) =>
     group.items
-      .filter((section) => {
-        if (section.id === "developer") {
-          return isDevelopment;
-        }
-        return true;
-      })
-      .map((section) => section.id)
+      .filter((section) => !section.external && isItemVisible(section))
+      .map((section) => section.id as SettingsSection)
   );
 }
 
@@ -106,13 +118,11 @@ export function SettingsNavigation({
   onSectionChange,
   isCollapsed = false,
 }: SettingsNavigationProps) {
-  const visibleIdSet = new Set(getVisibleSettingsSectionIds());
-
   return (
     <div className={cn("px-2 pb-4 pt-1", isCollapsed && "pb-2 pt-1")}>
       <nav className="space-y-1">
         {sectionGroups.map((group) => {
-          const visibleItems = group.items.filter((item) => visibleIdSet.has(item.id));
+          const visibleItems = group.items.filter(isItemVisible);
           if (visibleItems.length === 0) return null;
 
           return (
@@ -125,18 +135,10 @@ export function SettingsNavigation({
               <div className="space-y-0.5">
                 {visibleItems.map((section) => {
                   const isActive = section.id === activeSection;
-                  const adminURL = section.adminPath ? getAdminURL() : undefined;
-                  const externalHref = adminURL ? `${adminURL.replace(/\/$/, "")}${section.adminPath}` : undefined;
                   return (
                     <button
                       key={section.id}
-                      onClick={() => {
-                        if (externalHref) {
-                          void openExternalLink(externalHref);
-                          return;
-                        }
-                        onSectionChange(section.id);
-                      }}
+                      onClick={() => onSectionChange(section.id as SettingsSection)}
                       title={isCollapsed ? section.label : undefined}
                       className={cn(
                         "w-full cursor-pointer rounded-md border-l-2 px-3 py-1.5 text-sm transition-all",

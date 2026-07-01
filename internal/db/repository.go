@@ -215,6 +215,10 @@ type Repository interface {
 	IsDaemonAttached(ctx context.Context, userID string, staleThreshold time.Duration) (bool, error)
 	ListAttachedDaemonIDsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]string, error)
 	ListOutboundAttachments(ctx context.Context) ([]*DaemonAttachment, error)
+	// ListAllDaemonAttachments returns every live attachment row (any source).
+	// Used by the gateway's /flow-health endpoint to assert the connection
+	// registry has no stale (dead-stream) attachments.
+	ListAllDaemonAttachments(ctx context.Context) ([]*DaemonAttachment, error)
 	UpsertProjectConfigRecord(ctx context.Context, record *ProjectConfigRecord) error
 
 	// Daemon PATs (Personal Access Tokens)

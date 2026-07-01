@@ -9,8 +9,11 @@ description: |
   Phase 1b: SCAFFOLD — Takes the scoped plan and scaffolds the project, writes protos,
             runs forge generate + build. Uses get-it-right for lint/build verification.
   Phase 2:  FRONTEND POLISH — Make the generated UI look like a real product.
-  Phase 3:  MVP BACKEND — Implement the minimal feature set to make the app functional.
+  Phase 3:  MVP BACKEND — Single generative agent pass to make the app functional. It
+            self-verifies (generate+build); a mvp_verify gate fails loud if the tree
+            isn't green rather than feeding a broken project into production polish.
   Phase 4:  PRODUCTION POLISH — Remaining features, edge cases, error handling, tests.
+            Uses get-it-right — this is the real correctness gate.
 
   Context flows via two mechanisms:
   - FORGE_PLAN.md (project spec) — written by phase 1a, read by all phases. Defines WHAT to build.
@@ -450,40 +453,15 @@ nodes:
   # Implement the minimal feature set for a functional app. The agent
   # reads the plan to find high-priority features.
 
+  # Single generative pass (no review loop) — this is the first functional cut.
+  # It self-verifies via generate+build; the mvp_verify gate below fails loud if
+  # the tree isn't green, and production_polish is the real correctness gate.
   - id: mvp_backend
     type: workflow
-    ref: builtin://get-it-right
+    ref: builtin://agent
+    presets:
+      default: forge
     passthrough: [model, mode, ask]
-    args:
-      implementer_preset: forge
-      max_retries: 5
-      lint_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && if [ ! -f forge.yaml ]; then cd $(ls -d */ | head -1); fi && reliant forge generate && reliant forge lint"
-      test_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && if [ ! -f forge.yaml ]; then cd $(ls -d */ | head -1); fi && reliant forge test"
-      build_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && if [ ! -f forge.yaml ]; then cd $(ls -d */ | head -1); fi && reliant forge build"
-      review_instructions: |
-        You are reviewing the MVP backend implementation.
-
-        **Pass if:**
-        - High-priority features from the plan are implemented
-        - Custom RPC handlers have real implementations (not stubs)
-        - CRUD handlers work with proper validation
-        - Core business logic is correct
-        - Build and tests pass
-
-        **Do NOT fail because:**
-        - Lower-priority features aren't done (that's phase 4)
-        - Test coverage isn't exhaustive
-        - Error messages aren't polished
-        - Edge cases aren't all handled
-
-        **Only fail if:**
-        - Core features are still stubs
-        - Build or tests fail
-        - Database operations are broken
-        - Business logic is fundamentally wrong
-
-        Proto changes are fine — new RPCs, new fields, new entities are encouraged
-        as long as `forge generate && forge build` pass.
     thread:
       mode: fork
       inject:
@@ -537,7 +515,31 @@ nodes:
           - Read proto files for the API contract
           - If you need to understand generated types, look at the proto definitions, not the generated Go code
 
+          ## Verify Before Finishing (REQUIRED)
+          There is no separate reviewer for this phase — you are the last line before the
+          project moves on. Before you finish, run the full generate + build and do NOT
+          return until it is green:
+          ```bash
+          export PATH="$HOME/go/bin:$PATH" && cd {{inputs.working_directory}} && if [ ! -f forge.yaml ]; then cd $(ls -d */ | head -1); fi && reliant forge generate && reliant forge lint && reliant forge build
+          ```
+          If it fails, fix the root cause and re-run until it passes. If it fails due to a
+          TOOLING error (command not found, binary crash, install issue) rather than your
+          code, STOP and report it — do not try to build or debug forge/reliant itself.
+
           Work in `{{inputs.working_directory}}`.
+
+  # Fail-loud gate: confirm the single-agent MVP left a building project before
+  # handing off to production polish. A broken build routes to `failed`, not forward.
+  - id: mvp_verify
+    type: run
+    command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && if [ ! -f forge.yaml ]; then cd $(ls -d */ | head -1); fi && reliant forge generate && reliant forge build"
+    save_message:
+      condition: "output.exit_code != 0"
+      role: assistant
+      display_style: warning
+      content: |
+        **MVP build FAILED** (exit {{output.exit_code}}). The MVP pass left the project in a
+        non-building state, so I'm stopping before production polish. Review the output above.
 
   - id: mvp_done
     type: save_message
@@ -655,38 +657,17 @@ nodes:
 
   # ─── Terminal Nodes ─────────────────────────────────────────────────
 
-  - id: scaffold_stuck
+  - id: stuck
     type: save_message
     display_style: warning
     args:
       role: assistant
       content: |
-        ## Scaffold Stuck — External Issue
+        ## Stopped — External Issue
 
-        The scaffold phase hit a problem outside the code (tooling, environment, or infrastructure).
-        The issue was escalated and the workflow was stopped. Check the review feedback above for details.
-
-  - id: mvp_stuck
-    type: save_message
-    display_style: warning
-    args:
-      role: assistant
-      content: |
-        ## MVP Backend Stuck — External Issue
-
-        The MVP phase hit a problem outside the code (tooling, environment, or infrastructure).
-        The frontend is complete but the backend couldn't proceed. Check the review feedback above for details.
-
-  - id: production_stuck
-    type: save_message
-    display_style: warning
-    args:
-      role: assistant
-      content: |
-        ## Production Polish Stuck — External Issue
-
-        The production polish phase hit a problem outside the code. The MVP is functional but
-        hardening couldn't complete. Check the review feedback above for details.
+        A phase hit a problem outside the code (tooling, environment, or infrastructure)
+        and was escalated, so the workflow stopped. Check the feedback above for details.
+        The project is at `{{inputs.working_directory}}`.
 
   - id: success
     type: save_message
@@ -705,48 +686,26 @@ nodes:
         - **Frontend:** http://localhost:3000
         - **API:** http://localhost:8080
 
-  - id: scaffold_failed
+  - id: failed
     type: save_message
+    display_style: warning
     args:
       role: assistant
       content: |
-        ## Scaffold Failed
+        ## Didn't Fully Pass
 
-        The project could not be scaffolded after multiple attempts.
-        Review the output above for details.
-    display_style: error
-
-  - id: mvp_failed
-    type: save_message
-    args:
-      role: assistant
-      content: |
-        ## MVP Backend Not Passing
-
-        The frontend is polished but the MVP backend isn't passing verification.
+        A phase didn't pass verification after its attempts, so the workflow stopped.
         Review the issues above. The project is at `{{inputs.working_directory}}`.
-    display_style: warning
-
-  - id: production_failed
-    type: save_message
-    args:
-      role: assistant
-      content: |
-        ## Production Polish Incomplete
-
-        The app has a working MVP but production polish didn't fully pass.
-        Review remaining issues above. The project is at `{{inputs.working_directory}}`.
-    display_style: warning
 
 edges:
   - from: scope_conversation
     default: scaffold_and_verify
   - from: scaffold_and_verify
     cases:
-      - to: scaffold_stuck
+      - to: stuck
         condition: "has(nodes.scaffold_and_verify.stuck) && nodes.scaffold_and_verify.stuck == true"
         label: scaffold_stuck
-      - to: scaffold_failed
+      - to: failed
         condition: "nodes.scaffold_and_verify.strategy != 'pass'"
         label: scaffold_failed
     default: frontend_polish
@@ -755,22 +714,21 @@ edges:
   - from: frontend_done
     default: mvp_backend
   - from: mvp_backend
+    default: mvp_verify
+  - from: mvp_verify
     cases:
-      - to: mvp_stuck
-        condition: "has(nodes.mvp_backend.stuck) && nodes.mvp_backend.stuck == true"
-        label: mvp_stuck
-      - to: mvp_failed
-        condition: "nodes.mvp_backend.strategy != 'pass'"
+      - to: failed
+        condition: "nodes.mvp_verify.exit_code != 0"
         label: mvp_failed
     default: mvp_done
   - from: mvp_done
     default: production_polish
   - from: production_polish
     cases:
-      - to: production_stuck
+      - to: stuck
         condition: "has(nodes.production_polish.stuck) && nodes.production_polish.stuck == true"
         label: production_stuck
-      - to: production_failed
+      - to: failed
         condition: "nodes.production_polish.strategy != 'pass'"
         label: production_failed
     default: success
