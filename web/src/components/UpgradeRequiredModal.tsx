@@ -1,4 +1,5 @@
-import { ExternalLink, Zap } from "lucide-react";
+import { ArrowUpRight, Zap } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import { Modal } from "./ui/Modal";
 import type { UpgradeRequiredData } from "../store/modalStore";
 
@@ -31,16 +32,16 @@ export function UpgradeRequiredModal({
   onClose,
   data,
 }: UpgradeRequiredModalProps) {
+  const navigate = useNavigate();
   const copy = REASON_COPY[data.reason] ?? GENERIC_COPY;
 
   const handleUpgrade = () => {
-    if (!data.upgradeUrl) return;
-    if (window.electronAPI?.openExternal) {
-      void window.electronAPI.openExternal(absoluteUpgradeUrl(data.upgradeUrl));
-    } else {
-      window.open(absoluteUpgradeUrl(data.upgradeUrl), "_blank", "noopener,noreferrer");
-    }
     onClose();
+    // The billing dashboard now lives in-app at /settings/billing, so route
+    // there directly. The backend-supplied `upgradeUrl` (a relative path like
+    // "/billing/plans") is retained on the payload for non-SPA surfaces, but
+    // in the app the in-app route is always available and preferred.
+    void navigate({ to: "/settings/$section", params: { section: "billing" } });
   };
 
   return (
@@ -66,30 +67,16 @@ export function UpgradeRequiredModal({
           >
             Not now
           </button>
-          {data.upgradeUrl ? (
-            <button
-              type="button"
-              onClick={handleUpgrade}
-              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-            >
-              Upgrade plan
-              <ExternalLink className="h-3.5 w-3.5" />
-            </button>
-          ) : null}
+          <button
+            type="button"
+            onClick={handleUpgrade}
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            Upgrade plan
+            <ArrowUpRight className="h-3.5 w-3.5" />
+          </button>
         </div>
       </div>
     </Modal>
   );
-}
-
-// absoluteUpgradeUrl turns a backend-supplied path like "/billing/plans" into
-// a full URL. The backend sends relative paths because it doesn't know which
-// host the user reached us on (web vs. electron vs. self-hosted), and the
-// electron client needs an absolute URL for shell.openExternal anyway.
-function absoluteUpgradeUrl(url: string): string {
-  if (/^https?:\/\//i.test(url)) return url;
-  if (typeof window !== "undefined" && window.location?.origin) {
-    return new URL(url, window.location.origin).toString();
-  }
-  return url;
 }

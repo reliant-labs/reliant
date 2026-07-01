@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Mail, ExternalLink } from "lucide-react";
+import { Mail, ArrowUpRight } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import { Modal } from "./ui/Modal";
 import { BillingService } from "@/gen/controlplane/v1/public/billing_service_pb";
 import { getControlPlaneClient } from "../services/controlPlane/client";
@@ -27,9 +28,16 @@ export function BillingEmailRequiredModal({
   onClose,
   data,
 }: BillingEmailRequiredModalProps) {
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const handleManageBilling = () => {
+    onClose();
+    // In-app billing dashboard — replaces the old external /admin/billing link.
+    void navigate({ to: "/settings/$section", params: { section: "billing" } });
+  };
 
   const handleSave = async () => {
     const trimmed = email.trim();
@@ -97,19 +105,14 @@ export function BillingEmailRequiredModal({
         ) : null}
 
         <div className="flex items-center justify-between gap-2">
-          <a
-            href={
-              typeof window !== "undefined"
-                ? new URL("/admin/billing", window.location.origin).toString()
-                : "/admin/billing"
-            }
-            target="_blank"
-            rel="noreferrer"
+          <button
+            type="button"
+            onClick={handleManageBilling}
             className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
           >
-            Manage in admin
-            <ExternalLink className="h-3 w-3" />
-          </a>
+            Manage billing
+            <ArrowUpRight className="h-3 w-3" />
+          </button>
           <div className="flex gap-2">
             <button
               type="button"
