@@ -45,6 +45,26 @@ function shouldRestartBackendForAuthChange(previousSession, nextSession, options
     return false;
   }
 
+  // LOGOUT (real user -> anonymous): keep the daemon warm.
+  //
+  // Restarting the daemon on the way OUT is pure latency on the logout path
+  // (renderer's signOut awaits supabase.signOut -> storage removeItem ->
+  // auth:clear IPC -> stop()+start()) and buys nothing: there is no new
+  // principal to (re)mint a PAT for. The daemon has no user-facing work to
+  // do while logged out, so we leave the supervised process running instead
+  // of paying a SIGTERM + respawn + ensureDaemonCreds + waitForReady round
+  // trip. On the NEXT login the anonymous->user (or user->user) branch below
+  // still returns true, so the daemon respawns and re-mints for the incoming
+  // user before any of their RPCs land — correctness is unchanged.
+  //
+  // Trade-off: the previous user's daemon (holding their PAT) stays resident
+  // until the next login (which stops+respawns it, evicting the old PAT) or
+  // until app quit (which stops it). Acceptable for a local single-user
+  // desktop daemon; revisit if the daemon ever becomes multi-tenant.
+  if (change.nextPrincipal === 'anonymous') {
+    return false;
+  }
+
   return true;
 }
 

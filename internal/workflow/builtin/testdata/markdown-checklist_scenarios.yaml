@@ -1,0 +1,45 @@
+---
+name: happy_path
+description: >
+  The markdown checklist is completed successfully on the first implement-review cycle.
+
+events:
+  - node: complete_checklist
+    output:
+      verdict: "pass"
+      issues: []
+      summary: "All checklist items in TASKS.md are complete and the underlying work is implemented."
+      iterations: 1
+
+expect:
+  outcome: completed
+  reached:
+    - complete_checklist
+    - complete
+  node_outputs:
+    complete_checklist:
+      verdict: "pass"
+      summary: "All checklist items in TASKS.md are complete and the underlying work is implemented."
+
+---
+name: retry_then_pass
+description: >
+  First review finds remaining unchecked checklist items. A later attempt completes them and passes.
+
+events:
+  - node: complete_checklist
+    output:
+      verdict: "pass"
+      issues: []
+      summary: "Previously unchecked items were completed, TASKS.md was updated, and no remaining checklist tasks are open."
+      iterations: 2
+
+expect:
+  outcome: completed
+  reached:
+    - complete_checklist
+    - complete
+  node_outputs:
+    complete_checklist:
+      verdict: "pass"
+      iterations: 2

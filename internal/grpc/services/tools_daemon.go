@@ -1007,6 +1007,17 @@ func (s *ToolsDaemonService) handleProjectConfigDelta(ctx context.Context, conn 
 	return s.SendLoadProjectConfigs(ctx, conn.userID, projectPath, uuid.New().String())
 }
 
+// daemonRuntimeTypeFromLabels extracts the daemon's runtime/sandbox type
+// ("kata", "gvisor", ...) from its registration labels. Returns nil when the
+// label is absent or empty (local/unknown daemons), so it persists as NULL.
+func daemonRuntimeTypeFromLabels(labels map[string]string) *string {
+	rt := strings.TrimSpace(labels[cfgpkg.DaemonRuntimeTypeLabelKey])
+	if rt == "" {
+		return nil
+	}
+	return &rt
+}
+
 func (s *ToolsDaemonService) persistProjectConfigSnapshot(ctx context.Context, conn *daemonConnection, snapshot *reliantv1.ProjectConfigSnapshot, force bool) error {
 	if snapshot == nil {
 		return nil
@@ -1050,6 +1061,7 @@ func (s *ToolsDaemonService) persistProjectConfigSnapshot(ctx context.Context, c
 		ProjectScenariosJSON: flattenIndexedScenarios(snapshot.Scenarios),
 		ProjectSkillsJSON:    flattenIndexedSkills(snapshot.Skills),
 		RepoMemoriesJSON:     flattenRepoMemories(snapshot.RepoMemoriesMd),
+		RuntimeType:          daemonRuntimeTypeFromLabels(conn.labels),
 		PushedAt:             daemonTimestampToTime(snapshot.DaemonTimestampUnixMs),
 	}
 

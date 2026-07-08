@@ -1,12 +1,28 @@
 import { useCallback, useEffect, useState } from 'react'
 import { OAUTH_LOCAL_SERVER_URL } from '@/lib/oauth-local'
 
+export interface UseOAuthAvailabilityOptions {
+  /**
+   * Opt in to probing the localhost OAuth helper. Defaults to `false` so the
+   * 2s `http://127.0.0.1:19284/health` probe NEVER fires on mount. Probing from
+   * a deployed public origin (app.reliantlabs.io) triggers Chrome's "Local
+   * Network Access" permission prompt for users who never opted into local
+   * OAuth — so callers must flip this to `true` only while the local-OAuth UI
+   * (OAuthHelperPanel) is actually on screen. Ignored in Electron, where the
+   * helper is always available and no network probe is ever made.
+   */
+  enabled?: boolean
+}
+
 export interface UseOAuthAvailabilityReturn {
   /** Whether the localhost OAuth helper is reachable (or Electron, which always has it). */
   available: boolean
-  /** True while the initial health check is in flight (web mode only). */
+  /** True while a health check is in flight (web mode, while enabled). */
   loading: boolean
-  /** Re-check availability on demand. Surfaces `loading` while in flight. */
+  /**
+   * Force a one-off availability check on demand (e.g. the panel's Retry
+   * button). Works regardless of `enabled` since it's an explicit user action.
+   */
   recheck: () => void
 }
 
@@ -27,16 +43,23 @@ async function pingHealth(): Promise<boolean> {
 /**
  * Determines whether OAuth flows (Claude/Codex) can run.
  *
- * - **Electron**: always available immediately (daemon handles it).
- * - **Web**: pings `http://127.0.0.1:19284/health` to see if `reliant auth serve` is running.
- *   While unavailable, polls every 2s so the UI flips automatically when the user starts
- *   the helper in their terminal.
+ * - **Electron**: always available immediately (daemon handles it); no network
+ *   probe is ever made.
+ * - **Web**: pings `http://127.0.0.1:19284/health` to see if `reliant auth serve`
+ *   is running — but ONLY once `enabled` is `true`. Callers set `enabled` while
+ *   the local-OAuth UI is on screen, so the probe (and Chrome's Local Network
+ *   Access prompt) never fires for users who never chose the local-OAuth path.
+ *   While enabled + unavailable, polls every 2s so the UI flips automatically
+ *   when the user starts the helper in their terminal.
  */
-export function useOAuthAvailability(): UseOAuthAvailabilityReturn {
+export function useOAuthAvailability(
+  { enabled = false }: UseOAuthAvailabilityOptions = {},
+): UseOAuthAvailabilityReturn {
   const isElectron = !!window.electronAPI
 
   const [available, setAvailable] = useState(isElectron)
-  const [loading, setLoading] = useState(!isElectron)
+  // Not "loading" until we actually probe (web + enabled).
+  const [loading, setLoading] = useState(false)
 
   const check = useCallback(async () => {
     if (isElectron) {
@@ -50,21 +73,34 @@ export function useOAuthAvailability(): UseOAuthAvailabilityReturn {
     setLoading(false)
   }, [isElectron])
 
-  // Initial check on mount.
+  // Kick off an immediate check when probing turns on. In Electron we never
+  // touch the network; while disabled we stay quiet so no health probe fires.
   useEffect(() => {
-    check()
-  }, [check])
+    if (isElectron || !enabled) return
+    let cancelled = false
+    void (async () => {
+      setLoading(true)
+      const ok = await pingHealth()
+      if (cancelled) return
+      setAvailable(ok)
+      setLoading(false)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [enabled, isElectron])
 
-  // Poll silently while unavailable so the UI flips automatically once the user
-  // starts `reliant auth serve`. Stops on success or unmount.
+  // Poll silently while enabled + unavailable so the UI flips automatically once
+  // the user starts `reliant auth serve`. Stops on success, when disabled, or
+  // on unmount.
   useEffect(() => {
-    if (isElectron || available) return
+    if (isElectron || !enabled || available) return
     const id = setInterval(async () => {
       const ok = await pingHealth()
       if (ok) setAvailable(true)
     }, POLL_INTERVAL_MS)
     return () => clearInterval(id)
-  }, [available, isElectron])
+  }, [available, isElectron, enabled])
 
   return { available, loading, recheck: check }
 }

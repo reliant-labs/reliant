@@ -119,7 +119,6 @@ function getForcedEligibility(): "eligible" | "ineligible" | null {
 export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
   const codexOAuth = useCodexOAuth();
   const claudeOAuth = useClaudeOAuth();
-  const oauthAvailability = useOAuthAvailability();
   const cloudEligibility = useCloudEligibility();
 
   const forcedEligibility = getForcedEligibility();
@@ -143,6 +142,12 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
     () => PROVIDERS.find((item) => item.id === selectedProvider)!,
     [selectedProvider],
   );
+
+  // Only probe the localhost OAuth helper once the user selects an OAuth
+  // provider (the OAuthHelperPanel is shown) — never proactively on mount.
+  const oauthAvailability = useOAuthAvailability({
+    enabled: Boolean(provider.usesOAuth),
+  });
 
   const validateKeyMutation = useMutation({
     mutationFn: ({ providerId, key }: { providerId: string; key: string }) =>

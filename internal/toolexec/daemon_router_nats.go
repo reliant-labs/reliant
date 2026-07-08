@@ -819,7 +819,11 @@ func (r *NATSDaemonRouter) EnqueueDaemonCommand(ctx context.Context, userID, com
 		if d == nil || d.ID == "" {
 			continue
 		}
-		subject := pendingSubjectPrefix + d.ID
+		// Sanitize the daemonID to keep this subject identical to the one the
+		// gateway's drainer filters on (see sanitizePendingSubjectToken) and to
+		// control-plane's natsio.SanitizeSubject. A raw daemonID with a '.',
+		// '>', '*' or ' ' would publish to a subject the consumer never matches.
+		subject := pendingSubjectPrefix + sanitizePendingSubjectToken(d.ID)
 		if _, pubErr := js.Publish(ctx, subject, envelope); pubErr != nil {
 			logging.Warn("EnqueueDaemonCommand: JetStream publish failed",
 				"userID", userID, "daemonID", d.ID, "subject", subject,

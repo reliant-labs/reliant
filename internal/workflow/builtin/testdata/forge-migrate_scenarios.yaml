@@ -1,0 +1,361 @@
+# Test scenarios for forge-migrate.yaml workflow
+#
+# Five-phase workflow:
+#   inventory (structured-agent: MIGRATION_PLAN.md + ordered component array) →
+#   plan_context (save_message dump) → confirm (approval) →
+#   scaffold_baseline (get-it-right) →
+#   port_loop (sequential loop, one get-it-right per component, stops on first
+#   non-pass) → converge (get-it-right) → success
+#
+# Failure / escalation paths (collapsed terminals):
+#   confirm status != approved                → denied
+#   get-it-right stuck (tooling/env)          → stuck
+#   scaffold/port/converge strategy != pass   → failed
+#
+# Loop semantics under test:
+#   while: iter < size(components) && last component_strategy == 'pass'
+#   → a mid-list failure exits the loop early and routes to failed.
+
+---
+name: happy_path
+description: Two components port cleanly; full pipeline to success.
+
+events:
+  - node: inventory
+    output:
+      response_text: "Migration plan written."
+      response:
+        summary: "Small service repo; two port units."
+        project_name: "acme"
+        kind: "service"
+        module_path: "github.com/acme/acme-next"
+        target_directory: "/tmp/acme-next"
+        open_questions: []
+        components:
+          - name: "domain"
+            kind: "package"
+            source_paths: ["internal/domain"]
+            depends_on: []
+            notes: "Pure types, port first."
+          - name: "api"
+            kind: "service"
+            source_paths: ["internal/api"]
+            depends_on: ["domain"]
+            notes: "Connect handlers."
+
+  - node: confirm
+    output:
+      status: approved
+
+  - node: scaffold_baseline
+    output:
+      strategy: "pass"
+      eval_strategy: "pass"
+      review_grade: "pass"
+      review_feedback: "Scaffold green, contracts floor set."
+      iterations: 1
+      lint_exit: 0
+      build_exit: 0
+
+  - node: port_loop.port
+    output:
+      strategy: "pass"
+      eval_strategy: "pass"
+      review_grade: "pass"
+      review_feedback: "domain ported, tests green."
+      iterations: 1
+      lint_exit: 0
+      build_exit: 0
+      test_exit: 0
+
+  - node: port_loop.port
+    output:
+      strategy: "pass"
+      eval_strategy: "pass"
+      review_grade: "pass"
+      review_feedback: "api ported, tests green."
+      iterations: 1
+      lint_exit: 0
+      build_exit: 0
+      test_exit: 0
+
+  - node: converge
+    output:
+      strategy: "pass"
+      eval_strategy: "pass"
+      review_grade: "pass"
+      review_feedback: "Wiring complete, parity checklist satisfied."
+      iterations: 1
+      lint_exit: 0
+      build_exit: 0
+      test_exit: 0
+
+expect:
+  outcome: completed
+  reached:
+    - inventory
+    - plan_context
+    - confirm
+    - scaffold_baseline
+    - port_loop
+    - converge
+    - success
+  not_reached:
+    - denied
+    - stuck
+    - failed
+  node_outputs:
+    port_loop:
+      _iterations: 2
+      component_strategy: "pass"
+      ported: 2
+
+---
+name: plan_denied
+description: User rejects the migration plan; nothing downstream runs.
+
+events:
+  - node: inventory
+    output:
+      response_text: "Migration plan written."
+      response:
+        summary: "Plan ready."
+        project_name: "acme"
+        kind: "service"
+        module_path: "github.com/acme/acme-next"
+        target_directory: "/tmp/acme-next"
+        open_questions: ["Is the admin binary in scope?"]
+        components:
+          - name: "domain"
+            kind: "package"
+            source_paths: ["internal/domain"]
+            depends_on: []
+            notes: "Pure types."
+
+  - node: confirm
+    output:
+      status: denied
+
+expect:
+  outcome: completed
+  reached:
+    - inventory
+    - plan_context
+    - confirm
+    - denied
+  not_reached:
+    - scaffold_baseline
+    - port_loop
+    - converge
+    - success
+    - failed
+    - stuck
+
+---
+name: scaffold_stuck_escalates
+description: Scaffold hits a tooling problem (stuck); workflow stops at the stuck terminal without porting.
+
+events:
+  - node: inventory
+    output:
+      response_text: "Migration plan written."
+      response:
+        summary: "Plan ready."
+        project_name: "acme"
+        kind: "cli"
+        module_path: "github.com/acme/acme-next"
+        target_directory: "/tmp/acme-next"
+        open_questions: []
+        components:
+          - name: "core"
+            kind: "package"
+            source_paths: ["internal/core"]
+            depends_on: []
+            notes: "CLI core."
+
+  - node: confirm
+    output:
+      status: approved
+
+  - node: scaffold_baseline
+    output:
+      strategy: "stuck"
+      eval_strategy: "stuck"
+      review_grade: "fail"
+      review_feedback: "forge binary crashes on startup — environment issue."
+      iterations: 2
+      lint_exit: 1
+      build_exit: 1
+      stuck: true
+
+expect:
+  outcome: completed
+  reached:
+    - inventory
+    - confirm
+    - scaffold_baseline
+    - stuck
+  not_reached:
+    - port_loop
+    - converge
+    - success
+    - failed
+    - denied
+
+---
+name: port_failure_stops_loop
+description: Second of three components fails its gate; the loop exits early (no third iteration) and routes to failed, never reaching converge.
+
+events:
+  - node: inventory
+    output:
+      response_text: "Migration plan written."
+      response:
+        summary: "Three port units."
+        project_name: "acme"
+        kind: "service"
+        module_path: "github.com/acme/acme-next"
+        target_directory: "/tmp/acme-next"
+        open_questions: []
+        components:
+          - name: "domain"
+            kind: "package"
+            source_paths: ["internal/domain"]
+            depends_on: []
+            notes: "Pure types."
+          - name: "store"
+            kind: "package"
+            source_paths: ["internal/store"]
+            depends_on: ["domain"]
+            notes: "DB layer."
+          - name: "api"
+            kind: "service"
+            source_paths: ["internal/api"]
+            depends_on: ["store"]
+            notes: "Connect handlers."
+
+  - node: confirm
+    output:
+      status: approved
+
+  - node: scaffold_baseline
+    output:
+      strategy: "pass"
+      eval_strategy: "pass"
+      review_grade: "pass"
+      review_feedback: "Scaffold green."
+      iterations: 1
+      lint_exit: 0
+      build_exit: 0
+
+  - node: port_loop.port
+    output:
+      strategy: "pass"
+      eval_strategy: "pass"
+      review_grade: "pass"
+      review_feedback: "domain ported."
+      iterations: 1
+      lint_exit: 0
+      build_exit: 0
+      test_exit: 0
+
+  - node: port_loop.port
+    output:
+      strategy: "continue"
+      eval_strategy: "continue"
+      review_grade: "fail"
+      review_feedback: "store port left tests red after max retries."
+      iterations: 4
+      lint_exit: 0
+      build_exit: 0
+      test_exit: 1
+
+expect:
+  outcome: completed
+  reached:
+    - inventory
+    - confirm
+    - scaffold_baseline
+    - port_loop
+    - failed
+  not_reached:
+    - converge
+    - success
+    - stuck
+    - denied
+  node_outputs:
+    port_loop:
+      _iterations: 2
+      component_strategy: "continue"
+
+---
+name: converge_failure
+description: All components port but convergence review fails parity; workflow ends failed.
+
+events:
+  - node: inventory
+    output:
+      response_text: "Migration plan written."
+      response:
+        summary: "One port unit."
+        project_name: "acme"
+        kind: "service"
+        module_path: "github.com/acme/acme-next"
+        target_directory: "/tmp/acme-next"
+        open_questions: []
+        components:
+          - name: "domain"
+            kind: "package"
+            source_paths: ["internal/domain"]
+            depends_on: []
+            notes: "Pure types."
+
+  - node: confirm
+    output:
+      status: approved
+
+  - node: scaffold_baseline
+    output:
+      strategy: "pass"
+      eval_strategy: "pass"
+      review_grade: "pass"
+      review_feedback: "Scaffold green."
+      iterations: 1
+      lint_exit: 0
+      build_exit: 0
+
+  - node: port_loop.port
+    output:
+      strategy: "pass"
+      eval_strategy: "pass"
+      review_grade: "pass"
+      review_feedback: "domain ported."
+      iterations: 1
+      lint_exit: 0
+      build_exit: 0
+      test_exit: 0
+
+  - node: converge
+    output:
+      strategy: "continue"
+      eval_strategy: "continue"
+      review_grade: "fail"
+      review_feedback: "Two source entrypoints unaccounted for in the plan."
+      iterations: 5
+      lint_exit: 0
+      build_exit: 0
+      test_exit: 0
+
+expect:
+  outcome: completed
+  reached:
+    - inventory
+    - confirm
+    - scaffold_baseline
+    - port_loop
+    - converge
+    - failed
+  not_reached:
+    - success
+    - stuck
+    - denied

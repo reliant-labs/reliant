@@ -62,6 +62,27 @@ test('shouldRestartBackendForAuthChange restarts on principal change in dev and 
   );
 });
 
+test('shouldRestartBackendForAuthChange keeps the daemon warm on logout', () => {
+  // LOGOUT (user -> anonymous): do NOT restart. Restarting on the way out is
+  // pure latency on the logout path and there is no new principal to mint a
+  // PAT for. The next login (anonymous -> user) still restarts, so the daemon
+  // re-mints for the incoming user before their RPCs land.
+  assert.equal(
+    shouldRestartBackendForAuthChange({ user: { id: 'user-1' } }, null),
+    false
+  );
+  assert.equal(
+    shouldRestartBackendForAuthChange({ user: { id: 'user-1' } }, { user: { id: '' } }),
+    false
+  );
+  // User switch (user-1 -> user-2) MUST still restart to re-mint + evict the
+  // previous user's PAT.
+  assert.equal(
+    shouldRestartBackendForAuthChange({ user: { id: 'user-1' } }, { user: { id: 'user-2' } }),
+    true
+  );
+});
+
 test('getAuthPrincipal falls back to anonymous without a user id', () => {
   assert.equal(getAuthPrincipal(null), 'anonymous');
   assert.equal(getAuthPrincipal({ user: { id: 'user-9' } }), 'user-9');

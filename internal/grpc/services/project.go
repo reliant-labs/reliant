@@ -346,6 +346,49 @@ func (s *ProjectService) CreateProject(
 		defaultBranch = *req.Msg.DefaultBranch
 	}
 
+	// Auto-initialize a brand-new EMPTY project as a git repo so the user
+	// isn't nagged by the "Initialize Git" popup on a fresh project (the
+	// popup keys solely off is_git_repo, i.e. ".git exists"). Bare `git init`
+	// with NO initial commit: the popup only needs .git, and a fresh cloud
+	// workspace pod has no git identity for a commit. OnlyIfEmpty gates it on
+	// the daemon so an existing non-empty folder (e.g. a local dir the user
+	// opened) is left untouched and still prompts. Best-effort + idempotent
+	// (the daemon refuses if .git already exists); if the daemon isn't
+	// connected yet (the onboarding provisioning race), enqueue it after the
+	// queued fs.mkdir so it runs FIFO once the daemon's stream comes up.
+	if !isGitRepo {
+		gitInitPayload := struct {
+			Path              string   `json:"path"`
+			InitialBranch     string   `json:"initial_branch"`
+			GitignorePatterns []string `json:"gitignore_patterns"`
+			InitialCommit     bool     `json:"initial_commit"`
+			OnlyIfEmpty       bool     `json:"only_if_empty"`
+		}{
+			Path:          req.Msg.Path,
+			InitialBranch: defaultBranch,
+			InitialCommit: false,
+			OnlyIfEmpty:   true,
+		}
+		var gitInitResp struct {
+			Success bool   `json:"success"`
+			Error   string `json:"error,omitempty"`
+		}
+		if err := s.sendProjectDaemonCommand(ctx, userID, "project.init_git_repo", gitInitPayload, &gitInitResp); err != nil {
+			logging.Warn("Failed to auto git-init project via daemon; enqueueing for delivery on next connect", "error", err, "path", req.Msg.Path)
+			if payloadBytes, marshalErr := json.Marshal(gitInitPayload); marshalErr != nil {
+				logging.Warn("Failed to marshal git-init payload for enqueue", "error", marshalErr, "path", req.Msg.Path)
+			} else if n, enqErr := s.daemonRouter.EnqueueDaemonCommand(ctx, userID, "project.init_git_repo", payloadBytes, 30_000); enqErr != nil {
+				logging.Warn("Failed to enqueue git-init for daemon", "error", enqErr, "path", req.Msg.Path)
+			} else {
+				logging.Info("Queued project.init_git_repo on DAEMON_PENDING_COMMANDS", "path", req.Msg.Path, "daemons", n)
+			}
+		} else if gitInitResp.Success {
+			isGitRepo = true
+		} else {
+			logging.Info("Auto git-init skipped (non-empty dir or precondition)", "reason", gitInitResp.Error, "path", req.Msg.Path)
+		}
+	}
+
 	// Derive the project's canonical remote URL from the root repo (the
 	// discovered repo at RelativePath == "" or "."). For a single-repo
 	// project this is the repo's git remote; multi-repo workspaces fall
