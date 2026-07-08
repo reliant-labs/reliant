@@ -48,6 +48,7 @@ func (s *daemonServer) ConnectGateway(
 			Capabilities: d.capabilities,
 			Name:         d.daemonName,
 			DaemonType:   "cloud",
+			Labels:       d.registerLabels(),
 		}},
 	}
 	if err := stream.Send(register); err != nil {

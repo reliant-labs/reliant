@@ -1,0 +1,110 @@
+apiVersion: "0.0.5"
+name: markdown-checklist
+description: |
+  Complete a markdown checklist/task file until all checklist items are done.
+
+  This is a thin wrapper around builtin://implement-review specialized for a
+  markdown task file. The implementer iteratively updates the codebase and the
+  checklist file; the reviewer passes only when the markdown checklist is fully
+  complete and the implementation matches the remaining unchecked items.
+
+entry: [complete_checklist]
+
+inputs:
+  model:
+    type: model
+    description: LLM model to use for all phases
+    default:
+      tags: [flagship]
+
+  max_retries:
+    type: integer
+    default: 10
+    min: 1
+    max: 50
+    description: Maximum implement→review cycles
+
+  mode:
+    type: enum
+    ui: toolbar
+    default: auto
+    description: Execution mode for agent steps.
+    enum: [manual, auto]
+
+  ask:
+    type: boolean
+    ui: toolbar
+    default: true
+    description: Pause for user review after each iteration.
+
+  working_directory:
+    type: string
+    default: "."
+    description: Working directory where the markdown checklist and codebase live.
+
+  checklist_path:
+    type: string
+    default: "TASKS.md"
+    description: Path to the markdown checklist file, relative to working_directory unless absolute.
+
+nodes:
+  - id: complete_checklist
+    type: workflow
+    ref: builtin://implement-review
+    project:
+      path: "{{inputs.working_directory}}"
+    args:
+      model: "{{inputs.model}}"
+      max_retries: "{{inputs.max_retries}}"
+      mode: "{{inputs.mode}}"
+      ask: "{{inputs.ask}}"
+    thread:
+      mode: inherit
+      inject:
+        role: user
+        content: |
+          ## Complete the Markdown Checklist
+
+          Your source of truth is the markdown checklist file at `{{inputs.checklist_path}}` inside `{{inputs.working_directory}}`.
+
+          Goal: continue working until **all real task checkboxes in that markdown file are complete**.
+
+          Execution requirements:
+          1. Read `{{inputs.checklist_path}}` first and treat its unchecked task items as the backlog.
+          2. Implement the missing work in the repository, not just the markdown edits.
+          3. Update the markdown file as tasks are actually completed.
+          4. Re-read the file before finishing each attempt so your status reflects the current state.
+          5. If a task cannot yet be completed, leave it unchecked and explain the blocker precisely.
+          6. Do not mark tasks complete unless the underlying work is genuinely done.
+
+          Review / done criteria:
+          - Pass only when the markdown file has no remaining unchecked task items relevant to the requested work.
+          - Fail if any checklist item is still unchecked, incorrectly checked, or only partially implemented.
+          - When failing, identify the specific remaining checklist items or mismatches.
+
+          Notes:
+          - Ignore narrative bullets or non-task markdown content unless they represent actionable checklist items.
+          - Work in `{{inputs.working_directory}}`.
+
+  - id: complete
+    type: save_message
+    args:
+      role: assistant
+      content: |
+        ## Markdown Checklist Complete
+
+        **Checklist:** `{{inputs.checklist_path}}`
+        **Iterations:** {{nodes.complete_checklist.iterations}}
+        **Final verdict:** {{nodes.complete_checklist.verdict}}
+
+        {{nodes.complete_checklist.summary}}
+
+edges:
+  - from: complete_checklist
+    default: [complete]
+
+outputs:
+  verdict: "{{nodes.complete_checklist.verdict}}"
+  issues: "{{nodes.complete_checklist.issues}}"
+  summary: "{{nodes.complete_checklist.summary}}"
+  iterations: "{{nodes.complete_checklist.iterations}}"

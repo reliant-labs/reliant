@@ -490,7 +490,32 @@ func (b *NATSToolBridge) startProcessOutputForwarder(userCtx context.Context, us
 	}()
 }
 
-// drainPendingCommands creates an ephemeral pull consumer on the
+// sanitizePendingSubjectToken mirrors control-plane's
+// natsio.SanitizeSubject (control-plane/internal/natsio/publisher.go). It
+// MUST stay byte-for-byte identical: the daemon.pending.{daemonID} subject
+// is the invariant that the enqueue side (control-plane's
+// PublishPendingDaemonCommand AND our own NATSDaemonRouter.EnqueueDaemonCommand)
+// and the drain side (drainPendingCommands' FilterSubject) have to agree on.
+// If the two diverge for any daemonID containing '.', '>', '*' or ' ', the
+// published subject never matches the consumer filter and the queued command
+// (e.g. a git.clone) is silently never delivered.
+func sanitizePendingSubjectToken(s string) string {
+	return strings.NewReplacer(".", "_", ">", "_", "*", "_", " ", "_").Replace(s)
+}
+
+const (
+	// maxPendingCommandDeliveries bounds redelivery of a pending command that
+	// keeps failing to dispatch, so a poison message can't loop forever.
+	// NumDelivered is 1 on the first delivery.
+	maxPendingCommandDeliveries = 5
+	// pendingCommandRedeliveryDelay spaces out redeliveries of a command whose
+	// dispatch failed transiently (e.g. daemon momentarily busy right after
+	// reconnect). It also guarantees a Nak'd message is not immediately
+	// re-fetched within the same drain's fetch window.
+	pendingCommandRedeliveryDelay = 5 * time.Second
+)
+
+// drainPendingCommands creates a pull consumer on the
 // DAEMON_PENDING_COMMANDS stream, drains any messages queued for this
 // daemon while it was offline, dispatches them, and returns.
 func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemonID string) {
@@ -498,7 +523,8 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 		return
 	}
 
-	subject := "daemon.pending." + daemonID
+	// Sanitize to match the enqueue side (see sanitizePendingSubjectToken).
+	subject := pendingSubjectPrefix + sanitizePendingSubjectToken(daemonID)
 
 	// Look up the stream — if it doesn't exist yet, skip gracefully.
 	stream, err := b.js.Stream(ctx, "DAEMON_PENDING_COMMANDS")
@@ -513,26 +539,49 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 		return
 	}
 
-	// Create an ephemeral pull consumer filtered to this daemon's subject.
-	// DAEMON_PENDING_COMMANDS uses WorkQueue retention, which requires an
-	// explicit ack policy (ordered consumers force AckNone and fail with
-	// "consumer in pull mode requires ack policy"). InactiveThreshold lets
-	// the server reap the consumer if we exit without explicit cleanup.
-	consumer, err := stream.CreateConsumer(ctx, jetstream.ConsumerConfig{
+	// Create a *named* pull consumer filtered to this daemon's subject, via
+	// CreateOrUpdateConsumer (idempotent) rather than an anonymous
+	// CreateConsumer. This matters because DAEMON_PENDING_COMMANDS uses
+	// WorkQueue retention, which permits only ONE consumer per filter subject.
+	// With an anonymous consumer, a fast disconnect→reconnect would collide
+	// with the previous, not-yet-reaped consumer (InactiveThreshold below is
+	// 1 minute) — CreateConsumer would fail with an overlapping-filter error
+	// and the drain would be skipped, stranding the queued command. A
+	// deterministic name is simply re-attached on reconnect, and it preserves
+	// per-message NumDelivered so the bounded-retry guard below actually
+	// bounds across reconnects. Explicit ack policy is required (ordered
+	// consumers force AckNone and fail with "consumer in pull mode requires
+	// ack policy").
+	consumerName := "pending-drain-" + sanitizePendingSubjectToken(daemonID)
+	consumer, err := stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
+		Name:              consumerName,
+		Durable:           consumerName,
 		FilterSubject:     subject,
 		AckPolicy:         jetstream.AckExplicitPolicy,
 		DeliverPolicy:     jetstream.DeliverAllPolicy,
+		AckWait:           30 * time.Second,
 		InactiveThreshold: 1 * time.Minute,
 	})
 	if err != nil {
 		logging.Warn("[NATSToolBridge] Failed to create pending commands consumer",
-			"daemonID", daemonID, "error", err)
+			"daemonID", daemonID, "consumer", consumerName, "error", err)
 		return
 	}
+	// drainClean stays true only if we ack'd everything we saw. If any message
+	// was Nak'd for redelivery, we intentionally leave the named consumer in
+	// place so its NumDelivered accounting survives — InactiveThreshold reaps
+	// it later. Deleting it here would reset the redelivery count and defeat
+	// the poison-message guard.
+	drainClean := true
 	defer func() {
+		if !drainClean {
+			return
+		}
 		// Best-effort cleanup — InactiveThreshold above is the fallback.
-		if info, infoErr := consumer.Info(ctx); infoErr == nil {
-			_ = stream.DeleteConsumer(ctx, info.Name)
+		if delErr := stream.DeleteConsumer(ctx, consumerName); delErr != nil &&
+			!errors.Is(delErr, jetstream.ErrConsumerNotFound) {
+			logging.Debug("[NATSToolBridge] Pending commands consumer cleanup failed (InactiveThreshold will reap)",
+				"daemonID", daemonID, "consumer", consumerName, "error", delErr)
 		}
 	}()
 
@@ -578,11 +627,32 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 			}
 
 			if _, err := b.mgr.SendDaemonCommand(fetchCtx, userID, protoReq); err != nil {
-				logging.Warn("[NATSToolBridge] Failed to dispatch pending command",
+				// Dispatch failed. This is often transient — the daemon may be
+				// momentarily busy or the stream just healed on reconnect.
+				// DAEMON_PENDING_COMMANDS is WorkQueue retention, so the ONLY
+				// way to retry is to NOT ack and let JetStream redeliver; the
+				// daemon's own command idempotency absorbs any double-delivery.
+				// Acking here (the previous behavior) permanently dropped the
+				// command — the exact bug where an enqueued git.clone never ran
+				// after reconnect. Bound the retries so a genuinely poison
+				// command can't loop forever.
+				numDelivered := uint64(0)
+				if md, mdErr := msg.Metadata(); mdErr == nil && md != nil {
+					numDelivered = md.NumDelivered
+				}
+				if numDelivered >= maxPendingCommandDeliveries {
+					logging.Error("[NATSToolBridge] Dropping pending command after max delivery attempts",
+						"daemonID", daemonID, "commandType", envelope.CommandType,
+						"requestID", envelope.RequestID, "numDelivered", numDelivered, "error", err)
+					_ = msg.Ack()
+					continue
+				}
+				logging.Warn("[NATSToolBridge] Failed to dispatch pending command; leaving un-acked for redelivery",
 					"daemonID", daemonID, "commandType", envelope.CommandType,
-					"requestID", envelope.RequestID, "error", err)
-				// Still ack — WorkQueue retention means retry isn't possible,
-				// and leaving it un-acked would just block the consumer.
+					"requestID", envelope.RequestID, "numDelivered", numDelivered, "error", err)
+				_ = msg.NakWithDelay(pendingCommandRedeliveryDelay)
+				drainClean = false
+				continue
 			}
 			_ = msg.Ack()
 			dispatched++

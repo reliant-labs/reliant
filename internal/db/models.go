@@ -57,7 +57,11 @@ type ProjectConfigRecord struct {
 	ProjectScenariosJSON *string
 	ProjectSkillsJSON    *string
 	RepoMemoriesJSON     *string
-	PushedAt             time.Time
+	// RuntimeType is the serving daemon's runtime/sandbox type ("kata",
+	// "gvisor"); nil for local/unknown daemons. Captured from the pushing
+	// daemon's registration label at config-snapshot persist time.
+	RuntimeType *string
+	PushedAt    time.Time
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
 }

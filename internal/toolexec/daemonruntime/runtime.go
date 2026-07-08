@@ -55,6 +55,11 @@ type daemonClient struct {
 	mcpManager    *mcp.Manager
 	localExecutor *toolexec.LocalToolExecutor
 	capabilities  []string
+	// runtimeType is the sandbox/runtime this daemon executes under ("kata",
+	// "gvisor"), sourced from the DAEMON_RUNTIME_TYPE env stamped on cloud
+	// daemon pods. Empty for local/unknown daemons. Advertised to the server
+	// via a registration label so the model can be told about runtime limits.
+	runtimeType string
 
 	// sendCh decouples message producers from the stream I/O.
 	// All goroutines push messages here; a single runSender goroutine
@@ -134,6 +139,10 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 		hostname = "unknown-host"
 	}
 
+	// DAEMON_RUNTIME_TYPE is stamped by the control-plane on cloud daemon pods
+	// (e.g. "kata", "gvisor"); absent for local/self-hosted daemons.
+	runtimeType := strings.TrimSpace(os.Getenv("DAEMON_RUNTIME_TYPE"))
+
 	mcpManager := mcp.NewManager()
 	storedConfigProvider := config.NewStoredConfigProvider(&filesystemConfigStore{})
 	mcpManager.SetProjectConfigResolver(func(ctx context.Context, projectPath string) (*config.Config, error) {
@@ -175,12 +184,26 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 		mcpManager:        mcpManager,
 		localExecutor:     localExec,
 		capabilities:      caps,
+		runtimeType:       runtimeType,
 		cancelByReq:       make(map[string]context.CancelFunc),
 		watchersByPr:      make(map[string]context.CancelFunc),
 		fsWatchersByPr:    make(map[string]context.CancelFunc),
 		terminalPumps:     newTerminalPumpTracker(),
 		processOutputSubs: newProcessOutputSubTracker(),
 	}, nil
+}
+
+// registerLabels builds the daemon-registration label map. It advertises the
+// daemon's runtime/sandbox type when known so the server can surface runtime
+// capability limits to the model. Returns nil when there is nothing to report,
+// keeping the registration message unchanged for local daemons.
+func (d *daemonClient) registerLabels() map[string]string {
+	if strings.TrimSpace(d.runtimeType) == "" {
+		return nil
+	}
+	return map[string]string{
+		config.DaemonRuntimeTypeLabelKey: d.runtimeType,
+	}
 }
 
 // setupGitCredentials configures git credential-store globally when GIT_TOKEN
@@ -313,6 +336,7 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 			Capabilities: d.capabilities,
 			Name:         d.daemonName,
 			DaemonType:   "local",
+			Labels:       d.registerLabels(),
 		}},
 	}
 	if err = stream.Send(register); err != nil {

@@ -151,9 +151,10 @@ nodes:
         You are reviewing the initial scaffold of a Forge app.
 
         **Pass if:**
-        - The project exists with forge.yaml, proto files, and generated code
+        - The project exists with forge.yaml, proto files, migrations, and generated code
         - `forge generate` and `forge build` succeed
-        - Entity messages have proper fields and annotations
+        - Entities follow the two-halves rule from the forge db skill: CRUD RPCs in a
+          service proto AND a matching table in the migrations
         - At least one service and one frontend exist
         - FORGE_PLAN.md exists in the project root
 
@@ -177,93 +178,39 @@ nodes:
           Read `FORGE_PLAN.md` in `{{inputs.working_directory}}` — it has the scoping decisions
           from the conversation you just had with the user. Now scaffold the project.
 
-          **Step 1: Create the project.**
+          **Step 0: Load the source of truth — do not work from memory.**
           ```bash
           export PATH="$HOME/go/bin:$PATH" && cd {{inputs.working_directory}}
+          reliant forge skill load getting-started
+          reliant forge skill load db
+          reliant forge skill load proto
+          ```
+          These skills ship inside the forge binary this project is generated with, so
+          they always match its current conventions. Follow them exactly; if anything
+          in this prompt disagrees with a loaded skill, the skill wins.
+
+          **Step 1: Create the project.**
+          ```bash
           reliant forge new <project-name> --mod github.com/user/<project-name> --service <service-name> --frontend dashboard
           ```
           Pick the project and service names based on what the user described.
           This creates a `<project-name>/` subdirectory. `cd` into it for all subsequent commands.
 
-          **Step 2: Write proto files** at `proto/services/<service>/v1/<service>.proto`.
-          Entities become DB tables, CRUD handlers, pages, and hooks via `forge generate`.
-
-          Proto examples — follow these patterns exactly:
-
-          **Basic entity with all annotations:**
-          ```proto
-          import "forge/v1/forge.proto";
-          import "google/protobuf/timestamp.proto";
-          import "google/protobuf/wrappers.proto";
-
-          message Patient {
-            option (forge.v1.entity) = {
-              table: "patients"
-              soft_delete: true
-              timestamps: true
-            };
-
-            string id = 1 [(forge.v1.field) = { pk: true }];
-            string org_id = 2 [(forge.v1.field) = { tenant: true, ref: "organizations.id" }];
-            string name = 3;
-            string email = 4 [(forge.v1.field) = { unique: true }];
-            PatientStatus status = 5;
-            repeated string tags = 6;
-            google.protobuf.StringValue notes = 7;  // nullable
-            google.protobuf.Timestamp created_at = 10;
-            google.protobuf.Timestamp updated_at = 11;
-            google.protobuf.Timestamp deleted_at = 12;
-          }
-
-          enum PatientStatus {
-            PATIENT_STATUS_UNSPECIFIED = 0;
-            PATIENT_STATUS_ACTIVE = 1;
-            PATIENT_STATUS_INACTIVE = 2;
-            PATIENT_STATUS_DECEASED = 3;
-          }
-          ```
-
-          **Full CRUD RPCs (define ALL five):**
-          ```proto
-          service PatientsService {
-            rpc CreatePatient(CreatePatientRequest) returns (CreatePatientResponse) {
-              option (google.api.http) = { post: "/api/v1/patients" body: "*" };
-            }
-            rpc GetPatient(GetPatientRequest) returns (GetPatientResponse) {
-              option (google.api.http) = { get: "/api/v1/patients/{id}" };
-            }
-            rpc ListPatients(ListPatientsRequest) returns (ListPatientsResponse) {
-              option (google.api.http) = { get: "/api/v1/patients" };
-            }
-            rpc UpdatePatient(UpdatePatientRequest) returns (UpdatePatientResponse) {
-              option (google.api.http) = { patch: "/api/v1/patients/{id}" body: "*" };
-            }
-            rpc DeletePatient(DeletePatientRequest) returns (DeletePatientResponse) {
-              option (google.api.http) = { delete: "/api/v1/patients/{id}" };
-            }
-            // Custom non-CRUD RPC:
-            rpc TransferPatient(TransferPatientRequest) returns (TransferPatientResponse) {
-              option (google.api.http) = { post: "/api/v1/patients/{id}/transfer" body: "*" };
-            }
-          }
-          ```
-
-          **Common proto mistakes to avoid:**
-          - ALWAYS import `forge/v1/forge.proto` for entity annotations
-          - ALWAYS import `google/protobuf/timestamp.proto` for Timestamp fields
-          - ALWAYS import `google/protobuf/wrappers.proto` for nullable fields (StringValue, Int32Value, etc.)
-          - ALWAYS include `option go_package` at the top of the file
-          - Enum values MUST be prefixed with the enum name in SCREAMING_SNAKE_CASE
-          - Enum MUST have an UNSPECIFIED = 0 value
-          - Field numbers must be unique within a message — don't duplicate
-          - Name ALL five CRUD RPCs: Create, Get, List, Update, Delete
-
-          Entity annotations:
-          - `(forge.v1.entity)` on the message — sets table name, soft_delete, timestamps
-          - `(forge.v1.field)` on fields — pk, tenant, ref (foreign key), unique, index, immutable
-          - Entity detection: any message with an `id` field that isn't named *Request/*Response/*Filter
-          - Use `google.protobuf.StringValue` for nullable fields
-          - Use enums for status/type fields — they get badge rendering in the UI
+          **Step 2: Define the schema and API per the skills.**
+          - SQL migrations in `db/migrations/` are the single source of truth for the
+            schema; proto files define the API services and RPCs. An entity becomes
+            real only when BOTH halves exist — CRUD RPCs in a service proto AND a
+            matching table in the applied migrations (the db skill explains the rule).
+          - For each entity in FORGE_PLAN.md, use the scaffolder — it creates the
+            migration and the proto CRUD surface together:
+            ```bash
+            reliant forge add entity <name> <field:type ...>
+            ```
+            Field syntax, types, and nullability rules are in the db skill.
+          - Add custom (non-CRUD) RPCs to the service protos per the proto skill.
+          - Add relationships, indexes, and constraints with hand-written migrations
+            per the db skill.
+          - Prefer 1-2 services, 1 frontend. Be ambitious — Forge handles the heavy lifting.
 
           **Step 3: Generate and verify.**
           ```bash
@@ -271,26 +218,16 @@ nodes:
           reliant forge generate && reliant forge build
           ```
 
-          ## Proto Field Types
-          Scalar: `string`, `int32`, `int64`, `uint32`, `uint64`, `bool`, `float`, `double`, `bytes`
-          Timestamp: `google.protobuf.Timestamp`
-          Arrays: `repeated string`, `repeated int32`, etc. (Postgres arrays)
-          Any valid proto3 type works.
-
-          ## Entity Rules
-          - Every entity MUST have `id` (string) and `org_id` (string, tenant_key)
-          - Prefer 1-2 services, 1 frontend
-          - Be ambitious — Forge handles the heavy lifting
-
-          ## Do NOT Read or Edit Generated Files
-          `gen/`, `*_gen.go`, `cmd/server.go`, `cmd/otel.go`, `pkg/app/bootstrap.go`
-          You do not need to read these files. They are generated by forge and will be regenerated on every `forge generate`. Do not read them to understand signatures or patterns — work from the proto files and FORGE_PLAN.md instead.
-          Custom wiring: `pkg/app/setup.go`
+          ## Generated vs Owned
+          Rule of thumb (from the architecture skill): anything with `_gen` in the name
+          or under `gen/` is regenerated on every `forge generate` — never edit it, and
+          don't read it to learn signatures or patterns. Work from FORGE_PLAN.md, the
+          migrations, and the proto files. Everything without `_gen` is yours.
 
           ## SCOPE BOUNDARY — READ THIS
           Your job in this phase is ONLY:
           1. Run `forge new` to create the project
-          2. Write proto files with entity definitions and CRUD RPCs
+          2. Define entities (migrations + proto CRUD, via `forge add entity`) and custom RPCs
           3. Run `forge generate && forge build` to verify
 
           **STOP after `forge build` passes.** Do NOT:
@@ -299,9 +236,9 @@ nodes:
           - Write tests, seeds, business logic, or anything beyond proto files
           - Edit any generated files
 
-          The entire point of this phase is: proto files → generate → build passes. That's it.
-          Later phases handle everything else. If you write code beyond protos, you are wasting
-          tokens on work that will be overwritten.
+          The entire point of this phase is: migrations + protos → generate → build passes.
+          That's it. Later phases handle everything else. If you write code beyond the schema
+          and API surface, you are wasting tokens on work that will be overwritten.
 
           **FAIL FAST on tooling errors:** If `reliant forge new`, `reliant forge generate`, or `reliant forge build`
           fails with a tooling error (command not found, binary crash, installation issue), STOP IMMEDIATELY
@@ -481,39 +418,52 @@ nodes:
           The FORGE_PLAN.md file is your source of truth for MVP scope. If something
           isn't in the plan, it wasn't discussed — don't guess, focus on what's listed.
 
+          **Load the source of truth first — do not work from memory:**
+          ```bash
+          export PATH="$HOME/go/bin:$PATH" && cd {{inputs.working_directory}} && if [ ! -f forge.yaml ]; then cd $(ls -d */ | head -1); fi
+          reliant forge skill load architecture
+          reliant forge skill load service-layer
+          reliant forge skill load api
+          reliant forge skill load testing
+          ```
+          These skills ship inside the forge binary and always match its current
+          conventions — where to put business logic, how handlers delegate to the
+          service layer, how the composition/wiring seam works, and how the test
+          harness is used. If anything in this prompt disagrees with a loaded skill,
+          the skill wins.
+
           **What already works:**
-          - Generated CRUD handlers in `handlers/<service>/handlers_crud_gen.go` (real DB operations)
-          - ORM functions in `internal/db/<entity>_orm.go`
-          - Migrations in `db/migrations/`
-          - Test harness in `pkg/app/testing.go`
+          - Generated CRUD handlers with real DB operations, ORM projected from the
+            migrations, and the test harness (the architecture skill maps what is
+            generated vs owned)
           - Frontend is already polished and connected
 
           **Your focus:**
-          1. Implement custom (non-CRUD) RPC handlers — the stubs in `handlers/<service>/handlers_gen.go`
-          2. Add validation and business rules to existing CRUD handlers (create new files, don't edit `*_gen.go`)
-          3. Write tests for critical business logic
+          1. Implement custom (non-CRUD) RPCs in the owned handler/service files per the
+             service-layer and api skills
+          2. Add validation and business rules to existing CRUD flows (in owned files,
+             never in `*_gen.go`)
+          3. Write tests for critical business logic per the testing skill
           4. Wire up any integrations needed for MVP (auth, email, etc.)
 
           **Parallelize:** Spawn agents for independent handlers/services. Each agent should
           work on a cohesive vertical (handler + test + any frontend updates).
 
-          **Proto files are yours to modify.** Need a new RPC? A new field? A new entity entirely?
-          Edit the protos in `proto/services/<service>/v1/`, then run `reliant forge generate && reliant forge build`.
+          **Protos and migrations are yours to modify.** Need a new RPC? A new field? A new
+          entity entirely? Edit the protos / add a migration (or `reliant forge add entity ...`),
+          then run `reliant forge generate && reliant forge build`.
           There are no backwards compatibility concerns — this project has never shipped.
-          The only files you must NOT edit are generated outputs: `gen/`, `*_gen.go`, `cmd/server.go`, `cmd/otel.go`, `pkg/app/bootstrap.go`.
 
           **Rules:**
-          - Do NOT edit `*_gen.go` files, `cmd/server.go`, `cmd/otel.go`, `pkg/app/bootstrap.go`
-          - Custom wiring in `pkg/app/setup.go`
+          - Generated vs owned: anything with `_gen` in the name or under `gen/` is
+            regenerated — never edit it, and don't read it to learn signatures or
+            patterns. Everything else is yours (the architecture skill has the full map).
+          - Custom wiring goes in the owned composition seam the architecture skill
+            describes — never in generated composition files.
+          - To understand contracts: read FORGE_PLAN.md for requirements, proto files for
+            the API, migrations for the schema, and the owned contract/handler files for
+            the signatures to implement.
           - Track progress in your plan (mark tasks completed as you go)
-
-          ## Working with Generated Code
-          Do NOT read `_gen.go` files or files in `gen/` to understand handler signatures.
-          Instead:
-          - Read the handler stub files (the non-`_gen.go` files in `pkg/handlers/`) — they show the function signatures you need to implement
-          - Read FORGE_PLAN.md for the feature requirements
-          - Read proto files for the API contract
-          - If you need to understand generated types, look at the proto definitions, not the generated Go code
 
           ## Verify Before Finishing (REQUIRED)
           There is no separate reviewer for this phase — you are the last line before the
@@ -626,7 +576,7 @@ nodes:
 
           **Forge gives you production infrastructure for free:**
           - Auth middleware (JWT/API key) is already wired
-          - RBAC authorizers are generated from proto annotations
+          - RBAC authorizers are generated (the auth skill covers the model)
           - OpenTelemetry tracing/metrics are configured
           - Health checks, graceful shutdown are built in
           - Your job is the application logic, not infrastructure
@@ -634,24 +584,31 @@ nodes:
           **Parallelize aggressively:** Spawn agents for independent work streams —
           tests, remaining features, error handling can all happen in parallel.
 
-          **Proto files are yours to modify.** Need a new RPC? A new field? A new entity entirely?
-          Edit the protos in `proto/services/<service>/v1/`, then run `reliant forge generate && reliant forge build`.
+          **Load the source of truth first — do not work from memory:**
+          ```bash
+          export PATH="$HOME/go/bin:$PATH" && cd {{inputs.working_directory}} && if [ ! -f forge.yaml ]; then cd $(ls -d */ | head -1); fi
+          reliant forge skill load architecture
+          reliant forge skill load service-layer
+          reliant forge skill load testing
+          ```
+          If anything in this prompt disagrees with a loaded skill, the skill wins.
+
+          **Protos and migrations are yours to modify.** Need a new RPC? A new field? A new
+          entity entirely? Edit the protos / add a migration (or `reliant forge add entity ...`),
+          then run `reliant forge generate && reliant forge build`.
           There are no backwards compatibility concerns — this project has never shipped.
-          The only files you must NOT edit are generated outputs: `gen/`, `*_gen.go`, `cmd/server.go`, `cmd/otel.go`, `pkg/app/bootstrap.go`.
 
           **Rules:**
-          - Do NOT edit `*_gen.go` files, `cmd/server.go`, `cmd/otel.go`, `pkg/app/bootstrap.go`
-          - Custom wiring in `pkg/app/setup.go`
+          - Generated vs owned: anything with `_gen` in the name or under `gen/` is
+            regenerated — never edit it, and don't read it to learn signatures or
+            patterns. Everything else is yours (the architecture skill has the full map).
+          - Custom wiring goes in the owned composition seam the architecture skill
+            describes — never in generated composition files.
+          - To understand contracts: read FORGE_PLAN.md for requirements, proto files for
+            the API, migrations for the schema, and the owned contract/handler files for
+            the signatures to implement.
           - Run the full verification: `reliant forge generate && reliant forge lint && reliant forge test && reliant forge build`
           - Track progress in your plan (mark tasks completed as you go)
-
-          ## Working with Generated Code
-          Do NOT read `_gen.go` files or files in `gen/` to understand handler signatures.
-          Instead:
-          - Read the handler stub files (the non-`_gen.go` files in `pkg/handlers/`) — they show the function signatures you need to implement
-          - Read FORGE_PLAN.md for the feature requirements
-          - Read proto files for the API contract
-          - If you need to understand generated types, look at the proto definitions, not the generated Go code
 
           Work in `{{inputs.working_directory}}`.
 

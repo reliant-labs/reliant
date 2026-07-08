@@ -464,6 +464,13 @@ type initGitRepoRequest struct {
 	InitialBranch     string   `json:"initial_branch"`
 	GitignorePatterns []string `json:"gitignore_patterns"`
 	InitialCommit     bool     `json:"initial_commit"`
+	// OnlyIfEmpty gates auto-init: when true, init is skipped (Success=false,
+	// no error) if the directory already contains real content, so an
+	// existing non-empty folder a user opened is left untouched. A brand-new
+	// empty project (including a fresh cloud workspace, whose only possible
+	// entry is the reliant.md scaffold) still initializes. The manual
+	// "Initialize Git" flow leaves this false and always inits.
+	OnlyIfEmpty bool `json:"only_if_empty"`
 }
 
 type initGitRepoResponse struct {
@@ -487,6 +494,19 @@ func handleInitGitRepo(ctx context.Context, payload []byte) ([]byte, error) {
 		return json.Marshal(initGitRepoResponse{Error: "a .git directory already exists at this path"})
 	}
 
+	// Auto-init gate: only initialize an EMPTY project. Skips (without error)
+	// when the directory already holds real content, so an existing folder a
+	// user opened is left alone and the app prompts instead.
+	if req.OnlyIfEmpty {
+		empty, err := dirIsEffectivelyEmpty(req.Path)
+		if err != nil {
+			return json.Marshal(initGitRepoResponse{Error: fmt.Sprintf("check dir empty: %v", err)})
+		}
+		if !empty {
+			return json.Marshal(initGitRepoResponse{Success: false, Error: "directory not empty; skipping auto git init"})
+		}
+	}
+
 	if len(req.GitignorePatterns) == 0 {
 		req.GitignorePatterns = gitutil.DefaultGitignorePatterns()
 	}
@@ -503,6 +523,26 @@ func handleInitGitRepo(ctx context.Context, payload []byte) ([]byte, error) {
 	}
 
 	return json.Marshal(initGitRepoResponse{Success: true})
+}
+
+// dirIsEffectivelyEmpty reports whether path contains no real content —
+// treating the reliant scaffold (reliant.md / .reliant) and an existing .git
+// as "empty" so a freshly created project (including a cloud workspace that
+// already has reliant.md written) still qualifies for auto git-init, while a
+// folder with actual files does not.
+func dirIsEffectivelyEmpty(path string) (bool, error) {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return false, err
+	}
+	for _, e := range entries {
+		switch e.Name() {
+		case "reliant.md", ".reliant", ".git":
+			continue
+		}
+		return false, nil
+	}
+	return true, nil
 }
 
 // --- Helpers ---

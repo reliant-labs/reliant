@@ -1,23 +1,24 @@
 # Test scenarios for agent.yaml workflow
 #
 # Agent workflow structure:
-# - agent_loop (main loop) contains: call_llm -> approval -> execute_tools -> compact
-# - Loop continues while: tool_calls not empty
-# - Loop asks when: inputs.max_turns > 0 && iter.iteration >= inputs.max_turns
-# - After loop: max_turns_notification if _iterations >= max_turns
+# - agent_loop (main loop) contains: call_llm -> approval -> execute_tools -> compact -> ask_question
+# - Loop continues while: tool_calls not empty OR ask_question returned feedback
+# - ask input (default false): when true and the LLM returns no tool calls,
+#   ask_question runs; feedback continues the loop, no feedback exits it
 #
 # Key behaviors:
 # - mode=auto: auto-approves tool execution (skips approval node)
 # - mode=manual: requires approval before tool execution
 # - mode=plan: read-only tools with planning prompt
-# - max_turns=0 (default): unlimited iterations
-# - max_turns>0: loop asks (pauses for user input) at that iteration count
+# - compaction: fires when execute_tools thread_token_count exceeds
+#   inputs.model.compaction_threshold (default 185000)
 #
 # Output format note:
 # Events use the 'output' field which matches activity output structures directly:
 # - call_llm: message, response_text, tool_calls, token_count, etc.
 # - execute_tools: message, tool_results, thread_token_count, response_data, etc.
 # - approval: approval_id, status, action_taken, data
+# - ask_question: has_feedback
 
 ---
 # Happy path: LLM responds without any tool calls, loop exits immediately
@@ -25,7 +26,6 @@ name: happy_path_no_tools
 description: LLM responds with text only, no tool calls - loop exits after first iteration
 inputs:
   mode: auto
-  max_turns: 100
 events:
   # call_llm responds with text only, no tool calls
   - node: agent_loop.call_llm
@@ -44,7 +44,7 @@ expect:
     - agent_loop.approval
     - agent_loop.execute_tools
     - agent_loop.compact
-    - max_turns_notification
+    - agent_loop.ask_question
 
 ---
 # Auto mode: LLM uses tools, they execute automatically, then responds
@@ -52,7 +52,6 @@ name: tool_use_auto_mode
 description: LLM calls tools in auto mode, tools execute without approval, loop continues
 inputs:
   mode: auto
-  max_turns: 100
 events:
   # First iteration: LLM requests a tool
   - node: agent_loop.call_llm
@@ -92,7 +91,6 @@ expect:
     - agent_loop.execute_tools
   not_reached:
     - agent_loop.approval
-    - max_turns_notification
 
 ---
 # Manual mode with approval granted
@@ -100,7 +98,6 @@ name: tool_use_manual_approved
 description: Manual mode requires approval, user approves, tools execute
 inputs:
   mode: manual
-  max_turns: 100
 events:
   # LLM requests a tool
   - node: agent_loop.call_llm
@@ -148,8 +145,6 @@ expect:
     - agent_loop.call_llm
     - agent_loop.approval
     - agent_loop.execute_tools
-  not_reached:
-    - max_turns_notification
 
 ---
 # Manual mode with approval denied - loop exits (no tool execution)
@@ -157,7 +152,6 @@ name: tool_use_manual_denied
 description: Manual mode, user denies approval, tools do not execute
 inputs:
   mode: manual
-  max_turns: 100
 events:
   # LLM requests a tool
   - node: agent_loop.call_llm
@@ -187,97 +181,65 @@ expect:
   not_reached:
     - agent_loop.execute_tools
     - agent_loop.compact
-    - max_turns_notification
 
 ---
-# Max turns limit reached - while condition stops loop at max_turns
+# ask=true: feedback from ask_question continues the loop, no feedback exits it
 #
-# The while condition includes max_turns enforcement:
-#   ((outputs.tool_calls != null && size(outputs.tool_calls) > 0) || outputs.has_feedback == true)
-#     && (inputs.max_turns == 0 || iter.iteration < inputs.max_turns)
+# The while condition is:
+#   (outputs.tool_calls != null && size(outputs.tool_calls) > 0) || outputs.has_feedback == true
 #
-# With max_turns=2:
-# - Iteration 0: call_llm returns tool_calls → execute_tools → iteration becomes 1
-#   → while check: tool_calls=true AND 1 < 2 = true → continue
-# - Iteration 1: call_llm returns tool_calls → execute_tools → iteration becomes 2
-#   → while check: tool_calls=true AND 2 < 2 = false → loop exits with 2 iterations
-#
-# The max_turns_notification edge fires because _iterations (2) >= max_turns (2)
-name: max_turns_reached
-description: Loop hits max_turns limit, stops after 2 iterations
+# - Iteration 0: call_llm returns no tools → ask_question → user gives feedback
+#   → has_feedback=true → loop continues
+# - Iteration 1: call_llm returns no tools → ask_question → user continues
+#   → has_feedback=false → loop exits with 2 iterations
+name: ask_feedback_continues_loop
+description: With ask enabled, user feedback loops the agent; plain continue exits
 inputs:
   mode: auto
-  max_turns: 2
+  ask: true
 events:
-  # Iteration 0: tool call
+  # Iteration 0: no tools, ask fires, user provides feedback
   - node: agent_loop.call_llm
     output:
       message:
         role: assistant
-        text: "Searching..."
-      response_text: "Searching..."
-      tool_calls:
-        - id: call_0
-          name: grep
-          input:
-            pattern: "TODO"
-  - node: agent_loop.execute_tools
+        text: "Here's my first draft of the answer."
+      response_text: "Here's my first draft of the answer."
+      tool_calls: []
+  - node: agent_loop.ask_question
     output:
-      message:
-        role: tool
-        text: ""
-      tool_results:
-        - tool_call_id: call_0
-          content: '["file1.go"]'
-      thread_token_count: 500
-  # Iteration 1: still has tool calls, but max_turns stops loop after this
+      has_feedback: true
+  # Iteration 1: no tools, ask fires, user continues without feedback
   - node: agent_loop.call_llm
     output:
       message:
         role: assistant
-        text: "Reading file..."
-      response_text: "Reading file..."
-      tool_calls:
-        - id: call_1
-          name: view
-          input:
-            file_path: "file1.go"
-  - node: agent_loop.execute_tools
+        text: "Here's the revised answer incorporating your feedback."
+      response_text: "Here's the revised answer incorporating your feedback."
+      tool_calls: []
+  - node: agent_loop.ask_question
     output:
-      message:
-        role: tool
-        text: ""
-      tool_results:
-        - tool_call_id: call_1
-          content: "// TODO: fix this"
-      thread_token_count: 600
-  # max_turns_notification fires because _iterations (2) >= max_turns (2)
-  - node: max_turns_notification
-    output:
-      message:
-        role: system
-        text: "Agent reached maximum iteration limit (2 turns)."
+      has_feedback: false
 expect:
   outcome: completed
   reached:
     - agent_loop
     - agent_loop.call_llm
-    - agent_loop.execute_tools
-    - max_turns_notification
+    - agent_loop.ask_question
   not_reached:
     - agent_loop.approval
+    - agent_loop.execute_tools
+    - agent_loop.compact
   node_outputs:
     agent_loop:
       _iterations: 2
 
 ---
-# Compaction triggered when token count exceeds threshold
+# Compaction triggered when token count exceeds the default threshold (185000)
 name: compaction_triggered
-description: Token count exceeds threshold after tool execution, compact node runs
+description: Token count exceeds the model's compaction threshold after tool execution, compact node runs
 inputs:
   mode: auto
-  max_turns: 100
-  compaction_threshold: 10000
 events:
   # LLM requests a tool that returns lots of data
   - node: agent_loop.call_llm
@@ -291,7 +253,7 @@ events:
           name: view
           input:
             file_path: "/path/to/large/file.go"
-  # Tool returns with high token count
+  # Tool returns with token count above the 185000 default threshold
   - node: agent_loop.execute_tools
     output:
       message:
@@ -300,7 +262,7 @@ events:
       tool_results:
         - tool_call_id: call_0
           content: "Very large file content..."
-      thread_token_count: 15000
+      thread_token_count: 200000
   # Compact node runs due to high token count
   - node: agent_loop.compact
     output:
@@ -324,16 +286,13 @@ expect:
     - agent_loop.compact
   not_reached:
     - agent_loop.approval
-    - max_turns_notification
 
 ---
 # Compaction skipped when token count is below threshold
 name: compaction_skipped_below_threshold
-description: Token count stays below compaction_threshold, compact node is not reached
+description: Token count stays below the model's compaction threshold, compact node is not reached
 inputs:
   mode: auto
-  max_turns: 100
-  compaction_threshold: 185000
 events:
   # LLM requests a tool
   - node: agent_loop.call_llm
@@ -374,7 +333,6 @@ expect:
   not_reached:
     - agent_loop.approval
     - agent_loop.compact
-    - max_turns_notification
 
 ---
 # Multiple tool calls in sequence
@@ -382,7 +340,6 @@ name: multiple_tool_iterations
 description: Agent makes multiple tool calls across iterations before completing
 inputs:
   mode: auto
-  max_turns: 100
 events:
   # Iteration 0: search
   - node: agent_loop.call_llm
@@ -463,7 +420,6 @@ expect:
     - agent_loop.execute_tools
   not_reached:
     - agent_loop.approval
-    - max_turns_notification
 
 ---
 # Plan mode uses plan-tagged tools only
@@ -471,7 +427,6 @@ name: plan_mode_readonly
 description: Plan mode restricts to read-only tools for planning
 inputs:
   mode: plan
-  max_turns: 100
 events:
   # LLM uses read-only tools in plan mode
   - node: agent_loop.call_llm
@@ -534,4 +489,3 @@ expect:
     - agent_loop.execute_tools
   not_reached:
     - agent_loop.approval
-    - max_turns_notification

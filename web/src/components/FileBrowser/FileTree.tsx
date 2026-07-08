@@ -6,6 +6,11 @@ import { Loader2, AlertCircle, FilePlus, FolderPlus } from "lucide-react";
 import type { FileNode } from "./index";
 import { getFileTree, createFile, createFolder, deleteFileOrFolder, copyFile, getFileContent, getFilePreviewInfo } from "../../api/fileSystem";
 import { cn } from "../../lib/utils";
+import {
+  isDaemonConnectingError,
+  DAEMON_CONNECT_TIMEOUT_MS,
+} from "../../lib/daemon-errors";
+import { DaemonConnectingState } from "../DaemonConnectingState";
 import { useProjectStore } from "../../store/projectStore";
 import { useViewerStore } from "../../store/viewerStore";
 import { useFileDeletionStore } from "../../store/fileDeletionStore";
@@ -141,6 +146,10 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
   const [tree, setTree] = useState<FileNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Transient "cloud daemon still connecting" state: show a spinner + auto-retry
+  // instead of a red error while the daemon comes online (up to 60s).
+  const [connecting, setConnecting] = useState(false);
+  const connectingSinceRef = useRef<number | null>(null);
   const [newItemName, setNewItemName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -191,14 +200,43 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
     try {
       const tree = await getFileTree("/", showHidden, worktreeId);
       setTree(tree);
+      setConnecting(false);
+      connectingSinceRef.current = null;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load file tree");
+      if (isDaemonConnectingError(err)) {
+        // Cloud daemon is still coming online — show the connecting state and
+        // keep auto-retrying, but give up after the provisioning window so we
+        // don't spin forever on a genuinely stuck daemon.
+        const since = connectingSinceRef.current ?? Date.now();
+        connectingSinceRef.current = since;
+        if (Date.now() - since >= DAEMON_CONNECT_TIMEOUT_MS) {
+          setConnecting(false);
+          connectingSinceRef.current = null;
+          setError("Couldn't connect to your environment. Please try again.");
+        } else {
+          setConnecting(true);
+        }
+      } else {
+        setConnecting(false);
+        connectingSinceRef.current = null;
+        setError(err instanceof Error ? err.message : "Failed to load file tree");
+      }
     } finally {
       if (showLoading) {
         setLoading(false);
       }
     }
   }, [showHidden, worktreeId]);
+
+  // While connecting, silently retry every 2s so the tree loads automatically
+  // once the daemon flips to ACTIVE. The 60s cap lives in loadFileTree.
+  useEffect(() => {
+    if (!connecting) return;
+    const id = setInterval(() => {
+      void loadFileTree(false);
+    }, 2_000);
+    return () => clearInterval(id);
+  }, [connecting, loadFileTree]);
 
   // Build visible paths for navigation
   const visiblePaths = buildVisiblePaths(tree, expandedPaths, searchQuery);
@@ -889,6 +927,10 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
         </div>
       </div>
     );
+  }
+
+  if (connecting) {
+    return <DaemonConnectingState />;
   }
 
   if (error) {

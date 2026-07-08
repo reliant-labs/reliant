@@ -1889,12 +1889,26 @@ func formatStoredMemories(projectCfg *cfgpkg.Config) string {
 		memories = append(memories, "## Project Context\n\n"+projectCfg.ProjectMemoryMD)
 	}
 
-	if len(memories) == 0 {
+	// Runtime capability heads-up for cloud daemons: tell the model up front
+	// which operations the serving daemon's sandbox cannot perform. Empty for
+	// local/unknown runtimes. Appended into the user-memories block (not a new
+	// message) so it rides the same prefix-cache slot.
+	runtimeNote := daemonRuntimeLimitationNote(projectCfg.DaemonRuntimeType)
+
+	if len(memories) == 0 && runtimeNote == "" {
 		return ""
 	}
-	preamble := "# User defined rules, memories, and context\n\nYou must adhere to the user's defined rules and context below at all times.\n\n"
-	memories = append([]string{preamble}, memories...)
-	return strings.Join(memories, "\n\n")
+
+	var sections []string
+	if len(memories) > 0 {
+		preamble := "# User defined rules, memories, and context\n\nYou must adhere to the user's defined rules and context below at all times.\n\n"
+		sections = append(sections, preamble)
+		sections = append(sections, memories...)
+	}
+	if runtimeNote != "" {
+		sections = append(sections, runtimeNote)
+	}
+	return strings.Join(sections, "\n\n")
 }
 
 // formatRepoMemoryMessages converts the config's repo memories map into

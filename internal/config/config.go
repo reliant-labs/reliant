@@ -54,7 +54,19 @@ type Config struct {
 	// Populated from the daemon's project config sync so cloud workers don't
 	// need filesystem access.
 	RepoMemories map[string]string `yaml:"-" json:"-"`
+	// DaemonRuntimeType identifies the sandbox/runtime the serving daemon runs
+	// under (e.g. "kata", "gvisor"). Empty for local/unknown daemons. Reported
+	// by the daemon at registration (DAEMON_RUNTIME_TYPE env → register label)
+	// and threaded here so the LLM context can carry runtime capability
+	// limitations. Ephemeral, in-memory only.
+	DaemonRuntimeType string `yaml:"-" json:"-"`
 }
+
+// DaemonRuntimeTypeLabelKey is the daemon-registration label key that carries
+// the daemon's runtime/sandbox type ("kata", "gvisor", ...). The daemon sets it
+// from the DAEMON_RUNTIME_TYPE env var; the server persists it with the pushed
+// project config so it can be surfaced to the model as a capability heads-up.
+const DaemonRuntimeTypeLabelKey = "reliant.runtime-type"
 
 // Application constants
 const (
