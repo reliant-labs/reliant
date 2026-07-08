@@ -883,19 +883,35 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
         projects: state.projects,
       }),
       onRehydrateStorage: () => (state, error) => {
-        if (error) {
-          logger.error("[WorkspaceState] Failed to rehydrate:", error);
-          return;
+        // IMPORTANT: this callback must be total — it must never throw.
+        // zustand's persist middleware reuses the SAME callback for both the
+        // success and the error branch of its hydrate() promise. If anything
+        // in the success path below throws (e.g. Object.keys(null), or a
+        // SecurityError reading window.localStorage in a restricted-storage
+        // context), zustand catches it and re-invokes this callback via the
+        // .catch, logging a spurious "Failed to rehydrate" immediately after
+        // "Rehydrated". The persisted data is actually fine; the noise came
+        // from a non-defensive success handler. Guard everything.
+        try {
+          if (error) {
+            logger.error("[WorkspaceState] Failed to rehydrate:", error);
+            return;
+          }
+          if (state) {
+            logger.info("[WorkspaceState] Rehydrated", {
+              lastProjectId: state.lastProjectId,
+              projectCount: Object.keys(state.projects ?? {}).length,
+            });
+          }
+
+          // Clean up deprecated localStorage keys from old tab system
+          cleanupDeprecatedStorage();
+        } catch (e) {
+          // Swallow — a post-rehydrate side-effect failing must not be
+          // reported back as a rehydration failure, and must not escape into
+          // zustand's promise chain.
+          logger.warn("[WorkspaceState] Post-rehydrate step failed (non-fatal):", e);
         }
-        if (state) {
-          logger.info("[WorkspaceState] Rehydrated", {
-            lastProjectId: state.lastProjectId,
-            projectCount: Object.keys(state.projects).length,
-          });
-        }
-        
-        // Clean up deprecated localStorage keys from old tab system
-        cleanupDeprecatedStorage();
       },
       migrate: (persistedState: unknown, version: number) => {
         logger.info("[WorkspaceState] Migrating from version", version);
@@ -1004,14 +1020,25 @@ const DEPRECATED_STORAGE_KEYS = [
  * Called during rehydration to ensure old data doesn't accumulate.
  */
 function cleanupDeprecatedStorage(): void {
-  if (typeof window === "undefined" || !window.localStorage) return;
-  
+  if (typeof window === "undefined") return;
+
+  // Merely *reading* window.localStorage can throw a SecurityError in
+  // restricted-storage contexts (sandboxed iframe, blocked cookies, some
+  // privacy modes). Guard the access itself, not just the per-key ops below.
+  let store: Storage;
+  try {
+    if (!window.localStorage) return;
+    store = window.localStorage;
+  } catch {
+    return;
+  }
+
   for (const key of DEPRECATED_STORAGE_KEYS) {
     try {
-      const existing = localStorage.getItem(key);
+      const existing = store.getItem(key);
       if (existing) {
         logger.info(`[WorkspaceState] Removing deprecated storage: ${key}`);
-        localStorage.removeItem(key);
+        store.removeItem(key);
       }
     } catch (e) {
       logger.warn(`[WorkspaceState] Failed to remove deprecated key ${key}:`, e);

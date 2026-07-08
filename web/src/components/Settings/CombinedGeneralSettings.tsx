@@ -402,7 +402,11 @@ export function CombinedGeneralSettings({
 
   const codexOAuth = useCodexOAuth();
   const claudeOAuth = useClaudeOAuth();
-  const oauthAvailability = useOAuthAvailability();
+  // Only probe the localhost OAuth helper once the user picks an OAuth provider
+  // in "Add New Provider" (the OAuthHelperPanel is shown) — never on mount.
+  const oauthAvailability = useOAuthAvailability({
+    enabled: Boolean(providerConfigs[selectedProvider as ProviderId]?.usesOAuth),
+  });
   const cloudEligibility = useCloudEligibility();
   const [enablingReliant, setEnablingReliant] = useState(false);
   const navigate = useNavigate();

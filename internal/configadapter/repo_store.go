@@ -37,5 +37,6 @@ func (s *repoConfigStore) GetProjectConfigRecord(ctx context.Context, projectID 
 		ProjectPresetsJSON:   record.ProjectPresetsJSON,
 		ProjectScenariosJSON: record.ProjectScenariosJSON,
 		ProjectSkillsJSON:    record.ProjectSkillsJSON,
+		RuntimeType:          record.RuntimeType,
 	}, nil
 }

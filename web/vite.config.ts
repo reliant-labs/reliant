@@ -30,7 +30,13 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
-  base: "./", // Use relative paths for assets
+  // Absolute base: the app is served at the domain root (app.reliantlabs.io) with
+  // history routing + SPA fallback. Relative "./" breaks fresh loads/refreshes on
+  // any 2+-segment route (e.g. /auth/github/callback) because "./assets/x.js"
+  // resolves against the route's dir (/auth/github/) → 404 → index.html is served
+  // as text/html → "Expected a JavaScript module" MIME error. "/" always resolves
+  // assets to /assets/* regardless of route depth.
+  base: "/",
   build: {
     // Optimize build output
     rollupOptions: {

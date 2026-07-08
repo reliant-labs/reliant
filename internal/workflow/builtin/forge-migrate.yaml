@@ -1,0 +1,547 @@
+name: forge-migrate
+apiVersion: "0.0.5"
+description: |
+  Migrate an existing codebase into a Forge project. Distinct from `migrate`
+  (which imports Claude Code/Cursor/Codex config into Reliant) and from
+  `forge-one-shot` (which builds a greenfield app from a conversation).
+
+  Division of labor (deliberate — do not add forge domain knowledge here):
+  - This YAML owns control flow only: gates on exit codes, the approval
+    checkpoint, the per-component porting loop, thread forking, and fail-loud
+    terminal states.
+  - All migration domain knowledge (scaffold shape, porting recipe, gotchas,
+    contracts floor) lives in the forge-shipped skills (`migration`,
+    `migration-service`, `migration-cli`, `forge-libraries`, ...), which
+    version-lock with the pinned forge binary. Prompts here LOAD those skills;
+    they never restate them. Restated knowledge rots when the forge pin moves.
+  - The LLM owns everything inside a phase: what to ask the user, how to
+    decompose the port, what order dependencies force. There is no fixed
+    question list.
+
+  Phases:
+    1. inventory   — investigate the source repo FIRST (code answers most
+                     questions), ask the user only what code cannot answer,
+                     write MIGRATION_PLAN.md, emit an ordered component list.
+    2. approval    — explicit consent before anything is written. A migration
+                     touches a real repo; never start on implied consent.
+    3. scaffold    — side-by-side scaffold + green baseline (get-it-right).
+    4. port_loop   — sequential loop over components in dependency order,
+                     each gated by generate/lint/build/test. Stops at the
+                     first component that cannot go green.
+    5. converge    — wiring, parity checklist, honest deferred-work summary.
+
+  Context flows via MIGRATION_PLAN.md (in the source repo root) and
+  .forge-migrate/target (pointer to the new project directory, written by
+  inventory so every later gate command can `cd` deterministically).
+
+entry: [inventory]
+
+inputs:
+  model:
+    type: model
+    description: Model for all phases
+    default:
+      tags: [flagship]
+
+  mode:
+    type: enum
+    ui: toolbar
+    default: auto
+    description: Execution mode for agent steps
+    enum: [manual, auto]
+
+  ask:
+    type: boolean
+    ui: toolbar
+    default: true
+    description: Pause for user review between phases
+
+  working_directory:
+    type: string
+    default: "."
+    description: Root of the SOURCE repository to migrate
+
+  target_directory:
+    type: string
+    default: ""
+    description: |
+      Where to create the new forge project. Leave empty to let the inventory
+      phase choose a sibling directory per the migration skill's guidance
+      (side-by-side, never in-place).
+
+  test_command:
+    type: string
+    default: "go test ./..."
+    description: Test command run inside the new project during port/converge gates
+
+outputs:
+  project_root: "{{has(nodes.inventory.response) && nodes.inventory.response != null ? nodes.inventory.response.target_directory : ''}}"
+  components_ported: "{{has(nodes.port_loop.ported) ? nodes.port_loop.ported : 0}}"
+
+nodes:
+  # ─── Phase 1: Inventory ─────────────────────────────────────────────
+  #
+  # Investigate first, ask second. Most migration questions are answered by
+  # the source code; the user only decides what code cannot (scope cuts,
+  # module path preference, parity bar). No fixed question list.
+
+  - id: inventory
+    type: workflow
+    ref: builtin://structured-agent
+    presets:
+      default: forge
+    passthrough: [model, mode]
+    args:
+      tools: ["tag:default", "ask_user"]
+      response_tool_name: submit_migration_plan
+      response_tool_description: Submit the migration plan summary and the ordered component list
+      response_schema:
+        type: object
+        required:
+          - summary
+          - project_name
+          - kind
+          - module_path
+          - target_directory
+          - components
+        properties:
+          summary:
+            type: string
+            description: Short overview of the source repo and the migration approach
+          project_name:
+            type: string
+            description: Name for the new forge project
+          kind:
+            type: string
+            enum: [service, cli, library]
+            description: Project shape per the migration skill (picked at scaffold time, not prunable later)
+          module_path:
+            type: string
+            description: New Go module path (side-by-side suffix per the migration skill, renamed at final cutover)
+          target_directory:
+            type: string
+            description: Absolute path where the new project will be created (echo the input if provided, else the sibling directory you chose)
+          open_questions:
+            type: array
+            items:
+              type: string
+            description: Decisions you could not resolve from code or the user — surfaced before approval
+          components:
+            type: array
+            description: |
+              Ordered port units — dependencies BEFORE dependents. Coarse,
+              cohesive units (a package cluster, a service, a worker), not
+              per-file. Each becomes one gated port iteration.
+            items:
+              type: object
+              required:
+                - name
+                - kind
+                - source_paths
+                - notes
+              properties:
+                name:
+                  type: string
+                  description: Short stable name for this port unit
+                kind:
+                  type: string
+                  enum: [package, service, worker, operator, webhook, binary, frontend, pack]
+                source_paths:
+                  type: array
+                  items:
+                    type: string
+                  description: Source-repo paths this unit ports
+                depends_on:
+                  type: array
+                  items:
+                    type: string
+                  description: Names of components that must be ported first
+                notes:
+                  type: string
+                  description: Porting guidance specific to this unit (gotchas, import rewrites, tests to carry)
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Migration Inventory
+
+          You are planning the migration of the existing codebase at
+          `{{inputs.working_directory}}` into a new forge project.
+
+          **Load the source of truth FIRST — do not work from memory:**
+          ```bash
+          cd {{inputs.working_directory}} && reliant forge skill load migration
+          ```
+          Then load the shape-specific sibling skill it points you to
+          (`migration-service` or `migration-cli`) plus `architecture` and
+          `forge-libraries`. Follow those skills exactly — they define
+          pre-flight checks, project shape, module-path strategy, porting
+          order, and the per-package recipe. This workflow adds gates and
+          ordering; the skills define HOW.
+
+          **Investigate before asking.** Read the source repo: entrypoints,
+          go.mod, internal packages and their import graph, background
+          workers, HTTP/RPC surface, DB schema/migrations, frontends. The
+          code answers most questions. Use `ask_user` ONLY for decisions the
+          code cannot answer — e.g. which components are in/out of scope,
+          module-path preference, how strict the behavior-parity bar is.
+          Ask few, high-leverage questions; batch them.
+
+          **Then produce, in this order:**
+          1. `{{inputs.working_directory}}/MIGRATION_PLAN.md` — the durable
+             plan: source inventory, target shape, component list with port
+             order and per-component notes, parity bar, explicit deferred /
+             out-of-scope list.
+          2. `{{inputs.working_directory}}/.forge-migrate/target` — a file
+             containing ONLY the absolute path of the target project
+             directory ({{inputs.target_directory != '' ? 'use the configured target: ' + inputs.target_directory : 'choose a sibling directory per the migration skill — never in-place'}}).
+             Every later gate command reads this file to `cd`.
+          3. The structured response (submit_migration_plan) — the component
+             list MUST be in port order: dependencies before dependents.
+
+          Do NOT scaffold, write code, or modify the source repo (beyond the
+          two files above). This phase is read-and-plan only.
+    save_message:
+      role: assistant
+      content: |
+        ## Migration Plan
+        {{has(output.response) && output.response != null ? output.response.summary : 'No summary available.'}}
+
+  # Durable, thread-visible copy of the ordered component list. Port-loop
+  # iterations reference "component number N in the list below" — the same
+  # pattern migrate.yaml uses for workflow candidates.
+  - id: plan_context
+    type: save_message
+    args:
+      role: system
+      content: |
+        ## Migration component list (port order)
+
+        Target project: {{nodes.inventory.response.target_directory}}
+        Shape: {{nodes.inventory.response.kind}} — module {{nodes.inventory.response.module_path}}
+
+        {{size(nodes.inventory.response.components)}} component(s), dependencies first:
+        {{toJson(nodes.inventory.response.components)}}
+
+        {{has(nodes.inventory.response.open_questions) && nodes.inventory.response.open_questions != null && size(nodes.inventory.response.open_questions) > 0 ? 'Open questions (unresolved — review before approving):\n' + toJson(nodes.inventory.response.open_questions) : ''}}
+
+        Port-loop iterations process components in order using 1-based indexing.
+        The full plan is at {{inputs.working_directory}}/MIGRATION_PLAN.md.
+
+  # ─── Phase 2: Approval ──────────────────────────────────────────────
+  #
+  # Hard consent gate. The plan (and any open questions) is in the messages
+  # above; nothing is scaffolded or written until the user approves.
+
+  - id: confirm
+    type: approval
+    args:
+      title: Approve the migration plan?
+      timeout: 24h
+
+  - id: denied
+    type: save_message
+    display_style: warning
+    args:
+      role: assistant
+      content: |
+        ## Migration Stopped
+
+        Nothing was scaffolded or written. The plan is saved at
+        `{{inputs.working_directory}}/MIGRATION_PLAN.md` — edit it and rerun
+        forge-migrate when you're ready, or tell me what to change.
+
+  # ─── Phase 3: Scaffold & Green Baseline ─────────────────────────────
+  #
+  # Follow the migration skill's scaffold steps: side-by-side project of the
+  # right kind, components added one at a time, green baseline, contracts
+  # floor set BEFORE any porting. Gates run inside the new project via the
+  # .forge-migrate/target pointer.
+
+  - id: scaffold_baseline
+    type: workflow
+    ref: builtin://get-it-right
+    passthrough: [model, mode, ask]
+    args:
+      implementer_preset: forge
+      max_retries: 3
+      lint_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd \"$(cat '{{inputs.working_directory}}/.forge-migrate/target')\" && reliant forge generate && reliant forge lint"
+      build_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd \"$(cat '{{inputs.working_directory}}/.forge-migrate/target')\" && go mod tidy && go build ./..."
+      review_instructions: |
+        You are reviewing the scaffold baseline of a forge migration.
+
+        **Pass if:**
+        - The new project exists at the target directory recorded in the plan
+        - Components and packs from MIGRATION_PLAN.md are added
+        - `forge generate`, `go build ./...`, and `forge lint` are green
+        - The contracts floor is set in forge.yaml per the migration skill
+        - No business logic has been ported yet (that is the next phase)
+
+        **Do NOT fail because:**
+        - Handlers/workers are empty scaffolds (expected — porting comes next)
+        - The source repo is untouched (it must be)
+
+        **Only fail if:**
+        - The baseline is not green, the project shape contradicts the plan,
+          or the contracts floor was skipped
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Scaffold the Migration Target
+
+          Read `{{inputs.working_directory}}/MIGRATION_PLAN.md`, then load the
+          skills before doing anything:
+          ```bash
+          cd {{inputs.working_directory}} && reliant forge skill load migration
+          ```
+          plus the shape-specific skill (`migration-service` / `migration-cli`)
+          and `services`, `packs`, `contracts`. Follow the skill's recommended
+          migration order for the scaffold steps ONLY:
+
+          1. Scaffold the project at the target directory recorded in
+             `{{inputs.working_directory}}/.forge-migrate/target`, with the
+             kind and module path from the plan.
+          2. Add the components and packs the plan calls for, one at a time,
+             regenerating after each, per the skill.
+          3. Reach the skill's green baseline.
+          4. Set the contracts floor in forge.yaml per the skill — BEFORE any
+             porting happens.
+
+          **STOP once the baseline is green.** Do NOT port any business logic
+          — the port loop handles that component by component. Do NOT modify
+          the source repository.
+
+          **FAIL FAST on tooling errors:** if forge/reliant commands fail with
+          a tooling error (command not found, binary crash, install issue),
+          STOP and report it. Do not debug or rebuild forge/reliant itself.
+
+  # ─── Phase 4: Port Loop ─────────────────────────────────────────────
+  #
+  # Sequential — dependency order is the point. One component per iteration,
+  # each gated by generate/lint --contract/build/tests. The loop stops at the
+  # first component whose gate cannot go green; the edge routes to failed
+  # rather than porting dependents onto a broken base.
+
+  - id: port_loop
+    type: loop
+    while: >
+      iter.iteration < size(nodes.inventory.response.components)
+      && (!has(outputs.component_strategy) || outputs.component_strategy == 'pass')
+    ask: "{{false}}"
+    inline:
+      entry: [port]
+
+      outputs:
+        component_strategy: "{{has(nodes.port.strategy) ? nodes.port.strategy : 'failed'}}"
+        component_stuck: "{{has(nodes.port.stuck) ? nodes.port.stuck : false}}"
+        ported: "{{iter.iteration + 1}}"
+
+      nodes:
+        - id: port
+          type: workflow
+          ref: builtin://get-it-right
+          passthrough: [model, mode, ask]
+          args:
+            implementer_preset: forge
+            max_retries: 4
+            lint_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd \"$(cat '{{inputs.working_directory}}/.forge-migrate/target')\" && reliant forge generate && reliant forge lint --contract"
+            build_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd \"$(cat '{{inputs.working_directory}}/.forge-migrate/target')\" && go mod tidy && go build ./..."
+            test_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd \"$(cat '{{inputs.working_directory}}/.forge-migrate/target')\" && {{inputs.test_command}}"
+            review_instructions: |
+              You are reviewing ONE ported component of a forge migration.
+              The parity bar and component details are in MIGRATION_PLAN.md.
+
+              **Pass if:**
+              - This component's code is ported per the migration skill's
+                recipe (imports rewritten, tests carried over)
+              - Its tests are green and lint --contract passes
+              - Behavior was preserved — nothing silently stubbed out or
+                dropped without being recorded in MIGRATION_PLAN.md
+              - MIGRATION_PLAN.md is updated with this component's status
+
+              **Do NOT fail because:**
+              - Later components in the list are not ported yet
+              - Cross-component wiring is incomplete (converge handles it)
+
+              **Only fail if:**
+              - The gate commands are red, behavior was silently changed, or
+                the wrong component was ported
+          thread:
+            mode: fork
+            memo: false
+            inject:
+              role: user
+              content: |
+                ## Port Component {{iter.iteration + 1}}
+
+                Port component number {{iter.iteration + 1}} from the ordered
+                component list in the conversation above — that component
+                ONLY. Repeat its name and source paths before starting so the
+                thread records which unit is being ported.
+
+                Load the source of truth first:
+                ```bash
+                cd {{inputs.working_directory}} && reliant forge skill load migration
+                ```
+                Follow its per-package porting recipe and gotchas exactly
+                (import rewrites, dependency pins, embeds, generated
+                descriptors). Check `forge-libraries` before porting any
+                utility — the equivalent may already ship with forge.
+
+                The target project path is in
+                `{{inputs.working_directory}}/.forge-migrate/target`.
+                Consult `{{inputs.working_directory}}/MIGRATION_PLAN.md` for
+                this component's notes and the parity bar; update its status
+                there when done. Record anything you had to defer or stub —
+                honestly — in the plan's deferred list.
+
+                Do NOT port other components. Do NOT modify the source repo.
+
+  # ─── Phase 5: Convergence ───────────────────────────────────────────
+  #
+  # Wiring and parity. Everything ported now has to work as one app, and the
+  # final report has to be honest about what was deferred.
+
+  - id: converge
+    type: workflow
+    ref: builtin://get-it-right
+    passthrough: [model, mode, ask]
+    args:
+      implementer_preset: forge
+      max_retries: 5
+      lint_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd \"$(cat '{{inputs.working_directory}}/.forge-migrate/target')\" && reliant forge generate && reliant forge lint --contract"
+      test_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd \"$(cat '{{inputs.working_directory}}/.forge-migrate/target')\" && {{inputs.test_command}}"
+      build_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd \"$(cat '{{inputs.working_directory}}/.forge-migrate/target')\" && go mod tidy && go build ./..."
+      review_instructions: |
+        You are the final gate on a forge migration. Judge parity, not polish.
+
+        **Pass if:**
+        - Every component in MIGRATION_PLAN.md is ported or explicitly listed
+          as deferred with a reason — no silent gaps
+        - Wiring/composition is complete per the migration skill and the app
+          builds, lints (--contract), and tests green
+        - Entrypoints from the source repo are accounted for (mapped, ported,
+          or consciously dropped in the plan)
+        - MIGRATION_PLAN.md ends with an honest cutover checklist (module
+          rename is the final cutover step per the skill — it should be ON
+          the checklist, not done)
+
+        **Only fail if:**
+        - Gates are red, components are silently missing, wiring is
+          incomplete, or the deferred list hides real gaps
+
+        Be strict — a migration that "mostly works" is a migration that
+        fails in production.
+    thread:
+      mode: fork
+      memo: false
+      inject:
+        role: user
+        content: |
+          ## Converge & Verify Parity
+
+          All components in MIGRATION_PLAN.md have been ported. Now make them
+          one coherent app, per the migration skill's wiring guidance:
+
+          1. Complete the composition/wiring the skill describes (load
+             `migration` and `architecture` for the current conventions).
+          2. Run the full gate: generate, lint --contract, build, tests.
+          3. Sweep MIGRATION_PLAN.md: every component ported or explicitly
+             deferred with a reason; every source entrypoint accounted for.
+          4. Write the cutover checklist into MIGRATION_PLAN.md (module-path
+             rename last, per the skill). Do NOT perform the cutover.
+
+          The target project path is in
+          `{{inputs.working_directory}}/.forge-migrate/target`.
+          Do NOT modify the source repository.
+
+  # ─── Terminal Nodes ─────────────────────────────────────────────────
+
+  - id: stuck
+    type: save_message
+    display_style: warning
+    args:
+      role: assistant
+      content: |
+        ## Stopped — External Issue
+
+        A phase hit a problem outside the code (tooling, environment, or
+        infrastructure) and escalated. Check the feedback above.
+        Progress so far is recorded in
+        `{{inputs.working_directory}}/MIGRATION_PLAN.md`; rerun forge-migrate
+        to resume from the plan.
+
+  - id: failed
+    type: save_message
+    display_style: warning
+    args:
+      role: assistant
+      content: |
+        ## Migration Did Not Fully Pass
+
+        A gate stayed red after its repair attempts, so the workflow stopped
+        rather than building on a broken base.
+        `{{inputs.working_directory}}/MIGRATION_PLAN.md` records exactly how
+        far the port got and what failed. The source repository was not
+        modified.
+
+  - id: success
+    type: save_message
+    display_style: success
+    args:
+      role: assistant
+      content: |
+        ## Migration Complete
+
+        All {{has(nodes.port_loop.ported) ? nodes.port_loop.ported : 0}} component(s) ported and converged; gates are green.
+
+        - **New project:** {{has(nodes.inventory.response) && nodes.inventory.response != null ? nodes.inventory.response.target_directory : 'see .forge-migrate/target'}}
+        - **Plan & deferred work:** `{{inputs.working_directory}}/MIGRATION_PLAN.md`
+        - **Source repository:** untouched
+
+        Next step is the cutover checklist at the end of MIGRATION_PLAN.md —
+        the module-path rename is deliberately left as the final manual step.
+
+edges:
+  - from: inventory
+    default: plan_context
+  - from: plan_context
+    default: confirm
+  - from: confirm
+    cases:
+      - to: denied
+        condition: "nodes.confirm.status != 'approved'"
+        label: plan_denied
+    default: scaffold_baseline
+  - from: scaffold_baseline
+    cases:
+      - to: stuck
+        condition: "has(nodes.scaffold_baseline.stuck) && nodes.scaffold_baseline.stuck == true"
+        label: scaffold_stuck
+      - to: failed
+        condition: "nodes.scaffold_baseline.strategy != 'pass'"
+        label: scaffold_failed
+    default: port_loop
+  - from: port_loop
+    cases:
+      - to: stuck
+        condition: "has(nodes.port_loop.component_stuck) && nodes.port_loop.component_stuck == true"
+        label: port_stuck
+      - to: failed
+        condition: "has(nodes.port_loop.component_strategy) && nodes.port_loop.component_strategy != 'pass'"
+        label: port_failed
+    default: converge
+  - from: converge
+    cases:
+      - to: stuck
+        condition: "has(nodes.converge.stuck) && nodes.converge.stuck == true"
+        label: converge_stuck
+      - to: failed
+        condition: "nodes.converge.strategy != 'pass'"
+        label: converge_failed
+    default: success

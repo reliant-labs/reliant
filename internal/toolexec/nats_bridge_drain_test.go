@@ -71,9 +71,13 @@ func (m *recordingDaemonMgr) SubscribeProcessOutput(string, string, bool) (<-cha
 
 // stubMsg implements jetstream.Msg.
 type stubMsg struct {
-	data  []byte
-	mu    sync.Mutex
-	acked bool
+	data []byte
+	// numDelivered is what Metadata() reports (1 == first delivery). Set by
+	// tests that exercise the bounded-retry guard.
+	numDelivered uint64
+	mu           sync.Mutex
+	acked        bool
+	naked        bool
 }
 
 func (m *stubMsg) Data() []byte    { return m.data }
@@ -88,20 +92,40 @@ func (m *stubMsg) Ack() error {
 	m.acked = true
 	return nil
 }
-func (m *stubMsg) DoubleAck(context.Context) error  { return nil }
-func (m *stubMsg) Nak() error                       { return nil }
-func (m *stubMsg) NakWithDelay(time.Duration) error { return nil }
-func (m *stubMsg) InProgress() error                { return nil }
-func (m *stubMsg) Term() error                      { return nil }
-func (m *stubMsg) TermWithReason(string) error      { return nil }
+func (m *stubMsg) DoubleAck(context.Context) error { return nil }
+func (m *stubMsg) Nak() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.naked = true
+	return nil
+}
+func (m *stubMsg) NakWithDelay(time.Duration) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.naked = true
+	return nil
+}
+func (m *stubMsg) InProgress() error           { return nil }
+func (m *stubMsg) Term() error                 { return nil }
+func (m *stubMsg) TermWithReason(string) error { return nil }
 func (m *stubMsg) Metadata() (*jetstream.MsgMetadata, error) {
-	return &jetstream.MsgMetadata{}, nil
+	nd := m.numDelivered
+	if nd == 0 {
+		nd = 1 // JetStream reports 1 on the first delivery.
+	}
+	return &jetstream.MsgMetadata{NumDelivered: nd}, nil
 }
 
 func (m *stubMsg) wasAcked() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.acked
+}
+
+func (m *stubMsg) wasNaked() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.naked
 }
 
 // stubMessageBatch implements jetstream.MessageBatch.
@@ -155,17 +179,26 @@ func (c *stubConsumer) Info(context.Context) (*jetstream.ConsumerInfo, error) {
 }
 func (c *stubConsumer) CachedInfo() *jetstream.ConsumerInfo { panic("not implemented") }
 
-// stubStream implements jetstream.Stream — only OrderedConsumer is used.
+// stubStream implements jetstream.Stream — only consumer create/delete is used.
 type stubStream struct {
-	consumer jetstream.Consumer
+	consumer         jetstream.Consumer
+	createErr        error
+	lastConsumerCfg  jetstream.ConsumerConfig
+	deletedConsumers []string
 }
 
 func (s *stubStream) OrderedConsumer(_ context.Context, _ jetstream.OrderedConsumerConfig) (jetstream.Consumer, error) {
 	return s.consumer, nil
 }
 
-func (s *stubStream) CreateOrUpdateConsumer(context.Context, jetstream.ConsumerConfig) (jetstream.Consumer, error) {
-	panic("not implemented")
+// createErr, when set, is returned by CreateOrUpdateConsumer to simulate a
+// consumer-creation failure (e.g. WorkQueue overlap on fast reconnect).
+func (s *stubStream) CreateOrUpdateConsumer(_ context.Context, cfg jetstream.ConsumerConfig) (jetstream.Consumer, error) {
+	s.lastConsumerCfg = cfg
+	if s.createErr != nil {
+		return nil, s.createErr
+	}
+	return s.consumer, nil
 }
 func (s *stubStream) CreateConsumer(_ context.Context, _ jetstream.ConsumerConfig) (jetstream.Consumer, error) {
 	return s.consumer, nil
@@ -176,7 +209,10 @@ func (s *stubStream) UpdateConsumer(context.Context, jetstream.ConsumerConfig) (
 func (s *stubStream) Consumer(context.Context, string) (jetstream.Consumer, error) {
 	panic("not implemented")
 }
-func (s *stubStream) DeleteConsumer(context.Context, string) error { return nil }
+func (s *stubStream) DeleteConsumer(_ context.Context, name string) error {
+	s.deletedConsumers = append(s.deletedConsumers, name)
+	return nil
+}
 func (s *stubStream) PauseConsumer(context.Context, string, time.Time) (*jetstream.ConsumerPauseResponse, error) {
 	panic("not implemented")
 }
@@ -495,7 +531,9 @@ func TestDrainPendingCommands_MessagesAreAcked(t *testing.T) {
 	assert.True(t, msg2.wasAcked(), "msg2 should be acked after dispatch")
 }
 
-func TestDrainPendingCommands_AcksEvenOnDispatchError(t *testing.T) {
+// A transient dispatch failure must NOT ack (which would permanently drop the
+// command under WorkQueue retention) — it Naks for JetStream redelivery.
+func TestDrainPendingCommands_DispatchErrorNaksNotAcks(t *testing.T) {
 	mgr := &recordingDaemonMgr{err: errors.New("daemon busy")}
 
 	msg1 := makePendingMsg(t, "req-1", "git.clone", json.RawMessage(`{}`), 5000)
@@ -515,7 +553,157 @@ func TestDrainPendingCommands_AcksEvenOnDispatchError(t *testing.T) {
 
 	bridge.drainPendingCommands(context.Background(), "user-1", "daemon-1")
 
-	assert.True(t, msg1.wasAcked(), "msg should be acked even on dispatch error")
+	assert.False(t, msg1.wasAcked(), "msg must NOT be acked on transient dispatch error")
+	assert.True(t, msg1.wasNaked(), "msg must be Nak'd for redelivery on dispatch error")
+	// The consumer must survive so NumDelivered accounting persists.
+	assert.Empty(t, stream.deletedConsumers,
+		"consumer must not be deleted while messages are pending redelivery")
+}
+
+// After maxPendingCommandDeliveries the command is a poison message: ack it
+// (drop) rather than loop forever.
+func TestDrainPendingCommands_PoisonMessageDroppedAfterMaxDeliveries(t *testing.T) {
+	mgr := &recordingDaemonMgr{err: errors.New("daemon busy")}
+
+	msg1 := makePendingMsg(t, "req-1", "git.clone", json.RawMessage(`{}`), 5000)
+	msg1.numDelivered = maxPendingCommandDeliveries // already at the cap
+
+	consumer := &stubConsumer{
+		batches: []jetstream.MessageBatch{
+			&stubMessageBatch{
+				msgs: []jetstream.Msg{msg1},
+				err:  jetstream.ErrMsgIteratorClosed,
+			},
+		},
+	}
+	stream := &stubStream{consumer: consumer}
+	js := &stubJetStream{stream: stream}
+	bridge := newTestBridge(js, mgr)
+	defer bridge.cancel()
+
+	bridge.drainPendingCommands(context.Background(), "user-1", "daemon-1")
+
+	assert.True(t, msg1.wasAcked(), "poison msg should be acked (dropped) after max deliveries")
+	assert.False(t, msg1.wasNaked(), "poison msg should not be Nak'd again")
+}
+
+// The drain retries a previously-failed command on the next connect and
+// succeeds — the end-to-end redelivery path.
+func TestDrainPendingCommands_SucceedsOnRetryAfterTransientFailure(t *testing.T) {
+	// First drain: dispatch fails -> Nak, not acked.
+	failMgr := &recordingDaemonMgr{err: errors.New("daemon busy")}
+	msg := makePendingMsg(t, "req-1", "git.clone", json.RawMessage(`{}`), 5000)
+
+	firstConsumer := &stubConsumer{
+		batches: []jetstream.MessageBatch{
+			&stubMessageBatch{msgs: []jetstream.Msg{msg}, err: jetstream.ErrMsgIteratorClosed},
+		},
+	}
+	stream1 := &stubStream{consumer: firstConsumer}
+	bridge1 := newTestBridge(&stubJetStream{stream: stream1}, failMgr)
+	defer bridge1.cancel()
+	bridge1.drainPendingCommands(context.Background(), "user-1", "daemon-1")
+
+	require.False(t, msg.wasAcked(), "first attempt must not ack")
+	require.True(t, msg.wasNaked(), "first attempt must Nak")
+
+	// Simulate JetStream redelivery on the next connect: same message, now
+	// delivered a second time, daemon healthy.
+	msg.mu.Lock()
+	msg.naked = false
+	msg.numDelivered = 2
+	msg.mu.Unlock()
+
+	okMgr := &recordingDaemonMgr{}
+	secondConsumer := &stubConsumer{
+		batches: []jetstream.MessageBatch{
+			&stubMessageBatch{msgs: []jetstream.Msg{msg}, err: jetstream.ErrMsgIteratorClosed},
+		},
+	}
+	stream2 := &stubStream{consumer: secondConsumer}
+	bridge2 := newTestBridge(&stubJetStream{stream: stream2}, okMgr)
+	defer bridge2.cancel()
+	bridge2.drainPendingCommands(context.Background(), "user-1", "daemon-1")
+
+	assert.True(t, msg.wasAcked(), "retry must ack on success")
+	assert.False(t, msg.wasNaked(), "retry must not Nak on success")
+	okMgr.mu.Lock()
+	defer okMgr.mu.Unlock()
+	require.Len(t, okMgr.commands, 1)
+	assert.Equal(t, "git.clone", okMgr.commands[0].CommandType)
+}
+
+// A daemonID containing characters SanitizeSubject rewrites must still be
+// drained end-to-end: the consumer FilterSubject must match the sanitized
+// subject the enqueue side publishes to.
+func TestDrainPendingCommands_SanitizesDaemonIDInFilterSubject(t *testing.T) {
+	mgr := &recordingDaemonMgr{}
+	msg := makePendingMsg(t, "req-1", "git.clone", json.RawMessage(`{}`), 5000)
+
+	consumer := &stubConsumer{
+		batches: []jetstream.MessageBatch{
+			&stubMessageBatch{msgs: []jetstream.Msg{msg}, err: jetstream.ErrMsgIteratorClosed},
+		},
+	}
+	stream := &stubStream{consumer: consumer}
+	js := &stubJetStream{stream: stream}
+	bridge := newTestBridge(js, mgr)
+	defer bridge.cancel()
+
+	// daemonID with a '.' and a '*' — both rewritten to '_' by the sanitizer.
+	const rawID = "team.alpha*1 x"
+	const wantToken = "team_alpha_1_x"
+
+	bridge.drainPendingCommands(context.Background(), "user-1", rawID)
+
+	// The consumer must filter on the SANITIZED subject (matching what
+	// EnqueueDaemonCommand / control-plane publish to), else the message
+	// would never be delivered.
+	assert.Equal(t, pendingSubjectPrefix+wantToken, stream.lastConsumerCfg.FilterSubject,
+		"FilterSubject must use the sanitized daemonID")
+	assert.Equal(t, sanitizePendingSubjectToken(rawID), wantToken,
+		"sanitizer must rewrite '.', '*' and ' ' to '_'")
+
+	mgr.mu.Lock()
+	defer mgr.mu.Unlock()
+	require.Len(t, mgr.commands, 1, "command must be dispatched despite special chars in daemonID")
+	assert.True(t, msg.wasAcked())
+}
+
+// On successful clean drain the named consumer is deleted (best-effort cleanup).
+func TestDrainPendingCommands_DeletesConsumerOnCleanDrain(t *testing.T) {
+	mgr := &recordingDaemonMgr{}
+	msg := makePendingMsg(t, "req-1", "git.clone", json.RawMessage(`{}`), 5000)
+
+	consumer := &stubConsumer{
+		batches: []jetstream.MessageBatch{
+			&stubMessageBatch{msgs: []jetstream.Msg{msg}, err: jetstream.ErrMsgIteratorClosed},
+		},
+	}
+	stream := &stubStream{consumer: consumer}
+	js := &stubJetStream{stream: stream}
+	bridge := newTestBridge(js, mgr)
+	defer bridge.cancel()
+
+	bridge.drainPendingCommands(context.Background(), "user-1", "daemon-1")
+
+	require.Len(t, stream.deletedConsumers, 1, "clean drain should delete its consumer")
+	assert.Equal(t, "pending-drain-daemon-1", stream.deletedConsumers[0])
+}
+
+// When CreateOrUpdateConsumer fails, the drain gives up without dispatching.
+func TestDrainPendingCommands_ConsumerCreateError(t *testing.T) {
+	mgr := &recordingDaemonMgr{}
+	stream := &stubStream{createErr: errors.New("overlapping filter subject")}
+	js := &stubJetStream{stream: stream}
+	bridge := newTestBridge(js, mgr)
+	defer bridge.cancel()
+
+	bridge.drainPendingCommands(context.Background(), "user-1", "daemon-1")
+
+	mgr.mu.Lock()
+	defer mgr.mu.Unlock()
+	require.Empty(t, mgr.commands)
 }
 
 func TestDrainPendingCommands_InvalidPayloadAcksAndContinues(t *testing.T) {

@@ -384,7 +384,7 @@ nodes:
         {{nodes.analyze_workflows.response.summary}}
 
         Candidate list:
-        {{string(nodes.analyze_workflows.response.workflow_candidates)}}
+        {{toJson(nodes.analyze_workflows.response.workflow_candidates)}}
 
         Subsequent workflow-builder steps should process candidates in order using 1-based indexing.
 

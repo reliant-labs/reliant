@@ -36,6 +36,7 @@ type StoredProjectConfigRecord struct {
 	ProjectScenariosJSON *string // JSON array of stored scenarios
 	ProjectSkillsJSON    *string // JSON array of stored skills (SKILL.md)
 	RepoMemoriesJSON     *string // JSON object: repo relative path -> memory content
+	RuntimeType          *string // Serving daemon's runtime/sandbox type ("kata", "gvisor"); nil for local/unknown
 }
 
 // StoredConfigStore reads stored project config records.
@@ -125,6 +126,10 @@ func mergeStoredConfigRecord(record *StoredProjectConfigRecord) (*Config, error)
 		return nil, err
 	} else if len(repoMems) > 0 {
 		cfg.RepoMemories = repoMems
+	}
+
+	if record.RuntimeType != nil {
+		cfg.DaemonRuntimeType = strings.TrimSpace(*record.RuntimeType)
 	}
 
 	if record.MCPConfigs != nil && *record.MCPConfigs != "" {

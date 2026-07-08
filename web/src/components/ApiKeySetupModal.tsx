@@ -125,12 +125,17 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
   const [isSaving, setIsSaving] = useState(false);
   const codexOAuth = useCodexOAuth();
   const claudeOAuth = useClaudeOAuth();
-  const oauthAvailability = useOAuthAvailability();
-
   const provider = useMemo(
     () => PROVIDERS.find((p) => p.id === selectedProvider)!,
     [selectedProvider]
   );
+
+  // Only probe the localhost OAuth helper while the OAuth panel is actually on
+  // screen (modal open + an OAuth provider selected) — never proactively on
+  // mount, which would trip Chrome's Local Network Access prompt.
+  const oauthAvailability = useOAuthAvailability({
+    enabled: showModal && Boolean(provider.usesOAuth),
+  });
 
   useEffect(() => {
     if (!showModal) {

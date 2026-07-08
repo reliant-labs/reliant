@@ -32,6 +32,10 @@ import { transformWorkflowExecution } from "./ExecutionSidebar";
 import * as Sentry from "@sentry/react";
 import { logger } from "../../lib/logger";
 import { toast } from "../../lib/toast-manager";
+import {
+  isDaemonConnectingError,
+  DAEMON_CONNECTING_MESSAGE,
+} from "../../lib/daemon-errors";
 
 // Stable empty references
 const EMPTY_ARRAY: never[] = [];
@@ -178,8 +182,17 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
         }
       } catch (error) {
         logger.error("Error sending message:", error);
-        // Show error toast to user
-        toast.error(error);
+        if (isDaemonConnectingError(error)) {
+          // Cloud daemon is still coming online — surface a calm "connecting"
+          // toast instead of the raw `[internal] unavailable: no daemon
+          // connected` error so the user knows to resend in a moment.
+          toast.info(
+            `${DAEMON_CONNECTING_MESSAGE} Please resend in a moment.`,
+          );
+        } else {
+          // Show error toast to user
+          toast.error(error);
+        }
         throw error;
       }
     },
