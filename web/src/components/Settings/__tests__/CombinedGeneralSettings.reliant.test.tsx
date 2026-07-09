@@ -43,6 +43,17 @@ vi.mock('@/store/apiKeySetupStore', () => ({
 vi.mock('@/hooks', () => ({
   useCodexOAuth: () => ({ start: vi.fn(), cancel: vi.fn() }),
   useClaudeOAuth: () => ({ start: vi.fn(), cancel: vi.fn() }),
+  useCopilotOAuth: () => ({
+    phase: 'idle',
+    isActive: false,
+    userCode: null,
+    verificationUri: null,
+    message: null,
+    lastResult: null,
+    start: vi.fn(),
+    cancel: vi.fn(),
+    reset: vi.fn(),
+  }),
   useOAuthAvailability: () => ({ available: true, loading: false, recheck: vi.fn() }),
 }))
 

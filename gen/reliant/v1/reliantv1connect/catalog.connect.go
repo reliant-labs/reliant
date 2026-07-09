@@ -41,6 +41,9 @@ const (
 	// CatalogServiceListModelsByProviderProcedure is the fully-qualified name of the CatalogService's
 	// ListModelsByProvider RPC.
 	CatalogServiceListModelsByProviderProcedure = "/reliant.v1.CatalogService/ListModelsByProvider"
+	// CatalogServiceListAvailableModelsProcedure is the fully-qualified name of the CatalogService's
+	// ListAvailableModels RPC.
+	CatalogServiceListAvailableModelsProcedure = "/reliant.v1.CatalogService/ListAvailableModels"
 	// CatalogServiceListToolsProcedure is the fully-qualified name of the CatalogService's ListTools
 	// RPC.
 	CatalogServiceListToolsProcedure = "/reliant.v1.CatalogService/ListTools"
@@ -58,6 +61,10 @@ type CatalogServiceClient interface {
 	ListModels(context.Context, *connect.Request[v1.ListModelsRequest]) (*connect.Response[v1.ListModelsResponse], error)
 	// ListModelsByProvider returns all models for a specific provider
 	ListModelsByProvider(context.Context, *connect.Request[v1.ListModelsByProviderRequest]) (*connect.Response[v1.ListModelsByProviderResponse], error)
+	// ListAvailableModels returns the models available to the caller across every
+	// configured provider, carrying per-account availability (enabled) so a picker
+	// can render which models the user's account may actually use.
+	ListAvailableModels(context.Context, *connect.Request[v1.ListAvailableModelsRequest]) (*connect.Response[v1.ListAvailableModelsResponse], error)
 	// ListTools returns all available tools
 	ListTools(context.Context, *connect.Request[v1.ListToolsRequest]) (*connect.Response[v1.ListToolsResponse], error)
 	// ListNodes returns all workflow nodes available for the workflow builder
@@ -89,6 +96,12 @@ func NewCatalogServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(catalogServiceMethods.ByName("ListModelsByProvider")),
 			connect.WithClientOptions(opts...),
 		),
+		listAvailableModels: connect.NewClient[v1.ListAvailableModelsRequest, v1.ListAvailableModelsResponse](
+			httpClient,
+			baseURL+CatalogServiceListAvailableModelsProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("ListAvailableModels")),
+			connect.WithClientOptions(opts...),
+		),
 		listTools: connect.NewClient[v1.ListToolsRequest, v1.ListToolsResponse](
 			httpClient,
 			baseURL+CatalogServiceListToolsProcedure,
@@ -114,6 +127,7 @@ func NewCatalogServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 type catalogServiceClient struct {
 	listModels           *connect.Client[v1.ListModelsRequest, v1.ListModelsResponse]
 	listModelsByProvider *connect.Client[v1.ListModelsByProviderRequest, v1.ListModelsByProviderResponse]
+	listAvailableModels  *connect.Client[v1.ListAvailableModelsRequest, v1.ListAvailableModelsResponse]
 	listTools            *connect.Client[v1.ListToolsRequest, v1.ListToolsResponse]
 	listNodes            *connect.Client[v1.ListNodesRequest, v1.ListNodesResponse]
 	getCELCompletions    *connect.Client[v1.GetCELCompletionsRequest, v1.GetCELCompletionsResponse]
@@ -127,6 +141,11 @@ func (c *catalogServiceClient) ListModels(ctx context.Context, req *connect.Requ
 // ListModelsByProvider calls reliant.v1.CatalogService.ListModelsByProvider.
 func (c *catalogServiceClient) ListModelsByProvider(ctx context.Context, req *connect.Request[v1.ListModelsByProviderRequest]) (*connect.Response[v1.ListModelsByProviderResponse], error) {
 	return c.listModelsByProvider.CallUnary(ctx, req)
+}
+
+// ListAvailableModels calls reliant.v1.CatalogService.ListAvailableModels.
+func (c *catalogServiceClient) ListAvailableModels(ctx context.Context, req *connect.Request[v1.ListAvailableModelsRequest]) (*connect.Response[v1.ListAvailableModelsResponse], error) {
+	return c.listAvailableModels.CallUnary(ctx, req)
 }
 
 // ListTools calls reliant.v1.CatalogService.ListTools.
@@ -150,6 +169,10 @@ type CatalogServiceHandler interface {
 	ListModels(context.Context, *connect.Request[v1.ListModelsRequest]) (*connect.Response[v1.ListModelsResponse], error)
 	// ListModelsByProvider returns all models for a specific provider
 	ListModelsByProvider(context.Context, *connect.Request[v1.ListModelsByProviderRequest]) (*connect.Response[v1.ListModelsByProviderResponse], error)
+	// ListAvailableModels returns the models available to the caller across every
+	// configured provider, carrying per-account availability (enabled) so a picker
+	// can render which models the user's account may actually use.
+	ListAvailableModels(context.Context, *connect.Request[v1.ListAvailableModelsRequest]) (*connect.Response[v1.ListAvailableModelsResponse], error)
 	// ListTools returns all available tools
 	ListTools(context.Context, *connect.Request[v1.ListToolsRequest]) (*connect.Response[v1.ListToolsResponse], error)
 	// ListNodes returns all workflow nodes available for the workflow builder
@@ -177,6 +200,12 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 		connect.WithSchema(catalogServiceMethods.ByName("ListModelsByProvider")),
 		connect.WithHandlerOptions(opts...),
 	)
+	catalogServiceListAvailableModelsHandler := connect.NewUnaryHandler(
+		CatalogServiceListAvailableModelsProcedure,
+		svc.ListAvailableModels,
+		connect.WithSchema(catalogServiceMethods.ByName("ListAvailableModels")),
+		connect.WithHandlerOptions(opts...),
+	)
 	catalogServiceListToolsHandler := connect.NewUnaryHandler(
 		CatalogServiceListToolsProcedure,
 		svc.ListTools,
@@ -201,6 +230,8 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 			catalogServiceListModelsHandler.ServeHTTP(w, r)
 		case CatalogServiceListModelsByProviderProcedure:
 			catalogServiceListModelsByProviderHandler.ServeHTTP(w, r)
+		case CatalogServiceListAvailableModelsProcedure:
+			catalogServiceListAvailableModelsHandler.ServeHTTP(w, r)
 		case CatalogServiceListToolsProcedure:
 			catalogServiceListToolsHandler.ServeHTTP(w, r)
 		case CatalogServiceListNodesProcedure:
@@ -222,6 +253,10 @@ func (UnimplementedCatalogServiceHandler) ListModels(context.Context, *connect.R
 
 func (UnimplementedCatalogServiceHandler) ListModelsByProvider(context.Context, *connect.Request[v1.ListModelsByProviderRequest]) (*connect.Response[v1.ListModelsByProviderResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.CatalogService.ListModelsByProvider is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) ListAvailableModels(context.Context, *connect.Request[v1.ListAvailableModelsRequest]) (*connect.Response[v1.ListAvailableModelsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.CatalogService.ListAvailableModels is not implemented"))
 }
 
 func (UnimplementedCatalogServiceHandler) ListTools(context.Context, *connect.Request[v1.ListToolsRequest]) (*connect.Response[v1.ListToolsResponse], error) {

@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"time"
 
-	core "github.com/reliant-labs/reliant/internal/db/core"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	core "github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // ChatState represents the notification/lifecycle state of a chat.
@@ -62,8 +62,8 @@ type ProjectConfigRecord struct {
 	// daemon's registration label at config-snapshot persist time.
 	RuntimeType *string
 	PushedAt    time.Time
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 // CleanupMetadata is an alias to the shared core cleanup metadata model.
@@ -121,6 +121,9 @@ type Setting = core.Setting
 
 // CodexAuthTokens is an alias to the shared core Codex OAuth token model.
 type CodexAuthTokens = core.CodexAuthTokens
+
+// CopilotAuthTokens is an alias to the shared core Copilot OAuth token model.
+type CopilotAuthTokens = core.CopilotAuthTokens
 
 // ClaudeAuthTokens is an alias to the shared core Claude OAuth token model.
 type ClaudeAuthTokens = core.ClaudeAuthTokens

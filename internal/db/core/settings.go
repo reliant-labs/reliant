@@ -46,6 +46,16 @@ type CodexAuthTokens struct {
 	AccountID    string
 }
 
+// CopilotAuthTokens stores persisted GitHub Copilot OAuth credentials for a user.
+type CopilotAuthTokens struct {
+	UserID             string
+	GitHubAccessToken  string
+	GitHubRefreshToken string
+	Tier               string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
 // ClaudeAuthTokens stores persisted Claude OAuth credentials for a user.
 type ClaudeAuthTokens struct {
 	AccessToken      string
@@ -75,6 +85,10 @@ type SettingStore interface {
 	GetCodexAuthTokens(ctx context.Context, userID string) (*CodexAuthTokens, error)
 	SetCodexAuthTokens(ctx context.Context, userID string, tokens CodexAuthTokens) error
 	DeleteCodexAuthTokens(ctx context.Context, userID string) error
+
+	GetCopilotAuthTokens(ctx context.Context, userID string) (*CopilotAuthTokens, error)
+	SetCopilotAuthTokens(ctx context.Context, userID string, tokens CopilotAuthTokens) error
+	DeleteCopilotAuthTokens(ctx context.Context, userID string) error
 
 	GetClaudeAuthTokens(ctx context.Context, userID string) (*ClaudeAuthTokens, error)
 	SetClaudeAuthTokens(ctx context.Context, userID string, tokens ClaudeAuthTokens) error

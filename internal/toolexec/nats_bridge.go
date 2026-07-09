@@ -240,6 +240,27 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 		b.startProcessOutputForwarder(daemonCtx, userID, req.ProcessID, req.NewOnly)
 	}))
 
+	// 7b. daemon.terminal.subscribe.{userID}.{daemonID}.{sessionID}
+	// A terminal-output-subscribe request from a remote subscriber
+	// (NATSDaemonRouter). This starts the terminal output forwarder, which in
+	// turn sends the terminal-output-subscribe message down to the daemon and
+	// starts its PTY pump. Mirrors the process-output subscribe handler above.
+	addSub(b.nc.Subscribe(daemonSubject(terminalSubscribeSubject, userID, daemonID)+".*", func(msg *nats.Msg) {
+		_, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.daemon.terminal.subscribe")
+		defer span.End()
+		observability.NATSReceiveTotal.WithLabelValues("daemon.terminal.subscribe").Inc()
+
+		// Subject: daemon.terminal.subscribe.{userID}.{daemonID}.{sessionID}
+		parts := strings.SplitN(msg.Subject, ".", 6)
+		if len(parts) < 6 {
+			logging.Warn("[NATSToolBridge] Invalid terminal subscribe subject", "subject", msg.Subject)
+			return
+		}
+		sessionID := parts[5]
+
+		b.startTerminalOutputForwarder(daemonCtx, userID, daemonID, sessionID)
+	}))
+
 	// -----------------------------------------------------------------------
 	// Request-reply subjects (plain Subscribe — only this pod responds)
 	// -----------------------------------------------------------------------
@@ -316,12 +337,12 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 		})
 		_ = msg.Respond(respData)
 
-		// If this was a terminal.create command that succeeded, start
-		// forwarding terminal output from the local daemon to NATS so
-		// remote subscribers (NATSDaemonRouter) receive it.
-		if req.CommandType == "terminal.create" && resp.Success {
-			b.startTerminalOutputForwarder(daemonCtx, userID, daemonID, resp.Payload)
-		}
+		// NOTE: terminal output forwarding is NOT started here. It is now
+		// subscribe-driven — started only when a terminal-output-subscribe
+		// request arrives on daemon.terminal.subscribe.* (see below), mirroring
+		// the process-output subscribe flow. This ensures the daemon's PTY pump
+		// does not start until the full subscriber interest chain is up, so the
+		// initial shell prompt cannot be dropped.
 	}))
 
 	// 11. tools.request.sync.{userID}.{daemonID}
@@ -392,19 +413,21 @@ func (b *NATSToolBridge) OnDaemonDisconnected(userID, daemonID string) {
 	}
 }
 
-// startTerminalOutputForwarder extracts the sessionID from a terminal.create
-// response payload, subscribes to local terminal output, and publishes events
-// to NATS on daemon.terminal.output.{userID}.{daemonID}.{sessionID}.
-func (b *NATSToolBridge) startTerminalOutputForwarder(userCtx context.Context, userID, daemonID string, payload []byte) {
-	var createResp struct {
-		SessionID string `json:"session_id"`
-	}
-	if err := json.Unmarshal(payload, &createResp); err != nil || createResp.SessionID == "" {
-		logging.Warn("[NATSToolBridge] Could not extract session_id from terminal.create response",
-			"error", err, "userID", userID)
+// startTerminalOutputForwarder subscribes to local terminal output for the
+// given session and publishes events to NATS on
+// daemon.terminal.output.{userID}.{daemonID}.{sessionID}.
+//
+// This is driven by a terminal-output-subscribe request (not the terminal.create
+// hook): b.mgr.SubscribeTerminalOutput sends the terminal-output-subscribe
+// message down to the daemon, which is what starts the daemon's PTY output pump.
+// Deferring the pump until a subscriber's interest chain is fully established is
+// the whole point of the terminal-output race fix — it mirrors the
+// process-output subscribe flow.
+func (b *NATSToolBridge) startTerminalOutputForwarder(userCtx context.Context, userID, daemonID, sessionID string) {
+	if sessionID == "" {
+		logging.Warn("[NATSToolBridge] Empty sessionID for terminal output forwarder", "userID", userID)
 		return
 	}
-	sessionID := createResp.SessionID
 
 	outputCh, unsub, err := b.mgr.SubscribeTerminalOutput(userID, sessionID)
 	if err != nil {

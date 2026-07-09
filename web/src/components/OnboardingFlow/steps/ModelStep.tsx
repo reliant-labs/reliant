@@ -13,8 +13,9 @@ import { api } from "@/api/client";
 import { cn } from "@/lib/utils";
 import { getIsDev } from "@/lib/constants";
 import { logger } from "@/lib/logger";
-import { useCodexOAuth, useClaudeOAuth, useOAuthAvailability } from "@/hooks";
+import { useCodexOAuth, useClaudeOAuth, useCopilotOAuth, useOAuthAvailability } from "@/hooks";
 import { OAuthHelperPanel } from "@/components/OAuthHelperPanel";
+import { CopilotDevicePanel } from "@/components/CopilotDevicePanel";
 import { useCloudEligibility } from "@/hooks/useOnboardingQueries";
 // TODO: Remove this store import once the ApiKeySetupModal is converted to event-driven
 import { useApiKeySetupStore } from "@/store/apiKeySetupStore";
@@ -48,6 +49,15 @@ const PROVIDERS = [
     docsUrl: "https://github.com/openai/codex",
     keyFormat: "",
     usesOAuth: "codex" as const,
+    builtIn: false as const,
+  },
+  {
+    id: "copilot" as const,
+    modelProvider: "copilot" as ModelProvider,
+    name: "GitHub Copilot",
+    docsUrl: "https://github.com/settings/copilot",
+    keyFormat: "",
+    usesOAuth: "copilot" as const,
     builtIn: false as const,
   },
   {
@@ -119,6 +129,7 @@ function getForcedEligibility(): "eligible" | "ineligible" | null {
 export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
   const codexOAuth = useCodexOAuth();
   const claudeOAuth = useClaudeOAuth();
+  const copilotOAuth = useCopilotOAuth();
   const cloudEligibility = useCloudEligibility();
 
   const forcedEligibility = getForcedEligibility();
@@ -143,10 +154,11 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
     [selectedProvider],
   );
 
-  // Only probe the localhost OAuth helper once the user selects an OAuth
-  // provider (the OAuthHelperPanel is shown) — never proactively on mount.
+  // Only probe the localhost OAuth helper once the user selects a redirect-based
+  // OAuth provider (the OAuthHelperPanel is shown) — never proactively on mount.
+  // Copilot uses the device flow and needs no local helper.
   const oauthAvailability = useOAuthAvailability({
-    enabled: Boolean(provider.usesOAuth),
+    enabled: provider.usesOAuth === "claude" || provider.usesOAuth === "codex",
   });
 
   const validateKeyMutation = useMutation({
@@ -208,6 +220,31 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
       });
     }
   }, [claudeOAuth, codexOAuth, finishOnboarding, provider]);
+
+  // GitHub Copilot uses the device-authorization flow (device code → poll),
+  // driven by the shared CopilotDevicePanel. The panel surfaces its own
+  // in-progress / error UI; this only advances onboarding on success.
+  const handleConnectCopilot = useCallback(async () => {
+    setError(null);
+    setValidationResult(null);
+
+    const result = await copilotOAuth.start();
+    if (!result.ok) {
+      // The device panel surfaces the error message from the hook.
+      return;
+    }
+
+    // TODO: Remove once ApiKeySetupModal is event-driven
+    useApiKeySetupStore.setState({
+      hasApiKey: true,
+      showModal: false,
+      hasChecked: true,
+    });
+    const { useGlobalDataStore } = await import("@/store/globalDataStore");
+    await useGlobalDataStore.getState().refetchModels();
+    getEventBus().emit("api-key:saved", { provider: "copilot" });
+    await finishOnboarding(provider.modelProvider);
+  }, [copilotOAuth, finishOnboarding, provider]);
 
   const handleSaveKey = useCallback(async () => {
     if (!apiKey.trim() || provider.usesOAuth) return;
@@ -302,6 +339,8 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
                   setSelectedProvider(item.id);
                   setValidationResult(null);
                   setError(null);
+                  // Abort/clear any prior Copilot device flow when switching.
+                  copilotOAuth.reset();
                 }}
                 className={cn(
                   "rounded-lg border px-3 py-2 text-left transition-colors",
@@ -352,6 +391,11 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
                 Start with Reliant
               </button>
             </div>
+          ) : provider.usesOAuth === "copilot" ? (
+            <CopilotDevicePanel
+              oauth={copilotOAuth}
+              onStart={handleConnectCopilot}
+            />
           ) : provider.usesOAuth ? (
             <OAuthHelperPanel
               providerName={provider.name}

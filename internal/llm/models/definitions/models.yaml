@@ -9,6 +9,106 @@ models:
   # FLAGSHIP MODELS - Best overall for complex tasks
   # ============================================================================
 
+  - id: claude-4.8-opus
+    name: Claude 4.8 Opus
+    tags: [flagship, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1000000
+      max_output_tokens: 64000
+      thinking_levels: [low, medium, high, xhigh]
+      supported_file_types: [image, pdf, text]
+    cost:
+      input_per_1m: 5.0
+      output_per_1m: 25.0
+      cached_input_per_1m: 0.5
+    providers:
+      - driver: anthropic
+        api_model: claude-opus-4-8
+      - driver: openrouter
+        api_model: anthropic/claude-opus-4.8
+      - driver: reliant
+        api_model: claude-opus-4-8
+      # NOTE: no `copilot` provider here. GitHub Copilot serves opus-4.8 only on
+      # paid plans (the individual/free tier's /models reports it as
+      # policy=disabled, restricted_to=[pro_plus,business,enterprise,max]), and the
+      # enterprise Copilot tier has been removed. Mapping it here would offer a
+      # broken picker option that 400s (model_not_supported) upstream.
+    driver_settings:
+      thinking_mode: adaptive
+    default_thinking_level: high
+    default_compaction_threshold: 950000
+
+  - id: claude-5-sonnet
+    name: Claude 5 Sonnet
+    tags: [flagship, moderate, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1000000
+      max_output_tokens: 64000
+      thinking_levels: [low, medium, high, xhigh]
+      supported_file_types: [image, pdf, text]
+    cost:
+      input_per_1m: 3.0
+      output_per_1m: 15.0
+      cached_input_per_1m: 0.3
+    providers:
+      - driver: anthropic
+        api_model: claude-sonnet-5
+      - driver: openrouter
+        api_model: anthropic/claude-sonnet-5
+      - driver: reliant
+        api_model: claude-sonnet-5
+      # GitHub Copilot serves sonnet-5 on the Anthropic Messages dialect
+      # (/v1/messages). This account's /models reports it policy=enabled; verified
+      # 200 with the gho_ Bearer alone (paid plan).
+      - driver: copilot
+        api_model: claude-sonnet-5
+    driver_settings:
+      thinking_mode: adaptive
+    default_thinking_level: high
+    default_compaction_threshold: 950000
+
+  - id: claude-5-fable
+    name: Claude 5 Fable
+    tags: [flagship, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1000000
+      max_output_tokens: 64000
+      thinking_levels: [low, medium, high, xhigh]
+      supported_file_types: [image, pdf, text]
+    cost:
+      input_per_1m: 10.0
+      output_per_1m: 50.0
+      cached_input_per_1m: 1.0
+    providers:
+      - driver: anthropic
+        api_model: claude-fable-5
+      - driver: openrouter
+        api_model: anthropic/claude-fable-5
+      - driver: reliant
+        api_model: claude-fable-5
+    driver_settings:
+      thinking_mode: adaptive
+    default_thinking_level: high
+    default_compaction_threshold: 950000
+
   - id: claude-4.6-opus
     name: Claude 4.6 Opus
     tags: [flagship, reasoning]
@@ -518,7 +618,7 @@ models:
       supports_streaming: true
       supports_caching: true
       max_context_window: 200000
-      max_output_tokens: 8192
+      max_output_tokens: 32000
       supported_file_types: [image, pdf, text]
     cost:
       input_per_1m: 0.8
@@ -531,6 +631,11 @@ models:
         api_model: anthropic/claude-haiku-4.5
       - driver: reliant
         api_model: claude-haiku-4-5
+      # GitHub Copilot serves haiku-4.5 on the Anthropic Messages dialect
+      # (/v1/messages); /models reports it policy=enabled. Verified 200 with the
+      # gho_ Bearer alone.
+      - driver: copilot
+        api_model: claude-haiku-4.5
     default_temperature: 1.0
     default_compaction_threshold: 185000
 
@@ -564,6 +669,37 @@ models:
       temperature_mode: omit
       use_max_completion_tokens: true
     default_thinking_level: high
+    default_compaction_threshold: 370000
+
+  - id: gpt-5-mini
+    name: GPT-5 Mini
+    tags: [fast, cheap]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: false
+      supports_streaming: true
+      supports_caching: false
+      max_context_window: 400000
+      max_output_tokens: 128000
+      thinking_levels: [low, medium, high]
+      supported_file_types: [text]
+    cost:
+      input_per_1m: 0.25
+      output_per_1m: 2.0
+    providers:
+      # GitHub Copilot serves gpt-5-mini on the OpenAI Chat dialect
+      # (/chat/completions); /models reports it policy=enabled. Verified 200 with
+      # the gho_ Bearer alone. gpt-5-mini has no native (openai/codex) provider
+      # today, so copilot is its only source.
+      - driver: copilot
+        api_model: gpt-5-mini
+    driver_settings:
+      preferred_endpoint: responses
+      temperature_mode: omit
+      use_max_completion_tokens: true
+    default_thinking_level: medium
     default_compaction_threshold: 370000
 
   - id: gemini-3-flash-preview
@@ -692,6 +828,84 @@ models:
   # ============================================================================
   # VERTEX AI MODELS - Google Cloud Vertex AI hosted models
   # ============================================================================
+
+  - id: vertex-claude-4.8-opus
+    name: Vertex Claude 4.8 Opus
+    tags: [flagship, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1000000
+      max_output_tokens: 64000
+      thinking_levels: [low, medium, high, xhigh]
+      supported_file_types: [image, pdf, text]
+    cost:
+      input_per_1m: 5.0
+      output_per_1m: 25.0
+      cached_input_per_1m: 0.5
+    providers:
+      - driver: vertexai
+        api_model: claude-opus-4-8
+    driver_settings:
+      thinking_mode: adaptive
+    default_thinking_level: high
+    default_compaction_threshold: 950000
+
+  - id: vertex-claude-5-sonnet
+    name: Vertex Claude 5 Sonnet
+    tags: [flagship, moderate, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1000000
+      max_output_tokens: 64000
+      thinking_levels: [low, medium, high, xhigh]
+      supported_file_types: [image, pdf, text]
+    cost:
+      input_per_1m: 3.0
+      output_per_1m: 15.0
+      cached_input_per_1m: 0.3
+    providers:
+      - driver: vertexai
+        api_model: claude-sonnet-5
+    driver_settings:
+      thinking_mode: adaptive
+    default_thinking_level: high
+    default_compaction_threshold: 950000
+
+  - id: vertex-claude-5-fable
+    name: Vertex Claude 5 Fable
+    tags: [flagship, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1000000
+      max_output_tokens: 64000
+      thinking_levels: [low, medium, high, xhigh]
+      supported_file_types: [image, pdf, text]
+    cost:
+      input_per_1m: 10.0
+      output_per_1m: 50.0
+      cached_input_per_1m: 1.0
+    providers:
+      - driver: vertexai
+        api_model: claude-fable-5
+    driver_settings:
+      thinking_mode: adaptive
+    default_thinking_level: high
+    default_compaction_threshold: 950000
 
   - id: vertex-claude-4.6-opus
     name: Vertex Claude 4.6 Opus

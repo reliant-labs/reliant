@@ -102,7 +102,8 @@ type DriverOptions struct {
 	// Anthropic-specific options
 	UseBedrock bool
 
-	// Copilot-specific options
+	// Copilot-specific options. Auth is the raw GitHub OAuth token as a Bearer
+	// credential against a single host; there is no tier or session-token concept.
 	BearerToken string
 
 	// OpenAI-specific options
@@ -110,9 +111,6 @@ type DriverOptions struct {
 
 	// Gemini-specific options
 	SafetyLevel string
-
-	// Claude Code specific options
-	IgnoreDefaultPrompts bool // Skip the second Claude Code prompt (used for compaction)
 
 	// Claude OAuth account metadata (from stored tokens, replaces .claude.json)
 	UserID           string // Reliant (Supabase) user ID for device ID generation

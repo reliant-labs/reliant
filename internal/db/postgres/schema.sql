@@ -323,6 +323,19 @@ CREATE TABLE codex_auth_tokens (
 
 CREATE INDEX idx_codex_auth_tokens_user ON codex_auth_tokens(user_id);
 
+CREATE TABLE copilot_auth_tokens (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    github_access_token TEXT NOT NULL,
+    github_refresh_token TEXT,
+    tier TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id)
+);
+
+CREATE INDEX idx_copilot_auth_tokens_user ON copilot_auth_tokens(user_id);
+
 CREATE TABLE item_defaults (
     id TEXT PRIMARY KEY,
     item_type INTEGER NOT NULL,

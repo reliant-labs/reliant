@@ -18,6 +18,7 @@ import (
 	// Import drivers to trigger their init() functions for registry registration
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/anthropic"
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/codex"
+	_ "github.com/reliant-labs/reliant/internal/llm/drivers/copilot"
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/gemini"
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/openai"
@@ -151,6 +152,10 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 		return ReplayMode.Driver, nil
 	}
 	logging.Debug("calling defaultGetDriver", "preferences", preferences)
+	// lastErr captures the most recent per-preference failure reason so the
+	// terminal "no suitable models available" error is actionable instead of
+	// opaque (previously every failure was swallowed by `continue`).
+	var lastErr error
 	for _, pref := range preferences {
 		// Parse model ID to extract base model and optional explicit driver
 		// Format: "model-id" or "model-id@driver" (e.g., "claude-4.5-sonnet@openrouter")
@@ -205,6 +210,7 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 		}
 
 		if !found {
+			lastErr = fmt.Errorf("model %q: no configured driver can serve it (explicitDriver=%q) — is the provider connected and is this binary current?", modelID, explicitDriverID)
 			continue // Try next model in preferences
 		}
 
@@ -223,10 +229,13 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 			driverOpts = append(driverOpts, llm.WithExtraHeaders(driverConfig.ExtraHeaders))
 		}
 
-		// Pass Claude OAuth account metadata and token refresh if available
-		if driverConfig.AccountUUID != "" {
-			driverOpts = append(driverOpts, llm.WithAccountMetadata(driverConfig.UserID, driverConfig.AccountUUID, driverConfig.AccountEmail, driverConfig.OrganizationUUID))
-		}
+		// Always pass the Reliant user id (and any upstream account metadata) so
+		// drivers can derive STABLE per-user, per-account identity fingerprints
+		// (device_id / installation_id / machine_id). Keying on userID + account
+		// means multiple upstream accounts for one user get distinct fingerprints.
+		// Previously this was gated on AccountUUID != "", so codex/copilot never
+		// received UserID and their derivations fell back to random values.
+		driverOpts = append(driverOpts, llm.WithAccountMetadata(userID, driverConfig.AccountUUID, driverConfig.AccountEmail, driverConfig.OrganizationUUID))
 		if driverConfig.RefreshToken != "" {
 			refresher := BuildClaudeTokenRefresher(ctx, userID)
 			driverOpts = append(driverOpts, llm.WithTokenRefresher(refresher, driverConfig.RefreshToken, driverConfig.TokenExpiresAt))
@@ -259,6 +268,7 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 		agentProvider, err := GetDriverForModel(model, models.Family(driverConfig.DriverID), driverOpts...)
 		logging.Debug("provider, err", "provider", agentProvider, "err", err)
 		if err != nil {
+			lastErr = fmt.Errorf("model %q@%s: %w", modelID, driverConfig.DriverID, err)
 			continue
 		}
 
@@ -266,5 +276,8 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 		return agentProvider, nil
 	}
 
+	if lastErr != nil {
+		return nil, fmt.Errorf("failed to get driver for preferences (tried %d): %w", len(preferences), lastErr)
+	}
 	return nil, fmt.Errorf("failed to get driver for preferences: no suitable models available: %v", preferences[0])
 }

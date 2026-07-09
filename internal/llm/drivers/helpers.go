@@ -78,6 +78,50 @@ func BuildAvailableDrivers(ctx context.Context, repo db.Repository, userID strin
 				DriverID: models.DriverID(driverID),
 				APIKey:   accessToken,
 				Enabled:  true,
+				UserID:   userID,
+				// The ChatGPT account id is the per-credential discriminator: it
+				// makes each upstream account derive a distinct installation_id so
+				// one Reliant user's multiple accounts don't share a device
+				// fingerprint (Codex enforces one account per device).
+				AccountUUID: tokens.AccountID,
+			}
+			continue
+		}
+
+		if driverID == "copilot" {
+			// The Copilot credential is a GitHub OAuth token (from the device
+			// flow in copilot/auth.go). The driver exchanges it for the
+			// tier-appropriate bearer at request time.
+			//
+			// Prefer the dedicated Copilot credential store, which holds the GitHub
+			// OAuth token. Auth is the raw gho_ Bearer against a single host — there
+			// is no tier or session-token concept.
+			if tokens, err := repo.GetCopilotAuthTokens(ctx, userID); err == nil && tokens != nil {
+				githubToken := strings.TrimSpace(tokens.GitHubAccessToken)
+				if githubToken != "" && githubToken != "dummy" {
+					// GitHub token goes into APIKey, which the resolver forwards
+					// via WithAPIKey; the driver reads it through
+					// resolveGitHubToken (BearerToken/ApiKey).
+					drivers[models.DriverID(driverID)] = models.DriverConfig{
+						DriverID: models.DriverID(driverID),
+						APIKey:   githubToken,
+						Enabled:  true,
+					}
+					continue
+				}
+			}
+
+			// Fall back to the generic provider-key / env path (dev / env-token
+			// usage) when there is no copilot_auth_tokens row. The tier is left
+			// empty here, so the driver infers it from the requested model.
+			githubToken, err := repo.GetProviderAPIKey(ctx, userID, driverID)
+			if err != nil || strings.TrimSpace(githubToken) == "" || githubToken == "dummy" {
+				continue
+			}
+			drivers[models.DriverID(driverID)] = models.DriverConfig{
+				DriverID: models.DriverID(driverID),
+				APIKey:   githubToken,
+				Enabled:  true,
 			}
 			continue
 		}

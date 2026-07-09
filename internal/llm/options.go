@@ -100,13 +100,6 @@ func WithWorkingDirectory(path string) DriverOption {
 	}
 }
 
-// WithIgnoreDefaultPrompts skips the second Claude Code prompt (used for compaction)
-func WithIgnoreDefaultPrompts() DriverOption {
-	return func(opts *DriverOptions) {
-		opts.IgnoreDefaultPrompts = true
-	}
-}
-
 // WithAccountMetadata sets Claude OAuth account metadata (replaces .claude.json)
 func WithAccountMetadata(userID, accountUUID, accountEmail, organizationUUID string) DriverOption {
 	return func(opts *DriverOptions) {

@@ -89,6 +89,12 @@ const (
 	// SettingsServiceCompleteClaudeOAuthProcedure is the fully-qualified name of the SettingsService's
 	// CompleteClaudeOAuth RPC.
 	SettingsServiceCompleteClaudeOAuthProcedure = "/reliant.v1.SettingsService/CompleteClaudeOAuth"
+	// SettingsServiceStartCopilotDeviceAuthProcedure is the fully-qualified name of the
+	// SettingsService's StartCopilotDeviceAuth RPC.
+	SettingsServiceStartCopilotDeviceAuthProcedure = "/reliant.v1.SettingsService/StartCopilotDeviceAuth"
+	// SettingsServicePollCopilotDeviceAuthProcedure is the fully-qualified name of the
+	// SettingsService's PollCopilotDeviceAuth RPC.
+	SettingsServicePollCopilotDeviceAuthProcedure = "/reliant.v1.SettingsService/PollCopilotDeviceAuth"
 	// SettingsServiceGetPrivacySettingsProcedure is the fully-qualified name of the SettingsService's
 	// GetPrivacySettings RPC.
 	SettingsServiceGetPrivacySettingsProcedure = "/reliant.v1.SettingsService/GetPrivacySettings"
@@ -164,6 +170,14 @@ type SettingsServiceClient interface {
 	// CompleteClaudeOAuth exchanges an OAuth authorization code + PKCE verifier
 	// and marks Claude as connected for the current user.
 	CompleteClaudeOAuth(context.Context, *connect.Request[v1.CompleteClaudeOAuthRequest]) (*connect.Response[v1.CompleteClaudeOAuthResponse], error)
+	// StartCopilotDeviceAuth begins the GitHub Copilot device-authorization flow
+	// and returns the device/user codes plus polling parameters. The frontend
+	// drives polling via PollCopilotDeviceAuth.
+	StartCopilotDeviceAuth(context.Context, *connect.Request[v1.StartCopilotDeviceAuthRequest]) (*connect.Response[v1.StartCopilotDeviceAuthResponse], error)
+	// PollCopilotDeviceAuth polls GitHub for completion of a device-authorization
+	// flow. On AUTHORIZED the backend stores the Copilot credential for the
+	// current user.
+	PollCopilotDeviceAuth(context.Context, *connect.Request[v1.PollCopilotDeviceAuthRequest]) (*connect.Response[v1.PollCopilotDeviceAuthResponse], error)
 	// GetPrivacySettings retrieves user privacy settings
 	GetPrivacySettings(context.Context, *connect.Request[v1.GetPrivacySettingsRequest]) (*connect.Response[v1.GetPrivacySettingsResponse], error)
 	// UpdatePrivacySettings updates user privacy settings
@@ -307,6 +321,18 @@ func NewSettingsServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(settingsServiceMethods.ByName("CompleteClaudeOAuth")),
 			connect.WithClientOptions(opts...),
 		),
+		startCopilotDeviceAuth: connect.NewClient[v1.StartCopilotDeviceAuthRequest, v1.StartCopilotDeviceAuthResponse](
+			httpClient,
+			baseURL+SettingsServiceStartCopilotDeviceAuthProcedure,
+			connect.WithSchema(settingsServiceMethods.ByName("StartCopilotDeviceAuth")),
+			connect.WithClientOptions(opts...),
+		),
+		pollCopilotDeviceAuth: connect.NewClient[v1.PollCopilotDeviceAuthRequest, v1.PollCopilotDeviceAuthResponse](
+			httpClient,
+			baseURL+SettingsServicePollCopilotDeviceAuthProcedure,
+			connect.WithSchema(settingsServiceMethods.ByName("PollCopilotDeviceAuth")),
+			connect.WithClientOptions(opts...),
+		),
 		getPrivacySettings: connect.NewClient[v1.GetPrivacySettingsRequest, v1.GetPrivacySettingsResponse](
 			httpClient,
 			baseURL+SettingsServiceGetPrivacySettingsProcedure,
@@ -396,6 +422,8 @@ type settingsServiceClient struct {
 	syncReliantProvider         *connect.Client[v1.SyncReliantProviderRequest, v1.SyncReliantProviderResponse]
 	completeCodexOAuth          *connect.Client[v1.CompleteCodexOAuthRequest, v1.CompleteCodexOAuthResponse]
 	completeClaudeOAuth         *connect.Client[v1.CompleteClaudeOAuthRequest, v1.CompleteClaudeOAuthResponse]
+	startCopilotDeviceAuth      *connect.Client[v1.StartCopilotDeviceAuthRequest, v1.StartCopilotDeviceAuthResponse]
+	pollCopilotDeviceAuth       *connect.Client[v1.PollCopilotDeviceAuthRequest, v1.PollCopilotDeviceAuthResponse]
 	getPrivacySettings          *connect.Client[v1.GetPrivacySettingsRequest, v1.GetPrivacySettingsResponse]
 	updatePrivacySettings       *connect.Client[v1.UpdatePrivacySettingsRequest, v1.UpdatePrivacySettingsResponse]
 	trackPageVisited            *connect.Client[v1.TrackPageVisitedRequest, v1.TrackPageVisitedResponse]
@@ -499,6 +527,16 @@ func (c *settingsServiceClient) CompleteClaudeOAuth(ctx context.Context, req *co
 	return c.completeClaudeOAuth.CallUnary(ctx, req)
 }
 
+// StartCopilotDeviceAuth calls reliant.v1.SettingsService.StartCopilotDeviceAuth.
+func (c *settingsServiceClient) StartCopilotDeviceAuth(ctx context.Context, req *connect.Request[v1.StartCopilotDeviceAuthRequest]) (*connect.Response[v1.StartCopilotDeviceAuthResponse], error) {
+	return c.startCopilotDeviceAuth.CallUnary(ctx, req)
+}
+
+// PollCopilotDeviceAuth calls reliant.v1.SettingsService.PollCopilotDeviceAuth.
+func (c *settingsServiceClient) PollCopilotDeviceAuth(ctx context.Context, req *connect.Request[v1.PollCopilotDeviceAuthRequest]) (*connect.Response[v1.PollCopilotDeviceAuthResponse], error) {
+	return c.pollCopilotDeviceAuth.CallUnary(ctx, req)
+}
+
 // GetPrivacySettings calls reliant.v1.SettingsService.GetPrivacySettings.
 func (c *settingsServiceClient) GetPrivacySettings(ctx context.Context, req *connect.Request[v1.GetPrivacySettingsRequest]) (*connect.Response[v1.GetPrivacySettingsResponse], error) {
 	return c.getPrivacySettings.CallUnary(ctx, req)
@@ -594,6 +632,14 @@ type SettingsServiceHandler interface {
 	// CompleteClaudeOAuth exchanges an OAuth authorization code + PKCE verifier
 	// and marks Claude as connected for the current user.
 	CompleteClaudeOAuth(context.Context, *connect.Request[v1.CompleteClaudeOAuthRequest]) (*connect.Response[v1.CompleteClaudeOAuthResponse], error)
+	// StartCopilotDeviceAuth begins the GitHub Copilot device-authorization flow
+	// and returns the device/user codes plus polling parameters. The frontend
+	// drives polling via PollCopilotDeviceAuth.
+	StartCopilotDeviceAuth(context.Context, *connect.Request[v1.StartCopilotDeviceAuthRequest]) (*connect.Response[v1.StartCopilotDeviceAuthResponse], error)
+	// PollCopilotDeviceAuth polls GitHub for completion of a device-authorization
+	// flow. On AUTHORIZED the backend stores the Copilot credential for the
+	// current user.
+	PollCopilotDeviceAuth(context.Context, *connect.Request[v1.PollCopilotDeviceAuthRequest]) (*connect.Response[v1.PollCopilotDeviceAuthResponse], error)
 	// GetPrivacySettings retrieves user privacy settings
 	GetPrivacySettings(context.Context, *connect.Request[v1.GetPrivacySettingsRequest]) (*connect.Response[v1.GetPrivacySettingsResponse], error)
 	// UpdatePrivacySettings updates user privacy settings
@@ -733,6 +779,18 @@ func NewSettingsServiceHandler(svc SettingsServiceHandler, opts ...connect.Handl
 		connect.WithSchema(settingsServiceMethods.ByName("CompleteClaudeOAuth")),
 		connect.WithHandlerOptions(opts...),
 	)
+	settingsServiceStartCopilotDeviceAuthHandler := connect.NewUnaryHandler(
+		SettingsServiceStartCopilotDeviceAuthProcedure,
+		svc.StartCopilotDeviceAuth,
+		connect.WithSchema(settingsServiceMethods.ByName("StartCopilotDeviceAuth")),
+		connect.WithHandlerOptions(opts...),
+	)
+	settingsServicePollCopilotDeviceAuthHandler := connect.NewUnaryHandler(
+		SettingsServicePollCopilotDeviceAuthProcedure,
+		svc.PollCopilotDeviceAuth,
+		connect.WithSchema(settingsServiceMethods.ByName("PollCopilotDeviceAuth")),
+		connect.WithHandlerOptions(opts...),
+	)
 	settingsServiceGetPrivacySettingsHandler := connect.NewUnaryHandler(
 		SettingsServiceGetPrivacySettingsProcedure,
 		svc.GetPrivacySettings,
@@ -837,6 +895,10 @@ func NewSettingsServiceHandler(svc SettingsServiceHandler, opts ...connect.Handl
 			settingsServiceCompleteCodexOAuthHandler.ServeHTTP(w, r)
 		case SettingsServiceCompleteClaudeOAuthProcedure:
 			settingsServiceCompleteClaudeOAuthHandler.ServeHTTP(w, r)
+		case SettingsServiceStartCopilotDeviceAuthProcedure:
+			settingsServiceStartCopilotDeviceAuthHandler.ServeHTTP(w, r)
+		case SettingsServicePollCopilotDeviceAuthProcedure:
+			settingsServicePollCopilotDeviceAuthHandler.ServeHTTP(w, r)
 		case SettingsServiceGetPrivacySettingsProcedure:
 			settingsServiceGetPrivacySettingsHandler.ServeHTTP(w, r)
 		case SettingsServiceUpdatePrivacySettingsProcedure:
@@ -938,6 +1000,14 @@ func (UnimplementedSettingsServiceHandler) CompleteCodexOAuth(context.Context, *
 
 func (UnimplementedSettingsServiceHandler) CompleteClaudeOAuth(context.Context, *connect.Request[v1.CompleteClaudeOAuthRequest]) (*connect.Response[v1.CompleteClaudeOAuthResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.CompleteClaudeOAuth is not implemented"))
+}
+
+func (UnimplementedSettingsServiceHandler) StartCopilotDeviceAuth(context.Context, *connect.Request[v1.StartCopilotDeviceAuthRequest]) (*connect.Response[v1.StartCopilotDeviceAuthResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.StartCopilotDeviceAuth is not implemented"))
+}
+
+func (UnimplementedSettingsServiceHandler) PollCopilotDeviceAuth(context.Context, *connect.Request[v1.PollCopilotDeviceAuthRequest]) (*connect.Response[v1.PollCopilotDeviceAuthResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.PollCopilotDeviceAuth is not implemented"))
 }
 
 func (UnimplementedSettingsServiceHandler) GetPrivacySettings(context.Context, *connect.Request[v1.GetPrivacySettingsRequest]) (*connect.Response[v1.GetPrivacySettingsResponse], error) {

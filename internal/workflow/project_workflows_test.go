@@ -42,7 +42,11 @@ import (
 
 // projectWorkflowsDir returns the path to the project workflows directory.
 func projectWorkflowsDir() string {
-	// Walk up from internal/workflow/ to project root
+	// Walk up from internal/workflow/ to the project root, looking for a
+	// .reliant/workflows directory. The search is bounded to the repository:
+	// once we reach the directory containing the repo root marker (.git) we
+	// stop, so we never wander into unrelated ancestor directories that may
+	// happen to contain their own .reliant/workflows.
 	dir, err := os.Getwd()
 	if err != nil {
 		return ""
@@ -51,6 +55,11 @@ func projectWorkflowsDir() string {
 		candidate := filepath.Join(dir, ".reliant", "workflows")
 		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
 			return candidate
+		}
+		// Stop at the repository root (dir containing .git). We still checked
+		// this level's .reliant/workflows above before bailing out.
+		if info, err := os.Stat(filepath.Join(dir, ".git")); err == nil && info.IsDir() {
+			return ""
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {

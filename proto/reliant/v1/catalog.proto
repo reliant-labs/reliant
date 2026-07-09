@@ -12,7 +12,12 @@ service CatalogService {
   
   // ListModelsByProvider returns all models for a specific provider
   rpc ListModelsByProvider(ListModelsByProviderRequest) returns (ListModelsByProviderResponse) {}
-  
+
+  // ListAvailableModels returns the models available to the caller across every
+  // configured provider, carrying per-account availability (enabled) so a picker
+  // can render which models the user's account may actually use.
+  rpc ListAvailableModels(ListAvailableModelsRequest) returns (ListAvailableModelsResponse) {}
+
   // ListTools returns all available tools
   rpc ListTools(ListToolsRequest) returns (ListToolsResponse) {}
   
@@ -79,6 +84,53 @@ message ListModelsByProviderRequest {
 message ListModelsByProviderResponse {
   // List of models for the specified provider
   repeated ModelInfo models = 1;
+}
+
+// AvailableModelInfo is a picker-oriented, provider-scoped view of a model,
+// including whether the caller's account may actually use it (enabled).
+message AvailableModelInfo {
+  // Reliant model id (e.g. "claude-5-sonnet").
+  string id = 1;
+  // Human-readable display name.
+  string display_name = 2;
+  // Provider/driver serving this model (e.g. "anthropic", "copilot").
+  string provider = 3;
+  // Model vendor/family (claude, openai, gemini, grok, other).
+  string family = 4;
+  // Provider-facing model identifier (the api_model on the provider mapping).
+  string api_model = 5;
+  // Context window size in tokens.
+  int64 context_window = 6;
+  // Default max output tokens.
+  int64 default_max_tokens = 7;
+  // Cost per 1M input tokens.
+  double cost_per_1m_in = 8;
+  // Cost per 1M output tokens.
+  double cost_per_1m_out = 9;
+  // Whether the model supports reasoning/thinking.
+  bool can_reason = 10;
+  // Whether the model supports file attachments.
+  bool supports_attachments = 11;
+  // Whether the model supports tool/function calling.
+  bool supports_tools = 12;
+  // Whether the model supports caching.
+  bool supports_caching = 13;
+  // Model tags for categorization (e.g., "flagship", "fast", "cheap").
+  repeated string tags = 14;
+  // Whether the caller's account may actually use this model. Static providers
+  // report true for every model; a dynamic provider (Copilot) reports the
+  // account's per-model policy.
+  bool enabled = 15;
+}
+
+// ListAvailableModelsRequest is the request for ListAvailableModels
+message ListAvailableModelsRequest {}
+
+// ListAvailableModelsResponse is the response for ListAvailableModels
+message ListAvailableModelsResponse {
+  // Available models across all configured providers, one entry per
+  // {model, provider} pair.
+  repeated AvailableModelInfo models = 1;
 }
 
 // ToolInfo represents information about a tool

@@ -36,6 +36,9 @@ import {
   SyncReliantProviderRequestSchema,
   CompleteCodexOAuthRequestSchema,
   CompleteClaudeOAuthRequestSchema,
+  StartCopilotDeviceAuthRequestSchema,
+  PollCopilotDeviceAuthRequestSchema,
+  PollCopilotDeviceAuthResponse_Status,
   // Sub-phase 6e: Privacy
   GetPrivacySettingsRequestSchema,
   UpdatePrivacySettingsRequestSchema,
@@ -512,6 +515,55 @@ export const settingsGrpc = {
     return {
       success: response.success,
       message: response.message,
+    };
+  },
+
+  /**
+   * Begin the GitHub Copilot device-authorization flow.
+   *
+   * Returns the user-facing code the caller must display, the verification URI
+   * to open (github.com/login/device), and the polling parameters
+   * (interval + expiry) that govern the subsequent pollCopilotDeviceAuth loop.
+   */
+  async startCopilotDeviceAuth(): Promise<{
+    deviceCode: string;
+    userCode: string;
+    verificationUri: string;
+    intervalSeconds: number;
+    expiresInSeconds: number;
+  }> {
+    const client = grpcClient.settings();
+    const request = create(StartCopilotDeviceAuthRequestSchema, {});
+    const response = await client.startCopilotDeviceAuth(request);
+    return {
+      deviceCode: response.deviceCode,
+      userCode: response.userCode,
+      verificationUri: response.verificationUri,
+      intervalSeconds: response.intervalSeconds,
+      expiresInSeconds: response.expiresInSeconds,
+    };
+  },
+
+  /**
+   * Poll GitHub for completion of a Copilot device-authorization flow.
+   *
+   * On AUTHORIZED the backend persists the Copilot credential. Copilot has a
+   * single flavor — there is no longer a tier concept.
+   */
+  async pollCopilotDeviceAuth(
+    deviceCode: string
+  ): Promise<{
+    status: PollCopilotDeviceAuthResponse_Status;
+    errorMessage: string;
+  }> {
+    const client = grpcClient.settings();
+    const request = create(PollCopilotDeviceAuthRequestSchema, {
+      deviceCode,
+    });
+    const response = await client.pollCopilotDeviceAuth(request);
+    return {
+      status: response.status,
+      errorMessage: response.errorMessage,
     };
   },
 

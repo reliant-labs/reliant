@@ -96,6 +96,7 @@ import (
 	"fmt"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"gopkg.in/yaml.v3"
 )
 
@@ -258,7 +259,7 @@ func desugarParallelNode(nodeYAML *yaml.Node) (expandedNodes []*reliantv1.Node, 
 	// The join condition "all" is set via Node.Condition (the base condition field).
 	joinNode := &reliantv1.Node{
 		Id:        nodeID,
-		Type:      "join",
+		Type:      model.NodeTypeJoin,
 		Condition: &reliantv1.DirectCelBool{Expr: "all"},
 		Args: &reliantv1.Node_Join{
 			Join: &reliantv1.JoinArgs{},

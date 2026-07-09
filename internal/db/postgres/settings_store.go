@@ -192,6 +192,42 @@ func (s *settingStore) DeleteCodexAuthTokens(ctx context.Context, userID string)
 	return err
 }
 
+func (s *settingStore) GetCopilotAuthTokens(ctx context.Context, userID string) (*core.CopilotAuthTokens, error) {
+	query := s.bind(`SELECT user_id, github_access_token, github_refresh_token, tier, created_at, updated_at
+		FROM copilot_auth_tokens
+		WHERE user_id = ?`)
+	row := s.db.QueryRowContext(ctx, query, userID)
+
+	var tokens core.CopilotAuthTokens
+	if err := row.Scan(&tokens.UserID, &tokens.GitHubAccessToken, &tokens.GitHubRefreshToken, &tokens.Tier, &tokens.CreatedAt, &tokens.UpdatedAt); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &tokens, nil
+}
+
+func (s *settingStore) SetCopilotAuthTokens(ctx context.Context, userID string, tokens core.CopilotAuthTokens) error {
+	now := time.Now().UTC()
+	id := uuid.New().String()
+	query := s.bind(`INSERT INTO copilot_auth_tokens (id, user_id, github_access_token, github_refresh_token, tier, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(user_id) DO UPDATE SET
+		   github_access_token = excluded.github_access_token,
+		   github_refresh_token = excluded.github_refresh_token,
+		   tier = excluded.tier,
+		   updated_at = excluded.updated_at`)
+	_, err := s.db.ExecContext(ctx, query, id, userID, tokens.GitHubAccessToken, tokens.GitHubRefreshToken, tokens.Tier, now, now)
+	return err
+}
+
+func (s *settingStore) DeleteCopilotAuthTokens(ctx context.Context, userID string) error {
+	query := s.bind("DELETE FROM copilot_auth_tokens WHERE user_id = ?")
+	_, err := s.db.ExecContext(ctx, query, userID)
+	return err
+}
+
 func (s *settingStore) GetClaudeAuthTokens(ctx context.Context, userID string) (*core.ClaudeAuthTokens, error) {
 	query := s.bind(`SELECT access_token, refresh_token, expires_at, account_uuid, account_email, organization_uuid, organization_name, scope
 		FROM claude_auth_tokens

@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/db/core"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -2033,6 +2033,33 @@ func (r *Repo) DeleteCodexAuthTokens(ctx context.Context, userID string) error {
 	}
 
 	return r.settings.DeleteCodexAuthTokens(ctx, userID)
+}
+
+func (r *Repo) GetCopilotAuthTokens(ctx context.Context, userID string) (*CopilotAuthTokens, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user_id cannot be empty")
+	}
+
+	return r.settings.GetCopilotAuthTokens(ctx, userID)
+}
+
+func (r *Repo) SetCopilotAuthTokens(ctx context.Context, userID string, tokens CopilotAuthTokens) error {
+	if userID == "" {
+		return fmt.Errorf("user_id cannot be empty")
+	}
+	if strings.TrimSpace(tokens.GitHubAccessToken) == "" {
+		return fmt.Errorf("github access token cannot be empty")
+	}
+
+	return r.settings.SetCopilotAuthTokens(ctx, userID, tokens)
+}
+
+func (r *Repo) DeleteCopilotAuthTokens(ctx context.Context, userID string) error {
+	if userID == "" {
+		return fmt.Errorf("user_id cannot be empty")
+	}
+
+	return r.settings.DeleteCopilotAuthTokens(ctx, userID)
 }
 
 func (r *Repo) GetClaudeAuthTokens(ctx context.Context, userID string) (*ClaudeAuthTokens, error) {

@@ -7,7 +7,6 @@ import (
 
 	"go.temporal.io/sdk/client"
 
-	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/streaming"
@@ -24,7 +23,6 @@ type ChatService struct {
 	threads            *threads.Service
 	taskQueue          string
 	streamingHub       streaming.StreamingHub
-	controlPlaneClient controlplane.Client
 	discussLocks       sync.Map // per-chat lock to prevent concurrent discuss calls
 }
 
@@ -41,6 +39,5 @@ func NewChatService(database db.Repository, tempClient client.Client, pauseServi
 		threads:            threads.NewService(database),
 		taskQueue:          taskQueue,
 		streamingHub:       hub,
-		controlPlaneClient: controlplane.NewClient(""),
 	}
 }
