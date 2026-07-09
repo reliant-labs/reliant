@@ -11,10 +11,10 @@ import (
 	"connectrpc.com/connect"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
-	"github.com/reliant-labs/reliant/internal/daemonliveness"
-	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/daemonliveness"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
@@ -35,9 +35,10 @@ const (
 	configWatchSubject = "daemon.config.watch" // daemon.config.watch.{userID}.{daemonID}
 
 	// Terminal streaming subjects
-	terminalInputSubject  = "daemon.terminal.input"  // daemon.terminal.input.{userID}.{daemonID}.{sessionID}
-	terminalResizeSubject = "daemon.terminal.resize" // daemon.terminal.resize.{userID}.{daemonID}.{sessionID}
-	terminalOutputSubject = "daemon.terminal.output" // daemon.terminal.output.{userID}.{daemonID}.{sessionID}
+	terminalInputSubject     = "daemon.terminal.input"     // daemon.terminal.input.{userID}.{daemonID}.{sessionID}
+	terminalResizeSubject    = "daemon.terminal.resize"    // daemon.terminal.resize.{userID}.{daemonID}.{sessionID}
+	terminalOutputSubject    = "daemon.terminal.output"    // daemon.terminal.output.{userID}.{daemonID}.{sessionID}
+	terminalSubscribeSubject = "daemon.terminal.subscribe" // daemon.terminal.subscribe.{userID}.{daemonID}.{sessionID}
 
 	// Process output streaming subjects
 	processOutputSubscribeSubject = "daemon.process.subscribe" // daemon.process.subscribe.{userID}.{daemonID}
@@ -164,14 +165,27 @@ func (r *NATSDaemonRouter) resolveDaemonID(ctx context.Context, userID string, s
 		for _, id := range attachedIDs {
 			attached[id] = true
 		}
+		// Attachment freshness is a decaying hint, not ground truth: routing is
+		// authoritative via NATS (a request to a daemon with no live subscription
+		// returns ErrNoResponders → CodeUnavailable). So PREFER a daemon with a
+		// fresh attachment, but fall back to any matching daemon rather than
+		// erroring — this keeps a connected-but-idle daemon (whose attachment
+		// timestamp has gone stale) routable, and lets the NATS request decide
+		// actual reachability.
+		var fallbackID string
 		for _, d := range daemons {
-			if !attached[d.ID] {
-				continue
-			}
 			if selector != nil && selector.Type != "" && selector.Type != "any" {
 				continue
 			}
-			return d.ID, nil
+			if attached[d.ID] {
+				return d.ID, nil
+			}
+			if fallbackID == "" {
+				fallbackID = d.ID
+			}
+		}
+		if fallbackID != "" {
+			return fallbackID, nil
 		}
 	}
 
@@ -358,13 +372,23 @@ func (r *NATSDaemonRouter) SendToolExecutionCancel(ctx context.Context, userID, 
 	return nil
 }
 
-func (r *NATSDaemonRouter) SendKillProcess(ctx context.Context, userID, processID string) error {
-	if online, err := r.isDaemonReachable(ctx, userID); err != nil {
-		return fmt.Errorf("checking daemon status: %w", err)
-	} else if !online {
+// daemonRequestError maps a NATS request/reply error to a caller-facing error.
+// nats.ErrNoResponders is authoritative: the NATS server reports that no
+// subscription is currently live for the daemon's subject (the gateway
+// subscribes on connect and unsubscribes on disconnect), i.e. the daemon is not
+// connected. That is the ground-truth reachability signal — we deliberately do
+// NOT pre-check a decaying DB freshness timestamp, which produced false
+// "offline" for connected-but-idle daemons. Any other error (timeouts, wedged
+// daemon, transport failure) is surfaced as-is rather than mislabeled as
+// "no daemon connected".
+func daemonRequestError(op string, err error) error {
+	if err == nats.ErrNoResponders {
 		return connect.NewError(connect.CodeUnavailable, fmt.Errorf("no daemon connected for user"))
 	}
+	return fmt.Errorf("%s via NATS failed: %w", op, err)
+}
 
+func (r *NATSDaemonRouter) SendKillProcess(ctx context.Context, userID, processID string) error {
 	payload, err := json.Marshal(map[string]string{
 		"process_id": processID,
 	})
@@ -383,7 +407,7 @@ func (r *NATSDaemonRouter) SendKillProcess(ctx context.Context, userID, processI
 	observability.NATSRequestDuration.WithLabelValues("daemon.process.kill").Observe(time.Since(start).Seconds())
 	if err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("daemon.process.kill", "request").Inc()
-		return fmt.Errorf("kill process via NATS failed: %w", err)
+		return daemonRequestError("kill process", err)
 	}
 
 	// Check response for error.
@@ -397,12 +421,6 @@ func (r *NATSDaemonRouter) SendKillProcess(ctx context.Context, userID, processI
 }
 
 func (r *NATSDaemonRouter) SendDaemonCommand(ctx context.Context, userID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
-	if online, err := r.isDaemonReachable(ctx, userID); err != nil {
-		return nil, fmt.Errorf("checking daemon status: %w", err)
-	} else if !online {
-		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("no daemon connected for user"))
-	}
-
 	req := struct {
 		RequestID   string          `json:"request_id"`
 		CommandType string          `json:"command_type"`
@@ -456,7 +474,7 @@ func (r *NATSDaemonRouter) SendDaemonCommand(ctx context.Context, userID string,
 		observability.NATSRequestDuration.WithLabelValues("daemon.command").Observe(time.Since(start).Seconds())
 		if res.err != nil {
 			observability.NATSErrorsTotal.WithLabelValues("daemon.command", "request").Inc()
-			return nil, fmt.Errorf("daemon command via NATS failed: %w", res.err)
+			return nil, daemonRequestError("daemon command", res.err)
 		}
 		msg = res.msg
 	case <-ctx.Done():
@@ -480,12 +498,6 @@ func (r *NATSDaemonRouter) SendDaemonCommand(ctx context.Context, userID string,
 }
 
 func (r *NATSDaemonRouter) SendToolRequestSync(ctx context.Context, userID string, request *ToolExecutionRequest) (*ToolExecutionResponse, error) {
-	if online, err := r.isDaemonReachable(ctx, userID); err != nil {
-		return nil, fmt.Errorf("checking daemon status: %w", err)
-	} else if !online {
-		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("no daemon connected for user"))
-	}
-
 	payload, err := json.Marshal(request)
 	if err != nil {
 		return nil, fmt.Errorf("marshal tool request: %w", err)
@@ -525,7 +537,7 @@ func (r *NATSDaemonRouter) SendToolRequestSync(ctx context.Context, userID strin
 		observability.NATSRequestDuration.WithLabelValues("tools.request.sync").Observe(time.Since(start).Seconds())
 		if res.err != nil {
 			observability.NATSErrorsTotal.WithLabelValues("tools.request.sync", "request").Inc()
-			return nil, fmt.Errorf("tool request via NATS failed: %w", res.err)
+			return nil, daemonRequestError("tool request", res.err)
 		}
 		msg = res.msg
 	case <-ctx.Done():
@@ -584,7 +596,7 @@ func (r *NATSDaemonRouter) SendToolRequestSyncWithSelector(ctx context.Context, 
 		observability.NATSRequestDuration.WithLabelValues("tools.request.sync.selector").Observe(time.Since(start).Seconds())
 		if res.err != nil {
 			observability.NATSErrorsTotal.WithLabelValues("tools.request.sync.selector", "request").Inc()
-			return nil, fmt.Errorf("tool request via NATS failed: %w", res.err)
+			return nil, daemonRequestError("tool request", res.err)
 		}
 		msg = res.msg
 	case <-ctx.Done():
@@ -709,6 +721,29 @@ func (r *NATSDaemonRouter) SubscribeTerminalOutput(ctx context.Context, userID s
 	if err != nil {
 		return nil, nil, fmt.Errorf("subscribe to terminal output via NATS: %w", err)
 	}
+
+	// Only AFTER the local NATS subscription is live do we publish the subscribe
+	// request down to the bridge. The bridge starts the terminal output
+	// forwarder, which starts the daemon's PTY pump — so the daemon does not read
+	// the PTY until the full WS->NATS->bridge->daemon interest chain is
+	// established and the initial shell prompt can no longer be dropped. Mirrors
+	// SubscribeProcessOutput, but with the publish deliberately ordered after the
+	// subscribe (the whole point of the terminal fix).
+	reqPayload, err := json.Marshal(struct {
+		SessionID string `json:"session_id"`
+	}{SessionID: sessionID})
+	if err != nil {
+		_ = sub.Unsubscribe()
+		return nil, nil, err
+	}
+	subscribeSubject := daemonSubject(terminalSubscribeSubject, userID, resolvedDaemonID) + "." + sessionID
+	subMsg := observability.NATSPublishMsg(ctx, subscribeSubject, reqPayload)
+	if err := r.nc.PublishMsg(subMsg); err != nil {
+		observability.NATSErrorsTotal.WithLabelValues("daemon.terminal.subscribe", "publish").Inc()
+		_ = sub.Unsubscribe()
+		return nil, nil, fmt.Errorf("publish terminal output subscribe request via NATS: %w", err)
+	}
+	observability.NATSPublishTotal.WithLabelValues("daemon.terminal.subscribe").Inc()
 
 	unsub := func() {
 		_ = sub.Unsubscribe()

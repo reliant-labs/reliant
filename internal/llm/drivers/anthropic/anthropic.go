@@ -44,6 +44,30 @@ func NewAnthropicClient(opts llm.DriverOptions) *AnthropicClient {
 	}
 }
 
+// NewAnthropicClientWithOptions builds an Anthropic Messages client with extra
+// SDK request options appended after the defaults (streaming HTTP client, and
+// x-api-key from opts.ApiKey when non-empty).
+//
+// It exists so other drivers can reuse the full Anthropic Messages serialization
+// (message/tool conversion, streaming, thinking) while pointing the SDK at a
+// different host with a different auth scheme. In particular the GitHub Copilot
+// driver speaks the Anthropic Messages dialect against api.individual.githubcopilot.com,
+// where auth is `authorization: Bearer <gho_>` (supplied via a WithHeader option)
+// rather than x-api-key.
+func NewAnthropicClientWithOptions(opts llm.DriverOptions, extra ...option.RequestOption) *AnthropicClient {
+	clientOptions := []option.RequestOption{
+		option.WithHTTPClient(llm.StreamingHTTPClient()),
+	}
+	if opts.ApiKey != "" {
+		clientOptions = append(clientOptions, option.WithAPIKey(opts.ApiKey))
+	}
+	clientOptions = append(clientOptions, extra...)
+
+	return &AnthropicClient{
+		baseClient: newBase(opts, clientOptions),
+	}
+}
+
 func (c *AnthropicClient) preparedMessages(prompts []string, messages []anthropic.MessageParam, tools []anthropic.ToolUnionParam) anthropic.MessageNewParams {
 	return anthropic.MessageNewParams{
 		Model:     anthropic.Model(c.options.Model.APIModel),

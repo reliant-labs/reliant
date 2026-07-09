@@ -10,9 +10,9 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/reliant-labs/reliant/internal/auth"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -49,6 +49,22 @@ func (s *CatalogService) ListModels(
 	// Get user's available drivers (configured API keys)
 	availableDrivers := drivers.GetAvailableDrivers(ctx, userID)
 
+	// Per-account availability (Enabled per {driver, model}) comes from the
+	// modular provider capability, not a provider special-case. Static providers
+	// report every model enabled; a dynamic provider (Copilot) reports its
+	// account's policy. Fails open per provider, so a lookup failure never blanks
+	// the picker. We index it by driver -> model id -> enabled to gate the loop
+	// below uniformly.
+	enabledByDriver := make(map[string]map[string]bool)
+	for _, mi := range drivers.ListAvailableModelsOrEmpty(ctx, userID) {
+		byModel := enabledByDriver[mi.DriverID]
+		if byModel == nil {
+			byModel = make(map[string]bool)
+			enabledByDriver[mi.DriverID] = byModel
+		}
+		byModel[mi.ID] = mi.Enabled
+	}
+
 	// Get all user-visible models from the registry
 	registry := models.MustGetRegistry()
 	allModels := registry.GetUserVisibleModels()
@@ -75,6 +91,17 @@ func (s *CatalogService) ListModels(
 				driverConfig, exists := availableDrivers.Drivers[models.DriverID(provider.Driver)]
 				if !exists || !driverConfig.Enabled || driverConfig.APIKey == "" {
 					continue
+				}
+
+				// Per-account availability: a dynamic provider (e.g. Copilot) may
+				// report a model as disabled for this account (it 400s upstream),
+				// so we hide it from the picker. Static providers report every
+				// model enabled, and the lookup fails open (model absent -> shown),
+				// so this uniformly gates any provider without a special-case.
+				if byModel, ok := enabledByDriver[provider.Driver]; ok {
+					if enabled, present := byModel[model.ID]; present && !enabled {
+						continue
+					}
 				}
 			}
 
@@ -222,6 +249,47 @@ func extractBaseModelID(id string) string {
 		return id[:idx]
 	}
 	return id
+}
+
+// ListAvailableModels returns the models available to the caller across every
+// configured provider, with per-account availability (enabled). Static providers
+// report every model enabled; a dynamic provider (Copilot) reports its account's
+// per-model policy. Delegates to the drivers aggregator, which fails open per
+// provider so one flaky provider never blanks the list.
+func (s *CatalogService) ListAvailableModels(
+	ctx context.Context,
+	req *connect.Request[reliantv1.ListAvailableModelsRequest],
+) (*connect.Response[reliantv1.ListAvailableModelsResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+
+	infos, err := drivers.ListAvailableModels(ctx, userID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	out := make([]*reliantv1.AvailableModelInfo, 0, len(infos))
+	for _, mi := range infos {
+		out = append(out, &reliantv1.AvailableModelInfo{
+			Id:                  mi.ID,
+			DisplayName:         mi.DisplayName,
+			Provider:            mi.DriverID,
+			Family:              mi.Family,
+			ApiModel:            mi.APIModel,
+			ContextWindow:       int64(mi.Capabilities.MaxContextWindow),
+			DefaultMaxTokens:    int64(mi.Capabilities.MaxOutputTokens),
+			CostPer_1MIn:        mi.Cost.InputPer1M,
+			CostPer_1MOut:       mi.Cost.OutputPer1M,
+			CanReason:           mi.Capabilities.CanReason,
+			SupportsAttachments: mi.Capabilities.SupportsAttachments,
+			SupportsTools:       mi.Capabilities.SupportsTools,
+			SupportsCaching:     mi.Capabilities.SupportsCaching,
+			Tags:                mi.Tags,
+			Enabled:             mi.Enabled,
+		})
+	}
+
+	logging.Info("[ListAvailableModels] Returning available models", "userID", userID, "count", len(out))
+	return connect.NewResponse(&reliantv1.ListAvailableModelsResponse{Models: out}), nil
 }
 
 // ListModelsByProvider returns all models for a specific provider

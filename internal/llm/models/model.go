@@ -63,6 +63,12 @@ type Model struct {
 	UseMaxCompletionTokens bool                 `json:"use_max_completion_tokens"`
 	ReasoningSummaryMode   ReasoningSummaryMode `json:"reasoning_summary_mode"` // Controls allowed reasoning.summary values
 	DevOnly                bool                 `json:"dev_only"`               // If true, only available in development builds
+
+	// ThinkingMode selects how the Anthropic driver requests extended thinking.
+	// Values: "budget" (thinking:{type:"enabled",budget_tokens:N}) or
+	// "adaptive" (thinking:{type:"adaptive"} + output_config:{effort:<level>}).
+	// Defaults to "budget" when unset so existing models keep current behavior.
+	ThinkingMode string `json:"thinking_mode"`
 }
 
 // Preference represents a single model preference with its configuration

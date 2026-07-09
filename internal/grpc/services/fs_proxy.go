@@ -663,6 +663,39 @@ func (s *FileSystemProxyService) ListDirectory(
 	}), nil
 }
 
+// CreateDirectory creates a new directory at an arbitrary absolute path by
+// forwarding an fs.mkdir command to the user's daemon. Mirrors ListDirectory:
+// the path is an absolute filesystem path on the daemon (not project-scoped).
+func (s *FileSystemProxyService) CreateDirectory(
+	ctx context.Context,
+	req *connect.Request[reliantv1.CreateDirectoryRequest],
+) (*connect.Response[reliantv1.CreateDirectoryResponse], error) {
+	userID, err := s.getUserID(ctx)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+	}
+
+	path := req.Msg.Path
+	if path == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("path is required"))
+	}
+	if !filepath.IsAbs(path) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("path must be absolute"))
+	}
+
+	cmdReq := map[string]any{
+		"path": path,
+	}
+	var cmdResp struct{}
+	if err := s.sendCommand(ctx, userID, "fs.mkdir", cmdReq, &cmdResp, 5000); err != nil {
+		return nil, err
+	}
+
+	return connect.NewResponse(&reliantv1.CreateDirectoryResponse{
+		Path: path,
+	}), nil
+}
+
 // fsProxyDirEntry mirrors the daemon's DirEntry JSON shape.
 type fsProxyDirEntry struct {
 	Name      string `json:"name"`

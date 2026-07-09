@@ -23,10 +23,10 @@ import (
 	"github.com/google/uuid"
 	"gopkg.in/yaml.v3"
 
-	"github.com/reliant-labs/reliant/internal/config"
-	"github.com/reliant-labs/reliant/internal/daemon"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -463,6 +463,18 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, msg *reliantv1.S
 		d.handleTerminalResize(m.TerminalResize)
 		return nil
 
+	case *reliantv1.ServerMessage_TerminalOutputSubscribe:
+		if m.TerminalOutputSubscribe == nil {
+			return nil
+		}
+		// Subscribe-driven: this is what starts the PTY output pump (mirrors the
+		// process-output subscribe case below). The PTY buffered its initial
+		// shell prompt until now, so the prompt is delivered once the pump reads.
+		if sid := m.TerminalOutputSubscribe.GetSessionId(); sid != "" {
+			d.startTerminalOutputPump(sid)
+		}
+		return nil
+
 	case *reliantv1.ServerMessage_ProcessOutputSubscribe:
 		if m.ProcessOutputSubscribe == nil {
 			return nil
@@ -533,16 +545,11 @@ func (d *daemonClient) handleDaemonCommand(req *reliantv1.DaemonCommandRequest) 
 			"requestID", req.RequestId, "commandType", req.CommandType, "error", sendErr)
 	}
 
-	// After a successful terminal.create, start the output pump so PTY
-	// output is streamed back to the server over the bidi stream.
-	if err == nil && req.CommandType == "terminal.create" {
-		var created struct {
-			SessionID string `json:"session_id"`
-		}
-		if json.Unmarshal(resultPayload, &created) == nil && created.SessionID != "" {
-			d.startTerminalOutputPump(created.SessionID)
-		}
-	}
+	// NOTE: the terminal output pump is NOT started here on terminal.create.
+	// It is subscribe-driven — started only when a TerminalOutputSubscribeMessage
+	// arrives (see handleServerMessage), mirroring the process-output subscribe
+	// flow. Until then the PTY buffers its initial shell prompt, so the prompt
+	// cannot be drained before a subscriber's interest chain is established.
 }
 
 func (d *daemonClient) runHeartbeats(ctx context.Context) {

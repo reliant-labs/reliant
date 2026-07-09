@@ -7,10 +7,8 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/reliant/internal/auth"
-	controlplanev1 "github.com/reliant-labs/reliant/gen/controlplane/v1"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 
-	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,22 +19,6 @@ type fakeControlPlaneClient struct {
 	issueErr       error
 	issueCallCount int
 	lastIssueJWT   string
-}
-
-func (f *fakeControlPlaneClient) CheckManagedReliantAffordability(ctx context.Context, managedKey string, request controlplane.ManagedReliantAffordabilityRequest) (*controlplanev1.CheckManagedReliantAffordabilityResponse, error) {
-	return nil, errors.New("not implemented in fake")
-}
-
-func (f *fakeControlPlaneClient) ReserveManagedReliantUsage(ctx context.Context, managedKey string, request controlplane.ManagedReliantReservationRequest) (*controlplanev1.ReserveManagedReliantUsageResponse, error) {
-	return nil, errors.New("not implemented in fake")
-}
-
-func (f *fakeControlPlaneClient) FinalizeManagedReliantUsage(ctx context.Context, managedKey string, request controlplane.ManagedReliantFinalizeRequest) (*controlplanev1.FinalizeManagedReliantUsageResponse, error) {
-	return nil, errors.New("not implemented in fake")
-}
-
-func (f *fakeControlPlaneClient) ReleaseManagedReliantUsageReservation(ctx context.Context, managedKey, reservationID string) (*controlplanev1.ReleaseManagedReliantUsageReservationResponse, error) {
-	return nil, errors.New("not implemented in fake")
 }
 
 func (f *fakeControlPlaneClient) IssueMyReliantAPIKey(ctx context.Context, jwt string) (string, error) {

@@ -3,685 +3,203 @@ package copilot
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
-	"log/slog"
-	"net/http"
-	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
-	"time"
 
-	"github.com/openai/openai-go/v3"
-	"github.com/openai/openai-go/v3/option"
-	"github.com/openai/openai-go/v3/packages/param"
-	"github.com/openai/openai-go/v3/shared"
+	anthropicopt "github.com/anthropics/anthropic-sdk-go/option"
+	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/anthropic"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/openai"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	toolsPkg "github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
 )
 
+const (
+	// individualBaseURL is the single GitHub Copilot host. Auth is the raw GitHub
+	// OAuth token as a Bearer credential — no tier, no token exchange, no
+	// copilot-session-token (those were free-tier / enterprise artifacts and are
+	// gone). The Anthropic SDK appends /v1/messages; the OpenAI SDK appends
+	// /chat/completions.
+	individualBaseURL = "https://api.individual.githubcopilot.com"
+
+	// Editor-identity fidelity headers, taken from .dev/copilot/gpt5.curl (the
+	// GitHub Copilot CLI). GitHub gates these endpoints on a recognizable editor
+	// identity, so both dialects send the same set.
+	copilotIntegrationID = "copilot-developer-cli"
+	copilotEditorVersion = "copilot/1.0.69"
+	copilotUserAgent     = "copilot/1.0.69 (client/github/cli darwin v24.16.0) term/Apple_Terminal"
+	copilotAPIVersion    = "2026-07-01"
+	copilotOpenAIIntent  = "conversation-agent"
+)
+
+// dialectClient is the per-model implementation the dispatcher delegates to.
+// Both Reliant's Anthropic and OpenAI drivers satisfy it (it is a subset of
+// registry.Client), so the Copilot driver reuses their full serialization,
+// streaming, tool, and thinking logic — pointed at the Copilot host.
+type dialectClient interface {
+	SendMessages(ctx context.Context, prompts []string, messages []message.Message, tools []toolsPkg.Tool) (*llm.DriverResponse, error)
+	StreamResponse(ctx context.Context, prompts []string, messages []message.Message, tools []toolsPkg.Tool) <-chan llm.DriverEvent
+	ValidateKey(ctx context.Context) error
+}
+
+// CopilotClient is the GitHub Copilot driver. It is a thin dispatcher that
+// routes each model to the API dialect its vendor speaks against the Copilot
+// host:
+//
+//   - claude-* -> POST /v1/messages   (Anthropic Messages, via the anthropic driver)
+//   - gpt-* / gemini-* / other -> POST /chat/completions (OpenAI Chat, via the openai driver)
+//
+// Routing is by model-vendor prefix rather than a hardcoded per-model list, so
+// new Copilot models of a known vendor route correctly without code changes.
 type CopilotClient struct {
-	options    llm.DriverOptions
-	client     openai.Client
-	httpClient *http.Client
+	options llm.DriverOptions
+	impl    dialectClient
 }
 
-// Name returns the name of the driver
-func (c *CopilotClient) Name() string {
-	return "copilot"
-}
+// Name returns the name of the driver.
+func (c *CopilotClient) Name() string { return "copilot" }
 
-// CopilotTokenResponse represents the response from GitHub's token exchange endpoint
-type CopilotTokenResponse struct {
-	Token     string `json:"token"`
-	ExpiresAt int64  `json:"expires_at"`
-}
-
-// loadGitHubToken loads the GitHub OAuth token from the standard GitHub CLI/Copilot locations
-func loadGitHubToken() (string, error) {
-	// First check environment variable
-	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
-		return token, nil
-	}
-
-	// Get config directory
-	var configDir string
-	if xdgConfig := os.Getenv("XDG_CONFIG_HOME"); xdgConfig != "" {
-		configDir = xdgConfig
-	} else if runtime.GOOS == "windows" {
-		if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
-			configDir = localAppData
-		} else {
-			configDir = filepath.Join(os.Getenv("HOME"), "AppData", "Local")
-		}
-	} else {
-		configDir = filepath.Join(os.Getenv("HOME"), ".config")
-	}
-
-	// Try both hosts.json and apps.json files
-	filePaths := []string{
-		filepath.Join(configDir, "github-copilot", "hosts.json"),
-		filepath.Join(configDir, "github-copilot", "apps.json"),
-	}
-
-	for _, filePath := range filePaths {
-		data, err := os.ReadFile(filePath)
-		if err != nil {
-			continue
-		}
-
-		var config map[string]map[string]interface{}
-		if err := json.Unmarshal(data, &config); err != nil {
-			continue
-		}
-
-		for key, value := range config {
-			if strings.Contains(key, "github.com") {
-				if oauthToken, ok := value["oauth_token"].(string); ok {
-					return oauthToken, nil
-				}
-			}
-		}
-	}
-
-	return "", fmt.Errorf("GitHub token not found in standard locations")
-}
-
-// exchangeGitHubToken exchanges a GitHub token for a Copilot bearer token
-func (c *CopilotClient) exchangeGitHubToken(githubToken string) (string, error) {
-	req, err := http.NewRequest("GET", "https://api.github.com/copilot_internal/v2/token", nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to create token exchange request: %w", err)
-	}
-
-	req.Header.Set("Authorization", "Token "+githubToken)
-	req.Header.Set("User-Agent", "Reliant/1.0")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("failed to exchange GitHub token: %w", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			logging.Error("Failed to close response body", "error", err)
-		}
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("token exchange failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var tokenResp CopilotTokenResponse
-	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
-		return "", fmt.Errorf("failed to decode token response: %w", err)
-	}
-
-	return tokenResp.Token, nil
-}
-
+// NewClient constructs a Copilot client for the model carried in opts. Auth is
+// the raw GitHub OAuth token (from the device flow) sent as a Bearer credential.
 func NewClient(opts llm.DriverOptions) (*CopilotClient, error) {
 	if opts.ReasoningEffort == "" {
-		opts.ReasoningEffort = "medium" // Default reasoning effort
+		opts.ReasoningEffort = "medium"
 	}
 
-	// Create HTTP client for token exchange
-	httpClient := llm.ResilientHTTPClient()
-	httpClient.Timeout = 30 * time.Second
+	// The stored credential is a GitHub OAuth token (device flow or GitHub CLI).
+	// The resolver passes it via ApiKey/BearerToken.
+	githubToken, err := resolveGitHubToken(opts)
+	if err != nil {
+		return nil, err
+	}
 
-	var bearerToken string
+	headers := copilotHeaders(opts)
 
-	// If bearer token is already provided, use it
-	if opts.BearerToken != "" {
-		bearerToken = opts.BearerToken
+	client := &CopilotClient{options: opts}
+	dialect := "openai-chat"
+	if isAnthropicModel(opts.Model.APIModel) {
+		dialect = "anthropic-messages"
+		client.impl = newAnthropicDialect(opts, githubToken, headers)
 	} else {
-		// Try to get GitHub token from multiple sources
-		var githubToken string
-
-		// 1. Environment variable
-		githubToken = os.Getenv("GITHUB_TOKEN")
-
-		// 2. API key from options
-		if githubToken == "" {
-			githubToken = opts.ApiKey
-		}
-
-		// 3. Standard GitHub CLI/Copilot locations
-		if githubToken == "" {
-			var err error
-			githubToken, err = loadGitHubToken()
-			if err != nil {
-				logging.Debug("Failed to load GitHub token from standard locations", "error", err)
-			}
-		}
-
-		if githubToken == "" {
-			logging.Error("GitHub token is required for Copilot provider. Set GITHUB_TOKEN environment variable, configure it in reliant.json, or ensure GitHub CLI/Copilot is properly authenticated.")
-			return nil, fmt.Errorf("GitHub token is required")
-		}
-
-		// Create a temporary client for token exchange
-		tempClient := &CopilotClient{
-			options:    opts,
-			httpClient: httpClient,
-		}
-
-		// Exchange GitHub token for bearer token
-		var err error
-		bearerToken, err = tempClient.exchangeGitHubToken(githubToken)
-		if err != nil {
-			return nil, fmt.Errorf("failed to exchange GitHub token: %w", err)
-		}
+		client.impl = newOpenAIDialect(opts, githubToken, headers)
 	}
 
-	opts.BearerToken = bearerToken
-
-	// GitHub Copilot API base URL
-	baseURL := "https://api.githubcopilot.com"
-
-	openaiClientOptions := []option.RequestOption{
-		option.WithBaseURL(baseURL),
-		option.WithAPIKey(bearerToken), // Use bearer token as API key
-	}
-
-	// Add GitHub Copilot specific headers
-	openaiClientOptions = append(openaiClientOptions,
-		option.WithHeader("Editor-Version", "Reliant/1.0"),
-		option.WithHeader("Editor-Plugin-Version", "Reliant/1.0"),
-		option.WithHeader("Copilot-Integration-Id", "vscode-chat"),
-	)
-
-	// Use streaming HTTP client with DNS resilience, ResponseHeaderTimeout,
-	// and idle stream timeout for the OpenAI SDK client.
-	openaiClientOptions = append(openaiClientOptions, option.WithHTTPClient(llm.StreamingHTTPClient()))
-
-	// Add any extra headers
-	if opts.ExtraHeaders != nil {
-		for key, value := range opts.ExtraHeaders {
-			openaiClientOptions = append(openaiClientOptions, option.WithHeader(key, value))
-		}
-	}
-
-	client := openai.NewClient(openaiClientOptions...)
-	// logging.Debug("Copilot client created", "opts", opts, "copilotOpts", copilotOpts, "model", opts.Model)
-	return &CopilotClient{
-		options:    opts,
-		client:     client,
-		httpClient: httpClient,
-	}, nil
+	logging.Debug("Copilot client created", "model", opts.Model.APIModel, "dialect", dialect)
+	return client, nil
 }
 
-func (c *CopilotClient) convertMessages(prompts []string, messages []message.Message) (copilotMessages []openai.ChatCompletionMessageParamUnion) {
-	// Add system message first
-	for _, prompt := range prompts {
-		if prompt != "" {
-			copilotMessages = append(copilotMessages, openai.SystemMessage(prompt))
-		}
-	}
-
-	for _, msg := range messages {
-		switch msg.Role {
-		case message.User:
-			var content []openai.ChatCompletionContentPartUnionParam
-			textBlock := openai.ChatCompletionContentPartTextParam{Text: msg.Content().String()}
-			content = append(content, openai.ChatCompletionContentPartUnionParam{OfText: &textBlock})
-
-			for _, binaryContent := range msg.BinaryContent() {
-				if isImageMimeType(binaryContent.MIMEType) {
-					imageURL := openai.ChatCompletionContentPartImageImageURLParam{URL: binaryContent.String(Family)}
-					imageBlock := openai.ChatCompletionContentPartImageParam{ImageURL: imageURL}
-					content = append(content, openai.ChatCompletionContentPartUnionParam{OfImageURL: &imageBlock})
-				} else {
-					fileData := "data:" + binaryContent.MIMEType + ";base64," + base64.StdEncoding.EncodeToString(binaryContent.Data)
-					filename := filepath.Base(binaryContent.Path)
-					if filename == "" || filename == "." {
-						filename = "file"
-					}
-					filePart := openai.FileContentPart(openai.ChatCompletionContentPartFileFileParam{
-						FileData: param.NewOpt(fileData),
-						Filename: param.NewOpt(filename),
-					})
-					content = append(content, filePart)
-				}
-			}
-
-			copilotMessages = append(copilotMessages, openai.UserMessage(content))
-
-		case message.Assistant:
-			assistantMsg := openai.ChatCompletionAssistantMessageParam{
-				Role: "assistant",
-			}
-
-			// Always set content, even if empty (OpenAI API requires it)
-			assistantMsg.Content = openai.ChatCompletionAssistantMessageParamContentUnion{
-				OfString: openai.String(msg.Content().String()),
-			}
-
-			if len(msg.ToolCalls()) > 0 {
-				assistantMsg.ToolCalls = make([]openai.ChatCompletionMessageToolCallUnionParam, len(msg.ToolCalls()))
-				for i, call := range msg.ToolCalls() {
-					functionCall := openai.ChatCompletionMessageFunctionToolCallParam{
-						ID:   call.ID,
-						Type: "function",
-						Function: openai.ChatCompletionMessageFunctionToolCallFunctionParam{
-							Name:      call.Name,
-							Arguments: call.Input,
-						},
-					}
-					assistantMsg.ToolCalls[i] = openai.ChatCompletionMessageToolCallUnionParam{
-						OfFunction: &functionCall,
-					}
-				}
-			}
-
-			copilotMessages = append(copilotMessages, openai.ChatCompletionMessageParamUnion{
-				OfAssistant: &assistantMsg,
-			})
-
-		case message.Tool:
-			for _, result := range msg.ToolResults() {
-				copilotMessages = append(copilotMessages,
-					openai.ToolMessage(result.Content, result.ToolCallID),
-				)
-			}
-		}
-	}
-
-	return
+// isAnthropicModel reports whether the Copilot api_model is an Anthropic model
+// (served on /v1/messages). Everything else (gpt-*, gemini-*, …) speaks OpenAI
+// Chat Completions.
+func isAnthropicModel(apiModel string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(apiModel)), "claude")
 }
 
-func (c *CopilotClient) convertTools(tools []toolsPkg.Tool) []openai.ChatCompletionToolUnionParam {
-	copilotTools := make([]openai.ChatCompletionToolUnionParam, len(tools))
-
-	for i, tool := range tools {
-		schema := tool.ParamSchema()
-
-		// Ensure required is always an array (even if empty) for OpenAI compatibility
-		required := schema.Required
-		if required == nil {
-			required = []string{}
-		}
-
-		// Convert properties from OrderedMap to regular map for OpenAI
-		properties := make(map[string]interface{})
-		if schema.Properties != nil {
-			for pair := schema.Properties.Oldest(); pair != nil; pair = pair.Next() {
-				properties[pair.Key] = pair.Value
-			}
-		}
-
-		copilotTools[i] = openai.ChatCompletionFunctionTool(
-			openai.FunctionDefinitionParam{
-				Name:        tool.Name(),
-				Description: openai.String(tool.Description()),
-				Parameters: openai.FunctionParameters{
-					"type":       "object",
-					"properties": properties,
-					"required":   required,
-				},
-			},
-		)
-	}
-
-	return copilotTools
-}
-
-func (c *CopilotClient) finishReason(reason string) message.FinishReason {
-	switch reason {
-	case "stop":
-		return message.FinishReasonEndTurn
-	case "length":
-		return message.FinishReasonMaxTokens
-	case "tool_calls":
-		return message.FinishReasonToolUse
-	default:
-		return message.FinishReasonUnknown
+// copilotHeaders builds the editor-identity headers both dialects send. The
+// per-request correlation ids are minted once per client (per conversation),
+// which the endpoint accepts.
+func copilotHeaders(opts llm.DriverOptions) map[string]string {
+	return map[string]string{
+		"copilot-integration-id": copilotIntegrationID,
+		"editor-version":         copilotEditorVersion,
+		"user-agent":             copilotUserAgent,
+		"x-github-api-version":   copilotAPIVersion,
+		"openai-intent":          copilotOpenAIIntent,
+		"x-initiator":            "user",
+		"x-interaction-type":     "conversation-user",
+		"x-client-machine-id":    deviceID(opts),
+		"x-client-session-id":    sessionID(opts),
+		"x-interaction-id":       uuid.New().String(),
+		"x-agent-task-id":        uuid.New().String(),
 	}
 }
 
-func (c *CopilotClient) preparedParams(messages []openai.ChatCompletionMessageParamUnion, tools []openai.ChatCompletionToolUnionParam) openai.ChatCompletionNewParams {
-	params := openai.ChatCompletionNewParams{
-		Model:    openai.ChatModel(c.options.Model.APIModel),
-		Messages: messages,
+// newAnthropicDialect builds an Anthropic Messages client pointed at the Copilot
+// host. Copilot /v1/messages requires `authorization: Bearer <gho_>` (x-api-key
+// alone 400s), so we clear ApiKey (to avoid a stray x-api-key) and set the
+// Authorization header explicitly.
+func newAnthropicDialect(opts llm.DriverOptions, githubToken string, headers map[string]string) dialectClient {
+	sdkOpts := []anthropicopt.RequestOption{
+		anthropicopt.WithBaseURL(individualBaseURL),
+		anthropicopt.WithHeader("authorization", "Bearer "+githubToken),
+	}
+	for k, v := range headers {
+		sdkOpts = append(sdkOpts, anthropicopt.WithHeader(k, v))
 	}
 
-	// Only set tools if there are any
-	if len(tools) > 0 {
-		params.Tools = tools
-	}
-
-	if c.options.Model.CanReason || c.options.Model.UseMaxCompletionTokens {
-		params.MaxCompletionTokens = openai.Int(c.options.MaxTokens)
-		if c.options.Model.CanReason {
-			switch c.options.ReasoningEffort {
-			case "low":
-				params.ReasoningEffort = shared.ReasoningEffortLow
-			case "medium":
-				params.ReasoningEffort = shared.ReasoningEffortMedium
-			case "high":
-				params.ReasoningEffort = shared.ReasoningEffortHigh
-			default:
-				params.ReasoningEffort = shared.ReasoningEffortMedium
-			}
-		}
-	} else {
-		params.MaxTokens = openai.Int(c.options.MaxTokens)
-	}
-
-	return params
+	aopts := opts
+	aopts.ApiKey = ""
+	return anthropic.NewAnthropicClientWithOptions(aopts, sdkOpts...)
 }
 
-func (c *CopilotClient) SendMessages(ctx context.Context, prompts []string, messages []message.Message, tools []toolsPkg.Tool) (response *llm.DriverResponse, err error) {
-	params := c.preparedParams(c.convertMessages(prompts, messages), c.convertTools(tools))
-	isDebug := logging.GetLogLevel() == slog.LevelDebug
-	if isDebug {
-		// jsonData, _ := json.Marshal(params)
-		// logging.Debug("Prepared messages", "messages", string(jsonData))
-		// Deprecated: toolsPkg.SessionIDContextKey - use rctx.Context instead
-		// if sid, ok := ctx.Value(toolsPkg.SessionIDContextKey).(string); ok {
-		// 	sessionId = sid
-		// }
-		jsonData, _ := json.Marshal(params)
-		logging.Debug("Prepared messages", "messages", string(jsonData))
+// newOpenAIDialect builds an OpenAI Chat Completions client pointed at the
+// Copilot host. The OpenAI SDK's WithAPIKey sends `authorization: Bearer <key>`,
+// which is exactly Copilot's auth, so the gho_ token goes in as the API key.
+// PreferredEndpoint is forced to Chat Completions for broad model support.
+func newOpenAIDialect(opts llm.DriverOptions, githubToken string, headers map[string]string) dialectClient {
+	oopts := opts
+	oopts.ApiKey = githubToken
+	oopts.BaseURL = individualBaseURL
+	oopts.Model.PreferredEndpoint = "chat_completions"
+
+	// Merge the Copilot headers into a private copy of ExtraHeaders so we never
+	// mutate the caller's map.
+	merged := make(map[string]string, len(opts.ExtraHeaders)+len(headers))
+	for k, v := range opts.ExtraHeaders {
+		merged[k] = v
 	}
-
-	attempts := 0
-	for {
-		attempts++
-		copilotResponse, err := c.client.Chat.Completions.New(
-			ctx,
-			params,
-		)
-
-		// If there is an error we are going to see if we can retry the call
-		if err != nil {
-			retry, after, retryErr := c.shouldRetry(attempts, err)
-			if retryErr != nil {
-				return nil, retryErr
-			}
-			if retry {
-				logging.Warn(fmt.Sprintf("Retrying due to rate limit... attempt %d of %d", attempts, models.MaxRetries))
-				select {
-				case <-ctx.Done():
-					return nil, ctx.Err()
-				case <-time.After(time.Duration(after) * time.Millisecond):
-					continue
-				}
-			}
-			return nil, retryErr
-		}
-
-		content := ""
-		if copilotResponse.Choices[0].Message.Content != "" {
-			content = copilotResponse.Choices[0].Message.Content
-		}
-
-		toolCalls := c.toolCalls(*copilotResponse)
-		finishReason := c.finishReason(string(copilotResponse.Choices[0].FinishReason))
-
-		if len(toolCalls) > 0 {
-			finishReason = message.FinishReasonToolUse
-		}
-
-		return &llm.DriverResponse{
-			Content:      content,
-			ToolCalls:    toolCalls,
-			Usage:        c.usage(*copilotResponse),
-			FinishReason: finishReason,
-		}, nil
+	for k, v := range headers {
+		merged[k] = v
 	}
+	oopts.ExtraHeaders = merged
+
+	return openai.NewClient(oopts)
 }
 
+// SendMessages delegates to the per-model dialect implementation.
+func (c *CopilotClient) SendMessages(ctx context.Context, prompts []string, messages []message.Message, tools []toolsPkg.Tool) (*llm.DriverResponse, error) {
+	return c.impl.SendMessages(ctx, prompts, messages, tools)
+}
+
+// StreamResponse delegates to the per-model dialect implementation.
 func (c *CopilotClient) StreamResponse(ctx context.Context, prompts []string, messages []message.Message, tools []toolsPkg.Tool) <-chan llm.DriverEvent {
-	params := c.preparedParams(c.convertMessages(prompts, messages), c.convertTools(tools))
-	params.StreamOptions = openai.ChatCompletionStreamOptionsParam{
-		IncludeUsage: openai.Bool(true),
-	}
-
-	isDebug := logging.GetLogLevel() == slog.LevelDebug
-	if isDebug {
-		// Deprecated: toolsPkg.SessionIDContextKey - use rctx.Context instead
-		// if sid, ok := ctx.Value(toolsPkg.SessionIDContextKey).(string); ok {
-		// 	sessionId = sid
-		// }
-		jsonData, _ := json.Marshal(params)
-		logging.Debug("Prepared messages", "messages", string(jsonData))
-	}
-
-	attempts := 0
-	eventChan := make(chan llm.DriverEvent)
-
-	go func() {
-		for {
-			attempts++
-			copilotStream := c.client.Chat.Completions.NewStreaming(
-				ctx,
-				params,
-			)
-
-			acc := openai.ChatCompletionAccumulator{}
-			currentContent := ""
-			toolCalls := make([]message.ToolCall, 0)
-
-			for copilotStream.Next() {
-				chunk := copilotStream.Current()
-				acc.AddChunk(chunk)
-
-				for _, choice := range chunk.Choices {
-					if choice.Delta.Content != "" {
-						eventChan <- llm.DriverEvent{
-							Type:    llm.EventContentDelta,
-							Content: choice.Delta.Content,
-						}
-						currentContent += choice.Delta.Content
-					}
-				}
-			}
-
-			err := copilotStream.Err()
-			if err == nil || errors.Is(err, io.EOF) {
-				// Stream completed successfully
-				finishReason := c.finishReason(string(acc.ChatCompletion.Choices[0].FinishReason))
-				if len(acc.Choices[0].Message.ToolCalls) > 0 {
-					toolCalls = append(toolCalls, c.toolCalls(acc.ChatCompletion)...)
-				}
-				if len(toolCalls) > 0 {
-					finishReason = message.FinishReasonToolUse
-				}
-
-				eventChan <- llm.DriverEvent{
-					Type: llm.EventComplete,
-					Response: &llm.DriverResponse{
-						Content:      currentContent,
-						ToolCalls:    toolCalls,
-						Usage:        c.usage(acc.ChatCompletion),
-						FinishReason: finishReason,
-					},
-				}
-				close(eventChan)
-				return
-			}
-
-			// If there is an error we are going to see if we can retry the call
-			retry, after, retryErr := c.shouldRetry(attempts, err)
-			if retryErr != nil {
-				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: retryErr}
-				close(eventChan)
-				return
-			}
-			// shouldRetry is not catching the max retries...
-			// TODO: Figure out why
-			if attempts > models.MaxRetries {
-				logging.Warn("Maximum retry attempts reached for rate limit", "attempts", attempts, "max_retries", models.MaxRetries)
-				retry = false
-			}
-			if retry {
-				logging.Warn(fmt.Sprintf("Retrying due to rate limit... attempt %d of %d (paused for %d ms)", attempts, models.MaxRetries, after))
-				select {
-				case <-ctx.Done():
-					// context cancelled
-					if ctx.Err() == nil {
-						eventChan <- llm.DriverEvent{Type: llm.EventError, Error: ctx.Err()}
-					}
-					close(eventChan)
-					return
-				case <-time.After(time.Duration(after) * time.Millisecond):
-					continue
-				}
-			}
-			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: retryErr}
-			close(eventChan)
-			return
-		}
-	}()
-
-	return eventChan
+	return c.impl.StreamResponse(ctx, prompts, messages, tools)
 }
 
-func (c *CopilotClient) shouldRetry(attempts int, err error) (bool, int64, error) {
-	var apierr *openai.Error
-	if !errors.As(err, &apierr) {
-		return false, 0, err
-	}
+// Model returns the model configuration for this driver.
+func (c *CopilotClient) Model() models.Model { return c.options.Model }
 
-	// Check for token expiration (401 Unauthorized)
-	if apierr.StatusCode == 401 {
-		// Try to refresh the bearer token
-		var githubToken string
-
-		// 1. Environment variable
-		githubToken = os.Getenv("GITHUB_TOKEN")
-
-		// 2. API key from options
-		if githubToken == "" {
-			githubToken = c.options.ApiKey
-		}
-
-		// 3. Standard GitHub CLI/Copilot locations
-		if githubToken == "" {
-			var err error
-			githubToken, err = loadGitHubToken()
-			if err != nil {
-				logging.Debug("Failed to load GitHub token from standard locations during retry", "error", err)
-			}
-		}
-
-		if githubToken != "" {
-			newBearerToken, tokenErr := c.exchangeGitHubToken(githubToken)
-			if tokenErr == nil {
-				c.options.BearerToken = newBearerToken
-				// Update the client with the new token
-				// Note: This is a simplified approach. In a production system,
-				// you might want to recreate the entire client with the new token
-				logging.Info("Refreshed Copilot bearer token")
-				return true, 1000, nil // Retry immediately with new token
-			}
-			logging.Error("Failed to refresh Copilot bearer token", "error", tokenErr)
-		}
-		return false, 0, fmt.Errorf("authentication failed: %w", err)
-	}
-	logging.Debug("Copilot API Error", "status", apierr.StatusCode, "headers", apierr.Response.Header, "body", apierr.RawJSON())
-
-	if apierr.StatusCode != 429 && apierr.StatusCode != 500 {
-		return false, 0, err
-	}
-
-	if apierr.StatusCode == 500 {
-		logging.Warn("Copilot API returned 500 error, retrying", "error", err)
-	}
-
-	if attempts > models.MaxRetries {
-		return false, 0, fmt.Errorf("maximum retry attempts reached for rate limit: %d retries", models.MaxRetries)
-	}
-
-	retryMs := 0
-	retryAfterValues := apierr.Response.Header.Values("Retry-After")
-
-	backoffMs := 2000 * (1 << (attempts - 1))
-	jitterMs := int(float64(backoffMs) * 0.2)
-	retryMs = backoffMs + jitterMs
-	if len(retryAfterValues) > 0 {
-		if _, err := fmt.Sscanf(retryAfterValues[0], "%d", &retryMs); err == nil {
-			retryMs = retryMs * 1000
-		}
-	}
-	return true, int64(retryMs), nil
-}
-
-func (c *CopilotClient) toolCalls(completion openai.ChatCompletion) []message.ToolCall {
-	var toolCalls []message.ToolCall
-
-	if len(completion.Choices) > 0 && len(completion.Choices[0].Message.ToolCalls) > 0 {
-		for _, call := range completion.Choices[0].Message.ToolCalls {
-			// Skip empty or invalid tool calls
-			if call.ID == "" || call.Function.Name == "" {
-				logging.Warn("Skipping empty/invalid tool call",
-					"id", call.ID,
-					"name", call.Function.Name)
-				continue
-			}
-
-			toolCall := message.ToolCall{
-				ID:       call.ID,
-				Name:     call.Function.Name,
-				Input:    call.Function.Arguments,
-				Type:     "function",
-				Finished: true,
-			}
-			toolCalls = append(toolCalls, toolCall)
-		}
-	}
-
-	return toolCalls
-}
-
-func (c *CopilotClient) usage(completion openai.ChatCompletion) llm.TokenUsage {
-	// TokenCount = total tokens (prompt + completion)
-	return llm.TokenUsage{
-		TokenCount: completion.Usage.TotalTokens,
-	}
-}
-
-func (c *CopilotClient) Model() models.Model {
-	return c.options.Model
-}
-
+// ValidateKey delegates to the per-model dialect implementation.
 func (c *CopilotClient) ValidateKey(ctx context.Context) error {
-	// Use GPT-5.4 Mini for validation (small, fast model)
-	testMessages := []message.Message{
-		{
-			Role: message.User,
-			Parts: []message.ContentPart{
-				message.TextContent{Text: "Say 'test' and nothing else"},
-			},
-		},
-	}
-
-	// Create a temporary client with the small model
-	validationOpts := c.options
-	registry := models.MustGetRegistry()
-	if def, ok := registry.GetDefinition(string(models.GPT54Mini)); ok {
-		validationOpts.Model = def.ToModel()
-	}
-	validationOpts.MaxTokens = 10
-
-	_, err := c.SendMessages(ctx, []string{}, testMessages, []toolsPkg.Tool{})
-	return err
+	return c.impl.ValidateKey(ctx)
 }
 
-// isImageMimeType checks if a MIME type represents an image
-func isImageMimeType(mimeType string) bool {
-	switch mimeType {
-	case "image/jpeg", "image/png", "image/gif", "image/webp", "image/bmp", "image/svg+xml":
-		return true
-	default:
-		return false
+// GetAvailableModels implements registry.ModelLister: it reports the Copilot
+// models this account may use for the model picker. GitHub Copilot is a DYNAMIC
+// provider — a model Reliant maps may be disabled by the account's policy (it
+// 400s upstream) — so we start from the registry's curated Copilot list and set
+// each model's Enabled flag from the account's GET /models catalog (cached per
+// token). Unknown models (absent from the catalog) are treated as enabled so a
+// stale/renamed catalog never hides a model Reliant maps.
+//
+// Tags/tag-resolution are intentionally out of scope here: this is the picker
+// view, not workflow tag resolution (which stays registry-driven).
+func (c *CopilotClient) GetAvailableModels(ctx context.Context) ([]models.ModelInfo, error) {
+	token, err := resolveGitHubToken(c.options)
+	if err != nil {
+		return nil, err
 	}
+	enabled, err := EnabledModels(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+
+	infos := models.MustGetRegistry().ModelsForDriver(string(Family))
+	for i := range infos {
+		state, known := enabled[infos[i].APIModel]
+		infos[i].Enabled = !known || state
+	}
+	return infos, nil
 }

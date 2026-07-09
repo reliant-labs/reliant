@@ -23,10 +23,18 @@ func newTerminalPumpTracker() *terminalPumpTracker {
 	}
 }
 
-func (t *terminalPumpTracker) add(id string, stop func()) {
+// addIfAbsent registers stop for id and returns true. If a pump is already
+// registered for id it does nothing and returns false, so a duplicate
+// terminal-output-subscribe cannot start a second goroutine reading the same
+// PTY (and leak the first pump's stop func).
+func (t *terminalPumpTracker) addIfAbsent(id string, stop func()) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if _, exists := t.pumps[id]; exists {
+		return false
+	}
 	t.pumps[id] = stop
+	return true
 }
 
 func (t *terminalPumpTracker) remove(id string) {
@@ -126,7 +134,12 @@ func (d *daemonClient) startTerminalOutputPump(
 		}
 	}
 
-	d.terminalPumps.add(sessionID, stop)
+	// Idempotent: if a pump is already running for this session (e.g. a second
+	// subscriber attached, or a duplicate subscribe request), don't start
+	// another one — that would double-drain the PTY and leak the first pump.
+	if !d.terminalPumps.addIfAbsent(sessionID, stop) {
+		return
+	}
 
 	go func() {
 		defer d.terminalPumps.remove(sessionID)

@@ -46,6 +46,7 @@ export const launchPlanSchema = z
         "openai",
         "anthropic",
         "openrouter",
+        "copilot",
         "other",
         "not_configured",
       ])

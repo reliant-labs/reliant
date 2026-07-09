@@ -87,19 +87,12 @@ func (s *ChatService) handleDiscussMode(
 			"Keep your responses concise and helpful.",
 	}
 
-	activity := handlers.NewCallLLMActivity(s.database, s.streamingHub, nil, nil, nil, nil)
-	reservation, err := activity.ReserveManagedReliantUsageForChat(ctx, chat, driver, history, prompts, s.controlPlaneClient)
-	if err != nil {
-		return nil, err
-	}
-
 	eventCh := driver.StreamResponse(ctx, prompts, history, []tools.Tool{})
 
 	var fullContent string
 	blockIndex := 0
 	blockStarted := false
 	var streamErr error
-	var usage llm.TokenUsage
 
 	for event := range eventCh {
 		switch event.Type {
@@ -142,7 +135,6 @@ func (s *ChatService) handleDiscussMode(
 
 		case llm.EventComplete:
 			if event.Response != nil {
-				usage = event.Response.Usage
 				if event.Response.Content != "" && fullContent == "" {
 					fullContent = event.Response.Content
 				}
@@ -155,8 +147,6 @@ func (s *ChatService) handleDiscussMode(
 			}
 		}
 	}
-
-	activity.CompleteManagedReliantReservationForChat(ctx, chat, driver, usage, streamErr, reservation, s.controlPlaneClient)
 
 	// Emit stream_cancelled delta on error so the frontend knows streaming ended
 	if streamErr != nil && s.streamingHub != nil {

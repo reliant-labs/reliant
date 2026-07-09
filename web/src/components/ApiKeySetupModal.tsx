@@ -1,12 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ExternalLink, Eye, EyeOff, CheckCircle2, XCircle } from "lucide-react";
+import {
+  ExternalLink,
+  Eye,
+  EyeOff,
+  CheckCircle2,
+  XCircle,
+} from "lucide-react";
 import { Modal } from "./ui/Modal";
 import { api } from "../api/client";
 import { useApiKeySetupStore } from "../store/apiKeySetupStore";
 import { cn } from "../lib/utils";
 import { logger } from "../lib/logger";
-import { useCodexOAuth, useClaudeOAuth, useOAuthAvailability } from "../hooks";
+import { useCodexOAuth, useClaudeOAuth, useCopilotOAuth, useOAuthAvailability } from "../hooks";
 import { OAuthHelperPanel } from "./OAuthHelperPanel";
+import { CopilotDevicePanel } from "./CopilotDevicePanel";
 import { getEventBus } from "../lib/events";
 
 const PROVIDERS = [
@@ -23,6 +30,13 @@ const PROVIDERS = [
     docsUrl: "https://github.com/openai/codex",
     keyFormat: "",
     usesOAuth: "codex" as const,
+  },
+  {
+    id: "copilot" as const,
+    name: "GitHub Copilot",
+    docsUrl: "https://github.com/settings/copilot",
+    keyFormat: "",
+    usesOAuth: "copilot" as const,
   },
   {
     id: "anthropic" as const,
@@ -125,22 +139,27 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
   const [isSaving, setIsSaving] = useState(false);
   const codexOAuth = useCodexOAuth();
   const claudeOAuth = useClaudeOAuth();
+  const copilotOAuth = useCopilotOAuth();
   const provider = useMemo(
     () => PROVIDERS.find((p) => p.id === selectedProvider)!,
     [selectedProvider]
   );
 
-  // Only probe the localhost OAuth helper while the OAuth panel is actually on
-  // screen (modal open + an OAuth provider selected) — never proactively on
-  // mount, which would trip Chrome's Local Network Access prompt.
+  // Only probe the localhost OAuth helper while the redirect-based OAuth panel
+  // is actually on screen (modal open + Codex/Claude selected) — never
+  // proactively on mount, which would trip Chrome's Local Network Access
+  // prompt. Copilot uses the device flow and needs no local helper.
+  const usesLocalHelper =
+    provider.usesOAuth === "codex" || provider.usesOAuth === "claude";
   const oauthAvailability = useOAuthAvailability({
-    enabled: showModal && Boolean(provider.usesOAuth),
+    enabled: showModal && usesLocalHelper,
   });
 
   useEffect(() => {
     if (!showModal) {
       codexOAuth.cancel();
       claudeOAuth.cancel();
+      copilotOAuth.reset();
       setApiKey("");
       setValidationResult(null);
       setIsValidating(false);
@@ -148,7 +167,7 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
       setShowKey(false);
       setSelectedProvider("claude");
     }
-  }, [showModal, codexOAuth, claudeOAuth]);
+  }, [showModal, codexOAuth, claudeOAuth, copilotOAuth]);
 
   const handleConnectOAuth = useCallback(async (oauthType: "codex" | "claude") => {
     setIsValidating(true);
@@ -184,16 +203,45 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
     }
   }, [codexOAuth, claudeOAuth, onClose]);
 
+  // Device-flow login for GitHub Copilot. The visible user-code panel is driven
+  // reactively by `copilotOAuth` state; this only handles the terminal success
+  // (close + refetch) and error paths.
+  const handleConnectCopilot = useCallback(async () => {
+    setValidationResult(null);
+    const result = await copilotOAuth.start();
+    if (!result.ok) {
+      // The device panel surfaces the error message from the hook.
+      return false;
+    }
+
+    // Mark store as having a key and close modal
+    useApiKeySetupStore.setState({ hasApiKey: true, showModal: false });
+    onClose?.();
+
+    // Refetch models
+    const { useGlobalDataStore } = await import("../store/globalDataStore");
+    await useGlobalDataStore.getState().refetchModels();
+    getEventBus().emit("api-key:saved", { provider: "copilot" });
+    return true;
+  }, [copilotOAuth, onClose]);
+
   // Handle provider selection only; OAuth starts from explicit button click.
   const handleProviderSelect = useCallback((providerId: ProviderId) => {
     setSelectedProvider(providerId);
     setValidationResult(null);
-  }, []);
+    copilotOAuth.reset();
+  }, [copilotOAuth]);
 
   const handleValidate = useCallback(async () => {
-    // For OAuth providers, use the dedicated handler
+    // Copilot uses the device flow with its own dedicated panel/handler.
+    if (provider.usesOAuth === "copilot") {
+      await handleConnectCopilot();
+      return;
+    }
+
+    // For redirect-based OAuth providers, use the dedicated handler
     if (provider.usesOAuth) {
-      await handleConnectOAuth(provider.usesOAuth as "codex" | "claude");
+      await handleConnectOAuth(provider.usesOAuth);
       return;
     }
 
@@ -228,7 +276,7 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
     } finally {
       setIsValidating(false);
     }
-  }, [apiKey, selectedProvider, provider.usesOAuth, handleConnectOAuth]);
+  }, [apiKey, selectedProvider, provider.usesOAuth, handleConnectOAuth, handleConnectCopilot]);
 
   const handleSave = useCallback(async () => {
     if (!apiKey.trim()) {
@@ -329,7 +377,24 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
         </div>
 
         {/* OAuth Section */}
-        {provider.usesOAuth ? (
+        {provider.usesOAuth === "copilot" ? (
+          <div className="space-y-4">
+            <CopilotDevicePanel
+              oauth={copilotOAuth}
+              onStart={handleConnectCopilot}
+            />
+
+            <div className="flex pt-1">
+              <button
+                type="button"
+                onClick={() => handleDismiss(true)}
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Don't ask again
+              </button>
+            </div>
+          </div>
+        ) : provider.usesOAuth ? (
           <div className="space-y-4">
             <OAuthHelperPanel
               providerName={provider.name}

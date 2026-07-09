@@ -23,10 +23,16 @@ import {
   useApiKeySetupStore,
   resetApiKeySetupDismissed,
 } from "../../store/apiKeySetupStore";
-import { useCodexOAuth, useClaudeOAuth, useOAuthAvailability } from "../../hooks";
+import {
+  useCodexOAuth,
+  useClaudeOAuth,
+  useCopilotOAuth,
+  useOAuthAvailability,
+} from "../../hooks";
 import { useCloudEligibility } from "../../hooks/useOnboardingQueries";
 import { onboardingService } from "../../services/controlPlane/onboarding";
 import { OAuthHelperPanel } from "../OAuthHelperPanel";
+import { CopilotDevicePanel } from "../CopilotDevicePanel";
 import { getEventBus } from "../../lib/events";
 
 interface CombinedGeneralSettingsProps {
@@ -46,6 +52,7 @@ interface CombinedGeneralSettingsProps {
 const VISIBLE_PROVIDERS = [
   "claude",
   "codex",
+  "copilot",
   "reliant",
   "anthropic",
   "openai",
@@ -128,9 +135,10 @@ const providerConfigs = {
   copilot: {
     name: "GitHub Copilot",
     docsUrl: "https://github.com/settings/copilot",
-    keyFormat: "GitHub token",
-    description: "GitHub Copilot API access",
-    usesOAuth: false,
+    keyFormat: "",
+    description:
+      "GitHub Copilot models via device-flow OAuth (Enterprise or Individual plan)",
+    usesOAuth: "copilot" as const,
   },
   groq: {
     name: "Groq",
@@ -306,8 +314,17 @@ const parseErrorMessage = (errorText: string, provider: string): string => {
 
   // GitHub Copilot specific errors
   if (provider === "copilot") {
+    if (lowerError.includes("not authenticated")) {
+      return "GitHub Copilot is not connected. Please use Sign in with GitHub Copilot.";
+    }
+    if (lowerError.includes("expired")) {
+      return "GitHub Copilot session expired. Please reconnect with Sign in with GitHub Copilot.";
+    }
     if (lowerError.includes("unauthorized") || lowerError.includes("401")) {
-      return "Invalid GitHub token. Please check your Copilot subscription and token permissions.";
+      return "GitHub Copilot authentication failed. Please reconnect and confirm your Copilot subscription.";
+    }
+    if (lowerError.includes("rate limit") || lowerError.includes("429")) {
+      return "GitHub Copilot rate limit exceeded. Please wait a moment before trying again.";
     }
   }
 
@@ -402,10 +419,13 @@ export function CombinedGeneralSettings({
 
   const codexOAuth = useCodexOAuth();
   const claudeOAuth = useClaudeOAuth();
-  // Only probe the localhost OAuth helper once the user picks an OAuth provider
-  // in "Add New Provider" (the OAuthHelperPanel is shown) — never on mount.
+  const copilotOAuth = useCopilotOAuth();
+  const selectedOAuth = providerConfigs[selectedProvider as ProviderId]?.usesOAuth;
+  // Only probe the localhost OAuth helper once the user picks a redirect-based
+  // OAuth provider (the OAuthHelperPanel is shown) — never on mount. Copilot
+  // uses the device flow and needs no local helper.
   const oauthAvailability = useOAuthAvailability({
-    enabled: Boolean(providerConfigs[selectedProvider as ProviderId]?.usesOAuth),
+    enabled: selectedOAuth === "claude" || selectedOAuth === "codex",
   });
   const cloudEligibility = useCloudEligibility();
   const [enablingReliant, setEnablingReliant] = useState(false);
@@ -644,6 +664,28 @@ export function CombinedGeneralSettings({
     }
   };
 
+  // GitHub Copilot uses the device-authorization flow (device code → poll),
+  // driven by the shared CopilotDevicePanel. The panel surfaces its own
+  // in-progress / error UI via the hook; this only handles the success side
+  // effects (refresh models, notify) and collapses the add-provider form.
+  const handleConnectCopilot = async () => {
+    setValidationMessage(null);
+    const result = await copilotOAuth.start();
+    if (!result.ok) {
+      // The device panel surfaces the error message from the hook.
+      return;
+    }
+
+    onProvidersUpdate?.();
+    await useGlobalDataStore.getState().refetchModels();
+    getEventBus().emit("api-key:saved", { provider: "copilot" });
+
+    // Collapse the add-provider form; the connected provider now appears in the
+    // configured list below.
+    setSelectedProvider("");
+    copilotOAuth.reset();
+  };
+
   return (
     <div className="space-y-6">
       <div data-onboarding="ai-providers-settings">
@@ -670,6 +712,8 @@ export function CombinedGeneralSettings({
                     const providerId = e.target.value;
                     setSelectedProvider(providerId);
                     setValidationMessage(null);
+                    // Abort/clear any prior Copilot device flow when switching.
+                    copilotOAuth.reset();
                   }}
                   className="w-full px-3 py-2 pr-10 border border-border/40 bg-background rounded-md text-sm appearance-none cursor-pointer focus:ring-2 focus:ring-ring/40"
                 >
@@ -734,6 +778,12 @@ export function CombinedGeneralSettings({
                     </div>
                   );
                 })()
+              ) : providerConfigs[selectedProvider as ProviderId]?.usesOAuth === "copilot" ? (
+                /* GitHub Copilot device-flow section (device code → poll) */
+                <CopilotDevicePanel
+                  oauth={copilotOAuth}
+                  onStart={handleConnectCopilot}
+                />
               ) : providerConfigs[selectedProvider as ProviderId]?.usesOAuth ? (
                 /* OAuth Section */
                 <div className="space-y-4">

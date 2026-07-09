@@ -7,6 +7,17 @@ const claudeCancelMock = vi.fn()
 vi.mock('@/hooks', () => ({
   useCodexOAuth: () => ({ isRunning: false, lastResult: null, start: vi.fn(), cancel: codexCancelMock, reset: vi.fn() }),
   useClaudeOAuth: () => ({ isRunning: false, lastResult: null, start: vi.fn(), cancel: claudeCancelMock, reset: vi.fn() }),
+  useCopilotOAuth: () => ({
+    phase: 'idle',
+    isActive: false,
+    userCode: null,
+    verificationUri: null,
+    message: null,
+    lastResult: null,
+    start: vi.fn(),
+    cancel: vi.fn(),
+    reset: vi.fn(),
+  }),
   useOAuthAvailability: () => ({ available: true, loading: false, recheck: vi.fn() }),
 }))
 

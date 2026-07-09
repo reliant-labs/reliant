@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   Folder,
+  FolderPlus,
   File,
   ChevronRight,
   Loader2,
@@ -8,9 +9,14 @@ import {
   Eye,
   EyeOff,
   ArrowUp,
+  X,
 } from "lucide-react";
 import { Modal } from "../ui/Modal";
-import { listDirectory, type DirectoryEntry } from "../../api/filesystem-grpc";
+import {
+  listDirectory,
+  createDirectory,
+  type DirectoryEntry,
+} from "../../api/filesystem-grpc";
 
 interface DirectoryPickerProps {
   isOpen: boolean;
@@ -29,6 +35,11 @@ export function DirectoryPicker({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showHidden, setShowHidden] = useState(false);
+  // "New folder" inline-create state.
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [isSubmittingFolder, setIsSubmittingFolder] = useState(false);
 
   const loadDirectory = useCallback(async (path: string) => {
     setIsLoading(true);
@@ -55,13 +66,48 @@ export function DirectoryPicker({
       setEntries([]);
       setError(null);
       setShowHidden(false);
+      setIsCreatingFolder(false);
+      setNewFolderName("");
+      setCreateError(null);
       loadDirectory("");
     }
   }, [isOpen, loadDirectory]);
 
   const navigateTo = (path: string) => {
+    setIsCreatingFolder(false);
+    setNewFolderName("");
+    setCreateError(null);
     setCurrentPath(path);
     loadDirectory(path);
+  };
+
+  const handleCreateFolder = async () => {
+    const name = newFolderName.trim();
+    if (!name) {
+      setCreateError("Folder name is required");
+      return;
+    }
+    if (name.includes("/") || name === "." || name === "..") {
+      setCreateError("Enter a single folder name (no slashes)");
+      return;
+    }
+    const parent = resolvedPath || "/";
+    const targetPath = parent === "/" ? `/${name}` : `${parent}/${name}`;
+    setIsSubmittingFolder(true);
+    setCreateError(null);
+    try {
+      await createDirectory(targetPath);
+      setIsCreatingFolder(false);
+      setNewFolderName("");
+      // Refresh so the new folder appears and is selectable.
+      await loadDirectory(parent);
+    } catch (err) {
+      setCreateError(
+        err instanceof Error ? err.message : "Failed to create folder"
+      );
+    } finally {
+      setIsSubmittingFolder(false);
+    }
   };
 
   const navigateUp = () => {
@@ -136,19 +182,90 @@ export function DirectoryPicker({
             <ArrowUp className="w-3.5 h-3.5" />
             Up
           </button>
-          <button
-            onClick={() => setShowHidden(!showHidden)}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/80 rounded-md transition-colors"
-            title={showHidden ? "Hide hidden files" : "Show hidden files"}
-          >
-            {showHidden ? (
-              <EyeOff className="w-3.5 h-3.5" />
-            ) : (
-              <Eye className="w-3.5 h-3.5" />
-            )}
-            {showHidden ? "Hide hidden" : "Show hidden"}
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => {
+                setCreateError(null);
+                setNewFolderName("");
+                setIsCreatingFolder((v) => !v);
+              }}
+              disabled={!resolvedPath}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/80 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Create a new folder here"
+            >
+              <FolderPlus className="w-3.5 h-3.5" />
+              New folder
+            </button>
+            <button
+              onClick={() => setShowHidden(!showHidden)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/80 rounded-md transition-colors"
+              title={showHidden ? "Hide hidden files" : "Show hidden files"}
+            >
+              {showHidden ? (
+                <EyeOff className="w-3.5 h-3.5" />
+              ) : (
+                <Eye className="w-3.5 h-3.5" />
+              )}
+              {showHidden ? "Hide hidden" : "Show hidden"}
+            </button>
+          </div>
         </div>
+
+        {/* Inline "New folder" creator */}
+        {isCreatingFolder && (
+          <div className="flex flex-col gap-2 p-3 bg-muted/30 border border-border rounded-lg">
+            <div className="flex items-center gap-2">
+              <FolderPlus className="w-4 h-4 text-primary flex-shrink-0" />
+              <input
+                autoFocus
+                type="text"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void handleCreateFolder();
+                  } else if (e.key === "Escape") {
+                    e.preventDefault();
+                    setIsCreatingFolder(false);
+                    setNewFolderName("");
+                    setCreateError(null);
+                  }
+                }}
+                placeholder="New folder name"
+                disabled={isSubmittingFolder}
+                className="flex-1 min-w-0 bg-background border border-border rounded-md px-2.5 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60"
+              />
+              <button
+                type="button"
+                onClick={() => void handleCreateFolder()}
+                disabled={isSubmittingFolder || !newFolderName.trim()}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground hover:bg-primary/90 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmittingFolder && (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                )}
+                Create
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCreatingFolder(false);
+                  setNewFolderName("");
+                  setCreateError(null);
+                }}
+                disabled={isSubmittingFolder}
+                className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/80 rounded-md transition-colors disabled:opacity-40"
+                title="Cancel"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            {createError && (
+              <span className="text-xs text-destructive">{createError}</span>
+            )}
+          </div>
+        )}
 
         {/* Error state */}
         {error && (

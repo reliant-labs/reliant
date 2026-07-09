@@ -22,6 +22,7 @@ export type ModelProvider =
   | "openai"
   | "anthropic"
   | "openrouter"
+  | "copilot"
   | "other"
   | "not_configured";
 
