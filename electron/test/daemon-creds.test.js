@@ -9,6 +9,7 @@ const {
   readDaemonStore,
   writeDaemonStore,
   upsertEntry,
+  deleteEntry,
   mintDaemonPAT,
   ensureDaemonPATForOrigin,
   MINT_RPC_PATH,
@@ -178,6 +179,128 @@ test('upsertEntry throws on invalid apiUrl (empty endpoint key)', () => {
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// ----------------------------------------------------------------------------
+// daemon_id preservation + logout clearing
+// ----------------------------------------------------------------------------
+//
+// The Go daemon owns `daemon_id` (server-assigned stable identity persisted
+// per origin). The Electron PAT-mint preflight only rewrites the PAT, so it
+// MUST carry an existing daemon_id forward — clobbering it re-triggers the
+// hostname-churn bug the stable id exists to prevent. Logout, conversely,
+// drops the whole entry (PAT + sub + daemon_id) so the next login starts clean.
+
+test('upsertEntry preserves an existing daemon_id across a PAT rewrite', () => {
+  const { dir, file } = makeTmpFile();
+  try {
+    const seed = {
+      'http://localhost:3123': {
+        pat: 'rlnt_pat_old',
+        server_url: 'http://localhost:3123',
+        gateway_url: 'http://localhost:3124',
+        registered_at: '2025-01-02T00:00:00.000Z',
+        sub: 'user-abc',
+        daemon_id: 'stable-daemon-id-123',
+      },
+    };
+    fs.writeFileSync(file, JSON.stringify(seed, null, 2));
+
+    // Re-mint the PAT for the same origin (e.g. a fresh app launch).
+    upsertEntry({
+      apiUrl: 'http://localhost:3123',
+      gatewayUrl: 'http://localhost:3124',
+      pat: 'rlnt_pat_new',
+      sub: 'user-abc',
+      filePath: file,
+    });
+
+    const after = JSON.parse(fs.readFileSync(file, 'utf8'))['http://localhost:3123'];
+    assert.equal(after.pat, 'rlnt_pat_new', 'PAT must be updated');
+    assert.equal(
+      after.daemon_id,
+      'stable-daemon-id-123',
+      'daemon_id must survive the PAT rewrite'
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('upsertEntry leaves daemon_id unset when creating a fresh entry', () => {
+  const { dir, file } = makeTmpFile();
+  try {
+    upsertEntry({
+      apiUrl: 'http://localhost:3123',
+      pat: 'rlnt_pat_new',
+      filePath: file,
+    });
+    const after = JSON.parse(fs.readFileSync(file, 'utf8'))['http://localhost:3123'];
+    assert.ok(after, 'entry must exist');
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(after, 'daemon_id'),
+      false,
+      'fresh entry must not carry a daemon_id (server assigns one)'
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('deleteEntry removes the origin entry (logout clears PAT + daemon_id)', () => {
+  const { dir, file } = makeTmpFile();
+  try {
+    const seed = {
+      'http://localhost:3123': {
+        pat: 'rlnt_pat_local',
+        server_url: 'http://localhost:3123',
+        gateway_url: '',
+        registered_at: '2025-01-02T00:00:00.000Z',
+        sub: 'user-abc',
+        daemon_id: 'stable-daemon-id-123',
+      },
+      'https://staging.reliantapi.com': {
+        pat: 'rlnt_pat_staging',
+        server_url: 'https://staging.reliantapi.com',
+        gateway_url: '',
+        registered_at: '2025-01-01T00:00:00.000Z',
+      },
+    };
+    fs.writeFileSync(file, JSON.stringify(seed, null, 2));
+
+    const removed = deleteEntry({ apiUrl: 'http://localhost:3123', filePath: file });
+    assert.equal(removed, true, 'must report the entry was removed');
+
+    const after = JSON.parse(fs.readFileSync(file, 'utf8'));
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(after, 'http://localhost:3123'),
+      false,
+      'logged-out origin entry must be gone'
+    );
+    // Unrelated origins are untouched — logout is per-origin, not global.
+    assert.deepEqual(
+      after['https://staging.reliantapi.com'],
+      seed['https://staging.reliantapi.com'],
+      'unrelated origin must survive logout'
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('deleteEntry is a no-op when the origin has no entry', () => {
+  const { dir, file } = makeTmpFile();
+  try {
+    fs.writeFileSync(file, JSON.stringify({}, null, 2));
+    const removed = deleteEntry({ apiUrl: 'http://localhost:3123', filePath: file });
+    assert.equal(removed, false, 'nothing to remove → false');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('deleteEntry returns false for an invalid apiUrl', () => {
+  assert.equal(deleteEntry({ apiUrl: 'not-a-url' }), false);
 });
 
 test('writeDaemonStore creates the parent directory recursively', () => {

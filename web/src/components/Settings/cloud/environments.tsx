@@ -1,18 +1,18 @@
 /**
- * Settings → Environments section.
+ * Settings → Machines section.
  *
  * Ports admin-web's "Workspaces" (daemons) management into reliant-web as a
  * self-contained settings panel, using ONLY public control-plane RPCs
- * (controlplane.v1.DaemonService + BillingService) for lifecycle and the
- * reliant.v1.DaemonTokenService for access tokens. Data access lives in
- * `@/services/controlPlane/environments`; this file is presentation + local
- * UI state only.
+ * (controlplane.v1.DaemonService + BillingService) for lifecycle. Data access
+ * lives in `@/services/controlPlane/environments`; this file is presentation +
+ * local UI state only.
  *
- * Layout: two tabs — "Environments" (list / create / detail) and
- * "Access Tokens". Everything is rendered inside /settings/environments; the
- * detail view is internal component state (no nested route needed). An
- * optional `?daemon=<id>` search param deep-links straight into a detail view
- * (used by the onboarding DaemonConnectingGate "View logs" action).
+ * Layout: a single machines view (list / create / detail). Everything is
+ * rendered inside /settings/environments; the detail view is internal
+ * component state (no nested route needed). An optional `?daemon=<id>` search
+ * param deep-links straight into a detail view (used by the onboarding
+ * DaemonConnectingGate "View logs" action). Daemon access tokens are managed
+ * in the standalone System → Access Tokens settings section.
  */
 import React, { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
@@ -29,7 +29,6 @@ import {
   Cpu,
   ExternalLink,
   GitBranch,
-  KeyRound,
   Pause,
   Play,
   Plus,
@@ -65,22 +64,18 @@ import {
   DaemonSize,
   DaemonStatus,
   PortAccessMode,
-  createDaemonToken,
   createEnvironment,
   deleteDaemon,
   describeError,
   getComputeSubscription,
   getDaemon,
-  listDaemonTokens,
   listDaemons,
   listPortAccessRules,
   removePortAccess,
   resumeEnvironment,
-  revokeDaemonToken,
   setPortAccess,
   suspendDaemon,
   type Daemon,
-  type DaemonTokenInfo,
   type PortAccessRule,
 } from "@/services/controlPlane/environments";
 
@@ -90,7 +85,6 @@ const QK = {
   daemon: (id: string) => ["cp", "environments", "detail", id] as const,
   ports: (id: string) => ["cp", "environments", "ports", id] as const,
   computeSub: ["cp", "environments", "computeSubscription"] as const,
-  tokens: ["cp", "environments", "tokens"] as const,
 };
 
 // ── Status presentation ─────────────────────────────────────────────────────
@@ -192,13 +186,6 @@ function fmtTimestamp(ts?: Timestamp): string {
   }
 }
 
-function fmtIso(value?: string): string {
-  if (!value) return "—";
-  const ms = Date.parse(value);
-  if (Number.isNaN(ms)) return "—";
-  return new Date(ms).toLocaleString();
-}
-
 // ── Inline Modal ────────────────────────────────────────────────────────────
 function Modal({
   open,
@@ -269,18 +256,17 @@ function ErrorNote({ message }: { message?: string }) {
 // ── Root section ────────────────────────────────────────────────────────────
 export function EnvironmentsSection() {
   const search = useSearch({ strict: false }) as { daemon?: string };
-  const [tab, setTab] = useState<"environments" | "tokens">("environments");
   // Deep-link: ?daemon=<id> opens the detail view directly.
   const [selectedId, setSelectedId] = useState<string | null>(search.daemon ?? null);
 
   if (!capabilities.cloudDaemons) {
     return (
       <div className="mx-auto max-w-4xl">
-        <PageHeader title="Environments" subtitle="Managed and self-hosted compute environments." />
+        <PageHeader title="Machines" subtitle="Managed and self-hosted machines that run your projects." />
         <EmptyState
           icon={Server}
-          title="Cloud environments unavailable"
-          description="Environments are managed by the Reliant control plane, which isn't configured for this build. Connect a self-hosted environment to keep working locally."
+          title="Machines unavailable"
+          description="Machines are managed by the Reliant control plane, which isn't configured for this build. Connect a self-hosted machine to keep working locally."
         />
       </div>
     );
@@ -293,42 +279,17 @@ export function EnvironmentsSection() {
       ) : (
         <>
           <PageHeader
-            title="Environments"
-            subtitle="Managed and self-hosted compute environments."
+            title="Machines"
+            subtitle="Managed and self-hosted machines that run your projects."
           />
-          <div className="mb-6 flex gap-1 border-b border-border">
-            {([
-              { id: "environments", label: "Environments" },
-              { id: "tokens", label: "Access Tokens" },
-            ] as const).map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setTab(t.id)}
-                className={cn(
-                  "-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors",
-                  tab === t.id
-                    ? "border-primary text-foreground"
-                    : "border-transparent text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-
-          {tab === "environments" ? (
-            <EnvironmentsList onOpenDetail={(id) => setSelectedId(id)} />
-          ) : (
-            <AccessTokensPanel />
-          )}
+          <EnvironmentsList onOpenDetail={(id) => setSelectedId(id)} />
         </>
       )}
     </div>
   );
 }
 
-// ── Environments list + create ──────────────────────────────────────────────
+// ── Machines list + create ──────────────────────────────────────────────────
 function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void }) {
   const qc = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<number>(DaemonStatus.UNSPECIFIED);
@@ -359,17 +320,17 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
   const suspendMut = useMutation({
     mutationFn: (id: string) => suspendDaemon(id),
     onSuccess: () => { setActionError(""); invalidate(); },
-    onError: (e) => setActionError(describeError(e, "Failed to suspend environment")),
+    onError: (e) => setActionError(describeError(e, "Failed to suspend machine")),
   });
   const resumeMut = useMutation({
     mutationFn: (id: string) => resumeEnvironment(id),
     onSuccess: () => { setActionError(""); invalidate(); },
-    onError: (e) => setActionError(describeError(e, "Failed to resume environment")),
+    onError: (e) => setActionError(describeError(e, "Failed to resume machine")),
   });
   const deleteMut = useMutation({
     mutationFn: (id: string) => deleteDaemon(id),
     onSuccess: () => { setDeleteTarget(null); setActionError(""); invalidate(); },
-    onError: (e) => setActionError(describeError(e, "Failed to delete environment")),
+    onError: (e) => setActionError(describeError(e, "Failed to delete machine")),
   });
 
   const daemons = (daemonsQ.data ?? []).filter(
@@ -393,10 +354,10 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
         </select>
         {hasActivePlan ? (
           <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" /> New Environment
+            <Plus className="h-4 w-4" /> New Machine
           </Button>
         ) : !computeSubQ.isLoading ? (
-          <Badge variant="neutral" label="Subscribe to a compute plan to create environments" />
+          <Badge variant="neutral" label="Subscribe to a compute plan to create machines" />
         ) : null}
       </div>
 
@@ -404,12 +365,12 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
 
       {daemonsQ.isLoading ? (
         <Card>
-          <CardContent className="text-sm text-muted-foreground">Loading environments…</CardContent>
+          <CardContent className="text-sm text-muted-foreground">Loading machines…</CardContent>
         </Card>
       ) : daemonsQ.error ? (
         <Card>
           <CardContent>
-            <p className="text-sm font-medium text-destructive">Failed to load environments</p>
+            <p className="text-sm font-medium text-destructive">Failed to load machines</p>
             <p className="mt-1 text-sm text-muted-foreground">{describeError(daemonsQ.error)}</p>
             <Button variant="outline" size="sm" className="mt-3" onClick={() => daemonsQ.refetch()}>
               <RefreshCw className="h-3.5 w-3.5" /> Retry
@@ -419,16 +380,16 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
       ) : daemons.length === 0 ? (
         <EmptyState
           icon={Server}
-          title="No environments"
+          title="No machines"
           description={
             hasActivePlan
-              ? "Create your first cloud environment."
-              : "Subscribe to a compute plan, then create an environment. Environments run on the compute sizes your plan allows."
+              ? "Create your first cloud machine."
+              : "Subscribe to a compute plan, then create a machine. Machines run on the compute sizes your plan allows."
           }
           action={
             hasActivePlan ? (
               <Button onClick={() => setCreateOpen(true)}>
-                <Plus className="h-4 w-4" /> New Environment
+                <Plus className="h-4 w-4" /> New Machine
               </Button>
             ) : undefined
           }
@@ -500,7 +461,7 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
         onCreated={() => { setCreateOpen(false); invalidate(); }}
       />
 
-      <Modal open={deleteTarget !== null} onClose={() => setDeleteTarget(null)} title="Delete Environment">
+      <Modal open={deleteTarget !== null} onClose={() => setDeleteTarget(null)} title="Delete Machine">
         <p className="text-sm text-muted-foreground">
           Are you sure you want to delete <span className="font-semibold text-foreground">{deleteTarget?.name}</span>?
           This action cannot be undone.
@@ -558,11 +519,11 @@ function CreateEnvironmentModal({
       setError("");
       onCreated();
     },
-    onError: (e) => setError(describeError(e, "Failed to create environment")),
+    onError: (e) => setError(describeError(e, "Failed to create machine")),
   });
 
   return (
-    <Modal open={open} onClose={onClose} title="Create Environment" maxWidth="max-w-xl">
+    <Modal open={open} onClose={onClose} title="Create Machine" maxWidth="max-w-xl">
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -576,7 +537,7 @@ function CreateEnvironmentModal({
             required
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="my-environment"
+            placeholder="my-machine"
             className={inputCls}
           />
         </Field>
@@ -639,7 +600,7 @@ function CreateEnvironmentModal({
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
-          <p className="mt-1 text-xs text-muted-foreground">Suspended environments are not billed.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Suspended machines are not billed.</p>
         </Field>
 
         <ErrorNote message={error} />
@@ -655,7 +616,7 @@ function CreateEnvironmentModal({
   );
 }
 
-// ── Environment detail ──────────────────────────────────────────────────────
+// ── Machine detail ──────────────────────────────────────────────────────────
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex justify-between gap-4 border-b border-border py-2 last:border-0">
@@ -686,17 +647,17 @@ function EnvironmentDetail({ daemonId, onBack }: { daemonId: string; onBack: () 
   const suspendMut = useMutation({
     mutationFn: () => suspendDaemon(daemonId),
     onSuccess: () => { setError(""); refetchAll(); },
-    onError: (e) => setError(describeError(e, "Failed to suspend environment")),
+    onError: (e) => setError(describeError(e, "Failed to suspend machine")),
   });
   const resumeMut = useMutation({
     mutationFn: () => resumeEnvironment(daemonId),
     onSuccess: () => { setError(""); refetchAll(); },
-    onError: (e) => setError(describeError(e, "Failed to resume environment")),
+    onError: (e) => setError(describeError(e, "Failed to resume machine")),
   });
   const deleteMut = useMutation({
     mutationFn: () => deleteDaemon(daemonId),
     onSuccess: () => { setDeleteOpen(false); qc.invalidateQueries({ queryKey: QK.daemons }); onBack(); },
-    onError: (e) => setError(describeError(e, "Failed to delete environment")),
+    onError: (e) => setError(describeError(e, "Failed to delete machine")),
   });
 
   const status = daemon ? daemonStatus(daemon) : "pending";
@@ -712,15 +673,15 @@ function EnvironmentDetail({ daemonId, onBack }: { daemonId: string; onBack: () 
         onClick={onBack}
         className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="h-4 w-4" /> Back to Environments
+        <ArrowLeft className="h-4 w-4" /> Back to Machines
       </button>
 
       {daemonQ.isLoading ? (
-        <Card><CardContent className="text-sm text-muted-foreground">Loading environment…</CardContent></Card>
+        <Card><CardContent className="text-sm text-muted-foreground">Loading machine…</CardContent></Card>
       ) : daemonQ.error ? (
         <Card><CardContent className="text-sm text-destructive">{describeError(daemonQ.error)}</CardContent></Card>
       ) : !daemon ? (
-        <Card><CardContent className="text-sm text-muted-foreground">Environment not found.</CardContent></Card>
+        <Card><CardContent className="text-sm text-muted-foreground">Machine not found.</CardContent></Card>
       ) : (
         <>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -768,7 +729,7 @@ function EnvironmentDetail({ daemonId, onBack }: { daemonId: string; onBack: () 
 
           <PortAccessPanel daemonId={daemon.id} workspaceBaseDomain={workspaceBaseDomain} />
 
-          <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete Environment">
+          <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete Machine">
             <p className="text-sm text-muted-foreground">
               Are you sure you want to delete <span className="font-semibold text-foreground">{daemon.name}</span>?
               This action cannot be undone.
@@ -895,161 +856,6 @@ function PortAccessPanel({ daemonId, workspaceBaseDomain }: { daemonId: string; 
         <TokenRevealModal token={createdToken} onClose={() => setCreatedToken(null)} title="Port Access Token Created" />
       </CardContent>
     </Card>
-  );
-}
-
-// ── Access tokens tab ───────────────────────────────────────────────────────
-type TokenStatus = "active" | "revoked" | "expired";
-
-function tokenStatus(t: DaemonTokenInfo): TokenStatus {
-  if (t.revoked) return "revoked";
-  if (t.expiresAt) {
-    const ms = Date.parse(t.expiresAt);
-    if (!Number.isNaN(ms) && ms < Date.now()) return "expired";
-  }
-  return "active";
-}
-
-const tokenBadge: Record<TokenStatus, { label: string; variant: BadgeVariant }> = {
-  active: { label: "Active", variant: "success" },
-  revoked: { label: "Revoked", variant: "error" },
-  expired: { label: "Expired", variant: "warning" },
-};
-
-function AccessTokensPanel() {
-  const qc = useQueryClient();
-  const [createOpen, setCreateOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [createError, setCreateError] = useState("");
-  const [createdToken, setCreatedToken] = useState<string | null>(null);
-  const [revokeTarget, setRevokeTarget] = useState<DaemonTokenInfo | null>(null);
-
-  const tokensQ = useQuery({
-    queryKey: QK.tokens,
-    queryFn: () => listDaemonTokens(),
-    staleTime: 10_000,
-  });
-  const tokens = tokensQ.data ?? [];
-  const invalidate = () => qc.invalidateQueries({ queryKey: QK.tokens });
-
-  const createMut = useMutation({
-    mutationFn: () => createDaemonToken(name.trim()),
-    onSuccess: (res) => {
-      setName("");
-      setCreateOpen(false);
-      setCreateError("");
-      setCreatedToken(res.token);
-      invalidate();
-    },
-    onError: (e) => setCreateError(describeError(e, "Failed to create token")),
-  });
-  const revokeMut = useMutation({
-    mutationFn: (id: string) => revokeDaemonToken(id),
-    onSuccess: () => { setRevokeTarget(null); invalidate(); },
-  });
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          Long-lived tokens authenticate self-hosted environments connecting to the control plane.
-        </p>
-        <Button onClick={() => setCreateOpen(true)}>
-          <Plus className="h-4 w-4" /> New Token
-        </Button>
-      </div>
-
-      {tokensQ.isLoading ? (
-        <Card><CardContent className="text-sm text-muted-foreground">Loading tokens…</CardContent></Card>
-      ) : tokensQ.error ? (
-        <Card>
-          <CardContent>
-            <p className="text-sm font-medium text-destructive">Failed to load tokens</p>
-            <p className="mt-1 text-sm text-muted-foreground">{describeError(tokensQ.error)}</p>
-            <Button variant="outline" size="sm" className="mt-3" onClick={() => tokensQ.refetch()}>
-              <RefreshCw className="h-3.5 w-3.5" /> Retry
-            </Button>
-          </CardContent>
-        </Card>
-      ) : tokens.length === 0 ? (
-        <EmptyState
-          icon={KeyRound}
-          title="No access tokens"
-          description="Create a token to authenticate a self-hosted environment connecting to the control plane."
-          action={<Button onClick={() => setCreateOpen(true)}><Plus className="h-4 w-4" /> New Token</Button>}
-        />
-      ) : (
-        <Table>
-          <Thead>
-            <Tr>
-              <Th>Name</Th>
-              <Th>Prefix</Th>
-              <Th>Created</Th>
-              <Th>Last used</Th>
-              <Th>Status</Th>
-              <Th className="text-right">Actions</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
-            {tokens.map((t) => {
-              const st = tokenStatus(t);
-              const badge = tokenBadge[st];
-              return (
-                <Tr key={t.id}>
-                  <Td className="font-medium">{t.name}</Td>
-                  <Td className="font-mono text-muted-foreground">{t.tokenPrefix}…</Td>
-                  <Td className="text-muted-foreground">{fmtIso(t.createdAt)}</Td>
-                  <Td className="text-muted-foreground">{fmtIso(t.lastUsedAt)}</Td>
-                  <Td><Badge label={badge.label} variant={badge.variant} /></Td>
-                  <Td className="text-right">
-                    {st === "active" && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={revokeMut.isPending && revokeMut.variables === t.id}
-                        onClick={() => setRevokeTarget(t)}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" /> Revoke
-                      </Button>
-                    )}
-                  </Td>
-                </Tr>
-              );
-            })}
-          </Tbody>
-        </Table>
-      )}
-
-      <Modal open={createOpen} onClose={() => { setCreateOpen(false); setCreateError(""); }} title="Create Access Token">
-        <form onSubmit={(e) => { e.preventDefault(); setCreateError(""); createMut.mutate(); }}>
-          <Field label="Name" htmlFor="token-name">
-            <input id="token-name" required value={name} onChange={(e) => setName(e.target.value)} placeholder="my-access-token" className={inputCls} />
-          </Field>
-          <ErrorNote message={createError} />
-          <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="outline" onClick={() => { setCreateOpen(false); setCreateError(""); }}>Cancel</Button>
-            <Button type="submit" isLoading={createMut.isPending} disabled={!name.trim()}>
-              {createMut.isPending ? "Creating…" : "Create Token"}
-            </Button>
-          </div>
-        </form>
-      </Modal>
-
-      <TokenRevealModal token={createdToken} onClose={() => setCreatedToken(null)} title="Token Created" />
-
-      <Modal open={revokeTarget !== null} onClose={() => setRevokeTarget(null)} title="Revoke Token">
-        <p className="text-sm text-muted-foreground">
-          Revoke <span className="font-medium text-foreground">{revokeTarget?.name}</span>? Any environment using this token
-          will lose access. This cannot be undone.
-        </p>
-        <div className="mt-6 flex justify-end gap-3">
-          <Button variant="outline" onClick={() => setRevokeTarget(null)}>Cancel</Button>
-          <Button variant="danger" isLoading={revokeMut.isPending} onClick={() => revokeTarget && revokeMut.mutate(revokeTarget.id)}>
-            {revokeMut.isPending ? "Revoking…" : "Revoke Token"}
-          </Button>
-        </div>
-      </Modal>
-    </div>
   );
 }
 

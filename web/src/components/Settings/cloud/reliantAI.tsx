@@ -1,6 +1,6 @@
 /**
- * ReliantAISection — the managed-Reliant AI settings surface, rendered at
- * `/settings/reliant-ai` (Foundation maps the `reliant-ai` section id here).
+ * ReliantAISection — the managed-Reliant AI settings surface, rendered as the
+ * "Reliant AI" tab of the `/settings/general` AI section (see AISettings).
  *
  * This is the END-USER view of Reliant-issued LLM access + spend, ported from
  * admin-web's `(dashboard)/ai/page.tsx` but built on the PUBLIC RPCs only:

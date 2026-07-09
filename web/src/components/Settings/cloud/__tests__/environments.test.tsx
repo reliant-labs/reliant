@@ -80,19 +80,16 @@ describe('EnvironmentsSection', () => {
     mocks.listDaemonTokens.mockResolvedValue([])
   })
 
-  it('renders the header and both tabs, then the empty environments state', async () => {
+  it('renders the header, then the empty machines state', async () => {
     renderSection()
 
     expect(
-      screen.getByRole('heading', { level: 1, name: /environments/i }),
+      screen.getByRole('heading', { level: 1, name: /machines/i }),
     ).toBeInTheDocument()
 
-    expect(screen.getByRole('button', { name: /^environments$/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /access tokens/i })).toBeInTheDocument()
-
-    // The daemons query resolves to [] → the "No environments" empty state.
+    // The daemons query resolves to [] → the "No machines" empty state.
     expect(
-      await screen.findByRole('heading', { level: 3, name: /no environments/i }),
+      await screen.findByRole('heading', { level: 3, name: /no machines/i }),
     ).toBeInTheDocument()
   })
 
@@ -101,10 +98,10 @@ describe('EnvironmentsSection', () => {
     renderSection()
 
     expect(
-      screen.getByRole('heading', { level: 1, name: /environments/i }),
+      screen.getByRole('heading', { level: 1, name: /machines/i }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('heading', { level: 3, name: /cloud environments unavailable/i }),
+      screen.getByRole('heading', { level: 3, name: /machines unavailable/i }),
     ).toBeInTheDocument()
   })
 })

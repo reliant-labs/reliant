@@ -6,7 +6,7 @@
 
 set -e
 
-MIGRATION_DIR="internal/db/migrations/sqlite"
+MIGRATION_DIR="internal/db/migrations/postgres"
 
 # Colors for output
 RED='\033[0;31m'

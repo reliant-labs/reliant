@@ -32,32 +32,89 @@ const DISMISSED_KEY = "reliant.apiKeySetup.dismissed";
 
 const AUTO_MANAGED_PROVIDERS = new Set(["reliant"]);
 
+type ProviderStatus = Awaited<ReturnType<typeof api.settings.getProviders>>[number];
+
+/**
+ * Guards the managed-key self-heal to one attempt per session. The
+ * control-plane sync RPC is idempotent, but we don't want to fire it on every
+ * ensure() call — only when we first observe a signed-in user with no usable
+ * provider. Cleared on `reset()` (logout) so the next login re-attempts.
+ */
+let managedKeySyncAttempted = false;
+
 /**
  * Returns true when the current user is signed into Reliant (has an active
- * session).  The "reliant" provider is auto-managed via their JWT, so we
- * treat it as configured without requiring an explicit API key in the DB.
+ * session). Such users are eligible for the managed Reliant key, which is
+ * provisioned lazily from their JWT — so a missing key here is something we
+ * can self-heal rather than a reason to prompt for a manual key.
  */
 function isReliantSessionActive(): boolean {
   const { user, session } = useAuthStore.getState();
   return !!(user && session);
 }
 
-/** Match onboarding `detectCompletedItems` / checklist: key or OAuth-backed provider. */
-function hasAnyProviderCredentials(
-  providers: { provider?: string; hasApiKey: boolean; configured: boolean }[],
-): boolean {
-  if (isReliantSessionActive()) return true;
+/**
+ * Match onboarding `detectCompletedItems` / checklist: key or OAuth-backed
+ * provider. This is backend truth — a live session is NOT treated as
+ * credentials, because a signed-in user may not have a synced Reliant key yet
+ * (see `loadProviderCredentials`, which self-heals that case).
+ */
+function hasAnyProviderCredentials(providers: ProviderStatus[]): boolean {
   return providers.some((p) => p.hasApiKey || p.configured);
 }
 
-function hasAnyManualProviderCredentials(
-  providers: { provider?: string; hasApiKey: boolean; configured: boolean }[],
-): boolean {
+function hasAnyManualProviderCredentials(providers: ProviderStatus[]): boolean {
   return providers.some(
     (p) =>
       !AUTO_MANAGED_PROVIDERS.has((p.provider || "").toLowerCase()) &&
       (p.hasApiKey || p.configured)
   );
+}
+
+/**
+ * Fetch provider statuses, self-healing the managed Reliant key when the user
+ * is signed in but has no usable provider. The setup modal should only appear
+ * when the backend genuinely has no credentials — not merely because a synced
+ * key hasn't been minted yet. `provisionManagedKey` is idempotent server-side
+ * and a no-op in local (no control-plane) mode.
+ */
+async function loadProviderCredentials(): Promise<{
+  providers: ProviderStatus[];
+  hasAnyKey: boolean;
+  hasAnyManualKey: boolean;
+}> {
+  let providers = await api.settings.getProviders();
+
+  if (
+    !hasAnyProviderCredentials(providers) &&
+    isReliantSessionActive() &&
+    !managedKeySyncAttempted
+  ) {
+    managedKeySyncAttempted = true;
+    try {
+      const { onboardingService } = await import(
+        "../services/controlPlane/onboarding"
+      );
+      const result = await onboardingService.provisionManagedKey();
+      if (result.synced) {
+        logger.info(
+          "[ApiKeySetupStore] Self-healed managed Reliant key; re-checking providers"
+        );
+        providers = await api.settings.getProviders();
+      }
+    } catch (error) {
+      logger.warn(
+        "[ApiKeySetupStore] Managed Reliant key self-heal failed",
+        error
+      );
+    }
+  }
+
+  return {
+    providers,
+    hasAnyKey: hasAnyProviderCredentials(providers),
+    hasAnyManualKey: hasAnyManualProviderCredentials(providers),
+  };
 }
 
 interface ApiKeySetupState {
@@ -99,6 +156,7 @@ export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
    * Called when user logs out so we can check again on next login.
    */
   reset: () => {
+    managedKeySyncAttempted = false;
     set({
       hasChecked: false,
       isChecking: false,
@@ -148,10 +206,9 @@ export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
     
     try {
       logger.info("[ApiKeySetupStore] Checking for configured API keys...");
-      const providers = await api.settings.getProviders();
-      const hasAnyKey = hasAnyProviderCredentials(providers);
-      const hasAnyManualKey = hasAnyManualProviderCredentials(providers);
-      
+      const { providers, hasAnyKey, hasAnyManualKey } =
+        await loadProviderCredentials();
+
       logger.info("[ApiKeySetupStore] API key check result", {
         hasAnyKey,
         hasAnyManualKey,
@@ -231,9 +288,7 @@ export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
 
     try {
       logger.info("[ApiKeySetupStore] Ensuring API key is configured...");
-      const providers = await api.settings.getProviders();
-      const hasAnyKey = hasAnyProviderCredentials(providers);
-      const hasAnyManualKey = hasAnyManualProviderCredentials(providers);
+      const { hasAnyKey, hasAnyManualKey } = await loadProviderCredentials();
 
       logger.info("[ApiKeySetupStore] API key ensure result", { hasAnyKey, hasAnyManualKey });
 

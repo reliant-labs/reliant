@@ -19,9 +19,9 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/reliant-labs/reliant/internal/auth"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
@@ -472,6 +472,8 @@ Credential resolution order:
 						TLSMode:    parsedTLSMode,
 						DataDir:    dataDir,
 						Name:       daemonName,
+						ServerURL:  serverURL,
+						DaemonID:   c.DaemonID,
 						ServerMode: false,
 						ListenPort: listenPort,
 					},

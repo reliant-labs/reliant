@@ -118,7 +118,7 @@ docker-build:
 	@echo "$(YELLOW)  e.g. docker run $(DOCKER_REGISTRY)/reliant:$(DOCKER_TAG) server api$(NC)"
 
 ## test: Run all tests
-test: schema-generate
+test:
 	@echo "$(YELLOW)Running tests...$(NC)"
 	@$(MAKE) stop 2>/dev/null || true
 	$(GOTEST) -v -timeout=$(TEST_TIMEOUT) ./...
@@ -126,7 +126,7 @@ test: schema-generate
 	@echo "$(GREEN)✅ Tests complete$(NC)"
 
 ## test-race: Run tests with race detection
-test-race: schema-generate
+test-race:
 	@echo "$(YELLOW)Running tests with race detection...$(NC)"
 	$(GOTEST) -v -race -timeout=$(TEST_TIMEOUT) ./...
 	@echo "$(GREEN)✅ Race tests complete$(NC)"
@@ -218,26 +218,12 @@ proto-format:
 	@buf format -w
 	@echo "$(GREEN)✅ Protobuf formatting complete$(NC)"
 
-## schema-generate: Generate schema.sql from migrations
-schema-generate:
-	@echo "$(YELLOW)Generating schema.sql from migrations...$(NC)"
-	@bash ./scripts/generate-schema.sh
-	@echo "$(GREEN)✅ Schema generated$(NC)"
-
-## schema-validate: Validate schema.sql is in sync with migrations
-schema-validate:
-	@echo "$(YELLOW)Validating schema.sql...$(NC)"
-	@./scripts/validate-schema.sh
-	@echo "$(GREEN)✅ Schema is in sync$(NC)"
-
 ## db-driver-audit: Static dual-driver audit (SQLite/Postgres parity and bindQuery checks)
 db-driver-audit:
 	@echo "$(YELLOW)Running DB driver audit...$(NC)"
 	@./scripts/db-driver-audit.sh
 
 ## sqlc: Generate database code with sqlc
-# Pinned to v1.30.0 — newer versions infer SELECT EXISTS(...) for SQLite as
-# bool instead of int64, which breaks the store wrappers (e.g. `exists != 0`).
 SQLC_VERSION := v1.31.1
 SQLC_BIN := $(HOME)/go/bin/sqlc-$(SQLC_VERSION)
 
@@ -252,8 +238,8 @@ sqlc: $(SQLC_BIN)
 	@$(SQLC_BIN) generate
 	@echo "$(GREEN)✅ Database code generated$(NC)"
 
-## db-regenerate: Regenerate schema.sql and sqlc code (run after migration changes)
-db-regenerate: schema-generate sqlc
+## db-regenerate: Regenerate sqlc code (run after migration changes)
+db-regenerate: sqlc
 	@echo "$(GREEN)✅ Database schema and code regenerated$(NC)"
 	@echo "$(BLUE)You can now write Go code using the new schema types$(NC)"
 
@@ -262,7 +248,7 @@ generate-all: proto-generate generate
 	@echo "$(GREEN)✅ All code generation complete$(NC)"
 
 ## generate-go: Run Go code generators only (protobuf Go + sqlc + Go reference files)
-generate-go: proto-generate-go generate-yaml-bindings schema-generate sqlc generate-schema generate-refcheck generate-cel-reference generate-nodes
+generate-go: proto-generate-go generate-yaml-bindings sqlc generate-schema generate-refcheck generate-cel-reference generate-nodes
 	@echo "$(GREEN)✅ Go code generation complete$(NC)"
 
 ## generate-yaml-bindings: Generate YAML bindings from proto descriptors
@@ -319,7 +305,7 @@ WEB_SRC_DIR=web/src
 CHANGELOG_DIR=$(MINTLIFY_DOCS_DIR)/data/releases
 
 ## generate: Generate all docs, presets, and skills (run during build)
-generate: generate-yaml-bindings schema-generate sqlc generate-schema generate-scenario-schema generate-refcheck generate-cel-reference generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-models generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference
+generate: generate-yaml-bindings sqlc generate-schema generate-scenario-schema generate-refcheck generate-cel-reference generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-models generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference
 	@echo "$(GREEN)✅ All generated files up to date$(NC)"
 
 ## generate-schema: Generate workflow schema reference from proto types

@@ -582,6 +582,65 @@ func TestCreateWorkflowWithThread(t *testing.T) {
 		}
 	})
 
+	// Regression: inline/loop child workflows reuse the parent's workflow ID, so
+	// the INSERT in step 1 hits an existing row. On Postgres a raw duplicate-key
+	// violation aborts the whole transaction (SQLSTATE 25P02), poisoning every
+	// later statement in the tx — including the fork's parent-thread lookup, which
+	// then surfaces as a misleading "parent thread not found". CreateWorkflow must
+	// be idempotent (INSERT ... ON CONFLICT DO NOTHING) so a pre-existing workflow
+	// ID is a silent no-op and the fork proceeds normally.
+	t.Run("existing workflow ID forking a new thread succeeds (inline loop)", func(t *testing.T) {
+		// Parent thread to fork from.
+		parentThread, _ := h.createThread("loop-parent-thread", h.chatID)
+
+		// First iteration creates the workflow + its thread.
+		workflow := &db.Workflow{
+			ID:           "wf-loop",
+			ChatID:       h.chatID,
+			WorkflowName: "loop-workflow",
+			Thread:       "loop-thread-0",
+			Status:       db.WorkflowStatusRunning,
+			CreatedAt:    time.Now().UTC(),
+		}
+		if _, _, _, err := h.svc.CreateWorkflowWithThread(ctx, CreateWorkflowWithThreadOpts{
+			Workflow:       workflow,
+			ThreadID:       "loop-thread-0",
+			ChatID:         h.chatID,
+			ForkFromThread: &parentThread.ID,
+		}); err != nil {
+			t.Fatalf("first iteration failed: %v", err)
+		}
+
+		// Second iteration reuses the SAME workflow ID (as inline loops do) while
+		// forking a brand-new thread. This is the exact path that previously failed.
+		workflow2 := &db.Workflow{
+			ID:           "wf-loop", // same ID -> duplicate INSERT
+			ChatID:       h.chatID,
+			WorkflowName: "loop-workflow",
+			Thread:       "loop-thread-1",
+			Status:       db.WorkflowStatusRunning,
+			CreatedAt:    time.Now().UTC(),
+		}
+		_, thread, cw, err := h.svc.CreateWorkflowWithThread(ctx, CreateWorkflowWithThreadOpts{
+			Workflow:       workflow2,
+			ThreadID:       "loop-thread-1",
+			ChatID:         h.chatID,
+			ForkFromThread: &parentThread.ID,
+		})
+		if err != nil {
+			t.Fatalf("second iteration with existing workflow ID failed: %v", err)
+		}
+		if thread == nil || thread.ID != "loop-thread-1" {
+			t.Fatalf("expected forked thread loop-thread-1, got %v", thread)
+		}
+		if thread.WorkflowID == nil || *thread.WorkflowID != "wf-loop" {
+			t.Errorf("expected thread workflow_id wf-loop, got %v", thread.WorkflowID)
+		}
+		if cw == nil {
+			t.Error("expected a context window for the forked thread")
+		}
+	})
+
 	t.Run("requires workflow", func(t *testing.T) {
 		_, _, _, err := h.svc.CreateWorkflowWithThread(ctx, CreateWorkflowWithThreadOpts{
 			Workflow: nil,

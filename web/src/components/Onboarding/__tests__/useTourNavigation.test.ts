@@ -35,6 +35,7 @@ import { z } from "zod";
 const tourStoreMocks = vi.hoisted(() => ({
   completeStep: vi.fn(async () => undefined),
   skipStep: vi.fn(async () => undefined),
+  markRemainingSkipped: vi.fn(() => undefined),
   markTourCompleted: vi.fn(async () => undefined),
 }));
 
@@ -46,6 +47,7 @@ vi.mock("../../../store/tourStore", () => {
       hasCompletedOnboarding: false,
       completeStep: tourStoreMocks.completeStep,
       skipStep: tourStoreMocks.skipStep,
+      markRemainingSkipped: tourStoreMocks.markRemainingSkipped,
       markTourCompleted: tourStoreMocks.markTourCompleted,
     };
   }
@@ -180,6 +182,7 @@ describe("useTourNavigation", () => {
   beforeEach(() => {
     tourStoreMocks.completeStep.mockClear();
     tourStoreMocks.skipStep.mockClear();
+    tourStoreMocks.markRemainingSkipped.mockClear();
     tourStoreMocks.markTourCompleted.mockClear();
   });
 
@@ -475,7 +478,11 @@ describe("useTourNavigation", () => {
       await act(async () => {
         await result.current.skipAll();
       });
-      expect(tourStoreMocks.skipStep.mock.calls.length).toBeGreaterThan(0);
+      // skipAll now batches: it marks remaining steps skipped in memory (one
+      // call) and persists once via markTourCompleted, instead of awaiting a
+      // per-step skipStep save.
+      expect(tourStoreMocks.markRemainingSkipped).toHaveBeenCalledTimes(1);
+      expect(tourStoreMocks.markTourCompleted).toHaveBeenCalledTimes(1);
       expect(router.state.location.search.tour).toBeUndefined();
     });
   });

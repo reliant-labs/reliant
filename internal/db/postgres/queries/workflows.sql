@@ -4,6 +4,7 @@ INSERT INTO workflows (
     spawned_by_node_id, loop_iteration,
     created_at, completed_at
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+ON CONFLICT (id) DO NOTHING
 RETURNING *;
 
 -- name: GetWorkflow :one

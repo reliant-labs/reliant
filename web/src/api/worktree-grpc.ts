@@ -2,6 +2,7 @@
 
 import { grpcClient } from "./grpc-client";
 import { create } from "@bufbuild/protobuf";
+import { singleflight } from "../lib/singleflight";
 import type {
   Worktree as ProtoWorktree,
   CleanupMetadata as ProtoCleanupMetadata,
@@ -439,20 +440,28 @@ export const worktreeGrpc = {
   // repoId scopes to a nested repo. Empty/undefined uses legacy single-repo
   // behavior (server returns InvalidArgument if the project has 2+ repos).
   async getChanges(worktreeId: string, repoId?: string): Promise<WorktreeChanges> {
-    const client = grpcClient.worktree();
-    const request = create(GetWorktreeChangesRequestSchema, {
-      worktreeId,
-      repoId: repoId ?? "",
+    // Singleflight per worktree+repo: this RPC is issued by several mounted
+    // consumers (useWorktreeChanges instances, RecentChanges) plus a 30s
+    // fallback poll, with NO await between ticks — when the daemon answers
+    // slowly (large diffs), identical calls stacked up, each pinning one of
+    // the renderer's 6 HTTP/1.1 connections in dev until the whole app
+    // starved. Concurrent callers now share one in-flight request.
+    return singleflight(`worktree:getChanges:${worktreeId}:${repoId ?? ""}`, async () => {
+      const client = grpcClient.worktree();
+      const request = create(GetWorktreeChangesRequestSchema, {
+        worktreeId,
+        repoId: repoId ?? "",
+      });
+      const response = await client.getWorktreeChanges(request);
+      return {
+        files: response.files.map(protoFileChangeToFrontend),
+        total_files: response.totalFiles,
+        branch: response.branch,
+        ahead: response.ahead,
+        behind: response.behind,
+        default_branch: response.defaultBranch,
+      };
     });
-    const response = await client.getWorktreeChanges(request);
-    return {
-      files: response.files.map(protoFileChangeToFrontend),
-      total_files: response.totalFiles,
-      branch: response.branch,
-      ahead: response.ahead,
-      behind: response.behind,
-      default_branch: response.defaultBranch,
-    };
   },
 
   // Get git status for a worktree.

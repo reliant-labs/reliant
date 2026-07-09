@@ -201,11 +201,11 @@ describe("DaemonConnectingGate", () => {
       screen.getByText(/Image pull failed: ECR rate limit/),
     ).toBeInTheDocument();
 
-    // "View environment" navigates in-app to the Environments settings
-    // section, deep-linking to the failing environment via the `daemon`
-    // search param (keyed by the environment's UUID).
+    // "View machine" navigates in-app to the Machines settings
+    // section, deep-linking to the failing machine via the `daemon`
+    // search param (keyed by the machine's UUID).
     act(() => {
-      screen.getByRole("button", { name: /View environment/i }).click();
+      screen.getByRole("button", { name: /View machine/i }).click();
     });
     expect(mockNavigate).toHaveBeenCalledWith({
       to: "/settings/$section",

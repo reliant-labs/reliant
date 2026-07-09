@@ -66,6 +66,13 @@ type DaemonRouter interface {
 	// SendDaemonCommand sends a generic command to the user's daemon and waits for a response.
 	SendDaemonCommand(ctx context.Context, userID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
 
+	// ResolveDaemonID returns the daemon id that SendDaemonCommand would route
+	// to for this user (connected/local preferred, then control plane, then DB
+	// fallback). Returns an error when no daemon can be resolved. Callers use
+	// this to record which daemon an operation ran against (e.g. a
+	// project_daemons row) so resolution and routing stay consistent.
+	ResolveDaemonID(ctx context.Context, userID string) (string, error)
+
 	// EnqueueDaemonCommand persists a fire-and-forget command to the
 	// DAEMON_PENDING_COMMANDS JetStream stream for each of the user's
 	// daemons. The gateway drains the stream on the daemon's next connect

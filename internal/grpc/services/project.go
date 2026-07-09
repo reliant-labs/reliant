@@ -16,6 +16,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/config"
@@ -23,8 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonevents"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/gitutil"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -308,6 +309,25 @@ func (s *ProjectService) CreateProject(
 	// connected" in that window. To heal it, queue the same command on the
 	// DAEMON_PENDING_COMMANDS JetStream so the gateway dispatches it the
 	// moment the daemon's bidi stream comes up.
+	//
+	// Resolve the target daemon up front so, when the synchronous mkdir
+	// below succeeds (proving a connected daemon actually ran it), we can
+	// record a project_daemons row against the SAME daemon the command
+	// routed to. Resolution is deterministic (connected/local preferred),
+	// so the resolved id matches what sendProjectDaemonCommand targeted.
+	// A resolve failure is non-fatal: it just means no daemon is reachable
+	// right now, and the mkdir will fall through to the pending-command
+	// enqueue path (the reconcile-on-connect flow writes the row later).
+	resolvedDaemonID, resolveErr := s.daemonRouter.ResolveDaemonID(ctx, userID)
+	if resolveErr != nil {
+		logging.Info("No daemon resolvable for new project; will rely on pending-command + reconcile", "path", req.Msg.Path, "error", resolveErr)
+	}
+
+	// daemonConnected is set only when the synchronous mkdir succeeds. That
+	// is the authoritative signal a live daemon handled the command — a
+	// resolved id alone can come from a stale DB fallback. We gate the
+	// project_daemons row write on this so a phantom row is never recorded.
+	daemonConnected := false
 	mkdirPayload := map[string]string{"path": req.Msg.Path}
 	if err := s.sendProjectDaemonCommand(ctx, userID, "fs.mkdir", mkdirPayload, nil); err != nil {
 		logging.Warn("Failed to mkdir project path via daemon; enqueueing for delivery on next connect", "error", err, "path", req.Msg.Path)
@@ -319,6 +339,8 @@ func (s *ProjectService) CreateProject(
 		} else {
 			logging.Info("Queued fs.mkdir on DAEMON_PENDING_COMMANDS", "path", req.Msg.Path, "daemons", n)
 		}
+	} else {
+		daemonConnected = true
 	}
 
 	// Discover nested git repos under the project path. A project may
@@ -340,10 +362,15 @@ func (s *ProjectService) CreateProject(
 	}
 	isGitRepo := len(discoverResp.Discovered) > 0
 
-	// Set defaults
+	// Set defaults. Normalize + validate the caller-supplied branch so an
+	// untrimmed or invalid value (e.g. "main " with a trailing space) is
+	// never persisted or handed to git init.
 	defaultBranch := "main"
-	if req.Msg.DefaultBranch != nil && *req.Msg.DefaultBranch != "" {
-		defaultBranch = *req.Msg.DefaultBranch
+	if req.Msg.DefaultBranch != nil {
+		defaultBranch = gitutil.NormalizeBranchName(*req.Msg.DefaultBranch)
+		if err := gitutil.ValidateBranchName(defaultBranch); err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
 	}
 
 	// Auto-initialize a brand-new EMPTY project as a git repo so the user
@@ -384,6 +411,12 @@ func (s *ProjectService) CreateProject(
 			}
 		} else if gitInitResp.Success {
 			isGitRepo = true
+			// Register the freshly initialized root repo. Discovery ran
+			// BEFORE init (empty dir -> zero results), so without this the
+			// persist loop below records nothing and worktree creation
+			// refuses with "project has no git repos" despite .git existing.
+			discoverResp.Discovered = append(discoverResp.Discovered,
+				discoveredRepo{RelativePath: "", Name: req.Msg.Name})
 		} else {
 			logging.Info("Auto git-init skipped (non-empty dir or precondition)", "reason", gitInitResp.Error, "path", req.Msg.Path)
 		}
@@ -431,6 +464,23 @@ func (s *ProjectService) CreateProject(
 		}
 		logging.Error("Failed to create project", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create project"))
+	}
+
+	// Record which daemon this project was provisioned on so the picker can
+	// mark it immediately openable without waiting for a daemon reconnect.
+	// Only write when a live daemon actually handled the mkdir above AND we
+	// resolved its id — a resolved-but-unreachable daemon (mkdir enqueued
+	// for later) is the "pending" case, where the reconcile-on-connect flow
+	// creates the row once the daemon comes up. A failure here is logged but
+	// never fails creation; the reconcile path heals it.
+	if daemonConnected && resolvedDaemonID != "" {
+		if err := s.database.UpsertProjectDaemon(ctx, project.ID, resolvedDaemonID, project.Path, project.DefaultBranch); err != nil {
+			logging.Warn("Failed to record project_daemons row at creation; reconcile will heal it",
+				"error", err, "project_id", project.ID, "daemon_id", resolvedDaemonID, "path", project.Path)
+		} else {
+			logging.Info("Recorded project_daemons row at creation",
+				"project_id", project.ID, "daemon_id", resolvedDaemonID, "path", project.Path)
+		}
 	}
 
 	// Persist discovered repos. Failures here are logged but don't fail
@@ -1254,7 +1304,16 @@ func (s *ProjectService) InitializeGitRepo(
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("project is already a git repository"))
 	}
 
-	// Route git init through daemon (handles path existence check, .git check, init)
+	// Normalize + validate the branch name before anything touches disk or
+	// the DB, so a bad value (e.g. "main " with a trailing space from the
+	// UI) fails as invalid_argument instead of half-initializing the repo.
+	initialBranch := gitutil.NormalizeBranchName(req.Msg.InitialBranch)
+	if err := gitutil.ValidateBranchName(initialBranch); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+
+	// Route git init through daemon (handles path existence check, adopting
+	// an existing .git left behind by a previously failed init, and init)
 	var initResp struct {
 		Success bool   `json:"success"`
 		Error   string `json:"error,omitempty"`
@@ -1266,7 +1325,7 @@ func (s *ProjectService) InitializeGitRepo(
 		InitialCommit     bool     `json:"initial_commit"`
 	}{
 		Path:              project.Path,
-		InitialBranch:     req.Msg.InitialBranch,
+		InitialBranch:     initialBranch,
 		GitignorePatterns: req.Msg.GitignorePatterns,
 		InitialCommit:     req.Msg.InitialCommit,
 	}
@@ -1281,15 +1340,31 @@ func (s *ProjectService) InitializeGitRepo(
 
 	// Update project to mark it as a git repository
 	project.IsGitRepo = true
-	actualBranch := req.Msg.InitialBranch
-	if actualBranch == "" {
-		actualBranch = "main"
-	}
+	actualBranch := initialBranch
 	project.DefaultBranch = &actualBranch
 
 	if err := s.database.UpdateProject(ctx, project, userID); err != nil {
 		logging.Error("Failed to update project", "error", err, "projectID", req.Msg.ProjectId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update project"))
+	}
+
+	// Register the project root as a Repo row. Worktree creation gates on
+	// ListReposByProject (not project.is_git_repo), so without this a
+	// freshly initialized project would still fail with "project has no git
+	// repos". Idempotent: skip if a root repo is already registered.
+	if existing, err := s.database.GetRepoByProjectAndPath(ctx, project.ID, ""); err != nil || existing == nil {
+		now := time.Now().UTC()
+		rootRepo := &core.Repo{
+			ID:           uuid.New().String(),
+			ProjectID:    project.ID,
+			Name:         project.Name,
+			RelativePath: "",
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		}
+		if err := s.database.CreateRepo(ctx, rootRepo); err != nil {
+			logging.Warn("Failed to register root repo after git init", "error", err, "projectID", project.ID)
+		}
 	}
 
 	// Update the main worktree's branch to match the initialized branch

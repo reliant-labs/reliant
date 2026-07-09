@@ -489,10 +489,15 @@ func handleInitGitRepo(ctx context.Context, payload []byte) ([]byte, error) {
 		return json.Marshal(initGitRepoResponse{Error: "project path does not exist"})
 	}
 
-	// Check if already git repo
-	if gitutil.IsGitRepository(req.Path) {
-		return json.Marshal(initGitRepoResponse{Error: "a .git directory already exists at this path"})
+	// Normalize + validate the branch name up front so a bad value (e.g.
+	// a trailing space from the UI) fails cleanly before any state exists.
+	req.InitialBranch = gitutil.NormalizeBranchName(req.InitialBranch)
+	if err := gitutil.ValidateBranchName(req.InitialBranch); err != nil {
+		return json.Marshal(initGitRepoResponse{Error: err.Error()})
 	}
+
+	// NOTE: an existing .git is NOT an error — gitutil.InitGitRepository
+	// adopts it (retry-safe recovery from a previously failed init).
 
 	// Auto-init gate: only initialize an EMPTY project. Skips (without error)
 	// when the directory already holds real content, so an existing folder a

@@ -25,14 +25,17 @@ const POLL_INTERVAL_MS = 5_000;
  * consume the hook.
  */
 async function fetchDaemonList(): Promise<DaemonInfo[]> {
-  try {
-    const resp = await grpcClient
-      .daemonRegistry()
-      .listDaemons(create(ListDaemonsRequestSchema));
-    return resp.daemons;
-  } catch {
-    return [];
-  }
+  // Let failures THROW. React Query keeps the last successful result on
+  // error, so a transient RPC failure (auth-token refresh, proxy hiccup,
+  // api-server restart) leaves the UI showing the last-known daemon state.
+  // The old `catch { return [] }` resolved errors to an empty list, which
+  // REPLACED the cache — one failed poll flipped every consumer to
+  // "daemon disconnected" for at least a full 5s poll cycle even though
+  // the daemon was connected the whole time.
+  const resp = await grpcClient
+    .daemonRegistry()
+    .listDaemons(create(ListDaemonsRequestSchema));
+  return resp.daemons;
 }
 
 export function useDaemonStatus() {

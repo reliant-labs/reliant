@@ -1137,6 +1137,31 @@ class BackendManager {
     });
   }
 
+  /**
+   * Logout cleanup: drop the daemon.json entry for the current --server
+   * origin. Clears the PAT, owner sub, and stable daemon_id together so the
+   * next login mints fresh credentials and the server assigns a fresh daemon
+   * id (logout may precede a user switch). Best-effort — swallows errors so
+   * it never blocks the logout path.
+   *
+   * @returns {boolean} true if an entry was removed.
+   */
+  clearDaemonCredsForOrigin() {
+    try {
+      const removed = daemonCreds.deleteEntry({
+        apiUrl: this.apiUrl,
+        logger: log,
+      });
+      if (removed) {
+        log.info('[BackendManager] Cleared daemon.json entry for origin on logout:', this.apiUrl);
+      }
+      return removed;
+    } catch (e) {
+      log.warn('[BackendManager] Failed to clear daemon.json entry on logout:', e?.message || e);
+      return false;
+    }
+  }
+
   getPort() {
     return this.daemonPort;
   }

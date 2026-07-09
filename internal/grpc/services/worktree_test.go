@@ -14,10 +14,10 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -133,6 +133,9 @@ func (r *worktreeTestDaemonRouter) SubscribeProcessOutput(_ context.Context, _, 
 func (r *worktreeTestDaemonRouter) Close() error { return nil }
 func (r *worktreeTestDaemonRouter) EnqueueDaemonCommand(_ context.Context, _, _ string, _ []byte, _ int32) (int, error) {
 	return 0, nil
+}
+func (r *worktreeTestDaemonRouter) ResolveDaemonID(_ context.Context, _ string) (string, error) {
+	return "test-daemon-id", nil
 }
 
 // setupTestGitRepoWithRemote creates a git repo with a bare remote

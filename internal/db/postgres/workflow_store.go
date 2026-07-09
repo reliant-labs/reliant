@@ -29,6 +29,15 @@ func (s *workflowStore) CreateWorkflow(ctx context.Context, workflow *core.Workf
 		CreatedAt:       workflow.CreatedAt,
 		CompletedAt:     workflowPtrToNullTime(workflow.CompletedAt),
 	})
+	// CreateWorkflow uses INSERT ... ON CONFLICT (id) DO NOTHING, so an existing
+	// workflow ID is a no-op that returns no row (sql.ErrNoRows). This is the
+	// expected idempotent path for inline/loop child workflows that reuse the
+	// parent's workflow ID — treat it as success. Critically, DO NOTHING does not
+	// error at the Postgres level, so it does not abort the surrounding
+	// transaction (unlike a raw duplicate-key violation, SQLSTATE 25P02).
+	if err == sql.ErrNoRows {
+		return nil
+	}
 	return err
 }
 
