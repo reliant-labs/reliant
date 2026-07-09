@@ -13,7 +13,6 @@
 import { useCallback } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
-  ONBOARDING_STEPS,
   ONBOARDING_STEP_IDS,
   getNextStepId,
   getPreviousStepId,
@@ -162,13 +161,11 @@ export function useTourNavigation(): TourNavigation {
 
   const skipAll = useCallback(async () => {
     const store = useTourStore.getState();
-    // Mark every remaining (not-completed, not-skipped) step as skipped so
-    // the persistence layer reflects what the user did.
-    for (const step of ONBOARDING_STEPS) {
-      if (!store.completedSteps.has(step.id) && !store.skippedSteps.has(step.id)) {
-        await store.skipStep(step.id);
-      }
-    }
+    // Mark every remaining (not-completed, not-skipped) step as skipped in
+    // memory, then persist ONCE via markTourCompleted. Awaiting skipStep per
+    // step re-saved the entire tour state on every iteration (~N×3 sequential
+    // RPCs), which made "Skip tour" take ~10s.
+    store.markRemainingSkipped();
     await store.markTourCompleted();
     exitTour();
     useChatStore.getState().clearCurrentChat();

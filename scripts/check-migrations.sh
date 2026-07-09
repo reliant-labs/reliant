@@ -1,10 +1,9 @@
 #!/bin/bash
-# Validate migration naming/numbering for both SQLite and Postgres trees.
+# Validate migration naming/numbering for the Postgres migration tree.
 
 set -euo pipefail
 
 ROOT="internal/db/migrations"
-DIRS=("$ROOT/sqlite" "$ROOT/postgres")
 
 check_dir() {
   local dir="$1"
@@ -63,7 +62,6 @@ check_dir() {
 
 echo "🔍 Checking migration integrity..."
 
-check_dir "${DIRS[0]}" "sqlite"
-check_dir "${DIRS[1]}" "postgres"
+check_dir "$ROOT/postgres" "postgres"
 
 echo "✅ Migration check complete"

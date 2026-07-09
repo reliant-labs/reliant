@@ -20,7 +20,7 @@ import {
   upsertStringSetting,
   deleteSettingIfExists,
 } from "../lib/settingsPersistence";
-import { TOUR_SETTINGS_KEYS } from "../components/Onboarding/constants";
+import { TOUR_SETTINGS_KEYS, ONBOARDING_STEPS } from "../components/Onboarding/constants";
 import type { OnboardingStepId } from "../components/Onboarding/types";
 
 // ─── Store Interface ──────────────────────────────────────────────────────────
@@ -36,6 +36,13 @@ interface TourState {
   loadState: () => Promise<void>;
   completeStep: (stepId: OnboardingStepId) => Promise<void>;
   skipStep: (stepId: OnboardingStepId) => Promise<void>;
+  /**
+   * Mark every not-yet-completed, not-yet-skipped step as skipped in memory
+   * (firing per-step analytics) WITHOUT persisting. Callers batch this with a
+   * single trailing save — used by "Skip tour" so we don't re-persist the whole
+   * tour state once per step.
+   */
+  markRemainingSkipped: () => void;
   /** Mark the tour as completed (sets flag + analytics + persists). */
   markTourCompleted: () => Promise<void>;
   /** Reset all per-step progress so the tour can be restarted from scratch. */
@@ -127,6 +134,18 @@ export const useTourStore = create<TourState>((set, get) => ({
     await get().saveTourState();
   },
 
+  markRemainingSkipped: () => {
+    const { completedSteps, skippedSteps } = get();
+    const newSkipped = new Set(skippedSteps);
+    for (const step of ONBOARDING_STEPS) {
+      if (!completedSteps.has(step.id) && !newSkipped.has(step.id)) {
+        newSkipped.add(step.id);
+        trackEvent('tour_step_skipped', { step_id: step.id });
+      }
+    }
+    set({ skippedSteps: newSkipped });
+  },
+
   markTourCompleted: async () => {
     trackEvent('tour_completed', {
       completed_count: get().completedSteps.size,
@@ -183,18 +202,22 @@ export const useTourStore = create<TourState>((set, get) => ({
   saveTourState: async () => {
     const state = get();
     try {
-      await upsertStringSetting(
-        TOUR_SETTINGS_KEYS.COMPLETED,
-        state.hasCompletedOnboarding ? "true" : "false",
-      );
-      await upsertStringSetting(
-        TOUR_SETTINGS_KEYS.COMPLETED_STEPS,
-        JSON.stringify(Array.from(state.completedSteps)),
-      );
-      await upsertStringSetting(
-        TOUR_SETTINGS_KEYS.SKIPPED_STEPS,
-        JSON.stringify(Array.from(state.skippedSteps)),
-      );
+      // These three keys are independent — persist them concurrently instead of
+      // chaining awaits so a full tour save is one round-trip batch, not three.
+      await Promise.all([
+        upsertStringSetting(
+          TOUR_SETTINGS_KEYS.COMPLETED,
+          state.hasCompletedOnboarding ? "true" : "false",
+        ),
+        upsertStringSetting(
+          TOUR_SETTINGS_KEYS.COMPLETED_STEPS,
+          JSON.stringify(Array.from(state.completedSteps)),
+        ),
+        upsertStringSetting(
+          TOUR_SETTINGS_KEYS.SKIPPED_STEPS,
+          JSON.stringify(Array.from(state.skippedSteps)),
+        ),
+      ]);
     } catch (error) {
       logger.error("[TourStore] Failed to save tour state", error);
     }

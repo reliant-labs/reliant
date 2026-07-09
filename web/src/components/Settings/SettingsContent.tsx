@@ -1,4 +1,4 @@
-import { CombinedGeneralSettings } from "./CombinedGeneralSettings";
+import { AISettings } from "./AISettings";
 import { AboutSection } from "./AboutSection";
 import { DeveloperSettings } from "./DeveloperSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
@@ -26,9 +26,6 @@ const BillingSection = lazy(() =>
 );
 const EnvironmentsSection = lazy(() =>
   import("./cloud/environments").then((m) => ({ default: m.EnvironmentsSection }))
-);
-const ReliantAISection = lazy(() =>
-  import("./cloud/reliantAI").then((m) => ({ default: m.ReliantAISection }))
 );
 
 interface SettingsContentProps {
@@ -107,12 +104,7 @@ export function SettingsContent({
     if (activeSection === "developer") {
       return <DeveloperSettings />;
     }
-    return (
-      <CombinedGeneralSettings
-        providers={providers}
-        onProvidersUpdate={fetchProviderStatuses}
-      />
-    );
+    return null;
   };
 
   // Special handling for sections that need full height/width
@@ -142,24 +134,32 @@ export function SettingsContent({
     );
   }
 
+  // The "AI" section is a tabbed container (bring-your-own providers + managed
+  // Reliant AI). It gets its own full-height wrapper with a wider container so
+  // the Reliant AI tab's data tables have room; the providers tab renders inside
+  // its own narrow card (see AISettings).
+  if (activeSection === "general") {
+    return (
+      <div className="h-full overflow-auto px-8 py-8">
+        <div className="mx-auto max-w-5xl">
+          <AISettings
+            providers={providers}
+            onProvidersUpdate={fetchProviderStatuses}
+          />
+        </div>
+      </div>
+    );
+  }
+
   // Cloud settings sections. Rendered inside the `.cloud-settings` scoped
   // treatment (Inter + admin-like density) with a wider container than the
   // generic settings card so their data tables have room to breathe. The id →
   // component map is the contract the vertical agents plug into:
   //   billing        → <BillingSection/>      (./cloud/billing)
   //   environments   → <EnvironmentsSection/> (./cloud/environments)
-  //   reliant-ai     → <ReliantAISection/>    (./cloud/reliantAI)
-  if (
-    activeSection === "billing" ||
-    activeSection === "environments" ||
-    activeSection === "reliant-ai"
-  ) {
+  if (activeSection === "billing" || activeSection === "environments") {
     const CloudSection =
-      activeSection === "billing"
-        ? BillingSection
-        : activeSection === "environments"
-          ? EnvironmentsSection
-          : ReliantAISection;
+      activeSection === "billing" ? BillingSection : EnvironmentsSection;
     return (
       <div className="cloud-settings h-full overflow-auto bg-background px-8 py-8">
         <div className="mx-auto max-w-5xl">

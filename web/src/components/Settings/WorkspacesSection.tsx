@@ -89,7 +89,7 @@ export function WorkspacesSection() {
               </span>
               {activeDaemon?.hostname && (
                 <span className="rounded-full border border-border bg-background px-2.5 py-1">
-                  Cloud machine: {activeDaemon.hostname}
+                  Machine: {activeDaemon.hostname}
                 </span>
               )}
               {isLoading && <span>Refreshing…</span>}

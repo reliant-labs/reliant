@@ -192,6 +192,70 @@ const LONG_TIMEOUT_METHODS: Record<string, number> = {
   StreamProcessOutput: 0,
 };
 
+// ─── In-flight unary RPC registry (starvation diagnostics) ───────────
+// During the 2026-07-09 incident a hung daemon command (worktree.git_changes)
+// left GetWorktreeChanges pending; every later unary RPC queued behind it and
+// the console showed NOTHING until the first client timeout fired — with no
+// hint of what was blocking. This registry lets the timeout handler print a
+// snapshot of every in-flight unary RPC so a single console line identifies
+// the wedge.
+let _nextInFlightId = 0;
+const _inFlightUnary = new Map<number, { method: string; startedAt: number }>();
+
+const IN_FLIGHT_DESCRIBE_CAP = 8;
+
+/**
+ * Pure formatter for the in-flight diagnostic line, e.g.
+ * "7 in flight, oldest: GetWorktreeChanges 43s [GetWorktreeChanges:43s, ListApprovalsByChat:9s, +1 more]"
+ * Exported for tests; production code goes through describeInFlight().
+ */
+export function formatInFlight(
+  entries: ReadonlyArray<{ method: string; startedAt: number }>,
+  now: number,
+): string {
+  if (entries.length === 0) return "0 in flight";
+  const oldestFirst = [...entries].sort((a, b) => a.startedAt - b.startedAt);
+  const age = (e: { startedAt: number }) =>
+    `${Math.round((now - e.startedAt) / 1000)}s`;
+  const shown = oldestFirst
+    .slice(0, IN_FLIGHT_DESCRIBE_CAP)
+    .map((e) => `${e.method}:${age(e)}`);
+  const overflow =
+    oldestFirst.length > IN_FLIGHT_DESCRIBE_CAP
+      ? `, +${oldestFirst.length - IN_FLIGHT_DESCRIBE_CAP} more`
+      : "";
+  const oldest = oldestFirst[0];
+  return `${oldestFirst.length} in flight, oldest: ${oldest.method} ${age(oldest)} [${shown.join(", ")}${overflow}]`;
+}
+
+/** Snapshot of currently in-flight unary RPCs, oldest first. */
+export function describeInFlight(): string {
+  return formatInFlight([..._inFlightUnary.values()], Date.now());
+}
+
+// Rate-limit rpc-timeout Sentry events: a wedged connection times out many
+// queued RPCs in a burst, and each event would carry the same diagnostic
+// snapshot — one event per minute captures the incident without flooding.
+const RPC_TIMEOUT_REPORT_INTERVAL_MS = 60_000;
+let _lastRpcTimeoutReportAt = 0;
+
+function reportRpcTimeout(
+  method: string,
+  timeoutMs: number,
+  diagnostics: string,
+): void {
+  const now = Date.now();
+  if (now - _lastRpcTimeoutReportAt < RPC_TIMEOUT_REPORT_INTERVAL_MS) return;
+  _lastRpcTimeoutReportAt = now;
+  // captureMessage on an uninitialized SDK is a safe no-op, and initSentry()
+  // is skipped in dev (see lib/sentry.ts), so this only reports from packaged
+  // builds where Sentry is actually running.
+  Sentry.captureMessage(
+    `rpc-timeout: ${method} after ${timeoutMs}ms (${diagnostics})`,
+    "warning",
+  );
+}
+
 // Timeout interceptor to prevent requests from hanging indefinitely.
 // Races the RPC against a timer since req.signal is readonly and timeoutMs
 // is consumed by the transport before interceptors run.
@@ -204,8 +268,22 @@ const timeoutInterceptor: Interceptor = (next) => async (req) => {
     return next(req);
   }
 
+  const inFlightId = _nextInFlightId++;
+  _inFlightUnary.set(inFlightId, {
+    method: methodName,
+    startedAt: Date.now(),
+  });
+
   const controller = new AbortController();
   const timer = setTimeout(() => {
+    // Log BEFORE aborting so the snapshot still includes this RPC and every
+    // other call queued behind the same wedged connection — this line alone
+    // would have diagnosed the 2026-07-09 starvation from the console.
+    const diagnostics = describeInFlight();
+    logger.error(
+      `[gRPC Client] ${methodName} timed out after ${timeoutMs}ms — ${diagnostics}`,
+    );
+    reportRpcTimeout(methodName, timeoutMs, diagnostics);
     controller.abort(
       new ConnectError(
         `${methodName} timed out after ${timeoutMs}ms`,
@@ -221,6 +299,7 @@ const timeoutInterceptor: Interceptor = (next) => async (req) => {
   };
   if (req.signal.aborted) {
     clearTimeout(timer);
+    _inFlightUnary.delete(inFlightId);
     throw ConnectError.from(req.signal.reason);
   }
   req.signal.addEventListener("abort", onUpstreamAbort);
@@ -236,6 +315,7 @@ const timeoutInterceptor: Interceptor = (next) => async (req) => {
     ]);
   } finally {
     clearTimeout(timer);
+    _inFlightUnary.delete(inFlightId);
     req.signal.removeEventListener("abort", onUpstreamAbort);
   }
 };

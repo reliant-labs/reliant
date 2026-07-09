@@ -3,11 +3,11 @@
  *
  * In "preview" mode: shows a compact vertical list of the spawned thread's
  * text snippets and tool call rows (status dot + name + detail), growing
- * downward with scroll.
+ * downward inline with the chat (no nested scroll).
  * In "inline" mode: falls through to the generic renderer.
  */
 
-import { memo, useMemo, useRef, useEffect } from "react";
+import { memo, useMemo } from "react";
 import {
   AlertCircle,
   Check,
@@ -131,7 +131,6 @@ function findSpawnWorkflow(
 
 function SpawnPreview({ ctx }: ToolContentProps) {
   const { chatId, toolCallId, isCompleted, hasFailed } = ctx;
-  const scrollRef = useRef<HTMLDivElement>(null);
 
   const activeThreads = useActiveThreads(chatId || "");
   const spawnNodeId = `spawn-${toolCallId}`;
@@ -210,18 +209,15 @@ function SpawnPreview({ ctx }: ToolContentProps) {
     });
   }, [allMessages, spawnThreadId, isDone]);
 
-  // Auto-scroll to bottom
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [summaries]);
-
   const hasContent = summaries.some((s) => s.textSnippet || s.toolCalls.length > 0);
 
   return (
     <div className="tool-content-spawn w-full">
       {hasContent ? (
-        <div ref={scrollRef} style={{ height: FIXED_HEIGHT }} className="overflow-y-auto">
+        <div
+          style={{ height: FIXED_HEIGHT }}
+          className="overflow-hidden flex flex-col justify-end"
+        >
           {summaries.map((s) => (
             <div key={s.id} className="px-2 py-1 border-b border-border/10 last:border-0">
               {s.textSnippet && (

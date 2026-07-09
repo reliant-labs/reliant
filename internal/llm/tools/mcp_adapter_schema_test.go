@@ -1,10 +1,96 @@
 package tools
 
 import (
+	"encoding/json"
 	"testing"
 
+	"github.com/invopop/jsonschema"
 	"github.com/reliant-labs/reliant/internal/mcp"
 )
+
+// TestParseSchema_PropertyNamedType reproduces the chrome-devtools navigate_page
+// schema, which declares a property literally named "type". The normalizer must
+// treat that key as a property name and preserve its subschema, not collapse it
+// to the bare string "object" (which invopop rejects, forcing a loose fallback).
+func TestParseSchema_PropertyNamedType(t *testing.T) {
+	adapter := &MCPToolAdapter{
+		serverName: "chrome-devtools",
+		tool: mcp.Tool{
+			Name: "navigate_page",
+			InputSchema: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"type": map[string]interface{}{
+						"type":        "string",
+						"enum":        []interface{}{"url", "back", "forward", "reload"},
+						"description": "Navigate the page by URL, back or forward.",
+					},
+					"url": map[string]interface{}{
+						"type": "string",
+					},
+				},
+			},
+		},
+	}
+
+	adapter.parseSchema()
+
+	if adapter.schema.Properties == nil {
+		t.Fatalf("expected schema properties to be preserved, got loose fallback")
+	}
+	typeProp, ok := adapter.schema.Properties.Get("type")
+	if !ok {
+		t.Fatalf("expected 'type' property to be present in parsed schema")
+	}
+	if typeProp.Type != "string" {
+		t.Fatalf("expected 'type' property to be a string subschema, got %q", typeProp.Type)
+	}
+	if len(typeProp.Enum) != 4 {
+		t.Fatalf("expected 'type' property enum to be preserved, got %#v", typeProp.Enum)
+	}
+}
+
+// TestNormalizeSchemaForInvopop_PreservesPropertyNamedType is a focused unit test
+// for the normalizer: a property named "type" must remain a subschema map.
+func TestNormalizeSchemaForInvopop_PreservesPropertyNamedType(t *testing.T) {
+	input := map[string]interface{}{
+		"type": []interface{}{"object", "null"},
+		"properties": map[string]interface{}{
+			"type": map[string]interface{}{
+				"type": []interface{}{"string", "null"},
+			},
+		},
+	}
+
+	normalized, ok := normalizeSchemaForInvopop(input).(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected map output")
+	}
+	if normalized["type"] != "object" {
+		t.Fatalf("expected root type object, got %#v", normalized["type"])
+	}
+	props, ok := normalized["properties"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected properties map")
+	}
+	typeProp, ok := props["type"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected 'type' property to remain a subschema map, got %#v", props["type"])
+	}
+	if typeProp["type"] != "string" {
+		t.Fatalf("expected nested type keyword normalized to string, got %#v", typeProp["type"])
+	}
+
+	// Ensure it round-trips through invopop without error.
+	data, err := json.Marshal(normalized)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+	var schema jsonschema.Schema
+	if err := json.Unmarshal(data, &schema); err != nil {
+		t.Fatalf("invopop unmarshal failed (regression): %v", err)
+	}
+}
 
 func TestNormalizeSchemaType_ArrayPrefersConcreteNonNull(t *testing.T) {
 	typeValue := []interface{}{"object", "null"}

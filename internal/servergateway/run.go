@@ -254,6 +254,19 @@ func Run(ctx context.Context, opts Options) error {
 		"subjectPattern", daemonquery.SubjectQueryPrefix+"<daemonID>.status",
 	)
 
+	// Per-user any-live responder. Subscribes to
+	// daemon.v1.query.user.<userID>.any-live when a user's FIRST daemon
+	// connects to this gateway and unsubscribes when their LAST one
+	// disconnects, answering from the in-memory connection map. This gives
+	// daemonliveness.ReachableByUser the same NATS-first pull-RPC path the
+	// per-daemon variant already has — no responders anywhere means no
+	// gateway holds a stream for the user.
+	userLivenessResponder := daemonquery.NewUserResponder(nc, toolsDaemonService)
+	toolsDaemonService.AddConnectionListener(userLivenessResponder)
+	logging.Info("Per-user daemon liveness responder started",
+		"subjectPattern", daemonquery.SubjectQueryPrefix+"user.<userID>.any-live",
+	)
+
 	// Cross-process activity ping subscriber. The control-plane LLM proxy
 	// publishes to daemon.v1.activity.user.<userID> when forwarding a call;
 	// we bump lastActivity for that user's daemons so the status query

@@ -253,7 +253,7 @@ export function DaemonConnectingGate({
             )}
           >
             <ExternalLink className="h-4 w-4" />
-            View environment
+            View machine
           </button>
           <button
             type="button"

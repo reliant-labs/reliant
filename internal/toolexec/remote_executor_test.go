@@ -53,6 +53,9 @@ func (r *routerStub) SubscribeProcessOutput(_ context.Context, _, _ string, _ bo
 	return ch, func() { close(ch) }, nil
 }
 func (r *routerStub) Close() error { return nil }
+func (r *routerStub) ResolveDaemonID(_ context.Context, _ string) (string, error) {
+	return "test-daemon-id", nil
+}
 
 func TestNewRemoteExecutor_AllowsUnconfiguredRouterUntilBound(t *testing.T) {
 	exec := NewRemoteExecutor(nil)

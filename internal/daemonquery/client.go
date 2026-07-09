@@ -57,3 +57,42 @@ func Query(ctx context.Context, nc *nats.Conn, daemonID string, timeout time.Dur
 	}
 	return status, nil
 }
+
+// QueryUserAnyLive asks "does any gateway currently hold a daemon stream for
+// this user?" via the per-user any-live subject. Same pull-RPC semantics as
+// Query: any gateway replica holding at least one stream for the user is
+// subscribed and answers; NATS request/reply picks one.
+//
+// Returns ErrUnavailable when no gateway is subscribed within the timeout
+// (nats.ErrNoResponders or a deadline miss with no answer). That is the
+// canonical "no daemon connected for this user" signal — a replica whose last
+// stream for the user tore down has unsubscribed rather than answering
+// live=false, so silence is the correct aggregate.
+func QueryUserAnyLive(ctx context.Context, nc *nats.Conn, userID string, timeout time.Duration) (UserLiveness, error) {
+	if nc == nil {
+		return UserLiveness{}, fmt.Errorf("daemonquery: nil NATS connection")
+	}
+
+	reqCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	msg, err := nc.RequestWithContext(reqCtx, SubjectUserAnyLive(userID), nil)
+	if err != nil {
+		if errors.Is(err, nats.ErrNoResponders) {
+			return UserLiveness{}, ErrUnavailable
+		}
+		// Same reasoning as Query: a deadline miss with no response is
+		// indistinguishable from "no subscriber" — both mean no gateway holds
+		// any of this user's daemon streams right now.
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, nats.ErrTimeout) {
+			return UserLiveness{}, ErrUnavailable
+		}
+		return UserLiveness{}, fmt.Errorf("daemonquery: request: %w", err)
+	}
+
+	liveness, err := ParseUserLiveness(msg.Data)
+	if err != nil {
+		return UserLiveness{}, fmt.Errorf("daemonquery: parse reply: %w", err)
+	}
+	return liveness, nil
+}

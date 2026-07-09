@@ -25,6 +25,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -50,7 +51,11 @@ type daemonClient struct {
 	hostname   string
 	platform   string
 	cwd        string
-	bootCfg    bootstrap.DaemonBootstrapConfig
+	// serverURL is the API server origin these credentials belong to. Used
+	// as the per-origin key into ~/.reliant/daemon.json when persisting the
+	// server-assigned daemonID after registration. Empty in server mode.
+	serverURL string
+	bootCfg   bootstrap.DaemonBootstrapConfig
 
 	mcpManager    *mcp.Manager
 	localExecutor *toolexec.LocalToolExecutor
@@ -167,19 +172,23 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 	SetTerminalManager(terminal.NewManager())
 	SetMCPManager(mcpManager)
 
-	// daemonID is left empty here — the gateway is the authoritative source
-	// and assigns it via RegistrationAck once the stream is up.
+	// daemonID is seeded from persisted per-origin credentials (bootCfg.DaemonID)
+	// so a returning daemon re-asserts its stable identity in the registration
+	// message. On first-ever registration it's empty; the gateway assigns one
+	// via RegistrationAck and we persist it back to daemon.json.
 	daemonName := bootCfg.Name
 	if daemonName == "" {
 		daemonName = hostname
 	}
 
 	return &daemonClient{
+		daemonID:   bootCfg.DaemonID,
 		daemonName: daemonName,
-		// daemonID and userID are set later from RegistrationAck (gateway-derived from PAT).
+		// userID is set later from RegistrationAck (gateway-derived from PAT).
 		hostname:          hostname,
 		platform:          runtime.GOOS,
 		cwd:               cwd,
+		serverURL:         bootCfg.ServerURL,
 		bootCfg:           bootCfg,
 		mcpManager:        mcpManager,
 		localExecutor:     localExec,
@@ -191,6 +200,41 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 		terminalPumps:     newTerminalPumpTracker(),
 		processOutputSubs: newProcessOutputSubTracker(),
 	}, nil
+}
+
+// persistDaemonID writes the server-assigned daemon id into the per-origin
+// entry of ~/.reliant/daemon.json so it survives daemon restarts and machine
+// hostname changes. It's a no-op when there's no server origin to key by
+// (server mode / in-process runtime), when the id is empty, or when the
+// persisted value already matches — avoiding needless disk writes on every
+// reconnect. Best-effort: a write failure is logged but never fatal, since
+// the daemon is already connected and functional.
+func (d *daemonClient) persistDaemonID(daemonID string) {
+	if daemonID == "" || strings.TrimSpace(d.serverURL) == "" {
+		return
+	}
+	creds, err := auth.ReadDaemonCredentials(d.serverURL)
+	if err != nil {
+		logging.Warn(logPrefix+" Failed to read daemon credentials while persisting daemon id",
+			"error", err, "serverURL", d.serverURL)
+		return
+	}
+	if creds == nil {
+		// No persisted entry for this origin (e.g. --token flow that never
+		// wrote creds). Nothing to update — the id lives only in memory.
+		return
+	}
+	if creds.DaemonID == daemonID {
+		return
+	}
+	creds.DaemonID = daemonID
+	if err := auth.WriteDaemonCredentials(creds); err != nil {
+		logging.Warn(logPrefix+" Failed to persist assigned daemon id",
+			"error", err, "serverURL", d.serverURL, "daemonID", daemonID)
+		return
+	}
+	logging.Info(logPrefix+" Persisted stable daemon id for origin",
+		"daemonID", daemonID, "serverURL", d.serverURL)
 }
 
 // registerLabels builds the daemon-registration label map. It advertises the
@@ -337,6 +381,11 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 			Name:         d.daemonName,
 			DaemonType:   "local",
 			Labels:       d.registerLabels(),
+			// Re-assert our persisted stable identity (empty on first-ever
+			// registration). The gateway trusts it for unbound PATs so identity
+			// survives restarts and hostname changes instead of being re-derived
+			// from the (volatile) hostname.
+			DaemonId: d.daemonID,
 		}},
 	}
 	if err = stream.Send(register); err != nil {
@@ -402,6 +451,9 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, msg *reliantv1.S
 			if m.RegistrationAck.DaemonId != "" {
 				d.daemonID = m.RegistrationAck.DaemonId
 				logging.Info(logPrefix+" Daemon identity assigned by gateway", "daemonID", d.daemonID)
+				// Persist the assigned id per-origin so it survives restarts and
+				// hostname changes; next reconnect re-asserts it in Register.
+				d.persistDaemonID(m.RegistrationAck.DaemonId)
 			}
 			if m.RegistrationAck.UserId != "" {
 				d.userID = m.RegistrationAck.UserId
@@ -419,7 +471,22 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, msg *reliantv1.S
 		if m.LoadProjectConfigs == nil {
 			return nil
 		}
-		return d.sendLoadProjectConfigResponse(m.LoadProjectConfigs.ProjectPath, m.LoadProjectConfigs.RequestId)
+		// Dispatch async like DaemonCommand/KillProcess above. Building the
+		// response runs full skill/workflow/preset discovery (including forge
+		// skill enumeration via forgecli) and can take tens of seconds on a
+		// large project. Handling it inline wedged the stream RECEIVE loop:
+		// no DaemonCommand could even be dispatched until discovery finished,
+		// so every daemon-routed RPC timed out ("nats: timeout") and the
+		// stalled stream eventually died with EOF, retriggering the same
+		// LoadProjectConfigs on reconnect — a self-sustaining outage loop
+		// (2026-07-09 incident).
+		go func(req *reliantv1.LoadProjectConfigsRequest) {
+			if err := d.sendLoadProjectConfigResponse(req.ProjectPath, req.RequestId); err != nil {
+				logging.Warn(logPrefix+" Failed to send project config response",
+					"projectPath", req.ProjectPath, "requestID", req.RequestId, "error", err)
+			}
+		}(m.LoadProjectConfigs)
+		return nil
 
 	case *reliantv1.ServerMessage_WatchProjectConfigs:
 		if m.WatchProjectConfigs == nil {
@@ -525,7 +592,26 @@ func (d *daemonClient) handleDaemonCommand(req *reliantv1.DaemonCommandRequest) 
 		defer d.unregisterCancel(req.RequestId)
 	}
 
+	// Watchdog: daemon commands can wedge on network calls (the 2026-07-09
+	// incident was worktree.git_changes hanging on a git remote), and the
+	// stream response is only sent on completion — without this nothing is
+	// logged anywhere while a command hangs.
+	const slowCommandThreshold = 10 * time.Second
+	start := time.Now()
+	watchdog := time.AfterFunc(slowCommandThreshold, func() {
+		logging.Warn(logPrefix+" daemon command still running",
+			"commandType", req.CommandType, "requestID", req.RequestId)
+	})
+
 	resultPayload, err := defaultRegistry.Handle(ctx, req.CommandType, req.Payload)
+
+	watchdog.Stop()
+	if elapsed := time.Since(start); elapsed >= slowCommandThreshold {
+		logging.Warn(logPrefix+" daemon command completed slowly",
+			"commandType", req.CommandType, "requestID", req.RequestId,
+			"elapsed", elapsed.Round(time.Millisecond).String(),
+			"failed", err != nil)
+	}
 
 	resp := &reliantv1.DaemonMessage{
 		Message: &reliantv1.DaemonMessage_DaemonCommandResponse{
@@ -1075,7 +1161,43 @@ func collectRepoMemories(projectPath string) (map[string][]byte, []byte) {
 // .reliant/skills, .claude/skills, etc. are scanned in addition to the project
 // root's. Each skill carries a Source field identifying which repo it came from
 // ("" for project root) so the LLM can disambiguate same-named skills.
+// skillsIndexCache memoizes indexSkills per project path. Discovery is by far
+// the most expensive part of snapshot building — forge skill enumeration via
+// forgecli plus full-definition loads, across the project root AND every repo
+// source — and during the 2026-07-09 incident repeated snapshot builds pinned
+// the daemon above 150% CPU for minutes. Skills change rarely mid-session; a
+// short TTL keeps edits visible without paying discovery on every rebuild.
+// Cached slices are shared across callers — treat them as read-only.
+var (
+	skillsIndexMu    sync.Mutex
+	skillsIndexCache = map[string]skillsIndexEntry{}
+)
+
+type skillsIndexEntry struct {
+	skills  []*reliantv1.IndexedSkill
+	blob    []byte
+	expires time.Time
+}
+
+const skillsIndexTTL = 60 * time.Second
+
 func indexSkills(projectPath string) ([]*reliantv1.IndexedSkill, []byte) {
+	skillsIndexMu.Lock()
+	if e, ok := skillsIndexCache[projectPath]; ok && time.Now().Before(e.expires) {
+		skillsIndexMu.Unlock()
+		return e.skills, e.blob
+	}
+	skillsIndexMu.Unlock()
+
+	skills, blob := buildSkillsIndex(projectPath)
+
+	skillsIndexMu.Lock()
+	skillsIndexCache[projectPath] = skillsIndexEntry{skills: skills, blob: blob, expires: time.Now().Add(skillsIndexTTL)}
+	skillsIndexMu.Unlock()
+	return skills, blob
+}
+
+func buildSkillsIndex(projectPath string) ([]*reliantv1.IndexedSkill, []byte) {
 	repoSources := discoverRepoSources(context.Background(), projectPath)
 	snapshot := catalog.DiscoverAll(catalog.DiscoverInput{
 		ProjectPath:         projectPath,

@@ -246,13 +246,18 @@ func (c *ClaudeCodeClient) callerSystemBlocks(prompts []string) []anthropic.Text
 // turn 1 omits it). We deliberately OMIT diagnostics rather than send a
 // blank/incorrect previous_message_id.
 func (c *ClaudeCodeClient) applyClaudeCodeExtras(params *anthropic.MessageNewParams) {
-	extras := map[string]any{
-		// Sent on EVERY Claude Code request, all thinking tiers.
-		"context_management": map[string]any{
+	extras := map[string]any{}
+
+	// The clear_thinking_20251015 context-management strategy is only valid when
+	// thinking is enabled or adaptive; the API rejects it otherwise (400
+	// invalid_request_error). Gate it on the same predicate getThinkingConfig
+	// uses so thinking-disabled requests (e.g. compaction summaries) don't 400.
+	if c.isAdaptiveThinking() || c.isThinkingEnabled() {
+		extras["context_management"] = map[string]any{
 			"edits": []any{
 				map[string]any{"type": "clear_thinking_20251015", "keep": "all"},
 			},
-		},
+		}
 	}
 	// fable-5 falls back to opus-4.8 server-side.
 	if c.options.Model.APIModel == "claude-fable-5" {

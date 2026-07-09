@@ -197,6 +197,14 @@ function writeDaemonStore(store, opts = {}) {
  * old user's PAT, the daemon registers under the wrong owner, and the new
  * user's ListDaemons returns empty.
  *
+ * daemon_id preservation: the Go daemon owns `daemon_id` — the server assigns
+ * a stable identity on first registration and the daemon persists it into the
+ * origin's entry. This preflight only ever rewrites the PAT, so it MUST carry
+ * any existing `daemon_id` forward. Clobbering it would orphan the daemon's
+ * identity on every PAT re-mint, re-triggering the exact hostname-churn bug
+ * the stable id exists to prevent. A fresh entry leaves daemon_id unset so
+ * the server assigns one.
+ *
  * @param {{ apiUrl: string, gatewayUrl?: string, pat: string, sub?: string,
  *           filePath?: string, logger?: { warn?: Function } }} args
  */
@@ -209,14 +217,47 @@ function upsertEntry({ apiUrl, gatewayUrl, pat, sub, filePath, logger }) {
     throw new Error('refusing to write empty PAT to daemon.json');
   }
   const store = readDaemonStore({ filePath, logger });
+  const prior = store[key];
+  const priorDaemonId =
+    prior && typeof prior.daemon_id === 'string' ? prior.daemon_id : '';
   store[key] = {
     pat,
     server_url: apiUrl,
     gateway_url: gatewayUrl || '',
     registered_at: new Date().toISOString(),
     ...(sub ? { sub } : {}),
+    ...(priorDaemonId ? { daemon_id: priorDaemonId } : {}),
   };
   writeDaemonStore(store, { filePath });
+}
+
+/**
+ * Remove the credentials entry for `apiUrl`'s origin from daemon.json.
+ * Mirrors Go's DeleteDaemonCredentials — a no-op when no entry exists.
+ *
+ * Called on logout: dropping the whole origin entry clears the PAT, the
+ * owner `sub`, AND the stable `daemon_id` together. That's deliberate —
+ * logout may precede a user switch, so the next login should mint a fresh
+ * PAT and let the server assign a fresh daemon id rather than resurrecting
+ * the prior user's identity.
+ *
+ * Returns true if an entry was removed, false if there was nothing to remove
+ * (missing origin, invalid apiUrl). Never throws on a valid apiUrl.
+ *
+ * @param {{ apiUrl: string, filePath?: string,
+ *           logger?: { warn?: Function } }} args
+ * @returns {boolean}
+ */
+function deleteEntry({ apiUrl, filePath, logger }) {
+  const key = endpointKey(apiUrl);
+  if (!key) return false;
+  const store = readDaemonStore({ filePath, logger });
+  if (!Object.prototype.hasOwnProperty.call(store, key)) {
+    return false;
+  }
+  delete store[key];
+  writeDaemonStore(store, { filePath });
+  return true;
 }
 
 /**
@@ -593,6 +634,7 @@ module.exports = {
   readDaemonStore,
   writeDaemonStore,
   upsertEntry,
+  deleteEntry,
   entryOwnerSub,
   mintDaemonPAT,
   ensureDaemonPATForOrigin,

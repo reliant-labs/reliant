@@ -11,10 +11,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
+
+	"github.com/reliant-labs/reliant/internal/gitutil"
+	"github.com/reliant-labs/reliant/internal/logging"
 )
 
 func init() {
@@ -166,6 +171,22 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 	// repos on master/develop/etc. don't fail with "invalid reference 'main'".
 	if req.BaseBranch == "" {
 		req.BaseBranch = getRepositoryDefaultBranch(ctx, req.ProjectPath)
+	}
+
+	// A repo with an unborn HEAD (created by `git init` with no commit — the
+	// new-project auto-init path, or a user's manual `git init`) has .git but
+	// no ref for the base branch to resolve, so `git worktree add` below fails
+	// with "invalid reference". Give it a root commit first. This is a no-op
+	// once the repo has any commit. Base the worktree off the branch that now
+	// carries the commit so we don't reintroduce the same unresolved-ref error
+	// if auto-detect guessed a name that differs from the unborn branch.
+	if !gitutil.HasCommits(ctx, req.ProjectPath) {
+		if err := gitutil.EnsureInitialCommit(ctx, req.ProjectPath); err != nil {
+			return json.Marshal(worktreeCreateResponse{Error: fmt.Sprintf("failed to seed initial commit: %v", err)})
+		}
+		if current, err := gitutil.GetCurrentBranch(ctx, req.ProjectPath); err == nil && current != "" {
+			req.BaseBranch = current
+		}
 	}
 
 	// Resolve the on-disk worktree path.
@@ -638,6 +659,7 @@ func handleWorktreeGitChanges(ctx context.Context, payload []byte) ([]byte, erro
 
 	// Parse git status with diffs
 	files := parseGitStatusWithDiffs(ctx, req.WorktreePath, string(statusOutput))
+	files = capWorktreeChangesDiffs(req.WorktreePath, files)
 	resp.Files = files
 	resp.TotalFiles = int32(len(files))
 
@@ -1450,9 +1472,47 @@ func resolveCurrentBranch(ctx context.Context, repoPath string) (string, error) 
 	return branch, nil
 }
 
+// defaultBranchCache memoizes getRepositoryDefaultBranch per repo path for
+// the daemon's lifetime. The default branch effectively never changes, yet
+// this helper sits inside worktree.git_changes — a read the UI polls every
+// few seconds — and its network fallbacks (`gh repo view`, `git remote show
+// origin`) each cost ~1s on a good day and hang the whole poll pipeline on a
+// bad one (GitHub slowness, credential-helper prompt in the daemon's
+// non-interactive env). Resolve once, serve from memory after.
+var defaultBranchCache sync.Map // repoPath -> string
+
+// defaultBranchNetworkTimeout bounds the two network fallbacks. They are
+// decorative for the polled read paths — better to fall through to the local
+// heuristics than to stall a poll behind a slow GitHub round-trip.
+const defaultBranchNetworkTimeout = 5 * time.Second
+
 func getRepositoryDefaultBranch(ctx context.Context, repoPath string) string {
-	// Try gh CLI first
-	ghCmd := exec.CommandContext(ctx, "gh", "repo", "view", "--json", "defaultBranchRef", "-q", ".defaultBranchRef.name")
+	if cached, ok := defaultBranchCache.Load(repoPath); ok {
+		return cached.(string)
+	}
+	branch := resolveRepositoryDefaultBranch(ctx, repoPath)
+	defaultBranchCache.Store(repoPath, branch)
+	return branch
+}
+
+func resolveRepositoryDefaultBranch(ctx context.Context, repoPath string) string {
+	// LOCAL first: origin/HEAD is set on clone and answers in single-digit
+	// milliseconds. Output is "origin/<branch>" with --short.
+	symrefCmd := exec.CommandContext(ctx, "git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+	symrefCmd.Dir = repoPath
+	if out, err := symrefCmd.Output(); err == nil {
+		ref := strings.TrimSpace(string(out))
+		if branch := strings.TrimPrefix(ref, "origin/"); branch != "" && branch != ref {
+			return branch
+		}
+	}
+
+	// Network fallbacks, time-boxed. Only reached when origin/HEAD is unset
+	// (e.g. a repo added as a remote after init).
+	netCtx, cancel := context.WithTimeout(ctx, defaultBranchNetworkTimeout)
+	defer cancel()
+
+	ghCmd := exec.CommandContext(netCtx, "gh", "repo", "view", "--json", "defaultBranchRef", "-q", ".defaultBranchRef.name")
 	ghCmd.Dir = repoPath
 	output, err := ghCmd.Output()
 	if err == nil {
@@ -1463,7 +1523,7 @@ func getRepositoryDefaultBranch(ctx context.Context, repoPath string) string {
 	}
 
 	// Fall back to git remote show origin
-	remoteCmd := exec.CommandContext(ctx, "git", "remote", "show", "origin")
+	remoteCmd := exec.CommandContext(netCtx, "git", "remote", "show", "origin")
 	remoteCmd.Dir = repoPath
 	remoteOutput, err := remoteCmd.Output()
 	if err == nil {
@@ -1488,6 +1548,57 @@ func getRepositoryDefaultBranch(ctx context.Context, repoPath string) string {
 	}
 
 	return "main"
+}
+
+// worktreeChangesDiffBudget bounds the total bytes of diff text in a
+// git_changes response. The reply crosses NATS, whose default max_payload is
+// 1MB, and JSON string-escaping roughly doubles raw diff bytes — a dirty tree
+// with 84 modified files marshaled to 1.7MB and the reply was silently
+// undeliverable (2026-07-09 incident). 512KB of raw diff keeps the marshaled
+// reply comfortably under the cap while leaving normal working trees exact.
+const worktreeChangesDiffBudget = 512 * 1024
+
+// worktreeChangesDiffKeep is how much of an oversized diff is retained when
+// the budget forces truncation — enough for a preview, not the whole thing.
+const worktreeChangesDiffKeep = 4 * 1024
+
+const worktreeChangesTruncationNote = "\n... [diff truncated: worktree changes exceeded the transport budget]"
+
+// capWorktreeChangesDiffs enforces worktreeChangesDiffBudget by truncating
+// the LARGEST diffs first, so the file list and every reasonably-sized diff
+// stay exact and only pathological entries lose their tails.
+func capWorktreeChangesDiffs(repoPath string, files []worktreeFileChange) []worktreeFileChange {
+	total := 0
+	for i := range files {
+		total += len(files[i].Diff)
+	}
+	if total <= worktreeChangesDiffBudget {
+		return files
+	}
+
+	order := make([]int, len(files))
+	for i := range order {
+		order[i] = i
+	}
+	sort.Slice(order, func(a, b int) bool { return len(files[order[a]].Diff) > len(files[order[b]].Diff) })
+
+	truncated := 0
+	for _, idx := range order {
+		if total <= worktreeChangesDiffBudget {
+			break
+		}
+		d := files[idx].Diff
+		if len(d) <= worktreeChangesDiffKeep {
+			break // remaining diffs are all small; nothing meaningful left to trim
+		}
+		total -= len(d) - worktreeChangesDiffKeep - len(worktreeChangesTruncationNote)
+		files[idx].Diff = d[:worktreeChangesDiffKeep] + worktreeChangesTruncationNote
+		truncated++
+	}
+	logging.Warn("[worktree.git_changes] diff budget exceeded — truncated largest diffs",
+		"path", repoPath, "truncatedFiles", truncated, "remainingBytes", total,
+		"budget", worktreeChangesDiffBudget)
+	return files
 }
 
 func parseGitStatusWithDiffs(ctx context.Context, repoPath, statusOutput string) []worktreeFileChange {

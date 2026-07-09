@@ -2,7 +2,7 @@
 # Post-rebase hook - automatically fixes migration conflicts after rebase
 # This should be installed as .git/hooks/post-rebase
 
-MIGRATION_DIR="internal/db/migrations/sqlite"
+MIGRATION_DIR="internal/db/migrations/postgres"
 
 # Only run if migrations directory exists
 if [ ! -d "$MIGRATION_DIR" ]; then

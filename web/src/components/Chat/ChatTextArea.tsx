@@ -1009,7 +1009,7 @@ export const ChatTextArea = forwardRef<HTMLDivElement, ChatTextAreaProps>(functi
       data-testid="chat-input"
       data-placeholder={placeholder || defaultPlaceholder}
       data-empty={value.trim().length === 0 ? "true" : "false"}
-      className="chat-composer w-full px-0 py-0 text-sm chat-input disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 ease-in-out overflow-y-auto scroll-smooth"
+      className="chat-composer w-full px-0 py-0 text-sm chat-input disabled:opacity-50 disabled:cursor-not-allowed overflow-y-auto"
       style={{
         color: "var(--chat-input-text)",
         backgroundColor: "transparent",

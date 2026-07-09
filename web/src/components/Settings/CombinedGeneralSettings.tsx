@@ -44,6 +44,12 @@ interface CombinedGeneralSettingsProps {
     configured: boolean;
   }>;
   onProvidersUpdate?: () => void;
+  /**
+   * Switches the parent AI settings container to its "Reliant AI" tab. Provided
+   * by {@link AISettings} only when the managed-AI surface is available; when
+   * undefined the "Manage AI keys & spend" CTA is hidden.
+   */
+  onOpenReliantAI?: () => void;
 }
 
 // Providers visible in the manual-entry UI (other providers are hidden but implementations remain).
@@ -85,8 +91,9 @@ const providerConfigs = {
       "Access AI models through your Reliant organization (Gemini, Claude, GPT). Managed automatically via your login — no API key required.",
     usesOAuth: false,
     // External means: no key/OAuth input here. Instead of an API-key field we
-    // render in-app links to the managed Reliant AI surface (/settings/reliant-ai)
-    // and billing (/settings/billing) — auth is JWT-managed, not key-managed.
+    // render in-app links to the managed Reliant AI surface (the "Reliant AI"
+    // tab of the AI settings section) and billing (/settings/billing) — auth is
+    // JWT-managed, not key-managed.
     external: true as const,
   },
   openrouter: {
@@ -390,6 +397,7 @@ const parseErrorMessage = (errorText: string, provider: string): string => {
 export function CombinedGeneralSettings({
   providers,
   onProvidersUpdate,
+  onOpenReliantAI,
 }: CombinedGeneralSettingsProps) {
   // Add Provider State
   const [selectedProvider, setSelectedProvider] = useState<string>("");
@@ -762,18 +770,15 @@ export function CombinedGeneralSettings({
                         >
                           Billing & subscription
                         </button>
-                        <button
-                          className="px-4 py-2 text-sm font-medium border border-primary/40 bg-primary/10 text-primary rounded-md transition-colors hover:bg-primary/20 flex items-center gap-2"
-                          onClick={() =>
-                            navigate({
-                              to: "/settings/$section",
-                              params: { section: "reliant-ai" },
-                            })
-                          }
-                        >
-                          <Settings2 className="h-4 w-4" />
-                          Manage AI keys &amp; spend
-                        </button>
+                        {onOpenReliantAI && (
+                          <button
+                            className="px-4 py-2 text-sm font-medium border border-primary/40 bg-primary/10 text-primary rounded-md transition-colors hover:bg-primary/20 flex items-center gap-2"
+                            onClick={onOpenReliantAI}
+                          >
+                            <Settings2 className="h-4 w-4" />
+                            Manage AI keys &amp; spend
+                          </button>
+                        )}
                       </div>
                     </div>
                   );

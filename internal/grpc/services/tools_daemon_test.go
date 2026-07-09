@@ -10,9 +10,9 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/stretchr/testify/require"
 )
@@ -105,6 +105,46 @@ func (f *fakeDaemonRepo) ListDaemonsByUserID(_ context.Context, _ string) ([]*db
 // (userID, hostname) stable across reconnects. The tests below pin its three
 // branches so a refactor can't silently regress to "mint a fresh ID per
 // reconnect" — the failure mode this helper exists to prevent.
+
+// resolveDaemonID owns the precedence PAT-bound > client-asserted stable id >
+// hostname fallback. The lazy resolveUnbound thunk must NOT run when a
+// higher-precedence id is present — the calls counter proves the DB lookup is
+// skipped, which is the whole point of the stable-id path (identity survives
+// hostname churn without touching the daemons table).
+func TestResolveDaemonIDPrefersPATBoundID(t *testing.T) {
+	called := false
+	got := resolveDaemonID("pat-bound", "asserted", func() string {
+		called = true
+		return "fallback"
+	})
+	require.Equal(t, "pat-bound", got)
+	require.False(t, called, "hostname fallback must not run when PAT-bound id present")
+}
+
+func TestResolveDaemonIDTrustsClientAssertedIDForUnboundPAT(t *testing.T) {
+	called := false
+	got := resolveDaemonID("", "stable-from-daemon-json", func() string {
+		called = true
+		return "fallback"
+	})
+	require.Equal(t, "stable-from-daemon-json", got)
+	require.False(t, called, "hostname fallback must not run when client asserts a stable id")
+}
+
+func TestResolveDaemonIDTrimsAssertedID(t *testing.T) {
+	got := resolveDaemonID("", "  stable-id  ", func() string { return "fallback" })
+	require.Equal(t, "stable-id", got)
+}
+
+func TestResolveDaemonIDFallsBackToHostnameForOlderDaemons(t *testing.T) {
+	called := false
+	got := resolveDaemonID("", "   ", func() string {
+		called = true
+		return "hostname-derived"
+	})
+	require.Equal(t, "hostname-derived", got)
+	require.True(t, called, "hostname fallback must run when no id is asserted")
+}
 
 func TestResolveUnboundDaemonIDReusesExistingByHostname(t *testing.T) {
 	existingID := "existing-daemon-id"

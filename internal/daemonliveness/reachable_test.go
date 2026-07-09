@@ -72,7 +72,7 @@ func oldIsDaemonOnlineByID(ctx context.Context, repo *fakeRepo, daemonID string)
 // exactly the baseline `oldIsDaemonOnline` evaluates against.
 func TestDivergence_NewAndOldAgree(t *testing.T) {
 	now := time.Now().UTC()
-	fresh := now.Add(-5 * time.Second) // well within DefaultStaleThreshold (30s)
+	fresh := now.Add(-5 * time.Second) // well within DefaultStaleThreshold (90s)
 	stale := now.Add(-2 * time.Minute) // well outside DefaultStaleThreshold
 	repo := &fakeRepo{
 		userLastSeen: map[string]time.Time{

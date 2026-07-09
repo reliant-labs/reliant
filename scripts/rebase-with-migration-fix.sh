@@ -20,7 +20,7 @@ echo "📡 Fetching latest changes..."
 git fetch origin "$TARGET_BRANCH"
 
 # Show migration status before rebase
-MIGRATION_DIR="internal/db/migrations/sqlite"
+MIGRATION_DIR="internal/db/migrations/postgres"
 if [ -d "$MIGRATION_DIR" ]; then
     echo ""
     echo "📋 Current migrations in your branch:"
