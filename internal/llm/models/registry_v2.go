@@ -27,6 +27,7 @@ type ModelRegistry struct {
 var ProviderPriority = map[string]int{
 	"anthropic":  1,
 	"codex":      1,
+	"copilot":    1,
 	"openai":     1,
 	"gemini":     1,
 	"xai":        1,

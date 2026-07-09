@@ -341,6 +341,13 @@ func (def ModelDefinition) ToModel() Model {
 		if def.DriverSettings.ReasoningSummaryMode != "" {
 			model.ReasoningSummaryMode = ReasoningSummaryMode(def.DriverSettings.ReasoningSummaryMode)
 		}
+		model.ThinkingMode = def.DriverSettings.ThinkingMode
+	}
+
+	// Default ThinkingMode to "budget" when unset so existing models keep
+	// their current (budget_tokens-based) thinking behavior.
+	if model.ThinkingMode == "" {
+		model.ThinkingMode = "budget"
 	}
 
 	// Set visibility-based flags
@@ -627,6 +634,18 @@ type DriverSettings struct {
 	// YAML key: reasoning_summary_mode
 	// Default: "" (uses API default behavior)
 	ReasoningSummaryMode string `yaml:"reasoning_summary_mode,omitempty" json:"reasoning_summary_mode,omitempty"`
+
+	// ThinkingMode selects how the Anthropic driver requests extended thinking.
+	// Only relevant for the Anthropic/Claude Code driver.
+	//
+	// Valid values:
+	//   - "budget": thinking:{type:"enabled",budget_tokens:N} (default; older models)
+	//   - "adaptive": thinking:{type:"adaptive"} + output_config:{effort:<level>};
+	//     budget_tokens/temperature must NOT be sent (they 400 on these models).
+	//
+	// YAML key: thinking_mode
+	// Default: "" (treated as "budget" by ToModel)
+	ThinkingMode string `yaml:"thinking_mode,omitempty" json:"thinking_mode,omitempty"`
 }
 
 // ModelVisibility controls where a model appears.

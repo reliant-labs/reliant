@@ -127,6 +127,16 @@ export default defineConfig({
         changeOrigin: true,
         ws: false,
       },
+      // Interactive terminal is a RAW WebSocket (not a Connect RPC), served by
+      // reliant-api at /api/v2/terminal/ws (internal/grpc/server.go). It needs
+      // its own entry with ws:true so Vite upgrades + forwards the connection;
+      // without this the browser opens ws://<vite>/api/v2/terminal/ws, Vite has
+      // no rule for it, and the terminal hangs forever on "Connecting…".
+      "/api/v2/terminal/ws": {
+        target: process.env.VITE_API_URL || "http://127.0.0.1:3090",
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
   test: {

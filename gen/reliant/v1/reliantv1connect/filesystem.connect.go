@@ -71,6 +71,9 @@ const (
 	// FileSystemServiceListDirectoryProcedure is the fully-qualified name of the FileSystemService's
 	// ListDirectory RPC.
 	FileSystemServiceListDirectoryProcedure = "/reliant.v1.FileSystemService/ListDirectory"
+	// FileSystemServiceCreateDirectoryProcedure is the fully-qualified name of the FileSystemService's
+	// CreateDirectory RPC.
+	FileSystemServiceCreateDirectoryProcedure = "/reliant.v1.FileSystemService/CreateDirectory"
 )
 
 // FileSystemServiceClient is a client for the reliant.v1.FileSystemService service.
@@ -100,6 +103,10 @@ type FileSystemServiceClient interface {
 	// ListDirectory lists entries in an arbitrary filesystem directory.
 	// Used by the project picker in browser mode (no Electron).
 	ListDirectory(context.Context, *connect.Request[v1.ListDirectoryRequest]) (*connect.Response[v1.ListDirectoryResponse], error)
+	// CreateDirectory creates a new directory at an arbitrary absolute path.
+	// Used by the project picker in browser mode to make a "New folder" while
+	// choosing where to open/create a project on the remote daemon.
+	CreateDirectory(context.Context, *connect.Request[v1.CreateDirectoryRequest]) (*connect.Response[v1.CreateDirectoryResponse], error)
 }
 
 // NewFileSystemServiceClient constructs a client for the reliant.v1.FileSystemService service. By
@@ -185,6 +192,12 @@ func NewFileSystemServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(fileSystemServiceMethods.ByName("ListDirectory")),
 			connect.WithClientOptions(opts...),
 		),
+		createDirectory: connect.NewClient[v1.CreateDirectoryRequest, v1.CreateDirectoryResponse](
+			httpClient,
+			baseURL+FileSystemServiceCreateDirectoryProcedure,
+			connect.WithSchema(fileSystemServiceMethods.ByName("CreateDirectory")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -202,6 +215,7 @@ type fileSystemServiceClient struct {
 	searchFiles        *connect.Client[v1.SearchFilesRequest, v1.SearchFilesResponse]
 	replaceInFiles     *connect.Client[v1.ReplaceInFilesRequest, v1.ReplaceInFilesResponse]
 	listDirectory      *connect.Client[v1.ListDirectoryRequest, v1.ListDirectoryResponse]
+	createDirectory    *connect.Client[v1.CreateDirectoryRequest, v1.CreateDirectoryResponse]
 }
 
 // GetFileTree calls reliant.v1.FileSystemService.GetFileTree.
@@ -264,6 +278,11 @@ func (c *fileSystemServiceClient) ListDirectory(ctx context.Context, req *connec
 	return c.listDirectory.CallUnary(ctx, req)
 }
 
+// CreateDirectory calls reliant.v1.FileSystemService.CreateDirectory.
+func (c *fileSystemServiceClient) CreateDirectory(ctx context.Context, req *connect.Request[v1.CreateDirectoryRequest]) (*connect.Response[v1.CreateDirectoryResponse], error) {
+	return c.createDirectory.CallUnary(ctx, req)
+}
+
 // FileSystemServiceHandler is an implementation of the reliant.v1.FileSystemService service.
 type FileSystemServiceHandler interface {
 	// GetFileTree returns the file tree structure for a project
@@ -291,6 +310,10 @@ type FileSystemServiceHandler interface {
 	// ListDirectory lists entries in an arbitrary filesystem directory.
 	// Used by the project picker in browser mode (no Electron).
 	ListDirectory(context.Context, *connect.Request[v1.ListDirectoryRequest]) (*connect.Response[v1.ListDirectoryResponse], error)
+	// CreateDirectory creates a new directory at an arbitrary absolute path.
+	// Used by the project picker in browser mode to make a "New folder" while
+	// choosing where to open/create a project on the remote daemon.
+	CreateDirectory(context.Context, *connect.Request[v1.CreateDirectoryRequest]) (*connect.Response[v1.CreateDirectoryResponse], error)
 }
 
 // NewFileSystemServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -372,6 +395,12 @@ func NewFileSystemServiceHandler(svc FileSystemServiceHandler, opts ...connect.H
 		connect.WithSchema(fileSystemServiceMethods.ByName("ListDirectory")),
 		connect.WithHandlerOptions(opts...),
 	)
+	fileSystemServiceCreateDirectoryHandler := connect.NewUnaryHandler(
+		FileSystemServiceCreateDirectoryProcedure,
+		svc.CreateDirectory,
+		connect.WithSchema(fileSystemServiceMethods.ByName("CreateDirectory")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.FileSystemService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case FileSystemServiceGetFileTreeProcedure:
@@ -398,6 +427,8 @@ func NewFileSystemServiceHandler(svc FileSystemServiceHandler, opts ...connect.H
 			fileSystemServiceReplaceInFilesHandler.ServeHTTP(w, r)
 		case FileSystemServiceListDirectoryProcedure:
 			fileSystemServiceListDirectoryHandler.ServeHTTP(w, r)
+		case FileSystemServiceCreateDirectoryProcedure:
+			fileSystemServiceCreateDirectoryHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -453,4 +484,8 @@ func (UnimplementedFileSystemServiceHandler) ReplaceInFiles(context.Context, *co
 
 func (UnimplementedFileSystemServiceHandler) ListDirectory(context.Context, *connect.Request[v1.ListDirectoryRequest]) (*connect.Response[v1.ListDirectoryResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.ListDirectory is not implemented"))
+}
+
+func (UnimplementedFileSystemServiceHandler) CreateDirectory(context.Context, *connect.Request[v1.CreateDirectoryRequest]) (*connect.Response[v1.CreateDirectoryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.CreateDirectory is not implemented"))
 }

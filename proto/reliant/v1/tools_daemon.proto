@@ -127,6 +127,11 @@ message ServerMessage {
     ProcessOutputSubscribeMessage process_output_subscribe = 12;
     ProcessOutputUnsubscribeMessage process_output_unsubscribe = 13;
 
+    // Terminal output streaming (subscribe-driven, mirrors process output).
+    // Starting the PTY output pump is deferred until this arrives so the
+    // initial shell prompt is buffered until a subscriber is attached.
+    TerminalOutputSubscribeMessage terminal_output_subscribe = 15;
+
     // Stream initiation. Sent as the first message on a new ConnectGateway
     // stream so the underlying HTTP request is actually dispatched (connect-go
     // defers makeRequest until the first client Send). Carries no payload —
@@ -397,6 +402,14 @@ message TerminalSessionEvent {
   EventType event_type = 2;
   string message = 3;        // Error message or additional info
   int32 pid = 4;              // PID of the shell process (on created)
+}
+
+// TerminalOutputSubscribeMessage subscribes to a terminal session's output
+// (server -> daemon). Mirrors ProcessOutputSubscribeMessage: the daemon defers
+// starting the PTY output pump until this arrives, so the initial shell prompt
+// is buffered until the full subscriber chain is established.
+message TerminalOutputSubscribeMessage {
+  string session_id = 1;
 }
 
 // ============================================

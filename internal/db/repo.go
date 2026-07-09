@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	core "github.com/reliant-labs/reliant/internal/db/core"
 	postgresstore "github.com/reliant-labs/reliant/internal/db/postgres"
 	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
 	"go.temporal.io/sdk/activity"
@@ -206,6 +206,14 @@ func isRetryableError(err error) bool {
 		strings.Contains(errMsg, "could not serialize") ||
 		strings.Contains(errMsg, "deadlock") ||
 		strings.Contains(errMsg, "transaction conflict") {
+		return true
+	}
+
+	// SQLite: SQLITE_BUSY / SQLITE_LOCKED transient contention (e.g. "database is
+	// locked", "database table is locked", "database schema is locked", "database
+	// is busy"). These resolve once the competing transaction completes, so retry.
+	if strings.Contains(errMsg, "locked") ||
+		strings.Contains(errMsg, "busy") {
 		return true
 	}
 

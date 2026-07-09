@@ -105,6 +105,16 @@ func NewWorkflowSimulator(protoWf *reliantv1.Workflow, config SimulatorConfig) *
 		config.WorkflowInputs = make(map[string]interface{})
 	}
 
+	// Apply the workflow's declared input-schema defaults (and zero values for
+	// optional fields) so node conditions and templates can access inputs the
+	// same way the runtime does — otherwise a condition like "inputs.refine_prompt"
+	// hits a CEL "no such key" error when the scenario omits an optional input.
+	// Mirrors the runtime's ApplyDefaultsForRuntime usage (inline_workflow_executor.go,
+	// loop_executor.go) for semantic parity.
+	if len(protoWf.GetInputs()) > 0 {
+		config.WorkflowInputs = ApplyDefaultsForRuntime(config.WorkflowInputs, protoWf.GetInputs())
+	}
+
 	// Pre-populate node outputs from InitialState
 	nodeOutputs := make(map[string]interface{})
 	for nodeID, outputs := range config.InitialState {

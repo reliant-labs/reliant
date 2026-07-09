@@ -5,8 +5,8 @@ import (
 	"context"
 	"time"
 
-	core "github.com/reliant-labs/reliant/internal/db/core"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	core "github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // Repository defines the interface for all database operations
@@ -179,6 +179,10 @@ type Repository interface {
 	GetCodexAuthTokens(ctx context.Context, userID string) (*core.CodexAuthTokens, error)
 	SetCodexAuthTokens(ctx context.Context, userID string, tokens core.CodexAuthTokens) error
 	DeleteCodexAuthTokens(ctx context.Context, userID string) error
+
+	GetCopilotAuthTokens(ctx context.Context, userID string) (*core.CopilotAuthTokens, error)
+	SetCopilotAuthTokens(ctx context.Context, userID string, tokens core.CopilotAuthTokens) error
+	DeleteCopilotAuthTokens(ctx context.Context, userID string) error
 
 	GetClaudeAuthTokens(ctx context.Context, userID string) (*core.ClaudeAuthTokens, error)
 	SetClaudeAuthTokens(ctx context.Context, userID string, tokens core.ClaudeAuthTokens) error

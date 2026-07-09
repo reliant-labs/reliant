@@ -16,12 +16,12 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/google/uuid"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -745,7 +745,16 @@ func (s *ToolsDaemonService) handleIncoming(ctx context.Context, conn *daemonCon
 		s.mu.Lock()
 		conn.lastActivity = now
 		s.mu.Unlock()
-		s.statePublisher.Activity(conn.daemonID, conn.userID, conn.daemonType)
+		// conn.lastActivity (above) feeds the dead-connection sweeper and MUST
+		// bump on every message, heartbeats included. But workspace idle-suspend
+		// keys off statePublisher.Activity -> Workspace.Status.LastActivity, and a
+		// heartbeat is the daemon's own 15s keepalive, NOT user activity. Counting
+		// heartbeats as activity refreshes LastActivity forever, so the idle reaper
+		// never fires and the workspace never auto-suspends. Only publish real,
+		// user-driven inbound traffic as activity.
+		if _, isHeartbeat := msg.Message.(*reliantv1.DaemonMessage_Heartbeat); !isHeartbeat {
+			s.statePublisher.Activity(conn.daemonID, conn.userID, conn.daemonType)
+		}
 
 		switch m := msg.Message.(type) {
 		case *reliantv1.DaemonMessage_ToolResponse:
@@ -772,6 +781,21 @@ func (s *ToolsDaemonService) handleIncoming(ctx context.Context, conn *daemonCon
 
 		case *reliantv1.DaemonMessage_Heartbeat:
 			s.publishDaemonHeartbeat(ctx, conn.userID, conn.daemonID, time.Now().UTC())
+			// Renew the reachability lease (last_stream_activity) on the
+			// keepalive so an idle-but-connected daemon doesn't decay to
+			// "offline". We write daemon_attachment DIRECTLY here (the gateway
+			// already owns direct writes to this table — see teardownConnection's
+			// DeleteDaemonAttachment) instead of publishing a daemonstate event.
+			// A dedicated EventHeartbeat would land on the shared daemon.v1.state.*
+			// stream, whose authoritative consumer lives in the control-plane repo
+			// and STRICTLY rejects unknown event types ("daemon state event unknown
+			// type") — so it would both error-spam and, worse, drop the event
+			// without renewing the lease. A direct touch renews the lease
+			// unconditionally and never feeds the workspace idle-suspend timer
+			// (which keys off EventActivity), preserving the exclusion above.
+			if err := s.database.TouchDaemonAttachmentIfNewer(ctx, conn.daemonID, time.Now().UTC()); err != nil {
+				logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to renew daemon reachability lease", "error", err, "daemonID", conn.daemonID)
+			}
 
 		case *reliantv1.DaemonMessage_ProjectDiscovery:
 			if err := s.handleProjectDiscovery(ctx, conn, m.ProjectDiscovery); err != nil {
@@ -1899,9 +1923,40 @@ func (s *ToolsDaemonService) SubscribeTerminalOutput(userID string, sessionID st
 
 	ch := make(chan *toolexec.TerminalOutputEvent, 64)
 
+	// Register the subscriber channel BEFORE sending the subscribe message so no
+	// dispatched output can be dropped between the daemon starting its pump and
+	// the channel being registered.
 	conn.terminalSubsMu.Lock()
 	conn.terminalSubs[sessionID] = append(conn.terminalSubs[sessionID], ch)
 	conn.terminalSubsMu.Unlock()
+
+	// Send the terminal-output-subscribe message to the daemon. This is what
+	// starts the PTY output pump on the daemon side — mirroring the
+	// process-output subscribe flow — so the initial shell prompt is buffered
+	// until the full subscriber chain is established.
+	subMsg := &reliantv1.ServerMessage{
+		Message: &reliantv1.ServerMessage_TerminalOutputSubscribe{
+			TerminalOutputSubscribe: &reliantv1.TerminalOutputSubscribeMessage{
+				SessionId: sessionID,
+			},
+		},
+	}
+	if err := s.sendToUserDaemon(userID, subMsg); err != nil {
+		// Roll back the registration on failure.
+		conn.terminalSubsMu.Lock()
+		subs := conn.terminalSubs[sessionID]
+		for i, sub := range subs {
+			if sub == ch {
+				conn.terminalSubs[sessionID] = append(subs[:i], subs[i+1:]...)
+				break
+			}
+		}
+		if len(conn.terminalSubs[sessionID]) == 0 {
+			delete(conn.terminalSubs, sessionID)
+		}
+		conn.terminalSubsMu.Unlock()
+		return nil, nil, fmt.Errorf("send terminal output subscribe: %w", err)
+	}
 
 	unsub := func() {
 		conn.terminalSubsMu.Lock()

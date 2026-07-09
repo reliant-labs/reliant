@@ -21,6 +21,7 @@ import {
   SearchFilesRequestSchema,
   ReplaceInFilesRequestSchema,
   ListDirectoryRequestSchema,
+  CreateDirectoryRequestSchema,
   FileViewerKind,
   type DirectoryEntry,
   type SearchResult as ProtoSearchResult,
@@ -551,6 +552,15 @@ export async function listDirectory(path: string): Promise<{ path: string; entri
   const request = create(ListDirectoryRequestSchema, { path });
   const response = await client.listDirectory(request);
   return { path: response.path, entries: response.entries };
+}
+
+// createDirectory makes a new directory at an arbitrary absolute path on the
+// daemon (mkdir -p). Used by the project picker's "New folder" action.
+export async function createDirectory(path: string): Promise<{ path: string }> {
+  const client = getDaemonFileSystemClient();
+  const request = create(CreateDirectoryRequestSchema, { path });
+  const response = await client.createDirectory(request);
+  return { path: response.path };
 }
 
 export type { DirectoryEntry };

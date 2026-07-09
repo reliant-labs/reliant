@@ -6,12 +6,35 @@ import (
 	"go/token"
 	"io/fs"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 	"testing"
 )
+
+// generatedFileMarker matches the standard Go "generated code" header
+// (see `go help generate`). Files bearing this marker are machine-generated
+// and legitimately contain node-type strings as data, so they are excluded
+// from the raw-literal guard just like the explicitly listed generators.
+var generatedFileMarker = regexp.MustCompile(`^// Code generated .* DO NOT EDIT\.$`)
+
+// isGeneratedFile reports whether the parsed file carries the standard
+// generated-code marker in a comment before the package clause.
+func isGeneratedFile(file *ast.File) bool {
+	for _, group := range file.Comments {
+		if group.Pos() >= file.Package {
+			break
+		}
+		for _, comment := range group.List {
+			if generatedFileMarker.MatchString(comment.Text) {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 // TestNoRawNodeTypeLiteralsInProductionFiles guards against introducing new raw
 // node-type string literals in production code.
@@ -140,10 +163,10 @@ func TestNoRawNodeTypeLiteralsInProductionFiles(t *testing.T) {
 		}
 		relPath = filepath.ToSlash(relPath)
 
-		// Skip generated files and code generators — they necessarily
-		// contain string literals as data.
+		// Skip hand-written code generators — they necessarily contain
+		// node-type string literals as data. Machine-generated files are
+		// skipped separately below via their generated-code marker.
 		skipFiles := map[string]struct{}{
-			"yaml/bindings_generated.go":       {},
 			"yaml/cmd/yamlbindingsgen/main.go": {},
 		}
 		if _, skip := skipFiles[relPath]; skip {
@@ -151,9 +174,16 @@ func TestNoRawNodeTypeLiteralsInProductionFiles(t *testing.T) {
 		}
 
 		fset := token.NewFileSet()
-		parsedFile, err := parser.ParseFile(fset, path, nil, 0)
+		parsedFile, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
 		if err != nil {
 			return err
+		}
+
+		// Skip machine-generated files (e.g. docgen/v3schema output). They
+		// carry the standard "// Code generated ... DO NOT EDIT." marker and
+		// contain node-type strings as data, not production references.
+		if isGeneratedFile(parsedFile) {
+			return nil
 		}
 
 		ast.Inspect(parsedFile, func(n ast.Node) bool {

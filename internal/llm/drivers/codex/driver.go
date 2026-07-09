@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/openai/openai-go/v3"
@@ -30,21 +32,50 @@ const (
 	CodexBaseURL = "https://chatgpt.com/backend-api/codex"
 
 	// CodexVersion is the version header to send.
-	// Keep aligned with a current @openai/codex (CLI) release; backend may gate on this.
-	CodexVersion = "0.124.0"
+	// Keep aligned with a current codex-tui (CLI) release; backend may gate on this.
+	CodexVersion = "0.143.0"
 
-	// CodexUserAgent is the user agent string
-	CodexUserAgent = "Codex Desktop/0.124.0"
+	// CodexOriginator identifies the client to the Codex backend.
+	CodexOriginator = "codex-tui"
+
+	// CodexUserAgent is the user agent string, matching the codex-tui CLI identity.
+	CodexUserAgent = "codex-tui/0.143.0 (Mac OS 14.3.0; arm64) Apple_Terminal/453 (codex-tui; 0.143.0)"
+
+	// CodexBetaFeatures advertises the beta features the codex-tui client opts into.
+	CodexBetaFeatures = "remote_compaction_v2"
 )
+
+// codexInstallationNamespace is a fixed namespace UUID used to derive a stable,
+// per-user installation_id via UUIDv5 (SHA-1). It has no meaning beyond seeding a
+// deterministic derivation; keep it constant so derived ids stay stable forever.
+var codexInstallationNamespace = uuid.MustParse("6f0d3c2a-7b1e-4a5c-9e8d-3f2b1a0c4d5e")
+
+// deriveInstallationID returns a stable installation_id for the given Reliant user.
+// Real codex-tui persists installation_id per install; we instead derive it
+// deterministically from the user id (UUIDv5) so it is stable across restarts and
+// turns, unique per user, and requires NO storage. When userID is empty (dev / no
+// authenticated user) we fall back to a random UUID so behavior is unchanged.
+//
+// keyID is a stable per-credential discriminator (the ChatGPT account id) so that
+// two upstream accounts belonging to the same Reliant user derive DISTINCT
+// installation ids — otherwise one "installation" would span multiple accounts,
+// which providers that enforce one-account-per-device (e.g. Codex) may flag.
+func deriveInstallationID(userID, keyID string) string {
+	if userID == "" {
+		return uuid.New().String()
+	}
+	return uuid.NewSHA1(codexInstallationNamespace, []byte(userID+":"+keyID+":codex-installation")).String()
+}
 
 // CodexClient implements the LLM driver interface for the Codex API
 // using the official openai-go SDK with a custom base URL and OAuth token auth.
 type CodexClient struct {
-	options     llm.DriverOptions
-	client      openai.Client
-	accountID   string // Account ID extracted from JWT
-	accessToken string // OAuth access token
-	sessionID   string
+	options        llm.DriverOptions
+	client         openai.Client
+	accountID      string // Account ID extracted from JWT
+	accessToken    string // OAuth access token
+	sessionID      string
+	installationID string // Stable per-process installation identifier (codex-tui telemetry)
 }
 
 // Name returns the name of the driver
@@ -59,21 +90,42 @@ func NewClient(opts llm.DriverOptions) (*CodexClient, error) {
 		opts.ReasoningEffort = "medium"
 	}
 
-	sessionID := uuid.New().String()
+	// Session-scoped ids (session-id / thread-id / x-codex-window-id) must be stable
+	// across all turns of one conversation, matching real codex-tui. Source them from
+	// the caller-provided per-conversation SessionID; only mint a fresh one when the
+	// caller supplies none (preserving prior behavior).
+	sessionID := ""
+	if opts.SessionID != nil {
+		sessionID = strings.TrimSpace(*opts.SessionID)
+	}
+	if sessionID == "" {
+		sessionID = uuid.New().String()
+	}
 
 	client := &CodexClient{
 		options:   opts,
 		sessionID: sessionID,
+		// installation_id is DERIVED (not persisted) from the Reliant user id so it is
+		// stable per user across restarts/turns without any storage. See deriveInstallationID.
+		installationID: deriveInstallationID(opts.UserID, opts.AccountUUID),
 	}
 
-	// Common SDK options for all auth paths
+	// Common SDK options for all auth paths.
+	// These mirror the session-scoped headers the codex-tui CLI sends. Per-request
+	// headers (x-client-request-id, x-codex-turn-metadata) are attached per call.
+	//
+	// HTTP-vs-WS note: the ground-truth capture is a WebSocket handshake. WS-only
+	// headers (Upgrade/Connection/Sec-WebSocket-*, and openai-beta:
+	// responses_websockets=...) are intentionally NOT sent over the HTTP transport.
 	sdkOpts := []option.RequestOption{
 		option.WithBaseURL(CodexBaseURL),
 		option.WithHeader("version", CodexVersion),
-		option.WithHeader("x-oai-web-search-eligible", "true"),
-		option.WithHeader("session_id", sessionID),
+		option.WithHeader("originator", CodexOriginator),
 		option.WithHeader("user-agent", CodexUserAgent),
-		option.WithHeader("originator", "Codex Desktop"),
+		option.WithHeader("x-codex-beta-features", CodexBetaFeatures),
+		option.WithHeader("session-id", sessionID),
+		option.WithHeader("thread-id", sessionID),
+		option.WithHeader("x-codex-window-id", sessionID+":0"),
 	}
 
 	bearerToken := strings.TrimSpace(opts.BearerToken)
@@ -392,6 +444,72 @@ func (c *CodexClient) convertTools(toolList []tools.Tool) ([]responses.ToolUnion
 	return result, nil
 }
 
+// turnContext holds the per-request identifiers the codex-tui client sends as
+// headers and echoes into the request body's client_metadata.
+type turnContext struct {
+	requestID        string // x-client-request-id
+	turnID           string
+	windowID         string
+	turnMetadataJSON string // x-codex-turn-metadata (JSON string)
+	startedAtMs      int64
+}
+
+// newTurnContext builds a fresh per-turn identity matching the shape codex-tui sends.
+func (c *CodexClient) newTurnContext() turnContext {
+	requestID := uuid.New().String()
+	turnID := uuid.New().String()
+	windowID := c.sessionID + ":0"
+	startedAtMs := time.Now().UnixMilli()
+
+	meta := map[string]any{
+		"installation_id":         c.installationID,
+		"session_id":              c.sessionID,
+		"thread_id":               c.sessionID,
+		"turn_id":                 turnID,
+		"window_id":               windowID,
+		"request_kind":            "turn",
+		"thread_source":           "user",
+		"sandbox":                 "seatbelt",
+		"turn_started_at_unix_ms": startedAtMs,
+	}
+	metaJSON, _ := json.Marshal(meta) //nolint:errcheck
+
+	return turnContext{
+		requestID:        requestID,
+		turnID:           turnID,
+		windowID:         windowID,
+		turnMetadataJSON: string(metaJSON),
+		startedAtMs:      startedAtMs,
+	}
+}
+
+// requestOptions returns the per-request SDK options (correlation header capture
+// plus the per-turn codex-tui headers) for a given turn.
+func (c *CodexClient) requestOptions(tc turnContext, into **http.Response) []option.RequestOption {
+	return []option.RequestOption{
+		option.WithResponseInto(into),
+		option.WithHeader("x-client-request-id", tc.requestID),
+		option.WithHeader("x-codex-turn-metadata", tc.turnMetadataJSON),
+	}
+}
+
+// applyClientMetadata attaches the Codex backend's client_metadata extension to the
+// request body. It is not a typed OpenAI Responses field, so it goes through
+// SetExtraFields. Values mirror what codex-tui echoes for a turn.
+func (c *CodexClient) applyClientMetadata(params *responses.ResponseNewParams, tc turnContext) {
+	params.SetExtraFields(map[string]any{
+		"client_metadata": map[string]any{
+			"x-codex-window-id":                  tc.windowID,
+			"turn_id":                            tc.turnID,
+			"x-codex-ws-stream-request-start-ms": strconv.FormatInt(tc.startedAtMs, 10),
+			"x-codex-installation-id":            c.installationID,
+			"session_id":                         c.sessionID,
+			"thread_id":                          c.sessionID,
+			"x-codex-turn-metadata":              tc.turnMetadataJSON,
+		},
+	})
+}
+
 // buildParams constructs the SDK request params for both streaming and non-streaming paths
 func (c *CodexClient) buildParams(prompts []string, messages []message.Message, toolList []tools.Tool) (responses.ResponseNewParams, error) {
 	inputItems := c.convertMessages(messages)
@@ -411,6 +529,11 @@ func (c *CodexClient) buildParams(prompts []string, messages []message.Message, 
 		ParallelToolCalls: openai.Bool(true),
 		Store:             openai.Bool(false),
 		ToolChoice:        responses.ResponseNewParamsToolChoiceUnion{OfToolChoiceMode: openai.Opt(responses.ToolChoiceOptionsAuto)},
+		// codex-tui pins verbosity low; this matches the capture and suits terse
+		// agentic tool-use loops. There is no per-request verbosity option to plumb.
+		Text: responses.ResponseTextConfigParam{Verbosity: responses.ResponseTextConfigVerbosityLow},
+		// Prompt cache key mirrors codex-tui, which keys on the session/thread id.
+		PromptCacheKey: openai.String(c.sessionID),
 	}
 
 	// Set instructions from prompts
@@ -485,13 +608,15 @@ func (c *CodexClient) buildParams(prompts []string, messages []message.Message, 
 
 // SendMessages sends messages to the Codex API and returns a complete response
 func (c *CodexClient) SendMessages(ctx context.Context, prompts []string, messages []message.Message, toolList []tools.Tool) (*llm.DriverResponse, error) {
+	tc := c.newTurnContext()
 	params, err := c.buildParams(prompts, messages, toolList)
 	if err != nil {
 		return nil, fmt.Errorf("invalid codex request: %w", err)
 	}
+	c.applyClientMetadata(&params, tc)
 
 	var rawResp *http.Response
-	resp, err := c.client.Responses.New(ctx, params, option.WithResponseInto(&rawResp))
+	resp, err := c.client.Responses.New(ctx, params, c.requestOptions(tc, &rawResp)...)
 	if err != nil {
 		return nil, fmt.Errorf("codex API request failed: %w", AugmentAPIError(err))
 	}
@@ -543,6 +668,7 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 	go func() {
 		defer close(eventChan)
 
+		tc := c.newTurnContext()
 		params, err := c.buildParams(prompts, messages, toolList)
 		if err != nil {
 			logging.Error("[Codex] Request preflight failed",
@@ -553,8 +679,9 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: err}
 			return
 		}
+		c.applyClientMetadata(&params, tc)
 		var streamResp *http.Response
-		stream := c.client.Responses.NewStreaming(ctx, params, option.WithResponseInto(&streamResp))
+		stream := c.client.Responses.NewStreaming(ctx, params, c.requestOptions(tc, &streamResp)...)
 
 		currentContent := ""
 		toolCallsByID := make(map[string]*message.ToolCall)

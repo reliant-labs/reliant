@@ -409,7 +409,6 @@ func (a *GenerateTitleActivity) generateTitle(ctx context.Context, userID, first
 	driver, err := resolve(ctx, userID, preferences,
 		llm.WithModel(model),
 		llm.WithMaxTokens(25), // Strict limit for short titles
-		llm.WithIgnoreDefaultPrompts(),
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to get LLM driver: %w", err)

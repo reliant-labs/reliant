@@ -46,12 +46,13 @@ func NewClaudeCodeClient(opts llm.DriverOptions) *ClaudeCodeClient {
 
 	// Headers that need exact lowercase casing (Go canonicalizes by default)
 	lowercaseHeaders := map[string]string{
-		"host":           "api.anthropic.com",
-		"connection":     "keep-alive",
-		"authorization":  "Bearer " + opts.ApiKey,
-		"x-app":          "cli",
-		"content-type":   "application/json",
-		"anthropic-beta": "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,redact-thinking-2026-02-12,context-management-2025-06-27,prompt-caching-scope-2026-01-05,advanced-tool-use-2025-11-20,effort-2025-11-24",
+		"host":          "api.anthropic.com",
+		"connection":    "keep-alive",
+		"authorization": "Bearer " + opts.ApiKey,
+		"x-app":         "cli",
+		"content-type":  "application/json",
+		// anthropic-beta is per-model: exact ordered strings captured from real traffic.
+		"anthropic-beta": claudeCodeBetaHeader(opts.Model.APIModel),
 		"anthropic-dangerous-direct-browser-access": "true",
 		"anthropic-version":                         "2023-06-01",
 		"accept-language":                           "*",
@@ -93,12 +94,12 @@ func NewClaudeCodeClient(opts llm.DriverOptions) *ClaudeCodeClient {
 		option.WithHeader("X-Stainless-Retry-Count", "0"),
 		option.WithHeader("X-Stainless-Timeout", "600"),
 		option.WithHeader("X-Stainless-Lang", "js"),
-		option.WithHeader("X-Stainless-Package-Version", "0.81.0"),
+		option.WithHeader("X-Stainless-Package-Version", "0.94.0"),
 		option.WithHeader("X-Stainless-OS", "MacOS"),
 		option.WithHeader("X-Stainless-Arch", "arm64"),
 		option.WithHeader("X-Stainless-Runtime", "node"),
-		option.WithHeader("X-Stainless-Runtime-Version", "v25.9.0"),
-		option.WithHeader("User-Agent", "claude-cli/2.1.94 (external, cli)"),
+		option.WithHeader("X-Stainless-Runtime-Version", "v26.3.0"),
+		option.WithHeader("User-Agent", "claude-cli/2.1.204 (external, cli)"),
 	)
 
 	// Support validate (short timeout for validation requests)
@@ -208,34 +209,58 @@ func (c *ClaudeCodeClient) convertTools(tools []toolsPkg.Tool) []anthropic.ToolU
 	return anthropicTools
 }
 
-// prepareSystemPrompts overrides the base implementation with Claude Code-specific cache rules:
-// - getClaudeCodeMainPrompt (index 2 when IgnoreDefaultPrompts=false): ephemeral with ttl=1h, scope=global
-// - last system prompt: regular ephemeral
-// - tools: no cache control
-func (c *ClaudeCodeClient) prepareSystemPrompts(prompts []string) []anthropic.TextBlockParam {
-	systemPrompts := []anthropic.TextBlockParam{}
+// callerSystemBlocks converts Reliant's own system prompts into text blocks that
+// are appended AFTER the 4 Claude Code base blocks. Only the final caller block is
+// cached (ephemeral), which never disturbs the base blocks' exact cache treatment.
+func (c *ClaudeCodeClient) callerSystemBlocks(prompts []string) []anthropic.TextBlockParam {
+	blocks := []anthropic.TextBlockParam{}
 	for i, prompt := range prompts {
 		if len(strings.TrimSpace(prompt)) == 0 {
 			logging.Warn("ClaudeCode: Skipping empty system prompt", "index", i, "totalPrompts", len(prompts))
 			continue
 		}
-		block := anthropic.TextBlockParam{Text: prompt}
-		if !c.options.DisableCache {
-			// Index 2 is getClaudeCodeMainPrompt: [0]=billing, [1]="You are Claude Code", [2]=main prompt
-			if !c.options.IgnoreDefaultPrompts && i == 2 {
-				cc := anthropic.CacheControlEphemeralParam{
-					Type: "ephemeral",
-					TTL:  anthropic.CacheControlEphemeralTTLTTL1h,
-				}
-				cc.SetExtraFields(map[string]any{"scope": "global"})
-				block.CacheControl = cc
-			} else if i == len(prompts)-1 {
-				block.CacheControl = anthropic.CacheControlEphemeralParam{Type: "ephemeral"}
-			}
-		}
-		systemPrompts = append(systemPrompts, block)
+		blocks = append(blocks, anthropic.TextBlockParam{Text: prompt})
 	}
-	return systemPrompts
+	if !c.options.DisableCache && len(blocks) > 0 {
+		blocks[len(blocks)-1].CacheControl = anthropic.CacheControlEphemeralParam{Type: "ephemeral"}
+	}
+	return blocks
+}
+
+// applyClaudeCodeExtras injects the top-level request fields that the typed
+// non-beta MessageNewParams struct does not expose (context_management, fallbacks,
+// diagnostics). They are added as raw JSON via SetExtraFields so the emitted wire
+// body matches the captured Claude Code shape exactly.
+//
+// TODO(prev-id-chaining): chain diagnostics.previous_message_id (the prior turn's
+// anthropic.Message.ID, "msg_…"). This is DEFERRED, not a quick omission: the
+// ClaudeCodeClient is constructed fresh on every turn (each agentic turn is a
+// separate call_llm Temporal activity → resolveDriver → NewClaudeCodeClient), so an
+// in-memory lastMessageID field would always be empty. The prior turn's msg_ id is
+// also not persisted — message.Message has no provider-response-id field (its .ID is
+// the internal DB UUID) and llm.DriverResponse does not carry it back. Correct
+// chaining requires a cross-package change outside internal/llm/drivers/anthropic:
+// capture response.ID here + in the streaming path, surface it on llm.DriverResponse,
+// persist it on the assistant message.Message, and read it from the last assistant
+// message in convertMessages on the next turn (guard: emit only when non-empty so
+// turn 1 omits it). We deliberately OMIT diagnostics rather than send a
+// blank/incorrect previous_message_id.
+func (c *ClaudeCodeClient) applyClaudeCodeExtras(params *anthropic.MessageNewParams) {
+	extras := map[string]any{
+		// Sent on EVERY Claude Code request, all thinking tiers.
+		"context_management": map[string]any{
+			"edits": []any{
+				map[string]any{"type": "clear_thinking_20251015", "keep": "all"},
+			},
+		},
+	}
+	// fable-5 falls back to opus-4.8 server-side.
+	if c.options.Model.APIModel == "claude-fable-5" {
+		extras["fallbacks"] = []any{
+			map[string]any{"model": "claude-opus-4-8"},
+		}
+	}
+	params.SetExtraFields(extras)
 }
 
 // toolCalls overrides the base implementation to strip the MCP prefix from tool names
@@ -418,21 +443,28 @@ func (c *ClaudeCodeClient) streamResponseInternal(ctx context.Context, params an
 }
 
 func (c *ClaudeCodeClient) preparedMessages(prompts []string, messages []anthropic.MessageParam, tools []anthropic.ToolUnionParam) anthropic.MessageNewParams {
-	// Prepend Claude Code prompts: always include base prompt, optionally include second prompt
-	if c.options.IgnoreDefaultPrompts {
-		// Only include the first (base) prompt - skip the second prompt (used for compaction)
-		prompts = append(getClaudeCodeBasePrompt(), prompts...)
-	} else {
-		prompts = append(append(getClaudeCodeBasePrompt(), getClaudeCodeMainPrompt()), prompts...)
-	}
+	// Build the exact 4-block Claude Code base system prompt (same for every
+	// request — compaction/title-gen differ only by their user message), then
+	// append the caller's own system prompts after it.
+	system := claudeCodeBaseSystemBlocks(c.options.Model.APIModel, c.options.DisableCache)
+	system = append(system, c.callerSystemBlocks(prompts)...)
+
 	params := anthropic.MessageNewParams{
 		Model:     anthropic.Model(c.options.Model.APIModel),
 		MaxTokens: c.options.MaxTokens,
 		Messages:  messages,
 		Tools:     tools,
 		Thinking:  c.getThinkingConfig(),
-		System:    c.prepareSystemPrompts(prompts),
+		System:    system,
 	}
+
+	// Adaptive-thinking models emit output_config:{effort:<level>}; budget models omit it.
+	if oc, ok := c.getOutputConfig(); ok {
+		params.OutputConfig = oc
+	}
+
+	// context_management (every request), fallbacks (fable-5), diagnostics (TODO).
+	c.applyClaudeCodeExtras(&params)
 
 	// Attach user metadata for Claude Code keys using stored OAuth account data
 	if metadata, err := GetUserMetadata(c.options.ApiKey, c.options.SessionID, c.options.AccountUUID, c.options.UserID); err == nil && metadata != nil {

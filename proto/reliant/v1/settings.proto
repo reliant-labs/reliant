@@ -80,7 +80,17 @@ service SettingsService {
   // CompleteClaudeOAuth exchanges an OAuth authorization code + PKCE verifier
   // and marks Claude as connected for the current user.
   rpc CompleteClaudeOAuth(CompleteClaudeOAuthRequest) returns (CompleteClaudeOAuthResponse) {}
-  
+
+  // StartCopilotDeviceAuth begins the GitHub Copilot device-authorization flow
+  // and returns the device/user codes plus polling parameters. The frontend
+  // drives polling via PollCopilotDeviceAuth.
+  rpc StartCopilotDeviceAuth(StartCopilotDeviceAuthRequest) returns (StartCopilotDeviceAuthResponse) {}
+
+  // PollCopilotDeviceAuth polls GitHub for completion of a device-authorization
+  // flow. On AUTHORIZED the backend stores the Copilot credential for the
+  // current user.
+  rpc PollCopilotDeviceAuth(PollCopilotDeviceAuthRequest) returns (PollCopilotDeviceAuthResponse) {}
+
   // ============================================
   // Sub-phase 6e: Privacy Settings
   // ============================================
@@ -440,6 +450,36 @@ message CompleteClaudeOAuthRequest {
 message CompleteClaudeOAuthResponse {
   bool success = 1;
   string message = 2;
+}
+
+message StartCopilotDeviceAuthRequest {}
+
+message StartCopilotDeviceAuthResponse {
+  string device_code = 1;
+  string user_code = 2;
+  string verification_uri = 3;
+  int32 interval_seconds = 4;
+  int32 expires_in_seconds = 5;
+}
+
+message PollCopilotDeviceAuthRequest {
+  string device_code = 1;
+  // tier is the explicitly-selected Copilot tier: "enterprise" | "individual".
+  string tier = 2;
+}
+
+message PollCopilotDeviceAuthResponse {
+  // Status reports the outcome of a device-authorization poll.
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    STATUS_PENDING = 1;
+    STATUS_AUTHORIZED = 2;
+    STATUS_EXPIRED = 3;
+    STATUS_DENIED = 4;
+    STATUS_ERROR = 5;
+  }
+  Status status = 1;
+  string error_message = 2;
 }
 
 // ============================================

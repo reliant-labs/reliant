@@ -103,6 +103,12 @@ func (p *Publisher) Activity(daemonID, userID, daemonType string) {
 	})
 }
 
+// NOTE: reachability-lease renewal on the daemon keepalive is intentionally NOT
+// a daemonstate event. The gateway writes daemon_attachment.last_stream_activity
+// directly (ToolsDaemonService heartbeat case → TouchDaemonAttachmentIfNewer)
+// because the authoritative daemon.v1.state.* consumer lives in the control-plane
+// repo and strictly rejects unknown event types. See tools_daemon.go for detail.
+
 func (p *Publisher) publish(evt Event) {
 	payload, err := json.Marshal(evt)
 	if err != nil {

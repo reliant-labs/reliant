@@ -61,6 +61,11 @@ service FileSystemService {
   // ListDirectory lists entries in an arbitrary filesystem directory.
   // Used by the project picker in browser mode (no Electron).
   rpc ListDirectory(ListDirectoryRequest) returns (ListDirectoryResponse) {}
+
+  // CreateDirectory creates a new directory at an arbitrary absolute path.
+  // Used by the project picker in browser mode to make a "New folder" while
+  // choosing where to open/create a project on the remote daemon.
+  rpc CreateDirectory(CreateDirectoryRequest) returns (CreateDirectoryResponse) {}
 }
 
 // ============================================
@@ -309,6 +314,18 @@ message DirectoryEntry {
   bool is_directory = 3;
   bool is_hidden = 4;
   bool is_symlink = 5;
+}
+
+// ============================================
+// CreateDirectory
+// ============================================
+
+message CreateDirectoryRequest {
+  string path = 1; // Absolute path of the directory to create (mkdir -p).
+}
+
+message CreateDirectoryResponse {
+  string path = 1; // The absolute path that was created.
 }
 
 // ============================================

@@ -27,6 +27,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/claude"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/codex"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/copilot"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -911,6 +912,7 @@ func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.
 	providers := []models.Family{
 		"claude",
 		"codex",
+		"copilot",
 		"openrouter",
 		"anthropic",
 		"openai",
@@ -920,6 +922,7 @@ func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.
 	providerDisplayNames := map[models.Family]string{
 		"claude":     "Claude Code",
 		"codex":      "Codex (ChatGPT)",
+		"copilot":    "GitHub Copilot",
 		"openrouter": "OpenRouter",
 		"anthropic":  "Anthropic",
 		"openai":     "OpenAI",
@@ -968,6 +971,18 @@ func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.
 			status.Configured = configured
 			status.HasApiKey = configured
 			// Don't set MaskedKey for Codex - no API key to display
+		case "copilot":
+			// Copilot uses GitHub device-flow OAuth tokens persisted by Reliant.
+			tokens, tokenErr := s.database.GetCopilotAuthTokens(ctx, userID)
+			if tokenErr != nil {
+				logging.Warn("Failed to load Copilot auth tokens", "error", tokenErr)
+			}
+
+			configured := tokenErr == nil && tokens != nil && strings.TrimSpace(tokens.GitHubAccessToken) != ""
+
+			status.Configured = configured
+			status.HasApiKey = configured
+			// Don't set MaskedKey for Copilot - no API key to display
 		default:
 			maskedKey, hasKey := apiKeys[string(provider)]
 			status.Configured = hasKey
@@ -1036,6 +1051,7 @@ func (s *SettingsService) UpdateProviderAPIKey(ctx context.Context, req *connect
 	validProviders := map[string]bool{
 		"claude":     true,
 		"codex":      true,
+		"copilot":    true,
 		"reliant":    true,
 		"anthropic":  true,
 		"openai":     true,
@@ -1095,6 +1111,31 @@ func (s *SettingsService) UpdateProviderAPIKey(ctx context.Context, req *connect
 		return connect.NewResponse(&reliantv1.UpdateProviderAPIKeyResponse{
 			Success: true,
 			Message: "Disconnected from Codex",
+		}), nil
+	}
+
+	if provider == "copilot" {
+		if strings.TrimSpace(req.Msg.ApiKey) != "" {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("copilot does not use manual API keys. Use Connect GitHub Copilot in Settings"))
+		}
+
+		if err := s.database.DeleteCopilotAuthTokens(ctx, userID); err != nil {
+			logging.Error("Failed to delete Copilot auth tokens", "error", err)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to disconnect from GitHub Copilot"))
+		}
+		if err := s.database.DeleteProviderAPIKey(ctx, userID, "copilot"); err != nil {
+			logging.Error("Failed to delete copilot provider marker", "error", err)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to disconnect from GitHub Copilot"))
+		}
+		trackProviderEvent("disconnected", "oauth")
+
+		if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
+			logging.Warn("Failed to emit config_health refetch after copilot disconnect", "error", err)
+		}
+
+		return connect.NewResponse(&reliantv1.UpdateProviderAPIKeyResponse{
+			Success: true,
+			Message: "Disconnected from GitHub Copilot",
 		}), nil
 	}
 
@@ -1187,6 +1228,26 @@ func (s *SettingsService) ValidateProviderAPIKey(ctx context.Context, req *conne
 		}), nil
 	}
 
+	if provider == "copilot" {
+		tokens, err := s.database.GetCopilotAuthTokens(ctx, userID)
+		if err != nil {
+			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
+				Valid:   false,
+				Message: "Failed to load GitHub Copilot credentials",
+			}), nil
+		}
+		if tokens == nil || strings.TrimSpace(tokens.GitHubAccessToken) == "" {
+			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
+				Valid:   false,
+				Message: "GitHub Copilot is not connected",
+			}), nil
+		}
+		return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
+			Valid:   true,
+			Message: "Connected to GitHub Copilot",
+		}), nil
+	}
+
 	valid, message := s.validateAPIKey(ctx, provider, req.Msg.ApiKey)
 
 	return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
@@ -1245,6 +1306,102 @@ func (s *SettingsService) CompleteCodexOAuth(ctx context.Context, req *connect.R
 	return connect.NewResponse(&reliantv1.CompleteCodexOAuthResponse{
 		Success: true,
 		Message: "Connected to Codex",
+	}), nil
+}
+
+// StartCopilotDeviceAuth begins the GitHub Copilot device-authorization flow and
+// returns the user code + verification URI for the client to present.
+func (s *SettingsService) StartCopilotDeviceAuth(ctx context.Context, req *connect.Request[reliantv1.StartCopilotDeviceAuthRequest]) (*connect.Response[reliantv1.StartCopilotDeviceAuthResponse], error) {
+	// userID is not required to start the flow, but require an authenticated
+	// caller for parity with the other provider handlers.
+	_ = auth.MustGetUserID(ctx)
+
+	deviceAuth, err := copilot.StartDeviceAuth(ctx)
+	if err != nil {
+		logging.Error("Failed to start Copilot device authorization", "error", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to start GitHub Copilot login"))
+	}
+
+	return connect.NewResponse(&reliantv1.StartCopilotDeviceAuthResponse{
+		DeviceCode:       deviceAuth.DeviceCode,
+		UserCode:         deviceAuth.UserCode,
+		VerificationUri:  deviceAuth.VerificationURI,
+		IntervalSeconds:  int32(deviceAuth.Interval),
+		ExpiresInSeconds: int32(deviceAuth.ExpiresIn),
+	}), nil
+}
+
+// PollCopilotDeviceAuth performs a single poll of the GitHub device flow. On
+// success it persists the GitHub OAuth token + selected tier and marks the
+// copilot provider as connected.
+func (s *SettingsService) PollCopilotDeviceAuth(ctx context.Context, req *connect.Request[reliantv1.PollCopilotDeviceAuthRequest]) (*connect.Response[reliantv1.PollCopilotDeviceAuthResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+
+	deviceCode := strings.TrimSpace(req.Msg.DeviceCode)
+	if deviceCode == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("device_code is required"))
+	}
+
+	// Individual is the only supported GitHub Copilot tier. Ignore whatever tier
+	// the client sent (including a legacy "enterprise") and always store
+	// "individual" so the driver routes to api.individual.githubcopilot.com.
+	tier := "individual"
+
+	tokens, err := copilot.PollDeviceAuthOnce(ctx, deviceCode)
+	if err != nil {
+		switch {
+		case errors.Is(err, copilot.ErrAuthorizationPending), errors.Is(err, copilot.ErrSlowDown):
+			return connect.NewResponse(&reliantv1.PollCopilotDeviceAuthResponse{
+				Status: reliantv1.PollCopilotDeviceAuthResponse_STATUS_PENDING,
+			}), nil
+		case errors.Is(err, copilot.ErrDeviceCodeExpired):
+			return connect.NewResponse(&reliantv1.PollCopilotDeviceAuthResponse{
+				Status: reliantv1.PollCopilotDeviceAuthResponse_STATUS_EXPIRED,
+			}), nil
+		case errors.Is(err, copilot.ErrAccessDenied):
+			return connect.NewResponse(&reliantv1.PollCopilotDeviceAuthResponse{
+				Status: reliantv1.PollCopilotDeviceAuthResponse_STATUS_DENIED,
+			}), nil
+		default:
+			logging.Error("Copilot device authorization poll failed", "error", err)
+			msg := err.Error()
+			return connect.NewResponse(&reliantv1.PollCopilotDeviceAuthResponse{
+				Status:       reliantv1.PollCopilotDeviceAuthResponse_STATUS_ERROR,
+				ErrorMessage: msg,
+			}), nil
+		}
+	}
+
+	if err := s.database.SetCopilotAuthTokens(ctx, userID, db.CopilotAuthTokens{
+		UserID:            userID,
+		GitHubAccessToken: tokens.AccessToken,
+		Tier:              tier,
+	}); err != nil {
+		logging.Error("Failed to persist Copilot auth tokens", "error", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save GitHub Copilot credentials"))
+	}
+
+	if err := s.database.SetProviderAPIKey(ctx, userID, "copilot", "oauth"); err != nil {
+		logging.Error("Failed to set Copilot provider marker", "error", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to connect GitHub Copilot provider"))
+	}
+
+	// Drop any cached per-account model availability so the picker re-queries GET
+	// /models for the freshly-connected account on its next load.
+	copilot.EvictAvailabilityCache(tokens.AccessToken)
+
+	analytics.GetClientForUser(ctx, userID).TrackProviderSettingsUpdated(analytics.ProviderSettingsUpdatedMetrics{
+		Provider:   "copilot",
+		Action:     "connected",
+		AuthMethod: "oauth",
+	})
+
+	if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
+		logging.Warn("Failed to emit config_health refetch after Copilot OAuth connect", "error", err)
+	}
+
+	return connect.NewResponse(&reliantv1.PollCopilotDeviceAuthResponse{
+		Status: reliantv1.PollCopilotDeviceAuthResponse_STATUS_AUTHORIZED,
 	}), nil
 }
 

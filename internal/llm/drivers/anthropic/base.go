@@ -51,12 +51,10 @@ func newBase(opts llm.DriverOptions, clientOptions []option.RequestOption) *base
 	if opts.MaxTokens < 10 {
 		clientOptions = append(clientOptions, option.WithRequestTimeout(10*time.Second))
 	}
-	// When thinking/reasoning is enabled (medium or high), temperature MUST be 1
-	// per Anthropic API requirements
-	if opts.ReasoningEffort == "medium" || opts.ReasoningEffort == "high" {
-		temp := 1.0
-		opts.Temperature = &temp
-	}
+	// NOTE: We deliberately do NOT force temperature=1.0 here. Real Claude Code never
+	// sends temperature (it is null in every capture); the API defaults to 1.0, which
+	// is what extended thinking requires. Adaptive models (opus-4.8/sonnet-5/fable-5)
+	// 400 if temperature is sent at all, so omitting it is mandatory.
 	return &baseClient{
 		options: opts,
 		client:  anthropic.NewClient(clientOptions...),
@@ -653,9 +651,29 @@ func (b *baseClient) isThinkingEnabled() bool {
 		b.options.MaxTokens > 1024
 }
 
+// isAdaptiveThinking reports whether the model uses adaptive thinking
+// (thinking:{type:"adaptive"} + output_config:{effort}) rather than the classic
+// budget tier (thinking:{type:"enabled",budget_tokens:N}).
+func (b *baseClient) isAdaptiveThinking() bool {
+	return b.options.Model.ThinkingMode == "adaptive"
+}
+
 // getThinkingConfig returns the thinking configuration for extended thinking.
+//
+// Two tiers:
+//   - adaptive (opus-4.8/sonnet-5/fable-5): thinking:{type:"adaptive"}. These
+//     models reject budget_tokens and temperature. Effort is carried separately in
+//     output_config (see getOutputConfig). Adaptive thinking is always on for these
+//     models, matching real Claude Code traffic.
+//   - budget (haiku-4.5 and all older models, ThinkingMode "budget"/unset):
+//     thinking:{type:"enabled",budget_tokens:N}, gated by isThinkingEnabled.
 func (b *baseClient) getThinkingConfig() anthropic.ThinkingConfigParamUnion {
 	var thinkingParam anthropic.ThinkingConfigParamUnion
+
+	if b.isAdaptiveThinking() {
+		thinkingParam.OfAdaptive = &anthropic.ThinkingConfigAdaptiveParam{Type: "adaptive"}
+		return thinkingParam
+	}
 
 	if !b.isThinkingEnabled() {
 		return thinkingParam // Empty/disabled
@@ -689,4 +707,28 @@ func (b *baseClient) getThinkingConfig() anthropic.ThinkingConfigParamUnion {
 		"max_tokens", b.options.MaxTokens)
 
 	return thinkingParam
+}
+
+// getOutputConfig returns output_config:{effort:<level>} for adaptive-thinking
+// models and (false) for budget-tier models, which must NOT send output_config.
+// The effort level uses the caller's ReasoningEffort when set, else "high" (the
+// value observed in every adaptive capture).
+func (b *baseClient) getOutputConfig() (anthropic.OutputConfigParam, bool) {
+	if !b.isAdaptiveThinking() {
+		return anthropic.OutputConfigParam{}, false
+	}
+
+	var effort anthropic.OutputConfigEffort
+	switch b.options.ReasoningEffort {
+	case "low":
+		effort = anthropic.OutputConfigEffortLow
+	case "medium":
+		effort = anthropic.OutputConfigEffortMedium
+	case "high":
+		effort = anthropic.OutputConfigEffortHigh
+	default:
+		effort = anthropic.OutputConfigEffortHigh // captures always show effort:"high"
+	}
+
+	return anthropic.OutputConfigParam{Effort: effort}, true
 }

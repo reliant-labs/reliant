@@ -1166,3 +1166,28 @@ func (s *FileSystemService) ListDirectory(
 		Entries: entries,
 	}), nil
 }
+
+// CreateDirectory creates a new directory at an arbitrary absolute path.
+// Used by the project picker (browser mode) to make a "New folder" while
+// choosing where to open/create a project.
+func (s *FileSystemService) CreateDirectory(
+	ctx context.Context,
+	req *connect.Request[reliantv1.CreateDirectoryRequest],
+) (*connect.Response[reliantv1.CreateDirectoryResponse], error) {
+	path := req.Msg.Path
+	if path == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("path is required"))
+	}
+	if !filepath.IsAbs(path) {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("path must be absolute"))
+	}
+
+	if err := s.fs.MkdirAll(path, 0755); err != nil {
+		logging.Error("Failed to create directory", "error", err, "path", path)
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	return connect.NewResponse(&reliantv1.CreateDirectoryResponse{
+		Path: path,
+	}), nil
+}
