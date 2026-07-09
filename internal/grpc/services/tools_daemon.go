@@ -413,6 +413,33 @@ type daemonHostnameLookup interface {
 	ListDaemonsByUserID(ctx context.Context, userID string) ([]*db.Daemon, error)
 }
 
+// resolveDaemonID applies the daemon-id precedence for a registering daemon:
+//
+//  1. patBoundID — the PAT itself pins a specific daemon. Most authoritative;
+//     used verbatim when present.
+//  2. assertedID — the client-asserted stable id from the register message.
+//     Daemons persist their server-assigned id per-origin (in daemon.json) and
+//     re-assert it on every reconnect, so identity survives daemon restarts and
+//     machine hostname changes (macOS flipping between *.lan and *.local).
+//     Trusted verbatim, but only for unbound PATs.
+//  3. resolveUnbound() — hostname-based resolution, evaluated lazily only when
+//     neither id is present. Kept as a fallback so pre-update daemons (which
+//     don't send a stable id yet) still reuse their existing row.
+//
+// resolveUnbound is a thunk so the (DB-touching) hostname lookup is skipped
+// entirely whenever a higher-precedence id is available.
+func resolveDaemonID(patBoundID, assertedID string, resolveUnbound func() string) string {
+	if id := strings.TrimSpace(patBoundID); id != "" {
+		return id
+	}
+	if id := strings.TrimSpace(assertedID); id != "" {
+		logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Trusting client-asserted stable daemon_id for unbound PAT",
+			"daemonID", id)
+		return id
+	}
+	return resolveUnbound()
+}
+
 // resolveUnboundDaemonID picks the daemon_id to use when the authenticating
 // PAT is not bound to a specific daemon (the common path for external /
 // self-hosted daemons). It reuses the existing (userID, hostname) row if
@@ -474,11 +501,13 @@ func (s *ToolsDaemonService) ConnectDaemon(
 		return err
 	}
 
-	// Daemon ID is assigned by the gateway from the PAT binding, not self-asserted.
-	daemonID := auth.GetDaemonIDFromContext(ctx)
-	if daemonID == "" {
-		daemonID = resolveUnboundDaemonID(ctx, s.database, userID, reg.GetHostname())
-	}
+	daemonID := resolveDaemonID(
+		auth.GetDaemonIDFromContext(ctx),
+		reg.GetDaemonId(),
+		func() string {
+			return resolveUnboundDaemonID(ctx, s.database, userID, reg.GetHostname())
+		},
+	)
 
 	requestedProjectPaths, err := s.listAllProjectPaths(ctx, userID)
 	if err != nil {
@@ -589,6 +618,12 @@ func (s *ToolsDaemonService) ConnectDaemon(
 
 	// Start heartbeat goroutine
 	go s.runHeartbeat(conn)
+
+	// Reconcile project_daemons rows against what actually exists on this
+	// daemon's disk. Runs off the hot connect path so it never blocks
+	// registration; self-heals legacy rows, daemon-id churn, and the
+	// create-while-daemon-pending case. See reconcileProjectDaemonsOnConnect.
+	go s.reconcileProjectDaemonsOnConnect(conn)
 
 	for _, projectPath := range requestedProjectPaths {
 		if err := s.sendLoadAndWatchProjectConfig(ctx, conn, projectPath, true); err != nil {
@@ -1425,15 +1460,28 @@ func (s *ToolsDaemonService) sendToUserDaemon(userID string, msg *reliantv1.Serv
 	if conn == nil {
 		return fmt.Errorf("daemon not connected for user %s", userID)
 	}
+	return s.sendToConn(conn, msg)
+}
+
+// sendToConn enqueues a message on a specific connection's send channel. Used
+// when the caller already holds the exact connection (e.g. reconcile) rather
+// than resolving the user's default daemon.
+func (s *ToolsDaemonService) sendToConn(conn *daemonConnection, msg *reliantv1.ServerMessage) error {
+	if msg == nil {
+		return nil
+	}
+	if conn == nil {
+		return fmt.Errorf("nil daemon connection")
+	}
 
 	select {
 	case conn.sendCh <- msg:
 		return nil
 	case <-conn.done:
-		return fmt.Errorf("daemon connection closed for user %s", userID)
+		return fmt.Errorf("daemon connection closed for user %s", conn.userID)
 	default:
-		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" daemon send buffer full, message dropped", "userID", userID)
-		return fmt.Errorf("daemon send buffer full, message dropped for user %s", userID)
+		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" daemon send buffer full, message dropped", "userID", conn.userID)
+		return fmt.Errorf("daemon send buffer full, message dropped for user %s", conn.userID)
 	}
 }
 
@@ -1527,6 +1575,16 @@ func (s *ToolsDaemonService) HasConnectedDaemonsForUser(userID string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return len(s.userDaemons[userID]) > 0
+}
+
+// ConnectedDaemonCountForUser reports how many daemon streams this gateway
+// currently holds for the user. Implements daemonquery.UserLivenessSource so
+// the per-user any-live NATS responder answers from the in-memory connection
+// map — authoritative for the streams this gateway owns.
+func (s *ToolsDaemonService) ConnectedDaemonCountForUser(userID string) int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.userDaemons[userID])
 }
 
 // SendToolRequest pushes a tool request to the daemon
@@ -1667,7 +1725,10 @@ func (s *ToolsDaemonService) SendKillProcess(userID, processID string) error {
 	return s.sendToUserDaemon(userID, msg)
 }
 
-// SendDaemonCommand sends a generic command to the daemon and waits for a correlated response.
+// SendDaemonCommand sends a generic command to the user's default daemon and
+// waits for a correlated response. For commands that must target a specific
+// connection (e.g. reconcile asking THIS daemon what's on its disk) use
+// sendCommandToConn directly.
 func (s *ToolsDaemonService) SendDaemonCommand(ctx context.Context, userID string, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error) {
 	s.mu.RLock()
 	conn := s.defaultDaemonForUser(userID)
@@ -1675,8 +1736,20 @@ func (s *ToolsDaemonService) SendDaemonCommand(ctx context.Context, userID strin
 	if conn == nil {
 		return nil, fmt.Errorf("no daemon connected for user %s", userID)
 	}
+	return s.sendCommandToConn(ctx, conn, req)
+}
 
-	// Register a pending response channel.
+// sendCommandToConn sends a generic command to a specific daemon connection and
+// waits for the correlated DaemonCommandResponse. It mirrors SendDaemonCommand's
+// correlation logic but targets the passed conn directly rather than resolving
+// the user's default daemon — required when a user has multiple daemons and the
+// caller needs to ask one particular connection about its own disk.
+func (s *ToolsDaemonService) sendCommandToConn(ctx context.Context, conn *daemonConnection, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error) {
+	if conn == nil {
+		return nil, fmt.Errorf("nil daemon connection")
+	}
+
+	// Register a pending response channel keyed by request id on this conn.
 	respCh := make(chan *reliantv1.DaemonCommandResponse, 1)
 	conn.pendingCommandsMu.Lock()
 	conn.pendingCommands[req.RequestId] = respCh
@@ -1689,13 +1762,13 @@ func (s *ToolsDaemonService) SendDaemonCommand(ctx context.Context, userID strin
 		conn.pendingCommandsMu.Unlock()
 	}()
 
-	// Send the command to the daemon.
+	// Send the command to this specific connection.
 	msg := &reliantv1.ServerMessage{
 		Message: &reliantv1.ServerMessage_DaemonCommand{
 			DaemonCommand: req,
 		},
 	}
-	if err := s.sendToUserDaemon(userID, msg); err != nil {
+	if err := s.sendToConn(conn, msg); err != nil {
 		return nil, fmt.Errorf("send daemon command: %w", err)
 	}
 
@@ -1709,12 +1782,12 @@ func (s *ToolsDaemonService) SendDaemonCommand(ctx context.Context, userID strin
 	case resp := <-respCh:
 		return resp, nil
 	case <-time.After(timeout):
-		s.cancelDaemonCommand(userID, req.RequestId, "daemon command timed out")
+		s.cancelDaemonCommand(conn.userID, req.RequestId, "daemon command timed out")
 		return nil, fmt.Errorf("daemon command %q timed out after %s", req.CommandType, timeout)
 	case <-conn.done:
 		return nil, fmt.Errorf("daemon disconnected while waiting for command %q response", req.CommandType)
 	case <-ctx.Done():
-		s.cancelDaemonCommand(userID, req.RequestId, "daemon command caller cancelled")
+		s.cancelDaemonCommand(conn.userID, req.RequestId, "daemon command caller cancelled")
 		return nil, ctx.Err()
 	}
 }

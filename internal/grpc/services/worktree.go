@@ -19,11 +19,21 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/logging"
+	repopkg "github.com/reliant-labs/reliant/internal/repo"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/worktreepath"
 )
 
 const worktreeDaemonCommandTimeoutMs int32 = 120_000
+
+// worktreeReadCommandTimeoutMs bounds the interactive read-path commands the
+// UI issues repeatedly (git_changes / git_status / git_commits). At the 120s
+// mutation budget, one slow daemon answer pinned a browser connection per
+// stacked poll for two minutes — enough to exhaust Chromium's 6-connection
+// HTTP/1.1 pool in dev (renderer → Vite is plain http) and starve every other
+// RPC behind it. Reads that exceed this budget should fail fast and let the
+// next poll retry.
+const worktreeReadCommandTimeoutMs int32 = 30_000
 
 // WorktreeService implements the WorktreeService RPC handlers
 type WorktreeService struct {
@@ -38,13 +48,21 @@ func NewWorktreeService(database db.Repository, tempClient client.Client, daemon
 	return &WorktreeService{database: database, tempClient: tempClient, daemonRouter: daemonRouter}
 }
 
-// sendWorktreeDaemonCommand sends a command to the user's daemon and unmarshals the response.
+// sendWorktreeDaemonCommand sends a command to the user's daemon and unmarshals
+// the response, with the default (mutation) timeout budget.
 func (s *WorktreeService) sendWorktreeDaemonCommand(ctx context.Context, userID, commandType string, payload interface{}, resp interface{}) error {
+	return s.sendWorktreeDaemonCommandTimeout(ctx, userID, commandType, payload, resp, worktreeDaemonCommandTimeoutMs)
+}
+
+// sendWorktreeDaemonCommandTimeout is sendWorktreeDaemonCommand with an
+// explicit timeout — use worktreeReadCommandTimeoutMs for the polled read
+// paths so a slow daemon can't pin connections for the full mutation budget.
+func (s *WorktreeService) sendWorktreeDaemonCommandTimeout(ctx context.Context, userID, commandType string, payload interface{}, resp interface{}, timeoutMs int32) error {
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal payload: %w", err)
 	}
-	respBytes, err := s.daemonRouter.SendDaemonCommand(ctx, userID, commandType, payloadBytes, worktreeDaemonCommandTimeoutMs)
+	respBytes, err := s.daemonRouter.SendDaemonCommand(ctx, userID, commandType, payloadBytes, timeoutMs)
 	if err != nil {
 		return fmt.Errorf("daemon command %s: %w", commandType, err)
 	}
@@ -129,6 +147,12 @@ func (s *WorktreeService) listProjectRepos(ctx context.Context, project *db.Proj
 	repos, err := s.database.ListReposByProject(ctx, project.ID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list repos for project"))
+	}
+	if len(repos) == 0 {
+		// The registry trails the filesystem when a repo was created outside
+		// the tracked flows (e.g. `git init` in the workspace terminal), so
+		// ask the daemon what actually exists and adopt it before refusing.
+		repos = repopkg.AdoptFromDaemon(ctx, s.database, s.daemonRouter, project)
 	}
 	if len(repos) == 0 {
 		return nil, connect.NewError(connect.CodeFailedPrecondition,
@@ -1330,11 +1354,11 @@ func (s *WorktreeService) GetWorktreeChanges(
 		DefaultBranch string            `json:"default_branch"`
 		Error         string            `json:"error,omitempty"`
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.git_changes", map[string]string{
+	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, "worktree.git_changes", map[string]string{
 		"worktree_path": repoPath,
 		"branch":        worktree.Branch,
 		"base_branch":   worktree.BaseBranch,
-	}, &changesResp); err != nil {
+	}, &changesResp, worktreeReadCommandTimeoutMs); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get worktree changes: %w", err))
 	}
 	if changesResp.Error != "" {
@@ -1416,10 +1440,10 @@ func (s *WorktreeService) GetWorktreeGitStatus(
 		Ahead          int32    `json:"ahead"`
 		Behind         int32    `json:"behind"`
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.git_status", map[string]string{
+	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, "worktree.git_status", map[string]string{
 		"worktree_path": repoPath,
 		"branch":        worktree.Branch,
-	}, &statusResp); err != nil {
+	}, &statusResp, worktreeReadCommandTimeoutMs); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get git status: %w", err))
 	}
 
@@ -1504,12 +1528,12 @@ func (s *WorktreeService) GetWorktreeCommits(
 		BaseBranch   string `json:"base_branch"`
 		Limit        int32  `json:"limit"`
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.git_commits", commitsReq{
+	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, "worktree.git_commits", commitsReq{
 		WorktreePath: repoPath,
 		Branch:       worktree.Branch,
 		BaseBranch:   baseBranch,
 		Limit:        limit,
-	}, &commitsResp); err != nil {
+	}, &commitsResp, worktreeReadCommandTimeoutMs); err != nil {
 		logging.Warn("Failed to get git commits via daemon", "error", err)
 		return connect.NewResponse(&reliantv1.GetWorktreeCommitsResponse{
 			Commits: []*reliantv1.GitCommit{},
@@ -2100,10 +2124,10 @@ func (s *WorktreeService) ListWorktreeRepoStatuses(
 			Behind         int32    `json:"behind"`
 			Error          string   `json:"error,omitempty"`
 		}
-		if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.git_status", map[string]string{
+		if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, "worktree.git_status", map[string]string{
 			"worktree_path": repoPath,
 			"branch":        worktree.Branch,
-		}, &statusResp); err != nil {
+		}, &statusResp, worktreeReadCommandTimeoutMs); err != nil {
 			row.Error = err.Error()
 			statuses = append(statuses, row)
 			continue

@@ -19,26 +19,6 @@ func TestIsRetryableError(t *testing.T) {
 			expected: false,
 		},
 		{
-			name:     "database is locked",
-			err:      errors.New("database is locked"),
-			expected: true,
-		},
-		{
-			name:     "database table is locked",
-			err:      errors.New("database table is locked"),
-			expected: true,
-		},
-		{
-			name:     "database schema is locked",
-			err:      errors.New("database schema is locked"),
-			expected: true,
-		},
-		{
-			name:     "busy error",
-			err:      errors.New("database is busy"),
-			expected: true,
-		},
-		{
 			name:     "concurrent update",
 			err:      errors.New("concurrent update detected"),
 			expected: true,
@@ -74,13 +54,8 @@ func TestIsRetryableError(t *testing.T) {
 			expected: false,
 		},
 		{
-			name:     "case insensitive - BUSY",
-			err:      errors.New("Database Is BUSY"),
-			expected: true,
-		},
-		{
-			name:     "case insensitive - LOCKED",
-			err:      errors.New("Database TABLE Is LOCKED"),
+			name:     "case insensitive - DEADLOCK",
+			err:      errors.New("Deadlock Detected"),
 			expected: true,
 		},
 	}
@@ -222,11 +197,9 @@ func TestRetryLogicConstants(t *testing.T) {
 func TestRetryErrorMessages(t *testing.T) {
 	// Test that various Postgres error message formats are recognized as retryable
 	retryableErrors := []string{
-		"database is locked",
-		"database table is locked: users",
-		"database schema is locked",
 		"could not serialize access due to concurrent update",
 		"deadlock detected",
+		"current transaction is aborted",
 	}
 
 	for _, errMsg := range retryableErrors {

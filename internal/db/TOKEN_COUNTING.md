@@ -136,5 +136,5 @@ When `GetThreadTokenCount(thread, nil) > 185000`:
 
 - `internal/db/repository.go` - `GetThreadTokenCount` interface
 - `internal/db/repository_impl.go` - Implementation with fork recursion
-- `internal/db/sqlite/queries/context_usage.sql` - `GetThreadTokenCountAtOrdinal` query
+- `internal/db/postgres/queries/context_usage.sql` - `GetThreadTokenCountAtOrdinal` query
 - `internal/tokens/tokens.go` - Canonical estimation function

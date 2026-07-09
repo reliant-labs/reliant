@@ -71,6 +71,15 @@ var (
 			Help:      "Number of in-flight gRPC/ConnectRPC requests.",
 		},
 	)
+	SlowRPCTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "grpc",
+			Name:      "slow_rpc_total",
+			Help:      "Unary RPCs flagged by the slow-RPC watchdog, by procedure and stage (in_flight = still running past the threshold, completed = finished but slow).",
+		},
+		[]string{"procedure", "stage"},
+	)
 )
 
 // ─── NATS Metrics ───────────────────────────────────────────────────────────
@@ -269,6 +278,7 @@ func initMetrics() {
 		GRPCRequestsTotal,
 		GRPCRequestDuration,
 		GRPCInFlight,
+		SlowRPCTotal,
 		// NATS
 		NATSPublishTotal,
 		NATSReceiveTotal,

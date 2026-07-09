@@ -28,8 +28,31 @@ export async function upsertStringSetting(
   key: string,
   value: string,
 ): Promise<void> {
+  // Decide create-vs-update from the in-memory cache (populated by
+  // ListSettings on init) rather than a per-key network GET — that extra
+  // round-trip doubled the RPC count on every write. Snapshot existence
+  // BEFORE updateCache, which would otherwise make every key look present.
+  const existedInCache =
+    settingsSync.isInitialized() &&
+    settingsSync.getSettingFromCache(key) !== null;
+
   // Update the in-memory cache immediately so subsequent reads see the new value
   settingsSync.updateCache(key, value);
+
+  // If the cache is ready we trust it; otherwise fall back to a network GET.
+  if (settingsSync.isInitialized()) {
+    try {
+      if (existedInCache) {
+        await api.settings.updateSetting(key, value, "string");
+      } else {
+        await api.settings.createSetting(key, value, "string");
+      }
+      return;
+    } catch {
+      // Cache disagreed with the server (e.g. created-elsewhere race). Fall
+      // through to the create-then-update recovery below.
+    }
+  }
 
   try {
     const existing = await api.settings.getSetting(key);

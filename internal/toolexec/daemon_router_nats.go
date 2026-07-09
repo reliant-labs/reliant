@@ -111,6 +111,12 @@ func (r *NATSDaemonRouter) resolveDefaultDaemonID(ctx context.Context, userID st
 	return r.resolveDaemonID(ctx, userID, nil)
 }
 
+// ResolveDaemonID exposes the same default resolution SendDaemonCommand uses,
+// so callers can record which daemon an operation targeted.
+func (r *NATSDaemonRouter) ResolveDaemonID(ctx context.Context, userID string) (string, error) {
+	return r.resolveDefaultDaemonID(ctx, userID)
+}
+
 // resolveDaemonID resolves a daemon ID for a user, optionally using a selector.
 // Resolution order:
 //  1. Local resolver (connected daemons on this gateway)
@@ -233,9 +239,12 @@ func (r *NATSDaemonRouter) resolveViaControlPlane(ctx context.Context, selector 
 	return daemon.DaemonId, nil
 }
 
-// daemonStaleThreshold is 2× the daemon heartbeat interval. If the frontend
-// reports a heartbeat within this window we skip the DB query.
-const daemonStaleThreshold = 30 * time.Second
+// daemonStaleThreshold is 6 missed 15s heartbeats, matching the gateway's
+// staleConnectionThreshold and daemonliveness.DefaultStaleThreshold. If the
+// frontend reports a heartbeat within this window we skip the DB query. The
+// old 30s value (2 missed heartbeats) left zero margin over the heartbeat
+// interval, so routing intermittently judged a live daemon offline.
+const daemonStaleThreshold = 90 * time.Second
 
 // LocalConnectionChecker is implemented by resolvers that can report whether
 // any daemon stream is currently held in-process for a given user. It lets the
@@ -474,7 +483,18 @@ func (r *NATSDaemonRouter) SendDaemonCommand(ctx context.Context, userID string,
 		observability.NATSRequestDuration.WithLabelValues("daemon.command").Observe(time.Since(start).Seconds())
 		if res.err != nil {
 			observability.NATSErrorsTotal.WithLabelValues("daemon.command", "request").Inc()
-			return nil, daemonRequestError("daemon command", res.err)
+			// Self-describing failure: the subject names the exact daemon the
+			// command was addressed to, which is the first thing to check when
+			// a command times out (stale daemon resolution vs. dead stream) —
+			// the 2026-07-09 git_changes timeouts were undiagnosable from the
+			// bare "nats: timeout" alone.
+			logging.Warn("[DaemonRouter] daemon command failed",
+				"subject", subject, "commandType", commandType,
+				"payloadBytes", len(data), "timeout", timeout.String(),
+				"elapsed", time.Since(start).Round(time.Millisecond).String(),
+				"error", res.err)
+			return nil, daemonRequestError(
+				fmt.Sprintf("daemon command %s (subject %s, timeout %s)", commandType, subject, timeout), res.err)
 		}
 		msg = res.msg
 	case <-ctx.Done():

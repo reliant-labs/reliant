@@ -3,7 +3,6 @@ package threads
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -177,21 +176,15 @@ func (s *Service) CreateWorkflowWithThread(ctx context.Context, opts CreateWorkf
 	var resultCW *db.ContextWindow
 
 	err = s.repo.RunTx(ctx, func(txCtx context.Context) error {
-		// Step 1: Create workflow first (if it doesn't exist)
-		// For inline workflows (workflow nodes that execute within parent),
-		// the workflow ID is the same as the parent, so it already exists.
+		// Step 1: Create workflow first (if it doesn't exist).
+		// For inline workflows (workflow nodes that execute within parent), the
+		// workflow ID is the same as the parent, so it already exists. CreateWorkflow
+		// is idempotent (INSERT ... ON CONFLICT DO NOTHING), so a pre-existing ID is a
+		// no-op rather than an error. This matters on Postgres: a real duplicate-key
+		// violation would abort the whole transaction (SQLSTATE 25P02) and make every
+		// later statement in this tx fail.
 		if err := s.repo.CreateWorkflow(txCtx, opts.Workflow); err != nil {
-			// Check if this is a duplicate key error (workflow already exists)
-			errStr := err.Error()
-			if strings.Contains(errStr, "UNIQUE constraint failed: workflows.id") ||
-				strings.Contains(errStr, "duplicate key") {
-				// Workflow already exists - this is fine for inline workflows
-				logging.Info("[CreateWorkflowWithThread] Workflow already exists, proceeding with thread creation",
-					"workflowID", opts.Workflow.ID,
-					"threadID", opts.ThreadID)
-			} else {
-				return fmt.Errorf("failed to create workflow: %w", err)
-			}
+			return fmt.Errorf("failed to create workflow: %w", err)
 		}
 		resultWorkflow = opts.Workflow
 

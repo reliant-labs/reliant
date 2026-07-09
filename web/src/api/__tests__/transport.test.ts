@@ -104,6 +104,52 @@ describe('buildInterceptors factory', () => {
   })
 })
 
+describe('in-flight starvation diagnostics', () => {
+  // formatInFlight is the pure core of describeInFlight() — the line the
+  // timeout handler logs so a wedged connection (2026-07-09 incident) is
+  // diagnosable from the console alone.
+  it('formats in-flight entries oldest-first with per-entry ages', async () => {
+    const { formatInFlight } = await import('../transport')
+    const now = 100_000
+    const line = formatInFlight(
+      [
+        { method: 'ListApprovalsByChat', startedAt: now - 9_000 },
+        { method: 'GetWorktreeChanges', startedAt: now - 43_000 },
+        { method: 'GetChat', startedAt: now - 2_000 },
+      ],
+      now,
+    )
+    expect(line).toBe(
+      '3 in flight, oldest: GetWorktreeChanges 43s ' +
+        '[GetWorktreeChanges:43s, ListApprovalsByChat:9s, GetChat:2s]',
+    )
+  })
+
+  it('caps the entry list at 8 and reports the overflow count', async () => {
+    const { formatInFlight } = await import('../transport')
+    const now = 50_000
+    const entries = Array.from({ length: 11 }, (_, i) => ({
+      method: `Method${i}`,
+      // Method0 is oldest (11s), Method10 youngest (1s).
+      startedAt: now - (11 - i) * 1_000,
+    }))
+    const line = formatInFlight(entries, now)
+    expect(line).toContain('11 in flight, oldest: Method0 11s')
+    expect(line).toContain('+3 more')
+    // The cap keeps the youngest entries out of the bracket list.
+    expect(line).not.toContain('Method8:')
+    expect(line).not.toContain('Method10:')
+  })
+
+  it('reports an empty registry as "0 in flight"', async () => {
+    const { formatInFlight, describeInFlight } = await import('../transport')
+    expect(formatInFlight([], Date.now())).toBe('0 in flight')
+    // Nothing has gone through the timeout interceptor in this module
+    // instance, so the live registry snapshot is empty too.
+    expect(describeInFlight()).toBe('0 in flight')
+  })
+})
+
 describe('transport call sites', () => {
   it('grpc-client::getTransport wires the authed factory chain', async () => {
     // The transport module must load first so buildInterceptors's interceptor

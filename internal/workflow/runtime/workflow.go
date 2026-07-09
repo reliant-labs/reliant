@@ -2818,11 +2818,33 @@ func executeAskUserInline(
 		"type":         "ask_user",
 		"tool_call_id": toolCallID,
 	}
-	// Try to merge questions into metadata directly for frontend consumption
+	// Try to merge questions into metadata directly for frontend consumption.
+	// Only persist an actual JSON array: the LLM sometimes emits `questions` as
+	// a JSON-encoded string (double-encoded) or a single object, and persisting
+	// that verbatim crashes the frontend (questions.map is not a function).
 	var toolInput map[string]interface{}
 	if err := json.Unmarshal([]byte(rawInput), &toolInput); err == nil {
 		if questions, ok := toolInput["questions"]; ok {
-			metaObj["questions"] = questions
+			switch q := questions.(type) {
+			case []interface{}:
+				metaObj["questions"] = q
+			case string:
+				// Double-encoded: attempt to recover the array from the string.
+				var arr []interface{}
+				if err := json.Unmarshal([]byte(q), &arr); err == nil {
+					metaObj["questions"] = arr
+				} else {
+					logger.Warn("[AskUserInline] Dropping non-array questions from metadata",
+						"toolCallID", toolCallID,
+						"questionsType", fmt.Sprintf("%T", questions),
+					)
+				}
+			default:
+				logger.Warn("[AskUserInline] Dropping non-array questions from metadata",
+					"toolCallID", toolCallID,
+					"questionsType", fmt.Sprintf("%T", questions),
+				)
+			}
 		}
 	}
 	metaBytes, _ := json.Marshal(metaObj)

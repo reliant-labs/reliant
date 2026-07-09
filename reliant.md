@@ -56,17 +56,13 @@ We optimize for **distributed** mode:
 | `projects` | Project configurations |
 | `worktrees` | Git worktree associations |
 
-#### Dual-Driver Parity Requirement (SQLite + Postgres)
+#### Database Driver (Postgres only)
 
-Any DB-related change must keep SQLite and Postgres behavior aligned.
+Postgres is the only supported database driver. SQLite support has been removed.
 
-- Update **both** query/repo/mapper paths when one changes
-- Add equivalent migrations in:
-  - `internal/db/migrations/sqlite`
-  - `internal/db/migrations/postgres`
+- Add migrations in `internal/db/migrations/postgres`
+- Update `internal/db/postgres/schema.sql` and regenerate `sqlc` code (`make sqlc`) when contracts change
 - Keep generated/query artifacts in sync when contracts change
-- Validate with tests in both modes (SQLite + Postgres)
-- Do not merge one-driver-only DB features unless explicitly intentional
 
 - **Temporal DB:** `./data/temporal.db` (internal state; usually don’t query directly)
 

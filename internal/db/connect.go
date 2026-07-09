@@ -216,7 +216,7 @@ func seedAPIKeyFromEnv(db *sql.DB) error {
 	// Upsert into api_keys table
 	_, err = db.Exec(
 		`INSERT INTO api_keys (id, user_id, provider, api_key, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?)
+		 VALUES ($1, $2, $3, $4, $5, $6)
 		 ON CONFLICT(user_id, provider) DO UPDATE SET
 		   api_key = excluded.api_key,
 		   updated_at = excluded.updated_at`,

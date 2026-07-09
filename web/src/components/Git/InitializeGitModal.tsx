@@ -70,8 +70,12 @@ export function InitializeGitModal({
         .map((line) => line.trim())
         .filter((line) => line.length > 0);
 
+      // Trim the branch name — stray whitespace (e.g. "main ") is an
+      // invalid git branch name and would fail server-side validation.
+      const branch = initialBranch.trim() || "main";
+
       await api.git.initGitRepository(projectId, {
-        initial_branch: initialBranch,
+        initial_branch: branch,
         gitignore_patterns: gitignorePatterns,
         initial_commit: createInitialCommit,
       });
@@ -206,7 +210,7 @@ export function InitializeGitModal({
             </li>
             <li className="flex items-start gap-1.5">
               <CheckCircle2 className="w-3.5 h-3.5 text-primary mt-0.5 flex-shrink-0" />
-              <span>Branch "{initialBranch}"</span>
+              <span>Branch "{initialBranch.trim() || "main"}"</span>
             </li>
             {createInitialCommit && (
               <li className="flex items-start gap-1.5">

@@ -12,10 +12,10 @@
 //     on transport error, with CacheStale=true if the row is past
 //     staleThreshold.
 //
-//   - ReachableByUser: keyed by userID. The existing NATS subject is
-//     per-daemon-ID, so we can't ask "any daemon for user X live?" without
-//     enumerating the user's daemons. The honest answer is the DB path. The
-//     daemon-ID variant remains NATS-first.
+//   - ReachableByUser: keyed by userID. NATS pull-RPC first on the per-user
+//     any-live subject (each gateway subscribes while it holds at least one
+//     daemon stream for the user; no responders = no daemon connected
+//     anywhere). Same DB-fallback semantics as Reachable.
 package daemonliveness
 
 import (
@@ -29,10 +29,16 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonquery"
 )
 
-// DefaultStaleThreshold matches the existing toolexec.daemonStaleThreshold —
-// 2× the daemon heartbeat interval. Callers that need a different window can
-// pass their own value to repo.GetUserLiveness / GetDaemonLiveness.
-const DefaultStaleThreshold = 30 * time.Second
+// DefaultStaleThreshold is 6 missed 15s heartbeats, matching the gateway's
+// staleConnectionThreshold (tools_daemon.go). It was previously 30s (2
+// missed heartbeats), which left zero margin: one delayed heartbeat write or
+// GC pause aged the row past the window and a live daemon read as offline —
+// failing chat preflight and flipping the UI status dot. Staleness is only
+// the CRASH-detection path: a clean disconnect deletes the daemon_attachment
+// row immediately, so a generous window here does not delay normal
+// disconnect detection. Callers that need a different window can pass their
+// own value to repo.GetUserLiveness / GetDaemonLiveness.
+const DefaultStaleThreshold = 90 * time.Second
 
 // DefaultNATSTimeout is the hot-path budget for the pull-RPC. The router and
 // preflight checks fall back to the DB if NATS doesn't answer in time, so
@@ -121,22 +127,57 @@ func Reachable(ctx context.Context, nc *nats.Conn, repo Repository, daemonID str
 // ReachableByUser answers "is any daemon for this user live?" — used by the
 // routing layer (which only knows userID until it resolves a specific daemon).
 //
-// IMPORTANT: the existing NATS subject is per-daemon-ID
-// (daemon.v1.query.<id>.status), so there is no cheap "any-live" wildcard.
-// Enumerating all of a user's daemons and fanning out NATS requests would be
-// strictly slower than the DB read. So the DB IS the canonical path for the
-// by-user variant — until a daemon.v1.user.<userID>.any-live subject exists.
-//
-// TODO: add the per-user NATS subject (gateway publishes a per-user "any-live"
-// subscription on first daemon connect, tears down on last disconnect), then
-// switch this to NATS-first matching Reachable's pattern.
+// Resolution order mirrors Reachable:
+//  1. NATS pull-RPC daemon.v1.query.user.<userID>.any-live — each gateway
+//     subscribes while it holds at least one daemon stream for the user
+//     (first connect subscribes, last disconnect unsubscribes), so subject
+//     routing reaches a replica that can answer authoritatively. Note the
+//     minimal any-live payload carries no timestamp, so LastSeen is zero on
+//     this path; callers here only consume Live.
+//  2. ErrUnavailable means no gateway anywhere holds a stream for this user.
+//     That IS the answer: not live. LastSeen is decorated from the DB
+//     best-effort for observability, but the canonical Live=false wins.
+//  3. Real transport failures fall back to the DB derived state, with
+//     CacheStale=true if the row is past staleThreshold.
 func ReachableByUser(ctx context.Context, nc *nats.Conn, repo Repository, userID string) (Status, error) {
-	_ = nc // intentionally unused; see TODO above.
 	if userID == "" {
 		return Status{}, fmt.Errorf("daemonliveness: empty userID")
 	}
 	if repo == nil {
 		return Status{}, fmt.Errorf("daemonliveness: nil repository")
 	}
-	return repo.GetUserLiveness(ctx, userID, DefaultStaleThreshold)
+
+	// 1. NATS pull-RPC — canonical truth.
+	if nc != nil {
+		ul, err := daemonquery.QueryUserAnyLive(ctx, nc, userID, DefaultNATSTimeout)
+		switch {
+		case err == nil:
+			return Status{Live: ul.Live}, nil
+		case errors.Is(err, daemonquery.ErrUnavailable):
+			// No gateway is subscribed for this user. That IS the answer:
+			// not live. We still consult the DB to populate LastSeen for
+			// observability — but the canonical Live=false wins.
+			dbStatus, dbErr := repo.GetUserLiveness(ctx, userID, DefaultStaleThreshold)
+			if dbErr != nil {
+				// DB error during decoration is fine to swallow; the NATS
+				// answer is canonical.
+				return Status{Live: false}, nil
+			}
+			dbStatus.Live = false // override: NATS said no.
+			return dbStatus, nil
+		default:
+			// Real transport failure (connection closed, decode error, etc.).
+			// Fall through to DB fallback so the system degrades gracefully.
+		}
+	}
+
+	// 2. DB fallback. CacheStale reflects whether the row is past the freshness window.
+	dbStatus, err := repo.GetUserLiveness(ctx, userID, DefaultStaleThreshold)
+	if err != nil {
+		return Status{}, fmt.Errorf("daemonliveness: db fallback: %w", err)
+	}
+	if !dbStatus.Live {
+		dbStatus.CacheStale = true
+	}
+	return dbStatus, nil
 }

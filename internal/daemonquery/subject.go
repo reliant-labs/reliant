@@ -25,6 +25,20 @@ func SubjectStatus(daemonID string) string {
 	return SubjectQueryPrefix + daemonID + ".status"
 }
 
+// SubjectUserAnyLive returns the NATS subject for the per-user "is any daemon
+// for this user live?" query: `daemon.v1.query.user.<userID>.any-live`.
+//
+// Each gateway subscribes while it holds at least one daemon stream for the
+// user and unsubscribes when the last one goes away, so subject routing
+// reaches a replica that can answer authoritatively — and no responders at
+// all means no gateway anywhere holds a stream for the user.
+//
+// The literal `user.` token cannot collide with the per-daemon subjects
+// because daemonIDs are UUIDs (and the token counts differ anyway).
+func SubjectUserAnyLive(userID string) string {
+	return SubjectQueryPrefix + "user." + userID + ".any-live"
+}
+
 // Status is the wire payload returned to a status query. Intentionally
 // minimal — anything richer should live in a separate query subject to keep
 // the hot path small.
@@ -45,4 +59,23 @@ func ParseStatus(data []byte) (Status, error) {
 		return Status{}, fmt.Errorf("decoding daemon status: %w", err)
 	}
 	return s, nil
+}
+
+// UserLiveness is the wire payload returned to a per-user any-live query.
+// Intentionally minimal: a responding gateway is by construction holding at
+// least one stream, so Live is true in practice and Count says how many
+// streams THAT replica holds (not a cluster-wide total).
+type UserLiveness struct {
+	Live  bool `json:"live"`
+	Count int  `json:"count"`
+}
+
+// ParseUserLiveness decodes a UserLiveness from JSON. Exposed so callers use
+// the same parser as test fixtures.
+func ParseUserLiveness(data []byte) (UserLiveness, error) {
+	var u UserLiveness
+	if err := json.Unmarshal(data, &u); err != nil {
+		return UserLiveness{}, fmt.Errorf("decoding user liveness: %w", err)
+	}
+	return u, nil
 }

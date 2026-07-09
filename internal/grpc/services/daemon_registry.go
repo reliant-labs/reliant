@@ -18,8 +18,13 @@ import (
 )
 
 // daemonAttachmentStaleThreshold is the freshness window for daemon_attachment
-// rows when determining whether a daemon is currently routable.
-const daemonAttachmentStaleThreshold = 30 * time.Second
+// rows when determining whether a daemon is currently routable. 6 missed 15s
+// heartbeats, matching the gateway's staleConnectionThreshold and
+// daemonliveness.DefaultStaleThreshold — 30s (the old value) left zero margin
+// over the heartbeat interval, so a single delayed lease renewal made the UI
+// status dot flip to DISCONNECTED for a live daemon. Clean disconnects delete
+// the row immediately; this window only bounds crashed-gateway detection.
+const daemonAttachmentStaleThreshold = 90 * time.Second
 
 // DaemonRegistryService handles daemon registry queries (list/get/resolve/resume).
 // Token CRUD lives in DaemonTokenService; PAT introspection lives in DaemonAuthService.

@@ -11,10 +11,10 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/mcp"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/stretchr/testify/require"
@@ -804,6 +804,10 @@ func (r *fakeMCPDaemonRouter) Close() error { return nil }
 
 func (r *fakeMCPDaemonRouter) EnqueueDaemonCommand(_ context.Context, _ string, _ string, _ []byte, _ int32) (int, error) {
 	return 0, nil
+}
+
+func (r *fakeMCPDaemonRouter) ResolveDaemonID(_ context.Context, _ string) (string, error) {
+	return "test-daemon-id", nil
 }
 
 func (r *fakeMCPDaemonRouter) SendDaemonCommand(_ context.Context, _ string, commandType string, payload []byte, _ int32) ([]byte, error) {

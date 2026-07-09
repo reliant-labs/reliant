@@ -81,6 +81,15 @@ message DaemonRegister {
   string name = 8; // Human-friendly daemon name (default: hostname)
   map<string, string> labels = 9; // User-defined labels for daemon selection
   string daemon_type = 10; // Daemon type: "local" or "cloud"
+  // daemon_id is a client-asserted stable identity persisted per server
+  // origin in ~/.reliant/daemon.json. The server assigns it on first
+  // registration (via RegistrationAck) and the daemon echoes it back on
+  // every reconnect so identity survives restarts and hostname changes
+  // (macOS flipping between *.lan and *.local). The server trusts it only
+  // when the PAT is not already bound to a specific daemon; empty for
+  // first-ever registration and pre-update daemons (which fall back to
+  // hostname-based resolution server-side).
+  string daemon_id = 11;
 }
 
 // ToolResponse contains the result of tool execution

@@ -215,7 +215,7 @@ func StartWorkflow(ctx context.Context, repo db.Repository, temporalClient clien
 Apply migration 041 to add required schema changes:
 
 ```bash
-goose -dir internal/db/migrations/sqlite up
+goose -dir internal/db/migrations/postgres up
 ```
 
 This adds:

@@ -3,9 +3,10 @@
  *   - `controlplane.v1.LLMGatewayService` (LLM keys, spend, available models)
  *   - `controlplane.v1.BillingService`     (wallet + Reliant overview)
  *
- * These back the `/settings/reliant-ai` section (`ReliantAISection`), which is
- * the end-user view of Reliant-issued LLM keys + spend. Distinct from the BYO
- * provider-key flow in `/settings/general`.
+ * These back the "Reliant AI" tab of the `/settings/general` AI section
+ * (`ReliantAISection`), which is the end-user view of Reliant-issued LLM keys +
+ * spend. Distinct from the BYO provider-key flow on the "Your providers" tab of
+ * the same section.
  *
  * New file (per the multi-agent contract) — the existing `llm.ts` wrapper is
  * shared with onboarding and left untouched. Every call goes through the shared

@@ -379,14 +379,23 @@ func (*DaemonMessage_FileSystemChanged) isDaemonMessage_Message() {}
 // The server derives user_id from the PAT used to authenticate the stream;
 // the daemon should not need to assert it.
 type DaemonRegister struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Hostname      string                 `protobuf:"bytes,3,opt,name=hostname,proto3" json:"hostname,omitempty"`                                                                       // Machine hostname
-	Platform      string                 `protobuf:"bytes,4,opt,name=platform,proto3" json:"platform,omitempty"`                                                                       // OS platform (darwin, linux, windows)
-	WorkingDir    string                 `protobuf:"bytes,5,opt,name=working_dir,json=workingDir,proto3" json:"working_dir,omitempty"`                                                 // Current working directory
-	Capabilities  []string               `protobuf:"bytes,6,rep,name=capabilities,proto3" json:"capabilities,omitempty"`                                                               // Supported tools/features
-	Name          string                 `protobuf:"bytes,8,opt,name=name,proto3" json:"name,omitempty"`                                                                               // Human-friendly daemon name (default: hostname)
-	Labels        map[string]string      `protobuf:"bytes,9,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // User-defined labels for daemon selection
-	DaemonType    string                 `protobuf:"bytes,10,opt,name=daemon_type,json=daemonType,proto3" json:"daemon_type,omitempty"`                                                // Daemon type: "local" or "cloud"
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Hostname     string                 `protobuf:"bytes,3,opt,name=hostname,proto3" json:"hostname,omitempty"`                                                                       // Machine hostname
+	Platform     string                 `protobuf:"bytes,4,opt,name=platform,proto3" json:"platform,omitempty"`                                                                       // OS platform (darwin, linux, windows)
+	WorkingDir   string                 `protobuf:"bytes,5,opt,name=working_dir,json=workingDir,proto3" json:"working_dir,omitempty"`                                                 // Current working directory
+	Capabilities []string               `protobuf:"bytes,6,rep,name=capabilities,proto3" json:"capabilities,omitempty"`                                                               // Supported tools/features
+	Name         string                 `protobuf:"bytes,8,opt,name=name,proto3" json:"name,omitempty"`                                                                               // Human-friendly daemon name (default: hostname)
+	Labels       map[string]string      `protobuf:"bytes,9,rep,name=labels,proto3" json:"labels,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // User-defined labels for daemon selection
+	DaemonType   string                 `protobuf:"bytes,10,opt,name=daemon_type,json=daemonType,proto3" json:"daemon_type,omitempty"`                                                // Daemon type: "local" or "cloud"
+	// daemon_id is a client-asserted stable identity persisted per server
+	// origin in ~/.reliant/daemon.json. The server assigns it on first
+	// registration (via RegistrationAck) and the daemon echoes it back on
+	// every reconnect so identity survives restarts and hostname changes
+	// (macOS flipping between *.lan and *.local). The server trusts it only
+	// when the PAT is not already bound to a specific daemon; empty for
+	// first-ever registration and pre-update daemons (which fall back to
+	// hostname-based resolution server-side).
+	DaemonId      string `protobuf:"bytes,11,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -466,6 +475,13 @@ func (x *DaemonRegister) GetLabels() map[string]string {
 func (x *DaemonRegister) GetDaemonType() string {
 	if x != nil {
 		return x.DaemonType
+	}
+	return ""
+}
+
+func (x *DaemonRegister) GetDaemonId() string {
+	if x != nil {
+		return x.DaemonId
 	}
 	return ""
 }
@@ -3190,7 +3206,7 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	" \x01(\v2 .reliant.v1.TerminalSessionEventH\x00R\x14terminalSessionEvent\x12Y\n" +
 	"\x14process_output_chunk\x18\v \x01(\v2%.reliant.v1.ProcessOutputChunkMessageH\x00R\x12processOutputChunk\x12O\n" +
 	"\x13file_system_changed\x18\f \x01(\v2\x1d.reliant.v1.FileSystemChangedH\x00R\x11fileSystemChangedB\t\n" +
-	"\amessage\"\xcf\x02\n" +
+	"\amessage\"\xec\x02\n" +
 	"\x0eDaemonRegister\x12\x1a\n" +
 	"\bhostname\x18\x03 \x01(\tR\bhostname\x12\x1a\n" +
 	"\bplatform\x18\x04 \x01(\tR\bplatform\x12\x1f\n" +
@@ -3201,7 +3217,8 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\x06labels\x18\t \x03(\v2&.reliant.v1.DaemonRegister.LabelsEntryR\x06labels\x12\x1f\n" +
 	"\vdaemon_type\x18\n" +
 	" \x01(\tR\n" +
-	"daemonType\x1a9\n" +
+	"daemonType\x12\x1b\n" +
+	"\tdaemon_id\x18\v \x01(\tR\bdaemonId\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\x01\x10\x02J\x04\b\x02\x10\x03J\x04\b\a\x10\b\"\x80\x02\n" +

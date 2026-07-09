@@ -377,11 +377,11 @@ function OverviewTab({
                 <div className="flex flex-col gap-3 rounded-md border border-border bg-muted/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-sm font-medium text-foreground">
-                      Per-environment overage
+                      Per-machine overage
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {planUi.overageRateLabel === "—"
-                        ? "Per-environment overage is not available on this plan."
+                        ? "Per-machine overage is not available on this plan."
                         : `When on, you'll be charged ${planUi.overageRateLabel} for usage beyond included hours.`}
                     </p>
                   </div>
@@ -626,7 +626,7 @@ function PlansTab() {
           Compute plans
         </h3>
         <p className="text-sm text-muted-foreground">
-          One compute subscription powers all your environments. Each plan
+          One compute subscription powers all your machines. Each plan
           includes a monthly bucket of hours shared across them.
         </p>
       </div>
@@ -687,7 +687,7 @@ function PlansTab() {
                     </li>
                     <li className="flex items-start gap-2">
                       <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                      Runs {sizesLabel.toLowerCase()} environments
+                      Runs {sizesLabel.toLowerCase()} machines
                     </li>
                   </ul>
                   <Button
@@ -869,7 +869,7 @@ function UsageTab() {
         <EmptyState
           icon={BarChart3}
           title="No usage data"
-          description="Usage appears here once your environments start running."
+          description="Usage appears here once your machines start running."
         />
       ) : (
         <>
@@ -919,20 +919,20 @@ function UsageTab() {
 
           <div>
             <h4 className="mb-2 text-sm font-semibold text-foreground">
-              By environment
+              By machine
             </h4>
             {sortedWorkspaces.length === 0 ? (
               <EmptyState
                 icon={Server}
-                title="No environment usage"
-                description="No environment usage in this period."
+                title="No machine usage"
+                description="No machine usage in this period."
               />
             ) : (
               <Card className="overflow-hidden">
                 <Table>
                   <Thead>
                     <Tr>
-                      <Th>Environment</Th>
+                      <Th>Machine</Th>
                       <Th>Size</Th>
                       <Th className="text-right">Minutes</Th>
                       <Th className="text-right">Overage min</Th>

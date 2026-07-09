@@ -26,6 +26,19 @@ type DaemonBootstrapConfig struct {
 	DataDir   string
 	Name      string // Human-friendly daemon name (default: hostname)
 
+	// ServerURL is the API server origin (scheme://host:port) these
+	// credentials belong to. Used as the per-origin key into
+	// ~/.reliant/daemon.json so the daemon can persist the server-assigned
+	// DaemonID after registration. Empty in server mode (the gateway dials
+	// in and already knows our identity).
+	ServerURL string
+
+	// DaemonID is the stable identity previously assigned by the server for
+	// ServerURL's origin, read from persisted credentials at startup. The
+	// daemon re-asserts it in its registration message so identity survives
+	// restarts and hostname changes. Empty on first-ever registration.
+	DaemonID string
+
 	// ServerMode, when true, makes the daemon listen on ListenPort for
 	// incoming gateway connections instead of dialing out.
 	ServerMode bool

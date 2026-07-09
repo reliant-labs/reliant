@@ -175,6 +175,18 @@ func (a *MCPToolAdapter) buildLooseFallbackSchema() *jsonschema.Schema {
 	}
 }
 
+// subschemaMapKeywords are JSON Schema keywords whose values are maps keyed by
+// arbitrary names (e.g. property names) pointing at subschemas. Keys inside
+// these maps must NOT be interpreted as schema keywords — a property literally
+// named "type" is a property name, not the JSON Schema type keyword.
+var subschemaMapKeywords = map[string]struct{}{
+	"properties":        {},
+	"patternProperties": {},
+	"$defs":             {},
+	"definitions":       {},
+	"dependentSchemas":  {},
+}
+
 func normalizeSchemaForInvopop(value interface{}) interface{} {
 	switch v := value.(type) {
 	case map[string]interface{}:
@@ -182,6 +194,10 @@ func normalizeSchemaForInvopop(value interface{}) interface{} {
 		for key, raw := range v {
 			if key == "type" {
 				normalized[key] = normalizeSchemaType(raw)
+				continue
+			}
+			if _, ok := subschemaMapKeywords[key]; ok {
+				normalized[key] = normalizeSubschemaMap(raw)
 				continue
 			}
 			normalized[key] = normalizeSchemaForInvopop(raw)
@@ -196,6 +212,21 @@ func normalizeSchemaForInvopop(value interface{}) interface{} {
 	default:
 		return value
 	}
+}
+
+// normalizeSubschemaMap normalizes a map of arbitrary-name -> subschema. The
+// map keys are treated as opaque names (never as schema keywords) while each
+// value is normalized as a schema.
+func normalizeSubschemaMap(raw interface{}) interface{} {
+	m, ok := raw.(map[string]interface{})
+	if !ok {
+		return normalizeSchemaForInvopop(raw)
+	}
+	normalized := make(map[string]interface{}, len(m))
+	for name, sub := range m {
+		normalized[name] = normalizeSchemaForInvopop(sub)
+	}
+	return normalized
 }
 
 func validateMCPLogicalServerName(serverName string) error {

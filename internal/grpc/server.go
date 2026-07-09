@@ -477,6 +477,7 @@ func newHandlerOptions(timeoutInterceptor connect.Interceptor, authInterceptors 
 // Reliant-specific interceptors (error reporter, timeout, auth) are passed as Extras.
 func newInterceptors(timeoutInterceptor connect.Interceptor, authInterceptors ...connect.Interceptor) []connect.Interceptor {
 	extras := []connect.Interceptor{
+		interceptors.NewSlowRPCWatchdogInterceptor(),
 		interceptors.NewErrorReporterInterceptor(),
 		timeoutInterceptor,
 	}

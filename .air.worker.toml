@@ -1,0 +1,51 @@
+# Air config for the reliant temporal worker under `forge up --env=dev`.
+# See .air.api.toml for the design notes (per-service tmp dir, atomic build,
+# stop_on_error=false, no codegen pre_cmd). Env comes from forge's host phase.
+#
+# NOTE: the Temporal SDK reads the binary for its checksum on worker start
+# (initBinaryChecksum) — the atomic .tmp+mv below is what keeps that read
+# from racing a rebuild, same as the legacy .air.toml documented.
+root = "."
+testdata_dir = "testdata"
+tmp_dir = "tmp/air-worker"
+
+[build]
+  bin = "./tmp/air-worker/reliant"
+  args_bin = ["server", "worker"]
+  cmd = "CGO_ENABLED=0 go build -buildvcs=false -o ./tmp/air-worker/reliant.tmp ./cmd/reliant && mv ./tmp/air-worker/reliant.tmp ./tmp/air-worker/reliant"
+  delay = 1000
+  exclude_dir = ["assets", "tmp", "vendor", "testdata", "web", "mobile", "dist", ".claude_plan", "test", "electron", "node_modules", "e2e", ".reliant", "examples", "data", ".git", "scripts", "docs"]
+  exclude_file = []
+  exclude_regex = ["_test\\.go$"]
+  exclude_unchanged = false
+  follow_symlink = false
+  include_ext = ["go", "yaml"]
+  include_file = []
+  kill_delay = "5s"
+  log = "tmp/air-worker/build-errors.log"
+  poll = false
+  poll_interval = 0
+  post_cmd = []
+  pre_cmd = []
+  rerun = false
+  rerun_delay = 500
+  send_interrupt = true
+  stop_on_error = false
+
+[color]
+  app = ""
+  build = "yellow"
+  main = "magenta"
+  runner = "green"
+  watcher = "cyan"
+
+[log]
+  main_only = false
+  time = false
+
+[misc]
+  clean_on_exit = true
+
+[screen]
+  clear_on_rebuild = false
+  keep_scroll = true

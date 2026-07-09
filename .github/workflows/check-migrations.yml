@@ -4,22 +4,16 @@ on:
   pull_request:
     paths:
       - "internal/db/migrations/**"
-      - "internal/db/schema.sql"
       - "internal/db/postgres/schema.sql"
       - "scripts/check-migrations.sh"
-      - "scripts/validate-schema.sh"
-      - "scripts/generate-schema.sh"
       - "sqlc.yaml"
   push:
     branches:
       - main
     paths:
       - "internal/db/migrations/**"
-      - "internal/db/schema.sql"
       - "internal/db/postgres/schema.sql"
       - "scripts/check-migrations.sh"
-      - "scripts/validate-schema.sh"
-      - "scripts/generate-schema.sh"
       - "sqlc.yaml"
 
 jobs:
@@ -68,7 +62,7 @@ jobs:
 
           HAS_CONFLICTS=false
 
-          for MIGRATION_DIR in internal/db/migrations/sqlite internal/db/migrations/postgres; do
+          for MIGRATION_DIR in internal/db/migrations/postgres; do
             DIR_NAME=$(basename "$MIGRATION_DIR")
 
             # Get highest migration in main for this directory
@@ -135,7 +129,7 @@ jobs:
           echo ""
           echo "Or manually run:"
           echo "  ./scripts/fix-migration-conflicts.sh"
-          echo "  git add internal/db/migrations/sqlite/"
+          echo "  git add internal/db/migrations/postgres/"
           echo "  git commit --amend --no-edit"
           echo "  git push --force-with-lease"
           exit 1
@@ -147,23 +141,19 @@ jobs:
           shopt -u nullglob
 
           if [ ${#ROOT_MIGRATIONS[@]} -gt 0 ]; then
-            echo "❌ Found unexpected root-level migrations (must be in sqlite/ or postgres/):"
+            echo "❌ Found unexpected root-level migrations (must be in postgres/):"
             printf '  - %s\n' "${ROOT_MIGRATIONS[@]}"
             exit 1
           fi
 
           echo "✅ No root-level migrations found"
 
-      - name: Validate migration numbering (sqlite + postgres)
+      - name: Validate migration numbering (postgres)
         run: bash ./scripts/check-migrations.sh
 
       - name: Validate migration sequence
         run: |
           echo "✅ Sequence validation covered by scripts/check-migrations.sh"
-
-      - name: Validate SQLite migrations apply cleanly
-        run: |
-          goose -dir internal/db/migrations/sqlite sqlite3 /tmp/reliant-ci-schema-check.db up
 
       - name: Validate Postgres migrations apply cleanly
         env:
@@ -185,7 +175,7 @@ jobs:
           if [ "${{ steps.check.outputs.has_conflicts }}" = "true" ]; then
               echo "❌ **Migration conflicts detected**" >> $GITHUB_STEP_SUMMARY
               echo "" >> $GITHUB_STEP_SUMMARY
-              echo "One or more sqlite/postgres migrations need to be renumbered to come after main's highest migration in their respective directory." >> $GITHUB_STEP_SUMMARY
+              echo "One or more postgres migrations need to be renumbered to come after main's highest migration." >> $GITHUB_STEP_SUMMARY
               echo "" >> $GITHUB_STEP_SUMMARY
               echo "**To fix:**" >> $GITHUB_STEP_SUMMARY
               echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY

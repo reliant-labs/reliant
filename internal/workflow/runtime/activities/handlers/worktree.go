@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
+	repopkg "github.com/reliant-labs/reliant/internal/repo"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
@@ -115,6 +116,12 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 	repos, err := a.repo.ListReposByProject(ctx, project.ID)
 	if err != nil {
 		return CreateWorktreeOutput{}, fmt.Errorf("failed to list repos for project: %w", err)
+	}
+	if len(repos) == 0 {
+		// Same self-heal as the gRPC gate: the registry trails the filesystem
+		// when a repo was created outside the tracked flows (e.g. a manual
+		// `git init`), so adopt what actually exists before refusing.
+		repos = repopkg.AdoptFromDaemon(ctx, a.repo, a.daemonRouter, project)
 	}
 	if len(repos) == 0 {
 		return CreateWorktreeOutput{}, fmt.Errorf("project has no git repos; initialize one or add a nested repo before creating worktrees")

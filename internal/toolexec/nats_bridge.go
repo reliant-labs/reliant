@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -335,7 +336,31 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 			"payload":       resp.Payload,
 			"error_message": resp.ErrorMessage,
 		})
-		_ = msg.Respond(respData)
+		// A reply exceeding the NATS server's max_payload fails the publish —
+		// and the old `_ = msg.Respond(...)` DISCARDED that error, so the
+		// caller waited out its full timeout with zero diagnostics (2026-07-09:
+		// worktree.git_changes on a dirty tree marshaled to 1.7MB against the
+		// 1MB default; every call surfaced as a bare "nats: timeout").
+		// Preflight the size so the caller fails fast with a diagnosable
+		// message, and never drop a residual Respond error silently.
+		if max := b.nc.MaxPayload(); max > 0 && int64(len(respData)) > max {
+			logging.Error("[NATSToolBridge] Daemon command reply exceeds NATS max_payload",
+				"commandType", req.CommandType, "requestID", req.RequestID,
+				"replyBytes", len(respData), "maxPayload", max)
+			errResp, _ := json.Marshal(map[string]interface{}{
+				"success": false,
+				"error_message": fmt.Sprintf(
+					"daemon response too large for transport: %d bytes (NATS max_payload %d) — command %s",
+					len(respData), max, req.CommandType),
+			})
+			_ = msg.Respond(errResp)
+			return
+		}
+		if err := msg.Respond(respData); err != nil {
+			logging.Error("[NATSToolBridge] Failed to publish daemon command reply",
+				"commandType", req.CommandType, "requestID", req.RequestID,
+				"replyBytes", len(respData), "error", err)
+		}
 
 		// NOTE: terminal output forwarding is NOT started here. It is now
 		// subscribe-driven — started only when a terminal-output-subscribe

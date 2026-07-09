@@ -176,8 +176,8 @@ export function NewChatView({
     workflowParams?: Record<string, unknown>
   ) => {
     if (!daemonConnected) {
-      toast.error("No environment connected", {
-        description: "Start an environment to begin chatting.",
+      toast.error("No machine connected", {
+        description: "Start a machine to begin chatting.",
       });
       return;
     }
@@ -415,14 +415,14 @@ export function NewChatView({
       {/* Message Input - Collapsible when not focused */}
       {!daemonConnected && !daemonLoading && (() => {
         // In cloud mode (control-plane deployment) route to the in-app
-        // Environments settings section; otherwise fall back to the local
+        // Machines settings section; otherwise fall back to the local
         // "connect a daemon" modal.
         const isCloud = capabilities.cloudDaemons;
         return (
           <div className="flex items-center justify-center gap-2 border-t border-yellow-500/20 bg-yellow-500/5 px-4 py-2.5 text-sm text-yellow-600 dark:text-yellow-400">
             <Activity className="h-4 w-4" />
             <span>
-              No environment connected.{" "}
+              No machine connected.{" "}
               {isCloud ? (
                 <button
                   type="button"
@@ -434,7 +434,7 @@ export function NewChatView({
                   }
                   className="font-medium underline underline-offset-2 hover:text-yellow-700 dark:hover:text-yellow-300"
                 >
-                  Manage environments
+                  Manage machines
                 </button>
               ) : (
                 <button
@@ -442,7 +442,7 @@ export function NewChatView({
                   onClick={() => setShowConnectDaemonModal(true)}
                   className="font-medium underline underline-offset-2 hover:text-yellow-700 dark:hover:text-yellow-300"
                 >
-                  Start a cloud environment or run one locally
+                  Start a cloud machine or run one locally
                 </button>
               )}{" "}
               to begin chatting.

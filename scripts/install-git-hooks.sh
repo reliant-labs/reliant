@@ -28,7 +28,7 @@ cat > "$POST_REBASE_HOOK" << 'EOF'
 #!/bin/bash
 # Post-rebase hook - automatically fixes migration conflicts after rebase
 
-MIGRATION_DIR="internal/db/migrations/sqlite"
+MIGRATION_DIR="internal/db/migrations/postgres"
 
 # Get the root of the git repo
 REPO_ROOT=$(git rev-parse --show-toplevel)
@@ -70,7 +70,7 @@ cat > "$PRE_PUSH_HOOK" << 'EOF'
 #!/bin/bash
 # Pre-push hook - checks for migration conflicts before pushing
 
-MIGRATION_DIR="internal/db/migrations/sqlite"
+MIGRATION_DIR="internal/db/migrations/postgres"
 
 # Get the root of the git repo
 REPO_ROOT=$(git rev-parse --show-toplevel)

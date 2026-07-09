@@ -101,8 +101,8 @@ export function TokenSettings() {
       <div>
         <h2 className="text-lg font-semibold mb-2">Access Tokens</h2>
         <p className="text-sm text-muted-foreground">
-          Create and manage personal access tokens for headless daemon
-          connections.
+          Create and manage access tokens for connecting headless daemons and
+          self-hosted environments.
         </p>
       </div>
 

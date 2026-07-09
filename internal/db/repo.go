@@ -209,14 +209,6 @@ func isRetryableError(err error) bool {
 		return true
 	}
 
-	// SQLite: SQLITE_BUSY / SQLITE_LOCKED transient contention (e.g. "database is
-	// locked", "database table is locked", "database schema is locked", "database
-	// is busy"). These resolve once the competing transaction completes, so retry.
-	if strings.Contains(errMsg, "locked") ||
-		strings.Contains(errMsg, "busy") {
-		return true
-	}
-
 	// Postgres: transaction already aborted by a prior failed statement (SQLSTATE 25P02).
 	// Retrying the whole transaction from scratch will start a fresh BEGIN.
 	if strings.Contains(errMsg, "25p02") ||

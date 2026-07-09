@@ -12,6 +12,15 @@ const {
 
 // NOTE: With HTTP/2 (TLS), connection limits are not a concern.
 // The backend now uses self-signed certs for HTTPS, enabling HTTP/2 multiplexing.
+//
+// DEV is different: the renderer loads over plain HTTP from Vite, so every
+// RPC rides HTTP/1.1 and Chromium's 6-connections-per-origin limit applies.
+// Long-lived Connect streams (chat, user updates, terminals) plus any slow
+// unary call pin those sockets, and every other RPC sits "pending" in the
+// network tab until it times out. Lift the limit for loopback origins —
+// harmless for packaged builds (h2 multiplexes anyway), essential for dev.
+app.commandLine.appendSwitch("ignore-connections-limit", "127.0.0.1,localhost");
+
 const net = require("node:net");
 const log = require("./logger");
 const path = require("path");
@@ -2355,6 +2364,15 @@ ipcMain.handle("auth:clear", async () => {
 
     let backendRestart = { restarted: false };
     if (success) {
+      // Drop the per-origin daemon.json entry (PAT + owner sub + stable
+      // daemon_id) so the next login mints fresh credentials and the server
+      // assigns a fresh daemon id. Logout may precede a user switch, so we
+      // must not resurrect the prior user's identity. Done regardless of
+      // whether the daemon restarts here (on logout it stays warm — see
+      // shouldRestartBackendForAuthChange).
+      if (backendManager) {
+        backendManager.clearDaemonCredsForOrigin();
+      }
       backendRestart = await restartBackendForAuthPrincipalChange(previousSession, null, 'auth:clear');
     }
 

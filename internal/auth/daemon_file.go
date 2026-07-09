@@ -23,6 +23,14 @@ type DaemonCredentials struct {
 	ServerURL    string    `json:"server_url"`
 	GatewayURL   string    `json:"gateway_url,omitempty"`
 	RegisteredAt time.Time `json:"registered_at"`
+	// DaemonID is the stable, server-assigned identity for this daemon at
+	// this origin. The server mints it on first registration and returns it
+	// in RegistrationAck; the daemon persists it here and re-asserts it on
+	// every reconnect so identity survives daemon restarts and machine
+	// hostname changes (macOS flipping between *.lan and *.local). Empty
+	// until the first successful registration. Cleared on logout by deleting
+	// the whole origin entry.
+	DaemonID string `json:"daemon_id,omitempty"`
 }
 
 // daemonCredentialsStore is the on-disk format: endpoint key → credentials.
