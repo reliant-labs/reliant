@@ -25,10 +25,31 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonevents"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/gitutil"
+	"github.com/reliant-labs/reliant/internal/gitref"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
+
+// reconcileProjectGitRepo trues up a project's cached is_git_repo flag against
+// a fresh filesystem observation from the daemon, persisting only on change.
+//
+// is_git_repo is a cache of ONE fact: does the daemon see a .git at the
+// project path. It is intentionally NOT derived from the repos table — repo
+// rows are created only by the multi-repo/worktree flows, so a plain git
+// project the user never registers as a worktree repo has zero repo rows yet
+// is still a git repo. The API tier can't observe the filesystem itself, so
+// it caches the daemon's answer and reconciles here, in BOTH directions,
+// every time the daemon reports. Callers must pass a value that came from an
+// actual daemon observation (project.check_git / repo.discover), never from a
+// repo-count, so the cache stays honest.
+func reconcileProjectGitRepo(ctx context.Context, database db.Repository, project *db.Project, observed bool) error {
+	if project.IsGitRepo == observed {
+		return nil
+	}
+	project.IsGitRepo = observed
+	project.UpdatedAt = time.Now().UTC()
+	return database.UpdateProject(ctx, project, project.UserID)
+}
 
 // ProjectService implements the ProjectService RPC handlers
 type ProjectService struct {
@@ -367,8 +388,8 @@ func (s *ProjectService) CreateProject(
 	// never persisted or handed to git init.
 	defaultBranch := "main"
 	if req.Msg.DefaultBranch != nil {
-		defaultBranch = gitutil.NormalizeBranchName(*req.Msg.DefaultBranch)
-		if err := gitutil.ValidateBranchName(defaultBranch); err != nil {
+		defaultBranch = gitref.NormalizeBranchName(*req.Msg.DefaultBranch)
+		if err := gitref.ValidateBranchName(defaultBranch); err != nil {
 			return nil, connect.NewError(connect.CodeInvalidArgument, err)
 		}
 	}
@@ -686,22 +707,21 @@ func (s *ProjectService) GetProject(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
 	}
 
-	// Live-check git status via daemon so we never show a stale modal.
-	// Once IsGitRepo is true it's monotonic (a repo stays a repo), so skip the
-	// daemon round-trip in that case to avoid ~500ms of latency.
-	if !project.IsGitRepo {
-		var checkGitResp struct {
-			IsGitRepo bool `json:"is_git_repo"`
-		}
-		if err := s.sendProjectDaemonCommand(ctx, userID, "project.check_git", map[string]string{"path": project.Path}, &checkGitResp); err != nil {
-			logging.Warn("GetProject: failed to live-check git status, using DB value", "error", err, "projectID", project.ID)
-		} else if checkGitResp.IsGitRepo != project.IsGitRepo {
-			project.IsGitRepo = checkGitResp.IsGitRepo
-			project.UpdatedAt = time.Now().UTC()
-			if updateErr := s.database.UpdateProject(ctx, project, userID); updateErr != nil {
-				logging.Warn("GetProject: failed to persist updated git status", "error", updateErr, "projectID", project.ID)
-			}
-		}
+	// Live-check git status via daemon and reconcile in BOTH directions so the
+	// cached flag can never diverge from what the daemon actually observes on
+	// disk — a project that gained a .git (manual `git init`) flips true, and
+	// one whose .git was removed flips false. is_git_repo is a cache of the
+	// daemon's filesystem observation, nothing more; it is deliberately not
+	// derived from repo-count, because a git project the user never registers
+	// as a worktree repo still has zero repo rows. When the daemon is
+	// unreachable we keep the last-known DB value.
+	var checkGitResp struct {
+		IsGitRepo bool `json:"is_git_repo"`
+	}
+	if err := s.sendProjectDaemonCommand(ctx, userID, "project.check_git", map[string]string{"path": project.Path}, &checkGitResp); err != nil {
+		logging.Warn("GetProject: failed to live-check git status, using DB value", "error", err, "projectID", project.ID)
+	} else if err := reconcileProjectGitRepo(ctx, s.database, project, checkGitResp.IsGitRepo); err != nil {
+		logging.Warn("GetProject: failed to persist updated git status", "error", err, "projectID", project.ID)
 	}
 
 	analyticsClient := analytics.GetClientForUser(ctx, userID)
@@ -1307,8 +1327,8 @@ func (s *ProjectService) InitializeGitRepo(
 	// Normalize + validate the branch name before anything touches disk or
 	// the DB, so a bad value (e.g. "main " with a trailing space from the
 	// UI) fails as invalid_argument instead of half-initializing the repo.
-	initialBranch := gitutil.NormalizeBranchName(req.Msg.InitialBranch)
-	if err := gitutil.ValidateBranchName(initialBranch); err != nil {
+	initialBranch := gitref.NormalizeBranchName(req.Msg.InitialBranch)
+	if err := gitref.ValidateBranchName(initialBranch); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 

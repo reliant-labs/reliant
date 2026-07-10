@@ -114,6 +114,11 @@ func (f *ToolsFactory) View() Tool {
 	return NewViewTool()
 }
 
+// ReadAttachment reads user-attached files (paginating PDFs) from the database.
+func (f *ToolsFactory) ReadAttachment() Tool {
+	return NewReadAttachmentTool(f.opts.Repo)
+}
+
 func (f *ToolsFactory) Write() Tool {
 	return NewWriteTool()
 }

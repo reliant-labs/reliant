@@ -129,6 +129,7 @@ nodes:
             model: "{{inputs.model}}"
             temperature: "{{inputs.temperature}}"
             thinking_level: "{{inputs.thinking_level}}"
+            compaction_threshold: "{{inputs.compaction_threshold}}"
             system_prompt: "{{inputs.system_prompt}}"
             # Include regular tools, response tool, and spawn
             tools_config:
@@ -199,7 +200,7 @@ nodes:
         - from: execute_tools
           cases:
             - to: compact
-              condition: nodes.execute_tools.thread_token_count > inputs.compaction_threshold
+              condition: nodes.execute_tools.thread_token_count > nodes.call_llm.compaction_threshold
               label: needs_compact
 
       ui:

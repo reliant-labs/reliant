@@ -20,7 +20,9 @@ func TestCreateWorkflowWithThread_NewThread(t *testing.T) {
 	defer repo.Close()
 
 	// Setup: Create a project and chat
-	projectID := "test-project"
+	// Unique project ID per test: the package shares one Postgres DB, so a
+	// constant ID would collide (projects_pkey) across test functions.
+	projectID := uuid.New().String()
 	err := repo.CreateProject(ctx, &db.Project{
 		ID:        projectID,
 		Name:      "Test Project",
@@ -97,7 +99,9 @@ func TestCreateWorkflowWithThread_ForkedThread(t *testing.T) {
 	defer repo.Close()
 
 	// Setup: Create a project, chat, and parent thread with context window
-	projectID := "test-project"
+	// Unique project ID per test: the package shares one Postgres DB, so a
+	// constant ID would collide (projects_pkey) across test functions.
+	projectID := uuid.New().String()
 	err := repo.CreateProject(ctx, &db.Project{
 		ID:        projectID,
 		Name:      "Test Project",
@@ -175,7 +179,9 @@ func TestCreateWorkflowWithThread_ChildWorkflow(t *testing.T) {
 	defer repo.Close()
 
 	// Setup: Create a project and chat
-	projectID := "test-project"
+	// Unique project ID per test: the package shares one Postgres DB, so a
+	// constant ID would collide (projects_pkey) across test functions.
+	projectID := uuid.New().String()
 	err := repo.CreateProject(ctx, &db.Project{
 		ID:        projectID,
 		Name:      "Test Project",
@@ -329,7 +335,9 @@ func TestCreateWorkflowWithThread_DefaultThreadID(t *testing.T) {
 	defer repo.Close()
 
 	// Setup: Create a project and chat
-	projectID := "test-project"
+	// Unique project ID per test: the package shares one Postgres DB, so a
+	// constant ID would collide (projects_pkey) across test functions.
+	projectID := uuid.New().String()
 	err := repo.CreateProject(ctx, &db.Project{
 		ID:        projectID,
 		Name:      "Test Project",

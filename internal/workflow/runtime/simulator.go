@@ -652,6 +652,7 @@ func (s *WorkflowSimulator) Run(mocker StepMocker) error {
 			}
 
 			normalizedOutput := normalizeMockOutput(mockOutput, nodeActivityName(triggered.Node))
+			applyCallLLMCompactionThreshold(normalizedOutput, triggered.Node, evaluatedInputs)
 
 			// Store step output
 			s.nodeOutputs[stepID] = normalizedOutput
@@ -1089,6 +1090,7 @@ func (s *WorkflowSimulator) executeLoopIteration(
 			// Call mocker with qualified ID
 			mockOutput := mocker(qualifiedID, evaluatedInputs)
 			normalizedOutput := normalizeMockOutput(mockOutput, nodeActivityName(triggered.Node))
+			applyCallLLMCompactionThreshold(normalizedOutput, triggered.Node, evaluatedInputs)
 
 			// Store in sub-workflow's local outputs (for edge evaluation)
 			innerOutputs[innerNodeID] = normalizedOutput
@@ -1369,6 +1371,7 @@ func (s *WorkflowSimulator) executeNestedLoopIteration(
 
 			mockOutput := mocker(qualifiedID, evaluatedInputs)
 			normalizedOutput := normalizeMockOutput(mockOutput, nodeActivityName(triggered.Node))
+			applyCallLLMCompactionThreshold(normalizedOutput, triggered.Node, evaluatedInputs)
 
 			innerOutputs[innerNodeID] = normalizedOutput
 			s.nodeOutputs[qualifiedID] = normalizedOutput
@@ -1680,6 +1683,7 @@ func (s *WorkflowSimulator) executeWorkflowNode(nodePath string, protoNode *reli
 			// Regular node - use sub-mocker
 			mockOutput := subMocker(innerNodeID, evaluatedInputs)
 			normalizedOutput := normalizeMockOutput(mockOutput, nodeActivityName(triggered.Node))
+			applyCallLLMCompactionThreshold(normalizedOutput, triggered.Node, evaluatedInputs)
 
 			innerOutputs[innerNodeID] = normalizedOutput
 			s.nodeOutputs[qualifiedID] = normalizedOutput

@@ -274,7 +274,7 @@ func (s *RepoService) RemoveRepo(
 	req *connect.Request[reliantv1.RemoveRepoRequest],
 ) (*connect.Response[reliantv1.RemoveRepoResponse], error) {
 	userID := auth.MustGetUserID(ctx)
-	repo, project, err := s.authorizeRepo(ctx, req.Msg.RepoId, userID)
+	repo, _, err := s.authorizeRepo(ctx, req.Msg.RepoId, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -284,16 +284,12 @@ func (s *RepoService) RemoveRepo(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete repo"))
 	}
 
-	// If the project now has zero repos, flip is_git_repo back to false so
-	// downstream prompts (e.g. "initialize git") are accurate.
-	remaining, err := s.database.ListReposByProject(ctx, project.ID)
-	if err == nil && len(remaining) == 0 && project.IsGitRepo {
-		project.IsGitRepo = false
-		project.UpdatedAt = time.Now().UTC()
-		if err := s.database.UpdateProject(ctx, project, userID); err != nil {
-			logging.Warn("Failed to flip project.is_git_repo to false", "error", err, "projectID", project.ID)
-		}
-	}
+	// NOTE: removing a repo association deliberately does NOT touch
+	// is_git_repo. That flag caches whether a .git exists on disk (a daemon
+	// observation), not whether the project has registered worktree repos —
+	// unregistering the last repo doesn't delete .git from the filesystem, and
+	// a plain git project the user never registered still is a git repo. The
+	// flag is reconciled from the daemon in GetProject / project discovery.
 
 	return connect.NewResponse(&reliantv1.RemoveRepoResponse{Success: true}), nil
 }

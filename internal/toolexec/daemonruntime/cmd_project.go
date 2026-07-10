@@ -10,16 +10,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/gitutil"
 )
-
-// gitRepoCache caches positive is_git_repo results.
-// Once a path is known to be a git repo, it stays that way.
-// Negative results are never cached (user may run git init).
-var gitRepoCache sync.Map // path -> bool (only true values stored)
 
 func init() {
 	RegisterCommand("project.check_git", handleCheckGit)
@@ -47,17 +41,12 @@ func handleCheckGit(_ context.Context, payload []byte) ([]byte, error) {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
 
-	// Return cached positive result — git repos don't become non-git
-	if cached, ok := gitRepoCache.Load(req.Path); ok && cached.(bool) {
-		return json.Marshal(checkGitResponse{IsGitRepo: true})
-	}
-
-	isGit := gitutil.IsGitRepository(req.Path)
-	if isGit {
-		gitRepoCache.Store(req.Path, true)
-	}
-
-	return json.Marshal(checkGitResponse{IsGitRepo: isGit})
+	// Always stat the filesystem — a bare os.Stat is cheap, and caching a
+	// positive result would make the daemon lie after a `.git` is removed,
+	// which would in turn pin the API's cached is_git_repo flag to a stale
+	// true. The flag is a bidirectional cache of this observation, so this
+	// answer must reflect the live filesystem in both directions.
+	return json.Marshal(checkGitResponse{IsGitRepo: gitutil.IsGitRepository(req.Path)})
 }
 
 // --- project.init_files ---

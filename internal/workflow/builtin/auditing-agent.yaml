@@ -122,6 +122,7 @@ nodes:
             system_prompt: "{{inputs.system_prompt}}"
             temperature: "{{inputs.temperature}}"
             thinking_level: "{{inputs.thinking_level}}"
+            compaction_threshold: "{{inputs.compaction_threshold}}"
             tools_config:
               filter: "{{inputs.tools}}"
               spawn: "{{[spawn(workflow.name, inputs.spawn_presets)]}}"
@@ -214,7 +215,7 @@ nodes:
         - from: execute_tools
           cases:
             - to: compact
-              condition: nodes.execute_tools.thread_token_count > inputs.compaction_threshold
+              condition: nodes.execute_tools.thread_token_count > nodes.main_agent.compaction_threshold
               label: compact
       entry: [main_agent]
       ui:

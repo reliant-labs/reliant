@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/cmdutil"
 	"github.com/reliant-labs/reliant/internal/fileutil"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
+	"github.com/reliant-labs/reliant/internal/pdfutil"
 )
 
 // Compile-time check that LocalClient implements Client.
@@ -120,6 +121,25 @@ func (c *LocalClient) ReadBinaryFile(ctx context.Context, path string, maxBytes 
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
 	return data, nil
+}
+
+// PDFPageCount returns the number of pages in the PDF at path.
+func (c *LocalClient) PDFPageCount(ctx context.Context, path string) (int, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0, fmt.Errorf("read %s: %w", path, err)
+	}
+	return pdfutil.PageCount(data)
+}
+
+// ReadPDFPages extracts the given page range from the PDF at path and returns
+// the resulting PDF bytes.
+func (c *LocalClient) ReadPDFPages(ctx context.Context, path string, pages string) ([]byte, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	return pdfutil.ExtractPages(data, pages)
 }
 
 // WriteFile writes content to a file, creating parent directories as needed.

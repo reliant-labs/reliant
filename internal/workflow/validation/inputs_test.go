@@ -825,6 +825,30 @@ func TestValidateInputs_GroupTypeMismatchAndAmbiguousShapes(t *testing.T) {
 
 // ptrInt is a helper to create a pointer to an int value
 
+// An enum that declares no values constrains only the shape — it must not
+// reject every value with an empty "(allowed: )" list, which bricks in-flight
+// workflows resumed against a schema loaded mid-edit.
+func TestValidateInputs_EmptyEnumAcceptsAnyString(t *testing.T) {
+	workflow := &reliantv1.Workflow{
+		Name: "empty-enum",
+		Inputs: map[string]*reliantv1.Input{
+			"mode": enumInput(nil, false),
+			"tags": enumInput([]string{}, true),
+		},
+	}
+
+	result := ValidateInputs(workflow, map[string]any{"mode": "auto", "tags": []any{"x", "y"}})
+	if result.HasErrors() {
+		t.Fatalf("expected no errors for empty-enum inputs, got %v", result.Error())
+	}
+
+	// Shape is still enforced.
+	result = ValidateInputs(workflow, map[string]any{"mode": 3, "tags": []any{"x"}})
+	if !result.HasErrors() {
+		t.Fatal("expected type error for non-string enum value")
+	}
+}
+
 func TestValidateInputs_StrictConstraintValidation(t *testing.T) {
 	workflow := &reliantv1.Workflow{
 		Name: "strict-constraints",

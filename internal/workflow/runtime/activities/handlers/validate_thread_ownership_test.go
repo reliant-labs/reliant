@@ -19,7 +19,9 @@ func TestValidateThreadOwnership_ValidOwnership(t *testing.T) {
 	defer repo.Close()
 
 	// Setup: Create a project, chat, thread
-	projectID := "test-project"
+	// Unique project ID per test: the package shares one Postgres DB, so a
+	// constant ID would collide (projects_pkey) across test functions.
+	projectID := uuid.New().String()
 	err := repo.CreateProject(ctx, &db.Project{
 		ID:        projectID,
 		Name:      "Test Project",
@@ -76,7 +78,9 @@ func TestValidateThreadOwnership_InvalidOwnership(t *testing.T) {
 	defer repo.Close()
 
 	// Setup: Create a project, two chats, and a thread in chat A
-	projectID := "test-project"
+	// Unique project ID per test: the package shares one Postgres DB, so a
+	// constant ID would collide (projects_pkey) across test functions.
+	projectID := uuid.New().String()
 	err := repo.CreateProject(ctx, &db.Project{
 		ID:        projectID,
 		Name:      "Test Project",
@@ -171,7 +175,9 @@ func TestValidateThreadOwnership_SubAgentThread(t *testing.T) {
 	defer repo.Close()
 
 	// Setup: Create a project, chat, root thread, and sub-agent thread
-	projectID := "test-project"
+	// Unique project ID per test: the package shares one Postgres DB, so a
+	// constant ID would collide (projects_pkey) across test functions.
+	projectID := uuid.New().String()
 	err := repo.CreateProject(ctx, &db.Project{
 		ID:        projectID,
 		Name:      "Test Project",

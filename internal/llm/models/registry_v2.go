@@ -442,7 +442,11 @@ func (r *ModelRegistry) findBestProvider(model *ModelDefinition, preferredProvid
 		// Fall through to system priority
 	}
 
-	// Find best available provider by system priority
+	// Find best available provider by system priority. Iteration follows the
+	// model's YAML provider order, so selection is deterministic; ties keep
+	// the earlier YAML entry, except that user-owned (BYO) credentials always
+	// beat the managed reliant driver on a priority tie — a user who
+	// connected their own subscription expects it to be used.
 	var bestProvider *ProviderMapping
 	bestPriority := 1000 // Start with a high number
 
@@ -457,8 +461,13 @@ func (r *ModelRegistry) findBestProvider(model *ModelDefinition, preferredProvid
 			priority = 5 // Default priority for unknown providers
 		}
 
-		if priority < bestPriority {
+		switch {
+		case priority < bestPriority:
 			bestPriority = priority
+			bestProvider = p
+		case priority == bestPriority && bestProvider != nil &&
+			IsManagedDriver(DriverID(bestProvider.Driver)) && !IsManagedDriver(DriverID(p.Driver)):
+			// Priority tie: BYO beats managed regardless of YAML order.
 			bestProvider = p
 		}
 	}

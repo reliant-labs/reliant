@@ -20,6 +20,13 @@ const (
 	TypeUnsupported AttachmentType = "unsupported"
 )
 
+// DocumentExtensions are binary document files sent to the LLM natively rather
+// than as extracted text. PDFs are read on demand (and paginated) via the
+// read_attachment tool instead of being injected whole.
+var DocumentExtensions = map[string]bool{
+	".pdf": true,
+}
+
 // Image extensions supported by Claude API (base64 image blocks)
 var ImageExtensions = map[string]bool{
 	".jpg":  true,
@@ -52,7 +59,6 @@ var TextExtensions = map[string]bool{
 	".cfg":        true,
 	".env":        true,
 	".properties": true,
-	".pdf":        true,
 	".docx":       true,
 
 	// Programming languages
@@ -203,6 +209,11 @@ func GetAttachmentType(filename string) AttachmentType {
 		return TypeImage
 	}
 
+	// Check if it's a binary document (PDF) sent natively / read on demand
+	if DocumentExtensions[ext] {
+		return TypeDocument
+	}
+
 	// Check if it's a text file
 	if TextExtensions[ext] {
 		return TypeFileReference
@@ -279,6 +290,9 @@ func (t AttachmentType) IsSupported() bool {
 func SupportedExtensions() string {
 	var exts []string
 	for ext := range ImageExtensions {
+		exts = append(exts, ext)
+	}
+	for ext := range DocumentExtensions {
 		exts = append(exts, ext)
 	}
 	for ext := range TextExtensions {

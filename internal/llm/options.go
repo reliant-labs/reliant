@@ -52,14 +52,6 @@ func WithReasoningEffort(effort string) DriverOption {
 	}
 }
 
-// WithReasoningDisabled explicitly disables reasoning/thinking for the driver.
-// This prevents any thinking budget from being allocated.
-func WithReasoningDisabled() DriverOption {
-	return func(options *DriverOptions) {
-		options.ReasoningEffort = "disabled"
-	}
-}
-
 func WithExtraHeaders(headers map[string]string) DriverOption {
 	return func(c *DriverOptions) {
 		c.ExtraHeaders = headers

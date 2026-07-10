@@ -305,6 +305,12 @@ message CallLLMArgs {
   ResponseTool response_tool = 9;
   // Messages injects messages for ad-hoc LLM calls without a thread.
   repeated CallLLMMessageInput messages = 10 [(reliant) = { hidden: true }];
+  // CompactionThreshold optionally overrides the token count at which the agent
+  // loop triggers compaction. When unset (<= 0), call_llm resolves the value
+  // from the selected model's default_compaction_threshold, falling back to a
+  // global default. Emitted back on CallLLMOutput.compaction_threshold so the
+  // compact edge can read the resolved per-model value.
+  CelInt compaction_threshold = 13 [(reliant) = { description: "Token count to trigger context compaction (0 = use model default)" min_value: 0 label: "Compaction threshold" visibility_contexts: "advanced" hidden: true category: "Model" }];
 }
 
 // ResponseTool defines a custom tool for structured LLM output.
@@ -966,6 +972,12 @@ message CallLLMOutput {
   // of parsing response_text or digging through tool_calls.
   google.protobuf.Struct response_data = 8;
   double cost = 9; // Request cost in USD when returned by the provider response.
+  // CompactionThreshold is the effective token count at which compaction should
+  // trigger for the resolved model. Precedence: explicit arg > resolved model's
+  // default_compaction_threshold > global default. The agent-loop compact edge
+  // reads this via nodes.call_llm.compaction_threshold so tag-based model
+  // selectors get the correct per-model threshold after resolution.
+  int32 compaction_threshold = 10;
 }
 
 // ExecuteToolsOutput is the output from execute_tools nodes.

@@ -26,6 +26,8 @@ export interface ThreadInfo {
   isSpawn: boolean;
   color: string;
   firstMessageAt?: string;
+  /** Thread this one was spawned/forked from (undefined for main or unknown) */
+  parentThread?: string;
 }
 
 
@@ -81,15 +83,15 @@ export function useThreads(
     const seenThreads = new Set<string>();
 
     // Walk workflow tree to build thread list in order
-    function processWorkflow(wf: WorkflowExecution) {
+    function processWorkflow(wf: WorkflowExecution, treeParentThread?: string) {
       if (seenThreads.has(wf.thread)) return;
-      
+
       // Skip thread metadata records - they track thread lifecycle, not workflow execution
       // The actual threads are derived from messages on those threads
       if (isThreadMetadataRecord(wf.workflowName)) {
         // Still process children though
         for (const child of wf.children) {
-          processWorkflow(child);
+          processWorkflow(child, treeParentThread);
         }
         return;
       }
@@ -117,6 +119,11 @@ export function useThreads(
         ? isChatActive 
         : (activeThreadIds.has(wf.thread) || (isChatActive && wf.status === 'running'));
 
+      // Use authoritative parentThread from backend (thread table), fall back to tree-derived
+      const parentThread = isMain
+        ? undefined
+        : wf.parentThread || (treeParentThread !== wf.thread ? treeParentThread : undefined);
+
       threads.push({
         id: wf.thread,
         name,
@@ -126,10 +133,11 @@ export function useThreads(
         isSpawn: wf.spawnedByNodeId === "spawn_tool",
         color: getThreadColor(wf.thread, isMain),
         firstMessageAt: firstTimestamps.get(wf.thread),
+        parentThread,
       });
 
       for (const child of wf.children) {
-        processWorkflow(child);
+        processWorkflow(child, wf.thread);
       }
     }
 

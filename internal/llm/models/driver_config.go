@@ -62,31 +62,63 @@ func GetAvailableDriversForModel(modelID ModelID, availableDrivers AvailableDriv
 	return configs
 }
 
-// SelectBestDriver selects the best available driver for a model
-// Priority order: Uses ProviderPriority from registry_v2.go
-// Native providers (anthropic, openai, gemini, xai, vertexai) have priority 1
-// Local providers have priority 2, aggregators (openrouter) have priority 10
+// ManagedDriverID identifies the Reliant-managed driver ("reliant"). Requests
+// through it are billed to Reliant, unlike every other driver, which uses the
+// user's own (BYO) credentials or subscription.
+const ManagedDriverID DriverID = "reliant"
+
+// IsManagedDriver reports whether the driver spends Reliant-managed credit
+// rather than the user's own credentials/subscription.
+func IsManagedDriver(id DriverID) bool {
+	return id == ManagedDriverID
+}
+
+// driverPriority returns the ProviderPriority rank for a driver. Unknown
+// drivers rank last.
+func driverPriority(id DriverID) int {
+	if p, ok := ProviderPriority[string(id)]; ok && p != 0 {
+		return p
+	}
+	return 99
+}
+
+// preferDriver reports whether driver a should be selected over driver b.
+// The ordering is total and deterministic — it never depends on map iteration
+// order:
+//  1. lower ProviderPriority wins
+//  2. on priority ties, user-owned (BYO) credentials beat the managed reliant
+//     driver — a user who connected their own subscription expects it to be
+//     used, and it doesn't spend Reliant-managed credit
+//  3. remaining ties break lexicographically by driver ID
+func preferDriver(a, b DriverID) bool {
+	pa, pb := driverPriority(a), driverPriority(b)
+	if pa != pb {
+		return pa < pb
+	}
+	if am, bm := IsManagedDriver(a), IsManagedDriver(b); am != bm {
+		return bm // the non-managed (BYO) driver wins the tie
+	}
+	return a < b
+}
+
+// SelectBestDriver selects the best available driver for a model.
+// Priority order: Uses ProviderPriority from registry_v2.go.
+// Native providers (anthropic, openai, gemini, xai, vertexai) have priority 1,
+// local providers priority 2, aggregators (openrouter) priority 10.
+//
+// Selection is deterministic: candidates are ranked with preferDriver, so ties
+// are broken explicitly (BYO over managed, then driver ID) rather than by the
+// map iteration order of the candidate set.
 func SelectBestDriver(modelID ModelID, availableDrivers AvailableDrivers) (DriverConfig, bool) {
 	availableConfigs := GetAvailableDriversForModel(modelID, availableDrivers)
 	if len(availableConfigs) == 0 {
 		return DriverConfig{}, false
 	}
 
-	// Find the best config by priority using the authoritative ProviderPriority map
 	bestConfig := availableConfigs[0]
-	bestPriority := ProviderPriority[string(bestConfig.DriverID)]
-	if bestPriority == 0 {
-		bestPriority = 99 // Unknown driver, lowest priority
-	}
-
 	for _, config := range availableConfigs[1:] {
-		configPriority := ProviderPriority[string(config.DriverID)]
-		if configPriority == 0 {
-			configPriority = 99
-		}
-		if configPriority < bestPriority {
+		if preferDriver(config.DriverID, bestConfig.DriverID) {
 			bestConfig = config
-			bestPriority = configPriority
 		}
 	}
 

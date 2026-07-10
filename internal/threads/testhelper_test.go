@@ -36,8 +36,10 @@ func newTestHelper(t *testing.T) *testHelper {
 		cleanup:   cleanup,
 	}
 
-	// Create a default chat for tests
-	h.chatID = h.createChat("test-chat")
+	// Create a default chat for tests. Use a generated ID (empty -> uuid) rather
+	// than a constant: the whole package shares one Postgres DB, so a fixed chat
+	// ID would collide (chats_pkey) across every test function that builds a helper.
+	h.chatID = h.createChat("")
 
 	h.svc = NewService(repo)
 	return h

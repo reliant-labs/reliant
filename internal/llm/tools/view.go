@@ -10,6 +10,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/filepreview"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/pdfutil"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
@@ -17,6 +18,7 @@ type ViewParams struct {
 	FilePath string `json:"file_path" jsonschema:"required,description=the file to view"`
 	Offset   int    `json:"offset,omitempty" jsonschema:"description=The line to start reading from, default is 0"`
 	Limit    int    `json:"limit,omitempty" jsonschema:"description=The amount of lines to read, maximum is 256000, and the default (if empty), is 300. Only set the limit for large files."`
+	Pages    string `json:"pages,omitempty" jsonschema:"description=PDF files only. Page range to read (e.g. '1-5'\\, '3'\\, '10-20'). Maximum 20 pages per request. Required for PDFs larger than 10 pages; ignored for non-PDF files."`
 	Repo     string `json:"repo,omitempty" jsonschema:"description=Multi-repo only. Which repo the path is relative to: 'root' for the project root\\, or a repo name (e.g. 'api'\\, 'web'). Used as the base for relative paths. Omit in single-repo projects or when path is absolute."`
 }
 
@@ -34,6 +36,10 @@ const (
 	MaxBinaryFileSize = 5 * 1024 * 1024 // 5MB max for binary files (images, PDFs)
 	DefaultReadLimit  = 300
 	MaxLineLength     = 500
+	// PDFAutoInlinePageLimit is the largest PDF (in pages) returned whole without
+	// requiring an explicit page range. Larger PDFs must be read a range at a time
+	// so a single view call doesn't flood the context window.
+	PDFAutoInlinePageLimit = 10
 	viewDescription   = `File viewing tool that reads and displays the contents of files with line numbers, allowing you to examine code, logs, or text data.
 
 WHEN TO USE:
@@ -43,6 +49,7 @@ WHEN TO USE:
 HOW TO USE:
 - Provide the file path
 - Optional: offset (starting line) and limit (number of lines)
+- For PDFs: use the pages parameter to read a page range (e.g. "1-5"). PDFs larger than 10 pages require a page range; max 20 pages per request.
 - Issue multiple view tools in a single request for improved performance
 
 FEATURES:
@@ -58,7 +65,7 @@ LIMITATIONS:
 - Lines longer than 500 characters are truncated
 - Cannot display binary files (executables, archives, etc.)
 - Images up to 5MB are supported (JPEG, PNG, GIF, BMP, SVG, WebP)
-- PDFs up to 5MB are supported
+- PDFs up to 5MB are supported; large PDFs are read a page range at a time via the pages parameter
 
 TIPS:
 - Use with Glob tool to first find files you want to view
@@ -191,20 +198,10 @@ func (v *viewTool) Execute(rctx *rctx.ToolContext, params ViewParams) (ToolRespo
 		), nil
 	}
 
-	// Check if it's a PDF — read binary and return as document content
+	// Check if it's a PDF — read as a native document block, paginating large
+	// documents so a single view call can't flood the context window.
 	if strings.ToLower(filepath.Ext(filePath)) == ".pdf" {
-		data, err := rctx.Daemon.ReadBinaryFile(rctx.Context, filePath, MaxBinaryFileSize)
-		if err != nil {
-			return NewTextErrorResponse(fmt.Sprintf("Failed to read PDF file %s: %v", displayPath, err)), nil
-		}
-		return NewImageResponse(
-			fmt.Sprintf("PDF file: %s (%s)", displayPath, formatFileSize(int64(len(data)))),
-			[]message.BinaryContent{{
-				Path:     filePath,
-				MIMEType: "application/pdf",
-				Data:     data,
-			}},
-		), nil
+		return v.viewPDF(rctx, filePath, displayPath, params.Pages)
 	}
 
 	// Check for other known binary extensions
@@ -289,6 +286,55 @@ func (v *viewTool) Execute(rctx *rctx.ToolContext, params ViewParams) (ToolRespo
 			Content:  content,
 			HasMore:  hasMore,
 		},
+	), nil
+}
+
+// viewPDF returns a PDF as a native document block, paginating large documents.
+// If pages is set, only that page range is returned (capped at 20 pages by the
+// daemon). If pages is empty and the document has more than PDFAutoInlinePageLimit
+// pages, a text prompt asks the model to request a specific range instead of
+// dumping the whole file into context. Small PDFs are returned whole.
+func (v *viewTool) viewPDF(rctx *rctx.ToolContext, filePath, displayPath, pages string) (ToolResponse, error) {
+	if pages != "" {
+		data, err := rctx.Daemon.ReadPDFPages(rctx.Context, filePath, pages)
+		if err != nil {
+			return NewTextErrorResponse(fmt.Sprintf("Failed to read pages %q of PDF %s: %v", pages, displayPath, err)), nil
+		}
+		return NewImageResponse(
+			fmt.Sprintf("PDF file: %s (pages %s, %s)", displayPath, pages, formatFileSize(int64(len(data)))),
+			[]message.BinaryContent{{
+				Path:     filePath,
+				MIMEType: "application/pdf",
+				Data:     data,
+			}},
+		), nil
+	}
+
+	pageCount, err := rctx.Daemon.PDFPageCount(rctx.Context, filePath)
+	if err != nil {
+		return NewTextErrorResponse(fmt.Sprintf("Failed to read PDF file %s: %v", displayPath, err)), nil
+	}
+
+	if pageCount > PDFAutoInlinePageLimit {
+		return NewTextResponse(fmt.Sprintf(
+			"PDF file: %s has %d pages. Call view again with the pages parameter to read a range "+
+				"(e.g. pages=%q). Maximum %d pages per request.",
+			displayPath, pageCount, fmt.Sprintf("1-%d", PDFAutoInlinePageLimit), pdfutil.MaxPagesPerRequest,
+		)), nil
+	}
+
+	// Small PDF — return the whole document.
+	data, err := rctx.Daemon.ReadBinaryFile(rctx.Context, filePath, MaxBinaryFileSize)
+	if err != nil {
+		return NewTextErrorResponse(fmt.Sprintf("Failed to read PDF file %s: %v", displayPath, err)), nil
+	}
+	return NewImageResponse(
+		fmt.Sprintf("PDF file: %s (%d pages, %s)", displayPath, pageCount, formatFileSize(int64(len(data)))),
+		[]message.BinaryContent{{
+			Path:     filePath,
+			MIMEType: "application/pdf",
+			Data:     data,
+		}},
 	), nil
 }
 

@@ -12,10 +12,11 @@ import (
 // Tool name constants
 const (
 	// File tools
-	ToolView        = "view"
-	ToolWrite       = "write"
-	ToolEdit        = "edit"
-	ToolFindReplace = "find_replace"
+	ToolView           = "view"
+	ToolWrite          = "write"
+	ToolEdit           = "edit"
+	ToolFindReplace    = "find_replace"
+	ToolReadAttachment = "read_attachment"
 
 	// Search tools
 	ToolGrep = "grep"
@@ -420,6 +421,7 @@ func GetToolRegistry() []ToolDefinition {
 	tools := []ToolDefinition{
 		// File tools
 		{ToolView, (*ToolsFactory).View, []ToolTag{TagFile, TagReadOnly, TagPlan, TagDefault}, ToolRunsAnywhere},
+		{ToolReadAttachment, (*ToolsFactory).ReadAttachment, []ToolTag{TagFile, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnServer},
 		{ToolWrite, (*ToolsFactory).Write, []ToolTag{TagFile, TagDefault}, ToolRunsAnywhere},
 		{ToolEdit, (*ToolsFactory).Edit, []ToolTag{TagFile, TagDefault}, ToolRunsAnywhere},
 		{ToolFindReplace, (*ToolsFactory).FindAndReplace, []ToolTag{TagFile, TagDefault}, ToolRunsAnywhere},

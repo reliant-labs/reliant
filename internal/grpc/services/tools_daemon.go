@@ -1180,11 +1180,10 @@ func (s *ToolsDaemonService) ensureOwnedProjectForPath(ctx context.Context, conn
 		return nil, nil
 	}
 
-	// Refresh git status for existing projects if daemon discovery reports a different value
-	if discovered != nil && discovered.IsGitRepo != project.IsGitRepo {
-		project.IsGitRepo = discovered.IsGitRepo
-		project.UpdatedAt = time.Now().UTC()
-		if updateErr := s.database.UpdateProject(ctx, project, project.UserID); updateErr != nil {
+	// Reconcile the cached git flag against what daemon discovery actually
+	// observed on disk (bidirectional; see reconcileProjectGitRepo).
+	if discovered != nil {
+		if updateErr := reconcileProjectGitRepo(ctx, s.database, project, discovered.IsGitRepo); updateErr != nil {
 			logging.Warn("ensureOwnedProjectForPath: failed to update git status", "error", updateErr, "projectID", project.ID)
 		}
 	}

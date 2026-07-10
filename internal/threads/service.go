@@ -2,6 +2,8 @@ package threads
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -192,8 +194,16 @@ func (s *Service) CreateWorkflowWithThread(ctx context.Context, opts CreateWorkf
 		threadID := generateID(opts.ThreadID)
 		workflowID := opts.Workflow.ID
 
-		// Check if thread already exists (inherited case)
+		// Check if thread already exists (inherited case). Only a genuine
+		// not-found may fall through to the create branch: any other error
+		// (serialization conflict, aborted tx, connection loss) must abort
+		// the closure so RunTx can retry the whole transaction — continuing
+		// here would run the create path on a poisoned transaction and
+		// surface a misleading 25P02 from whatever statement runs next.
 		_, err := s.repo.GetThread(txCtx, threadID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("failed to check for existing thread: %w", err)
+		}
 		if err == nil {
 			// Thread exists - update its workflow_id (inherited thread)
 			updatedThread, err := s.repo.UpdateThreadWorkflow(txCtx, threadID, workflowID)

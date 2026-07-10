@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -3079,9 +3080,45 @@ func (r *Repo) GetContextUsage(ctx context.Context, chatID, thread string) (*Con
 
 	return &ContextUsage{
 		ThreadTokenCount:    tokens,
-		CompactionThreshold: 185000,
+		CompactionThreshold: int64(r.resolveThreadCompactionThreshold(ctx, thread, nil)),
 		CurrentContextSeq:   int64(contextSeq),
 	}, nil
+}
+
+// resolveThreadCompactionThreshold returns the compaction threshold for the
+// model that produced the thread's current token count, mirroring the fork
+// inheritance walk in GetThreadTokenCount so the indicator's denominator tracks
+// the same model the trigger evaluates. Falls back to the global default when
+// no model-bearing message is found.
+func (r *Repo) resolveThreadCompactionThreshold(ctx context.Context, thread string, maxOrdinal *int64) int {
+	if thread == "" {
+		return models.GlobalDefaultCompactionThreshold
+	}
+
+	contextSeq, err := r.GetMaxContextSequenceInThread(ctx, thread)
+	if err != nil {
+		contextSeq = 0
+	}
+
+	msg, err := r.GetLatestMessageWithTokensInThread(ctx, thread, contextSeq)
+	if err == nil && msg != nil && msg.TokenCount != nil && (maxOrdinal == nil || msg.Ordinal <= *maxOrdinal) {
+		if msg.Model != nil {
+			return models.CompactionThresholdForModel(*msg.Model)
+		}
+		return models.GlobalDefaultCompactionThreshold
+	}
+
+	// No local token-bearing message — follow fork inheritance like GetThreadTokenCount.
+	threadRecord, _, err := r.GetThreadWithParent(ctx, thread)
+	if err != nil || threadRecord.ParentThreadID == nil || threadRecord.ForkAtOrdinal == nil {
+		return models.GlobalDefaultCompactionThreshold
+	}
+	parentThreadID := *threadRecord.ParentThreadID
+	if parentThreadID == thread {
+		return models.GlobalDefaultCompactionThreshold
+	}
+	forkAtOrdinal := *threadRecord.ForkAtOrdinal
+	return r.resolveThreadCompactionThreshold(ctx, parentThreadID, &forkAtOrdinal)
 }
 
 // ==================== Workflows ====================

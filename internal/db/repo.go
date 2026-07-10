@@ -974,6 +974,13 @@ func (r *Repo) GetNextUserSequenceNumber(ctx context.Context, userID string) (in
 // 2) writes go through RunTx with retry logic for transient errors
 // 3) nested transaction calls (ctx already carrying txKey) are supported
 func (r *Repo) CreateUserUpdate(ctx context.Context, update *UserUpdate) error {
+	// Whether the caller supplied an explicit ID. When they didn't, we derive
+	// the ID from the sequence number and MUST re-derive it on every retry:
+	// GetNextUserSequenceNumber is a racy SELECT MAX+1, so a concurrent writer
+	// can collide on user_updates_pkey; RunTx retries, allocates a fresh
+	// sequence, and the ID has to follow it. (CreateChatUpdate is race-free for
+	// the same reason — it recomputes the ID inside the tx on each attempt.)
+	callerSuppliedID := update.ID != ""
 	err := r.RunTx(ctx, func(txCtx context.Context) error {
 		// Get next sequence number within the transaction for atomicity.
 		nextSeq, err := r.GetNextUserSequenceNumber(txCtx, update.UserID)
@@ -982,8 +989,7 @@ func (r *Repo) CreateUserUpdate(ctx context.Context, update *UserUpdate) error {
 		}
 		update.SequenceNumber = nextSeq
 
-		// Generate ID if not set
-		if update.ID == "" {
+		if !callerSuppliedID {
 			update.ID = fmt.Sprintf("%s-%d", update.UserID, nextSeq)
 		}
 

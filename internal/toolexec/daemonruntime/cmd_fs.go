@@ -22,11 +22,14 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/filepreview"
 	"github.com/reliant-labs/reliant/internal/fileutil"
+	"github.com/reliant-labs/reliant/internal/pdfutil"
 )
 
 func init() {
 	RegisterCommand("fs.read_file", handleFSReadFile)
 	RegisterCommand("fs.read_binary_file", handleFSReadBinaryFile)
+	RegisterCommand("fs.pdf_page_count", handleFSPDFPageCount)
+	RegisterCommand("fs.read_pdf_pages", handleFSReadPDFPages)
 	RegisterCommand("fs.write_file", handleFSWriteFile)
 	RegisterCommand("fs.patch_file", handleFSPatchFile)
 	RegisterCommand("fs.stat", handleFSStat)
@@ -143,6 +146,65 @@ func handleFSReadBinaryFile(_ context.Context, payload []byte) ([]byte, error) {
 		Data: base64.StdEncoding.EncodeToString(data),
 	}
 	return json.Marshal(resp)
+}
+
+// =============================================================================
+// fs.pdf_page_count
+// =============================================================================
+
+type fsPDFPageCountRequest struct {
+	Path string `json:"path"`
+}
+
+type fsPDFPageCountResponse struct {
+	PageCount int `json:"page_count"`
+}
+
+func handleFSPDFPageCount(_ context.Context, payload []byte) ([]byte, error) {
+	var req fsPDFPageCountRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return nil, fmt.Errorf("invalid payload: %w", err)
+	}
+
+	data, err := os.ReadFile(req.Path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", req.Path, err)
+	}
+	count, err := pdfutil.PageCount(data)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(fsPDFPageCountResponse{PageCount: count})
+}
+
+// =============================================================================
+// fs.read_pdf_pages
+// =============================================================================
+
+type fsReadPDFPagesRequest struct {
+	Path  string `json:"path"`
+	Pages string `json:"pages"`
+}
+
+type fsReadPDFPagesResponse struct {
+	Data string `json:"data"` // base64-encoded PDF bytes
+}
+
+func handleFSReadPDFPages(_ context.Context, payload []byte) ([]byte, error) {
+	var req fsReadPDFPagesRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return nil, fmt.Errorf("invalid payload: %w", err)
+	}
+
+	data, err := os.ReadFile(req.Path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", req.Path, err)
+	}
+	out, err := pdfutil.ExtractPages(data, req.Pages)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(fsReadPDFPagesResponse{Data: base64.StdEncoding.EncodeToString(out)})
 }
 
 // =============================================================================

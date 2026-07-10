@@ -13,6 +13,7 @@ import { UserStreamingService } from "../api/streaming-grpc";
 import type { UserUpdate, ChatUpdate, ConnectionStatus, ContextUsageInfo } from "../types/streaming";
 import { useChatStore, initGlobalUpdatesStoreRef } from "./chatStore";
 import { ChatState } from "../gen/reliant/v1/chat_pb";
+import type { Chat } from "../types/chat";
 import { useActivityStore, ChatActivity } from "./activityStore";
 import { useThreadActivityStore } from "./threadActivityStore";
 import { BackgroundProcessStatus } from "../gen/reliant/v1/common_pb";
@@ -27,7 +28,7 @@ import type { BackgroundProcess } from "../api/background-grpc";
 import { logger } from "../lib/logger";
 import { getEventBus } from "../lib/events";
 import { queryClient } from "../lib/query-client";
-import { chatKeys } from "../hooks/chat-queries";
+import { chatKeys, patchChatCaches, removeChatFromListCache } from "../hooks/chat-queries";
 import { approvalKeys } from "../hooks/approval-queries";
 import { showWorkflowCompletionNotification, showApprovalRequiredNotification, getNotificationPermission } from "../lib/notifications";
 import { getNotificationSoundOptions, useNotificationStore } from "./notificationStore";
@@ -339,6 +340,9 @@ function handleChatStateChange(update: UserUpdate) {
   const { chat_id } = update;
   if (!chat_id) return;
 
+  const projectId =
+    update.project_id || useProjectStore.getState().currentProject?.id;
+
   const data = update.data as {
     state: string;
     previous_state: string;
@@ -364,14 +368,17 @@ function handleChatStateChange(update: UserUpdate) {
   if (isBecomingArchived) {
     useActivityStore.getState().removeActivity(chat_id);
     logger.info(`${LOG_PREFIX} Chat archived: ${chat_id.slice(0, 8)}`);
-    try { getEventBus().emit("chat:archived", { chatId: chat_id }); queryClient.invalidateQueries({ queryKey: chatKeys.all }); } catch { /* bus not ready */ }
+    patchChatCaches(projectId, chat_id, { state: nextState });
+    // The archived list needs a refetch — we can't construct an ArchivedChat row.
+    queryClient.invalidateQueries({ queryKey: chatKeys.archived() });
     return;
   }
 
   // Handle restore transition
   if (isBeingRestored) {
     logger.info(`${LOG_PREFIX} Chat restored: ${chat_id.slice(0, 8)}`);
-    try { getEventBus().emit("chat:restored", { chatId: chat_id }); queryClient.invalidateQueries({ queryKey: chatKeys.all }); } catch { /* bus not ready */ }
+    patchChatCaches(projectId, chat_id, { state: nextState });
+    queryClient.invalidateQueries({ queryKey: chatKeys.archived() });
     return;
   }
 
@@ -386,7 +393,7 @@ function handleChatStateChange(update: UserUpdate) {
     newChats.set(chat_id, { ...existing, state: nextState });
     return { chats: newChats };
   });
-  try { getEventBus().emit("chat:stateChanged", { chatId: chat_id, state: String(nextState) }); queryClient.invalidateQueries({ queryKey: chatKeys.detail(chat_id) }); } catch { /* bus not ready */ }
+  patchChatCaches(projectId, chat_id, { state: nextState });
 
   // Handle unread flag from the update payload
   const unread = (data as { unread?: boolean }).unread;
@@ -399,7 +406,7 @@ function handleChatStateChange(update: UserUpdate) {
       newChats.set(chat_id, { ...existing, unread });
       return { chats: newChats };
     });
-    try { queryClient.invalidateQueries({ queryKey: chatKeys.detail(chat_id) }); } catch { /* not ready */ }
+    patchChatCaches(projectId, chat_id, { unread });
 
     // If unread=true and user is viewing this chat, auto-dismiss (fire-and-forget)
     const isViewingThisChat = useChatStore.getState().activeChatId === chat_id;
@@ -580,7 +587,35 @@ function handleChatConfigChanged(update: UserUpdate) {
     workflow_name: data.workflow_name,
   });
 
-  try { getEventBus().emit("chat:configChanged", { chatId: chat_id }); queryClient.invalidateQueries({ queryKey: chatKeys.detail(chat_id) }); } catch { /* bus not ready */ }
+  const projectId =
+    update.project_id || useProjectStore.getState().currentProject?.id;
+
+  const patch: Partial<Chat> = {};
+  if (data.workflow_name !== undefined) {
+    patch.workflowName = data.workflow_name ?? undefined;
+  }
+  if (data.title !== undefined) {
+    patch.title = data.title;
+  }
+  if (data.state !== undefined) {
+    patch.state = parseChatState(data.state);
+  }
+  patchChatCaches(projectId, chat_id, patch);
+
+  // Dual-write workflowName into the Zustand map — ChatInput preset restore
+  // reads workflowName/selectedPresets from the Zustand map, not React Query.
+  if (data.workflow_name !== undefined) {
+    useChatStore.setState((state) => {
+      const existing = state.chats.get(chat_id);
+      if (!existing) return state;
+      const newChats = new Map(state.chats);
+      newChats.set(chat_id, {
+        ...existing,
+        workflowName: data.workflow_name ?? undefined,
+      });
+      return { chats: newChats };
+    });
+  }
 }
 
 function handleChatCreated(update: UserUpdate) {
@@ -596,7 +631,10 @@ function handleChatCreated(update: UserUpdate) {
     title: data.title,
   });
 
-  try { getEventBus().emit("chat:created", { chatId: data.chat_id }); queryClient.invalidateQueries({ queryKey: chatKeys.lists() }); } catch { /* bus not ready */ }
+  // The event payload is partial (chat_id/title/project_id/worktree_id only);
+  // upserting a fabricated Chat row would render a broken sidebar entry, so
+  // refetch the list instead.
+  queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
 }
 
 function handleChatTitleChanged(update: UserUpdate) {
@@ -613,7 +651,9 @@ function handleChatTitleChanged(update: UserUpdate) {
     title: data.title,
   });
 
-  try { getEventBus().emit("chat:titleChanged", { chatId: chat_id, title: data.title }); queryClient.invalidateQueries({ queryKey: chatKeys.lists() }); queryClient.invalidateQueries({ queryKey: chatKeys.detail(chat_id) }); } catch { /* bus not ready */ }
+  const projectId =
+    update.project_id || useProjectStore.getState().currentProject?.id;
+  patchChatCaches(projectId, chat_id, { title: data.title });
 }
 
 function handleChatDeleted(update: UserUpdate) {
@@ -626,7 +666,20 @@ function handleChatDeleted(update: UserUpdate) {
 
   // Remove stale activity entry
   useActivityStore.getState().removeActivity(chat_id);
-  try { getEventBus().emit("chat:deleted", { chatId: chat_id }); queryClient.invalidateQueries({ queryKey: chatKeys.all }); } catch { /* bus not ready */ }
+
+  const projectId =
+    update.project_id || useProjectStore.getState().currentProject?.id;
+  removeChatFromListCache(projectId, chat_id);
+  // Deletes can come from the archived list too — refetch it.
+  queryClient.invalidateQueries({ queryKey: chatKeys.archived() });
+
+  // Drop from the Zustand map so useActiveChat existence checks don't show a ghost.
+  useChatStore.setState((state) => {
+    if (!state.chats.has(chat_id)) return state;
+    const newChats = new Map(state.chats);
+    newChats.delete(chat_id);
+    return { chats: newChats };
+  });
 }
 
 // ============================================
@@ -648,7 +701,6 @@ function handleChatActivityChanged(update: UserUpdate) {
 
   // Single source of truth: update the activity store
   useActivityStore.getState().setActivity(chat_id, activity);
-  try { getEventBus().emit("chat:activityChanged", { chatId: chat_id, activity: String(activity) }); } catch { /* bus not ready */ }
 
   // Clear pending approvals when activity goes idle.
   // NOTE: Thread activity is intentionally NOT cleared here. Thread metadata

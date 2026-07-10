@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/reliant-labs/reliant/internal/gitref"
 )
 
 // IsGitRepository checks if a directory is a git repository
@@ -72,63 +74,16 @@ type InitGitRepositoryOptions struct {
 	InitialCommit     bool
 }
 
-// NormalizeBranchName trims surrounding whitespace from a user-supplied
-// branch name and falls back to "main" when the result is empty. Callers
-// should validate the result with ValidateBranchName before handing it to
-// git or persisting it.
-func NormalizeBranchName(name string) string {
-	trimmed := strings.TrimSpace(name)
-	if trimmed == "" {
-		return "main"
-	}
-	return trimmed
-}
+// NormalizeBranchName is a re-export of gitref.NormalizeBranchName. The pure
+// implementation lives in internal/gitref so the server tier can validate
+// branch names without importing this filesystem/exec-touching package (the
+// architecture contract bans gitutil there). Daemon-side callers keep using it
+// here for convenience.
+func NormalizeBranchName(name string) string { return gitref.NormalizeBranchName(name) }
 
-// ValidateBranchName rejects branch names git itself would refuse
-// (a conservative pure-Go mirror of `git check-ref-format --branch`).
-// Validating up front lets callers fail with a clear error BEFORE any
-// on-disk state (a half-initialized .git) is created.
-func ValidateBranchName(name string) error {
-	invalid := func(reason string) error {
-		return fmt.Errorf("invalid branch name %q: %s", name, reason)
-	}
-	if name == "" {
-		return invalid("must not be empty")
-	}
-	if name == "@" {
-		return invalid("must not be \"@\"")
-	}
-	if strings.HasPrefix(name, "-") {
-		return invalid("must not start with \"-\"")
-	}
-	if strings.HasPrefix(name, "/") || strings.HasSuffix(name, "/") || strings.Contains(name, "//") {
-		return invalid("must not start or end with \"/\" or contain \"//\"")
-	}
-	if strings.HasSuffix(name, ".") || strings.Contains(name, "..") {
-		return invalid("must not end with \".\" or contain \"..\"")
-	}
-	if strings.Contains(name, "@{") {
-		return invalid("must not contain \"@{\"")
-	}
-	for _, component := range strings.Split(name, "/") {
-		if strings.HasPrefix(component, ".") {
-			return invalid("path components must not start with \".\"")
-		}
-		if strings.HasSuffix(component, ".lock") {
-			return invalid("path components must not end with \".lock\"")
-		}
-	}
-	for _, r := range name {
-		if r < 0x20 || r == 0x7F {
-			return invalid("must not contain control characters")
-		}
-		switch r {
-		case ' ', '~', '^', ':', '?', '*', '[', '\\':
-			return invalid(fmt.Sprintf("must not contain %q", r))
-		}
-	}
-	return nil
-}
+// ValidateBranchName is a re-export of gitref.ValidateBranchName. See
+// NormalizeBranchName for why the implementation lives in internal/gitref.
+func ValidateBranchName(name string) error { return gitref.ValidateBranchName(name) }
 
 // repoHasCommits reports whether the repository at path has at least one
 // commit (i.e. HEAD resolves). An unborn HEAD (fresh `git init`) returns false.
@@ -144,6 +99,49 @@ func repoHasCommits(ctx context.Context, path string) bool {
 // this package (the daemon worktree handler gates on it).
 func HasCommits(ctx context.Context, path string) bool {
 	return repoHasCommits(ctx, path)
+}
+
+// gitConfigValue returns the effective value of a git config key at path
+// (consulting repo, global, and system config), or "" if unset.
+func gitConfigValue(ctx context.Context, path, key string) string {
+	cmd := exec.CommandContext(ctx, "git", "config", "--get", key)
+	cmd.Dir = path
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// CommitWithFallbackIdentity creates a commit at path, supplying an ephemeral
+// Reliant identity ONLY for the user.name/user.email that git can't already
+// resolve. A fresh cloud workspace pod (or any machine where the user never
+// ran `git config --global user.email`) has no identity, so a plain
+// `git commit` fails with exit 128 "Author identity unknown". Injecting the
+// fallback via `-c` is per-invocation and does NOT mutate repo config, so a
+// real identity the user later configures still wins for their own commits.
+//
+// This is the single commit path for Reliant-initiated commits (project init,
+// worktree seeding, worktree auto-commit) so the identity fallback can't drift
+// between call sites. allowEmpty maps to `git commit --allow-empty`; the
+// caller is responsible for staging (`git add`) beforehand when needed.
+func CommitWithFallbackIdentity(ctx context.Context, path, message string, allowEmpty bool) ([]byte, error) {
+	var args []string
+	if gitConfigValue(ctx, path, "user.name") == "" {
+		args = append(args, "-c", "user.name=Reliant")
+	}
+	if gitConfigValue(ctx, path, "user.email") == "" {
+		args = append(args, "-c", "user.email=reliant@localhost")
+	}
+	args = append(args, "commit")
+	if allowEmpty {
+		args = append(args, "--allow-empty")
+	}
+	args = append(args, "-m", message)
+
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = path
+	return cmd.CombinedOutput()
 }
 
 // EnsureInitialCommit gives a repository a root commit if it has none, so an
@@ -176,12 +174,10 @@ func EnsureInitialCommit(ctx context.Context, path string) error {
 		return nil
 	}
 
-	cmd := exec.CommandContext(ctx, "git",
-		"-c", "user.email=reliant@localhost",
-		"-c", "user.name=Reliant",
-		"commit", "--allow-empty", "-m", "Initial commit")
-	cmd.Dir = path
-	if output, err := cmd.CombinedOutput(); err != nil {
+	// Empty commit (--allow-empty) on purpose: materialize the branch ref
+	// without sweeping the user's working-tree files into a commit they did
+	// not ask for.
+	if output, err := CommitWithFallbackIdentity(ctx, path, "Initial commit", true); err != nil {
 		return fmt.Errorf("failed to create initial commit: %w, output: %s", err, string(output))
 	}
 	return nil
@@ -261,10 +257,10 @@ func InitGitRepository(ctx context.Context, opts InitGitRepositoryOptions) error
 			return fmt.Errorf("failed to stage files: %w, output: %s", err, string(output))
 		}
 
-		// Create commit
-		cmd = exec.CommandContext(ctx, "git", "commit", "-m", "Initial commit")
-		cmd.Dir = opts.Path
-		if output, err := cmd.CombinedOutput(); err != nil {
+		// Create commit. Uses the shared fallback identity so a fresh cloud pod
+		// (or any machine without a configured git identity) doesn't fail with
+		// "Author identity unknown".
+		if output, err := CommitWithFallbackIdentity(ctx, opts.Path, "Initial commit", false); err != nil {
 			// It's OK if there's nothing to commit
 			if !strings.Contains(string(output), "nothing to commit") {
 				return fmt.Errorf("failed to create initial commit: %w, output: %s", err, string(output))

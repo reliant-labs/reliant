@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/certs"
+	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/db"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
@@ -259,8 +260,9 @@ func Run(ctx context.Context, opts Options) error {
 	analytics.SetClient(analyticsClient)
 	analytics.SetPrivacyChecker(repo)
 
-	// Telemetry (noop in standalone mode — Sentry is optional)
-	telemetry.SetReporter(telemetry.NewNoopReporter())
+	// Telemetry — Sentry in prod (when SENTRY_DSN is set), noop in dev/test.
+	telemetry.SetReporter(telemetry.NewReporterFromEnv(
+		config.IsDevelopmentEnvironment() || config.IsTestEnvironment()))
 
 	// TLS certificates
 	tlsCertFile := opts.TLSCertFile
