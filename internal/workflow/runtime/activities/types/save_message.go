@@ -32,6 +32,8 @@ type SaveMessageInput struct {
 	ToolCalls       []message.ToolCall   `json:"tool_calls,omitempty" reliant:"desc=Tool calls from LLM response (for assistant messages)"`
 	TokenCount      int                  `json:"token_count,omitempty" reliant:"-"`       // Total tokens (prompt + response + context)
 	Cost            float64              `json:"cost,omitempty" reliant:"-"`              // Request cost in USD returned by the LLM provider
+	Model           string               `json:"model,omitempty" reliant:"-"`             // Concrete model that served the completion (post tag resolution), persisted to messages.model
+	Agent           string               `json:"agent,omitempty" reliant:"-"`             // Agent/workflow identity that produced the message, persisted to messages.agent
 	ContextWindowID string               `json:"context_window_id,omitempty" reliant:"-"` // FK to context_windows (nullable during migration)
 	WorkflowID      string               `json:"workflow_id,omitempty" reliant:"-"`
 	LoopNodeID      string               `json:"loop_node_id,omitempty" reliant:"-"`

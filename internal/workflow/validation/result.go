@@ -41,6 +41,7 @@ const (
 	CategoryActivityConfig    Category = "activity_config"    // Activity input field errors
 	CategoryRuntime           Category = "runtime"            // Runtime validation errors
 	CategoryConditionalAccess Category = "conditional_access" // Unsafe access to conditional node outputs
+	CategoryNodeOrdering      Category = "node_ordering"      // nodes.<id> references to nodes not guaranteed to have executed
 )
 
 // Error represents a single validation issue.

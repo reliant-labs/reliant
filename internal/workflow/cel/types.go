@@ -164,13 +164,21 @@ func (c *LoopEvalContext) Namespaces() []CELNamespace {
 // POST ACTIVITY CONTEXT
 // =============================================================================
 
-// PostActivityContext is used for save_message condition evaluation after an activity runs.
-// Available namespaces: output, inputs, nodes, workflow.
+// PostActivityContext is used for save_message content/condition evaluation after
+// an activity runs.
+// Available namespaces: output, inputs, nodes, workflow, iter.
+//
+// iter is included so a save_message declared on a node inside a loop can reference
+// the loop iteration (e.g. "## Attempt {{iter.iteration + 1}}"), exactly like the
+// inject and node-config resolution paths can. Iter is nil outside loops, in which
+// case EnsureNamespaceDefaults supplies a zero default so bare iter references still
+// compile.
 type PostActivityContext struct {
 	Output   interface{}            // the activity result
 	Inputs   map[string]interface{} // dynamic — depends on workflow def
 	Nodes    map[string]interface{} // dynamic — node outputs vary
 	Workflow *model.WorkflowContext // typed
+	Iter     *model.IterContext     // typed — nil when not in a loop
 }
 
 func (c *PostActivityContext) Activation() map[string]interface{} {
@@ -187,11 +195,14 @@ func (c *PostActivityContext) Activation() map[string]interface{} {
 	if c.Workflow != nil {
 		m[string(CELWorkflow)] = c.Workflow
 	}
+	if c.Iter != nil {
+		m[string(CELIter)] = iterContextActivationValue(c.Iter)
+	}
 	return EnsureNamespaceDefaults(m, c.Namespaces())
 }
 
 func (c *PostActivityContext) Namespaces() []CELNamespace {
-	return []CELNamespace{CELOutput, CELInputs, CELNodes, CELWorkflow}
+	return []CELNamespace{CELOutput, CELInputs, CELNodes, CELWorkflow, CELIter}
 }
 
 // =============================================================================

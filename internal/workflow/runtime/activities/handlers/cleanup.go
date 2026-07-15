@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 )
@@ -274,7 +274,9 @@ func (a *CleanupActivity) createRepairToolMessage(
 	assistantMsg *db.Message,
 	orphans []orphanedToolCall,
 ) (string, error) {
-	now := time.Now()
+	// UTC to match every other persisted timestamp (local time would place
+	// repair messages hours in the past and break time-ordering).
+	now := time.Now().UTC()
 	msgID := uuid.New().String()
 
 	// Get next ordinal for this thread
@@ -304,7 +306,7 @@ func (a *CleanupActivity) createRepairToolMessage(
 	for i, orphan := range orphans {
 		blockID := uuid.New().String()
 		isError := true
-		content := "Tool execution was cancelled before completion. The previous request was interrupted."
+		content := InterruptedToolResultContent
 
 		block := &db.MessageContentBlock{
 			ID:         blockID,

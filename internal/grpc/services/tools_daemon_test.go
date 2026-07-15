@@ -358,7 +358,14 @@ func TestHandleLoadProjectConfigsResponsePersistsSnapshotAndTracksState(t *testi
 
 	require.NoError(t, svc.handleLoadProjectConfigsResponse(context.Background(), conn, resp))
 
-	record, err := repo.GetProjectConfigRecord(context.Background(), "test-project")
+	// The snapshot path (" /tmp/test ") normalizes to /tmp/test; the handler
+	// creates/owns a project at that path, and the config record is keyed on
+	// that project's ID. Resolve it rather than assuming a fixed seed ID.
+	project, err := repo.GetProjectByPath(context.Background(), "/tmp/test")
+	require.NoError(t, err)
+	require.NotNil(t, project)
+
+	record, err := repo.GetProjectConfigRecord(context.Background(), project.ID)
 	require.NoError(t, err)
 	require.Equal(t, daemonID, record.DaemonID)
 	require.NotNil(t, record.UserConfigYAML)

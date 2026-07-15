@@ -1,0 +1,63 @@
+# De-AI pass needs multiple iterations (internal mocking)
+#
+# The de_ai node is a builtin://get-it-right sub-workflow. This scenario mocks
+# its INTERNAL nodes (de_ai.attempt.*) to verify the multi-pass loop: the
+# reviewer returns "continue" with a punch-list on the first pass, the editor
+# applies another round of edits, and the second review passes.
+
+name: de_ai_multi_iteration
+description: De-AI reviewer requests another pass, editor iterates, second review passes
+
+events:
+  - node: context_intake
+    output:
+      response_text: "Existing final blog post artifact is the relevant context."
+
+  - node: classify
+    output:
+      selected_node: de_ai
+      reasoning: "Content is finalized and needs de-AI treatment."
+
+  # Pass 1: editor applies initial de-AI edits
+  - node: de_ai.attempt.implement
+    output:
+      response_text: "First de-AI pass: fixed the most obvious AI tells."
+
+  # Pass 1: reviewer says continue with a punch-list
+  - node: de_ai.attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "continue"
+        feedback: "Still reads synthetic: 'Not just X, but Y' in intro; uniform paragraph rhythm in section 3. Authenticity 3/5."
+
+  # Pass 2: editor applies the punch-list
+  - node: de_ai.attempt.implement
+    output:
+      response_text: "Second pass: rewrote intro hook, broke up section 3 rhythm."
+
+  # Pass 2: reviewer passes
+  - node: de_ai.attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Reads like a human practitioner now. Authenticity 4/5."
+
+  - node: reddit_summary
+    output:
+      response_text: "Reddit post written."
+
+expect:
+  outcome: completed
+  reached:
+    - de_ai
+    - de_ai.attempt.implement
+    - de_ai.attempt.review
+    - reddit_summary
+    - validate_artifacts
+    - complete
+  not_reached:
+    # "continue" loops straight back to implement — refactor is only for
+    # fundamentally-wrong approaches (and is forbidden for the de-AI pass).
+    - de_ai.attempt.refactor

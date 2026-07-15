@@ -57,7 +57,7 @@ const STARTER_OPTIONS: StarterOption[] = [
     icon: Sparkles,
     label: "Build something new with Forge",
     description:
-      "Forge is your LLM companion. It creates guardrails on projects to productionize and instill best practices from day 1. Use it and launch a production ready app within your first week.",
+      "Guardrails and best practices from day 1 — go from idea to a production-ready app in your first week.",
     workflowId: "builtin://forge-one-shot",
     workflowParams: { mode: "auto", ask: true },
     accent: "sky",
@@ -220,18 +220,12 @@ export function WorkflowStarterCards({
 
   return (
     <div className="w-full max-w-5xl mx-auto font-sans">
-      <div className="space-y-8 font-sans">
-        <div className="space-y-3 text-center font-sans">
-          <h2 className="text-3xl font-semibold tracking-tight text-foreground">
-            What are you building?
-          </h2>
-          <p className="mx-auto max-w-xl text-sm leading-relaxed text-muted-foreground">
-            Pick a starting point and Reliant will configure the right workflow.
-            You can change it any time in the chat composer.
-          </p>
-        </div>
+      <div className="space-y-5 font-sans">
+        <h2 className="text-center text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground/80">
+          What are you building?
+        </h2>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {STARTER_OPTIONS.map((option) => (
             <SecondaryCard
               key={option.intent}
@@ -275,7 +269,7 @@ function SecondaryCard({
         }
       }}
       className={cn(
-        "group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border p-5 text-left font-sans transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        "group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border p-4 text-left font-sans transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         "border-white/10 bg-white/[0.025]",
         "hover:-translate-y-0.5 hover:bg-white/[0.045]",
         accent.hoverBorder,
@@ -324,21 +318,15 @@ function SecondaryCard({
             {option.description}
           </p>
           {option.learnMoreUrl && (
-            <p
-              className={cn(
-                "leading-relaxed text-muted-foreground/80",
-                option.featured ? "text-sm" : "text-xs",
-              )}
-            >
-              Learn more at{" "}
+            <p className={option.featured ? "text-sm" : "text-xs"}>
               <a
                 href={option.learnMoreUrl}
                 target="_blank"
                 rel="noreferrer noopener"
                 onClick={(e) => e.stopPropagation()}
-                className="break-all text-sky-400 underline-offset-2 hover:text-sky-300 hover:underline"
+                className="text-sky-400 underline-offset-2 hover:text-sky-300 hover:underline"
               >
-                {option.learnMoreUrl}
+                Learn more →
               </a>
             </p>
           )}

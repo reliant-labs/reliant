@@ -81,9 +81,9 @@
         }
       ],
       "artifacts": {
-        "screenshot": "/Users/seanteeling/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit/desktop.png",
-        "annotatedScreenshot": "/Users/seanteeling/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit/desktop.annotated.png",
-        "dom": "/Users/seanteeling/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit/desktop.dom.json"
+        "screenshot": "~/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit/desktop.png",
+        "annotatedScreenshot": "~/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit/desktop.annotated.png",
+        "dom": "~/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit/desktop.dom.json"
       }
     },
     {
@@ -157,9 +157,9 @@
         }
       ],
       "artifacts": {
-        "screenshot": "/Users/seanteeling/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit/tablet.png",
-        "annotatedScreenshot": "/Users/seanteeling/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit/tablet.annotated.png",
-        "dom": "/Users/seanteeling/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit/tablet.dom.json"
+        "screenshot": "~/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit/tablet.png",
+        "annotatedScreenshot": "~/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit/tablet.annotated.png",
+        "dom": "~/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit/tablet.dom.json"
       }
     },
     {
@@ -233,11 +233,11 @@
         }
       ],
       "artifacts": {
-        "screenshot": "/Users/seanteeling/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit/mobile.png",
-        "annotatedScreenshot": "/Users/seanteeling/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit/mobile.annotated.png",
-        "dom": "/Users/seanteeling/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit/mobile.dom.json"
+        "screenshot": "~/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit/mobile.png",
+        "annotatedScreenshot": "~/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit/mobile.annotated.png",
+        "dom": "~/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit/mobile.dom.json"
       }
     }
   ],
-  "artifactsDir": "/Users/seanteeling/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit"
+  "artifactsDir": "~/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit"
 }

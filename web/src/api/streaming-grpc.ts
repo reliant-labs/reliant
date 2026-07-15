@@ -84,6 +84,13 @@ import type {
 // Log prefix for filtering/debugging
 const LOG_PREFIX_STREAM = "[📡 gRPCStream]";
 
+// Gap-resync pacing. Chat gaps are exact (per-chat sequences are contiguous),
+// so the interval only guards against reconnect loops. User-update jumps can
+// be legitimate (the server filters live events by project), so their resync
+// is throttled harder.
+const CHAT_GAP_RESYNC_MIN_INTERVAL_MS = 1_000;
+const USER_GAP_RESYNC_THROTTLE_MS = 5_000;
+
 // ============================================================================
 // Type Converters
 // ============================================================================
@@ -372,6 +379,8 @@ export class UserStreamingService {
   private lastChatSequence: bigint = 0n;
   private isConnected_ = false;
   private subscribedChatId: string | undefined = undefined;
+  private lastChatGapResyncAt = 0;
+  private lastUserGapResyncAt = 0;
 
   constructor(callbacks: GlobalWebSocketCallbacks) {
     this.callbacks = callbacks;
@@ -443,6 +452,58 @@ export class UserStreamingService {
     this.lastChatSequence = 0n;
 
     // Reconnect without chat subscription
+    this.reconnectWithNewSubscription();
+  }
+
+  /**
+   * A persisted chat update was missed upstream (sequence gap). Reconnect
+   * preserving both cursors; the server replays (chat_since_seq, latest]
+   * from the DB, restoring the missed updates in order.
+   */
+  private resyncChatStreamAfterGap(gapSeq: bigint): void {
+    const now = Date.now();
+    if (now - this.lastChatGapResyncAt < CHAT_GAP_RESYNC_MIN_INTERVAL_MS) {
+      // A resync is already in flight; its replay covers this gap too.
+      return;
+    }
+    this.lastChatGapResyncAt = now;
+
+    logger.warn(
+      `${LOG_PREFIX_STREAM} Chat update sequence gap detected — resyncing from last contiguous sequence`,
+      {
+        chatId: this.subscribedChatId?.slice(0, 8),
+        lastContiguous: Number(this.lastChatSequence),
+        gapSeq: Number(gapSeq),
+      },
+    );
+    this.reconnectWithNewSubscription();
+  }
+
+  /**
+   * The user-update sequence jumped. Rewind the resume cursor to the last
+   * pre-jump sequence and reconnect: the server replays the range from the
+   * DB (project-filtered), filling any genuinely dropped events. Throttled,
+   * because jumps can also be caused by the server's project filter.
+   */
+  private scheduleUserGapResync(fromSeq: bigint): void {
+    const now = Date.now();
+    if (now - this.lastUserGapResyncAt < USER_GAP_RESYNC_THROTTLE_MS) {
+      logger.debug(
+        `${LOG_PREFIX_STREAM} User update sequence jump — resync throttled`,
+        { fromSeq: Number(fromSeq) },
+      );
+      return;
+    }
+    this.lastUserGapResyncAt = now;
+
+    logger.warn(
+      `${LOG_PREFIX_STREAM} User update sequence jump detected — resyncing`,
+      {
+        fromSeq: Number(fromSeq),
+        currentSeq: Number(this.lastSequence),
+      },
+    );
+    this.lastSequence = fromSeq;
     this.reconnectWithNewSubscription();
   }
 
@@ -555,7 +616,10 @@ export class UserStreamingService {
         logger.info(`${LOG_PREFIX_STREAM} Received sync info`, {
           lastSequence: Number(syncInfo.lastSequence),
         });
-        this.lastSequence = syncInfo.lastSequence;
+        // Deliberately does NOT advance this.lastSequence: the server sends
+        // sync BEFORE replaying (since_seq, latest]. The resume cursor must
+        // only reflect updates we actually processed, otherwise a disconnect
+        // mid-replay would skip the remaining updates forever on reconnect.
         this.callbacks.onSync(Number(syncInfo.lastSequence));
         break;
       }
@@ -565,12 +629,27 @@ export class UserStreamingService {
         // Process events BEFORE advancing the sequence number.
         // If the stream is aborted mid-batch (e.g. chat-switch reconnect),
         // the un-acked sequence ensures the server re-sends on reconnect.
+        const preBatchCursor = this.lastSequence;
         const wsUpdates = batch.updates.map(convertUserUpdateData);
         this.callbacks.onUpdate(wsUpdates);
+        let jumped = false;
+        let cursor = preBatchCursor;
         for (const update of batch.updates) {
-          if (update.sequenceNumber > this.lastSequence) {
-            this.lastSequence = update.sequenceNumber;
+          if (cursor > 0n && update.sequenceNumber > cursor + 1n) {
+            jumped = true;
           }
+          if (update.sequenceNumber > cursor) {
+            cursor = update.sequenceNumber;
+          }
+        }
+        this.lastSequence = cursor;
+        if (jumped) {
+          // User sequences are per-user but the server filters live events by
+          // project, so a jump is only *possibly* a dropped event. The batch
+          // has been applied; a throttled replay-resync from the pre-jump
+          // cursor fills anything that was really dropped (re-delivery of
+          // already-applied updates is idempotent upsert/patching).
+          this.scheduleUserGapResync(preBatchCursor);
         }
         break;
       }
@@ -639,13 +718,44 @@ export class UserStreamingService {
 
       case "chatUpdates": {
         const batch = event.event.value;
-        this.lastChatSequence = batch.latestSequence;
 
-        const updates: ChatUpdate[] = batch.updates
+        // Persisted chat updates carry contiguous per-chat sequence numbers
+        // (ephemeral streaming deltas carry 0). A jump past cursor+1 means an
+        // upstream drop (e.g. NATS hub slow consumer): apply the contiguous
+        // prefix, drop the rest, and resync — the reconnect resumes from
+        // lastChatSequence and the server replays the missed range from the
+        // DB in order. batch.latestSequence is deliberately NOT trusted for
+        // the cursor: it echoes server state that can be ahead of what this
+        // client actually received.
+        const accepted: ChatUpdateData[] = [];
+        let gapAt: bigint | null = null;
+        for (const update of batch.updates) {
+          const seq = update.sequenceNumber;
+          if (seq === 0n) {
+            accepted.push(update); // ephemeral delta — no ordering contract
+            continue;
+          }
+          if (this.lastChatSequence > 0n && seq > this.lastChatSequence + 1n) {
+            gapAt = seq;
+            break;
+          }
+          if (seq > this.lastChatSequence) {
+            this.lastChatSequence = seq;
+          }
+          accepted.push(update);
+        }
+
+        const updates: ChatUpdate[] = accepted
           .map(convertChatUpdateData)
           .filter((u): u is ChatUpdate => u !== null);
 
-        this.callbacks.onChatUpdate?.(updates);
+        if (updates.length > 0) {
+          this.callbacks.onChatUpdate?.(updates);
+        }
+
+        if (gapAt !== null) {
+          this.resyncChatStreamAfterGap(gapAt);
+        }
         break;
       }
 

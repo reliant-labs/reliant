@@ -3,21 +3,25 @@
 # Tests the compaction path:
 # 1. LLM calls a tool
 # 2. Tool executes and returns a large result
-# 3. thread_token_count exceeds compaction_threshold
+# 3. thread_token_count exceeds the model's compaction threshold
 # 4. Compact node runs to reduce context size
 # 5. Loop continues, LLM responds with final answer
 #
 # The edge condition is:
-#   nodes.execute_tools.thread_token_count > inputs.compaction_threshold
+#   nodes.execute_tools.thread_token_count > nodes.call_llm.compaction_threshold
+#
+# agent.yaml resolves the threshold from the model config
+# (inputs.model.compaction_threshold), so the scenario sets it there.
 #
 # This verifies the compact node is triggered when context grows too large.
 
 name: compaction_triggered
-description: Token count exceeds compaction_threshold, compact node runs
+description: Token count exceeds the model compaction threshold, compact node runs
 
 inputs:
   mode: "auto"
-  compaction_threshold: 10000  # Low threshold to trigger compaction
+  model:
+    compaction_threshold: 10000 # Low threshold to trigger compaction
 
 events:
   # LLM requests a tool that returns lots of data
@@ -35,12 +39,10 @@ events:
     tool: view
     output:
       result: "Very large file content that pushed us over the token limit..."
-    thread_token_count: 15000
+      thread_token_count: 15000
 
   # Compact node runs due to high token count
   - node: agent_loop.compact
-    type: tool_result
-    tool: compact
     output:
       result: "Context compacted successfully."
 
@@ -55,7 +57,6 @@ expect:
     - agent_loop
     - agent_loop.call_llm
     - agent_loop.execute_tools
-    - agent_loop.compact  # Compact must be reached
+    - agent_loop.compact # Compact must be reached
   not_reached:
     - agent_loop.approval
-    - max_turns_notification

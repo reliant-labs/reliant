@@ -1,12 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
+import { Loader2 } from "lucide-react";
 import "@xterm/xterm/css/xterm.css";
 import { logger } from "../../lib/logger";
 import { supabase } from "../../lib/supabase";
 import { cn } from "../../lib/utils";
+import { isDaemonConnectingError } from "../../lib/daemon-errors";
+import { useDaemonStatus } from "../../hooks/useDaemonStatus";
 import { useTerminalStore } from "../../store/terminalStore";
 import { useSidebarStore } from "../../store/sidebarStore";
 import { getGRPCBaseURLPublic } from "../../api/grpc-client";
@@ -20,8 +23,27 @@ interface TerminalProps {
 }
 
 const WS_RECONNECT_BASE_DELAY = 1000;
-const WS_RECONNECT_MAX_DELAY = 10000;
+const WS_RECONNECT_MAX_DELAY = 20000;
 const WS_MAX_RECONNECT_ATTEMPTS = 10;
+// Slow fallback retry cadence while the daemon is known to be offline. The
+// real reconnect trigger in that state is the daemon-status subscription
+// flipping to online; this timer only guards against stale client-side status.
+const DAEMON_OFFLINE_RETRY_DELAY = 30000;
+
+/**
+ * Terminal connection lifecycle:
+ * - connecting:         initial session attempt (or a retry after the daemon came back)
+ * - connected:          session established (server sent "init")
+ * - reconnecting:       session dropped while a daemon is online; auto-retrying with backoff
+ * - waiting_for_daemon: no daemon connected; retries are gated on daemon status
+ * - disconnected:       terminal ended or retries exhausted; manual reconnect offered
+ */
+type TerminalConnectionState =
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  | "waiting_for_daemon"
+  | "disconnected";
 
 export function Terminal({ sessionId, workingDir, worktreeId, className }: TerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -30,16 +52,55 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
   const fitAddonRef = useRef<FitAddon | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = useRef(0);
-  const intentionalCloseRef = useRef(false);
-  const [isConnected, setIsConnected] = useState(false);
-  const [showReconnect, setShowReconnect] = useState(false);
+  const [connectionState, setConnectionState] = useState<TerminalConnectionState>("connecting");
+  const connectionStateRef = useRef<TerminalConnectionState>("connecting");
+  // Set when the server reports "no daemon connected" for the current attempt.
+  const daemonUnavailableRef = useRef(false);
   const connectWebSocketRef = useRef<(() => Promise<(() => void) | undefined>) | null>(null);
   const updateSessionPID = useTerminalStore((state) => state.updateSessionPID);
   const activeSessionId = useTerminalStore((state) => state.activeSessionId);
 
+  const updateConnectionState = useCallback((next: TerminalConnectionState) => {
+    connectionStateRef.current = next;
+    setConnectionState(next);
+  }, []);
+
+  // Daemon connectivity from the shared (deduped, 5s-poll) daemon status
+  // query. Used to classify a dropped session as "daemon offline" vs "session
+  // dropped", and to reconnect promptly when the daemon comes online instead
+  // of hammering the server while it is down. While the status is still
+  // loading we assume online — the server's own error is the stronger signal.
+  const { activeDaemon, loading: daemonStatusLoading } = useDaemonStatus();
+  const daemonOnline = !!activeDaemon || daemonStatusLoading;
+  const daemonOnlineRef = useRef(daemonOnline);
+
+  useEffect(() => {
+    const wasOnline = daemonOnlineRef.current;
+    daemonOnlineRef.current = daemonOnline;
+    if (!wasOnline && daemonOnline && connectionStateRef.current === "waiting_for_daemon") {
+      logger.info("[Terminal] Daemon came online, reconnecting", { sessionId });
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      reconnectAttemptsRef.current = 0;
+      updateConnectionState("connecting");
+      void connectWebSocketRef.current?.();
+    }
+  }, [daemonOnline, sessionId, updateConnectionState]);
+
   // Main terminal initialization effect - only runs once per sessionId
   useEffect(() => {
     if (!terminalRef.current) return;
+
+    // Effect-scoped disposal flag: each run gets its own, so a stale socket's
+    // async close event can never be mistaken for the current run's socket.
+    let disposed = false;
+
+    // Fresh run: reset connection bookkeeping (refs survive effect re-runs).
+    reconnectAttemptsRef.current = 0;
+    daemonUnavailableRef.current = false;
+    updateConnectionState("connecting");
 
     // Get theme colors from CSS variables
     const getColor = (variable: string) => {
@@ -204,11 +265,17 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
 
     // Connect to WebSocket
     const connectWebSocket = async () => {
+      if (disposed) return;
+
+      // Per-attempt evidence: cleared here, set by this attempt's messages.
+      daemonUnavailableRef.current = false;
+
       // Use the main gRPC base URL for terminal WebSocket connections.
       const baseURL = getGRPCBaseURLPublic();
       if (!baseURL) {
         logger.error("[Terminal] No gRPC base URL configured, terminal unavailable");
         term.writeln("\r\n\x1b[91mTerminal unavailable — no base URL configured.\x1b[0m");
+        updateConnectionState("disconnected");
         return () => {};
       }
 
@@ -234,10 +301,13 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
 
       ws.onopen = () => {
         logger.info("[Terminal] WebSocket connected");
-        setIsConnected(true);
-        setShowReconnect(false);
-        reconnectAttemptsRef.current = 0;
-        
+        // NOTE: an open socket does not mean the session exists — the server
+        // creates the daemon session after the upgrade and confirms it with
+        // the "init" message. Marking success (and resetting the backoff
+        // counter) here made every failed session-create look like attempt 1,
+        // producing a tight retry loop with no backoff while the daemon was
+        // offline. Success is handled in the "init" branch below.
+
         // Send initial resize to sync terminal dimensions
         setTimeout(() => {
           if (fitAddonRef.current && xtermRef.current && ws.readyState === WebSocket.OPEN) {
@@ -263,7 +333,11 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
           // This prevents raw characters like digits from being parsed as JSON numbers
           if (data && typeof data === 'object' && typeof data.type === 'string') {
             if (data.type === "init") {
-              // Initial message with PID
+              // Session created on the daemon — the connection is healthy.
+              // This (not ws.onopen) is the success signal: reset the backoff.
+              reconnectAttemptsRef.current = 0;
+              daemonUnavailableRef.current = false;
+              updateConnectionState("connected");
               if (data.pid) {
                 updateSessionPID(sessionId, data.pid);
                 logger.info("[Terminal] Received PID", { sessionId, pid: data.pid });
@@ -271,7 +345,15 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
             } else if (data.type === "output") {
               term.write(data.data);
             } else if (data.type === "error") {
-              term.write(`\r\n\x1b[91mError: ${data.data}\x1b[0m\r\n`);
+              if (isDaemonConnectingError(data.data)) {
+                // "no daemon connected" — expected while the daemon is
+                // offline. The waiting overlay owns the messaging; writing a
+                // red error per retry was spamming the buffer.
+                daemonUnavailableRef.current = true;
+                logger.info("[Terminal] Session unavailable: no daemon connected", { sessionId });
+              } else {
+                term.write(`\r\n\x1b[91mError: ${data.data}\x1b[0m\r\n`);
+              }
             } else if (data.type === "exit") {
               term.write(`\r\n\x1b[93m${data.data}\x1b[0m\r\n`);
             }
@@ -286,42 +368,66 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
       };
 
       ws.onerror = (error) => {
+        // onclose always follows and owns the user-visible state; writing
+        // "Connection error" here repeated it into the buffer on every retry.
         logger.error("[Terminal] WebSocket error", { error });
-        term.write("\r\n\x1b[91mConnection error\x1b[0m\r\n");
       };
 
       ws.onclose = (event) => {
         logger.info("[Terminal] WebSocket closed", { code: event.code, reason: event.reason });
-        setIsConnected(false);
 
-        // Don't reconnect if intentionally closed (component unmount / user action).
-        if (intentionalCloseRef.current) {
-          term.write("\r\n\x1b[93mConnection closed\x1b[0m\r\n");
-          return;
-        }
+        // Intentionally closed (component unmount / effect re-run): the
+        // terminal instance is disposed, do nothing.
+        if (disposed) return;
 
         // Normal exit (e.g. shell exited) — code 1000 means clean close.
         if (event.code === 1000) {
           term.write("\r\n\x1b[93mSession ended\x1b[0m\r\n");
+          updateConnectionState("disconnected");
+          return;
+        }
+
+        // Daemon offline — either the server said "no daemon connected" for
+        // this attempt, or the shared daemon status shows nothing connected.
+        // Don't burn backoff attempts: show a calm persistent waiting state
+        // and let the daemon-status subscription trigger the reconnect, with
+        // a slow fallback retry in case that status is stale.
+        if (daemonUnavailableRef.current || !daemonOnlineRef.current) {
+          if (connectionStateRef.current !== "waiting_for_daemon") {
+            term.write("\r\n\x1b[93mWaiting for daemon to come online...\x1b[0m\r\n");
+            updateConnectionState("waiting_for_daemon");
+          }
+          reconnectTimerRef.current = setTimeout(() => {
+            logger.info("[Terminal] Daemon-offline fallback retry", { sessionId });
+            connectWebSocket();
+          }, DAEMON_OFFLINE_RETRY_DELAY);
           return;
         }
 
         if (reconnectAttemptsRef.current >= WS_MAX_RECONNECT_ATTEMPTS) {
           term.write("\r\n\x1b[91mConnection lost. Max reconnect attempts reached.\x1b[0m\r\n");
-          setShowReconnect(true);
+          updateConnectionState("disconnected");
           return;
         }
 
         const attempt = reconnectAttemptsRef.current + 1;
-        const delay = Math.min(
+        reconnectAttemptsRef.current = attempt;
+        const baseDelay = Math.min(
           WS_RECONNECT_BASE_DELAY * Math.pow(2, attempt - 1),
           WS_RECONNECT_MAX_DELAY
         );
-        reconnectAttemptsRef.current = attempt;
-        term.write(`\r\n\x1b[93mConnection lost. Reconnecting (${attempt}/${WS_MAX_RECONNECT_ATTEMPTS})...\x1b[0m\r\n`);
+        // Small jitter so many mounted terminals don't retry in lockstep.
+        const delay = Math.round(baseDelay * (0.85 + Math.random() * 0.3));
+
+        // Announce the reconnect episode once — the overlay reflects ongoing
+        // state; a per-attempt write spammed the buffer.
+        if (connectionStateRef.current !== "reconnecting") {
+          term.write("\r\n\x1b[93mConnection lost. Reconnecting...\x1b[0m\r\n");
+          updateConnectionState("reconnecting");
+        }
 
         reconnectTimerRef.current = setTimeout(() => {
-          logger.info("[Terminal] Reconnecting", { attempt });
+          logger.info("[Terminal] Reconnecting", { attempt, delay });
           connectWebSocket();
         }, delay);
       };
@@ -371,7 +477,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
     // Cleanup
     return () => {
       logger.info("[Terminal] Cleaning up terminal");
-      intentionalCloseRef.current = true;
+      disposed = true;
 
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current);
@@ -390,7 +496,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
 
       term.dispose();
     };
-  }, [sessionId, workingDir, worktreeId, updateSessionPID]); // Only depend on sessionId, workingDir, worktreeId, and updateSessionPID
+  }, [sessionId, workingDir, worktreeId, updateSessionPID, updateConnectionState]); // updateConnectionState is a stable setter
 
   // Listen for theme changes and update terminal colors
   useEffect(() => {
@@ -573,10 +679,14 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
   }, [sessionId, sidebarWidth, diffHeightPercent]);
 
   const handleReconnectClick = () => {
-    setShowReconnect(false);
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
     reconnectAttemptsRef.current = 0;
-    intentionalCloseRef.current = false;
-    connectWebSocketRef.current?.();
+    daemonUnavailableRef.current = false;
+    updateConnectionState("connecting");
+    void connectWebSocketRef.current?.();
   };
 
   return (
@@ -585,12 +695,43 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
         ref={terminalRef}
         className="w-full h-full"
       />
-      {!isConnected && !showReconnect && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card border border-border text-foreground px-4 py-3 rounded-lg shadow-lg font-mono text-xs">
+      {connectionState === "connecting" && (
+        <div
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card border border-border text-foreground px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 font-mono text-xs"
+          role="status"
+          aria-live="polite"
+        >
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden="true" />
           Connecting to terminal...
         </div>
       )}
-      {showReconnect && (
+      {connectionState === "reconnecting" && (
+        <div
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card border border-border text-foreground px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 font-mono text-xs"
+          role="status"
+          aria-live="polite"
+        >
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden="true" />
+          Reconnecting...
+        </div>
+      )}
+      {connectionState === "waiting_for_daemon" && (
+        <div
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card border border-border text-foreground px-4 py-3 rounded-lg shadow-lg flex flex-col items-center gap-1.5"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-center gap-2 font-mono text-xs">
+            <span
+              className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse shadow-[0_0_0_3px_rgba(234,179,8,0.15)]"
+              aria-hidden="true"
+            />
+            Waiting for daemon to come online...
+          </div>
+          <span className="text-xs text-muted-foreground">The terminal will connect automatically.</span>
+        </div>
+      )}
+      {connectionState === "disconnected" && (
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card border border-border text-foreground px-4 py-3 rounded-lg shadow-lg flex flex-col items-center gap-2">
           <span className="font-mono text-xs text-muted-foreground">Terminal disconnected</span>
           <button

@@ -31,6 +31,7 @@ import type {
 } from "../../../types/streaming";
 import type { WorkflowExecution, StepExecution } from "../ExecutionSidebar/types";
 import { cn } from "../../../lib/utils";
+import { sortMessagesForDisplay } from "../../../lib/messageOrder";
 import { getActivitySteps } from "./activityIndicators";
 import { ActivityIndicator } from "./ActivityIndicator";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads, resolveRouterDecisionFromActiveThreads } from "./threadUtils";
@@ -343,12 +344,17 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     const lastWorkflowByThread = new Map<string, string>();
     const seenAssistantOnThread = new Set<string>();
 
-    // Sort messages by timestamp (ordinal is per-thread, not global)
-    const sorted = [...messages].sort(
-      (a, b) => new Date(a.createdAt || "").getTime() - new Date(b.createdAt || "").getTime()
-    );
+    // Canonical order: per-thread ordinal, threads interleaved by clamped
+    // time (lib/messageOrder). Raw createdAt is not trustworthy for ordering.
+    const sorted = sortMessagesForDisplay(messages, chatId);
 
     for (const msg of sorted) {
+      // TOOL-role messages carry only tool_result blocks; their content is
+      // already embedded into the assistant tool-call cards via matchedResult.
+      // Rendering them standalone would synthesize empty-input duplicate cards
+      // (see ChatContainer/ChatPresenter which filter the same way).
+      if (msg.role === MessageRole.TOOL) continue;
+
       // Thread defaults to chatId (main thread) if not set
       const thread = msg.thread || chatId;
       if (!isVisible(thread)) continue;

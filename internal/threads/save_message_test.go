@@ -715,7 +715,9 @@ func TestSaveMessage_PersistsCost(t *testing.T) {
 	if msg.Cost == nil {
 		t.Fatal("expected message cost to be persisted")
 	}
-	if *msg.Cost != 0.0789 {
+	// cost is stored as Postgres REAL (4-byte float), so the float64 round-trip is
+	// not bit-exact — compare with a tolerance sized to REAL's ~7 sig digits.
+	if diff := *msg.Cost - 0.0789; diff > 1e-6 || diff < -1e-6 {
 		t.Errorf("cost = %f, want %f", *msg.Cost, 0.0789)
 	}
 }

@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -17,6 +17,13 @@ import (
 // ============================================================================
 // SHARED HELPER FUNCTIONS
 // ============================================================================
+
+// InterruptedToolResultContent is the stub tool_result content synthesized for
+// dangling tool calls (assistant tool_use with no persisted result), e.g. when
+// a run was killed mid-execution and a later run resumes on the same thread.
+// The wording matters: the tool may or may not have taken effect, so the model
+// must verify before re-running side-effectful calls.
+const InterruptedToolResultContent = "Tool execution was interrupted — outcome unknown. The previous run was interrupted before the result was recorded; verify the effects of this call before re-running it."
 
 // LoadMessagesForLLM loads messages for LLM context with full repair support.
 // This is the primary function for loading messages to send to the LLM.
@@ -175,7 +182,9 @@ func RepairOrphanedToolCalls(ctx context.Context, repo db.Repository, chatID str
 
 	// Create synthetic tool message at the next ordinal (end of conversation)
 	msgID := fmt.Sprintf("repair-%s-%d", lastAssistant.ID, time.Now().UnixNano())
-	now := time.Now()
+	// UTC to match every other persisted timestamp — a local-time value here
+	// puts repair messages hours in the past and breaks time-ordering.
+	now := time.Now().UTC()
 
 	nextOrdinal, err := repo.GetNextOrdinal(ctx, thread)
 	if err != nil {
@@ -203,7 +212,7 @@ func RepairOrphanedToolCalls(ctx context.Context, repo db.Repository, chatID str
 	for i, tc := range orphanedToolCalls {
 		blockID := fmt.Sprintf("%s-block-%d", msgID, i)
 		isError := true
-		content := "Tool execution was cancelled before completion. The previous request was interrupted."
+		content := InterruptedToolResultContent
 
 		block := &db.MessageContentBlock{
 			ID:         blockID,

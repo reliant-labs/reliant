@@ -1,6 +1,7 @@
 import { X, ArrowRightFromLine, ArrowLeftToLine, FolderOpen, Terminal, Globe, FolderGit2, Workflow, Lock } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../../lib/utils";
+import { isElectron } from "../../lib/constants";
 import { ResizableDiffPanel } from "./ResizableDiffPanel";
 import { useViewerStore, type Viewer, type CommandsViewer, type WorkflowViewer } from "../../store/viewerStore";
 import { useProjectStore } from "../../store/projectStore";
@@ -444,6 +445,22 @@ function ViewerContent({ viewer, isActive }: ViewerContentProps) {
   }
 
   if (viewer.type === "browser") {
+    // The in-app browser is an Electron <webview> — it does not exist in the web
+    // build. Never mount it there; show a desktop-only note instead of a dead panel.
+    if (!isElectron()) {
+      return (
+        <div className="flex-1 flex items-center justify-center text-muted-foreground p-8 text-center">
+          <div className="max-w-xs">
+            <Globe className="w-8 h-8 mx-auto mb-2 opacity-50" />
+            <p className="text-sm font-medium">Browser preview is desktop-only</p>
+            <p className="text-xs mt-1">
+              The in-app browser is available in the Reliant desktop app. Here, links
+              open in a new browser tab.
+            </p>
+          </div>
+        </div>
+      );
+    }
     return <SingleBrowserView tabId={viewer.browserTabId} viewerId={viewer.id} />;
   }
 

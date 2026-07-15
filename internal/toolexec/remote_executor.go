@@ -5,10 +5,39 @@ import (
 	"context"
 	"fmt"
 	"time"
+	"unicode/utf8"
 
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 )
+
+// maxLLMToolContentBytes caps tool-result content surfaced to the LLM.
+// Per-tool truncation (tools.MaxOutputSize, enforced in the ToolWrapper —
+// see internal/llm/tools/output_limiter.go) normally caps output well below
+// this; this is the consumption-layer backstop for results that bypassed it.
+// The NATS transport now chunks oversize replies, so a multi-MB tool result
+// arrives intact — user RPCs need the full payload, but dumping it into
+// model context is still wrong. 2x the per-tool cap leaves room for the
+// wrapper's own truncation warnings so wrapper-truncated output is never
+// touched twice.
+const maxLLMToolContentBytes = 2 * tools.MaxOutputSize
+
+// capLLMToolContent truncates tool content to maxLLMToolContentBytes with an
+// actionable tail. The model gets partial results plus guidance instead of an
+// error (or an unbounded context dump).
+func capLLMToolContent(content string) string {
+	if len(content) <= maxLLMToolContentBytes {
+		return content
+	}
+	keep := maxLLMToolContentBytes
+	// Don't split a UTF-8 rune at the cut point.
+	for keep > 0 && !utf8.RuneStart(content[keep]) {
+		keep--
+	}
+	return content[:keep] + fmt.Sprintf(
+		"\n… [output truncated: %s total — narrow your search or request less data]",
+		formatByteSize(int64(len(content))))
+}
 
 // DaemonClientFactory creates a daemon.Client for a given user ID.
 // In distributed mode it creates a RemoteClient bound to the user's daemon via NATS.
@@ -186,7 +215,7 @@ func (e *RemoteExecutor) executeOnServer(ctx context.Context, req *ToolRequest, 
 		Success:      result.Success,
 		IsError:      result.IsError,
 		Backgrounded: result.Backgrounded,
-		Content:      result.Content,
+		Content:      capLLMToolContent(result.Content),
 		Metadata:     result.Metadata,
 		BinaryParts:  result.BinaryParts,
 		StartTime:    startTime,
@@ -270,11 +299,21 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 		}, nil
 	}
 
+	// Error envelopes from the transport layer (e.g. the bridge's
+	// oversize-reply protection or DAEMON_ERROR replies) may carry only
+	// ErrorMessage. The LLM sees the tool result's Content, so fall back to
+	// ErrorMessage — otherwise the actionable text is swallowed and the model
+	// gets a generic "failed with no error message".
+	content := resp.Content
+	if content == "" && (!resp.Success || resp.IsError) && resp.ErrorMessage != "" {
+		content = resp.ErrorMessage
+	}
+
 	return &ToolResult{
 		Success:      resp.Success,
 		IsError:      resp.IsError,
 		Backgrounded: resp.Backgrounded,
-		Content:      resp.Content,
+		Content:      capLLMToolContent(content),
 		Metadata:     resp.Metadata,
 		StartTime:    startTime,
 		EndTime:      time.Now(),

@@ -11,6 +11,7 @@ import (
 	"github.com/aymanbagabas/go-pty"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/osutil"
 )
 
 // Manager manages terminal sessions
@@ -72,6 +73,15 @@ func (m *Manager) CreateSession(workingDir string, userID string) (*Session, err
 	if err := cmd.Start(); err != nil {
 		ptty.Close()
 		return nil, fmt.Errorf("failed to start command: %w", err)
+	}
+
+	// Steer the kernel OOM killer toward the terminal's shell (and, via
+	// inheritance, everything the user runs in it) rather than the daemon.
+	// No-op outside Linux; best-effort everywhere.
+	if cmd.Process != nil {
+		if err := osutil.AdjustChildOOMScore(cmd.Process.Pid); err != nil {
+			logging.Debug("[Terminal] Failed to adjust shell oom_score_adj", "pid", cmd.Process.Pid, "error", err)
+		}
 	}
 
 	session := &Session{

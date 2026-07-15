@@ -107,6 +107,19 @@ export function ChatHeader({
   const allThreads = useThreads(messages, chatId || "", workflowExecution);
   const threads = useMemo(() => allThreads.filter((t) => !t.isSpawn), [allThreads]);
   const hasMultipleThreads = threads.length > 1;
+
+  // Currently viewed thread (may be a spawn thread, which is excluded from tabs)
+  const selectedThread = useMemo(
+    () => (selectedThreadId ? allThreads.find((t) => t.id === selectedThreadId) : undefined),
+    [allThreads, selectedThreadId],
+  );
+  // Back target when viewing a spawned/child thread: the parent thread if it's a
+  // known non-main thread, otherwise the default main chat view (null)
+  const backTargetThread = useMemo(() => {
+    if (!selectedThread?.parentThread) return undefined;
+    return allThreads.find((t) => t.id === selectedThread.parentThread && !t.isMain);
+  }, [allThreads, selectedThread]);
+  const showBackButton = Boolean(selectedThread && !selectedThread.isMain && onSelectThread);
   
   // Task stats from React Query
   const taskStats = useTaskStats(chatId);
@@ -378,6 +391,22 @@ export function ChatHeader({
           <div className="flex flex-col gap-0.5">
             {/* Row 1: Title, Menu, and Time */}
             <div className="flex items-center gap-1">
+              {/* Back to parent thread - only when viewing a spawned/child thread */}
+              {showBackButton && (
+                <Tooltip
+                  content={backTargetThread ? `Back to ${backTargetThread.name}` : "Back to main thread"}
+                  placement="bottom"
+                >
+                  <button
+                    onClick={() => onSelectThread?.(backTargetThread ? backTargetThread.id : null)}
+                    className="p-1 hover:bg-accent rounded transition-colors flex-shrink-0"
+                    aria-label="Back to parent thread"
+                  >
+                    <ArrowLeft className="h-4 w-4 text-muted-foreground" />
+                  </button>
+                </Tooltip>
+              )}
+
               {/* Title - click to edit inline */}
               {isEditingTitle ? (
                 <input
@@ -606,24 +635,6 @@ export function ChatHeader({
               />
             )}
 
-            {/* Back to main chat bar when viewing a spawn thread */}
-            {(() => {
-              const spawnThread = selectedThreadId ? threads.find(t => t.id === selectedThreadId && t.isSpawn) : null;
-              if (!spawnThread || !onSelectThread) return null;
-              return (
-                <div className="flex items-center gap-2 px-1 py-1 text-xs text-muted-foreground">
-                  <button
-                    onClick={() => onSelectThread(null)}
-                    className="flex items-center gap-1 hover:text-foreground transition-colors"
-                  >
-                    <ArrowLeft className="w-3 h-3" />
-                    Back to main chat
-                  </button>
-                  <span className="text-muted-foreground/50">&middot;</span>
-                  <span className="truncate max-w-[200px]">{spawnThread.name}</span>
-                </div>
-              );
-            })()}
           </div>
         </div>
       </div>

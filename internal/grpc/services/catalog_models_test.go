@@ -32,8 +32,11 @@ func TestCatalogService_ListModels_ReliantOnlyExposesCuratedAllowlist(t *testing
 
 	llmdrivers.InitializeAPIKeyProvider(repo)
 	ctx := newCatalogServiceTestContext()
-	// Reliant driver now uses JWT auth, not a stored API key.
-	auth.SetUserJWT("test-user", "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0LXVzZXIifQ.test")
+	// A logged-in user always has their managed Reliant key synced locally
+	// (JWT -> admin server -> LiteLLM key, minted and persisted by
+	// SyncReliantProvider). ListModels gates reliant on that stored key, so
+	// provision it here to represent a real authenticated user.
+	require.NoError(t, repo.SetProviderAPIKey(context.Background(), "test-user", "reliant", "rlnt_test_managed_key"))
 
 	svc := NewCatalogService(nil)
 	resp, err := svc.ListModels(ctx, connect.NewRequest(&reliantv1.ListModelsRequest{}))

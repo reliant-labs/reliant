@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/attachment"
 	"github.com/reliant-labs/reliant/internal/db"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -149,6 +149,8 @@ func (a *SaveMessageActivity) Execute(ctx context.Context, input ActivityInput) 
 		Thinking:      thinking,
 		TokenCount:    int(protoArgs.GetTokenCount()),
 		Cost:          protoArgs.GetCost(),
+		Model:         protoArgs.GetResolvedModel(),
+		Agent:         protoArgs.GetResolvedAgent(),
 		DisplayStyle:  parseDisplayStyle(protoArgs.GetResolvedDisplayStyle()),
 		WorkflowID:    workflowID,
 		StepID:        rtx.StepID,
@@ -199,7 +201,7 @@ func convertToolResults(results []message.ToolResult) []threads.ToolResult {
 // createInjectFileAttachment creates a DB attachment from inject file data and returns the attachment ID.
 func (a *SaveMessageActivity) createInjectFileAttachment(ctx context.Context, f *reliantv1.InjectFileMsg) (string, error) {
 	attID := uuid.New().String()
-	now := time.Now()
+	now := time.Now().UTC()
 
 	attType := attachment.GetAttachmentType(f.GetFilename())
 	attTypeStr := string(attType)

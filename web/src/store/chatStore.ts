@@ -15,6 +15,7 @@ import {
 import { ApprovalStatus } from "../gen/reliant/v1/approval_pb";
 import type { ProcessedMessage } from "../lib/messageProcessor";
 import { processMessage } from "../lib/messageProcessor";
+import { sortMessagesForDisplay } from "../lib/messageOrder";
 import {
   CHAT_MARKER_KINDS,
   extractChatMarker,
@@ -305,6 +306,20 @@ function clearStreamingBuffer(
     clearTimeout(buffer.flushTimeoutId);
   }
   streamingBuffers.delete(key);
+}
+
+// Clear ALL streaming buffers for a chat (every thread). Used when the
+// chat's activity goes idle and any leftover buffer is stale by definition.
+function clearStreamingBuffersForChat(chatId: string): void {
+  for (const key of [...streamingBuffers.keys()]) {
+    if (key.startsWith(`${chatId}:`)) {
+      const buffer = streamingBuffers.get(key);
+      if (buffer?.flushTimeoutId) {
+        clearTimeout(buffer.flushTimeoutId);
+      }
+      streamingBuffers.delete(key);
+    }
+  }
 }
 
 // Buffer streaming deltas and flush on newlines
@@ -655,6 +670,10 @@ interface ChatStoreState {
 
   // Stream methods (chat detail events are delivered via the unified global stream)
   processChatStreamUpdates: (chatId: string, updates: ChatUpdate[], isSnapshot?: boolean) => void;
+  // Clears streaming placeholders/buffers for a chat. Called when the chat's
+  // activity goes IDLE — the authoritative "nothing is streaming" signal —
+  // so stale delta tails can't leave a phantom message at the end of the chat.
+  clearStreamingState: (chatId: string) => void;
 
   // Chat control methods
   cancelChat: (chatId: string) => Promise<void>;
@@ -1440,7 +1459,12 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         `[ChatStore] Loading messages for chat ${chatId.slice(0, 8)}`,
       );
       const response = await api.chatsV2.listMessages(chatId);
-      const messages = (response.messages || []).map(normalizeMessageAttachmentFields);
+      // Canonical order — the server's flat list is sorted by raw ordinal,
+      // which interleaves threads incorrectly (ordinals are per-thread).
+      const messages = sortMessagesForDisplay(
+        (response.messages || []).map(normalizeMessageAttachmentFields),
+        chatId,
+      );
 
       logger.debug(`[ChatStore] gRPC returned ${messages.length} messages`, {
         total: response.total,
@@ -1597,6 +1621,14 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       const compactBlocks = contentBlocks.filter(
         (block: unknown) => block !== undefined && block !== null,
       );
+
+      // A tail of deltas from an already-finalized stream (deltas race the
+      // final message on a separate server channel) must not fabricate an
+      // empty placeholder: without a block-starting delta and without an
+      // existing streaming message there is nothing to display.
+      if (!currentMsg && compactBlocks.length === 0) {
+        return null;
+      }
 
       const normalizedThread = normalizeThreadKey(chatId, thread);
       const streamingId =
@@ -2269,13 +2301,11 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             }
           }
 
-          // Sort by createdAt timestamp in descending order (newest first) for bottom-up rendering
-          // IMPORTANT: Using createdAt instead of ordinal because ordinal is per-thread, not global.
-          updatedMessages.sort((a, b) => {
-            const timeA = new Date(a.createdAt || "").getTime();
-            const timeB = new Date(b.createdAt || "").getTime();
-            return timeB - timeA; // Descending (newest first)
-          });
+          // Canonical order (oldest first): per-thread ordinal, threads
+          // interleaved by clamped time — see lib/messageOrder.ts. createdAt
+          // alone is NOT trustworthy (repair/attachment messages have shipped
+          // with wrong timestamps; placeholders stamp the client clock).
+          updatedMessages = sortMessagesForDisplay(updatedMessages, chatId);
 
           // Process approval updates (both traditional and workflow-based)
           // CRITICAL: Use freshState to avoid race condition
@@ -2709,6 +2739,50 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         }
   },
 
+
+  // Remove streaming placeholders and buffers for a chat. The activity-IDLE
+  // event (persisted + gap-protected) is the authoritative signal that no
+  // stream is running; any placeholder still present is a stale delta tail
+  // that would otherwise render at the end of the chat until a refresh.
+  clearStreamingState: (chatId: string) => {
+    // Drop buffers first so pending flush timers can't resurrect a placeholder.
+    clearStreamingBuffersForChat(chatId);
+
+    set((state) => {
+      const messages = state.messages[chatId] || [];
+      const filtered = messages.filter(
+        (m) => !m.id.startsWith("streaming-temp"),
+      );
+      const hasStreaming = !!state.streamingMessages[chatId];
+      if (filtered.length === messages.length && !hasStreaming) {
+        return state;
+      }
+
+      logger.info("[Streaming] Clearing streaming state for idle chat", {
+        chatId: chatId.slice(0, 8),
+        removedPlaceholders: messages.length - filtered.length,
+      });
+
+      const newProcessed = new Map(state.processedMessages[chatId] || []);
+      for (const m of messages) {
+        if (m.id.startsWith("streaming-temp")) {
+          newProcessed.delete(m.id);
+        }
+      }
+
+      const newStreamingMessages = { ...state.streamingMessages };
+      delete newStreamingMessages[chatId];
+
+      return {
+        messages: { ...state.messages, [chatId]: filtered },
+        processedMessages: {
+          ...state.processedMessages,
+          [chatId]: newProcessed,
+        },
+        streamingMessages: newStreamingMessages,
+      };
+    });
+  },
 
   // Cancel chat - cancels all sessions in the chat
   cancelChat: async (chatId: string) => {

@@ -739,3 +739,55 @@ func TestInlineWorkflowUnreachableNodeDetection(t *testing.T) {
 		t.Error("expected unreachable node detection in inline workflow, got no errors")
 	}
 }
+
+// ============================================================================
+// resume_node validation
+// ============================================================================
+
+func TestValidateStructure_ResumeNode(t *testing.T) {
+	makeWf := func(resumeNode string) *reliantv1.Workflow {
+		return &reliantv1.Workflow{
+			Name:       "test",
+			Entry:      []string{"plan"},
+			ResumeNode: resumeNode,
+			Nodes: []*reliantv1.Node{
+				{Id: "plan", Type: "call_llm", Args: &reliantv1.Node_CallLlm{CallLlm: &reliantv1.CallLLMArgs{Model: &reliantv1.CelModelSelector{Value: &reliantv1.CelModelSelector_Expr{Expr: "inputs.model"}}}}},
+				{Id: "work", Type: "call_llm", Args: &reliantv1.Node_CallLlm{CallLlm: &reliantv1.CallLLMArgs{Model: &reliantv1.CelModelSelector{Value: &reliantv1.CelModelSelector_Expr{Expr: "inputs.model"}}}}},
+			},
+			Edges: []*reliantv1.Edge{
+				{From: "plan", Default: []string{"work"}},
+			},
+		}
+	}
+
+	t.Run("valid resume_node passes", func(t *testing.T) {
+		result := StaticAnalysis(makeWf("work"), nil)
+		for _, err := range result.Errors() {
+			if strings.Contains(err.Field, "resume_node") {
+				t.Errorf("unexpected resume_node error: %v", err.Message)
+			}
+		}
+	})
+
+	t.Run("empty resume_node passes", func(t *testing.T) {
+		result := StaticAnalysis(makeWf(""), nil)
+		for _, err := range result.Errors() {
+			if strings.Contains(err.Field, "resume_node") {
+				t.Errorf("unexpected resume_node error: %v", err.Message)
+			}
+		}
+	})
+
+	t.Run("unknown resume_node errors", func(t *testing.T) {
+		result := StaticAnalysis(makeWf("nonexistent"), nil)
+		found := false
+		for _, err := range result.Errors() {
+			if strings.Contains(err.Field, "resume_node") && strings.Contains(err.Message, "unknown node") {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected resume_node unknown-node error, got: %v", result.Errors())
+		}
+	})
+}

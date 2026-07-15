@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/attachment"
 	"github.com/reliant-labs/reliant/internal/db"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/ptr"
 )
@@ -47,6 +47,14 @@ type SaveMessageOpts struct {
 	// TokenCount represents the context size (how many tokens the LLM saw)
 	TokenCount int
 	Cost       float64
+
+	// Provenance (provided by caller from LLM resolution / workflow context)
+	// Model is the concrete model that served the completion, captured after tag
+	// resolution (e.g. "claude-4.8-opus"). Persisted to messages.model.
+	Model string
+	// Agent is the agent/workflow identity that produced the message
+	// (e.g. "builtin://agent", "get-it-right"). Persisted to messages.agent.
+	Agent string
 
 	// Display and workflow context
 	DisplayStyle int32 // DisplayStyle proto enum value (0=unspecified, 1=info, 2=warning, 3=success, 4=hidden)
@@ -171,6 +179,8 @@ func (s *Service) SaveMessage(ctx context.Context, opts SaveMessageOpts) (*SaveM
 			ActivityID:      opts.ActivityID,
 			TokenCount:      ptr.IntIfPositive(opts.TokenCount),
 			Cost:            ptr.Float64IfPositive(opts.Cost),
+			Model:           ptr.StringIfNotEmpty(opts.Model),
+			Agent:           ptr.StringIfNotEmpty(opts.Agent),
 			DisplayStyle:    displayStylePtrIfNonZero(opts.DisplayStyle),
 			CreatedAt:       timestamp,
 			UpdatedAt:       timestamp,
@@ -631,7 +641,10 @@ func (s *Service) emitChatUpdate(ctx context.Context, opts SaveMessageOpts, mess
 	}
 
 	if err := s.repo.CreateChatUpdate(ctx, opts.ChatID, db.UpdateTypeMessage, messageID, string(updateDataJSON)); err != nil {
-		slog.Error("[SaveMessage] Failed to create chat_update",
+		// Warn, not Error: this runs inside SaveMessage's RunTx, so transient
+		// failures (e.g. SQLSTATE 40001) are retried by the enclosing
+		// transaction. Terminal failures are logged at ERROR by RunTx itself.
+		slog.Warn("[SaveMessage] Failed to create chat_update (may be retried)",
 			"error", err,
 			"chat_id", opts.ChatID,
 			"message_id", messageID)

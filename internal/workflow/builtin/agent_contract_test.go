@@ -24,7 +24,7 @@ const (
 	edgeCallLLMToExecuteTools  = `nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode != 'manual'`
 	edgeCallLLMToAskQuestion   = `(nodes.call_llm.tool_calls == null || size(nodes.call_llm.tool_calls) == 0) && inputs.ask`
 	edgeApprovalToExecuteTools = `nodes.approval.status == 'approved'`
-	edgeExecuteToolsToCompact  = `nodes.execute_tools.thread_token_count > (has(inputs.model.compaction_threshold) ? inputs.model.compaction_threshold : 185000)`
+	edgeExecuteToolsToCompact  = `nodes.execute_tools.thread_token_count > nodes.call_llm.compaction_threshold`
 )
 
 func TestContractExpressionsMatchAgentYAML(t *testing.T) {
@@ -213,7 +213,8 @@ func TestContractAgentYAMLExpressionsEvaluate(t *testing.T) {
 				ctx := &wfcel.EdgeEvalContext{
 					Nodes: map[string]interface{}{
 						"call_llm": map[string]interface{}{
-							"tool_calls": makeToolCalls(1),
+							"tool_calls":           makeToolCalls(1),
+							"compaction_threshold": 185000,
 						},
 						"approval": map[string]interface{}{
 							"status": "approved",

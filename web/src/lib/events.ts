@@ -40,16 +40,6 @@ export interface EventMap {
 
   // --- Reliant-specific events ---
 
-  // Chat events
-  "chat:created": { chatId: string };
-  "chat:deleted": { chatId: string };
-  "chat:archived": { chatId: string };
-  "chat:restored": { chatId: string };
-  "chat:titleChanged": { chatId: string; title: string };
-  "chat:stateChanged": { chatId: string; state: string };
-  "chat:activityChanged": { chatId: string; activity: string };
-  "chat:configChanged": { chatId: string };
-
   // Streaming events
   "stream:started": { chatId: string; thread?: string };
   "stream:completed": { chatId: string; thread?: string };

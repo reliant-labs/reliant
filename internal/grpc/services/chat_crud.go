@@ -1026,6 +1026,16 @@ func (s *ChatService) CancelChat(
 
 	workflowID := *chat.WorkflowID
 
+	// User cancel is the explicit "start fresh next time" marker: drop the
+	// position checkpoint so the next message never resumes this run at
+	// position, regardless of how the run's terminal status settles (the
+	// workflow's own cancelled-path clears it too, but a wedged run never
+	// reaches that path). Best-effort.
+	if err := s.database.DeleteWorkflowCheckpoint(ctx, workflowID); err != nil {
+		logging.Warn("CancelChat: failed to clear workflow checkpoint",
+			"workflowID", workflowID, "error", err)
+	}
+
 	// Check if the Temporal workflow is still running before sending cancel signal.
 	// If it's already completed/terminated, reconcile the DB status directly
 	// so the frontend receives an activity=IDLE event.

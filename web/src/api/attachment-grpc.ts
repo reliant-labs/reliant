@@ -132,8 +132,8 @@ export const attachmentGrpc = {
       }
       // If it's an Electron file reference, we need to read it first
       throw new Error("Image upload requires a File object");
-    } else if (attachmentType === 'file_reference') {
-      // For text files from Electron with a File object, upload the content directly
+    } else if (attachmentType === 'file_reference' || attachmentType === 'document') {
+      // For text files and documents (PDFs) with a File object, upload the content directly.
       if (fileOrPath instanceof File) {
         return this.uploadAttachment(fileOrPath);
       }

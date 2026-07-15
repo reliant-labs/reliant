@@ -154,7 +154,7 @@ func TestValidateResponseToolData(t *testing.T) {
 				return
 			}
 
-			err := validateResponseToolData(tt.jsonStr, tt.schema)
+			_, err := validateResponseToolData("test_tool", tt.jsonStr, tt.schema)
 			if (err != nil) != tt.wantError {
 				t.Errorf("validateResponseToolData() error = %v, wantError %v", err, tt.wantError)
 			}
@@ -208,6 +208,50 @@ func TestExecuteResponseToolInline_WithValidation(t *testing.T) {
 			schema:     nil,
 			wantError:  false,
 			wantInResp: "approved",
+		},
+		{
+			// Regression: models sometimes emit array-typed properties as a
+			// JSON-encoded STRING containing the array (observed as 21
+			// consecutive submit_deck_plan failures). The repair layer must
+			// parse the string and pass validation with the real array.
+			name:      "stringified array property is repaired and passes validation",
+			toolName:  "submit_deck_plan",
+			toolInput: `{"slides": "[{\"title\": \"Intro\", \"bullets\": [\"a\", \"b\"]}]"}`,
+			schema: map[string]interface{}{
+				"type":     "object",
+				"required": []interface{}{"slides"},
+				"properties": map[string]interface{}{
+					"slides": map[string]interface{}{
+						"type": "array",
+						"items": map[string]interface{}{
+							"type":     "object",
+							"required": []interface{}{"title"},
+							"properties": map[string]interface{}{
+								"title":   map[string]interface{}{"type": "string"},
+								"bullets": map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
+							},
+						},
+					},
+				},
+			},
+			wantError: false,
+			// The repaired (parsed) array must flow into content/metadata —
+			// not the original stringified form.
+			wantInResp: `"slides":[{`,
+		},
+		{
+			name:      "stringified property that is not valid JSON still fails cleanly",
+			toolName:  "submit_deck_plan",
+			toolInput: `{"slides": "definitely not json"}`,
+			schema: map[string]interface{}{
+				"type":     "object",
+				"required": []interface{}{"slides"},
+				"properties": map[string]interface{}{
+					"slides": map[string]interface{}{"type": "array"},
+				},
+			},
+			wantError:  true,
+			wantInResp: "schema validation failed",
 		},
 	}
 

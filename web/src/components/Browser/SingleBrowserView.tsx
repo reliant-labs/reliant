@@ -73,6 +73,9 @@ export function SingleBrowserView({ tabId, viewerId }: SingleBrowserViewProps) {
       logger.debug("[SingleBrowserView] Load stopped", { tabId });
       updateTabLoading(tabId, false);
 
+      // Guard: Electron <webview> APIs are absent in plain-browser (web) builds.
+      if (typeof webview.getURL !== "function") return;
+
       // Update URL
       const url = webview.getURL();
       updateTabUrl(tabId, url);
@@ -110,7 +113,9 @@ export function SingleBrowserView({ tabId, viewerId }: SingleBrowserViewProps) {
     const handleDidNavigate = (e: any) => {
       logger.debug("[SingleBrowserView] Navigation", { tabId, url: e.url });
       updateTabUrl(tabId, e.url);
-      updateTabNavigation(tabId, webview.canGoBack(), webview.canGoForward());
+      if (typeof webview.canGoBack === "function") {
+        updateTabNavigation(tabId, webview.canGoBack(), webview.canGoForward());
+      }
     };
 
     // Inject JavaScript to intercept target="_blank" links and window.open calls
@@ -144,6 +149,7 @@ export function SingleBrowserView({ tabId, viewerId }: SingleBrowserViewProps) {
         })();
       `;
       
+      if (typeof webview.executeJavaScript !== "function") return;
       webview.executeJavaScript(injectedScript).catch((err: Error) => {
         logger.error("[SingleBrowserView] Failed to inject click interceptor", { error: err.message });
       });
@@ -164,11 +170,11 @@ export function SingleBrowserView({ tabId, viewerId }: SingleBrowserViewProps) {
               openBrowserViewer(currentProject.id, currentWorktree.id, browserTabId);
             } catch (err) {
               // Fallback: navigate current tab
-              webview.loadURL(url);
+              if (typeof webview.loadURL === "function") webview.loadURL(url);
             }
           } else {
             // No context for new tab, navigate current tab
-            webview.loadURL(url);
+            if (typeof webview.loadURL === "function") webview.loadURL(url);
           }
         }
       }
@@ -214,7 +220,7 @@ export function SingleBrowserView({ tabId, viewerId }: SingleBrowserViewProps) {
     }
 
     const webview = webviewRef.current as any;
-    if (webview) {
+    if (webview && typeof webview.loadURL === "function") {
       webview.loadURL(url);
     }
     addressBarRef.current?.blur();
@@ -223,21 +229,21 @@ export function SingleBrowserView({ tabId, viewerId }: SingleBrowserViewProps) {
   const handleGoBack = () => {
     if (tab?.canGoBack) {
       const webview = webviewRef.current as any;
-      webview?.goBack();
+      if (typeof webview?.goBack === "function") webview.goBack();
     }
   };
 
   const handleGoForward = () => {
     if (tab?.canGoForward) {
       const webview = webviewRef.current as any;
-      webview?.goForward();
+      if (typeof webview?.goForward === "function") webview.goForward();
     }
   };
 
   const handleReload = () => {
     if (tab) {
       const webview = webviewRef.current as any;
-      webview?.reload();
+      if (typeof webview?.reload === "function") webview.reload();
     }
   };
 

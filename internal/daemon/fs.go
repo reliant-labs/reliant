@@ -55,4 +55,12 @@ type FileSystem interface {
 	// ReadBinaryFile reads a file's raw bytes up to maxBytes.
 	// Returns the raw bytes, or error if the file exceeds maxBytes or doesn't exist.
 	ReadBinaryFile(ctx context.Context, path string, maxBytes int64) ([]byte, error)
+
+	// PDFPageCount returns the number of pages in the PDF at path.
+	PDFPageCount(ctx context.Context, path string) (int, error)
+
+	// ReadPDFPages extracts the given page range (e.g. "1-5") from the PDF at
+	// path into a new self-contained PDF and returns its raw bytes. The caller
+	// is responsible for enforcing any per-request page cap.
+	ReadPDFPages(ctx context.Context, path string, pages string) ([]byte, error)
 }

@@ -9,7 +9,6 @@ import (
 	"reflect"
 	"strings"
 
-	gojsonschema "github.com/google/jsonschema-go/jsonschema"
 	"github.com/invopop/jsonschema"
 	"github.com/reliant-labs/reliant/internal/ctxkeys"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -33,6 +32,11 @@ func unwrapStringifiedValues(jsonStr string, schema *jsonschema.Schema) string {
 		return jsonStr
 	}
 
+	// The whole argument object is sometimes delivered as a JSON string (the model
+	// or an MCP serialization layer double-encodes it). Unwrap that outer layer
+	// before looking at individual properties.
+	jsonStr = unwrapStringifiedObject(jsonStr)
+
 	var data map[string]interface{}
 	if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
 		return jsonStr
@@ -53,9 +57,12 @@ func unwrapStringifiedValues(jsonStr string, schema *jsonschema.Schema) string {
 			continue
 		}
 
-		// Try to parse the string as JSON
-		var parsed interface{}
-		if err := json.Unmarshal([]byte(strVal), &parsed); err != nil {
+		// Peel away one or more layers of JSON string encoding. Values are
+		// occasionally double-stringified (a JSON string whose contents are
+		// themselves a JSON string), so keep unwrapping until the decoded value
+		// matches the schema's expected non-string type.
+		parsed, ok := unwrapToType(strVal, propSchema.Type)
+		if !ok {
 			continue
 		}
 
@@ -74,6 +81,77 @@ func unwrapStringifiedValues(jsonStr string, schema *jsonschema.Schema) string {
 		return jsonStr
 	}
 	return string(fixedBytes)
+}
+
+// maxUnwrapDepth bounds how many layers of JSON string encoding we peel away,
+// guarding against pathological or adversarial deeply-nested inputs.
+const maxUnwrapDepth = 5
+
+// unwrapStringifiedObject handles the case where the entire tool argument
+// payload arrived as a JSON-encoded string rather than a JSON object. It peels
+// string layers until it reaches a JSON object, returning the object's JSON
+// text. If the input is already an object (or never resolves to one) the
+// original string is returned unchanged.
+func unwrapStringifiedObject(jsonStr string) string {
+	current := jsonStr
+	for depth := 0; depth < maxUnwrapDepth; depth++ {
+		trimmed := strings.TrimSpace(current)
+		if len(trimmed) == 0 || trimmed[0] != '"' {
+			return current
+		}
+		var unquoted string
+		if err := json.Unmarshal([]byte(trimmed), &unquoted); err != nil {
+			return current
+		}
+		current = unquoted
+	}
+	return current
+}
+
+// unwrapToType parses a JSON string value, peeling repeated string encodings
+// until the decoded value matches the expected schema type ("array", "object",
+// "integer", "number", "boolean"). It returns the decoded value and true on
+// success, or false if the string does not decode to the expected type.
+func unwrapToType(strVal, expectedType string) (interface{}, bool) {
+	current := strVal
+	for depth := 0; depth < maxUnwrapDepth; depth++ {
+		var parsed interface{}
+		if err := json.Unmarshal([]byte(current), &parsed); err != nil {
+			return nil, false
+		}
+		if jsonValueMatchesType(parsed, expectedType) {
+			return parsed, true
+		}
+		// Another layer of string encoding — keep peeling.
+		if next, ok := parsed.(string); ok {
+			current = next
+			continue
+		}
+		return nil, false
+	}
+	return nil, false
+}
+
+// jsonValueMatchesType reports whether a decoded JSON value matches the JSON
+// Schema type name. Numbers decode as float64, so both "integer" and "number"
+// accept float64.
+func jsonValueMatchesType(v interface{}, expectedType string) bool {
+	switch expectedType {
+	case "array":
+		_, ok := v.([]interface{})
+		return ok
+	case "object":
+		_, ok := v.(map[string]interface{})
+		return ok
+	case "integer", "number":
+		_, ok := v.(float64)
+		return ok
+	case "boolean":
+		_, ok := v.(bool)
+		return ok
+	default:
+		return false
+	}
 }
 
 // coerceKVArrayMaps converts any top-level fields that look like:
@@ -223,13 +301,17 @@ func (t *ToolWrapper[P, O]) Run(rctx *rctxpkg.ToolContext, call ToolCall) (ToolR
 	normalizedInput := unwrapStringifiedValues(call.Input, schema)
 	normalizedInput = coerceKVArrayMaps(normalizedInput)
 
-	// Validate input against JSON Schema
+	// Validate input against JSON Schema. When validation fails because the
+	// model emitted an array/object value as a JSON-encoded string, the shared
+	// repair helper (schema_repair.go) fixes it in place and re-validates.
 	if schema != nil {
-		if err := validateJSONSchema(normalizedInput, schema); err != nil {
+		repairedInput, err := validateJSONSchemaWithRepair(toolName, normalizedInput, schema)
+		if err != nil {
 			errMsg := fmt.Sprintf("JSON Schema validation failed: %v", err)
 			logging.Warn("Tool input schema validation failed", "tool", toolName, "error", err, "input", truncateString(normalizedInput, 500))
 			return NewTextErrorResponse(errMsg), nil
 		}
+		normalizedInput = repairedInput
 	}
 
 	// Unmarshal to typed params with strict validation
@@ -503,36 +585,24 @@ func truncateString(s string, maxLen int) string {
 	return s[:maxLen] + "... (truncated)"
 }
 
-// validateJSONSchema validates a JSON string against a JSON Schema
+// validateJSONSchema validates a JSON string against a JSON Schema (no repair).
 func validateJSONSchema(jsonStr string, schema *jsonschema.Schema) error {
 	// Convert invopop/jsonschema to raw JSON for google/jsonschema-go
 	schemaBytes, err := json.Marshal(schema)
 	if err != nil {
 		return fmt.Errorf("failed to marshal schema: %w", err)
 	}
+	return ValidateJSONAgainstSchema(jsonStr, schemaBytes)
+}
 
-	// Parse the schema
-	var goSchema gojsonschema.Schema
-	if err := json.Unmarshal(schemaBytes, &goSchema); err != nil {
-		return fmt.Errorf("failed to unmarshal schema: %w", err)
-	}
-
-	// Resolve the schema
-	resolved, err := goSchema.Resolve(nil)
+// validateJSONSchemaWithRepair validates a JSON string against a JSON Schema,
+// repairing stringified array/object values (see schema_repair.go) before
+// failing. Returns the (possibly repaired) JSON string.
+func validateJSONSchemaWithRepair(toolName, jsonStr string, schema *jsonschema.Schema) (string, error) {
+	// Convert invopop/jsonschema to raw JSON for google/jsonschema-go
+	schemaBytes, err := json.Marshal(schema)
 	if err != nil {
-		return fmt.Errorf("failed to resolve schema: %w", err)
+		return jsonStr, fmt.Errorf("failed to marshal schema: %w", err)
 	}
-
-	// Parse the input JSON
-	var inputData interface{}
-	if err := json.Unmarshal([]byte(jsonStr), &inputData); err != nil {
-		return fmt.Errorf("failed to unmarshal input JSON: %w", err)
-	}
-
-	// Validate
-	if err := resolved.Validate(inputData); err != nil {
-		return fmt.Errorf("validation failed: %w", err)
-	}
-
-	return nil
+	return ValidateJSONWithRepair(toolName, jsonStr, schemaBytes)
 }

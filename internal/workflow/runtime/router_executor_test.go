@@ -248,6 +248,12 @@ func TestDynamicWorkflowNodeRoutingPassesThreadToCallLLM(t *testing.T) {
 	)
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
+			return map[string]interface{}{"success": true}, nil
+		},
+		activity.RegisterOptions{Name: "WorkflowCheckpoint"},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
 			return map[string]interface{}{}, nil
 		},
 		activity.RegisterOptions{Name: "Cleanup"},
@@ -487,6 +493,12 @@ func TestExecuteSelectedWorkflow_SavesInjectMessage(t *testing.T) {
 			activity.RegisterOptions{Name: "WorkflowStatus"},
 		)
 		env.RegisterActivityWithOptions(
+			func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
+				return map[string]interface{}{"success": true}, nil
+			},
+			activity.RegisterOptions{Name: "WorkflowCheckpoint"},
+		)
+		env.RegisterActivityWithOptions(
 			func(_ context.Context, _ map[string]interface{}) (interface{}, error) {
 				return nil, nil
 			},
@@ -582,6 +594,12 @@ func TestExecuteSelectedWorkflow_SavesInjectMessage(t *testing.T) {
 				return nil, nil
 			},
 			activity.RegisterOptions{Name: "WorkflowStatus"},
+		)
+		env.RegisterActivityWithOptions(
+			func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
+				return map[string]interface{}{"success": true}, nil
+			},
+			activity.RegisterOptions{Name: "WorkflowCheckpoint"},
 		)
 		env.RegisterActivityWithOptions(
 			func(_ context.Context, _ map[string]interface{}) (interface{}, error) {

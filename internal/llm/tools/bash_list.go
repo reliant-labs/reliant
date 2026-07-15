@@ -98,12 +98,13 @@ func (b *bashListTool) Execute(rctx *rctx.ToolContext, params BashListParams) (T
 		}
 		if params.All || p.Status == "running" {
 			filteredProcesses = append(filteredProcesses, &filteredProcess{
-				ID:        p.ID,
-				Command:   p.Command,
-				Status:    p.Status,
-				StartTime: p.StartTime,
-				EndTime:   p.EndTime,
-				ExitCode:  p.ExitCode,
+				ID:          p.ID,
+				Command:     p.Command,
+				Status:      p.Status,
+				StartTime:   p.StartTime,
+				EndTime:     p.EndTime,
+				ExitCode:    p.ExitCode,
+				PreviewURLs: previewURLsForProcess(p),
 			})
 		}
 	}
@@ -133,6 +134,12 @@ func (b *bashListTool) Execute(rctx *rctx.ToolContext, params BashListParams) (T
 		if p.Status == "running" {
 			duration := time.Since(p.StartTime)
 			fmt.Fprintf(&output, "Running for: %s\n", formatDuration(duration))
+			// Surface the env-aware proxied preview URL for any publicly-bound
+			// (0.0.0.0) listening port so the agent can post a reachable link
+			// instead of the daemon's unreachable loopback.
+			for _, line := range p.PreviewURLs {
+				fmt.Fprintf(&output, "%s\n", line)
+			}
 		} else if p.EndTime != nil {
 			fmt.Fprintf(&output, "Ended: %s\n", p.EndTime.Format(time.RFC3339))
 			duration := p.EndTime.Sub(p.StartTime)
@@ -162,6 +169,9 @@ type filteredProcess struct {
 	StartTime time.Time
 	EndTime   *time.Time
 	ExitCode  *int
+	// PreviewURLs holds one ready-to-post line per publicly-bound listening
+	// port (env-aware proxied URL), populated for running processes only.
+	PreviewURLs []string
 }
 
 func formatDuration(d time.Duration) string {

@@ -322,7 +322,6 @@ func TestStructuredAgentOutputCEL(t *testing.T) {
 			require.NoError(t, err, "CEL evaluation should not fail")
 
 			if tt.expectedResponse == nil {
-				// CEL returns structpb.NullValue(0) for null, not Go nil
 				assertCELNull(t, outputs["response"], "response output should be null")
 			} else {
 				assert.Equal(t, tt.expectedResponse, outputs["response"],
@@ -330,20 +329,26 @@ func TestStructuredAgentOutputCEL(t *testing.T) {
 			}
 			assert.Equal(t, tt.expectedCompleted, outputs["completed"],
 				"completed output mismatch")
+
+			// Regression: the loop executor converts iteration outputs to a
+			// structpb.Struct (loop_executor.go). If a CEL null leaks through
+			// as the structpb.NullValue enum instead of Go nil, this fails with
+			// "proto: invalid type: structpb.NullValue" and kills the loop.
+			_, err = structpb.NewStruct(outputs)
+			require.NoError(t, err, "loop outputs must be structpb-compatible")
 		})
 	}
 }
 
-// assertCELNull checks that a value is null in the CEL sense: either Go nil or structpb.NullValue.
+// assertCELNull checks that a CEL-evaluated value surfaced as Go nil.
+// After normalization (wfcel.ConvertToNative), CEL null must NEVER escape as
+// the structpb.NullValue enum — structpb.NewStruct rejects that enum, which
+// used to fail loop-output conversion with "proto: invalid type: structpb.NullValue".
 func assertCELNull(t *testing.T, val interface{}, msgAndArgs ...interface{}) {
 	t.Helper()
-	if val == nil {
-		return
+	if val != nil {
+		t.Errorf("expected Go nil for CEL null, got %T(%v) - %v", val, val, msgAndArgs)
 	}
-	if _, ok := val.(structpb.NullValue); ok {
-		return
-	}
-	t.Errorf("expected null (nil or NullValue), got %T(%v) - %v", val, val, msgAndArgs)
 }
 
 // TestFilterUnresolvedTemplates tests the helper that removes unresolved {{...}} templates.

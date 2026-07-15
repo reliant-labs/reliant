@@ -73,6 +73,18 @@ type InlineLoopExecutor struct {
 	// makeThreadPauseCtrl creates per-thread PauseControllers for pause-aware execution.
 	// Propagated from the root workflow to support nested spawn tool calls.
 	makeThreadPauseCtrl func(string) *PauseController
+
+	// iterationCheckpoint, when set, is invoked at the start of each sequential
+	// iteration with the iteration index. Set only for TOP-LEVEL loops by
+	// DynamicWorkflow to persist the position checkpoint {loopID, iteration}
+	// (resume-at-position support). Nested loops leave it nil.
+	iterationCheckpoint func(iteration int)
+
+	// startIteration, when > 0, makes the sequential loop begin at that
+	// iteration instead of 0. Used in resume mode to re-enter an interrupted
+	// loop at the checkpointed iteration so max-iteration guards keep counting
+	// from where they were. Ignored by parallel loops.
+	startIteration int
 }
 
 // NewInlineLoopExecutor creates a new executor for inline loop execution.
@@ -159,6 +171,22 @@ func (e *InlineLoopExecutor) WithPauseController(pc *PauseController) *InlineLoo
 // WithMakeThreadPauseCtrl sets the per-thread PauseController factory for spawn support.
 func (e *InlineLoopExecutor) WithMakeThreadPauseCtrl(fn func(string) *PauseController) *InlineLoopExecutor {
 	e.makeThreadPauseCtrl = fn
+	return e
+}
+
+// WithIterationCheckpoint sets the per-iteration position-checkpoint callback.
+// Only DynamicWorkflow sets this, and only for top-level loops.
+func (e *InlineLoopExecutor) WithIterationCheckpoint(fn func(iteration int)) *InlineLoopExecutor {
+	e.iterationCheckpoint = fn
+	return e
+}
+
+// WithStartIteration makes the sequential loop begin at the given iteration
+// (resume-at-position). No-op for iteration <= 0 and for parallel loops.
+func (e *InlineLoopExecutor) WithStartIteration(iteration int) *InlineLoopExecutor {
+	if iteration > 0 {
+		e.startIteration = iteration
+	}
 	return e
 }
 
@@ -383,6 +411,17 @@ func (e *InlineLoopExecutor) Execute() (*reliantv1.LoopOutput, error) {
 	// Track outputs from the last iteration
 	var lastIterationOutputs map[string]interface{}
 
+	// Resume-at-position: begin at the checkpointed iteration instead of 0.
+	// Guarded on e.iteration == 0 so a pause-cancel re-Execute() of the same
+	// executor (see workflow.go retryLoop) never rewinds real progress.
+	if e.startIteration > 0 && e.iteration == 0 {
+		e.iteration = e.startIteration
+		e.logger.Info("[InlineLoop] Resuming loop at checkpointed iteration",
+			"loopID", e.loopID,
+			"startIteration", e.startIteration,
+		)
+	}
+
 	e.logger.Info("[InlineLoop] About to enter main loop",
 		"loopID", e.loopID,
 		"iteration", e.iteration,
@@ -422,6 +461,12 @@ func (e *InlineLoopExecutor) Execute() (*reliantv1.LoopOutput, error) {
 			"loopID", e.loopID,
 			"iteration", e.iteration,
 		)
+
+		// Position checkpoint: record the iteration in flight so an
+		// interrupted run resumes this loop at this iteration.
+		if e.iterationCheckpoint != nil {
+			e.iterationCheckpoint(e.iteration)
+		}
 
 		// Execute this iteration
 		iterOutputs, err := e.executeIteration()

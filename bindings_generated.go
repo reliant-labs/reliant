@@ -53,18 +53,26 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 			"title":   {},
 		},
 	},
+	"ask_question": {
+		oneofFieldName: "ask_question",
+		isStructural:   false,
+		argFieldKeys: map[string]struct{}{
+			"metadata": {},
+		},
+	},
 	"call_llm": {
 		oneofFieldName: "call_llm",
 		isStructural:   false,
 		argFieldKeys: map[string]struct{}{
-			"max_tokens":     {},
-			"messages":       {},
-			"model":          {},
-			"response_tool":  {},
-			"system_prompt":  {},
-			"temperature":    {},
-			"thinking_level": {},
-			"tools_config":   {},
+			"compaction_threshold": {},
+			"max_tokens":           {},
+			"messages":             {},
+			"model":                {},
+			"response_tool":        {},
+			"system_prompt":        {},
+			"temperature":          {},
+			"thinking_level":       {},
+			"tools_config":         {},
 		},
 	},
 	"compact": {
@@ -114,7 +122,6 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 			"ref":         {},
 			"thread":      {},
 			"while":       {},
-			"yield":       {},
 		},
 	},
 	"router": {

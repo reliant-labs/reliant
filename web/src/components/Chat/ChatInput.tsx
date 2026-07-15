@@ -9,7 +9,7 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import { Settings2, RefreshCw, ChevronDown } from "lucide-react";
+import { Settings2, ChevronDown } from "lucide-react";
 import { useAttachmentStore } from "../../store/attachmentStore";
 import { useChatParamsStore } from "../../store/chatParamsStore";
 import { useActiveChatId } from "../../store/chatStoreHooks";
@@ -92,6 +92,10 @@ export function buildWorkflowInputsFromProto(
 
   return { inputs, groupTags, groupUIs };
 }
+
+/** Debounce window for auto-syncing edited params to an in-flight workflow run.
+ *  Rapid edits within this window coalesce into a single updateWorkflowParams call. */
+const PARAM_SYNC_DEBOUNCE_MS = 500;
 
 interface ChatInputProps {
   onSend: (
@@ -962,6 +966,37 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
       }
     }, [chatId, selectedThreadId, threadParamValues, threadParamsOverride, threadSyncedParams, isSyncing]);
 
+    // Auto-sync edited params to the in-flight workflow run, debounced.
+    // Replaces the former manual "Sync" button: while a run is active, param
+    // edits are pushed to the running workflow ~500ms after the user stops
+    // editing. Rapid edits reset the timer and coalesce into one request.
+    // A sync already in flight (isSyncing) defers the next attempt — when it
+    // settles, syncedParams changes, this effect re-runs, and any remaining
+    // unsynced edits are flushed. Params are also persisted locally on every
+    // change (handleWorkflowParamsChange), so they still apply on the next send
+    // even if this debounced push is skipped (e.g. component unmounts / chat
+    // switches before the timer fires).
+    useEffect(() => {
+      // Wait for an in-flight sync to settle; re-runs once isSyncing clears.
+      if (isSyncing) return;
+      const flush = hasUnsyncedThreadChanges
+        ? handleSyncThreadParams
+        : hasUnsyncedChanges
+          ? handleSyncParams
+          : null;
+      if (!flush) return;
+      const timer = setTimeout(() => {
+        void flush();
+      }, PARAM_SYNC_DEBOUNCE_MS);
+      return () => clearTimeout(timer);
+    }, [
+      hasUnsyncedChanges,
+      hasUnsyncedThreadChanges,
+      isSyncing,
+      handleSyncParams,
+      handleSyncThreadParams,
+    ]);
+
     // Attachment management
     const attachFile = useAttachmentStore((state) => state.attachFile);
     const removeAttachment = useAttachmentStore(
@@ -1587,35 +1622,6 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                           </Tooltip>
                           {settingsPage !== null && settingsPage !== 'model' && renderSettingsPopover(settingsPage)}
                         </div>
-                      )}
-
-                      {/* Sync Button - always clickable (can sync params while streaming) */}
-                      {(hasUnsyncedChanges || hasUnsyncedThreadChanges) && (
-                        <Tooltip
-                          content={isViewingThreadParams ? "Sync settings to thread workflow" : "Sync settings to workflow"}
-                          placement="top"
-                        >
-                          <button
-                            onClick={isViewingThreadParams ? handleSyncThreadParams : handleSyncParams}
-                            disabled={disabled || isSyncing}
-                            className={cn(
-                              "flex items-center justify-center rounded-full transition-colors h-6 px-2.5 gap-1",
-                              "text-[10px] font-medium",
-                              !disabled && !isSyncing
-                                ? "cursor-pointer hover:bg-primary/30"
-                                : "cursor-default opacity-60",
-                              "bg-primary/20 text-primary"
-                            )}
-                          >
-                            <RefreshCw
-                              className={cn(
-                                "w-3 h-3",
-                                isSyncing && "animate-spin"
-                              )}
-                            />
-                            <span>Sync</span>
-                          </button>
-                        </Tooltip>
                       )}
                     </div>
 

@@ -274,7 +274,12 @@ func validateEnumInputType(name string, value any, enumConfig *reliantv1.EnumInp
 		return nil
 	}
 
+	// An enum with no declared values constrains only the shape (string /
+	// array of strings), never the content — otherwise every value is
+	// rejected with an empty "(allowed: )" list, which bricks in-flight
+	// workflows whenever a schema is loaded mid-edit without its values.
 	allowedValues := enumConfig.GetEnumValues()
+	unrestricted := len(allowedValues) == 0
 	allowedValueSet := make(map[string]struct{}, len(allowedValues))
 	for _, allowedValue := range allowedValues {
 		allowedValueSet[allowedValue] = struct{}{}
@@ -290,7 +295,7 @@ func validateEnumInputType(name string, value any, enumConfig *reliantv1.EnumInp
 			if !stringOK {
 				return fmt.Errorf("input '%s' expects array of strings, item %d is %T", name, index, enumValue)
 			}
-			if _, allowed := allowedValueSet[enumString]; !allowed {
+			if _, allowed := allowedValueSet[enumString]; !allowed && !unrestricted {
 				return fmt.Errorf("input '%s' has invalid enum value %q (allowed: %s)", name, enumString, strings.Join(allowedValues, ", "))
 			}
 		}
@@ -301,7 +306,7 @@ func validateEnumInputType(name string, value any, enumConfig *reliantv1.EnumInp
 	if !ok {
 		return fmt.Errorf("input '%s' expects string, got %T", name, value)
 	}
-	if _, allowed := allowedValueSet[enumString]; !allowed {
+	if _, allowed := allowedValueSet[enumString]; !allowed && !unrestricted {
 		return fmt.Errorf("input '%s' has invalid enum value %q (allowed: %s)", name, enumString, strings.Join(allowedValues, ", "))
 	}
 	return nil

@@ -1,0 +1,93 @@
+# Start from research: router enters at the research phase
+#
+# The research phase is TWO parallel nodes joined by research_done (an "all"
+# join). Dispatching to research_competitors alone would deadlock the join, so
+# the classify edge fans out to BOTH research nodes. This scenario verifies:
+# 1. Both research tracks run when the router selects the research entry
+# 2. The research_done join fires and the pipeline continues
+# 3. The guarded scrape_website references fall back cleanly (scrape never ran)
+
+name: start_from_research
+description: Router enters at research phase; both parallel research nodes run and the join fires
+
+inputs:
+  website_url: "https://example.com"
+  deck_purpose: seed
+
+events:
+  # Router: website content is available, start at research
+  - node: classify
+    output:
+      selected_node: research_competitors
+      reasoning: "Website analysis already exists — run the research phase."
+
+  # Phase 2a + 2b run in parallel (both must run for the all-join)
+  - node: research_competitors
+    output:
+      response_text: "Competitive landscape researched."
+  - node: research_market
+    output:
+      response_text: "Market sizing researched."
+
+  # Phase 3: Founder interview
+  - node: founder_interview
+    output:
+      response_text: "Founder brief captured."
+
+  # Phase 4a: Plan deck
+  - node: plan_deck
+    output:
+      response_text: "Planned 1-slide deck."
+      response:
+        narrative_arc: "Traction-first."
+        slides:
+          - filename: "01-hook.md"
+            title: "Hook"
+            purpose: "Hook"
+            key_content: "Key stat"
+            layout_hint: centered-hero
+            sources: "phase-2-research/market-sizing.md"
+
+  # Phase 4b: slide_pipeline (black box)
+  - node: slide_pipeline
+    output:
+      _completed: 1
+      _failed: 0
+      _parallel: true
+      _results:
+        "01-hook.md":
+          response_text: "Wrote hook slide."
+
+  # Phase 5: slides_loop inner nodes
+  - node: slides_loop.build_slides
+    output:
+      response_text: "Built slide components."
+  - node: slides_loop.start_dev_server
+    output:
+      exit_code: 0
+  - node: slides_loop.visual_review
+    output:
+      response_text: "Slides pass visual review."
+      response:
+        verdict: pass
+        summary: "Clean slides."
+        slide_issues: []
+        ai_visual_tells: []
+  - node: slides_loop.stop_dev_server
+    output:
+      exit_code: 0
+
+expect:
+  outcome: completed
+  reached:
+    - classify
+    - research_competitors
+    - research_market
+    - research_done
+    - founder_interview
+    - plan_deck
+    - slide_pipeline
+    - slides_loop
+    - complete
+  not_reached:
+    - scrape_website

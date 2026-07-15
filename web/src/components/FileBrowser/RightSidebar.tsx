@@ -7,6 +7,7 @@ import { useViewerStore } from "../../store/viewerStore";
 import { useWorktreeStore, useActiveWorktreeId } from "../../store/worktreeStore";
 import { useUIStore } from "../../store/uiStore";
 import { useBrowserStore } from "../../store/browserStore";
+import { isElectron } from "../../lib/constants";
 import { useUnifiedProcessCounts } from "../../hooks/useUnifiedProcesses";
 import { RecentChanges } from "../Chat/RecentChanges";
 import { TasksPanel } from "../Chat/TasksPanel";
@@ -561,29 +562,33 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
             </span>
           </button>
         </Tooltip>
-        <Tooltip content="Browser" placement="bottom">
-          <button
-            onClick={() => handleTabClick("browser")}
-            tabIndex={-1}
-            className={cn(
-              "px-3 h-full transition-colors border-b-2 flex items-center justify-center",
-              activeSidebarTab === "browser"
-                ? "text-foreground"
-                : "text-muted-foreground bg-accent header-icon-btn"
-            )}
-            style={activeSidebarTab === "browser" ? {
-              backgroundColor: 'hsl(var(--tab-active) / 0.15)',
-              borderBottomColor: 'hsl(var(--tab-active))'
-            } : undefined}
-          >
-            <span className="relative">
-              <Globe className="w-4 h-4" />
-              {worktreeBrowserTabs.length > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-blue-500" />
+        {/* The in-app browser is an Electron <webview> — hide its sidebar entirely
+            in the web build, where it cannot be mounted. */}
+        {isElectron() && (
+          <Tooltip content="Browser" placement="bottom">
+            <button
+              onClick={() => handleTabClick("browser")}
+              tabIndex={-1}
+              className={cn(
+                "px-3 h-full transition-colors border-b-2 flex items-center justify-center",
+                activeSidebarTab === "browser"
+                  ? "text-foreground"
+                  : "text-muted-foreground bg-accent header-icon-btn"
               )}
-            </span>
-          </button>
-        </Tooltip>
+              style={activeSidebarTab === "browser" ? {
+                backgroundColor: 'hsl(var(--tab-active) / 0.15)',
+                borderBottomColor: 'hsl(var(--tab-active))'
+              } : undefined}
+            >
+              <span className="relative">
+                <Globe className="w-4 h-4" />
+                {worktreeBrowserTabs.length > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-blue-500" />
+                )}
+              </span>
+            </button>
+          </Tooltip>
+        )}
       </div>
 
       {/* Header and search bar - only show for files tab */}
@@ -643,7 +648,7 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
         {activeSidebarTab === "processes" && (
           <CommandsViewerTab worktreeId={activeWorktreeId} />
         )}
-        {activeSidebarTab === "browser" && (
+        {isElectron() && activeSidebarTab === "browser" && (
           <BrowserSidebarContent worktreeId={activeWorktreeId} />
         )}
       </div>

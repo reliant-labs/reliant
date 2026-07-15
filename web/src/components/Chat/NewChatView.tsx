@@ -26,8 +26,10 @@ import {
   Activity,
 } from "lucide-react";
 import { ResumeDaemonPill } from "./ResumeDaemonPill";
+import { OomKillBanner } from "./OomKillBanner";
 import { toast } from "sonner";
 import { cn } from "../../lib/utils";
+import { Tooltip } from "../ui/Tooltip";
 import { trackEvent } from "../../lib/analytics";
 
 interface NewChatViewProps {
@@ -56,22 +58,25 @@ export function NewChatView({
 
   const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
   const worktrees = useWorktreeStore((state) => state.worktrees);
-  // Only show inline starter cards on the empty state — i.e. when the
-  // current project has zero chats across all worktrees. The chatStore's
-  // chats map is scoped to the current project (see loadChats), so
-  // chats.size === 0 is equivalent to "no chats in this project".
-  // We additionally wait for the initial `loadChats` to complete (success or
-  // failure) before showing the cards, so we don't flash them prematurely
-  // while chats are still loading. `hasLoaded` is set in both paths of
-  // loadChats, so a load failure won't trap the cards from ever showing.
-  // The post-tour modal variant is mounted separately in ModernApp and
+  // Starter cards stay available on every new-chat view — not just first run —
+  // so users can re-pick a workflow (landing page, pitch deck, blog, …) at any
+  // time. Previously they were gated to `chats.size === 0` and vanished after
+  // the first chat, which made those flows unreachable. We still wait for the
+  // initial `loadChats` to complete (`hasLoaded`, set on both success and
+  // failure) so we don't flash the cards while chats are still loading.
+  //
+  // The blocking full-screen picker (`lockChatInput`) is still reserved for the
+  // genuine first-run empty state: a project with zero chats where the user
+  // hasn't picked a starter yet. Returning users get the cards inline, never a
+  // modal. The post-tour modal variant is mounted separately in ModernApp and
   // is not affected by this gate.
   const chatsCount = useChatStore((state) => state.chats.size);
   const chatsLoaded = useChatStore((state) => state.hasLoaded);
-  const showInlineCards = chatsLoaded && chatsCount === 0;
   const hasNoChatsInProject = chatsLoaded && chatsCount === 0;
   const hasPickedStarter = useChatParamsStore((s) => Boolean(s.tempNewChatWorkflow));
   const lockChatInput = hasNoChatsInProject && !hasPickedStarter;
+  // Show inline cards whenever we aren't showing the blocking first-run modal.
+  const showInlineCards = chatsLoaded && !lockChatInput;
   const switchWorktreeContext = useWorktreeStore(
     (state) => state.switchWorktreeContext
   );
@@ -279,12 +284,12 @@ export function NewChatView({
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_38%,hsl(var(--muted)_/_0.16),transparent_62%)]" />
 
         <div className="relative z-10 min-h-full w-full max-w-5xl mx-auto grid grid-rows-[auto_1fr_auto]">
-          <div className="flex items-center justify-center pt-12">
-            <div className="w-full max-w-xl mx-auto flex flex-col items-center text-center gap-4">
+          <div className="flex items-center justify-center pt-8">
+            <div className="w-full max-w-xl mx-auto flex flex-col items-center text-center gap-3">
               <ResumeDaemonPill placement="inline" />
 
-              <div className="inline-flex h-12 w-12 items-center justify-center">
-                <ReliantIcon className="h-12 w-12" />
+              <div className="inline-flex h-10 w-10 items-center justify-center">
+                <ReliantIcon className="h-10 w-10" />
               </div>
 
               {/* Workspace controls */}
@@ -294,14 +299,19 @@ export function NewChatView({
               >
                 {/* Workspace Selector */}
                 <div className="relative" ref={workspaceDropdownRef}>
-                  <button
-                    onClick={() => setShowWorkspaceDropdown(!showWorkspaceDropdown)}
-                    className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground border border-border/40 rounded-lg hover:border-border hover:text-foreground transition-colors"
+                  <Tooltip
+                    content="Workspaces are isolated copies of your codebase, powered by git worktrees — run multiple agents in parallel without conflicts."
+                    placement="top"
                   >
-                    <FolderGit2 className="w-4 h-4" />
-                    <span className="max-w-[180px] truncate">{selectedWorkspaceName}</span>
-                    <ChevronDown className="w-3.5 h-3.5 opacity-50" />
-                  </button>
+                    <button
+                      onClick={() => setShowWorkspaceDropdown(!showWorkspaceDropdown)}
+                      className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-foreground bg-muted/40 border border-border/70 rounded-lg hover:border-border hover:bg-muted/60 transition-colors"
+                    >
+                      <FolderGit2 className="w-4 h-4" />
+                      <span className="max-w-[180px] truncate">{selectedWorkspaceName}</span>
+                      <ChevronDown className="w-3.5 h-3.5 opacity-60" />
+                    </button>
+                  </Tooltip>
 
                   {showWorkspaceDropdown && (
                     <div className="absolute top-full left-0 mt-1 border border-border/50 rounded-md elevation-4 z-[1000] min-w-60 bg-[var(--chat-dropdown-bg)] overflow-hidden">
@@ -387,30 +397,38 @@ export function NewChatView({
                 </div>
 
                 {/* Quick create workspace */}
-                <button
-                  onClick={() => setShowCreateWorktreeModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground border border-border/40 rounded-lg hover:border-border hover:text-foreground transition-colors"
+                <Tooltip
+                  content="Create an isolated copy of your codebase (a git worktree) so another agent can work in parallel without conflicts."
+                  placement="top"
                 >
-                  <FolderPlus className="w-4 h-4 shrink-0" />
-                  <span className="leading-none">New workspace</span>
-                </button>
+                  <button
+                    onClick={() => setShowCreateWorktreeModal(true)}
+                    className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-foreground bg-muted/40 border border-border/70 rounded-lg hover:border-border hover:bg-muted/60 transition-colors"
+                  >
+                    <FolderPlus className="w-4 h-4 shrink-0" />
+                    <span className="leading-none">New workspace</span>
+                  </button>
+                </Tooltip>
               </div>
 
             </div>
           </div>
 
-          {/* Starter cards — pick a workflow to seed the next chat.
-              Only shown on the genuine empty state (no chats yet in this
-              project). Once the project has any chat, the inline cards
-              are hidden so they don't clutter NewChatView. */}
-          {showInlineCards && !lockChatInput && (
-            <div className="w-full px-4 py-6 md:py-8">
+          {/* Starter cards — pick a workflow to seed the next chat. Shown on
+              every new-chat view (except when the blocking first-run modal is
+              up) so landing-page / pitch-deck / blog stay reachable, not just
+              on the first-ever chat. */}
+          {showInlineCards && (
+            <div className="w-full px-4 py-4 md:py-5">
               <WorkflowStarterCards />
             </div>
           )}
 
         </div>
       </div>
+
+      {/* OOM banner — machine ran out of memory recently (cloud daemons) */}
+      <OomKillBanner />
 
       {/* Message Input - Collapsible when not focused */}
       {!daemonConnected && !daemonLoading && (() => {

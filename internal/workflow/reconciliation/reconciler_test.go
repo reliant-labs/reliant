@@ -4,16 +4,23 @@ package reconciliation
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -50,13 +57,25 @@ type mockDescribeResponse struct {
 type mockReconcilerTemporalClient struct {
 	client.Client // embed to satisfy the full interface
 
+	mu                sync.Mutex
 	describeResponses map[string]mockDescribeResponse // keyed by workflowID
 	terminateCalls    []string                        // workflow IDs that were terminated
+
+	// Poller-gating / reset support
+	taskQueueResponses    map[enums.TaskQueueType]*workflowservice.DescribeTaskQueueResponse
+	describeTaskQueueErr  error
+	describeTaskQueueCnt  int
+	resetCalls            []*workflowservice.ResetWorkflowExecutionRequest
+	resetErr              error
+	historyEvents         []*historypb.HistoryEvent
+	getWorkflowHistoryCnt int
 }
 
 func (m *mockReconcilerTemporalClient) DescribeWorkflowExecution(
 	_ context.Context, workflowID, _ string,
 ) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if resp, ok := m.describeResponses[workflowID]; ok {
 		return resp.resp, resp.err
 	}
@@ -67,8 +86,73 @@ func (m *mockReconcilerTemporalClient) DescribeWorkflowExecution(
 func (m *mockReconcilerTemporalClient) TerminateWorkflow(
 	_ context.Context, workflowID, _ string, _ string, _ ...interface{},
 ) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.terminateCalls = append(m.terminateCalls, workflowID)
 	return nil
+}
+
+func (m *mockReconcilerTemporalClient) DescribeTaskQueue(
+	_ context.Context, _ string, tqType enums.TaskQueueType,
+) (*workflowservice.DescribeTaskQueueResponse, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.describeTaskQueueCnt++
+	if m.describeTaskQueueErr != nil {
+		return nil, m.describeTaskQueueErr
+	}
+	if resp, ok := m.taskQueueResponses[tqType]; ok {
+		return resp, nil
+	}
+	return &workflowservice.DescribeTaskQueueResponse{}, nil
+}
+
+func (m *mockReconcilerTemporalClient) ResetWorkflowExecution(
+	_ context.Context, req *workflowservice.ResetWorkflowExecutionRequest,
+) (*workflowservice.ResetWorkflowExecutionResponse, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.resetCalls = append(m.resetCalls, req)
+	if m.resetErr != nil {
+		return nil, m.resetErr
+	}
+	return &workflowservice.ResetWorkflowExecutionResponse{RunId: "reset-run"}, nil
+}
+
+func (m *mockReconcilerTemporalClient) GetWorkflowHistory(
+	_ context.Context, _ string, _ string, _ bool, _ enums.HistoryEventFilterType,
+) client.HistoryEventIterator {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.getWorkflowHistoryCnt++
+	return &fakeHistoryIterator{events: m.historyEvents}
+}
+
+// setPollersActive flips the poller state for BOTH task queue types.
+func (m *mockReconcilerTemporalClient) setPollersActive(active bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.taskQueueResponses == nil {
+		m.taskQueueResponses = map[enums.TaskQueueType]*workflowservice.DescribeTaskQueueResponse{}
+	}
+	m.taskQueueResponses[enums.TASK_QUEUE_TYPE_WORKFLOW] = makePollersResponse(active)
+	m.taskQueueResponses[enums.TASK_QUEUE_TYPE_ACTIVITY] = makePollersResponse(active)
+}
+
+type fakeHistoryIterator struct {
+	events []*historypb.HistoryEvent
+	idx    int
+}
+
+func (f *fakeHistoryIterator) HasNext() bool { return f.idx < len(f.events) }
+
+func (f *fakeHistoryIterator) Next() (*historypb.HistoryEvent, error) {
+	if f.idx >= len(f.events) {
+		return nil, fmt.Errorf("no more events")
+	}
+	e := f.events[f.idx]
+	f.idx++
+	return e, nil
 }
 
 // --- Mock DB repository ---
@@ -77,11 +161,17 @@ func (m *mockReconcilerTemporalClient) TerminateWorkflow(
 type mockRepo struct {
 	db.Repository // embed to satisfy interface
 
+	mu                sync.Mutex
 	updatedStatuses   map[string]db.WorkflowStatus // workflowID -> new status
 	chats             map[string]*db.Chat          // chatID -> chat
 	userUpdates       []*db.UserUpdate
 	savedMessages     []savedMessage
 	workflowsByStatus map[db.WorkflowStatus][]*db.Workflow
+
+	// Progress-watchdog exclusion state
+	pendingQuestions map[string]*db.Question   // chatID -> pending question
+	pendingApprovals map[string][]*db.Approval // chatID -> pending approvals
+	questionErr      error                     // forced error for GetPendingQuestionByChatID
 }
 
 type savedMessage struct {
@@ -95,15 +185,36 @@ func newMockRepo() *mockRepo {
 		updatedStatuses:   make(map[string]db.WorkflowStatus),
 		chats:             make(map[string]*db.Chat),
 		workflowsByStatus: make(map[db.WorkflowStatus][]*db.Workflow),
+		pendingQuestions:  make(map[string]*db.Question),
+		pendingApprovals:  make(map[string][]*db.Approval),
 	}
 }
 
+func (m *mockRepo) GetPendingQuestionByChatID(_ context.Context, chatID string) (*db.Question, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.questionErr != nil {
+		return nil, m.questionErr
+	}
+	return m.pendingQuestions[chatID], nil
+}
+
+func (m *mockRepo) ListPendingApprovalsByChat(_ context.Context, chatID string) ([]*db.Approval, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.pendingApprovals[chatID], nil
+}
+
 func (m *mockRepo) CompareAndSwapWorkflowStatus(_ context.Context, id string, newStatus, expectedStatus db.WorkflowStatus) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.updatedStatuses[id] = newStatus
 	return true, nil
 }
 
 func (m *mockRepo) UpdateWorkflowStatus(_ context.Context, id string, status db.WorkflowStatus) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.updatedStatuses[id] = status
 	return nil
 }
@@ -121,6 +232,8 @@ func (m *mockRepo) CreateUserUpdate(_ context.Context, update *db.UserUpdate) er
 }
 
 func (m *mockRepo) SaveMessageToThread(_ context.Context, chatID, thread string, role int32, content string, workflowID *string, _ []string, _ *int32) (*db.Message, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.savedMessages = append(m.savedMessages, savedMessage{
 		chatID:     chatID,
 		thread:     thread,
@@ -156,6 +269,93 @@ func makeTerminalDescribeResp(status enums.WorkflowExecutionStatus) *workflowser
 				RunId: "some-run",
 			},
 		},
+	}
+}
+
+// makePollersResponse returns a DescribeTaskQueue response with (or without)
+// one recently-active poller.
+func makePollersResponse(active bool) *workflowservice.DescribeTaskQueueResponse {
+	if !active {
+		return &workflowservice.DescribeTaskQueueResponse{}
+	}
+	return &workflowservice.DescribeTaskQueueResponse{
+		Pollers: []*taskqueuepb.PollerInfo{
+			{Identity: "worker-1", LastAccessTime: timestamppb.New(time.Now())},
+		},
+	}
+}
+
+// makeStuckActivityDescribeResp returns a running workflow whose pending
+// activity has been sitting in Scheduled state for scheduledAgo.
+func makeStuckActivityDescribeResp(runID, activityID string, scheduledAgo time.Duration) *workflowservice.DescribeWorkflowExecutionResponse {
+	return &workflowservice.DescribeWorkflowExecutionResponse{
+		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+			Status:    enums.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			Execution: &commonpb.WorkflowExecution{RunId: runID},
+		},
+		PendingActivities: []*workflowpb.PendingActivityInfo{
+			{
+				ActivityId:    activityID,
+				ActivityType:  &commonpb.ActivityType{Name: "execute_step"},
+				State:         enums.PENDING_ACTIVITY_STATE_SCHEDULED,
+				ScheduledTime: timestamppb.New(time.Now().Add(-scheduledAgo)),
+			},
+		},
+	}
+}
+
+// makeStuckWorkflowTaskDescribeResp returns a running workflow whose pending
+// WORKFLOW task has been sitting in Scheduled state for scheduledAgo.
+func makeStuckWorkflowTaskDescribeResp(runID string, scheduledAgo time.Duration) *workflowservice.DescribeWorkflowExecutionResponse {
+	return &workflowservice.DescribeWorkflowExecutionResponse{
+		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+			Status:    enums.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			Execution: &commonpb.WorkflowExecution{RunId: runID},
+		},
+		PendingWorkflowTask: &workflowpb.PendingWorkflowTaskInfo{
+			State:         enums.PENDING_WORKFLOW_TASK_STATE_SCHEDULED,
+			ScheduledTime: timestamppb.New(time.Now().Add(-scheduledAgo)),
+		},
+	}
+}
+
+// makeHistoryWithActivity returns a minimal history: workflow task completed
+// at event 4, the given activity scheduled at event 5.
+func makeHistoryWithActivity(activityID string) []*historypb.HistoryEvent {
+	return []*historypb.HistoryEvent{
+		{EventId: 1, EventType: enums.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+		{EventId: 2, EventType: enums.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED},
+		{EventId: 3, EventType: enums.EVENT_TYPE_WORKFLOW_TASK_STARTED},
+		{EventId: 4, EventType: enums.EVENT_TYPE_WORKFLOW_TASK_COMPLETED},
+		{
+			EventId:   5,
+			EventType: enums.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+			Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
+				ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
+					ActivityId: activityID,
+				},
+			},
+		},
+	}
+}
+
+// stuckTestConfig returns a config whose debounce confirms after `passes`
+// consecutive poller-active observations (time window effectively disabled).
+func stuckTestConfig(passes int) *ReconcilerConfig {
+	return &ReconcilerConfig{
+		StuckConfirmationPasses: passes,
+		StuckConfirmationWindow: time.Nanosecond,
+		Namespace:               "test-ns",
+	}
+}
+
+func runningWorkflow() *db.Workflow {
+	return &db.Workflow{
+		ID:           "wf-1",
+		ChatID:       "chat-1",
+		Thread:       "main",
+		Status:       db.WorkflowStatusRunning,
+		WorkflowName: "builtin://agent",
 	}
 }
 
@@ -428,4 +628,1004 @@ func TestReconciler_RunningWorkflow_TemporalRunning_NoChange(t *testing.T) {
 	require.NoError(t, result.Error)
 	assert.False(t, result.WasStale, "running+running = no mismatch")
 	assert.Empty(t, repo.updatedStatuses)
+}
+
+// --- Stuck-task handling: poller gating, debounce, reset-first recovery ---
+
+func TestReconciler_StuckActivity_NoPollers_Skipped(t *testing.T) {
+	repo := newMockRepo()
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeStuckActivityDescribeResp("run-1", "act-1", 5*time.Minute)},
+		},
+		historyEvents: makeHistoryWithActivity("act-1"),
+	}
+	tempClient.setPollersActive(false) // worker down/rebuilding
+
+	reconciler := NewReconciler(repo, tempClient, stuckTestConfig(2))
+	wf := runningWorkflow()
+
+	// Many passes: with no pollers, stuck handling must never trigger.
+	for i := 0; i < 5; i++ {
+		result := reconciler.ReconcileWorkflow(context.Background(), wf)
+		require.NoError(t, result.Error)
+		assert.False(t, result.WasStale, "pass %d: no action while pollers absent", i)
+		assert.False(t, result.RecoveredByReset, "pass %d", i)
+	}
+
+	assert.Empty(t, tempClient.resetCalls, "must not reset while pollers absent")
+	assert.Empty(t, tempClient.terminateCalls, "must not terminate while pollers absent")
+	assert.Empty(t, repo.updatedStatuses, "must not touch DB while pollers absent")
+	assert.Empty(t, repo.savedMessages, "must not post chat messages while pollers absent")
+}
+
+func TestReconciler_StuckActivity_PollerCheckError_Skipped(t *testing.T) {
+	repo := newMockRepo()
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeStuckActivityDescribeResp("run-1", "act-1", 5*time.Minute)},
+		},
+		describeTaskQueueErr: fmt.Errorf("temporal unavailable"),
+	}
+
+	reconciler := NewReconciler(repo, tempClient, stuckTestConfig(2))
+	wf := runningWorkflow()
+
+	for i := 0; i < 4; i++ {
+		result := reconciler.ReconcileWorkflow(context.Background(), wf)
+		require.NoError(t, result.Error)
+		assert.False(t, result.WasStale, "pass %d: no action when poller liveness unknown", i)
+	}
+
+	assert.Empty(t, tempClient.resetCalls)
+	assert.Empty(t, tempClient.terminateCalls)
+	assert.Empty(t, repo.updatedStatuses)
+}
+
+func TestReconciler_StuckActivity_StalePollers_Skipped(t *testing.T) {
+	// Temporal keeps dead workers in the poller list for ~5 minutes; only a
+	// RECENTLY active poller counts.
+	repo := newMockRepo()
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeStuckActivityDescribeResp("run-1", "act-1", 5*time.Minute)},
+		},
+		taskQueueResponses: map[enums.TaskQueueType]*workflowservice.DescribeTaskQueueResponse{
+			enums.TASK_QUEUE_TYPE_WORKFLOW: {Pollers: []*taskqueuepb.PollerInfo{
+				{Identity: "dead-worker", LastAccessTime: timestamppb.New(time.Now().Add(-4 * time.Minute))},
+			}},
+			enums.TASK_QUEUE_TYPE_ACTIVITY: {Pollers: []*taskqueuepb.PollerInfo{
+				{Identity: "dead-worker", LastAccessTime: timestamppb.New(time.Now().Add(-4 * time.Minute))},
+			}},
+		},
+	}
+
+	reconciler := NewReconciler(repo, tempClient, stuckTestConfig(2))
+	wf := runningWorkflow()
+
+	for i := 0; i < 4; i++ {
+		result := reconciler.ReconcileWorkflow(context.Background(), wf)
+		require.NoError(t, result.Error)
+		assert.False(t, result.WasStale, "pass %d: stale pollers must not count as active", i)
+	}
+
+	assert.Empty(t, tempClient.resetCalls)
+	assert.Empty(t, tempClient.terminateCalls)
+}
+
+func TestReconciler_StuckActivity_DebounceRequiresConsecutivePasses(t *testing.T) {
+	repo := newMockRepo()
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeStuckActivityDescribeResp("run-1", "act-1", 5*time.Minute)},
+		},
+		historyEvents: makeHistoryWithActivity("act-1"),
+	}
+	tempClient.setPollersActive(true)
+
+	reconciler := NewReconciler(repo, tempClient, stuckTestConfig(3))
+	wf := runningWorkflow()
+
+	// Passes 1 and 2: observed but not confirmed.
+	for i := 1; i <= 2; i++ {
+		result := reconciler.ReconcileWorkflow(context.Background(), wf)
+		require.NoError(t, result.Error)
+		assert.False(t, result.RecoveredByReset, "pass %d must not act yet", i)
+		assert.Empty(t, tempClient.resetCalls, "pass %d must not reset yet", i)
+		assert.Empty(t, tempClient.terminateCalls, "pass %d must not terminate yet", i)
+	}
+
+	// Pass 3: confirmed -> reset (not terminate).
+	result := reconciler.ReconcileWorkflow(context.Background(), wf)
+	require.NoError(t, result.Error)
+	assert.True(t, result.RecoveredByReset, "third consecutive poller-active pass confirms")
+	require.Len(t, tempClient.resetCalls, 1)
+	assert.Empty(t, tempClient.terminateCalls, "reset succeeded - terminate must not run")
+	assert.Empty(t, repo.updatedStatuses, "reset succeeded - DB status untouched")
+	assert.Empty(t, repo.savedMessages, "reset succeeded - no error message posted")
+
+	// The reset request targets the last WorkflowTaskCompleted before the
+	// stuck activity was scheduled.
+	req := tempClient.resetCalls[0]
+	assert.Equal(t, "test-ns", req.Namespace)
+	assert.Equal(t, "wf-1", req.WorkflowExecution.GetWorkflowId())
+	assert.Equal(t, "run-1", req.WorkflowExecution.GetRunId())
+	assert.Equal(t, int64(4), req.WorkflowTaskFinishEventId)
+	assert.Contains(t, req.Reason, "recovering lost task")
+}
+
+func TestReconciler_StuckActivity_PollerOutageResetsDebounce(t *testing.T) {
+	repo := newMockRepo()
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeStuckActivityDescribeResp("run-1", "act-1", 5*time.Minute)},
+		},
+		historyEvents: makeHistoryWithActivity("act-1"),
+	}
+
+	reconciler := NewReconciler(repo, tempClient, stuckTestConfig(3))
+	wf := runningWorkflow()
+
+	// Two poller-active passes...
+	tempClient.setPollersActive(true)
+	reconciler.ReconcileWorkflow(context.Background(), wf)
+	reconciler.ReconcileWorkflow(context.Background(), wf)
+	// ...then a pass with pollers gone (worker restarting) resets the count...
+	tempClient.setPollersActive(false)
+	reconciler.ReconcileWorkflow(context.Background(), wf)
+	// ...so two more active passes still aren't enough...
+	tempClient.setPollersActive(true)
+	reconciler.ReconcileWorkflow(context.Background(), wf)
+	result := reconciler.ReconcileWorkflow(context.Background(), wf)
+	assert.False(t, result.RecoveredByReset)
+	assert.Empty(t, tempClient.resetCalls, "outage must reset the consecutive-pass count")
+
+	// ...and the third consecutive active pass confirms.
+	result = reconciler.ReconcileWorkflow(context.Background(), wf)
+	assert.True(t, result.RecoveredByReset)
+	assert.Len(t, tempClient.resetCalls, 1)
+}
+
+func TestReconciler_StuckActivity_ConfirmationWindowMustElapse(t *testing.T) {
+	repo := newMockRepo()
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeStuckActivityDescribeResp("run-1", "act-1", 5*time.Minute)},
+		},
+		historyEvents: makeHistoryWithActivity("act-1"),
+	}
+	tempClient.setPollersActive(true)
+
+	// Passes threshold is low, but the wall-clock window is 1h: no action.
+	config := &ReconcilerConfig{
+		StuckConfirmationPasses: 2,
+		StuckConfirmationWindow: time.Hour,
+	}
+	reconciler := NewReconciler(repo, tempClient, config)
+	wf := runningWorkflow()
+
+	for i := 0; i < 5; i++ {
+		result := reconciler.ReconcileWorkflow(context.Background(), wf)
+		require.NoError(t, result.Error)
+		assert.False(t, result.RecoveredByReset, "pass %d: window not elapsed", i)
+	}
+	assert.Empty(t, tempClient.resetCalls)
+	assert.Empty(t, tempClient.terminateCalls)
+}
+
+func TestReconciler_StuckActivity_TerminateFallbackOnResetError(t *testing.T) {
+	repo := newMockRepo()
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeStuckActivityDescribeResp("run-1", "act-1", 5*time.Minute)},
+		},
+		historyEvents: makeHistoryWithActivity("act-1"),
+		resetErr:      fmt.Errorf("reset not allowed"),
+	}
+	tempClient.setPollersActive(true)
+
+	reconciler := NewReconciler(repo, tempClient, stuckTestConfig(2))
+	wf := runningWorkflow()
+
+	// First pass observes; second confirms, reset fails, terminate fallback.
+	reconciler.ReconcileWorkflow(context.Background(), wf)
+	result := reconciler.ReconcileWorkflow(context.Background(), wf)
+
+	require.NoError(t, result.Error)
+	assert.False(t, result.RecoveredByReset)
+	assert.True(t, result.WasStale)
+	assert.Equal(t, db.WorkflowStatusFailed, result.TemporalStatus)
+
+	require.Len(t, tempClient.resetCalls, 1, "reset must be attempted BEFORE terminate")
+	require.Len(t, tempClient.terminateCalls, 1, "terminate is the fallback after reset failure")
+	assert.Equal(t, "wf-1", tempClient.terminateCalls[0])
+	assert.Equal(t, db.WorkflowStatusFailed, repo.updatedStatuses["wf-1"])
+	require.Len(t, repo.savedMessages, 1)
+	assert.Contains(t, repo.savedMessages[0].content, "automatic recovery was attempted")
+}
+
+func TestReconciler_StuckWorkflowTask_ResetToLastWorkflowTaskCompleted(t *testing.T) {
+	repo := newMockRepo()
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeStuckWorkflowTaskDescribeResp("run-1", 5*time.Minute)},
+		},
+		// No activity in flight - history ends after a completed workflow task.
+		historyEvents: []*historypb.HistoryEvent{
+			{EventId: 1, EventType: enums.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+			{EventId: 2, EventType: enums.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED},
+			{EventId: 3, EventType: enums.EVENT_TYPE_WORKFLOW_TASK_STARTED},
+			{EventId: 4, EventType: enums.EVENT_TYPE_WORKFLOW_TASK_COMPLETED},
+			{EventId: 5, EventType: enums.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED},
+		},
+	}
+	tempClient.setPollersActive(true)
+
+	reconciler := NewReconciler(repo, tempClient, stuckTestConfig(2))
+	wf := runningWorkflow()
+
+	reconciler.ReconcileWorkflow(context.Background(), wf)
+	result := reconciler.ReconcileWorkflow(context.Background(), wf)
+
+	require.NoError(t, result.Error)
+	assert.True(t, result.RecoveredByReset)
+	require.Len(t, tempClient.resetCalls, 1)
+	assert.Equal(t, int64(4), tempClient.resetCalls[0].WorkflowTaskFinishEventId)
+	assert.Empty(t, tempClient.terminateCalls)
+}
+
+func TestReconciler_StuckActivity_ActivityIDChangeResetsDebounce(t *testing.T) {
+	repo := newMockRepo()
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeStuckActivityDescribeResp("run-1", "act-1", 5*time.Minute)},
+		},
+		historyEvents: makeHistoryWithActivity("act-2"),
+	}
+	tempClient.setPollersActive(true)
+
+	reconciler := NewReconciler(repo, tempClient, stuckTestConfig(3))
+	wf := runningWorkflow()
+
+	// Two observations of act-1...
+	reconciler.ReconcileWorkflow(context.Background(), wf)
+	reconciler.ReconcileWorkflow(context.Background(), wf)
+
+	// ...then the stuck activity changes (act-1 made progress): fresh window.
+	tempClient.mu.Lock()
+	tempClient.describeResponses["wf-1"] = mockDescribeResponse{
+		resp: makeStuckActivityDescribeResp("run-1", "act-2", 5*time.Minute),
+	}
+	tempClient.mu.Unlock()
+
+	result := reconciler.ReconcileWorkflow(context.Background(), wf)
+	assert.False(t, result.RecoveredByReset, "identity change must restart the debounce")
+	result = reconciler.ReconcileWorkflow(context.Background(), wf)
+	assert.False(t, result.RecoveredByReset)
+	assert.Empty(t, tempClient.resetCalls)
+
+	// Third consecutive observation of act-2 confirms.
+	result = reconciler.ReconcileWorkflow(context.Background(), wf)
+	assert.True(t, result.RecoveredByReset)
+	assert.Len(t, tempClient.resetCalls, 1)
+}
+
+func TestReconciler_PollerCheckCachedPerPass(t *testing.T) {
+	repo := newMockRepo()
+	wf1 := &db.Workflow{ID: "wf-1", ChatID: "chat-1", Status: db.WorkflowStatusRunning, WorkflowName: "builtin://agent"}
+	wf2 := &db.Workflow{ID: "wf-2", ChatID: "chat-2", Status: db.WorkflowStatusRunning, WorkflowName: "builtin://agent"}
+	repo.workflowsByStatus[db.WorkflowStatusRunning] = []*db.Workflow{wf1, wf2}
+
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeStuckActivityDescribeResp("run-1", "act-1", 5*time.Minute)},
+			"wf-2": {resp: makeStuckActivityDescribeResp("run-2", "act-9", 5*time.Minute)},
+		},
+	}
+	tempClient.setPollersActive(false)
+
+	reconciler := NewReconciler(repo, tempClient, stuckTestConfig(3))
+
+	_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
+	require.Empty(t, errs)
+
+	// One poller check per pass (one DescribeTaskQueue call per task queue
+	// type), no matter how many workflows are stuck.
+	assert.Equal(t, 2, tempClient.describeTaskQueueCnt,
+		"expected exactly one workflow-queue + one activity-queue check per pass")
+}
+
+func TestReconciler_StuckObservationsPrunedWhenWorkflowGone(t *testing.T) {
+	repo := newMockRepo()
+	wf := runningWorkflow()
+	repo.workflowsByStatus[db.WorkflowStatusRunning] = []*db.Workflow{wf}
+
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeStuckActivityDescribeResp("run-1", "act-1", 5*time.Minute)},
+		},
+		historyEvents: makeHistoryWithActivity("act-1"),
+	}
+	tempClient.setPollersActive(true)
+
+	reconciler := NewReconciler(repo, tempClient, stuckTestConfig(10))
+
+	_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
+	require.Empty(t, errs)
+
+	reconciler.stuckMu.Lock()
+	tracked := len(reconciler.stuckObservations)
+	reconciler.stuckMu.Unlock()
+	assert.Equal(t, 1, tracked, "stuck observation recorded")
+
+	// Workflow no longer running -> its debounce entry is pruned.
+	repo.workflowsByStatus[db.WorkflowStatusRunning] = nil
+	_, errs = reconciler.ReconcileRunningWorkflows(context.Background())
+	require.Empty(t, errs)
+
+	reconciler.stuckMu.Lock()
+	tracked = len(reconciler.stuckObservations)
+	reconciler.stuckMu.Unlock()
+	assert.Equal(t, 0, tracked, "entries for non-running workflows are pruned")
+}
+
+// --- Wedged workflow task handling: detect, debounce, terminate (no reset) ---
+
+// makeWedgedWorkflowTaskDescribeResp returns a running workflow whose pending
+// WORKFLOW task has the given attempt count (being dispatched and failing
+// repeatedly — the non-determinism wedge class). State is STARTED with a fresh
+// scheduled time: the task never sits in Scheduled long enough to look stuck.
+func makeWedgedWorkflowTaskDescribeResp(runID string, attempt int32) *workflowservice.DescribeWorkflowExecutionResponse {
+	return &workflowservice.DescribeWorkflowExecutionResponse{
+		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+			Status:    enums.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			Execution: &commonpb.WorkflowExecution{RunId: runID},
+		},
+		PendingWorkflowTask: &workflowpb.PendingWorkflowTaskInfo{
+			State:         enums.PENDING_WORKFLOW_TASK_STATE_STARTED,
+			ScheduledTime: timestamppb.New(time.Now()),
+			Attempt:       attempt,
+		},
+	}
+}
+
+func TestReconciler_WedgedWorkflowTask_TerminatedAndMarkedFailed(t *testing.T) {
+	repo := newMockRepo()
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeWedgedWorkflowTaskDescribeResp("run-1", 42)},
+		},
+	}
+	tempClient.setPollersActive(true)
+
+	reconciler := NewReconciler(repo, tempClient, stuckTestConfig(2))
+	wf := runningWorkflow()
+
+	// First pass observes; second confirms.
+	result := reconciler.ReconcileWorkflow(context.Background(), wf)
+	require.NoError(t, result.Error)
+	assert.False(t, result.WasStale, "first pass must only observe")
+	assert.Empty(t, tempClient.terminateCalls, "first pass must not terminate")
+
+	result = reconciler.ReconcileWorkflow(context.Background(), wf)
+	require.NoError(t, result.Error)
+	assert.True(t, result.WasStale)
+	assert.Equal(t, db.WorkflowStatusFailed, result.TemporalStatus)
+
+	// Reset is USELESS for the wedge class (replay re-diverges) — recovery
+	// must terminate directly, never attempt a reset.
+	assert.Empty(t, tempClient.resetCalls, "wedge recovery must NOT attempt a reset")
+	require.Len(t, tempClient.terminateCalls, 1)
+	assert.Equal(t, "wf-1", tempClient.terminateCalls[0])
+
+	// DB marked failed so the next SendMessage resumes at position.
+	assert.Equal(t, db.WorkflowStatusFailed, repo.updatedStatuses["wf-1"])
+
+	// User told what happened and how to continue.
+	require.Len(t, repo.savedMessages, 1)
+	assert.Equal(t, "chat-1", repo.savedMessages[0].chatID)
+	assert.Contains(t, repo.savedMessages[0].content, "will resume where it left off when you send a message")
+}
+
+func TestReconciler_WedgedWorkflowTask_BelowThreshold_NoAction(t *testing.T) {
+	repo := newMockRepo()
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			// Attempt 3 < default threshold 5: normal transient retries.
+			"wf-1": {resp: makeWedgedWorkflowTaskDescribeResp("run-1", 3)},
+		},
+	}
+	tempClient.setPollersActive(true)
+
+	cfg := stuckTestConfig(1)
+	reconciler := NewReconciler(repo, tempClient, cfg)
+	wf := runningWorkflow()
+
+	for i := 0; i < 4; i++ {
+		result := reconciler.ReconcileWorkflow(context.Background(), wf)
+		require.NoError(t, result.Error)
+		assert.False(t, result.WasStale, "pass %d: below-threshold attempts are not a wedge", i)
+	}
+	assert.Empty(t, tempClient.terminateCalls)
+	assert.Empty(t, tempClient.resetCalls)
+	assert.Empty(t, repo.updatedStatuses)
+	assert.Empty(t, repo.savedMessages)
+}
+
+func TestReconciler_WedgedWorkflowTask_NoPollers_Skipped(t *testing.T) {
+	repo := newMockRepo()
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeWedgedWorkflowTaskDescribeResp("run-1", 42)},
+		},
+	}
+	tempClient.setPollersActive(false) // worker down/rebuilding
+
+	reconciler := NewReconciler(repo, tempClient, stuckTestConfig(2))
+	wf := runningWorkflow()
+
+	for i := 0; i < 5; i++ {
+		result := reconciler.ReconcileWorkflow(context.Background(), wf)
+		require.NoError(t, result.Error)
+		assert.False(t, result.WasStale, "pass %d: no action while pollers absent", i)
+	}
+	assert.Empty(t, tempClient.terminateCalls)
+	assert.Empty(t, repo.updatedStatuses)
+	assert.Empty(t, repo.savedMessages)
+}
+
+func TestReconciler_WedgedWorkflowTask_DebounceRequiresConsecutivePasses(t *testing.T) {
+	repo := newMockRepo()
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeWedgedWorkflowTaskDescribeResp("run-1", 99)},
+		},
+	}
+
+	reconciler := NewReconciler(repo, tempClient, stuckTestConfig(3))
+	wf := runningWorkflow()
+
+	// Two poller-active passes...
+	tempClient.setPollersActive(true)
+	reconciler.ReconcileWorkflow(context.Background(), wf)
+	reconciler.ReconcileWorkflow(context.Background(), wf)
+	// ...a poller outage resets the count...
+	tempClient.setPollersActive(false)
+	reconciler.ReconcileWorkflow(context.Background(), wf)
+	// ...so two more active passes still aren't enough...
+	tempClient.setPollersActive(true)
+	reconciler.ReconcileWorkflow(context.Background(), wf)
+	result := reconciler.ReconcileWorkflow(context.Background(), wf)
+	assert.False(t, result.WasStale)
+	assert.Empty(t, tempClient.terminateCalls, "outage must reset the consecutive-pass count")
+
+	// ...and the third consecutive active pass confirms.
+	result = reconciler.ReconcileWorkflow(context.Background(), wf)
+	assert.True(t, result.WasStale)
+	assert.Len(t, tempClient.terminateCalls, 1)
+}
+
+func TestReconciler_WedgedWorkflowTask_PrecedenceOverStuckReset(t *testing.T) {
+	// A wedged workflow task can transiently sit in Scheduled state between
+	// retries with an old-looking scheduled time. It must be classified as a
+	// wedge (terminate), never as a lost task (reset) — resetting a
+	// non-deterministic wedge just re-diverges.
+	repo := newMockRepo()
+	resp := makeStuckWorkflowTaskDescribeResp("run-1", 5*time.Minute)
+	resp.PendingWorkflowTask.Attempt = 42
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: resp},
+		},
+		historyEvents: makeHistoryWithActivity("act-1"),
+	}
+	tempClient.setPollersActive(true)
+
+	reconciler := NewReconciler(repo, tempClient, stuckTestConfig(2))
+	wf := runningWorkflow()
+
+	reconciler.ReconcileWorkflow(context.Background(), wf)
+	result := reconciler.ReconcileWorkflow(context.Background(), wf)
+
+	require.NoError(t, result.Error)
+	assert.True(t, result.WasStale)
+	assert.Empty(t, tempClient.resetCalls, "wedge must take precedence over stuck-in-Scheduled reset recovery")
+	assert.Len(t, tempClient.terminateCalls, 1)
+	assert.Equal(t, db.WorkflowStatusFailed, repo.updatedStatuses["wf-1"])
+}
+
+func TestReconciler_WedgedThenRecovered_ClearsDebounce(t *testing.T) {
+	repo := newMockRepo()
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeWedgedWorkflowTaskDescribeResp("run-1", 10)},
+		},
+	}
+	tempClient.setPollersActive(true)
+
+	reconciler := NewReconciler(repo, tempClient, stuckTestConfig(3))
+	wf := runningWorkflow()
+
+	// Two wedge observations...
+	reconciler.ReconcileWorkflow(context.Background(), wf)
+	reconciler.ReconcileWorkflow(context.Background(), wf)
+
+	// ...then the workflow makes progress (task succeeded): debounce clears.
+	tempClient.mu.Lock()
+	tempClient.describeResponses["wf-1"] = mockDescribeResponse{resp: makeRunningDescribeResp("run-1")}
+	tempClient.mu.Unlock()
+	result := reconciler.ReconcileWorkflow(context.Background(), wf)
+	require.NoError(t, result.Error)
+	assert.False(t, result.WasStale)
+
+	reconciler.stuckMu.Lock()
+	tracked := len(reconciler.stuckObservations)
+	reconciler.stuckMu.Unlock()
+	assert.Equal(t, 0, tracked, "recovered workflow must clear its wedge debounce entry")
+	assert.Empty(t, tempClient.terminateCalls)
+}
+
+// --- Progress watchdog: cause-agnostic stall detection ---
+
+// makeQuiescentDescribeResp returns a RUNNING workflow with ZERO pending work
+// (no pending workflow task / activities / children / nexus ops) and the
+// given HistoryLength — the progress watchdog's suspicious shape.
+func makeQuiescentDescribeResp(runID string, historyLength int64) *workflowservice.DescribeWorkflowExecutionResponse {
+	return &workflowservice.DescribeWorkflowExecutionResponse{
+		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+			Status:        enums.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			Execution:     &commonpb.WorkflowExecution{RunId: runID},
+			HistoryLength: historyLength,
+		},
+	}
+}
+
+// makeStartedActivityDescribeResp returns a RUNNING workflow with one pending
+// activity in STARTED state (a legitimately slow in-flight activity, e.g. a
+// long LLM call). Not stuck (not Scheduled), and not quiescent.
+func makeStartedActivityDescribeResp(runID string, historyLength int64) *workflowservice.DescribeWorkflowExecutionResponse {
+	return &workflowservice.DescribeWorkflowExecutionResponse{
+		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+			Status:        enums.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			Execution:     &commonpb.WorkflowExecution{RunId: runID},
+			HistoryLength: historyLength,
+		},
+		PendingActivities: []*workflowpb.PendingActivityInfo{
+			{
+				ActivityId:    "act-slow",
+				ActivityType:  &commonpb.ActivityType{Name: "call_llm"},
+				State:         enums.PENDING_ACTIVITY_STATE_STARTED,
+				ScheduledTime: timestamppb.New(time.Now().Add(-time.Hour)),
+			},
+		},
+	}
+}
+
+// progressTestConfig returns a config whose progress watchdog detects after
+// detectPasses quiescent passes (confirmation at double that) with the
+// wall-clock window effectively disabled.
+func progressTestConfig(detectPasses int) *ReconcilerConfig {
+	return &ReconcilerConfig{
+		ProgressStallPasses: detectPasses,
+		ProgressStallWindow: time.Nanosecond,
+		Namespace:           "test-ns",
+	}
+}
+
+// anomalyCount reads the current value of the reconciler anomaly counter for
+// a class. Counters are process-global, so tests assert on deltas.
+func anomalyCount(class string) float64 {
+	return promtestutil.ToFloat64(observability.ReconcilerAnomaliesTotal.WithLabelValues(class))
+}
+
+func (r *Reconciler) progressObservationCount() int {
+	r.progressMu.Lock()
+	defer r.progressMu.Unlock()
+	return len(r.progressObservations)
+}
+
+func TestReconciler_ProgressWatchdog_DetectThenConfirm(t *testing.T) {
+	repo := newMockRepo()
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeQuiescentDescribeResp("run-1", 42)},
+		},
+	}
+	tempClient.setPollersActive(true)
+
+	detectedBefore := anomalyCount("progress_stall_detected")
+	confirmedBefore := anomalyCount("progress_stall_confirmed")
+
+	// Detect at 2 passes, confirm at 4.
+	reconciler := NewReconciler(repo, tempClient, progressTestConfig(2))
+	wf := runningWorkflow()
+
+	// Passes 1-3: observe + detect, but never act.
+	for i := 1; i <= 3; i++ {
+		result := reconciler.ReconcileWorkflow(context.Background(), wf)
+		require.NoError(t, result.Error)
+		assert.False(t, result.WasStale, "pass %d: no action before confirmation", i)
+		assert.False(t, result.ProgressStalled, "pass %d", i)
+		assert.Empty(t, tempClient.terminateCalls, "pass %d must not terminate", i)
+	}
+	assert.Equal(t, detectedBefore+1, anomalyCount("progress_stall_detected"),
+		"detection metric fires exactly once per streak")
+	assert.Equal(t, confirmedBefore, anomalyCount("progress_stall_confirmed"),
+		"confirmation metric must not fire before the confirmation window")
+
+	// Pass 4: confirmed -> terminate + mark failed + resumable-truth message.
+	result := reconciler.ReconcileWorkflow(context.Background(), wf)
+	require.NoError(t, result.Error)
+	assert.True(t, result.WasStale)
+	assert.True(t, result.ProgressStalled)
+	assert.Equal(t, db.WorkflowStatusFailed, result.TemporalStatus)
+
+	// Unknown cause: never attempt a reset, terminate directly.
+	assert.Empty(t, tempClient.resetCalls, "stall recovery must NOT attempt a reset")
+	require.Len(t, tempClient.terminateCalls, 1)
+	assert.Equal(t, "wf-1", tempClient.terminateCalls[0])
+
+	// DB marked failed so the next SendMessage resumes at position.
+	assert.Equal(t, db.WorkflowStatusFailed, repo.updatedStatuses["wf-1"])
+
+	// User told what happened and how to continue.
+	require.Len(t, repo.savedMessages, 1)
+	assert.Equal(t, "chat-1", repo.savedMessages[0].chatID)
+	assert.Contains(t, repo.savedMessages[0].content, "resume where it left off when you send a message")
+
+	// Streak cleared and confirmation metric incremented exactly once.
+	assert.Equal(t, 0, reconciler.progressObservationCount())
+	assert.Equal(t, confirmedBefore+1, anomalyCount("progress_stall_confirmed"))
+}
+
+func TestReconciler_ProgressWatchdog_HistoryGrowthResetsStreak(t *testing.T) {
+	repo := newMockRepo()
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeQuiescentDescribeResp("run-1", 10)},
+		},
+	}
+	tempClient.setPollersActive(true)
+
+	reconciler := NewReconciler(repo, tempClient, progressTestConfig(2))
+	wf := runningWorkflow()
+
+	// Three static passes (confirm would need 4)...
+	for i := 0; i < 3; i++ {
+		reconciler.ReconcileWorkflow(context.Background(), wf)
+	}
+	assert.Empty(t, tempClient.terminateCalls)
+
+	// ...then history grows (= progress): the streak must restart.
+	tempClient.mu.Lock()
+	tempClient.describeResponses["wf-1"] = mockDescribeResponse{resp: makeQuiescentDescribeResp("run-1", 11)}
+	tempClient.mu.Unlock()
+
+	// Three more static passes at the new length still aren't enough...
+	for i := 0; i < 3; i++ {
+		result := reconciler.ReconcileWorkflow(context.Background(), wf)
+		require.NoError(t, result.Error)
+		assert.False(t, result.ProgressStalled, "post-growth pass %d must not act", i)
+	}
+	assert.Empty(t, tempClient.terminateCalls, "history growth must reset the streak")
+
+	// ...and the fourth consecutive static pass confirms.
+	result := reconciler.ReconcileWorkflow(context.Background(), wf)
+	assert.True(t, result.ProgressStalled)
+	assert.Len(t, tempClient.terminateCalls, 1)
+}
+
+func TestReconciler_ProgressWatchdog_PendingQuestionExcluded(t *testing.T) {
+	// A workflow parked on signal.question.<id> (ask_question / ask_user) has
+	// the same Temporal footprint as a stall. The pending questions row is the
+	// discriminator: it must suppress detection AND action entirely.
+	repo := newMockRepo()
+	repo.pendingQuestions["chat-1"] = &db.Question{
+		ID:     "q-1",
+		ChatID: "chat-1",
+		Status: db.QuestionStatusPending,
+	}
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeQuiescentDescribeResp("run-1", 42)},
+		},
+	}
+	tempClient.setPollersActive(true)
+
+	detectedBefore := anomalyCount("progress_stall_detected")
+	reconciler := NewReconciler(repo, tempClient, progressTestConfig(2))
+	wf := runningWorkflow()
+
+	for i := 0; i < 6; i++ {
+		result := reconciler.ReconcileWorkflow(context.Background(), wf)
+		require.NoError(t, result.Error)
+		assert.False(t, result.WasStale, "pass %d: question wait is not a stall", i)
+	}
+
+	assert.Empty(t, tempClient.terminateCalls)
+	assert.Empty(t, repo.updatedStatuses)
+	assert.Empty(t, repo.savedMessages)
+	assert.Equal(t, detectedBefore, anomalyCount("progress_stall_detected"),
+		"signal-parked question wait must not even be reported")
+	assert.Equal(t, 0, reconciler.progressObservationCount(),
+		"exclusion at a threshold crossing clears the streak")
+}
+
+func TestReconciler_ProgressWatchdog_PendingApprovalExcluded(t *testing.T) {
+	// Same as the question case, for tool approvals parked on
+	// signal.approval.<id> with a pending approvals row.
+	repo := newMockRepo()
+	repo.pendingApprovals["chat-1"] = []*db.Approval{{}}
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeQuiescentDescribeResp("run-1", 42)},
+		},
+	}
+	tempClient.setPollersActive(true)
+
+	reconciler := NewReconciler(repo, tempClient, progressTestConfig(2))
+	wf := runningWorkflow()
+
+	for i := 0; i < 6; i++ {
+		result := reconciler.ReconcileWorkflow(context.Background(), wf)
+		require.NoError(t, result.Error)
+		assert.False(t, result.WasStale, "pass %d: approval wait is not a stall", i)
+	}
+
+	assert.Empty(t, tempClient.terminateCalls)
+	assert.Empty(t, repo.updatedStatuses)
+	assert.Empty(t, repo.savedMessages)
+}
+
+func TestReconciler_ProgressWatchdog_ExclusionCheckError_Holds(t *testing.T) {
+	// If the wait-marker check fails, the watchdog must neither report nor
+	// act (unknown exclusion state), and must not clear the streak.
+	repo := newMockRepo()
+	repo.questionErr = fmt.Errorf("db unavailable")
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeQuiescentDescribeResp("run-1", 42)},
+		},
+	}
+	tempClient.setPollersActive(true)
+
+	detectedBefore := anomalyCount("progress_stall_detected")
+	reconciler := NewReconciler(repo, tempClient, progressTestConfig(2))
+	wf := runningWorkflow()
+
+	for i := 0; i < 6; i++ {
+		result := reconciler.ReconcileWorkflow(context.Background(), wf)
+		require.NoError(t, result.Error)
+		assert.False(t, result.WasStale, "pass %d: unknown exclusion state must hold", i)
+	}
+
+	assert.Empty(t, tempClient.terminateCalls)
+	assert.Equal(t, detectedBefore, anomalyCount("progress_stall_detected"))
+	assert.Equal(t, 1, reconciler.progressObservationCount(),
+		"streak is frozen, not cleared, while the exclusion check errors")
+}
+
+func TestReconciler_ProgressWatchdog_PendingActivityNotSuspicious(t *testing.T) {
+	// A long in-flight activity (e.g. a slow LLM call) is pending work: the
+	// workflow is NOT quiescent and must never accumulate a stall streak.
+	repo := newMockRepo()
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeStartedActivityDescribeResp("run-1", 42)},
+		},
+	}
+	tempClient.setPollersActive(true)
+
+	reconciler := NewReconciler(repo, tempClient, progressTestConfig(2))
+	wf := runningWorkflow()
+
+	for i := 0; i < 6; i++ {
+		result := reconciler.ReconcileWorkflow(context.Background(), wf)
+		require.NoError(t, result.Error)
+		assert.False(t, result.WasStale, "pass %d", i)
+	}
+
+	assert.Empty(t, tempClient.terminateCalls)
+	assert.Equal(t, 0, reconciler.progressObservationCount(),
+		"pending work must not accumulate a stall streak")
+}
+
+func TestReconciler_ProgressWatchdog_PausedWorkflowNeverEnters(t *testing.T) {
+	// Paused chats (user pause, retry-exhaustion, daemon-offline breaker) are
+	// the "user is NOT awaiting progress" state: the watchdog must not track
+	// them even when their Temporal execution is quiescent.
+	repo := newMockRepo()
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeQuiescentDescribeResp("run-1", 42)},
+		},
+	}
+	tempClient.setPollersActive(true)
+
+	reconciler := NewReconciler(repo, tempClient, progressTestConfig(2))
+	wf := &db.Workflow{
+		ID:           "wf-1",
+		ChatID:       "chat-1",
+		Thread:       "main",
+		Status:       db.WorkflowStatusPaused,
+		WorkflowName: "builtin://agent",
+	}
+
+	for i := 0; i < 6; i++ {
+		result := reconciler.ReconcileWorkflow(context.Background(), wf)
+		require.NoError(t, result.Error)
+		assert.False(t, result.WasStale, "pass %d: paused+running is intentional", i)
+	}
+
+	assert.Empty(t, tempClient.terminateCalls)
+	assert.Equal(t, 0, reconciler.progressObservationCount(),
+		"paused workflows must never accumulate a stall streak")
+}
+
+func TestReconciler_ProgressWatchdog_ConfirmationWindowMustElapse(t *testing.T) {
+	repo := newMockRepo()
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeQuiescentDescribeResp("run-1", 42)},
+		},
+	}
+	tempClient.setPollersActive(true)
+
+	// Pass threshold is tiny but the wall-clock window is 1h: nothing fires.
+	config := &ReconcilerConfig{
+		ProgressStallPasses: 2,
+		ProgressStallWindow: time.Hour,
+	}
+	detectedBefore := anomalyCount("progress_stall_detected")
+	reconciler := NewReconciler(repo, tempClient, config)
+	wf := runningWorkflow()
+
+	for i := 0; i < 8; i++ {
+		result := reconciler.ReconcileWorkflow(context.Background(), wf)
+		require.NoError(t, result.Error)
+		assert.False(t, result.WasStale, "pass %d: window not elapsed", i)
+	}
+
+	assert.Empty(t, tempClient.terminateCalls)
+	assert.Equal(t, detectedBefore, anomalyCount("progress_stall_detected"))
+}
+
+func TestReconciler_ProgressWatchdog_ConfirmActionGatedOnPollers(t *testing.T) {
+	// The confirmed destructive action must hold while workflow pollers are
+	// absent (whole-system outage = known cause), WITHOUT resetting the
+	// streak — quiescent workflows need no worker to make progress, so the
+	// static-history evidence stays valid.
+	repo := newMockRepo()
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeQuiescentDescribeResp("run-1", 42)},
+		},
+	}
+	tempClient.setPollersActive(false)
+
+	reconciler := NewReconciler(repo, tempClient, progressTestConfig(2))
+	wf := runningWorkflow()
+
+	// Six passes, all past the confirmation threshold from pass 4 on: no
+	// pollers, no action.
+	for i := 0; i < 6; i++ {
+		result := reconciler.ReconcileWorkflow(context.Background(), wf)
+		require.NoError(t, result.Error)
+		assert.False(t, result.ProgressStalled, "pass %d: no action while pollers absent", i)
+	}
+	assert.Empty(t, tempClient.terminateCalls)
+	assert.Empty(t, repo.updatedStatuses)
+
+	// Pollers return: the already-confirmed stall acts on the next pass.
+	tempClient.setPollersActive(true)
+	result := reconciler.ReconcileWorkflow(context.Background(), wf)
+	require.NoError(t, result.Error)
+	assert.True(t, result.ProgressStalled)
+	require.Len(t, tempClient.terminateCalls, 1)
+	assert.Equal(t, db.WorkflowStatusFailed, repo.updatedStatuses["wf-1"])
+}
+
+func TestReconciler_ProgressObservationsPrunedWhenWorkflowGone(t *testing.T) {
+	repo := newMockRepo()
+	wf := runningWorkflow()
+	repo.workflowsByStatus[db.WorkflowStatusRunning] = []*db.Workflow{wf}
+
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeQuiescentDescribeResp("run-1", 42)},
+		},
+	}
+	tempClient.setPollersActive(true)
+
+	// Generous thresholds: observe only, never report/act.
+	reconciler := NewReconciler(repo, tempClient, DefaultConfig())
+
+	_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
+	require.Empty(t, errs)
+	assert.Equal(t, 1, reconciler.progressObservationCount(), "streak recorded")
+
+	// Workflow no longer running -> its streak entry is pruned.
+	repo.workflowsByStatus[db.WorkflowStatusRunning] = nil
+	_, errs = reconciler.ReconcileRunningWorkflows(context.Background())
+	require.Empty(t, errs)
+	assert.Equal(t, 0, reconciler.progressObservationCount(),
+		"entries for non-running workflows are pruned")
+}
+
+// --- Anomaly metric emission for the pre-existing recovery classes ---
+
+func TestReconciler_AnomalyMetrics_Counters(t *testing.T) {
+	t.Run("lost_workflow_repaired", func(t *testing.T) {
+		before := anomalyCount("lost_workflow_repaired")
+		repo := newMockRepo()
+		tempClient := &mockReconcilerTemporalClient{
+			describeResponses: map[string]mockDescribeResponse{}, // not found
+		}
+		reconciler := NewReconciler(repo, tempClient, DefaultConfig())
+
+		result := reconciler.ReconcileWorkflow(context.Background(), runningWorkflow())
+		require.NoError(t, result.Error)
+		require.True(t, result.NeedsRecovery)
+		assert.Equal(t, before+1, anomalyCount("lost_workflow_repaired"))
+	})
+
+	t.Run("wedge_terminated", func(t *testing.T) {
+		before := anomalyCount("wedge_terminated")
+		repo := newMockRepo()
+		tempClient := &mockReconcilerTemporalClient{
+			describeResponses: map[string]mockDescribeResponse{
+				"wf-1": {resp: makeWedgedWorkflowTaskDescribeResp("run-1", 42)},
+			},
+		}
+		tempClient.setPollersActive(true)
+		reconciler := NewReconciler(repo, tempClient, stuckTestConfig(2))
+		wf := runningWorkflow()
+
+		reconciler.ReconcileWorkflow(context.Background(), wf)
+		result := reconciler.ReconcileWorkflow(context.Background(), wf)
+		require.NoError(t, result.Error)
+		require.True(t, result.WasStale)
+		assert.Equal(t, before+1, anomalyCount("wedge_terminated"))
+	})
+
+	t.Run("stuck_reset", func(t *testing.T) {
+		before := anomalyCount("stuck_reset")
+		repo := newMockRepo()
+		tempClient := &mockReconcilerTemporalClient{
+			describeResponses: map[string]mockDescribeResponse{
+				"wf-1": {resp: makeStuckActivityDescribeResp("run-1", "act-1", 5*time.Minute)},
+			},
+			historyEvents: makeHistoryWithActivity("act-1"),
+		}
+		tempClient.setPollersActive(true)
+		reconciler := NewReconciler(repo, tempClient, stuckTestConfig(2))
+		wf := runningWorkflow()
+
+		reconciler.ReconcileWorkflow(context.Background(), wf)
+		result := reconciler.ReconcileWorkflow(context.Background(), wf)
+		require.NoError(t, result.Error)
+		require.True(t, result.RecoveredByReset)
+		assert.Equal(t, before+1, anomalyCount("stuck_reset"))
+	})
+
+	t.Run("reset_failed_terminated", func(t *testing.T) {
+		before := anomalyCount("reset_failed_terminated")
+		repo := newMockRepo()
+		tempClient := &mockReconcilerTemporalClient{
+			describeResponses: map[string]mockDescribeResponse{
+				"wf-1": {resp: makeStuckActivityDescribeResp("run-1", "act-1", 5*time.Minute)},
+			},
+			historyEvents: makeHistoryWithActivity("act-1"),
+			resetErr:      fmt.Errorf("reset not allowed"),
+		}
+		tempClient.setPollersActive(true)
+		reconciler := NewReconciler(repo, tempClient, stuckTestConfig(2))
+		wf := runningWorkflow()
+
+		reconciler.ReconcileWorkflow(context.Background(), wf)
+		result := reconciler.ReconcileWorkflow(context.Background(), wf)
+		require.NoError(t, result.Error)
+		require.True(t, result.WasStale)
+		assert.Equal(t, before+1, anomalyCount("reset_failed_terminated"))
+	})
 }

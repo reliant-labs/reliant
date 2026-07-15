@@ -20,6 +20,11 @@ description: |
   - Per-phase plans (via plan tool) — each forked phase creates its own plan for task tracking.
     Plans are thread-scoped, so each phase has its own compaction-resistant execution tracker.
 
+# When this one-shot pipeline completes, the chat permanently transitions to the
+# interactive agent so the user can keep talking to their finished project
+# (the pipeline itself is one-shot — see the transition_to mechanism).
+transition_to: builtin://agent
+
 entry: [scope_conversation]
 
 inputs:
@@ -145,8 +150,8 @@ nodes:
     args:
       implementer_preset: forge
       max_retries: 3
-      lint_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && cd $(ls -d */ | head -1) && reliant forge generate && reliant forge lint"
-      build_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && cd $(ls -d */ | head -1) && reliant forge build"
+      lint_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && reliant forge generate && reliant forge lint"
+      build_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && reliant forge build"
       review_instructions: |
         You are reviewing the initial scaffold of a Forge app.
 
@@ -189,12 +194,14 @@ nodes:
           they always match its current conventions. Follow them exactly; if anything
           in this prompt disagrees with a loaded skill, the skill wins.
 
-          **Step 1: Create the project.**
+          **Step 1: Create the project IN PLACE at the working directory.**
           ```bash
-          reliant forge new <project-name> --mod github.com/user/<project-name> --service <service-name> --frontend dashboard
+          cd {{inputs.working_directory}} && reliant forge new --in-place --force --mod github.com/user/<project-name> --service <service-name> --frontend dashboard
           ```
           Pick the project and service names based on what the user described.
-          This creates a `<project-name>/` subdirectory. `cd` into it for all subsequent commands.
+          `--in-place` scaffolds directly into `{{inputs.working_directory}}` (no nested
+          subdirectory), so `forge.yaml` lives at the working directory and all subsequent
+          commands run there. `--force` makes re-runs idempotent if this phase retries.
 
           **Step 2: Define the schema and API per the skills.**
           - SQL migrations in `db/migrations/` are the single source of truth for the
@@ -214,7 +221,7 @@ nodes:
 
           **Step 3: Generate and verify.**
           ```bash
-          cd <project-dir> && export PATH="$HOME/go/bin:$PATH"
+          cd {{inputs.working_directory}} && export PATH="$HOME/go/bin:$PATH"
           reliant forge generate && reliant forge build
           ```
 
@@ -240,14 +247,7 @@ nodes:
           That's it. Later phases handle everything else. If you write code beyond the schema
           and API surface, you are wasting tokens on work that will be overwritten.
 
-          **FAIL FAST on tooling errors:** If `reliant forge new`, `reliant forge generate`, or `reliant forge build`
-          fails with a tooling error (command not found, binary crash, installation issue), STOP IMMEDIATELY
-          and report the error. Do NOT:
-          - Attempt to debug or fix forge/reliant tooling
-          - Build reliant or forge from source
-          - Search for or read forge source code
-          - Investigate forge internals
-          These are infrastructure problems that need human intervention, not coding solutions.
+          If a forge command fails because the binary itself is missing or crashes (not your protos/code), report it rather than rebuilding forge.
 
           Work in `{{inputs.working_directory}}`.
 
@@ -266,8 +266,8 @@ nodes:
       max_retries: 7
       start_app_command: "cd {{inputs.working_directory}} && reliant forge run"
       app_port: 3000
-      lint_command: "cd {{inputs.working_directory}} && if [ ! -f forge.yaml ]; then cd $(ls -d */ | head -1); fi && for d in frontends/*/; do (cd \"$d\" && npm run build); done"
-      build_command: "cd {{inputs.working_directory}} && if [ ! -f forge.yaml ]; then cd $(ls -d */ | head -1); fi && for d in frontends/*/; do (cd \"$d\" && npm run build); done"
+      lint_command: "cd {{inputs.working_directory}} && for d in frontends/*/; do (cd \"$d\" && npm run build); done"
+      build_command: "cd {{inputs.working_directory}} && for d in frontends/*/; do (cd \"$d\" && npm run build); done"
       review_instructions: |
         You are reviewing a frontend polish pass. The goal is visual quality and real data integration.
 
@@ -304,6 +304,14 @@ nodes:
           **Read the project spec** — read `FORGE_PLAN.md` in the project root to understand what
           features the user wants. Then **create your own plan** (via the plan tool) with tasks
           for your frontend work. Focus on supporting the features in the spec.
+
+          **Load the design discipline first — do not design from memory:**
+          ```bash
+          export PATH="$HOME/go/bin:$PATH" && cd {{inputs.working_directory}}
+          reliant forge skill load frontend/design
+          ```
+          Follow it for every visual decision — brief, declared system, restrained color/type,
+          no hand-drawn SVGs, visual verification. If this prompt disagrees with the skill, the skill wins.
 
           **IMPORTANT: The scaffolded UI is disposable.** The generated pages, layout, and components
           in `frontends/*/src/` are just initial code generation — they are NOT a starting point to
@@ -420,7 +428,7 @@ nodes:
 
           **Load the source of truth first — do not work from memory:**
           ```bash
-          export PATH="$HOME/go/bin:$PATH" && cd {{inputs.working_directory}} && if [ ! -f forge.yaml ]; then cd $(ls -d */ | head -1); fi
+          export PATH="$HOME/go/bin:$PATH" && cd {{inputs.working_directory}}
           reliant forge skill load architecture
           reliant forge skill load service-layer
           reliant forge skill load api
@@ -470,11 +478,10 @@ nodes:
           project moves on. Before you finish, run the full generate + build and do NOT
           return until it is green:
           ```bash
-          export PATH="$HOME/go/bin:$PATH" && cd {{inputs.working_directory}} && if [ ! -f forge.yaml ]; then cd $(ls -d */ | head -1); fi && reliant forge generate && reliant forge lint && reliant forge build
+          export PATH="$HOME/go/bin:$PATH" && cd {{inputs.working_directory}} && reliant forge generate && reliant forge lint && reliant forge build
           ```
-          If it fails, fix the root cause and re-run until it passes. If it fails due to a
-          TOOLING error (command not found, binary crash, install issue) rather than your
-          code, STOP and report it — do not try to build or debug forge/reliant itself.
+          If it fails, fix the root cause and re-run until it passes. If a forge command fails
+          because the binary itself is missing or crashes (not your protos/code), report it rather than rebuilding forge.
 
           Work in `{{inputs.working_directory}}`.
 
@@ -482,7 +489,7 @@ nodes:
   # handing off to production polish. A broken build routes to `failed`, not forward.
   - id: mvp_verify
     type: run
-    command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && if [ ! -f forge.yaml ]; then cd $(ls -d */ | head -1); fi && reliant forge generate && reliant forge build"
+    command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && reliant forge generate && reliant forge build"
     save_message:
       condition: "output.exit_code != 0"
       role: assistant
@@ -524,9 +531,9 @@ nodes:
     args:
       implementer_preset: forge
       max_retries: 5
-      lint_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && if [ ! -f forge.yaml ]; then cd $(ls -d */ | head -1); fi && reliant forge generate && reliant forge lint"
-      test_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && if [ ! -f forge.yaml ]; then cd $(ls -d */ | head -1); fi && reliant forge test"
-      build_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && if [ ! -f forge.yaml ]; then cd $(ls -d */ | head -1); fi && reliant forge build"
+      lint_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && reliant forge generate && reliant forge lint"
+      test_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && reliant forge test"
+      build_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && reliant forge build"
       review_instructions: |
         You are reviewing a production-ready Forge app. Be thorough.
 
@@ -586,7 +593,7 @@ nodes:
 
           **Load the source of truth first — do not work from memory:**
           ```bash
-          export PATH="$HOME/go/bin:$PATH" && cd {{inputs.working_directory}} && if [ ! -f forge.yaml ]; then cd $(ls -d */ | head -1); fi
+          export PATH="$HOME/go/bin:$PATH" && cd {{inputs.working_directory}}
           reliant forge skill load architecture
           reliant forge skill load service-layer
           reliant forge skill load testing
@@ -609,6 +616,71 @@ nodes:
             the signatures to implement.
           - Run the full verification: `reliant forge generate && reliant forge lint && reliant forge test && reliant forge build`
           - Track progress in your plan (mark tasks completed as you go)
+
+          Work in `{{inputs.working_directory}}`.
+
+  # ─── Launch Preview ─────────────────────────────────────────────────
+  #
+  # Start the finished app as a BACKGROUND process (survives the turn) and post
+  # its running preview URL as a markdown link, so the user can open it the
+  # moment the chat transitions to the interactive agent (see `transition_to`).
+  # Forced to auto mode so the handoff stays seamless regardless of pipeline mode.
+
+  - id: launch_preview
+    type: workflow
+    ref: builtin://agent
+    presets:
+      default: forge
+    passthrough: [model]
+    args:
+      mode: auto
+    thread:
+      mode: fork
+      inject:
+        role: user
+        content: |
+          ## Launch the App Preview
+
+          The build is complete. Start the finished app as a BACKGROUND process
+          and give the user a link to open it. Keep this focused — do NOT change
+          code, run builds, add features, or do anything else.
+
+          **Step 1: Go to the project directory** (the project lives at the working
+          directory — `forge.yaml` is right there):
+          ```bash
+          export PATH="$HOME/go/bin:$PATH" && cd {{inputs.working_directory}} && pwd
+          ```
+
+          **Step 2: Start the app's dev server in the BACKGROUND, bound to 0.0.0.0.**
+          Use the shell tool with `run_in_background: true` so the process survives
+          after this turn ends — do NOT block on it. The server MUST bind to `0.0.0.0`,
+          not `127.0.0.1` — a localhost-only bind is NOT reachable through the proxy and
+          gets NO preview URL. For a Vite frontend, pass `--host 0.0.0.0`, e.g.:
+          ```bash
+          cd {{inputs.working_directory}} && reliant forge run -- --host 0.0.0.0
+          ```
+          (Whatever start command the project uses, make sure the dev server ends up
+          listening on `0.0.0.0`.)
+
+          **Step 3: Read the proxied preview URL.** After giving it a moment to boot,
+          call `bash_list` (or `bash_output` on the background pid) and look for the line
+          reliant emits once the server is up and bound to `0.0.0.0`:
+          ```
+          Preview URL (port N): <url>
+          ```
+          That `<url>` is the proxied, externally-reachable URL. If you don't see it yet,
+          the server is still booting or bound to localhost — check the output again and
+          confirm the `--host 0.0.0.0` bind.
+
+          **Step 4: Post that exact preview URL** as a markdown link so the user can click
+          it (the embedded browser / a new web tab will open it). Use the proxied `<url>`
+          from Step 3 verbatim — do NOT post a raw `http://localhost:<port>` link:
+
+          **[Open your app](<paste the exact Preview URL here>)**
+
+          If the app cannot be started because a forge command's binary itself is missing
+          or crashes (not your protos/code), say so briefly and give the manual run command
+          (`reliant forge run -- --host 0.0.0.0`) as a fallback rather than rebuilding forge.
 
           Work in `{{inputs.working_directory}}`.
 
@@ -688,4 +760,6 @@ edges:
       - to: failed
         condition: "nodes.production_polish.strategy != 'pass'"
         label: production_failed
+    default: launch_preview
+  - from: launch_preview
     default: success

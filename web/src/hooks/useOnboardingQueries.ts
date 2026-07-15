@@ -80,7 +80,7 @@ export function useCloudEligibility() {
   return { eligible, reason, isLoading };
 }
 
-export function useDaemonList() {
+export function useDaemonList(options?: { refetchInterval?: number }) {
   return useQuery({
     queryKey: ['onboarding', 'daemons'],
     queryFn: async () => {
@@ -88,6 +88,10 @@ export function useDaemonList() {
       return daemons;
     },
     staleTime: 10_000,
+    // Observers share one cache entry; TanStack polls at the smallest
+    // interval among mounted consumers, so passing this from one component
+    // (e.g. OomKillBanner) doesn't change the others' behavior otherwise.
+    refetchInterval: options?.refetchInterval,
   });
 }
 

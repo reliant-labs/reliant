@@ -22,6 +22,27 @@ import (
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
+// resumeInputForInterruptedRun builds the engine resume parameter for a new
+// run whose predecessor was interrupted (failed/terminated/wedged/lost) rather
+// than completed or user-cancelled. It reads the position checkpoint written
+// at node-entry/loop-iteration boundaries. A missing checkpoint still returns
+// a non-nil (empty) ResumeInput: resume mode stays on and the engine applies
+// its fallbacks (workflow resume_node -> single top-level loop -> graph entry).
+func (s *ChatService) resumeInputForInterruptedRun(ctx context.Context, workflowID string) *v2.ResumeInput {
+	cp, err := s.database.GetWorkflowCheckpoint(ctx, workflowID)
+	if err != nil {
+		logging.Warn("Failed to load workflow checkpoint - resuming with engine fallbacks",
+			"workflowID", workflowID, "error", err)
+	}
+	if cp == nil {
+		return &v2.ResumeInput{}
+	}
+	return &v2.ResumeInput{
+		NodeID:        cp.NodeID,
+		LoopIteration: int(cp.LoopIteration),
+	}
+}
+
 // resurrectGhostWorkflow handles the case where a workflow exists in DB as running/paused
 // but is missing from Temporal (ghost workflow). Instead of failing, we restart the workflow
 // with a fresh Temporal execution, allowing the conversation to continue seamlessly.
@@ -36,7 +57,12 @@ func (s *ChatService) resurrectGhostWorkflow(
 	workflowID string,
 	userID string,
 ) (*connect.Response[reliantv1.SendMessageResponse], error) {
-	workflowName := existingWorkflow.WorkflowName
+	// Restart the workflow the CHAT currently points at, not the (possibly
+	// stale) db.Workflow ROW name. After a transition_to handoff the row still
+	// records the completed one-shot pipeline while chat.WorkflowName holds the
+	// target the conversation moved to; resurrecting the row name would re-run
+	// e.g. forge-one-shot on an already-built project.
+	workflowName := activeWorkflowNameForResume(chat, existingWorkflow)
 
 	// Extract user and system messages from input
 	userContent, systemMessages, hasUserContent := extractMessagesFromInput(req.Msg.Messages)
@@ -141,6 +167,9 @@ func (s *ChatService) resurrectGhostWorkflow(
 		WorkflowName: workflowName,
 		Inputs:       initialData,
 		ExecContext:  execContext,
+		// A ghost (Temporal lost the running execution) is an infra failure,
+		// not user intent — the fresh execution resumes at position.
+		Resume: s.resumeInputForInterruptedRun(ctx, workflowID),
 	}
 
 	// Step 6: Start fresh Temporal execution
@@ -211,6 +240,15 @@ func (s *ChatService) SendMessage(
 	if err := validateWorkflowParamStructure(req.Msg.WorkflowParams); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
+
+	// Resume-at-position state, populated when the prior run for this chat was
+	// interrupted (failed/terminated/lost) rather than completed or
+	// user-cancelled. Decision table for the new-run start below:
+	//   failed / terminated / wedged / lost  -> resume at checkpointed position
+	//   completed                            -> fresh start
+	//   user-cancelled                       -> fresh start (thread history only)
+	var resumeInput *v2.ResumeInput
+	var resumeThread string
 
 	// Check workflow status to decide: resume paused, send to running, or start new
 	// This must happen atomically to avoid race conditions
@@ -372,8 +410,12 @@ func (s *ChatService) SendMessage(
 				// - Lost execution: returns ErrWorkflowNotFound
 				if err := s.pauseService.ResumeWorkflow(ctx, workflowID, req.Msg.ChatId); err != nil {
 					if errors.Is(err, workflow.ErrWorkflowNotFound) {
-						logging.Warn("Paused workflow not found in Temporal during SendMessage - starting fresh",
+						logging.Warn("Paused workflow not found in Temporal during SendMessage - resuming at position with a new run",
 							"workflowID", workflowID, "chatID", req.Msg.ChatId)
+						// The paused run was lost (infra failure, not user
+						// intent) — start a new run that resumes at position.
+						resumeInput = s.resumeInputForInterruptedRun(ctx, workflowID)
+						resumeThread = existingWorkflow.Thread
 						// Fall through to start a new workflow below
 						break
 					}
@@ -560,10 +602,24 @@ func (s *ChatService) SendMessage(
 					return nil, connect.NewError(connect.CodeFailedPrecondition,
 						fmt.Errorf("this conversation experienced a workflow error and cannot be resumed - use the branch feature to start a new conversation from any previous message"))
 				}
-				// Normal failed workflow - fall through to start new
+				// Failed/terminated/wedged run: the new run RESUMES AT POSITION
+				// (a resume should be a resume, not a full restart). The engine
+				// enters directly at the checkpointed node instead of graph
+				// entry, so entry routers never re-classify the user's
+				// "continue" message. Fall through to start the new run.
+				resumeInput = s.resumeInputForInterruptedRun(ctx, workflowID)
+				resumeThread = existingWorkflow.Thread
+				logging.Info("Interrupted workflow detected - new run will resume at position",
+					"chatID", req.Msg.ChatId,
+					"workflowID", workflowID,
+					"checkpointNode", resumeInput.NodeID,
+					"loopIteration", resumeInput.LoopIteration,
+				)
 
 			case db.WorkflowStatusCancelled, db.WorkflowStatusCompleted:
-				// Need to start a new workflow - fall through to normal flow
+				// User-cancelled or completed: start a fresh workflow at graph
+				// entry (thread history is still the conversation context).
+				// Fall through to normal flow.
 			}
 		}
 	}
@@ -657,8 +713,16 @@ func (s *ChatService) SendMessage(
 	// Build workflow inputs from merged presets and user params
 	initialData := s.buildWorkflowInputs(ctx, userID, projectPath, chat.ProjectID, workflowName, effectivePresets, req.Msg.WorkflowParams)
 
-	// Determine target thread
+	// Determine target thread. Resume runs continue the interrupted run's
+	// thread (which may be a forked/child thread) so history stays continuous.
 	targetThread := workflowID
+	threadMode := model.ThreadModeNew
+	if resumeInput != nil {
+		threadMode = model.ThreadModeInherit
+		if resumeThread != "" {
+			targetThread = resumeThread
+		}
+	}
 	if req.Msg.TargetThread != nil && *req.Msg.TargetThread != "" {
 		targetThread = *req.Msg.TargetThread
 	}
@@ -669,7 +733,7 @@ func (s *ChatService) SendMessage(
 		ChatID:       req.Msg.ChatId,
 		WorkflowName: workflowName,
 		Thread:       targetThread,
-		ThreadMode:   model.ThreadModeNew,
+		ThreadMode:   threadMode,
 	}
 	if jwt, ok := auth.GetUserJWT(userID); ok {
 		execContext.UserJWT = jwt
@@ -714,6 +778,7 @@ func (s *ChatService) SendMessage(
 		WorkflowName: workflowName,
 		Inputs:       initialData,
 		ExecContext:  execContext,
+		Resume:       resumeInput,
 	}
 
 	workflowRun, err := s.tempClient.ExecuteWorkflow(ctx, workflowOptions, v2.DynamicWorkflow, workflowInput)

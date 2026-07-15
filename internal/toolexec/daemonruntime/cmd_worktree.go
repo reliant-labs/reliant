@@ -1182,22 +1182,11 @@ func handleWorktreeCreatePR(ctx context.Context, payload []byte) ([]byte, error)
 			return json.Marshal(resp)
 		}
 
-		// Configure git user if needed
-		configCmd := exec.CommandContext(ctx, "git", "config", "user.email")
-		configCmd.Dir = req.WorktreePath
-		if output, err := configCmd.Output(); err != nil || len(output) == 0 {
-			setEmailCmd := exec.CommandContext(ctx, "git", "config", "user.email", "reliant@localhost")
-			setEmailCmd.Dir = req.WorktreePath
-			_ = setEmailCmd.Run()
-			setNameCmd := exec.CommandContext(ctx, "git", "config", "user.name", "Reliant")
-			setNameCmd.Dir = req.WorktreePath
-			_ = setNameCmd.Run()
-		}
-
-		// Commit
-		commitCmd := exec.CommandContext(ctx, "git", "commit", "-m", req.Title)
-		commitCmd.Dir = req.WorktreePath
-		if output, err := commitCmd.CombinedOutput(); err != nil {
+		// Commit. The shared helper supplies an ephemeral Reliant identity only
+		// for user.name/user.email git can't already resolve, without persisting
+		// it into repo config — so a real identity the user configures later
+		// still authors their own commits.
+		if output, err := gitutil.CommitWithFallbackIdentity(ctx, req.WorktreePath, req.Title, false); err != nil {
 			if !strings.Contains(string(output), "nothing to commit") {
 				resp.Error = fmt.Sprintf("failed to commit changes: %s", strings.TrimSpace(string(output)))
 				return json.Marshal(resp)

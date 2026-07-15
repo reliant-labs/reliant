@@ -123,9 +123,12 @@ func (ps *PauseService) reconcileTerminalStatus(ctx context.Context, workflowID 
 		switch descResp.WorkflowExecutionInfo.Status {
 		case enums.WORKFLOW_EXECUTION_STATUS_COMPLETED:
 			status = db.WorkflowStatusCompleted
-		case enums.WORKFLOW_EXECUTION_STATUS_FAILED, enums.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
+		case enums.WORKFLOW_EXECUTION_STATUS_FAILED, enums.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+			enums.WORKFLOW_EXECUTION_STATUS_TERMINATED:
+			// TERMINATED = system/operator kill → Failed (resumable at
+			// position). Only CANCELED (user cancel) maps to Cancelled.
 			status = db.WorkflowStatusFailed
-		case enums.WORKFLOW_EXECUTION_STATUS_CANCELED, enums.WORKFLOW_EXECUTION_STATUS_TERMINATED:
+		case enums.WORKFLOW_EXECUTION_STATUS_CANCELED:
 			status = db.WorkflowStatusCancelled
 		default:
 			status = db.WorkflowStatusCompleted

@@ -404,7 +404,34 @@ func (s *WorkflowSimulator) assembleSubWorkflowInputs(nodePath string, node *rel
 	if len(contract.DefaultInputs) > 0 {
 		mergeMissingMaps(assembled, contract.DefaultInputs)
 	}
+	// Contract args are compile-time raw values: CEL template args (e.g.
+	// "{{inputs.max_retries}}") are still unevaluated strings. Resolve them
+	// against the parent context, mirroring the runtime's EvaluateNodeConfig
+	// on workflow/loop node args before invoking the child.
+	s.resolveTemplateInputs(assembled)
 	return assembled
+}
+
+// resolveTemplateInputs evaluates {{...}} template strings in assembled
+// sub-workflow inputs against the parent's inputs and node outputs.
+// Values that fail to evaluate are left as-is (best-effort, matching the
+// simulator's mock-first philosophy).
+func (s *WorkflowSimulator) resolveTemplateInputs(assembled map[string]interface{}) {
+	evalCtx := &wfcel.EdgeEvalContext{
+		Nodes:  s.nodeOutputs,
+		Inputs: s.workflowInputs,
+	}
+	for key, value := range assembled {
+		str, ok := value.(string)
+		if !ok || !strings.Contains(str, "{{") {
+			continue
+		}
+		resolved, err := wfcel.EvaluateTemplate(str, evalCtx)
+		if err != nil {
+			continue
+		}
+		assembled[key] = resolved
+	}
 }
 
 // Run executes the workflow simulation
@@ -652,6 +679,7 @@ func (s *WorkflowSimulator) Run(mocker StepMocker) error {
 			}
 
 			normalizedOutput := normalizeMockOutput(mockOutput, nodeActivityName(triggered.Node))
+			applyCallLLMCompactionThreshold(normalizedOutput, triggered.Node, evaluatedInputs)
 
 			// Store step output
 			s.nodeOutputs[stepID] = normalizedOutput
@@ -1089,6 +1117,7 @@ func (s *WorkflowSimulator) executeLoopIteration(
 			// Call mocker with qualified ID
 			mockOutput := mocker(qualifiedID, evaluatedInputs)
 			normalizedOutput := normalizeMockOutput(mockOutput, nodeActivityName(triggered.Node))
+			applyCallLLMCompactionThreshold(normalizedOutput, triggered.Node, evaluatedInputs)
 
 			// Store in sub-workflow's local outputs (for edge evaluation)
 			innerOutputs[innerNodeID] = normalizedOutput
@@ -1369,6 +1398,7 @@ func (s *WorkflowSimulator) executeNestedLoopIteration(
 
 			mockOutput := mocker(qualifiedID, evaluatedInputs)
 			normalizedOutput := normalizeMockOutput(mockOutput, nodeActivityName(triggered.Node))
+			applyCallLLMCompactionThreshold(normalizedOutput, triggered.Node, evaluatedInputs)
 
 			innerOutputs[innerNodeID] = normalizedOutput
 			s.nodeOutputs[qualifiedID] = normalizedOutput
@@ -1416,6 +1446,22 @@ func (s *WorkflowSimulator) GetEventSequence() []string {
 // GetNodeOutputs returns all step outputs
 func (s *WorkflowSimulator) GetNodeOutputs() map[string]interface{} {
 	return s.nodeOutputs
+}
+
+// GetWorkflowOutputs evaluates the root workflow's declared outputs against the
+// final simulation state. Returns nil when the workflow declares no outputs.
+// Mirrors the runtime's end-of-workflow output evaluation.
+func (s *WorkflowSimulator) GetWorkflowOutputs() (map[string]interface{}, error) {
+	declared := s.protoWorkflow.GetOutputs()
+	if len(declared) == 0 {
+		return nil, nil
+	}
+	workflowContext := map[string]interface{}{
+		"id":     "sim-workflow",
+		"name":   s.rootWorkflowIdentity(),
+		"inputs": s.workflowInputs,
+	}
+	return EvaluateWorkflowOutputs(declared, s.nodeOutputs, workflowContext)
 }
 
 // GetNodeStates returns the execution state of each node
@@ -1596,9 +1642,26 @@ func (s *WorkflowSimulator) executeWorkflowNode(nodePath string, protoNode *reli
 				}
 			}
 
-			// Handle loops inside the workflow
+			// Handle loops inside the workflow.
+			// Run through a child simulator whose workflowInputs are the
+			// SUB-workflow's assembled inputs: an inline loop inside a
+			// referenced workflow inherits that workflow's inputs (args +
+			// declared defaults), NOT the root workflow's inputs.
 			if triggered.Node.GetType() == model.NodeTypeLoop {
-				loopOutput, err := s.executeNestedLoop(qualifiedID, triggered.Node, mocker)
+				loopSim := &WorkflowSimulator{
+					protoWorkflow:        s.protoWorkflow,
+					nodeOutputs:          s.nodeOutputs,
+					nodeStates:           s.nodeStates,
+					visitedSteps:         s.visitedSteps,
+					workflowInputs:       subInputs,
+					hasInternalEvents:    s.hasInternalEvents,
+					workflowLoader:       s.workflowLoader,
+					compiledSemantics:    s.compiledSemantics,
+					canonicalWorkflowRef: s.canonicalWorkflowRef,
+				}
+				loopOutput, err := loopSim.executeNestedLoop(qualifiedID, triggered.Node, mocker)
+				// Sync visited steps back (slice appends don't propagate to the parent)
+				s.visitedSteps = loopSim.visitedSteps
 				if err != nil {
 					return nil, fmt.Errorf("execute nested loop %s: %w", qualifiedID, err)
 				}
@@ -1680,6 +1743,7 @@ func (s *WorkflowSimulator) executeWorkflowNode(nodePath string, protoNode *reli
 			// Regular node - use sub-mocker
 			mockOutput := subMocker(innerNodeID, evaluatedInputs)
 			normalizedOutput := normalizeMockOutput(mockOutput, nodeActivityName(triggered.Node))
+			applyCallLLMCompactionThreshold(normalizedOutput, triggered.Node, evaluatedInputs)
 
 			innerOutputs[innerNodeID] = normalizedOutput
 			s.nodeOutputs[qualifiedID] = normalizedOutput

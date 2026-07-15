@@ -475,6 +475,7 @@ func TestSaveMessageConfig_OutputToolCallsResolution(t *testing.T) {
 			"workflow-123",
 			"call_llm",
 			nil, // execContext
+			nil, // iter (not in a loop)
 		)
 
 		require.NoError(t, err)
@@ -517,7 +518,8 @@ func TestSaveMessageConfig_OutputToolCallsResolution(t *testing.T) {
 			"thread-0",
 			"workflow-123",
 			"call_llm",
-			nil,
+			nil, // execContext
+			nil, // iter (not in a loop)
 		)
 
 		require.NoError(t, err)
@@ -526,9 +528,11 @@ func TestSaveMessageConfig_OutputToolCallsResolution(t *testing.T) {
 	})
 
 	t.Run("output.tool_calls resolves to empty via direct expression when null", func(t *testing.T) {
-		// Directly passing {{output.tool_calls}} when it's null produces a structpb.NullValue
-		// which fails with "expected array, got structpb.NullValue".
-		// This test documents the current behavior - workflows should use the ternary form.
+		// Directly passing {{output.tool_calls}} when it's null used to leak the
+		// structpb.NullValue enum out of CEL evaluation and fail with
+		// "expected array, got structpb.NullValue". CEL null is now normalized
+		// to Go nil (wfcel.ConvertToNative), so a null tool_calls behaves the
+		// same as not configuring tool_calls at all.
 		config := &reliantv1.SaveMessageConfig{
 			Role:      celLiteral("assistant"),
 			Content:   celLiteral("{{output.response_text}}"),
@@ -549,7 +553,7 @@ func TestSaveMessageConfig_OutputToolCallsResolution(t *testing.T) {
 			"inputs": map[string]interface{}{},
 		}
 
-		_, err := evaluateSaveMessageConfig(
+		result, err := evaluateSaveMessageConfig(
 			config,
 			activityOutput,
 			workflowContext,
@@ -558,13 +562,13 @@ func TestSaveMessageConfig_OutputToolCallsResolution(t *testing.T) {
 			"thread-0",
 			"workflow-123",
 			"call_llm",
-			nil,
+			nil, // execContext
+			nil, // iter (not in a loop)
 		)
 
-		// Currently this returns an error due to structpb.NullValue
-		assert.Error(t, err, "Direct {{output.tool_calls}} with null value should error")
-		assert.Contains(t, err.Error(), "structpb.NullValue",
-			"Error should indicate the NullValue type issue")
+		require.NoError(t, err, "null tool_calls must not error — CEL null normalizes to nil")
+		require.NotNil(t, result)
+		assert.Empty(t, result.ToolCalls, "null tool_calls should resolve to no tool calls")
 	})
 
 	t.Run("output.tool_calls with multiple tool calls", func(t *testing.T) {
@@ -613,7 +617,8 @@ func TestSaveMessageConfig_OutputToolCallsResolution(t *testing.T) {
 			"thread-0",
 			"workflow-123",
 			"call_llm",
-			nil,
+			nil, // execContext
+			nil, // iter (not in a loop)
 		)
 
 		require.NoError(t, err)

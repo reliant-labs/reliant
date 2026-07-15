@@ -227,6 +227,11 @@ type CommandResult struct {
 	DurationMs int64 `json:"duration_ms"`
 	// TimedOut is true if the command exceeded TimeoutMs.
 	TimedOut bool `json:"timed_out"`
+	// OOMKilled is true when the command's death was attributed to the kernel
+	// OOM killer (SIGKILL-shaped exit plus an oom_kill recorded in the
+	// workspace cgroup during the command's lifetime). The actionable
+	// explanation is appended to Stderr/Combined so all consumers surface it.
+	OOMKilled bool `json:"oom_killed,omitempty"`
 }
 
 // OutputOpts controls how background process output is retrieved.
@@ -254,6 +259,22 @@ type ProcessOutput struct {
 	TotalBytes int `json:"total_bytes"`
 }
 
+// PortInfo describes a network port a background process is listening on.
+// Address is the bind address (e.g. "0.0.0.0", "127.0.0.1", "::") and is
+// load-bearing for preview: only publicly-bound ports (0.0.0.0/::) are
+// reachable through the workspace proxy, so a 127.0.0.1-only dev server is not
+// previewable and callers surface nothing for it.
+type PortInfo struct {
+	// Port is the TCP/UDP port number.
+	Port int `json:"port"`
+	// Protocol is "tcp" or "udp".
+	Protocol string `json:"protocol"`
+	// State is the socket state (e.g. "LISTEN").
+	State string `json:"state"`
+	// Address is the bind address (e.g. "0.0.0.0", "127.0.0.1", "::").
+	Address string `json:"address"`
+}
+
 // ProcessInfo describes a background process.
 type ProcessInfo struct {
 	// ID is the unique process identifier.
@@ -268,4 +289,13 @@ type ProcessInfo struct {
 	StartTime time.Time `json:"start_time"`
 	// EndTime is when the process exited (nil if still running).
 	EndTime *time.Time `json:"end_time,omitempty"`
+	// Ports are the network ports the process is currently listening on
+	// (running processes only). Used to surface a proxied preview URL to the
+	// agent for dev servers.
+	Ports []PortInfo `json:"ports,omitempty"`
+	// DaemonID is the control-plane identity of the daemon this process runs on,
+	// stamped by the remote daemon runtime so the orchestrator can build the
+	// env-aware proxied preview URL (empty for a fully-local/in-process daemon,
+	// whose loopback is already reachable by the user).
+	DaemonID string `json:"daemon_id,omitempty"`
 }
